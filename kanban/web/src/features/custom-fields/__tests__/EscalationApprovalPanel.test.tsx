@@ -552,4 +552,21 @@ describe('EscalationApprovalPanel', () => {
       expect(api.requestFieldApproval).toHaveBeenCalled();
     });
   });
+
+  it('renders FieldHelpHint components for scope, credential mode, and modal inputs', async () => {
+    vi.mocked(api.fetchFieldApprovals).mockResolvedValue([]);
+
+    renderPanel({
+      field: elevatedFieldSp,
+      callerTier: 'PROJECT_ADMIN',
+    });
+
+    // Summary hints
+    expect(screen.getByTestId('hint-escalation-target-scope')).toBeDefined();
+    expect(screen.getByTestId('hint-escalation-credential-mode')).toBeDefined();
+
+    // Open request modal
+    fireEvent.click(await screen.findByTestId('request-approval-btn'));
+    expect(screen.getByTestId('hint-escalation-justification')).toBeDefined();
+  });
 });

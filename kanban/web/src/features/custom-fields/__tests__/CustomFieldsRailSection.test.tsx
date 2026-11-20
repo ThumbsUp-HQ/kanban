@@ -467,4 +467,78 @@ describe('CustomFieldsRailSection', () => {
 
     resolveExecution(firstRes);
   });
+
+  it('renders FieldHelpHint on custom field rows in properties rail', async () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
+    vi.mocked(api.fetchIssueCustomFields).mockResolvedValue(mockResults);
+
+    renderWithQuery(<CustomFieldsRailSection projectKey="KAN" issueKey="KAN-42" />);
+
+    const cvssHint = await screen.findByTestId('rail-field-hint-cvss-score');
+    expect(cvssHint).toBeDefined();
+
+    const envHint = screen.getByTestId('rail-field-hint-target-env');
+    expect(envHint).toBeDefined();
+
+    // Focus opens popover
+    act(() => {
+      cvssHint.focus();
+    });
+    const popover = screen.getByTestId('rail-field-hint-cvss-score-popover');
+    expect(popover.textContent).toContain('CVSS Score');
+    expect(popover.textContent).toContain('severity_pill');
+  });
+
+  it('renders FieldHelpHint for scalar and formula flavors and resolves projectKey from issueKey', async () => {
+    const extraDefs: api.CustomFieldDefinition[] = [
+      {
+        id: 'f-scalar',
+        slug: 'scalar-field',
+        name: 'Scalar Field',
+        tier: 'wasm',
+        script_source: 'scalar: "Active"',
+        output_format: 'text',
+        output_format_metadata: {},
+        target_scope: 'PROJECT',
+        credential_mode: 'INVOKING_USER',
+        egress_allowlist: [],
+        is_enabled: true,
+      },
+      {
+        id: 'f-formula',
+        slug: 'formula-field',
+        name: 'Formula Field',
+        tier: 'wasm',
+        script_source: 'formula: issue.state === "DONE"',
+        output_format: 'badge',
+        output_format_metadata: {},
+        target_scope: 'PROJECT',
+        credential_mode: 'INVOKING_USER',
+        egress_allowlist: [],
+        is_enabled: true,
+      },
+    ];
+
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(extraDefs);
+    vi.mocked(api.fetchIssueCustomFields).mockResolvedValue([]);
+
+    // projectKey empty to test fallback resolution from issueKey
+    renderWithQuery(<CustomFieldsRailSection projectKey="" issueKey="KANBA-99" />);
+
+    const scalarHint = await screen.findByTestId('rail-field-hint-scalar-field');
+    act(() => {
+      scalarHint.focus();
+    });
+    expect(screen.getByTestId('rail-field-hint-scalar-field-popover').textContent).toContain(
+      'Scalar',
+    );
+
+    const formulaHint = screen.getByTestId('rail-field-hint-formula-field');
+    act(() => {
+      formulaHint.focus();
+    });
+    expect(screen.getByTestId('rail-field-hint-formula-field-popover').textContent).toContain(
+      'Formula',
+    );
+  });
 });

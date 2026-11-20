@@ -4,6 +4,7 @@
 import type { JSX } from 'react';
 import React, { useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import {
   approveFieldEscalation,
   fetchFieldApprovals,
@@ -207,11 +208,50 @@ export function EscalationApprovalPanel({
       {/* Scope x Principal Matrix Requirements */}
       <div className="custom-field-matrix-summary">
         <div className="custom-field-matrix-row">
-          <span className="custom-field-matrix-label">Target Scope:</span>
+          <span className="custom-field-matrix-label">
+            Target Scope:
+            <FieldHelpHint
+              title="Target Scope"
+              summary="The security boundary for API authorization tokens granted to custom scripts."
+              validValues={[
+                { label: 'PROJECT', description: 'Restricted strictly to the current project' },
+                {
+                  label: 'WORKSPACE',
+                  description: 'Grants access across all projects in the workspace',
+                },
+                { label: 'SERVER', description: 'Grants server-wide access (Dual-control required)' },
+              ]}
+              docHref="/docs/custom-fields#target-scope"
+              testId="hint-escalation-target-scope"
+            />
+          </span>
           <span className="custom-field-matrix-val mono">{targetScope}</span>
         </div>
         <div className="custom-field-matrix-row">
-          <span className="custom-field-matrix-label">Credential Mode:</span>
+          <span className="custom-field-matrix-label">
+            Credential Mode:
+            <FieldHelpHint
+              title="Credential Mode"
+              summary="Identity and principal authority assumed when executing the custom field script."
+              validValues={[
+                {
+                  label: 'INVOKING_USER',
+                  description: 'Operates with the viewing user permissions (Default)',
+                },
+                {
+                  label: 'PROJECT_ADMIN_SP',
+                  description: 'Runs under Project Admin Service Principal for all viewers',
+                },
+                {
+                  label: 'SERVER_ADMIN_SP',
+                  description: 'Runs under Server Admin Service Principal (Dual-control required)',
+                },
+              ]}
+              caution="Service Principal modes execute with elevated authority regardless of the viewer."
+              docHref="/docs/custom-fields#credential-mode"
+              testId="hint-escalation-credential-mode"
+            />
+          </span>
           <span className="custom-field-matrix-val mono">{credentialMode}</span>
         </div>
         <div className="custom-field-matrix-row">
@@ -333,6 +373,13 @@ export function EscalationApprovalPanel({
             <div className="custom-field-form-group">
               <label htmlFor="approval-justification" className="custom-field-form-label">
                 Business Justification (min 10 characters)
+                <FieldHelpHint
+                  title="Business Justification"
+                  summary="Audit justification explaining why elevated scope or service-principal credentials are required."
+                  caution="Recorded immutably in the security audit ledger."
+                  docHref="/docs/custom-fields#approvals"
+                  testId="hint-escalation-justification"
+                />
               </label>
               <textarea
                 id="approval-justification"
@@ -389,6 +436,12 @@ export function EscalationApprovalPanel({
               <div className="custom-field-form-group">
                 <label htmlFor="aal2-otp" className="custom-field-form-label">
                   Passkey or Authenticator Code
+                  <FieldHelpHint
+                    title="AAL2 Step-Up Verification"
+                    summary="Secondary factor verification required before executing or approving administrative escalation."
+                    docHref="/docs/custom-fields#aal2-stepup"
+                    testId="hint-escalation-aal2"
+                  />
                 </label>
                 <input
                   id="aal2-otp"

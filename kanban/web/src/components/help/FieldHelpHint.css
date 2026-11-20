@@ -1,0 +1,220 @@
+/* ==========================================================================
+   FieldHelpHint Component & Popover Styling (KAN-15, S6.2, S13)
+   Enforces canonical tokens, compact 18px trigger, 44px touch hit area,
+   360px max width popover with dl key-value pairs, example, and footer link.
+   Strict CSP style-src 'self' (zero inline style props).
+   ========================================================================== */
+
+/* Trigger button: compact inline question-mark circle */
+.field-help-hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  min-height: 18px;
+  padding: 0;
+  margin: 0 0 0 var(--space-1);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-full);
+  background: var(--bg-surface);
+  color: var(--fg-muted);
+  font-family: var(--font-sans);
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  line-height: 1;
+  cursor: pointer;
+  position: relative;
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: manipulation;
+  vertical-align: middle;
+  box-sizing: border-box;
+  transition: background-color 100ms ease, color 100ms ease, border-color 100ms ease;
+}
+
+.field-help-hint:hover {
+  background-color: var(--bg-hover);
+  color: var(--fg-primary);
+  border-color: var(--border-strong);
+}
+
+.field-help-hint:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+.field-help-hint-icon {
+  display: inline-block;
+  line-height: 1;
+  pointer-events: none;
+}
+
+/* 44x44px touch hit area on coarse pointers without visual layout disruption */
+@media (pointer: coarse) {
+  .field-help-hint::before {
+    content: '';
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: var(--tap-min);
+    height: var(--tap-min);
+    min-width: var(--tap-min);
+    min-height: var(--tap-min);
+  }
+}
+
+/* Help popover card */
+.field-help-hint-popover {
+  position: fixed;
+  top: -9999px;
+  left: -9999px;
+  max-width: var(--hint-max-w);
+  width: max-content;
+  padding: var(--hint-pad);
+  font-family: var(--font-sans);
+  font-size: var(--text-sm);
+  line-height: var(--leading-prose);
+  color: var(--fg-primary);
+  background-color: var(--bg-surface-raised);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  z-index: 1000;
+  user-select: text;
+  -webkit-user-select: text;
+  box-sizing: border-box;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  overflow-wrap: break-word;
+}
+
+/* Popover Header & Title */
+.field-help-hint-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+}
+
+.field-help-hint-title {
+  font-size: var(--text-sm);
+  font-weight: var(--font-semibold);
+  color: var(--fg-primary);
+}
+
+/* Plain-English Summary */
+.field-help-hint-summary {
+  font-size: var(--text-sm);
+  color: var(--fg-secondary);
+  line-height: var(--leading-prose);
+}
+
+/* Subheadings for dl / example / caution */
+.field-help-hint-subhead {
+  display: block;
+  font-size: var(--text-xs);
+  font-weight: var(--font-semibold);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--fg-muted);
+  margin-bottom: var(--space-1);
+}
+
+/* Valid values definition list */
+.field-help-hint-values {
+  margin-top: var(--space-1);
+}
+
+.field-help-hint-dl {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
+  padding: 0;
+  font-size: var(--text-xs);
+}
+
+.field-help-hint-dt {
+  font-family: var(--font-mono);
+  font-weight: var(--font-semibold);
+  color: var(--fg-primary);
+  margin: 0;
+}
+
+.field-help-hint-dd {
+  color: var(--fg-secondary);
+  margin: 0;
+}
+
+/* Example section */
+.field-help-hint-example {
+  margin-top: var(--space-1);
+}
+
+.field-help-hint-code {
+  display: block;
+  padding: var(--space-1) var(--space-2);
+  background-color: var(--bg-canvas);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-sm);
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--fg-primary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* Caution section */
+.field-help-hint-caution {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+  padding: var(--space-1) var(--space-2);
+  background-color: var(--state-started-bg);
+  border: 1px solid var(--state-started-border);
+  border-radius: var(--radius-sm);
+  font-size: var(--text-xs);
+  color: var(--fg-primary);
+}
+
+.field-help-hint-caution-icon {
+  flex-shrink: 0;
+  line-height: 1.2;
+}
+
+.field-help-hint-caution-text {
+  flex: 1;
+}
+
+/* Footer & Link */
+.field-help-hint-footer {
+  margin-top: var(--space-1);
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--border-subtle);
+  display: flex;
+  justify-content: flex-end;
+}
+
+.field-help-hint-link {
+  font-size: var(--text-xs);
+  font-weight: var(--font-medium);
+  color: var(--state-unstarted-fg);
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  transition: color 100ms ease;
+}
+
+.field-help-hint-link:hover {
+  text-decoration: underline;
+}
+
+.field-help-hint-link:focus-visible {
+  outline: var(--focus-ring-w) solid var(--focus-ring);
+  outline-offset: 2px;
+}

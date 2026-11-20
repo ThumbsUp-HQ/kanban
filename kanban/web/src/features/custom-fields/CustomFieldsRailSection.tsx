@@ -5,6 +5,7 @@ import type { JSX } from 'react';
 import React, { useCallback, useMemo, useRef, useState } from 'react';
 import { QueryClientContext, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import {
   executeCustomField,
   fetchIssueCustomFields,
@@ -153,7 +154,29 @@ function CustomFieldsRailSectionInner({
               data-testid={`custom-field-row-${def.slug}`}
             >
               <div className="custom-fields-rail-label" title={def.name}>
-                {def.name}
+                <span className="custom-fields-rail-label-text">{def.name}</span>
+                <FieldHelpHint
+                  title={def.name}
+                  summary={`Custom Field (${def.slug}) with ${def.output_format} output format.`}
+                  validValues={[
+                    {
+                      label: 'Flavor',
+                      description:
+                        def.tier === 'nsjail'
+                          ? 'nsjail container'
+                          : def.script_source?.startsWith('scalar:')
+                            ? 'Scalar'
+                            : def.script_source?.startsWith('formula:')
+                              ? 'Formula'
+                              : 'WebAssembly',
+                    },
+                    { label: 'Tier', description: def.tier },
+                    { label: 'Scope', description: def.target_scope },
+                    { label: 'Mode', description: def.credential_mode },
+                  ]}
+                  docHref={`/docs/custom-fields#${def.slug}`}
+                  testId={`rail-field-hint-${def.slug}`}
+                />
               </div>
 
               <div className="custom-fields-rail-pill">

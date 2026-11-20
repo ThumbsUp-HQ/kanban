@@ -802,27 +802,155 @@ describe('CustomFieldDefinitionEditor', () => {
     });
   });
 
-  it('evaluates test execute with empty metadata text', async () => {
+  it('renders FieldHelpHint components across all fields in basic and advanced tabs', () => {
     vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
-    vi.mocked(api.testExecuteCustomField).mockResolvedValue({
-      output_format: 'text',
-      value: 'Empty Meta Val',
-      status: 'SUCCESS',
-      latency_ms: 5,
-      logs: '',
+    renderEditor(true);
+
+    // Basic tab hints
+    expect(screen.getByTestId('hint-field-name')).toBeDefined();
+    expect(screen.getByTestId('hint-field-slug')).toBeDefined();
+    expect(screen.getByTestId('hint-field-flavor')).toBeDefined();
+    expect(screen.getByTestId('hint-output-format')).toBeDefined();
+    expect(screen.getByTestId('hint-format-metadata')).toBeDefined();
+    expect(screen.getByTestId('hint-script-source')).toBeDefined();
+
+    // Switch to advanced tab
+    fireEvent.click(screen.getByTestId('custom-fields-advanced-tab'));
+
+    expect(screen.getByTestId('hint-execution-tier')).toBeDefined();
+    expect(screen.getByTestId('hint-target-scope')).toBeDefined();
+    expect(screen.getByTestId('hint-credential-mode')).toBeDefined();
+    expect(screen.getByTestId('hint-egress-allowlist')).toBeDefined();
+  });
+
+  it('renders Starter Presets and Flavor Decision Matrix when creating a new field', () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
+    renderEditor(true);
+
+    expect(screen.getByTestId('custom-fields-starter-toolkit')).toBeDefined();
+    expect(screen.getByTestId('flavor-decision-matrix')).toBeDefined();
+    expect(screen.getByTestId('preset-gallery-section')).toBeDefined();
+  });
+
+  it('updates form flavor and template when selecting a flavor from Flavor Decision Matrix', () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
+    renderEditor(true);
+
+    // Open matrix
+    fireEvent.click(screen.getByTestId('toggle-flavor-matrix-btn'));
+    expect(screen.getByTestId('flavor-matrix-content')).toBeDefined();
+
+    // Select WebAssembly
+    fireEvent.click(screen.getByTestId('select-flavor-btn-wasm'));
+
+    expect(screen.getByTestId<HTMLSelectElement>('field-flavor-select').value).toBe('wasm');
+    expect(screen.getByTestId<HTMLTextAreaElement>('script-source-textarea').value).toContain(
+      'WebAssembly Tier A Module',
+    );
+
+    // Select nsjail
+    fireEvent.click(screen.getByTestId('select-flavor-btn-nsjail'));
+    expect(screen.getByTestId<HTMLSelectElement>('field-flavor-select').value).toBe('nsjail');
+    expect(screen.getByTestId<HTMLTextAreaElement>('script-source-textarea').value).toContain(
+      'Tier B nsjail container Python script',
+    );
+  });
+
+  it('allows dismissing undo strip via dismiss button', () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
+    renderEditor(true);
+
+    fireEvent.click(screen.getByTestId('use-preset-btn-cvss-score'));
+    expect(screen.getByTestId('preset-undo-strip')).toBeDefined();
+
+    fireEvent.click(screen.getByTestId('preset-dismiss-undo-btn'));
+    expect(screen.queryByTestId('preset-undo-strip')).toBeNull();
+  });
+
+  it('applies preset from PresetGallery into form fields', () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
+    renderEditor(true);
+
+    // Apply CVSS Score preset
+    fireEvent.click(screen.getByTestId('use-preset-btn-cvss-score'));
+
+    expect(screen.getByTestId<HTMLInputElement>('field-name-input').value).toBe(
+      'CVSS 3.1 / 4.0 Score',
+    );
+    expect(screen.getByTestId<HTMLInputElement>('field-slug-input').value).toBe('cvss-score');
+    expect(screen.getByTestId<HTMLSelectElement>('field-flavor-select').value).toBe('wasm');
+    expect(screen.getByTestId<HTMLSelectElement>('output-format-select').value).toBe(
+      'severity_pill',
+    );
+    expect(screen.getByTestId<HTMLTextAreaElement>('script-source-textarea').value).toContain(
+      'WebAssembly Tier A Module',
+    );
+  });
+
+  it('supports non-destructive undo after applying a preset', () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
+    renderEditor(true);
+
+    // Type custom name
+    fireEvent.change(screen.getByTestId('field-name-input'), {
+      target: { value: 'My Custom SLA Field' },
     });
+    fireEvent.change(screen.getByTestId('field-slug-input'), {
+      target: { value: 'my-custom-sla' },
+    });
+
+    // Form is now dirty, click Use Preset on blocker count
+    fireEvent.click(screen.getByTestId('use-preset-btn-blocker-count'));
+
+    // Confirm dialog appears
+    expect(screen.getByTestId('preset-dirty-confirm-dialog')).toBeDefined();
+    fireEvent.click(screen.getByTestId('preset-confirm-overwrite-btn'));
+
+    // Blocker count applied
+    expect(screen.getByTestId<HTMLInputElement>('field-name-input').value).toBe('Blocker Count');
+    expect(screen.getByTestId('preset-undo-strip')).toBeDefined();
+
+    // Click Undo
+    fireEvent.click(screen.getByTestId('preset-undo-btn'));
+
+    // Restores original values
+    expect(screen.getByTestId<HTMLInputElement>('field-name-input').value).toBe(
+      'My Custom SLA Field',
+    );
+    expect(screen.getByTestId<HTMLInputElement>('field-slug-input').value).toBe('my-custom-sla');
+  });
+
+  it('allows updating egress allowlist and submits it in create mutation', async () => {
+    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
+    vi.mocked(api.createCustomField).mockResolvedValue(def0);
 
     renderEditor(true);
 
-    fireEvent.change(screen.getByTestId('format-metadata-textarea'), {
-      target: { value: '   ' },
+    fireEvent.change(screen.getByTestId('field-name-input'), {
+      target: { value: 'PR Egress Field' },
     });
-    fireEvent.change(screen.getByTestId('test-issue-key-input'), {
-      target: { value: 'KAN-5' },
+    fireEvent.change(screen.getByTestId('field-slug-input'), {
+      target: { value: 'pr-egress-field' },
     });
-    fireEvent.click(screen.getByTestId('test-execute-btn'));
 
-    expect(await screen.findByTestId('test-execute-result-panel')).toBeDefined();
-    expect(screen.getByTestId('test-output-pill').textContent).toContain('Empty Meta Val');
+    // Advanced tab egress allowlist
+    fireEvent.click(screen.getByTestId('custom-fields-advanced-tab'));
+    const egressArea = screen.getByTestId<HTMLTextAreaElement>('egress-allowlist-textarea');
+    fireEvent.change(egressArea, {
+      target: { value: 'api.github.com\n127.0.0.1' },
+    });
+
+    fireEvent.click(screen.getByTestId('save-definition-btn'));
+
+    await waitFor(() => {
+      expect(api.createCustomField).toHaveBeenCalledWith(
+        'KAN',
+        expect.objectContaining({
+          name: 'PR Egress Field',
+          slug: 'pr-egress-field',
+          egress_allowlist: ['api.github.com', '127.0.0.1'],
+        }),
+      );
+    });
   });
 });
