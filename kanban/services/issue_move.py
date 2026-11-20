@@ -21,12 +21,14 @@ if TYPE_CHECKING:
     import uuid
 
     from sqlalchemy.ext.asyncio import AsyncSession
+    from starlette.responses import Response
 
     from kanban.api.deps import PrincipalContext
 
 logger = logging.getLogger(__name__)
 
 MIN_OVERRIDE_REASON_LEN: Final[int] = 10
+_HTTP_ACCEPTED: Final[int] = 202
 MAX_OVERRIDE_REASON_LEN: Final[int] = 500
 REQUIRED_AAL2_LEVEL: Final[int] = 2
 
@@ -248,6 +250,8 @@ async def move_issue(
     caller: PrincipalContext,
     issue_ref: str,
     req: IssueMoveRequest,
+    *,
+    response: Response | None = None,
 ) -> IssueMoveResponse:
     """Move an issue to a new board position or column in a single-row mutation."""
     issue = await resolve_issue_ref(session, caller, issue_ref)
@@ -313,12 +317,30 @@ async def move_issue(
     old_state_id = issue.state_id
 
     if is_cross_column:
-        await TransitionEngine.request_transition(
+        outcome = await TransitionEngine.request_transition(
             session=session,
             issue_key=str(issue.id),
             to_state=target_state_id,
             actor=caller,
         )
+        if outcome.status_code == _HTTP_ACCEPTED or outcome.status == "pending_agent_gate":
+            if response is not None:
+                response.status_code = _HTTP_ACCEPTED
+            proj_ident = (
+                await session.execute(
+                    select(Project.identifier).where(Project.id == issue.project_id)
+                )
+            ).scalar_one()
+            issue_key = f"{proj_ident}-{issue.sequence_id}"
+            return IssueMoveResponse(
+                issue_key=issue_key,
+                state_id=old_state_id,
+                board_rank=old_rank,
+                rebalance_scheduled=False,
+                wip_warning=wip_warning,
+                hard_limit=target_state.wip_hard_limit if wip_overridden else None,
+                resulting_count=resulting_count if (wip_overridden or wip_warning) else None,
+            )
         await session.execute(
             text("UPDATE issues SET board_rank = :r WHERE id = :id"),
             {"r": new_rank, "id": issue.id},

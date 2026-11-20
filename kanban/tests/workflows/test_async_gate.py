@@ -1073,7 +1073,7 @@ async def test_fail_open_warn_advance_and_commit(
     issue_id = uuid.UUID(resp.json()["id"])
 
     states = await _get_states(api_env.seed, proj_id)
-    done_id = states["Done"]
+    in_prog_id = states["In Progress"]
 
     # Provision 2 hooks with fail_open_warn
     agent_id1 = uuid.uuid4()
@@ -1106,7 +1106,7 @@ async def test_fail_open_warn_advance_and_commit(
         api_env.workspace_id,
         proj_id,
         agent_id1,
-        to_state_id=done_id,
+        to_state_id=in_prog_id,
         name="hook_one",
         sort_rank="10",
         failure_policy="fail_open_warn",
@@ -1116,7 +1116,7 @@ async def test_fail_open_warn_advance_and_commit(
         api_env.workspace_id,
         proj_id,
         agent_id2,
-        to_state_id=done_id,
+        to_state_id=in_prog_id,
         name="hook_two",
         sort_rank="20",
         failure_policy="fail_open_warn",
@@ -1124,7 +1124,7 @@ async def test_fail_open_warn_advance_and_commit(
 
     t_resp = await client.post(
         f"/api/v1/issues/{issue_key}/transitions",
-        json={"to_state": "Done"},
+        json={"to_state": "In Progress"},
     )
     assert t_resp.status_code == 202
     exec_id = uuid.UUID(t_resp.json()["execution_id"])
@@ -1139,11 +1139,11 @@ async def test_fail_open_warn_advance_and_commit(
     await api_env.seed.commit()
     assert ex2.status == "approved"
 
-    # State updated to Done
+    # State updated to In Progress
     issue_post = (
         await api_env.seed.execute(select(Issue).where(Issue.id == issue_id))
     ).scalar_one()
-    assert issue_post.state_id == done_id
+    assert issue_post.state_id == in_prog_id
     assert issue_post.pending_transition_exec_id is None
 
 
@@ -1249,7 +1249,7 @@ async def test_gate_coverage_branches(  # noqa: PLR0915
     issue_key = resp.json()["key"]
 
     states = await _get_states(api_env.seed, proj_id)
-    done_id = states["Done"]
+    in_prog_id = states["In Progress"]
 
     agent_id = uuid.uuid4()
     agent_def = AgentDefinition(
@@ -1270,7 +1270,7 @@ async def test_gate_coverage_branches(  # noqa: PLR0915
         api_env.workspace_id,
         proj_id,
         agent_id,
-        to_state_id=done_id,
+        to_state_id=in_prog_id,
         name="branch_hook",
         sort_rank="10",
         allowed_mutable_fields=["description_markdown"],
@@ -1279,7 +1279,7 @@ async def test_gate_coverage_branches(  # noqa: PLR0915
 
     t_resp = await client.post(
         f"/api/v1/issues/{issue_key}/transitions",
-        json={"to_state": "Done"},
+        json={"to_state": "In Progress"},
     )
     assert t_resp.status_code == 202
     exec_id = uuid.UUID(t_resp.json()["execution_id"])
@@ -1316,7 +1316,7 @@ async def test_gate_coverage_branches(  # noqa: PLR0915
     issue_key2 = resp2.json()["key"]
     t_resp2 = await client.post(
         f"/api/v1/issues/{issue_key2}/transitions",
-        json={"to_state": "Done"},
+        json={"to_state": "In Progress"},
     )
     exec_id2 = uuid.UUID(t_resp2.json()["execution_id"])
     with pytest.raises(ProblemException) as exc_info2:
@@ -1331,7 +1331,7 @@ async def test_gate_coverage_branches(  # noqa: PLR0915
     issue_key3 = resp_fields.json()["key"]
     t_resp3 = await client.post(
         f"/api/v1/issues/{issue_key3}/transitions",
-        json={"to_state": "Done"},
+        json={"to_state": "In Progress"},
     )
     exec_id3 = uuid.UUID(t_resp3.json()["execution_id"])
     good_decision = GateDecision(
@@ -1371,7 +1371,7 @@ async def test_gate_coverage_branches(  # noqa: PLR0915
     issue_id4 = uuid.UUID(resp_toctou.json()["id"])
     t_resp4 = await client.post(
         f"/api/v1/issues/{issue_key4}/transitions",
-        json={"to_state": "Done"},
+        json={"to_state": "In Progress"},
     )
     exec_id4 = uuid.UUID(t_resp4.json()["execution_id"])
 
@@ -1385,3 +1385,77 @@ async def test_gate_coverage_branches(  # noqa: PLR0915
     ex4 = await GateCoordinator.record_failure(api_env.seed, exec_id4, hook.id, "AGENT_ERR")
     await api_env.seed.commit()
     assert ex4.status == "cancelled"
+
+
+async def test_completed_state_forces_fail_closed(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Whenever target_state.state_group == 'completed', record_failure enforces fail_closed."""
+    admin = await make_user("t_fc_admin", workspace_role="WORKSPACE_ADMIN")
+    proj_id = await make_project("TFCP", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+    client = as_principal(admin)
+
+    states = await _get_states(api_env.seed, proj_id)
+    todo_id = states["Todo"]
+    done_id = states["Done"]
+
+    agent_def, _ = await create_agent_definition(
+        api_env.seed, api_env.workspace_id, proj_id, slug="qa-gate-agent"
+    )
+
+    # Hook explicitly configured with fail_open_warn targeting completed state Done
+    hook = await create_agent_hook(
+        api_env.seed,
+        api_env.workspace_id,
+        proj_id,
+        agent_def.id,
+        to_state_id=done_id,
+        name="qa_fail_open_hook",
+        failure_policy="fail_open_warn",
+    )
+
+    create_resp = await client.post(
+        "/api/v1/projects/TFCP/issues",
+        json={
+            "summary": "Fail closed test",
+            "description_markdown": "Desc",
+            "state_id": str(todo_id),
+        },
+    )
+    issue_key = create_resp.json()["key"]
+    issue_id = uuid.UUID(create_resp.json()["id"])
+
+    t_resp = await client.post(
+        f"/api/v1/issues/{issue_key}/transitions",
+        json={"to_state": "Done"},
+    )
+    assert t_resp.status_code == 202
+    exec_id = uuid.UUID(t_resp.json()["execution_id"])
+
+    # Fail the hook with a transient error -> MUST fail closed, not auto-approve into Done!
+    ex = await GateCoordinator.record_failure(api_env.seed, exec_id, hook.id, "TRANSIENT_TIMEOUT")
+    await api_env.seed.commit()
+
+    assert ex.status == "rejected"
+    assert ex.verdict_json is not None
+    assert ex.verdict_json["decision"] == "rejected"
+
+    # Issue must remain in original state (Todo), hold must be cleared
+    issue_post = (
+        await api_env.seed.execute(select(Issue).where(Issue.id == issue_id))
+    ).scalar_one()
+    assert issue_post.state_id == todo_id
+    assert issue_post.pending_transition_exec_id is None
+
+    # Veto comment posted
+    comments = (
+        (await api_env.seed.execute(select(IssueComment).where(IssueComment.issue_id == issue_id)))
+        .scalars()
+        .all()
+    )
+    assert len(comments) == 1
+    assert "🛑🤖" in comments[0].body_markdown
+    assert "Gate failed: TRANSIENT_TIMEOUT" in comments[0].body_markdown

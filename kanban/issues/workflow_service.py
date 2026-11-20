@@ -9,16 +9,23 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
 
 from pydantic import ValidationError
-from sqlalchemy import select, text
+from sqlalchemy import or_, select, text
 
 from database.models.issues import Issue, IssueAssignee, IssueComment
 from database.models.projects import Cycle, Project, WorkflowState
+from database.models.workflow import WorkflowTransitionHook
 from kanban.api.problems import ProblemException
 from kanban.content import normalize_to_markdown
-from kanban.issues.proof import VerificationProof, validate_proof_ticket_key
+from kanban.issues.proof import (
+    VerificationProof,
+    validate_proof_ticket_key,
+    validate_reality_checker_report,
+)
 from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.issue_keys import resolve_issue_ref
+
+_HTTP_ACCEPTED: Final[int] = 202
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -495,18 +502,24 @@ async def _collect_open_blockers(
     caller: PrincipalContext,
     issue: Issue,
 ) -> list[str]:
-    """Inspect recursive child issues and incoming BLOCKS links for uncompleted work."""
+    """Inspect recursive child issues and incoming BLOCKS / outgoing BLOCKED_BY links."""
     visible_keys: list[str] = []
     redacted_count = 0
     seen_ids: set[uuid.UUID] = set()
 
-    # 1. Recursive child issues
+    # 1. Recursive child issues filtering deleted_at IS NULL
     stmt_children = text(
         "WITH RECURSIVE descendants AS ("
-        "    SELECT id, project_id, state_id, sequence_id FROM issues WHERE parent_issue_id = :iid "
+        "    SELECT i.id, i.project_id, i.state_id, i.sequence_id "
+        "    FROM issues i "
+        "    JOIN objects o ON o.id = i.id "
+        "    WHERE i.parent_issue_id = :iid AND o.deleted_at IS NULL "
         "    UNION ALL "
-        "    SELECT i.id, i.project_id, i.state_id, i.sequence_id FROM issues i "
+        "    SELECT i.id, i.project_id, i.state_id, i.sequence_id "
+        "    FROM issues i "
         "    JOIN descendants d ON i.parent_issue_id = d.id "
+        "    JOIN objects o ON o.id = i.id "
+        "    WHERE o.deleted_at IS NULL "
         ") "
         "SELECT d.id, d.project_id, d.sequence_id, p.identifier "
         "FROM descendants d "
@@ -526,16 +539,24 @@ async def _collect_open_blockers(
         else:
             redacted_count += 1
 
-    # 2. Inbound BLOCKS links from object_links
-    stmt_blocks = text(
-        "SELECT ol.source_id, ol.source_key_snapshot "
-        "FROM object_links ol "
-        "WHERE ol.target_id = :iid "
-        "  AND ol.link_type = 'BLOCKS' "
-        "  AND ol.link_state = 'ACTIVE'"
+    # 2. Inbound BLOCKS and outgoing BLOCKED_BY links
+    stmt_links = text(
+        "SELECT blocker_id FROM ("
+        "  SELECT ol.source_id AS blocker_id "
+        "  FROM object_links ol "
+        "  WHERE ol.target_id = :iid "
+        "    AND ol.link_type = 'BLOCKS' "
+        "    AND ol.link_state = 'ACTIVE' "
+        "  UNION "
+        "  SELECT ol.target_id AS blocker_id "
+        "  FROM object_links ol "
+        "  WHERE ol.source_id = :iid "
+        "    AND ol.link_type = 'BLOCKED_BY' "
+        "    AND ol.link_state = 'ACTIVE' "
+        ") blockers"
     )
-    block_links = (await session.execute(stmt_blocks, {"iid": issue.id})).all()
-    for row in block_links:
+    link_rows = (await session.execute(stmt_links, {"iid": issue.id})).all()
+    for row in link_rows:
         src_id = row[0]
         if src_id in seen_ids:
             continue
@@ -546,13 +567,14 @@ async def _collect_open_blockers(
             redacted_count += 1
             continue
 
-        # For readable source, check whether its state is non-terminal
+        # For readable blocker, check whether its state is non-terminal
         src_state_stmt = text(
             "SELECT p.identifier, src.sequence_id, ws.state_group "
             "FROM issues src "
+            "JOIN objects o ON o.id = src.id "
             "JOIN projects p ON p.id = src.project_id "
             "JOIN workflow_states ws ON ws.id = src.state_id "
-            "WHERE src.id = :sid"
+            "WHERE src.id = :sid AND o.deleted_at IS NULL"
         )
         src_state_row = (await session.execute(src_state_stmt, {"sid": src_id})).first()
         if src_state_row is not None:
@@ -568,7 +590,7 @@ async def _collect_open_blockers(
     return result_keys
 
 
-async def complete_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
+async def complete_work(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     session: AsyncSession,
     caller: PrincipalContext,
     issue_ref: str,
@@ -639,6 +661,16 @@ async def complete_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
             detail="summary_markdown length must be between 1 and 65536 bytes",
         )
 
+    try:
+        validate_reality_checker_report(summary_markdown)
+    except ValueError as exc:
+        raise ProblemException(
+            code="INVALID_REALITY_CHECKER_REPORT",
+            status=422,
+            title="Invalid Reality-Checker Report",
+            detail=str(exc),
+        ) from exc
+
     # Resolve target completed state
     if to_state_ref:
         target_state = await _resolve_state_by_ref(session, issue.project_id, to_state_ref)
@@ -708,36 +740,79 @@ async def complete_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
             detail="Current issue state could not be resolved",
         )
 
-    # 3. Evaluate gate hook
-    hook = get_workflow_gate_hook()
-    gate_hold = await hook.evaluate_transition(
-        session,
-        caller,
-        issue,
-        from_state,
-        target_state,
-        verification_proof=verification_proof,
-    )
-
-    if gate_hold is not None:
-        issue.pending_transition_exec_id = gate_hold.execution_id
-    elif issue.state_id != target_state.id:
-        await session.execute(text("SELECT set_config('app.transition_exec_id', 'bypass', true)"))
-        old_id = issue.state_id
-        issue.state_id = target_state.id
-        await record_activity(
-            session,
-            workspace_id=caller.workspace_id,
-            object_id=issue.id,
-            actor_principal_id=caller.principal_id,
-            event_type=ActivityEventType.ISSUE_STATE_CHANGED,
-            payload={
-                "from_state_id": str(old_id),
-                "to_state_id": str(target_state.id),
-                "from_state": from_state.name,
-                "to_state": target_state.name,
-            },
+    # 3. Evaluate transition hooks / gate hook
+    hooks_stmt = (
+        select(WorkflowTransitionHook.id)
+        .where(
+            WorkflowTransitionHook.project_id == issue.project_id,
+            WorkflowTransitionHook.to_state_id == target_state.id,
+            WorkflowTransitionHook.is_enabled.is_(True),
+            or_(
+                WorkflowTransitionHook.from_state_id == from_state.id,
+                WorkflowTransitionHook.from_state_id.is_(None),
+            ),
         )
+        .limit(1)
+    )
+    has_hooks = (await session.execute(hooks_stmt)).scalar_one_or_none() is not None
+
+    gate_hold: GateHoldResult | None = None
+    if has_hooks:
+        from kanban.workflows.engine import TransitionEngine  # noqa: PLC0415
+
+        engine = TransitionEngine(session)
+        outcome = await engine.execute_transition(
+            issue_key=str(issue.id),
+            to_state=target_state.id,
+            actor=caller,
+            if_match=if_match,
+            is_complete_work=True,
+            verification_proof=verification_proof,
+        )
+        if outcome.status_code == _HTTP_ACCEPTED or outcome.status == "pending_agent_gate":
+            active_ag = (
+                outcome.field_updates.get("active_agent", "") if outcome.field_updates else ""
+            )
+            gate_hold = GateHoldResult(
+                execution_id=outcome.execution_id
+                or (uuid.uuid7() if hasattr(uuid, "uuid7") else uuid.uuid4()),
+                active_agent=active_ag,
+                from_state=from_state.name,
+                to_state=target_state.name,
+            )
+            issue.pending_transition_exec_id = gate_hold.execution_id
+    else:
+        hook = get_workflow_gate_hook()
+        gate_hold = await hook.evaluate_transition(
+            session,
+            caller,
+            issue,
+            from_state,
+            target_state,
+            verification_proof=verification_proof,
+        )
+
+        if gate_hold is not None:
+            issue.pending_transition_exec_id = gate_hold.execution_id
+        elif issue.state_id != target_state.id:
+            await session.execute(
+                text("SELECT set_config('app.transition_exec_id', 'bypass', true)")
+            )
+            old_id = issue.state_id
+            issue.state_id = target_state.id
+            await record_activity(
+                session,
+                workspace_id=caller.workspace_id,
+                object_id=issue.id,
+                actor_principal_id=caller.principal_id,
+                event_type=ActivityEventType.ISSUE_STATE_CHANGED,
+                payload={
+                    "from_state_id": str(old_id),
+                    "to_state_id": str(target_state.id),
+                    "from_state": from_state.name,
+                    "to_state": target_state.name,
+                },
+            )
 
     # 4. Post summary comment with rendered proof table
     comment_content = render_proof_table(summary_markdown, verification_proof)

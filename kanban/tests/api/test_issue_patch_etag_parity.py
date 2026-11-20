@@ -50,6 +50,35 @@ def _make_valid_proof(key: str) -> dict[str, Any]:
     }
 
 
+def _make_valid_report(verdict: str = "READY", grade: str = "A") -> str:
+    return f"""# Integration Agent Reality-Based Report
+
+## Reality Check Validation
+- Verified all deliverables against acceptance criteria.
+- Complete audit of all source files and assets.
+
+## Complete System Evidence
+- System running smoothly with zero errors.
+- Verification artifacts collected in docs/qa.
+
+## Integration Testing Results
+- All unit and integration test suites executed cleanly.
+- Full regression suite passing.
+
+## Comprehensive Issue Assessment
+- Root cause identified and systematically resolved.
+- Security and performance invariants verified.
+
+## Realistic Quality Certification
+- Verdict: {verdict}
+- Grade: {grade}
+
+## Deployment Readiness Assessment
+- Ready for immediate production deployment.
+- No rollback concerns or migration locks.
+"""
+
+
 async def test_chained_patch_get_patch_etag_parity(
     make_user: Callable[..., Awaitable[SeededUser]],
     make_project: Callable[..., Awaitable[uuid.UUID]],
@@ -225,7 +254,7 @@ async def test_workflow_and_provenance_and_mcp_etag_parity(
     cw_resp = await client.post(
         f"/api/v1/issues/{issue_key}/complete-work",
         json={
-            "summary_markdown": "Completed all implementation and tests.",
+            "summary_markdown": _make_valid_report(),
             "verification_proof": proof,
         },
         headers={"If-Match": trans_etag},

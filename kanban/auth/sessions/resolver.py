@@ -82,6 +82,8 @@ class SessionCookieResolver:
             session_id=user_session.id,
             mfa_pending=user_session.mfa_pending,
             aal2_verified_at=user_session.aal2_verified_at,
+            principal_type="USER",
+            is_mcp_credential=False,
         )
         request.state.principal = ctx
         bind_request_log_user(
@@ -144,6 +146,10 @@ class SessionCookieResolver:
                 ws_id = def_ws if def_ws is not None else uuid.UUID(int=0)
 
         is_ephemeral = intro.token_kind == "ephemeral" or raw_token.startswith("kb_agt_eph_")  # noqa: S105
+        owner_kind = intro.owner_kind or (
+            "agent" if intro.agent_principal_id or is_ephemeral else "user"
+        )
+        principal_type = owner_kind.upper()
         ctx = PrincipalContext(
             principal_id=intro.principal_id,
             workspace_id=ws_id,
@@ -154,6 +160,8 @@ class SessionCookieResolver:
             read_only=is_ephemeral,
             scope_tier=intro.scope_tier,
             scoped_project_id=intro.project_id,
+            principal_type=principal_type,
+            is_mcp_credential=True,
         )
         request.state.principal = ctx
         bind_request_log_user(

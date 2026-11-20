@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from typing import Annotated
 
-from fastapi import APIRouter, Depends
+from fastapi import APIRouter, Depends, Response
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
@@ -13,6 +13,8 @@ from kanban.api.v1.schemas.issue_move import (
     IssueMoveRequest,
     IssueMoveResponse,
 )
+from kanban.security.read_taint import TaintGuard, get_taint_guard
+from kanban.services.issue_keys import resolve_issue_ref
 from kanban.services.issue_move import move_issue
 
 router = APIRouter(tags=["issues"])
@@ -27,12 +29,16 @@ Session = Annotated[AsyncSession, Depends(get_rls_session)]
     response_model_exclude_none=False,
     summary="Move or reorder an issue on the board",
 )
-async def post_issue_move(
+async def post_issue_move(  # noqa: PLR0913, PLR0917
     issue_ref: str,
     body: IssueMoveRequest,
     caller: Caller,
     session: Session,
+    response: Response,
+    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
 ) -> IssueMoveResponse:
     """Move an issue across columns or reorder it within a column (S6.4)."""
     async with timing_floor(floor_ms=25.0):
-        return await move_issue(session, caller, issue_ref, body)
+        issue = await resolve_issue_ref(session, caller, issue_ref)
+        await taint_guard.check_write(issue.project_id, tool_name="move_issue")
+        return await move_issue(session, caller, issue_ref, body, response=response)

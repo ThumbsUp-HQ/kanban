@@ -329,8 +329,14 @@ class TierAWasmRunner:
         try:
             # Allocate guest buffer and copy input bytes
             alloc_ptr = kb_alloc(store, len(input_bytes))
-            if isinstance(alloc_ptr, int):
-                memory.write(store, input_bytes, alloc_ptr)
+            if not (
+                isinstance(alloc_ptr, int)
+                and alloc_ptr > 0
+                and alloc_ptr + len(input_bytes) <= memory.data_len(store)
+            ):
+                msg = "WebAssembly guest 'kb_alloc' returned invalid or out-of-bounds pointer"
+                raise WasmRunError(msg, code="SCRIPT_TRAP")
+            memory.write(store, input_bytes, alloc_ptr)
 
             # Invoke guest run entrypoint
             ret = kb_run(store, alloc_ptr, len(input_bytes))

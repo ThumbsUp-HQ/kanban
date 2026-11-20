@@ -270,6 +270,55 @@ def _start_outbox_relay(
         return task, relay_stop_event
 
 
+async def _run_startup_checks(app: FastAPI, session_target: object | None) -> None:
+    if session_target is None:
+        return
+    try:
+        await verify_schema_head(session_target)  # type: ignore[arg-type]
+    except Exception:
+        logger.debug("Startup schema-head check skipped or failed", exc_info=True)
+    try:
+        key_material = getattr(app.state, "key_material", None)
+        app_settings = getattr(app.state, "settings", None)
+        await mint_setup_token_if_uninitialized(
+            session_target,  # type: ignore[arg-type]
+            key_material=key_material,
+            settings=app_settings,
+        )
+    except Exception:
+        logger.debug("First-boot setup token check bypassed or failed", exc_info=True)
+
+
+async def _start_gate_worker_if_enabled(
+    app: FastAPI,
+    *,
+    should_run: bool,
+    session_target: object | None,
+) -> tuple[asyncio.Task[None] | None, asyncio.Event | None]:
+    if not (should_run and session_target is not None):
+        return None, None
+    try:
+        gate_runner_mod = importlib.import_module("agent.gates.runner")
+        start_gate_worker = getattr(gate_runner_mod, "start_gate_worker", None)
+        if start_gate_worker is not None:
+            return await start_gate_worker(app, session_target)  # type: ignore[no-any-return]
+    except Exception:
+        logger.debug("Gate worker runner startup skipped or failed", exc_info=True)
+    return None, None
+
+
+async def _stop_background_task(
+    task: asyncio.Task[None] | None, stop_event: asyncio.Event | None
+) -> None:
+    if task is None:
+        return
+    if stop_event is not None:
+        stop_event.set()
+    task.cancel()
+    with contextlib.suppress(asyncio.CancelledError, Exception):
+        await task
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Manage application lifespan, starting background workers and draining on shutdown."""
@@ -285,35 +334,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if hub is not None:
         await hub.start()
 
-    if session_target is not None:
-        try:
-            await verify_schema_head(session_target)
-        except Exception:
-            logger.debug("Startup schema-head check skipped or failed", exc_info=True)
-        try:
-            key_material = getattr(app.state, "key_material", None)
-            app_settings = getattr(app.state, "settings", None)
-            await mint_setup_token_if_uninitialized(
-                session_target,
-                key_material=key_material,
-                settings=app_settings,
-            )
-        except Exception:
-            logger.debug("First-boot setup token check bypassed or failed", exc_info=True)
+    await _run_startup_checks(app, session_target)
 
     if should_run and session_target is not None:
         await scheduler.start(session_target)
 
+    gate_runner_task, gate_runner_stop_event = await _start_gate_worker_if_enabled(
+        app, should_run=should_run, session_target=session_target
+    )
     relay_task, relay_stop_event = _start_outbox_relay(app, session_target)
 
     try:
         yield
     finally:
-        if relay_task is not None:
-            relay_stop_event.set()
-            relay_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError, Exception):
-                await relay_task
+        await _stop_background_task(gate_runner_task, gate_runner_stop_event)
+        await _stop_background_task(relay_task, relay_stop_event)
         if should_run and session_target is not None:
             await scheduler.stop()
         hub = getattr(app.state, "realtime_hub", None)

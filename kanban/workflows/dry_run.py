@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy import select, text
 
 from database.models.agent_definition import AgentDefinition
-from database.models.issues import Issue
+from database.models.issues import Issue, IssueComment
 from database.models.projects import ProjectPriority
 from database.models.wasm_module import ApprovedWasmModule
 from database.models.workflow import WorkflowTransitionHook
@@ -66,6 +66,9 @@ class DryRunPayload(BaseModel):
     issue_key: str | None = Field(default=None, description="Existing issue key or UUID")
     sample_ticket: DryRunSampleTicket | None = Field(
         default=None, description="Synthetic ticket for dry-run"
+    )
+    verification_proof: dict[str, Any] | None = Field(
+        default=None, description="Optional verification proof packet"
     )
 
 
@@ -228,6 +231,25 @@ async def run_dry_run(
                 issue_labels = []
                 issue_key_str = payload.issue_key.strip()
 
+            comments_list: list[dict[str, Any]] = []
+            if has_key:
+                c_stmt = (
+                    select(IssueComment)
+                    .where(IssueComment.issue_id == issue_id, IssueComment.deleted_at.is_(None))
+                    .order_by(IssueComment.created_at.desc())
+                    .limit(10)
+                )
+                c_rows = list((await session.execute(c_stmt)).scalars().all())
+                comments_list = [
+                    {
+                        "id": str(c.id),
+                        "author_id": str(c.author_id),
+                        "body_markdown": (c.body_markdown or "")[:16384],
+                        "created_at": c.created_at.isoformat(),
+                    }
+                    for c in reversed(c_rows)
+                ]
+
             # Query enabled hooks for this transition in sort_rank order
             hook_stmt = select(WorkflowTransitionHook).where(
                 WorkflowTransitionHook.project_id == project.id,
@@ -370,6 +392,8 @@ async def run_dry_run(
                         "description_sha256": issue_desc_sha.hex(),
                         "priority": issue_priority_str,
                         "labels": issue_labels,
+                        "comments": comments_list,
+                        "verification_proof": payload.verification_proof,
                     },
                     "transition": {
                         "from_state": from_name,

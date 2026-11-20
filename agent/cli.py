@@ -9,6 +9,10 @@ import sys
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, NoReturn
 
+from agent.cli_commands.run_gate_worker import (
+    configure_run_gate_worker_parser,
+    handle_run_gate_worker,
+)
 from agent.cli_commands.validate_echo import (
     configure_validate_echo_parser,
     handle_validate_echo,
@@ -254,6 +258,16 @@ register_subcommand(
         help="Validate transition gate interceptor across in_app_sdk, cli_pipe and remote_runner",
         configure_parser=configure_validate_transition_parser,
         handler=handle_validate_transition,
+    )
+)
+
+# Register run-gate-worker subcommand
+register_subcommand(
+    SubcommandSpec(
+        name="run-gate-worker",
+        help="Run background gate worker executing asynchronous transition gates",
+        configure_parser=configure_run_gate_worker_parser,
+        handler=handle_run_gate_worker,
     )
 )
 
