@@ -4,9 +4,9 @@
 - Title: Implement Progressive-Disclosure Self-Correcting YAML Error UX Across All MCP Surfaces
 - Reviewer: api-spec-2 (Clean-Room Backend / API / Security Specialist)
 - Date: 2026-11-20
-- Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan19-rc4-a70467c2`
-- Branch: `fix/KAN-19-rc4`
-- Commit: `7d0889b910c626e4923c1e2661c0b5d5addcb1d3`
+- Workspace: `/home/adamoutler/kanban`
+- Branch: `main`
+- Commit: `18bcddb7`
 - Wiki Commit: `535fe9e06b544b652f9a3ed3bd1c245a9053407f`
 - Status: STATUS: APPROVED
 
@@ -14,7 +14,7 @@
 
 ## 1. Executive Summary
 
-This clean-room API and Architecture audit inspects ticket KAN-19 on remediation branch `fix/KAN-19-rc4` (commit `7d0889b9`). The ticket implements self-correcting progressive-disclosure YAML error handling across all MCP surfaces (`/mcp/agent`, `/mcp/docs`, `/mcp/admin`), fixes the JIT-help bypass regression, guards `custom_fields` parameter handling to `update_ticket`, corrects the self-correction CLI example in `manage_cycles_and_modules` to `--action=list_cycles`, enriches all `NOT_FOUND` / `ENTITY_NOT_FOUND` / `SECTION_NOT_FOUND` paths with `fix_hint` and `cli_example` self-correction guidance, aligns all wiki CLI and error documentation with runtime contracts, wraps `<pre>` code blocks in Markdown viewers, and verifies 356 passing unit tests with `>= 95%` coverage on every touched MCP file (overall 96%).
+This clean-room API and Architecture audit inspects ticket KAN-19 on `main` at commit `18bcddb7` (paired with wiki commit `535fe9e`). The ticket implements self-correcting progressive-disclosure YAML error handling across all MCP surfaces (`/mcp/agent`, `/mcp/docs`, `/mcp/admin`), fixes the JIT-help bypass regression, guards `custom_fields` parameter handling to `update_ticket`, corrects the self-correction CLI example in `manage_cycles_and_modules` to `--action=list_cycles`, enriches all `NOT_FOUND` / `ENTITY_NOT_FOUND` / `SECTION_NOT_FOUND` paths with `fix_hint` and `cli_example` self-correction guidance, aligns all wiki CLI and error documentation with runtime contracts, wraps `<pre>` code blocks in Markdown viewers, and verifies 356 passing unit tests with `>= 95%` coverage on every touched MCP file (overall 96%).
 
 The implementation adheres to all architectural invariants, schema validation requirements, and API standards:
 1. `KbMcpError` in `mcp/errors.py` is extended with structured remediation fields (`field`, `valid_options`, `did_you_mean`, `fix_hint`, `cli_example`, `closest_match`), serialized via `InlineSafeDumper` (`strip_nulls=True`) to maintain a minimal token footprint for LLM context windows.
@@ -24,8 +24,9 @@ The implementation adheres to all architectural invariants, schema validation re
 5. `_map_cycle_error` in `mcp/surfaces/admin/manage_cycles_and_modules.py:197` formats `--action=list_cycles`, matching `MANAGE_CYCLES_AND_MODULES_SCHEMA` enum choices.
 6. All `NOT_FOUND` / `ENTITY_NOT_FOUND` / `SECTION_NOT_FOUND` domain error handlers across `/mcp/agent`, `/mcp/docs`, and `/mcp/admin` expose detailed self-correcting information (`fix_hint` and `cli_example`) so callers immediately receive discovery suggestions rather than dead-ends.
 7. Explicit regression test `test_not_found_regression_progressive_disclosure` confirms both `read_ticket` and `docs update` return structured YAML containing `code: NOT_FOUND`, `hint:`, `fix_hint:`, and pre-populated `cli_example:`.
-8. Full architectural layering is preserved: `mcp` maintains zero runtime imports from `database`.
-9. Full test suite: 356 passed, 0 failed in 46.07s, with every touched file reaching `>= 95%` coverage:
+8. Unmocked live full-stack proof in `docs/qa/KAN-19/live-fullstack-proof.txt` confirms all 10 live JSON-RPC 2.0 cases pass against container `kanban-liveqa-1`, specifically validating Case 3A (`/mcp/agent read_ticket` NOT_FOUND with `kanban-cli-agent search_tickets --query="KAN-99999"`) and Case 3B (`/mcp/docs update` NOT_FOUND with `kanban-cli-docs search --query="DOC-99999"`).
+9. Full architectural layering is preserved: `mcp` maintains zero runtime imports from `database`.
+10. Full test suite: 356 passed, 0 failed in 46.07s, with every touched file reaching `>= 95%` coverage (overall 96%):
    - `mcp/errors.py`: 100%
    - `mcp/internal_client.py`: 96%
    - `mcp/protocol.py`: 95%
@@ -34,8 +35,7 @@ The implementation adheres to all architectural invariants, schema validation re
    - `mcp/surfaces/agent/transition_ticket.py`: 95%
    - `mcp/surfaces/agent/update_ticket.py`: 97%
    - `mcp/surfaces/docs/update.py`: 97%
-   - Overall touched files coverage: 96%.
-10. Frontend and wiki alignment: 434/434 Vitest unit tests pass across 38 suites, CSS token audit passed 4/4, wiki Example 7 key ordering aligned with runtime serialization, tool count reconciled to 24 in `_Sidebar.md`, and 0 em-dashes or en-dashes across codebase and wiki.
+11. Frontend and wiki alignment: 434/434 Vitest unit tests pass across 38 suites, CSS token audit passed 4/4, wiki Example 7 key ordering aligned with runtime serialization, tool count reconciled to 24 in `_Sidebar.md`, wrapped `<pre>` code blocks prevent mid-word clipping across all viewports, and 0 em-dashes or en-dashes across codebase and wiki.
 
 ---
 
@@ -73,7 +73,35 @@ The implementation adheres to all architectural invariants, schema validation re
 
 ---
 
-## 3. Layering, Static Quality & Security Verification
+## 3. Live Full-Stack Proof Audit (`live-fullstack-proof.txt`)
+
+The live full-stack proof in `docs/qa/KAN-19/live-fullstack-proof.txt` was inspected across all 10 live JSON-RPC cases and rendered documentation UI metrics against container `kanban-liveqa-1` at `http://localhost:18951` (commit `18bcddb7`, wiki `535fe9e`):
+
+- **Case 1 (/mcp/agent link_objects JIT help):** Calling `source: "help"` returns JIT syntax guidance (`params: {source, target, link_type, action}`) with `isError: false`.
+- **Case 2 (/mcp/admin manage_cycles_and_modules JIT help):** Calling `action: "help"` returns cycle/module schema syntax with `isError: false`.
+- **Case 3A (/mcp/agent read_ticket NOT_FOUND):** Calling `identifier: "KAN-99999"` returns structured YAML containing `code: NOT_FOUND`, `field: identifier`, `hint:`, `fix_hint:`, and `cli_example: kanban-cli-agent search_tickets --query="KAN-99999"`.
+- **Case 3B (/mcp/docs update NOT_FOUND):** Calling `id: "DOC-99999"` returns structured YAML containing `code: NOT_FOUND`, `field: id`, `hint:`, `fix_hint:`, and `cli_example: kanban-cli-docs search --query="DOC-99999"`.
+- **Case 4 (/mcp/agent read_ticket unknown alias):** Calling `ticket_id: "KAN-1"` returns `code: VALIDATION_FAILED`, suggests `did_you_mean: [identifier]`, and formats `cli_example: kanban-cli-agent read_ticket --identifier=KAN-1`.
+- **Case 5 (/mcp/agent read_ticket invalid enum):** Calling `lod: "verbose"` discloses valid options `[summary, standard, full]` and provides valid CLI example.
+- **Case 6 (/mcp/agent create_ticket missing required):** Calling without `summary` returns `code: VALIDATION_FAILED` with `cli_example: kanban-cli-agent create_ticket --project=KAN --summary="<summary>"`.
+- **Case 7 (/mcp/agent update_ticket CONFLICT_ETAG):** Calling with stale ETag returns `code: CONFLICT_ETAG`, exposes `current_etag`, and generates `cli_example` with the active ETag.
+- **Case 8 (/mcp/docs update unknown param):** Calling with `body` suggests `did_you_mean: [content]` with corrected CLI invocation.
+- **Case 9 (/mcp/admin manage_cycles_and_modules invalid enum):** Calling with `action: "list"` suggests `did_you_mean: [list_views]` and enumerates all valid actions.
+- **Part 2 (Live Rendered MCP Docs & Wrapped Code Blocks):**
+  - Confirmed 0 overflowing `<pre>` elements (`overflowingCount: 0`, `maxOverflowPx: 0`) across 1440x900 Desktop Light, 1440x900 Desktop Dark, and 390x844 Mobile Light.
+  - All 5 screenshots inspected in `docs/qa/KAN-19/screenshots/`:
+    * `live-kan19-mcp-docs-desktop-light.png`
+    * `live-kan19-mcp-docs-desktop-dark.png`
+    * `live-kan19-mcp-docs-mobile-light.png`
+    * `live-kan19-mcp-docs-examples-bottom-desktop-light.png`
+    * `live-kan19-mcp-docs-cycles-desktop-light.png`
+  - Zero application console errors and zero page errors recorded.
+
+Overall Live Stack Verdict: PASS.
+
+---
+
+## 4. Layering, Static Quality & Security Verification
 
 - Layering Invariant: Zero `database` imports inside `mcp/` (`uv run lint-imports` confirmed 2 kept, 0 broken).
 - Static Quality:
@@ -86,7 +114,7 @@ The implementation adheres to all architectural invariants, schema validation re
 
 ---
 
-## 4. Test Coverage Audit
+## 5. Test Coverage Audit
 
 - Pytest Coverage:
   - 356 tests passed in 46.07s across `mcp/tests/`.
@@ -108,9 +136,9 @@ The implementation adheres to all architectural invariants, schema validation re
 
 ---
 
-## 5. Verification Verdict
+## 6. Verification Verdict
 
-All MCP protocol schema enhancements, progressive-disclosure error disclosures, NOT_FOUND self-correction hints, documentation alignments, and test coverage standards are verified and approved.
+All MCP protocol schema enhancements, progressive-disclosure error disclosures, NOT_FOUND self-correction hints, live full-stack proof cases, documentation alignments, and test coverage standards are verified and approved.
 
 STATUS: APPROVED
 Reviewed by: api-spec-2

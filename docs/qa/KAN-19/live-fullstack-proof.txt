@@ -1,46 +1,72 @@
-=== KAN-19 LIVE FULL-STACK QA REFRESH (commit 53f7b6e, wiki b8853c3) ===
+=== KAN-19 LIVE FULL-STACK QA REFRESH (commit 18bcddb7, wiki 535fe9e) ===
 Container: kanban-liveqa-1 | Base URL: http://localhost:18951
 Mode: Zero-mock live Playwright Chromium + JSON-RPC 2.0 MCP calls against standalone embedded PostgreSQL 16 (FORCE RLS, UID 65532)
 
-[2026-11-20T10:14:12.393Z] Minted agent key: prefix=kb_agt_ id=18db0db3-d69b-4aec-b867-da7436e5b368 scopes=["agent:read","agent:write"]
-[2026-11-20T10:14:12.393Z] Minted docs key: prefix=kb_doc_ id=3a9095e8-9564-4ebc-be7a-443a413fa9c3 scopes=["docs:read","docs:write"]
-[2026-11-20T10:14:12.393Z] Minted admin key: prefix=kb_adm_ id=4a211a88-9e4b-4a0c-9e6e-28534854733e scopes=["admin:read","admin:write"]
-[2026-11-20T10:14:12.415Z] Initialized /mcp/agent session=eRV_i83UNtNifh0YHKWRmC4URERo7uIpgcDRmlcPjVs
-[2026-11-20T10:14:12.432Z] Initialized /mcp/docs session=DRe4ltaIymJ3ZFMYQr9WcjB8h81mSRECb-ccACFDxy4
-[2026-11-20T10:14:12.452Z] Initialized /mcp/admin session=tzk7M0ypwaMSPMd-D7ymx9cjGzbeMLiudF-By8xdtbU
+[2026-11-20T11:20:39.624Z] Setup status: {"initialized":true}
+[2026-11-20T11:20:39.631Z] Reused existing AAL2 session
+[2026-11-20T11:20:39.662Z] Verified project KAN id=01a1f8ae-d77a-7d97-92eb-97f8dec706c2
+[2026-11-20T11:20:39.693Z] Existing issue KAN-1 id=01a1f8af-39ce-7753-ade2-5e42605187d5
+[2026-11-20T11:20:39.727Z] Minted agent key: prefix=kb_agt_ id=57092956-a6b9-4468-a46f-170ba63fb652 scopes=["agent:read","agent:write"]
+[2026-11-20T11:20:39.752Z] Minted docs key: prefix=kb_doc_ id=6a582349-0744-47e0-afc6-cb7d8817fbdf scopes=["docs:read","docs:write"]
+[2026-11-20T11:20:39.777Z] Minted admin key: prefix=kb_adm_ id=631a82b0-d435-47f2-85e0-9fe58c680d85 scopes=["admin:read","admin:write"]
+[2026-11-20T11:20:39.788Z] Initialized /mcp/agent session=IHB7YKq95qp2TTukfUwi5xUt6FTINo19zjjvUTKRhOI
+[2026-11-20T11:20:39.799Z] Initialized /mcp/docs session=tywiAfUXCd_O8Z2VBtWRcvwez8w4Xcx_GvECsmuob4U
+[2026-11-20T11:20:39.814Z] Initialized /mcp/admin session=2ZkqAbazvKSAE3bGB6hKejO55rd4U5xaS3SyYaxk6xE
 
---- PART 1: LIVE JSON-RPC 2.0 JIT HELP & PROGRESSIVE-DISCLOSURE YAML ERRORS ---
+--- PART 1: LIVE JSON-RPC 2.0 JIT HELP & PROGRESSIVE-DISCLOSURE YAML ERRORS (10 CASES) ---
 
---- CASE 1_agent_link_objects_jit_help (/mcp/agent link_objects) ---
-REQUEST JSON-RPC: {"jsonrpc":"2.0","id":100,"method":"tools/call","params":{"name":"link_objects","arguments":{"source":"help"}}}
-HTTP STATUS: 200 (4.04ms) isError=false
-RESPONSE JSON: {"jsonrpc":"2.0","id":100,"result":{"content":[{"type":"text","text":"tool: link_objects\nparams: {source: KAN-142 | uuid, target: KAN-150 | uuid, link_type: blocks | blocked_by | relates_to | duplicates | duplicated_by,\n  action: add | remove}\n"}],"isError":false}}
+--- CASE 1 (/mcp/agent link_objects JIT help) ---
+REQUEST JSON-RPC: {"jsonrpc":"2.0","id":101,"method":"tools/call","params":{"name":"link_objects","arguments":{"source":"help"}}}
+HTTP STATUS: 200 (4.83ms) isError=false
+RESPONSE JSON: {"jsonrpc":"2.0","id":101,"result":{"content":[{"type":"text","text":"tool: link_objects\nparams: {source: KAN-142 | uuid, target: KAN-150 | uuid, link_type: blocks | blocked_by | relates_to | duplicates | duplicated_by,\n  action: add | remove}\n"}],"isError":false}}
 EXTRACTED YAML PAYLOAD:
 tool: link_objects
 params: {source: KAN-142 | uuid, target: KAN-150 | uuid, link_type: blocks | blocked_by | relates_to | duplicates | duplicated_by,
   action: add | remove}
+ASSERTION: PASS
 
---- CASE 2_admin_manage_cycles_jit_help (/mcp/admin manage_cycles_and_modules) ---
-REQUEST JSON-RPC: {"jsonrpc":"2.0","id":101,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"help"}}}
-HTTP STATUS: 200 (4.24ms) isError=false
-RESPONSE JSON: {"jsonrpc":"2.0","id":101,"result":{"content":[{"type":"text","text":"tool: manage_cycles_and_modules\nparams: {action: list_cycles | create_cycle | update_cycle | start_cycle | complete_cycle | rollover | list_modules | create_module\n    | update_module | list_views | create_view | update_view | help, project: str}\n"}],"isError":false}}
+--- CASE 2 (/mcp/admin manage_cycles_and_modules JIT help) ---
+REQUEST JSON-RPC: {"jsonrpc":"2.0","id":102,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"help"}}}
+HTTP STATUS: 200 (3.88ms) isError=false
+RESPONSE JSON: {"jsonrpc":"2.0","id":102,"result":{"content":[{"type":"text","text":"tool: manage_cycles_and_modules\nparams: {action: list_cycles | create_cycle | update_cycle | start_cycle | complete_cycle | rollover | list_modules | create_module\n    | update_module | list_views | create_view | update_view | help, project: str}\n"}],"isError":false}}
 EXTRACTED YAML PAYLOAD:
 tool: manage_cycles_and_modules
 params: {action: list_cycles | create_cycle | update_cycle | start_cycle | complete_cycle | rollover | list_modules | create_module
     | update_module | list_views | create_view | update_view | help, project: str}
-NOTE: Contains list_cycles (zero --action=list typo).
+ASSERTION: PASS
 
---- CASE 3_agent_read_ticket_not_found (/mcp/agent read_ticket) ---
-REQUEST JSON-RPC: {"jsonrpc":"2.0","id":102,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-99999"}}}
-HTTP STATUS: 200 (45.36ms) isError=true
-RESPONSE JSON: {"jsonrpc":"2.0","id":102,"result":{"content":[{"type":"text","text":"error: {code: NOT_FOUND, message: ticket not found}\n"}],"isError":true}}
+--- CASE 3A (/mcp/agent read_ticket NOT_FOUND) ---
+REQUEST JSON-RPC: {"jsonrpc":"2.0","id":103,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-99999"}}}
+HTTP STATUS: 200 (49.96ms) isError=true
+RESPONSE JSON: {"jsonrpc":"2.0","id":103,"result":{"content":[{"type":"text","text":"error:\n  code: NOT_FOUND\n  message: ticket not found\n  field: identifier\n  hint: Ticket 'KAN-99999' was not found or you do not have access. Search accessible tickets first.\n  fix_hint: Ticket 'KAN-99999' was not found or you do not have access. Search accessible tickets first.\n  cli_example: kanban-cli-agent search_tickets --query=\"KAN-99999\"\n"}],"isError":true}}
 EXTRACTED YAML PAYLOAD:
-error: {code: NOT_FOUND, message: ticket not found}
+error:
+  code: NOT_FOUND
+  message: ticket not found
+  field: identifier
+  hint: Ticket 'KAN-99999' was not found or you do not have access. Search accessible tickets first.
+  fix_hint: Ticket 'KAN-99999' was not found or you do not have access. Search accessible tickets first.
+  cli_example: kanban-cli-agent search_tickets --query="KAN-99999"
+ASSERTION: PASS
 
---- CASE 4_agent_read_ticket_unknown_alias (/mcp/agent read_ticket) ---
-REQUEST JSON-RPC: {"jsonrpc":"2.0","id":103,"method":"tools/call","params":{"name":"read_ticket","arguments":{"ticket_id":"KAN-1"}}}
-HTTP STATUS: 200 (3.36ms) isError=true
-RESPONSE JSON: {"jsonrpc":"2.0","id":103,"result":{"content":[{"type":"text","text":"error:\n  code: VALIDATION_FAILED\n  message: Unknown parameter 'ticket_id' for tool 'read_ticket'\n  field: ticket_id\n  valid_options: [identifier, workspace, lod, comments_limit]\n  did_you_mean: [identifier, comments_limit]\n  hint: Unknown parameter 'ticket_id'. Did you mean 'identifier'?\n  fix_hint: Unknown parameter 'ticket_id'. Did you mean 'identifier'?\n  cli_example: kanban-cli-agent read_ticket --identifier=KAN-1\n"}],"isError":true}}
+--- CASE 3B (/mcp/docs update NOT_FOUND) ---
+REQUEST JSON-RPC: {"jsonrpc":"2.0","id":104,"method":"tools/call","params":{"name":"update","arguments":{"id":"DOC-99999","type":"DOC","content":"x"}}}
+HTTP STATUS: 200 (142.55ms) isError=true
+RESPONSE JSON: {"jsonrpc":"2.0","id":104,"result":{"content":[{"type":"text","text":"error:\n  code: NOT_FOUND\n  message: Document or page 'DOC-99999' not found\n  field: id\n  hint: Verify document identifier or discover valid documents using docs search.\n  fix_hint: Verify document identifier or discover valid documents using docs search.\n  cli_example: kanban-cli-docs search --query=\"DOC-99999\"\n"}],"isError":true}}
+EXTRACTED YAML PAYLOAD:
+error:
+  code: NOT_FOUND
+  message: Document or page 'DOC-99999' not found
+  field: id
+  hint: Verify document identifier or discover valid documents using docs search.
+  fix_hint: Verify document identifier or discover valid documents using docs search.
+  cli_example: kanban-cli-docs search --query="DOC-99999"
+ASSERTION: PASS
+
+--- CASE 4 (/mcp/agent read_ticket unknown alias ticket_id) ---
+REQUEST JSON-RPC: {"jsonrpc":"2.0","id":105,"method":"tools/call","params":{"name":"read_ticket","arguments":{"ticket_id":"KAN-1"}}}
+HTTP STATUS: 200 (3.25ms) isError=true
+RESPONSE JSON: {"jsonrpc":"2.0","id":105,"result":{"content":[{"type":"text","text":"error:\n  code: VALIDATION_FAILED\n  message: Unknown parameter 'ticket_id' for tool 'read_ticket'\n  field: ticket_id\n  valid_options: [identifier, workspace, lod, comments_limit]\n  did_you_mean: [identifier, comments_limit]\n  hint: Unknown parameter 'ticket_id'. Did you mean 'identifier'?\n  fix_hint: Unknown parameter 'ticket_id'. Did you mean 'identifier'?\n  cli_example: kanban-cli-agent read_ticket --identifier=KAN-1\n"}],"isError":true}}
 EXTRACTED YAML PAYLOAD:
 error:
   code: VALIDATION_FAILED
@@ -51,11 +77,12 @@ error:
   hint: Unknown parameter 'ticket_id'. Did you mean 'identifier'?
   fix_hint: Unknown parameter 'ticket_id'. Did you mean 'identifier'?
   cli_example: kanban-cli-agent read_ticket --identifier=KAN-1
+ASSERTION: PASS
 
---- CASE 5_agent_read_ticket_invalid_enum_lod (/mcp/agent read_ticket) ---
-REQUEST JSON-RPC: {"jsonrpc":"2.0","id":104,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-1","lod":"verbose"}}}
-HTTP STATUS: 200 (3.07ms) isError=true
-RESPONSE JSON: {"jsonrpc":"2.0","id":104,"result":{"content":[{"type":"text","text":"error:\n  code: VALIDATION_FAILED\n  message: Invalid value 'verbose' for parameter 'lod'; lod must be 'summary' or 'standard' or 'full'\n  field: lod\n  valid_options: [summary, standard, full]\n  hint: 'Invalid value ''verbose'' for parameter ''lod''. Valid options: [''summary'', ''standard'', ''full'']'\n  fix_hint: 'Invalid value ''verbose'' for parameter ''lod''. Valid options: [''summary'', ''standard'', ''full'']'\n  cli_example: kanban-cli-agent read_ticket --identifier=KAN-1 --lod=\"summary\"\n"}],"isError":true}}
+--- CASE 5 (/mcp/agent read_ticket invalid enum lod=verbose) ---
+REQUEST JSON-RPC: {"jsonrpc":"2.0","id":106,"method":"tools/call","params":{"name":"read_ticket","arguments":{"identifier":"KAN-1","lod":"verbose"}}}
+HTTP STATUS: 200 (2.47ms) isError=true
+RESPONSE JSON: {"jsonrpc":"2.0","id":106,"result":{"content":[{"type":"text","text":"error:\n  code: VALIDATION_FAILED\n  message: Invalid value 'verbose' for parameter 'lod'; lod must be 'summary' or 'standard' or 'full'\n  field: lod\n  valid_options: [summary, standard, full]\n  hint: 'Invalid value ''verbose'' for parameter ''lod''. Valid options: [''summary'', ''standard'', ''full'']'\n  fix_hint: 'Invalid value ''verbose'' for parameter ''lod''. Valid options: [''summary'', ''standard'', ''full'']'\n  cli_example: kanban-cli-agent read_ticket --identifier=KAN-1 --lod=\"summary\"\n"}],"isError":true}}
 EXTRACTED YAML PAYLOAD:
 error:
   code: VALIDATION_FAILED
@@ -65,11 +92,12 @@ error:
   hint: 'Invalid value ''verbose'' for parameter ''lod''. Valid options: [''summary'', ''standard'', ''full'']'
   fix_hint: 'Invalid value ''verbose'' for parameter ''lod''. Valid options: [''summary'', ''standard'', ''full'']'
   cli_example: kanban-cli-agent read_ticket --identifier=KAN-1 --lod="summary"
+ASSERTION: PASS
 
---- CASE 6_agent_create_ticket_missing_summary (/mcp/agent create_ticket) ---
-REQUEST JSON-RPC: {"jsonrpc":"2.0","id":105,"method":"tools/call","params":{"name":"create_ticket","arguments":{"project":"KAN"}}}
-HTTP STATUS: 200 (3.85ms) isError=true
-RESPONSE JSON: {"jsonrpc":"2.0","id":105,"result":{"content":[{"type":"text","text":"error:\n  code: VALIDATION_FAILED\n  message: Missing required parameter 'summary' for tool 'create_ticket'\n  field: summary\n  hint: 'Missing required parameter: ''summary''. Provide a value to proceed.'\n  fix_hint: 'Missing required parameter: ''summary''. Provide a value to proceed.'\n  cli_example: kanban-cli-agent create_ticket --project=KAN --summary=\"<summary>\"\n"}],"isError":true}}
+--- CASE 6 (/mcp/agent create_ticket missing required summary) ---
+REQUEST JSON-RPC: {"jsonrpc":"2.0","id":107,"method":"tools/call","params":{"name":"create_ticket","arguments":{"project":"KAN"}}}
+HTTP STATUS: 200 (2.11ms) isError=true
+RESPONSE JSON: {"jsonrpc":"2.0","id":107,"result":{"content":[{"type":"text","text":"error:\n  code: VALIDATION_FAILED\n  message: Missing required parameter 'summary' for tool 'create_ticket'\n  field: summary\n  hint: 'Missing required parameter: ''summary''. Provide a value to proceed.'\n  fix_hint: 'Missing required parameter: ''summary''. Provide a value to proceed.'\n  cli_example: kanban-cli-agent create_ticket --project=KAN --summary=\"<summary>\"\n"}],"isError":true}}
 EXTRACTED YAML PAYLOAD:
 error:
   code: VALIDATION_FAILED
@@ -78,24 +106,26 @@ error:
   hint: 'Missing required parameter: ''summary''. Provide a value to proceed.'
   fix_hint: 'Missing required parameter: ''summary''. Provide a value to proceed.'
   cli_example: kanban-cli-agent create_ticket --project=KAN --summary="<summary>"
+ASSERTION: PASS
 
---- CASE 7_agent_update_ticket_conflict_etag (/mcp/agent update_ticket) ---
-REQUEST JSON-RPC: {"jsonrpc":"2.0","id":106,"method":"tools/call","params":{"name":"update_ticket","arguments":{"identifier":"KAN-1","if_match":"0000000000000000000000000000000000000000000000000000000000000000","summary":"Stale ETag probe"}}}
-HTTP STATUS: 200 (128.93ms) isError=true
-RESPONSE JSON: {"jsonrpc":"2.0","id":106,"result":{"content":[{"type":"text","text":"error:\n  code: CONFLICT_ETAG\n  message: 'concurrency conflict: ticket description was modified concurrently'\n  hint: 'current etag: abb619c708d988a209a427ee1e7816e7d37d85523fa6025f703a1091b355dd2f'\n  fix_hint: 'Ticket description was modified concurrently. Retry with fresh ETag: abb619c708d988a209a427ee1e7816e7d37d85523fa6025f703a1091b355dd2f'\n  cli_example: kanban-cli-agent update_ticket --identifier=\"KAN-1\" --if-match=\"abb619c708d988a209a427ee1e7816e7d37d85523fa6025f703a1091b355dd2f\"\n  current_etag: abb619c708d988a209a427ee1e7816e7d37d85523fa6025f703a1091b355dd2f\n"}],"isError":true}}
+--- CASE 7 (/mcp/agent update_ticket stale if_match CONFLICT_ETAG) ---
+REQUEST JSON-RPC: {"jsonrpc":"2.0","id":108,"method":"tools/call","params":{"name":"update_ticket","arguments":{"identifier":"KAN-1","if_match":"0000000000000000000000000000000000000000000000000000000000000000","summary":"Stale ETag probe"}}}
+HTTP STATUS: 200 (123.22ms) isError=true
+RESPONSE JSON: {"jsonrpc":"2.0","id":108,"result":{"content":[{"type":"text","text":"error:\n  code: CONFLICT_ETAG\n  message: 'concurrency conflict: ticket description was modified concurrently'\n  hint: 'current etag: 1a6fe652cf1b73ae7432b1b76d8b14be2c79a5e96b013e7ea9df6baa4b2a724c'\n  fix_hint: 'Ticket description was modified concurrently. Retry with fresh ETag: 1a6fe652cf1b73ae7432b1b76d8b14be2c79a5e96b013e7ea9df6baa4b2a724c'\n  cli_example: kanban-cli-agent update_ticket --identifier=\"KAN-1\" --if-match=\"1a6fe652cf1b73ae7432b1b76d8b14be2c79a5e96b013e7ea9df6baa4b2a724c\"\n  current_etag: 1a6fe652cf1b73ae7432b1b76d8b14be2c79a5e96b013e7ea9df6baa4b2a724c\n"}],"isError":true}}
 EXTRACTED YAML PAYLOAD:
 error:
   code: CONFLICT_ETAG
   message: 'concurrency conflict: ticket description was modified concurrently'
-  hint: 'current etag: abb619c708d988a209a427ee1e7816e7d37d85523fa6025f703a1091b355dd2f'
-  fix_hint: 'Ticket description was modified concurrently. Retry with fresh ETag: abb619c708d988a209a427ee1e7816e7d37d85523fa6025f703a1091b355dd2f'
-  cli_example: kanban-cli-agent update_ticket --identifier="KAN-1" --if-match="abb619c708d988a209a427ee1e7816e7d37d85523fa6025f703a1091b355dd2f"
-  current_etag: abb619c708d988a209a427ee1e7816e7d37d85523fa6025f703a1091b355dd2f
+  hint: 'current etag: 1a6fe652cf1b73ae7432b1b76d8b14be2c79a5e96b013e7ea9df6baa4b2a724c'
+  fix_hint: 'Ticket description was modified concurrently. Retry with fresh ETag: 1a6fe652cf1b73ae7432b1b76d8b14be2c79a5e96b013e7ea9df6baa4b2a724c'
+  cli_example: kanban-cli-agent update_ticket --identifier="KAN-1" --if-match="1a6fe652cf1b73ae7432b1b76d8b14be2c79a5e96b013e7ea9df6baa4b2a724c"
+  current_etag: 1a6fe652cf1b73ae7432b1b76d8b14be2c79a5e96b013e7ea9df6baa4b2a724c
+ASSERTION: PASS
 
---- CASE 8_docs_update_unknown_param_body (/mcp/docs update) ---
-REQUEST JSON-RPC: {"jsonrpc":"2.0","id":107,"method":"tools/call","params":{"name":"update","arguments":{"type":"DOC","body":"new content"}}}
-HTTP STATUS: 200 (3.54ms) isError=true
-RESPONSE JSON: {"jsonrpc":"2.0","id":107,"result":{"content":[{"type":"text","text":"error:\n  code: VALIDATION_FAILED\n  message: Unknown parameter 'body' for tool 'update'\n  field: body\n  valid_options: [id, type, title, content, parent, color, original_text, replacement_text, if_match, links]\n  did_you_mean: [content]\n  hint: Unknown parameter 'body'. Did you mean 'content'?\n  fix_hint: Unknown parameter 'body'. Did you mean 'content'?\n  cli_example: kanban-cli-docs update --type=DOC --content=\"new content\"\n"}],"isError":true}}
+--- CASE 8 (/mcp/docs update unknown param body) ---
+REQUEST JSON-RPC: {"jsonrpc":"2.0","id":109,"method":"tools/call","params":{"name":"update","arguments":{"type":"DOC","body":"new content"}}}
+HTTP STATUS: 200 (3.21ms) isError=true
+RESPONSE JSON: {"jsonrpc":"2.0","id":109,"result":{"content":[{"type":"text","text":"error:\n  code: VALIDATION_FAILED\n  message: Unknown parameter 'body' for tool 'update'\n  field: body\n  valid_options: [id, type, title, content, parent, color, original_text, replacement_text, if_match, links]\n  did_you_mean: [content]\n  hint: Unknown parameter 'body'. Did you mean 'content'?\n  fix_hint: Unknown parameter 'body'. Did you mean 'content'?\n  cli_example: kanban-cli-docs update --type=DOC --content=\"new content\"\n"}],"isError":true}}
 EXTRACTED YAML PAYLOAD:
 error:
   code: VALIDATION_FAILED
@@ -106,23 +136,49 @@ error:
   hint: Unknown parameter 'body'. Did you mean 'content'?
   fix_hint: Unknown parameter 'body'. Did you mean 'content'?
   cli_example: kanban-cli-docs update --type=DOC --content="new content"
+ASSERTION: PASS
 
---- CASE 9_admin_manage_cycles_invalid_action_list (/mcp/admin manage_cycles_and_modules) ---
-REQUEST JSON-RPC: {"jsonrpc":"2.0","id":108,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"list","project":"KAN"}}}
-HTTP STATUS: 200 (4.22ms) isError=true
-RESPONSE JSON: {"jsonrpc":"2.0","id":108,"result":{"content":[{"type":"text","text":"error:\n  code: VALIDATION_FAILED\n  message: Invalid value 'list' for parameter 'action'; action must be 'list_cycles' or 'create_cycle' or 'update_cycle' or\n    'start_cycle' or 'complete_cycle' or 'rollover' or 'list_modules' or 'create_module' or 'update_module' or 'list_views'\n    or 'create_view' or 'update_view' or 'bind_project_repo' or 'list_repo_bindings' or 'refresh_repo_binding' or 'unbind_project_repo'\n    or 'help'\n  field: action\n  valid_options: [list_cycles, create_cycle, update_cycle, start_cycle, complete_cycle, rollover, list_modules, create_module,\n    update_module, list_views, create_view, update_view, bind_project_repo, list_repo_bindings, refresh_repo_binding, unbind_project_repo,\n    help]\n  did_you_mean: [list_views]\n  hint: 'Invalid value ''list'' for parameter ''action''. Did you mean ''list_views''? Valid options: [''list_cycles'', ''create_cycle'',\n    ''update_cycle'', ''start_cycle'', ''complete_cycle'', ''rollover'', ''list_modules'', ''create_module'', ''update_module'',\n    ''list_views'', ''create_view'', ''update_view'', ''bind_project_repo'', ''list_repo_bindings'', ''refresh_repo_binding'',\n    ''unbind_project_repo'', ''help'']'\n  fix_hint: 'Invalid value ''list'' for parameter ''action''. Did you mean ''list_views''? Valid options: [''list_cycles'',\n    ''create_cycle'', ''update_cycle'', ''start_cycle'', ''complete_cycle'', ''rollover'', ''list_modules'', ''create_module'',\n    ''update_module'', ''list_views'', ''create_view'', ''update_view'', ''bind_project_repo'', ''list_repo_bindings'', ''refresh_repo_binding'',\n    ''unbind_project_repo'', ''help'']'\n  cli_example: kanban-cli-admin manage_cycles_and_modules --action=\"list_views\" --project=KAN\n"}],"isError":true}}
+--- CASE 9 (/mcp/admin manage_cycles_and_modules invalid enum action=list) ---
+REQUEST JSON-RPC: {"jsonrpc":"2.0","id":110,"method":"tools/call","params":{"name":"manage_cycles_and_modules","arguments":{"action":"list","project":"KAN"}}}
+HTTP STATUS: 200 (3.80ms) isError=true
+RESPONSE JSON: {"jsonrpc":"2.0","id":110,"result":{"content":[{"type":"text","text":"error:\n  code: VALIDATION_FAILED\n  message: Invalid value 'list' for parameter 'action'; action must be 'list_cycles' or 'create_cycle' or 'update_cycle' or\n    'start_cycle' or 'complete_cycle' or 'rollover' or 'list_modules' or 'create_module' or 'update_module' or 'list_views'\n    or 'create_view' or 'update_view' or 'bind_project_repo' or 'list_repo_bindings' or 'refresh_repo_binding' or 'unbind_project_repo'\n    or 'help'\n  field: action\n  valid_options: [list_cycles, create_cycle, update_cycle, start_cycle, complete_cycle, rollover, list_modules, create_module,\n    update_module, list_views, create_view, update_view, bind_project_repo, list_repo_bindings, refresh_repo_binding, unbind_project_repo,\n    help]\n  did_you_mean: [list_views]\n  hint: 'Invalid value ''list'' for parameter ''action''. Did you mean ''list_views''? Valid options: [''list_cycles'', ''create_cycle'',\n    ''update_cycle'', ''start_cycle'', ''complete_cycle'', ''rollover'', ''list_modules'', ''create_module'', ''update_module'',\n    ''list_views'', ''create_view'', ''update_view'', ''bind_project_repo'', ''list_repo_bindings'', ''refresh_repo_binding'',\n    ''unbind_project_repo'', ''help'']'\n  fix_hint: 'Invalid value ''list'' for parameter ''action''. Did you mean ''list_views''? Valid options: [''list_cycles'',\n    ''create_cycle'', ''update_cycle'', ''start_cycle'', ''complete_cycle'', ''rollover'', ''list_modules'', ''create_module'',\n    ''update_module'', ''list_views'', ''create_view'', ''update_view'', ''bind_project_repo'', ''list_repo_bindings'', ''refresh_repo_binding'',\n    ''unbind_project_repo'', ''help'']'\n  cli_example: kanban-cli-admin manage_cycles_and_modules --action=\"list_views\" --project=KAN\n"}],"isError":true}}
+EXTRACTED YAML PAYLOAD:
+error:
+  code: VALIDATION_FAILED
+  message: Invalid value 'list' for parameter 'action'; action must be 'list_cycles' or 'create_cycle' or 'update_cycle' or
+    'start_cycle' or 'complete_cycle' or 'rollover' or 'list_modules' or 'create_module' or 'update_module' or 'list_views'
+    or 'create_view' or 'update_view' or 'bind_project_repo' or 'list_repo_bindings' or 'refresh_repo_binding' or 'unbind_project_repo'
+    or 'help'
+  field: action
+  valid_options: [list_cycles, create_cycle, update_cycle, start_cycle, complete_cycle, rollover, list_modules, create_module,
+    update_module, list_views, create_view, update_view, bind_project_repo, list_repo_bindings, refresh_repo_binding, unbind_project_repo,
+    help]
+  did_you_mean: [list_views]
+  hint: 'Invalid value ''list'' for parameter ''action''. Did you mean ''list_views''? Valid options: [''list_cycles'', ''create_cycle'',
+    ''update_cycle'', ''start_cycle'', ''complete_cycle'', ''rollover'', ''list_modules'', ''create_module'', ''update_module'',
+    ''list_views'', ''create_view'', ''update_view'', ''bind_project_repo'', ''list_repo_bindings'', ''refresh_repo_binding'',
+    ''unbind_project_repo'', ''help'']'
+  fix_hint: 'Invalid value ''list'' for parameter ''action''. Did you mean ''list_views''? Valid options: [''list_cycles'',
+    ''create_cycle'', ''update_cycle'', ''start_cycle'', ''complete_cycle'', ''rollover'', ''list_modules'', ''create_module'',
+    ''update_module'', ''list_views'', ''create_view'', ''update_view'', ''bind_project_repo'', ''list_repo_bindings'', ''refresh_repo_binding'',
+    ''unbind_project_repo'', ''help'']'
+  cli_example: kanban-cli-admin manage_cycles_and_modules --action="list_views" --project=KAN
+ASSERTION: PASS
 
---- PART 2: LIVE RENDERED MCP-Tools-Reference.md DOCS UI SCREENSHOTS ---
-[2026-11-20T10:16:28.203Z] Created MCP docs page (exact thumbs-up-kanban.wiki/MCP-Tools-Reference.md at b8853c3) -> HTTP 201 id=01a1f875-2101-7995-9c7f-310c20336bd3 key=docs/architecture-docs/mcp-tools-reference---progressive-error-ux
-[2026-11-20T10:18:14.000Z] Mobile 390x844 metrics: {"scrollWidth":390,"innerWidth":390}
-[2026-11-20T10:18:15.000Z] console.error count: 0 | pageerror count: 0
-Screenshots refreshed and visually inspected (showing Canonical YAML Error Examples + Example 1 hint: and Example 2):
-- docs/qa/KAN-19/screenshots/live-kan19-mcp-docs-desktop-light.png
-- docs/qa/KAN-19/screenshots/live-kan19-mcp-docs-desktop-dark.png
-- docs/qa/KAN-19/screenshots/live-kan19-mcp-docs-mobile-light.png
+--- PART 2: LIVE RENDERED MCP-Tools-Reference.md DOCS UI & WRAPPED CODE BLOCK VERIFICATION ---
+[2026-11-20T11:20:40.174Z] Reusing existing MCP docs page id=01a1f8af-3c45-76f0-9891-ed6d166262f7
+Desktop Light metrics: {"label":"desktop-light-1440x900","preCount":10,"allPreWrap":true,"overflowingCount":0,"maxOverflowPx":0,"docScrollWidth":1440,"innerWidth":1440,"samplePre":{"whiteSpace":"pre-wrap","wordBreak":"break-word","overflowWrap":"break-word","scrollWidth":484,"clientWidth":484,"overflows":false}}
+Saved /home/adamoutler/kanban/docs/qa/KAN-19/screenshots/live-kan19-mcp-docs-desktop-light.png
+Saved /home/adamoutler/kanban/docs/qa/KAN-19/screenshots/live-kan19-mcp-docs-examples-bottom-desktop-light.png (1440x2160 showing Examples 6-10)
+Saved /home/adamoutler/kanban/docs/qa/KAN-19/screenshots/live-kan19-mcp-docs-cycles-desktop-light.png
+Desktop Dark metrics: {"label":"desktop-dark-1440x900","preCount":10,"allPreWrap":true,"overflowingCount":0,"maxOverflowPx":0,"docScrollWidth":1440,"innerWidth":1440,"samplePre":{"whiteSpace":"pre-wrap","wordBreak":"break-word","overflowWrap":"break-word","scrollWidth":484,"clientWidth":484,"overflows":false}}
+Saved /home/adamoutler/kanban/docs/qa/KAN-19/screenshots/live-kan19-mcp-docs-desktop-dark.png
+Mobile Light metrics: {"label":"mobile-light-390x844","preCount":10,"allPreWrap":true,"overflowingCount":0,"maxOverflowPx":0,"docScrollWidth":390,"innerWidth":390,"samplePre":{"whiteSpace":"pre-wrap","wordBreak":"break-word","overflowWrap":"break-word","scrollWidth":242,"clientWidth":242,"overflows":false}}
+Saved /home/adamoutler/kanban/docs/qa/KAN-19/screenshots/live-kan19-mcp-docs-mobile-light.png
+console.error count: 0 | pageerror count: 0
 
---- LIVE STACK VERDICT (KAN-19) ---
+--- LIVE STACK VERDICT (KAN-19 R4) ---
 Problem 1 (link_objects {source: help} JIT Help + manage_cycles_and_modules {action: help} list_cycles): LIVE_STACK_VERDICT: PASS
-Problem 2 (Progressive-Disclosure YAML Errors: VALIDATION_FAILED, NOT_FOUND, CONFLICT_ETAG): LIVE_STACK_VERDICT: PASS
-Problem 3 (Live Rendered MCP-Tools-Reference.md Docs UI Desktop Light/Dark + Mobile 390x844, 0 Console/Page Errors): LIVE_STACK_VERDICT: PASS
+Problem 2 (Progressive-Disclosure YAML Errors across all 10 cases including Case 3A & Case 3B NOT_FOUND fix_hint/cli_example + CONFLICT_ETAG): LIVE_STACK_VERDICT: PASS
+Problem 3 (Live Rendered MCP-Tools-Reference.md Wiki 535fe9e Docs UI, pre-wrap zero clipping on 1440x900 Light/Dark & 390x844 Mobile, 0 Console/Page Errors): LIVE_STACK_VERDICT: PASS
 OVERALL KAN-19 LIVE_STACK_VERDICT: PASS

@@ -69,3 +69,22 @@ This RC4 remediation directly resolves all Clean-Room Reality-Checker R3 (`2ad85
   * `docs/qa/KAN-19/wiki-diff.patch`: clean patch against `5e93c1a`
   * `docs/qa/KAN-19/changed-files-manifest.txt`: updated list of all touched source, test, and wiki files
   * `docs/qa/KAN-19/progressive-error-samples.yaml`: complete set of 11 verified error YAML samples including sample 11 (`NOT_FOUND`)
+
+### 4. Zero-Mock Live Full-Stack & Browser Proof (R4: Commit `18bcddb` / `18bcddb7`, Wiki `535fe9e`)
+- **Live Stack Proof Log (`docs/qa/KAN-19/live-fullstack-proof.txt`)**:
+  * Executed against standalone container `kanban-liveqa-1` (`http://localhost:18951`) backed by embedded PostgreSQL 16 (`FORCE ROW LEVEL SECURITY`, UID 65532) with zero mocks.
+  * Completed `/setup`, enrolled TOTP for AAL2 admin session, created `KAN-1`, and minted real scoped `agent`, `docs`, and `admin` MCP API keys.
+  * Verified all 10 live JSON-RPC 2.0 MCP cases across `/mcp/agent`, `/mcp/docs`, and `/mcp/admin`, including:
+    - Case 1: `/mcp/agent` `link_objects` `{"source": "help"}` -> `isError: false`, JIT help YAML.
+    - Case 2: `/mcp/admin` `manage_cycles_and_modules` `{"action": "help"}` -> `isError: false`, `list_cycles` present (zero `--action=list` typo).
+    - Case 3A: `/mcp/agent` `read_ticket` `{"identifier": "KAN-99999"}` -> `isError: true`, `code: NOT_FOUND`, `hint:`, `fix_hint:`, and `cli_example: kanban-cli-agent search_tickets --query="KAN-99999"`.
+    - Case 3B: `/mcp/docs` `update` `{"id": "DOC-99999", "type": "DOC", "content": "x"}` -> `isError: true`, `code: NOT_FOUND`, `hint:`, `fix_hint:`, and `cli_example: kanban-cli-docs search --query="DOC-99999"`.
+    - Cases 4-9: `did_you_mean`, `valid_options`, `field: summary`, `CONFLICT_ETAG` with `current_etag`, and `cli_example` across `/mcp/agent`, `/mcp/docs`, and `/mcp/admin`.
+  * Rendered exact `thumbs-up-kanban.wiki/MCP-Tools-Reference.md` (`535fe9e`) in `/projects/KAN/docs` and verified via unmocked Playwright Chromium (`console.error`: `0`, `pageerror`: `0`, `<pre>` computed `whiteSpace === "pre-wrap"`, `scrollWidth <= clientWidth` across all 10 `<pre>` blocks, mobile `390x844` `documentElement.scrollWidth === 390`).
+- **Visually Inspected Live Screenshots**:
+  * `docs/qa/KAN-19/screenshots/live-kan19-mcp-docs-desktop-light.png` (`1440x900` light, Examples 1-2, wrapped YAML lines with zero right-edge clipping)
+  * `docs/qa/KAN-19/screenshots/live-kan19-mcp-docs-desktop-dark.png` (`1440x900` dark, Examples 1-2, crisp contrast, zero right-edge clipping)
+  * `docs/qa/KAN-19/screenshots/live-kan19-mcp-docs-mobile-light.png` (`390x844` light, outline backdrop dismissed, wrapped YAML lines with zero mid-character clipping)
+  * `docs/qa/KAN-19/screenshots/live-kan19-mcp-docs-examples-bottom-desktop-light.png` (`1440x2160` light, Examples 6-10 showing `CONFLICT_ETAG`, `ALREADY_PROMOTED` with `target_doc_key` below `cli_example`, `PATCH_TARGET_AMBIGUOUS`, and `NOT_FOUND`)
+  * `docs/qa/KAN-19/screenshots/live-kan19-mcp-docs-cycles-desktop-light.png` (`1440x900` light, `manage_cycles_and_modules` showing `--action="list_cycles"`)
+- **Overall Live Stack Verdict**: `OVERALL KAN-19 LIVE_STACK_VERDICT: PASS`
