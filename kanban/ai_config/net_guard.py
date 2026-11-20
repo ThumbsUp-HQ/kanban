@@ -16,12 +16,14 @@ if TYPE_CHECKING:
 __all__ = [
     "HARD_DENIED_NETWORKS",
     "IPV6_ULA_NETWORKS",
+    "LOCAL_AND_PRIVATE_CIDRS",
     "LOOPBACK_NETWORKS",
     "PRIVATE_LAN_NETWORKS",
     "PRIVATE_LAN_TLDS",
     "RFC1918_NETWORKS",
     "EgressDeniedError",
     "Resolver",
+    "SSRFBlockedError",
     "is_hard_denied",
     "is_local_base_url",
     "is_local_or_private_ip",
@@ -64,6 +66,9 @@ PRIVATE_LAN_NETWORKS: tuple[IPv4Network | IPv6Network, ...] = (
     *IPV6_ULA_NETWORKS,
 )
 
+# Canonical alias for private and local CIDR ranges
+LOCAL_AND_PRIVATE_CIDRS: tuple[IPv4Network | IPv6Network, ...] = PRIVATE_LAN_NETWORKS
+
 _LOOPBACK_HOSTS: frozenset[str] = frozenset(
     {"127.0.0.1", "::1", "[::1]", "localhost", "localhost.localdomain"}
 )
@@ -91,6 +96,14 @@ class EgressDeniedError(Exception):
         super().__init__(message)
         self.message: str = message
         self.code: str = code
+
+
+class SSRFBlockedError(EgressDeniedError):
+    """Raised when an HTTP endpoint resolves to a public or forbidden IP address."""
+
+    def __init__(self, message: str, code: str = "SSRF_BLOCKED") -> None:
+        """Initialize SSRF blocked error with diagnostic error code."""
+        super().__init__(message, code=code)
 
 
 def is_hard_denied(ip: IPv4Address | IPv6Address) -> bool:

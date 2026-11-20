@@ -3,7 +3,9 @@
 """AI provider configuration package."""
 
 from kanban.ai_config.net_guard import (
+    LOCAL_AND_PRIVATE_CIDRS,
     EgressDeniedError,
+    SSRFBlockedError,
     is_local_base_url,
     resolve_and_pin,
 )
@@ -18,12 +20,14 @@ from kanban.ai_config.service import (
 )
 
 __all__ = [
+    "LOCAL_AND_PRIVATE_CIDRS",
     "AIConfigNotFoundError",
     "AIConfigValidationError",
     "AIProviderConfigService",
     "AirGapViolation",
     "EgressDeniedError",
     "EnvelopeIntegrityError",
+    "SSRFBlockedError",
     "build_ai_provider_aad",
     "is_local_base_url",
     "resolve_and_pin",

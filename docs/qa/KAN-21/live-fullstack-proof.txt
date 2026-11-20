@@ -1,0 +1,82 @@
+KAN-21 ([KB-P3-AUDIT-15]) LIVE FULL-STACK QA PROOF
+======================================================================
+Target Container : kanban-liveqa-4 (thumbs-up-kanban:local-qa)
+Target URL       : http://localhost:18954
+Execution Mode   : Real live standalone container, real PostgreSQL 16 + FORCE RLS,
+                   real server-side httpx probing against in-container HTTP servers
+                   on 127.0.0.1:11434 (Ollama /api/tags) and 127.0.0.1:18080 (/v1/models)
+Timestamp (UTC)  : 2026-11-20T02:51:29Z - 2026-11-20T02:52:09Z
+
+----------------------------------------------------------------------
+RAW API & POSTGRES TRANSCRIPT (test_kan21_api.py)
+----------------------------------------------------------------------
+Admin AAL2 session check -> 200: {"authenticated":true,"principal_id":"01a1f6d9-6054-7595-85a9-5181efcc2409","workspace_id":"01a1f6d9-6053-71d5-aa7e-e02cbb8113da","session_id":"01a1f6db-c892-7810-b74a-e0cd0dbbe970","aal_level":2,"mfa_pending":false,"csrf_token":"322lAekoJS4jKpVKsfj4Pg.5XWXAXqzttTVV58jDvlPLSz3Fy9l1kEvhPGLYsyvThs","idle_expires_at":"2026-11-27T02:51:29.028369+00:00","absolute_expires_at":"2026-12-20T02:49:21.258686+00:00","remember_me":true}
+
+=== 1. GET /api/v1/admin/workspace-settings (fetchAirGapMode path) ===
+GET /api/v1/admin/workspace-settings -> 200: {"workspace_id":"01a1f6d9-6053-71d5-aa7e-e02cbb8113da","name":"kanban","slug":"kanban","display_name":"Default Workspace","default_project_visibility":"private","session_idle_timeout_min":60,"session_absolute_timeout_min":720,"trash_retention_days":30,"mcp_key_max_ttl_days":90,"air_gap_mode":false,"updated_at":"2026-11-20T02:46:43.539792Z"}
+
+=== 2. SSRF & Cleartext Rejection + Local/LAN No-Key 201 ===
+POST metadata SSRF (http://169.254.169.254/latest/meta-data) -> HTTP 422:
+  {"type":"urn:kanban:problem:INVALID_BASE_URL","title":"Validation Error","status":422,"code":"INVALID_BASE_URL","detail":"base_url must not target link-local, multicast, or metadata address '169.254.169.254'","request_id":"973fc57bfeb6443dbecc92b1565559db"}
+
+POST cleartext public (http://api.openai.com/v1) -> HTTP 422:
+  {"type":"urn:kanban:problem:INVALID_BASE_URL","title":"Validation Error","status":422,"code":"INVALID_BASE_URL","detail":"base_url must use HTTPS unless targeting loopback (127.0.0.1, ::1, localhost) or private LAN","request_id":"ec3629d1642b4141be814c293dc5e48f"}
+
+POST create #1 Ollama Primary (http://127.0.0.1:11434, NO API key) -> HTTP 201:
+  {"id":"c84e0890-51a7-4dfb-845c-57095842a5c0","provider_kind":"ollama","display_name":"#1 Ollama Primary","base_url":"http://127.0.0.1:11434","model_allowlist":["qwen2.5-coder:32b","llama3.3:70b"],"residency_tier":"local","priority":10,"settings":{},"api_key_set":false,"is_enabled":true,"project_id":null}
+
+POST create #2 Ollama LAN 192.168.1.101 (http://192.168.1.101:11434, NO API key) -> HTTP 201:
+  {"id":"88c403a4-8c32-4fe6-bde8-bf730ed16f1a","provider_kind":"ollama","display_name":"#2 Ollama LAN 192.168.1.101","base_url":"http://192.168.1.101:11434","model_allowlist":["qwen2.5-coder:32b"],"residency_tier":"local","priority":20,"settings":{},"api_key_set":false,"is_enabled":true,"project_id":null}
+  (Note: Created config record only; 192.168.1.101 was NEVER probed or contacted.)
+
+POST create #3 OpenAI Local vLLM (http://127.0.0.1:18080/v1, NO API key) -> HTTP 201:
+  {"id":"9e90b8b2-1f26-442d-b83a-4ca37a729444","provider_kind":"openai","display_name":"#3 OpenAI Local vLLM","base_url":"http://127.0.0.1:18080/v1","model_allowlist":["local-vllm-coder","mistral-24b"],"residency_tier":"local","priority":30,"settings":{},"api_key_set":false,"is_enabled":true,"project_id":null}
+
+POST create #4 Google Gemini (https://generativelanguage.googleapis.com, key configured) -> HTTP 201:
+  {"id":"86b1621e-3dac-4a50-b8d8-f53e134f1b92","provider_kind":"gemini","display_name":"#4 Google Gemini","base_url":"https://generativelanguage.googleapis.com","model_allowlist":["gemini-2.5-pro","gemini-2.5-flash"],"residency_tier":"cloud","priority":40,"settings":{},"api_key_set":true,"is_enabled":true,"project_id":null}
+
+POST create #5 OpenAI Cloud (https://api.openai.com/v1, key configured) -> HTTP 201:
+  {"id":"315239f3-8486-4ef8-a46f-127faeee6a08","provider_kind":"openai","display_name":"#5 OpenAI Cloud","base_url":"https://api.openai.com/v1","model_allowlist":["gpt-4o","gpt-4o-mini"],"residency_tier":"cloud","priority":50,"settings":{},"api_key_set":true,"is_enabled":true,"project_id":null}
+
+=== 3. Probe Models & Test Connection (Unsaved + Saved via real server-side httpx) ===
+POST /api/v1/admin/ai/providers/probe-models (ollama 127.0.0.1:11434) -> HTTP 200:
+  {"ok":true,"latency_ms":22.54,"models":["qwen2.5-coder:32b","llama3.3:70b"],"model_count":2,"error_code":null,"message":"Successfully connected to Ollama (2 models available)"}
+
+POST /api/v1/admin/ai/providers/probe-models (openai 127.0.0.1:18080/v1) -> HTTP 200:
+  {"ok":true,"latency_ms":22.46,"models":["local-vllm-coder","mistral-24b"],"model_count":2,"error_code":null,"message":"Successfully connected to OpenAI (2 models available)"}
+
+POST /api/v1/admin/ai/providers/test-connection (ollama 127.0.0.1:11434) -> HTTP 200:
+  {"ok":true,"latency_ms":22.31,"models":["qwen2.5-coder:32b","llama3.3:70b"],"model_count":2,"error_code":null,"message":"Successfully connected to Ollama (2 models available)"}
+
+POST /api/v1/admin/ai/providers/c84e0890-51a7-4dfb-845c-57095842a5c0/probe-models -> HTTP 200:
+  {"ok":true,"latency_ms":22.69,"models":["qwen2.5-coder:32b","llama3.3:70b"],"model_count":2,"error_code":null,"message":"Successfully connected to Ollama (2 models available)"}
+
+POST /api/v1/admin/ai/providers/c84e0890-51a7-4dfb-845c-57095842a5c0/test-connection -> HTTP 200:
+  {"ok":true,"latency_ms":22.49,"models":["qwen2.5-coder:32b","llama3.3:70b"],"model_count":2,"error_code":null,"message":"Successfully connected to Ollama (2 models available)"}
+
+POST /api/v1/admin/ai/providers/9e90b8b2-1f26-442d-b83a-4ca37a729444/probe-models -> HTTP 200:
+  {"ok":true,"latency_ms":22.31,"models":["local-vllm-coder","mistral-24b"],"model_count":2,"error_code":null,"message":"Successfully connected to OpenAI (2 models available)"}
+
+POST /api/v1/admin/ai/providers/9e90b8b2-1f26-442d-b83a-4ca37a729444/test-connection -> HTTP 200:
+  {"ok":true,"latency_ms":24.05,"models":["local-vllm-coder","mistral-24b"],"model_count":2,"error_code":null,"message":"Successfully connected to OpenAI (2 models available)"}
+
+=== 4. Non-AAL2 and Non-Admin Access Control ===
+AAL1 @admin (mfa_pending=true) GET /api/v1/admin/ai/providers -> HTTP 401 MFA_REQUIRED
+AAL1 @admin (mfa_pending=true) POST /api/v1/admin/ai/providers/probe-models -> HTTP 401 MFA_REQUIRED
+AAL1 @admin (mfa_pending=true) POST /api/v1/admin/ai/providers/test-connection -> HTTP 401 MFA_REQUIRED
+@member (WORKSPACE_MEMBER) GET /api/v1/admin/ai/providers -> HTTP 403 FORBIDDEN
+@member (WORKSPACE_MEMBER) POST /api/v1/admin/ai/providers/probe-models -> HTTP 403 FORBIDDEN
+@member (WORKSPACE_MEMBER) POST /api/v1/admin/ai/providers/test-connection -> HTTP 403 FORBIDDEN
+@member (WORKSPACE_MEMBER) PUT /api/v1/admin/ai/providers/order -> HTTP 403 FORBIDDEN
+
+=== 5. PUT /api/v1/admin/ai/providers/order Atomic 10,20,30,40,50 + Audit Event ===
+PUT /api/v1/admin/ai/providers/order -> HTTP 200
+Returned priorities in order: 10 (#3 OpenAI Local vLLM), 20 (#1 Ollama Primary), 30 (#5 OpenAI Cloud), 40 (#2 Ollama LAN 192.168.1.101), 50 (#4 Google Gemini)
+
+PostgreSQL activity_records audit row:
+AI_PROVIDER_REORDERED | {"ordered_ids": ["9e90b8b2-1f26-442d-b83a-4ca37a729444", "c84e0890-51a7-4dfb-845c-57095842a5c0", "315239f3-8486-4ef8-a46f-127faeee6a08", "88c403a4-8c32-4fe6-bde8-bf730ed16f1a", "86b1621e-3dac-4a50-b8d8-f53e134f1b92"], "assigned_priorities": {"315239f3-8486-4ef8-a46f-127faeee6a08": 30, "86b1621e-3dac-4a50-b8d8-f53e134f1b92": 50, "88c403a4-8c32-4fe6-bde8-bf730ed16f1a": 40, "9e90b8b2-1f26-442d-b83a-4ca37a729444": 10, "c84e0890-51a7-4dfb-845c-57095842a5c0": 20}}
+
+----------------------------------------------------------------------
+OVERALL KAN-21 VERDICT
+----------------------------------------------------------------------
+LIVE_STACK_VERDICT: PASS

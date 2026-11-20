@@ -2,10 +2,10 @@
 All checks passed!
 
 === 2. Ruff Format Check ===
-30 files already formatted
+1851 files already formatted
 
 === 3. Mypy Typecheck ===
-Success: no issues found in 17 source files
+Success: no issues found in 1084 source files
 
 === 4. Lint Imports (Architecture Boundaries) ===
 
@@ -23,7 +23,7 @@ Success: no issues found in 17 source files
 Contracts
 ---------
 
-Analyzed 946 files, 3292 dependencies.
+Analyzed 953 files, 3327 dependencies.
 --------------------------------------
 
 Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
@@ -32,16 +32,7 @@ mcp forbidden from importing database KEPT (48 ignored imports)
 Contracts: 2 kept, 0 broken.
 
 === 5. Check No Dashes (Plain ASCII Hyphens Only) ===
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan21-39347c90/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan21-fix-1feb19c7/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
 
-=== 6. Frontend TypeScript Typecheck ===
-
-> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan21-39347c90/kanban/web
-> tsc -b --noEmit
-
-
-=== 7. Frontend ESLint ===
-
-> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan21-39347c90/kanban/web
-> eslint . --max-warnings 0
-
+=== 6. Frontend Note ===
+Frontend web files untouched in KAN-21 Clean-Room Reality-Checker remediation (owned by b-kan22-fix).
