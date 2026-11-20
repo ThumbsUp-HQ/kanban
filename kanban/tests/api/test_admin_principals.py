@@ -1081,5 +1081,3 @@ async def test_admin_principals_endpoints_additional_coverage(
         json={"principal_id": str(target_user.id), "scope_type": "workspace"},
     )
     assert role_invalid.status_code == 422
-
-

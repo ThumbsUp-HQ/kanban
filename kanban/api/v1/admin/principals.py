@@ -208,9 +208,7 @@ async def provision_principal_endpoint(
         )
     if body.type == "GROUP":
         group_name = (
-            principal_service.normalize_handle(body.handle)
-            if body.handle
-            else body.display_name
+            principal_service.normalize_handle(body.handle) if body.handle else body.display_name
         )
         res = await principal_service.provision_group(
             session,

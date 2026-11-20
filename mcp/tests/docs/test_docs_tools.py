@@ -1507,7 +1507,7 @@ async def test_case_7_programmatic_contract_sample_generator(
     )
     assert p_resp.status_code == 201
 
-    kanban_app = api_env.client._transport.app
+    kanban_app = api_env.client._transport.app  # type: ignore[attr-defined]
     settings = McpSettings(mode="standalone_inprocess", auth_enabled=False)
     mcp_app = create_mcp_app(settings, kanban_app=kanban_app)
     transport = httpx.ASGITransport(app=mcp_app)
