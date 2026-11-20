@@ -1,0 +1,1133 @@
+diff --git a/mcp/lod.py b/mcp/lod.py
+index 7f10e3d0..b39dd04d 100644
+--- a/mcp/lod.py
++++ b/mcp/lod.py
+@@ -11,6 +11,7 @@ from mcp.errors import KbMcpError, McpErrorCode
+ __all__ = [
+     "Lod",
+     "_compact_access_manifest",
++    "extract_issue_sequence",
+     "parse_lod",
+     "project_doc",
+     "project_entity",
+@@ -49,6 +50,8 @@ def parse_lod(value: str | Lod | None) -> Lod:
+ 
+ _SUMMARY_ISSUE_KEYS: Final[tuple[str, ...]] = (
+     "key",
++    "issue_key",
++    "sequence_number",
+     "summary",
+     "state",
+     "priority",
+@@ -80,6 +83,61 @@ _FULL_ISSUE_KEYS: Final[tuple[str, ...]] = (
+ )
+ 
+ 
++def _parse_seq_from_key(key: str | None) -> int:
++    if not key:
++        return 0
++    if "-" in key:
++        part = key.rsplit("-", 1)[-1]
++        if part.isdigit():
++            return int(part)
++    elif key.isdigit():
++        return int(key)
++    return 0
++
++
++def extract_issue_sequence(raw: dict[str, Any] | None = None, key: str | None = None) -> int:
++    """Extract or parse sequence_number as int from raw dict or issue key."""
++    if raw is not None:
++        for field in ("sequence_number", "sequence_id"):
++            val = raw.get(field)
++            if val is not None:
++                try:
++                    return int(val)
++                except (ValueError, TypeError):
++                    pass
++        if not key:
++            raw_key = raw.get("key") or raw.get("issue_key")
++            key = str(raw_key) if raw_key is not None else None
++    return _parse_seq_from_key(key)
++
++
++def _project_child_issue(child: dict[str, Any]) -> dict[str, Any]:
++    """Project a nested child issue with typed key, issue_key, sequence_number."""
++    c_key = str(child.get("key") or child.get("issue_key") or "")
++    c_seq = extract_issue_sequence(child, c_key)
++    res: dict[str, Any] = {
++        "key": c_key,
++        "issue_key": c_key,
++        "sequence_number": c_seq,
++    }
++    for field in ("summary", "state", "priority", "parent"):
++        if field in child:
++            res[field] = str(child[field]) if child[field] is not None else ""
++    return res
++
++
++def _normalize_issue_data(raw: dict[str, Any]) -> dict[str, Any]:
++    """Ensure key, issue_key, and sequence_number are populated if key/issue_key exists."""
++    if "key" not in raw and "issue_key" not in raw:
++        return raw
++    data = dict(raw)
++    key_val = str(data.get("key") or data.get("issue_key") or "")
++    data["key"] = key_val
++    data["issue_key"] = key_val
++    data["sequence_number"] = extract_issue_sequence(data, key_val)
++    return data
++
++
+ def _is_gate_pending(gate: object) -> bool:
+     """Check if gate status is pending."""
+     if isinstance(gate, str):
+@@ -91,28 +149,38 @@ def _is_gate_pending(gate: object) -> bool:
+ 
+ 
+ def _project_issue_summary(raw: dict[str, Any]) -> dict[str, Any]:
++    raw_norm = _normalize_issue_data(raw)
+     result: dict[str, Any] = {}
+     for k in _SUMMARY_ISSUE_KEYS:
+-        if k in raw:
+-            result[k] = raw[k]
+-    if raw.get("workspace"):
+-        result["workspace"] = raw["workspace"]
+-    gate = raw.get("gate")
++        if k in raw_norm:
++            result[k] = raw_norm[k]
++    if raw_norm.get("workspace"):
++        result["workspace"] = raw_norm["workspace"]
++    gate = raw_norm.get("gate")
+     if _is_gate_pending(gate):
+         result["gate"] = gate
++    if "children" in raw_norm and isinstance(raw_norm["children"], list):
++        result["children"] = [
++            _project_child_issue(c) if isinstance(c, dict) else c for c in raw_norm["children"]
++        ]
+     return result
+ 
+ 
+ def _project_issue_standard(raw: dict[str, Any]) -> dict[str, Any]:
++    raw_norm = _normalize_issue_data(raw)
+     result: dict[str, Any] = {}
+     for k in _STANDARD_ISSUE_KEYS:
+-        if k in raw:
+-            result[k] = raw[k]
+-    if raw.get("workspace"):
+-        result["workspace"] = raw["workspace"]
+-    gate = raw.get("gate")
++        if k in raw_norm:
++            result[k] = raw_norm[k]
++    if raw_norm.get("workspace"):
++        result["workspace"] = raw_norm["workspace"]
++    gate = raw_norm.get("gate")
+     if _is_gate_pending(gate):
+         result["gate"] = gate
++    if "children" in raw_norm and isinstance(raw_norm["children"], list):
++        result["children"] = [
++            _project_child_issue(c) if isinstance(c, dict) else c for c in raw_norm["children"]
++        ]
+     return result
+ 
+ 
+@@ -269,13 +337,18 @@ def _project_issue_full_field(k: str, raw: dict[str, Any], result: dict[str, Any
+ 
+ 
+ def _project_issue_full(raw: dict[str, Any]) -> dict[str, Any]:
++    raw_norm = _normalize_issue_data(raw)
+     result: dict[str, Any] = {}
+     for k in _FULL_ISSUE_KEYS:
+-        _project_issue_full_field(k, raw, result)
++        _project_issue_full_field(k, raw_norm, result)
+ 
+-    gate = raw.get("gate")
++    gate = raw_norm.get("gate")
+     if gate is not None:
+         result["gate"] = gate
++    if "children" in raw_norm and isinstance(raw_norm["children"], list):
++        result["children"] = [
++            _project_child_issue(c) if isinstance(c, dict) else c for c in raw_norm["children"]
++        ]
+     return result
+ 
+ 
+diff --git a/mcp/surfaces/agent/begin_work.py b/mcp/surfaces/agent/begin_work.py
+index f71193d1..f55c0acf 100644
+--- a/mcp/surfaces/agent/begin_work.py
++++ b/mcp/surfaces/agent/begin_work.py
+@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Final
+ from mcp.context import get_current_mcp_context
+ from mcp.errors import KbMcpError, McpErrorCode
+ from mcp.help import build_help
++from mcp.lod import extract_issue_sequence
+ from mcp.surfaces.agent.read_ticket import _format_assignees
+ 
+ if TYPE_CHECKING:
+@@ -113,6 +114,9 @@ async def begin_work(
+         msg = "Invalid response from upstream begin-work endpoint"
+         raise KbMcpError(McpErrorCode.UPSTREAM_ERROR, msg)
+ 
++    key = str(resp_data.get("key", identifier))
++    seq_num = extract_issue_sequence(resp_data, key)
++
+     # Check for 202 Accepted pending_agent_gate hold
+     if "execution_id" in resp_data and "active_agent" in resp_data:
+         from_val = resp_data.get("from_state")
+@@ -121,7 +125,9 @@ async def begin_work(
+         to_str = to_val.get("name", "") if isinstance(to_val, dict) else str(to_val or "")
+         return {
+             "status": "pending_agent_gate",
+-            "key": str(resp_data.get("key", identifier)),
++            "key": key,
++            "issue_key": key,
++            "sequence_number": seq_num,
+             "from_state": from_str,
+             "to_state": to_str,
+             "execution_id": str(resp_data.get("execution_id", "")),
+@@ -129,7 +135,6 @@ async def begin_work(
+             "hint": "transition is held; poll read_ticket for the gate verdict",
+         }
+ 
+-    key = str(resp_data.get("key", identifier))
+     state_val = resp_data.get("state")
+     state_str = (
+         str(state_val.get("name", "")) if isinstance(state_val, dict) else str(state_val or "")
+@@ -140,6 +145,8 @@ async def begin_work(
+     result: dict[str, Any] = {
+         "status": "started",
+         "key": key,
++        "issue_key": key,
++        "sequence_number": seq_num,
+         "state": state_str,
+         "assignees": assignees,
+     }
+diff --git a/mcp/surfaces/agent/complete_work.py b/mcp/surfaces/agent/complete_work.py
+index bda51532..195e6937 100644
+--- a/mcp/surfaces/agent/complete_work.py
++++ b/mcp/surfaces/agent/complete_work.py
+@@ -11,6 +11,7 @@ from pydantic import ValidationError
+ from mcp.context import get_current_mcp_context
+ from mcp.errors import KbMcpError, McpErrorCode
+ from mcp.help import build_help
++from mcp.lod import extract_issue_sequence
+ from mcp.surfaces.agent.proof import (
+     VERIFICATION_PROOF_SCHEMA,
+     VerificationProof,
+@@ -158,6 +159,9 @@ async def complete_work(
+         msg = "Invalid response from upstream complete-work endpoint"
+         raise KbMcpError(McpErrorCode.UPSTREAM_ERROR, msg)
+ 
++    key = str(resp_data.get("key", identifier))
++    seq_num = extract_issue_sequence(resp_data, key)
++
+     # Check for 202 Accepted pending_agent_gate hold
+     if "execution_id" in resp_data and "active_agent" in resp_data:
+         from_val = resp_data.get("from_state")
+@@ -166,7 +170,9 @@ async def complete_work(
+         to_str = to_val.get("name", "") if isinstance(to_val, dict) else str(to_val or "")
+         return {
+             "status": "pending_agent_gate",
+-            "key": str(resp_data.get("key", identifier)),
++            "key": key,
++            "issue_key": key,
++            "sequence_number": seq_num,
+             "from_state": from_str,
+             "to_state": to_str,
+             "execution_id": str(resp_data.get("execution_id", "")),
+@@ -174,7 +180,6 @@ async def complete_work(
+             "hint": "transition is held; poll read_ticket for the gate verdict",
+         }
+ 
+-    key = str(resp_data.get("key", identifier))
+     state_val = resp_data.get("state")
+     state_str = (
+         str(state_val.get("name", "")) if isinstance(state_val, dict) else str(state_val or "")
+@@ -193,6 +198,8 @@ async def complete_work(
+     result: dict[str, Any] = {
+         "status": "completed",
+         "key": key,
++        "issue_key": key,
++        "sequence_number": seq_num,
+         "state": resp_data.get("target_state") or state_str or "Done",
+         "proof": proof_summary,
+     }
+diff --git a/mcp/surfaces/agent/create_ticket.py b/mcp/surfaces/agent/create_ticket.py
+index 8984359d..ef9b4607 100644
+--- a/mcp/surfaces/agent/create_ticket.py
++++ b/mcp/surfaces/agent/create_ticket.py
+@@ -9,6 +9,7 @@ from typing import Any, Final
+ from mcp.context import get_current_mcp_context
+ from mcp.errors import KbMcpError, McpErrorCode
+ from mcp.help import build_help
++from mcp.lod import extract_issue_sequence
+ from mcp.protocol import format_cli_example
+ from mcp.registry import Surface
+ 
+@@ -358,22 +359,29 @@ async def create_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
+ 
+     root_raw = res.get("root", {})
+     children_raw = res.get("children", [])
++    root_key = str(root_raw.get("key", ""))
++    root_seq = extract_issue_sequence(root_raw, root_key)
+ 
+     return {
+         "created": res.get("created", 1),
+         "root": {
+-            "key": str(root_raw.get("key", "")),
++            "key": root_key,
++            "issue_key": root_key,
++            "sequence_number": root_seq,
+             "summary": str(root_raw.get("summary", "")),
+             "state": str(root_raw.get("state", "")),
+             "priority": str(root_raw.get("priority", "")),
+         },
+         "children": [
+             {
+-                "key": str(c.get("key", "")),
++                "key": c_key,
++                "issue_key": c_key,
++                "sequence_number": extract_issue_sequence(c, c_key),
+                 "summary": str(c.get("summary", "")),
+                 "parent": str(c.get("parent", "")),
+             }
+             for c in (children_raw if isinstance(children_raw, list) else [])
+             if isinstance(c, dict)
++            for c_key in [str(c.get("key", ""))]
+         ],
+     }
+diff --git a/mcp/surfaces/agent/read_ticket.py b/mcp/surfaces/agent/read_ticket.py
+index a1448fd6..79ba5299 100644
+--- a/mcp/surfaces/agent/read_ticket.py
++++ b/mcp/surfaces/agent/read_ticket.py
+@@ -10,7 +10,7 @@ from kanban.security.scrubber import scrub_text
+ from mcp.context import get_current_mcp_context
+ from mcp.errors import KbMcpError, McpErrorCode
+ from mcp.help import build_help
+-from mcp.lod import _compact_access_manifest, project_issue
++from mcp.lod import _compact_access_manifest, extract_issue_sequence, project_issue
+ 
+ if TYPE_CHECKING:
+     from collections.abc import Sequence
+@@ -326,32 +326,45 @@ async def _load_activity(issue_key: str, ctx: McpRequestContext) -> list[dict[st
+     return [_compact_single_activity(it) for it in raw_items if isinstance(it, dict)]
+ 
+ 
+-async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
+-    """Execute read_ticket tool loading issue details, links, comments, and activity."""
+-    _validate_read_arguments(arguments)
++def _extract_labels(raw_labels: object) -> list[str]:
++    if not isinstance(raw_labels, list):
++        return []
++    res: list[str] = []
++    for lbl in raw_labels:
++        if isinstance(lbl, dict):
++            val = lbl.get("name")
++            if val is not None:
++                res.append(str(val))
++        elif lbl is not None:
++            res.append(str(lbl))
++    return res
++
++
++def _format_children(raw_children: object) -> list[dict[str, Any]] | None:
++    if not isinstance(raw_children, list):
++        return None
++    return [
++        {
++            "key": str(c.get("key", "")),
++            "issue_key": str(c.get("issue_key") or c.get("key", "")),
++            "sequence_number": extract_issue_sequence(c, str(c.get("key", ""))),
++            "summary": str(c.get("summary", "")),
++            **({"parent": str(c["parent"])} if "parent" in c else {}),
++        }
++        for c in raw_children
++        if isinstance(c, dict)
++    ]
+ 
+-    identifier = arguments["identifier"].strip()
+-    lod = arguments.get("lod", "standard")
+-    comments_limit = arguments.get("comments_limit", 20)
+ 
+-    ctx = get_current_mcp_context()
+-    if ctx is None or ctx.client is None:
+-        msg = "MCP request context unavailable"
++async def _fetch_issue_data(
++    ctx: McpRequestContext,
++    identifier: str,
++    req_params: dict[str, Any],
++    safe_identifier: str,
++) -> dict[str, Any]:
++    if ctx.client is None:
++        msg = "MCP request context client unavailable"
+         raise KbMcpError(McpErrorCode.INTERNAL, msg)
+-
+-    if identifier == "help":
+-        return await build_help(
+-            "read_ticket",
+-            client=ctx.client,
+-            subject_token=ctx.subject_token,
+-            mcp_session_id=ctx.session_id,
+-        )
+-
+-    req_params: dict[str, Any] = {}
+-    if arguments.get("workspace"):
+-        req_params["workspace"] = arguments["workspace"]
+-
+-    safe_identifier = identifier.replace('"', '\\"')
+     try:
+         issue_data = await ctx.client.request(
+             "GET",
+@@ -399,8 +412,39 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
+             ),
+             cli_example=f'kanban-cli-agent search_tickets --query="{safe_identifier}"',
+         )
++    return issue_data
++
++
++async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
++    """Execute read_ticket tool loading issue details, links, comments, and activity."""
++    _validate_read_arguments(arguments)
++
++    identifier = arguments["identifier"].strip()
++    lod = arguments.get("lod", "standard")
++    comments_limit = arguments.get("comments_limit", 20)
++
++    ctx = get_current_mcp_context()
++    if ctx is None or ctx.client is None:
++        msg = "MCP request context unavailable"
++        raise KbMcpError(McpErrorCode.INTERNAL, msg)
++
++    if identifier == "help":
++        return await build_help(
++            "read_ticket",
++            client=ctx.client,
++            subject_token=ctx.subject_token,
++            mcp_session_id=ctx.session_id,
++        )
++
++    req_params: dict[str, Any] = {}
++    if arguments.get("workspace"):
++        req_params["workspace"] = arguments["workspace"]
++
++    safe_identifier = identifier.replace('"', '\\"')
++    issue_data = await _fetch_issue_data(ctx, identifier, req_params, safe_identifier)
+ 
+     issue_key = str(issue_data.get("key", identifier))
++    seq_num = extract_issue_sequence(issue_data, issue_key)
+     state_val = issue_data.get("state")
+     state_str = (
+         str(state_val.get("name", "")) if isinstance(state_val, dict) else str(state_val or "")
+@@ -419,12 +463,7 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
+         comments = await _load_comments(issue_key, comments_limit, ctx)
+         activity = await _load_activity(issue_key, ctx)
+ 
+-    labels_raw = issue_data.get("labels", [])
+-    labels_list = [
+-        lbl.get("name") if isinstance(lbl, dict) else str(lbl)
+-        for lbl in (labels_raw if isinstance(labels_raw, list) else [])
+-        if lbl is not None
+-    ]
++    labels_list = _extract_labels(issue_data.get("labels"))
+ 
+     etag_raw = issue_data.get("etag") or issue_data.get("description_sha256") or ""
+     etag = str(etag_raw).strip('"')
+@@ -435,9 +474,12 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
+         access_val = access_manifest_raw.get("pill_label")
+ 
+     compact_manifest = _compact_access_manifest(access_manifest_raw)
++    children_list = _format_children(issue_data.get("children"))
+ 
+     normalized_issue: dict[str, Any] = {
+         "key": issue_key,
++        "issue_key": issue_key,
++        "sequence_number": seq_num,
+         "workspace": issue_data.get("workspace"),
+         "summary": issue_data.get("summary", ""),
+         "state": state_str,
+@@ -462,5 +504,7 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
+         "activity": activity,
+         "provenance": issue_data.get("provenance"),
+     }
++    if children_list is not None:
++        normalized_issue["children"] = children_list
+ 
+     return project_issue(normalized_issue, lod)
+diff --git a/mcp/surfaces/agent/transition_ticket.py b/mcp/surfaces/agent/transition_ticket.py
+index bb7824b1..bcf24fbe 100644
+--- a/mcp/surfaces/agent/transition_ticket.py
++++ b/mcp/surfaces/agent/transition_ticket.py
+@@ -11,6 +11,7 @@ from pydantic import ValidationError
+ from mcp.context import get_current_mcp_context
+ from mcp.errors import KbMcpError, McpErrorCode
+ from mcp.help import build_help
++from mcp.lod import extract_issue_sequence
+ from mcp.surfaces.agent.proof import (
+     VERIFICATION_PROOF_SCHEMA,
+     VerificationProof,
+@@ -168,6 +169,9 @@ async def transition_ticket(
+         msg = "Invalid response from upstream transition endpoint"
+         raise KbMcpError(McpErrorCode.UPSTREAM_ERROR, msg)
+ 
++    key = str(resp_data.get("key", identifier))
++    seq_num = extract_issue_sequence(resp_data, key)
++
+     # Check for 202 Accepted pending_agent_gate hold
+     if "execution_id" in resp_data and "active_agent" in resp_data:
+         from_val = resp_data.get("from_state")
+@@ -176,7 +180,9 @@ async def transition_ticket(
+         to_str = to_val.get("name", "") if isinstance(to_val, dict) else str(to_val or "")
+         return {
+             "status": "pending_agent_gate",
+-            "key": str(resp_data.get("key", identifier)),
++            "key": key,
++            "issue_key": key,
++            "sequence_number": seq_num,
+             "from_state": from_str,
+             "to_state": to_str,
+             "execution_id": str(resp_data.get("execution_id", "")),
+@@ -184,7 +190,6 @@ async def transition_ticket(
+             "hint": "transition is held; poll read_ticket for the gate verdict",
+         }
+ 
+-    key = str(resp_data.get("key", identifier))
+     state_val = resp_data.get("state")
+     state_str = (
+         str(state_val.get("name", "")) if isinstance(state_val, dict) else str(state_val or "")
+@@ -197,6 +202,8 @@ async def transition_ticket(
+     return {
+         "status": "transitioned",
+         "key": key,
++        "issue_key": key,
++        "sequence_number": seq_num,
+         "from_state": from_state or "In Progress",
+         "to_state": resp_data.get("target_state") or state_str or to_state,
+     }
+diff --git a/mcp/surfaces/agent/update_ticket.py b/mcp/surfaces/agent/update_ticket.py
+index 7248f14e..74c6fb42 100644
+--- a/mcp/surfaces/agent/update_ticket.py
++++ b/mcp/surfaces/agent/update_ticket.py
+@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, Final
+ from mcp.context import get_current_mcp_context
+ from mcp.errors import KbMcpError, McpErrorCode
+ from mcp.help import build_help
++from mcp.lod import extract_issue_sequence
+ 
+ if TYPE_CHECKING:
+     from collections.abc import Sequence
+@@ -551,8 +552,12 @@ async def update_ticket(arguments: dict[str, Any]) -> dict[str, Any]:  # noqa: C
+     pri_str = str(pri_val.get("slug", "")) if isinstance(pri_val, dict) else str(pri_val or "")
+     etag_val = patched_issue.get("etag") or patched_issue.get("description_sha256") or ""
+ 
++    seq_num = extract_issue_sequence(patched_issue, issue_key)
++
+     return {
+         "key": issue_key,
++        "issue_key": issue_key,
++        "sequence_number": seq_num,
+         "summary": patched_issue.get("summary", ""),
+         "state": state_str,
+         "priority": pri_str,
+diff --git a/mcp/tests/agent/test_create_ticket.py b/mcp/tests/agent/test_create_ticket.py
+index ea7dd9ca..64262feb 100644
+--- a/mcp/tests/agent/test_create_ticket.py
++++ b/mcp/tests/agent/test_create_ticket.py
+@@ -99,12 +99,24 @@ async def test_case_1_positive_create_tree(agent_test_env: AgentTestEnv) -> None
+     assert parsed["created"] == 3
+     root = parsed["root"]
+     assert root["key"].startswith("KAN-")
++    assert root["issue_key"] == root["key"]
++    assert isinstance(root["sequence_number"], int)
++    assert root["sequence_number"] > 0
+     assert root["summary"] == "Root Feature Tree"
+     assert root["priority"] == "high"
+ 
+     children = parsed["children"]
+     assert len(children) == 2
++    assert children[0]["key"].startswith("KAN-")
++    assert children[0]["issue_key"] == children[0]["key"]
++    assert isinstance(children[0]["sequence_number"], int)
++    assert children[0]["sequence_number"] > 0
+     assert children[0]["parent"] == root["key"]
++
++    assert children[1]["key"].startswith("KAN-")
++    assert children[1]["issue_key"] == children[1]["key"]
++    assert isinstance(children[1]["sequence_number"], int)
++    assert children[1]["sequence_number"] > 0
+     assert children[1]["parent"] == root["key"]
+ 
+ 
+diff --git a/mcp/tests/agent/test_pending_gate_contract.py b/mcp/tests/agent/test_pending_gate_contract.py
+index 7fef67ee..283f13ba 100644
+--- a/mcp/tests/agent/test_pending_gate_contract.py
++++ b/mcp/tests/agent/test_pending_gate_contract.py
+@@ -73,6 +73,9 @@ async def test_transition_ticket_pending_agent_gate_contract() -> None:
+ 
+     assert res["status"] == "pending_agent_gate"
+     assert res["key"] == "KAN-142"
++    assert res["issue_key"] == "KAN-142"
++    assert res["sequence_number"] == 142
++    assert isinstance(res["sequence_number"], int)
+     assert res["from_state"] == "In Review"
+     assert res["to_state"] == "Done"
+     assert res["execution_id"] == execution_id
+@@ -84,6 +87,9 @@ async def test_transition_ticket_pending_agent_gate_contract() -> None:
+     parsed = yaml.safe_load(yaml_text)
+     assert parsed["status"] == "pending_agent_gate"
+     assert parsed["key"] == "KAN-142"
++    assert parsed["issue_key"] == "KAN-142"
++    assert parsed["sequence_number"] == 142
++    assert isinstance(parsed["sequence_number"], int)
+     assert parsed["from_state"] == "In Review"
+     assert parsed["to_state"] == "Done"
+     assert parsed["execution_id"] == execution_id
+@@ -133,6 +139,9 @@ async def test_complete_work_pending_agent_gate_contract() -> None:
+ 
+     assert res["status"] == "pending_agent_gate"
+     assert res["key"] == "KAN-142"
++    assert res["issue_key"] == "KAN-142"
++    assert res["sequence_number"] == 142
++    assert isinstance(res["sequence_number"], int)
+     assert res["from_state"] == "In Progress"
+     assert res["to_state"] == "Done"
+     assert res["execution_id"] == execution_id
+diff --git a/mcp/tests/agent/test_read_ticket.py b/mcp/tests/agent/test_read_ticket.py
+index 68afc9fc..acb1bcf3 100644
+--- a/mcp/tests/agent/test_read_ticket.py
++++ b/mcp/tests/agent/test_read_ticket.py
+@@ -18,9 +18,11 @@ from mcp.surfaces.agent.read_ticket import (
+     _compact_single_activity,
+     _compact_single_comment,
+     _extract_assignee_name,
++    _extract_labels,
+     _extract_principal_name,
+     _format_activity_actor,
+     _format_assignees,
++    _format_children,
+     _format_comment_author,
+     _format_parent,
+     _load_activity,
+@@ -85,6 +87,13 @@ async def _call_read_ticket(
+     return cast("dict[str, Any]", data["result"])
+ 
+ 
++def _assert_ticket_identity(parsed: dict[str, Any], key: str, seq: int) -> None:
++    assert parsed["key"] == key
++    assert parsed["issue_key"] == key
++    assert parsed["sequence_number"] == seq
++    assert isinstance(parsed["sequence_number"], int)
++
++
+ @pytest.mark.asyncio
+ async def test_case_1_positive_read_ticket_all_lods(agent_test_env: AgentTestEnv) -> None:
+     """Case 1: read_ticket('KAN-142', lod='full') contains all detailed fields."""
+@@ -96,7 +105,7 @@ async def test_case_1_positive_read_ticket_all_lods(agent_test_env: AgentTestEnv
+     content_full = res_full["content"][0]["text"]
+     parsed_full = yaml.safe_load(content_full)
+ 
+-    assert parsed_full["key"] == "KAN-142"
++    _assert_ticket_identity(parsed_full, "KAN-142", 142)
+     assert parsed_full["summary"] == "Harden Multi-Card OIDC & LDAPS Auth Studio"
+     assert parsed_full["state"] == "In Progress"
+     assert parsed_full["priority"] == "urgent"
+@@ -117,7 +126,7 @@ async def test_case_1_positive_read_ticket_all_lods(agent_test_env: AgentTestEnv
+     content_std = res_std["content"][0]["text"]
+     parsed_std = yaml.safe_load(content_std)
+ 
+-    assert parsed_std["key"] == "KAN-142"
++    _assert_ticket_identity(parsed_std, "KAN-142", 142)
+     assert parsed_std["summary"] == "Harden Multi-Card OIDC & LDAPS Auth Studio"
+     assert parsed_std["state"] == "In Progress"
+     assert parsed_std["priority"] == "urgent"
+@@ -136,7 +145,7 @@ async def test_case_1_positive_read_ticket_all_lods(agent_test_env: AgentTestEnv
+     content_sum = res_sum["content"][0]["text"]
+     parsed_sum = yaml.safe_load(content_sum)
+ 
+-    assert parsed_sum["key"] == "KAN-142"
++    _assert_ticket_identity(parsed_sum, "KAN-142", 142)
+     assert parsed_sum["summary"] == "Harden Multi-Card OIDC & LDAPS Auth Studio"
+     assert parsed_sum["state"] == "In Progress"
+     assert parsed_sum["priority"] == "urgent"
+@@ -671,3 +680,65 @@ async def test_read_ticket_load_and_dispatch_branches() -> None:
+         assert exc_int.value.code == McpErrorCode.NOT_FOUND
+     finally:
+         reset_current_mcp_context(token)
++
++
++@pytest.mark.asyncio
++async def test_read_ticket_additional_coverage_boosters() -> None:
++    """Exercise remaining helper branches and full coverage in read_ticket."""
++    assert _extract_labels([{"name": "tag1"}, "tag2", None]) == ["tag1", "tag2"]
++    assert _extract_labels(None) == []
++
++    children = _format_children(
++        [
++            {"key": "KAN-10", "sequence_number": 10, "title": "Sub 1"},
++            {"key": "KAN-11", "summary": "Sub 2"},
++            "not-a-dict",
++        ]
++    )
++    assert children is not None
++    assert len(children) == 2
++    assert children[0]["key"] == "KAN-10"
++    assert children[0]["issue_key"] == "KAN-10"
++    assert children[0]["sequence_number"] == 10
++    assert children[1]["key"] == "KAN-11"
++    assert children[1]["issue_key"] == "KAN-11"
++    assert children[1]["sequence_number"] == 11
++    assert _format_children(None) is None
++
++    mock_client = AsyncMock()
++    ctx = McpRequestContext(surface=Surface.AGENT, client=mock_client)
++    token = set_current_mcp_context(ctx)
++    try:
++        mock_client.request.side_effect = [
++            # issue GET
++            {
++                "key": "KAN-20",
++                "sequence_number": 20,
++                "title": "Parent",
++                "state": "Todo",
++                "priority": "high",
++                "labels": [{"name": "backend"}],
++                "children": [{"key": "KAN-21", "title": "Child"}],
++            },
++            # links
++            None,
++            # comments
++            [],
++            # activity
++            [],
++        ]
++        res = await read_ticket({"identifier": "KAN-20", "workspace": "test-ws", "lod": "full"})
++        assert res["key"] == "KAN-20"
++        assert res["issue_key"] == "KAN-20"
++        assert res["sequence_number"] == 20
++        assert len(res["children"]) == 1
++        assert res["children"][0]["issue_key"] == "KAN-21"
++        assert res["children"][0]["sequence_number"] == 21
++
++        # Error re-raise on non-404 KbMcpError in _fetch_issue_data
++        mock_client.request.side_effect = KbMcpError(McpErrorCode.INTERNAL, "backend fail")
++        with pytest.raises(KbMcpError) as exc_err:
++            await read_ticket({"identifier": "KAN-20"})
++        assert exc_err.value.code == McpErrorCode.INTERNAL
++    finally:
++        reset_current_mcp_context(token)
+diff --git a/mcp/tests/agent/test_search_tickets.py b/mcp/tests/agent/test_search_tickets.py
+index d7931e94..ccf7126d 100644
+--- a/mcp/tests/agent/test_search_tickets.py
++++ b/mcp/tests/agent/test_search_tickets.py
+@@ -5,12 +5,24 @@
+ from __future__ import annotations
+ 
+ from typing import TYPE_CHECKING, Any, cast
++from unittest.mock import AsyncMock
+ 
+ import pytest
+ import yaml
+ 
++from mcp.context import McpRequestContext, reset_current_mcp_context, set_current_mcp_context
+ from mcp.errors import KbMcpError, McpErrorCode
+-from mcp.surfaces.agent.search_tickets import _validate_search_arguments, search_tickets
++from mcp.registry import Surface
++from mcp.resolver import EntityResolver
++from mcp.surfaces.agent.search_tickets import (
++    _compose_search_filters,
++    _execute_search_request,
++    _resolve_assignees,
++    _resolve_project_key,
++    _validate_keys,
++    _validate_search_arguments,
++    search_tickets,
++)
+ 
+ if TYPE_CHECKING:
+     from mcp.tests.agent.conftest import AgentTestEnv
+@@ -110,6 +122,9 @@ async def test_case_1_positive_search_tickets(agent_test_env: AgentTestEnv) -> N
+     assert len(parsed["items"]) == 1
+     item = parsed["items"][0]
+     assert item["key"] == "KAN-142"
++    assert item["issue_key"] == "KAN-142"
++    assert item["sequence_number"] == 142
++    assert isinstance(item["sequence_number"], int)
+     assert item["summary"] == "Harden Multi-Card OIDC & LDAPS Auth Studio"
+     assert item["state"] == "In Progress"
+     assert item["priority"] == "urgent"
+@@ -232,6 +247,8 @@ async def test_case_4_lod_hybrid_mode_and_gate_status(agent_test_env: AgentTestE
+     parsed_sum = yaml.safe_load(res_sum["content"][0]["text"])
+     for it in parsed_sum["items"]:
+         assert "description_markdown" not in it
++        assert it["issue_key"] == it["key"]
++        assert isinstance(it["sequence_number"], int)
+ 
+     # 2. standard LOD contains description_markdown
+     res_std = await _call_search_tickets(
+@@ -242,6 +259,9 @@ async def test_case_4_lod_hybrid_mode_and_gate_status(agent_test_env: AgentTestE
+     parsed_std = yaml.safe_load(res_std["content"][0]["text"])
+     assert len(parsed_std["items"]) == 2
+     kan_142_item = next(it for it in parsed_std["items"] if it["key"] == "KAN-142")
++    assert kan_142_item["issue_key"] == "KAN-142"
++    assert kan_142_item["sequence_number"] == 142
++    assert isinstance(kan_142_item["sequence_number"], int)
+     assert "description_markdown" in kan_142_item
+     assert "# OIDC Architecture" in kan_142_item["description_markdown"]
+ 
+@@ -386,3 +406,117 @@ async def test_tools_list_agent_surface(agent_test_env: AgentTestEnv) -> None:
+         "add_comment",
+         "link_objects",
+     ]
++
++
++@pytest.mark.asyncio
++async def test_search_tickets_helper_and_request_coverage() -> None:
++    """Test helper functions in search_tickets for full unit coverage."""
++    # 1. _validate_keys
++    with pytest.raises(KbMcpError) as exc_keys:
++        _validate_keys({"bogus_key": 1})
++    assert exc_keys.value.code == McpErrorCode.VALIDATION_FAILED
++
++    # 2. _execute_search_request edge cases
++    no_client_ctx = McpRequestContext(surface=Surface.AGENT, client=None)
++    with pytest.raises(KbMcpError) as exc_no_client:
++        await _execute_search_request(no_client_ctx, {}, "summary")
++    assert exc_no_client.value.code == McpErrorCode.INTERNAL
++
++    mock_client = AsyncMock()
++    client_ctx = McpRequestContext(surface=Surface.AGENT, client=mock_client)
++    mock_client.request.return_value = "invalid-payload"
++    with pytest.raises(KbMcpError) as exc_bad_res:
++        await _execute_search_request(client_ctx, {}, "summary")
++    assert exc_bad_res.value.code == McpErrorCode.UPSTREAM_ERROR
++
++    # 3. match_reason in projected items and cursor
++    mock_client.request.return_value = {
++        "items": [
++            {"key": "KAN-1", "sequence_number": 1, "match_reason": "exact_title"},
++        ],
++        "total": 1,
++        "next_cursor": "cur-123",
++    }
++    exec_res = await _execute_search_request(client_ctx, {"mode": "hybrid"}, "summary")
++    assert exec_res["mode"] == "hybrid"
++    assert exec_res["total"] == 1
++    assert exec_res["next_cursor"] == "cur-123"
++    assert exec_res["items"][0]["key"] == "KAN-1"
++    assert exec_res["items"][0]["issue_key"] == "KAN-1"
++    assert exec_res["items"][0]["sequence_number"] == 1
++    assert exec_res["items"][0]["match_reason"] == "exact_title"
++
++    # 4. _resolve_project_key with project_ref=None and NOT_FOUND
++    mock_resolver = AsyncMock()
++    found, key = await _resolve_project_key(mock_resolver, None)
++    assert found is True
++    assert key is None
++
++    mock_resolver.resolve.side_effect = KbMcpError(McpErrorCode.NOT_FOUND, "missing")
++    found, key = await _resolve_project_key(mock_resolver, "UNKNOWN")
++    assert found is False
++    assert key is None
++
++    mock_resolver.resolve.side_effect = KbMcpError(McpErrorCode.INTERNAL, "db error")
++    with pytest.raises(KbMcpError):
++        await _resolve_project_key(mock_resolver, "FAIL")
++
++    # 5. _resolve_assignees with "me" and username
++    mock_user = AsyncMock()
++    mock_user.id = "user-uuid-1"
++    mock_resolver.resolve.side_effect = None
++    mock_resolver.resolve.return_value = mock_user
++    assignee_ids = await _resolve_assignees(mock_resolver, ["me", "alice"])
++    assert assignee_ids == ["me", "user-uuid-1"]
++
++
++@pytest.mark.asyncio
++async def test_search_tickets_filters_and_missing_project(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Test search filter resolution and missing project handling."""
++    mock_resolver = AsyncMock()
++    mock_ent = AsyncMock()
++    mock_ent.id = "ent-uuid-1"
++    mock_resolver.resolve.return_value = mock_ent
++    filters = await _compose_search_filters(
++        mock_resolver,
++        {
++            "states": ["todo"],
++            "assignees": ["me"],
++            "cycle": "cycle-1",
++            "modules": ["mod-1"],
++            "labels": ["bug"],
++            "blocked": True,
++            "gate_status": "pending",
++        },
++        "KAN",
++    )
++    assert filters["state_ids"] == ["ent-uuid-1"]
++    assert filters["assignee_ids"] == ["me"]
++    assert filters["cycle_ids"] == ["ent-uuid-1"]
++    assert filters["module_ids"] == ["ent-uuid-1"]
++    assert filters["label_ids"] == ["ent-uuid-1"]
++    assert filters["blocked"] is True
++    assert filters["gate_status"] == "pending"
++
++    mock_client = AsyncMock()
++    client_ctx = McpRequestContext(surface=Surface.AGENT, client=mock_client)
++    token = set_current_mcp_context(client_ctx)
++    try:
++
++        async def mock_resolve(
++            _self: EntityResolver,
++            _entity_type: str,
++            _reference: str,
++            *,
++            _project: str | None = None,
++        ) -> None:
++            raise KbMcpError(McpErrorCode.NOT_FOUND, "not found")
++
++        monkeypatch.setattr(EntityResolver, "resolve", mock_resolve)
++        res_empty = await search_tickets({"project": "MISSING_PROJ"})
++        assert res_empty["items"] == []
++        assert res_empty["total"] == 0
++    finally:
++        reset_current_mcp_context(token)
+diff --git a/mcp/tests/agent/test_update_ticket.py b/mcp/tests/agent/test_update_ticket.py
+index 27f4c7f7..71b504e5 100644
+--- a/mcp/tests/agent/test_update_ticket.py
++++ b/mcp/tests/agent/test_update_ticket.py
+@@ -147,6 +147,9 @@ async def test_case_1_positive_append(agent_test_env: AgentTestEnv) -> None:
+     parsed_update = yaml.safe_load(update_res["content"][0]["text"])
+ 
+     assert parsed_update["key"] == "KAN-142"
++    assert parsed_update["issue_key"] == "KAN-142"
++    assert parsed_update["sequence_number"] == 142
++    assert isinstance(parsed_update["sequence_number"], int)
+     assert "description_markdown" in parsed_update["changed"]
+     new_etag = parsed_update["etag"]
+     assert new_etag != old_etag
+diff --git a/mcp/tests/agent/test_workflow_tools.py b/mcp/tests/agent/test_workflow_tools.py
+index 87a1817a..766d8127 100644
+--- a/mcp/tests/agent/test_workflow_tools.py
++++ b/mcp/tests/agent/test_workflow_tools.py
+@@ -133,6 +133,9 @@ async def test_begin_work_positive_execution(agent_test_env: AgentTestEnv) -> No
+     parsed = yaml.safe_load(res["content"][0]["text"])
+     assert parsed["status"] == "started"
+     assert parsed["key"] == "KAN-150"
++    assert parsed["issue_key"] == "KAN-150"
++    assert parsed["sequence_number"] == 150
++    assert isinstance(parsed["sequence_number"], int)
+     assert parsed["state"] == "In Progress"
+     assert "@adam" in parsed["assignees"]
+     assert "comment" in parsed
+@@ -176,6 +179,9 @@ async def test_transition_ticket_positive_execution(agent_test_env: AgentTestEnv
+     parsed = yaml.safe_load(res["content"][0]["text"])
+     assert parsed["status"] == "transitioned"
+     assert parsed["key"] == "KAN-142"
++    assert parsed["issue_key"] == "KAN-142"
++    assert parsed["sequence_number"] == 142
++    assert isinstance(parsed["sequence_number"], int)
+     assert parsed["to_state"] == "Todo"
+     assert parsed["from_state"] == "In Progress"
+ 
+@@ -198,6 +204,10 @@ async def test_transition_ticket_dict_from_state_extraction() -> None:
+         client=mock_client,
+     )
+     assert res["status"] == "transitioned"
++    assert res["key"] == "KAN-142"
++    assert res["issue_key"] == "KAN-142"
++    assert res["sequence_number"] == 142
++    assert isinstance(res["sequence_number"], int)
+     assert res["from_state"] == "In Progress"
+     assert isinstance(res["from_state"], str)
+ 
+@@ -279,5 +289,8 @@ async def test_complete_work_positive_execution(agent_test_env: AgentTestEnv) ->
+     parsed = yaml.safe_load(res["content"][0]["text"])
+     assert parsed["status"] == "completed"
+     assert parsed["key"] == "KAN-150"
++    assert parsed["issue_key"] == "KAN-150"
++    assert parsed["sequence_number"] == 150
++    assert isinstance(parsed["sequence_number"], int)
+     assert parsed["state"] == "Done"
+     assert "comment" in parsed
+diff --git a/mcp/tests/test_lod_help.py b/mcp/tests/test_lod_help.py
+index fbb6e746..b1800fe6 100644
+--- a/mcp/tests/test_lod_help.py
++++ b/mcp/tests/test_lod_help.py
+@@ -15,6 +15,9 @@ from mcp.help import build_help
+ from mcp.lod import (
+     Lod,
+     _compact_access_manifest,
++    _extract_provenance,
++    _format_provenance_handle,
++    extract_issue_sequence,
+     parse_lod,
+     project_doc,
+     project_entity,
+@@ -57,7 +60,19 @@ def test_issue_summary_projection_keys() -> None:
+     }
+ 
+     summary = project_issue(raw_issue, Lod.SUMMARY)
+-    assert set(summary.keys()) == {"key", "summary", "state", "priority", "assignees"}
++    assert set(summary.keys()) == {
++        "key",
++        "issue_key",
++        "sequence_number",
++        "summary",
++        "state",
++        "priority",
++        "assignees",
++    }
++    assert summary["key"] == "KAN-142"
++    assert summary["issue_key"] == "KAN-142"
++    assert summary["sequence_number"] == 142
++    assert isinstance(summary["sequence_number"], int)
+     assert "description_markdown" not in summary
+     assert "access_manifest" not in summary
+     assert "gate" not in summary  # Gate omitted because not pending
+@@ -114,6 +129,10 @@ def test_issue_standard_and_full_projections() -> None:
+     }
+ 
+     standard = project_issue(raw_issue, Lod.STANDARD)
++    assert standard["key"] == "KAN-142"
++    assert standard["issue_key"] == "KAN-142"
++    assert standard["sequence_number"] == 142
++    assert isinstance(standard["sequence_number"], int)
+     assert "description_markdown" in standard
+     assert "labels" in standard
+     assert "access" in standard
+@@ -121,6 +140,10 @@ def test_issue_standard_and_full_projections() -> None:
+     assert "custom_fields" not in standard
+ 
+     full = project_issue(raw_issue, Lod.FULL)
++    assert full["key"] == "KAN-142"
++    assert full["issue_key"] == "KAN-142"
++    assert full["sequence_number"] == 142
++    assert isinstance(full["sequence_number"], int)
+     assert "access_manifest" in full
+     assert "custom_fields" in full
+     assert len(full["comments"]) == 50  # Latest 50
+@@ -264,7 +287,13 @@ def test_doc_sticky_project_entity_projections() -> None:
+     assert generic_full == {"id": "c-1", "secret": "show"}
+ 
+     issue_proj = project_entity("issue", {"key": "KAN-1", "summary": "One"}, Lod.SUMMARY)
+-    assert issue_proj == {"key": "KAN-1", "summary": "One"}
++    assert issue_proj == {
++        "key": "KAN-1",
++        "issue_key": "KAN-1",
++        "sequence_number": 1,
++        "summary": "One",
++    }
++    assert isinstance(issue_proj["sequence_number"], int)
+ 
+ 
+ def test_issue_projections_edge_cases() -> None:
+@@ -622,3 +651,110 @@ async def test_build_help_edge_cases() -> None:
+     )
+     h3 = await build_help("create_ticket", project="PRJ", client=mock_client)
+     assert h3["project"] == "PRJ"
++
++
++def test_extract_issue_sequence_and_child_framing() -> None:
++    """Verify typed sequence extraction and child issue projection across all LOD tiers."""
++    # 1. extract_issue_sequence variations
++    assert extract_issue_sequence({"sequence_number": 404}) == 404
++    assert extract_issue_sequence({"sequence_number": "404"}) == 404
++    assert extract_issue_sequence({"sequence_id": 505}) == 505
++    assert extract_issue_sequence({"sequence_id": "505"}) == 505
++    assert extract_issue_sequence(key="KAN-404") == 404
++    assert extract_issue_sequence(key="404") == 404
++    assert extract_issue_sequence({"key": "KAN-404"}) == 404
++    assert extract_issue_sequence({"issue_key": "KAN-404"}) == 404
++    assert extract_issue_sequence({"key": "NONUMBER"}) == 0
++    assert extract_issue_sequence(None, None) == 0
++
++    # 2. project_issue with nested children
++    parent_with_children = {
++        "key": "KAN-100",
++        "summary": "Parent Issue",
++        "state": "In Progress",
++        "priority": "high",
++        "children": [
++            {
++                "key": "KAN-101",
++                "summary": "Child One",
++                "parent": "KAN-100",
++            },
++            {
++                "issue_key": "KAN-102",
++                "summary": "Child Two",
++                "parent": "KAN-100",
++            },
++        ],
++    }
++
++    for tier in (Lod.SUMMARY, Lod.STANDARD, Lod.FULL):
++        projected = project_issue(parent_with_children, tier)
++        assert projected["key"] == "KAN-100"
++        assert projected["issue_key"] == "KAN-100"
++        assert projected["sequence_number"] == 100
++        assert isinstance(projected["sequence_number"], int)
++
++        children = projected.get("children", [])
++        assert len(children) == 2
++        assert children[0]["key"] == "KAN-101"
++        assert children[0]["issue_key"] == "KAN-101"
++        assert children[0]["sequence_number"] == 101
++        assert isinstance(children[0]["sequence_number"], int)
++        assert children[0]["parent"] == "KAN-100"
++
++        assert children[1]["key"] == "KAN-102"
++        assert children[1]["issue_key"] == "KAN-102"
++        assert children[1]["sequence_number"] == 102
++        assert isinstance(children[1]["sequence_number"], int)
++        assert children[1]["parent"] == "KAN-100"
++
++
++def test_lod_coverage_boosters() -> None:
++    """Exercise remaining branches for sticky, project, and provenance formatting."""
++    # Sticky standard and full
++    raw_st = {"id": "s1", "project": "KAN", "color": "blue", "content": "hi", "position": 1}
++    st_std = project_entity("sticky", raw_st, Lod.STANDARD)
++    assert st_std["color"] == "blue"
++    st_full = project_entity("sticky", raw_st, Lod.FULL)
++    assert st_full["color"] == "blue"
++
++    # Project standard and full
++    raw_prj = {"id": "p1", "key": "P1", "name": "Prj", "status": "active"}
++    prj_std = project_entity("project", raw_prj, Lod.STANDARD)
++    assert prj_std["name"] == "Prj"
++    prj_full = project_entity("project", raw_prj, Lod.FULL)
++    assert prj_full["name"] == "Prj"
++
++    # Issue with no key or issue_key
++    raw_no_keys = {"summary": "no keys issue"}
++    proj_no_keys = project_issue(raw_no_keys, Lod.SUMMARY)
++    assert "key" not in proj_no_keys
++    assert "issue_key" not in proj_no_keys
++
++    # Issue with invalid sequence number
++    assert extract_issue_sequence({"sequence_number": "not_int"}) == 0
++    assert extract_issue_sequence({"sequence_id": "not_int"}) == 0
++
++    # Provenance handle formatting
++    assert _format_provenance_handle({"handle": "maya"}) == "@maya"
++    assert _format_provenance_handle({"name": "alex"}) == "@alex"
++    assert _format_provenance_handle({"id": 12345}) == "@12345"
++    assert _format_provenance_handle({}) is None
++    assert _format_provenance_handle("   ") is None
++
++    # Provenance with string raw provenance and creator_modified_by
++    prov_raw_str = _extract_provenance({"provenance": "raw_creator_str"})
++    assert prov_raw_str == {"raw": "raw_creator_str"}
++
++    prov_mod = _extract_provenance(
++        {
++            "provenance": {
++                "created_by": "adam",
++                "creator_modified_by": "lead",
++                "source": "import_job",
++            }
++        }
++    )
++    assert prov_mod is not None
++    assert prov_mod["creator_modified_by"] == "@lead"
++    assert prov_mod["source"] == "import_job"

@@ -15,6 +15,9 @@ from mcp.help import build_help
 from mcp.lod import (
     Lod,
     _compact_access_manifest,
+    _extract_provenance,
+    _format_provenance_handle,
+    extract_issue_sequence,
     parse_lod,
     project_doc,
     project_entity,
@@ -57,7 +60,19 @@ def test_issue_summary_projection_keys() -> None:
     }
 
     summary = project_issue(raw_issue, Lod.SUMMARY)
-    assert set(summary.keys()) == {"key", "summary", "state", "priority", "assignees"}
+    assert set(summary.keys()) == {
+        "key",
+        "issue_key",
+        "sequence_number",
+        "summary",
+        "state",
+        "priority",
+        "assignees",
+    }
+    assert summary["key"] == "KAN-142"
+    assert summary["issue_key"] == "KAN-142"
+    assert summary["sequence_number"] == 142
+    assert isinstance(summary["sequence_number"], int)
     assert "description_markdown" not in summary
     assert "access_manifest" not in summary
     assert "gate" not in summary  # Gate omitted because not pending
@@ -114,6 +129,10 @@ def test_issue_standard_and_full_projections() -> None:
     }
 
     standard = project_issue(raw_issue, Lod.STANDARD)
+    assert standard["key"] == "KAN-142"
+    assert standard["issue_key"] == "KAN-142"
+    assert standard["sequence_number"] == 142
+    assert isinstance(standard["sequence_number"], int)
     assert "description_markdown" in standard
     assert "labels" in standard
     assert "access" in standard
@@ -121,6 +140,10 @@ def test_issue_standard_and_full_projections() -> None:
     assert "custom_fields" not in standard
 
     full = project_issue(raw_issue, Lod.FULL)
+    assert full["key"] == "KAN-142"
+    assert full["issue_key"] == "KAN-142"
+    assert full["sequence_number"] == 142
+    assert isinstance(full["sequence_number"], int)
     assert "access_manifest" in full
     assert "custom_fields" in full
     assert len(full["comments"]) == 50  # Latest 50
@@ -264,7 +287,13 @@ def test_doc_sticky_project_entity_projections() -> None:
     assert generic_full == {"id": "c-1", "secret": "show"}
 
     issue_proj = project_entity("issue", {"key": "KAN-1", "summary": "One"}, Lod.SUMMARY)
-    assert issue_proj == {"key": "KAN-1", "summary": "One"}
+    assert issue_proj == {
+        "key": "KAN-1",
+        "issue_key": "KAN-1",
+        "sequence_number": 1,
+        "summary": "One",
+    }
+    assert isinstance(issue_proj["sequence_number"], int)
 
 
 def test_issue_projections_edge_cases() -> None:
@@ -622,3 +651,110 @@ async def test_build_help_edge_cases() -> None:
     )
     h3 = await build_help("create_ticket", project="PRJ", client=mock_client)
     assert h3["project"] == "PRJ"
+
+
+def test_extract_issue_sequence_and_child_framing() -> None:
+    """Verify typed sequence extraction and child issue projection across all LOD tiers."""
+    # 1. extract_issue_sequence variations
+    assert extract_issue_sequence({"sequence_number": 404}) == 404
+    assert extract_issue_sequence({"sequence_number": "404"}) == 404
+    assert extract_issue_sequence({"sequence_id": 505}) == 505
+    assert extract_issue_sequence({"sequence_id": "505"}) == 505
+    assert extract_issue_sequence(key="KAN-404") == 404
+    assert extract_issue_sequence(key="404") == 404
+    assert extract_issue_sequence({"key": "KAN-404"}) == 404
+    assert extract_issue_sequence({"issue_key": "KAN-404"}) == 404
+    assert extract_issue_sequence({"key": "NONUMBER"}) == 0
+    assert extract_issue_sequence(None, None) == 0
+
+    # 2. project_issue with nested children
+    parent_with_children = {
+        "key": "KAN-100",
+        "summary": "Parent Issue",
+        "state": "In Progress",
+        "priority": "high",
+        "children": [
+            {
+                "key": "KAN-101",
+                "summary": "Child One",
+                "parent": "KAN-100",
+            },
+            {
+                "issue_key": "KAN-102",
+                "summary": "Child Two",
+                "parent": "KAN-100",
+            },
+        ],
+    }
+
+    for tier in (Lod.SUMMARY, Lod.STANDARD, Lod.FULL):
+        projected = project_issue(parent_with_children, tier)
+        assert projected["key"] == "KAN-100"
+        assert projected["issue_key"] == "KAN-100"
+        assert projected["sequence_number"] == 100
+        assert isinstance(projected["sequence_number"], int)
+
+        children = projected.get("children", [])
+        assert len(children) == 2
+        assert children[0]["key"] == "KAN-101"
+        assert children[0]["issue_key"] == "KAN-101"
+        assert children[0]["sequence_number"] == 101
+        assert isinstance(children[0]["sequence_number"], int)
+        assert children[0]["parent"] == "KAN-100"
+
+        assert children[1]["key"] == "KAN-102"
+        assert children[1]["issue_key"] == "KAN-102"
+        assert children[1]["sequence_number"] == 102
+        assert isinstance(children[1]["sequence_number"], int)
+        assert children[1]["parent"] == "KAN-100"
+
+
+def test_lod_coverage_boosters() -> None:
+    """Exercise remaining branches for sticky, project, and provenance formatting."""
+    # Sticky standard and full
+    raw_st = {"id": "s1", "project": "KAN", "color": "blue", "content": "hi", "position": 1}
+    st_std = project_entity("sticky", raw_st, Lod.STANDARD)
+    assert st_std["color"] == "blue"
+    st_full = project_entity("sticky", raw_st, Lod.FULL)
+    assert st_full["color"] == "blue"
+
+    # Project standard and full
+    raw_prj = {"id": "p1", "key": "P1", "name": "Prj", "status": "active"}
+    prj_std = project_entity("project", raw_prj, Lod.STANDARD)
+    assert prj_std["name"] == "Prj"
+    prj_full = project_entity("project", raw_prj, Lod.FULL)
+    assert prj_full["name"] == "Prj"
+
+    # Issue with no key or issue_key
+    raw_no_keys = {"summary": "no keys issue"}
+    proj_no_keys = project_issue(raw_no_keys, Lod.SUMMARY)
+    assert "key" not in proj_no_keys
+    assert "issue_key" not in proj_no_keys
+
+    # Issue with invalid sequence number
+    assert extract_issue_sequence({"sequence_number": "not_int"}) == 0
+    assert extract_issue_sequence({"sequence_id": "not_int"}) == 0
+
+    # Provenance handle formatting
+    assert _format_provenance_handle({"handle": "maya"}) == "@maya"
+    assert _format_provenance_handle({"name": "alex"}) == "@alex"
+    assert _format_provenance_handle({"id": 12345}) == "@12345"
+    assert _format_provenance_handle({}) is None
+    assert _format_provenance_handle("   ") is None
+
+    # Provenance with string raw provenance and creator_modified_by
+    prov_raw_str = _extract_provenance({"provenance": "raw_creator_str"})
+    assert prov_raw_str == {"raw": "raw_creator_str"}
+
+    prov_mod = _extract_provenance(
+        {
+            "provenance": {
+                "created_by": "adam",
+                "creator_modified_by": "lead",
+                "source": "import_job",
+            }
+        }
+    )
+    assert prov_mod is not None
+    assert prov_mod["creator_modified_by"] == "@lead"
+    assert prov_mod["source"] == "import_job"

@@ -1,0 +1,107 @@
+=== MCP TEST SUITE EXECUTION ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan51-a02519b7
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 373 items
+
+mcp/tests/admin/test_architect_project.py .......                        [  1%]
+mcp/tests/admin/test_audit_and_purge_links.py .........                  [  4%]
+mcp/tests/admin/test_bind_project_repo.py ...                            [  5%]
+mcp/tests/admin/test_configure_workspace.py ........                     [  7%]
+mcp/tests/admin/test_destructive_lifecycle.py ..........                 [  9%]
+mcp/tests/admin/test_manage_access_policies.py ......                    [ 11%]
+mcp/tests/admin/test_manage_ai_and_agent_runners.py .......              [ 13%]
+mcp/tests/admin/test_manage_ai_and_agent_runners_full.py .....           [ 14%]
+mcp/tests/admin/test_manage_auth_cards.py ......                         [ 16%]
+mcp/tests/admin/test_manage_custom_fields_and_scripts.py ...........     [ 19%]
+mcp/tests/admin/test_manage_cycles_and_modules.py ..........             [ 21%]
+mcp/tests/admin/test_manage_principals.py .....                          [ 23%]
+mcp/tests/admin/test_manage_workflow_interceptors.py ..............      [ 27%]
+mcp/tests/admin/test_override_ticket_provenance.py ..........            [ 29%]
+mcp/tests/agent/test_add_comment.py ........                             [ 31%]
+mcp/tests/agent/test_create_ticket.py .............                      [ 35%]
+mcp/tests/agent/test_link_objects.py ........                            [ 37%]
+mcp/tests/agent/test_pending_gate_contract.py ...                        [ 38%]
+mcp/tests/agent/test_read_ticket.py ...............                      [ 42%]
+mcp/tests/agent/test_search_tickets.py ........                          [ 44%]
+mcp/tests/agent/test_transition_ticket_gate.py ...                       [ 45%]
+mcp/tests/agent/test_update_ticket.py ............                       [ 48%]
+mcp/tests/agent/test_workflow_argument_validation.py ......              [ 50%]
+mcp/tests/agent/test_workflow_tools.py .........                         [ 52%]
+mcp/tests/docs/test_docs_surfaces_unit.py .............                  [ 56%]
+mcp/tests/docs/test_docs_tools.py .......                                [ 57%]
+mcp/tests/test_admin_scope_requirements_all_12.py ..                     [ 58%]
+mcp/tests/test_app.py ................                                   [ 62%]
+mcp/tests/test_auth.py .............                                     [ 66%]
+mcp/tests/test_connection_scoping.py ..............                      [ 69%]
+mcp/tests/test_docs_kan18_coverage.py ....                               [ 71%]
+mcp/tests/test_ephemeral_auth.py ...................                     [ 76%]
+mcp/tests/test_internal_client.py ........                               [ 78%]
+mcp/tests/test_key_narrowing.py ...                                      [ 79%]
+mcp/tests/test_lod_help.py ..................                            [ 83%]
+mcp/tests/test_markdown_sections.py .......                              [ 85%]
+mcp/tests/test_metadata.py ..                                            [ 86%]
+mcp/tests/test_progressive_disclosure_errors.py ................         [ 90%]
+mcp/tests/test_protocol.py ............                                  [ 93%]
+mcp/tests/test_registry_isolation.py ...                                 [ 94%]
+mcp/tests/test_resolver.py ....                                          [ 95%]
+mcp/tests/test_schema_budget.py ..                                       [ 96%]
+mcp/tests/test_smoke.py .                                                [ 96%]
+mcp/tests/test_token_benchmark.py .....                                  [ 97%]
+mcp/tests/test_yaml_out.py ........                                      [100%]
+
+=============================== warnings summary ===============================
+mcp/tests/admin/test_manage_ai_and_agent_runners_full.py::test_mcp_mint_enrollment_token_and_list_runners
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan51-a02519b7/.venv/lib/python3.12/site-packages/fastapi/routing.py:372: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    return await dependant.call(**values)
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================= 373 passed, 1 warning in 58.96s ========================
+
+=== UNIT TEST COVERAGE ON TOUCHED FILES ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan51-a02519b7
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 18 items
+
+mcp/tests/test_lod_help.py ..................                            [100%]
+
+============================== 18 passed in 0.18s ==============================
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan51-a02519b7
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 85 items
+
+mcp/tests/agent/test_add_comment.py ........                             [  9%]
+mcp/tests/agent/test_create_ticket.py .............                      [ 24%]
+mcp/tests/agent/test_link_objects.py ........                            [ 34%]
+mcp/tests/agent/test_pending_gate_contract.py ...                        [ 37%]
+mcp/tests/agent/test_read_ticket.py ...............                      [ 55%]
+mcp/tests/agent/test_search_tickets.py ........                          [ 64%]
+mcp/tests/agent/test_transition_ticket_gate.py ...                       [ 68%]
+mcp/tests/agent/test_update_ticket.py ............                       [ 82%]
+mcp/tests/agent/test_workflow_argument_validation.py ......              [ 89%]
+mcp/tests/agent/test_workflow_tools.py .........                         [100%]
+
+============================= 85 passed in 50.23s ==============================
+Name                                      Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------------
+mcp/lod.py                                  301      3    196     14    97%   38->43, 91->95, 200->203, 203->205, 205->207, 207->195, 220->219, 236, 240, 242->247, 244->247, 252, 308->311, 329->exit
+mcp/surfaces/agent/begin_work.py             73      2     28      2    96%   95, 156
+mcp/surfaces/agent/complete_work.py          93      2     36      3    96%   135, 148, 206->209
+mcp/surfaces/agent/create_ticket.py         124      4     62      3    96%   279-280, 311->318, 341-342
+mcp/surfaces/agent/read_ticket.py           269      4    140     13    96%   129->127, 168->170, 201->204, 206->209, 228->230, 232->234, 234->237, 265, 288->290, 294->303, 325, 336->333, 366-367
+mcp/surfaces/agent/search_tickets.py        172      1     84      2    99%   303->305, 364
+mcp/surfaces/agent/transition_ticket.py      96      4     38      2    96%   103-104, 126, 138
+mcp/surfaces/agent/update_ticket.py         253      2    160     11    97%   245, 341->346, 346->351, 363->368, 368->373, 393->428, 405->411, 425, 431->489, 491->532, 543->547
+-------------------------------------------------------------------------------------
+TOTAL                                      1381     22    744     50    97%

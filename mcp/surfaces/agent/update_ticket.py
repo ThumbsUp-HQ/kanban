@@ -11,6 +11,7 @@ from typing import TYPE_CHECKING, Any, Final
 from mcp.context import get_current_mcp_context
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.help import build_help
+from mcp.lod import extract_issue_sequence
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -551,8 +552,12 @@ async def update_ticket(arguments: dict[str, Any]) -> dict[str, Any]:  # noqa: C
     pri_str = str(pri_val.get("slug", "")) if isinstance(pri_val, dict) else str(pri_val or "")
     etag_val = patched_issue.get("etag") or patched_issue.get("description_sha256") or ""
 
+    seq_num = extract_issue_sequence(patched_issue, issue_key)
+
     return {
         "key": issue_key,
+        "issue_key": issue_key,
+        "sequence_number": seq_num,
         "summary": patched_issue.get("summary", ""),
         "state": state_str,
         "priority": pri_str,

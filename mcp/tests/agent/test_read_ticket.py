@@ -18,9 +18,11 @@ from mcp.surfaces.agent.read_ticket import (
     _compact_single_activity,
     _compact_single_comment,
     _extract_assignee_name,
+    _extract_labels,
     _extract_principal_name,
     _format_activity_actor,
     _format_assignees,
+    _format_children,
     _format_comment_author,
     _format_parent,
     _load_activity,
@@ -85,6 +87,13 @@ async def _call_read_ticket(
     return cast("dict[str, Any]", data["result"])
 
 
+def _assert_ticket_identity(parsed: dict[str, Any], key: str, seq: int) -> None:
+    assert parsed["key"] == key
+    assert parsed["issue_key"] == key
+    assert parsed["sequence_number"] == seq
+    assert isinstance(parsed["sequence_number"], int)
+
+
 @pytest.mark.asyncio
 async def test_case_1_positive_read_ticket_all_lods(agent_test_env: AgentTestEnv) -> None:
     """Case 1: read_ticket('KAN-142', lod='full') contains all detailed fields."""
@@ -96,7 +105,7 @@ async def test_case_1_positive_read_ticket_all_lods(agent_test_env: AgentTestEnv
     content_full = res_full["content"][0]["text"]
     parsed_full = yaml.safe_load(content_full)
 
-    assert parsed_full["key"] == "KAN-142"
+    _assert_ticket_identity(parsed_full, "KAN-142", 142)
     assert parsed_full["summary"] == "Harden Multi-Card OIDC & LDAPS Auth Studio"
     assert parsed_full["state"] == "In Progress"
     assert parsed_full["priority"] == "urgent"
@@ -117,7 +126,7 @@ async def test_case_1_positive_read_ticket_all_lods(agent_test_env: AgentTestEnv
     content_std = res_std["content"][0]["text"]
     parsed_std = yaml.safe_load(content_std)
 
-    assert parsed_std["key"] == "KAN-142"
+    _assert_ticket_identity(parsed_std, "KAN-142", 142)
     assert parsed_std["summary"] == "Harden Multi-Card OIDC & LDAPS Auth Studio"
     assert parsed_std["state"] == "In Progress"
     assert parsed_std["priority"] == "urgent"
@@ -136,7 +145,7 @@ async def test_case_1_positive_read_ticket_all_lods(agent_test_env: AgentTestEnv
     content_sum = res_sum["content"][0]["text"]
     parsed_sum = yaml.safe_load(content_sum)
 
-    assert parsed_sum["key"] == "KAN-142"
+    _assert_ticket_identity(parsed_sum, "KAN-142", 142)
     assert parsed_sum["summary"] == "Harden Multi-Card OIDC & LDAPS Auth Studio"
     assert parsed_sum["state"] == "In Progress"
     assert parsed_sum["priority"] == "urgent"
@@ -669,5 +678,67 @@ async def test_read_ticket_load_and_dispatch_branches() -> None:
         with pytest.raises(KbMcpError) as exc_int:
             await read_ticket({"identifier": "KAN-1"})
         assert exc_int.value.code == McpErrorCode.NOT_FOUND
+    finally:
+        reset_current_mcp_context(token)
+
+
+@pytest.mark.asyncio
+async def test_read_ticket_additional_coverage_boosters() -> None:
+    """Exercise remaining helper branches and full coverage in read_ticket."""
+    assert _extract_labels([{"name": "tag1"}, "tag2", None]) == ["tag1", "tag2"]
+    assert _extract_labels(None) == []
+
+    children = _format_children(
+        [
+            {"key": "KAN-10", "sequence_number": 10, "title": "Sub 1"},
+            {"key": "KAN-11", "summary": "Sub 2"},
+            "not-a-dict",
+        ]
+    )
+    assert children is not None
+    assert len(children) == 2
+    assert children[0]["key"] == "KAN-10"
+    assert children[0]["issue_key"] == "KAN-10"
+    assert children[0]["sequence_number"] == 10
+    assert children[1]["key"] == "KAN-11"
+    assert children[1]["issue_key"] == "KAN-11"
+    assert children[1]["sequence_number"] == 11
+    assert _format_children(None) is None
+
+    mock_client = AsyncMock()
+    ctx = McpRequestContext(surface=Surface.AGENT, client=mock_client)
+    token = set_current_mcp_context(ctx)
+    try:
+        mock_client.request.side_effect = [
+            # issue GET
+            {
+                "key": "KAN-20",
+                "sequence_number": 20,
+                "title": "Parent",
+                "state": "Todo",
+                "priority": "high",
+                "labels": [{"name": "backend"}],
+                "children": [{"key": "KAN-21", "title": "Child"}],
+            },
+            # links
+            None,
+            # comments
+            [],
+            # activity
+            [],
+        ]
+        res = await read_ticket({"identifier": "KAN-20", "workspace": "test-ws", "lod": "full"})
+        assert res["key"] == "KAN-20"
+        assert res["issue_key"] == "KAN-20"
+        assert res["sequence_number"] == 20
+        assert len(res["children"]) == 1
+        assert res["children"][0]["issue_key"] == "KAN-21"
+        assert res["children"][0]["sequence_number"] == 21
+
+        # Error re-raise on non-404 KbMcpError in _fetch_issue_data
+        mock_client.request.side_effect = KbMcpError(McpErrorCode.INTERNAL, "backend fail")
+        with pytest.raises(KbMcpError) as exc_err:
+            await read_ticket({"identifier": "KAN-20"})
+        assert exc_err.value.code == McpErrorCode.INTERNAL
     finally:
         reset_current_mcp_context(token)

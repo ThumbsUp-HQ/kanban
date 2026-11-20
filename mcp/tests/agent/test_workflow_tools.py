@@ -133,6 +133,9 @@ async def test_begin_work_positive_execution(agent_test_env: AgentTestEnv) -> No
     parsed = yaml.safe_load(res["content"][0]["text"])
     assert parsed["status"] == "started"
     assert parsed["key"] == "KAN-150"
+    assert parsed["issue_key"] == "KAN-150"
+    assert parsed["sequence_number"] == 150
+    assert isinstance(parsed["sequence_number"], int)
     assert parsed["state"] == "In Progress"
     assert "@adam" in parsed["assignees"]
     assert "comment" in parsed
@@ -176,6 +179,9 @@ async def test_transition_ticket_positive_execution(agent_test_env: AgentTestEnv
     parsed = yaml.safe_load(res["content"][0]["text"])
     assert parsed["status"] == "transitioned"
     assert parsed["key"] == "KAN-142"
+    assert parsed["issue_key"] == "KAN-142"
+    assert parsed["sequence_number"] == 142
+    assert isinstance(parsed["sequence_number"], int)
     assert parsed["to_state"] == "Todo"
     assert parsed["from_state"] == "In Progress"
 
@@ -198,6 +204,10 @@ async def test_transition_ticket_dict_from_state_extraction() -> None:
         client=mock_client,
     )
     assert res["status"] == "transitioned"
+    assert res["key"] == "KAN-142"
+    assert res["issue_key"] == "KAN-142"
+    assert res["sequence_number"] == 142
+    assert isinstance(res["sequence_number"], int)
     assert res["from_state"] == "In Progress"
     assert isinstance(res["from_state"], str)
 
@@ -279,5 +289,8 @@ async def test_complete_work_positive_execution(agent_test_env: AgentTestEnv) ->
     parsed = yaml.safe_load(res["content"][0]["text"])
     assert parsed["status"] == "completed"
     assert parsed["key"] == "KAN-150"
+    assert parsed["issue_key"] == "KAN-150"
+    assert parsed["sequence_number"] == 150
+    assert isinstance(parsed["sequence_number"], int)
     assert parsed["state"] == "Done"
     assert "comment" in parsed
