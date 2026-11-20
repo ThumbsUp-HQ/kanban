@@ -6,15 +6,16 @@ import { useParams, useSearchParams, Link } from 'react-router';
 import { useQuery, QueryClient, QueryClientContext } from '@tanstack/react-query';
 import { qk } from '../../api/queryKeys';
 import {
-  fetchPersonalMcpKeys,
-  mintPersonalMcpKey,
-  revokePersonalMcpKey,
   fetchConnectedApps,
   revokeConnectedApp,
   fetchUnifiedMcpKeys,
+  mintUnifiedMcpKey,
+  revokeUnifiedMcpKey,
   type McpApiKeyItem,
   type OAuthConnectedApp,
   type ScopeTier,
+  type OwnerKind,
+  type MintMcpKeyRequest,
 } from './settingsApi';
 import { McpConfigSnippetModal } from './McpConfigSnippetModal';
 import { ConnectOAuthAppModal } from './ConnectOAuthAppModal';
@@ -143,56 +144,6 @@ export function McpAccessStudio({
     queryView === 'governance' ? 'governance' : 'mine',
   );
 
-  const projectsQuery = useQuery<ProjectOption[]>(
-    {
-      queryKey: qk.projects(),
-      queryFn: async () => {
-        try {
-          const res = await apiFetch('GET', '/api/v1/projects');
-          const data = res as unknown as
-            | { items?: { id: string; identifier?: string; key?: string; name?: string }[] }
-            | { id: string; identifier?: string; key?: string; name?: string }[];
-          const rawList = Array.isArray(data) ? data : (data.items ?? []);
-          return rawList.map((p) => {
-            const ident = p.identifier ?? p.key ?? '';
-            return {
-              id: p.id,
-              identifier: ident,
-              name: p.name ?? ident,
-            };
-          });
-        } catch {
-          return [];
-        }
-      },
-      staleTime: 30000,
-    },
-    queryClient,
-  );
-
-  const workspacesQuery = useQuery<{ id: string; name: string; slug: string; is_current?: boolean }[]>(
-    {
-      queryKey: ['workspaces'],
-      queryFn: async () => {
-        try {
-          const res = await apiFetch('GET', '/api/v1/workspaces');
-          return Array.isArray(res) ? res : [];
-        } catch {
-          return [];
-        }
-      },
-      staleTime: 60000,
-    },
-    queryClient,
-  );
-
-  const currentWorkspaceSlug =
-    routeParams.workspaceSlug ??
-    (/^\/w\/([^/]+)/.exec(typeof window !== 'undefined' ? window.location.pathname : '')?.[1]) ??
-    workspacesQuery.data?.find((w) => w.is_current)?.slug ??
-    workspacesQuery.data?.[0]?.slug ??
-    'kanban';
-
   const [fetchedUser, setFetchedUser] = useState<{
     is_server_admin?: boolean;
     is_workspace_admin?: boolean;
@@ -228,6 +179,62 @@ export function McpAccessStudio({
   const canAccessGovernance = isServerAdmin || isWorkspaceAdmin || isProjectAdmin;
   const isViewer =
     currentUser?.workspace_role === 'VIEWER' || currentUser?.workspace_role === 'WORKSPACE_GUEST';
+
+  const isDenied =
+    currentUser !== null &&
+    ((tier === 'global' && !isServerAdmin) || (tier === 'workspace' && !isWorkspaceAdmin));
+
+  const projectsQuery = useQuery<ProjectOption[]>(
+    {
+      queryKey: qk.projects(),
+      queryFn: async () => {
+        try {
+          const res = await apiFetch('GET', '/api/v1/projects');
+          const data = res as unknown as
+            | { items?: { id: string; identifier?: string; key?: string; name?: string }[] }
+            | { id: string; identifier?: string; key?: string; name?: string }[];
+          const rawList = Array.isArray(data) ? data : (data.items ?? []);
+          return rawList.map((p) => {
+            const ident = p.identifier ?? p.key ?? '';
+            return {
+              id: p.id,
+              identifier: ident,
+              name: p.name ?? ident,
+            };
+          });
+        } catch {
+          return [];
+        }
+      },
+      staleTime: 30000,
+      enabled: !isDenied,
+    },
+    queryClient,
+  );
+
+  const workspacesQuery = useQuery<{ id: string; name: string; slug: string; is_current?: boolean }[]>(
+    {
+      queryKey: ['workspaces'],
+      queryFn: async () => {
+        try {
+          const res = await apiFetch('GET', '/api/v1/workspaces');
+          return Array.isArray(res) ? res : [];
+        } catch {
+          return [];
+        }
+      },
+      staleTime: 60000,
+      enabled: !isDenied,
+    },
+    queryClient,
+  );
+
+  const currentWorkspaceSlug =
+    routeParams.workspaceSlug ??
+    (/^\/w\/([^/]+)/.exec(typeof window !== 'undefined' ? window.location.pathname : '')?.[1]) ??
+    workspacesQuery.data?.find((w) => w.is_current)?.slug ??
+    workspacesQuery.data?.[0]?.slug ??
+    'kanban';
 
   const systemStatusQuery = useSystemStatus();
   const allowUnlimited =
@@ -267,6 +274,7 @@ export function McpAccessStudio({
   const [showMintModal, setShowMintModal] = useState<boolean>(false);
   const [newKeyLabel, setNewKeyLabel] = useState<string>('');
   const [newKeySurface, setNewKeySurface] = useState<'agent' | 'docs' | 'admin'>('agent');
+  const [newKeyOwnerKind, setNewKeyOwnerKind] = useState<OwnerKind>('personal_user');
   const [newKeyScopeTier, setNewKeyScopeTier] = useState<ScopeTier>(
     activeScope === 'server' ? 'global' : activeScope === 'project' ? 'project' : 'workspace',
   );
@@ -277,6 +285,7 @@ export function McpAccessStudio({
   const [disabledTools, setDisabledTools] = useState<string[]>([]);
   const [minting, setMinting] = useState<boolean>(false);
   const [mintError, setMintError] = useState<string | null>(null);
+  const [studioError, setStudioError] = useState<string | null>(null);
 
   // Snippet modal state (ephemeral secret)
   const [activeSnippetKey, setActiveSnippetKey] = useState<string | undefined>(undefined);
@@ -294,6 +303,10 @@ export function McpAccessStudio({
   const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
 
   const loadData = useCallback(async (): Promise<void> => {
+    if (isDenied) {
+      setLoading(false);
+      return;
+    }
     setLoading(true);
     try {
       if (activeView === 'governance') {
@@ -306,7 +319,11 @@ export function McpAccessStudio({
         setConnectedApps([]);
       } else {
         const [fetchedKeys, fetchedApps] = await Promise.all([
-          tier === 'global' ? fetchPersonalMcpKeys('global') : fetchPersonalMcpKeys(),
+          fetchUnifiedMcpKeys({
+            view: 'mine',
+            scope_tier: tier === 'global' ? 'global' : activeScope !== 'all' ? activeScope : undefined,
+            project_ref: activeScope === 'project' ? effectiveProjectKey : undefined,
+          }),
           fetchConnectedApps(),
         ]);
         setKeys(fetchedKeys);
@@ -327,7 +344,7 @@ export function McpAccessStudio({
     } finally {
       setLoading(false);
     }
-  }, [activeView, activeScope, effectiveProjectKey, tier]);
+  }, [activeView, activeScope, effectiveProjectKey, tier, isDenied]);
 
   useEffect(() => {
     void loadData();
@@ -379,6 +396,7 @@ export function McpAccessStudio({
     } else {
       initialTier = 'workspace';
     }
+    setNewKeyOwnerKind('personal_user');
     setNewKeyScopeTier(initialTier);
     setNewKeyProject(effectiveProjectKey);
     setShowMintModal(true);
@@ -397,15 +415,29 @@ export function McpAccessStudio({
 
     const mintAction = async (): Promise<void> => {
       const resolvedScopeTier: ScopeTier =
-        tier === 'global' ? 'global' : tier === 'project' ? 'project' : newKeyScopeTier;
+        tier === 'global'
+          ? 'global'
+          : tier === 'project'
+          ? 'project'
+          : newKeyScopeTier === 'global'
+          ? 'global'
+          : newKeyScopeTier === 'project'
+          ? 'project'
+          : 'workspace';
 
-      const payload = {
+      const targetProject = newKeyProject.trim() || effectiveProjectKey;
+
+      const payload: MintMcpKeyRequest = {
         label: newKeyLabel.trim(),
         surface: newKeySurface,
         scopes: [`${newKeySurface}:read`, `${newKeySurface}:write`],
         scope_tier: resolvedScopeTier,
+        owner_kind: newKeyOwnerKind,
         ...(resolvedScopeTier === 'project'
-          ? { allowed_projects: [newKeyProject.trim() || effectiveProjectKey] }
+          ? {
+              project_ref: targetProject,
+              allowed_projects: targetProject ? [targetProject] : undefined,
+            }
           : {}),
         ...(isUnlimited
           ? { unlimited: true, confirm_unlimited: confirmUnlimited }
@@ -413,7 +445,7 @@ export function McpAccessStudio({
         ...(disabledTools.length > 0 ? { disabled_tools: disabledTools } : {}),
       };
 
-      const minted = await mintPersonalMcpKey(payload);
+      const minted = await mintUnifiedMcpKey(payload);
 
       await queryClient.invalidateQueries({ queryKey: ['mcp-keys'] });
       await queryClient.invalidateQueries({ queryKey: qk.projects() });
@@ -456,12 +488,9 @@ export function McpAccessStudio({
   };
 
   const handleConfirmRevokeKey = async (keyId: string): Promise<void> => {
+    setStudioError(null);
     const revokeAction = async (): Promise<void> => {
-      if (tier === 'global') {
-        await revokePersonalMcpKey(keyId, 'global');
-      } else {
-        await revokePersonalMcpKey(keyId);
-      }
+      await revokeUnifiedMcpKey(keyId);
       setKeys((prev) =>
         prev.map((k) => (k.id === keyId ? { ...k, revoked_at: new Date().toISOString() } : k)),
       );
@@ -481,6 +510,11 @@ export function McpAccessStudio({
           await revokeAction();
         });
         return;
+      }
+      if (err instanceof Error) {
+        setStudioError(err.message);
+      } else {
+        setStudioError('Failed to revoke MCP key.');
       }
     } finally {
       setConfirmRevokeKeyId(null);
@@ -521,7 +555,7 @@ export function McpAccessStudio({
     if (keyTier === 'workspace') {
       return (
         <span className="kb-mcp-tier-badge kb-mcp-tier-workspace" data-testid="tier-badge-workspace">
-          <EmojiHint kind="access" /> Workspace: kanban
+          <EmojiHint kind="access" /> Workspace: {currentWorkspaceSlug}
         </span>
       );
     }
@@ -599,6 +633,12 @@ export function McpAccessStudio({
           + Mint MCP Key
         </button>
       </header>
+
+      {studioError && (
+        <div className="kb-mcp-mint-error kb-mcp-mint-error--banner" role="alert" data-testid="studio-error-banner">
+          {studioError}
+        </div>
+      )}
 
       {/* Admin subnav for global tier */}
       {tier === 'global' && (
@@ -1033,6 +1073,25 @@ export function McpAccessStudio({
                 />
               </div>
 
+              {/* Key Type Selector in Mint Modal */}
+              <div className="kb-mcp-form-row">
+                <label htmlFor="mint-owner-kind-select" className="kb-mcp-form-label">
+                  Key Type:
+                </label>
+                <select
+                  id="mint-owner-kind-select"
+                  className="kb-mcp-form-select"
+                  data-testid="mint-owner-kind-select"
+                  value={newKeyOwnerKind}
+                  onChange={(e) => {
+                    setNewKeyOwnerKind(e.target.value as OwnerKind);
+                  }}
+                >
+                  <option value="personal_user">Personal User Key</option>
+                  <option value="service_bot">Service Bot Key</option>
+                </select>
+              </div>
+
               {/* Scope Tier Selector in Mint Modal */}
               <div className="kb-mcp-form-row">
                 <label htmlFor="mint-scope-select" className="kb-mcp-form-label">
@@ -1042,14 +1101,20 @@ export function McpAccessStudio({
                   id="mint-scope-select"
                   className="kb-mcp-form-select"
                   data-testid="mint-scope-select"
-                  value={newKeyScopeTier}
+                  value={newKeyScopeTier === 'personal_user' ? 'workspace' : newKeyScopeTier}
                   onChange={(e) => {
-                    setNewKeyScopeTier(e.target.value as ScopeTier);
+                    const val = e.target.value;
+                    if (val === 'personal_user') {
+                      setNewKeyOwnerKind('personal_user');
+                      setNewKeyScopeTier('workspace');
+                    } else {
+                      setNewKeyScopeTier(val as ScopeTier);
+                    }
                   }}
                 >
-                  <option value="workspace">Workspace Bot Key</option>
-                  <option value="project">Project Bot Key</option>
-                  {isServerAdmin && <option value="global">Server / Global Key</option>}
+                  <option value="workspace">Workspace</option>
+                  <option value="project">Project</option>
+                  {isServerAdmin && <option value="global">Server / Global</option>}
                   <option value="personal_user">Personal User Key</option>
                 </select>
               </div>
@@ -1223,7 +1288,7 @@ export function McpAccessStudio({
           rawKey={activeSnippetKey}
           surface={newKeySurface}
           workspaceSlug={currentWorkspaceSlug}
-          projectKey={effectiveProjectKey}
+          projectKey={newKeyProject.trim() || effectiveProjectKey}
           onClose={() => {
             setActiveSnippetKey(undefined);
             setShowSnippetModal(false);

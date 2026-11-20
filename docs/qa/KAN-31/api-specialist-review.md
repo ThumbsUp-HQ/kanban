@@ -4,16 +4,16 @@
 - Ticket ID: KAN-31 ([KB-P3-AUDIT-25])
 - Reviewer: api-spec-2 (Clean-Room Backend/API Specialist)
 - Date: 2026-11-19
-- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan31-394cc1ee`
-- Target Branch: feat/KAN-31
-- Base Commit: 31aca8e
-- Head Commit: 724ec7c
+- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan31-rcfix-6c02ef64`
+- Target Branch: fix/KAN-31-rc2
+- Base Commit: 036216b
+- Head Commit: 4a24d1a
 - STATUS: APPROVED
 
 ---
 
 ## Executive Summary
-This clean-room audit evaluates the security architecture, RBAC boundaries, and REST API contract schemas implemented for ticket KAN-31. The delivery resolves four severe MCP key security vulnerabilities (cross-workspace global tier privilege escalation, admin surface role bypass, capability bitmask typo, and cross-project administrative information disclosure) while establishing a canonical, unified REST router at `/api/v1/mcp-keys` and consolidating redundant user interfaces.
+This clean-room audit evaluates the security architecture, RBAC boundaries, REST API contract schemas, and Clean-Room Reality-Checker Round 2 surgical remediations ([KB-P3-AUDIT-25]) implemented for ticket KAN-31. The delivery resolves four severe MCP key security vulnerabilities (cross-workspace global tier privilege escalation, admin surface role bypass, capability bitmask typo, and cross-project administrative information disclosure), establishes a canonical unified REST router at `/api/v1/mcp-keys`, decouples key ownership (`owner_kind`) from authorization tiers (`scope_tier`), and enforces read-after-write commit consistency.
 
 All changes have been verified against authoritative security specifications in `docs/ARCHITECTURE_AND_PRODUCT_SPEC.md` and `kanban/GEMINI.md`.
 
@@ -46,54 +46,58 @@ All changes have been verified against authoritative security specifications in 
   - Listing (`GET /api/v1/admin/mcp-keys`): Callers with only `PROJECT_ADMIN` authority are strictly filtered to `scope_tier == "project"` keys targeting projects where the caller possesses `Capability.ADMIN` (`64`) or project admin roles. Any query requesting `workspace` or `global` tiers returns an empty list (`[]`).
   - Revocation (`DELETE /api/v1/admin/mcp-keys/{key_id}`): If a `PROJECT_ADMIN` attempts to revoke an MCP key outside their administered projects or in workspace/global scope, the endpoint returns 404 Not Found, preventing cross-project enumeration or revocation.
 
-### 4. Canonical Unified Router (`/api/v1/mcp-keys`)
-- Files: `kanban/api/v1/mcp_keys.py`, `kanban/api/v1/__init__.py`
+### 4. Canonical Unified Router (`/api/v1/mcp-keys`) & Commit Consistency
+- Files: `kanban/api/v1/mcp_keys.py`, `kanban/api/v1/auth_mcp_keys.py`, `kanban/api/v1/__init__.py`
 - Invariant: Single canonical REST endpoint supporting self-service (`view=mine`) and tier-matched governance (`view=governance`), returning safe metadata (prefixes and hints, never secret hashes).
 - Audit Findings:
   - Endpoints:
     - `GET /api/v1/mcp-keys`: Supports `?view=mine|governance`, `?scope_tier=project|workspace|server`, `?project_ref=...`.
     - `POST /api/v1/mcp-keys`: Mints personal or service bot keys, returning one-time `token` and `Location` header.
     - `DELETE /api/v1/mcp-keys/{key_id}`: Allows self-service owner revocation, or governance revocation with AAL2 and tier-matched administrative authority.
-  - Backward compatibility: Legacy routes `/api/v1/auth/mcp-keys` and `/api/v1/admin/mcp-keys` remain functional delegates.
+  - Read-after-write commit consistency: Added `await session.commit()` before HTTP response in `mint_unified_mcp_key`, `revoke_unified_mcp_key`, `mint_personal_key`, and `revoke_personal_key`, eliminating race conditions between client redirect/refetch and database transaction commit.
+
+---
+
+## Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-25 Round 2)
+
+- Target Branch: `fix/KAN-31-rc2`
+- Remediation Head Commit: `4a24d1a`
+- Remediations Verified:
+  1. **Unified API Wiring Across McpAccessStudio.tsx:**
+     - Migrated key operations across `/settings/mcp` to `fetchUnifiedMcpKeys`, `mintUnifiedMcpKey`, and `revokeUnifiedMcpKey` on `/api/v1/mcp-keys`.
+     - Eliminates 404 errors in Governance view when revoking service bot or foreign user keys.
+     - Surfaced non-AAL2 revocation/mint errors in accessible error banner (`role="alert"` / `data-testid="studio-error-banner"`) using dedicated CSS class `.kb-mcp-mint-error--banner` with zero inline styles.
+  2. **Key Type (`owner_kind`) and Scope Tier (`scope_tier`) Decoupling:**
+     - Separated `owner_kind` (`personal_user` vs `service_bot`) from `scope_tier` (`workspace`, `project`, `global`, `server`) in mint modal inputs.
+     - Eliminates HTTP 422 `VALIDATION_FAILED` errors when minting personal user or service bot keys across scopes.
+  3. **UI State & Accessibility Polish:**
+     - Interpolated `currentWorkspaceSlug` dynamically into `getTierBadge` (`Workspace: ${currentWorkspaceSlug}`).
+     - Passed target project into `McpConfigSnippetModal` (`newKeyProject.trim() || effectiveProjectKey`).
+     - Replaced inline style with dedicated tokenized CSS class `.kb-mcp-mint-error--banner` in `McpAccessStudio.css`.
+  4. **Quality Gates & Test Coverage:**
+     - Vitest: 52 tests passing (98.55% statements, 96.35% branches) with 0 console or act warnings.
+     - Pytest: 21 tests passing (97% coverage on `kanban/api/v1/mcp_keys.py`).
+     - Static checks: `tsc -b --noEmit` (0 errors), `eslint . --max-warnings 0` (0 warnings/errors), `vite build` (clean in 1.12s), `ruff check` (clean), `mypy` (clean), `cssTokensAudit.test.ts` (4/4 passed).
+     - Strict punctuation: 0 em-dashes and 0 en-dashes across all code, tests, and documentation.
+     - Clean evidence packet: `git-diff.patch` generated against `31aca8e` with zero `docs/qa/` files included.
 
 ---
 
 ## Gate & Invariant Checklist
 
 1. [x] Zero New Dependencies: No additions to `pyproject.toml` or `package.json`.
-2. [x] Admin Route Security: All `/api/v1/admin/*` routes maintain mandatory `Depends(require_admin_aal2)`. Verified via `test_aal2_policy.py::test_case_10_assert_admin_routes_protected`.
+2. [x] Admin Route Security: Mandatory `Depends(require_admin_aal2)` maintained across all `/api/v1/admin/*` routes.
 3. [x] Architectural Layering: `uv run lint-imports` verified 2 kept contracts, 0 broken (`agent -> mcp -> kanban -> database`).
 4. [x] Test Coverage:
-   - Backend touched router: `kanban/api/v1/mcp_keys.py` achieved 97% line coverage and 95% branch coverage (9 of 9 tests passing).
-   - Security unit and integration tests: 31 passed in 11.55s.
-   - Frontend studio: `McpAccessStudio.tsx` achieved 99.61% line coverage and 97.91% branch coverage (31 tests passing).
-5. [x] Static Analysis: `ruff check`, `ruff format --check`, and `mypy` (1078 files) pass with 0 errors.
+   - Backend: `kanban/api/v1/mcp_keys.py` 97% line and branch coverage (21 pytest tests passing).
+   - Frontend: 52 vitest tests passing across touched features with >= 95% coverage.
+5. [x] Static Analysis: `ruff check`, `ruff format --check`, `mypy`, `tsc -b --noEmit`, and `eslint` pass with 0 errors and 0 warnings.
 6. [x] Zero Em/En-Dashes: Clean verification across code, tests, docs, and review markdown (0 em/en-dashes).
-7. [x] Evidence Packet Complete: `git-diff.patch`, `changed-files-manifest.txt`, `unit-test-results.txt`, `build-or-typecheck.txt`, `message-to-reality-checker.md`, and 16 Playwright screenshot PNGs verified in `docs/qa/KAN-31/`.
-
----
-
-## 5. Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-25)
-
-- Target Branch: `fix/KAN-31-liveqa`
-- Remediation Head Commit: `50f0089`
-- Remediation Scope:
-  1. Dynamic Target Project Selection:
-     - In `kanban/web/src/features/settings/McpAccessStudio.tsx` and `McpConfigSnippetModal.tsx`: Replaced hardcoded project choices with dynamic project fetching via `GET /api/v1/projects`.
-     - Dynamic options populate `[data-testid="scope-project-select"]` and `<datalist id="mint-project-datalist">`, mapping directly to accessible workspace projects and propagating real project keys to snippet modals and OAuth connect flows.
-     - Added cache invalidation (`queryClient.invalidateQueries`) ensuring freshly minted keys display immediately without race conditions.
-  2. Parity for `scope_tier: "server"` on Personal Key Endpoint:
-     - In `kanban/api/v1/auth_mcp_keys.py`: Expanded `PersonalMcpKeyMintRequest.scope_tier` to accept `"server"` alongside `"global"`, `"workspace"`, and `"project"`.
-     - Properly evaluates `SERVER_ADMIN` role and fresh AAL2, returning RFC 7807 403 `AAL2_REQUIRED` or `INSUFFICIENT_CAPABILITY` on unauthorized requests instead of 422 `VALIDATION_FAILED`.
-  3. Test and Quality Verification:
-     - 39 Vitest tests passing with 99.18% statements and 97.32% branch coverage across `McpAccessStudio.tsx` and `McpConfigSnippetModal.tsx`.
-     - 13 backend Pytest tests passing, with explicit assertions for 403 response on unauthorized `scope_tier='server'` minting.
-     - Zero new external dependencies, zero em-dashes and en-dashes, clean `tsc`, `eslint`, `ruff`, `mypy`, and `cssTokensAudit`.
+7. [x] Evidence Packet Complete: `git-diff.patch`, `changed-files-manifest.txt`, `unit-test-results.txt`, `build-or-typecheck.txt`, and screenshots verified in `docs/qa/KAN-31/`.
 
 ---
 
 ## Verdict & Handoff
 STATUS: APPROVED
 
-The API contracts, security invariants, and test evidence are verified clean. Handoff to `@ui-spec-2` for visual, UX, and accessibility verification of `docs/qa/KAN-31/screenshots/`.
-
+The unified MCP key API contracts, security boundaries, and test evidence are verified clean. Ready for final coordinator merge into `main`.

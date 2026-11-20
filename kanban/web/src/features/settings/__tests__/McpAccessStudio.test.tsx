@@ -112,6 +112,8 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue(mockKeys);
+    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue(mockKeys);
     vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method: string, path: string) => {
       if (path === '/api/v1/projects') {
         return Promise.resolve({
@@ -129,7 +131,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
   });
 
   it('renders scope tiers correctly across all 4 mount routes', async () => {
-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue(mockKeys);
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue(mockKeys);
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue(mockApps);
 
     // Personal tier
@@ -204,7 +206,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
       revoked_at: null,
     };
 
-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([qaadmKey]);
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([qaadmKey]);
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
 
     render(
@@ -231,17 +233,18 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     expect(screen.getByText('Not found or no access')).toBeDefined();
     u1();
 
-    render(
+    const { unmount: u2 } = render(
       <MemoryRouter initialEntries={['/workspaces/settings/mcp']}>
         <McpAccessStudio tier="workspace" user={standardUser} />
       </MemoryRouter>,
     );
     expect(screen.getByTestId('not-found-view')).toBeDefined();
     expect(screen.getByText('Not found or no access')).toBeDefined();
+    u2();
   });
 
   it('mints key, opens snippet modal with plaintext, copies, and wipes secret on close (Test Case 3)', async () => {
-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
 
     const newlyMintedKey: settingsApi.McpApiKeyItem = {
@@ -259,7 +262,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
       raw_key: 'kb_agt_mock_key',
     };
 
-    vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockResolvedValue(newlyMintedKey);
+    vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockResolvedValue(newlyMintedKey);
 
     const writeTextMock = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, {
@@ -298,14 +301,16 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     fireEvent.click(submitBtn);
 
     await waitFor(() => {
-      expect(settingsApi.mintPersonalMcpKey).toHaveBeenCalledWith({
-        label: 'CI Bot Token',
-        surface: 'agent',
-        scopes: ['agent:read', 'agent:write'],
-        scope_tier: 'project',
-        allowed_projects: ['KANBA'],
-        expires_in_days: 60,
-      });
+      expect(settingsApi.mintUnifiedMcpKey).toHaveBeenCalledWith(
+        expect.objectContaining({
+          label: 'CI Bot Token',
+          surface: 'agent',
+          scopes: ['agent:read', 'agent:write'],
+          scope_tier: 'project',
+          allowed_projects: ['KANBA'],
+          expires_in_days: 60,
+        }),
+      );
       // Plaintext key modal rendered
       expect(screen.getByTestId('raw-key-banner')).not.toBeNull();
     });
@@ -367,9 +372,9 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
   });
 
   it('performs 2-step inline revocation and deauth (Test Case 4)', async () => {
-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue(mockKeys);
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue(mockKeys);
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue(mockApps);
-    vi.spyOn(settingsApi, 'revokePersonalMcpKey').mockResolvedValue(undefined);
+    vi.spyOn(settingsApi, 'revokeUnifiedMcpKey').mockResolvedValue(undefined);
     vi.spyOn(settingsApi, 'revokeConnectedApp').mockResolvedValue(undefined);
 
     render(
@@ -395,7 +400,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
 
     await waitFor(() => {
-      expect(settingsApi.revokePersonalMcpKey).toHaveBeenCalledWith('key-1');
+      expect(settingsApi.revokeUnifiedMcpKey).toHaveBeenCalledWith('key-1');
       expect(screen.getAllByTestId('status-revoked').length).toBe(2);
     });
 
@@ -420,7 +425,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
   });
 
   it('renders hostile app names strictly as escaped text nodes (Anti-XSS)', async () => {
-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue(mockApps);
 
     render(
@@ -439,7 +444,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
   });
 
   it('closes snippet modal on Escape key press and backdrop click', async () => {
-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
 
     const newlyMintedKey: settingsApi.McpApiKeyItem = {
@@ -447,7 +452,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
       label: 'Esc Test Key',
       display_hint: '1234',
       surface: 'agent',
-      scope_tier: 'personal_user',
+      scope_tier: 'workspace',
       scopes: ['agent:read'],
       allowed_projects: null,
       created_at: new Date().toISOString(),
@@ -456,7 +461,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
       revoked_at: null,
       raw_key: 'raw_key_esc',
     };
-    vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockResolvedValue(newlyMintedKey);
+    vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockResolvedValue(newlyMintedKey);
 
     render(
       <MemoryRouter initialEntries={['/settings/mcp']}>
@@ -487,7 +492,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
 
   it('closes mint modal via cancel button and backdrop click, handles empty label and load error', async () => {
     // 1. Initial fetch failure
-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockRejectedValueOnce(new Error('Network error'));
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockRejectedValueOnce(new Error('Network error'));
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
 
     const { unmount } = render(
@@ -502,7 +507,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     unmount();
 
     // 2. Normal render
-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
 
     render(
@@ -545,15 +550,15 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
   });
 
   it('supports unlimited key minting with friction checkbox and disables button until confirmed', async () => {
-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
 
-    const mintSpy = vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockResolvedValue({
+    const mintSpy = vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockResolvedValue({
       id: 'key-unlimited',
       label: 'Unlimited Token',
       display_hint: 'unl1',
       surface: 'agent',
-      scope_tier: 'personal_user',
+      scope_tier: 'workspace',
       scopes: ['agent:read', 'agent:write'],
       allowed_projects: null,
       created_at: new Date().toISOString(),
@@ -598,14 +603,17 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     fireEvent.click(submitBtn);
 
     await waitFor(() => {
-      expect(mintSpy).toHaveBeenCalledWith({
-        label: 'Unlimited Token',
-        surface: 'agent',
-        scopes: ['agent:read', 'agent:write'],
-        scope_tier: 'workspace',
-        unlimited: true,
-        confirm_unlimited: true,
-      });
+      expect(mintSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          label: 'Unlimited Token',
+          surface: 'agent',
+          scopes: ['agent:read', 'agent:write'],
+          scope_tier: 'workspace',
+          owner_kind: 'personal_user',
+          unlimited: true,
+          confirm_unlimited: true,
+        }),
+      );
     });
 
     // Keys table should render 'Never (Unlimited)' for expires_at: null
@@ -614,7 +622,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
   });
 
   it('hides unlimited option when allow_unlimited_mcp_keys is false', async () => {
-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
 
     render(
@@ -632,15 +640,15 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
   });
 
   it('supports granular tool disabling into disabled_tools on minting', async () => {
-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
 
-    const mintSpy = vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockResolvedValue({
+    const mintSpy = vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockResolvedValue({
       id: 'key-narrow',
       label: 'Narrowed Agent Key',
       display_hint: 'nar1',
       surface: 'agent',
-      scope_tier: 'personal_user',
+      scope_tier: 'workspace',
       scopes: ['agent:read', 'agent:write'],
       allowed_projects: null,
       created_at: new Date().toISOString(),
@@ -675,21 +683,24 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     fireEvent.click(screen.getByTestId('mint-submit-btn'));
 
     await waitFor(() => {
-      expect(mintSpy).toHaveBeenCalledWith({
-        label: 'Narrowed Agent Key',
-        surface: 'agent',
-        scopes: ['agent:read', 'agent:write'],
-        scope_tier: 'workspace',
-        expires_in_days: 60,
-        disabled_tools: ['complete_work', 'add_comment'],
-      });
+      expect(mintSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          label: 'Narrowed Agent Key',
+          surface: 'agent',
+          scopes: ['agent:read', 'agent:write'],
+          scope_tier: 'workspace',
+          owner_kind: 'personal_user',
+          expires_in_days: 60,
+          disabled_tools: ['complete_work', 'add_comment'],
+        }),
+      );
     });
   });
 
   it('renders visible role="alert" error banner inside mint modal when API fails', async () => {
-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
-    vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockRejectedValue(
+    vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockRejectedValue(
       new Error('Forbidden: Insufficient privileges to mint key'),
     );
 
@@ -718,9 +729,9 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
   });
 
   it('covers unlimited without confirm, unchecking disabled tools, and non-Error mint error fallback', async () => {
-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
-    const mintSpy = vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockRejectedValueOnce('raw-string-error');
+    const mintSpy = vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockRejectedValueOnce('raw-string-error');
 
     const { container } = render(
       <MemoryRouter initialEntries={['/settings/mcp']}>
@@ -770,9 +781,9 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
   });
 
   it('covers minting under tier="global" and tier="project"', async () => {
-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
-    const mintSpy = vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockResolvedValue({
+    const mintSpy = vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockResolvedValue({
       id: 'key-g1',
       label: 'Global Test Key',
       display_hint: 'g1g1',
@@ -805,13 +816,13 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
 
     await waitFor(() => {
       expect(mintSpy).toHaveBeenCalledWith(
-        expect.objectContaining({ scope_tier: 'global' }),
+        expect.objectContaining({ scope_tier: 'global', owner_kind: 'personal_user' }),
       );
     });
     u1();
 
     // Now test project tier
-    const mintProjectSpy = vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockResolvedValue({
+    const mintProjectSpy = vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockResolvedValue({
       id: 'key-p1',
       label: 'Project Test Key',
       display_hint: 'p1p1',
@@ -828,7 +839,12 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
 
     render(
       <MemoryRouter initialEntries={['/projects/KANBA/settings/mcp']}>
-        <McpAccessStudio tier="project" />
+        <Routes>
+          <Route
+            path="/projects/:projectKey/settings/mcp"
+            element={<McpAccessStudio tier="project" />}
+          />
+        </Routes>
       </MemoryRouter>,
     );
 
@@ -850,7 +866,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
   });
 
   it('covers tier badge edge cases, viewer tool narrowing, and non-Error rejections', async () => {
-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue([
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([
       {
         id: 'key-edge-1',
         label: 'Edge Tier Key',
@@ -911,7 +927,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     });
 
     // Revoke failure with non-Error string
-    vi.spyOn(settingsApi, 'revokePersonalMcpKey').mockRejectedValueOnce('Plain revoke failure');
+    vi.spyOn(settingsApi, 'revokeUnifiedMcpKey').mockRejectedValueOnce('Plain revoke failure');
     fireEvent.click(screen.getByTestId('revoke-btn-key-edge-1'));
     fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
     await waitFor(() => {
@@ -920,7 +936,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
 
     // Mint modal with viewer role and non-Error mint rejection
     fireEvent.click(screen.getByTestId('mint-key-button'));
-    vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockRejectedValueOnce('Plain mint failure');
+    vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockRejectedValueOnce('Plain mint failure');
     fireEvent.change(screen.getByTestId('mint-label-input'), {
       target: { value: 'Viewer Key' },
     });
@@ -934,7 +950,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     const queryClient = new QueryClient({
       defaultOptions: { queries: { retry: false } },
     });
-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue(mockKeys);
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue(mockKeys);
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue(mockApps);
     vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method: string, path: string) => {
       if (path === '/api/v1/projects') {
@@ -973,14 +989,14 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     });
     const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
 
-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue(mockKeys);
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue(mockKeys);
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue(mockApps);
-    vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockResolvedValue({
+    vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockResolvedValue({
       id: 'key-new',
       label: 'Newly Minted Key',
       display_hint: 'n3w1',
       surface: 'agent',
-      scope_tier: 'personal_user',
+      scope_tier: 'workspace',
       scopes: ['agent:read'],
       allowed_projects: null,
       created_at: new Date().toISOString(),
@@ -1014,7 +1030,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
   });
 
   it('opens and closes ConnectOAuthAppModal from header button and empty state', async () => {
-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue(mockKeys);
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue(mockKeys);
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue(mockApps);
 
     render(
@@ -1042,7 +1058,7 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
 
   it('handles projects returned as array or with key field, and covers modal backdrop close', async () => {
     const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-    vi.spyOn(settingsApi, 'fetchPersonalMcpKeys').mockResolvedValue(mockKeys);
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue(mockKeys);
     vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
     vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method: string, path: string) => {
       if (path === '/api/v1/projects') {
@@ -1079,6 +1095,97 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
     fireEvent.click(screen.getByTestId('connect-oauth-modal-backdrop'));
     await waitFor(() => {
       expect(screen.queryByTestId('connect-oauth-app-modal')).toBeNull();
+    });
+  });
+
+  it('mints a service_bot key when Key Type is switched to Service Bot in mint modal', async () => {
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+    const mintSpy = vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockResolvedValue({
+      id: 'key-bot-1',
+      label: 'Automation Bot Key',
+      display_hint: 'bot1',
+      surface: 'agent',
+      scope_tier: 'workspace',
+      owner_kind: 'service_bot',
+      scopes: ['agent:read', 'agent:write'],
+      allowed_projects: null,
+      created_at: new Date().toISOString(),
+      expires_at: null,
+      last_used_at: null,
+      revoked_at: null,
+      raw_key: 'kb_agt_bot_key_123',
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/settings/mcp']}>
+        <McpAccessStudio tier="personal" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByTestId('mint-key-button'));
+
+    const labelInput = screen.getByTestId('mint-label-input');
+    fireEvent.change(labelInput, { target: { value: 'Automation Bot Key' } });
+
+    // Switch Key Type to Service Bot
+    const ownerSelect = screen.getByTestId('mint-owner-kind-select');
+    fireEvent.change(ownerSelect, { target: { value: 'service_bot' } });
+
+    fireEvent.click(screen.getByTestId('mint-submit-btn'));
+
+    await waitFor(() => {
+      expect(mintSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          label: 'Automation Bot Key',
+          owner_kind: 'service_bot',
+          scope_tier: 'workspace',
+        }),
+      );
+    });
+  });
+
+  it('allows admin in governance view to revoke a service_bot or foreign key via revokeUnifiedMcpKey without 404', async () => {
+    const foreignBotKey: settingsApi.McpApiKeyItem = {
+      id: 'bot-foreign-999',
+      label: 'Foreign Service Bot',
+      display_hint: 'f999',
+      surface: 'agent',
+      scope_tier: 'workspace',
+      owner_kind: 'service_bot',
+      scopes: ['agent:read'],
+      allowed_projects: null,
+      created_at: new Date().toISOString(),
+      expires_at: null,
+      last_used_at: null,
+      revoked_at: null,
+    };
+
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([foreignBotKey]);
+    const revokeSpy = vi.spyOn(settingsApi, 'revokeUnifiedMcpKey').mockResolvedValue(undefined);
+
+    render(
+      <MemoryRouter initialEntries={['/settings/mcp?view=governance']}>
+        <McpAccessStudio user={{ is_server_admin: true, is_workspace_admin: true }} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('key-row-bot-foreign-999')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('revoke-btn-bot-foreign-999'));
+    await waitFor(() => {
+      expect(screen.getByTestId('confirm-revoke-btn')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
+
+    await waitFor(() => {
+      expect(revokeSpy).toHaveBeenCalledWith('bot-foreign-999');
     });
   });
 });

@@ -337,7 +337,7 @@ describe('Unified MCP Studio (KAN-31)', () => {
     });
 
     const mintSpy = vi
-      .spyOn(settingsApi, 'mintPersonalMcpKey')
+      .spyOn(settingsApi, 'mintUnifiedMcpKey')
       .mockRejectedValueOnce(aal2MintError)
       .mockResolvedValueOnce({
         id: 'new-key-1',
@@ -409,7 +409,7 @@ describe('Unified MCP Studio (KAN-31)', () => {
       challenge_id: 'mint-cancel-challenge',
       methods: ['totp'],
     });
-    vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockRejectedValue(aal2MintError);
+    vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockRejectedValue(aal2MintError);
 
     render(
       <MemoryRouter initialEntries={['/settings/mcp']}>
@@ -447,7 +447,7 @@ describe('Unified MCP Studio (KAN-31)', () => {
   });
 
   it('handles mint error reporting on generic failure', async () => {
-    vi.spyOn(settingsApi, 'mintPersonalMcpKey').mockRejectedValueOnce(
+    vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockRejectedValueOnce(
       new Error('Quota limit reached'),
     );
 
@@ -485,7 +485,7 @@ describe('Unified MCP Studio (KAN-31)', () => {
     });
 
     const revokeSpy = vi
-      .spyOn(settingsApi, 'revokePersonalMcpKey')
+      .spyOn(settingsApi, 'revokeUnifiedMcpKey')
       .mockRejectedValueOnce(aal2RevokeError)
       .mockResolvedValueOnce(undefined);
 
@@ -553,8 +553,8 @@ describe('Unified MCP Studio (KAN-31)', () => {
   });
 
   it('handles global tier personal key revocation and connected app revocation', async () => {
-    const revokePersonalSpy = vi
-      .spyOn(settingsApi, 'revokePersonalMcpKey')
+    const revokeUnifiedSpy = vi
+      .spyOn(settingsApi, 'revokeUnifiedMcpKey')
       .mockResolvedValue(undefined);
 
     const mockApps: settingsApi.OAuthConnectedApp[] = [
@@ -589,7 +589,7 @@ describe('Unified MCP Studio (KAN-31)', () => {
     });
     fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
     await waitFor(() => {
-      expect(revokePersonalSpy).toHaveBeenCalledWith('key-server', 'global');
+      expect(revokeUnifiedSpy).toHaveBeenCalledWith('key-server');
     });
   });
 
@@ -659,7 +659,7 @@ describe('Unified MCP Studio (KAN-31)', () => {
       .mockResolvedValueOnce(keysWithEdgeCases);
 
     const mintSpy = vi
-      .spyOn(settingsApi, 'mintPersonalMcpKey')
+      .spyOn(settingsApi, 'mintUnifiedMcpKey')
       .mockRejectedValueOnce(staleError)
       .mockResolvedValueOnce({
         id: 'new-key-custom',
@@ -678,7 +678,7 @@ describe('Unified MCP Studio (KAN-31)', () => {
       } as unknown as settingsApi.McpApiKeyItem);
 
     const revokeSpy = vi
-      .spyOn(settingsApi, 'revokePersonalMcpKey')
+      .spyOn(settingsApi, 'revokeUnifiedMcpKey')
       .mockRejectedValueOnce(staleError)
       .mockResolvedValueOnce(undefined);
 

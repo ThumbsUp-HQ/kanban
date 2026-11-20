@@ -1,52 +1,52 @@
-=== FRONTEND VITEST SUITES ===
+=== FRONTEND VITEST SUITES (COVERAGE >= 95%) ===
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan31-fix-d3e0178a/kanban/web
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan31-rcfix-6c02ef64/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/settings/__tests__/McpConfigSnippetModal.test.tsx (4 tests) 149ms
-stderr | src/features/settings/__tests__/McpAccessStudio.test.tsx > McpAccessStudio & McpConfigSnippetModal (KB-P4-16) > renders NotFoundView when standard user navigates to workspace or admin mcp
-An update to McpAccessStudio inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-
- ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (19 tests) 1429ms
- ✓ src/features/settings/__tests__/McpUnifiedStudio.test.tsx (16 tests) 1712ms
+ ✓ src/features/settings/settingsApi.test.ts (7 tests) 20ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 15ms
+ ✓ src/features/settings/__tests__/McpConfigSnippetModal.test.tsx (4 tests) 173ms
+ ✓ src/features/settings/__tests__/McpAccessStudio.test.tsx (21 tests) 1609ms
+ ✓ src/features/settings/__tests__/McpUnifiedStudio.test.tsx (16 tests) 1905ms
    ✓ Unified MCP Studio (KAN-31) (16)
-     ✓ handles MFA challenge cancel and session expired 307ms
+     ✓ handles MFA challenge cancel and session expired 374ms
 
- Test Files  3 passed (3)
-      Tests  39 passed (39)
-   Start at  22:43:40
-   Duration  3.71s (tests 44%, environment 27%, import 19%, transform 8%, worker 2%)
+ Test Files  5 passed (5)
+      Tests  52 passed (52)
+   Start at  23:59:53
+   Duration  4.22s (environment 39%, tests 35%, import 16%, transform 6%, worker 3%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   99.18 |    97.32 |     100 |   99.13 |                   
- ...cessStudio.tsx |   99.04 |    97.19 |     100 |   98.97 | 165,181,567       
+All files          |   98.55 |    96.35 |     100 |   98.45 |                   
+ ...cessStudio.tsx |   98.18 |    95.48 |     100 |   98.05 | ...,601,1108-1109 
  ...ippetModal.tsx |     100 |    98.03 |     100 |     100 | 43                
+ settingsApi.ts    |     100 |      100 |     100 |     100 |                   
 -------------------|---------|----------|---------|---------|-------------------
 
-=== BACKEND PYTEST SUITES ===
+=== BACKEND PYTEST SUITES (COVERAGE >= 95%) ===
+
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan31-fix-d3e0178a/.venv/bin/python
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan31-fix-d3e0178a
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan31-rcfix-6c02ef64
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 4 items
+collected 21 items
 
-kanban/tests/api/test_admin_mcp_keys_api.py::test_admin_mcp_keys_endpoints_lifecycle PASSED [ 25%]
-kanban/tests/api/test_admin_mcp_keys_api.py::test_internal_mcp_introspect_missing_session_factory PASSED [ 50%]
-kanban/tests/api/test_admin_mcp_keys_api.py::test_admin_mcp_keys_hierarchical_and_unlimited_minting PASSED [ 75%]
-kanban/tests/api/test_admin_mcp_keys_api.py::test_personal_mcp_keys_api_lifecycle PASSED [100%]
+kanban/tests/api/test_unified_mcp_keys_api.py .........                  [ 42%]
+kanban/tests/api/test_admin_mcp_keys_api.py ....                         [ 61%]
+kanban/tests/security/test_mcp_keys.py ........                          [100%]
 
-============================== 4 passed in 1.63s ===============================
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                        Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------------------------
+kanban/api/v1/mcp_keys.py     198      3     76      4    97%   319, 332->322, 335-336, 380->383, 456->482
+-----------------------------------------------------------------------
+TOTAL                         198      3     76      4    97%
+============================== 21 passed in 9.45s ==============================

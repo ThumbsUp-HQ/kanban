@@ -192,6 +192,8 @@ async def mint_personal_key(
         if keys_res:
             resolved_proj_keys = [str(k) for k in keys_res]
 
+    await session.commit()
+
     return PersonalMcpKeyMintResponse(
         id=key_record.id,
         raw_key=plaintext_token,
@@ -325,3 +327,4 @@ async def revoke_personal_key(
         key_id=key_id,
         caller_principal_id=caller.principal_id,
     )
+    await session.commit()
