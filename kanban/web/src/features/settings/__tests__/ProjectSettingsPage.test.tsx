@@ -254,6 +254,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       name: 'New Platform Name',
       description_markdown: 'Updated markdown description',
       modules_enabled: true,
+      skip_loaded_sequence_numbers: false,
       auto_archive_days: 30,
     });
   });
@@ -3416,5 +3417,70 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project', 'KAN'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['project-states', 'KAN'] });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['issues', 'KAN', {}] });
+  });
+
+  it('renders and toggles skip_loaded_sequence_numbers checkbox in general settings tab', async () => {
+    let patchedBody: Record<string, unknown> | null = null;
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
+      await Promise.resolve();
+      const url: string = path;
+      const m = method.toUpperCase();
+
+      if (url.includes('/api/v1/projects/KAN/members') && m === 'GET') {
+        return [];
+      }
+      if (url.includes('/api/v1/projects/KAN') && m === 'GET') {
+        return {
+          id: 'p-1',
+          identifier: 'KAN',
+          name: 'Platform Core',
+          description_markdown: 'Core project',
+          modules_enabled: false,
+          skip_loaded_sequence_numbers: false,
+          is_project_admin: true,
+        };
+      }
+      if (url.includes('/api/v1/projects/KAN') && m === 'PATCH') {
+        patchedBody = JSON.parse(String((options as { body?: string }).body)) as Record<string, unknown>;
+        return {
+          id: 'p-1',
+          identifier: 'KAN',
+          name: 'Platform Core',
+          description_markdown: 'Core project',
+          modules_enabled: false,
+          skip_loaded_sequence_numbers: true,
+          is_project_admin: true,
+        };
+      }
+      return {};
+    });
+
+    renderComponent('KAN');
+
+    const skipCheckbox = await screen.findByTestId<HTMLInputElement>(
+      'project-skip-loaded-seq-checkbox',
+    );
+    expect(skipCheckbox).toBeDefined();
+    expect(skipCheckbox.checked).toBe(false);
+
+    // Toggle skip_loaded_sequence_numbers
+    fireEvent.click(skipCheckbox);
+    expect(skipCheckbox.checked).toBe(true);
+
+    const saveBtn = screen.getByTestId('save-general-btn');
+    fireEvent.click(saveBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Project settings saved successfully.')).toBeDefined();
+    });
+
+    expect(patchedBody).toEqual({
+      name: 'Platform Core',
+      description_markdown: 'Core project',
+      modules_enabled: false,
+      skip_loaded_sequence_numbers: true,
+      auto_archive_days: null,
+    });
   });
 });

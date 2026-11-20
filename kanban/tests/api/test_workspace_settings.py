@@ -108,6 +108,7 @@ async def test_workspace_settings_get_default(
     assert data["trash_retention_days"] == 30
     assert data["mcp_key_max_ttl_days"] == 90
     assert data["air_gap_mode"] is False
+    assert data["default_skip_loaded_sequence_numbers"] is False
     assert "updated_at" in data
 
 
@@ -127,6 +128,7 @@ async def test_workspace_settings_patch_and_activity(
         "session_absolute_timeout_min": 1440,
         "mcp_key_max_ttl_days": 60,
         "default_project_visibility": "workspace",
+        "default_skip_loaded_sequence_numbers": True,
     }
     resp = await api_env.client.patch(
         "/api/v1/admin/workspace-settings",
@@ -141,6 +143,7 @@ async def test_workspace_settings_patch_and_activity(
     assert data["session_absolute_timeout_min"] == 1440
     assert data["mcp_key_max_ttl_days"] == 60
     assert data["default_project_visibility"] == "workspace"
+    assert data["default_skip_loaded_sequence_numbers"] is True
 
     # Verify activity record was appended
     act_stmt = text(
@@ -153,6 +156,9 @@ async def test_workspace_settings_patch_and_activity(
     payload = act_row[1]
     assert "diff" in payload
     assert payload["diff"]["trash_retention_days"] == 45
+    assert payload["diff"]["default_skip_loaded_sequence_numbers"] is True
+    assert payload["before"]["default_skip_loaded_sequence_numbers"] is False
+    assert payload["after"]["default_skip_loaded_sequence_numbers"] is True
 
     # Verify workspaces.trash_retention_days is synchronized
     ws_row = (
@@ -596,3 +602,19 @@ async def test_workspace_settings_name_and_slug_updates(
         json={"slug": "-invalid_slug"},
     )
     assert r3.status_code == 422
+
+    # 4. Slug conflict with existing workspace -> 409
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO workspaces (id, name, slug) "
+            "VALUES (uuidv7(), 'Taken Workspace', 'taken-slug')"
+        ),
+    )
+    await api_env.seed.commit()
+
+    r4 = await api_env.client.patch(
+        "/api/v1/admin/workspace-settings",
+        json={"slug": "taken-slug"},
+    )
+    assert r4.status_code == 409
+    assert r4.json()["code"] == "WORKSPACE_SLUG_CONFLICT"

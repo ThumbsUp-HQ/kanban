@@ -188,6 +188,13 @@ export const EXTENDED_EMOJI_REGISTRY: Readonly<Record<string, EmojiEntry>> = Obj
     ariaLabel: 'Proxied external image',
     defaultHint: 'Proxied anonymously via Kanban Media Shield',
   }),
+  agentSafeNumbering: Object.freeze({
+    glyph: '🔢',
+    domain: 'Agent-Safe Sequence Numbering',
+    ariaLabel: 'Agent-safe sequence numbering',
+    defaultHint:
+      'Skip distracting / culturally loaded ticket numbers (13, 69, 88, 404, 420, 666, 1337, 1488)',
+  }),
 });
 
-export type ExtendedEmojiKey = EmojiKey | 'externalMedia';
+export type ExtendedEmojiKey = EmojiKey | 'externalMedia' | 'agentSafeNumbering';

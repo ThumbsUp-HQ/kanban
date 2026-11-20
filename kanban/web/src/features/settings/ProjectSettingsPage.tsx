@@ -25,6 +25,7 @@ import { ColorPresetPicker, ColoredPill } from './ColorPresetPicker';
 import { DeleteAuditModal } from './DeleteAuditModal';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { EmojiHint } from '../../components/emoji/EmojiHint';
 import './ProjectSettingsPage.css';
 
 export interface ProjectDetail {
@@ -33,6 +34,7 @@ export interface ProjectDetail {
   name: string;
   description_markdown?: string | null;
   modules_enabled?: boolean;
+  skip_loaded_sequence_numbers?: boolean;
   default_module_ids?: string[];
   auto_archive_days?: number | null;
   capabilities?: string[];
@@ -179,6 +181,7 @@ export function ProjectSettingsPage(): JSX.Element {
   const [name, setName] = useState<string>('');
   const [description, setDescription] = useState<string>('');
   const [modulesEnabled, setModulesEnabled] = useState<boolean>(true);
+  const [skipLoadedSeq, setSkipLoadedSeq] = useState<boolean>(false);
   const [defaultModuleIds, setDefaultModuleIds] = useState<string[]>([]);
   const [autoArchiveDays, setAutoArchiveDays] = useState<string>('');
   const [isSaving, setIsSaving] = useState<boolean>(false);
@@ -276,6 +279,7 @@ export function ProjectSettingsPage(): JSX.Element {
           setName(projRes.name);
           setDescription(projRes.description_markdown ?? '');
           setModulesEnabled(projRes.modules_enabled ?? true);
+          setSkipLoadedSeq(projRes.skip_loaded_sequence_numbers ?? false);
           setDefaultModuleIds(projRes.default_module_ids ?? []);
           setAutoArchiveDays(
             projRes.auto_archive_days !== null && projRes.auto_archive_days !== undefined
@@ -483,6 +487,7 @@ export function ProjectSettingsPage(): JSX.Element {
           name: name.trim(),
           description_markdown: description,
           modules_enabled: modulesEnabled,
+          skip_loaded_sequence_numbers: skipLoadedSeq,
           auto_archive_days: autoArchiveDays ? parseInt(autoArchiveDays, 10) : null,
         };
 
@@ -1430,6 +1435,20 @@ export function ProjectSettingsPage(): JSX.Element {
                   docHref="/docs/ticket-screen-and-work-item-features#modules"
                   testId="proj-modules-help"
                 />
+              </label>
+            </div>
+
+            <div className="kb-form-group kb-form-group-checkbox">
+              <label className="kb-checkbox-label" htmlFor="project-skip-loaded-seq">
+                <input
+                  type="checkbox"
+                  id="project-skip-loaded-seq"
+                  data-testid="project-skip-loaded-seq-checkbox"
+                  checked={skipLoadedSeq}
+                  onChange={(e) => { setSkipLoadedSeq(e.target.checked); }}
+                />
+                <EmojiHint kind="agentSafeNumbering" />
+                <span>Skip distracting / culturally loaded ticket numbers (13, 69, 88, 404, 420, 666, 1337, 1488)</span>
               </label>
             </div>
 

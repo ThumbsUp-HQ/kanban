@@ -9,6 +9,7 @@
 import React, { useEffect, useRef, useState, type JSX, type SyntheticEvent } from 'react';
 import { useNavigate } from 'react-router';
 import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
+import { EmojiHint } from '../../components/emoji/EmojiHint';
 import './CreateProjectModal.css';
 
 export interface CreatedProject {
@@ -17,6 +18,7 @@ export interface CreatedProject {
   readonly name: string;
   readonly description_markdown?: string;
   readonly modules_enabled?: boolean;
+  readonly skip_loaded_sequence_numbers?: boolean;
   readonly is_project_admin?: boolean;
   readonly capabilities?: readonly string[];
 }
@@ -73,6 +75,7 @@ export function CreateProjectModal({
   const [identifierTouched, setIdentifierTouched] = useState(false);
   const [description, setDescription] = useState('');
   const [modulesEnabled, setModulesEnabled] = useState(true);
+  const [skipLoadedSeq, setSkipLoadedSeq] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -94,6 +97,7 @@ export function CreateProjectModal({
     setIdentifierTouched(false);
     setDescription('');
     setModulesEnabled(true);
+    setSkipLoadedSeq(false);
     setErrorMessage(null);
     setIsSubmitting(false);
   };
@@ -187,6 +191,7 @@ export function CreateProjectModal({
           identifier: cleanId,
           description_markdown: description.trim(),
           modules_enabled: modulesEnabled,
+          skip_loaded_sequence_numbers: skipLoadedSeq,
         }),
       });
 
@@ -335,6 +340,23 @@ export function CreateProjectModal({
               }}
             />
             <span>Enable project modules</span>
+          </label>
+
+          <label
+            htmlFor="create-project-skip-loaded-seq"
+            className="kb-create-project-checkbox-row"
+          >
+            <input
+              id="create-project-skip-loaded-seq"
+              data-testid="create-project-skip-loaded-seq"
+              type="checkbox"
+              checked={skipLoadedSeq}
+              onChange={(e) => {
+                setSkipLoadedSeq(e.target.checked);
+              }}
+            />
+            <EmojiHint kind="agentSafeNumbering" />
+            <span>Skip distracting / culturally loaded ticket numbers (13, 69, 88, 404, 420, 666, 1337, 1488)</span>
           </label>
 
           {errorMessage && (
