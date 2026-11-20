@@ -4,16 +4,16 @@
 - Title: [KB-P3-AUDIT-26] Gate Custom Fields nsjail Sandbox in Standalone Mode, Fix tier_b_runner Wiring, and Publish Step-by-Step [Guide] How to Use Custom Fields (3 Problems)
 - Reviewer: api-spec-2 (Clean-Room Backend / API / Security Specialist)
 - Date: 2026-11-20
-- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f`
-- Target Branch: `feat/KAN-32`
-- Commit: `77044d53776c2e296577b24cc2a533f0c0ea382c`
+- Target Directory: `/home/adamoutler/kanban/docs/qa/KAN-32`
+- Branch: `main`
+- Commit: `837f657d079ebcb8ee88eec86ad2f6df41c1eb33` (short: `837f657d`)
 - Status: STATUS: APPROVED
 
 ---
 
 ## 1. Executive Summary
 
-This clean-room API, Security, and Architecture audit inspects ticket KAN-32 on branch `feat/KAN-32` (commit `77044d53`) and wiki repository (commit `bc6b15a`).
+This clean-room API, Security, and Architecture audit inspects ticket KAN-32 on `main` at commit `837f657d`, incorporating verified evidence from the zero-mock live container execution (`live-fullstack-proof.txt` run on `http://127.0.0.1:18961`, container `kanban-liveqa-1`), all 6 live visual screenshots in `docs/qa/KAN-32/screenshots/`, unit test logs (`unit-test-results.txt`), and static build outputs (`build-or-typecheck.txt`).
 
 The ticket resolves three primary problems:
 1. Backend Standalone `nsjail` Fail-Closed Gating & Multi-Container `tier_b_runner` Wiring:
@@ -21,19 +21,20 @@ The ticket resolves three primary problems:
    - Enforced fail-closed validation in `CustomFieldDefinitionService.create_definition` and `update_definition` (`kanban/custom_fields/service.py`) and `POST /projects/{ref}/custom-fields/test-execute` (`kanban/api/v1/custom_field_execution.py`) rejecting `tier == "nsjail"` when `tier_b_sandbox_available == False` with HTTP 422 `SANDBOX_UNAVAILABLE_IN_STANDALONE`.
    - Maintained backward compatibility and inspection safety by allowing pre-existing `nsjail` definitions imported from backup to update non-tier metadata (name, description, enabled) without error.
    - Fixed `CustomFieldExecutor(session, tier_b_runner=getattr(request.app.state, "tier_b_runner", None))` wiring across `list_custom_fields_for_issue`, `execute_custom_field_for_issue`, and `test_execute_custom_field`, ensuring multi-container deployments execute Tier B nsjail scripts properly.
-2. Web UI Badging and Guidance for Unavailable `nsjail` Options:
+2. Built-in Wasm Fallback & Web UI Badging for Unavailable `nsjail` Options:
+   - Added built-in Wasm module fallback (`kanban/custom_fields/builtin_wasm.py`) enabling starter presets like `cvss-score` (`echo_cvss.wasm`) to execute successfully in fresh projects with zero rows in `approved_wasm_modules`.
    - Connected `CustomFieldDefinitionEditor.tsx`, `FlavorDecisionMatrix.tsx`, and `PresetGallery.tsx` to `useSystemStatus()`.
    - When `tier_b_sandbox_available === false`, renders the Standalone Guidance Callout (`standalone-guidance-callout`) with links to `/docs/Guide-Custom-Fields` and `/admin/standalone`, disables `nsjail` options in Field Flavor and Execution Sandbox selects with the badge `[Multi-Container Compose Required]`, disables `total-project-issues` and `git-pr-link` presets, and displays a warning banner when inspecting pre-existing `nsjail` definitions.
 3. Published Step-by-Step Wiki Guide:
-   - Authored `/home/adamoutler/kanban/thumbs-up-kanban.wiki/Guide-Custom-Fields.md` starting with `# [Guide] How to Use Custom Fields`, linked in `_Sidebar.md`.
+   - Authored `/home/adamoutler/kanban/thumbs-up-kanban.wiki/Guide-Custom-Fields.md` starting with `# [Guide] How to Use Custom Fields`, linked in `_Sidebar.md` and accessible at `/docs/Guide-Custom-Fields`.
    - Documented where custom field values appear (Issue Properties Rail, Table View, Board Cards, Filters and Search), tier selection and Standalone gating, copy-paste examples with valid Python AST syntax and format metadata JSON schemas (`Priority SLA Days`, `Sub-Issue Progress %`, `CVSS Severity Pill`, `Total Project Issues Rollup`), all 7 output formats, safe formula AST execution context, and dual-control AAL2 scope escalation.
 
 All API contracts, security invariants, error responses, database transaction boundaries, and test coverage requirements are verified and approved:
 - Exact problem response structure: HTTP 422 `SANDBOX_UNAVAILABLE_IN_STANDALONE` with clear remediation advice pointing callers toward `scalar`, `formula`, or `wasm` tiers.
-- High test coverage: 26/26 Pytest tests pass in 28.31s with 98% overall statement coverage across touched backend files (`service.py` 99%, `custom_field_execution.py` 97%, `custom_fields.py` 100%). 165/165 Vitest tests pass across 10 test files with 100% lines coverage across touched components.
+- High test coverage: 33/33 Pytest tests pass in 23.24s with 99% overall statement coverage across touched backend files (`service.py` 99%, `builtin_wasm.py` 100%, `custom_field_execution.py` 98%, `custom_fields.py` 100%). 165/165 Vitest tests pass across 10 test files in 6.61s with 100% lines coverage across touched components.
 - Zero external runtime packages added (`Apache-2.0` compliant).
 - Strict unidirectional layering (`agent -> mcp -> kanban -> database`) verified via `import-linter` (2 kept, 0 broken).
-- Strict 0 em-dashes and en-dashes across all code, tests, and documentation (`check_no_dashes` passed cleanly).
+- Strict 0 em-dashes and en-dashes across all code, tests, and documentation (`check_no_dashes` clean).
 
 ---
 
@@ -102,101 +103,113 @@ All API contracts, security invariants, error responses, database transaction bo
 ### 2.3 Tier-B Runner Wiring (`kanban/api/v1/custom_field_execution.py`)
 - Source: `kanban/api/v1/custom_field_execution.py`
 - Verification:
-  - `list_custom_fields_for_issue`:
-    ```python
-    executor = CustomFieldExecutor(
-        session,
-        tier_b_runner=getattr(request.app.state, "tier_b_runner", None),
-    )
-    ```
-  - `execute_custom_field_for_issue`:
-    ```python
-    executor = CustomFieldExecutor(
-        session,
-        tier_b_runner=getattr(request.app.state, "tier_b_runner", None),
-    )
-    ```
-  - `test_execute_custom_field`:
-    ```python
-    executor = CustomFieldExecutor(
-        session,
-        tier_b_runner=getattr(request.app.state, "tier_b_runner", None),
-    )
-    ```
+  - `list_custom_fields_for_issue`: Passes `tier_b_runner=getattr(request.app.state, "tier_b_runner", None)`.
+  - `execute_custom_field_for_issue`: Passes `tier_b_runner=getattr(request.app.state, "tier_b_runner", None)`.
+  - `test_execute_custom_field`: Passes `tier_b_runner=getattr(request.app.state, "tier_b_runner", None)`.
   - In `kanban/app.py`: `app.state.tier_b_runner = TierBNsjailRunner()` and `app.state.tier_b_sandbox_available = bool(standalone_status.get("tier_b_sandbox_available", True))` initialized during startup.
 
-### 2.4 Published Wiki Documentation (`Guide-Custom-Fields.md`)
-- File: `/home/adamoutler/kanban/thumbs-up-kanban.wiki/Guide-Custom-Fields.md` (commit `bc6b15a`), linked in `_Sidebar.md`.
-- Content Verification:
-  - Section 1 (Where Values Appear): Detailed coverage of Issue Properties Rail, Table View, Board Cards, Filters and Search.
-  - Section 2 (Choosing Between Execution Tiers): Comprehensive matrix comparing Scalar (<1ms), Safe Formula (<5ms), WebAssembly (<25ms), and Isolated Sandbox (<250ms), documenting Standalone fail-closed gating and promotion path to Multi-Container Compose.
-  - Section 3 (Walkthroughs and Examples): Copy-paste examples with valid Python AST expressions matching `executor.py` AST evaluator:
-    - `Priority SLA Days`: `1 if priority == 'URGENT' else 3 if priority == 'HIGH' else 7 if priority == 'MEDIUM' else 14` -> format `number` with unit `d`.
-    - `Sub-Issue Progress %`: `round((completed_sub_issue_count * 100.0) / sub_issue_count, 1) if sub_issue_count > 0 else 100.0` -> format `number` with unit `%`.
-    - `Incident Severity Pill`: Dynamic severity formula -> format `severity_pill`.
-    - `Total Project Issues Rollup`: Wasm/nsjail rollup metric -> format `number`.
-    - Complete format metadata JSON schemas for all 7 formats.
-  - Section 4 (Safe Formula AST Context): Reference of issue keys (`state`, `state_group`, `priority`, `days_until_due`, `blocker_count`, `sub_issue_count`, `completed_sub_issue_count`) and allowlisted built-in functions.
-  - Section 5 (Dry-Running and Approvals): Details `Test Execute` dry-run and dual-control AAL2 approval workflows for `WORKSPACE`/`SERVER` scope escalation.
-  - Zero em-dashes and zero en-dashes (`check_no_dashes` passed cleanly).
+### 2.4 Built-in Wasm Module Fallback (`kanban/custom_fields/builtin_wasm.py`)
+- Source: `kanban/custom_fields/builtin_wasm.py`
+- Fallback Invariant:
+  - When executing or test-executing a Wasm custom field definition (such as `cvss-score`), the executor looks up the approved module in `approved_wasm_modules`.
+  - If no module is found in the database (e.g., in fresh workspaces or standalone installs before manual upload), `load_builtin_wasm_module(module_name)` loads the built-in fallback binary (`echo_cvss.wasm`), enabling presets to work immediately out-of-the-box.
 
-### 2.5 Test Suites and Coverage Verification
-- Backend Pytest Suite:
-  - `kanban/tests/custom_fields/test_standalone_nsjail_gate.py`: 8/8 passed.
-    - `test_create_custom_field_nsjail_rejected_in_standalone` (422 `SANDBOX_UNAVAILABLE_IN_STANDALONE`)
-    - `test_create_custom_field_nsjail_succeeds_in_multicontainer` (201 Created)
-    - `test_update_custom_field_nsjail_rejected_in_standalone` (422 `SANDBOX_UNAVAILABLE_IN_STANDALONE`)
-    - `test_update_existing_nsjail_field_metadata_succeeds_in_standalone` (200 OK)
-    - `test_test_execute_nsjail_rejected_in_standalone` (422 `SANDBOX_UNAVAILABLE_IN_STANDALONE`)
-    - `test_test_execute_nsjail_succeeds_with_wired_tier_b_runner` (200 OK, MockTierBRunner)
-    - `test_execute_custom_field_uses_wired_tier_b_runner` (200 OK, MockTierBRunner)
-    - `test_service_assert_tier_available_logic` (unit test covering `assert_tier_available` and `is_tier_b_available`)
-  - Full suite: 26/26 tests passed in 28.31s.
-  - Statement coverage:
-    - `kanban/custom_fields/service.py`: 99% (163 stmts, 0 miss, 42 branch, 2 brpart)
-    - `kanban/api/v1/custom_field_execution.py`: 97% (120 stmts, 1 miss, 26 branch, 4 brpart)
-    - `kanban/api/v1/custom_fields.py`: 100% (30 stmts, 0 miss)
-    - Combined: 98% coverage on touched backend modules.
-- Frontend Vitest Suite:
-  - 165/165 tests passed across 10 test files in 5.61s.
+---
+
+## 3. Live Full-Stack Proof Verification (`live-fullstack-proof.txt`)
+
+Verbatim inspection of `/home/adamoutler/kanban/docs/qa/KAN-32/live-fullstack-proof.txt` on target container `kanban-liveqa-1` (`http://127.0.0.1:18961`) at commit `837f657d`:
+1. Standalone System Status & Fail-Closed nsjail 422 Gating:
+   - `GET /api/v1/system/status` -> HTTP 200 (6ms):
+     * `deployment_mode: "standalone_embedded_pg"`
+     * `tier_b_sandbox_available: false`
+     * `supported_custom_field_tiers: ["scalar", "formula", "wasm"]`
+     * `sandbox_unavailable_reason: "Isolated nsjail sandbox execution is unavailable in standalone mode. Multi-container compose deployment is required."`
+   - Provisioned fresh project `SEC2` (with zero rows in `approved_wasm_modules`) and issue `SEC2-3` -> HTTP 201.
+   - Fail-Closed Negative Gating Checks:
+     * `POST /api/v1/projects/SEC2/custom-fields` (tier=nsjail) -> HTTP 422 `SANDBOX_UNAVAILABLE_IN_STANDALONE` (request_id: `27f29aa0fa854d958dbead75ebe7d296`).
+     * `POST /api/v1/projects/SEC2/custom-fields/test-execute` (tier=nsjail) -> HTTP 422 `SANDBOX_UNAVAILABLE_IN_STANDALONE` (request_id: `8cf279f3e7bc46ed91115595a70ded98`).
+2. Custom Fields Studio UI & Built-in Wasm Fallback:
+   - Loaded `/projects/SEC2/settings/custom-fields` (819ms).
+   - `[data-testid="standalone-guidance-callout"]` rendered cleanly:
+     "💡 Standalone Mode Active: Scalar (<1ms), Formula (<5ms), and WebAssembly (<25ms) work out of the box in Standalone mode. [Guide] How to Use Custom Fields → Promote to Multi-Container →"
+   - Disabled `nsjail` option verified in both Basic Flavor select and Advanced Execution Tier select with "Multi-Container Compose Required" badge.
+   - Applied Starter Preset "cvss-score" (`data-testid="use-preset-btn-cvss-score"`) and saved -> `POST /api/v1/projects/SEC2/custom-fields` -> HTTP 201 (61ms).
+   - Selected saved field item and clicked `Test Execute` on `SEC2-3` (with 0 manually uploaded Wasm modules):
+     * `POST /api/v1/projects/SEC2/custom-fields/test-execute` -> HTTP 200 (62ms).
+     * Output: `{"output_format":"severity_pill","value":{"level":"high","score":8.8,"label":"8.8 High"},"latency_ms":10,"logs":"Draft test execution on SEC2-3 (flavor=wasm)\nExecuted Wasm module: fuel=7\nSuccess: validated format severity_pill\n","status":"SUCCESS","error":null}`.
+   - `GET /api/v1/issues/SEC2-3/custom-fields` -> HTTP 200 (30ms) returning computed severity pill.
+3. Dark Mode WCAG AA Contrast, Log Wrapping & Viewport Verification:
+   - `pre.custom-field-test-logs` metrics: `scrollWidth=742 == clientWidth=742`, `overflowsSelf=false`, `overflowsCard=false`, `whiteSpace="pre-wrap"`, `overflowWrap="anywhere"`.
+   - Dark mode `.custom-fields-def-item--selected` computed styles: `backgroundColor="rgba(37, 99, 235, 0.25)"`, `borderColor="rgba(96, 165, 250, 0.4)"`, `textColor="rgb(249, 250, 251)"` (WCAG AA compliant contrast, zero light-mode bleed).
+   - Viewport checks: Tablet (768x1024, `scrollWidth=768`), Mobile (390x844, `scrollWidth=390`), zero horizontal overflow.
+4. Step-by-Step Guide Verification:
+   - Loaded `/docs/Guide-Custom-Fields` (877ms), `hasExpectedContent=true`.
+   - Screenshot: `screenshots/live-guide-custom-fields-desktop-light.png`.
+5. All 6 Live Screenshots Verified on Disk:
+   - `live-desktop-dark.png`
+   - `live-desktop-light.png`
+   - `live-desktop-test-exec.png`
+   - `live-guide-custom-fields-desktop-light.png`
+   - `live-mobile.png`
+   - `live-tablet.png`
+6. Telemetry & Stability: Console errors: 0, Page errors: 0, HTTP 5xx server errors: 0. `LIVE_STACK_VERDICT: PASS`.
+
+---
+
+## 4. Test Suite & Coverage Verification
+
+- Backend Pytest Suite (`unit-test-results.txt`):
+  - `kanban/tests/custom_fields/test_standalone_nsjail_gate.py`: 8 passed.
+  - `kanban/tests/custom_fields/test_custom_fields_api.py`: 7 passed.
+  - `kanban/tests/custom_fields/test_execution_api.py`: 3 passed.
+  - `kanban/tests/custom_fields/test_manifest_and_formula_security.py`: 8 passed.
+  - `kanban/tests/custom_fields/test_builtin_wasm_preset.py`: 7 passed.
+  - Total: 33 passed in 23.24s.
+  - Statement coverage across touched files:
+    - `kanban/api/v1/custom_field_execution.py`: 98%
+    - `kanban/api/v1/custom_fields.py`: 100%
+    - `kanban/custom_fields/builtin_wasm.py`: 100%
+    - `kanban/custom_fields/service.py`: 99%
+    - Combined coverage: 99% (369 stmts, 0 miss).
+- Frontend Vitest Suite (`unit-test-results.txt`):
+  - 165 passed across 10 test files in 6.61s.
   - Statement coverage:
     - `src/app/useSystemStatus.ts`: 100% statements, 100% lines
     - `src/features/custom-fields/CustomFieldDefinitionEditor.tsx`: 100% statements, 100% lines, 95.74% branch
     - `src/features/custom-fields/FlavorDecisionMatrix.tsx`: 100% statements, 100% lines, 92.3% branch
     - `src/features/custom-fields/PresetGallery.tsx`: 100% statements, 100% lines, 96.87% branch
-  - Design tokens: `cssTokensAudit.test.ts` passed 4/4 (0 inline JSX style props).
-
-### 2.6 Security, Architectural Boundary, and Code Style Compliance
-- Dependency Invariant: Zero external runtime packages added (`Apache-2.0` compliant).
-- Boundary Invariant: `lint-imports` confirms strict unidirectional layering (`agent -> mcp -> kanban -> database`), 2 kept, 0 broken.
-- Static Typecheck: `mypy` passed across 7 touched source files with zero issues; `tsc -b --noEmit` passed with zero diagnostics.
-- Linter: `ruff check` passed with zero errors; `eslint . --max-warnings 0` passed across entire frontend repository with zero warnings.
-- Punctuation Standard: Zero em-dashes and zero en-dashes across all code, tests, and documentation (`check_no_dashes` clean).
-
----
-
-## 3. Specialist Checklist
-
-1. [x] `SystemStatusResponse` includes `supported_custom_field_tiers` and `sandbox_unavailable_reason`
-2. [x] Standalone mode returns `["scalar", "formula", "wasm"]` without `nsjail`
-3. [x] Multi-Container mode returns `["scalar", "formula", "wasm", "nsjail"]`
-4. [x] Creating `nsjail` custom field in Standalone mode rejected with HTTP 422 `SANDBOX_UNAVAILABLE_IN_STANDALONE`
-5. [x] Patching `tier: "nsjail"` in Standalone mode rejected with HTTP 422 `SANDBOX_UNAVAILABLE_IN_STANDALONE`
-6. [x] Pre-existing `nsjail` definitions allow non-tier metadata updates without error
-7. [x] `POST /custom-fields/test-execute` for `nsjail` rejected with HTTP 422 in Standalone mode
-8. [x] `CustomFieldExecutor` initialized with `tier_b_runner` from `request.app.state`
-9. [x] Web editor, decision matrix, and preset gallery badge and disable `nsjail` options when unavailable
-10. [x] Step-by-step guide published on wiki (`Guide-Custom-Fields.md`) with valid AST formula examples
-11. [x] 26/26 backend Pytest tests pass with 98% coverage on touched files
-12. [x] 165/165 frontend Vitest tests pass with 100% lines coverage on touched files
-13. [x] Design token compliance verified with zero inline JSX style props (`cssTokensAudit.test.ts` 4/4)
-14. [x] Static typecheck and linting clean (`mypy`, `ruff`, `tsc`, `eslint`, `lint-imports`)
-15. [x] Zero em-dashes or en-dashes across all code and documentation
+  - Design tokens: `cssTokensAudit.test.ts` passed 4/4 in 13ms (0 inline JSX style props).
+- Static Analysis (`build-or-typecheck.txt`):
+  - `uv run ruff check .`: Clean (All checks passed).
+  - `uv run ruff format --check .`: Clean (1942 files already formatted).
+  - `uv run mypy`: Clean (Success: no issues found in 1115 source files).
+  - `uv run lint-imports`: Clean (Contracts: 2 kept, 0 broken).
+  - `pnpm --dir kanban/web typecheck` (`tsc -b`): Clean (0 errors).
+  - `pnpm --dir kanban/web lint` (`eslint`): Clean (0 warnings).
+  - `pnpm --dir kanban/web build` (`vite build`): Clean in 1.48s (0 errors).
+  - `python3 -m scripts.check_no_dashes`: Clean (0 em/en-dashes found).
 
 ---
 
-## 4. Verdict & Certification
+## 5. Security & Isolation Matrix
+
+| Capability / Concern | Specification Standard | Implementation | Verdict |
+| :--- | :--- | :--- | :--- |
+| Standalone Tiers Listing | Omits nsjail when standalone | `supported_custom_field_tiers: ["scalar", "formula", "wasm"]` | PASS |
+| Fail-Closed Gating | Rejects nsjail draft creation in standalone | HTTP 422 `SANDBOX_UNAVAILABLE_IN_STANDALONE` | PASS |
+| Test Execute Gating | Rejects nsjail test execution in standalone | HTTP 422 `SANDBOX_UNAVAILABLE_IN_STANDALONE` | PASS |
+| Built-in Wasm Fallback | Fallback for echo_cvss.wasm preset | `load_builtin_wasm_module` enables 0-config test | PASS |
+| Tier-B Runner Wiring | Passes `tier_b_runner` to `CustomFieldExecutor` | Wired in execution endpoints | PASS |
+| Dark Mode Contrast | WCAG AA compliant selected item contrast | `rgba(37, 99, 235, 0.25)` and `rgb(249, 250, 251)` | PASS |
+| Test Log Wrapping | No horizontal card clipping from test logs | `pre.custom-field-test-logs` with `whiteSpace: pre-wrap` | PASS |
+| Published Guide | Step-by-step guide published | Rendered at `/docs/Guide-Custom-Fields` | PASS |
+| Style Compliance | 0 em-dashes and 0 en-dashes | Checked with `scripts.check_no_dashes` | PASS |
+
+---
+
+## 6. Verdict & Signoff
 
 STATUS: APPROVED
 
-Ticket KAN-32 is verified and approved on branch `feat/KAN-32` (commit `77044d53`) and wiki repository (commit `bc6b15a`). The implementation provides fail-closed security gating of `nsjail` container sandboxes in Standalone mode, wires `tier_b_runner` for multi-container compose execution, disables and badges unavailable UI presets, and publishes a complete, copy-paste step-by-step Custom Fields Guide. Ready for dual specialist signoff and merge into `main`.
+All API endpoints, fail-closed nsjail gating, built-in Wasm fallbacks, tier_b_runner wiring, Custom Fields Studio UI adaptations, and unit test suites for KAN-32 on `main` at commit `837f657d` have been thoroughly audited, verified against live container `kanban-liveqa-1`, and certified. All 6 live visual screenshots in `docs/qa/KAN-32/screenshots/` are verified. Ready for Clean-Room Reality-Checker QA.

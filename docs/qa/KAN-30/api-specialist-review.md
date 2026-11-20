@@ -4,18 +4,18 @@
 - Title: [KB-P3-AUDIT-24] Add Workspace Admin Trash & Retention Studio, Enforce Per-Workspace Retention & RLS Boundaries, and Publish Visual Role & Permission Matrix (4 Problems)
 - Reviewer: api-spec-2 (Clean-Room Backend / API / Security Specialist)
 - Date: 2026-11-20
-- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan30-112e571f`
-- Target Branch: `feat/KAN-30`
-- Commit: `29fa13e88dcc058d8fa3d20206ba13e8cf13f3ae`
+- Target Directory: `/home/adamoutler/kanban/docs/qa/KAN-30`
+- Branch: `main`
+- Commit: `837f657d079ebcb8ee88eec86ad2f6df41c1eb33` (short: `837f657d`)
 - Status: STATUS: APPROVED
 
 ---
 
 ## 1. Executive Summary
 
-This clean-room API, Security, and Architecture audit inspects ticket KAN-30 on branch `feat/KAN-30` (commit `29fa13e8`) and wiki repository (commit `899dec9`).
+This clean-room API, Security, and Architecture audit inspects ticket KAN-30 on `main` at commit `837f657d`, incorporating verified evidence from the zero-mock live container execution (`live-fullstack-proof.txt` run on `http://127.0.0.1:18961`, container `kanban-liveqa-1`), all 6 live visual screenshots in `docs/qa/KAN-30/screenshots/`, unit test logs (`unit-test-results.txt`), and static build outputs (`build-or-typecheck.txt`).
 
-The ticket resolves four primary problems:
+The ticket resolves four primary problems across data retention, trash lifecycle, role-based access control, and visual permissions:
 1. Per-Workspace Retention Enforcement & Multi-Object Expired Trash Sweep:
    - Enforces per-workspace `workspaces.trash_retention_days` (`7..365` days) across `workspace_settings.py`, `issue_delete.py`, and `destructive_lifecycle.py`.
    - Requires fresh AAL2 step-up verification (`<= 900s`) when updating workspace retention settings, and records `ActivityEventType.TRASH_RETENTION_SHORTENED_WARN` in the immutable audit ledger if retention days are shortened.
@@ -29,15 +29,14 @@ The ticket resolves four primary problems:
    - Integrated `#tab-trash` (`id="tab-trash"`) into `WorkspaceSettingsPage.tsx` with bidirectional URL hash sync (`#tab-trash`, `#tab-general`, `#tab-members`, `#tab-groups`).
    - Provided retention policy setting card (`7..365` days), multi-kind filter pills, real-time search, responsive data table, and Restore / Permanent Purge actions with zero inline CSS styles.
 4. Published Visual Role & Permission Matrix:
-   - Authored `/home/adamoutler/kanban/thumbs-up-kanban.wiki/Role-and-Permission-Matrix.md` (commit `899dec9`), linked in `_Sidebar.md`.
+   - Authored `/home/adamoutler/kanban/thumbs-up-kanban.wiki/Role-and-Permission-Matrix.md` and integrated `/docs/role-and-permission-matrix`.
    - Documented fine-grained capabilities across all 7 principal tiers using standardized visual indicators (`●` Allowed by role, `◐` Conditional, `○` Never allowed).
 
 All API contracts, security invariants, tenant boundaries, administrative AAL2 step-up protections, and test coverage requirements are verified and approved:
 - Exact problem response structure and capability enforcement: Callers lacking AAL2 or with stale sessions (`> 900s`) receive HTTP 403 `AAL2_REQUIRED` or `AAL2_STALE`.
-- High test coverage: 50/50 Pytest tests pass in 52.04s with 95% overall statement coverage across touched backend files (`destructive.py` 95%, `workspace_settings.py` 95%, `issue_delete.py` 100% schemas / 95% services, `trash_purge.py` 95%, `activity.py` 96%, `destructive_lifecycle.py` 95%). 31/31 Vitest tests pass in 3.80s with 99.76% statement / 95.79% branch coverage on `WorkspaceSettingsPage.tsx`.
+- High test coverage: 50/50 Pytest tests pass in 50.50s with 95% overall statement coverage across touched backend files (`destructive.py` 95%, `workspace_settings.py` 95%, `issue_delete.py` 100% schemas / 95% services, `trash_purge.py` 95%, `activity.py` 96%, `destructive_lifecycle.py` 95%). 31/31 Vitest tests pass in 3.76s with 99.77% statement / 95.68% branch coverage on `WorkspaceSettingsPage.tsx`.
 - Zero external runtime packages added (`Apache-2.0` compliant).
 - Strict unidirectional layering (`agent -> mcp -> kanban -> database`) verified via `import-linter` (2 kept, 0 broken).
-- Linear migration chain: 62 valid migrations, single head `p4_23_oidc_link_intent_fk`.
 - Strict 0 em-dashes and en-dashes across all code, tests, and documentation (`check_no_dashes` clean).
 
 ---
@@ -95,28 +94,69 @@ All API contracts, security invariants, tenant boundaries, administrative AAL2 s
   - Handles project cascades under `SET LOCAL kanban.allow_project_delete = 'on'`, safely removing project priorities, workflow states, and module defaults.
   - Cascades `pages` deletion to `page_versions` respecting database immutability triggers.
 
-### 2.5 Published Role and Permission Matrix (`Role-and-Permission-Matrix.md`)
-- File: `/home/adamoutler/kanban/thumbs-up-kanban.wiki/Role-and-Permission-Matrix.md` (commit `899dec9`), linked in `_Sidebar.md`.
-- Content Verification:
-  - Defines the 7 principal tiers: `Guest`, `Viewer`, `Member`, `Project Admin`, `Workspace Admin`, `Server Admin`, and `Scoped MCP Agent`.
-  - Visual status symbols: `●` (Allowed by role), `◐` (Conditional), `○` (Never allowed).
-  - Explicit documentation of:
-    - Absolute `DENY` precedence (effective bitmask collapse).
-    - Fresh AAL2 step-up requirement (`<= 900s`).
-    - 2-stage cryptographic confirmation tokens for permanent purge.
-    - Scoped MCP agent token narrowing and tool permission filters.
-    - Immutable audit ledger protection (no UPDATE/DELETE grants).
-  - Strictly 0 em-dashes and 0 en-dashes (`check_no_dashes` passed cleanly).
+---
 
-### 2.6 Test Suites and Coverage Verification
-- Backend Pytest Suite:
-  - `kanban/tests/api/test_admin_trash_api.py`: 5/5 passed (listing, kind filtering, search, project scope, and ACL DENY isolation).
-  - `kanban/tests/api/test_workspace_settings.py`: 13/13 passed (retention bounds, fresh AAL2 step-up <= 900s, and warning audit emission).
-  - `kanban/tests/jobs/test_trash_purge.py`: 9/9 passed (multi-object sweep, cascade handling, and link purging).
-  - `kanban/tests/api/test_destructive_lifecycle.py` & `test_destructive_lifecycle_coverage.py`: 12/12 passed.
-  - `kanban/tests/api/test_issue_delete.py`: 8/8 passed.
-  - `kanban/tests/auth/test_aal2_policy.py`: 3/3 passed.
-  - Total: 50/50 tests passed in 52.04s.
+## 3. Live Full-Stack Proof Verification (`live-fullstack-proof.txt`)
+
+Verbatim inspection of `/home/adamoutler/kanban/docs/qa/KAN-30/live-fullstack-proof.txt` on target container `kanban-liveqa-1` (`http://127.0.0.1:18961`) at commit `837f657d`:
+1. Test Data Provisioning & Soft-Trash Setup:
+   - Provisioned disposable issues as `@admin` (`SERVER_ADMIN`, AAL2):
+     * `pubIssue`: KAN-7 (`01a1fa5c-8c3e-7a6c-b21f-7b9f1b684777`) -> HTTP 201
+     * `secIssue`: KAN-8 (`01a1fa5c-8c7f-76ac-9da4-c22524fe2692`) -> HTTP 201
+     * `restoreIssue`: KAN-9 (`01a1fa5c-8cba-7acc-9c3a-b2aadd625ae4`) -> HTTP 201
+   - Granted explicit ACL DENY for `@wsadmin` (`WORKSPACE_ADMIN`) on KAN-8 via `POST /api/v1/admin/acl-entries` -> HTTP 200.
+   - Soft-trashed KAN-7, KAN-8, KAN-9 (GET /delete-preview + DELETE /api/v1/issues/{key} with Kb-Blast-Hash) -> HTTP 200 each.
+2. Workspace Admin Trash & Retention Studio UI:
+   - Loaded `/workspaces/settings#tab-trash` as `@admin` (795ms).
+   - Viewport checks confirm zero horizontal overflow across Desktop (1440x900 Light/Dark), Tablet (768x1024, scrollWidth=768), and Mobile (390x844, scrollWidth=390).
+   - Retention policy setting:
+     * Invalid (<7 days): `PATCH /api/v1/admin/workspace-settings {trash_retention_days: 3}` -> HTTP 422.
+     * Valid update via UI (21 days): `PATCH /api/v1/admin/workspace-settings` -> HTTP 200 (55ms).
+   - UI Restore action: Clicked Restore on KAN-9 -> `POST /api/v1/admin/trash/01a1fa5c-8cba-7acc-9c3a-b2aadd625ae4:restore` -> HTTP 200 (89ms).
+3. Full Live 2-Stage Permanent Purge UI Modal E2E:
+   - Stage 1: Clicked `[data-testid="permanent-purge-btn-01a1fa5c-8c3e-7a6c-b21f-7b9f1b684777"]` on KAN-7:
+     * `POST /api/v1/admin/destructive:request` -> HTTP 200 (57ms).
+     * Returned `confirm_phrase="PURGE ISSUE KAN-7"`.
+     * Confirmation dialog rendered with exact confirm phrase. Screenshot: `screenshots/live-purge-modal.png`.
+   - Stage 2: Entered reason ("Live QA permanent purge verification for KAN-30") and confirmed:
+     * `POST /api/v1/admin/destructive:execute` -> HTTP 200 (65ms).
+     * Body: `{"status":"executed","target":"KAN-7","target_kind":"issue","target_id":"01a1fa5c-8c3e-7a6c-b21f-7b9f1b684777","mode":"permanent_purge","blast_hash":"192640f97a9d700f5bce38727e5c86f3d4f9ca98da9287ce495df76e93a420f5"}`.
+     * KAN-7 disappeared immediately from the trash items table.
+4. RLS & Role Isolation (@member and @wsadmin):
+   - `@member_r4` (`WORKSPACE_MEMBER`, non-admin):
+     * `GET /api/v1/admin/trash` -> HTTP 403.
+     * `POST /api/v1/admin/destructive:request` -> HTTP 403.
+     * UI renders access-denied message.
+   - `@wsadmin` (`WORKSPACE_ADMIN`, AAL2):
+     * `GET /api/v1/admin/trash` -> HTTP 200, secret ACL-DENY issue KAN-8 excluded (`secretHidden=true`).
+     * `POST /api/v1/admin/destructive:request` -> HTTP 403 `SERVER_ADMIN_REQUIRED`.
+     * UI permanently hides purge buttons (`count = 0`).
+5. Visual Role & Permission Matrix:
+   - Loaded `/docs/role-and-permission-matrix` (843ms).
+   - Verified glyphs rendered in DOM: filled circle (`●`), half circle (`◐`), and empty circle (`○`).
+   - Desktop 1440x900 Light: `scrollWidth=1440`, `innerWidth=1440` (zero horizontal overflow). Screenshot: `live-role-matrix-desktop-light.png`.
+6. All 6 Live Screenshots Verified on Disk:
+   - `live-desktop-dark.png`
+   - `live-desktop-light.png`
+   - `live-mobile.png`
+   - `live-purge-modal.png`
+   - `live-role-matrix-desktop-light.png`
+   - `live-tablet.png`
+7. Telemetry & Stability: Unexpected console errors: 0, Page errors: 0, HTTP 5xx server errors: 0. `LIVE_STACK_VERDICT: PASS`.
+
+---
+
+## 4. Test Suite & Coverage Verification
+
+- Backend Pytest Suite (`unit-test-results.txt`):
+  - `kanban/tests/api/test_admin_trash_api.py`: 5 passed.
+  - `kanban/tests/api/test_workspace_settings.py`: 13 passed.
+  - `kanban/tests/jobs/test_trash_purge.py`: 9 passed.
+  - `kanban/tests/auth/test_aal2_policy.py`: 3 passed.
+  - `kanban/tests/api/test_destructive_lifecycle.py`: 6 passed.
+  - `kanban/tests/api/test_destructive_lifecycle_coverage.py`: 6 passed.
+  - `kanban/tests/api/test_issue_delete.py`: 8 passed.
+  - Total: 50 passed in 50.50s.
   - Statement coverage across touched files:
     - `kanban/api/v1/admin/destructive.py`: 95%
     - `kanban/api/v1/admin/workspace_settings.py`: 95%
@@ -126,45 +166,42 @@ All API contracts, security invariants, tenant boundaries, administrative AAL2 s
     - `kanban/services/destructive_lifecycle.py`: 95%
     - `kanban/services/issue_delete.py`: 95%
     - Combined coverage: 95% (1431 stmts, 33 miss).
-- Frontend Vitest Suite:
-  - `src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx`: 31/31 passed in 3.80s.
-  - Coverage: 99.76% statements, 95.79% branch, 100% funcs, 100% lines on `WorkspaceSettingsPage.tsx`.
-  - Design tokens: `cssTokensAudit.test.ts` passed 4/4 (0 inline JSX style props).
-
-### 2.7 Security, Architectural Boundary, and Code Style Compliance
-- Dependency Invariant: Zero external runtime packages added (`Apache-2.0` compliant).
-- Boundary Invariant: `lint-imports` confirms strict unidirectional layering (`agent -> mcp -> kanban -> database`), 2 kept, 0 broken.
-- Database Invariant: `kanban-ctl db check-migrations` validates all 62 migrations with single head `p4_23_oidc_link_intent_fk`.
-- Static Typecheck: `mypy` passed with zero errors across 1107 source files; `tsc -b --noEmit` passed with zero diagnostics.
-- Linter: `ruff check` and `ruff format --check` clean; `eslint` passed with zero warnings.
-- Punctuation Standard: Zero em-dashes and zero en-dashes across all code, tests, and documentation (`check_no_dashes` clean).
-
----
-
-## 3. Specialist Checklist
-
-1. [x] `workspaces.trash_retention_days` validated between 7 and 365 days
-2. [x] Modifying retention days enforces fresh AAL2 step-up (`<= 900s`)
-3. [x] Shortening retention days records `ActivityEventType.TRASH_RETENTION_SHORTENED_WARN`
-4. [x] `destructive_lifecycle.py` enforces tenant boundary clause `.where(..., Issue.workspace_id == caller.workspace_id)`
-5. [x] `trash_purge.py` sweeps all expired trashed object types (`issues`, `docs`, `pages`, `stickies`, `cycles`, `modules`, `views`, `projects`)
-6. [x] Project dependencies purged under `SET LOCAL kanban.allow_project_delete = 'on'`
-7. [x] `GET /api/v1/admin/trash` protected by `Depends(require_admin_aal2)`
-8. [x] Filter by `kind`, `project_id`, and `q` supported
-9. [x] Evaluates `evaluate_capabilities(session, caller, obj.id)` so explicit ACL `DENY` items never leak
-10. [x] Project Admins restricted to items in projects they administer
-11. [x] `POST /api/v1/admin/trash/{target_id}:restore` allows Workspace and Server Admins to restore items
-12. [x] Permanent purge remains strictly restricted to `SERVER_ADMIN` + fresh AAL2 + 2-stage tokens
-13. [x] `#tab-trash` integrated in `WorkspaceSettingsPage.tsx` with bidirectional URL hash sync
-14. [x] Visual Role and Permission Matrix published on wiki (`Role-and-Permission-Matrix.md`)
-15. [x] 50/50 Pytest tests pass with 95% coverage on touched backend files
-16. [x] 31/31 Vitest tests pass with 99.76% statement coverage on `WorkspaceSettingsPage.tsx`
-17. [x] Zero em-dashes or en-dashes across all code, tests, and documentation
+  - Admin Routes Compliance: `kanban/tests/api/test_system_status.py::test_assert_admin_routes_protected_compliance` PASSED (0.66s).
+- Frontend Vitest Suite (`unit-test-results.txt`):
+  - `src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx`: 31 passed in 2346ms.
+  - Coverage: 99.77% statements, 95.68% branch, 100% funcs, 100% lines on `WorkspaceSettingsPage.tsx`.
+  - Design tokens: `cssTokensAudit.test.ts` passed 4/4 in 14ms (0 inline JSX style props).
+- Static Analysis (`build-or-typecheck.txt`):
+  - `uv run ruff check .`: Clean (All checks passed).
+  - `uv run ruff format --check .`: Clean (1942 files already formatted).
+  - `uv run mypy`: Clean (Success: no issues found in 1115 source files).
+  - `uv run lint-imports`: Clean (Contracts: 2 kept, 0 broken).
+  - `pnpm --dir kanban/web typecheck` (`tsc -b`): Clean (0 errors).
+  - `pnpm --dir kanban/web lint` (`eslint`): Clean (0 warnings).
+  - `pnpm --dir kanban/web build` (`vite build`): Clean (0 errors).
+  - `python3 -m scripts.check_no_dashes`: Clean (0 em/en-dashes found).
 
 ---
 
-## 4. Verdict & Certification
+## 5. Security & Isolation Matrix
+
+| Capability / Concern | Specification Standard | Implementation | Verdict |
+| :--- | :--- | :--- | :--- |
+| Per-Workspace Retention | `7..365` days range validation | Enforced via Pydantic validator | PASS |
+| AAL2 Step-Up Protection | Retention update requires fresh AAL2 (<= 900s) | Checked against `caller.aal2_verified_at` | PASS |
+| Shortened Retention Warning | Warning event recorded on retention reduction | `TRASH_RETENTION_SHORTENED_WARN` emitted | PASS |
+| Multi-Object Sweep | Purges all expired trashed entity types | Sweeps issues, docs, stickies, cycles, views, etc. | PASS |
+| ACL DENY Trash Isolation | Trashed items with explicit DENY hidden from UI | `evaluate_capabilities` excludes DENY entities | PASS |
+| Project Admin Scope | Project Admin sees only items in their projects | Scoped to `admin_project_ids` | PASS |
+| 2-Stage Permanent Purge | `SERVER_ADMIN` + token + phrase + reason | Enforced in Stage 1 & Stage 2 | PASS |
+| Confirm Phrase Match | Exact phrase `"PURGE ISSUE KAN-7"` | Validated in live proof and test suite | PASS |
+| Visual Permission Matrix | Visual ●/◐/○ representation published | Rendered at `/docs/role-and-permission-matrix` | PASS |
+| Style Compliance | 0 em-dashes and 0 en-dashes | Checked with `scripts.check_no_dashes` | PASS |
+
+---
+
+## 6. Verdict & Signoff
 
 STATUS: APPROVED
 
-Ticket KAN-30 is verified and approved on branch `feat/KAN-30` (commit `29fa13e8`) and wiki repository (commit `899dec9`). The implementation enforces per-workspace retention boundaries, protects against ACL DENY data leaks in the trash studio, sweeps all expired trashed object types, and provides a clear, authoritative Visual Role & Permission Matrix. Ready for dual specialist signoff and merge into `main`.
+All API endpoints, retention validators, trash sweep daemon logic, ACL DENY isolation guards, 2-stage permanent purge flows, and unit test suites for KAN-30 on `main` at commit `837f657d` have been thoroughly audited, verified against live container `kanban-liveqa-1`, and certified. All 6 live visual screenshots in `docs/qa/KAN-30/screenshots/` are verified. Ready for Clean-Room Reality-Checker QA.
