@@ -320,8 +320,19 @@ async def test_case_1_system_status_admin_full_fields_and_member_redaction(
         assert data_admin["data_mount_point"] == "/var/lib/kanban/data"
         assert data_admin["data_mount_fstype"] == "overlay"
         assert data_admin["tier_b_sandbox_available"] is False
+        assert data_admin["supported_custom_field_tiers"] == ["scalar", "formula", "wasm"]
+        assert data_admin["sandbox_unavailable_reason"] is not None
+        assert "nsjail" in data_admin["sandbox_unavailable_reason"]
         assert data_admin["local_llm_endpoint_host"] == "http://host.docker.internal:11434"
         assert data_admin["is_server_admin"] is True
+
+        # Test admin standalone status endpoint
+        resp_admin_sa = await client.get("/api/v1/admin/standalone/status")
+        assert resp_admin_sa.status_code == 200
+        data_admin_sa = resp_admin_sa.json()
+        assert data_admin_sa["tier_b_sandbox_available"] is False
+        assert data_admin_sa["supported_custom_field_tiers"] == ["scalar", "formula", "wasm"]
+        assert data_admin_sa["sandbox_unavailable_reason"] is not None
 
         # 2. As regular MEMBER: sensitive host topology redacted to null
         client.cookies.clear()
@@ -331,6 +342,9 @@ async def test_case_1_system_status_admin_full_fields_and_member_redaction(
         data_member = resp_member.json()
         assert data_member["deployment_mode"] == "standalone_embedded_pg"
         assert data_member["persistent_volume"] is False
+        assert data_member["tier_b_sandbox_available"] is False
+        assert data_member["supported_custom_field_tiers"] == ["scalar", "formula", "wasm"]
+        assert data_member["sandbox_unavailable_reason"] is not None
         assert data_member["data_mount_point"] is None  # Redacted
         assert data_member["data_mount_fstype"] is None  # Redacted
         assert data_member["local_llm_endpoint_host"] is None  # Redacted
@@ -362,6 +376,15 @@ async def test_case_1b_missing_status_file_defaults_to_production_multi_containe
         assert data["deployment_mode"] == "production_multi_container"
         assert data["persistent_volume"] is True
         assert data["tier_b_sandbox_available"] is True
+        assert data["supported_custom_field_tiers"] == ["scalar", "formula", "wasm", "nsjail"]
+        assert data["sandbox_unavailable_reason"] is None
+
+        resp_admin_sa = await client.get("/api/v1/admin/standalone/status")
+        assert resp_admin_sa.status_code == 200
+        data_sa = resp_admin_sa.json()
+        assert data_sa["tier_b_sandbox_available"] is True
+        assert data_sa["supported_custom_field_tiers"] == ["scalar", "formula", "wasm", "nsjail"]
+        assert data_sa["sandbox_unavailable_reason"] is None
 
 
 @pytest.mark.asyncio

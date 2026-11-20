@@ -1,0 +1,4023 @@
+diff --git a/docs/qa/KAN-32/build-or-typecheck.txt b/docs/qa/KAN-32/build-or-typecheck.txt
+new file mode 100644
+index 00000000..7dd3aa01
+--- /dev/null
++++ b/docs/qa/KAN-32/build-or-typecheck.txt
+@@ -0,0 +1,67 @@
++=== 1. RUFF CHECK ===
++$ uv run ruff check kanban/api/v1/system_status.py kanban/custom_fields/service.py kanban/api/v1/custom_field_execution.py kanban/api/v1/custom_fields.py kanban/app.py kanban/tests/custom_fields/test_standalone_nsjail_gate.py kanban/tests/api/test_system_status.py
++All checks passed!
++
++=== 2. MYPY TYPECHECK ===
++$ uv run mypy kanban/api/v1/system_status.py kanban/custom_fields/service.py kanban/api/v1/custom_field_execution.py kanban/api/v1/custom_fields.py kanban/app.py kanban/tests/custom_fields/test_standalone_nsjail_gate.py kanban/tests/api/test_system_status.py
++Success: no issues found in 7 source files
++
++=== 3. LINT-IMPORTS ===
++$ uv run lint-imports
++
++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
++  └──▶║║                    ▲ 
++      ╚╝────────────────────┘
++
++
++---------
++Contracts
++---------
++
++Analyzed 970 files, 3432 dependencies.
++--------------------------------------
++
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
++mcp forbidden from importing database KEPT (48 ignored imports)
++
++Contracts: 2 kept, 0 broken.
++
++=== 4. TYPESCRIPT TYPECHECK (TSC -B) ===
++$ pnpm --filter @kanban/web typecheck
++
++> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
++> tsc -b --noEmit
++
++
++=== 5. ESLINT ===
++$ pnpm --filter @kanban/web lint
++
++> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
++> eslint . --max-warnings 0
++
++
++=== 6. CHECK NO DASHES (0 EM/EN-DASHES) ===
++$ python3 -m scripts.check_no_dashes --all
++Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
++
++=== 7. CSS TOKENS AUDIT (0 INLINE STYLE PROPS) ===
++$ pnpm --filter @kanban/web test:unit --run src/styles/__tests__/cssTokensAudit.test.ts
++
++> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
++> vitest run --run src/styles/__tests__/cssTokensAudit.test.ts
++
++
++ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
++
++ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 16ms
++
++ Test Files  1 passed (1)
++      Tests  4 passed (4)
++   Start at  10:06:13
++   Duration  1.30s (environment 95%, import 2%, tests 2%, worker 1%, transform 1%)
++
+diff --git a/docs/qa/KAN-32/changed-files-manifest.txt b/docs/qa/KAN-32/changed-files-manifest.txt
+new file mode 100644
+index 00000000..a219293f
+--- /dev/null
++++ b/docs/qa/KAN-32/changed-files-manifest.txt
+@@ -0,0 +1,21 @@
++docs/qa/KAN-32/build-or-typecheck.txt
++docs/qa/KAN-32/changed-files-manifest.txt
++docs/qa/KAN-32/git-diff.patch
++docs/qa/KAN-32/message-to-reality-checker.md
++docs/qa/KAN-32/unit-test-results.txt
++docs/qa/KAN-32/wiki-diff.patch
++kanban/api/v1/custom_field_execution.py
++kanban/api/v1/custom_fields.py
++kanban/api/v1/system_status.py
++kanban/app.py
++kanban/custom_fields/service.py
++kanban/tests/api/test_system_status.py
++kanban/tests/custom_fields/test_standalone_nsjail_gate.py
++kanban/web/src/api/schema.gen.ts
++kanban/web/src/app/useSystemStatus.ts
++kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
++kanban/web/src/features/custom-fields/custom-fields.css
++kanban/web/src/features/custom-fields/FlavorDecisionMatrix.tsx
++kanban/web/src/features/custom-fields/PresetGallery.tsx
++kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx
++kanban/web/src/features/custom-fields/__tests__/PresetGallery.test.tsx
+diff --git a/docs/qa/KAN-32/git-diff.patch b/docs/qa/KAN-32/git-diff.patch
+new file mode 100644
+index 00000000..82755980
+--- /dev/null
++++ b/docs/qa/KAN-32/git-diff.patch
+@@ -0,0 +1,1995 @@
++diff --git a/docs/qa/KAN-32/build-or-typecheck.txt b/docs/qa/KAN-32/build-or-typecheck.txt
++new file mode 100644
++index 00000000..7dd3aa01
++--- /dev/null
+++++ b/docs/qa/KAN-32/build-or-typecheck.txt
++@@ -0,0 +1,67 @@
+++=== 1. RUFF CHECK ===
+++$ uv run ruff check kanban/api/v1/system_status.py kanban/custom_fields/service.py kanban/api/v1/custom_field_execution.py kanban/api/v1/custom_fields.py kanban/app.py kanban/tests/custom_fields/test_standalone_nsjail_gate.py kanban/tests/api/test_system_status.py
+++All checks passed!
+++
+++=== 2. MYPY TYPECHECK ===
+++$ uv run mypy kanban/api/v1/system_status.py kanban/custom_fields/service.py kanban/api/v1/custom_field_execution.py kanban/api/v1/custom_fields.py kanban/app.py kanban/tests/custom_fields/test_standalone_nsjail_gate.py kanban/tests/api/test_system_status.py
+++Success: no issues found in 7 source files
+++
+++=== 3. LINT-IMPORTS ===
+++$ uv run lint-imports
+++
+++╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+++╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+++ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+++ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+++╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+++╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+++  └──▶║║                    ▲ 
+++      ╚╝────────────────────┘
+++
+++
+++---------
+++Contracts
+++---------
+++
+++Analyzed 970 files, 3432 dependencies.
+++--------------------------------------
+++
+++Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
+++mcp forbidden from importing database KEPT (48 ignored imports)
+++
+++Contracts: 2 kept, 0 broken.
+++
+++=== 4. TYPESCRIPT TYPECHECK (TSC -B) ===
+++$ pnpm --filter @kanban/web typecheck
+++
+++> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
+++> tsc -b --noEmit
+++
+++
+++=== 5. ESLINT ===
+++$ pnpm --filter @kanban/web lint
+++
+++> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
+++> eslint . --max-warnings 0
+++
+++
+++=== 6. CHECK NO DASHES (0 EM/EN-DASHES) ===
+++$ python3 -m scripts.check_no_dashes --all
+++Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+++
+++=== 7. CSS TOKENS AUDIT (0 INLINE STYLE PROPS) ===
+++$ pnpm --filter @kanban/web test:unit --run src/styles/__tests__/cssTokensAudit.test.ts
+++
+++> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
+++> vitest run --run src/styles/__tests__/cssTokensAudit.test.ts
+++
+++
+++ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
+++
+++ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 16ms
+++
+++ Test Files  1 passed (1)
+++      Tests  4 passed (4)
+++   Start at  10:06:13
+++   Duration  1.30s (environment 95%, import 2%, tests 2%, worker 1%, transform 1%)
+++
++diff --git a/docs/qa/KAN-32/message-to-reality-checker.md b/docs/qa/KAN-32/message-to-reality-checker.md
++new file mode 100644
++index 00000000..811544e7
++--- /dev/null
+++++ b/docs/qa/KAN-32/message-to-reality-checker.md
++@@ -0,0 +1,125 @@
+++# Reality-Checker Verification Packet: KAN-32
+++
+++**Ticket ID:** KAN-32  
+++**Title:** [KB-P3-AUDIT-26] Gate Custom Fields nsjail Sandbox in Standalone Mode, Fix tier_b_runner Wiring, and Publish Step-by-Step [Guide] How to Use Custom Fields (3 Problems)  
+++**Branch:** `feat/KAN-32`  
+++
+++---
+++
+++## 1. Executive Summary & Verification Proof
+++
+++All 3 scoped problems for ticket KAN-32 have been fully implemented, verified with automated test suites, checked against strict static gates, and documented without em-dashes or en-dashes.
+++
+++### Problem 1: Standalone `nsjail` Fail-Closed Gating & Multi-Container `tier_b_runner` Wiring
+++- Extended `SystemStatusResponse` in `kanban/api/v1/system_status.py` and TypeScript interface `SystemStatus` in `kanban/web/src/app/useSystemStatus.ts` with:
+++  * `supported_custom_field_tiers`: `["scalar", "formula", "wasm"]` in Standalone mode (`tier_b_sandbox_available == False`), and `["scalar", "formula", "wasm", "nsjail"]` in Multi-Container mode (`tier_b_sandbox_available == True`).
+++  * `sandbox_unavailable_reason`: Plain ASCII explanation when `tier_b_sandbox_available == False` (`"Isolated nsjail sandbox execution is unavailable in standalone mode. Multi-container compose deployment is required."`), and `None` when `True`.
+++- In `kanban/custom_fields/service.py`:
+++  * Added `is_tier_b_available` and `assert_tier_available` helper functions enforcing fail-closed gating.
+++  * In `create_definition`: Reject `tier == "nsjail"` when `tier_b_sandbox_available == False` with HTTP `422 SANDBOX_UNAVAILABLE_IN_STANDALONE`.
+++  * In `update_definition`: Reject patching `payload.tier == "nsjail"` when `tier_b_sandbox_available == False` with HTTP `422 SANDBOX_UNAVAILABLE_IN_STANDALONE`. Pre-existing `nsjail` definitions imported from backup can update metadata (name, description, enabled) without error.
+++- In `kanban/api/v1/custom_field_execution.py`:
+++  * In `test_execute_custom_field`: Enforce `assert_tier_available("nsjail", request=request)`. Reject `nsjail` test-execute in Standalone mode with HTTP `422 SANDBOX_UNAVAILABLE_IN_STANDALONE`.
+++  * In `list_custom_fields_for_issue`, `execute_custom_field_for_issue`, and `test_execute_custom_field`: Fixed `CustomFieldExecutor(session, tier_b_runner=getattr(request.app.state, "tier_b_runner", None))` wiring so multi-container deployments execute Tier B nsjail scripts seamlessly.
+++- In `kanban/app.py`: Initialized `app.state.tier_b_sandbox_available` during startup using `get_standalone_status(settings=settings)`.
+++
+++### Problem 2: Disabled/Badged Unavailable `nsjail` Options in Web UI
+++- Connected `CustomFieldDefinitionEditor.tsx` and `PresetGallery.tsx` to `useSystemStatus()`.
+++- When `tier_b_sandbox_available === false`:
+++  * Rendered inline Standalone Guidance Callout (`standalone-guidance-callout`) in `CustomFieldDefinitionEditor.tsx` explaining that `Scalar` (<1ms), `Formula` (<5ms), and `WebAssembly` (<25ms) work out of the box in Standalone mode, with links to `[Guide] How to Use Custom Fields ->` (`/docs/Guide-Custom-Fields`) and `Promote to Multi-Container ->` (`/admin/standalone`).
+++  * In `CustomFieldDefinitionEditor.tsx`: Disabled `nsjail` options in both Field Flavor (`field-flavor-select`) and Execution Sandbox Tier (`field-tier-select`) selects, badged with `[Multi-Container Compose Required]`.
+++  * Rendered Pre-Existing nsjail Warning Banner (`preexisting-nsjail-warning-banner`) when inspecting an imported `nsjail` definition in Standalone mode.
+++  * In `FlavorDecisionMatrix.tsx`: Badged and disabled the `nsjail` card with `Multi-Container Compose Required` and tooltip when `!tierBAvailable`.
+++  * In `PresetGallery.tsx`: Badged and disabled `nsjail`-dependent presets (`total-project-issues` and `git-pr-link`) with `Multi-Container Compose Required`.
+++- Styled all callouts, banners, and badges using 100% canonical `theme.css` tokens with zero inline `style={...}` props, verified via `cssTokensAudit.test.ts`.
+++
+++### Problem 3: Published Step-by-Step Wiki Guide
+++- Published `/home/adamoutler/kanban/thumbs-up-kanban.wiki/Guide-Custom-Fields.md` starting with `# [Guide] How to Use Custom Fields` and linked in `_Sidebar.md` under `Reference Guides`.
+++- Covered all 4 required sections:
+++  1. What Custom Fields do and where values appear (Issue Properties Rail, Table View, Board Cards, Filters and Search).
+++  2. Choosing between `Scalar`, `Safe Formula`, `WebAssembly (wasmtime)`, and `Isolated Sandbox (nsjail)` (Standalone vs Multi-Container Compose gating and promotion path).
+++  3. Step-by-step walkthroughs with copy-paste examples:
+++     * `Priority SLA Days`: Safe Formula (`1 if priority == 'URGENT' else 3 if priority == 'HIGH' else 7 if priority == 'MEDIUM' else 14`) -> format `number` with unit `d`.
+++     * `Sub-Issue Progress %`: Safe Formula (`round((completed_sub_issue_count * 100.0) / sub_issue_count, 1) if sub_issue_count > 0 else 100.0`) -> format `number` with unit `%`.
+++     * `CVSS Severity Pill`: Dynamic severity formula -> format `severity_pill`.
+++     * `Total Project Issues Rollup`: WebAssembly / nsjail project metric rollup -> format `number`.
+++     * Detailed specification and format metadata JSON schemas for all 7 canonical output formats (`text`, `number`, `badge`, `severity_pill`, `url`, `markdown_snippet`, `json_table`).
+++  4. Safe formula AST execution context reference and built-in function allowlist.
+++  5. Dry-running with `Test Execute` and `WORKSPACE`/`SERVER` scope escalation dual-control AAL2 approval workflows.
+++- Checked against `check_no_dashes` (strictly 0 em-dashes and 0 en-dashes).
+++- Committed to wiki repository on branch `main` (`bc6b15a`).
+++
+++---
+++
+++## 2. Test Suite & Coverage Evidence
+++
+++### Python Pytest & Coverage
+++Command:
+++```bash
+++KB_TEST_PGSOCKET_DIR=/tmp/kb-pgsock-b-kan32 KB_TEST_PGHOST=/tmp/kb-pgsock-b-kan32 uv run pytest \
+++  kanban/tests/custom_fields/test_standalone_nsjail_gate.py \
+++  kanban/tests/custom_fields/test_custom_fields_api.py \
+++  kanban/tests/custom_fields/test_execution_api.py \
+++  kanban/tests/custom_fields/test_manifest_and_formula_security.py \
+++  --cov=kanban.custom_fields.service \
+++  --cov=kanban.api.v1.custom_field_execution \
+++  --cov=kanban.api.v1.custom_fields \
+++  --cov-report=term-missing
+++```
+++
+++Results:
+++- **Test Files:** 4 passed (4 total)
+++- **Tests:** 26 passed (26 total)
+++- **Pass Rate:** 100%
+++
+++| Name | Stmts | Miss | Branch | BrPart | Cover | Missing |
+++| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
+++| `kanban/api/v1/custom_field_execution.py` | 120 | 1 | 26 | 4 | **97%** | 71->74, 109->125, 261->282, 283 |
+++| `kanban/api/v1/custom_fields.py` | 30 | 0 | 0 | 0 | **100%** | |
+++| `kanban/custom_fields/service.py` | 163 | 0 | 42 | 2 | **99%** | 355->359, 361->365 |
+++| **TOTAL** | **313** | **1** | **68** | **6** | **98%** | |
+++
+++### TypeScript Vitest & Coverage
+++Command:
+++```bash
+++COVERAGE_INCLUDE="src/features/custom-fields/CustomFieldDefinitionEditor.tsx,src/features/custom-fields/PresetGallery.tsx,src/features/custom-fields/FlavorDecisionMatrix.tsx,src/app/useSystemStatus.ts" \
+++pnpm --filter @kanban/web test:coverage src/features/custom-fields src/app/useSystemStatus.test.tsx
+++```
+++
+++Results:
+++- **Test Files:** 10 passed (10 total)
+++- **Tests:** 165 passed (165 total)
+++- **Pass Rate:** 100%
+++
+++| File | % Stmts | % Branch | % Funcs | % Lines |
+++| :--- | :---: | :---: | :---: | :---: |
+++| **All files** | **100%** | **95.69%** | **100%** | **100%** |
+++| `src/app/useSystemStatus.ts` | 100% | 100% | 100% | 100% |
+++| `src/features/custom-fields/CustomFieldDefinitionEditor.tsx` | 100% | 95.74% | 100% | 100% |
+++| `src/features/custom-fields/FlavorDecisionMatrix.tsx` | 100% | 92.30% | 100% | 100% |
+++| `src/features/custom-fields/PresetGallery.tsx` | 100% | 96.87% | 100% | 100% |
+++
+++---
+++
+++## 3. Mandatory Static Quality Gates
+++
+++All 7 mandatory checks execute cleanly with zero errors:
+++
+++1. **Ruff Check:** Passed (`All checks passed!`).
+++2. **Mypy Typecheck:** Passed (`Success: no issues found in 7 source files`).
+++3. **Lint-Imports Architectural Boundary Gate:** Passed (`Contracts: 2 kept, 0 broken`).
+++4. **TypeScript Compiler (`tsc -b`):** Passed with zero diagnostics.
+++5. **ESLint (`eslint . --max-warnings 0`):** Passed across entire frontend repository with zero warnings/errors.
+++6. **No Dashes Guard (`check_no_dashes --all`):** Passed with 0 em/en-dashes.
+++7. **CSS Tokens Audit (`cssTokensAudit.test.ts`):** Passed (4/4 tests passed, 0 inline JSX styles).
+++
+++---
+++
+++## 4. Manifest of Forensic Artifacts
+++
+++- `docs/qa/KAN-32/unit-test-results.txt`: Verbatim pytest and vitest test execution logs and coverage tables.
+++- `docs/qa/KAN-32/build-or-typecheck.txt`: Verbatim outputs of ruff, mypy, lint-imports, tsc, eslint, check_no_dashes, and cssTokensAudit.
+++- `docs/qa/KAN-32/git-diff.patch`: Complete diff of all touched code on branch `feat/KAN-32`.
+++- `docs/qa/KAN-32/wiki-diff.patch`: Complete diff of published wiki documentation (`Guide-Custom-Fields.md` and `_Sidebar.md`).
+++- `docs/qa/KAN-32/changed-files-manifest.txt`: List of all modified and added files.
+++- `docs/qa/KAN-32/message-to-reality-checker.md`: This forensic audit document.
++diff --git a/docs/qa/KAN-32/unit-test-results.txt b/docs/qa/KAN-32/unit-test-results.txt
++new file mode 100644
++index 00000000..459debf1
++--- /dev/null
+++++ b/docs/qa/KAN-32/unit-test-results.txt
++@@ -0,0 +1,71 @@
+++=== PYTHON PYTEST & COVERAGE (KAN-32) ===
+++Command:
+++KB_TEST_PGSOCKET_DIR=/tmp/kb-pgsock-b-kan32 KB_TEST_PGHOST=/tmp/kb-pgsock-b-kan32 uv run pytest kanban/tests/custom_fields/test_standalone_nsjail_gate.py kanban/tests/custom_fields/test_custom_fields_api.py kanban/tests/custom_fields/test_execution_api.py kanban/tests/custom_fields/test_manifest_and_formula_security.py --cov=kanban.custom_fields.service --cov=kanban.api.v1.custom_field_execution --cov=kanban.api.v1.custom_fields --cov-report=term-missing
+++
+++Output:
+++============================= test session starts ==============================
+++platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+++rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f
+++configfile: pyproject.toml
+++plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+++asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+++collecting ... collected 26 items
+++
+++kanban/tests/custom_fields/test_standalone_nsjail_gate.py ........       [ 30%]
+++kanban/tests/custom_fields/test_custom_fields_api.py .......             [ 57%]
+++kanban/tests/custom_fields/test_execution_api.py ...                     [ 69%]
+++kanban/tests/custom_fields/test_manifest_and_formula_security.py ....... [ 96%]
+++.                                                                        [100%]
+++
+++================================ tests coverage ================================
+++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+++
+++Name                                      Stmts   Miss Branch BrPart  Cover   Missing
+++-------------------------------------------------------------------------------------
+++kanban/api/v1/custom_field_execution.py     120      1     26      4    97%   71->74, 109->125, 261->282, 283
+++kanban/api/v1/custom_fields.py               30      0      0      0   100%
+++kanban/custom_fields/service.py             163      0     42      2    99%   355->359, 361->365
+++-------------------------------------------------------------------------------------
+++TOTAL                                       313      1     68      6    98%
+++============================= 26 passed in 28.31s ==============================
+++
+++
+++=== TYPESCRIPT VITEST & COVERAGE (KAN-32) ===
+++Command:
+++COVERAGE_INCLUDE="src/features/custom-fields/CustomFieldDefinitionEditor.tsx,src/features/custom-fields/PresetGallery.tsx,src/features/custom-fields/FlavorDecisionMatrix.tsx,src/app/useSystemStatus.ts" pnpm --filter @kanban/web test:coverage src/features/custom-fields src/app/useSystemStatus.test.tsx
+++
+++Output:
+++> @kanban/web@0.1.0 test:coverage /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
+++> vitest run --coverage src/features/custom-fields src/app/useSystemStatus.test.tsx
+++
+++ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
+++      Coverage enabled with v8
+++
+++ ✓ src/features/custom-fields/__tests__/presets.test.ts (3 tests) 18ms
+++ ✓ src/features/custom-fields/__tests__/CustomFieldsStudio.test.tsx (2 tests) 67ms
+++ ✓ src/app/useSystemStatus.test.tsx (4 tests) 192ms
+++ ✓ src/features/custom-fields/__tests__/FlavorDecisionMatrix.test.tsx (5 tests) 175ms
+++ ✓ src/features/custom-fields/__tests__/PresetGallery.test.tsx (8 tests) 378ms
+++ ✓ src/features/custom-fields/__tests__/CustomFieldValue.test.tsx (32 tests) 310ms
+++ ✓ src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx (23 tests) 590ms
+++ ✓ src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx (18 tests) 650ms
+++ ✓ src/features/custom-fields/__tests__/api.test.ts (30 tests) 35ms
+++ ✓ src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx (40 tests) 2634ms
+++
+++ Test Files  10 passed (10)
+++      Tests  165 passed (165)
+++   Start at  09:46:46
+++   Duration  5.61s (environment 50%, tests 24%, import 19%, transform 4%, worker 3%)
+++
+++ % Coverage report from v8
+++-------------------|---------|----------|---------|---------|-------------------
+++File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+++-------------------|---------|----------|---------|---------|-------------------
+++All files          |     100 |    95.69 |     100 |     100 |                   
+++ app               |     100 |      100 |     100 |     100 |                   
+++  ...stemStatus.ts |     100 |      100 |     100 |     100 |                   
+++ .../custom-fields |     100 |    95.47 |     100 |     100 |                   
+++  ...ionEditor.tsx |     100 |    95.74 |     100 |     100 | ...49,504-525,558 
+++  ...ionMatrix.tsx |     100 |     92.3 |     100 |     100 | 140,184           
+++  ...etGallery.tsx |     100 |    96.87 |     100 |     100 | 51                
+++-------------------|---------|----------|---------|---------|-------------------
++diff --git a/docs/qa/KAN-32/wiki-diff.patch b/docs/qa/KAN-32/wiki-diff.patch
++new file mode 100644
++index 00000000..fb14387c
++--- /dev/null
+++++ b/docs/qa/KAN-32/wiki-diff.patch
++@@ -0,0 +1,273 @@
+++diff --git a/Guide-Custom-Fields.md b/Guide-Custom-Fields.md
+++new file mode 100644
+++index 0000000..b2f6bd6
+++--- /dev/null
++++++ b/Guide-Custom-Fields.md
+++@@ -0,0 +1,256 @@
++++# [Guide] How to Use Custom Fields
++++
++++Custom Fields extend your projects and issues with dynamic calculations, computed business metrics, compliance indicators, and metadata without modifying the core database schema or writing custom server plugins.
++++
++++This comprehensive guide covers how Custom Fields work, where their values surface across the UI, how to choose the right execution tier for your deployment mode (Standalone vs Multi-Container Compose), step-by-step walkthroughs with copy-paste examples, and the required governance and dual-control approval workflows.
++++
++++---
++++
++++## 1. What Custom Fields Do and Where Values Appear
++++
++++Custom Fields allow project administrators and server administrators to attach computed or scalar attributes to issues. Whenever an issue is viewed, edited, or evaluated in a workflow, Custom Fields are resolved and formatted according to their output specifications.
++++
++++Custom field values automatically surface across the following surfaces in the web interface:
++++
++++- **Issue Properties Rail:** Located in the right sidebar of the issue detail screen. Displays the custom field label, current value (formatted as text, number, badge, severity pill, link, markdown snippet, or table), and cache status with an instant recalculate trigger.
++++- **Table View:** Embedded as sortable, custom columns in the project Table View. Allows rapid scanning and comparison of computed metrics (such as SLA deadlines or sub-issue progress percentages) across dozens of work items.
++++- **Board Cards:** Rendered as compact badges, severity pills, or monospace tags directly on Kanban board cards, providing immediate visual cues to team members during daily standups and cycle reviews.
++++- **Filters and Search:** Filter work items by custom field values, enabling targeted views such as finding all issues with a `CRITICAL` severity pill or projects with overdue SLA days.
++++
++++---
++++
++++## 2. Choosing Between Execution Tiers
++++
++++👍kanban provides four distinct execution tiers for custom fields, balanced across performance, security isolation, and deployment modes:
++++
++++| Tier | Engine / Flavor | Latency Budget | Standalone Mode | Multi-Container Compose | Best Used For |
++++| :--- | :--- | :--- | :--- | :--- | :--- |
++++| **Scalar** | Static metadata | `<1ms` | Supported | Supported | Static tags, manual attributes, default strings, constant numbers |
++++| **Safe Formula** | In-process Python AST | `<5ms` | Supported | Supported | Math, date arithmetic, conditionals, sub-issue rollups, SLA days |
++++| **WebAssembly** | `wasmtime` runtime | `<25ms` | Supported | Supported | Compiled C, Rust, or AssemblyScript logic with strict memory sandboxing |
++++| **Isolated Sandbox** | `nsjail` Linux container | `<250ms` | **Gated (Unavailable)** | Supported | Complex Python/Rust scripts requiring full network egress allowlists or multi-entity queries |
++++
++++### Standalone Mode vs Multi-Container Compose Gating
++++
++++In **Standalone mode** (running via a single container or single process):
++++- `Scalar`, `Safe Formula`, and `WebAssembly (wasmtime)` run natively out of the box with zero external dependencies.
++++- `Isolated Sandbox (nsjail)` is **fail-closed and rejected**. Attempting to create or execute an `nsjail` custom field in Standalone mode returns an actionable HTTP `422 SANDBOX_UNAVAILABLE_IN_STANDALONE` error recommending `scalar`, `formula`, or `wasm`. In the web editor and preset gallery, `nsjail` options are disabled and badged with `Multi-Container Compose Required`.
++++- **Pre-existing nsjail fields:** If you import a workspace backup containing pre-existing `nsjail` fields into Standalone mode, definitions remain inspectable and editable, with an informational warning banner reminding you that multi-container compose is required for execution.
++++- **Promoting to Multi-Container:** To unlock `nsjail` container sandboxes, promote your installation to multi-container compose via the administrator portal at `/admin/standalone` or follow the Production Promotion and Backup Runbook.
++++
++++---
++++
++++## 3. Step-by-Step Walkthroughs and Copy-Paste Examples
++++
++++### Example 1: Priority SLA Days (Safe Formula)
++++
++++Compute the remaining service level agreement (SLA) target turnaround days based on the issue priority.
++++
++++- **Name:** Priority SLA Days
++++- **Slug:** `priority-sla-days`
++++- **Flavor / Tier:** Safe Formula (`formula`)
++++- **Target Scope:** `PROJECT`
++++- **Formula Expression:**
++++  ```python
++++  1 if priority == 'URGENT' else 3 if priority == 'HIGH' else 7 if priority == 'MEDIUM' else 14
++++  ```
++++- **Output Format:** `number`
++++- **Format Metadata JSON:**
++++  ```json
++++  {
++++    "format": "number",
++++    "maximum_fraction_digits": 0,
++++    "unit_suffix": "d",
++++    "min_value": 1,
++++    "max_value": 30
++++  }
++++  ```
++++
++++### Example 2: Sub-Issue Progress Percentage (Safe Formula)
++++
++++Calculate the completion percentage of sub-issues for epic or parent issue tracking.
++++
++++- **Name:** Sub-Issue Progress %
++++- **Slug:** `sub-issue-progress`
++++- **Flavor / Tier:** Safe Formula (`formula`)
++++- **Target Scope:** `PROJECT`
++++- **Formula Expression:**
++++  ```python
++++  round((completed_sub_issue_count * 100.0) / sub_issue_count, 1) if sub_issue_count > 0 else 100.0
++++  ```
++++- **Output Format:** `number`
++++- **Format Metadata JSON:**
++++  ```json
++++  {
++++    "format": "number",
++++    "maximum_fraction_digits": 1,
++++    "unit_suffix": "%",
++++    "min_value": 0.0,
++++    "max_value": 100.0
++++  }
++++  ```
++++
++++### Example 3: CVSS Severity Pill (Safe Formula / Dynamic Severity)
++++
++++Map issue priority and due date urgency to a standardized security vulnerability pill.
++++
++++- **Name:** Incident Severity Pill
++++- **Slug:** `incident-severity-pill`
++++- **Flavor / Tier:** Safe Formula (`formula`)
++++- **Target Scope:** `PROJECT`
++++- **Formula Expression:**
++++  ```python
++++  'CRITICAL' if (days_until_due is not None and days_until_due < 0) else 'HIGH' if priority == 'URGENT' else 'MEDIUM' if priority == 'HIGH' else 'LOW'
++++  ```
++++- **Output Format:** `severity_pill`
++++- **Format Metadata JSON:**
++++  ```json
++++  {
++++    "format": "severity_pill"
++++  }
++++  ```
++++
++++### Example 4: Total Project Issues Rollup (WebAssembly or Multi-Container nsjail)
++++
++++Roll up total project issues and blockers using WebAssembly or Multi-Container nsjail.
++++
++++- **Name:** Total Project Issues
++++- **Slug:** `total-project-issues`
++++- **Flavor / Tier:** WebAssembly (`wasm`) or Isolated Sandbox (`nsjail` in Multi-Container Compose)
++++- **Target Scope:** `PROJECT` (or `WORKSPACE` with AAL2 dual control)
++++- **Output Format:** `number`
++++- **Format Metadata JSON:**
++++  ```json
++++  {
++++    "format": "number",
++++    "maximum_fraction_digits": 0,
++++    "unit_suffix": " issues"
++++  }
++++  ```
++++
++++---
++++
++++## 4. All Seven Supported Output Formats and Schemas
++++
++++Every custom field produces output formatted according to one of seven canonical schemas:
++++
++++### 1. `text`
++++Single-line formatted string with optional prefix and monospace font.
++++```json
++++{
++++  "format": "text",
++++  "max_length": 128,
++++  "prefix": "REF-",
++++  "monospace": true
++++}
++++```
++++
++++### 2. `number`
++++Floating point or integer numeric value with precision limits, suffix, and range bounds.
++++```json
++++{
++++  "format": "number",
++++  "maximum_fraction_digits": 2,
++++  "unit_suffix": " hrs",
++++  "min_value": 0.0,
++++  "max_value": 1000.0
++++}
++++```
++++
++++### 3. `badge`
++++Visual status badge with color token and strict label allowlist. Supported color tokens: `neutral`, `info`, `success`, `warning`, `danger`, `accent`.
++++```json
++++{
++++  "format": "badge",
++++  "color_token": "success",
++++  "allowed_labels": ["Passed", "Failed", "In Progress", "Pending"]
++++}
++++```
++++
++++### 4. `severity_pill`
++++Standardized vulnerability and risk assessment pill. Accepts severity levels (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `NONE`) or numeric CVSS scores from 0.0 to 10.0.
++++```json
++++{
++++  "format": "severity_pill"
++++}
++++```
++++
++++### 5. `url`
++++Sanitized hyperlink validated against allowed schemes and host suffixes.
++++```json
++++{
++++  "format": "url",
++++  "allowed_schemes": ["https"],
++++  "allowed_host_suffixes": ["github.com", "gitlab.com"]
++++}
++++```
++++
++++### 6. `markdown_snippet`
++++Sanitized canonical Markdown snippet rendered inline up to 2000 characters.
++++```json
++++{
++++  "format": "markdown_snippet",
++++  "max_chars": 2000
++++}
++++```
++++
++++### 7. `json_table`
++++Structured 2-dimensional tabular data rendered directly in the issue details view.
++++```json
++++{
++++  "format": "json_table",
++++  "columns": [
++++    {"key": "test_name", "label": "Test Suite"},
++++    {"key": "duration_ms", "label": "Duration (ms)"},
++++    {"key": "status", "label": "Status"}
++++  ],
++++  "max_rows": 25
++++}
++++```
++++
++++---
++++
++++## 5. Safe Formula Context Reference
++++
++++When writing Safe Formulas, expressions have access to the active issue attributes without executing arbitrary code:
++++
++++| Variable | Type | Description |
++++| :--- | :--- | :--- |
++++| `id` | `str` | Issue unique identifier (UUID) |
++++| `key` | `str` | Human-readable issue key (e.g. `KAN-32`) |
++++| `summary` | `str` | Issue title / summary |
++++| `description_markdown` | `str` | Raw Markdown body of the issue |
++++| `state` | `str` | Name of current workflow state (e.g. `In Progress`) |
++++| `state_group` | `str` | Workflow state category (`backlog`, `unstarted`, `started`, `completed`, `cancelled`) |
++++| `priority` | `str` | Normalized uppercase priority (`URGENT`, `HIGH`, `MEDIUM`, `LOW`, `NONE`) |
++++| `priority_slug` | `str` | Lowercase priority slug (`urgent`, `high`, `medium`, `low`, `none`) |
++++| `priority_label` | `str` | Display label of priority (`Urgent`, `High`, etc.) |
++++| `start_date` | `str` or `None` | ISO-formatted start date |
++++| `due_date` | `str` or `None` | ISO-formatted due date |
++++| `days_until_due` | `int` or `None` | Days until due date (negative values indicate overdue) |
++++| `blocker_count` | `int` | Number of active blocking dependencies on this issue |
++++| `sub_issue_count` | `int` | Total count of child sub-issues |
++++| `completed_sub_issue_count`| `int` | Count of sub-issues in `completed` state group |
++++| `labels` | `list[str]` | List of tag names assigned to the issue |
++++
++++### Safe Built-in Functions
++++Safe formulas allow standard deterministic operations: `round`, `int`, `float`, `min`, `max`, `len`, `abs`, `str`. Arbitrary imports, file system access, and network sockets are strictly prohibited at the Python AST parser layer.
++++
++++---
++++
++++## 6. Testing, Dry-Running, and Scope Escalation
++++
++++### Dry-Running with Test Execute
++++Before saving any custom field definition, use the **Test Execute** button in the Custom Field Definition Editor or send a POST request to:
++++```http
++++POST /api/v1/projects/{project_ref}/custom-fields/test-execute
++++```
++++This evaluates your formula or script against a mock issue payload or existing issue key in memory without persisting values or polluting the audit ledger. In Standalone mode, Test Execute verifies that your script does not request unavailable sandbox tiers.
++++
++++### Scope Escalation and AAL2 Dual-Control Approval
++++Custom fields can be scoped at three tiers:
++++- **`PROJECT` Scope:** Can only read and affect issues within the parent project. Requires Project Administrator privileges.
++++- **`WORKSPACE` Scope:** Can read issues across all projects in the workspace.
++++- **`SERVER` Scope:** Global fields available across all workspaces.
++++
++++**Dual-Control Governance:** Escalating a custom field definition from `PROJECT` to `WORKSPACE` or `SERVER` scope (or running with elevated Service Account credentials rather than `INVOKING_USER`) requires cryptographic approval by an administrator of that target tier with active Authenticator Assurance Level 2 (AAL2 / WebAuthn / TOTP) session elevation.
+++diff --git a/_Sidebar.md b/_Sidebar.md
+++index 6b7c13b..54a1d72 100644
+++--- a/_Sidebar.md
++++++ b/_Sidebar.md
+++@@ -28,5 +28,6 @@
+++ 
+++ - **Reference Guides**
+++   - [Feature Comparison Matrix (35 Features)](Feature-Comparison)
++++  - [Guide: How to Use Custom Fields](Guide-Custom-Fields)
+++   - [MCP Tools Reference (24 Tools)](MCP-Tools-Reference)
+++   - [REST API and OpenAPI Guide](REST-API-Architecture-and-OpenAPI-Guide)
++diff --git a/kanban/api/v1/custom_field_execution.py b/kanban/api/v1/custom_field_execution.py
++index 71d17bab..110931bc 100644
++--- a/kanban/api/v1/custom_field_execution.py
+++++ b/kanban/api/v1/custom_field_execution.py
++@@ -73,7 +73,10 @@ async def list_custom_fields_for_issue(
++ 
++     cached_only = script_depth >= 1
++     async with timing_floor(floor_ms=25.0):
++-        executor = CustomFieldExecutor(session)
+++        executor = CustomFieldExecutor(
+++            session,
+++            tier_b_runner=getattr(request.app.state, "tier_b_runner", None),
+++        )
++         results = await executor.list_values_for_issue(
++             session, caller, issue_key, cached_only=cached_only
++         )
++@@ -85,11 +88,12 @@ async def list_custom_fields_for_issue(
++     response_model=CustomFieldValueItem,
++     summary="Force fresh execution of a custom field for an issue",
++ )
++-async def execute_custom_field_for_issue(
+++async def execute_custom_field_for_issue(  # noqa: PLR0913
++     issue_key: str,
++     field_id: str,
++     caller: Caller,
++     session: Session,
+++    request: Request,
++     *,
++     force_refresh: bool = True,
++ ) -> CustomFieldValueItem:
++@@ -118,7 +122,10 @@ async def execute_custom_field_for_issue(
++                     ),
++                 )
++ 
++-        executor = CustomFieldExecutor(session)
+++        executor = CustomFieldExecutor(
+++            session,
+++            tier_b_runner=getattr(request.app.state, "tier_b_runner", None),
+++        )
++         result = await executor.execute_for_issue(
++             session,
++             caller,
++@@ -219,6 +226,7 @@ async def test_execute_custom_field(  # noqa: C901
++     body: CustomFieldTestExecuteRequest,
++     caller: Caller,
++     session: Session,
+++    request: Request,
++ ) -> CustomFieldTestExecuteResponse:
++     """Test-execute custom field draft against a chosen project issue.
++ 
++@@ -228,6 +236,11 @@ async def test_execute_custom_field(  # noqa: C901
++         proj = await get_project_or_404(session, caller, project)
++         await CustomFieldDefinitionService.require_admin_and_aal2(session, caller, proj)
++ 
+++        if str(body.tier) == "nsjail":
+++            from kanban.custom_fields.service import assert_tier_available  # noqa: PLC0415
+++
+++            assert_tier_available("nsjail", request=request)
+++
++         if str(body.tier) == "wasm":
++             source = (body.script_source or "").strip()
++             is_interpreted = source.startswith(("scalar:", "formula:", "return ")) or bool(
++@@ -302,7 +315,10 @@ async def test_execute_custom_field(  # noqa: C901
++                 detail=detail_msg,
++             )
++ 
++-        executor = CustomFieldExecutor(session)
+++        executor = CustomFieldExecutor(
+++            session,
+++            tier_b_runner=getattr(request.app.state, "tier_b_runner", None),
+++        )
++         res = await executor.test_execute(
++             session=session,
++             caller=caller,
++diff --git a/kanban/api/v1/custom_fields.py b/kanban/api/v1/custom_fields.py
++index 8cb265e2..a5fdc0a9 100644
++--- a/kanban/api/v1/custom_fields.py
+++++ b/kanban/api/v1/custom_fields.py
++@@ -6,7 +6,7 @@ from __future__ import annotations
++ 
++ from typing import Annotated
++ 
++-from fastapi import APIRouter, Depends, Response, status
+++from fastapi import APIRouter, Depends, Request, Response, status
++ from sqlalchemy.ext.asyncio import AsyncSession
++ 
++ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
++@@ -45,17 +45,18 @@ async def list_custom_fields(
++     response_model=CustomFieldResponse,
++     summary="Create a custom field definition",
++ )
++-async def create_custom_field(
+++async def create_custom_field(  # noqa: PLR0913, PLR0917
++     project: str,
++     body: CustomFieldCreateRequest,
++     caller: Caller,
++     session: Session,
++     response: Response,
+++    request: Request,
++ ) -> CustomFieldResponse:
++     """Create a new custom field definition (admin-only, requires AAL2 and CSRF)."""
++     async with timing_floor(floor_ms=25.0):
++         result = await CustomFieldDefinitionService.create_definition(
++-            session, caller, project, body
+++            session, caller, project, body, request=request
++         )
++         response.headers["Location"] = f"/api/v1/projects/{project}/custom-fields/{result.id}"
++         return result
++@@ -66,17 +67,18 @@ async def create_custom_field(
++     response_model=CustomFieldResponse,
++     summary="Update a custom field definition",
++ )
++-async def update_custom_field(
+++async def update_custom_field(  # noqa: PLR0913, PLR0917
++     project: str,
++     field_id: str,
++     body: CustomFieldUpdateRequest,
++     caller: Caller,
++     session: Session,
+++    request: Request,
++ ) -> CustomFieldResponse:
++     """Update an existing custom field definition (admin-only, requires AAL2 and CSRF)."""
++     async with timing_floor(floor_ms=25.0):
++         return await CustomFieldDefinitionService.update_definition(
++-            session, caller, project, field_id, body
+++            session, caller, project, field_id, body, request=request
++         )
++ 
++ 
++diff --git a/kanban/api/v1/system_status.py b/kanban/api/v1/system_status.py
++index ee670614..76f6f792 100644
++--- a/kanban/api/v1/system_status.py
+++++ b/kanban/api/v1/system_status.py
++@@ -61,6 +61,10 @@ class SystemStatusResponse(BaseModel):
++     local_llm_endpoint_host: str | None = None
++     is_server_admin: bool
++     allow_unlimited_mcp_keys: bool = True
+++    supported_custom_field_tiers: list[str] = Field(
+++        default_factory=lambda: ["scalar", "formula", "wasm", "nsjail"]
+++    )
+++    sandbox_unavailable_reason: str | None = None
++ 
++ 
++ class StandaloneBackupRequest(BaseModel):
++@@ -181,16 +185,33 @@ async def get_system_status_endpoint(
++             ws_air_gap = False
++     effective_air_gap = ws_air_gap or bool(status_data["air_gap_mode"])
++ 
+++    tier_b_avail = bool(status_data["tier_b_sandbox_available"])
+++    supported_tiers = (
+++        ["scalar", "formula", "wasm", "nsjail"]
+++        if tier_b_avail
+++        else ["scalar", "formula", "wasm"]
+++    )
+++    sandbox_reason = (
+++        None
+++        if tier_b_avail
+++        else (
+++            "Isolated nsjail sandbox execution is unavailable in standalone mode. "
+++            "Multi-container compose deployment is required."
+++        )
+++    )
+++
++     return SystemStatusResponse(
++         deployment_mode=status_data["deployment_mode"],
++         persistent_volume=status_data["persistent_volume"],
++         data_mount_point=mount_point,
++         data_mount_fstype=mount_fstype,
++-        tier_b_sandbox_available=status_data["tier_b_sandbox_available"],
+++        tier_b_sandbox_available=tier_b_avail,
++         air_gap_mode=effective_air_gap,
++         local_llm_endpoint_host=local_llm_host,
++         is_server_admin=is_server_admin,
++         allow_unlimited_mcp_keys=not disable_unlimited,
+++        supported_custom_field_tiers=supported_tiers,
+++        sandbox_unavailable_reason=sandbox_reason,
++     )
++ 
++ 
++@@ -230,16 +251,33 @@ async def get_admin_standalone_status_endpoint(
++             ws_air_gap = False
++     effective_air_gap = ws_air_gap or bool(status_data["air_gap_mode"])
++ 
+++    tier_b_avail = bool(status_data["tier_b_sandbox_available"])
+++    supported_tiers = (
+++        ["scalar", "formula", "wasm", "nsjail"]
+++        if tier_b_avail
+++        else ["scalar", "formula", "wasm"]
+++    )
+++    sandbox_reason = (
+++        None
+++        if tier_b_avail
+++        else (
+++            "Isolated nsjail sandbox execution is unavailable in standalone mode. "
+++            "Multi-container compose deployment is required."
+++        )
+++    )
+++
++     return SystemStatusResponse(
++         deployment_mode=status_data["deployment_mode"],
++         persistent_volume=status_data["persistent_volume"],
++         data_mount_point=mount_point,
++         data_mount_fstype=mount_fstype,
++-        tier_b_sandbox_available=status_data["tier_b_sandbox_available"],
+++        tier_b_sandbox_available=tier_b_avail,
++         air_gap_mode=effective_air_gap,
++         local_llm_endpoint_host=local_llm_host,
++         is_server_admin=is_server_admin,
++         allow_unlimited_mcp_keys=not disable_unlimited,
+++        supported_custom_field_tiers=supported_tiers,
+++        sandbox_unavailable_reason=sandbox_reason,
++     )
++ 
++ 
++diff --git a/kanban/app.py b/kanban/app.py
++index 12785719..54f6d9eb 100644
++--- a/kanban/app.py
+++++ b/kanban/app.py
++@@ -66,6 +66,7 @@ from kanban.security.keys import load_key_material
++ from kanban.services.notifications import register_notifications_listener
++ from kanban.services.realtime_outbox import register_realtime_outbox_listener
++ from kanban.settings import Settings
+++from kanban.standalone.export_service import get_standalone_status
++ from kanban.web_static import PrecompressedSPAStaticApp
++ 
++ logger = logging.getLogger(__name__)
++@@ -382,7 +383,7 @@ def _mount_sparkle_router(app: FastAPI) -> None:
++         logger.debug("Automatic live sparkle router mounting skipped", exc_info=True)
++ 
++ 
++-def create_app(
+++def create_app(  # noqa: PLR0915
++     settings: Settings | None = None,
++     mcp_settings: McpSettings | None = None,
++ ) -> FastAPI:
++@@ -408,6 +409,10 @@ def create_app(
++     app.state.broker = None
++     app.state.realtime_hub = None
++     app.state.tier_b_runner = TierBNsjailRunner()
+++    standalone_status = get_standalone_status(settings=settings)
+++    app.state.tier_b_sandbox_available = bool(
+++        standalone_status.get("tier_b_sandbox_available", True)
+++    )
++ 
++     # Register RFC 7807 problem exception handlers
++     app.add_exception_handler(ProblemException, problem_exception_handler)  # type: ignore[arg-type]
++diff --git a/kanban/custom_fields/service.py b/kanban/custom_fields/service.py
++index e1e6986c..4c79241c 100644
++--- a/kanban/custom_fields/service.py
+++++ b/kanban/custom_fields/service.py
++@@ -25,8 +25,10 @@ from kanban.custom_fields.output_formats import parse_output_format_metadata
++ from kanban.security.permissions import Capability, require_capability
++ from kanban.services.activity import ActivityEventType, record_activity
++ from kanban.services.projects import get_project_or_404
+++from kanban.standalone.export_service import get_standalone_status
++ 
++ if TYPE_CHECKING:
+++    from fastapi import Request
++     from sqlalchemy.ext.asyncio import AsyncSession
++ 
++     from database.models.projects import Project
++@@ -36,6 +38,46 @@ AAL2_MIN_LEVEL: Final[int] = 2
++ SHA256_BYTE_LEN: Final[int] = 32
++ 
++ 
+++def is_tier_b_available(
+++    request: Request | None = None,
+++    *,
+++    override: bool | None = None,
+++) -> bool:
+++    """Return True if Tier B nsjail sandbox is available in the current environment."""
+++    if override is not None:
+++        return override
+++    if request is not None:
+++        if hasattr(request.app.state, "tier_b_sandbox_available"):
+++            return bool(request.app.state.tier_b_sandbox_available)
+++        settings = getattr(request.app.state, "settings", None)
+++        status_data = get_standalone_status(settings=settings)
+++        return bool(status_data.get("tier_b_sandbox_available", True))
+++    status_data = get_standalone_status()
+++    return bool(status_data.get("tier_b_sandbox_available", True))
+++
+++
+++def assert_tier_available(
+++    tier: str,
+++    *,
+++    request: Request | None = None,
+++    tier_b_sandbox_available: bool | None = None,
+++) -> None:
+++    """Validate that requested execution tier is supported in the current environment."""
+++    if tier == "nsjail" and not is_tier_b_available(
+++        request=request, override=tier_b_sandbox_available
+++    ):
+++        raise ProblemException(
+++            status=422,
+++            code="SANDBOX_UNAVAILABLE_IN_STANDALONE",
+++            title="Sandbox Unavailable In Standalone",
+++            detail=(
+++                "Isolated nsjail sandbox execution is unavailable in standalone mode. "
+++                "Use scalar, formula, or wasm execution tiers instead, "
+++                "or promote to multi-container compose."
+++            ),
+++        )
+++
+++
++ def _parse_wasm_sha256(hex_str: str) -> bytes:
++     try:
++         raw = bytes.fromhex(hex_str)
++@@ -162,14 +204,22 @@ class CustomFieldDefinitionService:
++         return [cls.serialize(row, is_admin=is_adm) for row in rows]
++ 
++     @classmethod
++-    async def create_definition(
+++    async def create_definition(  # noqa: PLR0913
++         cls,
++         session: AsyncSession,
++         caller: PrincipalContext,
++         project_ref: str,
++         payload: CustomFieldCreateRequest,
+++        *,
+++        request: Request | None = None,
+++        tier_b_sandbox_available: bool | None = None,
++     ) -> CustomFieldResponse:
++         """Create a new custom field definition with validation and activity recording."""
+++        assert_tier_available(
+++            payload.tier,
+++            request=request,
+++            tier_b_sandbox_available=tier_b_sandbox_available,
+++        )
++         project = await get_project_or_404(session, caller, project_ref)
++         await cls.require_admin_and_aal2(session, caller, project)
++ 
++@@ -315,15 +365,24 @@ class CustomFieldDefinitionService:
++         return spec_changed
++ 
++     @classmethod
++-    async def update_definition(
+++    async def update_definition(  # noqa: PLR0913
++         cls,
++         session: AsyncSession,
++         caller: PrincipalContext,
++         project_ref: str,
++         field_id: str,
++         payload: CustomFieldUpdateRequest,
+++        *,
+++        request: Request | None = None,
+++        tier_b_sandbox_available: bool | None = None,
++     ) -> CustomFieldResponse:
++         """Update an existing custom field definition."""
+++        if payload.tier is not None:
+++            assert_tier_available(
+++                payload.tier,
+++                request=request,
+++                tier_b_sandbox_available=tier_b_sandbox_available,
+++            )
++         project = await get_project_or_404(session, caller, project_ref)
++         await cls.require_admin_and_aal2(session, caller, project)
++ 
++diff --git a/kanban/tests/api/test_system_status.py b/kanban/tests/api/test_system_status.py
++index d475f4eb..f9a72c86 100644
++--- a/kanban/tests/api/test_system_status.py
+++++ b/kanban/tests/api/test_system_status.py
++@@ -320,9 +320,20 @@ async def test_case_1_system_status_admin_full_fields_and_member_redaction(
++         assert data_admin["data_mount_point"] == "/var/lib/kanban/data"
++         assert data_admin["data_mount_fstype"] == "overlay"
++         assert data_admin["tier_b_sandbox_available"] is False
+++        assert data_admin["supported_custom_field_tiers"] == ["scalar", "formula", "wasm"]
+++        assert data_admin["sandbox_unavailable_reason"] is not None
+++        assert "nsjail" in data_admin["sandbox_unavailable_reason"]
++         assert data_admin["local_llm_endpoint_host"] == "http://host.docker.internal:11434"
++         assert data_admin["is_server_admin"] is True
++ 
+++        # Test admin standalone status endpoint
+++        resp_admin_sa = await client.get("/api/v1/admin/standalone/status")
+++        assert resp_admin_sa.status_code == 200
+++        data_admin_sa = resp_admin_sa.json()
+++        assert data_admin_sa["tier_b_sandbox_available"] is False
+++        assert data_admin_sa["supported_custom_field_tiers"] == ["scalar", "formula", "wasm"]
+++        assert data_admin_sa["sandbox_unavailable_reason"] is not None
+++
++         # 2. As regular MEMBER: sensitive host topology redacted to null
++         client.cookies.clear()
++         await _login_and_elevate(client, session_service, db_session, member_id, ws_id, aal_level=1)
++@@ -331,6 +342,9 @@ async def test_case_1_system_status_admin_full_fields_and_member_redaction(
++         data_member = resp_member.json()
++         assert data_member["deployment_mode"] == "standalone_embedded_pg"
++         assert data_member["persistent_volume"] is False
+++        assert data_member["tier_b_sandbox_available"] is False
+++        assert data_member["supported_custom_field_tiers"] == ["scalar", "formula", "wasm"]
+++        assert data_member["sandbox_unavailable_reason"] is not None
++         assert data_member["data_mount_point"] is None  # Redacted
++         assert data_member["data_mount_fstype"] is None  # Redacted
++         assert data_member["local_llm_endpoint_host"] is None  # Redacted
++@@ -362,6 +376,15 @@ async def test_case_1b_missing_status_file_defaults_to_production_multi_containe
++         assert data["deployment_mode"] == "production_multi_container"
++         assert data["persistent_volume"] is True
++         assert data["tier_b_sandbox_available"] is True
+++        assert data["supported_custom_field_tiers"] == ["scalar", "formula", "wasm", "nsjail"]
+++        assert data["sandbox_unavailable_reason"] is None
+++
+++        resp_admin_sa = await client.get("/api/v1/admin/standalone/status")
+++        assert resp_admin_sa.status_code == 200
+++        data_sa = resp_admin_sa.json()
+++        assert data_sa["tier_b_sandbox_available"] is True
+++        assert data_sa["supported_custom_field_tiers"] == ["scalar", "formula", "wasm", "nsjail"]
+++        assert data_sa["sandbox_unavailable_reason"] is None
++ 
++ 
++ @pytest.mark.asyncio
++diff --git a/kanban/tests/custom_fields/test_standalone_nsjail_gate.py b/kanban/tests/custom_fields/test_standalone_nsjail_gate.py
++new file mode 100644
++index 00000000..995f45a5
++--- /dev/null
+++++ b/kanban/tests/custom_fields/test_standalone_nsjail_gate.py
++@@ -0,0 +1,359 @@
+++# Copyright 2026 Kanban Platform Contributors
+++# Apache-2.0 License. See LICENSE for details.
+++"""Tests for standalone nsjail sandbox fail-closed gating and tier_b_runner wiring (KAN-32)."""
+++
+++from __future__ import annotations
+++
+++import uuid
+++from typing import TYPE_CHECKING
+++from unittest.mock import MagicMock
+++
+++import pytest
+++from sqlalchemy import text
+++
+++from kanban.api.deps import PrincipalContext
+++from kanban.api.problems import ProblemException
+++from kanban.custom_fields.manifest import compute_field_manifest_sha256
+++from kanban.custom_fields.service import assert_tier_available, is_tier_b_available
+++from kanban.sandbox.nsjail_runner import NsjailRunResult
+++
+++if TYPE_CHECKING:
+++    from collections.abc import Awaitable, Callable
+++
+++    import httpx
+++
+++    from kanban.tests.api.conftest import ApiEnv, SeededUser
+++
+++pytestmark = pytest.mark.committed_db
+++
+++
+++def _as_admin_aal2(api_env: ApiEnv, user: SeededUser) -> httpx.AsyncClient:
+++    """Configure active principal context with PROJECT_ADMIN and AAL2."""
+++    api_env.resolver.principal = PrincipalContext(
+++        principal_id=user.id,
+++        workspace_id=user.workspace_id,
+++        token_scopes=("session",),
+++        aal_level=2,
+++    )
+++    return api_env.client
+++
+++
+++class MockTierBRunner:
+++    """Mock Tier B nsjail runner returning deterministic output."""
+++
+++    async def execute(self, *args: object, **kwargs: object) -> NsjailRunResult:  # noqa: ARG002
+++        """Execute mock nsjail container."""
+++        return NsjailRunResult(
+++            returncode=0,
+++            stdout=b'"mocked-nsjail-output"',
+++            stderr=b"",
+++        )
+++
+++    async def run(self, *args: object, **kwargs: object) -> bytes:  # noqa: ARG002
+++        """Run mock nsjail script."""
+++        return b'"mocked-nsjail-output"'
+++
+++
+++def _set_tier_b_state(
+++    client: httpx.AsyncClient,
+++    *,
+++    available: bool,
+++    runner: object = None,
+++) -> None:
+++    """Configure tier_b_sandbox_available and optional tier_b_runner on test app."""
+++    transport = getattr(client, "_transport", None)
+++    app = getattr(transport, "app", None)
+++    assert app is not None
+++    app.state.tier_b_sandbox_available = available
+++    if runner is not None:
+++        app.state.tier_b_runner = runner
+++
+++
+++async def _create_test_issue(
+++    client: httpx.AsyncClient,
+++    project_ref: str,
+++) -> str:
+++    """Create a minimal issue for test execution via API."""
+++    resp = await client.post(
+++        f"/api/v1/projects/{project_ref}/issues",
+++        json={"summary": "Gate Test Issue", "description_markdown": "Test Description"},
+++    )
+++    assert resp.status_code == 201
+++    return str(resp.json()["key"])
+++
+++
+++async def test_create_custom_field_nsjail_rejected_in_standalone(
+++    api_env: ApiEnv,
+++    make_user: Callable[..., Awaitable[SeededUser]],
+++    make_project: Callable[..., Awaitable[uuid.UUID]],
+++) -> None:
+++    """In standalone mode (tier_b_sandbox_available=False), creating nsjail tier returns 422."""
+++    admin = await make_user("admin-gate-1", workspace_role="WORKSPACE_ADMIN")
+++    await make_project("GATE1", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+++    client = _as_admin_aal2(api_env, admin)
+++    _set_tier_b_state(client, available=False)
+++
+++    resp = await client.post(
+++        "/api/v1/projects/GATE1/custom-fields",
+++        json={
+++            "slug": "nsjail-standalone-test",
+++            "name": "Nsjail Test Field",
+++            "tier": "nsjail",
+++            "output_format": "text",
+++            "output_format_metadata": {"max_length": 140},
+++            "script_source": "import sys; print('hello')",
+++        },
+++    )
+++    assert resp.status_code == 422
+++    body = resp.json()
+++    assert body["code"] == "SANDBOX_UNAVAILABLE_IN_STANDALONE"
+++    assert "standalone" in body["detail"].lower()
+++    assert "formula" in body["detail"].lower()
+++
+++
+++async def test_create_custom_field_nsjail_succeeds_in_multicontainer(
+++    api_env: ApiEnv,
+++    make_user: Callable[..., Awaitable[SeededUser]],
+++    make_project: Callable[..., Awaitable[uuid.UUID]],
+++) -> None:
+++    """In multi-container mode (tier_b_sandbox_available=True), creating nsjail tier succeeds."""
+++    admin = await make_user("admin-gate-2", workspace_role="WORKSPACE_ADMIN")
+++    await make_project("GATE2", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+++    client = _as_admin_aal2(api_env, admin)
+++    _set_tier_b_state(client, available=True)
+++
+++    resp = await client.post(
+++        "/api/v1/projects/GATE2/custom-fields",
+++        json={
+++            "slug": "nsjail-multi-test",
+++            "name": "Nsjail Multi Test Field",
+++            "tier": "nsjail",
+++            "output_format": "text",
+++            "output_format_metadata": {"max_length": 140},
+++            "script_source": "import sys; print('hello')",
+++        },
+++    )
+++    assert resp.status_code == 201
+++    assert resp.json()["tier"] == "nsjail"
+++
+++
+++async def test_update_custom_field_nsjail_rejected_in_standalone(
+++    api_env: ApiEnv,
+++    make_user: Callable[..., Awaitable[SeededUser]],
+++    make_project: Callable[..., Awaitable[uuid.UUID]],
+++) -> None:
+++    """Updating definition tier to nsjail in standalone mode fails with 422."""
+++    admin = await make_user("admin-gate-3", workspace_role="WORKSPACE_ADMIN")
+++    await make_project("GATE3", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+++    client = _as_admin_aal2(api_env, admin)
+++    _set_tier_b_state(client, available=True)
+++
+++    # Create wasm field first
+++    create_resp = await client.post(
+++        "/api/v1/projects/GATE3/custom-fields",
+++        json={
+++            "slug": "wasm-to-nsjail",
+++            "name": "Wasm to Nsjail Field",
+++            "tier": "wasm",
+++            "output_format": "text",
+++            "output_format_metadata": {"max_length": 140},
+++            "script_source": "scalar: 'initial'",
+++        },
+++    )
+++    assert create_resp.status_code == 201
+++    field_id = create_resp.json()["id"]
+++
+++    # Switch to standalone mode
+++    _set_tier_b_state(client, available=False)
+++
+++    # Attempt to patch tier to nsjail
+++    patch_resp = await client.patch(
+++        f"/api/v1/projects/GATE3/custom-fields/{field_id}",
+++        json={"tier": "nsjail"},
+++    )
+++    assert patch_resp.status_code == 422
+++    assert patch_resp.json()["code"] == "SANDBOX_UNAVAILABLE_IN_STANDALONE"
+++
+++
+++async def test_update_existing_nsjail_field_metadata_succeeds_in_standalone(
+++    api_env: ApiEnv,
+++    make_user: Callable[..., Awaitable[SeededUser]],
+++    make_project: Callable[..., Awaitable[uuid.UUID]],
+++) -> None:
+++    """Editing non-tier properties on pre-existing nsjail field succeeds in standalone mode."""
+++    admin = await make_user("admin-gate-4", workspace_role="WORKSPACE_ADMIN")
+++    await make_project("GATE4", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+++    client = _as_admin_aal2(api_env, admin)
+++    _set_tier_b_state(client, available=True)
+++
+++    # Create nsjail field while available
+++    create_resp = await client.post(
+++        "/api/v1/projects/GATE4/custom-fields",
+++        json={
+++            "slug": "preexisting-nsjail",
+++            "name": "Preexisting Nsjail Field",
+++            "tier": "nsjail",
+++            "output_format": "text",
+++            "output_format_metadata": {"max_length": 140},
+++            "script_source": "import sys; print('initial')",
+++        },
+++    )
+++    assert create_resp.status_code == 201
+++    field_id = create_resp.json()["id"]
+++
+++    # Switch to standalone mode (simulating imported backup)
+++    _set_tier_b_state(client, available=False)
+++
+++    # Updating name and enabled state without passing tier must succeed
+++    patch_resp = await client.patch(
+++        f"/api/v1/projects/GATE4/custom-fields/{field_id}",
+++        json={"name": "Renamed Preexisting Nsjail", "is_enabled": False},
+++    )
+++    assert patch_resp.status_code == 200
+++    assert patch_resp.json()["name"] == "Renamed Preexisting Nsjail"
+++    assert patch_resp.json()["tier"] == "nsjail"
+++    assert patch_resp.json()["is_enabled"] is False
+++
+++
+++async def test_test_execute_nsjail_rejected_in_standalone(
+++    api_env: ApiEnv,
+++    make_user: Callable[..., Awaitable[SeededUser]],
+++    make_project: Callable[..., Awaitable[uuid.UUID]],
+++) -> None:
+++    """Test-executing draft nsjail field in standalone mode returns 422."""
+++    admin = await make_user("admin-gate-5", workspace_role="WORKSPACE_ADMIN")
+++    await make_project("GATE5", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+++    client = _as_admin_aal2(api_env, admin)
+++    issue_key = await _create_test_issue(client, "GATE5")
+++    _set_tier_b_state(client, available=False)
+++
+++    resp = await client.post(
+++        "/api/v1/projects/GATE5/custom-fields/test-execute",
+++        json={
+++            "issue_key": issue_key,
+++            "tier": "nsjail",
+++            "output_format": "text",
+++            "output_format_metadata": {},
+++            "script_source": "import sys; print('test')",
+++        },
+++    )
+++    assert resp.status_code == 422
+++    body = resp.json()
+++    assert body["code"] == "SANDBOX_UNAVAILABLE_IN_STANDALONE"
+++    assert "formula" in body["detail"].lower()
+++
+++
+++async def test_test_execute_nsjail_succeeds_with_wired_tier_b_runner(
+++    api_env: ApiEnv,
+++    make_user: Callable[..., Awaitable[SeededUser]],
+++    make_project: Callable[..., Awaitable[uuid.UUID]],
+++) -> None:
+++    """Test-executing nsjail field in multi-container mode uses wired tier_b_runner."""
+++    admin = await make_user("admin-gate-6", workspace_role="WORKSPACE_ADMIN")
+++    await make_project("GATE6", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+++    client = _as_admin_aal2(api_env, admin)
+++    issue_key = await _create_test_issue(client, "GATE6")
+++    _set_tier_b_state(client, available=True, runner=MockTierBRunner())
+++
+++    resp = await client.post(
+++        "/api/v1/projects/GATE6/custom-fields/test-execute",
+++        json={
+++            "issue_key": issue_key,
+++            "tier": "nsjail",
+++            "output_format": "text",
+++            "output_format_metadata": {},
+++            "script_source": "import sys; print('test')",
+++        },
+++    )
+++    assert resp.status_code == 200
+++    body = resp.json()
+++    assert body["status"] == "SUCCESS"
+++    assert body["value"] == "mocked-nsjail-output"
+++
+++
+++async def test_execute_custom_field_uses_wired_tier_b_runner(
+++    api_env: ApiEnv,
+++    make_user: Callable[..., Awaitable[SeededUser]],
+++    make_project: Callable[..., Awaitable[uuid.UUID]],
+++) -> None:
+++    """POST /issues/{key}/custom-fields/{id}/execute wires tier_b_runner from app.state."""
+++    admin = await make_user("admin-gate-7", workspace_role="WORKSPACE_ADMIN")
+++    proj_id = await make_project("GATE7", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+++    client = _as_admin_aal2(api_env, admin)
+++    await _create_test_issue(client, "GATE7")
+++    _set_tier_b_state(client, available=True, runner=MockTierBRunner())
+++
+++    # Create nsjail field
+++    field_id = uuid.uuid4()
+++    manifest = compute_field_manifest_sha256(
+++        script_source="import sys; print('execute')",
+++        output_format="text",
+++        output_format_metadata={},
+++        tier="nsjail",
+++        target_scope="PROJECT",
+++        credential_mode="INVOKING_USER",
+++    )
+++    await api_env.seed.execute(
+++        text(
+++            "INSERT INTO custom_field_definitions ("
+++            "id, workspace_id, project_id, name, slug, tier, output_format, "
+++            "output_format_metadata, script_source, manifest_sha256, target_scope, "
+++            "credential_mode, created_by_id"
+++            ") VALUES ("
+++            ":id, :ws, :proj, 'Nsjail Exec Field', 'nsjail-exec-field', 'nsjail', 'text', "
+++            "'{}'::jsonb, 'import sys; print(\"execute\")', :man, 'PROJECT', 'INVOKING_USER', :uid"
+++            ")"
+++        ),
+++        {
+++            "id": field_id,
+++            "ws": api_env.workspace_id,
+++            "proj": proj_id,
+++            "man": manifest,
+++            "uid": admin.id,
+++        },
+++    )
+++    await api_env.seed.commit()
+++
+++    resp = await client.post(f"/api/v1/issues/GATE7-1/custom-fields/{field_id}/execute")
+++    assert resp.status_code == 200
+++    body = resp.json()
+++    assert body["value"] == "mocked-nsjail-output"
+++
+++
+++def test_is_tier_b_available_direct_helpers() -> None:
+++    """Test helper functions is_tier_b_available and assert_tier_available directly."""
+++    # 1. Override takes precedence
+++    assert is_tier_b_available(override=True) is True
+++    assert is_tier_b_available(override=False) is False
+++
+++    # 2. Request with app.state.tier_b_sandbox_available
+++    req = MagicMock()
+++    req.app.state.tier_b_sandbox_available = True
+++    assert is_tier_b_available(request=req) is True
+++    req.app.state.tier_b_sandbox_available = False
+++    assert is_tier_b_available(request=req) is False
+++
+++    # 3. Request without tier_b_sandbox_available attribute
+++    del req.app.state.tier_b_sandbox_available
+++    req.app.state.settings = None
+++    res = is_tier_b_available(request=req)
+++    assert isinstance(res, bool)
+++
+++    # 4. Request is None
+++    res_none = is_tier_b_available(request=None)
+++    assert isinstance(res_none, bool)
+++
+++    # 5. assert_tier_available passes for scalar/formula/wasm regardless of tier_b
+++    assert_tier_available("scalar", tier_b_sandbox_available=False)
+++    assert_tier_available("formula", tier_b_sandbox_available=False)
+++    assert_tier_available("wasm", tier_b_sandbox_available=False)
+++
+++    # 6. assert_tier_available passes for nsjail when available
+++    assert_tier_available("nsjail", tier_b_sandbox_available=True)
+++
+++    # 7. assert_tier_available raises 422 ProblemException for nsjail when unavailable
+++    with pytest.raises(ProblemException) as exc_info:
+++        assert_tier_available("nsjail", tier_b_sandbox_available=False)
+++    assert exc_info.value.status == 422
+++    assert exc_info.value.code == "SANDBOX_UNAVAILABLE_IN_STANDALONE"
+++
++diff --git a/kanban/web/src/api/schema.gen.ts b/kanban/web/src/api/schema.gen.ts
++index c38f4481..1ea7047f 100644
++--- a/kanban/web/src/api/schema.gen.ts
+++++ b/kanban/web/src/api/schema.gen.ts
++@@ -10661,6 +10661,10 @@ export interface components {
++             persistent_volume: boolean;
++             /** Tier B Sandbox Available */
++             tier_b_sandbox_available: boolean;
+++            /** Supported Custom Field Tiers */
+++            supported_custom_field_tiers?: string[];
+++            /** Sandbox Unavailable Reason */
+++            sandbox_unavailable_reason?: string | null;
++         };
++         /**
++          * TimelineLink
++diff --git a/kanban/web/src/app/useSystemStatus.ts b/kanban/web/src/app/useSystemStatus.ts
++index 7d45a260..c22cfba2 100644
++--- a/kanban/web/src/app/useSystemStatus.ts
+++++ b/kanban/web/src/app/useSystemStatus.ts
++@@ -3,10 +3,21 @@
++  * Queries /api/v1/system/status to determine deployment mode, air-gap, and persistence.
++  */
++ 
++-import { useEffect } from 'react';
++-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+++import { useContext, useEffect } from 'react';
+++import {
+++  QueryClient,
+++  QueryClientContext,
+++  useQuery,
+++  type UseQueryResult,
+++} from '@tanstack/react-query';
++ import { qk } from '../api/queryKeys';
++ 
+++let fallbackClient: QueryClient | null = null;
+++function getFallbackQueryClient(): QueryClient {
+++  fallbackClient ??= new QueryClient();
+++  return fallbackClient;
+++}
+++
++ export interface SystemStatus {
++   readonly deployment_mode:
++     | 'standalone_embedded_pg'
++@@ -21,6 +32,8 @@ export interface SystemStatus {
++   readonly data_mount_point?: string | null;
++   readonly data_mount_fstype?: string | null;
++   readonly tier_b_sandbox_available?: boolean;
+++  readonly supported_custom_field_tiers?: readonly string[];
+++  readonly sandbox_unavailable_reason?: string | null;
++ }
++ 
++ export async function fetchSystemStatus(signal?: AbortSignal): Promise<SystemStatus> {
++@@ -37,9 +50,11 @@ export async function fetchSystemStatus(signal?: AbortSignal): Promise<SystemSta
++ }
++ 
++ export function useSystemStatus(): UseQueryResult<SystemStatus> {
++-  const queryClient = useQueryClient();
+++  const contextClient = useContext(QueryClientContext);
+++  const queryClient = contextClient ?? getFallbackQueryClient();
++ 
++   useEffect(() => {
+++    if (!contextClient) return;
++     const handleStatusChanged = (): void => {
++       void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
++     };
++@@ -47,11 +62,15 @@ export function useSystemStatus(): UseQueryResult<SystemStatus> {
++     return () => {
++       window.removeEventListener('kb:system-status-changed', handleStatusChanged);
++     };
++-  }, [queryClient]);
+++  }, [contextClient, queryClient]);
++ 
++-  return useQuery({
++-    queryKey: qk.systemStatus(),
++-    queryFn: ({ signal }) => fetchSystemStatus(signal),
++-    staleTime: 60000,
++-  });
+++  return useQuery(
+++    {
+++      queryKey: qk.systemStatus(),
+++      queryFn: ({ signal }) => fetchSystemStatus(signal),
+++      staleTime: 60000,
+++      enabled: Boolean(contextClient),
+++    },
+++    queryClient,
+++  );
++ }
++diff --git a/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx b/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
++index a66d0869..a4e88615 100644
++--- a/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
+++++ b/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
++@@ -4,6 +4,7 @@
++ import type { JSX } from 'react';
++ import React, { useMemo, useRef, useState } from 'react';
++ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+++import { useSystemStatus } from '../../app/useSystemStatus';
++ import { NotFoundView } from '../../app/routes';
++ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
++ import { FlavorDecisionMatrix } from './FlavorDecisionMatrix';
++@@ -210,6 +211,8 @@ export function CustomFieldDefinitionEditor({
++   isAdmin = true,
++ }: CustomFieldDefinitionEditorProps): JSX.Element {
++   const queryClient = useQueryClient();
+++  const { data: systemStatus } = useSystemStatus();
+++  const isTierBAvailable = systemStatus?.tier_b_sandbox_available !== false;
++ 
++   // Selected field for editing (null = creating new)
++   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
++@@ -670,11 +673,58 @@ export function CustomFieldDefinitionEditor({
++           </div>
++         )}
++ 
+++        {/* Inline Guidance Callout for Standalone Mode */}
+++        {!isTierBAvailable && (
+++          <div
+++            className="custom-field-standalone-callout"
+++            role="status"
+++            data-testid="standalone-guidance-callout"
+++          >
+++            <span className="custom-field-standalone-callout-icon" aria-hidden="true">
+++              💡
+++            </span>
+++            <div className="custom-field-standalone-callout-text">
+++              <strong>Standalone Mode Active:</strong> Scalar (&lt;1ms), Formula (&lt;5ms), and WebAssembly (&lt;25ms) work out of the box in Standalone mode.{' '}
+++              <a
+++                href="/docs/Guide-Custom-Fields"
+++                className="custom-field-callout-link"
+++                data-testid="link-guide-custom-fields"
+++              >
+++                [Guide] How to Use Custom Fields &rarr;
+++              </a>{' '}
+++              <a
+++                href="/admin/standalone"
+++                className="custom-field-callout-link"
+++                data-testid="link-promote-multi-container"
+++              >
+++                Promote to Multi-Container &rarr;
+++              </a>
+++            </div>
+++          </div>
+++        )}
+++
+++        {/* Warning Banner for Pre-Existing nsjail Field from Backup */}
+++        {selectedField?.tier === 'nsjail' && !isTierBAvailable && (
+++          <div
+++            className="custom-field-warning-banner"
+++            role="alert"
+++            data-testid="preexisting-nsjail-warning-banner"
+++          >
+++            <span className="custom-field-warning-banner-icon" aria-hidden="true">
+++              ⚠️
+++            </span>
+++            <div className="custom-field-warning-banner-text">
+++              <strong>Pre-Existing nsjail Field (Imported from Backup):</strong> Execution sandbox is unavailable in Standalone mode. You can inspect and edit configuration, but execution requires promoting to multi-container compose.
+++            </div>
+++          </div>
+++        )}
+++
++         {/* Starter Presets & 4-Flavor Decision Matrix (when creating new definition) */}
++         {!selectedField && (
++           <div className="custom-fields-starter-toolkit" data-testid="custom-fields-starter-toolkit">
++             <FlavorDecisionMatrix
++               selectedFlavor={flavor}
+++              tierBAvailable={isTierBAvailable}
++               onSelectFlavor={(f) => {
++                 setFlavor(f);
++                 if (f === 'nsjail') {
++@@ -691,6 +741,7 @@ export function CustomFieldDefinitionEditor({
++               isDirty={isDirty}
++               onUndo={handleUndoPreset}
++               appliedPresetName={appliedPresetName}
+++              tierBAvailable={isTierBAvailable}
++               onDismissUndo={() => {
++                 setAppliedPresetName(null);
++               }}
++@@ -836,8 +887,18 @@ export function CustomFieldDefinitionEditor({
++                   <option value="scalar">Scalar Value (Static literal or JSON object)</option>
++                   <option value="formula">Formula Expression (AST safe issue evaluation)</option>
++                   <option value="wasm">WebAssembly (Tier A sandboxed bytecode)</option>
++-                  <option value="nsjail">nsjail Advanced Script (Linux namespaces)</option>
+++                  <option value="nsjail" disabled={!isTierBAvailable}>
+++                    nsjail Advanced Script (Linux namespaces){!isTierBAvailable ? ' [Multi-Container Compose Required]' : ''}
+++                  </option>
++                 </select>
+++                {!isTierBAvailable && (
+++                  <span
+++                    className="custom-field-badge custom-field-badge--warning"
+++                    data-testid="flavor-nsjail-disabled-badge"
+++                  >
+++                    Multi-Container Compose Required
+++                  </span>
+++                )}
++               </div>
++ 
++               {/* Output Format */}
++@@ -1088,8 +1149,18 @@ export function CustomFieldDefinitionEditor({
++                   data-testid="execution-tier-select"
++                 >
++                   <option value="wasm">Built-in Formula Sandbox (WebAssembly)</option>
++-                  <option value="nsjail">Isolated Process & CLI Sandbox (Linux Namespaces)</option>
+++                  <option value="nsjail" disabled={!isTierBAvailable}>
+++                    Isolated Process & CLI Sandbox (Linux Namespaces){!isTierBAvailable ? ' [Multi-Container Compose Required]' : ''}
+++                  </option>
++                 </select>
+++                {!isTierBAvailable && (
+++                  <span
+++                    className="custom-field-badge custom-field-badge--warning"
+++                    data-testid="tier-nsjail-disabled-badge"
+++                  >
+++                    Multi-Container Compose Required
+++                  </span>
+++                )}
++                 <div className="custom-field-form-hint">
++                   {tier === 'wasm'
++                     ? 'Runs fast custom field formulas and workflow checks in-memory with zero network or filesystem access (Always active).'
++diff --git a/kanban/web/src/features/custom-fields/FlavorDecisionMatrix.tsx b/kanban/web/src/features/custom-fields/FlavorDecisionMatrix.tsx
++index fd072690..61355d26 100644
++--- a/kanban/web/src/features/custom-fields/FlavorDecisionMatrix.tsx
+++++ b/kanban/web/src/features/custom-fields/FlavorDecisionMatrix.tsx
++@@ -63,6 +63,7 @@ export interface FlavorDecisionMatrixProps {
++   onSelectFlavor?: (flavor: FieldFlavor) => void;
++   isOpen?: boolean;
++   onToggle?: () => void;
+++  tierBAvailable?: boolean;
++ }
++ 
++ /**
++@@ -74,6 +75,7 @@ export function FlavorDecisionMatrix({
++   onSelectFlavor,
++   isOpen: controlledIsOpen,
++   onToggle,
+++  tierBAvailable = true,
++ }: FlavorDecisionMatrixProps): JSX.Element {
++   const [internalIsOpen, setInternalIsOpen] = useState(false);
++   const isOpen = controlledIsOpen ?? internalIsOpen;
++@@ -135,6 +137,14 @@ export function FlavorDecisionMatrix({
++                     >
++                       {item.latency}
++                     </span>
+++                    {item.flavor === 'nsjail' && !tierBAvailable && (
+++                      <span
+++                        className="flavor-matrix-unavailable-badge"
+++                        data-testid="flavor-nsjail-unavailable-badge"
+++                      >
+++                        Multi-Container Compose Required
+++                      </span>
+++                    )}
++                   </div>
++ 
++                   <dl className="flavor-matrix-card-dl">
++@@ -169,6 +179,12 @@ export function FlavorDecisionMatrix({
++                       onClick={() => {
++                         onSelectFlavor(item.flavor);
++                       }}
+++                      disabled={item.flavor === 'nsjail' && !tierBAvailable}
+++                      title={
+++                        item.flavor === 'nsjail' && !tierBAvailable
+++                          ? 'Multi-Container Compose Required'
+++                          : undefined
+++                      }
++                       data-testid={`select-flavor-btn-${item.flavor}`}
++                     >
++                       {isSelected ? 'Selected' : `Use ${item.title}`}
++diff --git a/kanban/web/src/features/custom-fields/PresetGallery.tsx b/kanban/web/src/features/custom-fields/PresetGallery.tsx
++index c2bf02a5..f465f5be 100644
++--- a/kanban/web/src/features/custom-fields/PresetGallery.tsx
+++++ b/kanban/web/src/features/custom-fields/PresetGallery.tsx
++@@ -2,6 +2,7 @@
++ // Apache-2.0 License. See LICENSE for details.
++ 
++ import React, { useState, type JSX } from 'react';
+++import { useSystemStatus } from '../../app/useSystemStatus';
++ import type { FieldFlavor } from './api';
++ import { STARTER_PRESETS, type CustomFieldPreset } from './presets';
++ 
++@@ -11,6 +12,7 @@ export interface PresetGalleryProps {
++   onUndo?: () => void;
++   appliedPresetName?: string | null;
++   onDismissUndo?: () => void;
+++  tierBAvailable?: boolean;
++ }
++ 
++ /**
++@@ -24,7 +26,11 @@ export function PresetGallery({
++   onUndo,
++   appliedPresetName,
++   onDismissUndo,
+++  tierBAvailable,
++ }: PresetGalleryProps): JSX.Element {
+++  const { data: systemStatus } = useSystemStatus();
+++  const isTierBAvailable = tierBAvailable ?? (systemStatus?.tier_b_sandbox_available !== false);
+++
++   const [filter, setFilter] = useState<FieldFlavor | 'all'>('all');
++   const [pendingPreset, setPendingPreset] = useState<CustomFieldPreset | null>(null);
++ 
++@@ -129,55 +135,69 @@ export function PresetGallery({
++ 
++       {/* Grid of 6 Presets */}
++       <div className="preset-gallery-grid" role="list">
++-        {filteredPresets.map((preset) => (
++-          <div
++-            key={preset.id}
++-            className="preset-card"
++-            role="listitem"
++-            data-testid={`preset-card-${preset.slug}`}
++-          >
++-            <div className="preset-card-header">
++-              <h5 className="preset-card-title">{preset.name}</h5>
++-              <div className="preset-card-badges">
++-                <span className={`preset-badge preset-badge--${preset.flavor}`}>
++-                  {preset.flavor}
++-                </span>
++-                <span className="preset-badge preset-badge--latency">
++-                  {preset.latency}
++-                </span>
+++        {filteredPresets.map((preset) => {
+++          const isPresetDisabled =
+++            !isTierBAvailable && (preset.flavor === 'nsjail' || preset.tier === 'nsjail');
+++          return (
+++            <div
+++              key={preset.id}
+++              className={`preset-card ${isPresetDisabled ? 'preset-card--disabled' : ''}`}
+++              role="listitem"
+++              data-testid={`preset-card-${preset.slug}`}
+++            >
+++              <div className="preset-card-header">
+++                <h5 className="preset-card-title">{preset.name}</h5>
+++                <div className="preset-card-badges">
+++                  <span className={`preset-badge preset-badge--${preset.flavor}`}>
+++                    {preset.flavor}
+++                  </span>
+++                  <span className="preset-badge preset-badge--latency">
+++                    {preset.latency}
+++                  </span>
+++                  {isPresetDisabled && (
+++                    <span
+++                      className="preset-badge preset-badge--unavailable"
+++                      data-testid={`preset-unavailable-${preset.slug}`}
+++                    >
+++                      Multi-Container Compose Required
+++                    </span>
+++                  )}
+++                </div>
++               </div>
++-            </div>
++ 
++-            <p className="preset-card-desc">{preset.description}</p>
+++              <p className="preset-card-desc">{preset.description}</p>
++ 
++-            <div className="preset-card-when">
++-              <span className="preset-card-when-label">When to use:</span>
++-              <p className="preset-card-when-text">{preset.whenToUse}</p>
++-            </div>
+++              <div className="preset-card-when">
+++                <span className="preset-card-when-label">When to use:</span>
+++                <p className="preset-card-when-text">{preset.whenToUse}</p>
+++              </div>
++ 
++-            <div className="preset-card-meta">
++-              <span className="preset-card-format-pill">
++-                Format: <strong className="mono">{preset.outputFormat}</strong>
++-              </span>
++-              <span className="preset-card-tier-pill">
++-                Tier: <strong className="mono">{preset.tier}</strong>
++-              </span>
++-            </div>
+++              <div className="preset-card-meta">
+++                <span className="preset-card-format-pill">
+++                  Format: <strong className="mono">{preset.outputFormat}</strong>
+++                </span>
+++                <span className="preset-card-tier-pill">
+++                  Tier: <strong className="mono">{preset.tier}</strong>
+++                </span>
+++              </div>
++ 
++-            <div className="preset-card-footer">
++-              <button
++-                type="button"
++-                className="custom-field-btn custom-field-btn--primary custom-field-btn--sm preset-card-apply-btn"
++-                onClick={() => {
++-                  handlePresetClick(preset);
++-                }}
++-                data-testid={`use-preset-btn-${preset.slug}`}
++-              >
++-                Use Preset
++-              </button>
+++              <div className="preset-card-footer">
+++                <button
+++                  type="button"
+++                  className="custom-field-btn custom-field-btn--primary custom-field-btn--sm preset-card-apply-btn"
+++                  onClick={() => {
+++                    handlePresetClick(preset);
+++                  }}
+++                  disabled={isPresetDisabled}
+++                  title={isPresetDisabled ? 'Multi-Container Compose Required' : undefined}
+++                  data-testid={`use-preset-btn-${preset.slug}`}
+++                >
+++                  Use Preset
+++                </button>
+++              </div>
++             </div>
++-          </div>
++-        ))}
+++          );
+++        })}
++       </div>
++ 
++       {/* Dirty Form Confirmation Dialog */}
++diff --git a/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx b/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx
++index 023e3d98..b3fe645b 100644
++--- a/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx
+++++ b/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx
++@@ -100,12 +100,24 @@ if (!def0 || !def1) {
++   throw new Error('mockDefinitions missing expected entries');
++ }
++ 
++-function renderEditor(isAdmin = true) {
+++function renderEditor(
+++  isAdmin = true,
+++  systemStatus?: { tier_b_sandbox_available?: boolean },
+++) {
++   const queryClient = new QueryClient({
++     defaultOptions: {
++       queries: { retry: false, staleTime: Infinity },
++     },
++   });
+++  if (systemStatus) {
+++    queryClient.setQueryData(['system', 'status'], {
+++      deployment_mode: 'standalone_embedded_pg',
+++      persistent_volume: false,
+++      air_gap_mode: false,
+++      local_llm_endpoint_host: null,
+++      ...systemStatus,
+++    });
+++  }
++   return render(
++     <QueryClientProvider client={queryClient}>
++       <MemoryRouter>
++@@ -953,4 +965,70 @@ describe('CustomFieldDefinitionEditor', () => {
++       );
++     });
++   });
+++
+++  it('renders standalone guidance callout and disables nsjail options when tier_b_sandbox_available is false', async () => {
+++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
+++
+++    renderEditor(true, { tier_b_sandbox_available: false });
+++
+++    // 1. Guidance callout with links
+++    const callout = screen.getByTestId('standalone-guidance-callout');
+++    expect(callout).toBeDefined();
+++    expect(callout.textContent).toContain('Standalone Mode Active:');
+++    expect(callout.textContent).toContain('Scalar (<1ms), Formula (<5ms), and WebAssembly (<25ms)');
+++
+++    const guideLink = screen.getByTestId<HTMLAnchorElement>('link-guide-custom-fields');
+++    expect(guideLink.getAttribute('href')).toBe('/docs/Guide-Custom-Fields');
+++
+++    const promoteLink = screen.getByTestId<HTMLAnchorElement>('link-promote-multi-container');
+++    expect(promoteLink.getAttribute('href')).toBe('/admin/standalone');
+++
+++    // 2. Field flavor nsjail option disabled with badge
+++    const flavorSelect = screen.getByTestId<HTMLSelectElement>('field-flavor-select');
+++    const nsjailFlavorOpt = flavorSelect.querySelector<HTMLOptionElement>('option[value="nsjail"]');
+++    expect(nsjailFlavorOpt?.disabled).toBe(true);
+++    expect(screen.getByTestId('flavor-nsjail-disabled-badge')).toBeDefined();
+++
+++    // 3. Execution tier nsjail option disabled with badge in Advanced tab
+++    fireEvent.click(screen.getByTestId('custom-fields-advanced-tab'));
+++    const tierSelect = screen.getByTestId<HTMLSelectElement>('execution-tier-select');
+++    const nsjailTierOpt = tierSelect.querySelector<HTMLOptionElement>('option[value="nsjail"]');
+++    expect(nsjailTierOpt?.disabled).toBe(true);
+++    expect(screen.getByTestId('tier-nsjail-disabled-badge')).toBeDefined();
+++
+++    // 4. Pre-existing nsjail field selection shows warning banner
+++    await waitFor(() => {
+++      expect(screen.getByTestId('field-item-deploy-target')).toBeDefined();
+++    });
+++    fireEvent.click(screen.getByTestId('field-item-deploy-target'));
+++
+++    const warningBanner = screen.getByTestId('preexisting-nsjail-warning-banner');
+++    expect(warningBanner).toBeDefined();
+++    expect(warningBanner.textContent).toContain('Pre-Existing nsjail Field (Imported from Backup)');
+++  });
+++
+++  it('enables nsjail options and hides guidance callout when tier_b_sandbox_available is true', () => {
+++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
+++
+++    renderEditor(true, { tier_b_sandbox_available: true });
+++
+++    // Callout not present
+++    expect(screen.queryByTestId('standalone-guidance-callout')).toBeNull();
+++
+++    // Flavor nsjail option enabled and badge not present
+++    const flavorSelect = screen.getByTestId<HTMLSelectElement>('field-flavor-select');
+++    const nsjailFlavorOpt = flavorSelect.querySelector<HTMLOptionElement>('option[value="nsjail"]');
+++    expect(nsjailFlavorOpt?.disabled).toBe(false);
+++    expect(screen.queryByTestId('flavor-nsjail-disabled-badge')).toBeNull();
+++
+++    // Tier nsjail option enabled and badge not present in Advanced tab
+++    fireEvent.click(screen.getByTestId('custom-fields-advanced-tab'));
+++    const tierSelect = screen.getByTestId<HTMLSelectElement>('execution-tier-select');
+++    const nsjailTierOpt = tierSelect.querySelector<HTMLOptionElement>('option[value="nsjail"]');
+++    expect(nsjailTierOpt?.disabled).toBe(false);
+++    expect(screen.queryByTestId('tier-nsjail-disabled-badge')).toBeNull();
+++
+++    // Pre-existing warning banner not present
+++    expect(screen.queryByTestId('preexisting-nsjail-warning-banner')).toBeNull();
+++  });
++ });
++diff --git a/kanban/web/src/features/custom-fields/__tests__/PresetGallery.test.tsx b/kanban/web/src/features/custom-fields/__tests__/PresetGallery.test.tsx
++index b52efe79..492f32bc 100644
++--- a/kanban/web/src/features/custom-fields/__tests__/PresetGallery.test.tsx
+++++ b/kanban/web/src/features/custom-fields/__tests__/PresetGallery.test.tsx
++@@ -142,4 +142,48 @@ describe('PresetGallery Component (KAN-15, KB-P3-AUDIT-09)', () => {
++     });
++     expect(handleDismiss).toHaveBeenCalledTimes(1);
++   });
+++
+++  it('disables nsjail presets and renders Multi-Container Compose Required badge when tierBAvailable is false', () => {
+++    const handleApply = vi.fn();
+++    render(<PresetGallery onApplyPreset={handleApply} tierBAvailable={false} />);
+++
+++    // nsjail presets should have unavailable badge
+++    const rollupBadge = screen.getByTestId('preset-unavailable-total-project-issues');
+++    expect(rollupBadge).toBeDefined();
+++    expect(rollupBadge.textContent).toContain('Multi-Container Compose Required');
+++
+++    const gitPrBadge = screen.getByTestId('preset-unavailable-git-pr-link');
+++    expect(gitPrBadge).toBeDefined();
+++    expect(gitPrBadge.textContent).toContain('Multi-Container Compose Required');
+++
+++    // Use button should be disabled for nsjail presets
+++    const rollupBtn = screen.getByTestId<HTMLButtonElement>('use-preset-btn-total-project-issues');
+++    expect(rollupBtn.disabled).toBe(true);
+++
+++    const gitPrBtn = screen.getByTestId<HTMLButtonElement>('use-preset-btn-git-pr-link');
+++    expect(gitPrBtn.disabled).toBe(true);
+++
+++    // Non-nsjail presets remain enabled
+++    const cvssBtn = screen.getByTestId<HTMLButtonElement>('use-preset-btn-cvss-score');
+++    expect(cvssBtn.disabled).toBe(false);
+++    expect(screen.queryByTestId('preset-unavailable-cvss-score')).toBeNull();
+++
+++    const blockerBtn = screen.getByTestId<HTMLButtonElement>('use-preset-btn-blocker-count');
+++    expect(blockerBtn.disabled).toBe(false);
+++    expect(screen.queryByTestId('preset-unavailable-blocker-count')).toBeNull();
+++  });
+++
+++  it('enables nsjail presets when tierBAvailable is true', () => {
+++    const handleApply = vi.fn();
+++    render(<PresetGallery onApplyPreset={handleApply} tierBAvailable={true} />);
+++
+++    expect(screen.queryByTestId('preset-unavailable-total-project-issues')).toBeNull();
+++    expect(screen.queryByTestId('preset-unavailable-git-pr-link')).toBeNull();
+++
+++    const rollupBtn = screen.getByTestId<HTMLButtonElement>('use-preset-btn-total-project-issues');
+++    expect(rollupBtn.disabled).toBe(false);
+++
+++    const gitPrBtn = screen.getByTestId<HTMLButtonElement>('use-preset-btn-git-pr-link');
+++    expect(gitPrBtn.disabled).toBe(false);
+++  });
++ });
++diff --git a/kanban/web/src/features/custom-fields/custom-fields.css b/kanban/web/src/features/custom-fields/custom-fields.css
++index 3ef14b7d..ca40b31e 100644
++--- a/kanban/web/src/features/custom-fields/custom-fields.css
+++++ b/kanban/web/src/features/custom-fields/custom-fields.css
++@@ -1420,3 +1420,94 @@
++   text-overflow: ellipsis;
++   white-space: nowrap;
++ }
+++
+++/* Standalone Guidance Callout and Pre-existing nsjail Warning */
+++.custom-field-standalone-callout {
+++  display: flex;
+++  align-items: flex-start;
+++  gap: var(--space-2);
+++  padding: var(--space-2) var(--space-3);
+++  background-color: var(--bg-surface-raised);
+++  border: 1px solid var(--border-subtle);
+++  border-left: 3px solid var(--accent-primary);
+++  border-radius: var(--radius-sm);
+++  font-size: var(--text-xs);
+++  color: var(--fg-primary);
+++  margin-bottom: var(--space-3);
+++  line-height: var(--leading-prose);
+++}
+++
+++.custom-field-standalone-callout-icon {
+++  font-size: var(--text-sm);
+++  flex-shrink: 0;
+++  margin-top: 1px;
+++}
+++
+++.custom-field-standalone-callout-text {
+++  flex: 1;
+++}
+++
+++.custom-field-callout-link {
+++  color: var(--accent-primary);
+++  text-decoration: underline;
+++  font-weight: var(--font-semibold);
+++  margin-left: var(--space-1);
+++}
+++
+++.custom-field-warning-banner {
+++  display: flex;
+++  align-items: flex-start;
+++  gap: var(--space-2);
+++  padding: var(--space-2) var(--space-3);
+++  background-color: var(--warn-bg);
+++  border: 1px solid var(--border-warning);
+++  border-radius: var(--radius-sm);
+++  font-size: var(--text-xs);
+++  color: var(--warn-fg);
+++  margin-bottom: var(--space-3);
+++  line-height: var(--leading-prose);
+++}
+++
+++.custom-field-warning-banner-icon {
+++  font-size: var(--text-sm);
+++  flex-shrink: 0;
+++  margin-top: 1px;
+++}
+++
+++.custom-field-warning-banner-text {
+++  flex: 1;
+++}
+++
+++.custom-field-badge--warning {
+++  display: inline-block;
+++  margin-top: var(--space-1);
+++  padding: 2px var(--space-2);
+++  background-color: var(--warn-bg);
+++  border: 1px solid var(--border-warning);
+++  color: var(--warn-fg);
+++  font-size: var(--text-xs);
+++  font-weight: var(--font-semibold);
+++  border-radius: var(--radius-sm);
+++}
+++
+++.preset-badge--unavailable {
+++  background-color: var(--warn-bg);
+++  border-color: var(--border-warning);
+++  color: var(--warn-fg);
+++}
+++
+++.preset-card--disabled {
+++  opacity: 0.85;
+++  border-color: var(--border-warning);
+++}
+++
+++.flavor-matrix-unavailable-badge {
+++  display: inline-block;
+++  font-size: var(--text-xs);
+++  padding: 2px var(--space-1);
+++  background-color: var(--warn-bg);
+++  border: 1px solid var(--border-warning);
+++  color: var(--warn-fg);
+++  border-radius: var(--radius-sm);
+++  margin-left: auto;
+++}
+diff --git a/docs/qa/KAN-32/message-to-reality-checker.md b/docs/qa/KAN-32/message-to-reality-checker.md
+new file mode 100644
+index 00000000..811544e7
+--- /dev/null
++++ b/docs/qa/KAN-32/message-to-reality-checker.md
+@@ -0,0 +1,125 @@
++# Reality-Checker Verification Packet: KAN-32
++
++**Ticket ID:** KAN-32  
++**Title:** [KB-P3-AUDIT-26] Gate Custom Fields nsjail Sandbox in Standalone Mode, Fix tier_b_runner Wiring, and Publish Step-by-Step [Guide] How to Use Custom Fields (3 Problems)  
++**Branch:** `feat/KAN-32`  
++
++---
++
++## 1. Executive Summary & Verification Proof
++
++All 3 scoped problems for ticket KAN-32 have been fully implemented, verified with automated test suites, checked against strict static gates, and documented without em-dashes or en-dashes.
++
++### Problem 1: Standalone `nsjail` Fail-Closed Gating & Multi-Container `tier_b_runner` Wiring
++- Extended `SystemStatusResponse` in `kanban/api/v1/system_status.py` and TypeScript interface `SystemStatus` in `kanban/web/src/app/useSystemStatus.ts` with:
++  * `supported_custom_field_tiers`: `["scalar", "formula", "wasm"]` in Standalone mode (`tier_b_sandbox_available == False`), and `["scalar", "formula", "wasm", "nsjail"]` in Multi-Container mode (`tier_b_sandbox_available == True`).
++  * `sandbox_unavailable_reason`: Plain ASCII explanation when `tier_b_sandbox_available == False` (`"Isolated nsjail sandbox execution is unavailable in standalone mode. Multi-container compose deployment is required."`), and `None` when `True`.
++- In `kanban/custom_fields/service.py`:
++  * Added `is_tier_b_available` and `assert_tier_available` helper functions enforcing fail-closed gating.
++  * In `create_definition`: Reject `tier == "nsjail"` when `tier_b_sandbox_available == False` with HTTP `422 SANDBOX_UNAVAILABLE_IN_STANDALONE`.
++  * In `update_definition`: Reject patching `payload.tier == "nsjail"` when `tier_b_sandbox_available == False` with HTTP `422 SANDBOX_UNAVAILABLE_IN_STANDALONE`. Pre-existing `nsjail` definitions imported from backup can update metadata (name, description, enabled) without error.
++- In `kanban/api/v1/custom_field_execution.py`:
++  * In `test_execute_custom_field`: Enforce `assert_tier_available("nsjail", request=request)`. Reject `nsjail` test-execute in Standalone mode with HTTP `422 SANDBOX_UNAVAILABLE_IN_STANDALONE`.
++  * In `list_custom_fields_for_issue`, `execute_custom_field_for_issue`, and `test_execute_custom_field`: Fixed `CustomFieldExecutor(session, tier_b_runner=getattr(request.app.state, "tier_b_runner", None))` wiring so multi-container deployments execute Tier B nsjail scripts seamlessly.
++- In `kanban/app.py`: Initialized `app.state.tier_b_sandbox_available` during startup using `get_standalone_status(settings=settings)`.
++
++### Problem 2: Disabled/Badged Unavailable `nsjail` Options in Web UI
++- Connected `CustomFieldDefinitionEditor.tsx` and `PresetGallery.tsx` to `useSystemStatus()`.
++- When `tier_b_sandbox_available === false`:
++  * Rendered inline Standalone Guidance Callout (`standalone-guidance-callout`) in `CustomFieldDefinitionEditor.tsx` explaining that `Scalar` (<1ms), `Formula` (<5ms), and `WebAssembly` (<25ms) work out of the box in Standalone mode, with links to `[Guide] How to Use Custom Fields ->` (`/docs/Guide-Custom-Fields`) and `Promote to Multi-Container ->` (`/admin/standalone`).
++  * In `CustomFieldDefinitionEditor.tsx`: Disabled `nsjail` options in both Field Flavor (`field-flavor-select`) and Execution Sandbox Tier (`field-tier-select`) selects, badged with `[Multi-Container Compose Required]`.
++  * Rendered Pre-Existing nsjail Warning Banner (`preexisting-nsjail-warning-banner`) when inspecting an imported `nsjail` definition in Standalone mode.
++  * In `FlavorDecisionMatrix.tsx`: Badged and disabled the `nsjail` card with `Multi-Container Compose Required` and tooltip when `!tierBAvailable`.
++  * In `PresetGallery.tsx`: Badged and disabled `nsjail`-dependent presets (`total-project-issues` and `git-pr-link`) with `Multi-Container Compose Required`.
++- Styled all callouts, banners, and badges using 100% canonical `theme.css` tokens with zero inline `style={...}` props, verified via `cssTokensAudit.test.ts`.
++
++### Problem 3: Published Step-by-Step Wiki Guide
++- Published `/home/adamoutler/kanban/thumbs-up-kanban.wiki/Guide-Custom-Fields.md` starting with `# [Guide] How to Use Custom Fields` and linked in `_Sidebar.md` under `Reference Guides`.
++- Covered all 4 required sections:
++  1. What Custom Fields do and where values appear (Issue Properties Rail, Table View, Board Cards, Filters and Search).
++  2. Choosing between `Scalar`, `Safe Formula`, `WebAssembly (wasmtime)`, and `Isolated Sandbox (nsjail)` (Standalone vs Multi-Container Compose gating and promotion path).
++  3. Step-by-step walkthroughs with copy-paste examples:
++     * `Priority SLA Days`: Safe Formula (`1 if priority == 'URGENT' else 3 if priority == 'HIGH' else 7 if priority == 'MEDIUM' else 14`) -> format `number` with unit `d`.
++     * `Sub-Issue Progress %`: Safe Formula (`round((completed_sub_issue_count * 100.0) / sub_issue_count, 1) if sub_issue_count > 0 else 100.0`) -> format `number` with unit `%`.
++     * `CVSS Severity Pill`: Dynamic severity formula -> format `severity_pill`.
++     * `Total Project Issues Rollup`: WebAssembly / nsjail project metric rollup -> format `number`.
++     * Detailed specification and format metadata JSON schemas for all 7 canonical output formats (`text`, `number`, `badge`, `severity_pill`, `url`, `markdown_snippet`, `json_table`).
++  4. Safe formula AST execution context reference and built-in function allowlist.
++  5. Dry-running with `Test Execute` and `WORKSPACE`/`SERVER` scope escalation dual-control AAL2 approval workflows.
++- Checked against `check_no_dashes` (strictly 0 em-dashes and 0 en-dashes).
++- Committed to wiki repository on branch `main` (`bc6b15a`).
++
++---
++
++## 2. Test Suite & Coverage Evidence
++
++### Python Pytest & Coverage
++Command:
++```bash
++KB_TEST_PGSOCKET_DIR=/tmp/kb-pgsock-b-kan32 KB_TEST_PGHOST=/tmp/kb-pgsock-b-kan32 uv run pytest \
++  kanban/tests/custom_fields/test_standalone_nsjail_gate.py \
++  kanban/tests/custom_fields/test_custom_fields_api.py \
++  kanban/tests/custom_fields/test_execution_api.py \
++  kanban/tests/custom_fields/test_manifest_and_formula_security.py \
++  --cov=kanban.custom_fields.service \
++  --cov=kanban.api.v1.custom_field_execution \
++  --cov=kanban.api.v1.custom_fields \
++  --cov-report=term-missing
++```
++
++Results:
++- **Test Files:** 4 passed (4 total)
++- **Tests:** 26 passed (26 total)
++- **Pass Rate:** 100%
++
++| Name | Stmts | Miss | Branch | BrPart | Cover | Missing |
++| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
++| `kanban/api/v1/custom_field_execution.py` | 120 | 1 | 26 | 4 | **97%** | 71->74, 109->125, 261->282, 283 |
++| `kanban/api/v1/custom_fields.py` | 30 | 0 | 0 | 0 | **100%** | |
++| `kanban/custom_fields/service.py` | 163 | 0 | 42 | 2 | **99%** | 355->359, 361->365 |
++| **TOTAL** | **313** | **1** | **68** | **6** | **98%** | |
++
++### TypeScript Vitest & Coverage
++Command:
++```bash
++COVERAGE_INCLUDE="src/features/custom-fields/CustomFieldDefinitionEditor.tsx,src/features/custom-fields/PresetGallery.tsx,src/features/custom-fields/FlavorDecisionMatrix.tsx,src/app/useSystemStatus.ts" \
++pnpm --filter @kanban/web test:coverage src/features/custom-fields src/app/useSystemStatus.test.tsx
++```
++
++Results:
++- **Test Files:** 10 passed (10 total)
++- **Tests:** 165 passed (165 total)
++- **Pass Rate:** 100%
++
++| File | % Stmts | % Branch | % Funcs | % Lines |
++| :--- | :---: | :---: | :---: | :---: |
++| **All files** | **100%** | **95.69%** | **100%** | **100%** |
++| `src/app/useSystemStatus.ts` | 100% | 100% | 100% | 100% |
++| `src/features/custom-fields/CustomFieldDefinitionEditor.tsx` | 100% | 95.74% | 100% | 100% |
++| `src/features/custom-fields/FlavorDecisionMatrix.tsx` | 100% | 92.30% | 100% | 100% |
++| `src/features/custom-fields/PresetGallery.tsx` | 100% | 96.87% | 100% | 100% |
++
++---
++
++## 3. Mandatory Static Quality Gates
++
++All 7 mandatory checks execute cleanly with zero errors:
++
++1. **Ruff Check:** Passed (`All checks passed!`).
++2. **Mypy Typecheck:** Passed (`Success: no issues found in 7 source files`).
++3. **Lint-Imports Architectural Boundary Gate:** Passed (`Contracts: 2 kept, 0 broken`).
++4. **TypeScript Compiler (`tsc -b`):** Passed with zero diagnostics.
++5. **ESLint (`eslint . --max-warnings 0`):** Passed across entire frontend repository with zero warnings/errors.
++6. **No Dashes Guard (`check_no_dashes --all`):** Passed with 0 em/en-dashes.
++7. **CSS Tokens Audit (`cssTokensAudit.test.ts`):** Passed (4/4 tests passed, 0 inline JSX styles).
++
++---
++
++## 4. Manifest of Forensic Artifacts
++
++- `docs/qa/KAN-32/unit-test-results.txt`: Verbatim pytest and vitest test execution logs and coverage tables.
++- `docs/qa/KAN-32/build-or-typecheck.txt`: Verbatim outputs of ruff, mypy, lint-imports, tsc, eslint, check_no_dashes, and cssTokensAudit.
++- `docs/qa/KAN-32/git-diff.patch`: Complete diff of all touched code on branch `feat/KAN-32`.
++- `docs/qa/KAN-32/wiki-diff.patch`: Complete diff of published wiki documentation (`Guide-Custom-Fields.md` and `_Sidebar.md`).
++- `docs/qa/KAN-32/changed-files-manifest.txt`: List of all modified and added files.
++- `docs/qa/KAN-32/message-to-reality-checker.md`: This forensic audit document.
+diff --git a/docs/qa/KAN-32/unit-test-results.txt b/docs/qa/KAN-32/unit-test-results.txt
+new file mode 100644
+index 00000000..459debf1
+--- /dev/null
++++ b/docs/qa/KAN-32/unit-test-results.txt
+@@ -0,0 +1,71 @@
++=== PYTHON PYTEST & COVERAGE (KAN-32) ===
++Command:
++KB_TEST_PGSOCKET_DIR=/tmp/kb-pgsock-b-kan32 KB_TEST_PGHOST=/tmp/kb-pgsock-b-kan32 uv run pytest kanban/tests/custom_fields/test_standalone_nsjail_gate.py kanban/tests/custom_fields/test_custom_fields_api.py kanban/tests/custom_fields/test_execution_api.py kanban/tests/custom_fields/test_manifest_and_formula_security.py --cov=kanban.custom_fields.service --cov=kanban.api.v1.custom_field_execution --cov=kanban.api.v1.custom_fields --cov-report=term-missing
++
++Output:
++============================= test session starts ==============================
++platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
++rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f
++configfile: pyproject.toml
++plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
++asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
++collecting ... collected 26 items
++
++kanban/tests/custom_fields/test_standalone_nsjail_gate.py ........       [ 30%]
++kanban/tests/custom_fields/test_custom_fields_api.py .......             [ 57%]
++kanban/tests/custom_fields/test_execution_api.py ...                     [ 69%]
++kanban/tests/custom_fields/test_manifest_and_formula_security.py ....... [ 96%]
++.                                                                        [100%]
++
++================================ tests coverage ================================
++_______________ coverage: platform linux, python 3.12.7-final-0 ________________
++
++Name                                      Stmts   Miss Branch BrPart  Cover   Missing
++-------------------------------------------------------------------------------------
++kanban/api/v1/custom_field_execution.py     120      1     26      4    97%   71->74, 109->125, 261->282, 283
++kanban/api/v1/custom_fields.py               30      0      0      0   100%
++kanban/custom_fields/service.py             163      0     42      2    99%   355->359, 361->365
++-------------------------------------------------------------------------------------
++TOTAL                                       313      1     68      6    98%
++============================= 26 passed in 28.31s ==============================
++
++
++=== TYPESCRIPT VITEST & COVERAGE (KAN-32) ===
++Command:
++COVERAGE_INCLUDE="src/features/custom-fields/CustomFieldDefinitionEditor.tsx,src/features/custom-fields/PresetGallery.tsx,src/features/custom-fields/FlavorDecisionMatrix.tsx,src/app/useSystemStatus.ts" pnpm --filter @kanban/web test:coverage src/features/custom-fields src/app/useSystemStatus.test.tsx
++
++Output:
++> @kanban/web@0.1.0 test:coverage /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
++> vitest run --coverage src/features/custom-fields src/app/useSystemStatus.test.tsx
++
++ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
++      Coverage enabled with v8
++
++ ✓ src/features/custom-fields/__tests__/presets.test.ts (3 tests) 18ms
++ ✓ src/features/custom-fields/__tests__/CustomFieldsStudio.test.tsx (2 tests) 67ms
++ ✓ src/app/useSystemStatus.test.tsx (4 tests) 192ms
++ ✓ src/features/custom-fields/__tests__/FlavorDecisionMatrix.test.tsx (5 tests) 175ms
++ ✓ src/features/custom-fields/__tests__/PresetGallery.test.tsx (8 tests) 378ms
++ ✓ src/features/custom-fields/__tests__/CustomFieldValue.test.tsx (32 tests) 310ms
++ ✓ src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx (23 tests) 590ms
++ ✓ src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx (18 tests) 650ms
++ ✓ src/features/custom-fields/__tests__/api.test.ts (30 tests) 35ms
++ ✓ src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx (40 tests) 2634ms
++
++ Test Files  10 passed (10)
++      Tests  165 passed (165)
++   Start at  09:46:46
++   Duration  5.61s (environment 50%, tests 24%, import 19%, transform 4%, worker 3%)
++
++ % Coverage report from v8
++-------------------|---------|----------|---------|---------|-------------------
++File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
++-------------------|---------|----------|---------|---------|-------------------
++All files          |     100 |    95.69 |     100 |     100 |                   
++ app               |     100 |      100 |     100 |     100 |                   
++  ...stemStatus.ts |     100 |      100 |     100 |     100 |                   
++ .../custom-fields |     100 |    95.47 |     100 |     100 |                   
++  ...ionEditor.tsx |     100 |    95.74 |     100 |     100 | ...49,504-525,558 
++  ...ionMatrix.tsx |     100 |     92.3 |     100 |     100 | 140,184           
++  ...etGallery.tsx |     100 |    96.87 |     100 |     100 | 51                
++-------------------|---------|----------|---------|---------|-------------------
+diff --git a/docs/qa/KAN-32/wiki-diff.patch b/docs/qa/KAN-32/wiki-diff.patch
+new file mode 100644
+index 00000000..fb14387c
+--- /dev/null
++++ b/docs/qa/KAN-32/wiki-diff.patch
+@@ -0,0 +1,273 @@
++diff --git a/Guide-Custom-Fields.md b/Guide-Custom-Fields.md
++new file mode 100644
++index 0000000..b2f6bd6
++--- /dev/null
+++++ b/Guide-Custom-Fields.md
++@@ -0,0 +1,256 @@
+++# [Guide] How to Use Custom Fields
+++
+++Custom Fields extend your projects and issues with dynamic calculations, computed business metrics, compliance indicators, and metadata without modifying the core database schema or writing custom server plugins.
+++
+++This comprehensive guide covers how Custom Fields work, where their values surface across the UI, how to choose the right execution tier for your deployment mode (Standalone vs Multi-Container Compose), step-by-step walkthroughs with copy-paste examples, and the required governance and dual-control approval workflows.
+++
+++---
+++
+++## 1. What Custom Fields Do and Where Values Appear
+++
+++Custom Fields allow project administrators and server administrators to attach computed or scalar attributes to issues. Whenever an issue is viewed, edited, or evaluated in a workflow, Custom Fields are resolved and formatted according to their output specifications.
+++
+++Custom field values automatically surface across the following surfaces in the web interface:
+++
+++- **Issue Properties Rail:** Located in the right sidebar of the issue detail screen. Displays the custom field label, current value (formatted as text, number, badge, severity pill, link, markdown snippet, or table), and cache status with an instant recalculate trigger.
+++- **Table View:** Embedded as sortable, custom columns in the project Table View. Allows rapid scanning and comparison of computed metrics (such as SLA deadlines or sub-issue progress percentages) across dozens of work items.
+++- **Board Cards:** Rendered as compact badges, severity pills, or monospace tags directly on Kanban board cards, providing immediate visual cues to team members during daily standups and cycle reviews.
+++- **Filters and Search:** Filter work items by custom field values, enabling targeted views such as finding all issues with a `CRITICAL` severity pill or projects with overdue SLA days.
+++
+++---
+++
+++## 2. Choosing Between Execution Tiers
+++
+++👍kanban provides four distinct execution tiers for custom fields, balanced across performance, security isolation, and deployment modes:
+++
+++| Tier | Engine / Flavor | Latency Budget | Standalone Mode | Multi-Container Compose | Best Used For |
+++| :--- | :--- | :--- | :--- | :--- | :--- |
+++| **Scalar** | Static metadata | `<1ms` | Supported | Supported | Static tags, manual attributes, default strings, constant numbers |
+++| **Safe Formula** | In-process Python AST | `<5ms` | Supported | Supported | Math, date arithmetic, conditionals, sub-issue rollups, SLA days |
+++| **WebAssembly** | `wasmtime` runtime | `<25ms` | Supported | Supported | Compiled C, Rust, or AssemblyScript logic with strict memory sandboxing |
+++| **Isolated Sandbox** | `nsjail` Linux container | `<250ms` | **Gated (Unavailable)** | Supported | Complex Python/Rust scripts requiring full network egress allowlists or multi-entity queries |
+++
+++### Standalone Mode vs Multi-Container Compose Gating
+++
+++In **Standalone mode** (running via a single container or single process):
+++- `Scalar`, `Safe Formula`, and `WebAssembly (wasmtime)` run natively out of the box with zero external dependencies.
+++- `Isolated Sandbox (nsjail)` is **fail-closed and rejected**. Attempting to create or execute an `nsjail` custom field in Standalone mode returns an actionable HTTP `422 SANDBOX_UNAVAILABLE_IN_STANDALONE` error recommending `scalar`, `formula`, or `wasm`. In the web editor and preset gallery, `nsjail` options are disabled and badged with `Multi-Container Compose Required`.
+++- **Pre-existing nsjail fields:** If you import a workspace backup containing pre-existing `nsjail` fields into Standalone mode, definitions remain inspectable and editable, with an informational warning banner reminding you that multi-container compose is required for execution.
+++- **Promoting to Multi-Container:** To unlock `nsjail` container sandboxes, promote your installation to multi-container compose via the administrator portal at `/admin/standalone` or follow the Production Promotion and Backup Runbook.
+++
+++---
+++
+++## 3. Step-by-Step Walkthroughs and Copy-Paste Examples
+++
+++### Example 1: Priority SLA Days (Safe Formula)
+++
+++Compute the remaining service level agreement (SLA) target turnaround days based on the issue priority.
+++
+++- **Name:** Priority SLA Days
+++- **Slug:** `priority-sla-days`
+++- **Flavor / Tier:** Safe Formula (`formula`)
+++- **Target Scope:** `PROJECT`
+++- **Formula Expression:**
+++  ```python
+++  1 if priority == 'URGENT' else 3 if priority == 'HIGH' else 7 if priority == 'MEDIUM' else 14
+++  ```
+++- **Output Format:** `number`
+++- **Format Metadata JSON:**
+++  ```json
+++  {
+++    "format": "number",
+++    "maximum_fraction_digits": 0,
+++    "unit_suffix": "d",
+++    "min_value": 1,
+++    "max_value": 30
+++  }
+++  ```
+++
+++### Example 2: Sub-Issue Progress Percentage (Safe Formula)
+++
+++Calculate the completion percentage of sub-issues for epic or parent issue tracking.
+++
+++- **Name:** Sub-Issue Progress %
+++- **Slug:** `sub-issue-progress`
+++- **Flavor / Tier:** Safe Formula (`formula`)
+++- **Target Scope:** `PROJECT`
+++- **Formula Expression:**
+++  ```python
+++  round((completed_sub_issue_count * 100.0) / sub_issue_count, 1) if sub_issue_count > 0 else 100.0
+++  ```
+++- **Output Format:** `number`
+++- **Format Metadata JSON:**
+++  ```json
+++  {
+++    "format": "number",
+++    "maximum_fraction_digits": 1,
+++    "unit_suffix": "%",
+++    "min_value": 0.0,
+++    "max_value": 100.0
+++  }
+++  ```
+++
+++### Example 3: CVSS Severity Pill (Safe Formula / Dynamic Severity)
+++
+++Map issue priority and due date urgency to a standardized security vulnerability pill.
+++
+++- **Name:** Incident Severity Pill
+++- **Slug:** `incident-severity-pill`
+++- **Flavor / Tier:** Safe Formula (`formula`)
+++- **Target Scope:** `PROJECT`
+++- **Formula Expression:**
+++  ```python
+++  'CRITICAL' if (days_until_due is not None and days_until_due < 0) else 'HIGH' if priority == 'URGENT' else 'MEDIUM' if priority == 'HIGH' else 'LOW'
+++  ```
+++- **Output Format:** `severity_pill`
+++- **Format Metadata JSON:**
+++  ```json
+++  {
+++    "format": "severity_pill"
+++  }
+++  ```
+++
+++### Example 4: Total Project Issues Rollup (WebAssembly or Multi-Container nsjail)
+++
+++Roll up total project issues and blockers using WebAssembly or Multi-Container nsjail.
+++
+++- **Name:** Total Project Issues
+++- **Slug:** `total-project-issues`
+++- **Flavor / Tier:** WebAssembly (`wasm`) or Isolated Sandbox (`nsjail` in Multi-Container Compose)
+++- **Target Scope:** `PROJECT` (or `WORKSPACE` with AAL2 dual control)
+++- **Output Format:** `number`
+++- **Format Metadata JSON:**
+++  ```json
+++  {
+++    "format": "number",
+++    "maximum_fraction_digits": 0,
+++    "unit_suffix": " issues"
+++  }
+++  ```
+++
+++---
+++
+++## 4. All Seven Supported Output Formats and Schemas
+++
+++Every custom field produces output formatted according to one of seven canonical schemas:
+++
+++### 1. `text`
+++Single-line formatted string with optional prefix and monospace font.
+++```json
+++{
+++  "format": "text",
+++  "max_length": 128,
+++  "prefix": "REF-",
+++  "monospace": true
+++}
+++```
+++
+++### 2. `number`
+++Floating point or integer numeric value with precision limits, suffix, and range bounds.
+++```json
+++{
+++  "format": "number",
+++  "maximum_fraction_digits": 2,
+++  "unit_suffix": " hrs",
+++  "min_value": 0.0,
+++  "max_value": 1000.0
+++}
+++```
+++
+++### 3. `badge`
+++Visual status badge with color token and strict label allowlist. Supported color tokens: `neutral`, `info`, `success`, `warning`, `danger`, `accent`.
+++```json
+++{
+++  "format": "badge",
+++  "color_token": "success",
+++  "allowed_labels": ["Passed", "Failed", "In Progress", "Pending"]
+++}
+++```
+++
+++### 4. `severity_pill`
+++Standardized vulnerability and risk assessment pill. Accepts severity levels (`CRITICAL`, `HIGH`, `MEDIUM`, `LOW`, `NONE`) or numeric CVSS scores from 0.0 to 10.0.
+++```json
+++{
+++  "format": "severity_pill"
+++}
+++```
+++
+++### 5. `url`
+++Sanitized hyperlink validated against allowed schemes and host suffixes.
+++```json
+++{
+++  "format": "url",
+++  "allowed_schemes": ["https"],
+++  "allowed_host_suffixes": ["github.com", "gitlab.com"]
+++}
+++```
+++
+++### 6. `markdown_snippet`
+++Sanitized canonical Markdown snippet rendered inline up to 2000 characters.
+++```json
+++{
+++  "format": "markdown_snippet",
+++  "max_chars": 2000
+++}
+++```
+++
+++### 7. `json_table`
+++Structured 2-dimensional tabular data rendered directly in the issue details view.
+++```json
+++{
+++  "format": "json_table",
+++  "columns": [
+++    {"key": "test_name", "label": "Test Suite"},
+++    {"key": "duration_ms", "label": "Duration (ms)"},
+++    {"key": "status", "label": "Status"}
+++  ],
+++  "max_rows": 25
+++}
+++```
+++
+++---
+++
+++## 5. Safe Formula Context Reference
+++
+++When writing Safe Formulas, expressions have access to the active issue attributes without executing arbitrary code:
+++
+++| Variable | Type | Description |
+++| :--- | :--- | :--- |
+++| `id` | `str` | Issue unique identifier (UUID) |
+++| `key` | `str` | Human-readable issue key (e.g. `KAN-32`) |
+++| `summary` | `str` | Issue title / summary |
+++| `description_markdown` | `str` | Raw Markdown body of the issue |
+++| `state` | `str` | Name of current workflow state (e.g. `In Progress`) |
+++| `state_group` | `str` | Workflow state category (`backlog`, `unstarted`, `started`, `completed`, `cancelled`) |
+++| `priority` | `str` | Normalized uppercase priority (`URGENT`, `HIGH`, `MEDIUM`, `LOW`, `NONE`) |
+++| `priority_slug` | `str` | Lowercase priority slug (`urgent`, `high`, `medium`, `low`, `none`) |
+++| `priority_label` | `str` | Display label of priority (`Urgent`, `High`, etc.) |
+++| `start_date` | `str` or `None` | ISO-formatted start date |
+++| `due_date` | `str` or `None` | ISO-formatted due date |
+++| `days_until_due` | `int` or `None` | Days until due date (negative values indicate overdue) |
+++| `blocker_count` | `int` | Number of active blocking dependencies on this issue |
+++| `sub_issue_count` | `int` | Total count of child sub-issues |
+++| `completed_sub_issue_count`| `int` | Count of sub-issues in `completed` state group |
+++| `labels` | `list[str]` | List of tag names assigned to the issue |
+++
+++### Safe Built-in Functions
+++Safe formulas allow standard deterministic operations: `round`, `int`, `float`, `min`, `max`, `len`, `abs`, `str`. Arbitrary imports, file system access, and network sockets are strictly prohibited at the Python AST parser layer.
+++
+++---
+++
+++## 6. Testing, Dry-Running, and Scope Escalation
+++
+++### Dry-Running with Test Execute
+++Before saving any custom field definition, use the **Test Execute** button in the Custom Field Definition Editor or send a POST request to:
+++```http
+++POST /api/v1/projects/{project_ref}/custom-fields/test-execute
+++```
+++This evaluates your formula or script against a mock issue payload or existing issue key in memory without persisting values or polluting the audit ledger. In Standalone mode, Test Execute verifies that your script does not request unavailable sandbox tiers.
+++
+++### Scope Escalation and AAL2 Dual-Control Approval
+++Custom fields can be scoped at three tiers:
+++- **`PROJECT` Scope:** Can only read and affect issues within the parent project. Requires Project Administrator privileges.
+++- **`WORKSPACE` Scope:** Can read issues across all projects in the workspace.
+++- **`SERVER` Scope:** Global fields available across all workspaces.
+++
+++**Dual-Control Governance:** Escalating a custom field definition from `PROJECT` to `WORKSPACE` or `SERVER` scope (or running with elevated Service Account credentials rather than `INVOKING_USER`) requires cryptographic approval by an administrator of that target tier with active Authenticator Assurance Level 2 (AAL2 / WebAuthn / TOTP) session elevation.
++diff --git a/_Sidebar.md b/_Sidebar.md
++index 6b7c13b..54a1d72 100644
++--- a/_Sidebar.md
+++++ b/_Sidebar.md
++@@ -28,5 +28,6 @@
++ 
++ - **Reference Guides**
++   - [Feature Comparison Matrix (35 Features)](Feature-Comparison)
+++  - [Guide: How to Use Custom Fields](Guide-Custom-Fields)
++   - [MCP Tools Reference (24 Tools)](MCP-Tools-Reference)
++   - [REST API and OpenAPI Guide](REST-API-Architecture-and-OpenAPI-Guide)
+diff --git a/kanban/api/v1/custom_field_execution.py b/kanban/api/v1/custom_field_execution.py
+index 71d17bab..110931bc 100644
+--- a/kanban/api/v1/custom_field_execution.py
++++ b/kanban/api/v1/custom_field_execution.py
+@@ -73,7 +73,10 @@ async def list_custom_fields_for_issue(
+ 
+     cached_only = script_depth >= 1
+     async with timing_floor(floor_ms=25.0):
+-        executor = CustomFieldExecutor(session)
++        executor = CustomFieldExecutor(
++            session,
++            tier_b_runner=getattr(request.app.state, "tier_b_runner", None),
++        )
+         results = await executor.list_values_for_issue(
+             session, caller, issue_key, cached_only=cached_only
+         )
+@@ -85,11 +88,12 @@ async def list_custom_fields_for_issue(
+     response_model=CustomFieldValueItem,
+     summary="Force fresh execution of a custom field for an issue",
+ )
+-async def execute_custom_field_for_issue(
++async def execute_custom_field_for_issue(  # noqa: PLR0913
+     issue_key: str,
+     field_id: str,
+     caller: Caller,
+     session: Session,
++    request: Request,
+     *,
+     force_refresh: bool = True,
+ ) -> CustomFieldValueItem:
+@@ -118,7 +122,10 @@ async def execute_custom_field_for_issue(
+                     ),
+                 )
+ 
+-        executor = CustomFieldExecutor(session)
++        executor = CustomFieldExecutor(
++            session,
++            tier_b_runner=getattr(request.app.state, "tier_b_runner", None),
++        )
+         result = await executor.execute_for_issue(
+             session,
+             caller,
+@@ -219,6 +226,7 @@ async def test_execute_custom_field(  # noqa: C901
+     body: CustomFieldTestExecuteRequest,
+     caller: Caller,
+     session: Session,
++    request: Request,
+ ) -> CustomFieldTestExecuteResponse:
+     """Test-execute custom field draft against a chosen project issue.
+ 
+@@ -228,6 +236,11 @@ async def test_execute_custom_field(  # noqa: C901
+         proj = await get_project_or_404(session, caller, project)
+         await CustomFieldDefinitionService.require_admin_and_aal2(session, caller, proj)
+ 
++        if str(body.tier) == "nsjail":
++            from kanban.custom_fields.service import assert_tier_available  # noqa: PLC0415
++
++            assert_tier_available("nsjail", request=request)
++
+         if str(body.tier) == "wasm":
+             source = (body.script_source or "").strip()
+             is_interpreted = source.startswith(("scalar:", "formula:", "return ")) or bool(
+@@ -302,7 +315,10 @@ async def test_execute_custom_field(  # noqa: C901
+                 detail=detail_msg,
+             )
+ 
+-        executor = CustomFieldExecutor(session)
++        executor = CustomFieldExecutor(
++            session,
++            tier_b_runner=getattr(request.app.state, "tier_b_runner", None),
++        )
+         res = await executor.test_execute(
+             session=session,
+             caller=caller,
+diff --git a/kanban/api/v1/custom_fields.py b/kanban/api/v1/custom_fields.py
+index 8cb265e2..a5fdc0a9 100644
+--- a/kanban/api/v1/custom_fields.py
++++ b/kanban/api/v1/custom_fields.py
+@@ -6,7 +6,7 @@ from __future__ import annotations
+ 
+ from typing import Annotated
+ 
+-from fastapi import APIRouter, Depends, Response, status
++from fastapi import APIRouter, Depends, Request, Response, status
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
+@@ -45,17 +45,18 @@ async def list_custom_fields(
+     response_model=CustomFieldResponse,
+     summary="Create a custom field definition",
+ )
+-async def create_custom_field(
++async def create_custom_field(  # noqa: PLR0913, PLR0917
+     project: str,
+     body: CustomFieldCreateRequest,
+     caller: Caller,
+     session: Session,
+     response: Response,
++    request: Request,
+ ) -> CustomFieldResponse:
+     """Create a new custom field definition (admin-only, requires AAL2 and CSRF)."""
+     async with timing_floor(floor_ms=25.0):
+         result = await CustomFieldDefinitionService.create_definition(
+-            session, caller, project, body
++            session, caller, project, body, request=request
+         )
+         response.headers["Location"] = f"/api/v1/projects/{project}/custom-fields/{result.id}"
+         return result
+@@ -66,17 +67,18 @@ async def create_custom_field(
+     response_model=CustomFieldResponse,
+     summary="Update a custom field definition",
+ )
+-async def update_custom_field(
++async def update_custom_field(  # noqa: PLR0913, PLR0917
+     project: str,
+     field_id: str,
+     body: CustomFieldUpdateRequest,
+     caller: Caller,
+     session: Session,
++    request: Request,
+ ) -> CustomFieldResponse:
+     """Update an existing custom field definition (admin-only, requires AAL2 and CSRF)."""
+     async with timing_floor(floor_ms=25.0):
+         return await CustomFieldDefinitionService.update_definition(
+-            session, caller, project, field_id, body
++            session, caller, project, field_id, body, request=request
+         )
+ 
+ 
+diff --git a/kanban/api/v1/system_status.py b/kanban/api/v1/system_status.py
+index ee670614..76f6f792 100644
+--- a/kanban/api/v1/system_status.py
++++ b/kanban/api/v1/system_status.py
+@@ -61,6 +61,10 @@ class SystemStatusResponse(BaseModel):
+     local_llm_endpoint_host: str | None = None
+     is_server_admin: bool
+     allow_unlimited_mcp_keys: bool = True
++    supported_custom_field_tiers: list[str] = Field(
++        default_factory=lambda: ["scalar", "formula", "wasm", "nsjail"]
++    )
++    sandbox_unavailable_reason: str | None = None
+ 
+ 
+ class StandaloneBackupRequest(BaseModel):
+@@ -181,16 +185,33 @@ async def get_system_status_endpoint(
+             ws_air_gap = False
+     effective_air_gap = ws_air_gap or bool(status_data["air_gap_mode"])
+ 
++    tier_b_avail = bool(status_data["tier_b_sandbox_available"])
++    supported_tiers = (
++        ["scalar", "formula", "wasm", "nsjail"]
++        if tier_b_avail
++        else ["scalar", "formula", "wasm"]
++    )
++    sandbox_reason = (
++        None
++        if tier_b_avail
++        else (
++            "Isolated nsjail sandbox execution is unavailable in standalone mode. "
++            "Multi-container compose deployment is required."
++        )
++    )
++
+     return SystemStatusResponse(
+         deployment_mode=status_data["deployment_mode"],
+         persistent_volume=status_data["persistent_volume"],
+         data_mount_point=mount_point,
+         data_mount_fstype=mount_fstype,
+-        tier_b_sandbox_available=status_data["tier_b_sandbox_available"],
++        tier_b_sandbox_available=tier_b_avail,
+         air_gap_mode=effective_air_gap,
+         local_llm_endpoint_host=local_llm_host,
+         is_server_admin=is_server_admin,
+         allow_unlimited_mcp_keys=not disable_unlimited,
++        supported_custom_field_tiers=supported_tiers,
++        sandbox_unavailable_reason=sandbox_reason,
+     )
+ 
+ 
+@@ -230,16 +251,33 @@ async def get_admin_standalone_status_endpoint(
+             ws_air_gap = False
+     effective_air_gap = ws_air_gap or bool(status_data["air_gap_mode"])
+ 
++    tier_b_avail = bool(status_data["tier_b_sandbox_available"])
++    supported_tiers = (
++        ["scalar", "formula", "wasm", "nsjail"]
++        if tier_b_avail
++        else ["scalar", "formula", "wasm"]
++    )
++    sandbox_reason = (
++        None
++        if tier_b_avail
++        else (
++            "Isolated nsjail sandbox execution is unavailable in standalone mode. "
++            "Multi-container compose deployment is required."
++        )
++    )
++
+     return SystemStatusResponse(
+         deployment_mode=status_data["deployment_mode"],
+         persistent_volume=status_data["persistent_volume"],
+         data_mount_point=mount_point,
+         data_mount_fstype=mount_fstype,
+-        tier_b_sandbox_available=status_data["tier_b_sandbox_available"],
++        tier_b_sandbox_available=tier_b_avail,
+         air_gap_mode=effective_air_gap,
+         local_llm_endpoint_host=local_llm_host,
+         is_server_admin=is_server_admin,
+         allow_unlimited_mcp_keys=not disable_unlimited,
++        supported_custom_field_tiers=supported_tiers,
++        sandbox_unavailable_reason=sandbox_reason,
+     )
+ 
+ 
+diff --git a/kanban/app.py b/kanban/app.py
+index 12785719..54f6d9eb 100644
+--- a/kanban/app.py
++++ b/kanban/app.py
+@@ -66,6 +66,7 @@ from kanban.security.keys import load_key_material
+ from kanban.services.notifications import register_notifications_listener
+ from kanban.services.realtime_outbox import register_realtime_outbox_listener
+ from kanban.settings import Settings
++from kanban.standalone.export_service import get_standalone_status
+ from kanban.web_static import PrecompressedSPAStaticApp
+ 
+ logger = logging.getLogger(__name__)
+@@ -382,7 +383,7 @@ def _mount_sparkle_router(app: FastAPI) -> None:
+         logger.debug("Automatic live sparkle router mounting skipped", exc_info=True)
+ 
+ 
+-def create_app(
++def create_app(  # noqa: PLR0915
+     settings: Settings | None = None,
+     mcp_settings: McpSettings | None = None,
+ ) -> FastAPI:
+@@ -408,6 +409,10 @@ def create_app(
+     app.state.broker = None
+     app.state.realtime_hub = None
+     app.state.tier_b_runner = TierBNsjailRunner()
++    standalone_status = get_standalone_status(settings=settings)
++    app.state.tier_b_sandbox_available = bool(
++        standalone_status.get("tier_b_sandbox_available", True)
++    )
+ 
+     # Register RFC 7807 problem exception handlers
+     app.add_exception_handler(ProblemException, problem_exception_handler)  # type: ignore[arg-type]
+diff --git a/kanban/custom_fields/service.py b/kanban/custom_fields/service.py
+index e1e6986c..4c79241c 100644
+--- a/kanban/custom_fields/service.py
++++ b/kanban/custom_fields/service.py
+@@ -25,8 +25,10 @@ from kanban.custom_fields.output_formats import parse_output_format_metadata
+ from kanban.security.permissions import Capability, require_capability
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.projects import get_project_or_404
++from kanban.standalone.export_service import get_standalone_status
+ 
+ if TYPE_CHECKING:
++    from fastapi import Request
+     from sqlalchemy.ext.asyncio import AsyncSession
+ 
+     from database.models.projects import Project
+@@ -36,6 +38,46 @@ AAL2_MIN_LEVEL: Final[int] = 2
+ SHA256_BYTE_LEN: Final[int] = 32
+ 
+ 
++def is_tier_b_available(
++    request: Request | None = None,
++    *,
++    override: bool | None = None,
++) -> bool:
++    """Return True if Tier B nsjail sandbox is available in the current environment."""
++    if override is not None:
++        return override
++    if request is not None:
++        if hasattr(request.app.state, "tier_b_sandbox_available"):
++            return bool(request.app.state.tier_b_sandbox_available)
++        settings = getattr(request.app.state, "settings", None)
++        status_data = get_standalone_status(settings=settings)
++        return bool(status_data.get("tier_b_sandbox_available", True))
++    status_data = get_standalone_status()
++    return bool(status_data.get("tier_b_sandbox_available", True))
++
++
++def assert_tier_available(
++    tier: str,
++    *,
++    request: Request | None = None,
++    tier_b_sandbox_available: bool | None = None,
++) -> None:
++    """Validate that requested execution tier is supported in the current environment."""
++    if tier == "nsjail" and not is_tier_b_available(
++        request=request, override=tier_b_sandbox_available
++    ):
++        raise ProblemException(
++            status=422,
++            code="SANDBOX_UNAVAILABLE_IN_STANDALONE",
++            title="Sandbox Unavailable In Standalone",
++            detail=(
++                "Isolated nsjail sandbox execution is unavailable in standalone mode. "
++                "Use scalar, formula, or wasm execution tiers instead, "
++                "or promote to multi-container compose."
++            ),
++        )
++
++
+ def _parse_wasm_sha256(hex_str: str) -> bytes:
+     try:
+         raw = bytes.fromhex(hex_str)
+@@ -162,14 +204,22 @@ class CustomFieldDefinitionService:
+         return [cls.serialize(row, is_admin=is_adm) for row in rows]
+ 
+     @classmethod
+-    async def create_definition(
++    async def create_definition(  # noqa: PLR0913
+         cls,
+         session: AsyncSession,
+         caller: PrincipalContext,
+         project_ref: str,
+         payload: CustomFieldCreateRequest,
++        *,
++        request: Request | None = None,
++        tier_b_sandbox_available: bool | None = None,
+     ) -> CustomFieldResponse:
+         """Create a new custom field definition with validation and activity recording."""
++        assert_tier_available(
++            payload.tier,
++            request=request,
++            tier_b_sandbox_available=tier_b_sandbox_available,
++        )
+         project = await get_project_or_404(session, caller, project_ref)
+         await cls.require_admin_and_aal2(session, caller, project)
+ 
+@@ -315,15 +365,24 @@ class CustomFieldDefinitionService:
+         return spec_changed
+ 
+     @classmethod
+-    async def update_definition(
++    async def update_definition(  # noqa: PLR0913
+         cls,
+         session: AsyncSession,
+         caller: PrincipalContext,
+         project_ref: str,
+         field_id: str,
+         payload: CustomFieldUpdateRequest,
++        *,
++        request: Request | None = None,
++        tier_b_sandbox_available: bool | None = None,
+     ) -> CustomFieldResponse:
+         """Update an existing custom field definition."""
++        if payload.tier is not None:
++            assert_tier_available(
++                payload.tier,
++                request=request,
++                tier_b_sandbox_available=tier_b_sandbox_available,
++            )
+         project = await get_project_or_404(session, caller, project_ref)
+         await cls.require_admin_and_aal2(session, caller, project)
+ 
+diff --git a/kanban/tests/api/test_system_status.py b/kanban/tests/api/test_system_status.py
+index d475f4eb..f9a72c86 100644
+--- a/kanban/tests/api/test_system_status.py
++++ b/kanban/tests/api/test_system_status.py
+@@ -320,9 +320,20 @@ async def test_case_1_system_status_admin_full_fields_and_member_redaction(
+         assert data_admin["data_mount_point"] == "/var/lib/kanban/data"
+         assert data_admin["data_mount_fstype"] == "overlay"
+         assert data_admin["tier_b_sandbox_available"] is False
++        assert data_admin["supported_custom_field_tiers"] == ["scalar", "formula", "wasm"]
++        assert data_admin["sandbox_unavailable_reason"] is not None
++        assert "nsjail" in data_admin["sandbox_unavailable_reason"]
+         assert data_admin["local_llm_endpoint_host"] == "http://host.docker.internal:11434"
+         assert data_admin["is_server_admin"] is True
+ 
++        # Test admin standalone status endpoint
++        resp_admin_sa = await client.get("/api/v1/admin/standalone/status")
++        assert resp_admin_sa.status_code == 200
++        data_admin_sa = resp_admin_sa.json()
++        assert data_admin_sa["tier_b_sandbox_available"] is False
++        assert data_admin_sa["supported_custom_field_tiers"] == ["scalar", "formula", "wasm"]
++        assert data_admin_sa["sandbox_unavailable_reason"] is not None
++
+         # 2. As regular MEMBER: sensitive host topology redacted to null
+         client.cookies.clear()
+         await _login_and_elevate(client, session_service, db_session, member_id, ws_id, aal_level=1)
+@@ -331,6 +342,9 @@ async def test_case_1_system_status_admin_full_fields_and_member_redaction(
+         data_member = resp_member.json()
+         assert data_member["deployment_mode"] == "standalone_embedded_pg"
+         assert data_member["persistent_volume"] is False
++        assert data_member["tier_b_sandbox_available"] is False
++        assert data_member["supported_custom_field_tiers"] == ["scalar", "formula", "wasm"]
++        assert data_member["sandbox_unavailable_reason"] is not None
+         assert data_member["data_mount_point"] is None  # Redacted
+         assert data_member["data_mount_fstype"] is None  # Redacted
+         assert data_member["local_llm_endpoint_host"] is None  # Redacted
+@@ -362,6 +376,15 @@ async def test_case_1b_missing_status_file_defaults_to_production_multi_containe
+         assert data["deployment_mode"] == "production_multi_container"
+         assert data["persistent_volume"] is True
+         assert data["tier_b_sandbox_available"] is True
++        assert data["supported_custom_field_tiers"] == ["scalar", "formula", "wasm", "nsjail"]
++        assert data["sandbox_unavailable_reason"] is None
++
++        resp_admin_sa = await client.get("/api/v1/admin/standalone/status")
++        assert resp_admin_sa.status_code == 200
++        data_sa = resp_admin_sa.json()
++        assert data_sa["tier_b_sandbox_available"] is True
++        assert data_sa["supported_custom_field_tiers"] == ["scalar", "formula", "wasm", "nsjail"]
++        assert data_sa["sandbox_unavailable_reason"] is None
+ 
+ 
+ @pytest.mark.asyncio
+diff --git a/kanban/tests/custom_fields/test_standalone_nsjail_gate.py b/kanban/tests/custom_fields/test_standalone_nsjail_gate.py
+new file mode 100644
+index 00000000..995f45a5
+--- /dev/null
++++ b/kanban/tests/custom_fields/test_standalone_nsjail_gate.py
+@@ -0,0 +1,359 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Tests for standalone nsjail sandbox fail-closed gating and tier_b_runner wiring (KAN-32)."""
++
++from __future__ import annotations
++
++import uuid
++from typing import TYPE_CHECKING
++from unittest.mock import MagicMock
++
++import pytest
++from sqlalchemy import text
++
++from kanban.api.deps import PrincipalContext
++from kanban.api.problems import ProblemException
++from kanban.custom_fields.manifest import compute_field_manifest_sha256
++from kanban.custom_fields.service import assert_tier_available, is_tier_b_available
++from kanban.sandbox.nsjail_runner import NsjailRunResult
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    import httpx
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++
++pytestmark = pytest.mark.committed_db
++
++
++def _as_admin_aal2(api_env: ApiEnv, user: SeededUser) -> httpx.AsyncClient:
++    """Configure active principal context with PROJECT_ADMIN and AAL2."""
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=user.id,
++        workspace_id=user.workspace_id,
++        token_scopes=("session",),
++        aal_level=2,
++    )
++    return api_env.client
++
++
++class MockTierBRunner:
++    """Mock Tier B nsjail runner returning deterministic output."""
++
++    async def execute(self, *args: object, **kwargs: object) -> NsjailRunResult:  # noqa: ARG002
++        """Execute mock nsjail container."""
++        return NsjailRunResult(
++            returncode=0,
++            stdout=b'"mocked-nsjail-output"',
++            stderr=b"",
++        )
++
++    async def run(self, *args: object, **kwargs: object) -> bytes:  # noqa: ARG002
++        """Run mock nsjail script."""
++        return b'"mocked-nsjail-output"'
++
++
++def _set_tier_b_state(
++    client: httpx.AsyncClient,
++    *,
++    available: bool,
++    runner: object = None,
++) -> None:
++    """Configure tier_b_sandbox_available and optional tier_b_runner on test app."""
++    transport = getattr(client, "_transport", None)
++    app = getattr(transport, "app", None)
++    assert app is not None
++    app.state.tier_b_sandbox_available = available
++    if runner is not None:
++        app.state.tier_b_runner = runner
++
++
++async def _create_test_issue(
++    client: httpx.AsyncClient,
++    project_ref: str,
++) -> str:
++    """Create a minimal issue for test execution via API."""
++    resp = await client.post(
++        f"/api/v1/projects/{project_ref}/issues",
++        json={"summary": "Gate Test Issue", "description_markdown": "Test Description"},
++    )
++    assert resp.status_code == 201
++    return str(resp.json()["key"])
++
++
++async def test_create_custom_field_nsjail_rejected_in_standalone(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++) -> None:
++    """In standalone mode (tier_b_sandbox_available=False), creating nsjail tier returns 422."""
++    admin = await make_user("admin-gate-1", workspace_role="WORKSPACE_ADMIN")
++    await make_project("GATE1", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = _as_admin_aal2(api_env, admin)
++    _set_tier_b_state(client, available=False)
++
++    resp = await client.post(
++        "/api/v1/projects/GATE1/custom-fields",
++        json={
++            "slug": "nsjail-standalone-test",
++            "name": "Nsjail Test Field",
++            "tier": "nsjail",
++            "output_format": "text",
++            "output_format_metadata": {"max_length": 140},
++            "script_source": "import sys; print('hello')",
++        },
++    )
++    assert resp.status_code == 422
++    body = resp.json()
++    assert body["code"] == "SANDBOX_UNAVAILABLE_IN_STANDALONE"
++    assert "standalone" in body["detail"].lower()
++    assert "formula" in body["detail"].lower()
++
++
++async def test_create_custom_field_nsjail_succeeds_in_multicontainer(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++) -> None:
++    """In multi-container mode (tier_b_sandbox_available=True), creating nsjail tier succeeds."""
++    admin = await make_user("admin-gate-2", workspace_role="WORKSPACE_ADMIN")
++    await make_project("GATE2", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = _as_admin_aal2(api_env, admin)
++    _set_tier_b_state(client, available=True)
++
++    resp = await client.post(
++        "/api/v1/projects/GATE2/custom-fields",
++        json={
++            "slug": "nsjail-multi-test",
++            "name": "Nsjail Multi Test Field",
++            "tier": "nsjail",
++            "output_format": "text",
++            "output_format_metadata": {"max_length": 140},
++            "script_source": "import sys; print('hello')",
++        },
++    )
++    assert resp.status_code == 201
++    assert resp.json()["tier"] == "nsjail"
++
++
++async def test_update_custom_field_nsjail_rejected_in_standalone(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++) -> None:
++    """Updating definition tier to nsjail in standalone mode fails with 422."""
++    admin = await make_user("admin-gate-3", workspace_role="WORKSPACE_ADMIN")
++    await make_project("GATE3", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = _as_admin_aal2(api_env, admin)
++    _set_tier_b_state(client, available=True)
++
++    # Create wasm field first
++    create_resp = await client.post(
++        "/api/v1/projects/GATE3/custom-fields",
++        json={
++            "slug": "wasm-to-nsjail",
++            "name": "Wasm to Nsjail Field",
++            "tier": "wasm",
++            "output_format": "text",
++            "output_format_metadata": {"max_length": 140},
++            "script_source": "scalar: 'initial'",
++        },
++    )
++    assert create_resp.status_code == 201
++    field_id = create_resp.json()["id"]
++
++    # Switch to standalone mode
++    _set_tier_b_state(client, available=False)
++
++    # Attempt to patch tier to nsjail
++    patch_resp = await client.patch(
++        f"/api/v1/projects/GATE3/custom-fields/{field_id}",
++        json={"tier": "nsjail"},
++    )
++    assert patch_resp.status_code == 422
++    assert patch_resp.json()["code"] == "SANDBOX_UNAVAILABLE_IN_STANDALONE"
++
++
++async def test_update_existing_nsjail_field_metadata_succeeds_in_standalone(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++) -> None:
++    """Editing non-tier properties on pre-existing nsjail field succeeds in standalone mode."""
++    admin = await make_user("admin-gate-4", workspace_role="WORKSPACE_ADMIN")
++    await make_project("GATE4", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = _as_admin_aal2(api_env, admin)
++    _set_tier_b_state(client, available=True)
++
++    # Create nsjail field while available
++    create_resp = await client.post(
++        "/api/v1/projects/GATE4/custom-fields",
++        json={
++            "slug": "preexisting-nsjail",
++            "name": "Preexisting Nsjail Field",
++            "tier": "nsjail",
++            "output_format": "text",
++            "output_format_metadata": {"max_length": 140},
++            "script_source": "import sys; print('initial')",
++        },
++    )
++    assert create_resp.status_code == 201
++    field_id = create_resp.json()["id"]
++
++    # Switch to standalone mode (simulating imported backup)
++    _set_tier_b_state(client, available=False)
++
++    # Updating name and enabled state without passing tier must succeed
++    patch_resp = await client.patch(
++        f"/api/v1/projects/GATE4/custom-fields/{field_id}",
++        json={"name": "Renamed Preexisting Nsjail", "is_enabled": False},
++    )
++    assert patch_resp.status_code == 200
++    assert patch_resp.json()["name"] == "Renamed Preexisting Nsjail"
++    assert patch_resp.json()["tier"] == "nsjail"
++    assert patch_resp.json()["is_enabled"] is False
++
++
++async def test_test_execute_nsjail_rejected_in_standalone(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++) -> None:
++    """Test-executing draft nsjail field in standalone mode returns 422."""
++    admin = await make_user("admin-gate-5", workspace_role="WORKSPACE_ADMIN")
++    await make_project("GATE5", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = _as_admin_aal2(api_env, admin)
++    issue_key = await _create_test_issue(client, "GATE5")
++    _set_tier_b_state(client, available=False)
++
++    resp = await client.post(
++        "/api/v1/projects/GATE5/custom-fields/test-execute",
++        json={
++            "issue_key": issue_key,
++            "tier": "nsjail",
++            "output_format": "text",
++            "output_format_metadata": {},
++            "script_source": "import sys; print('test')",
++        },
++    )
++    assert resp.status_code == 422
++    body = resp.json()
++    assert body["code"] == "SANDBOX_UNAVAILABLE_IN_STANDALONE"
++    assert "formula" in body["detail"].lower()
++
++
++async def test_test_execute_nsjail_succeeds_with_wired_tier_b_runner(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++) -> None:
++    """Test-executing nsjail field in multi-container mode uses wired tier_b_runner."""
++    admin = await make_user("admin-gate-6", workspace_role="WORKSPACE_ADMIN")
++    await make_project("GATE6", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = _as_admin_aal2(api_env, admin)
++    issue_key = await _create_test_issue(client, "GATE6")
++    _set_tier_b_state(client, available=True, runner=MockTierBRunner())
++
++    resp = await client.post(
++        "/api/v1/projects/GATE6/custom-fields/test-execute",
++        json={
++            "issue_key": issue_key,
++            "tier": "nsjail",
++            "output_format": "text",
++            "output_format_metadata": {},
++            "script_source": "import sys; print('test')",
++        },
++    )
++    assert resp.status_code == 200
++    body = resp.json()
++    assert body["status"] == "SUCCESS"
++    assert body["value"] == "mocked-nsjail-output"
++
++
++async def test_execute_custom_field_uses_wired_tier_b_runner(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++) -> None:
++    """POST /issues/{key}/custom-fields/{id}/execute wires tier_b_runner from app.state."""
++    admin = await make_user("admin-gate-7", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("GATE7", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = _as_admin_aal2(api_env, admin)
++    await _create_test_issue(client, "GATE7")
++    _set_tier_b_state(client, available=True, runner=MockTierBRunner())
++
++    # Create nsjail field
++    field_id = uuid.uuid4()
++    manifest = compute_field_manifest_sha256(
++        script_source="import sys; print('execute')",
++        output_format="text",
++        output_format_metadata={},
++        tier="nsjail",
++        target_scope="PROJECT",
++        credential_mode="INVOKING_USER",
++    )
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO custom_field_definitions ("
++            "id, workspace_id, project_id, name, slug, tier, output_format, "
++            "output_format_metadata, script_source, manifest_sha256, target_scope, "
++            "credential_mode, created_by_id"
++            ") VALUES ("
++            ":id, :ws, :proj, 'Nsjail Exec Field', 'nsjail-exec-field', 'nsjail', 'text', "
++            "'{}'::jsonb, 'import sys; print(\"execute\")', :man, 'PROJECT', 'INVOKING_USER', :uid"
++            ")"
++        ),
++        {
++            "id": field_id,
++            "ws": api_env.workspace_id,
++            "proj": proj_id,
++            "man": manifest,
++            "uid": admin.id,
++        },
++    )
++    await api_env.seed.commit()
++
++    resp = await client.post(f"/api/v1/issues/GATE7-1/custom-fields/{field_id}/execute")
++    assert resp.status_code == 200
++    body = resp.json()
++    assert body["value"] == "mocked-nsjail-output"
++
++
++def test_is_tier_b_available_direct_helpers() -> None:
++    """Test helper functions is_tier_b_available and assert_tier_available directly."""
++    # 1. Override takes precedence
++    assert is_tier_b_available(override=True) is True
++    assert is_tier_b_available(override=False) is False
++
++    # 2. Request with app.state.tier_b_sandbox_available
++    req = MagicMock()
++    req.app.state.tier_b_sandbox_available = True
++    assert is_tier_b_available(request=req) is True
++    req.app.state.tier_b_sandbox_available = False
++    assert is_tier_b_available(request=req) is False
++
++    # 3. Request without tier_b_sandbox_available attribute
++    del req.app.state.tier_b_sandbox_available
++    req.app.state.settings = None
++    res = is_tier_b_available(request=req)
++    assert isinstance(res, bool)
++
++    # 4. Request is None
++    res_none = is_tier_b_available(request=None)
++    assert isinstance(res_none, bool)
++
++    # 5. assert_tier_available passes for scalar/formula/wasm regardless of tier_b
++    assert_tier_available("scalar", tier_b_sandbox_available=False)
++    assert_tier_available("formula", tier_b_sandbox_available=False)
++    assert_tier_available("wasm", tier_b_sandbox_available=False)
++
++    # 6. assert_tier_available passes for nsjail when available
++    assert_tier_available("nsjail", tier_b_sandbox_available=True)
++
++    # 7. assert_tier_available raises 422 ProblemException for nsjail when unavailable
++    with pytest.raises(ProblemException) as exc_info:
++        assert_tier_available("nsjail", tier_b_sandbox_available=False)
++    assert exc_info.value.status == 422
++    assert exc_info.value.code == "SANDBOX_UNAVAILABLE_IN_STANDALONE"
++
+diff --git a/kanban/web/src/api/schema.gen.ts b/kanban/web/src/api/schema.gen.ts
+index c38f4481..1ea7047f 100644
+--- a/kanban/web/src/api/schema.gen.ts
++++ b/kanban/web/src/api/schema.gen.ts
+@@ -10661,6 +10661,10 @@ export interface components {
+             persistent_volume: boolean;
+             /** Tier B Sandbox Available */
+             tier_b_sandbox_available: boolean;
++            /** Supported Custom Field Tiers */
++            supported_custom_field_tiers?: string[];
++            /** Sandbox Unavailable Reason */
++            sandbox_unavailable_reason?: string | null;
+         };
+         /**
+          * TimelineLink
+diff --git a/kanban/web/src/app/useSystemStatus.ts b/kanban/web/src/app/useSystemStatus.ts
+index 7d45a260..c22cfba2 100644
+--- a/kanban/web/src/app/useSystemStatus.ts
++++ b/kanban/web/src/app/useSystemStatus.ts
+@@ -3,10 +3,21 @@
+  * Queries /api/v1/system/status to determine deployment mode, air-gap, and persistence.
+  */
+ 
+-import { useEffect } from 'react';
+-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
++import { useContext, useEffect } from 'react';
++import {
++  QueryClient,
++  QueryClientContext,
++  useQuery,
++  type UseQueryResult,
++} from '@tanstack/react-query';
+ import { qk } from '../api/queryKeys';
+ 
++let fallbackClient: QueryClient | null = null;
++function getFallbackQueryClient(): QueryClient {
++  fallbackClient ??= new QueryClient();
++  return fallbackClient;
++}
++
+ export interface SystemStatus {
+   readonly deployment_mode:
+     | 'standalone_embedded_pg'
+@@ -21,6 +32,8 @@ export interface SystemStatus {
+   readonly data_mount_point?: string | null;
+   readonly data_mount_fstype?: string | null;
+   readonly tier_b_sandbox_available?: boolean;
++  readonly supported_custom_field_tiers?: readonly string[];
++  readonly sandbox_unavailable_reason?: string | null;
+ }
+ 
+ export async function fetchSystemStatus(signal?: AbortSignal): Promise<SystemStatus> {
+@@ -37,9 +50,11 @@ export async function fetchSystemStatus(signal?: AbortSignal): Promise<SystemSta
+ }
+ 
+ export function useSystemStatus(): UseQueryResult<SystemStatus> {
+-  const queryClient = useQueryClient();
++  const contextClient = useContext(QueryClientContext);
++  const queryClient = contextClient ?? getFallbackQueryClient();
+ 
+   useEffect(() => {
++    if (!contextClient) return;
+     const handleStatusChanged = (): void => {
+       void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
+     };
+@@ -47,11 +62,15 @@ export function useSystemStatus(): UseQueryResult<SystemStatus> {
+     return () => {
+       window.removeEventListener('kb:system-status-changed', handleStatusChanged);
+     };
+-  }, [queryClient]);
++  }, [contextClient, queryClient]);
+ 
+-  return useQuery({
+-    queryKey: qk.systemStatus(),
+-    queryFn: ({ signal }) => fetchSystemStatus(signal),
+-    staleTime: 60000,
+-  });
++  return useQuery(
++    {
++      queryKey: qk.systemStatus(),
++      queryFn: ({ signal }) => fetchSystemStatus(signal),
++      staleTime: 60000,
++      enabled: Boolean(contextClient),
++    },
++    queryClient,
++  );
+ }
+diff --git a/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx b/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
+index a66d0869..a4e88615 100644
+--- a/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
++++ b/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
+@@ -4,6 +4,7 @@
+ import type { JSX } from 'react';
+ import React, { useMemo, useRef, useState } from 'react';
+ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
++import { useSystemStatus } from '../../app/useSystemStatus';
+ import { NotFoundView } from '../../app/routes';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { FlavorDecisionMatrix } from './FlavorDecisionMatrix';
+@@ -210,6 +211,8 @@ export function CustomFieldDefinitionEditor({
+   isAdmin = true,
+ }: CustomFieldDefinitionEditorProps): JSX.Element {
+   const queryClient = useQueryClient();
++  const { data: systemStatus } = useSystemStatus();
++  const isTierBAvailable = systemStatus?.tier_b_sandbox_available !== false;
+ 
+   // Selected field for editing (null = creating new)
+   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
+@@ -670,11 +673,58 @@ export function CustomFieldDefinitionEditor({
+           </div>
+         )}
+ 
++        {/* Inline Guidance Callout for Standalone Mode */}
++        {!isTierBAvailable && (
++          <div
++            className="custom-field-standalone-callout"
++            role="status"
++            data-testid="standalone-guidance-callout"
++          >
++            <span className="custom-field-standalone-callout-icon" aria-hidden="true">
++              💡
++            </span>
++            <div className="custom-field-standalone-callout-text">
++              <strong>Standalone Mode Active:</strong> Scalar (&lt;1ms), Formula (&lt;5ms), and WebAssembly (&lt;25ms) work out of the box in Standalone mode.{' '}
++              <a
++                href="/docs/Guide-Custom-Fields"
++                className="custom-field-callout-link"
++                data-testid="link-guide-custom-fields"
++              >
++                [Guide] How to Use Custom Fields &rarr;
++              </a>{' '}
++              <a
++                href="/admin/standalone"
++                className="custom-field-callout-link"
++                data-testid="link-promote-multi-container"
++              >
++                Promote to Multi-Container &rarr;
++              </a>
++            </div>
++          </div>
++        )}
++
++        {/* Warning Banner for Pre-Existing nsjail Field from Backup */}
++        {selectedField?.tier === 'nsjail' && !isTierBAvailable && (
++          <div
++            className="custom-field-warning-banner"
++            role="alert"
++            data-testid="preexisting-nsjail-warning-banner"
++          >
++            <span className="custom-field-warning-banner-icon" aria-hidden="true">
++              ⚠️
++            </span>
++            <div className="custom-field-warning-banner-text">
++              <strong>Pre-Existing nsjail Field (Imported from Backup):</strong> Execution sandbox is unavailable in Standalone mode. You can inspect and edit configuration, but execution requires promoting to multi-container compose.
++            </div>
++          </div>
++        )}
++
+         {/* Starter Presets & 4-Flavor Decision Matrix (when creating new definition) */}
+         {!selectedField && (
+           <div className="custom-fields-starter-toolkit" data-testid="custom-fields-starter-toolkit">
+             <FlavorDecisionMatrix
+               selectedFlavor={flavor}
++              tierBAvailable={isTierBAvailable}
+               onSelectFlavor={(f) => {
+                 setFlavor(f);
+                 if (f === 'nsjail') {
+@@ -691,6 +741,7 @@ export function CustomFieldDefinitionEditor({
+               isDirty={isDirty}
+               onUndo={handleUndoPreset}
+               appliedPresetName={appliedPresetName}
++              tierBAvailable={isTierBAvailable}
+               onDismissUndo={() => {
+                 setAppliedPresetName(null);
+               }}
+@@ -836,8 +887,18 @@ export function CustomFieldDefinitionEditor({
+                   <option value="scalar">Scalar Value (Static literal or JSON object)</option>
+                   <option value="formula">Formula Expression (AST safe issue evaluation)</option>
+                   <option value="wasm">WebAssembly (Tier A sandboxed bytecode)</option>
+-                  <option value="nsjail">nsjail Advanced Script (Linux namespaces)</option>
++                  <option value="nsjail" disabled={!isTierBAvailable}>
++                    nsjail Advanced Script (Linux namespaces){!isTierBAvailable ? ' [Multi-Container Compose Required]' : ''}
++                  </option>
+                 </select>
++                {!isTierBAvailable && (
++                  <span
++                    className="custom-field-badge custom-field-badge--warning"
++                    data-testid="flavor-nsjail-disabled-badge"
++                  >
++                    Multi-Container Compose Required
++                  </span>
++                )}
+               </div>
+ 
+               {/* Output Format */}
+@@ -1088,8 +1149,18 @@ export function CustomFieldDefinitionEditor({
+                   data-testid="execution-tier-select"
+                 >
+                   <option value="wasm">Built-in Formula Sandbox (WebAssembly)</option>
+-                  <option value="nsjail">Isolated Process & CLI Sandbox (Linux Namespaces)</option>
++                  <option value="nsjail" disabled={!isTierBAvailable}>
++                    Isolated Process & CLI Sandbox (Linux Namespaces){!isTierBAvailable ? ' [Multi-Container Compose Required]' : ''}
++                  </option>
+                 </select>
++                {!isTierBAvailable && (
++                  <span
++                    className="custom-field-badge custom-field-badge--warning"
++                    data-testid="tier-nsjail-disabled-badge"
++                  >
++                    Multi-Container Compose Required
++                  </span>
++                )}
+                 <div className="custom-field-form-hint">
+                   {tier === 'wasm'
+                     ? 'Runs fast custom field formulas and workflow checks in-memory with zero network or filesystem access (Always active).'
+diff --git a/kanban/web/src/features/custom-fields/FlavorDecisionMatrix.tsx b/kanban/web/src/features/custom-fields/FlavorDecisionMatrix.tsx
+index fd072690..61355d26 100644
+--- a/kanban/web/src/features/custom-fields/FlavorDecisionMatrix.tsx
++++ b/kanban/web/src/features/custom-fields/FlavorDecisionMatrix.tsx
+@@ -63,6 +63,7 @@ export interface FlavorDecisionMatrixProps {
+   onSelectFlavor?: (flavor: FieldFlavor) => void;
+   isOpen?: boolean;
+   onToggle?: () => void;
++  tierBAvailable?: boolean;
+ }
+ 
+ /**
+@@ -74,6 +75,7 @@ export function FlavorDecisionMatrix({
+   onSelectFlavor,
+   isOpen: controlledIsOpen,
+   onToggle,
++  tierBAvailable = true,
+ }: FlavorDecisionMatrixProps): JSX.Element {
+   const [internalIsOpen, setInternalIsOpen] = useState(false);
+   const isOpen = controlledIsOpen ?? internalIsOpen;
+@@ -135,6 +137,14 @@ export function FlavorDecisionMatrix({
+                     >
+                       {item.latency}
+                     </span>
++                    {item.flavor === 'nsjail' && !tierBAvailable && (
++                      <span
++                        className="flavor-matrix-unavailable-badge"
++                        data-testid="flavor-nsjail-unavailable-badge"
++                      >
++                        Multi-Container Compose Required
++                      </span>
++                    )}
+                   </div>
+ 
+                   <dl className="flavor-matrix-card-dl">
+@@ -169,6 +179,12 @@ export function FlavorDecisionMatrix({
+                       onClick={() => {
+                         onSelectFlavor(item.flavor);
+                       }}
++                      disabled={item.flavor === 'nsjail' && !tierBAvailable}
++                      title={
++                        item.flavor === 'nsjail' && !tierBAvailable
++                          ? 'Multi-Container Compose Required'
++                          : undefined
++                      }
+                       data-testid={`select-flavor-btn-${item.flavor}`}
+                     >
+                       {isSelected ? 'Selected' : `Use ${item.title}`}
+diff --git a/kanban/web/src/features/custom-fields/PresetGallery.tsx b/kanban/web/src/features/custom-fields/PresetGallery.tsx
+index c2bf02a5..f465f5be 100644
+--- a/kanban/web/src/features/custom-fields/PresetGallery.tsx
++++ b/kanban/web/src/features/custom-fields/PresetGallery.tsx
+@@ -2,6 +2,7 @@
+ // Apache-2.0 License. See LICENSE for details.
+ 
+ import React, { useState, type JSX } from 'react';
++import { useSystemStatus } from '../../app/useSystemStatus';
+ import type { FieldFlavor } from './api';
+ import { STARTER_PRESETS, type CustomFieldPreset } from './presets';
+ 
+@@ -11,6 +12,7 @@ export interface PresetGalleryProps {
+   onUndo?: () => void;
+   appliedPresetName?: string | null;
+   onDismissUndo?: () => void;
++  tierBAvailable?: boolean;
+ }
+ 
+ /**
+@@ -24,7 +26,11 @@ export function PresetGallery({
+   onUndo,
+   appliedPresetName,
+   onDismissUndo,
++  tierBAvailable,
+ }: PresetGalleryProps): JSX.Element {
++  const { data: systemStatus } = useSystemStatus();
++  const isTierBAvailable = tierBAvailable ?? (systemStatus?.tier_b_sandbox_available !== false);
++
+   const [filter, setFilter] = useState<FieldFlavor | 'all'>('all');
+   const [pendingPreset, setPendingPreset] = useState<CustomFieldPreset | null>(null);
+ 
+@@ -129,55 +135,69 @@ export function PresetGallery({
+ 
+       {/* Grid of 6 Presets */}
+       <div className="preset-gallery-grid" role="list">
+-        {filteredPresets.map((preset) => (
+-          <div
+-            key={preset.id}
+-            className="preset-card"
+-            role="listitem"
+-            data-testid={`preset-card-${preset.slug}`}
+-          >
+-            <div className="preset-card-header">
+-              <h5 className="preset-card-title">{preset.name}</h5>
+-              <div className="preset-card-badges">
+-                <span className={`preset-badge preset-badge--${preset.flavor}`}>
+-                  {preset.flavor}
+-                </span>
+-                <span className="preset-badge preset-badge--latency">
+-                  {preset.latency}
+-                </span>
++        {filteredPresets.map((preset) => {
++          const isPresetDisabled =
++            !isTierBAvailable && (preset.flavor === 'nsjail' || preset.tier === 'nsjail');
++          return (
++            <div
++              key={preset.id}
++              className={`preset-card ${isPresetDisabled ? 'preset-card--disabled' : ''}`}
++              role="listitem"
++              data-testid={`preset-card-${preset.slug}`}
++            >
++              <div className="preset-card-header">
++                <h5 className="preset-card-title">{preset.name}</h5>
++                <div className="preset-card-badges">
++                  <span className={`preset-badge preset-badge--${preset.flavor}`}>
++                    {preset.flavor}
++                  </span>
++                  <span className="preset-badge preset-badge--latency">
++                    {preset.latency}
++                  </span>
++                  {isPresetDisabled && (
++                    <span
++                      className="preset-badge preset-badge--unavailable"
++                      data-testid={`preset-unavailable-${preset.slug}`}
++                    >
++                      Multi-Container Compose Required
++                    </span>
++                  )}
++                </div>
+               </div>
+-            </div>
+ 
+-            <p className="preset-card-desc">{preset.description}</p>
++              <p className="preset-card-desc">{preset.description}</p>
+ 
+-            <div className="preset-card-when">
+-              <span className="preset-card-when-label">When to use:</span>
+-              <p className="preset-card-when-text">{preset.whenToUse}</p>
+-            </div>
++              <div className="preset-card-when">
++                <span className="preset-card-when-label">When to use:</span>
++                <p className="preset-card-when-text">{preset.whenToUse}</p>
++              </div>
+ 
+-            <div className="preset-card-meta">
+-              <span className="preset-card-format-pill">
+-                Format: <strong className="mono">{preset.outputFormat}</strong>
+-              </span>
+-              <span className="preset-card-tier-pill">
+-                Tier: <strong className="mono">{preset.tier}</strong>
+-              </span>
+-            </div>
++              <div className="preset-card-meta">
++                <span className="preset-card-format-pill">
++                  Format: <strong className="mono">{preset.outputFormat}</strong>
++                </span>
++                <span className="preset-card-tier-pill">
++                  Tier: <strong className="mono">{preset.tier}</strong>
++                </span>
++              </div>
+ 
+-            <div className="preset-card-footer">
+-              <button
+-                type="button"
+-                className="custom-field-btn custom-field-btn--primary custom-field-btn--sm preset-card-apply-btn"
+-                onClick={() => {
+-                  handlePresetClick(preset);
+-                }}
+-                data-testid={`use-preset-btn-${preset.slug}`}
+-              >
+-                Use Preset
+-              </button>
++              <div className="preset-card-footer">
++                <button
++                  type="button"
++                  className="custom-field-btn custom-field-btn--primary custom-field-btn--sm preset-card-apply-btn"
++                  onClick={() => {
++                    handlePresetClick(preset);
++                  }}
++                  disabled={isPresetDisabled}
++                  title={isPresetDisabled ? 'Multi-Container Compose Required' : undefined}
++                  data-testid={`use-preset-btn-${preset.slug}`}
++                >
++                  Use Preset
++                </button>
++              </div>
+             </div>
+-          </div>
+-        ))}
++          );
++        })}
+       </div>
+ 
+       {/* Dirty Form Confirmation Dialog */}
+diff --git a/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx b/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx
+index 023e3d98..b3fe645b 100644
+--- a/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx
++++ b/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx
+@@ -100,12 +100,24 @@ if (!def0 || !def1) {
+   throw new Error('mockDefinitions missing expected entries');
+ }
+ 
+-function renderEditor(isAdmin = true) {
++function renderEditor(
++  isAdmin = true,
++  systemStatus?: { tier_b_sandbox_available?: boolean },
++) {
+   const queryClient = new QueryClient({
+     defaultOptions: {
+       queries: { retry: false, staleTime: Infinity },
+     },
+   });
++  if (systemStatus) {
++    queryClient.setQueryData(['system', 'status'], {
++      deployment_mode: 'standalone_embedded_pg',
++      persistent_volume: false,
++      air_gap_mode: false,
++      local_llm_endpoint_host: null,
++      ...systemStatus,
++    });
++  }
+   return render(
+     <QueryClientProvider client={queryClient}>
+       <MemoryRouter>
+@@ -953,4 +965,70 @@ describe('CustomFieldDefinitionEditor', () => {
+       );
+     });
+   });
++
++  it('renders standalone guidance callout and disables nsjail options when tier_b_sandbox_available is false', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
++
++    renderEditor(true, { tier_b_sandbox_available: false });
++
++    // 1. Guidance callout with links
++    const callout = screen.getByTestId('standalone-guidance-callout');
++    expect(callout).toBeDefined();
++    expect(callout.textContent).toContain('Standalone Mode Active:');
++    expect(callout.textContent).toContain('Scalar (<1ms), Formula (<5ms), and WebAssembly (<25ms)');
++
++    const guideLink = screen.getByTestId<HTMLAnchorElement>('link-guide-custom-fields');
++    expect(guideLink.getAttribute('href')).toBe('/docs/Guide-Custom-Fields');
++
++    const promoteLink = screen.getByTestId<HTMLAnchorElement>('link-promote-multi-container');
++    expect(promoteLink.getAttribute('href')).toBe('/admin/standalone');
++
++    // 2. Field flavor nsjail option disabled with badge
++    const flavorSelect = screen.getByTestId<HTMLSelectElement>('field-flavor-select');
++    const nsjailFlavorOpt = flavorSelect.querySelector<HTMLOptionElement>('option[value="nsjail"]');
++    expect(nsjailFlavorOpt?.disabled).toBe(true);
++    expect(screen.getByTestId('flavor-nsjail-disabled-badge')).toBeDefined();
++
++    // 3. Execution tier nsjail option disabled with badge in Advanced tab
++    fireEvent.click(screen.getByTestId('custom-fields-advanced-tab'));
++    const tierSelect = screen.getByTestId<HTMLSelectElement>('execution-tier-select');
++    const nsjailTierOpt = tierSelect.querySelector<HTMLOptionElement>('option[value="nsjail"]');
++    expect(nsjailTierOpt?.disabled).toBe(true);
++    expect(screen.getByTestId('tier-nsjail-disabled-badge')).toBeDefined();
++
++    // 4. Pre-existing nsjail field selection shows warning banner
++    await waitFor(() => {
++      expect(screen.getByTestId('field-item-deploy-target')).toBeDefined();
++    });
++    fireEvent.click(screen.getByTestId('field-item-deploy-target'));
++
++    const warningBanner = screen.getByTestId('preexisting-nsjail-warning-banner');
++    expect(warningBanner).toBeDefined();
++    expect(warningBanner.textContent).toContain('Pre-Existing nsjail Field (Imported from Backup)');
++  });
++
++  it('enables nsjail options and hides guidance callout when tier_b_sandbox_available is true', () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue(mockDefinitions);
++
++    renderEditor(true, { tier_b_sandbox_available: true });
++
++    // Callout not present
++    expect(screen.queryByTestId('standalone-guidance-callout')).toBeNull();
++
++    // Flavor nsjail option enabled and badge not present
++    const flavorSelect = screen.getByTestId<HTMLSelectElement>('field-flavor-select');
++    const nsjailFlavorOpt = flavorSelect.querySelector<HTMLOptionElement>('option[value="nsjail"]');
++    expect(nsjailFlavorOpt?.disabled).toBe(false);
++    expect(screen.queryByTestId('flavor-nsjail-disabled-badge')).toBeNull();
++
++    // Tier nsjail option enabled and badge not present in Advanced tab
++    fireEvent.click(screen.getByTestId('custom-fields-advanced-tab'));
++    const tierSelect = screen.getByTestId<HTMLSelectElement>('execution-tier-select');
++    const nsjailTierOpt = tierSelect.querySelector<HTMLOptionElement>('option[value="nsjail"]');
++    expect(nsjailTierOpt?.disabled).toBe(false);
++    expect(screen.queryByTestId('tier-nsjail-disabled-badge')).toBeNull();
++
++    // Pre-existing warning banner not present
++    expect(screen.queryByTestId('preexisting-nsjail-warning-banner')).toBeNull();
++  });
+ });
+diff --git a/kanban/web/src/features/custom-fields/__tests__/PresetGallery.test.tsx b/kanban/web/src/features/custom-fields/__tests__/PresetGallery.test.tsx
+index b52efe79..492f32bc 100644
+--- a/kanban/web/src/features/custom-fields/__tests__/PresetGallery.test.tsx
++++ b/kanban/web/src/features/custom-fields/__tests__/PresetGallery.test.tsx
+@@ -142,4 +142,48 @@ describe('PresetGallery Component (KAN-15, KB-P3-AUDIT-09)', () => {
+     });
+     expect(handleDismiss).toHaveBeenCalledTimes(1);
+   });
++
++  it('disables nsjail presets and renders Multi-Container Compose Required badge when tierBAvailable is false', () => {
++    const handleApply = vi.fn();
++    render(<PresetGallery onApplyPreset={handleApply} tierBAvailable={false} />);
++
++    // nsjail presets should have unavailable badge
++    const rollupBadge = screen.getByTestId('preset-unavailable-total-project-issues');
++    expect(rollupBadge).toBeDefined();
++    expect(rollupBadge.textContent).toContain('Multi-Container Compose Required');
++
++    const gitPrBadge = screen.getByTestId('preset-unavailable-git-pr-link');
++    expect(gitPrBadge).toBeDefined();
++    expect(gitPrBadge.textContent).toContain('Multi-Container Compose Required');
++
++    // Use button should be disabled for nsjail presets
++    const rollupBtn = screen.getByTestId<HTMLButtonElement>('use-preset-btn-total-project-issues');
++    expect(rollupBtn.disabled).toBe(true);
++
++    const gitPrBtn = screen.getByTestId<HTMLButtonElement>('use-preset-btn-git-pr-link');
++    expect(gitPrBtn.disabled).toBe(true);
++
++    // Non-nsjail presets remain enabled
++    const cvssBtn = screen.getByTestId<HTMLButtonElement>('use-preset-btn-cvss-score');
++    expect(cvssBtn.disabled).toBe(false);
++    expect(screen.queryByTestId('preset-unavailable-cvss-score')).toBeNull();
++
++    const blockerBtn = screen.getByTestId<HTMLButtonElement>('use-preset-btn-blocker-count');
++    expect(blockerBtn.disabled).toBe(false);
++    expect(screen.queryByTestId('preset-unavailable-blocker-count')).toBeNull();
++  });
++
++  it('enables nsjail presets when tierBAvailable is true', () => {
++    const handleApply = vi.fn();
++    render(<PresetGallery onApplyPreset={handleApply} tierBAvailable={true} />);
++
++    expect(screen.queryByTestId('preset-unavailable-total-project-issues')).toBeNull();
++    expect(screen.queryByTestId('preset-unavailable-git-pr-link')).toBeNull();
++
++    const rollupBtn = screen.getByTestId<HTMLButtonElement>('use-preset-btn-total-project-issues');
++    expect(rollupBtn.disabled).toBe(false);
++
++    const gitPrBtn = screen.getByTestId<HTMLButtonElement>('use-preset-btn-git-pr-link');
++    expect(gitPrBtn.disabled).toBe(false);
++  });
+ });
+diff --git a/kanban/web/src/features/custom-fields/custom-fields.css b/kanban/web/src/features/custom-fields/custom-fields.css
+index 3ef14b7d..ca40b31e 100644
+--- a/kanban/web/src/features/custom-fields/custom-fields.css
++++ b/kanban/web/src/features/custom-fields/custom-fields.css
+@@ -1420,3 +1420,94 @@
+   text-overflow: ellipsis;
+   white-space: nowrap;
+ }
++
++/* Standalone Guidance Callout and Pre-existing nsjail Warning */
++.custom-field-standalone-callout {
++  display: flex;
++  align-items: flex-start;
++  gap: var(--space-2);
++  padding: var(--space-2) var(--space-3);
++  background-color: var(--bg-surface-raised);
++  border: 1px solid var(--border-subtle);
++  border-left: 3px solid var(--accent-primary);
++  border-radius: var(--radius-sm);
++  font-size: var(--text-xs);
++  color: var(--fg-primary);
++  margin-bottom: var(--space-3);
++  line-height: var(--leading-prose);
++}
++
++.custom-field-standalone-callout-icon {
++  font-size: var(--text-sm);
++  flex-shrink: 0;
++  margin-top: 1px;
++}
++
++.custom-field-standalone-callout-text {
++  flex: 1;
++}
++
++.custom-field-callout-link {
++  color: var(--accent-primary);
++  text-decoration: underline;
++  font-weight: var(--font-semibold);
++  margin-left: var(--space-1);
++}
++
++.custom-field-warning-banner {
++  display: flex;
++  align-items: flex-start;
++  gap: var(--space-2);
++  padding: var(--space-2) var(--space-3);
++  background-color: var(--warn-bg);
++  border: 1px solid var(--border-warning);
++  border-radius: var(--radius-sm);
++  font-size: var(--text-xs);
++  color: var(--warn-fg);
++  margin-bottom: var(--space-3);
++  line-height: var(--leading-prose);
++}
++
++.custom-field-warning-banner-icon {
++  font-size: var(--text-sm);
++  flex-shrink: 0;
++  margin-top: 1px;
++}
++
++.custom-field-warning-banner-text {
++  flex: 1;
++}
++
++.custom-field-badge--warning {
++  display: inline-block;
++  margin-top: var(--space-1);
++  padding: 2px var(--space-2);
++  background-color: var(--warn-bg);
++  border: 1px solid var(--border-warning);
++  color: var(--warn-fg);
++  font-size: var(--text-xs);
++  font-weight: var(--font-semibold);
++  border-radius: var(--radius-sm);
++}
++
++.preset-badge--unavailable {
++  background-color: var(--warn-bg);
++  border-color: var(--border-warning);
++  color: var(--warn-fg);
++}
++
++.preset-card--disabled {
++  opacity: 0.85;
++  border-color: var(--border-warning);
++}
++
++.flavor-matrix-unavailable-badge {
++  display: inline-block;
++  font-size: var(--text-xs);
++  padding: 2px var(--space-1);
++  background-color: var(--warn-bg);
++  border: 1px solid var(--border-warning);
++  color: var(--warn-fg);
++  border-radius: var(--radius-sm);
++  margin-left: auto;
++}

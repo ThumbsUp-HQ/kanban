@@ -4,6 +4,7 @@
 import type { JSX } from 'react';
 import React, { useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useSystemStatus } from '../../app/useSystemStatus';
 import { NotFoundView } from '../../app/routes';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { FlavorDecisionMatrix } from './FlavorDecisionMatrix';
@@ -210,6 +211,8 @@ export function CustomFieldDefinitionEditor({
   isAdmin = true,
 }: CustomFieldDefinitionEditorProps): JSX.Element {
   const queryClient = useQueryClient();
+  const { data: systemStatus } = useSystemStatus();
+  const isTierBAvailable = systemStatus?.tier_b_sandbox_available !== false;
 
   // Selected field for editing (null = creating new)
   const [selectedFieldId, setSelectedFieldId] = useState<string | null>(null);
@@ -670,11 +673,58 @@ export function CustomFieldDefinitionEditor({
           </div>
         )}
 
+        {/* Inline Guidance Callout for Standalone Mode */}
+        {!isTierBAvailable && (
+          <div
+            className="custom-field-standalone-callout"
+            role="status"
+            data-testid="standalone-guidance-callout"
+          >
+            <span className="custom-field-standalone-callout-icon" aria-hidden="true">
+              💡
+            </span>
+            <div className="custom-field-standalone-callout-text">
+              <strong>Standalone Mode Active:</strong> Scalar (&lt;1ms), Formula (&lt;5ms), and WebAssembly (&lt;25ms) work out of the box in Standalone mode.{' '}
+              <a
+                href="/docs/Guide-Custom-Fields"
+                className="custom-field-callout-link"
+                data-testid="link-guide-custom-fields"
+              >
+                [Guide] How to Use Custom Fields &rarr;
+              </a>{' '}
+              <a
+                href="/admin/standalone"
+                className="custom-field-callout-link"
+                data-testid="link-promote-multi-container"
+              >
+                Promote to Multi-Container &rarr;
+              </a>
+            </div>
+          </div>
+        )}
+
+        {/* Warning Banner for Pre-Existing nsjail Field from Backup */}
+        {selectedField?.tier === 'nsjail' && !isTierBAvailable && (
+          <div
+            className="custom-field-warning-banner"
+            role="alert"
+            data-testid="preexisting-nsjail-warning-banner"
+          >
+            <span className="custom-field-warning-banner-icon" aria-hidden="true">
+              ⚠️
+            </span>
+            <div className="custom-field-warning-banner-text">
+              <strong>Pre-Existing nsjail Field (Imported from Backup):</strong> Execution sandbox is unavailable in Standalone mode. You can inspect and edit configuration, but execution requires promoting to multi-container compose.
+            </div>
+          </div>
+        )}
+
         {/* Starter Presets & 4-Flavor Decision Matrix (when creating new definition) */}
         {!selectedField && (
           <div className="custom-fields-starter-toolkit" data-testid="custom-fields-starter-toolkit">
             <FlavorDecisionMatrix
               selectedFlavor={flavor}
+              tierBAvailable={isTierBAvailable}
               onSelectFlavor={(f) => {
                 setFlavor(f);
                 if (f === 'nsjail') {
@@ -691,6 +741,7 @@ export function CustomFieldDefinitionEditor({
               isDirty={isDirty}
               onUndo={handleUndoPreset}
               appliedPresetName={appliedPresetName}
+              tierBAvailable={isTierBAvailable}
               onDismissUndo={() => {
                 setAppliedPresetName(null);
               }}
@@ -836,8 +887,18 @@ export function CustomFieldDefinitionEditor({
                   <option value="scalar">Scalar Value (Static literal or JSON object)</option>
                   <option value="formula">Formula Expression (AST safe issue evaluation)</option>
                   <option value="wasm">WebAssembly (Tier A sandboxed bytecode)</option>
-                  <option value="nsjail">nsjail Advanced Script (Linux namespaces)</option>
+                  <option value="nsjail" disabled={!isTierBAvailable}>
+                    nsjail Advanced Script (Linux namespaces){!isTierBAvailable ? ' [Multi-Container Compose Required]' : ''}
+                  </option>
                 </select>
+                {!isTierBAvailable && (
+                  <span
+                    className="custom-field-badge custom-field-badge--warning"
+                    data-testid="flavor-nsjail-disabled-badge"
+                  >
+                    Multi-Container Compose Required
+                  </span>
+                )}
               </div>
 
               {/* Output Format */}
@@ -1088,8 +1149,18 @@ export function CustomFieldDefinitionEditor({
                   data-testid="execution-tier-select"
                 >
                   <option value="wasm">Built-in Formula Sandbox (WebAssembly)</option>
-                  <option value="nsjail">Isolated Process & CLI Sandbox (Linux Namespaces)</option>
+                  <option value="nsjail" disabled={!isTierBAvailable}>
+                    Isolated Process & CLI Sandbox (Linux Namespaces){!isTierBAvailable ? ' [Multi-Container Compose Required]' : ''}
+                  </option>
                 </select>
+                {!isTierBAvailable && (
+                  <span
+                    className="custom-field-badge custom-field-badge--warning"
+                    data-testid="tier-nsjail-disabled-badge"
+                  >
+                    Multi-Container Compose Required
+                  </span>
+                )}
                 <div className="custom-field-form-hint">
                   {tier === 'wasm'
                     ? 'Runs fast custom field formulas and workflow checks in-memory with zero network or filesystem access (Always active).'

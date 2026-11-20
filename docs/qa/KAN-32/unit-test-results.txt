@@ -1,0 +1,71 @@
+=== PYTHON PYTEST & COVERAGE (KAN-32) ===
+Command:
+KB_TEST_PGSOCKET_DIR=/tmp/kb-pgsock-b-kan32 KB_TEST_PGHOST=/tmp/kb-pgsock-b-kan32 uv run pytest kanban/tests/custom_fields/test_standalone_nsjail_gate.py kanban/tests/custom_fields/test_custom_fields_api.py kanban/tests/custom_fields/test_execution_api.py kanban/tests/custom_fields/test_manifest_and_formula_security.py --cov=kanban.custom_fields.service --cov=kanban.api.v1.custom_field_execution --cov=kanban.api.v1.custom_fields --cov-report=term-missing
+
+Output:
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 26 items
+
+kanban/tests/custom_fields/test_standalone_nsjail_gate.py ........       [ 30%]
+kanban/tests/custom_fields/test_custom_fields_api.py .......             [ 57%]
+kanban/tests/custom_fields/test_execution_api.py ...                     [ 69%]
+kanban/tests/custom_fields/test_manifest_and_formula_security.py ....... [ 96%]
+.                                                                        [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                      Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------------
+kanban/api/v1/custom_field_execution.py     120      1     26      4    97%   71->74, 109->125, 261->282, 283
+kanban/api/v1/custom_fields.py               30      0      0      0   100%
+kanban/custom_fields/service.py             163      0     42      2    99%   355->359, 361->365
+-------------------------------------------------------------------------------------
+TOTAL                                       313      1     68      6    98%
+============================= 26 passed in 28.31s ==============================
+
+
+=== TYPESCRIPT VITEST & COVERAGE (KAN-32) ===
+Command:
+COVERAGE_INCLUDE="src/features/custom-fields/CustomFieldDefinitionEditor.tsx,src/features/custom-fields/PresetGallery.tsx,src/features/custom-fields/FlavorDecisionMatrix.tsx,src/app/useSystemStatus.ts" pnpm --filter @kanban/web test:coverage src/features/custom-fields src/app/useSystemStatus.test.tsx
+
+Output:
+> @kanban/web@0.1.0 test:coverage /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
+> vitest run --coverage src/features/custom-fields src/app/useSystemStatus.test.tsx
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan32-82da2d0f/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/custom-fields/__tests__/presets.test.ts (3 tests) 18ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldsStudio.test.tsx (2 tests) 67ms
+ ✓ src/app/useSystemStatus.test.tsx (4 tests) 192ms
+ ✓ src/features/custom-fields/__tests__/FlavorDecisionMatrix.test.tsx (5 tests) 175ms
+ ✓ src/features/custom-fields/__tests__/PresetGallery.test.tsx (8 tests) 378ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldValue.test.tsx (32 tests) 310ms
+ ✓ src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx (23 tests) 590ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx (18 tests) 650ms
+ ✓ src/features/custom-fields/__tests__/api.test.ts (30 tests) 35ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx (40 tests) 2634ms
+
+ Test Files  10 passed (10)
+      Tests  165 passed (165)
+   Start at  09:46:46
+   Duration  5.61s (environment 50%, tests 24%, import 19%, transform 4%, worker 3%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |    95.69 |     100 |     100 |                   
+ app               |     100 |      100 |     100 |     100 |                   
+  ...stemStatus.ts |     100 |      100 |     100 |     100 |                   
+ .../custom-fields |     100 |    95.47 |     100 |     100 |                   
+  ...ionEditor.tsx |     100 |    95.74 |     100 |     100 | ...49,504-525,558 
+  ...ionMatrix.tsx |     100 |     92.3 |     100 |     100 | 140,184           
+  ...etGallery.tsx |     100 |    96.87 |     100 |     100 | 51                
+-------------------|---------|----------|---------|---------|-------------------

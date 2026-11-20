@@ -2,6 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React, { useState, type JSX } from 'react';
+import { useSystemStatus } from '../../app/useSystemStatus';
 import type { FieldFlavor } from './api';
 import { STARTER_PRESETS, type CustomFieldPreset } from './presets';
 
@@ -11,6 +12,7 @@ export interface PresetGalleryProps {
   onUndo?: () => void;
   appliedPresetName?: string | null;
   onDismissUndo?: () => void;
+  tierBAvailable?: boolean;
 }
 
 /**
@@ -24,7 +26,11 @@ export function PresetGallery({
   onUndo,
   appliedPresetName,
   onDismissUndo,
+  tierBAvailable,
 }: PresetGalleryProps): JSX.Element {
+  const { data: systemStatus } = useSystemStatus();
+  const isTierBAvailable = tierBAvailable ?? (systemStatus?.tier_b_sandbox_available !== false);
+
   const [filter, setFilter] = useState<FieldFlavor | 'all'>('all');
   const [pendingPreset, setPendingPreset] = useState<CustomFieldPreset | null>(null);
 
@@ -129,55 +135,69 @@ export function PresetGallery({
 
       {/* Grid of 6 Presets */}
       <div className="preset-gallery-grid" role="list">
-        {filteredPresets.map((preset) => (
-          <div
-            key={preset.id}
-            className="preset-card"
-            role="listitem"
-            data-testid={`preset-card-${preset.slug}`}
-          >
-            <div className="preset-card-header">
-              <h5 className="preset-card-title">{preset.name}</h5>
-              <div className="preset-card-badges">
-                <span className={`preset-badge preset-badge--${preset.flavor}`}>
-                  {preset.flavor}
+        {filteredPresets.map((preset) => {
+          const isPresetDisabled =
+            !isTierBAvailable && (preset.flavor === 'nsjail' || preset.tier === 'nsjail');
+          return (
+            <div
+              key={preset.id}
+              className={`preset-card ${isPresetDisabled ? 'preset-card--disabled' : ''}`}
+              role="listitem"
+              data-testid={`preset-card-${preset.slug}`}
+            >
+              <div className="preset-card-header">
+                <h5 className="preset-card-title">{preset.name}</h5>
+                <div className="preset-card-badges">
+                  <span className={`preset-badge preset-badge--${preset.flavor}`}>
+                    {preset.flavor}
+                  </span>
+                  <span className="preset-badge preset-badge--latency">
+                    {preset.latency}
+                  </span>
+                  {isPresetDisabled && (
+                    <span
+                      className="preset-badge preset-badge--unavailable"
+                      data-testid={`preset-unavailable-${preset.slug}`}
+                    >
+                      Multi-Container Compose Required
+                    </span>
+                  )}
+                </div>
+              </div>
+
+              <p className="preset-card-desc">{preset.description}</p>
+
+              <div className="preset-card-when">
+                <span className="preset-card-when-label">When to use:</span>
+                <p className="preset-card-when-text">{preset.whenToUse}</p>
+              </div>
+
+              <div className="preset-card-meta">
+                <span className="preset-card-format-pill">
+                  Format: <strong className="mono">{preset.outputFormat}</strong>
                 </span>
-                <span className="preset-badge preset-badge--latency">
-                  {preset.latency}
+                <span className="preset-card-tier-pill">
+                  Tier: <strong className="mono">{preset.tier}</strong>
                 </span>
               </div>
-            </div>
 
-            <p className="preset-card-desc">{preset.description}</p>
-
-            <div className="preset-card-when">
-              <span className="preset-card-when-label">When to use:</span>
-              <p className="preset-card-when-text">{preset.whenToUse}</p>
+              <div className="preset-card-footer">
+                <button
+                  type="button"
+                  className="custom-field-btn custom-field-btn--primary custom-field-btn--sm preset-card-apply-btn"
+                  onClick={() => {
+                    handlePresetClick(preset);
+                  }}
+                  disabled={isPresetDisabled}
+                  title={isPresetDisabled ? 'Multi-Container Compose Required' : undefined}
+                  data-testid={`use-preset-btn-${preset.slug}`}
+                >
+                  Use Preset
+                </button>
+              </div>
             </div>
-
-            <div className="preset-card-meta">
-              <span className="preset-card-format-pill">
-                Format: <strong className="mono">{preset.outputFormat}</strong>
-              </span>
-              <span className="preset-card-tier-pill">
-                Tier: <strong className="mono">{preset.tier}</strong>
-              </span>
-            </div>
-
-            <div className="preset-card-footer">
-              <button
-                type="button"
-                className="custom-field-btn custom-field-btn--primary custom-field-btn--sm preset-card-apply-btn"
-                onClick={() => {
-                  handlePresetClick(preset);
-                }}
-                data-testid={`use-preset-btn-${preset.slug}`}
-              >
-                Use Preset
-              </button>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
 
       {/* Dirty Form Confirmation Dialog */}

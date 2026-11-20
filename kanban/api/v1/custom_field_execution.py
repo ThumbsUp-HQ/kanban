@@ -73,7 +73,10 @@ async def list_custom_fields_for_issue(
 
     cached_only = script_depth >= 1
     async with timing_floor(floor_ms=25.0):
-        executor = CustomFieldExecutor(session)
+        executor = CustomFieldExecutor(
+            session,
+            tier_b_runner=getattr(request.app.state, "tier_b_runner", None),
+        )
         results = await executor.list_values_for_issue(
             session, caller, issue_key, cached_only=cached_only
         )
@@ -85,11 +88,12 @@ async def list_custom_fields_for_issue(
     response_model=CustomFieldValueItem,
     summary="Force fresh execution of a custom field for an issue",
 )
-async def execute_custom_field_for_issue(
+async def execute_custom_field_for_issue(  # noqa: PLR0913
     issue_key: str,
     field_id: str,
     caller: Caller,
     session: Session,
+    request: Request,
     *,
     force_refresh: bool = True,
 ) -> CustomFieldValueItem:
@@ -118,7 +122,10 @@ async def execute_custom_field_for_issue(
                     ),
                 )
 
-        executor = CustomFieldExecutor(session)
+        executor = CustomFieldExecutor(
+            session,
+            tier_b_runner=getattr(request.app.state, "tier_b_runner", None),
+        )
         result = await executor.execute_for_issue(
             session,
             caller,
@@ -219,6 +226,7 @@ async def test_execute_custom_field(  # noqa: C901
     body: CustomFieldTestExecuteRequest,
     caller: Caller,
     session: Session,
+    request: Request,
 ) -> CustomFieldTestExecuteResponse:
     """Test-execute custom field draft against a chosen project issue.
 
@@ -227,6 +235,11 @@ async def test_execute_custom_field(  # noqa: C901
     async with timing_floor(floor_ms=25.0):
         proj = await get_project_or_404(session, caller, project)
         await CustomFieldDefinitionService.require_admin_and_aal2(session, caller, proj)
+
+        if str(body.tier) == "nsjail":
+            from kanban.custom_fields.service import assert_tier_available  # noqa: PLC0415
+
+            assert_tier_available("nsjail", request=request)
 
         if str(body.tier) == "wasm":
             source = (body.script_source or "").strip()
@@ -302,7 +315,10 @@ async def test_execute_custom_field(  # noqa: C901
                 detail=detail_msg,
             )
 
-        executor = CustomFieldExecutor(session)
+        executor = CustomFieldExecutor(
+            session,
+            tier_b_runner=getattr(request.app.state, "tier_b_runner", None),
+        )
         res = await executor.test_execute(
             session=session,
             caller=caller,

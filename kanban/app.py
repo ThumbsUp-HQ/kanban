@@ -66,6 +66,7 @@ from kanban.security.keys import load_key_material
 from kanban.services.notifications import register_notifications_listener
 from kanban.services.realtime_outbox import register_realtime_outbox_listener
 from kanban.settings import Settings
+from kanban.standalone.export_service import get_standalone_status
 from kanban.web_static import PrecompressedSPAStaticApp
 
 logger = logging.getLogger(__name__)
@@ -382,7 +383,7 @@ def _mount_sparkle_router(app: FastAPI) -> None:
         logger.debug("Automatic live sparkle router mounting skipped", exc_info=True)
 
 
-def create_app(
+def create_app(  # noqa: PLR0915
     settings: Settings | None = None,
     mcp_settings: McpSettings | None = None,
 ) -> FastAPI:
@@ -408,6 +409,10 @@ def create_app(
     app.state.broker = None
     app.state.realtime_hub = None
     app.state.tier_b_runner = TierBNsjailRunner()
+    standalone_status = get_standalone_status(settings=settings)
+    app.state.tier_b_sandbox_available = bool(
+        standalone_status.get("tier_b_sandbox_available", True)
+    )
 
     # Register RFC 7807 problem exception handlers
     app.add_exception_handler(ProblemException, problem_exception_handler)  # type: ignore[arg-type]
