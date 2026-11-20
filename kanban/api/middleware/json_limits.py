@@ -303,7 +303,7 @@ class JsonLimitsMiddleware:
                 if not body_sent:
                     body_sent = True
                     return {"type": "http.request", "body": raw_body, "more_body": False}
-                return {"type": "http.request", "body": b"", "more_body": False}
+                return await receive()
 
             await self.app(scope, empty_receive, send)
             return
@@ -351,6 +351,6 @@ class JsonLimitsMiddleware:
             if not body_sent:
                 body_sent = True
                 return {"type": "http.request", "body": raw_body, "more_body": False}
-            return {"type": "http.request", "body": b"", "more_body": False}
+            return await receive()
 
         await self.app(scope, validated_receive, send)

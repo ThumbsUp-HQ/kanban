@@ -12,6 +12,11 @@ describe('SetupClaimPage (KB-P3-35)', () => {
 
   beforeEach(() => {
     vi.restoreAllMocks();
+    Object.defineProperty(window, 'isSecureContext', {
+      value: true,
+      configurable: true,
+      writable: true,
+    });
   });
 
   it('boundary: setup token with 42 or 44 chars is rejected, 43 accepted (Mandatory Test Case 6)', () => {
