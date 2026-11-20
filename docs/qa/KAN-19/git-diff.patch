@@ -69,21 +69,19 @@ index 3557024..50e7138 100644
 -            payload["blockers"] = self.blockers
          return dump_yaml({"error": payload}, strip_nulls=True)
 diff --git a/mcp/internal_client.py b/mcp/internal_client.py
-index de30d25..0e0c1fc 100644
+index de30d25..84528de 100644
 --- a/mcp/internal_client.py
 +++ b/mcp/internal_client.py
-@@ -277,6 +277,10 @@ class KanbanApiClient:
+@@ -277,6 +277,8 @@ class KanbanApiClient:
              extra_dict["tainted_by"] = problem["extra"]["tainted_by"]
          if "unauthorized_mentions" in problem:
              extra_dict["unauthorized_mentions"] = problem["unauthorized_mentions"]
 +
-+        enriched = self._enrich_progressive_disclosure(
-+            mapped_code, problem, hint_str, extra_dict
-+        )
++        enriched = self._enrich_progressive_disclosure(mapped_code, problem, hint_str, extra_dict)
          raise KbMcpError(
              mapped_code,
              error_message,
-@@ -284,8 +288,85 @@ class KanbanApiClient:
+@@ -284,8 +286,85 @@ class KanbanApiClient:
              candidates=candidates_list,
              blockers=blockers_list,
              extra=extra_dict or None,
@@ -105,10 +103,14 @@ index de30d25..0e0c1fc 100644
 +        """Extract and synthesize self-correcting progressive disclosure error fields."""
 +        fix_hint = problem.get("fix_hint") or hint_str
 +        cli_example = problem.get("cli_example")
-+        raw_options = problem.get("valid_options") or problem.get("valid_states") or (
-+            problem["extra"].get("valid_states")
-+            if isinstance(problem.get("extra"), dict)
-+            else None
++        raw_options = (
++            problem.get("valid_options")
++            or problem.get("valid_states")
++            or (
++                problem["extra"].get("valid_states")
++                if isinstance(problem.get("extra"), dict)
++                else None
++            )
 +        )
 +        valid_options = list(raw_options) if isinstance(raw_options, (list, tuple)) else None
 +        raw_mean = problem.get("did_you_mean")
@@ -121,8 +123,7 @@ index de30d25..0e0c1fc 100644
 +            fix_hint = fix_hint or f"Allowed target states: {opts_str}"
 +            first_opt = valid_options[0]
 +            cli_example = cli_example or (
-+                'kanban-cli-agent transition_ticket --identifier="<key>" '
-+                f'--to-state="{first_opt}"'
++                f'kanban-cli-agent transition_ticket --identifier="<key>" --to-state="{first_opt}"'
 +            )
 +        elif mapped_code == McpErrorCode.CONFLICT_ETAG:
 +            current_etag = (
@@ -131,8 +132,7 @@ index de30d25..0e0c1fc 100644
 +            if current_etag:
 +                extra_dict["current_etag"] = str(current_etag)
 +                fix_hint = (
-+                    fix_hint
-+                    or f"Concurrency conflict. Retry with current ETag: {current_etag}"
++                    fix_hint or f"Concurrency conflict. Retry with current ETag: {current_etag}"
 +                )
 +                cli_example = cli_example or (
 +                    'kanban-cli-agent update_ticket --identifier="<key>" '
@@ -147,13 +147,11 @@ index de30d25..0e0c1fc 100644
 +            if target_doc:
 +                extra_dict["target_doc_key"] = str(target_doc)
 +                fix_hint = fix_hint or (
-+                    f"Sticky has already been promoted to Doc '{target_doc}'. "
-+                    "Use update instead."
++                    f"Sticky has already been promoted to Doc '{target_doc}'. Use update instead."
 +                )
 +                cli_example = cli_example or f'kanban-cli-docs update --id="{target_doc}"'
 +        elif (
-+            mapped_code in (McpErrorCode.NOT_FOUND, McpErrorCode.SECTION_NOT_FOUND)
-+            and not fix_hint
++            mapped_code in (McpErrorCode.NOT_FOUND, McpErrorCode.SECTION_NOT_FOUND) and not fix_hint
 +        ):
 +            fix_hint = "Verify identifier or use search tool to discover valid entities."
 +
@@ -170,7 +168,7 @@ index de30d25..0e0c1fc 100644
      def _resolve_conflict_code(prob_type: str, prob_code: str) -> McpErrorCode:
          if prob_type.endswith("etag-mismatch"):
 diff --git a/mcp/protocol.py b/mcp/protocol.py
-index 9844e36..9bd8231 100644
+index 9844e36..bdbebd9 100644
 --- a/mcp/protocol.py
 +++ b/mcp/protocol.py
 @@ -4,9 +4,11 @@
@@ -293,7 +291,19 @@ index 9844e36..9bd8231 100644
              )
              return JSONResponse(
                  {
-@@ -974,6 +1057,9 @@ class McpProtocolHandler:
+@@ -950,7 +1033,10 @@ class McpProtocolHandler:
+                     )
+ 
+         # Progressive disclosure: JIT help
+-        if arguments.get("identifier") == "help" or arguments.get("action") == "help":
++        if any(
++            isinstance(arguments.get(k), str) and arguments.get(k, "").strip().lower() == "help"
++            for k in ("identifier", "action", "source", "id", "project", "summary")
++        ):
+             return await self._handle_jit_help(
+                 req_id,
+                 tool_name,
+@@ -974,6 +1060,9 @@ class McpProtocolHandler:
          ctx_token = set_current_mcp_context(ctx)
          try:
              try:
@@ -303,7 +313,7 @@ index 9844e36..9bd8231 100644
                  # Invoke handler
                  handler = spec.handler
                  if inspect.iscoroutinefunction(handler):
-@@ -1059,3 +1145,219 @@ class McpProtocolHandler:
+@@ -1059,3 +1148,219 @@ class McpProtocolHandler:
                  },
              }
          )
@@ -524,10 +534,10 @@ index 9844e36..9bd8231 100644
 +                            cli_example=cli_example,
 +                        )
 diff --git a/mcp/surfaces/admin/manage_cycles_and_modules.py b/mcp/surfaces/admin/manage_cycles_and_modules.py
-index f6d6d66..fbcef7c 100644
+index f6d6d66..8d7f74a 100644
 --- a/mcp/surfaces/admin/manage_cycles_and_modules.py
 +++ b/mcp/surfaces/admin/manage_cycles_and_modules.py
-@@ -166,11 +166,41 @@ def _map_cycle_error(exc: KbMcpError) -> KbMcpError:
+@@ -166,11 +166,37 @@ def _map_cycle_error(exc: KbMcpError) -> KbMcpError:
      code_str = exc.code.value if hasattr(exc.code, "value") else str(exc.code)
      msg = exc.message
      if code_str in ("INVALID_CYCLE_TRANSITION", "INVALID_TRANSITION"):
@@ -539,12 +549,10 @@ index f6d6d66..fbcef7c 100644
 +            field="action",
 +            valid_options=valid_opts,
 +            fix_hint=(
-+                "Cycle state transition must follow monotonicity: "
-+                "upcoming -> started -> completed"
++                "Cycle state transition must follow monotonicity: upcoming -> started -> completed"
 +            ),
 +            cli_example=(
-+                'kanban-cli-admin manage_cycles_and_modules --action=update_cycle '
-+                '--cycle="<id>"'
++                'kanban-cli-admin manage_cycles_and_modules --action=update_cycle --cycle="<id>"'
 +            ),
 +        )
      if code_str == "MODULES_DISABLED":
@@ -553,8 +561,7 @@ index f6d6d66..fbcef7c 100644
 +            McpErrorCode.MODULES_DISABLED,
 +            msg,
 +            fix_hint=(
-+                "Modules are disabled for this project. "
-+                "Enable modules in project settings first."
++                "Modules are disabled for this project. Enable modules in project settings first."
 +            ),
 +            cli_example='kanban-cli-admin architect_project --action=update --project="<project>"',
 +        )
@@ -565,8 +572,7 @@ index f6d6d66..fbcef7c 100644
 +            msg,
 +            fix_hint="Cycle or module not found. Verify identifier or list project cycles/modules.",
 +            cli_example=(
-+                'kanban-cli-admin manage_cycles_and_modules --action=list '
-+                '--project="<project>"'
++                'kanban-cli-admin manage_cycles_and_modules --action=list --project="<project>"'
 +            ),
 +        )
      return exc
@@ -638,7 +644,7 @@ index f800059..cc0f991 100644
              raise
  
 diff --git a/mcp/surfaces/docs/update.py b/mcp/surfaces/docs/update.py
-index d885d7f..7085713 100644
+index d885d7f..05a1d39 100644
 --- a/mcp/surfaces/docs/update.py
 +++ b/mcp/surfaces/docs/update.py
 @@ -82,9 +82,11 @@ _INPUT_SCHEMA: Final[dict[str, Any]] = {
@@ -707,7 +713,7 @@ index d885d7f..7085713 100644
          )
  
      return current_body.replace(original_text, replacement_text, 1)
-@@ -489,14 +517,43 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
+@@ -489,14 +517,42 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
      # =========================================================================
      if sticky_info is not None and target_type == "DOC":
          if sticky_info.get("is_promoted_stub") or sticky_info.get("promoted_to_doc_id"):
@@ -744,8 +750,7 @@ index d885d7f..7085713 100644
 +                hint=f"Current fresh ETag is {current_sha}",
 +                extra={"current_etag": current_sha},
 +                fix_hint=(
-+                    "Sticky was modified concurrently. "
-+                    f"Retry with current ETag: {current_sha}"
++                    f"Sticky was modified concurrently. Retry with current ETag: {current_sha}"
 +                ),
 +                cli_example=(
 +                    f'kanban-cli-docs update --id="{clean_id}" --type=DOC '
@@ -754,7 +759,7 @@ index d885d7f..7085713 100644
              )
  
          parent_doc_id: str | None = None
-@@ -584,7 +641,18 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
+@@ -584,7 +640,16 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
              if if_match and if_match != current_sha:
                  msg = f"ETag mismatch: client provided '{if_match}', current is '{current_sha}'"
                  raise KbMcpError(
@@ -764,17 +769,15 @@ index d885d7f..7085713 100644
 +                    hint=f"Current fresh ETag is {current_sha}",
 +                    extra={"current_etag": current_sha},
 +                    fix_hint=(
-+                        "Sticky was modified concurrently. "
-+                        f"Retry with current ETag: {current_sha}"
++                        f"Sticky was modified concurrently. Retry with current ETag: {current_sha}"
 +                    ),
 +                    cli_example=(
-+                        f'kanban-cli-docs update --id="{clean_id}" '
-+                        f'--if-match="{current_sha}"'
++                        f'kanban-cli-docs update --id="{clean_id}" --if-match="{current_sha}"'
 +                    ),
                  )
              patch_payload["body_markdown"] = content
  
-@@ -657,7 +725,18 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
+@@ -657,7 +722,16 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
          if if_match and if_match != current_sha:
              msg = f"ETag mismatch: client provided '{if_match}', current is '{current_sha}'"
              raise KbMcpError(
@@ -784,13 +787,1219 @@ index d885d7f..7085713 100644
 +                hint=f"Current fresh ETag is {current_sha}",
 +                extra={"current_etag": current_sha},
 +                fix_hint=(
-+                    "Document was modified concurrently. "
-+                    f"Retry with current ETag: {current_sha}"
++                    f"Document was modified concurrently. Retry with current ETag: {current_sha}"
 +                ),
 +                cli_example=(
-+                    f'kanban-cli-docs update --id="{clean_id}" '
-+                    f'--if-match="{current_sha}"'
++                    f'kanban-cli-docs update --id="{clean_id}" --if-match="{current_sha}"'
 +                ),
              )
          doc_patch_payload["body_markdown"] = content
  
+diff --git a/mcp/tests/admin/test_manage_cycles_and_modules.py b/mcp/tests/admin/test_manage_cycles_and_modules.py
+index 8f397cb..dc9117e 100644
+--- a/mcp/tests/admin/test_manage_cycles_and_modules.py
++++ b/mcp/tests/admin/test_manage_cycles_and_modules.py
+@@ -1,5 +1,6 @@
+ # Copyright 2026 Kanban Platform Contributors
+ # Apache-2.0 License. See LICENSE for details.
++# ruff: noqa: E501, ANN401, ARG001
+ """Feature unit tests for /mcp/admin tool: manage_cycles_and_modules (KB-P4-10 / S11.4)."""
+ 
+ from __future__ import annotations
+@@ -846,3 +847,226 @@ async def test_manage_cycles_and_modules_direct_unit_branches() -> None:  # noqa
+     assert exc_info.value.code == McpErrorCode.VALIDATION_FAILED
+ 
+     set_current_mcp_context(None)
++
++
++@pytest.mark.asyncio
++async def test_manage_cycles_and_modules_additional_branch_coverage() -> None:  # noqa: PLR0915
++    """Additional branch coverage targeting manage_cycles_and_modules to reach >=95%."""
++    valid_uuid_str = str(uuid.uuid4())
++    mock_client = AsyncMock()
++
++    # 1. Unknown parameter
++    with pytest.raises(KbMcpError) as exc_unk:
++        await manage_cycles_and_modules(
++            {"action": "list_cycles", "project": "KAN", "bad_param": 123}
++        )
++    assert exc_unk.value.code == McpErrorCode.VALIDATION_FAILED
++
++    # 2. repo binding actions without project, but with valid uuid binding (line 316)
++    ctx = McpRequestContext(
++        session_id="test",
++        surface=create_manage_cycles_and_modules_tool().surface,
++        client=mock_client,
++        caller_scopes=frozenset({"admin:write"}),
++    )
++    set_current_mcp_context(ctx)
++
++    try:
++        mock_client.request.return_value = {"id": valid_uuid_str, "status": "refreshed"}
++        res_ref = await manage_cycles_and_modules(
++            {
++                "action": "refresh_repo_binding",
++                "binding": valid_uuid_str,
++            }
++        )
++        assert "refreshed" in res_ref
++
++        # 3. admin:destructive scope authorization check (lines 327-338)
++        ctx_destr = McpRequestContext(
++            session_id="test",
++            surface=create_manage_cycles_and_modules_tool().surface,
++            client=mock_client,
++            caller_scopes=frozenset({"admin:destructive"}),
++        )
++        set_current_mcp_context(ctx_destr)
++        mock_client.request.return_value = {"id": valid_uuid_str, "name": "Cycle Destr"}
++        res_d = await manage_cycles_and_modules(
++            {
++                "action": "create_cycle",
++                "project": "KAN",
++                "name": "Cycle Destr",
++            }
++        )
++        assert "Cycle Destr" in res_d
++
++        # 4. update_cycle with name, start_date, end_date (lines 408-410)
++        set_current_mcp_context(ctx)
++        mock_client.request.return_value = {"id": valid_uuid_str, "name": "Cycle Named"}
++        res_up_c = await manage_cycles_and_modules(
++            {
++                "action": "update_cycle",
++                "project": "KAN",
++                "cycle": valid_uuid_str,
++                "name": "Cycle Named",
++                "start_date": "2026-01-01",
++                "end_date": "2026-01-14",
++            }
++        )
++        assert "Cycle Named" in res_up_c
++
++        # 5. rollover KbMcpError (lines 495-496)
++        mock_client.request.side_effect = KbMcpError(McpErrorCode.INTERNAL, "rollover error")
++        with pytest.raises(KbMcpError):
++            await manage_cycles_and_modules(
++                {
++                    "action": "rollover",
++                    "project": "KAN",
++                    "cycle": valid_uuid_str,
++                    "target_cycle": valid_uuid_str,
++                }
++            )
++
++        # 6. list_modules KbMcpError (lines 521-522)
++        mock_client.request.side_effect = KbMcpError(McpErrorCode.INTERNAL, "list_modules error")
++        with pytest.raises(KbMcpError):
++            await manage_cycles_and_modules({"action": "list_modules", "project": "KAN"})
++
++        # 7. update_module with and without name (lines 569-572)
++        mock_client.request.side_effect = None
++        mock_client.request.return_value = {"id": valid_uuid_str, "name": "M1-Updated"}
++        res_up_m = await manage_cycles_and_modules(
++            {
++                "action": "update_module",
++                "project": "KAN",
++                "module": valid_uuid_str,
++                "name": "M1-Updated",
++            }
++        )
++        assert "M1-Updated" in res_up_m
++
++        # 8. update_view with name (lines 657-659)
++        mock_client.request.return_value = {"id": valid_uuid_str, "name": "V-New"}
++        res_up_v = await manage_cycles_and_modules(
++            {
++                "action": "update_view",
++                "project": "KAN",
++                "view": valid_uuid_str,
++                "name": "V-New",
++            }
++        )
++        assert "V-New" in res_up_v
++
++        # 9. bind_project_repo validation and credentials (lines 689-705)
++        with pytest.raises(KbMcpError) as exc_bind:
++            await manage_cycles_and_modules(
++                {
++                    "action": "bind_project_repo",
++                    "project": "KAN",
++                }
++            )
++        assert exc_bind.value.code == McpErrorCode.VALIDATION_FAILED
++
++        async def _mock_repo_req(method: str, path: str, **kwargs: Any) -> Any:
++            if method == "GET" and "/api/v1/resolve" in path:
++                return {
++                    "id": valid_uuid_str,
++                    "kind": "project",
++                    "key": "KAN",
++                    "title": "Kanban",
++                }
++            if method == "POST" and "/repo-bindings" in path:
++                return {"id": valid_uuid_str, "slug": "my-repo", "credential": "***"}
++            if method == "POST" and f"/repo-bindings/{valid_uuid_str}/refresh" in path:
++                return {"id": valid_uuid_str, "status": "refreshed"}
++            if method == "DELETE" and f"/repo-bindings/{valid_uuid_str}" in path:
++                return {"status": "ok"}
++            return {}
++
++        mock_client.request = AsyncMock(side_effect=_mock_repo_req)
++        res_bind = await manage_cycles_and_modules(
++            {
++                "action": "bind_project_repo",
++                "project": "KAN",
++                "slug": "my-repo",
++                "remote_url": "https://git.example.com/repo.git",
++                "access_mode": "read_only",
++                "credential": "secret-token",
++            }
++        )
++        assert "my-repo" in res_bind
++
++        # 10. list_repo_bindings invalid response (lines 730-731)
++        async def _mock_list_bad(method: str, path: str, **kwargs: Any) -> Any:
++            if method == "GET" and "/api/v1/resolve" in path:
++                return {
++                    "id": valid_uuid_str,
++                    "kind": "project",
++                    "key": "KAN",
++                    "title": "Kanban",
++                }
++            return "not-a-list"
++
++        mock_client.request = AsyncMock(side_effect=_mock_list_bad)
++        with pytest.raises(KbMcpError) as exc_lr:
++            await manage_cycles_and_modules({"action": "list_repo_bindings", "project": "KAN"})
++        assert exc_lr.value.code == McpErrorCode.UPSTREAM_ERROR
++
++        # 11. refresh_repo_binding parameter validations and slug resolution (lines 753-766)
++        with pytest.raises(KbMcpError) as exc_ref_miss:
++            await manage_cycles_and_modules({"action": "refresh_repo_binding", "project": "KAN"})
++        assert exc_ref_miss.value.code == McpErrorCode.VALIDATION_FAILED
++
++        with pytest.raises(KbMcpError) as exc_slug_no_proj:
++            await manage_cycles_and_modules(
++                {
++                    "action": "refresh_repo_binding",
++                    "binding": "slug-name",
++                }
++            )
++        assert exc_slug_no_proj.value.code == McpErrorCode.VALIDATION_FAILED
++
++        mock_client.request = AsyncMock(side_effect=_mock_repo_req)
++        res_ref_slug = await manage_cycles_and_modules(
++            {
++                "action": "refresh_repo_binding",
++                "binding": "slug-name",
++                "project": "KAN",
++            }
++        )
++        assert "refreshed" in res_ref_slug
++
++        # 12. unbind_project_repo parameter validations, slug resolution, confirmation (lines 779-811)
++        with pytest.raises(KbMcpError) as exc_unb_miss:
++            await manage_cycles_and_modules({"action": "unbind_project_repo", "project": "KAN"})
++        assert exc_unb_miss.value.code == McpErrorCode.VALIDATION_FAILED
++
++        with pytest.raises(KbMcpError) as exc_unb_no_proj:
++            await manage_cycles_and_modules(
++                {
++                    "action": "unbind_project_repo",
++                    "binding": "slug-name",
++                }
++            )
++        assert exc_unb_no_proj.value.code == McpErrorCode.VALIDATION_FAILED
++
++        res_unb_warn = await manage_cycles_and_modules(
++            {
++                "action": "unbind_project_repo",
++                "binding": "slug-name",
++                "project": "KAN",
++            }
++        )
++        assert "confirmation_required" in res_unb_warn
++
++        res_unb_del = await manage_cycles_and_modules(
++            {
++                "action": "unbind_project_repo",
++                "binding": "slug-name",
++                "project": "KAN",
++                "confirm": True,
++            }
++        )
++        assert "deleted" in res_unb_del
++
++    finally:
++        set_current_mcp_context(None)
+diff --git a/mcp/tests/agent/test_update_ticket.py b/mcp/tests/agent/test_update_ticket.py
+index f4354e0..6316c61 100644
+--- a/mcp/tests/agent/test_update_ticket.py
++++ b/mcp/tests/agent/test_update_ticket.py
+@@ -732,3 +732,186 @@ async def test_update_ticket_modules_labels_unit_branches() -> None:
+         assert "parent" in res["changed"]
+     finally:
+         reset_current_mcp_context(token)
++
++
++@pytest.mark.asyncio
++async def test_update_ticket_comprehensive_branch_coverage() -> None:  # noqa: C901, PLR0915
++    """Target all uncovered branches in update_ticket.py to exceed 95% coverage."""
++    from unittest.mock import AsyncMock, MagicMock
++
++    from mcp.context import McpRequestContext, reset_current_mcp_context, set_current_mcp_context
++    from mcp.registry import Surface
++    from mcp.surfaces.agent.update_ticket import update_ticket
++
++    mock_client = MagicMock()
++    ctx = McpRequestContext(
++        surface=Surface.AGENT, client=mock_client, subject_token="tok", session_id="sid"
++    )
++    token = set_current_mcp_context(ctx)
++
++    try:
++        # 1. identifier == "help"
++        mock_client.request = AsyncMock(return_value={"key": "KAN"})
++        res_help = await update_ticket({"identifier": "help"})
++        assert "update_ticket" in res_help.get("tool", "")
++
++        # 2. forbidden properties: custom_fields and state
++        with pytest.raises(KbMcpError) as exc_cf:
++            await update_ticket({"identifier": "KAN-1", "custom_fields": {}})
++        assert exc_cf.value.code == McpErrorCode.VALIDATION_FAILED
++
++        with pytest.raises(KbMcpError) as exc_st:
++            await update_ticket({"identifier": "KAN-1", "state": "done"})
++        assert exc_st.value.code == McpErrorCode.VALIDATION_FAILED
++
++        # 3. unknown parameter
++        with pytest.raises(KbMcpError) as exc_unk:
++            await update_ticket({"identifier": "KAN-1", "bogus_param": True})
++        assert exc_unk.value.code == McpErrorCode.VALIDATION_FAILED
++
++        # 4. invalid description_mode
++        curr_issue = {
++            "key": "KAN-1",
++            "description_markdown": "old text",
++            "description_sha256": "a" * 64,
++            "assignees": [
++                {"kind": "free_text", "free_text": "Vendor QA", "id": "ft-1"},
++                {
++                    "kind": "principal",
++                    "id": "p-1",
++                    "principal": {
++                        "handle": "@alice",
++                        "display_name": "Alice Wonderland",
++                        "id": "u-alice",
++                    },
++                },
++            ],
++            "module_ids": ["m-1"],
++            "labels": [{"id": "l-1"}],
++        }
++
++        async def _mock_req(method: str, path: str, **kwargs: Any) -> Any:
++            if method == "GET" and path == "/api/v1/issues/KAN-1":
++                return curr_issue
++            if method == "GET" and path == "/api/v1/resolve":
++                params = kwargs.get("params", {})
++                if params.get("ref") == "carol":
++                    return {"id": "u-carol"}
++                raise KbMcpError(McpErrorCode.NOT_FOUND, "User not found")
++            if method == "PATCH" and path == "/api/v1/issues/KAN-1":
++                return {**curr_issue, **kwargs.get("json_data", {})}
++            if method == "POST" and "/assignees" in path:
++                return {"status": "ok"}
++            if method == "DELETE" and "/assignees/" in path:
++                return {"status": "ok"}
++            return {}
++
++        mock_client.request = AsyncMock(side_effect=_mock_req)
++
++        with pytest.raises(KbMcpError) as exc_mode:
++            await update_ticket(
++                {
++                    "identifier": "KAN-1",
++                    "description_markdown": "new text",
++                    "if_match": "a" * 64,
++                    "description_mode": "unsupported_mode",
++                }
++            )
++        assert exc_mode.value.code == McpErrorCode.VALIDATION_FAILED
++
++        # 5. ETag conflict handling (lines 357-382)
++        async def _mock_req_conflict(method: str, path: str, **_kwargs: Any) -> Any:
++            if method == "GET" and path == "/api/v1/issues/KAN-1":
++                return {"key": "KAN-1", "description_sha256": "c" * 64}
++            if method == "PATCH" and path == "/api/v1/issues/KAN-1":
++                raise KbMcpError(McpErrorCode.CONFLICT_ETAG, "conflict")
++            return curr_issue
++
++        mock_client.request = AsyncMock(side_effect=_mock_req_conflict)
++        with pytest.raises(KbMcpError) as exc_conflict:
++            await update_ticket(
++                {
++                    "identifier": "KAN-1",
++                    "description_markdown": "new text",
++                    "if_match": "b" * 64,
++                    "description_mode": "replace",
++                }
++            )
++        assert exc_conflict.value.code == McpErrorCode.CONFLICT_ETAG
++        assert exc_conflict.value.hint is not None and "c" * 64 in exc_conflict.value.hint
++
++        # 6. Assignees add & remove complex paths (lines 388-489)
++        mock_client.request = AsyncMock(side_effect=_mock_req)
++        res_assign = await update_ticket(
++            {
++                "identifier": "KAN-1",
++                "assignees_add": [
++                    "",
++                    "Vendor QA",
++                    "alice",
++                    "@bob",
++                    "carol",
++                    "external-contractor",
++                ],
++                "assignees_remove": [
++                    "Vendor QA",
++                    "Alice Wonderland",
++                    "u-alice",
++                    "ft-1",
++                    "unknown-person",
++                ],
++            }
++        )
++        assert "assignees" in res_assign["changed"]
++
++        # 7. Modules and labels no-op branches (lines 302-334)
++        res_noop = await update_ticket(
++            {
++                "identifier": "KAN-1",
++                "modules_add": ["m-1"],
++                "modules_remove": ["non-existent"],
++                "labels_add": ["l-1"],
++                "labels_remove": ["non-existent"],
++            }
++        )
++        assert "modules" not in res_noop["changed"]
++        assert "labels" not in res_noop["changed"]
++
++        # 8. Non-dict assignees in issue, non-list modules/labels, resolve returns dict without id
++        curr_issue_dirty = {
++            "key": "KAN-1",
++            "assignees": [
++                "not-a-dict",
++                {"kind": "principal", "id": "p-2", "principal": "not-a-dict-principal"},
++            ],
++            "module_ids": ["m-1"],
++            "labels": [{"id": "l-1"}],
++        }
++
++        async def _mock_req_dirty(method: str, path: str, **_kwargs: Any) -> Any:
++            if method == "GET" and path == "/api/v1/issues/KAN-1":
++                return curr_issue_dirty
++            if method == "GET" and path == "/api/v1/resolve":
++                return {"status": "resolved_without_id"}
++            if method == "POST" and "/assignees" in path:
++                return {"status": "ok"}
++            if method == "DELETE" and "/assignees/" in path:
++                return {"status": "ok"}
++            return {}
++
++        mock_client.request = AsyncMock(side_effect=_mock_req_dirty)
++        res_dirty = await update_ticket(
++            {
++                "identifier": "KAN-1",
++                "assignees_add": ["resolve-no-id"],
++                "assignees_remove": ["some-user"],
++                "modules_add": "not-a-list",
++                "modules_remove": "not-a-list",
++                "labels_add": "not-a-list",
++                "labels_remove": "not-a-list",
++            }
++        )
++        assert "assignees" in res_dirty["changed"]
++
++    finally:
++        reset_current_mcp_context(token)
+diff --git a/mcp/tests/test_progressive_disclosure_errors.py b/mcp/tests/test_progressive_disclosure_errors.py
+new file mode 100644
+index 0000000..201bbb2
+--- /dev/null
++++ b/mcp/tests/test_progressive_disclosure_errors.py
+@@ -0,0 +1,773 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++# ruff: noqa: SLF001, ARG001, FBT003, PLC0415
++"""Comprehensive unit tests for Progressive-Disclosure Self-Correction YAML Error UX (KAN-19)."""
++
++from __future__ import annotations
++
++import uuid
++from typing import Any
++
++import httpx
++import pytest
++import yaml
++
++from mcp.errors import KbMcpError, McpErrorCode
++from mcp.internal_client import KanbanApiClient
++from mcp.protocol import (
++    InMemorySessionStore,
++    McpProtocolHandler,
++    _format_flag_val,
++    format_cli_example,
++)
++from mcp.registry import Surface, ToolRegistry, ToolSpec
++from mcp.settings import McpSettings
++
++
++def test_format_flag_val_and_cli_example() -> None:
++    """Validate flag scalar and collection formatting and CLI syntax."""
++    assert _format_flag_val(True) == "true"
++    assert _format_flag_val(False) == "false"
++    assert _format_flag_val(42) == "42"
++    assert _format_flag_val(3.14) == "3.14"
++    assert _format_flag_val("DOC") == "DOC"
++    assert _format_flag_val("KAN-42") == "KAN-42"
++    assert _format_flag_val("hello world") == '"hello world"'
++    assert _format_flag_val(["a", "b"]) == '\'["a", "b"]\''
++    assert _format_flag_val({"k": "v"}) == '\'{"k": "v"}\''
++
++    docs_ex = format_cli_example(
++        Surface.DOCS,
++        "update",
++        {"id": "docs/arch", "type": "DOC", "original_text": "old", "replacement_text": "new"},
++    )
++    assert docs_ex == (
++        'kanban-cli-docs update --id="docs/arch" --type=DOC '
++        '--original-text="old" --replacement-text="new"'
++    )
++
++    agent_ex = format_cli_example(
++        Surface.AGENT,
++        "transition_ticket",
++        {"identifier": "KAN-19", "to_state": "Done"},
++    )
++    assert agent_ex == 'kanban-cli-agent transition_ticket --identifier=KAN-19 --to-state="Done"'
++
++    admin_ex = format_cli_example(
++        Surface.ADMIN,
++        "architect_project",
++        {"action": "plan", "project": "KAN"},
++    )
++    assert admin_ex == 'kanban-cli-admin architect_project --action="plan" --project=KAN'
++
++
++def test_kb_mcp_error_to_yaml_and_fields() -> None:
++    """Test KbMcpError progressive disclosure fields serialization."""
++    err = KbMcpError(
++        code=McpErrorCode.VALIDATION_FAILED,
++        message="Unknown parameter 'body'",
++        hint="Use semantic parameter",
++        field="body",
++        valid_options=["content", "description_markdown"],
++        did_you_mean=["content"],
++        fix_hint="Did you mean 'content'?",
++        cli_example='kanban-cli-docs create --content="text"',
++        closest_match=[{"line": 10, "text": "sample"}],
++    )
++
++    assert err.code == McpErrorCode.VALIDATION_FAILED
++    assert err.field == "body"
++    assert err.valid_options == ["content", "description_markdown"]
++    assert err.did_you_mean == ["content"]
++    assert err.fix_hint == "Did you mean 'content'?"
++    assert err.cli_example == 'kanban-cli-docs create --content="text"'
++    assert err.closest_match == [{"line": 10, "text": "sample"}]
++
++    yaml_text = err.to_yaml()
++    data = yaml.safe_load(yaml_text)
++    error_obj = data["error"]
++    assert error_obj["code"] == "VALIDATION_FAILED"
++    assert error_obj["field"] == "body"
++    assert error_obj["valid_options"] == ["content", "description_markdown"]
++    assert error_obj["did_you_mean"] == ["content"]
++    assert error_obj["fix_hint"] == "Did you mean 'content'?"
++    assert error_obj["cli_example"] == 'kanban-cli-docs create --content="text"'
++    assert error_obj["closest_match"] == [{"line": 10, "text": "sample"}]
++
++    # Test minimal error has no None keys serialized
++    minimal_err = KbMcpError(McpErrorCode.NOT_FOUND, "Entity missing", extra={"custom_flag": True})
++    minimal_yaml = minimal_err.to_yaml()
++    assert "custom_flag: true" in minimal_yaml
++    assert "field:" not in minimal_yaml
++    assert "valid_options:" not in minimal_yaml
++    assert "did_you_mean:" not in minimal_yaml
++    assert "fix_hint:" not in minimal_yaml
++    assert "cli_example:" not in minimal_yaml
++    assert "closest_match:" not in minimal_yaml
++
++
++@pytest.mark.asyncio
++async def test_protocol_pre_dispatch_unknown_param_semantic_alias() -> None:
++    """Verify unknown parameter pre-dispatch catches aliases and populates did_you_mean."""
++    reg = ToolRegistry(Surface.DOCS)
++
++    async def dummy_handler(args: dict[str, Any]) -> str:
++        return "ok"
++
++    dummy_spec = ToolSpec(
++        name="update",
++        description="Update doc",
++        surface=Surface.DOCS,
++        input_schema={
++            "type": "object",
++            "properties": {
++                "id": {"type": "string"},
++                "content": {"type": "string"},
++                "description_markdown": {"type": "string"},
++            },
++            "required": ["id"],
++            "additionalProperties": False,
++        },
++        handler=dummy_handler,
++    )
++    reg.register(dummy_spec)
++    store = InMemorySessionStore()
++    handler = McpProtocolHandler(
++        surface=Surface.DOCS,
++        registry=reg,
++        session_store=store,
++        settings=McpSettings(),
++    )
++
++    # Calling with 'body' which is in SEMANTIC_ALIASES
++    with pytest.raises(KbMcpError) as exc_info:
++        handler._validate_tool_arguments_schema(dummy_spec, {"id": "DOC-1", "body": "text"})
++
++    err = exc_info.value
++    assert err.code == McpErrorCode.VALIDATION_FAILED
++    assert err.field == "body"
++    assert err.did_you_mean == ["content", "description_markdown"]
++    assert "Unknown parameter 'body'" in err.message
++    assert err.fix_hint is not None
++    assert "Did you mean 'content'?" in err.fix_hint
++    assert err.cli_example is not None
++    assert "--content=" in err.cli_example
++
++
++@pytest.mark.asyncio
++async def test_protocol_pre_dispatch_unknown_param_fuzzy_difflib() -> None:
++    """Verify unknown parameter pre-dispatch fuzzy matches close keys."""
++    reg = ToolRegistry(Surface.DOCS)
++
++    async def dummy_handler(args: dict[str, Any]) -> str:
++        return "ok"
++
++    dummy_spec = ToolSpec(
++        name="search",
++        description="Search docs",
++        surface=Surface.DOCS,
++        input_schema={
++            "type": "object",
++            "properties": {
++                "query": {"type": "string"},
++                "limit": {"type": "integer"},
++            },
++            "required": ["query"],
++            "additionalProperties": False,
++        },
++        handler=dummy_handler,
++    )
++    reg.register(dummy_spec)
++    store = InMemorySessionStore()
++    handler = McpProtocolHandler(
++        surface=Surface.DOCS,
++        registry=reg,
++        session_store=store,
++        settings=McpSettings(),
++    )
++
++    # Calling with typo 'querry'
++    with pytest.raises(KbMcpError) as exc_info:
++        handler._validate_tool_arguments_schema(dummy_spec, {"querry": "terms"})
++
++    err = exc_info.value
++    assert err.code == McpErrorCode.VALIDATION_FAILED
++    assert err.field == "querry"
++    assert err.did_you_mean == ["query"]
++    assert set(err.valid_options or []) == {"limit", "query"}
++    assert "Did you mean 'query'?" in (err.fix_hint or "")
++    assert err.cli_example is not None
++    assert 'kanban-cli-docs search --query="terms"' in err.cli_example
++
++
++@pytest.mark.asyncio
++async def test_protocol_pre_dispatch_missing_required_parameter() -> None:
++    """Verify missing required parameter formats pre-filled cli_example with placeholders."""
++    reg = ToolRegistry(Surface.DOCS)
++
++    async def dummy_handler(args: dict[str, Any]) -> str:
++        return "ok"
++
++    dummy_spec = ToolSpec(
++        name="create",
++        description="Create doc",
++        surface=Surface.DOCS,
++        input_schema={
++            "type": "object",
++            "properties": {
++                "summary": {"type": "string"},
++                "project_key": {"type": "string"},
++                "content": {"type": "string"},
++            },
++            "required": ["project_key", "summary"],
++            "additionalProperties": False,
++        },
++        handler=dummy_handler,
++    )
++    reg.register(dummy_spec)
++    store = InMemorySessionStore()
++    handler = McpProtocolHandler(
++        surface=Surface.DOCS,
++        registry=reg,
++        session_store=store,
++        settings=McpSettings(),
++    )
++
++    # Caller only gave summary
++    with pytest.raises(KbMcpError) as exc_info:
++        handler._validate_tool_arguments_schema(dummy_spec, {"summary": "Architecture"})
++
++    err = exc_info.value
++    assert err.code == McpErrorCode.VALIDATION_FAILED
++    assert err.field == "project_key"
++    assert "Missing required parameter 'project_key'" in err.message
++    assert err.fix_hint == "Missing required parameter: 'project_key'. Provide a value to proceed."
++    assert err.cli_example is not None
++    assert '--summary="Architecture"' in err.cli_example
++    assert '--project-key="<project_key>"' in err.cli_example
++
++
++@pytest.mark.asyncio
++async def test_protocol_pre_dispatch_invalid_enum_value() -> None:
++    """Verify invalid enum value provides valid_options, did_you_mean, and corrected cli_example."""
++    reg = ToolRegistry(Surface.DOCS)
++
++    async def dummy_handler(args: dict[str, Any]) -> str:
++        return "ok"
++
++    dummy_spec = ToolSpec(
++        name="create",
++        description="Create entity",
++        surface=Surface.DOCS,
++        input_schema={
++            "type": "object",
++            "properties": {
++                "type": {
++                    "type": "string",
++                    "enum": ["DOC", "STICKY"],
++                },
++                "summary": {"type": "string"},
++            },
++            "required": ["type", "summary"],
++        },
++        handler=dummy_handler,
++    )
++    reg.register(dummy_spec)
++    store = InMemorySessionStore()
++    handler = McpProtocolHandler(
++        surface=Surface.DOCS,
++        registry=reg,
++        session_store=store,
++        settings=McpSettings(),
++    )
++
++    with pytest.raises(KbMcpError) as exc_info:
++        handler._validate_tool_arguments_schema(
++            dummy_spec,
++            {"type": "dco", "summary": "Note"},
++        )
++
++    err = exc_info.value
++    assert err.code == McpErrorCode.VALIDATION_FAILED
++    assert err.field == "type"
++    assert err.valid_options == ["DOC", "STICKY"]
++    assert err.did_you_mean == ["DOC"]
++    assert "type must be 'DOC' or 'STICKY'" in err.message
++    assert "Did you mean 'DOC'?" in (err.fix_hint or "")
++    assert err.cli_example is not None
++    assert "--type=DOC" in err.cli_example
++
++
++@pytest.mark.asyncio
++async def test_protocol_pre_dispatch_type_and_pattern_validations() -> None:
++    """Verify type checking (string, integer, boolean, array) and pattern regex validation."""
++    reg = ToolRegistry(Surface.ADMIN)
++
++    async def dummy_handler(args: dict[str, Any]) -> str:
++        return "ok"
++
++    dummy_spec = ToolSpec(
++        name="configure",
++        description="Config tool",
++        surface=Surface.ADMIN,
++        input_schema={
++            "type": "object",
++            "properties": {
++                "name": {"type": "string"},
++                "count": {"type": "integer"},
++                "active": {"type": "boolean"},
++                "tags": {"type": "array"},
++                "plan_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
++            },
++        },
++        handler=dummy_handler,
++    )
++    reg.register(dummy_spec)
++    store = InMemorySessionStore()
++    handler = McpProtocolHandler(
++        surface=Surface.ADMIN,
++        registry=reg,
++        session_store=store,
++        settings=McpSettings(),
++    )
++
++    # String type check
++    with pytest.raises(KbMcpError) as exc_str:
++        handler._validate_tool_arguments_schema(dummy_spec, {"name": 1234})
++    assert exc_str.value.field == "name"
++    assert "must be of type string" in exc_str.value.message
++
++    # Integer type check
++    with pytest.raises(KbMcpError) as exc_int:
++        handler._validate_tool_arguments_schema(dummy_spec, {"count": "not-a-number"})
++    assert exc_int.value.field == "count"
++    assert "must be of type integer" in exc_int.value.message
++
++    # Boolean type check
++    with pytest.raises(KbMcpError) as exc_bool:
++        handler._validate_tool_arguments_schema(dummy_spec, {"active": "yes"})
++    assert exc_bool.value.field == "active"
++    assert "must be of type boolean" in exc_bool.value.message
++
++    # Array type check
++    with pytest.raises(KbMcpError) as exc_arr:
++        handler._validate_tool_arguments_schema(dummy_spec, {"tags": "single-tag"})
++    assert exc_arr.value.field == "tags"
++    assert "must be of type array" in exc_arr.value.message
++
++    # Pattern check
++    with pytest.raises(KbMcpError) as exc_pat:
++        handler._validate_tool_arguments_schema(dummy_spec, {"plan_sha256": "bad-sha"})
++    assert exc_pat.value.field == "plan_sha256"
++    assert "does not match required format pattern" in exc_pat.value.message
++    assert exc_pat.value.cli_example is not None
++    assert "<64-hex-sha256>" in exc_pat.value.cli_example
++
++
++@pytest.mark.asyncio
++async def test_protocol_tool_not_found_progressive_disclosure() -> None:
++    """Verify tool not found on surface suggests closest match and formats CLI example."""
++    reg = ToolRegistry(Surface.DOCS)
++
++    async def dummy_handler(args: dict[str, Any]) -> str:
++        return "ok"
++
++    reg.register(
++        ToolSpec(
++            name="search",
++            description="Search docs",
++            surface=Surface.DOCS,
++            input_schema={},
++            handler=dummy_handler,
++        )
++    )
++    reg.register(
++        ToolSpec(
++            name="update",
++            description="Update doc",
++            surface=Surface.DOCS,
++            input_schema={},
++            handler=dummy_handler,
++        )
++    )
++
++    store = InMemorySessionStore()
++    session = store.create_session(Surface.DOCS)
++    handler = McpProtocolHandler(
++        surface=Surface.DOCS,
++        registry=reg,
++        session_store=store,
++        settings=McpSettings(),
++    )
++
++    # Call 'search_docs' which is close to 'search'
++    resp = await handler._handle_tools_call(
++        req_id=1,
++        params={"name": "search_docs", "arguments": {}},
++        session_id=session.session_id,
++    )
++    data = bytes(resp.body).decode("utf-8")
++    assert "NOT_FOUND" in data
++    assert "did_you_mean:" in data
++    assert "did_you_mean: [search]" in data
++    assert "cli_example: kanban-cli-docs search" in data
++
++
++def test_enrich_progressive_disclosure_domain_errors() -> None:
++    """Verify KanbanApiClient._enrich_progressive_disclosure domain mappings."""
++    # 1. INVALID_TRANSITION
++    trans_enriched = KanbanApiClient._enrich_progressive_disclosure(
++        McpErrorCode.INVALID_TRANSITION,
++        {"extra": {"valid_states": ["Todo", "In Progress", "Done"]}},
++        hint_str=None,
++        extra_dict={},
++    )
++    assert trans_enriched["valid_options"] == ["Todo", "In Progress", "Done"]
++    assert "Allowed target states: Todo, In Progress, Done" in trans_enriched["fix_hint"]
++    assert '--to-state="Todo"' in trans_enriched["cli_example"]
++
++    # 2. CONFLICT_ETAG
++    conflict_extra: dict[str, Any] = {}
++    conflict_enriched = KanbanApiClient._enrich_progressive_disclosure(
++        McpErrorCode.CONFLICT_ETAG,
++        {"current_etag": "sha256-current-version"},
++        hint_str=None,
++        extra_dict=conflict_extra,
++    )
++    assert conflict_extra["current_etag"] == "sha256-current-version"
++    assert "Retry with current ETag: sha256-current-version" in conflict_enriched["fix_hint"]
++    assert '--if-match="sha256-current-version"' in conflict_enriched["cli_example"]
++
++    # 3. ALREADY_PROMOTED
++    promoted_extra: dict[str, Any] = {}
++    promoted_enriched = KanbanApiClient._enrich_progressive_disclosure(
++        McpErrorCode.ALREADY_PROMOTED,
++        {"target_doc_key": "DOC-99"},
++        hint_str=None,
++        extra_dict=promoted_extra,
++    )
++    assert promoted_extra["target_doc_key"] == "DOC-99"
++    assert "Sticky has already been promoted to Doc 'DOC-99'" in promoted_enriched["fix_hint"]
++    assert 'kanban-cli-docs update --id="DOC-99"' in promoted_enriched["cli_example"]
++
++    # 4. NOT_FOUND without fix_hint
++    nf_enriched = KanbanApiClient._enrich_progressive_disclosure(
++        McpErrorCode.NOT_FOUND,
++        {},
++        hint_str=None,
++        extra_dict={},
++    )
++    assert "Verify identifier or use search tool" in nf_enriched["fix_hint"]
++
++    # 5. Fallback branches when details missing or custom fix_hint provided
++    custom_enriched = KanbanApiClient._enrich_progressive_disclosure(
++        McpErrorCode.INVALID_TRANSITION,
++        {
++            "field": "to_state",
++            "fix_hint": "Custom transition hint",
++            "cli_example": "custom-cli",
++            "did_you_mean": ["Backlog"],
++            "closest_match": [{"text": "candidate"}],
++        },
++        hint_str=None,
++        extra_dict={},
++    )
++    assert custom_enriched["field"] == "to_state"
++    assert custom_enriched["fix_hint"] == "Custom transition hint"
++    assert custom_enriched["cli_example"] == "custom-cli"
++    assert custom_enriched["did_you_mean"] == ["Backlog"]
++    assert custom_enriched["closest_match"] == [{"text": "candidate"}]
++
++    # 6. CONFLICT_ETAG and ALREADY_PROMOTED without identifiers
++    empty_conflict = KanbanApiClient._enrich_progressive_disclosure(
++        McpErrorCode.CONFLICT_ETAG, {}, hint_str=None, extra_dict={}
++    )
++    assert empty_conflict["cli_example"] is None
++
++    empty_promoted = KanbanApiClient._enrich_progressive_disclosure(
++        McpErrorCode.ALREADY_PROMOTED, {}, hint_str=None, extra_dict={}
++    )
++    assert empty_promoted["cli_example"] is None
++
++    # 7. NOT_FOUND with existing fix_hint
++    existing_nf = KanbanApiClient._enrich_progressive_disclosure(
++        McpErrorCode.NOT_FOUND, {}, hint_str="Custom not found hint", extra_dict={}
++    )
++    assert existing_nf["fix_hint"] == "Custom not found hint"
++
++
++def test_docs_apply_patch_progressive_disclosure() -> None:
++    """Verify _diff_patch_content error paths for PATCH_TARGET_NOT_FOUND and AMBIGUOUS."""
++    from mcp.surfaces.docs.update import _diff_patch_content
++
++    doc_body = "Line 1: Introduction\nLine 2: Overview\nLine 3: Conclusion\n"
++
++    # 1. Target not found -> suggestions with closest match
++    with pytest.raises(KbMcpError) as exc_nf:
++        _diff_patch_content(doc_body, "Line 2: Overvew", "Line 2: Revised", "sha1", "sha1")
++    err_nf = exc_nf.value
++    assert err_nf.code == McpErrorCode.PATCH_TARGET_NOT_FOUND
++    assert err_nf.closest_match is not None
++    assert len(err_nf.closest_match) > 0
++    assert err_nf.fix_hint is not None
++    assert "closest_match suggestions" in err_nf.fix_hint
++    assert err_nf.cli_example is not None
++
++    # 2. Target ambiguous (multiple matches)
++    ambiguous_body = "apple\nbanana\napple\ncherry\n"
++    with pytest.raises(KbMcpError) as exc_amb:
++        _diff_patch_content(ambiguous_body, "apple", "orange", "sha1", "sha1")
++    err_amb = exc_amb.value
++    assert err_amb.code == McpErrorCode.PATCH_TARGET_AMBIGUOUS
++    assert err_amb.fix_hint is not None
++    assert "appears 2 times" in err_amb.fix_hint
++    assert err_amb.cli_example is not None
++
++
++def test_admin_map_cycle_error_progressive_disclosure() -> None:
++    """Verify _map_cycle_error domain mappings with progressive disclosure."""
++    from mcp.surfaces.admin.manage_cycles_and_modules import _map_cycle_error
++
++    # 1. INVALID_CYCLE_TRANSITION
++    orig_err = KbMcpError(McpErrorCode.INVALID_TRANSITION, "Invalid state jump")
++    mapped = _map_cycle_error(orig_err)
++    assert mapped.code == McpErrorCode.INVALID_TRANSITION
++    assert mapped.valid_options == ["upcoming", "started", "completed"]
++    assert "Cycle state transition must follow monotonicity" in (mapped.fix_hint or "")
++    assert mapped.cli_example is not None
++
++    # 2. MODULES_DISABLED
++    orig_mod = KbMcpError(McpErrorCode.MODULES_DISABLED, "Modules disabled")
++    mapped_mod = _map_cycle_error(orig_mod)
++    assert mapped_mod.code == McpErrorCode.MODULES_DISABLED
++    assert "Modules are disabled" in (mapped_mod.fix_hint or "")
++    assert mapped_mod.cli_example is not None
++
++    # 3. NOT_FOUND
++    orig_nf = KbMcpError(McpErrorCode.NOT_FOUND, "Not found")
++    mapped_nf = _map_cycle_error(orig_nf)
++    assert mapped_nf.code == McpErrorCode.NOT_FOUND
++    assert "Verify identifier or list project cycles/modules" in (mapped_nf.fix_hint or "")
++    assert mapped_nf.cli_example is not None
++
++
++@pytest.mark.asyncio
++async def test_jit_help_bypass_pre_dispatch() -> None:
++    """Verify action='help' or identifier='help' bypasses pre-dispatch schema validation."""
++    reg = ToolRegistry(Surface.AGENT)
++
++    async def dummy_handler(args: dict[str, Any]) -> str:
++        return "ok: help rendered"
++
++    spec = ToolSpec(
++        name="read_ticket",
++        description="Read ticket",
++        surface=Surface.AGENT,
++        input_schema={
++            "type": "object",
++            "properties": {
++                "identifier": {"type": "string"},
++                "fields": {"type": "array"},
++            },
++            "required": ["identifier"],
++            "additionalProperties": False,
++        },
++        handler=dummy_handler,
++    )
++    reg.register(spec)
++    store = InMemorySessionStore()
++    handler = McpProtocolHandler(
++        surface=Surface.AGENT,
++        registry=reg,
++        session_store=store,
++        settings=McpSettings(),
++    )
++
++    # Calling with identifier='help' without other required fields does NOT fail
++    # pre-dispatch validation
++    handler._validate_tool_arguments_schema(spec, {"identifier": "help"})
++
++
++@pytest.mark.asyncio
++async def test_protocol_pre_dispatch_special_cases() -> None:
++    """Test state hint, custom_fields hint, camelCase conversion, and no-fuzzy match."""
++    reg = ToolRegistry(Surface.AGENT)
++
++    async def dummy_handler(args: dict[str, Any]) -> str:
++        return "ok"
++
++    spec = ToolSpec(
++        name="update_ticket",
++        description="Update ticket",
++        surface=Surface.AGENT,
++        input_schema={
++            "type": "object",
++            "properties": {
++                "identifier": {"type": "string"},
++                "summary": {"type": "string"},
++                "ticket_priority": {"type": "string"},
++                "status_enum": {
++                    "type": "string",
++                    "enum": ["ACTIVE", "INACTIVE"],
++                },
++                "optional_note": {
++                    "type": ["string", "null"],
++                },
++            },
++            "required": ["identifier"],
++            "additionalProperties": False,
++        },
++        handler=dummy_handler,
++    )
++    reg.register(spec)
++    store = InMemorySessionStore()
++    handler = McpProtocolHandler(
++        surface=Surface.AGENT,
++        registry=reg,
++        session_store=store,
++        settings=McpSettings(),
++    )
++
++    # 1. 'state' in update_ticket hints use transition_ticket
++    with pytest.raises(KbMcpError) as exc_state:
++        handler._validate_tool_arguments_schema(spec, {"identifier": "KAN-1", "state": "Done"})
++    assert exc_state.value.hint == "use transition_ticket"
++    assert "use transition_ticket" in (exc_state.value.fix_hint or "")
++
++    # 2. 'custom_fields' in update_ticket hints Phase 5
++    with pytest.raises(KbMcpError) as exc_cf:
++        handler._validate_tool_arguments_schema(
++            spec, {"identifier": "KAN-1", "custom_fields": {"priority": 1}}
++        )
++    assert exc_cf.value.hint == "custom fields arrive in Phase 5"
++    assert "custom fields arrive in Phase 5" in (exc_cf.value.fix_hint or "")
++
++    # 3. camelCase 'ticketPriority' converted to snake_case 'ticket_priority'
++    with pytest.raises(KbMcpError) as exc_camel:
++        handler._validate_tool_arguments_schema(
++            spec, {"identifier": "KAN-1", "ticketPriority": "High"}
++        )
++    assert exc_camel.value.did_you_mean == ["ticket_priority"]
++
++    # 4. Unknown param with no close matches
++    with pytest.raises(KbMcpError) as exc_none:
++        handler._validate_tool_arguments_schema(
++            spec, {"identifier": "KAN-1", "zzzz_completely_unknown_999": "val"}
++        )
++    assert exc_none.value.did_you_mean is None
++    assert "Valid options:" in (exc_none.value.fix_hint or "")
++
++    # 5. Enum with no close match
++    with pytest.raises(KbMcpError) as exc_enum:
++        handler._validate_tool_arguments_schema(
++            spec, {"identifier": "KAN-1", "status_enum": "zzzzzz"}
++        )
++    assert exc_enum.value.did_you_mean is None
++    assert "Valid options: ['ACTIVE', 'INACTIVE']" in (exc_enum.value.fix_hint or "")
++
++    # 6. Nullable union with None passes
++    handler._validate_tool_arguments_schema(spec, {"identifier": "KAN-1", "optional_note": None})
++
++
++@pytest.mark.asyncio
++async def test_protocol_pre_dispatch_object_type_and_enum_fuzzy() -> None:
++    """Verify object type check failure and direct fuzzy enum matches."""
++    reg = ToolRegistry(Surface.ADMIN)
++
++    async def dummy_handler(args: dict[str, Any]) -> str:
++        return "ok"
++
++    dummy_spec = ToolSpec(
++        name="test_obj_tool",
++        description="Test obj tool",
++        surface=Surface.ADMIN,
++        input_schema={
++            "type": "object",
++            "properties": {
++                "config": {"type": "object"},
++                "status": {"type": "string", "enum": ["ACTIVE", "INACTIVE"]},
++            },
++        },
++        handler=dummy_handler,
++    )
++    reg.register(dummy_spec)
++    store = InMemorySessionStore()
++    handler = McpProtocolHandler(
++        surface=Surface.ADMIN,
++        registry=reg,
++        session_store=store,
++        settings=McpSettings(),
++    )
++
++    # Object type check failure
++    with pytest.raises(KbMcpError) as exc_obj:
++        handler._validate_tool_arguments_schema(dummy_spec, {"config": "not-a-dict"})
++    assert exc_obj.value.field == "config"
++    assert "must be of type object" in exc_obj.value.message
++    assert exc_obj.value.cli_example is not None
++    assert "--config='{}'" in exc_obj.value.cli_example
++
++    # Enum direct fuzzy match (e.g. ACTIVEX matches ACTIVE)
++    with pytest.raises(KbMcpError) as exc_enum:
++        handler._validate_tool_arguments_schema(dummy_spec, {"status": "ACTIVEX"})
++    assert exc_enum.value.field == "status"
++    assert exc_enum.value.did_you_mean == ["ACTIVE"]
++
++
++@pytest.mark.asyncio
++async def test_docs_update_sticky_diff_patch_and_links_coverage() -> None:
++    """Verify sticky diff patching, color, and link updates in update_handler."""
++    from mcp.surfaces.docs.update import update_handler
++
++    sticky_id = str(uuid.uuid4())
++
++    async def mock_handler(request: httpx.Request) -> httpx.Response:
++        url = str(request.url)
++        if f"/api/v1/stickies/{sticky_id}" in url and request.method == "GET":
++            return httpx.Response(
++                200,
++                json={
++                    "id": sticky_id,
++                    "body_markdown": "line one\nline two",
++                    "body_sha256": "sha123",
++                    "color_token": "sky",
++                    "project_id": "018f-p1",
++                },
++            )
++        if f"/api/v1/stickies/{sticky_id}" in url and request.method == "PATCH":
++            return httpx.Response(
++                200,
++                json={
++                    "id": sticky_id,
++                    "body_markdown": "line one\nline replaced",
++                    "body_sha256": "sha456",
++                    "color_token": "coral",
++                    "project_id": "018f-p1",
++                },
++            )
++        if f"/api/v1/objects/{sticky_id}/links" in url:
++            if request.method == "GET":
++                return httpx.Response(200, json={"outbound": []})
++            if request.method == "POST":
++                return httpx.Response(201, json={"status": "linked"})
++        return httpx.Response(404, json={"detail": "not found"})
++
++    client = KanbanApiClient(
++        McpSettings(mode="standalone_inprocess"),
++        transport=httpx.MockTransport(mock_handler),
++    )
++
++    res = await update_handler(
++        {
++            "id": sticky_id,
++            "type": "STICKY",
++            "original_text": "line two",
++            "replacement_text": "line replaced",
++            "color": "coral",
++            "links": ["+KAN-10"],
++        },
++        client=client,
++    )
++    assert res["status"] == "updated"
++    assert res["kind"] == "sticky"
++    assert res["links"] == [{"action": "added", "target": "KAN-10", "link_type": "RELATES_TO"}]

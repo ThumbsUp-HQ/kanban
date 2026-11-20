@@ -1033,7 +1033,10 @@ class McpProtocolHandler:
                     )
 
         # Progressive disclosure: JIT help
-        if arguments.get("identifier") == "help" or arguments.get("action") == "help":
+        if any(
+            isinstance(arguments.get(k), str) and arguments.get(k, "").strip().lower() == "help"
+            for k in ("identifier", "action", "source", "id", "project", "summary")
+        ):
             return await self._handle_jit_help(
                 req_id,
                 tool_name,

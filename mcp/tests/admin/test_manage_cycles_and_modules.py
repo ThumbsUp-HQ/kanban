@@ -1,5 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
+# ruff: noqa: E501, ANN401, ARG001
 """Feature unit tests for /mcp/admin tool: manage_cycles_and_modules (KB-P4-10 / S11.4)."""
 
 from __future__ import annotations
@@ -846,3 +847,226 @@ async def test_manage_cycles_and_modules_direct_unit_branches() -> None:  # noqa
     assert exc_info.value.code == McpErrorCode.VALIDATION_FAILED
 
     set_current_mcp_context(None)
+
+
+@pytest.mark.asyncio
+async def test_manage_cycles_and_modules_additional_branch_coverage() -> None:  # noqa: PLR0915
+    """Additional branch coverage targeting manage_cycles_and_modules to reach >=95%."""
+    valid_uuid_str = str(uuid.uuid4())
+    mock_client = AsyncMock()
+
+    # 1. Unknown parameter
+    with pytest.raises(KbMcpError) as exc_unk:
+        await manage_cycles_and_modules(
+            {"action": "list_cycles", "project": "KAN", "bad_param": 123}
+        )
+    assert exc_unk.value.code == McpErrorCode.VALIDATION_FAILED
+
+    # 2. repo binding actions without project, but with valid uuid binding (line 316)
+    ctx = McpRequestContext(
+        session_id="test",
+        surface=create_manage_cycles_and_modules_tool().surface,
+        client=mock_client,
+        caller_scopes=frozenset({"admin:write"}),
+    )
+    set_current_mcp_context(ctx)
+
+    try:
+        mock_client.request.return_value = {"id": valid_uuid_str, "status": "refreshed"}
+        res_ref = await manage_cycles_and_modules(
+            {
+                "action": "refresh_repo_binding",
+                "binding": valid_uuid_str,
+            }
+        )
+        assert "refreshed" in res_ref
+
+        # 3. admin:destructive scope authorization check (lines 327-338)
+        ctx_destr = McpRequestContext(
+            session_id="test",
+            surface=create_manage_cycles_and_modules_tool().surface,
+            client=mock_client,
+            caller_scopes=frozenset({"admin:destructive"}),
+        )
+        set_current_mcp_context(ctx_destr)
+        mock_client.request.return_value = {"id": valid_uuid_str, "name": "Cycle Destr"}
+        res_d = await manage_cycles_and_modules(
+            {
+                "action": "create_cycle",
+                "project": "KAN",
+                "name": "Cycle Destr",
+            }
+        )
+        assert "Cycle Destr" in res_d
+
+        # 4. update_cycle with name, start_date, end_date (lines 408-410)
+        set_current_mcp_context(ctx)
+        mock_client.request.return_value = {"id": valid_uuid_str, "name": "Cycle Named"}
+        res_up_c = await manage_cycles_and_modules(
+            {
+                "action": "update_cycle",
+                "project": "KAN",
+                "cycle": valid_uuid_str,
+                "name": "Cycle Named",
+                "start_date": "2026-01-01",
+                "end_date": "2026-01-14",
+            }
+        )
+        assert "Cycle Named" in res_up_c
+
+        # 5. rollover KbMcpError (lines 495-496)
+        mock_client.request.side_effect = KbMcpError(McpErrorCode.INTERNAL, "rollover error")
+        with pytest.raises(KbMcpError):
+            await manage_cycles_and_modules(
+                {
+                    "action": "rollover",
+                    "project": "KAN",
+                    "cycle": valid_uuid_str,
+                    "target_cycle": valid_uuid_str,
+                }
+            )
+
+        # 6. list_modules KbMcpError (lines 521-522)
+        mock_client.request.side_effect = KbMcpError(McpErrorCode.INTERNAL, "list_modules error")
+        with pytest.raises(KbMcpError):
+            await manage_cycles_and_modules({"action": "list_modules", "project": "KAN"})
+
+        # 7. update_module with and without name (lines 569-572)
+        mock_client.request.side_effect = None
+        mock_client.request.return_value = {"id": valid_uuid_str, "name": "M1-Updated"}
+        res_up_m = await manage_cycles_and_modules(
+            {
+                "action": "update_module",
+                "project": "KAN",
+                "module": valid_uuid_str,
+                "name": "M1-Updated",
+            }
+        )
+        assert "M1-Updated" in res_up_m
+
+        # 8. update_view with name (lines 657-659)
+        mock_client.request.return_value = {"id": valid_uuid_str, "name": "V-New"}
+        res_up_v = await manage_cycles_and_modules(
+            {
+                "action": "update_view",
+                "project": "KAN",
+                "view": valid_uuid_str,
+                "name": "V-New",
+            }
+        )
+        assert "V-New" in res_up_v
+
+        # 9. bind_project_repo validation and credentials (lines 689-705)
+        with pytest.raises(KbMcpError) as exc_bind:
+            await manage_cycles_and_modules(
+                {
+                    "action": "bind_project_repo",
+                    "project": "KAN",
+                }
+            )
+        assert exc_bind.value.code == McpErrorCode.VALIDATION_FAILED
+
+        async def _mock_repo_req(method: str, path: str, **kwargs: Any) -> Any:
+            if method == "GET" and "/api/v1/resolve" in path:
+                return {
+                    "id": valid_uuid_str,
+                    "kind": "project",
+                    "key": "KAN",
+                    "title": "Kanban",
+                }
+            if method == "POST" and "/repo-bindings" in path:
+                return {"id": valid_uuid_str, "slug": "my-repo", "credential": "***"}
+            if method == "POST" and f"/repo-bindings/{valid_uuid_str}/refresh" in path:
+                return {"id": valid_uuid_str, "status": "refreshed"}
+            if method == "DELETE" and f"/repo-bindings/{valid_uuid_str}" in path:
+                return {"status": "ok"}
+            return {}
+
+        mock_client.request = AsyncMock(side_effect=_mock_repo_req)
+        res_bind = await manage_cycles_and_modules(
+            {
+                "action": "bind_project_repo",
+                "project": "KAN",
+                "slug": "my-repo",
+                "remote_url": "https://git.example.com/repo.git",
+                "access_mode": "read_only",
+                "credential": "secret-token",
+            }
+        )
+        assert "my-repo" in res_bind
+
+        # 10. list_repo_bindings invalid response (lines 730-731)
+        async def _mock_list_bad(method: str, path: str, **kwargs: Any) -> Any:
+            if method == "GET" and "/api/v1/resolve" in path:
+                return {
+                    "id": valid_uuid_str,
+                    "kind": "project",
+                    "key": "KAN",
+                    "title": "Kanban",
+                }
+            return "not-a-list"
+
+        mock_client.request = AsyncMock(side_effect=_mock_list_bad)
+        with pytest.raises(KbMcpError) as exc_lr:
+            await manage_cycles_and_modules({"action": "list_repo_bindings", "project": "KAN"})
+        assert exc_lr.value.code == McpErrorCode.UPSTREAM_ERROR
+
+        # 11. refresh_repo_binding parameter validations and slug resolution (lines 753-766)
+        with pytest.raises(KbMcpError) as exc_ref_miss:
+            await manage_cycles_and_modules({"action": "refresh_repo_binding", "project": "KAN"})
+        assert exc_ref_miss.value.code == McpErrorCode.VALIDATION_FAILED
+
+        with pytest.raises(KbMcpError) as exc_slug_no_proj:
+            await manage_cycles_and_modules(
+                {
+                    "action": "refresh_repo_binding",
+                    "binding": "slug-name",
+                }
+            )
+        assert exc_slug_no_proj.value.code == McpErrorCode.VALIDATION_FAILED
+
+        mock_client.request = AsyncMock(side_effect=_mock_repo_req)
+        res_ref_slug = await manage_cycles_and_modules(
+            {
+                "action": "refresh_repo_binding",
+                "binding": "slug-name",
+                "project": "KAN",
+            }
+        )
+        assert "refreshed" in res_ref_slug
+
+        # 12. unbind_project_repo parameter validations, slug resolution, confirmation (lines 779-811)
+        with pytest.raises(KbMcpError) as exc_unb_miss:
+            await manage_cycles_and_modules({"action": "unbind_project_repo", "project": "KAN"})
+        assert exc_unb_miss.value.code == McpErrorCode.VALIDATION_FAILED
+
+        with pytest.raises(KbMcpError) as exc_unb_no_proj:
+            await manage_cycles_and_modules(
+                {
+                    "action": "unbind_project_repo",
+                    "binding": "slug-name",
+                }
+            )
+        assert exc_unb_no_proj.value.code == McpErrorCode.VALIDATION_FAILED
+
+        res_unb_warn = await manage_cycles_and_modules(
+            {
+                "action": "unbind_project_repo",
+                "binding": "slug-name",
+                "project": "KAN",
+            }
+        )
+        assert "confirmation_required" in res_unb_warn
+
+        res_unb_del = await manage_cycles_and_modules(
+            {
+                "action": "unbind_project_repo",
+                "binding": "slug-name",
+                "project": "KAN",
+                "confirm": True,
+            }
+        )
+        assert "deleted" in res_unb_del
+
+    finally:
+        set_current_mcp_context(None)
