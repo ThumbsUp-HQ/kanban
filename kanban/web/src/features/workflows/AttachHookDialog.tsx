@@ -148,7 +148,7 @@ function AttachHookDialogInner({
       >
         <div className="workflow-dialog-header">
           <h2 id="attach-hook-title" className="workflow-dialog-title">
-            {editingHook ? `Edit Hook: ${editingHook.name}` : 'Attach Workflow Interceptor Hook'}
+            {editingHook ? `Edit Hook: ${editingHook.name}` : 'Attach Workflow Helper Hook'}
           </h2>
         </div>
 
@@ -221,11 +221,11 @@ function AttachHookDialogInner({
                 Hook Kind
                 <FieldHelpHint
                   title="Workflow Hook Kind"
-                  summary="The execution tier for this transition interceptor rule."
+                  summary="The execution tier for this transition helper rule."
                   validValues={[
                     { label: 'Sync Wasm Validator', description: 'Fast <25ms in-process WebAssembly validator that checks conditions and can veto.' },
                     { label: 'Async Wasm Post-Mutation', description: 'Background WebAssembly post-action that mutates allowed fields.' },
-                    { label: 'Agent Interceptor', description: 'Autonomous agent (CLI, SDK, or Runner) executing forensic QA gates.' },
+                    { label: 'Agent Transition Helper', description: 'Autonomous agent (CLI, SDK, or Runner) executing forensic QA gates.' },
                   ]}
                   docHref="/docs/scriptrunner-workflows-and-transition-interceptors#interceptor-architecture"
                   testId="hook-kind-help"
@@ -260,7 +260,7 @@ function AttachHookDialogInner({
                     checked={hookKind === 'agent_interceptor'}
                     onChange={() => { setHookKind('agent_interceptor'); }}
                   />
-                  Agent Interceptor
+                  Agent Transition Helper
                 </label>
               </div>
             </div>
@@ -286,13 +286,13 @@ function AttachHookDialogInner({
               </div>
             )}
 
-            {/* Conditional: Agent Interceptor selector */}
+            {/* Conditional: Agent Transition Helper selector */}
             {hookKind === 'agent_interceptor' && (
               agentDefinitions.length === 0 ? (
                 <div className="workflow-alert workflow-alert-warning" data-testid="no-agents-warning">
                   <strong>No Agent Definitions configured</strong>
                   <p style={{ margin: '4px 0 8px' }}>
-                    There are no active Agent Definitions registered in this workspace. Configure an Agent Definition before attaching an Agent Interceptor hook.
+                    There are no active Agent Definitions registered in this workspace. Configure an Agent Definition before attaching an Agent Transition Helper hook.
                   </p>
                   <Link
                     to="/workspaces/settings"
@@ -367,7 +367,7 @@ function AttachHookDialogInner({
                 Failure Policy
                 <FieldHelpHint
                   title="Failure Policy"
-                  summary="Specifies behavior when interceptor times out, returns an error, or crashes."
+                  summary="Specifies behavior when helper times out, returns an error, or crashes."
                   validValues={[
                     { label: 'Fail-Closed', description: 'Blocks transition immediately, rejecting state change.' },
                     { label: 'Fail-Open (Warn)', description: 'Records audit warning and allows transition to proceed.' },

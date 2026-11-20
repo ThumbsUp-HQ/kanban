@@ -8,7 +8,7 @@
  * Verifies:
  * 1. S14.4 wireframe fidelity (In Review -> Done card with 3 hooks, latency budget, ro mount, emoji hint popover).
  * 2. Hook reordering (drag-and-drop & keyboard move), toggle enable/disable, and error recovery.
- * 3. AttachHookDialog conditional Wasm vs Agent interceptor selectors, MUTABLE_FIELD_UNIVERSE chips.
+ * 3. AttachHookDialog conditional Wasm vs Agent transition helper selectors, MUTABLE_FIELD_UNIVERSE chips.
  * 4. Sample-ticket / existing-issue DryRunDrawer with rejection reasons and copyable CLI validation snippet.
  * 5. Security guards: non-admin 404 anti-enumeration view, AAL2 step-up elevation challenge.
  * 6. Multi-device annotated screenshots across desktop, tablet, and mobile viewports.
@@ -262,7 +262,7 @@ test.describe('Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158)', (
         },
         {
           selector: '[data-testid="hook-pipeline-row-hook-2"]',
-          label: 'CLI Agent Interceptor (forensic-code-check, agy -p, :ro mount)',
+          label: 'CLI Agent Transition Helper (forensic-code-check, agy -p, :ro mount)',
           note: 'Isolated subprocess execution with restricted mutable fields [labels]',
         },
         {
@@ -294,9 +294,9 @@ test.describe('Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158)', (
 
     const dialog = page.locator('[role="dialog"]');
     await expect(dialog).toBeVisible();
-    await expect(page.locator('#attach-hook-title')).toHaveText('Attach Workflow Interceptor Hook');
+    await expect(page.locator('#attach-hook-title')).toHaveText('Attach Workflow Helper Hook');
 
-    // Select Agent Interceptor
+    // Select Agent Transition Helper
     const agentRadio = page.locator('input[type="radio"][value="agent_interceptor"]');
     await agentRadio.check();
 
@@ -330,7 +330,7 @@ test.describe('Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158)', (
         {
           selector: '[role="radiogroup"][aria-label="Hook Kind"]',
           label: 'Hook Kind RadioGroup',
-          note: 'Switches between Sync Wasm Validator, Sync Wasm Mutator, and Agent Interceptor',
+          note: 'Switches between Sync Wasm Validator, Sync Wasm Mutator, and Agent Transition Helper',
         },
         {
           selector: '[data-testid="agent-details-summary"]',
@@ -406,7 +406,7 @@ test.describe('Admin Workflow Transition Studio UI E2E (KB-P5-24, KANBA-158)', (
         },
         {
           selector: '[data-testid="dry-run-step-2"]',
-          label: 'Step 2 Interceptor: Skipped Async',
+          label: 'Step 2 Helper: Skipped Async',
           note: 'Asynchronous agent hooks are skipped in interactive UI dry-runs',
         },
         {

@@ -112,6 +112,9 @@ describe('DryRunDrawer (KB-P5-24)', () => {
     expect(writeTextSpy).toHaveBeenCalledWith(
       expect.stringContaining('uv run kanban-agent validate-transition'),
     );
+    await waitFor(() => {
+      expect(screen.getByText('Copied!')).toBeDefined();
+    });
   });
 
   it('switches between sample ticket and existing issue modes', async () => {
