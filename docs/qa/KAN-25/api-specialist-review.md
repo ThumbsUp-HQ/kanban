@@ -6,21 +6,22 @@
 - Date: 2026-11-20
 - Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan25-rc1-ad1c82a2`
 - Branch: `fix/KAN-25-rc1`
-- Commit: `6dad2ff`
+- Commit: `1508e3e`
 - Status: STATUS: APPROVED
 
 ---
 
 ## 1. Executive Summary
 
-This clean-room API and Architecture audit inspects ticket KAN-25 on remediation branch `fix/KAN-25-rc1` (commit `6dad2ff`). The ticket implements self-service passkey and FIDO2 hardware security key enrollment, credential testing via WebAuthn authentication assertion, device badge classification, clone detection warnings, complete AAL2 step-up interception on Profile Settings, credential scoping during key testing, and accessible modal focus trapping.
+This clean-room API and Architecture audit inspects ticket KAN-25 on remediation branch `fix/KAN-25-rc1` (commit `1508e3e`). The ticket implements self-service passkey and FIDO2 hardware security key enrollment, credential testing via WebAuthn authentication assertion, device badge classification, clone detection warnings, complete AAL2 step-up interception on Profile Settings, credential scoping during key testing, accessible modal focus trapping, and backend credential ID exposure in `list_credentials`.
 
 All API contracts, security boundaries, and coverage requirements are verified and approved:
 1. Exact route path alignment between the frontend client (`personalSettingsApi.ts`, `PasskeyEnrollModal.tsx`, `PersonalSettingsPage.tsx`) and the live FastAPI backend router in `kanban/api/v1/auth_webauthn.py`.
 2. Binary base64url challenge and credential serialization/deserialization contracts.
 3. Cryptographic and authentication security invariants, including secure context enforcement, RP ID scoping, credential-specific challenge filtering, and anti-replay safeguards.
-4. Robust RFC 9457 ApiProblem error handling and step-up orchestration across both `AAL2_REQUIRED` and `AAL2_STALE` challenges.
-5. High unit test coverage: 105 passing Vitest tests with >= 95% statement and branch coverage across all touched frontend API and component files.
+4. Exposing raw WebAuthn base64url `credential_id` via `bytes_to_base64url(bytes(r.credential_id))` in `list_credentials` (`kanban/api/v1/auth_webauthn.py:579`), ensuring exact matching against `optionsJson.allowCredentials[].id` during `[Test Key]`.
+5. Robust RFC 9457 ApiProblem error handling and step-up orchestration across both `AAL2_REQUIRED` and `AAL2_STALE` challenges.
+6. High unit test coverage: 23 passing Pytest tests with 98% coverage on `kanban/api/v1/auth_webauthn.py`, and 105 passing Vitest tests with >= 95% statement and branch coverage across all touched frontend API and component files.
 
 ---
 
@@ -54,6 +55,7 @@ All API contracts, security boundaries, and coverage requirements are verified a
     - Frontend URL: `GET /api/v1/auth/webauthn/credentials`
     - Schema items: `{ id, credential_id, nickname, sign_count, aaguid, transports, suspect_clone_at, created_at, last_used_at }`
     - Verification: `WebauthnCredentialItem` in `personalSettingsApi.ts` extended with `credential_id`, `transports`, `sign_count`, `aaguid`, and `suspect_clone_at`.
+    - Backend Alignment: `kanban/api/v1/auth_webauthn.py:579` populates `"credential_id": bytes_to_base64url(bytes(r.credential_id))`, matching the base64url encoding used in `allowCredentials[].id`.
 
 ### 2.2 Binary Encoding & Serialization Contracts (`webauthn.ts`)
 - The WebAuthn API requires binary ArrayBuffers for `challenge`, `user.id`, and `rawId`, whereas JSON transports base64url strings.
@@ -101,6 +103,9 @@ All API contracts, security boundaries, and coverage requirements are verified a
 
 ## 4. Test Coverage Audit
 
+- Pytest Suite:
+  - 23 passed in 9.96s across `kanban/tests/auth/`.
+  - `kanban/api/v1/auth_webauthn.py`: 98% coverage (exceeds >= 95% mandate).
 - Vitest Suite:
   - 105 passed across 5 test suites.
   - Every touched file meets the `>= 95%` coverage mandate:
