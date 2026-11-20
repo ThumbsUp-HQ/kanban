@@ -1,36 +1,50 @@
-=== STATIC TYPECHECK & LINTERS AUDIT ===
-
-1. Python MyPy (uv run mypy):
-Success: no issues found in 1149 source files
-Exit code: 0 (PASSED)
-
-2. Python Ruff (uv run ruff check .):
+=== 1. Ruff Check & Format ===
 All checks passed!
-Exit code: 0 (PASSED)
+1861 files already formatted
+=== 2. Mypy Typecheck ===
+Success: no issues found in 1126 source files
+=== 3. Import Architecture Contracts ===
 
-3. Python Import Architecture Linter (uv run lint-imports):
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 954 files, 3338 dependencies.
+--------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
+mcp forbidden from importing database KEPT (48 ignored imports)
+
 Contracts: 2 kept, 0 broken.
-Exit code: 0 (PASSED)
+=== 4. TypeScript Typecheck ===
+tsc: 0 errors
+=== 5. ESLint ===
+eslint: 0 errors, 0 warnings
+=== 6. Vite Build ===
 
-4. TypeScript (tsc -b --noEmit):
-> @kanban/web@0.1.0 typecheck
-> tsc -b --noEmit
-Exit code: 0 (PASSED)
-
-5. ESLint (eslint . --max-warnings 0):
-> @kanban/web@0.1.0 lint
-> eslint . --max-warnings 0
-Exit code: 0 (PASSED - 0 errors, 0 warnings)
-
-6. Production Web Build (vite build):
-> @kanban/web@0.1.0 build
+> @kanban/web@0.1.0 build /home/adamoutler/kanban/kanban/web
 > tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 694 modules transformed.
+rendering chunks...
+computing gzip size...
 dist/index.html                             0.51 kB │ gzip:   0.31 kB
 dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
 dist/assets/index-Dw6CVgUb.css            404.67 kB │ gzip:  57.28 kB
 dist/assets/index-CrhklPDG.js           1,917.79 kB │ gzip: 520.90 kB
-built in 1.09s
-Exit code: 0 (PASSED)
 
-7. Dash Check (python3 -m scripts.check_no_dashes --all):
-Exit code: 0 (PASSED - 0 em/en-dashes)
+✓ built in 1.10s
+=== 7. Check No Dashes ===
+check_no_dashes: 0 em/en-dashes

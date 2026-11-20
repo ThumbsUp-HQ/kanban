@@ -179,6 +179,57 @@ index ec3bd01..898059b 100644
      agent_handle = body.handle or body.display_name.lower().replace(" ", "-")
      return await principal_service.provision_agent(
          session,
+diff --git a/kanban/api/v1/projects.py b/kanban/api/v1/projects.py
+index 429c1bf..5e9631c 100644
+--- a/kanban/api/v1/projects.py
++++ b/kanban/api/v1/projects.py
+@@ -36,6 +36,7 @@ async def create_project(
+     Requires workspace admin or server admin role.
+     """
+     result = await svc.create_project(session, caller, body)
++    await session.commit()
+     response.headers["Location"] = f"/api/v1/projects/{result.identifier}"
+     return result
+ 
+@@ -74,7 +75,9 @@ async def patch_project(
+     Requires project ADMIN role.
+     """
+     async with timing_floor(floor_ms=25.0):
+-        return await svc.update_project(session, caller, project_ref, body)
++        result = await svc.update_project(session, caller, project_ref, body)
++        await session.commit()
++        return result
+ 
+ 
+ @router.put(
+@@ -90,7 +93,9 @@ async def put_module_defaults(
+     Requires project ADMIN role.
+     """
+     async with timing_floor(floor_ms=25.0):
+-        return await svc.replace_module_defaults(session, caller, project_ref, body.module_ids)
++        result = await svc.replace_module_defaults(session, caller, project_ref, body.module_ids)
++        await session.commit()
++        return result
+ 
+ 
+ @router.get(
+@@ -120,7 +125,9 @@ async def add_project_member(
+     Requires project ADMIN role.
+     """
+     async with timing_floor(floor_ms=25.0):
+-        return await svc.add_project_member(session, caller, project_ref, body)
++        result = await svc.add_project_member(session, caller, project_ref, body)
++        await session.commit()
++        return result
+ 
+ 
+ @router.delete(
+@@ -137,4 +144,5 @@ async def delete_project_member(
+     """
+     async with timing_floor(floor_ms=25.0):
+         await svc.delete_project_member(session, caller, project_ref, principal_id)
++        await session.commit()
+         return Response(status_code=204)
 diff --git a/kanban/tests/api/test_admin_principals.py b/kanban/tests/api/test_admin_principals.py
 index 3292874..5d5f02c 100644
 --- a/kanban/tests/api/test_admin_principals.py
@@ -666,6 +717,47 @@ index 3292874..5d5f02c 100644
 +        session, admin.workspace_id, admin.id, user_pw_id, "WORKSPACE_GUEST", "workspace"
 +    )
 +    assert ub_res2["status"] == "role_unbound"
+diff --git a/kanban/tests/api/test_projects.py b/kanban/tests/api/test_projects.py
+index 301259c..623b362 100644
+--- a/kanban/tests/api/test_projects.py
++++ b/kanban/tests/api/test_projects.py
+@@ -436,3 +436,36 @@ async def test_patch_unchanged_description_and_module_toggle(
+     bad = await client.patch("/api/v1/projects/TOG", json={"description_markdown": "x"})
+     assert bad.status_code == 422
+     assert bad.json()["code"] == "INVALID_CONTENT"
++
++
++async def test_project_members_endpoints(
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify list, add, and remove project members endpoints with commit semantics."""
++    admin = await make_user("admin_proj_mem", workspace_role="WORKSPACE_ADMIN")
++    member = await make_user("target_proj_mem", workspace_role="WORKSPACE_MEMBER")
++    client = as_principal(admin)
++
++    # 1. Create project
++    resp_create = await client.post(
++        "/api/v1/projects",
++        json={"identifier": "PMEM", "name": "Project Members Test"},
++    )
++    assert resp_create.status_code == 201
++
++    # 2. List members initially
++    resp_list = await client.get("/api/v1/projects/PMEM/members")
++    assert resp_list.status_code == 200
++    assert isinstance(resp_list.json(), list)
++
++    # 3. Add member
++    resp_add = await client.post(
++        "/api/v1/projects/PMEM/members",
++        json={"principal_id": str(member.id), "role": "MEMBER"},
++    )
++    assert resp_add.status_code == 201
++
++    # 4. Remove member
++    resp_del = await client.delete(f"/api/v1/projects/PMEM/members/{member.id}")
++    assert resp_del.status_code == 204
 diff --git a/kanban/web/src/app/shortcuts.test.ts b/kanban/web/src/app/shortcuts.test.ts
 index 6d0d877..08b6f0e 100644
 --- a/kanban/web/src/app/shortcuts.test.ts

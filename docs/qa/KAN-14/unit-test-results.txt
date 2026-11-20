@@ -1,40 +1,80 @@
-========================================================================
-UNIT TEST & COVERAGE RESULTS - KAN-14 CLEAN-ROOM REMEDIATION & ROUND 4 POLISH
-========================================================================
+=== PYTEST UNIT TESTS & COVERAGE ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 28 items
 
---- Backend Tests (Pytest) ---
-Command: uv run pytest kanban/tests/api/test_admin_principals.py --cov=kanban.admin.principal_service --cov=kanban.api.v1.admin.principals --cov-branch --cov-report=term-missing
-Status: PASSED (16 passed in 15.22s)
+kanban/tests/api/test_admin_principals.py ................               [ 57%]
+kanban/tests/api/test_projects.py ............                           [100%]
 
-Coverage Summary:
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
 Name                                Stmts   Miss Branch BrPart  Cover   Missing
 -------------------------------------------------------------------------------
 kanban/admin/principal_service.py     409      7    148     14    96%   141, 167->174, 325->333, 327->333, 330->333, 502, 636, 715, 785->863, 844->863, 933-936, 1104->1112, 1112->1121, 1217->1223
 kanban/api/v1/admin/principals.py     104      2     20      2    97%   368, 398
+kanban/api/v1/projects.py              54      0      0      0   100%
 -------------------------------------------------------------------------------
-TOTAL                                 513      9    168     16    96%
+TOTAL                                 567      9    168     16    96%
+============================= 28 passed in 20.79s ==============================
 
---- Frontend Tests (Vitest) ---
-Command: cd kanban/web && vitest run src/app/shortcuts.test.ts src/features/views/useIssueKeyboardMap.test.tsx src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx src/features/settings/__tests__/ProjectSettingsPage.test.tsx src/features/admin-auth/AuthStudioPage.test.tsx src/features/drawer-rail/PropertiesRail.test.tsx src/features/drawer-rail/railApi.test.ts src/features/views/FilterDisplayBar.test.tsx src/features/views/viewRegistry.test.tsx
-Status: PASSED (9 passed test files, 199 passed tests in 8.70s)
+=== VITEST UNIT TESTS & COVERAGE ===
 
-Files Tested:
-- src/app/shortcuts.test.ts (10 passed)
-- src/features/views/useIssueKeyboardMap.test.tsx (11 passed)
-- src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (21 passed)
-- src/features/settings/__tests__/ProjectSettingsPage.test.tsx (26 passed)
-- src/features/admin-auth/AuthStudioPage.test.tsx (39 passed)
-- src/features/drawer-rail/PropertiesRail.test.tsx (17 passed)
-- src/features/drawer-rail/railApi.test.ts (16 passed)
-- src/features/views/FilterDisplayBar.test.tsx (19 passed)
-- src/features/views/viewRegistry.test.tsx (40 passed)
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
+      Coverage enabled with v8
 
-Coverage Highlights:
-- useIssueKeyboardMap.ts: 98.03% Lines, 94.89% Branches, 100% Functions, 97.88% Statements
-- PropertiesRail.tsx: 100% Statements, 100% Functions, 100% Lines
-- railApi.ts: 100% Statements, 98.46% Branches, 100% Functions, 100% Lines
-- ProjectSettingsPage.tsx: 99.56% Statements, 95.68% Branches, 100% Functions, 100% Lines
-- WorkspaceSettingsPage.tsx: 99.63% Statements, 95.43% Branches, 100% Functions, 100% Lines
-- AuthStudioPage.tsx: 96.12% Lines, 94.43% Statements
-- FilterDisplayBar.tsx: 100% Statements, 98.43% Branches, 100% Functions, 100% Lines
-- viewRegistry.tsx: 98.51% Statements, 95.28% Branches, 97.82% Functions, 100% Lines
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 14ms
+ ✓ src/features/drawer-rail/railApi.test.ts (16 tests) 24ms
+ ✓ src/app/shortcuts.test.ts (10 tests) 70ms
+ ✓ src/features/views/useIssueKeyboardMap.test.tsx (11 tests) 168ms
+ ✓ src/features/views/FilterDisplayBar.test.tsx (19 tests) 1385ms
+ ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (21 tests) 1664ms
+   ✓ WorkspaceSettingsPage (KANBA-202) (21)
+     ✓ renders workspace settings page and updates workspace name and slug 322ms
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (26 tests) 1791ms
+ ✓ src/features/admin-auth/AuthStudioPage.test.tsx (39 tests) 4720ms
+   ✓ AuthStudioPage (KB-P3-36) (39)
+     ✓ renders 4 cards in sort_rank order with Primary indicator on first enabled external card, and moves card down (Mandatory Test Case 1) 356ms
+     ✓ opens drawer to add a new auth card and appends created card 686ms
+     ✓ opens drawer to edit an existing card and updates it 309ms
+     ✓ handles LOCKOUT_PREVENTED during card update and general error during delete 304ms
+ ✓ src/features/views/viewRegistry.test.tsx (40 tests) 13057ms
+   ✓ viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) (40)
+     ✓ IssuesWorkspaceRoute: creates a new issue via QuickCreateIssueModal and updates state/priority via field popover 1127ms
+     ✓ IssuesWorkspaceRoute: handles multi-select, batch archive, and batch delete in BulkActionBar 627ms
+     ✓ IssuesWorkspaceRoute: filters by Priority, Assignee (unassigned and alice), Cycle, Module, Due Date 2205ms
+     ✓ IssuesWorkspaceRoute: tests state filter Active preset, alice assignee, and select-all 787ms
+     ✓ IssuesWorkspaceRoute: covers batch update state with Shift (todo) and batch update priority with Shift (medium) 344ms
+     ✓ IssuesWorkspaceRoute: tests field popovers for high/low priority and in-progress/backlog state, and / shortcut 616ms
+     ✓ IssuesWorkspaceRoute: covers handleToggleSelect 100 cap and unassigned I shortcut 2436ms
+     ✓ Live Mode API Wiring & Board State Normalization (KANBA-164) (20)
+       ✓ creates, updates, and bulk-operates on issues in live mode via REST endpoints 543ms
+       ✓ covers opening, cancelling, and saving custom view via SaveViewModal in IssuesWorkspaceRoute 704ms
+       ✓ covers BulkActionBar batch delete and archive in table layout 522ms
+
+ Test Files  9 passed (9)
+      Tests  186 passed (186)
+   Start at  02:16:36
+   Duration  15.40s (tests 64%, environment 24%, import 6%, transform 4%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.27 |    96.06 |   99.41 |   99.78 |                   
+ app               |     100 |    98.79 |     100 |     100 |                   
+  shortcuts.ts     |     100 |    98.79 |     100 |     100 | 109               
+ ...es/drawer-rail |     100 |    98.48 |     100 |     100 |                   
+  railApi.ts       |     100 |    98.48 |     100 |     100 | 182               
+ features/settings |   99.59 |    95.62 |     100 |     100 |                   
+  ...tingsPage.tsx |   99.56 |    95.75 |     100 |     100 | ...84,833,877,935 
+  ...tingsPage.tsx |   99.63 |    95.43 |     100 |     100 | ...83,321,348,394 
+ features/views    |   98.75 |    95.86 |    98.7 |   99.48 |                   
+  ...isplayBar.tsx |     100 |    98.43 |     100 |     100 | 92,290            
+  ...eyboardMap.ts |   98.03 |    94.89 |     100 |   97.88 | 159-163           
+  viewRegistry.tsx |   98.51 |    95.28 |   97.82 |     100 | ...00-605,660,677 
+-------------------|---------|----------|---------|---------|-------------------
