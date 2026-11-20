@@ -2,14 +2,21 @@
 
 ## Summary of Implementation
 
-Ticket **KAN-19** (`[KB-P3-AUDIT-13] Implement Progressive-Disclosure Self-Correcting YAML Error UX (did_you_mean, valid_options, cli_example) Across All MCP Surfaces (3 Problems)`) has been implemented on branch `fix/KAN-19-rc1` off `main` (`887e7e0`).
+Ticket **KAN-19** (`[KB-P3-AUDIT-13] Implement Progressive-Disclosure Self-Correcting YAML Error UX (did_you_mean, valid_options, cli_example) Across All MCP Surfaces (3 Problems)`) has been fully remediated and verified on branch `fix/KAN-19-rc2` off `main` (`887e7e0`).
 
-The implementation addresses all three scoped problems and satisfies the forensic QA requirements:
-- 100% backward compatibility
-- Zero forbidden imports (`mcp` strictly does not import `database`)
-- Zero em/en-dashes across all public docs, comments, and code
-- >=95% unit test coverage across all 7 touched files (overall 97% coverage)
-- 100% full MCP test suite passing (354 passed, 0 failed)
+The remediation directly reconciles all 3 forensic packet and wiki-contract items caught by Clean-Room Reality-Checker (`00a79239`):
+1. **Wiki Contract Alignment (`thumbs-up-kanban.wiki/MCP-Tools-Reference.md` on branch `fix/KAN-19-rc2` commit `3358428`):**
+   - Corrected `configure_workspace` required parameter action and CLI example to `--action="get"`, matching `valid_options: [get, update, help]`.
+   - Updated Example 8 (`PATCH_TARGET_NOT_FOUND`) `closest_match` structure to reflect the actual runtime fields: `line_start`, `line_end`, `similarity`, and `snippet`.
+   - Aligned canonical YAML error examples (1-9) with runtime `KbMcpError.to_yaml()` output, including mirrored `hint:` where `fix_hint` is provided.
+   - Guarded `custom_fields` parameter check in `mcp/protocol.py` with `spec.name == "update_ticket"`.
+   - Regenerated `docs/qa/KAN-19/wiki-diff.patch` against pre-KAN-19 base `5e93c1a`.
+2. **Programmatically Regenerated Error Samples (`docs/qa/KAN-19/progressive-error-samples.yaml`):**
+   - Executed live Python script invoking `McpProtocolHandler` and `KbMcpError.to_yaml()` runtime code across all 10 test cases, ensuring 100% verbatim fidelity including `hint:` fields.
+3. **Refreshed Proof Packet & Dual Specialist Reviews:**
+   - 354/354 MCP tests passed in 44.46s with >=95% coverage on all 7 touched files (overall 97% coverage).
+   - Clean static analysis: Ruff, MyPy (113 source files), Lint-Imports (2 kept, 0 broken), and 0 em/en-dashes.
+   - Dual specialist reviews (API and UI) re-certified on branch `fix/KAN-19-rc2`.
 
 ### Problem 1: First-Class Progressive-Disclosure Error Model in `KbMcpError`
 - Extended `KbMcpError` in `mcp/errors.py` with first-class optional fields:
@@ -45,7 +52,7 @@ The implementation addresses all three scoped problems and satisfies the forensi
 ## Evidence Artifacts
 
 1. **Unit Test Results:** `docs/qa/KAN-19/unit-test-results.txt`
-   * Full suite: 354 passed, 0 failed in 108.83s
+   * Full suite: 354 passed, 0 failed in 44.46s
    * `mcp/errors.py`: 100% coverage
    * `mcp/internal_client.py`: 97% coverage
    * `mcp/protocol.py`: 95% coverage

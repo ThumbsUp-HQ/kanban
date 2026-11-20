@@ -3,39 +3,19 @@ sample_1_unknown_param_semantic_alias:
     code: VALIDATION_FAILED
     message: Unknown parameter 'body' for tool 'update'
     field: body
-    valid_options:
-    - id
-    - type
-    - title
-    - content
-    - parent
-    - color
-    - original_text
-    - replacement_text
-    - if_match
-    - links
-    did_you_mean:
-    - content
+    valid_options: [id, type, title, content, parent, color, original_text, replacement_text, if_match, links]
+    did_you_mean: [content]
+    hint: Unknown parameter 'body'. Did you mean 'content'?
     fix_hint: Unknown parameter 'body'. Did you mean 'content'?
-    cli_example: kanban-cli-docs update --id="docs/arch" --type=DOC --content="new
-      content"
+    cli_example: kanban-cli-docs update --id="docs/arch" --type=DOC --content="new content"
 sample_2_unknown_param_fuzzy_difflib:
   error:
     code: VALIDATION_FAILED
     message: Unknown parameter 'querry' for tool 'search'
     field: querry
-    valid_options:
-    - id
-    - query
-    - type
-    - project
-    - lod
-    - include_tree
-    - limit
-    - cursor
-    did_you_mean:
-    - query
-    - cursor
+    valid_options: [id, query, type, project, lod, include_tree, limit, cursor]
+    did_you_mean: [query, cursor]
+    hint: Unknown parameter 'querry'. Did you mean 'query'?
     fix_hint: Unknown parameter 'querry'. Did you mean 'query'?
     cli_example: kanban-cli-docs search --query="architecture"
 sample_3_missing_required_parameter:
@@ -43,36 +23,28 @@ sample_3_missing_required_parameter:
     code: VALIDATION_FAILED
     message: Missing required parameter 'title' for tool 'create'
     field: title
+    hint: 'Missing required parameter: ''title''. Provide a value to proceed.'
     fix_hint: 'Missing required parameter: ''title''. Provide a value to proceed.'
     cli_example: kanban-cli-docs create --type=DOC --content="# Architecture" --title="<title>"
 sample_4_invalid_enum_value:
   error:
     code: VALIDATION_FAILED
-    message: Invalid value 'dco' for parameter 'type'; type must be 'DOC' or 'STICKY'
-      or 'doc' or 'sticky'
+    message: Invalid value 'dco' for parameter 'type'; type must be 'DOC' or 'STICKY' or 'doc' or 'sticky'
     field: type
-    valid_options:
-    - DOC
-    - STICKY
-    - doc
-    - sticky
-    did_you_mean:
-    - doc
-    fix_hint: 'Invalid value ''dco'' for parameter ''type''. Did you mean ''doc''?
-      Valid options: [''DOC'', ''STICKY'', ''doc'', ''sticky'']'
-    cli_example: kanban-cli-docs create --type="doc" --title="System Architecture"
-      --content="text"
+    valid_options: [DOC, STICKY, doc, sticky]
+    did_you_mean: [doc]
+    hint: 'Invalid value ''dco'' for parameter ''type''. Did you mean ''doc''? Valid options: [''DOC'', ''STICKY'', ''doc'',
+      ''sticky'']'
+    fix_hint: 'Invalid value ''dco'' for parameter ''type''. Did you mean ''doc''? Valid options: [''DOC'', ''STICKY'', ''doc'',
+      ''sticky'']'
+    cli_example: kanban-cli-docs create --type="doc" --title="System Architecture" --content="text"
 sample_5_tool_not_found_on_surface:
   error:
     code: NOT_FOUND
     message: Tool 'search_docs' not found on surface 'docs'
     field: tool_name
-    valid_options:
-    - search
-    - create
-    - update
-    did_you_mean:
-    - search
+    valid_options: [search, create, update]
+    did_you_mean: [search]
     hint: Verify tool name or switch to appropriate MCP surface endpoint
     fix_hint: Tool 'search_docs' not found. Did you mean 'search'?
     cli_example: kanban-cli-docs search
@@ -81,10 +53,8 @@ sample_6_domain_invalid_transition:
     code: INVALID_TRANSITION
     message: Cannot transition issue directly from 'Backlog' to 'Done'
     field: to_state
-    valid_options:
-    - Todo
-    - In Progress
-    - Done
+    valid_options: [Todo, In Progress, Done]
+    hint: 'Allowed target states: Todo, In Progress, Done'
     fix_hint: 'Allowed target states: Todo, In Progress, Done'
     cli_example: kanban-cli-agent transition_ticket --identifier="KAN-19" --to-state="Todo"
 sample_7_domain_conflict_etag:
@@ -93,8 +63,7 @@ sample_7_domain_conflict_etag:
     message: 'concurrency conflict: ticket description was modified concurrently'
     field: if_match
     hint: 'current etag: 9f83726abcde...'
-    fix_hint: 'Ticket description was modified concurrently. Retry with fresh ETag:
-      9f83726abcde...'
+    fix_hint: 'Ticket description was modified concurrently. Retry with fresh ETag: 9f83726abcde...'
     cli_example: kanban-cli-agent update_ticket --identifier="KAN-19" --if-match="9f83726abcde..."
     current_etag: 9f83726abcde...
 sample_8_domain_already_promoted:
@@ -102,8 +71,8 @@ sample_8_domain_already_promoted:
     code: ALREADY_PROMOTED
     message: Sticky 'stk_01abc' has already been promoted to document 'DOC-KAN-42'
     field: id
-    fix_hint: Sticky 'stk_01abc' has already been promoted to Doc 'DOC-KAN-42'. Use
-      update on that Doc instead.
+    hint: Sticky 'stk_01abc' has already been promoted to Doc 'DOC-KAN-42'. Use update on that Doc instead.
+    fix_hint: Sticky 'stk_01abc' has already been promoted to Doc 'DOC-KAN-42'. Use update on that Doc instead.
     cli_example: kanban-cli-docs update --id="DOC-KAN-42"
     target_doc_key: DOC-KAN-42
 sample_9_domain_patch_target_not_found:
@@ -112,32 +81,23 @@ sample_9_domain_patch_target_not_found:
     message: Target text not found in document
     field: original_text
     closest_match:
-    - line_start: 3
-      line_end: 3
-      similarity: 0.971
-      snippet: 'Section 1: Context'
+    - {line_start: 3, line_end: 3, similarity: 0.973, snippet: 'Section 1: Context'}
     - line_start: 2
       line_end: 3
-      similarity: 0.944
-      snippet: '
+      similarity: 0.947
+      snippet: |2-
 
-        Section 1: Context'
+        Section 1: Context
     hint: Verify exact whitespace and indentation, or inspect closest_match suggestions.
-    fix_hint: Target text not found in document. Inspect closest_match suggestions
-      for exact whitespace/indentation.
-    cli_example: kanban-cli-docs update --id="<id>" --original-text="<snippet from
-      closest_match>" --replacement-text="<new>"
+    fix_hint: Target text not found in document. Inspect closest_match suggestions for exact whitespace/indentation.
+    cli_example: kanban-cli-docs update --id="<id>" --original-text="<snippet from closest_match>" --replacement-text="<new>"
 sample_10_domain_patch_target_ambiguous:
   error:
     code: PATCH_TARGET_AMBIGUOUS
     message: Target text appears 2 times in document; provide more surrounding context
     field: original_text
     hint: Include unique surrounding lines to disambiguate the target region.
-    fix_hint: Target text appears 2 times at lines [1, 3]. Include unique surrounding
-      lines in original_text to disambiguate.
-    cli_example: kanban-cli-docs update --id="<id>" --original-text="<unique context>"
-      --replacement-text="<new>"
-    line_hints:
-    - 1
-    - 3
+    fix_hint: Target text appears 2 times at lines [1, 3]. Include unique surrounding lines in original_text to disambiguate.
+    cli_example: kanban-cli-docs update --id="<id>" --original-text="<unique context>" --replacement-text="<new>"
+    line_hints: [1, 3]
     count: 2
