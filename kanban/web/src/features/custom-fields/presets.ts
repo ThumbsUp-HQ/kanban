@@ -94,7 +94,7 @@ if __name__ == "__main__":
     outputFormat: 'severity_pill',
     metadataText: JSON.stringify({}, null, 2),
     scriptSource:
-      'formula: issue.priority === "URGENT" ? {"level": "critical", "score": 9.5, "label": "SLA Breached"} : (issue.priority === "HIGH" ? {"level": "high", "score": 7.0, "label": "Due in 1 Day"} : {"level": "low", "score": 2.0, "label": "Within SLA"})',
+      'formula: {"level": "critical", "score": 9.5, "label": "SLA Breached"} if (issue.days_until_due < 0 or issue.priority == "URGENT") else ({"level": "high", "score": 7.0, "label": "Due Soon"} if (issue.days_until_due <= 2 or issue.priority == "HIGH") else {"level": "low", "score": 2.0, "label": "Within SLA"})',
     targetScope: 'PROJECT',
     credentialMode: 'INVOKING_USER',
     egressAllowlist: [],
@@ -114,7 +114,8 @@ if __name__ == "__main__":
       null,
       2,
     ),
-    scriptSource: 'formula: issue.state === "CANCELLED" ? "Blocked" : "Clear"',
+    scriptSource:
+      'formula: "Blocked" if (issue.blocker_count > 0 or issue.state in ("BLOCKED", "CANCELLED")) else "Clear"',
     targetScope: 'PROJECT',
     credentialMode: 'INVOKING_USER',
     egressAllowlist: [],
@@ -135,7 +136,7 @@ if __name__ == "__main__":
       2,
     ),
     scriptSource:
-      'formula: issue.state === "DONE" ? 100 : (issue.state === "IN_PROGRESS" ? 50 : 0)',
+      'formula: ((issue.completed_sub_issue_count * 100.0) / issue.sub_issue_count) if (issue.sub_issue_count > 0) else (100.0 if issue.state in ("DONE", "Done") else 0.0)',
     targetScope: 'PROJECT',
     credentialMode: 'INVOKING_USER',
     egressAllowlist: [],
