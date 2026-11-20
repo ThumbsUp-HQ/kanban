@@ -4,25 +4,26 @@
 - Title: Implement Progressive-Disclosure Self-Correcting YAML Error UX Across All MCP Surfaces
 - Reviewer: api-spec-2 (Clean-Room Backend / API / Security Specialist)
 - Date: 2026-11-20
-- Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan19-rc2-7e0a322e`
-- Branch: `fix/KAN-19-rc2`
-- Commit: `9191344`
+- Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan19-rc3-a8e13b04`
+- Branch: `fix/KAN-19-rc3`
+- Commit: `b559f55`
 - Status: STATUS: APPROVED
 
 ---
 
 ## 1. Executive Summary
 
-This clean-room API and Architecture audit inspects ticket KAN-19 on remediation branch `fix/KAN-19-rc2` (commit `9191344`). The ticket implements self-correcting progressive-disclosure YAML error handling across all MCP surfaces (`/mcp/agent`, `/mcp/docs`, `/mcp/admin`), fixes the JIT-help bypass regression, guards `custom_fields` parameter handling to `update_ticket`, aligns all wiki CLI and error documentation with runtime contracts, programmatically regenerates all 10 error samples, and verifies 354 passing unit tests with `>= 95%` coverage on every touched MCP file (overall 97%).
+This clean-room API and Architecture audit inspects ticket KAN-19 on remediation branch `fix/KAN-19-rc3` (commit `b559f55`). The ticket implements self-correcting progressive-disclosure YAML error handling across all MCP surfaces (`/mcp/agent`, `/mcp/docs`, `/mcp/admin`), fixes the JIT-help bypass regression, guards `custom_fields` parameter handling to `update_ticket`, corrects the self-correction CLI example in `manage_cycles_and_modules` to `--action=list_cycles`, aligns all wiki CLI and error documentation with runtime contracts, programmatically regenerates all 10 error samples, and verifies 354 passing unit tests with `>= 95%` coverage on every touched MCP file (overall 97%).
 
 The implementation adheres to all architectural invariants, schema validation requirements, and API standards:
 1. `KbMcpError` in `mcp/errors.py` is extended with structured remediation fields (`field`, `valid_options`, `did_you_mean`, `fix_hint`, `cli_example`, `closest_match`), serialized via `InlineSafeDumper` (`strip_nulls=True`) to maintain a minimal token footprint for LLM context windows.
 2. Pre-dispatch schema validation in `mcp/protocol.py` intercepts unknown parameters, missing required arguments, type mismatches, and enum violations before tool handlers execute. It leverages `SEMANTIC_ALIASES` and fuzzy string matching (`difflib.get_close_matches`) to supply actionable corrections and ready-to-run CLI examples.
 3. JIT-help handling in `mcp/protocol.py` recognizes all standard JIT help parameters (`identifier`, `action`, `source`, `id`, `project`, `summary`) before pre-dispatch validation runs, ensuring seamless JIT assistance.
 4. Parameter check for `custom_fields` in `mcp/protocol.py:1196` is safely scoped to `spec.name == "update_ticket"`.
-5. Domain error handlers in `/mcp/agent`, `/mcp/docs`, and `/mcp/admin` expose detailed conflict recovery information (`INVALID_TRANSITION`, `CONFLICT_ETAG`, `ALREADY_PROMOTED`, `PATCH_TARGET_NOT_FOUND`).
-6. Full architectural layering is preserved: `mcp` maintains zero runtime imports from `database`.
-7. Full test suite: 354 passed, 0 failed in 44.46s, with every touched file reaching `>= 95%` coverage:
+5. `_map_cycle_error` in `mcp/surfaces/admin/manage_cycles_and_modules.py:197` formats `--action=list_cycles`, matching `MANAGE_CYCLES_AND_MODULES_SCHEMA` enum choices.
+6. Domain error handlers in `/mcp/agent`, `/mcp/docs`, and `/mcp/admin` expose detailed conflict recovery information (`INVALID_TRANSITION`, `CONFLICT_ETAG`, `ALREADY_PROMOTED`, `PATCH_TARGET_NOT_FOUND`).
+7. Full architectural layering is preserved: `mcp` maintains zero runtime imports from `database`.
+8. Full test suite: 354 passed, 0 failed in 52.51s, with every touched file reaching `>= 95%` coverage:
    - `mcp/errors.py`: 100%
    - `mcp/internal_client.py`: 97%
    - `mcp/protocol.py`: 95%
@@ -31,7 +32,7 @@ The implementation adheres to all architectural invariants, schema validation re
    - `mcp/surfaces/agent/update_ticket.py`: 97%
    - `mcp/surfaces/docs/update.py`: 96%
    - Overall touched files coverage: 97%.
-8. Zero em-dashes or en-dashes are used across code, tests, YAML samples, and wiki documentation.
+9. Zero em-dashes or en-dashes are used across code, tests, YAML samples, and wiki documentation.
 
 ---
 
@@ -70,7 +71,7 @@ The implementation adheres to all architectural invariants, schema validation re
   - `update`: When attempting to promote an already-promoted sticky (`ALREADY_PROMOTED`), it provides direct links and keys to the existing doc.
   - Patch disambiguation: When `original_text` does not match, fuzzy line scanning identifies candidate line numbers and context snippets (`PATCH_TARGET_NOT_FOUND` / `PATCH_TARGET_AMBIGUOUS`) with `line_start`, `line_end`, `similarity`, and `snippet`.
 - `/mcp/admin`:
-  - `manage_cycles_and_modules`: Subcommand dispatch errors provide valid action options (`valid_options: [get, update, help]`) and closest match.
+  - `manage_cycles_and_modules`: Subcommand dispatch errors provide valid action options and closest match (`--action=list_cycles`).
 
 ### 2.4 Programmatic Error Sample Verification (`progressive-error-samples.yaml`)
 - Verified all 10 captured error samples in `docs/qa/KAN-19/progressive-error-samples.yaml`.
@@ -87,14 +88,14 @@ The implementation adheres to all architectural invariants, schema validation re
   - `uv run mypy mcp/`: 0 errors across 113 source files.
   - `python3 -m scripts.check_no_dashes --all`: 0 errors.
 - Clean Patch Artifact: `docs/qa/KAN-19/git-diff.patch` verified to contain zero `docs/qa/*` files.
-- Authoritative Wiki Documentation: `thumbs-up-kanban.wiki/MCP-Tools-Reference.md` updated at `3358428` with 0 em/en-dashes.
+- Authoritative Wiki Documentation: `thumbs-up-kanban.wiki/MCP-Tools-Reference.md` updated at `58aa9cd` with 0 em/en-dashes.
 
 ---
 
 ## 4. Test Coverage Audit
 
 - Pytest Suite:
-  - Full suite: 354 passed, 0 failed in 44.46s.
+  - Full suite: 354 passed, 0 failed in 52.51s.
   - Every touched file meets the `>= 95%` coverage threshold:
     - `mcp/errors.py`: 100%
     - `mcp/internal_client.py`: 97%
