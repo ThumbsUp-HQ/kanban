@@ -2,108 +2,38 @@
 
 ## 1. Executive Summary & Verification Context
 - **Ticket ID:** KAN-7 ([KB-P3-AUDIT-01])
-- **Branch:** `feat/KAN-7`
-- **Worktree:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9`
-- **Author:** `@b-kan7`
-- **Status:** READY FOR REVIEW
+- **Repository Root:** `/home/adamoutler/kanban`
+- **Status:** READY FOR CLEAN-ROOM AUDIT
 
-This packet provides indisputable forensic proof for the four defects addressed in KAN-7:
-1. `POST /api/v1/setup/claim` RLS Context Binding under `FORCE ROW LEVEL SECURITY`.
-2. Headless setup token permissions, container initialization, and fallback persistence.
-3. Recovery Code HTML5 pattern UnicodeSets (`/v` flag) `SyntaxError` resolution.
-4. `SecondFactorStep` root container `data-testid="second-factor-step"` attribute.
+This packet provides indisputable zero-mock forensic proof for all 4 scoped KAN-7 defects plus clean-room fail-closed auth and shell polish:
+1. `POST /api/v1/setup/claim` RLS Context Binding (`bind_rls_context`) under PostgreSQL `FORCE ROW LEVEL SECURITY` (`kanban/auth/setup.py`).
+2. Headless setup token permissions (`UID 65532` `/run/kanban` mode `0600`), `KB_SETUP_TOKEN_FILE` passthrough (`deploy/standalone/entrypoint.py`), and `_persist_token` fallback persistence (`kanban/auth/setup.py`).
+3. Recovery Code HTML5 `pattern="[A-Za-z0-9\-]{8,32}"` UnicodeSets (`/v` flag) `SyntaxError` fix (`kanban/web/src/features/auth/SecondFactorStep.tsx`).
+4. `SecondFactorStep` root `data-testid="second-factor-step"`, single-card layout (zero nested `.auth-panel` borders), `0` inline `style={{...}}` props, and fail-closed `AppShell` + `RealtimeProvider` auth gate (`0` `401` API requests and `0` WS/SSE connections when unauthenticated, pre-claim, or `mfa_pending: true`).
 
----
+## 2. Unit Test & Static Quality Proof
+- **Backend Unit Tests (`docs/qa/KAN-7/unit-test-results.txt`):** `46 passed` across `kanban/tests/auth/test_setup.py` and `tests/deploy/test_standalone_entrypoint.py` (`100%` statement and branch coverage on `kanban/auth/setup.py`, `99%` coverage on `deploy/standalone/entrypoint.py`, `0` missed statements, `99%` combined coverage).
+- **Frontend Unit Tests (`docs/qa/KAN-7/unit-test-results.txt`):** `134 passed` across touched suites (`99.29%` Stmts, `96.30%` Branch, `100%` Funcs, `99.71%` Lines; `AppShell.tsx` `97.67%` branch, `useSessionGuard.ts` `95.31%` branch, `SecondFactorStep.tsx` `96.42%` branch, including `src/styles/__tests__/cssTokensAudit.test.ts`).
+- **Static Checks (`docs/qa/KAN-7/build-or-typecheck.txt`):** `uv run mypy` (Success: no issues found in 1094 source files), `uv run ruff check .` (All checks passed!), `uv run ruff format --check .` (1858 files already formatted), `uv run lint-imports` (Contracts: 2 kept, 0 broken), `tsc -b --noEmit` (0 errors), `eslint --max-warnings 0` (0 errors, 0 warnings), `vite build` (clean production build), and `check_no_dashes` all exit `0`.
 
-## 2. Root Cause Analysis & Architectural Fixes
+## 3. Zero-Mock Live Full-Stack Proof (`docs/qa/KAN-7/live-fullstack-proof.txt`)
+Verified against live standalone container `kanban-liveqa-1` (`thumbs-up-kanban:local-qa` on `http://localhost:18951`, embedded PostgreSQL 16 + Uvicorn UID `65532`, **zero** `mockApi` / `page.route` stubs):
+- `/run/kanban/setup_token` verified at `Uid=65532, Gid=65532, mode=0600`.
+- Pre-claim `GET /` mounts `app-shell-auth-loading` and redirects to `/setup` with `0` `401`s, `0` WS/SSE attempts, `0` `console.error`, `0` `pageerror`.
+- `/setup?token=...` scrubs URL query, `POST /api/v1/setup/claim` returns `200`, CTAP2 WebAuthn passkey registration (`POST /api/v1/auth/webauthn/registration/verify`) returns `200` (`aal_level: 2`), recovery codes generated (`200`), workspace renders cleanly.
+- Logout -> unauthenticated `GET /` redirects to `/login` (`0` `401`s, `0` errors) -> password login (`mfa_pending: true`) -> direct `GET /` redirects back to `/login` (`0` `401`s, `0` WS/SSE, `0` errors) -> Recovery Code login (`POST /api/v1/auth/recovery/verify` -> `200`) -> `GET /api/v1/auth/session` returns `authenticated: true, mfa_pending: false, aal_level: 2`.
+- Container logs (`101` lines): `0` occurrences of `401`, `403`, `404`, or `500`.
 
-### Defect 1: Setup Claim RLS Context Binding (`kanban/auth/setup.py`)
-- **Root Cause:** In `SetupBootstrapService.claim_initial_admin`, the database bootstrap was performed under an anonymous context (principal 0, workspace 0). `setup_consume_and_create_admin` creates the initial admin user, workspace, and local card credential in `kb_auth`. However, subsequent queries that verify the existence of the default project and insert into `objects` and `projects` were executing on the same session while the session was still bound to the anonymous context. Under PostgreSQL `FORCE ROW LEVEL SECURITY` on `objects` (`objects_insert_rls`), inserting rows without the principal and workspace RLS context failed.
-- **Forensic Fix:** Immediately following `setup_consume_and_create_admin`, the returned `principal_id` and `workspace_id` are bound to the session via:
-  ```python
-  await bind_rls_context(
-      session,
-      RLSContext(principal_id=admin_principal_id, workspace_id=workspace_id),
-  )
-  ```
-  This ensures all subsequent entity queries and inserts execute under valid authenticated workspace administrator credentials with full RLS authorization.
-
-### Defect 2: Headless Setup Token Permissions & Fallback (`deploy/standalone/entrypoint.py`, `kanban/auth/setup.py`)
-- **Root Cause:**
-  1. In standalone single-container boot (`entrypoint.py`), `_PASSTHROUGH_ENV_VARS` did not include `KB_SETUP_TOKEN_FILE`. When `build_child_env` prepared the sanitized environment for the unprivileged `kanban_app` (UID 65532) process, any custom `KB_SETUP_TOKEN_FILE` was stripped.
-  2. When running as root during standalone container boot, `/run/kanban` was either not created or owned by root with 0755 permissions, causing `kanban_app` (UID 65532) to fail with `PermissionError` when persisting the minted token.
-  3. `SetupBootstrapService._persist_token` failed fatally if `/run/kanban` was unwritable.
-- **Forensic Fix:**
-  1. Added `"KB_SETUP_TOKEN_FILE"` to `_PASSTHROUGH_ENV_VARS` in `deploy/standalone/entrypoint.py`.
-  2. In `entrypoint.py`, ensure `/run/kanban` is created and chowned to UID 65532 with mode `0o775` when `os.getuid() == 0`.
-  3. In `SetupBootstrapService._persist_token`, wrapped persistence with graceful fallback candidates (`KB_DATA_DIR`, `KB_RUN_DIR`, `/var/lib/kanban/data`, `/var/lib/kanban`, and `tempfile.gettempdir()`) if `PermissionError` occurs on the primary path.
-
-### Defect 3: Recovery Code HTML5 Pattern `/v` Regex Fix (`kanban/web/src/features/auth/SecondFactorStep.tsx`)
-- **Root Cause:** In ECMAScript 2024 / Chromium UnicodeSets (`/v` flag), unescaped hyphens inside character classes `[...]` trigger a `SyntaxError: Invalid regular expression: Invalid character class` because `-` is a reserved operator for character set subtraction and intersection (e.g. `[A-Z--[Q]]`). The previous pattern attribute `^[A-Za-z0-9-]{8,32}$` or unescaped hyphen caused browser form validation engines or libraries compiling with `new RegExp(pattern, 'v')` to throw an unhandled `SyntaxError`.
-- **Forensic Fix:** Updated the input pattern attribute in `SecondFactorStep.tsx` to:
-  ```tsx
-  pattern="[A-Za-z0-9\-]{8,32}"
-  ```
-  The escaped hyphen `\-` is valid both in standard regular expressions and under `/v` UnicodeSets mode. Added an explicit unit test verifying `expect(() => new RegExp(patternStr, 'v')).not.toThrow()`.
-
-### Defect 4: SecondFactorStep Root testid (`kanban/web/src/features/auth/SecondFactorStep.tsx`)
-- **Root Cause:** The root container element lacked `data-testid="second-factor-step"`, preventing reliable deterministic selection by automated end-to-end testing and QA inspection.
-- **Forensic Fix:** Added `data-testid="second-factor-step"` to the outer wrapper `<div>` of `SecondFactorStep.tsx`.
-
----
-
-## 3. Unit Test Results & Coverage Metrics
-
-### Backend Coverage (`kanban/auth/setup.py` & `deploy/standalone/entrypoint.py`)
-- Command: `uv run pytest kanban/tests/auth/test_setup.py tests/deploy/test_standalone_entrypoint.py -v --cov=kanban.auth.setup --cov=deploy.standalone.entrypoint --cov-branch --cov-report=term-missing`
-- Result: **38 passed in 0.71s**
-- Coverage for `kanban/auth/setup.py`:
-  - **Statements:** 127/127 (**100%**)
-  - **Branches:** 20/20 (**100%**)
-  - **Missing lines:** None
-
-### Frontend Coverage (`kanban/web/src/features/auth/SecondFactorStep.tsx`)
-- Command: `(cd kanban/web && pnpm vitest run src/features/auth/SecondFactorStep.test.tsx --coverage --coverage.include='src/features/auth/SecondFactorStep.tsx')`
-- Result: **19 passed in 1.65s**
-- Coverage for `SecondFactorStep.tsx`:
-  - **Statements:** 98.96%
-  - **Branches:** 96.25% (exceeds `>= 95.10%` threshold)
-  - **Functions:** 100.00%
-  - **Lines:** 100.00%
-
-### Code Quality & Static Analysis Checks
-- `uv run ruff check`: **All checks passed (0 errors)**
-- `uv run ruff format --check`: **All files formatted**
-- `uv run mypy`: **Success: no issues found in 4 source files**
-- `uv run lint-imports`: **Contracts: 2 kept, 0 broken**
-- `pnpm --dir kanban/web typecheck`: **Exit code 0 (clean)**
-- `pnpm --dir kanban/web lint`: **Exit code 0 (0 warnings, 0 errors)**
-- `python3 -m scripts.check_no_dashes --all`: **Exit code 0 (zero em-dashes/en-dashes)**
-
----
-
-## 4. Visual Evidence & Artifacts
-
-All screenshot artifacts have been captured using Playwright across Desktop (1280x800) and Mobile (390x844) viewports in both Light and Dark themes:
-
-1. **Setup Claim Screen:**
-   - Light Desktop: [kan-7-setup-claim-light-desktop.png](file:///home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/docs/qa/KAN-7/screenshots/kan-7-setup-claim-light-desktop.png)
-   - Dark Desktop: [kan-7-setup-claim-dark-desktop.png](file:///home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/docs/qa/KAN-7/screenshots/kan-7-setup-claim-dark-desktop.png)
-   - Light Mobile: [kan-7-setup-claim-light-mobile.png](file:///home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/docs/qa/KAN-7/screenshots/kan-7-setup-claim-light-mobile.png)
-   - Dark Mobile: [kan-7-setup-claim-dark-mobile.png](file:///home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/docs/qa/KAN-7/screenshots/kan-7-setup-claim-dark-mobile.png)
-
-2. **Second Factor Recovery Code Screen:**
-   - Light Desktop: [kan-7-second-factor-recovery-light-desktop.png](file:///home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/docs/qa/KAN-7/screenshots/kan-7-second-factor-recovery-light-desktop.png)
-   - Dark Desktop: [kan-7-second-factor-recovery-dark-desktop.png](file:///home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/docs/qa/KAN-7/screenshots/kan-7-second-factor-recovery-dark-desktop.png)
-   - Light Mobile: [kan-7-second-factor-recovery-light-mobile.png](file:///home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/docs/qa/KAN-7/screenshots/kan-7-second-factor-recovery-light-mobile.png)
-   - Dark Mobile: [kan-7-second-factor-recovery-dark-mobile.png](file:///home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/docs/qa/KAN-7/screenshots/kan-7-second-factor-recovery-dark-mobile.png)
-
----
-
-## 5. QA Artifact Inventory (`docs/qa/KAN-7/`)
-- [build-or-typecheck.txt](file:///home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/docs/qa/KAN-7/build-or-typecheck.txt)
-- [unit-test-results.txt](file:///home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/docs/qa/KAN-7/unit-test-results.txt)
-- [git-diff.patch](file:///home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/docs/qa/KAN-7/git-diff.patch)
-- [changed-files-manifest.txt](file:///home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/docs/qa/KAN-7/changed-files-manifest.txt)
-- [message-to-reality-checker.md](file:///home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/docs/qa/KAN-7/message-to-reality-checker.md)
-- `screenshots/` (8 full-fidelity PNGs)
+## 4. Live Zero-Mock Screenshots (`docs/qa/KAN-7/screenshots/`)
+- `live-01-setup-claim-light-desktop.png`
+- `live-01b-setup-passkey-enrolled-light.png`
+- `live-02-setup-recovery-codes-light.png`
+- `live-03-workspace-light-desktop.png`
+- `live-04-workspace-dark-desktop.png`
+- `live-05-workspace-light-mobile.png`
+- `live-06-login-light-desktop.png`
+- `live-06b-login-light-mobile.png`
+- `live-07-second-factor-initial-light.png`
+- `live-08-second-factor-totp-tab-dark.png`
+- `live-09-second-factor-recovery-tab-light.png`
+- `live-10-second-factor-mobile-dark.png`

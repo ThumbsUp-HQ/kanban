@@ -3,17 +3,17 @@
 ## Audit Metadata
 - Ticket ID: KAN-7 ([KB-P3-AUDIT-01])
 - Reviewer: api-spec-2 (Clean-Room Backend/API Specialist)
-- Date: 2026-11-19
-- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-rc3-22375430`
-- Target Branch: fix/KAN-7-rc3
-- Base Commit: 564b574
-- Head Commit: 631ee80
+- Date: 2026-11-20
+- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-rc4-09e793fa`
+- Target Branch: fix/KAN-7-rc4
+- Base Commit: c43f946
+- Head Commit: d263409
 - STATUS: APPROVED
 
 ---
 
 ## Executive Summary
-This clean-room audit evaluates the setup bootstrapping flow, row-level security (RLS) session lifecycle, headless setup token persistence, authentication input validation, and Clean-Room Reality-Checker Round 3 fail-closed shell authentication gating ([KB-P3-AUDIT-01]) implemented for ticket KAN-7. The delivery resolves setup claim RLS context binding, container token persistence across unprivileged boundaries, fail-closed realtime session lifecycle management, clean synchronization of client-side logout events, and elimination of premature 401 requests during root route navigation.
+This clean-room audit evaluates the setup bootstrapping flow, row-level security (RLS) session lifecycle, headless setup token persistence, authentication input validation, fail-closed AppShell auth gating, and Clean-Room Reality-Checker Round 4 unit test coverage hardening ([KB-P3-AUDIT-01]) implemented for ticket KAN-7. The delivery resolves setup claim RLS context binding, container token persistence across unprivileged boundaries, fail-closed realtime session lifecycle management, clean synchronization of client-side logout events, elimination of premature 401 requests during root route navigation, and achievement of 99% unit test coverage on standalone entrypoint deployment scripts.
 
 All implementations adhere strictly to the authoritative specifications in `docs/ARCHITECTURE_AND_PRODUCT_SPEC.md` and `kanban/GEMINI.md`.
 
@@ -50,24 +50,39 @@ All implementations adhere strictly to the authoritative specifications in `docs
 
 ---
 
-## Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-01 Round 3)
+## Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-01 Round 4)
 
-- Target Branch: `fix/KAN-7-rc3`
-- Remediation Head Commit: `631ee80`
+- Target Branch: `fix/KAN-7-rc4`
+- Remediation Head Commit: `d263409`
 - Remediations Verified:
-  1. **Fail-Closed AppShell Auth Gating (`kanban/web/src/app/AppShell.tsx`):**
+  1. **Standalone Entrypoint Coverage Hardening (`deploy/standalone/entrypoint.py`):**
+     - Statement coverage raised to 99% (286/286 statements, 0 missing, 72 branches, 5 partial).
+     - Added comprehensive unit tests in `tests/deploy/test_standalone_entrypoint.py` properly mocking `shutil.chown`, `Path.mkdir`, `Path.chmod`, warm boot concurrent execution, and supervisor polling loops.
+     - Total combined Python touched-file coverage: 99% (413/413 statements, 0 missing; `kanban/auth/setup.py` 100%, `deploy/standalone/entrypoint.py` 99%).
+  2. **Fail-Closed AppShell Auth Gating (`kanban/web/src/app/AppShell.tsx`):**
      - Captured `useSessionGuard()`, computed `isAuthReady = sessionGuard.status === 'authenticated' && !sessionGuard.mfaPending && sessionGuard.authenticated !== false`.
-     - When `!isAuthReady` (`checking`, `redirecting`, `mfaPending`, or unauthenticated), renders a minimal clean shell placeholder `<div className="kb-app-shell" data-testid="app-shell-auth-loading" />` with 0 inline styles without mounting `<Topbar />`, `<Sidebar />`, or `<Outlet />`.
-     - Gated `meQuery` (`/api/v1/auth/me`) and `useRealtimeSubscription` on `isAuthReady`, completely eliminating premature 401 requests and console errors on `/` before session redirection completes.
-  2. **useSessionGuard Runtime State Initialization (`kanban/web/src/features/auth/useSessionGuard.ts`):**
-     - In live browser runtime (`isTestEnvironment() === false`), initializes `status: 'checking'` until `/api/v1/setup/status` and `/api/v1/auth/session` settle.
-     - Preserves graceful default to `'authenticated'` in offline unit test environments where endpoints are unmocked.
-  3. **Quality Gates & Test Coverage:**
-     - Vitest: 130 tests passed across touched suites with 99.29% statements and 96.30% branch coverage (`AppShell.tsx` 100% Stmts / 97.67% Branch, `useSessionGuard.ts` 100% Stmts / 95.31% Branch).
-     - Pytest: 38 tests passed with 100% coverage on `kanban/auth/setup.py`.
-     - Static checks: `tsc -b --noEmit` (0 errors), `eslint . --max-warnings 0` (0 warnings/errors), `vite build` (clean in 1.18s).
+     - When `!isAuthReady`, renders minimal clean placeholder `<div className="kb-app-shell" data-testid="app-shell-auth-loading" />` with 0 inline styles without mounting `<Topbar />`, `<Sidebar />`, or `<Outlet />`.
+     - Gated `meQuery` (`/api/v1/auth/me`) and `useRealtimeSubscription` on `isAuthReady`, completely eliminating premature 401 requests on `/` before session redirection completes.
+  3. **Visual Proof & Screenshot Synchronization:**
+     - Verified all 12 live Playwright PNG screenshots in `docs/qa/KAN-7/screenshots/`:
+       * `live-01-setup-claim-light-desktop.png`
+       * `live-01b-setup-passkey-enrolled-light.png`
+       * `live-02-setup-recovery-codes-light.png`
+       * `live-03-workspace-light-desktop.png`
+       * `live-04-workspace-dark-desktop.png`
+       * `live-05-workspace-light-mobile.png`
+       * `live-06-login-light-desktop.png`
+       * `live-06b-login-light-mobile.png`
+       * `live-07-second-factor-initial-light.png`
+       * `live-08-second-factor-totp-tab-dark.png`
+       * `live-09-second-factor-recovery-tab-light.png`
+       * `live-10-second-factor-mobile-dark.png`
+  4. **Quality Gates & Static Verification:**
+     - Vitest: 134 unit tests passing across touched features with 99.29% statements and 96.30% branch coverage.
+     - Pytest: 46 unit tests passing across `test_standalone_entrypoint.py` and `test_setup.py`.
+     - Static checks: `uv run mypy` (1094 files clean), `uv run ruff check .` (clean), `uv run ruff format --check .` (clean), `tsc -b --noEmit` (0 errors), `eslint . --max-warnings 0` (0 errors/warnings), `vite build` (clean in 1.11s).
      - Punctuation: 0 em-dashes and 0 en-dashes across all code, tests, and documentation.
-     - Evidence packet: `git-diff.patch` cleanly generated against `31aca8e` with zero `docs/qa/` files included.
+     - Evidence packet: `git-diff.patch` cleanly generated against `31aca8e` across 15 KAN-7 code and test files with zero `docs/qa/` files included.
 
 ---
 
@@ -77,15 +92,15 @@ All implementations adhere strictly to the authoritative specifications in `docs
 2. [x] Admin Route Security: All `/api/v1/admin/*` routes maintain mandatory `Depends(require_admin_aal2)`.
 3. [x] Architectural Layering: `uv run lint-imports` verified 2 kept contracts, 0 broken (`agent -> mcp -> kanban -> database`).
 4. [x] Test Coverage:
-   - Backend: `kanban/auth/setup.py` achieved 100% statement and 100% branch coverage (38 pytest tests passing).
-   - Frontend: Touched web features achieved 99.29% statement and 96.30% branch coverage (130 vitest tests passing).
-5. [x] Static Analysis: `ruff check`, `ruff format --check`, `mypy`, `tsc -b --noEmit`, and `eslint` pass with 0 errors and 0 warnings.
+   - Backend: `deploy/standalone/entrypoint.py` 99% and `kanban/auth/setup.py` 100% statement coverage (46 pytest tests passing).
+   - Frontend: Touched web features achieved 99.29% statement and 96.30% branch coverage (134 vitest tests passing).
+5. [x] Static Analysis: `ruff check`, `ruff format --check`, `mypy` (1094 source files), `tsc -b --noEmit`, and `eslint` pass with 0 errors and 0 warnings.
 6. [x] Zero Em/En-Dashes: Clean verification across code, tests, docs, and review markdown (0 em/en-dashes).
-7. [x] Evidence Packet Complete: `git-diff.patch`, `changed-files-manifest.txt`, `unit-test-results.txt`, `build-or-typecheck.txt`, and Playwright screenshots verified in `docs/qa/KAN-7/`.
+7. [x] Evidence Packet Complete: `git-diff.patch`, `changed-files-manifest.txt`, `unit-test-results.txt`, `build-or-typecheck.txt`, and 12 live Playwright screenshots verified in `docs/qa/KAN-7/`.
 
 ---
 
 ## Verdict & Handoff
 STATUS: APPROVED
 
-The API contracts, security invariants, fail-closed AppShell auth gate, and test evidence are verified clean. Ready for final coordinator merge into `main`.
+The API contracts, security invariants, entrypoint test coverage, fail-closed AppShell auth gate, and live screenshots are verified clean. Ready for final coordinator merge into `main`.

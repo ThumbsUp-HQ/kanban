@@ -1,44 +1,57 @@
 === PYTEST UNIT TESTS & COVERAGE ===
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-rc3-22375430
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-rc4-09e793fa
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 38 items
+collected 46 items
 
-kanban/tests/auth/test_setup.py ................                         [ 42%]
-tests/deploy/test_standalone_entrypoint.py ......................        [100%]
+tests/deploy/test_standalone_entrypoint.py ............................. [ 63%]
+.                                                                        [ 65%]
+kanban/tests/auth/test_setup.py ................                         [100%]
 
+=============================== warnings summary ===============================
+tests/deploy/test_standalone_entrypoint.py::test_entrypoint_dunder_main
+  <frozen runpy>:128: RuntimeWarning: 'deploy.standalone.entrypoint' found in sys.modules after import of package 'deploy.standalone', but prior to execution of 'deploy.standalone.entrypoint'; this may result in unpredictable behaviour
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.7-final-0 ________________
 
 Name                              Stmts   Miss Branch BrPart  Cover   Missing
 -----------------------------------------------------------------------------
-deploy/standalone/entrypoint.py     286     32     72      8    87%   342-343, 471->476, 517->521, 522, 562->574, 565-570, 593-625, 631->634, 654->659, 684
+deploy/standalone/entrypoint.py     286      0     72      5    99%   562->574, 596->599, 622->624, 631->634, 654->659
 kanban/auth/setup.py                127      0     20      0   100%
 -----------------------------------------------------------------------------
-TOTAL                               413     32     92      8    91%
-============================== 38 passed in 0.70s ==============================
+TOTAL                               413      0     92      5    99%
+======================== 46 passed, 1 warning in 0.79s =========================
 
 === VITEST UNIT TESTS & COVERAGE (KAN-7 REMEDIATION) ===
+> @kanban/web@0.1.0 test:coverage /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-rc4-09e793fa/kanban/web
+> vitest run --coverage src/features/auth/useSessionGuard.test.tsx src/api/realtime.test.ts src/realtime/index.test.tsx src/features/auth/SecondFactorStep.test.tsx src/app/AppShell.test.tsx src/app/Topbar.test.tsx src/styles/__tests__/cssTokensAudit.test.ts
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-rc3-22375430/kanban/web
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-rc4-09e793fa/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/auth/useSessionGuard.test.tsx (18 tests) 145ms
- ✓ src/api/realtime.test.ts (44 tests) 130ms
- ✓ src/realtime/index.test.tsx (21 tests) 221ms
- ✓ src/features/auth/SecondFactorStep.test.tsx (20 tests) 652ms
- ✓ src/app/AppShell.test.tsx (6 tests) 1386ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 19ms
+ ✓ src/features/auth/useSessionGuard.test.tsx (18 tests) 129ms
+ ✓ src/api/realtime.test.ts (44 tests) 114ms
+ ✓ src/realtime/index.test.tsx (21 tests) 188ms
+ ✓ src/features/auth/SecondFactorStep.test.tsx (20 tests) 634ms
+ ✓ src/app/AppShell.test.tsx (6 tests) 1072ms
    ✓ AppShell (6)
-     ✓ renders app shell with skip link, sidebar rail, topbar header, main canvas, and anchors 457ms
-     ✓ renders minimal clean shell placeholder without Topbar/Sidebar/Outlet when sessionGuard is checking or redirecting (fail-closed) 245ms
- ✓ src/app/Topbar.test.tsx (21 tests) 1943ms
+     ✓ renders app shell with skip link, sidebar rail, topbar header, main canvas, and anchors 392ms
+ ✓ src/app/Topbar.test.tsx (21 tests) 1805ms
+   ✓ Topbar (21)
+     ✓ renders breadcrumb, search trigger, header pills, and avatar menu 332ms
+     ✓ navigates via avatar menu admin links and closes menu on click 405ms
 
- Test Files  6 passed (6)
-      Tests  130 passed (130)
-   Duration  3.55s
+ Test Files  7 passed (7)
+      Tests  134 passed (134)
+   Start at  01:32:41
+   Duration  3.32s (environment 51%, tests 32%, import 12%, worker 3%, transform 2%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
@@ -56,3 +69,50 @@ All files          |   99.29 |     96.3 |     100 |   99.71 |
  realtime          |     100 |      100 |     100 |     100 |                   
   context.tsx      |     100 |      100 |     100 |     100 |                   
 -------------------|---------|----------|---------|---------|-------------------
+stderr | src/realtime/index.test.tsx > Realtime Module & React Hooks > Session gating & KAN-7 remediation > queries /api/v1/auth/session via useQuery when session prop is omitted on protected path
+An update to RealtimeProvider inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/auth/SecondFactorStep.test.tsx > SecondFactorStep (KB-P3-35) > prevents multiple concurrent submissions when isVerifying is active
+An update to SecondFactorStep inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/auth/SecondFactorStep.test.tsx > SecondFactorStep (KB-P3-35) > prevents concurrent recovery code submission when isVerifying is true
+An update to SecondFactorStep inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/auth/SecondFactorStep.test.tsx > SecondFactorStep (KB-P3-35) > prevents concurrent passkey assertions when isVerifying is already true
+An update to SecondFactorStep inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act

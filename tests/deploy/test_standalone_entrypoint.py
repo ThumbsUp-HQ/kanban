@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+import runpy
 import signal
 import subprocess
-from typing import TYPE_CHECKING, Any
+from pathlib import Path
+from typing import Any
 from unittest.mock import MagicMock
 
 import pytest
@@ -17,6 +19,7 @@ from deploy.standalone.entrypoint import (
     BIN_PG_ISREADY,
     BIN_SETPRIV,
     BIN_UVICORN,
+    _compute_migrations_digest,
     bootstrap_database,
     build_child_env,
     build_uvicorn_command,
@@ -33,14 +36,11 @@ from deploy.standalone.entrypoint import (
 from deploy.standalone.keyring import Keyring, KeyringError
 from deploy.standalone.pg_config import configure_postgres
 
-if TYPE_CHECKING:
-    from pathlib import Path
-
 
 # -----------------------------------------------------------------------------
 # Case 1: Positive First Boot
 # -----------------------------------------------------------------------------
-def test_case_1_first_boot(
+def test_case_1_first_boot(  # noqa: PLR0915
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -83,6 +83,33 @@ def test_case_1_first_boot(
         recorded_runs.append({"popen_cmd": cmd, "env": env, "shell": shell, "text": text})
         return mock_proc
 
+    chown_calls: list[tuple[str, int | str, int | str]] = []
+    chmod_calls: list[tuple[str, int]] = []
+
+    def mock_chown(path: str, user: int | str, group: int | str) -> None:
+        chown_calls.append((path, user, group))
+
+    def mock_chmod(self: Path, mode: int) -> None:
+        chmod_calls.append((str(self), mode))
+
+    orig_is_dir = Path.is_dir
+
+    def mock_is_dir(self: Path) -> bool:
+        if str(self) == "/run/kanban":
+            return True
+        return orig_is_dir(self)
+
+    orig_mkdir = Path.mkdir
+
+    def mock_mkdir(self: Path, *args: object, **kwargs: object) -> None:
+        if str(self) == "/run/kanban":
+            return
+        orig_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr("shutil.chown", mock_chown)
+    monkeypatch.setattr(Path, "chmod", mock_chmod)
+    monkeypatch.setattr(Path, "is_dir", mock_is_dir)
+    monkeypatch.setattr(Path, "mkdir", mock_mkdir)
     monkeypatch.setattr("deploy.standalone.entrypoint.run_as_postgres", mock_run)
     monkeypatch.setattr(subprocess, "Popen", mock_popen)
     monkeypatch.setattr("os.getuid", lambda: 0)
@@ -94,6 +121,14 @@ def test_case_1_first_boot(
 
     rc = main([])
     assert rc == 0
+
+    # Assert chown and chmod calls for data_dir, backups_dir, and /run/kanban
+    assert (str(tmp_path), 65532, 65532) in chown_calls
+    assert (str(tmp_path / "backups"), 65532, 65532) in chown_calls
+    assert ("/run/kanban", 65532, 65532) in chown_calls
+    assert (str(tmp_path), 0o775) in chmod_calls
+    assert (str(tmp_path / "backups"), 0o775) in chmod_calls
+    assert ("/run/kanban", 0o775) in chmod_calls
 
     commands = [r.get("cmd") for r in recorded_runs if "cmd" in r]
 
@@ -755,3 +790,284 @@ def test_ensure_backup_grants_executes_alembic_version_grant(
     assert len(executed_sqls) == 1
     assert "alembic_version" in executed_sqls[0]
     assert "GRANT SELECT ON TABLE alembic_version TO kanban_app" in executed_sqls[0]
+
+
+def test_first_boot_chown_oserror_handled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """When shutil.chown raises OSError, main catches it, logs a warning, and continues."""
+    pgdata = tmp_path / "pgdata"
+    alembic_ini = tmp_path / "alembic.ini"
+    alembic_ini.write_text("[alembic]\n", encoding="utf-8")
+
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = 0
+    mock_proc.returncode = 0
+
+    monkeypatch.setattr(
+        "deploy.standalone.entrypoint.run_as_postgres",
+        lambda *_a, **_k: subprocess.CompletedProcess([], 0, "1", ""),
+    )
+    monkeypatch.setattr(subprocess, "Popen", lambda *_a, **_k: mock_proc)
+    monkeypatch.setattr("os.getuid", lambda: 0)
+    msg = "Permission denied"
+    monkeypatch.setattr("shutil.chown", MagicMock(side_effect=OSError(msg)))
+
+    monkeypatch.setenv("KB_PGDATA_DIR", str(pgdata))
+    monkeypatch.setenv("KB_RUN_DIR", str(tmp_path / "run"))
+    monkeypatch.setenv("KB_ALEMBIC_INI", str(alembic_ini))
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    rc = main([])
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "Warning: chown failed: Permission denied" in captured.out
+
+
+def test_first_boot_run_kanban_mkdir_oserror_handled(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """When /run/kanban mkdir raises OSError, main logs a warning and proceeds."""
+    pgdata = tmp_path / "pgdata"
+    alembic_ini = tmp_path / "alembic.ini"
+    alembic_ini.write_text("[alembic]\n", encoding="utf-8")
+
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = 0
+    mock_proc.returncode = 0
+
+    orig_mkdir = Path.mkdir
+
+    def mock_mkdir(self: Path, *args: object, **kwargs: object) -> None:
+        if str(self) == "/run/kanban":
+            msg = "Read-only filesystem"
+            raise OSError(msg)
+        orig_mkdir(self, *args, **kwargs)
+
+    monkeypatch.setattr(Path, "mkdir", mock_mkdir)
+    monkeypatch.setattr(
+        "deploy.standalone.entrypoint.run_as_postgres",
+        lambda *_a, **_k: subprocess.CompletedProcess([], 0, "1", ""),
+    )
+    monkeypatch.setattr(subprocess, "Popen", lambda *_a, **_k: mock_proc)
+    monkeypatch.setattr("os.getuid", lambda: 0)
+    monkeypatch.setattr("shutil.chown", lambda *_a, **_k: None)
+
+    monkeypatch.setenv("KB_PGDATA_DIR", str(pgdata))
+    monkeypatch.setenv("KB_RUN_DIR", str(tmp_path / "run"))
+    monkeypatch.setenv("KB_ALEMBIC_INI", str(alembic_ini))
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    rc = main([])
+    assert rc == 0
+    captured = capsys.readouterr()
+    assert "Warning: mkdir /run/kanban failed: Read-only filesystem" in captured.out
+
+
+def test_warm_boot_concurrent_uvicorn_and_postgres(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """Full warm boot: PG_VERSION present, migrations_current True, keyring present."""
+    pgdata = tmp_path / "pgdata"
+    pgdata.mkdir(parents=True)
+    (pgdata / "PG_VERSION").write_text("16\n", encoding="utf-8")
+
+    digest = _compute_migrations_digest()
+    (pgdata / ".alembic_head").write_text(digest, encoding="utf-8")
+
+    secrets_dir = tmp_path / "secrets"
+    secrets_dir.mkdir(parents=True)
+    keyring_file = secrets_dir / "keyring.json"
+    keyring_file.write_text("{}", encoding="utf-8")
+
+    kr = Keyring(
+        version=1,
+        created_at="2026-01-01T00:00:00Z",
+        master_kek=b"\x01" * 32,
+        auth_pepper=b"\x02" * 32,
+        session_hmac_key=b"\x03" * 32,
+        kanban_app_password=b"\x04" * 32,
+        kanban_migrator_password=b"\x05" * 32,
+    )
+    monkeypatch.setattr("deploy.standalone.entrypoint.load_or_create_keyring", lambda _p: kr)
+
+    recorded_calls: list[str] = []
+
+    def mock_start_pg(path: Path, run_dir: str = "/tmp") -> None:
+        _ = (path, run_dir)
+        recorded_calls.append("start_postgres")
+
+    def mock_ensure_grants(run_dir: str = "/tmp") -> None:
+        _ = run_dir
+        recorded_calls.append("ensure_backup_grants")
+
+    def mock_configure_pg(path: Path, run_dir: str = "/tmp") -> None:
+        _ = (path, run_dir)
+        recorded_calls.append("configure_postgres")
+
+    def mock_supervisor(proc: object, path: Path) -> int:
+        _ = (proc, path)
+        recorded_calls.append("supervisor_loop")
+        return 0
+
+    mock_proc = MagicMock()
+    mock_proc.poll.return_value = 0
+
+    def mock_popen(cmd: list[str], **kwargs: object) -> MagicMock:
+        _ = (cmd, kwargs)
+        recorded_calls.append("uvicorn_popen")
+        return mock_proc
+
+    monkeypatch.setattr("deploy.standalone.entrypoint.start_postgres", mock_start_pg)
+    monkeypatch.setattr("deploy.standalone.entrypoint.ensure_backup_grants", mock_ensure_grants)
+    monkeypatch.setattr("deploy.standalone.entrypoint.configure_postgres", mock_configure_pg)
+    monkeypatch.setattr("deploy.standalone.entrypoint.supervisor_loop", mock_supervisor)
+    monkeypatch.setattr(subprocess, "Popen", mock_popen)
+    monkeypatch.setattr("os.getuid", lambda: 0)
+    monkeypatch.setattr("shutil.chown", lambda *_a, **_k: None)
+
+    monkeypatch.setenv("KB_PGDATA_DIR", str(pgdata))
+    monkeypatch.setenv("KB_RUN_DIR", str(tmp_path / "run"))
+    monkeypatch.setenv("KB_KEYRING_PATH", str(keyring_file))
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    rc = main([])
+    assert rc == 0
+    assert "configure_postgres" in recorded_calls
+    assert "uvicorn_popen" in recorded_calls
+    assert "start_postgres" in recorded_calls
+    assert "ensure_backup_grants" in recorded_calls
+    assert "supervisor_loop" in recorded_calls
+
+    captured = capsys.readouterr()
+    assert "migrations up to date, skipping alembic upgrade" in captured.out
+
+
+def test_warm_boot_keyring_error_exits_78(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """When warm boot encounters KeyringError, it exits 78."""
+    pgdata = tmp_path / "pgdata"
+    pgdata.mkdir(parents=True)
+    (pgdata / "PG_VERSION").write_text("16\n", encoding="utf-8")
+
+    digest = _compute_migrations_digest()
+    (pgdata / ".alembic_head").write_text(digest, encoding="utf-8")
+
+    keyring_file = tmp_path / "keyring.json"
+    keyring_file.write_text("{}", encoding="utf-8")
+
+    def mock_keyring_fail(*_a: object, **_k: object) -> None:
+        msg = "Insecure warm keyring permissions"
+        raise KeyringError(msg)
+
+    monkeypatch.setattr("deploy.standalone.entrypoint.load_or_create_keyring", mock_keyring_fail)
+    monkeypatch.setattr("os.getuid", lambda: 0)
+    monkeypatch.setattr("shutil.chown", lambda *_a, **_k: None)
+
+    monkeypatch.setenv("KB_PGDATA_DIR", str(pgdata))
+    monkeypatch.setenv("KB_RUN_DIR", str(tmp_path / "run"))
+    monkeypatch.setenv("KB_KEYRING_PATH", str(keyring_file))
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+
+    rc = main([])
+    assert rc == 78
+    captured = capsys.readouterr()
+    assert "KEYRING_INVALID" in captured.err
+    assert "Insecure warm keyring permissions" in captured.err
+
+
+def test_ensure_backup_grants_handles_exception(
+    monkeypatch: pytest.MonkeyPatch,
+    capsys: pytest.CaptureFixture[str],
+) -> None:
+    """ensure_backup_grants catches and logs exceptions without raising."""
+
+    def mock_fail(*_a: object, **_k: object) -> None:
+        msg = "db connection refused"
+        raise RuntimeError(msg)
+
+    monkeypatch.setattr("deploy.standalone.entrypoint.run_psql_script", mock_fail)
+    ensure_backup_grants(run_dir="/tmp/test_run")
+
+    captured = capsys.readouterr()
+    assert "Warning: grant SELECT on alembic_version failed: db connection refused" in captured.out
+
+
+def test_supervisor_loop_healthy_poll(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """supervisor_loop executes healthy pg_ctl status check and exits when uvicorn cleanly exits."""
+    pgdata = tmp_path / "pgdata"
+    mock_proc = MagicMock()
+    mock_proc.poll.side_effect = [None, 0]
+    mock_proc.returncode = 0
+
+    checked_cmds: list[list[str]] = []
+
+    def mock_run(cmd: list[str], **_kwargs: object) -> subprocess.CompletedProcess[str]:
+        checked_cmds.append(cmd)
+        return subprocess.CompletedProcess(cmd, returncode=0, stdout="", stderr="")
+
+    simulated_time = 0.0
+
+    def mock_monotonic() -> float:
+        nonlocal simulated_time
+        simulated_time += 3.0
+        return simulated_time
+
+    monkeypatch.setattr("deploy.standalone.entrypoint.run_as_postgres", mock_run)
+    monkeypatch.setattr("time.monotonic", mock_monotonic)
+    monkeypatch.setattr("time.sleep", lambda _s: None)
+
+    rc = supervisor_loop(mock_proc, pgdata)
+    assert rc == 0
+    assert any(BIN_PG_CTL in c and "status" in c for c in checked_cmds)
+
+
+def test_compute_migrations_digest_branches(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test _compute_migrations_digest branch edges."""
+    orig_is_dir = Path.is_dir
+
+    # Case 1: sql_dir does not exist
+    def mock_is_dir_no_sql(self: Path) -> bool:
+        if "sql" in str(self):
+            return False
+        return orig_is_dir(self)
+
+    monkeypatch.setattr(Path, "is_dir", mock_is_dir_no_sql)
+    d1 = _compute_migrations_digest()
+    assert len(d1) == 64
+
+    # Case 2: neither candidates directory exists
+    monkeypatch.setattr(Path, "is_dir", lambda _s: False)
+    d2 = _compute_migrations_digest()
+    assert d2 == ""
+
+
+def test_entrypoint_dunder_main(
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test __name__ == '__main__' invocation branch."""
+
+    def mock_execv(_path: str, _args: list[str]) -> None:
+        raise SystemExit(0)
+
+    monkeypatch.setenv("DATABASE_URL", "postgresql+asyncpg://remote-db:5432/kanban")
+    monkeypatch.setenv("KB_STANDALONE_STATUS_PATH", str(tmp_path / "status.json"))
+    monkeypatch.setattr("os.execv", mock_execv)
+    with pytest.raises(SystemExit) as exc_info:
+        runpy.run_module("deploy.standalone.entrypoint", run_name="__main__")
+    assert exc_info.value.code == 0
