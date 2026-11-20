@@ -1,6 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""Ephemeral MCP read toolkit for transition interceptors (S14.2, S14.3)."""
+"""Ephemeral MCP read toolkit for transition helpers (S14.2, S14.3)."""
 
 from __future__ import annotations
 

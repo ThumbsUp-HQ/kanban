@@ -175,7 +175,7 @@ class InAppSdkHarness:
         raise RepoToolPolicyError(code, msg)
 
     async def run(self, ctx: RenderedContext, agent_def: object) -> bytes:  # noqa: C901, PLR0912, PLR0915
-        """Execute the transition interceptor tool loop and return canonical verdict JSON."""
+        """Execute the transition helper tool loop and return canonical verdict JSON."""
         self.last_tool_traces = []
         self.last_report = None
 

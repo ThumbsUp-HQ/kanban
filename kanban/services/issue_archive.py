@@ -33,7 +33,7 @@ async def archive_issue(
     caller: PrincipalContext,
     issue_ref: str,
 ) -> IssueResponse:
-    """Archive an issue enforcing Plane rule and checking for open sub-issues.
+    """Archive an issue enforcing completion rules and checking for open sub-issues.
 
     Enforces:
     1. Issue resolution through RLS (404 on non-existent, cross-workspace, deleted, unreadable).

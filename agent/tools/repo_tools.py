@@ -1,6 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""Read-only bare Git repository toolkit for SDK transition interceptors (S14.2)."""
+"""Read-only bare Git repository toolkit for SDK transition helpers (S14.2)."""
 
 from __future__ import annotations
 

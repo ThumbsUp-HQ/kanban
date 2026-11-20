@@ -67,7 +67,7 @@ async def _create_test_project(
 
 
 async def test_01_project_creation_and_seeding(app_session: AsyncSession) -> None:
-    """Test project insertion seeds exactly 5 states and 5 priorities with Plane defaults."""
+    """Test project insertion seeds exactly 5 states and 5 priorities with standard defaults."""
     ws_id = await _create_workspace(app_session)
     proj_id = await _create_test_project(app_session, ws_id, identifier="KAN", name="Core Project")
 

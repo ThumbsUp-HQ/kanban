@@ -31,7 +31,7 @@ When evaluating an MCP ticketing server, standard assumptions often anticipate c
 | **Docs** | `list_stickies`, `update_sticky` | `manage_stickies` | Unified sticky scratchpad tool computing live `promotion_recommended` complexity signals. |
 | **Docs** | `convert_sticky_to_issue` | `promote_sticky_to_doc` | Atomic lossless promotion of complex scratchpads into permanent Docs with ACL preservation. |
 | **Admin** | `admin_principals`, `admin_groups` | `manage_principals_and_groups` | Consolidates user, group, agent service-principal provisioning and role binding with cycle detection. |
-| **Admin** | `admin_workflows` | `manage_workflow_interceptors` | Configures ScriptRunner Tier A Wasm validators/mutators and Tier B async agent gates on state transitions. |
+| **Admin** | `admin_workflows` | `manage_workflow_interceptors` | Configures Scripted Workflow Tier A Wasm validators/mutators and Tier B async agent gates on state transitions. |
 | **Admin** | `admin_ai_providers` | `manage_ai_and_agent_runners` | Manages LLM endpoints, token caps, and CLI pipe (`agy -p` / `codex exec -s read-only -`) execution profiles. |
 | **Admin** | `admin_destructive` | `destructive_lifecycle` | Mandatory 2-stage blast-radius preview (`request_delete`) and tokenized execution (`execute_delete`). |
 
@@ -52,7 +52,7 @@ The overall architecture represents an enterprise-grade, security-hardened break
 ### Three-Surface Separation and Least Privilege Isolation
 
 The codebase enforces strict network and surface isolation across three independent mounting points in `mcp/app.py`:
-- `/mcp/agent` mounts execution and QA tools. Tokens issued to this surface use prefix `kb_agt_*`. Ephemeral tokens (`kb_agt_eph_*`) minted for workflow transition interceptors automatically restrict access to read-only tools (`read_ticket`, `search_tickets`), preventing rogue agents from modifying unrelated state.
+- `/mcp/agent` mounts execution and QA tools. Tokens issued to this surface use prefix `kb_agt_*`. Ephemeral tokens (`kb_agt_eph_*`) minted for workflow transition helpers automatically restrict access to read-only tools (`read_ticket`, `search_tickets`), preventing rogue agents from modifying unrelated state.
 - `/mcp/docs` mounts knowledge tools (`kb_doc_*`), enabling technical writers and documentation bots to manage specs without gaining ticket mutation privileges.
 - `/mcp/admin` mounts administrative tools (`kb_adm_*`), requiring Server Admin or Workspace Admin credentials and enforcing Authenticator Assurance Level 2 (`AAL2`) verification.
 
@@ -159,7 +159,7 @@ Budget Consumption: 95.1% (PASSED)
 - **Required Parameters:** `identifier` (str), `to_state` (str).
 - **Optional Parameters:** `comment_markdown` (str), `verification_proof` (object).
 - **Usability Analysis:**
-  - *Strengths:* First-class support for async transition interceptors. When an agent gate (such as reality-checker) intercepts the move, the tool cleanly returns `status: pending_agent_gate` with `execution_id` and `active_agent`.
+  - *Strengths:* First-class support for async transition helpers. When an agent gate (such as reality-checker) intercepts the move, the tool cleanly returns `status: pending_agent_gate` with `execution_id` and `active_agent`.
   - *Clarity Gaps:* If an agent attempts to transition directly to a completed state, the server rejects the call with error code `USE_COMPLETE_WORK`, directing the agent to use `complete_work`. However, this requirement is not documented in the schema description. `verification_proof` is an untyped `object`.
   - *Agent Ergonomics:* High. Clear separation of non-terminal transitions from terminal QA completions.
 
@@ -338,7 +338,7 @@ Variance: +2,629 tokens (+84.8%)
   - *Agent Ergonomics:* Strong security guardrails prevent unauthorized privilege escalation.
 
 #### 23. `manage_workflow_interceptors`
-- **Purpose:** Configure ScriptRunner transition hooks (sync validators, mutators, and async agent gates).
+- **Purpose:** Configure scripted workflow transition hooks (sync validators, mutators, and async agent gates).
 - **Required Parameters:** `action` (str enum: `help`, `list`, `attach`, `update`, `reorder`, `enable`, `disable`, `detach`, `dry_run`).
 - **Optional Parameters:** `project` (str), `hook` (str), `name` (str), `from_state` (str), `to_state` (str), `hook_kind` (str enum: `sync_validator`, `sync_mutator`, `agent_interceptor`), `failure_policy` (str), `wasm_module_sha256` (str), `agent` (str), `allowed_mutable_fields` (array of str), `ordered_hook_ids` (array of str), `issue` (str), `sample_ticket` (object), `confirm` (bool), `lod` (str).
 - **Usability Analysis:**
@@ -461,7 +461,7 @@ A forensic comparison between `docs/ARCHITECTURE_AND_PRODUCT_SPEC.md` Section 11
 | Topic | Specification (Spec §11) | Actual Implementation (`/tmp/mcp_tools_actual.json`) | Root Cause Analysis & Verdict |
 | :--- | :--- | :--- | :--- |
 | **Agent Tool Count** | Spec §11.1 stated 8 tools. Bullet 8 in §11.2 grouped `link_objects & add_comment` together. | Implementation provides 9 distinct tools (`add_comment` and `link_objects` are separate). | **Superior Implementation:** Separating commenting from graph linking is cleaner and more modular. The schema budget test (`test_schema_budget.py`) explicitly expects 9 tools and confirms they use 1,759 tokens (under the 1,850 budget). |
-| **Admin Schema Budget** | Spec §11.1 projected ~3,100 tokens for the admin surface. | Actual admin schema consumes 5,729 tokens (184.8% of estimate). | **Justified Expansion:** Admin tools consolidated v2 ScriptRunner workflows, Wasm sandboxes, runner pools, and git bindings. The richer descriptions prevent critical admin errors. |
+| **Admin Schema Budget** | Spec §11.1 projected ~3,100 tokens for the admin surface. | Actual admin schema consumes 5,729 tokens (184.8% of estimate). | **Justified Expansion:** Admin tools consolidated v2 scripted workflows, Wasm sandboxes, runner pools, and git bindings. The richer descriptions prevent critical admin errors. |
 | **Repo Binding Placement** | Spec §11.4 mentioned repo bindings under `manage_cycles_and_modules`. | Actions `bind_project_repo`, `list_repo_bindings`, `refresh_repo_binding`, and `unbind_project_repo` are housed in `manage_cycles_and_modules`. | **Fully Aligned:** The implementation places repo bindings inside `manage_cycles_and_modules`, providing `:ro` Git context for workflow gates. |
 
 ---

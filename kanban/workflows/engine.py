@@ -64,7 +64,7 @@ class TransitionOutcome:
 
 
 class AsyncGateDispatcher(Protocol):
-    """Protocol for dispatching asynchronous AI/CLI agent transition interceptors."""
+    """Protocol for dispatching asynchronous AI/CLI agent transition helpers."""
 
     async def dispatch(
         self,

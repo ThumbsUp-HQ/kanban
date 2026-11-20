@@ -1,7 +1,7 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
 # ruff: noqa: E501, ANN401, PLR0911, PLR0912, PLR0915, C901, ASYNC240, ARG001, TRY004, S603, S607
-"""CLI command validate-transition: workbench for transition interceptor testing (S15.3)."""
+"""CLI command validate-transition: workbench for transition helper testing (S15.3)."""
 
 from __future__ import annotations
 

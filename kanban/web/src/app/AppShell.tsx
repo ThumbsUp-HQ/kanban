@@ -1,6 +1,6 @@
 /**
  * Breathable Application Shell (KB-P3-34, S6.3).
- * Plane-parity grid layout hosting collapsible sidebar rail, calm topbar, command palette, and surface anchors.
+ * Breathable grid layout hosting collapsible sidebar rail, calm topbar, command palette, and surface anchors.
  */
 
 import React, {

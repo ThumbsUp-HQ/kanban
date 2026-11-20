@@ -2323,7 +2323,7 @@ export function ProjectSettingsPage(): JSX.Element {
               <div className="kb-card-icon">🔀</div>
               <div className="kb-card-content">
                 <h3>Workflows &amp; States</h3>
-                <p>Configure lifecycle hooks, state transition interceptors, and automated scripts.</p>
+                <p>Configure lifecycle hooks, state transition helpers, and automated scripts.</p>
               </div>
             </Link>
 

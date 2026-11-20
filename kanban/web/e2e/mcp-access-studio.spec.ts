@@ -165,7 +165,7 @@ test.describe('MCP Access Studio & Device Flow E2E Proofs (KB-P4-16)', () => {
         {
           selector: '[data-testid="mcp-keys-section"]',
           label: 'Breathable --prop-row-h Spacing',
-          note: 'S6.1 ergonomics conforming to Jira/Plane whitespace tokens',
+          note: 'S6.1 ergonomics conforming to breathable whitespace tokens',
         },
       ],
     });
