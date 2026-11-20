@@ -263,6 +263,9 @@ async def test_case_1_positive_lifecycle(
         creds = list_res.json()
         assert len(creds) == 1
         assert creds[0]["nickname"] == "MacBook Touch ID"
+        assert "credential_id" in creds[0]
+        assert isinstance(creds[0]["credential_id"], str)
+        assert len(creds[0]["credential_id"]) > 0
 
         # 6. Re-login with password -> new session with mfa_pending=True
         login_res_2 = await client.post(

@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import text
 from starlette.requests import Request  # noqa: TC002  # Required at runtime for FastAPI dependency analysis
 from starlette.responses import JSONResponse
+from webauthn.helpers import bytes_to_base64url
 
 from database.session import RLSContext
 from kanban.api.deps import PrincipalContext, get_principal  # Required at runtime
@@ -577,6 +578,7 @@ async def list_credentials(
         content=[
             {
                 "id": str(r.id),
+                "credential_id": bytes_to_base64url(bytes(r.credential_id)),
                 "nickname": r.nickname,
                 "sign_count": r.sign_count,
                 "aaguid": str(r.aaguid) if r.aaguid else None,

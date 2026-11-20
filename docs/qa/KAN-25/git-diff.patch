@@ -1,3 +1,37 @@
+diff --git a/kanban/api/v1/auth_webauthn.py b/kanban/api/v1/auth_webauthn.py
+index 57fe2ed..3378ef6 100644
+--- a/kanban/api/v1/auth_webauthn.py
++++ b/kanban/api/v1/auth_webauthn.py
+@@ -14,6 +14,7 @@ from pydantic import BaseModel, Field
+ from sqlalchemy import text
+ from starlette.requests import Request  # noqa: TC002  # Required at runtime for FastAPI dependency analysis
+ from starlette.responses import JSONResponse
++from webauthn.helpers import bytes_to_base64url
+ 
+ from database.session import RLSContext
+ from kanban.api.deps import PrincipalContext, get_principal  # Required at runtime
+@@ -577,6 +578,7 @@ async def list_credentials(
+         content=[
+             {
+                 "id": str(r.id),
++                "credential_id": bytes_to_base64url(bytes(r.credential_id)),
+                 "nickname": r.nickname,
+                 "sign_count": r.sign_count,
+                 "aaguid": str(r.aaguid) if r.aaguid else None,
+diff --git a/kanban/tests/auth/test_webauthn.py b/kanban/tests/auth/test_webauthn.py
+index 4deb570..da93b8c 100644
+--- a/kanban/tests/auth/test_webauthn.py
++++ b/kanban/tests/auth/test_webauthn.py
+@@ -263,6 +263,9 @@ async def test_case_1_positive_lifecycle(
+         creds = list_res.json()
+         assert len(creds) == 1
+         assert creds[0]["nickname"] == "MacBook Touch ID"
++        assert "credential_id" in creds[0]
++        assert isinstance(creds[0]["credential_id"], str)
++        assert len(creds[0]["credential_id"]) > 0
+ 
+         # 6. Re-login with password -> new session with mfa_pending=True
+         login_res_2 = await client.post(
 diff --git a/kanban/web/src/features/auth/webauthn.test.ts b/kanban/web/src/features/auth/webauthn.test.ts
 index 1ce28d4..fb2dd2d 100644
 --- a/kanban/web/src/features/auth/webauthn.test.ts

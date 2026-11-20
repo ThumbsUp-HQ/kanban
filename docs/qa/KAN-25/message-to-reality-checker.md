@@ -6,6 +6,8 @@
 - Branch: fix/KAN-25-rc1
 - Base Commit: 887e7e029127b77b5868a4d7c35dd2b818d3a4e5
 - Scoped Files Touched:
+  - `kanban/api/v1/auth_webauthn.py`
+  - `kanban/tests/auth/test_webauthn.py`
   - `kanban/web/src/features/auth/webauthn.ts`
   - `kanban/web/src/features/auth/webauthn.test.ts`
   - `kanban/web/src/features/settings/personalSettingsApi.ts`
@@ -46,9 +48,19 @@
 - Added cycling focus trap for `Tab` and `Shift+Tab` within the dialog element.
 - Added comprehensive Vitest tests verifying Escape key dismiss, mid-submission Escape lockout, and bidirectional focus trapping.
 
+### 6. Backend WebAuthn Credential ID Alignment (`kanban/api/v1/auth_webauthn.py`)
+- Added `"credential_id": bytes_to_base64url(bytes(r.credential_id))` to `list_credentials` in `kanban/api/v1/auth_webauthn.py:579` so the raw WebAuthn base64url credential ID is exposed alongside the internal database UUID `id`.
+- This ensures `handleTestKey(cred)` accurately matches `optionsJson.allowCredentials[].id` emitted by WebAuthn authentication options when multiple authenticators exist.
+- Added verification assertion in `kanban/tests/auth/test_webauthn.py:266-268`.
+
 ---
 
 ## Test Coverage & Quality Gates
+
+### Pytest Backend Test Coverage
+- Test Suites: `kanban/tests/auth/test_webauthn.py` and `test_kan24_fido2_enrollment_and_guards.py`
+- Tests: 23 passed in 9.96s (0 failed)
+- Coverage on `kanban/api/v1/auth_webauthn.py`: 98% (target >= 95%)
 
 ### Unit Test Coverage (Vitest v8)
 - Test Suites: 5 passed (105 tests, 0 failed)
@@ -78,8 +90,8 @@
 
 ## Artifacts in `docs/qa/KAN-25/`
 - `changed-files-manifest.txt`
-- `git-diff.patch` (clean diff against 887e7e0 across all 10 touched code and test files, 0 docs/qa/* files inside)
-- `unit-test-results.txt` (verbatim Vitest coverage output)
+- `git-diff.patch` (clean diff against 887e7e0 across all 12 touched code and test files, 0 docs/qa/* files inside)
+- `unit-test-results.txt` (verbatim Pytest and Vitest coverage output)
 - `build-or-typecheck.txt` (verbatim output of ruff, mypy, lint-imports, typecheck, lint, build, check_no_dashes)
 - `live-fullstack-proof.txt` (verbatim zero-mock CDP Playwright CTAP2 live execution proof)
 - `screenshots/` (7 live unmocked screenshots on desktop 1440x900 and mobile 390x844 light/dark modes)

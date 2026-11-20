@@ -1,8 +1,11 @@
-=== 1. Ruff Check ===
+=== RUFF CHECK ===
 All checks passed!
-=== 2. Mypy Typecheck ===
+=== RUFF FORMAT CHECK ===
+1878 files already formatted
+=== MYPY ===
 Success: no issues found in 1095 source files
-=== 3. Import Architecture Contracts ===
+=== LINT IMPORTS ===
+
 ╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
 ╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
  ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
@@ -24,24 +27,9 @@ Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored 
 mcp forbidden from importing database KEPT (48 ignored imports)
 
 Contracts: 2 kept, 0 broken.
-=== 4. TypeScript Typecheck ===
-
-> @kanban/web@0.1.0 typecheck
-> tsc -b --noEmit
-
-=== 5. ESLint ===
-
-> @kanban/web@0.1.0 lint
-> eslint . --max-warnings 0
-
-=== 6. Vite Build ===
-
-> @kanban/web@0.1.0 build
-> tsc -b && vite build
-
-> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan25-rc1-ad1c82a2/kanban/web
-> tsc -b && vite build
-
+=== TSC ===
+=== ESLINT ===
+=== VITE BUILD ===
 vite v8.3.8 building client environment for production...
 transforming...
 ✓ 697 modules transformed.
@@ -52,11 +40,11 @@ dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
 dist/assets/index-C2XqbB5T.css            411.27 kB │ gzip:  58.03 kB
 dist/assets/index-pfL0ROaC.js           1,930.96 kB │ gzip: 523.69 kB
 
-✓ built in 1.09s
 [plugin builtin:vite-reporter] 
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-=== 7. No Em/En-Dashes Check ===
+✓ built in 1.36s
+=== CHECK NO DASHES ===
 Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan25-rc1-ad1c82a2/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
