@@ -291,14 +291,13 @@ function AttachHookDialogInner({
               agentDefinitions.length === 0 ? (
                 <div className="workflow-alert workflow-alert-warning" data-testid="no-agents-warning">
                   <strong>No Agent Definitions configured</strong>
-                  <p style={{ margin: '4px 0 8px' }}>
+                  <p className="no-agents-warning-text">
                     There are no active Agent Definitions registered in this workspace. Configure an Agent Definition before attaching an Agent Transition Helper hook.
                   </p>
                   <Link
                     to="/workspaces/settings"
-                    className="workflow-btn workflow-btn-secondary workflow-btn-sm"
+                    className="workflow-btn workflow-btn-secondary workflow-btn-sm no-agents-configure-link"
                     data-testid="configure-agents-link"
-                    style={{ display: 'inline-flex', alignItems: 'center', textDecoration: 'none' }}
                   >
                     Configure Agent Definitions &rarr;
                   </Link>

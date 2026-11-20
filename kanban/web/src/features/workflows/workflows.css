@@ -30,11 +30,24 @@
 .workflow-studio-title {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 8px;
   font-size: 1.25rem;
   font-weight: 600;
   margin: 0;
   color: var(--fg-primary);
+  line-height: 1.35;
+}
+
+.workflow-studio-title-prefix {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.workflow-studio-title-suffix {
+  display: inline;
 }
 
 .workflow-studio-title-badge {
@@ -116,6 +129,16 @@
   background-color: var(--warn-bg);
   color: var(--warn-fg);
   border: 1px solid var(--warn-fg);
+}
+
+.no-agents-warning-text {
+  margin: 4px 0 8px;
+}
+
+.no-agents-configure-link {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
 }
 
 .workflow-alert-success {

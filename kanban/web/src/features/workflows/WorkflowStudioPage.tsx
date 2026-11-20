@@ -277,9 +277,11 @@ export function WorkflowStudioPage({
       {/* Studio Header */}
       <header className="workflow-studio-header">
         <h1 className="workflow-studio-title">
-          <span>⚙️ Project</span>
-          <span className="workflow-studio-title-badge">{projectKey}</span>
-          <span>&gt; Scripted Workflows &amp; Transition Helpers</span>
+          <span className="workflow-studio-title-prefix">
+            <span>⚙️ Project</span>
+            <span className="workflow-studio-title-badge">{projectKey}</span>
+          </span>
+          <span className="workflow-studio-title-suffix">&gt; Scripted Workflows &amp; Transition Helpers</span>
         </h1>
         <div className="workflow-studio-actions">
           <StudioDocLink

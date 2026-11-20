@@ -80,10 +80,26 @@
 }
 
 @media (max-width: 767px) {
+  .kb-breadcrumb {
+    min-width: 0;
+    overflow: hidden;
+  }
   .kb-breadcrumb-desktop {
     display: none;
   }
   .kb-breadcrumb-mobile {
     display: flex;
+    min-width: 0;
+    overflow: hidden;
+  }
+  .kb-breadcrumb-mobile .kb-breadcrumb-current {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    display: block;
+  }
+  .kb-breadcrumb-back-btn {
+    flex-shrink: 0;
   }
 }
