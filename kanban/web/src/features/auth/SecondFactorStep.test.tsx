@@ -9,6 +9,20 @@ import { ApiProblem } from '../../api/problem';
 describe('SecondFactorStep (KB-P3-35)', () => {
   beforeEach(() => {
     vi.restoreAllMocks();
+    Object.defineProperty(window, 'isSecureContext', {
+      value: true,
+      configurable: true,
+      writable: true,
+    });
+    (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = vi.fn();
+    Object.defineProperty(navigator, 'credentials', {
+      writable: true,
+      configurable: true,
+      value: {
+        create: vi.fn().mockResolvedValue(null),
+        get: vi.fn().mockResolvedValue(null),
+      },
+    });
   });
 
   it('renders method tabs in provided order (Action 7)', () => {
@@ -163,7 +177,7 @@ describe('SecondFactorStep (KB-P3-35)', () => {
 
     Object.defineProperty(navigator, 'credentials', {
       writable: true,
-      value: { get: vi.fn().mockResolvedValue(mockCred) },
+      value: { create: vi.fn(), get: vi.fn().mockResolvedValue(mockCred) },
     });
 
     const onSuccess = vi.fn();
@@ -254,7 +268,7 @@ describe('SecondFactorStep (KB-P3-35)', () => {
 
     Object.defineProperty(navigator, 'credentials', {
       writable: true,
-      value: { get: vi.fn().mockResolvedValue(null) },
+      value: { create: vi.fn(), get: vi.fn().mockResolvedValue(null) },
     });
 
     const onSuccess = vi.fn();
@@ -448,7 +462,7 @@ describe('SecondFactorStep (KB-P3-35)', () => {
     // Null credential returned from navigator.credentials.get
     Object.defineProperty(navigator, 'credentials', {
       writable: true,
-      value: { get: vi.fn().mockResolvedValue(null) },
+      value: { create: vi.fn(), get: vi.fn().mockResolvedValue(null) },
     });
 
     const onError = vi.fn();
