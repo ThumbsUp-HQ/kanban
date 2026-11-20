@@ -297,12 +297,16 @@ async def _execute_search_request(
     total = int(res.get("total", 0))
     next_cursor = res.get("next_cursor")
 
-    projected_items = [
-        project_issue(it, lod) for it in (raw_items if isinstance(raw_items, list) else [])
-    ]
+    projected_items: list[dict[str, Any]] = []
+    for it in raw_items if isinstance(raw_items, list) else []:
+        proj = project_issue(it, lod)
+        if isinstance(it, dict) and it.get("match_reason"):
+            proj["match_reason"] = it["match_reason"]
+        projected_items.append(proj)
 
+    executed_mode = res.get("executed_mode") or payload.get("mode", "lexical")
     out: dict[str, Any] = {
-        "mode": "lexical",
+        "mode": executed_mode,
         "total": total,
         "items": projected_items,
     }

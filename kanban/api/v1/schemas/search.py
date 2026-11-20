@@ -30,6 +30,7 @@ class SearchItem(BaseModel):
     match_spans: list[tuple[int, int]] = Field(default_factory=list)
     score: float
     summary: str | None = None
+    match_reason: str | None = None
 
 
 class SearchResponse(BaseModel):
@@ -38,7 +39,7 @@ class SearchResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     total: int
-    executed_mode: Literal["lexical"] = "lexical"
+    executed_mode: Literal["lexical", "hybrid"] = "lexical"
     items: list[SearchItem]
     next_cursor: str | None = None
 
@@ -63,6 +64,7 @@ class IssueSearchItem(BaseModel):
     priority: str | None = None
     assignees: list[str] = Field(default_factory=list)
     description_markdown: str | None = None
+    match_reason: str | None = None
 
 
 class IssueSearchRequest(BaseModel):
@@ -85,7 +87,7 @@ class IssueSearchResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     total: int
-    executed_mode: Literal["lexical"] = "lexical"
+    executed_mode: Literal["lexical", "hybrid"] = "lexical"
     items: list[IssueSearchItem]
     next_cursor: str | None = None
 
@@ -104,6 +106,7 @@ class KnowledgeSearchItem(BaseModel):
     snippet: str
     match_spans: list[tuple[int, int]] = Field(default_factory=list)
     score: float
+    match_reason: str | None = None
 
 
 def _default_knowledge_kinds() -> list[Literal["doc", "page", "sticky"]]:
@@ -118,6 +121,7 @@ class KnowledgeSearchRequest(BaseModel):
     query: str
     kinds: list[Literal["doc", "page", "sticky"]] = Field(default_factory=_default_knowledge_kinds)
     project: str | None = None
+    mode: SearchMode = "lexical"
     limit: int = Field(default=20, ge=1, le=50)
     cursor: str | None = None
 
@@ -128,6 +132,6 @@ class KnowledgeSearchResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     total: int
-    executed_mode: Literal["lexical"] = "lexical"
+    executed_mode: Literal["lexical", "hybrid"] = "lexical"
     items: list[KnowledgeSearchItem]
     next_cursor: str | None = None

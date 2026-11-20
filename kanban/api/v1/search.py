@@ -16,6 +16,7 @@ from kanban.api.v1.schemas.search import (
     IssueSearchResponse,
     KnowledgeSearchRequest,
     KnowledgeSearchResponse,
+    SearchMode,
     SearchResponse,
 )
 from kanban.security.read_taint import TaintRecorder, get_taint_recorder
@@ -46,8 +47,12 @@ async def search_unified(  # noqa: PLR0913, PLR0917
         str | None,
         Query(description="Opaque HMAC-signed keyset pagination cursor"),
     ] = None,
+    mode: Annotated[
+        SearchMode,
+        Query(description="Search mode: lexical or hybrid"),
+    ] = "lexical",
 ) -> SearchResponse:
-    """Execute unified lexical full-text and trigram search under caller RLS."""
+    """Execute unified search under caller RLS."""
     async with timing_floor(floor_ms=25.0):
         kinds_list = [k.strip() for k in kinds.split(",") if k.strip()] if kinds else None
         res = await svc.search_unified(
@@ -58,6 +63,7 @@ async def search_unified(  # noqa: PLR0913, PLR0917
             project_ref=project,
             limit=limit,
             cursor=cursor,
+            mode=mode,
         )
         pids = {item.project_identifier for item in res.items if item.project_identifier}
         if pids:
