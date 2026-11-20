@@ -181,10 +181,76 @@ async def _allocate_unique_canonical_key(
         idx += 1
 
 
+async def _auto_create_root_doc(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    proj_id: uuid.UUID,
+    clean_ref: str,
+    caller_principal_id: uuid.UUID | None = None,
+) -> uuid.UUID:
+    """Auto-create default root doc for a fresh project with zero existing docs."""
+    proj_obj = (
+        await session.execute(
+            select(ObjectRecord.display_title, ObjectRecord.created_by_id).where(
+                ObjectRecord.id == proj_id,
+                ObjectRecord.workspace_id == workspace_id,
+            )
+        )
+    ).first()
+    proj_rec = proj_obj[0] if proj_obj else None
+    proj_creator = proj_obj[1] if proj_obj else None
+
+    creator_id = caller_principal_id
+    if creator_id is None:
+        guc_res = (
+            await session.execute(
+                text("SELECT nullif(current_setting('app.principal_id', true), '')::uuid")
+            )
+        ).scalar_one_or_none()
+        if guc_res is not None:
+            creator_id = guc_res
+    if creator_id is None and proj_creator is not None:
+        creator_id = proj_creator
+
+    doc_title = f"{proj_rec or clean_ref.upper()} Documentation"
+    base_slug = _to_slug(doc_title, "doc")
+    canonical_key = await _allocate_unique_canonical_key(
+        session, workspace_id, "doc", "docs", base_slug
+    )
+    new_doc_id = (
+        await session.execute(
+            text(
+                "SELECT register_object("
+                "  CAST('doc' AS object_kind), :ws, :proj, :ckey, :title, :creator"
+                ")"
+            ),
+            {
+                "ws": workspace_id,
+                "proj": proj_id,
+                "ckey": canonical_key,
+                "title": doc_title,
+                "creator": creator_id,
+            },
+        )
+    ).scalar_one()
+    doc_inst = Doc(
+        id=new_doc_id,
+        workspace_id=workspace_id,
+        project_id=proj_id,
+        title=doc_title,
+        body_markdown="",
+        hierarchy_path="pending",
+    )
+    session.add(doc_inst)
+    await session.flush()
+    return uuid.UUID(str(new_doc_id))
+
+
 async def _resolve_doc_id(  # noqa: RET503
     session: AsyncSession,
     workspace_id: uuid.UUID,
     doc_ref: str,
+    caller_principal_id: uuid.UUID | None = None,
 ) -> uuid.UUID:
     """Resolve doc UUID from UUID string or canonical key, or project identifier."""
     try:
@@ -268,47 +334,13 @@ async def _resolve_doc_id(  # noqa: RET503
         if existing_doc is not None:
             return existing_doc
 
-        # Auto-create default root doc for fresh project
-        proj_rec = (
-            await session.execute(
-                select(ObjectRecord.display_title).where(
-                    ObjectRecord.id == proj_id,
-                    ObjectRecord.workspace_id == workspace_id,
-                )
-            )
-        ).scalar_one_or_none()
-        doc_title = f"{proj_rec or clean_ref.upper()} Documentation"
-        base_slug = _to_slug(doc_title, "doc")
-        canonical_key = await _allocate_unique_canonical_key(
-            session, workspace_id, "doc", "docs", base_slug
+        return await _auto_create_root_doc(
+            session,
+            workspace_id,
+            proj_id,
+            clean_ref,
+            caller_principal_id=caller_principal_id,
         )
-        new_doc_id = (
-            await session.execute(
-                text(
-                    "SELECT register_object("
-                    "  CAST('doc' AS object_kind), :ws, :proj, :ckey, :title, :creator"
-                    ")"
-                ),
-                {
-                    "ws": workspace_id,
-                    "proj": proj_id,
-                    "ckey": canonical_key,
-                    "title": doc_title,
-                    "creator": None,
-                },
-            )
-        ).scalar_one()
-        doc_inst = Doc(
-            id=new_doc_id,
-            workspace_id=workspace_id,
-            project_id=proj_id,
-            title=doc_title,
-            body_markdown="",
-            hierarchy_path="pending",
-        )
-        session.add(doc_inst)
-        await session.flush()
-        return uuid.UUID(str(new_doc_id))
 
     not_found()
 
@@ -569,7 +601,9 @@ async def get_doc(
     doc_ref: str,
 ) -> tuple[DocResponse, str]:
     """Retrieve full document detail, breadcrumbs, outline, and access metadata."""
-    doc_id = await _resolve_doc_id(session, caller.workspace_id, doc_ref)
+    doc_id = await _resolve_doc_id(
+        session, caller.workspace_id, doc_ref, caller_principal_id=caller.principal_id
+    )
     caps = await require_capability(session, caller, doc_id, Capability.VIEW)
 
     doc = (
@@ -636,7 +670,9 @@ async def update_doc(
     if_match: str | None,
 ) -> tuple[DocResponse, str]:
     """Update document title or body markdown under optimistic concurrency."""
-    doc_id = await _resolve_doc_id(session, caller.workspace_id, doc_ref)
+    doc_id = await _resolve_doc_id(
+        session, caller.workspace_id, doc_ref, caller_principal_id=caller.principal_id
+    )
     await require_capability(session, caller, doc_id, Capability.EDIT)
 
     doc_row = (
@@ -688,7 +724,9 @@ async def delete_doc(
     doc_ref: str,
 ) -> None:
     """Soft-trash document and all hierarchical pages."""
-    doc_id = await _resolve_doc_id(session, caller.workspace_id, doc_ref)
+    doc_id = await _resolve_doc_id(
+        session, caller.workspace_id, doc_ref, caller_principal_id=caller.principal_id
+    )
     await require_capability(session, caller, doc_id, Capability.DELETE)
 
     # Soft trash doc in objects
@@ -721,7 +759,9 @@ async def get_doc_tree(
     doc_ref: str,
 ) -> list[PageTreeNode]:
     """Retrieve full hierarchical page tree with restricted ancestor masking."""
-    doc_id = await _resolve_doc_id(session, caller.workspace_id, doc_ref)
+    doc_id = await _resolve_doc_id(
+        session, caller.workspace_id, doc_ref, caller_principal_id=caller.principal_id
+    )
     await require_capability(session, caller, doc_id, Capability.VIEW)
 
     rows = (
@@ -911,7 +951,9 @@ async def create_page(
     body: PageCreate,
 ) -> tuple[PageResponse, str]:
     """Create a hierarchical page within a document."""
-    doc_id = await _resolve_doc_id(session, caller.workspace_id, doc_ref)
+    doc_id = await _resolve_doc_id(
+        session, caller.workspace_id, doc_ref, caller_principal_id=caller.principal_id
+    )
     await require_capability(session, caller, doc_id, Capability.EDIT)
     await _validate_parent_page(session, caller, body.parent_page_id, doc_id)
 

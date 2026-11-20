@@ -33,9 +33,25 @@ export function DocsWorkspaceView(): JSX.Element {
 
   const [currentMarkdown, setCurrentMarkdown] = useState<string | undefined>(undefined);
   const [isTreeSheetOpen, setIsTreeSheetOpen] = useState(false);
-  const [isRailSheetOpen, setIsRailSheetOpen] = useState(true);
+  const [isRailSheetOpen, setIsRailSheetOpen] = useState(
+    () => !(typeof window !== 'undefined' && window.innerWidth <= 1024)
+  );
   const [railTab, setRailTab] = useState<'outline' | 'history'>('outline');
   const [announcement, setAnnouncement] = useState<string | null>(null);
+
+  const [isMobile, setIsMobile] = useState(
+    () => typeof window !== 'undefined' && window.innerWidth <= 1024
+  );
+
+  useEffect(() => {
+    function handleResize() {
+      setIsMobile(window.innerWidth <= 1024);
+    }
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
 
   const handleOpenHistory = useCallback(() => {
     setIsRailSheetOpen(true);
@@ -137,7 +153,7 @@ export function DocsWorkspaceView(): JSX.Element {
       {/* 3-Pane Body */}
       <div className="docs-workspace-body">
         {/* Backdrop for mobile sheets */}
-        {(isTreeSheetOpen || isRailSheetOpen) && (
+        {isMobile && (isTreeSheetOpen || isRailSheetOpen) && (
           <div
             className="docs-sheet-backdrop"
             onClick={() => {

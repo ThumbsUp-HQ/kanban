@@ -1,6 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-# ruff: noqa: E501, ASYNC240, ANN401, SLF001, N806, ARG001, SIM105, S110, BLE001
+# ruff: noqa: E501, ASYNC240, ANN401, SLF001, N806, ARG001, TRY003, EM101, B009
 """Integration tests for Sticky -> Doc AI structuring preview & confirm contract (KB-P5-26)."""
 
 from __future__ import annotations
@@ -14,6 +14,7 @@ import pytest
 from sqlalchemy import func, select
 
 from database.models import Doc, ObjectLink, Page, ResourceAclEntry, Sticky
+from kanban.api.v1.sticky_promo_ai import _is_provider_unavailable_error
 from kanban.tests.security.helpers import (
     add_acl_entry,
     add_group_member,
@@ -459,10 +460,126 @@ async def test_case_6_custom_structurer_and_default_router(
     assert resp1.status_code == 200
     assert resp1.json()["proposal"]["proposed_title"] == "Custom Title"
 
-    # 2. Test fallback default ProviderRouter branch
+    # 2. Test fallback default ProviderRouter branch with AllProvidersUnavailable caught
     app.state.sticky_structurer = None
     app.state.provider_router = None
-    try:
+    resp2 = await client.post(f"/api/v1/stickies/{sticky_id}/promote-preview")
+    assert resp2.status_code == 200
+    assert resp2.json()["proposal"]["proposed_title"] == "Custom Structurer Test"
+
+
+async def test_case_7_air_gapped_provider_unavailable_and_preview_promotion_alias(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Test Case 7: AllProvidersUnavailable/EgressDenied returns 200 OK on both route aliases (KAN-9 Problem 2)."""
+    admin = await make_user("offline_admin", workspace_role="WORKSPACE_ADMIN")
+    client = as_principal(admin)
+    proj_id = await _setup_project(api_env, admin, identifier="OFFLN")
+
+    sticky_content = (
+        "# Air Gapped Architecture\n\n"
+        "Here are air-gapped system notes.\n\n"
+        "## Offline Sequence\n"
+        "```mermaid\n"
+        "sequenceDiagram\n"
+        "  Client->>Server: Local Request\n"
+        "```\n\n"
+        "## Action Items\n"
+        "- [ ] Verify air-gap mode\n"
+        "- [ ] Test fallback preview\n"
+    )
+
+    c_resp = await client.post(
+        f"/api/v1/projects/{proj_id}/stickies",
+        json={"body_markdown": sticky_content, "color_token": "amber"},
+    )
+    assert c_resp.status_code == 201
+    sticky_id = uuid.UUID(c_resp.json()["id"])
+
+    # 1. Simulate AllProvidersUnavailable error
+    errors_mod = importlib.import_module("agent.providers.errors")
+    all_unavail_cls = getattr(errors_mod, "AllProvidersUnavailable")
+
+    async def _failing_structurer(**kwargs: Any) -> Any:
+        raise all_unavail_cls("No provider online", code="NO_PROVIDER_IN_RESIDENCY_TIER")
+
+    app = api_env.client._transport.app  # type: ignore[attr-defined]
+    app.state.sticky_structurer = _failing_structurer
+
+    # Test route alias /preview-promotion
+    alias_resp = await client.post(f"/api/v1/stickies/{sticky_id}/preview-promotion")
+    assert alias_resp.status_code == 200
+    data_alias = alias_resp.json()
+    assert data_alias["proposal"]["proposed_title"] == "Air Gapped Architecture"
+    assert "Offline Sequence" in data_alias["rendered_markdown"]
+    assert "sequenceDiagram" in data_alias["rendered_markdown"]
+    assert len(data_alias["proposal"]["extracted_action_items"]) == 2
+
+    # Test original route /promote-preview with EgressDenied / air gap
+    egress_cls = getattr(errors_mod, "EgressDenied")
+
+    async def _egress_denied_structurer(**kwargs: Any) -> Any:
+        raise egress_cls("External egress blocked", code="AIR_GAP_EGRESS_DENIED")
+
+    app.state.sticky_structurer = _egress_denied_structurer
+    prev_resp = await client.post(f"/api/v1/stickies/{sticky_id}/promote-preview")
+    assert prev_resp.status_code == 200
+    data_prev = prev_resp.json()
+    assert data_prev["proposal"]["proposed_title"] == "Air Gapped Architecture"
+
+    # 3. Test generic error that gets re-raised
+    async def _crash_structurer(**kwargs: Any) -> Any:
+        raise RuntimeError("Unexpected boom")
+
+    app.state.sticky_structurer = _crash_structurer
+    with pytest.raises(RuntimeError, match="Unexpected boom"):
         await client.post(f"/api/v1/stickies/{sticky_id}/promote-preview")
-    except Exception:
-        pass
+
+    # Reset
+    app.state.sticky_structurer = None
+
+
+def test_is_provider_unavailable_error_branches() -> None:
+    """Verify _is_provider_unavailable_error correctly classifies error types and codes."""
+    class CustomCodeError(Exception):
+        def __init__(self, code: str) -> None:
+            super().__init__(f"Error code: {code}")
+            self.code = code
+
+    assert _is_provider_unavailable_error(CustomCodeError("NO_PROVIDER_IN_RESIDENCY_TIER")) is True
+    assert _is_provider_unavailable_error(CustomCodeError("AIR_GAP_EGRESS_DENIED")) is True
+    assert _is_provider_unavailable_error(CustomCodeError("UNKNOWN_CODE")) is False
+    assert _is_provider_unavailable_error(ValueError("plain error")) is False
+
+
+def test_deterministic_fallback_structurer_unit() -> None:
+    """Verify deterministic_fallback_structuring unit behavior, guards, and secret scrubbing."""
+    structurer_mod = importlib.import_module("agent.sticky_promo.structurer")
+    fallback_fn = structurer_mod.deterministic_fallback_structuring
+    too_large_err = structurer_mod.StickyTooLargeError
+
+    # 1. Positive fallback structuring with diagram and secrets
+    raw_md = (
+        "# Secure Offline Notes\n"
+        "Secret token: AKIAIOSFODNN7EXAMPLE.\n\n"
+        "## Diagram Section\n"
+        "```mermaid\n"
+        "graph LR\n"
+        "  A --> B\n"
+        "```\n\n"
+        "- [ ] Task 1\n"
+        "- [x] Task 2\n"
+    )
+    result = fallback_fn(raw_md)
+    assert result.proposal.proposed_title == "Secure Offline Notes"
+    assert len(result.proposal.sections) >= 1
+    assert "AKIAIOSFODNN7EXAMPLE" not in result.rendered_markdown
+    assert "graph LR" in result.rendered_markdown
+    assert len(result.proposal.extracted_action_items) == 2
+
+    # 2. Oversized sticky error
+    with pytest.raises(too_large_err):
+        fallback_fn("A" * 150_000)
+

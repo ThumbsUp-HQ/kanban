@@ -24,6 +24,8 @@ import {
   WorkspaceMcpRedirect,
   AdminMcpRedirect,
   ProjectRouteContext,
+  ProjectOverviewRoute,
+  ProjectIssuesRoute,
 } from './routes';
 import { saveDraft } from '../features/drafts/draftsStore';
 import { ThemeProvider } from '../theme/ThemeProvider';
@@ -367,7 +369,7 @@ describe('routes and AppShell integration', () => {
     fireEvent.click(screen.getByTestId('home-create-issue-btn'));
   });
 
-  it('preserves IssuesWorkspaceRoute in background when ?peek= is set and triggers create modal on ?create=1', () => {
+  it('preserves IssuesWorkspaceRoute in background when ?peek= is set and triggers create modal on ?create=1', async () => {
     const router = createAppRouter(['/projects/KAN/issues?layout=list&peek=KAN-101&create=1']);
     render(
       <QueryClientProvider client={queryClient}>
@@ -378,6 +380,10 @@ describe('routes and AppShell integration', () => {
     );
 
     expect(screen.getByTestId('issues-workspace')).toBeDefined();
+
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    });
 
     act(() => {
       window.dispatchEvent(new CustomEvent('kb:create-issue'));
@@ -410,7 +416,7 @@ describe('IssuesWorkspaceRoute', () => {
     window.history.pushState({}, '', '/projects/KAN/issues');
   });
 
-  it('mounts and renders default ListView', () => {
+  it('mounts and renders default ListView and triggers handleOpenPeek on click', () => {
     render(
       <IssuesWorkspaceRoute
         projectKey="KAN"
@@ -420,6 +426,11 @@ describe('IssuesWorkspaceRoute', () => {
     );
 
     expect(screen.getByText('Backlog')).toBeDefined();
+    const firstIssue = FIXTURE_12_ISSUES[0];
+    expect(firstIssue).toBeDefined();
+    if (!firstIssue) return;
+    const issueLink = screen.getByText(firstIssue.key);
+    fireEvent.click(issueLink);
   });
 
   it('renders TableView when layout=table in search params', () => {
@@ -1880,8 +1891,15 @@ describe('IssuesWorkspaceRoute', () => {
       });
       uHome();
 
-      // 6. create=1 timer execution in ProjectIssuesRoute
+      // 6. create=1 timer execution and onOpenPeek in ProjectIssuesRoute
       const qcIssues = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      qcIssues.setQueryData(qk.issues('KAN', {}), FIXTURE_12_ISSUES);
+      const setTimeoutSpy = vi.spyOn(window, 'setTimeout').mockImplementation((cb: TimerHandler) => {
+        if (typeof cb === 'function') {
+          (cb as () => void)();
+        }
+        return 9999 as unknown as ReturnType<typeof setTimeout>;
+      });
       const routerIssues = createAppRouter(['/projects/KAN/issues?create=1']);
       const { unmount: uIssues } = render(
         <QueryClientProvider client={qcIssues}>
@@ -1890,10 +1908,49 @@ describe('IssuesWorkspaceRoute', () => {
           </ThemeProvider>
         </QueryClientProvider>,
       );
-      await act(async () => {
-        await new Promise((resolve) => setTimeout(resolve, 50));
-      });
+      setTimeoutSpy.mockRestore();
       uIssues();
+
+      // 6b. handleOpenPeek execution in ProjectIssuesRoute
+      vi.spyOn(window, 'fetch').mockImplementation((input) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes('/states')) {
+          return Promise.resolve(new Response(JSON.stringify([{ id: 'state-todo', name: 'Todo', group: 'unstarted' }]), { status: 200 }));
+        }
+        if (url.includes('/issues')) {
+          return Promise.resolve(new Response(JSON.stringify({ items: FIXTURE_12_ISSUES }), { status: 200 }));
+        }
+        if (url.includes('/api/v1/projects/KAN')) {
+          return Promise.resolve(new Response(JSON.stringify({ id: 'p-1', identifier: 'KAN', key: 'KAN', name: 'kanban', capabilities: ['EDIT', 'ADMIN'], modules_enabled: true }), { status: 200 }));
+        }
+        if (url.includes('/api/v1/projects')) {
+          return Promise.resolve(new Response(JSON.stringify({ items: [{ identifier: 'KAN', key: 'KAN' }] }), { status: 200 }));
+        }
+        return Promise.resolve(new Response('{}', { status: 200 }));
+      });
+      const qcIssuesPeek = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const { unmount: uIssuesPeek } = render(
+        <QueryClientProvider client={qcIssuesPeek}>
+          <ProjectRouteContext.Provider
+            value={{
+              projectKey: 'KAN',
+              projectName: 'kanban',
+              modulesEnabled: true,
+              capabilities: ['EDIT', 'ADMIN'],
+              isProjectAdmin: true,
+            }}
+          >
+            <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+              <Routes>
+                <Route path="/projects/:projectKey/issues" element={<ProjectIssuesRoute />} />
+              </Routes>
+            </MemoryRouter>
+          </ProjectRouteContext.Provider>
+        </QueryClientProvider>,
+      );
+      const rowKeyLink = await screen.findByRole('link', { name: 'KAN-140' });
+      fireEvent.click(rowKeyLink);
+      uIssuesPeek();
 
       // 7. DraftsWorkspaceView with cached object having key instead of identifier
       vi.spyOn(window, 'fetch').mockImplementation((input) => {
@@ -1956,6 +2013,44 @@ describe('IssuesWorkspaceRoute', () => {
         await new Promise((resolve) => setTimeout(resolve, 50));
       });
       uIssuesInvalid();
+
+      // 10. KAN-9: ProjectOverviewRoute stickies alias on /projects/:key/stickies and /w/:slug/p/:key/stickies
+      const qcStickies = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const { unmount: uDirectStickies } = render(
+        <QueryClientProvider client={qcStickies}>
+          <MemoryRouter initialEntries={['/projects/KAN/stickies']}>
+            <ProjectOverviewRoute />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      expect(screen.getByTestId('project-overview-page')).toBeDefined();
+      uDirectStickies();
+
+      const routerProjStickies = createAppRouter(['/projects/KAN/stickies']);
+      const { unmount: uProjStickies } = render(
+        <QueryClientProvider client={qcStickies}>
+          <ThemeProvider>
+            <RouterProvider router={routerProjStickies} />
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId('project-overview-page')).toBeDefined();
+      });
+      uProjStickies();
+
+      const routerWsStickies = createAppRouter(['/w/default/p/KAN/stickies']);
+      const { unmount: uWsStickies } = render(
+        <QueryClientProvider client={qcStickies}>
+          <ThemeProvider>
+            <RouterProvider router={routerWsStickies} />
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId('project-overview-page')).toBeDefined();
+      });
+      uWsStickies();
     });
   });
 });
