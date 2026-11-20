@@ -3,23 +3,32 @@
 ## Audit Metadata
 - Ticket ID: KAN-14 ([KB-P3-AUDIT-08])
 - Reviewer: ui-spec-2 (Clean-Room UI/UX Specialist)
-- Date: 2026-11-19
-- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan14-rcfix-fd828a4a`
-- Target Branch: fix/KAN-14-rc2
-- Base Commit: 036216b
-- Head Commit: b9ecb89
+- Date: 2026-11-20
+- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan14-rc3-b0722c3e`
+- Target Branch: fix/KAN-14-rc3
+- Base Commit: 564b574
+- Head Commit: fffb27f
 - STATUS: APPROVED
 
 ---
 
 ## Executive Summary
-This review verifies the visual layout, responsiveness, interaction ergonomics, accessibility (WCAG AA), and frontend code quality for ticket KAN-14 and its Clean-Room Reality-Checker Round 2 remediation ([KB-P3-AUDIT-08]).
+This review verifies the visual layout, responsiveness, interaction ergonomics, accessibility (WCAG AA), and frontend code quality for ticket KAN-14 and its Clean-Room Reality-Checker Round 3 surgical polish ([KB-P3-AUDIT-08]).
 
-The Round 2 remediation resolves:
-1. Fault-tolerant keyboard map listener in `kanban/web/src/features/views/useIssueKeyboardMap.ts`: added `if (typeof e.key !== 'string' || e.key.length === 0) return;` at entry, guarding the board/list/table keyboard listener from uncaught `TypeError` crashes when browser password managers or autofill extensions dispatch synthetic keydown events without standard key properties.
-2. Principal service handle contract normalization in `kanban/admin/principal_service.py`: ensuring all principal listings (`/api/v1/admin/principals`, `/api/v1/admin/groups/{id}/members`) consistently expose `@handle`, `email`, `role`, and `provider` while preserving `principal` intact for complete backward compatibility.
-3. Gating of project modules queries behind `modules_enabled !== false` and graceful handling of 404 MODULES_DISABLED, preventing unhandled browser console errors.
-4. Responsive wrapping and horizontal overflow containment in Workspace Settings and Project Settings via `.kb-table-scroll-container` (`overflow-x: auto; max-width: 100%; box-sizing: border-box;`), eliminating mobile 390px viewport horizontal bleeding.
+The Round 3 remediation resolves:
+1. Handle Formatting Normalization (`formatPrincipalHandle` in `ProjectSettingsPage.tsx`):
+   - Created `formatPrincipalHandle(handle, principal)` which strips any leading `@` symbols before prepending a single `@`.
+   - Normalizes principal handles rendered in both the principal picker dropdown and the project members table, guaranteeing single `@alice` rendering regardless of backend representation (`"alice"` vs `"@alice"`) and eliminating duplicate `@@` prefixes.
+   - Verified by dedicated unit test in `ProjectSettingsPage.test.tsx`.
+2. Module Query Suppression (`FilterDisplayBar.tsx` & `viewRegistry.tsx`):
+   - Gated `fetchProjectModules(projectKey)` in `FilterDisplayBar.tsx` behind `modulesEnabled === true` inside the hydration effect and added `modulesEnabled` to the dependency array.
+   - Updated `IssuesWorkspaceRoute` in `viewRegistry.tsx` to subscribe to the query cache and default `modulesEnabled` to `false` in live mode until the project query confirms `project?.modules_enabled === true`.
+   - Eliminates all HTTP 404 errors on `GET /api/v1/projects/:key/modules` when modules are disabled.
+3. Maintained Round 2 Invariants:
+   - Guard in `useIssueKeyboardMap.ts` against synthetic autofill events with non-string `e.key`.
+   - Principal service handle contract exposing `@handle` alongside `principal`.
+   - Responsive horizontal table scrolling container (`.kb-table-scroll-container`) on mobile 390px viewports.
+4. Comprehensive test coverage: 198 Vitest tests passing across 9 suites with >95% branch coverage, and 16 Pytest tests passing with 96% coverage.
 
 All live Playwright PNG screenshots (Desktop 1440x900 and Mobile 390x844 across Light and Dark themes) were inspected and verified via binary image analysis.
 
@@ -48,6 +57,7 @@ All live Playwright PNG screenshots (Desktop 1440x900 and Mobile 390x844 across 
 
 ### 4. Project Settings Tab Desktop (live-kan14-project-settings-desktop-light.png & dark.png)
 - Theme: Light and Dark Themes (1440x900 Desktop)
+- Handle Formatting: Principal picker and member rows display clean single `@alice` and `@admin` handles without duplicate `@` symbols.
 - Modules Toggle: Checkbox "Enable Modules for this project" is cleanly placed with proper label association.
 - Console Cleanliness: When disabled, module fetch calls are suppressed and 404 MODULES_DISABLED is handled cleanly, resulting in zero uncaught console errors.
 
@@ -78,16 +88,18 @@ All live Playwright PNG screenshots (Desktop 1440x900 and Mobile 390x844 across 
 
 ---
 
-## Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-08 Round 2)
+## Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-08 Round 3)
 
-- Target Branch: `fix/KAN-14-rc2`
-- Remediation Head Commit: `b9ecb89`
+- Target Branch: `fix/KAN-14-rc3`
+- Remediation Head Commit: `fffb27f`
 - Remediations Verified:
-  1. Guard in `useIssueKeyboardMap.ts` against synthetic autofill events with non-string `e.key`.
-  2. Principal service handle contract exposes `@handle` consistently alongside `principal`.
-  3. All 137 Vitest unit tests passing across touched components with >= 95% line coverage.
-  4. 16 backend Pytest tests passing with 96-97% coverage.
-  5. Zero em/en-dashes verified.
+  1. `formatPrincipalHandle` normalizes handles and eliminates duplicate `@@` prefixes in ProjectSettingsPage.
+  2. Gated module fetching in FilterDisplayBar and viewRegistry avoids 404 console errors.
+  3. Guard in `useIssueKeyboardMap.ts` against synthetic autofill events with non-string `e.key`.
+  4. Principal service handle contract exposes `@handle` consistently alongside `principal`.
+  5. All 198 Vitest unit tests passing across touched components with >= 95% line coverage.
+  6. 16 backend Pytest tests passing with 96% coverage.
+  7. 100% zero em-dashes and en-dashes.
 
 ---
 
@@ -97,14 +109,16 @@ All live Playwright PNG screenshots (Desktop 1440x900 and Mobile 390x844 across 
 2. [x] Mobile (390x844) Light & Dark screenshots verified
 3. [x] Breathable whitespace and responsive grid layout confirmed
 4. [x] WCAG AA color contrast compliant in Light and Dark themes
-5. [x] Zero overlapping, clipped, or truncated text
-6. [x] Zero square selection bleeds on circular avatars
-7. [x] Zero broken or missing icons
-8. [x] Zero inline `style={...}` CSP violations
-9. [x] Proper nullish coalescing (`??`) patterns enforced
-10. [x] Strict ASCII hyphenation (0 em/en-dashes)
-11. [x] Horizontal table overflow container verified on mobile
-12. [x] Keyboard map synthetic autofill keydown guard verified
+5. [x] Single `@handle` display verified (zero `@@` strings)
+6. [x] Gated module fetching verified (zero 404 errors)
+7. [x] Zero overlapping, clipped, or truncated text
+8. [x] Zero square selection bleeds on circular avatars
+9. [x] Zero broken or missing icons
+10. [x] Zero inline `style={...}` CSP violations
+11. [x] Proper nullish coalescing (`??`) patterns enforced
+12. [x] Strict ASCII hyphenation (0 em/en-dashes)
+13. [x] Horizontal table overflow container verified on mobile
+14. [x] Keyboard map synthetic autofill keydown guard verified
 
 ---
 
