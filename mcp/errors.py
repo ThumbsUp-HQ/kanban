@@ -85,18 +85,32 @@ class KbMcpError(Exception):
         budget: dict[str, int] | None = None,
         extra: dict[str, Any] | None = None,
         blockers: list[str] | None = None,
+        field: str | None = None,
+        fix_hint: str | None = None,
+        cli_example: str | None = None,
+        valid_options: list[str] | None = None,
+        did_you_mean: list[str] | None = None,
+        closest_match: list[dict[str, Any]] | None = None,
     ) -> None:
-        """Initialize KbMcpError with code, message, optional hint, candidates, budget, blockers."""
+        """Initialize KbMcpError with code, message, and progressive-disclosure fields."""
         enum_code = McpErrorCode(code)
         super().__init__(f"[{enum_code.value}] {message}")
         self.code: Final[McpErrorCode] = enum_code
         self.message: Final[str] = message
-        self.hint: Final[str | None] = hint
+        resolved_hint = hint if hint is not None else fix_hint
+        resolved_fix_hint = fix_hint if fix_hint is not None else hint
+        self.hint: Final[str | None] = resolved_hint
         self.candidates: Final[list[dict[str, str]] | None] = candidates
         self.allowed_tools: Final[list[str] | None] = allowed_tools
         self.budget: Final[dict[str, int] | None] = budget
         self.extra: Final[dict[str, Any] | None] = extra
         self.blockers: Final[list[str] | None] = blockers
+        self.field: Final[str | None] = field
+        self.fix_hint: Final[str | None] = resolved_fix_hint
+        self.cli_example: Final[str | None] = cli_example
+        self.valid_options: Final[list[str] | None] = valid_options
+        self.did_you_mean: Final[list[str] | None] = did_you_mean
+        self.closest_match: Final[list[dict[str, Any]] | None] = closest_match
 
     def to_yaml(self) -> str:
         """Serialize error payload containing code, message, optional hint, candidates, blockers."""
@@ -104,16 +118,20 @@ class KbMcpError(Exception):
             "code": self.code.value,
             "message": self.message,
         }
-        if self.allowed_tools is not None:
-            payload["allowed_tools"] = self.allowed_tools
-        if self.budget is not None:
-            payload["budget"] = self.budget
+        optional_fields: tuple[tuple[str, Any], ...] = (
+            ("field", self.field),
+            ("valid_options", self.valid_options),
+            ("did_you_mean", self.did_you_mean),
+            ("closest_match", self.closest_match),
+            ("allowed_tools", self.allowed_tools),
+            ("budget", self.budget),
+            ("hint", self.hint),
+            ("fix_hint", self.fix_hint),
+            ("cli_example", self.cli_example),
+            ("candidates", self.candidates),
+            ("blockers", self.blockers),
+        )
+        payload.update({key: val for key, val in optional_fields if val is not None})
         if self.extra:
             payload.update(self.extra)
-        if self.hint:
-            payload["hint"] = self.hint
-        if self.candidates:
-            payload["candidates"] = self.candidates
-        if self.blockers:
-            payload["blockers"] = self.blockers
         return dump_yaml({"error": payload}, strip_nulls=True)

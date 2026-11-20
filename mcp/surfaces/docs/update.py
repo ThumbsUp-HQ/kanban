@@ -82,9 +82,11 @@ _INPUT_SCHEMA: Final[dict[str, Any]] = {
             "description": "64-character SHA-256 hex ETag required for concurrency control",
         },
         "links": {
-            "type": "array",
-            "items": {"type": "string"},
-            "description": "Inline links list/delta syntax (e.g. ['KAN-1', '+KAN-2', '-KAN-3'])",
+            "type": ["array", "object"],
+            "description": (
+                "Inline links list/delta syntax or dict (e.g. ['KAN-1', '+KAN-2'] "
+                "or {'add': ['KAN-1']})"
+            ),
         },
     },
     "required": ["id"],
@@ -310,7 +312,14 @@ def _diff_patch_content(
     clean_match = if_match.strip().strip('"') if if_match is not None else None
     if clean_match is not None and clean_match != clean_sha:
         msg = f"ETag mismatch: client provided '{if_match}', current is '{clean_sha}'"
-        raise KbMcpError(McpErrorCode.CONFLICT_ETAG, msg, hint=f"Current fresh ETag is {clean_sha}")
+        raise KbMcpError(
+            McpErrorCode.CONFLICT_ETAG,
+            msg,
+            hint=f"Current fresh ETag is {clean_sha}",
+            extra={"current_etag": clean_sha},
+            fix_hint=f"Document was modified concurrently. Retry with current ETag: {clean_sha}",
+            cli_example=f'kanban-cli-docs update --id="<id>" --if-match="{clean_sha}"',
+        )
 
     count = current_body.count(original_text)
     if count == 0:
@@ -320,7 +329,17 @@ def _diff_patch_content(
             McpErrorCode.PATCH_TARGET_NOT_FOUND,
             msg,
             extra={"closest_match": closest},
+            closest_match=closest,
+            field="original_text",
             hint="Verify exact whitespace and indentation, or inspect closest_match suggestions.",
+            fix_hint=(
+                "Target text not found in document. "
+                "Inspect closest_match suggestions for exact whitespace/indentation."
+            ),
+            cli_example=(
+                'kanban-cli-docs update --id="<id>" '
+                '--original-text="<snippet from closest_match>" --replacement-text="<new>"'
+            ),
         )
 
     if count > 1:
@@ -330,7 +349,16 @@ def _diff_patch_content(
             McpErrorCode.PATCH_TARGET_AMBIGUOUS,
             msg,
             extra={"line_hints": line_hints, "count": count},
+            field="original_text",
             hint="Include unique surrounding lines to disambiguate the target region.",
+            fix_hint=(
+                f"Target text appears {count} times at lines {line_hints}. "
+                "Include unique surrounding lines in original_text to disambiguate."
+            ),
+            cli_example=(
+                'kanban-cli-docs update --id="<id>" '
+                '--original-text="<unique context>" --replacement-text="<new>"'
+            ),
         )
 
     return current_body.replace(original_text, replacement_text, 1)
@@ -489,14 +517,43 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
     # =========================================================================
     if sticky_info is not None and target_type == "DOC":
         if sticky_info.get("is_promoted_stub") or sticky_info.get("promoted_to_doc_id"):
-            msg = f"Sticky '{clean_id}' has already been promoted to a document"
-            raise KbMcpError(McpErrorCode.ALREADY_PROMOTED, msg)
+            raw_prom = sticky_info.get("promoted_to_doc")
+            promoted_doc: dict[str, Any] = raw_prom if isinstance(raw_prom, dict) else {}
+            target_doc_key = str(
+                promoted_doc.get("root_page_canonical_key")
+                or promoted_doc.get("id")
+                or sticky_info.get("promoted_to_doc_id")
+                or clean_id
+            )
+            msg = f"Sticky '{clean_id}' has already been promoted to document '{target_doc_key}'"
+            raise KbMcpError(
+                McpErrorCode.ALREADY_PROMOTED,
+                msg,
+                extra={"target_doc_key": target_doc_key},
+                field="id",
+                fix_hint=(
+                    f"Sticky '{clean_id}' has already been promoted to Doc '{target_doc_key}'. "
+                    "Use update on that Doc instead."
+                ),
+                cli_example=f'kanban-cli-docs update --id="{target_doc_key}"',
+            )
 
         current_sha = _clean_etag(sticky_info.get("body_sha256") or sticky_info.get("etag"))
         if if_match and if_match != current_sha:
             msg = f"ETag mismatch: client provided '{if_match}', current is '{current_sha}'"
             raise KbMcpError(
-                McpErrorCode.CONFLICT_ETAG, msg, hint=f"Current fresh ETag is {current_sha}"
+                McpErrorCode.CONFLICT_ETAG,
+                msg,
+                hint=f"Current fresh ETag is {current_sha}",
+                extra={"current_etag": current_sha},
+                fix_hint=(
+                    "Sticky was modified concurrently. "
+                    f"Retry with current ETag: {current_sha}"
+                ),
+                cli_example=(
+                    f'kanban-cli-docs update --id="{clean_id}" --type=DOC '
+                    f'--if-match="{current_sha}"'
+                ),
             )
 
         parent_doc_id: str | None = None
@@ -584,7 +641,18 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
             if if_match and if_match != current_sha:
                 msg = f"ETag mismatch: client provided '{if_match}', current is '{current_sha}'"
                 raise KbMcpError(
-                    McpErrorCode.CONFLICT_ETAG, msg, hint=f"Current fresh ETag is {current_sha}"
+                    McpErrorCode.CONFLICT_ETAG,
+                    msg,
+                    hint=f"Current fresh ETag is {current_sha}",
+                    extra={"current_etag": current_sha},
+                    fix_hint=(
+                        "Sticky was modified concurrently. "
+                        f"Retry with current ETag: {current_sha}"
+                    ),
+                    cli_example=(
+                        f'kanban-cli-docs update --id="{clean_id}" '
+                        f'--if-match="{current_sha}"'
+                    ),
                 )
             patch_payload["body_markdown"] = content
 
@@ -657,7 +725,18 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
         if if_match and if_match != current_sha:
             msg = f"ETag mismatch: client provided '{if_match}', current is '{current_sha}'"
             raise KbMcpError(
-                McpErrorCode.CONFLICT_ETAG, msg, hint=f"Current fresh ETag is {current_sha}"
+                McpErrorCode.CONFLICT_ETAG,
+                msg,
+                hint=f"Current fresh ETag is {current_sha}",
+                extra={"current_etag": current_sha},
+                fix_hint=(
+                    "Document was modified concurrently. "
+                    f"Retry with current ETag: {current_sha}"
+                ),
+                cli_example=(
+                    f'kanban-cli-docs update --id="{clean_id}" '
+                    f'--if-match="{current_sha}"'
+                ),
             )
         doc_patch_payload["body_markdown"] = content
 

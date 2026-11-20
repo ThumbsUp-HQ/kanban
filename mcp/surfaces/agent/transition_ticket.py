@@ -136,13 +136,33 @@ async def transition_ticket(
     if arguments.get("verification_proof") is not None:
         payload["verification_proof"] = arguments["verification_proof"]
 
-    resp_data = await active_client.request(
-        "POST",
-        f"/api/v1/issues/{identifier}/transition",
-        json_data=payload,
-        subject_token=subject_token,
-        mcp_session_id=session_id,
-    )
+    try:
+        resp_data = await active_client.request(
+            "POST",
+            f"/api/v1/issues/{identifier}/transition",
+            json_data=payload,
+            subject_token=subject_token,
+            mcp_session_id=session_id,
+        )
+    except KbMcpError as exc:
+        if exc.code == McpErrorCode.INVALID_TRANSITION and exc.valid_options:
+            first_state = exc.valid_options[0]
+            opts_str = ", ".join(str(s) for s in exc.valid_options)
+            raise KbMcpError(
+                McpErrorCode.INVALID_TRANSITION,
+                exc.message,
+                hint=exc.hint,
+                field="to_state",
+                valid_options=exc.valid_options,
+                did_you_mean=exc.did_you_mean,
+                fix_hint=exc.fix_hint or f"Allowed target states: {opts_str}",
+                cli_example=(
+                    f'kanban-cli-agent transition_ticket --identifier="{identifier}" '
+                    f'--to-state="{first_state}"'
+                ),
+                extra=exc.extra,
+            ) from None
+        raise
 
     if not isinstance(resp_data, dict):
         msg = "Invalid response from upstream transition endpoint"

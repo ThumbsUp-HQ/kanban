@@ -166,11 +166,41 @@ def _map_cycle_error(exc: KbMcpError) -> KbMcpError:
     code_str = exc.code.value if hasattr(exc.code, "value") else str(exc.code)
     msg = exc.message
     if code_str in ("INVALID_CYCLE_TRANSITION", "INVALID_TRANSITION"):
-        return KbMcpError(McpErrorCode.INVALID_TRANSITION, msg)
+        valid_opts = ["upcoming", "started", "completed"]
+        return KbMcpError(
+            McpErrorCode.INVALID_TRANSITION,
+            msg,
+            field="action",
+            valid_options=valid_opts,
+            fix_hint=(
+                "Cycle state transition must follow monotonicity: "
+                "upcoming -> started -> completed"
+            ),
+            cli_example=(
+                'kanban-cli-admin manage_cycles_and_modules --action=update_cycle '
+                '--cycle="<id>"'
+            ),
+        )
     if code_str == "MODULES_DISABLED":
-        return KbMcpError(McpErrorCode.MODULES_DISABLED, msg)
+        return KbMcpError(
+            McpErrorCode.MODULES_DISABLED,
+            msg,
+            fix_hint=(
+                "Modules are disabled for this project. "
+                "Enable modules in project settings first."
+            ),
+            cli_example='kanban-cli-admin architect_project --action=update --project="<project>"',
+        )
     if code_str == "NOT_FOUND":
-        return KbMcpError(McpErrorCode.NOT_FOUND, msg)
+        return KbMcpError(
+            McpErrorCode.NOT_FOUND,
+            msg,
+            fix_hint="Cycle or module not found. Verify identifier or list project cycles/modules.",
+            cli_example=(
+                'kanban-cli-admin manage_cycles_and_modules --action=list '
+                '--project="<project>"'
+            ),
+        )
     return exc
 
 
