@@ -36,6 +36,7 @@
   padding: 2px 4px;
   border-radius: var(--radius-sm, 4px);
   transition: background-color 100ms ease;
+  gap: var(--space-2, 8px);
 }
 
 .custom-fields-rail-row:hover {
@@ -43,13 +44,28 @@
 }
 
 .custom-fields-rail-label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1, 4px);
   font-size: 13px;
   color: var(--fg-secondary, #4b5563);
   font-weight: 500;
-  flex: 0 1 120px;
+  flex: 0 1 auto;
+  min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.custom-fields-rail-label-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.custom-fields-rail-label .field-help-hint {
+  flex-shrink: 0;
 }
 
 .custom-fields-rail-pill {
@@ -58,18 +74,21 @@
   gap: 6px;
   background-color: var(--bg-surface, #ffffff);
   border: 1px solid var(--border-subtle, #e5e7eb);
-  border-radius: 9999px;
+  border-radius: var(--radius-full, 9999px);
   padding: 2px 8px 2px 4px;
   font-size: 12px;
-  max-width: calc(100% - 130px);
+  flex-shrink: 0;
+  max-width: 100%;
+}
+
+.custom-fields-rail-pill .emoji-hint {
+  flex-shrink: 0;
 }
 
 .custom-fields-rail-value {
   display: inline-flex;
   align-items: center;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
   color: var(--fg-primary, #111827);
   font-size: 12px;
 }
@@ -80,12 +99,13 @@
   justify-content: center;
   width: 18px;
   height: 18px;
+  flex-shrink: 0;
   padding: 0;
   border: none;
   background: transparent;
   color: var(--fg-muted, #525866);
   cursor: pointer;
-  border-radius: 50%;
+  border-radius: var(--radius-full, 9999px);
   font-size: 13px;
   line-height: 1;
   transition: transform 150ms ease, color 150ms ease;
@@ -283,10 +303,12 @@
   align-items: center;
   gap: 4px;
   padding: 2px 6px;
-  border-radius: 9999px;
+  border-radius: var(--radius-full, 9999px);
   font-size: 11px;
   font-weight: 600;
   border: 1px solid transparent;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .custom-field-severity--low {
@@ -1408,15 +1430,3 @@
   margin-top: var(--space-1);
 }
 
-/* Properties rail custom field label layout */
-.custom-fields-rail-label {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-1);
-}
-
-.custom-fields-rail-label-text {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}

@@ -1,6 +1,6 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan15-rc1-825368b6
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan15-rc2-04ce3074
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
@@ -26,78 +26,53 @@ Name                               Stmts   Miss Branch BrPart  Cover   Missing
 kanban/custom_fields/executor.py     584     18    252     19    96%   121->159, 150->152, 155->121, 165, 259-260, 263->276, 293, 309, 333->337, 350, 354-355, 379, 385, 387, 393, 428->433, 430->433, 433->441, 435->441, 438-439, 442->478, 473-474, 788->821, 1030-1031
 ------------------------------------------------------------------------------
 TOTAL                                584     18    252     19    96%
-============================= 61 passed in 28.63s ==============================
+============================= 61 passed in 34.58s ==============================
 
 ======================================================================
-VITEST FRONTEND UNIT TEST & COVERAGE RESULTS (src/features/custom-fields)
+VITEST FRONTEND UNIT TEST & COVERAGE RESULTS (src/features/custom-fields & src/components/help)
 ======================================================================
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan15-rc1-825368b6/kanban/web
+
+> @kanban/web@0.1.0 test:coverage /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan15-rc2-04ce3074/kanban/web
+> vitest run --coverage src/features/custom-fields/ src/components/help/FieldHelpHint.test.tsx
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan15-rc2-04ce3074/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/custom-fields/__tests__/presets.test.ts (3 tests) 16ms
- ✓ src/features/custom-fields/__tests__/CustomFieldsStudio.test.tsx (2 tests) 63ms
- ✓ src/features/custom-fields/__tests__/FlavorDecisionMatrix.test.tsx (5 tests) 191ms
- ✓ src/features/custom-fields/__tests__/PresetGallery.test.tsx (6 tests) 271ms
- ✓ src/features/custom-fields/__tests__/CustomFieldValue.test.tsx (32 tests) 393ms
-stderr | src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx > EscalationApprovalPanel > displays Submitting... while request approval mutation is in flight
-An update to EscalationApprovalPanel inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-An update to EscalationApprovalPanel inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-
-stderr | src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx > CustomFieldsRailSection > deduplicates rapid clicks on refresh by returning early while in flight
-An update to CustomFieldsRailSectionInner inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-
- ✓ src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx (23 tests) 762ms
- ✓ src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx (18 tests) 832ms
+ ✓ src/features/custom-fields/__tests__/presets.test.ts (3 tests) 46ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldsStudio.test.tsx (2 tests) 103ms
+ ✓ src/features/custom-fields/__tests__/FlavorDecisionMatrix.test.tsx (5 tests) 272ms
+ ✓ src/features/custom-fields/__tests__/PresetGallery.test.tsx (6 tests) 597ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldValue.test.tsx (32 tests) 463ms
+ ✓ src/components/help/FieldHelpHint.test.tsx (23 tests) 709ms
+ ✓ src/features/custom-fields/__tests__/EscalationApprovalPanel.test.tsx (23 tests) 870ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldsRailSection.test.tsx (18 tests) 931ms
    ✓ CustomFieldsRailSection (18)
-     ✓ renders literal section header and rows with 🧪 popover metadata 323ms
- ✓ src/features/custom-fields/__tests__/api.test.ts (30 tests) 44ms
- ✓ src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx (38 tests) 2952ms
+     ✓ renders literal section header and rows with 🧪 popover metadata 328ms
+ ✓ src/features/custom-fields/__tests__/api.test.ts (30 tests) 38ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx (38 tests) 3401ms
 
- Test Files  9 passed (9)
-      Tests  157 passed (157)
-   Start at  08:36:28
-   Duration  6.08s (environment 50%, tests 26%, import 16%, transform 4%, worker 4%)
+ Test Files  10 passed (10)
+      Tests  180 passed (180)
+   Start at  10:01:43
+   Duration  7.52s (environment 49%, tests 24%, import 19%, transform 5%, worker 3%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   99.66 |    96.84 |     100 |     100 |                   
- ...tionEditor.tsx |     100 |    95.31 |     100 |     100 | ...46,501-522,555 
- ...FieldValue.tsx |   99.14 |    98.16 |     100 |     100 | 36,283            
- ...ailSection.tsx |     100 |     98.3 |     100 |     100 | 60                
- ...eldsStudio.tsx |     100 |      100 |     100 |     100 |                   
- ...rovalPanel.tsx |   98.79 |    95.55 |     100 |     100 | 102-114,130,144   
- ...sionMatrix.tsx |     100 |      100 |     100 |     100 |                   
- PresetGallery.tsx |     100 |    95.23 |     100 |     100 | 45                
- api.ts            |     100 |    97.91 |     100 |     100 | 253               
- presets.ts        |     100 |      100 |     100 |     100 |                   
+All files          |   99.72 |    96.62 |     100 |     100 |                   
+ components/help   |     100 |    95.45 |     100 |     100 |                   
+  ...dHelpHint.tsx |     100 |    95.45 |     100 |     100 | 220,255,271,342   
+ .../custom-fields |   99.66 |    96.84 |     100 |     100 |                   
+  ...ionEditor.tsx |     100 |    95.31 |     100 |     100 | ...46,501-522,555 
+  ...ieldValue.tsx |   99.14 |    98.16 |     100 |     100 | 36,283            
+  ...ilSection.tsx |     100 |     98.3 |     100 |     100 | 60                
+  ...ldsStudio.tsx |     100 |      100 |     100 |     100 |                   
+  ...ovalPanel.tsx |   98.79 |    95.55 |     100 |     100 | 102-114,130,144   
+  ...ionMatrix.tsx |     100 |      100 |     100 |     100 |                   
+  ...etGallery.tsx |     100 |    95.23 |     100 |     100 | 45                
+  api.ts           |     100 |    97.91 |     100 |     100 | 253               
+  presets.ts       |     100 |      100 |     100 |     100 |                   
 -------------------|---------|----------|---------|---------|-------------------

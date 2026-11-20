@@ -1,8 +1,8 @@
-KAN-15 LIVE FULL-STACK VERIFICATION PROOF (ZERO MOCKS)
+KAN-15 LIVE FULL-STACK VERIFICATION PROOF (ZERO MOCKS - R2)
 Target Container: kanban-liveqa-2 (http://localhost:18952)
-Commit Under Test: 5998e9ab
+Commit Under Test: 23ae056d
 Mode: standalone_embedded_pg (PostgreSQL 16 with FORCE ROW LEVEL SECURITY, UID 65532 uvicorn)
-Timestamp: 2026-11-20T12:40Z - 12:42Z
+Timestamp: 2026-11-20T14:23Z - 14:25Z
 
 ================================================================================
 1. SETUP & ISSUE PROVISIONING (/setup -> TOTP AAL2 -> KAN-1)
@@ -13,9 +13,8 @@ Timestamp: 2026-11-20T12:40Z - 12:42Z
   * Project: Kanban Project (key: KAN)
   * User: admin (SERVER_ADMIN) + enrolled TOTP AAL2 + confirmed 10 recovery codes
   * Landed on: http://localhost:18952/
-- Created issue KAN-1 via POST /api/v1/projects/KAN/issues -> HTTP 201
-  Response snippet:
-  {"id":"01a1f8f8-d691-...","key":"KAN-1","summary":"KAN-1 SLA Security Baseline Verification","priority":{"slug":"high","label":"High","emoji":"⚡"},"state":{"id":"...","name":"Backlog","group":"backlog"}}
+- Created issue KAN-1 via POST /api/v1/projects/KAN/issues -> HTTP 201 (due_date=2026-11-21, priority=high):
+  {"id":"01a1f956-e2e1-706c-b1de-064a66aceb16","object_id":"01a1f956-e2e1-706c-b1de-064a66aceb16","key":"KAN-1","summary":"KAN-1 SLA Security Baseline Verification","priority":{"slug":"high","label":"High","emoji":"⚡"},"state":{"id":"01a1f956-e134-7b9e-aac7-8dedf90280e7","name":"Backlog","group":"backlog"},"due_date":"2026-11-21"}
 
 ================================================================================
 2. PROBLEM 1 & 3: 4-FLAVOR DECISION MATRIX, 6-PRESET GALLERY & CSP AUDIT
@@ -25,16 +24,14 @@ Route: http://localhost:18952/projects/KAN/settings/custom-fields
   * Flavor cards rendered: 4 (Scalar Value <1ms, Formula Expression <5ms, WebAssembly <25ms, Project Rollup / nsjail <=3,000ms)
   * Preset cards rendered: 6 (CVSS 3.1 / 4.0 Score, Total Issues in Project, Days Until Due / SLA Breach, Blocker Count, Sub-Issue Completion %, Git PR Link Badge)
 - Inline JSX style="..." audit inside [data-testid="custom-fields-editor-layout"]:
-  {"toolkitPresent":true,"inlineStyledCount":0,"inlineStyledDetails":[]}
-- Browser runtime error counts across full run:
-  consoleErrors: [] (0)
-  pageErrors: [] (0)
-  cspViolations: [] (0)
-  serverErrors: [] (0)
-- Mobile 390x844 horizontal overflow check:
-  {"scrollWidth":390,"clientWidth":390,"innerWidth":390} -> PASS (scrollWidth === 390)
+  {"present":true,"count":0,"styled":[]}
+- Viewport metrics:
+  * Tablet 768x1024: {"scrollWidth":768,"innerWidth":768} -> PASS
+  * Mobile 390x844: {"scrollWidth":390,"clientWidth":390,"innerWidth":390} -> PASS (scrollWidth === 390)
 - Dark theme check via Topbar theme selector:
   document.documentElement.dataset.theme === "dark" -> PASS
+- Browser runtime error counts across full run:
+  consoleErrors=0, pageErrors=0, cspViolations=0, serverErrors=0
 
 ================================================================================
 3. PROBLEM 1 & 2: <FieldHelpHint /> TIMING, ESCAPE FOCUS RESTORE & POPOVER CONTENT
@@ -43,65 +40,57 @@ Trigger tested: [data-testid="hint-format-metadata"] (Format Metadata JSON)
 - Hover delay test:
   * At 40ms after hover: openAt40ms = 0
   * At 260ms after hover: openAt260ms = 1 (180ms hover delay confirmed)
-- Keyboard Tab focus test (0ms open) + Escape focus restore:
-  * Focus trigger -> openAtFocus = 1 (0ms open confirmed)
-  * Press Escape -> openAfterEsc = 0, activeAfterEsc = "hint-format-metadata" (focus restored to trigger)
+- Keyboard focus test (0ms open) + Escape focus restore:
+  * Focus trigger -> openAtFocus0ms = 1 (0ms open confirmed)
+  * Press Escape -> openAfterEsc = 0, activeElement = "hint-format-metadata" (focus restored to trigger)
 - Popover content inspection ([data-testid="hint-format-metadata-popover"]):
-  * Title: "Format Metadata JSON"
-  * Summary: "JSON configuration dictionary tailoring display options for the selected output format."
-  * <dl> Valid Config Values: hasDl=true, dlDtCount=7 (text, number, badge, markdown_snippet, url, json_table, severity_pill)
-  * Example block: {"maximum_fraction_digits":2,"unit_suffix":" pts"}
+  * hasDl=true, dtCount=7, dts=["text","number","badge","markdown_snippet","url","json_table","severity_pill"]
   * Footer link: docHref="/docs/custom-fields#format-metadata", docText="More info ->"
 
 ================================================================================
-4. DIRTY FORM CONFIRM, UNDO STRIP, POSTGRES SAVE & KAN-1 RAIL HINT
+4. DIRTY FORM CONFIRM, UNDO STRIP, POSTGRES SAVE & ALL 3 FORMULA EXECUTIONS (R2)
 ================================================================================
 - Typed "My Custom Dirty Field" into [data-testid="field-name-input"]
-- Clicked [data-testid="use-preset-btn-days-until-due-sla"] (Days Until Due / SLA Breach)
+- Clicked [data-testid="use-preset-btn-days-until-due-sla"]
 - Dirty confirmation modal [data-testid="preset-dirty-confirm-dialog"] appeared -> confirmed overwrite
-- Undo strip [data-testid="preset-undo-strip"] appeared ("Applied preset Days Until Due / SLA Breach.")
-- Clicked Undo ([data-testid="preset-undo-btn"]) -> field-name-input reverted to "My Custom Dirty Field"
-- Re-applied preset Days Until Due / SLA Breach and clicked Save ([data-testid="save-definition-btn"]):
-  POST /api/v1/projects/KAN/custom-fields -> HTTP 201
-  {"id":"01a1f8fa-2ffa-7588-8823-2f648e57ac20","workspace_id":"01a1f8f8-d681-7d2b-b3f6-ef040d72d154","project_id":"01a1f8f8-d691-7cf8-bf9d-81fd074e0095","slug":"days-until-due-sla","name":"Days Until Due / SLA Breach","tier":"wasm","output_format":"severity_pill","output_format_metadata":{},"script_source":"formula: issue.priority === \"URGENT\" ? {\"level\": \"critical\", \"score\": 9.5, \"label\": \"SLA Breached\"} : (issue.priority === \"HIGH\" ? {\"level\": \"high\", \"score\": 7.0, \"label\": \"Due in 1 Day\"} : {\"level\": \"low\", \"score\": 2.0, \"label\": \"Within SLA\"})","wasm_module_sha256":null,"script_version":1,"target_scope":"PROJECT","credential_mode":"INVOKING_USER","egress_allowlist":[],"manifest_sha256":"19d14c3d07f1250275c2fc31801f8d7c20eaebee12d73272ed8eeeee9a6871b0","is_enabled":true,"approval_status":"default_no_escalation","required_approver_tier":null}
-- Navigated to http://localhost:18952/projects/KAN/issues?peek=KAN-1:
-  * [data-testid="custom-fields-rail-section"] mounted
-  * [data-testid="rail-field-hint-days-until-due-sla"] focused -> popover [data-testid="rail-field-hint-days-until-due-sla-popover"] opened cleanly
+- Undo strip [data-testid="preset-undo-strip"] appeared -> clicked [data-testid="preset-undo-btn"] -> reverted to "My Custom Dirty Field"
+- Applied and saved ALL THREE formula presets via UI -> POST /api/v1/projects/KAN/custom-fields -> HTTP 201 Created:
+  1. days-until-due-sla (id=01a1f956-f32a-7c6c-8198-57f0aa46973f, output_format=severity_pill) -> HTTP 201
+  2. blocker-count (id=01a1f958-846a-785d-9d39-8076bde9d7d2, output_format=badge) -> HTTP 201
+  3. sub-issue-completion (id=01a1f958-8580-7510-b855-1e3c55c425e8, output_format=number) -> HTTP 201
+
+- Direct API execution against KAN-1 (POST /api/v1/issues/KAN-1/custom-fields/{id}/execute):
+  1. days-until-due-sla -> HTTP 200:
+     {"field_id":"01a1f956-f32a-7c6c-8198-57f0aa46973f","slug":"days-until-due-sla","name":"Days Until Due / SLA Breach","output_format":"severity_pill","output_format_metadata":{},"value":{"level":"high","score":7.0,"label":"Due Soon"},"computed_at":"2026-11-20T14:25:18.379776+00:00","last_latency_ms":1,"tier":"wasm","token_scope":"PROJECT","credential_mode":"INVOKING_USER","status":"computed"}
+  2. blocker-count -> HTTP 200:
+     {"field_id":"01a1f958-846a-785d-9d39-8076bde9d7d2","slug":"blocker-count","name":"Blocker Count","output_format":"badge","output_format_metadata":{"color_token":"danger","allowed_labels":["Blocked","Clear"]},"value":"Clear","computed_at":"2026-11-20T14:25:18.414638+00:00","last_latency_ms":1,"tier":"wasm","token_scope":"PROJECT","credential_mode":"INVOKING_USER","status":"computed"}
+  3. sub-issue-completion -> HTTP 200:
+     {"field_id":"01a1f958-8580-7510-b855-1e3c55c425e8","slug":"sub-issue-completion","name":"Sub-Issue Completion %","output_format":"number","output_format_metadata":{"unit_suffix":"%","maximum_fraction_digits":1},"value":0.0,"computed_at":"2026-11-20T14:25:18.453657+00:00","last_latency_ms":1,"tier":"wasm","token_scope":"PROJECT","credential_mode":"INVOKING_USER","status":"computed"}
+
+- Browser KAN-1 Drawer refresh via CustomFieldsRailSection (http://localhost:18952/projects/KAN/issues?peek=KAN-1):
+  1. [data-testid="refresh-field-days-until-due-sla"] -> HTTP 200 (status="computed") -> rendered class="custom-field-severity-pill custom-field-severity--high" text="7.0Due Soon"
+  2. [data-testid="refresh-field-blocker-count"] -> HTTP 200 (status="computed") -> rendered class="custom-field-badge custom-field-badge--danger" text="Clear"
+  3. [data-testid="refresh-field-sub-issue-completion"] -> HTTP 200 (status="computed") -> rendered class="custom-field-number" text="0 %"
+  * Zero 422 SCRIPT_OUTPUT_SCHEMA_INVALID responses!
+  * [data-testid="rail-field-hint-days-until-due-sla"] focused -> [data-testid="rail-field-hint-days-until-due-sla-popover"] opened cleanly alongside all 3 evaluated pills.
 
 ================================================================================
-5. LIVE EXECUTION FAILURE ON SAVED PRESET (REAL BACKEND DEFECT FOUND)
+5. CAPTURED SCREENSHOTS (docs/qa/KAN-15/screenshots/)
 ================================================================================
-- Clicked [data-testid="refresh-field-days-until-due-sla"] on KAN-1 Drawer:
-  POST /api/v1/issues/KAN-1/custom-fields/01a1f8fa-2ffa-7588-8823-2f648e57ac20/execute
-  HTTP Status: 422
-  Response Body:
-  {"type":"urn:kanban:problem:SCRIPT_OUTPUT_SCHEMA_INVALID","title":"Invalid Output Schema","status":422,"code":"SCRIPT_OUTPUT_SCHEMA_INVALID","detail":"Script output failed validation for 'severity_pill': Expected dict for 'severity_pill' output format, got NoneType","request_id":"6cd74e9d96ea44918cdcd694ff181305"}
-- Container log (kanban-liveqa-2):
-  Client error [SCRIPT_OUTPUT_SCHEMA_INVALID / 422] on POST /api/v1/issues/KAN-1/custom-fields/01a1f8fa-2ffa-7588-8823-2f648e57ac20/execute: Script output failed validation for 'severity_pill': Expected dict for 'severity_pill' output format, got NoneType | cause=TypeError: Expected dict for 'severity_pill' output format, got NoneType
-- Root Cause Analysis:
-  1. kanban/web/src/features/custom-fields/presets.ts:97 defines Days Until Due / SLA Breach with nested ternary returning dict literals containing colons (":"):
-     formula: issue.priority === "URGENT" ? {"level": "critical", "score": 9.5, "label": "SLA Breached"} : (issue.priority === "HIGH" ? {"level": "high", "score": 7.0, "label": "Due in 1 Day"} : {"level": "low", "score": 2.0, "label": "Within SLA"})
-  2. kanban/custom_fields/executor.py:80-83 (_eval_safe_formula) normalizes ternaries via single-pass regex re.match(r"^(.*?)\s*\?\s*(.*?)\s*:\s*(.*)$", expr), which splits on the first ":" inside {"level": "critical", ...}, producing invalid Python syntax so ast.parse raises SyntaxError and returns None.
-
-================================================================================
-6. CAPTURED SCREENSHOTS (docs/qa/KAN-15/screenshots/)
-================================================================================
-- live-kan15-presets-matrix-desktop-light.png (1440x900 light, 4-Flavor Matrix)
-- live-kan15-presets-matrix-desktop-dark.png (1440x900 dark, 4-Flavor Matrix)
-- live-kan15-presets-gallery-desktop-light.png (1440x900 light, 6-Preset Starter Gallery)
-- live-kan15-presets-matrix-mobile-light.png (390x844 mobile light, scrollWidth=390)
-- live-kan15-field-help-popover-desktop-light.png (1440x900 light, FieldHelpHint popover)
-- live-kan15-field-help-popover-desktop-dark.png (1440x900 dark, FieldHelpHint popover)
-- live-kan15-dirty-confirm-modal-desktop-light.png (1440x900 light, dirty confirmation modal)
-- live-kan15-dirty-confirm-undo-desktop-light.png (1440x900 light, undo toast strip)
-- live-kan15-rail-hint-desktop-light.png (1440x900 light, KAN-1 drawer rail FieldHelpHint + Unavailable pill)
+- live-kan15-presets-matrix-desktop-light.png (1440x900 light)
+- live-kan15-presets-matrix-desktop-dark.png (1440x900 dark)
+- live-kan15-presets-matrix-tablet-light.png (768x1024 light)
+- live-kan15-presets-matrix-mobile-light.png (390x844 light, scrollWidth=390)
+- live-kan15-field-help-popover-desktop-light.png (1440x900 light)
+- live-kan15-field-help-popover-desktop-dark.png (1440x900 dark)
+- live-kan15-dirty-confirm-undo-desktop-light.png (1440x900 light)
+- live-kan15-rail-evaluated-pills-desktop-light.png (1440x900 light, KAN-1 Drawer with severity_pill + badge + number + (?) rail hint)
 
 ================================================================================
 VERDICT PER SCOPED PROBLEM (KAN-15)
 ================================================================================
 - Problem 1 (Accessible <FieldHelpHint /> component): PASS
 - Problem 2 (Attached <FieldHelpHint /> across Studio & Issue Rail): PASS
-- Problem 3 (4-Flavor Matrix & 6-Preset Starter Gallery - valid executable configs): FAIL
-  (UI/Matrix/Dirty Confirm/Undo/Save PASS, but Days Until Due / SLA Breach preset fails live server execution with HTTP 422 SCRIPT_OUTPUT_SCHEMA_INVALID: Expected dict for 'severity_pill' output format, got NoneType)
+- Problem 3 (4-Flavor Matrix & 6-Preset Starter Gallery - valid executable configs): PASS
 
-LIVE_STACK_VERDICT: FAIL
+LIVE_STACK_VERDICT: PASS
