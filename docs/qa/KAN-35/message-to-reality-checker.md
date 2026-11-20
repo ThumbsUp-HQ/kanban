@@ -126,29 +126,30 @@ All 5 scoped problems have been completely implemented, tested, and verified wit
 
 ---
 
-## 5. Zero-Mock Live Full-Stack Verification (`kanban-liveqa-2`, commit `5998e9ab`)
+## 5. Zero-Mock Live Full-Stack Verification (`kanban-liveqa-2`, commit `23ae056d`, R2)
 
 **Target:** `http://localhost:18952` (`standalone_embedded_pg` with PostgreSQL 16 `FORCE ROW LEVEL SECURITY`, UID 65532 `uvicorn`)
 **Raw Proof Log:** `docs/qa/KAN-35/live-fullstack-proof.txt`
 **Screenshots (`docs/qa/KAN-35/screenshots/`):**
 - `live-kan35-board-before-mutation-desktop-light.png` (`1440x900` light)
-- `live-kan35-board-after-realtime-desktop-light.png` (`1440x900` light)
+- `live-kan35-board-after-realtime-desktop-light.png` (`1440x900` light, `KAN-8` created + `Alt+ArrowRight` + MCP transition to `In Progress`)
 - `live-kan35-board-after-realtime-desktop-dark.png` (`1440x900` dark)
-- `live-kan35-board-after-realtime-mobile-light.png` (`390x844` mobile light, `scrollWidth === 390`)
-- `live-kan35-drawer-realtime-comment-desktop-light.png` (`1440x900` light)
-- `live-kan35-fail-optimistic-move-crash.png` (`1440x900`, live React crash modal on optimistic BoardView move)
+- `live-kan35-board-after-realtime-tablet-light.png` (`768x1024` light)
+- `live-kan35-board-after-realtime-mobile-light.png` (`390x844` light, `scrollWidth === 390`)
+- `live-kan35-drawer-realtime-comment-desktop-light.png` (`1440x900` light, live MCP comment in `KAN-8` Drawer)
 
-### Summary & Live Defect Finding
+### R2 Live Verification Summary (All 5 Problems PASS)
 - **Problems 1, 2, 3, and 4 (Outbox, Lifespan, Delivery-Time RLS & Replay, Channel Normalization, Zero-Reload MCP->WS Push):** **PASS**
-  - Non-admin `WORKSPACE_MEMBER` (`@member`) minted a scoped `/mcp/agent` key (`201`) and executed `create_ticket` (`KAN-2`), `transition_ticket` (`Todo` -> `In Progress`), and `add_comment` via `/mcp/agent/w/kanban/p/KAN` with `0` `outbox_events_select_rls` errors.
-  - Browser received `issue.created`, `issue.transitioned`, and `comment.created` over `/ws` and updated `BoardView` and `IssueSurface` Drawer live with `0` page reloads.
+  - Non-admin `WORKSPACE_MEMBER` (`@member`) minted a scoped `/mcp/agent` key (`201`) and executed `create_ticket`, `transition_ticket`, and `add_comment` via `/mcp/agent/w/kanban/p/KAN` with `0` `outbox_events_select_rls` errors.
   - WebSocket `/ws` anti-harvesting returned `subscribe_error` `code: "NOT_FOUND"` for `project:PRIV`, `project:<PRIV_UUID>`, and `project:DOESNOTEXIST`.
-  - Live `@member` `/ws` received `0` frames during `@admin` `PRIV-1` create + transition, and SSE `GET /sse?channels=workspace:<WS_UUID>,project:KAN` with `Last-Event-ID: 1` replayed authorized `KAN` events (`2, 3, 4, 7, 8, 9`) with `0` `PRIV` events (`5, 6` withheld). (Note: SSE endpoint is `/sse`, where unauthorized channels are silently omitted with `200` `: open` per `test_sse_resume.py`, while `/api/v1/sse` returns `404`.)
-- **Problem 5 (Reactive TanStack Query Migration & Optimistic `BoardView` Move Settlement):** **FAIL**
-  - Moving a card in `BoardView` (`Alt+ArrowRight` / `Alt+ArrowLeft`) invokes `useOptimisticMutation` on shared `qk.issues(projectKey, {})` using `applyOptimisticMove` (`kanban/web/src/features/board/boardApi.ts:130-143`), which writes a `BoardIssue` into `qk.issues(projectKey, {})` **without** the nested `state: { id, name, group }` property required by `IssueItem`.
-  - Immediately upon optimistic update, `IssuesWorkspaceRoute` (`kanban/web/src/features/views/viewRegistry.tsx:717`) crashes with `TypeError: Cannot read properties of undefined (reading 'name')`, displaying the full-screen `Application Error Detected` modal (`live-kan35-fail-optimistic-move-crash.png`).
+  - Live `@member` `/ws` received `0` frames during `@admin` `PRIV-1` create + transition and received `issue.created` for `KAN-10`; SSE `GET /sse?channels=workspace:<WS_UUID>,project:KAN` with `Last-Event-ID: 1` replayed authorized `KAN` events with `0` `PRIV` events leaked.
+- **Problem 5 (Reactive TanStack Query Migration & Optimistic `BoardView` Move Settlement):** **PASS**
+  - Out-of-band `/mcp/agent` `create_ticket` (`KAN-8` in `Backlog`) rendered live on `BoardView`.
+  - Moving `KAN-8` via keyboard `Alt+ArrowRight` (`Backlog` -> `Todo`, `POST /api/v1/issues/KAN-8/move` -> `200`, `applyOptimisticMove` on shared `qk.issues(projectKey, {})`) succeeded with **ZERO `TypeError` / ZERO `app-error-modal` crash** (`pageErrors=0`, `consoleErrors=0`).
+  - Immediate out-of-band `/mcp/agent` `transition_ticket` (`Todo` -> `In Progress`) updated `BoardView` live with `0` freeze and `0` reloads (`docLoads=2` unchanged, `bootId` unchanged).
+  - List View (`?layout=list`) rendered `KAN-9` live on out-of-band `/mcp/agent` `create_ticket`, and `KAN-8` Drawer (`IssueSurface`) rendered `"Realtime comment from MCP agent (R2 verified)"` live on out-of-band `/mcp/agent` `add_comment` with `0` reloads.
 
-**`LIVE_STACK_VERDICT: RESOLVED via fix/KAN-35-rc1`**
+**`LIVE_STACK_VERDICT: PASS`**
 
 ---
 

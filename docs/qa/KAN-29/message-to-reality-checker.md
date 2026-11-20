@@ -180,3 +180,17 @@ Tests: 51 passed (51)
 - **Frontend Unit Tests:** 45/45 passed across `DeleteAuditModal.test.tsx` (11 tests) and `ProjectSettingsPage.test.tsx` (34 tests) with 98.88% Statements / 97.24% Branch / 100% Functions / 100% Lines on `DeleteAuditModal.tsx`.
 - **Static Quality & Gate Checks:** 0 errors across Ruff, Ruff Format, MyPy, Lint-Imports, TypeScript (`tsc -b --noEmit`), and ESLint (`--max-warnings 0`).
 - **Design System Invariants:** 0 inline styles (`style=...`), 0 em-dashes and 0 en-dashes across all modified files.
+
+---
+
+## 7. Live Full-Stack Verification R2 (Zero-Mock Against Standalone Container, Commit 23ae056d)
+
+- **Target:** `http://localhost:18951` (`kanban-liveqa-1`, PostgreSQL 16 with `FORCE ROW LEVEL SECURITY`, `fix/KAN-29-rc1` merged into `main`)
+- **Proof Log:** `docs/qa/KAN-29/live-fullstack-proof.txt`
+- **LIVE_STACK_VERDICT: PASS**
+- **Verified Live Flows (0 mocks, 0 `page.route`, 0 `context.route`, 0 console/page errors):**
+  - `<ColorPresetPicker />` renders all 12 WCAG presets + `Advanced Color Picker...` with synchronized native `<input type="color">` and `#RRGGBB` hex input (`0` inline `style` attributes) across Desktop `1440x900` Light/Dark, Tablet `768x1024` Light, and Mobile `390x844` Light (`scrollWidth=390`), plus live inline State `PATCH` editing (`live-kan29-color-picker-*.png`, `live-kan29-inline-edit-desktop-light.png`).
+  - Provisioned custom state `"QA Gate"`, labels `"sec-review"` and `"verified-clean"`, issue `KAN-4`, Saved View `"QA Gate Security Focus"` (populating `display_props_json["full_filters"]`), and enabled `WorkflowTransitionHook` `"qa-gate-proof-check"` (`is_enabled: true`).
+  - Unsafe `DELETE /api/v1/projects/KAN/states/{id}` without replacement returns `409 ACTIVE_AUTOMATION_HOOK_REQUIRES_STATE`.
+  - Opening `DeleteAuditModal` on `"QA Gate"` displays `qa-gate-proof-check (Enabled)` (fixed from `(Disabled)`), `1 active hook(s) require migration`, and omits the empty `"None (Delete without reassignment)"` option (`requiresReplacement` enforced) across Light and Dark (`live-kan29-delete-audit-modal-desktop-light.png`, `live-kan29-delete-audit-modal-desktop-dark.png`).
+  - Confirming reassignment deletion in UI for both `"QA Gate"` (`-> In Progress`) and `"sec-review"` (`-> verified-clean`) migrates `KAN-4`, `qa-gate-proof-check` (`from_state="In Progress"`, `is_enabled=true`), and `GET /api/v1/views/{view_id}` + PostgreSQL `views.filters_json` / `views.display_props_json["full_filters"]` with zero references to the deleted IDs.

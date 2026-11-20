@@ -1,17 +1,20 @@
 # UI/UX Specialist Review: KAN-41
 
-- **Ticket:** KAN-41 (Fix create_ticket children JSON Schema, add MCP agent instructions, and emit child parameter hints)
-- **Branch:** `feat/KAN-41`
-- **Worktree:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan41-3ac81419`
-- **Auditor:** Clean-Room UI/UX Specialist (`ui-spec-2`)
-- **Review Date:** 2026-11-20
-- **Status:** STATUS: APPROVED
+## Audit Metadata
+- Ticket ID: KAN-41 (Fix create_ticket children JSON Schema, add MCP agent instructions, and emit child parameter hints)
+- Target Directory: `/home/adamoutler/kanban/docs/qa/KAN-41`
+- Target Branch: `main`
+- Merged HEAD SHA: `23ae056d`
+- Auditor: Clean-Room UI/UX Specialist (`ui-spec-2`)
+- Review Date: 2026-11-20
+- Visual Evidence: N/A - Non-UI Ticket (MCP Protocol and Server Schema)
+- Status: STATUS: APPROVED
 
 ---
 
 ## 1. Executive Summary
 
-A clean-room UI/UX and Agent/Developer Experience (DX) review of branch `feat/KAN-41` (commit `1d2fd39cb2c8f6bd03de89565fc4b692a7a18671`) was performed.
+A clean-room UI/UX and Agent/Developer Experience (DX) review of ticket KAN-41 on `main` (commit `23ae056d`) was performed.
 
 KAN-41 addresses critical schema and contract defects in the Model Context Protocol (MCP) server:
 1. Replaces the invalid recursive root schema ref in `CREATE_TICKET_SCHEMA` with a dedicated `$defs.child` schema omitting `project` and `parent`.
@@ -97,6 +100,6 @@ While KAN-41 touches backend MCP protocol and schema modules, its output directl
 
 ## 6. Formal Signoff
 
-The UI/UX, DX, and ergonomics implementation for **KAN-41** meets all architectural, design token, typography, and test requirements.
+The UI/UX, DX, and ergonomics implementation for **KAN-41** on `main` (commit `23ae056d`) meets all architectural, design token, typography, and test requirements.
 
 **STATUS: APPROVED**

@@ -61,3 +61,20 @@ All 4 scoped problems are completely resolved with zero regressions, >=95% test 
 - Static analysis and typecheck logs: [build-or-typecheck.txt](file:///home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan12-257137e5/docs/qa/KAN-12/build-or-typecheck.txt)
 - Changed files manifest: [changed-files-manifest.txt](file:///home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan12-257137e5/docs/qa/KAN-12/changed-files-manifest.txt)
 - Full diff: [git-diff.patch](file:///home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan12-257137e5/docs/qa/KAN-12/git-diff.patch)
+
+
+---
+
+## Live Full-Stack Verification (`kanban-liveqa-3`, `http://localhost:18953`, commit `23ae056d`)
+
+- **Container & Runtime:** Verified end-to-end against real standalone FastAPI + PostgreSQL 16 (`FORCE ROW LEVEL SECURITY`) inside `kanban-liveqa-3` (`http://localhost:18953`, commit `23ae056d`), ZERO mocks (`0` `mockApi`, `0` `page.route`, `0` `context.route`), `0` console errors, `0` page errors, `0` HTTP 5xx responses.
+- **Problem 1 (Air-Gap Topbar Reactive Sync):** On `/workspaces/settings#tab-general`, toggled Air-Gap Mode ON and saved -> Topbar immediately rendered the Air-Gap indicator WITHOUT `page.reload()`; toggled Air-Gap Mode OFF and saved -> Topbar indicator cleared reactively WITHOUT `page.reload()`.
+- **Problems 2 & 3 (Auth Studio Group `@slug` & Zero `Reset Password` on `GROUP`/`AGENT`):** Created `"Infra Team"` group via `/workspaces/settings#tab-groups` and `"Triage Bot"` agent. In `/admin/auth` (`Users & Permissions`), `"Infra Team"` displayed `@infra-team` (zero raw UUIDs) and both `GROUP` (`@infra-team`) and `AGENT` (`@triage-bot`) rows rendered `0` `Reset Password` buttons while `USER` rows (`@admin`, `@viewer`) retained `Reset Password`.
+- **Problem 4 (`#tab-*` DOM IDs & Hash Navigation):** Verified `id="tab-general"`, `id="tab-members"`, and `id="tab-groups"` DOM elements on `/workspaces/settings`, `#tab-groups` initial active tab rendering, and clicking `#tab-members` updating `window.location.hash` to `#tab-members`.
+- **Live Artifacts:**
+  - `docs/qa/KAN-12/live-fullstack-proof.txt` (`LIVE_STACK_VERDICT: PASS`)
+  - `docs/qa/KAN-12/screenshots/live-kan12-auth-studio-groups-desktop-light.png`
+  - `docs/qa/KAN-12/screenshots/live-kan12-auth-studio-groups-desktop-dark.png`
+  - `docs/qa/KAN-12/screenshots/live-kan12-workspace-tabs-airgap-sync-desktop-light.png`
+  - `docs/qa/KAN-12/screenshots/live-kan12-workspace-tabs-tablet-light.png`
+  - `docs/qa/KAN-12/screenshots/live-kan12-auth-studio-mobile-light.png` (`390x844`, `scrollWidth === 390`)

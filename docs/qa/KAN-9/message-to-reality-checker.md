@@ -65,3 +65,19 @@ Status: READY FOR AUDIT
    - 0 inline React `style={...}` props (CSP `style-src 'self'` compliant).
    - UTF-16 lone-surrogate validation enforced.
    - Isolated hermetic test fixtures used exclusively (`KB_TEST_PGSOCKET_DIR="/tmp/kb-pgsock-kan9"`).
+
+
+## Live Full-Stack Verification (`kanban-liveqa-3`, `http://localhost:18953`, commit `23ae056d`)
+
+- **Container & Runtime:** Verified end-to-end against real standalone FastAPI + PostgreSQL 16 (`FORCE ROW LEVEL SECURITY`) inside `kanban-liveqa-3` (`http://localhost:18953`, commit `23ae056d`), ZERO mocks (`0` `mockApi`, `0` `page.route`, `0` `context.route`), `0` console errors, `0` page errors, `0` HTTP 5xx responses.
+- **Problem 1 (`GET /docs/tree` & `POST /docs/pages` on fresh project `KAN` with 0 existing docs):** `GET /api/v1/projects/KAN/docs/tree` returned `200 OK` (`[]`) and `POST /api/v1/projects/KAN/docs/pages` returned `201 Created` (`docs/kanban-core-documentation/live-qa-architecture-overview`) with ZERO `REGISTER_OBJECT_NULL_ARGUMENT` errors.
+- **Problem 2 (Offline Sticky Promotion Preview):** Created sticky in `KAN` (`POST /api/v1/projects/KAN/stickies` -> `201`) and called `POST /api/v1/stickies/{id}/preview-promotion` with zero LLM providers configured -> `200 OK` deterministic Markdown preview (`kb-sticky-doc-proposal/v1`), verified interactively in browser modal.
+- **Problem 3 (`/stickies` Route Alias):** Both `/w/kanban/p/KAN/stickies` and `/projects/KAN/stickies` rendered the Project Overview Stickies canvas cleanly (`0` 404s).
+- **Problem 4 (Mobile Docs Initial Backdrop):** At `390x844`, `.docs-sheet-backdrop` count on initial load was `0` (`scrollWidth === 390`), and tapping `Pages Tree` (`toggle-tree-sheet-btn`) opened the tree sheet cleanly (`1` backdrop after tap).
+- **Live Artifacts:**
+  - `docs/qa/KAN-9/live-fullstack-proof.txt` (`LIVE_STACK_VERDICT: PASS`)
+  - `docs/qa/KAN-9/screenshots/live-kan9-fresh-docs-desktop-light.png`
+  - `docs/qa/KAN-9/screenshots/live-kan9-fresh-docs-desktop-dark.png`
+  - `docs/qa/KAN-9/screenshots/live-kan9-stickies-route-and-preview-desktop-light.png`
+  - `docs/qa/KAN-9/screenshots/live-kan9-docs-tablet-light.png`
+  - `docs/qa/KAN-9/screenshots/live-kan9-mobile-docs-unblocked-light.png`

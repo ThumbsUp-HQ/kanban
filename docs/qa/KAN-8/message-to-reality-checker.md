@@ -79,3 +79,22 @@ Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05
    - `lint-imports`: 2 kept, 0 broken
    - `tsc -b --noEmit`: 0 errors
    - `eslint . --max-warnings 0`: 0 warnings, 0 errors
+
+
+---
+
+## Live Full-Stack Verification (`kanban-liveqa-3`, `http://localhost:18953`, commit `23ae056d`)
+
+- **Container & Runtime:** Verified end-to-end against real standalone FastAPI + PostgreSQL 16 (`FORCE ROW LEVEL SECURITY`) inside `kanban-liveqa-3` (`http://localhost:18953`, commit `23ae056d`), ZERO mocks (`0` `mockApi`, `0` `page.route`, `0` `context.route`), `0` console errors, `0` page errors, `0` HTTP 5xx responses.
+- **Problem 1 (Empty Query Assignee Suggestions):** `GET /api/v1/projects/KAN/assignee-suggestions?q=&limit=10` and omitted `q` both returned `200 OK` with project candidate assignees (`0` `422` errors).
+- **Problem 2 (Saved Views Mapping):** Created saved view (`POST /api/v1/projects/KAN/views` -> `201`) and verified `/projects/KAN/views` renders the real saved view card cleanly.
+- **Problem 3 (`@viewer` Read-Only Table Guard):** Provisioned `@viewer` (`WORKSPACE_GUEST` + `VIEWER` on `KAN`, effective capabilities `["VIEW", "COMMENT"]`), logged in as `@viewer`, navigated to `/projects/KAN/issues?layout=table` across Desktop (`1440x900`), Tablet (`768x1024`), and Mobile (`390x844`): `document.querySelectorAll('table select').length === 0` on all 3 viewports while `KAN-1` rendered read-only.
+- **Problem 4 (`AccessPill` Object ID & Popover):** Created issue `KAN-1`, opened drawer `/projects/KAN/issues/KAN-1`, clicked `AccessPill`, observed `GET /api/v1/objects/{uuid}/access` -> `200 OK`, and verified the Access Inspector popover opened in Light and Dark themes.
+- **Live Artifacts:**
+  - `docs/qa/KAN-8/live-fullstack-proof.txt` (`LIVE_STACK_VERDICT: PASS`)
+  - `docs/qa/KAN-8/screenshots/live-kan8-saved-views-desktop-light.png`
+  - `docs/qa/KAN-8/screenshots/live-kan8-access-pill-desktop-light.png`
+  - `docs/qa/KAN-8/screenshots/live-kan8-access-pill-desktop-dark.png`
+  - `docs/qa/KAN-8/screenshots/live-kan8-table-viewer-readonly-desktop-light.png`
+  - `docs/qa/KAN-8/screenshots/live-kan8-table-viewer-readonly-tablet-light.png`
+  - `docs/qa/KAN-8/screenshots/live-kan8-table-viewer-readonly-mobile-light.png`

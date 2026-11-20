@@ -130,28 +130,29 @@ All static validation commands pass with exit code 0:
 
 ---
 
-## 5. Zero-Mock Live Full-Stack Verification (`kanban-liveqa-2`, commit `5998e9ab`)
+## 5. Zero-Mock Live Full-Stack Verification (`kanban-liveqa-2`, commit `23ae056d`, R2)
 
 **Target:** `http://localhost:18952` (`standalone_embedded_pg` with PostgreSQL 16 `FORCE ROW LEVEL SECURITY`, UID 65532 `uvicorn`)
 **Raw Proof Log:** `docs/qa/KAN-15/live-fullstack-proof.txt`
 **Screenshots (`docs/qa/KAN-15/screenshots/`):**
-- `live-kan15-presets-matrix-desktop-light.png` (`1440x900` light)
-- `live-kan15-presets-matrix-desktop-dark.png` (`1440x900` dark)
-- `live-kan15-presets-gallery-desktop-light.png` (`1440x900` light, 6-Preset Starter Gallery)
+- `live-kan15-presets-matrix-desktop-light.png` (`1440x900` light, 4-Flavor Matrix)
+- `live-kan15-presets-matrix-desktop-dark.png` (`1440x900` dark, 4-Flavor Matrix)
+- `live-kan15-presets-matrix-tablet-light.png` (`768x1024` tablet light, 4-Flavor Matrix)
 - `live-kan15-presets-matrix-mobile-light.png` (`390x844` mobile light, `scrollWidth === 390`)
 - `live-kan15-field-help-popover-desktop-light.png` (`1440x900` light, `FieldHelpHint` popover)
 - `live-kan15-field-help-popover-desktop-dark.png` (`1440x900` dark, `FieldHelpHint` popover)
-- `live-kan15-dirty-confirm-modal-desktop-light.png` (`1440x900` light, dirty-form modal)
-- `live-kan15-dirty-confirm-undo-desktop-light.png` (`1440x900` light, undo toast strip)
-- `live-kan15-rail-hint-desktop-light.png` (`1440x900` light, `KAN-1` Drawer `CustomFieldsRailSection` hint)
+- `live-kan15-dirty-confirm-undo-desktop-light.png` (`1440x900` light, 6-Preset Gallery + undo strip)
+- `live-kan15-rail-evaluated-pills-desktop-light.png` (`1440x900` light, `KAN-1` Drawer `CustomFieldsRailSection` showing live evaluated `severity_pill`, `badge`, `number` pills and `(?)` rail hint)
 
-### Summary & Live Defect Finding
-- **UI, Accessibility, CSP, Persistence, and Rail Hints (Problems 1 & 2, Matrix/Gallery UI):** **PASS**
-  - `0` inline JSX `style="..."` attributes, `0` CSP violations, `0` console/page/5xx errors, `scrollWidth === 390` on mobile.
+### R2 Live Verification Summary (All 3 Problems PASS)
+- **Problems 1 & 2 (`<FieldHelpHint />` & Studio/Rail Integration):** **PASS**
+  - `0` inline JSX `style="..."` attributes, `0` CSP violations, `0` console/page/5xx errors, `scrollWidth === 390` on mobile, `scrollWidth === 768` on tablet.
   - `FieldHelpHint` `180ms` hover delay (`0` at 40ms, `1` at 260ms), `0ms` keyboard focus open, `Escape` close + focus restore, `<dl>` valid values, and `More info ->` verified live.
-  - Dirty-form confirmation modal, Undo revert, `POST /api/v1/projects/KAN/custom-fields` (`201 Created`), and `KAN-1` Drawer rail hint verified live.
-- **Problem 3 Preset Execution Initial Finding (Now Resolved):**
-  - Executing the saved `Days Until Due / SLA Breach` preset originally returned HTTP 422 `SCRIPT_OUTPUT_SCHEMA_INVALID` due to JS ternary colon splitting inside dict literals.
+- **Problem 3 (4-Flavor Matrix, 6-Preset Starter Gallery & Live Formula Execution):** **PASS**
+  - Dirty-form confirmation modal, Undo strip revert, and `POST /api/v1/projects/KAN/custom-fields` (`201 Created`) verified for all 3 `formula` presets (`days-until-due-sla`, `blocker-count`, `sub-issue-completion`).
+  - Executing all 3 presets against `KAN-1` (with `due_date` set) via `POST /api/v1/issues/KAN-1/custom-fields/{id}/execute` AND in `KAN-1` Drawer (`CustomFieldsRailSection` refresh) returned **HTTP `200` (`status: "computed"`)** with **ZERO `422 SCRIPT_OUTPUT_SCHEMA_INVALID`** and rendered live `severity_pill` (`7.0 Due Soon`), `badge` (`Clear`), and `number` (`0 %`) pills.
+
+**`LIVE_STACK_VERDICT: PASS`**
 
 ---
 

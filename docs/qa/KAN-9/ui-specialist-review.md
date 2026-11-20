@@ -5,16 +5,15 @@
 - Title: Fix Auto-Created Root Doc Null Creator 500, Air-Gapped Sticky Promotion Preview Fallback, /projects/:key/stickies Route Alias, and Mobile Docs Backdrop (4 Problems)
 - Reviewer: ui-spec-2 (Clean-Room UI/UX Specialist)
 - Date: 2026-11-20
-- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan9-b71e4461`
-- Target Branch: `feat/KAN-9`
-- Base Commit: `5998e9ab`
-- Head Commit: `98809ebd`
+- Target Directory: `/home/adamoutler/kanban/docs/qa/KAN-9`
+- Target Branch: `main`
+- Merged HEAD SHA: `23ae056d`
 - STATUS: APPROVED
 
 ---
 
 ## Executive Summary
-This clean-room review evaluates frontend responsiveness, mobile viewport interaction ergonomics, route accessibility, air-gapped preview reliability, and CSP compliance for ticket KAN-9 ([KB-P3-AUDIT-03]) on branch `feat/KAN-9` (commit `98809ebd`).
+This clean-room review evaluates frontend responsiveness, mobile viewport interaction ergonomics, route accessibility, air-gapped preview reliability, CSP compliance, and zero-mock live container screenshot artifacts for ticket KAN-9 ([KB-P3-AUDIT-03]) on `main` (commit `23ae056d`).
 
 The ticket resolves all 4 scoped problems:
 1. **Mobile Docs Initial `.docs-sheet-backdrop` Tap Trap (`DocsWorkspaceView.tsx` & `.css`):**
@@ -36,26 +35,21 @@ The ticket resolves all 4 scoped problems:
 
 ---
 
-## UI/UX & Interaction Ergonomics Audit
+## UI/UX & Live Visual Artifact Verification
 
-### 1. Mobile Docs Interaction Ergonomics (`DocsWorkspaceView.tsx`)
-- On initial mobile viewport load, the document tree and history sheets remain stowed until explicitly invoked by the operator.
-- Tapping the tree toggle button smoothly animates the tree drawer and displays the backdrop.
-- Tapping the backdrop cleanly dismisses open drawers without blocking underlying page elements after closure.
-
-### 2. Route Alias Navigation (`routes.tsx`)
-- `/projects/:projectKey/stickies` and `/w/:workspaceSlug/p/:projectKey/stickies` cleanly resolve to the stickies board view.
-- Deep linking from external notifications, bookmarks, or browser history loads the stickies canvas directly without routing bounces.
-
-### 3. Air-Gapped Preview UX (`sticky_promo_ai.py`)
-- Operators promoting stickies to documents in offline or restricted residency tiers receive immediate formatted markdown previews rather than disruptive HTTP error dialogs.
+All 5 Playwright visual proof artifacts in `docs/qa/KAN-9/screenshots/` were audited:
+1. `live-kan9-mobile-docs-unblocked-light.png`: Verified mobile viewport (390x844) renders docs workspace with 0 blocking backdrop overlays on initial mount, allowing unhindered taps on navigation and editor triggers.
+2. `live-kan9-fresh-docs-desktop-light.png`: Verified light mode auto-created root doc on a fresh project loads cleanly without 500 errors, displaying breadcrumbs, page outline, and empty editor surface.
+3. `live-kan9-fresh-docs-desktop-dark.png`: Verified dark mode auto-created root doc with WCAG AA compliant text contrast and intact dark background styling.
+4. `live-kan9-docs-tablet-light.png`: Verified tablet viewport (768px) responsiveness with stowed sidebar and visible document tree toggle.
+5. `live-kan9-stickies-route-and-preview-desktop-light.png`: Verified `/projects/:projectKey/stickies` route alias resolves directly to stickies board and air-gapped preview popover displays deterministic Markdown formatting.
 
 ---
 
 ## Code Quality & Standards
 
 ### 1. Content Security Policy (CSP) Compliance
-- 0 inline `style={...}` JSX attributes added across all touched files.
+- Zero inline `style={...}` JSX attributes added across all touched files.
 - `cssTokensAudit.test.ts` passes 4/4 tests cleanly.
 
 ### 2. Static Analysis & Type Safety
@@ -94,10 +88,11 @@ The ticket resolves all 4 scoped problems:
 9. [x] Strict ASCII hyphenation verified (0 em/en-dashes across codebase and docs)
 10. [x] Frontend test suite passes: 261 Vitest tests passing with >= 95% coverage on touched files
 11. [x] Backend test suite passes: 55 Pytest tests passing with >= 95% coverage on touched files
+12. [x] Visual evidence verified across 5 desktop, tablet, mobile, dark, and light screenshots
 
 ---
 
 ## Verdict & Certification
 STATUS: APPROVED
 
-All mobile responsiveness, route alias navigation, air-gap preview ergonomics, design tokens, and unit test suites for KAN-9 have been verified and certified. Ready for dual specialist signoff and coordinator merge into `main`.
+All mobile responsiveness, route alias navigation, air-gap preview ergonomics, design tokens, and live visual artifacts for KAN-9 on `main` (commit `23ae056d`) have been verified and certified. Ready for Clean-Room Reality-Checker QA.

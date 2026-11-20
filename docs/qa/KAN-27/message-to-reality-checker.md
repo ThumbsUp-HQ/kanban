@@ -134,3 +134,19 @@
 - Full Auth test suite: PASSED (292/292).
 - Frontend Vitest: PASSED (66/66).
 - Static quality checks (Ruff, MyPy, lint-imports, check_no_dashes, tsc, eslint): 100% clean, 0 errors, 0 em/en-dashes.
+
+---
+
+## 7. Live Full-Stack Verification R2 (Zero-Mock Against Standalone Container, Commit 23ae056d)
+
+- **Target:** `http://localhost:18951` (`kanban-liveqa-1`, PostgreSQL 16 with `FORCE ROW LEVEL SECURITY`, migration head `p4_23_oidc_link_intent_fk`)
+- **Proof Log:** `docs/qa/KAN-27/live-fullstack-proof.txt`
+- **LIVE_STACK_VERDICT: PASS**
+- **Verified Live Flows (0 mocks, 0 `page.route`, 0 `context.route`, 0 console/page errors):**
+  - Empty external providers notice + Server Admin `Configure Providers in Admin Auth Studio ->` (`/admin/auth`) link (`live-kan27-empty-providers-desktop-light.png`).
+  - Real HTTPS OIDC provider on `172.17.0.1:40085` (RS256 JWKS + PKCE S256 + strict TLS CA verification) with enabled `corp-sso` (`OIDC`) and `corp-ldap` (`LDAP`) cards.
+  - Unauthenticated `GET /api/v1/auth/oidc/corp-sso/start?link_intent_id=...` and `GET /api/v1/auth/cards/corp-sso/start?link_intent_id=...` ignore `link_intent_id` (`oidc_auth_requests.link_intent_id` remains `NULL`).
+  - `@projadmin` (`PROJECT_ADMIN`, `aal_level=1`) calling `POST /api/v1/auth/identities/link/start` receives `403 AAL2_REQUIRED`.
+  - Zero-factor `WORKSPACE_MEMBER` (`@alice_33yuf`, `aal_level=1`) clicking `+ Connect Corp SSO` succeeds: `POST /api/v1/auth/identities/link/start` returns `HTTP 200` with `Set-Cookie` forwarded (0 FK errors), real IdP `/authorize` + `/token` + `/jwks` + `/api/v1/auth/oidc/corp-sso/callback` returns `302` to `/settings/profile?linked=corp-sso`, preserves exact `session_id` and `aal_level === 1`, and displays the confirmation banner and `corp-sso (OIDC)` row in `GET /api/v1/auth/identities` and UI.
+  - `@admin` (`AAL2`) attempting to link the same `(issuer, sub)` via real OIDC callback redirects cleanly (`302`) to `/settings/profile?link_error=IDENTITY_ALREADY_LINKED`.
+  - Screenshots verified via `read_file` across Desktop `1440x900` Light/Dark, Tablet `768x1024` Light, Mobile `390x844` Light (`scrollWidth=390`), LDAP credentials modal Light/Dark, and linked confirmation banner + OIDC row Light/Dark (`docs/qa/KAN-27/screenshots/live-kan27-*.png`).

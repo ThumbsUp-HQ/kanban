@@ -1,4 +1,6 @@
 {
+  "verified_commit": "23ae056d",
+  "wiki_commit": "6220420",
   "agent_initialize_instructions": "Use human keys (e.g. KAN, KAN-142, @handle). Pass identifier='help' (or project='help' on create_ticket) for live project options. On create_ticket, set 'project' and optional 'parent' on the root object only; omit 'project' and 'parent' inside children[].",
   "create_ticket_input_schema": {
     "type": "object",
@@ -156,22 +158,8 @@
     ],
     "additionalProperties": false
   },
-  "validation_failed_child_project_hint": {
-    "error": {
-      "code": "VALIDATION_FAILED",
-      "message": "Parameter 'project' is only allowed on the root ticket",
-      "hint": "Omit 'project' inside children[]; child issues automatically inherit the root project.",
-      "fix_hint": "Omit 'project' inside children[]; child issues automatically inherit the root project.",
-      "cli_example": "kanban-cli-agent create_ticket --project=KAN --summary=\"<summary>\""
-    }
-  },
-  "validation_failed_child_parent_hint": {
-    "error": {
-      "code": "VALIDATION_FAILED",
-      "message": "Parameter 'parent' is only allowed on the root ticket",
-      "hint": "Omit 'parent' inside children[]; each child's parent is its enclosing node in children[].",
-      "fix_hint": "Omit 'parent' inside children[]; each child's parent is its enclosing node in children[].",
-      "cli_example": "kanban-cli-agent create_ticket --project=KAN --summary=\"<summary>\""
-    }
-  }
+  "validation_failed_child_project_raw_yaml": "error:\n  code: VALIDATION_FAILED\n  message: Parameter 'project' is only allowed on the root ticket\n  hint: Omit 'project' inside children[]; child issues automatically inherit the root project.\n  fix_hint: Omit 'project' inside children[]; child issues automatically inherit the root project.\n  cli_example: kanban-cli-agent create_ticket --project=KAN --summary=\"<summary>\"\n",
+  "validation_failed_child_parent_raw_yaml": "error:\n  code: VALIDATION_FAILED\n  message: Parameter 'parent' is only allowed on the root ticket\n  hint: Omit 'parent' inside children[]; each child's parent is its enclosing node in children[].\n  fix_hint: Omit 'parent' inside children[]; each child's parent is its enclosing node in children[].\n  cli_example: kanban-cli-agent create_ticket --project=KAN --summary=\"<summary>\"\n",
+  "live_3level_tree_raw_yaml": "created: 3\nroot: {key: KAN-2, summary: KAN41 Live 3-Level Root, state: Backlog, priority: none}\nchildren: [{key: KAN-3, summary: KAN41 Live Child Level 2, parent: KAN-2}, {key: KAN-4, summary: KAN41 Live Grandchild Level\n      3, parent: KAN-3}]\n",
+  "live_project_help_raw_yaml": "tool: create_ticket\nproject: KAN\nparams:\n  project: KAN\n  summary: str\n  priority: urgent | high | medium | low | none\n  parent: KAN-142 | uuid (root only)\n  children: array of child objects (require summary; omit project and parent; max 49/node, <=50 total, depth <=6)\n"
 }

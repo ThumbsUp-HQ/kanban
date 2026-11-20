@@ -86,3 +86,21 @@ Total suite: **43 passed in 9.17s** with 0 errors and 0 failures.
 - `wiki-diff.patch`: Unified diff of wiki commit `6220420`.
 - `changed-files-manifest.txt`: List of all touched source files and wiki references.
 - `message-to-reality-checker.md`: This forensic QA summary packet.
+
+
+---
+
+## 6. Live Full-Stack Verification (`kanban-liveqa-3`, `http://localhost:18953`, commit `23ae056d`, wiki `6220420`)
+
+- **Container & Runtime:** Minted real `/mcp/agent` API key (`POST /api/v1/auth/mcp-keys` -> `201`) and executed live JSON-RPC 2.0 HTTP requests against `POST http://localhost:18953/mcp/agent` (commit `23ae056d`, wiki `6220420`) backed by real PostgreSQL 16 (`FORCE ROW LEVEL SECURITY`).
+- **Checks Executed & Passed (7/7):**
+  1. `initialize` -> `result.instructions` contains `"omit 'project' and 'parent' inside children[]"`.
+  2. `tools/list` -> `create_ticket.inputSchema.properties.children.items == {"$ref": "#/$defs/child"}`, `$defs.child.required == ["summary"]`, and `"project"` / `"parent"` absent from `$defs.child.properties`.
+  3. `tools/call` `create_ticket` 3-level hierarchy (`root -> child -> grandchild`) -> `isError: false`, `created: 3` (`KAN-2`, `KAN-3`, `KAN-4`).
+  4. `tools/call` `create_ticket` with `children: [{"summary": "Bad", "project": "KAN"}]` -> `isError: true`, `VALIDATION_FAILED`, actionable `hint`.
+  5. `tools/call` `create_ticket` with `children: [{"summary": "Bad", "parent": "KAN-1"}]` -> `isError: true`, `VALIDATION_FAILED`, actionable `hint`.
+  6. `tools/call` `create_ticket` with depth `7` nested `children` -> `isError: true`, `VALIDATION_FAILED` (`Tree depth (7) exceeds maximum hierarchy depth of 6`, zero `RecursionError`).
+  7. `tools/call` `create_ticket` with `{"project": "KAN", "summary": "help"}` -> `isError: false`, live project `KAN` help output.
+- **Live Artifacts:**
+  - `docs/qa/KAN-41/live-fullstack-proof.txt` (`LIVE_STACK_VERDICT: PASS`)
+  - `docs/qa/KAN-41/contract-sample.json` (updated with live `/mcp/agent` responses from commit `23ae056d` / wiki `6220420`)
