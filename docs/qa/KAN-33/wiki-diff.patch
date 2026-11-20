@@ -1,0 +1,776 @@
+diff --git a/Admin-Custom-Scripted-Fields-and-Sandbox.md b/Admin-Custom-Scripted-Fields-and-Sandbox.md
+index 997775c..8930d46 100644
+--- a/Admin-Custom-Scripted-Fields-and-Sandbox.md
++++ b/Admin-Custom-Scripted-Fields-and-Sandbox.md
+@@ -1,4 +1,4 @@
+-# Admin Custom Scripted Fields and Sandboxed Execution
++# [Architectural] Admin Custom Scripted Fields and Sandboxed Execution
+ 
+ ## Overview
+ 
+diff --git a/Architecture-Delta-and-Missing-Features.md b/Architecture-Delta-and-Missing-Features.md
+index 555d640..881a3c8 100644
+--- a/Architecture-Delta-and-Missing-Features.md
++++ b/Architecture-Delta-and-Missing-Features.md
+@@ -1,4 +1,4 @@
+-# 👍kanban: Architecture Specification Delta & Gap Analysis
++# [Architectural] 👍kanban: Architecture Specification Delta & Gap Analysis
+ 
+ ## Executive Summary
+ 
+diff --git a/Blinking-Cursor-Sparkle-Completion-Engine.md b/Blinking-Cursor-Sparkle-Completion-Engine.md
+index d108f9d..0bb713e 100644
+--- a/Blinking-Cursor-Sparkle-Completion-Engine.md
++++ b/Blinking-Cursor-Sparkle-Completion-Engine.md
+@@ -1,4 +1,4 @@
+-# Blinking Cursor Sparkle Completion Engine
++# [Informational] Blinking Cursor Sparkle Completion Engine
+ 
+ ## Overview
+ 
+diff --git a/Canonical-Markdown-and-Safe-Media-Pipeline.md b/Canonical-Markdown-and-Safe-Media-Pipeline.md
+index 5cabe70..59c5f4c 100644
+--- a/Canonical-Markdown-and-Safe-Media-Pipeline.md
++++ b/Canonical-Markdown-and-Safe-Media-Pipeline.md
+@@ -1,4 +1,4 @@
+-# Canonical Markdown and Safe Media Pipeline
++# [Architectural] Canonical Markdown and Safe Media Pipeline
+ 
+ ## Overview
+ 
+diff --git a/Clean-DB-Testing-and-Governance-Gates.md b/Clean-DB-Testing-and-Governance-Gates.md
+index 5ffa6b0..8e43f47 100644
+--- a/Clean-DB-Testing-and-Governance-Gates.md
++++ b/Clean-DB-Testing-and-Governance-Gates.md
+@@ -1,4 +1,4 @@
+-# Clean-DB Testing and Governance Gates
++# [Architectural] Clean-DB Testing and Governance Gates
+ 
+ ## Overview
+ 
+diff --git a/Custom-Scripts-and-JSON-Security-Architecture.md b/Custom-Scripts-and-JSON-Security-Architecture.md
+index 775e11d..cbb810a 100644
+--- a/Custom-Scripts-and-JSON-Security-Architecture.md
++++ b/Custom-Scripts-and-JSON-Security-Architecture.md
+@@ -1,4 +1,4 @@
+-# Custom Scripts and JSON Security Architecture
++# [Architectural] Custom Scripts and JSON Security Architecture
+ 
+ ## Overview
+ 
+diff --git a/Enterprise-Whitespace-and-Kanban-Board.md b/Enterprise-Whitespace-and-Kanban-Board.md
+index 2da2f53..9f393e9 100644
+--- a/Enterprise-Whitespace-and-Kanban-Board.md
++++ b/Enterprise-Whitespace-and-Kanban-Board.md
+@@ -1,4 +1,4 @@
+-# Enterprise Whitespace, Semantic Emojis, and Kanban Board
++# [Informational] Enterprise Whitespace, Semantic Emojis, and Kanban Board
+ 
+ ## Overview
+ 
+diff --git a/Feature-Comparison.md b/Feature-Comparison.md
+index 40d979b..bbed07d 100644
+--- a/Feature-Comparison.md
++++ b/Feature-Comparison.md
+@@ -1,4 +1,4 @@
+-# Feature Comparison
++# [Informational] Feature Comparison Matrix (35 Features)
+ 
+ A kanban is just a kanban until you start digging deeper. On the surface, every issue tracker presents identical columns, draggable cards, and basic workflow states. The real architectural divergence begins the moment you inspect paywalled enterprise controls, database-level security invariants, canonical Markdown integrity, and native agent/MCP execution gates. While commercial SaaS and copyleft alternatives lock custom properties, audit logs, Single Sign-On, and AI integrations behind steep per-seat subscription tiers or bloated CRUD APIs, `👍kanban` ships an uncompromising, security-first, agent-first platform under a pure Apache-2.0 license. Below is the full 35-feature technical capability matrix comparing `👍kanban` directly against legacy and modern project management systems.
+ 
+diff --git a/Guide-Custom-Fields.md b/Guide-Custom-Fields.md
+index 5f4edf6..e7813ae 100644
+--- a/Guide-Custom-Fields.md
++++ b/Guide-Custom-Fields.md
+@@ -271,3 +271,55 @@ Custom fields can be scoped at three tiers:
+ - **`SERVER` Scope:** Global fields available across all workspaces.
+ 
+ **Dual-Control Governance:** Escalating a custom field definition from `PROJECT` to `WORKSPACE` or `SERVER` scope (or running with elevated Service Account credentials rather than `INVOKING_USER`) requires cryptographic approval by an administrator of that target tier with active Authenticator Assurance Level 2 (AAL2 / WebAuthn / TOTP) session elevation.
++
++---
++
++## Custom Field Configuration Attributes and Controls
++
++<a id="display-name"></a>
++### Display Name (`#display-name`)
++The human-readable title of the custom field shown on ticket property rails, board cards, and table columns.
++
++<a id="slug"></a>
++### Field Slug (`#slug`)
++The unique, URL-safe ASCII identifier used in formulas, API payloads, and query filters.
++
++<a id="flavors"></a>
++### Field Flavors (`#flavors`)
++Determines the underlying calculation mechanism: `scalar`, `formula`, `wasm`, or `nsjail`.
++
++<a id="sandbox-tier"></a>
++### Execution Sandbox Tier (`#sandbox-tier`)
++Selects between in-process WebAssembly (`wasmtime` Tier A) and containerized Linux namespaces (`nsjail` Tier B). In Standalone mode, `nsjail` is gated.
++
++<a id="credential-mode"></a>
++### Ephemeral Credential Mode (`#credential-mode`)
++Specifies whether the field executes with `INVOKING_USER` permissions or elevated `SERVICE_ACCOUNT` credentials.
++
++<a id="target-scope"></a>
++### Target Scope Tier (`#target-scope`)
++Controls the tenant boundary accessible to the custom field: `PROJECT`, `WORKSPACE`, or `SERVER`.
++
++<a id="output-formats"></a>
++### Output Formats (`#output-formats`)
++Canonical schema used to format and validate the output: `text`, `number`, `badge`, `severity_pill`, `url`, `markdown_snippet`, or `json_table`.
++
++<a id="format-metadata"></a>
++### Format Metadata Configuration (`#format-metadata`)
++JSON metadata configuring format-specific options such as decimal precision, color tokens, and table column schemas.
++
++<a id="script-source"></a>
++### Custom Script Source (`#script-source`)
++The Python AST expression, compiled WebAssembly module, or sandboxed script implementing the field calculation.
++
++<a id="egress-allowlist"></a>
++### Network Egress Allowlist (`#egress-allowlist`)
++Explicit list of destination hosts accessible to `nsjail` tier scripts. Network access is disabled by default via `CLONE_NEWNET`.
++
++<a id="aal2-stepup"></a>
++### Mandatory AAL2 Step-Up (`#aal2-stepup`)
++Administrative modifications and scope escalations require recent multi-factor authentication (AAL2 verified within 900 seconds).
++
++<a id="approvals"></a>
++### Dual-Control Cryptographic Approvals (`#approvals`)
++Escalating a field to workspace or server scope requires explicit cryptographic signing and approval by an administrator of that target tier.
+diff --git a/Hierarchical-Docs-and-Stickies-with-Smart-Promotion.md b/Hierarchical-Docs-and-Stickies-with-Smart-Promotion.md
+index 593a2e8..6beb751 100644
+--- a/Hierarchical-Docs-and-Stickies-with-Smart-Promotion.md
++++ b/Hierarchical-Docs-and-Stickies-with-Smart-Promotion.md
+@@ -1,4 +1,4 @@
+-# Hierarchical Docs, Project Stickies, and Smart Promotion
++# [Informational] Hierarchical Docs, Project Stickies, and Smart Promotion
+ 
+ ## Overview
+ 
+diff --git a/Home.md b/Home.md
+index da0af86..4f10c9b 100644
+--- a/Home.md
++++ b/Home.md
+@@ -8,6 +8,7 @@ Licensed under the strictly permissive **Apache-2.0** license, 👍kanban elimin
+ 
+ ---
+ 
++<a id="system-topology"></a>
+ ## Core System Architecture
+ 
+ ```mermaid
+@@ -111,28 +112,47 @@ For an exhaustive feature-by-feature evaluation across 35 criteria, see the [Fea
+ 
+ ## Complete Table of Contents
+ 
+-### System Architecture Domains
+-1. [System Topology and Multi-Container Architecture](System-Topology-and-Multi-Container-Architecture) - Standalone embedded PostgreSQL Unix socket and 5-network production container stack.
+-2. [Zero-Trust Security and Access Visibility](Zero-Trust-Security-and-Access-Visibility) - PostgreSQL FORCE RLS, dynamic sharing pill, access manifests, and STRIDE threat mitigation.
+-3. [Multi-Card Authentication Studio](Multi-Card-Authentication-Studio) - Pluggable auth cards (OAuth2, LDAP, WebAuthn Passkeys, TOTP, Local Admin) with break-glass protection.
+-4. [Canonical Markdown and Safe Media Pipeline](Canonical-Markdown-and-Safe-Media-Pipeline) - Hostile input sanitization, safe Mermaid rendering, SVG sandboxing, and media proxying.
+-5. [Enterprise Whitespace and Kanban Board](Enterprise-Whitespace-and-Kanban-Board) - 5 native view layouts, 2D swimlanes, sub-16ms drag-and-drop, and the `<EmojiHint>` semantic hover system.
+-6. [Ticket Screen and Work Item Features](Ticket-Screen-and-Work-Item-Features) - 960px peek drawer, 17 enterprise work-item features, properties rail, and 4-tab activity stream.
+-7. [Hierarchical Docs and Stickies with Smart Promotion](Hierarchical-Docs-and-Stickies-with-Smart-Promotion) - ltree page trees, color-coded sticky masonry, and lossless AI-assisted promotion to Docs.
+-8. [Blinking Cursor Sparkle Completion Engine](Blinking-Cursor-Sparkle-Completion-Engine) - Sub-300ms inline Fill-In-the-Middle (FIM) ghost text with surgical right-click disambiguation.
+-9. [Multi-Provider AI Engine and Runners](Multi-Provider-AI-Engine-and-Runners) - OpenAI, Ollama, Gemini integrations, local CLI pipe harnesses (`agy -p`, `codex -p`), and mTLS runners.
+-10. [Three-Surface MCP Server Architecture](Three-Surface-MCP-Server-Architecture) - Dedicated streamable endpoints (`/mcp/agent`, `/mcp/docs`, `/mcp/admin`) with InlineSafeDumper YAML.
+-11. [Universal Object Graph and Link Auditor](Universal-Object-Graph-and-Link-Auditor) - Unified object spine, 13 typed object relationships, and automated invalid link detection/purging.
+-12. [Admin Custom Scripted Fields and Sandbox](Admin-Custom-Scripted-Fields-and-Sandbox) - Wasmtime (Tier A) and nsjail (Tier B) sandboxed execution with cryptographic tier escalation.
+-13. [Scripted Workflows and Transition Helpers](Scripted-Workflows-and-Transition-Helpers) - Synchronous transition validators/mutators and asynchronous AI agent gates.
+-14. [Clean-DB Testing and Governance Gates](Clean-DB-Testing-and-Governance-Gates) - Fast parallel test execution, tmpfs template database, pluggable AI fixtures, and CI/CD validation.
+-15. [Production Promotion and Backup Runbook](Production-Promotion-and-Backup-Runbook) - Single-command standalone promotion, encrypted KBBAK1 backup format, and disaster recovery.
+-16. [Migration and Cutover Runbook](Migration-and-Cutover-Runbook) - 7-phase zero-downtime cutover plan, dry-run reconciliation, and rollback procedures.
+-17. [Real-Time Web and WebSocket Architecture](Real-Time-Web-and-WebSocket-Architecture) - Distributed WebSocket hub, connection throttling, channel subscriptions, and board state synchronization.
+-
+-### Reference Manuals & Verification Matrices
+-- [Feature Comparison Matrix (35 Features)](Feature-Comparison) - Comprehensive capability comparison across 35 features evaluating 👍kanban against Jira, Plane, GitHub, Vibe Kanban, Businessmap, and Codebeamer.
+-- [MCP Tools Reference (27 Tools)](MCP-Tools-Reference) - Exhaustive specification of all 27 MCP tools, parameter schemas, LOD tiers, and destructive token workflows.
+-- [REST API Architecture and OpenAPI Guide](REST-API-Architecture-and-OpenAPI-Guide) - Technical guide to the 184-route FastAPI backend, interactive OpenAPI documentation, and TypeScript SDK.
+-- [User Tasks and QA Verification Matrix](User-Tasks-and-QA-Matrix) - Verification audit mapping tasks UT-01 through UT-16 to live browser checks and screenshot deliverables.
+-- [Architecture Delta and Gap Analysis](Architecture-Delta-and-Missing-Features) - Forensic analysis of specification requirements versus codebase implementation and tracking backlog.
++### Track 1: Step-by-Step Guides
++1. [[Guide] Production Promotion and Backup Runbook](Production-Promotion-and-Backup-Runbook) - Single-command standalone promotion, encrypted KBBAK1 backup format, and disaster recovery.
++2. [[Guide] Legacy Tracker Migration and Cutover Runbook](Migration-and-Cutover-Runbook) - 7-phase zero-downtime cutover plan, dry-run reconciliation, and rollback procedures.
++3. [[Guide] How to Use Custom Fields](Guide-Custom-Fields) - Step-by-step custom fields guide, formulas, wasm/nsjail tiers, and approval workflows.
++4. [[Guide] Scripted Workflows and Transition Helpers](Scripted-Workflows-and-Transition-Helpers) - Synchronous transition validators/mutators and asynchronous AI agent gates.
++5. [[Guide] Multi-Card Authentication Studio and Identity Architecture](Multi-Card-Authentication-Studio) - Pluggable auth cards (OAuth2, LDAP, WebAuthn Passkeys, TOTP, Local Admin) with break-glass protection.
++6. [[Guide] Multi-Provider AI Engine, Execution Harnesses, and Runners](Multi-Provider-AI-Engine-and-Runners) - OpenAI, Ollama, Gemini integrations, local CLI pipe harnesses (`agy -p`, `codex -p`), and mTLS runners.
++7. [[Guide] Three-Surface Model Context Protocol (MCP) Server Architecture](Three-Surface-MCP-Server-Architecture) - Dedicated streamable endpoints (`/mcp/agent`, `/mcp/docs`, `/mcp/admin`) with InlineSafeDumper YAML.
++
++### Track 2: Feature & Field Reference
++1. [[Informational] Studio Configuration Reference](Studio-Configuration-Reference) - Exhaustive field configuration tables and security impact across all 11 👍kanban Studios.
++2. [[Informational] Enterprise Whitespace, Semantic Emojis, and Kanban Board](Enterprise-Whitespace-and-Kanban-Board) - 5 native view layouts, 2D swimlanes, sub-16ms drag-and-drop, and the `<EmojiHint>` semantic hover system.
++3. [[Informational] Ticket Screen, Peek Drawer, and Work Item Architecture](Ticket-Screen-and-Work-Item-Features) - 960px peek drawer, 17 enterprise work-item features, properties rail, and 4-tab activity stream.
++4. [[Informational] Hierarchical Docs, Project Stickies, and Smart Promotion](Hierarchical-Docs-and-Stickies-with-Smart-Promotion) - ltree page trees, color-coded sticky masonry, and lossless AI-assisted promotion to Docs.
++5. [[Informational] Blinking Cursor Sparkle Completion Engine](Blinking-Cursor-Sparkle-Completion-Engine) - Sub-300ms inline Fill-In-the-Middle (FIM) ghost text with surgical right-click disambiguation.
++6. [[Informational] Model Context Protocol (MCP) Tools Reference Manual](MCP-Tools-Reference) - Exhaustive specification of all 27 MCP tools, parameter schemas, LOD tiers, and destructive token workflows.
++7. [[Informational] REST API Architecture and OpenAPI Integration Guide](REST-API-Architecture-and-OpenAPI-Guide) - Technical guide to the 184-route FastAPI backend, interactive OpenAPI documentation, and TypeScript SDK.
++
++### Track 3: Security & Adoption Overview
++1. [[Informational] Role and Permission Matrix](Role-and-Permission-Matrix) - Visual ● / ◐ / ○ role and capability matrix across all 7 principal tiers.
++2. [[Informational] Zero-Trust Security Architecture and Explicit Access Visibility](Zero-Trust-Security-and-Access-Visibility) - PostgreSQL FORCE RLS, dynamic sharing pill, access manifests, and STRIDE threat mitigation.
++3. [[Informational] Feature Comparison Matrix (35 Features)](Feature-Comparison) - Comprehensive capability comparison across 35 features evaluating 👍kanban against Jira, Plane, GitHub, Vibe Kanban, Businessmap, and Codebeamer.
++
++### Track 4: Engineering & Security Architecture
++
++#### Functional Architecture
++1. [[Architectural] System Topology and Multi-Container Architecture](System-Topology-and-Multi-Container-Architecture) - Standalone embedded PostgreSQL Unix socket and 5-network production container stack.
++2. [[Architectural] Universal Object Graph and Invalid Link Auditor](Universal-Object-Graph-and-Link-Auditor) - Unified object spine, 13 typed object relationships, and automated invalid link detection/purging.
++3. [[Architectural] Real-Time Web and WebSocket Architecture](Real-Time-Web-and-WebSocket-Architecture) - Distributed WebSocket hub, connection throttling, channel subscriptions, and board state synchronization.
++4. [[Architectural] Canonical Markdown and Safe Media Pipeline](Canonical-Markdown-and-Safe-Media-Pipeline) - Hostile input sanitization, safe Mermaid rendering, SVG sandboxing, and media proxying.
++5. [[Architectural] Clean-DB Testing and Governance Gates](Clean-DB-Testing-and-Governance-Gates) - Fast parallel test execution, tmpfs template database, pluggable AI fixtures, and CI/CD validation.
++
++#### Security Architecture
++1. [[Architectural] Admin Custom Scripted Fields and Sandboxed Execution](Admin-Custom-Scripted-Fields-and-Sandbox) - Wasmtime (Tier A) and nsjail (Tier B) sandboxed execution with cryptographic tier escalation.
++2. [[Architectural] Custom Scripts and JSON Security Architecture](Custom-Scripts-and-JSON-Security-Architecture) - Hostile input sanitization, AST inspection, and ephemeral token boundaries.
++
++#### Engineering Appendix
++<details>
++<summary>Engineering Appendix</summary>
++
++- [[Architectural] 👍kanban: Architecture Specification Delta & Gap Analysis](Architecture-Delta-and-Missing-Features) - Forensic analysis of specification requirements versus codebase implementation and tracking backlog.
++- [[Architectural] 👍kanban User Task & Architecture QA Verification Matrix](User-Tasks-and-QA-Matrix) - Verification audit mapping tasks UT-01 through UT-16 to live browser checks and screenshot deliverables.
++
++</details>
+diff --git a/MCP-Tools-Reference.md b/MCP-Tools-Reference.md
+index ef78e64..e336f65 100644
+--- a/MCP-Tools-Reference.md
++++ b/MCP-Tools-Reference.md
+@@ -1,4 +1,4 @@
+-# Model Context Protocol (MCP) Tools Reference Manual
++# [Informational] Model Context Protocol (MCP) Tools Reference Manual
+ 
+ ## Overview
+ 
+diff --git a/Migration-and-Cutover-Runbook.md b/Migration-and-Cutover-Runbook.md
+index 458be6f..121a49f 100644
+--- a/Migration-and-Cutover-Runbook.md
++++ b/Migration-and-Cutover-Runbook.md
+@@ -1,4 +1,4 @@
+-# Legacy Tracker Migration and Cutover Runbook
++# [Guide] Legacy Tracker Migration and Cutover Runbook
+ 
+ ## Overview
+ 
+diff --git a/Multi-Card-Authentication-Studio.md b/Multi-Card-Authentication-Studio.md
+index b66860a..644272d 100644
+--- a/Multi-Card-Authentication-Studio.md
++++ b/Multi-Card-Authentication-Studio.md
+@@ -1,4 +1,4 @@
+-# Multi-Card Authentication Studio and Identity Architecture
++# [Guide] Multi-Card Authentication Studio and Identity Architecture
+ 
+ ## Overview
+ 
+diff --git a/Multi-Provider-AI-Engine-and-Runners.md b/Multi-Provider-AI-Engine-and-Runners.md
+index 02b4b36..9170ff9 100644
+--- a/Multi-Provider-AI-Engine-and-Runners.md
++++ b/Multi-Provider-AI-Engine-and-Runners.md
+@@ -1,4 +1,4 @@
+-# Multi-Provider AI Engine, Execution Harnesses, and Runners
++# [Guide] Multi-Provider AI Engine, Execution Harnesses, and Runners
+ 
+ ## Overview
+ 
+@@ -56,6 +56,7 @@ class LLMProvider(ABC):
+         """Generate vector embeddings for semantic search."""
+ ```
+ 
++<a id="supported-runtimes"></a>
+ ### Supported Providers Matrix
+ 
+ | Provider Key | Primary Use Cases | Streaming Support | Function / Tool Calling | Network Boundary |
+@@ -68,6 +69,7 @@ class LLMProvider(ABC):
+ 
+ ---
+ 
++<a id="execution-harnesses"></a>
+ ## Zero-Shell CLI Pipe Harnesses (`agy -p` / `codex -p`)
+ 
+ ```mermaid
+@@ -230,3 +232,6 @@ kanban-agent validate-transition \
+   --to-state done \
+   --dry-run
+ ```
++
++<a id="remote-runners"></a>
++<a id="repository-access"></a>
+diff --git a/Production-Promotion-and-Backup-Runbook.md b/Production-Promotion-and-Backup-Runbook.md
+index 5416cc0..bfbf897 100644
+--- a/Production-Promotion-and-Backup-Runbook.md
++++ b/Production-Promotion-and-Backup-Runbook.md
+@@ -1,4 +1,4 @@
+-# Production Promotion and Backup Runbook
++# [Guide] Production Promotion and Backup Runbook
+ 
+ ## Overview
+ 
+diff --git a/REST-API-Architecture-and-OpenAPI-Guide.md b/REST-API-Architecture-and-OpenAPI-Guide.md
+index 15be2a5..bf10ad7 100644
+--- a/REST-API-Architecture-and-OpenAPI-Guide.md
++++ b/REST-API-Architecture-and-OpenAPI-Guide.md
+@@ -1,4 +1,4 @@
+-# REST API Architecture and OpenAPI Integration Guide
++# [Informational] REST API Architecture and OpenAPI Integration Guide
+ 
+ ## Overview
+ 
+diff --git a/Real-Time-Web-and-WebSocket-Architecture.md b/Real-Time-Web-and-WebSocket-Architecture.md
+index c20dc83..89b6746 100644
+--- a/Real-Time-Web-and-WebSocket-Architecture.md
++++ b/Real-Time-Web-and-WebSocket-Architecture.md
+@@ -1,4 +1,4 @@
+-# Real-Time Web and WebSocket Architecture
++# [Architectural] Real-Time Web and WebSocket Architecture
+ 
+ ## Overview
+ 
+diff --git a/Role-and-Permission-Matrix.md b/Role-and-Permission-Matrix.md
+index d2ff159..8e6db3f 100644
+--- a/Role-and-Permission-Matrix.md
++++ b/Role-and-Permission-Matrix.md
+@@ -1,4 +1,4 @@
+-# Role and Permission Matrix
++# [Informational] Role and Permission Matrix
+ 
+ This document defines the authoritative, fine-grained access control model across all 7 principal tiers in the 👍kanban platform.
+ 
+@@ -16,6 +16,7 @@ The platform enforces Row-Level Security (FORCE RLS) at the PostgreSQL database
+ 
+ ---
+ 
++<a id="system-roles"></a>
+ ## The 7 Principal Tiers
+ 
+ 1. **Guest (`WORKSPACE_GUEST` / `PROJECT_GUEST`):** Ephemeral or external collaborator. Confined strictly to explicitly shared objects with zero ambient project or workspace visibility.
+@@ -28,6 +29,7 @@ The platform enforces Row-Level Security (FORCE RLS) at the PostgreSQL database
+ 
+ ---
+ 
++<a id="workspace-level-roles"></a>
+ ## Master Capability Matrix
+ 
+ | Operational Capability | Guest | Viewer | Member | Project Admin | Workspace Admin | Server Admin | Scoped MCP Agent |
+diff --git a/Scripted-Workflows-and-Transition-Helpers.md b/Scripted-Workflows-and-Transition-Helpers.md
+index b300244..2c7803b 100644
+--- a/Scripted-Workflows-and-Transition-Helpers.md
++++ b/Scripted-Workflows-and-Transition-Helpers.md
+@@ -1,4 +1,4 @@
+-# Scripted Workflows and Transition Helpers
++# [Guide] Scripted Workflows and Transition Helpers
+ 
+ ## Overview
+ 
+diff --git a/Studio-Configuration-Reference.md b/Studio-Configuration-Reference.md
+new file mode 100644
+index 0000000..a1e4ad7
+--- /dev/null
++++ b/Studio-Configuration-Reference.md
+@@ -0,0 +1,241 @@
++# [Informational] Studio Configuration Reference
++
++Authoritative technical reference specification for all configuration attributes, execution tiers, and administrative controls across all 11 👍kanban Studios.
++
++---
++
++## 1. Workspace Studio (`#workspace-studio`)
++
++The Workspace Studio (`/workspaces/:ws/settings` or `/admin/workspaces`) manages top-level tenancy, membership defaults, data lifecycle policies, and security guardrails.
++
++<a id="workspace-configuration"></a>
++<a id="workspace-studio"></a>
++
++### Workspace Studio Configuration Table
++
++| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
++| :--- | :--- | :--- | :--- | :--- |
++| `name` | Human-readable name of the workspace displayed in header and navigation | UTF-8 String (1 to 128 characters) | Required at provisioning | Public within workspace; visible to all members and invited guests |
++| `slug` | URL-safe workspace identifier used in API routes and web paths | Lowercase alphanumeric ASCII with hyphens (2 to 64 chars) | Derived from name | Immutable after creation; binds database RLS tenancy context |
++| `default_role` | Default permission tier assigned to newly provisioned local users | `WORKSPACE_MEMBER`, `WORKSPACE_VIEWER`, `WORKSPACE_GUEST` | `WORKSPACE_MEMBER` | Restricts baseline capabilities before explicit project assignments |
++| `trash_retention_days` | Number of days soft-deleted items remain in Trash Studio before automated purge | Integer between 7 and 365 | 30 | Governs compliance data retention; automated purge requires daemon runner |
++| `auto_archive_threshold_days` | Inactivity duration after which closed tickets are automatically archived | Integer between 0 and 730 (0 disables auto-archive) | 90 | Keeps active board queries lightweight; archived tickets remain search-indexable |
++| `max_projects_limit` | Maximum number of active projects allowed within this workspace | Positive integer (1 to 1000) | 50 | Resource cap preventing tenant sprawl and memory exhaustion |
++| `air_gap_enforced` | Strict zero-egress flag blocking all external cloud AI and runner connections | Boolean (`true` / `false`) | `false` | When enabled, only local Ollama models and internal runners execute |
++| `allowed_email_domains` | Comma-separated domain allowlist for user registration and invite cards | List of valid domain strings (e.g. `corp.example.com`) | Empty (Allow all verified) | Rejects non-corporate email addresses at registration gate |
++
++---
++
++## 2. Project Studio (`#project-studio`)
++
++The Project Studio (`/projects/:proj/settings`) configures project-level attributes, work item defaults, view presets, and planning dimensions.
++
++<a id="project-configuration"></a>
++<a id="project-studio"></a>
++
++### Project Studio Configuration Table
++
++| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
++| :--- | :--- | :--- | :--- | :--- |
++| `name` | Display name of the project | UTF-8 String (1 to 128 characters) | Required at creation | Scoped to workspace; surfaced in command palette and breadcrumbs |
++| `key` | Prefix key for issue identifiers (e.g. `KAN-142`) | Uppercase ASCII alphanumeric (2 to 10 characters) | Required at creation | Immutable; generates human-readable issue keys across all surfaces |
++| `description` | Markdown overview and charter for the project | Canonical UTF-8 Markdown (up to 10,000 characters) | Empty | Sanitized server-side; safe Mermaid and media proxying enabled |
++| `default_workflow_id` | Identifier of active workflow managing state transitions | Valid UUID of existing project workflow | Default Kanban Workflow | Determines active transition gates, validators, and AI agent checks |
++| `auto_archive_days` | Project-specific threshold for archiving closed work items | Integer (0 to 365, 0 = inherit workspace) | 0 | Overrides workspace retention for high-velocity software teams |
++| `enable_cycles` | Toggles Agile/Scrum cycle and sprint planning features | Boolean (`true` / `false`) | `true` | Enables cycle velocity tracking, start/end dates, and rollover |
++| `enable_modules` | Toggles functional module breakdown and progress roll-ups | Boolean (`true` / `false`) | `true` | Allows hierarchical grouping of work items under functional deliverables |
++| `wip_limits_enforcement` | Behavior when Kanban column WIP limits are exceeded | `warn`, `strict_block`, `disabled` | `warn` | `strict_block` rejects card drop operations exceeding column capacity |
++| `default_assignee_mode` | Initial assignment policy for newly authored work items | `unassigned`, `project_lead`, `creator` | `unassigned` | Prevents orphaned tickets and automates triage assignment |
++
++---
++
++## 3. Workflow Transition Studio (`#workflow-studio`)
++
++The Workflow Transition Studio (`/projects/:proj/settings/workflows`) defines state groups, transition helper hooks, synchronous validators, and asynchronous AI agent gates.
++
++<a id="workflow-configuration"></a>
++<a id="workflow-studio"></a>
++
++### Workflow Transition Studio Configuration Table
++
++| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
++| :--- | :--- | :--- | :--- | :--- |
++| `state_name` | Human-readable label for the workflow state | String (1 to 64 characters) | Required (e.g. `In Review`) | Appears on board columns, peek drawers, and transition selectors |
++| `state_group` | Standardized category mapping for cycle metrics | `backlog`, `unstarted`, `started`, `completed`, `cancelled` | `started` | Used in velocity burn-down and sub-issue progress roll-ups |
++| `helper_type` | Engine used to evaluate transition eligibility | `wasm_validator`, `wasm_mutator`, `agent_gate` | `wasm_validator` | Governs execution latency and synchronous vs asynchronous processing |
++| `hook_path` | Target module, wasm bytecode, or agent identifier | File path, slug, or registered agent UUID | Required | Executes within sandboxed environment with strict resource caps |
++| `failure_policy` | Action taken if transition helper rejects or times out | `BLOCK_TRANSITION`, `WARN_AND_ALLOW`, `PROVISIONAL_HOLD` | `BLOCK_TRANSITION` | Fail-closed invariant preventing invalid transitions into protected states |
++| `execution_timeout_ms` | Maximum allowed wall-clock execution time | 50ms to 30000ms (Sync Wasm: <=250ms) | 100ms | Prevents hanging transitions and thread pool starvation |
++| `sandbox_tier` | Isolation level enforced during helper execution | `wasm` (in-process wasmtime) or `nsjail` (container) | `wasm` | Sandboxed with zero network or filesystem syscall access |
++
++---
++
++## 4. Custom Fields Studio (`#custom-fields-studio`)
++
++The Custom Fields Studio (`/projects/:proj/settings/custom-fields`) defines dynamic metadata, computed story points, and sandboxed formulas.
++
++<a id="custom-fields-configuration"></a>
++<a id="custom-fields-studio"></a>
++
++### Custom Fields Studio Configuration Table
++
++| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
++| :--- | :--- | :--- | :--- | :--- |
++| `name` | Human-readable label displayed on ticket rails and tables | String (1 to 64 characters) | Required | Displayed alongside execution status badge (`🧪`) |
++| `slug` | Unique field identifier used in formulas and JSON payloads | Lowercase alphanumeric ASCII with hyphens | Derived from name | Used in formula expressions and API JSON properties |
++| `flavor` | Execution tier and computation engine | `scalar`, `formula`, `wasm`, `nsjail` | `formula` | Determines performance budget and standalone mode availability |
++| `sandbox_tier` | Multi-tier sandbox engine used for execution | `scalar`, `wasmtime` (Tier A), `nsjail` (Tier B) | `wasmtime` | `nsjail` requires multi-container compose; fail-closed in standalone |
++| `credential_mode` | Token identity provided during script execution | `INVOKING_USER`, `SERVICE_ACCOUNT` | `INVOKING_USER` | `SERVICE_ACCOUNT` requires dual-control cryptographic approval |
++| `target_scope` | Maximum tenant visibility boundary of the field | `PROJECT`, `WORKSPACE`, `SERVER` | `PROJECT` | Escalation beyond `PROJECT` requires AAL2 administrative step-up |
++| `output_format` | Canonical schema used to format and render output | `text`, `number`, `badge`, `severity_pill`, `url`, `markdown_snippet`, `json_table` | `text` | Enforces strict Pydantic validation before persisting to JSONB |
++| `format_metadata` | Configuration options tailored to chosen output format | JSON object matching schema specification | `{}` | Governs decimal precision, color tokens, allowlists, or table headers |
++| `script_source` | Raw source code for formula or script evaluation | Python AST expression, Rust Wasm, or container script | Required | Signed with SHA-256 digest upon commit; immutable against database tampering |
++| `egress_allowlist` | Allowed destination hostnames for nsjail tier | Comma-separated domain list (e.g. `api.github.com`) | Empty (Zero egress) | Network disabled by default via Linux kernel `CLONE_NEWNET` |
++
++---
++
++## 5. Authentication Studio (`#auth-studio`)
++
++The Multi-Card Authentication Studio (`/admin/auth`) configures enterprise identity providers, WebAuthn Passkeys, LDAP trees, and break-glass recovery.
++
++<a id="authentication-configuration"></a>
++<a id="auth-studio"></a>
++
++### Authentication Studio Configuration Table
++
++| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
++| :--- | :--- | :--- | :--- | :--- |
++| `provider_type` | Underlying identity protocol card | `LOCAL_ADMIN`, `OAUTH2`, `OIDC`, `LDAP`, `WEBAUTHN`, `TOTP` | Required | Determines credential validation handshake and token exchange |
++| `card_enabled` | Master active toggle for the authentication card | Boolean (`true` / `false`) | `true` | Disabled cards reject authentication attempts immediately |
++| `sort_rank` | Order in which login cards appear on `/login` screen | Non-negative integer (lower ranks appear first) | 10 | Allows organizations to prioritize SSO while preserving local admin cards |
++| `rp_name` | WebAuthn Relying Party display name | String (Always canonical `👍kanban`) | `👍kanban` | Displayed by browser and hardware security keys during passkey prompts |
++| `rp_id` | WebAuthn Relying Party domain identifier | Strict ASCII FQDN without protocol or port | Hostname of deployment | Must match browser origin to prevent credential theft or spoofing |
++| `issuer_url` | OIDC discovery endpoint URL | Valid HTTPS URL | None | Fetches `/.well-known/openid-configuration` and cryptographic keys |
++| `client_id` | OAuth/OIDC application client identifier | ASCII string | None | Public identifier registered with enterprise identity provider |
++| `client_secret` | OAuth/OIDC client secret credential | Encrypted string (write-only custody) | None | Stored encrypted in PostgreSQL; never exposed over REST API |
++| `ldap_host` | LDAPS directory hostname or IP address | Hostname or IP | None | LDAPS on port 636 or StartTLS required; plaintext LDAP rejected |
++| `ldap_bind_dn` | Distinguished Name used for directory lookup | LDAP DN string (e.g. `cn=admin,dc=corp,dc=com`) | None | Service account with read-only search permissions across user tree |
++| `break_glass_active` | Emergency lockout prevention bypass trigger | Boolean (`true` / `false`) | `false` | Allows emergency local admin access when SSO is offline |
++
++---
++
++## 6. MCP Access Studio (`#mcp-studio`)
++
++The MCP Access Studio (`/settings/mcp` or `/admin/mcp`) manages Model Context Protocol API tokens, Level of Detail (LOD) defaults, and rate limits.
++
++<a id="mcp-configuration"></a>
++<a id="mcp-studio"></a>
++
++### MCP Access Studio Configuration Table
++
++| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
++| :--- | :--- | :--- | :--- | :--- |
++| `surface_type` | Target isolated streamable endpoint | `/mcp/agent`, `/mcp/docs`, `/mcp/admin` | `/mcp/agent` | Determines tool catalog and token budget ceiling (<= 1,850 tokens for agent) |
++| `key_name` | Descriptive name of the API token or client tool | String (1 to 64 characters) | Required | Surfaced in audit logs and active session inspector |
++| `token_prefix` | Standardized key prefix identifying privilege level | `kb_agt_*`, `kb_doc_*`, `kb_adm_*` | Auto-assigned | Cryptographically identifies target surface before database lookup |
++| `lod_tier` | Default Level of Detail returned in tool responses | `summary`, `standard`, `full` | `standard` | Controls response verbosity; `summary` minimizes agent context consumption |
++| `rate_limit_rpm` | Maximum allowed tool invocations per minute | Integer between 10 and 600 | 120 | Protects database connection pool from runaway autonomous agent loops |
++| `expires_at` | Expiration timestamp for the API key | ISO-8601 Timestamp or `None` | 90 days from creation | Expired keys reject calls with `401 UNAUTHORIZED` |
++| `destructive_gate` | Enables two-stage confirmation for destructive operations | Boolean (`true` / `false`) | `true` | Requires short-lived confirmation token before permanent deletions |
++
++---
++
++## 7. OAuth 2.1 Governance Studio (`#oauth-studio`)
++
++The OAuth 2.1 Governance Studio (`/admin/oauth`) registers client applications, enforces PKCE code challenges, and configures token lifetimes.
++
++<a id="oauth-configuration"></a>
++<a id="oauth-studio"></a>
++
++### OAuth 2.1 Governance Studio Configuration Table
++
++| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
++| :--- | :--- | :--- | :--- | :--- |
++| `client_name` | Name of the integrating client application | String (1 to 128 characters) | Required | Displayed on user authorization consent screens |
++| `client_id` | Unique OAuth client identifier | String prefixed with `kb_client_` | Auto-generated | Public application key used during authorization code flow |
++| `redirect_uris` | Allowed callback URLs for authorization codes | List of strict HTTPS URLs (localhost allowed for dev) | Required | Exact string matching enforced; wildcards strictly forbidden |
++| `pkce_enforced` | Proof Key for Code Exchange requirement | Mandatory `S256` challenge | `S256` | Rejects plaintext code challenges; mitigates authorization code interception |
++| `allowed_scopes` | List of privilege scopes client can request | `agent`, `docs`, `admin`, `read:issues`, `write:issues` | `agent` | Token capability bitmask cannot exceed granted scopes |
++| `access_token_ttl` | Lifetime of minted access tokens | Integer seconds (300 to 86400) | 3600 (1 hour) | Ephemeral lifetime limiting blast radius of token leakage |
++| `refresh_token_ttl` | Lifetime of rotating refresh tokens | Integer seconds (86400 to 2592000) | 2592000 (30 days) | Refresh tokens rotate upon use; reused tokens revoke family |
++
++---
++
++## 8. AI Providers Studio (`#ai-studio`)
++
++The AI Providers Studio (`/admin/ai`) registers model providers, configures write-only API keys, and sets monthly token consumption caps.
++
++<a id="ai-configuration"></a>
++<a id="ai-studio"></a>
++
++### AI Providers Studio Configuration Table
++
++| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
++| :--- | :--- | :--- | :--- | :--- |
++| `provider_key` | Underlying AI provider implementation | `openai`, `gemini`, `ollama`, `custom` | `gemini` | Selects prompt serializer, tool calling dialect, and streaming pipeline |
++| `priority` | Fallback dispatch order when multiple providers are active | Integer (1 to 100, higher runs first) | 10 | Primary provider attempted first; falls back on rate limit or 5xx |
++| `api_endpoint` | Base URL for API communications | Valid HTTP/HTTPS URL | Official cloud endpoint | Local Ollama uses `http://localhost:11434`; cloud requires HTTPS |
++| `api_key` | Cryptographic API secret for provider access | String (Write-only custody) | None | Stored encrypted in PostgreSQL; never sent back to browser client |
++| `monthly_token_cap` | Monthly token consumption budget ceiling | Non-negative integer (0 = unlimited) | 1,000,000 | Blocks cloud invocations once budget is reached to prevent cost overruns |
++| `default_model` | Model identifier used for sparkle and transition gates | String (e.g. `gemini-2.5-flash`, `gpt-4o`) | Provider default | Balances reasoning capability against response latency |
++| `temperature` | Randomness parameter for model generations | Float between 0.0 and 1.0 | 0.2 | Low temperatures ensure deterministic responses for code and QA gates |
++
++---
++
++## 9. Agent Definitions Studio (`#agents-studio`)
++
++The Agent Definitions Studio (`/admin/agents`) authors system personas, binds autonomous agents to service accounts, and configures execution harnesses.
++
++<a id="agents-configuration"></a>
++<a id="agents-studio"></a>
++
++### Agent Definitions Studio Configuration Table
++
++| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
++| :--- | :--- | :--- | :--- | :--- |
++| `agent_name` | Unique name and identifier for the autonomous agent | String (1 to 64 characters) | Required | Used in ticket mentions, activity streams, and assignment cards |
++| `system_prompt` | Core instructions, persona guidelines, and security boundaries | UTF-8 Markdown text | Required | Directs model reasoning; stripped of dangerous injection sequences |
++| `execution_harness` | Runtime environment executing agent invocations | `api_direct`, `cli_pipe`, `remote_runner` | `api_direct` | `cli_pipe` uses zero-shell `agy -p` or `codex -p` in Linux jail |
++| `cli_pipe_binary` | Binary path used for zero-shell CLI pipe harness | Pre-approved binary name (`agy`, `codex`) | `agy` | Executes without shell or bash; communicates strictly over STDIN/STDOUT |
++| `service_principal_id` | Bound service account identity for database RLS | Valid UUID of service principal | Auto-provisioned | Binds database permissions to caller identity via `SET LOCAL` |
++| `repository_access` | Git repository access mode granted to the agent | `none`, `ro_mount`, `ephemeral_clone` | `none` | `ro_mount` mounts repository strictly read-only for forensic QA |
++
++---
++
++## 10. Remote Runners Studio (`#runners-studio`)
++
++The Remote Runners Studio (`/admin/runners`) configures distributed build nodes, mints enrollment tokens, and monitors mTLS heartbeats.
++
++<a id="runners-configuration"></a>
++<a id="runners-studio"></a>
++
++### Remote Runners Studio Configuration Table
++
++| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
++| :--- | :--- | :--- | :--- | :--- |
++| `runner_name` | Unique hostname or identifier of the runner node | String (1 to 64 characters) | Required | Displayed in runner health dashboard and active job telemetry |
++| `enrollment_token` | Single-use cryptographic token for runner registration | Base64-encoded HMAC string | Minted on demand | Expires after 60 minutes; grants certificate signing request (CSR) |
++| `mtls_cert_fingerprint`| SHA-256 fingerprint of validated client certificate | Hexadecimal SHA-256 hash | Registered upon enroll | Hardware-bound identity verifying mutual TLS WebSocket connection |
++| `max_concurrent_jobs` | Maximum simultaneous task executions allowed on runner | Integer between 1 and 16 | 2 | Throttles runner workload to prevent resource exhaustion |
++| `heartbeat_timeout_s` | Maximum allowable duration without ping before offline | Integer between 10 and 120 seconds | 30 | Dead runners are marked offline and active jobs rescheduled |
++| `allowed_repo_remotes` | Whitelist of Git repository URLs runner can clone | Comma-separated list of repository URLs | Empty (All authorized) | Prevents runner exploitation for arbitrary network exfiltration |
++
++---
++
++## 11. Standalone & Promotion Studio (`#standalone-studio`)
++
++The Standalone & Promotion Studio (`/admin/standalone`) inspects deployment topologies, triggers promotion to multi-container compose, and exports encrypted backups.
++
++<a id="standalone-configuration"></a>
++<a id="standalone-studio"></a>
++
++### Standalone & Promotion Studio Configuration Table
++
++| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |
++| :--- | :--- | :--- | :--- | :--- |
++| `deployment_mode` | Current platform runtime environment | `STANDALONE_CONTAINER`, `MULTI_CONTAINER_COMPOSE` | Detected at boot | Gates availability of nsjail container sandboxes and Redis hubs |
++| `backup_encryption_passphrase` | Secret passphrase used to derive AES-256 backup key | String (Minimum 16 characters) | User-supplied | Used by PBKDF2 to encrypt standalone archive into KBBAK1 format |
++| `target_postgres_url` | External database URL used during promotion cutover | Valid PostgreSQL connection string | None | Must support UTF-8, RLS, and required extensions (`ltree`, `pgvector`) |
++| `target_redis_url` | External Redis connection string for WebSocket pub/sub | Valid Redis URL (`redis://` or `rediss://`) | None | Decouples distributed realtime events from single-process memory |
++| `backup_storage_path` | Local filesystem path where backups are stored | Directory path (default `/var/backups/kanban`) | `/var/backups/kanban` | Requires write permissions; accessible for disaster recovery download |
++| `auto_promotion_verify` | Runs comprehensive post-migration verification suite | Boolean (`true` / `false`) | `true` | Asserts object link integrity and user access manifests before cutover |
+diff --git a/System-Topology-and-Multi-Container-Architecture.md b/System-Topology-and-Multi-Container-Architecture.md
+index 136a0f9..3ce847e 100644
+--- a/System-Topology-and-Multi-Container-Architecture.md
++++ b/System-Topology-and-Multi-Container-Architecture.md
+@@ -1,4 +1,4 @@
+-# System Topology and Multi-Container Architecture
++# [Architectural] System Topology and Multi-Container Architecture
+ 
+ ## Overview
+ 
+diff --git a/Three-Surface-MCP-Server-Architecture.md b/Three-Surface-MCP-Server-Architecture.md
+index c9fe722..44ebc44 100644
+--- a/Three-Surface-MCP-Server-Architecture.md
++++ b/Three-Surface-MCP-Server-Architecture.md
+@@ -1,4 +1,4 @@
+-# Three-Surface Model Context Protocol (MCP) Server Architecture
++# [Guide] Three-Surface Model Context Protocol (MCP) Server Architecture
+ 
+ ## Overview
+ 
+@@ -8,6 +8,7 @@ The Model Context Protocol (MCP) allows Large Language Models (LLMs) and autonom
+ 
+ ---
+ 
++<a id="scope-tiers"></a>
+ ## The Three Isolated MCP Surfaces
+ 
+ ```mermaid
+@@ -102,6 +103,8 @@ Users and administrators configure MCP integrations through the visual Access St
+ 
+ ---
+ 
++<a id="oauth-21--pkce"></a>
++<a id="oauth-21-pkce"></a>
+ ## Admin OAuth 2.1 Governance Studio (`/admin/oauth`)
+ 
+ In addition to static API keys, 👍kanban provides an enterprise OAuth 2.1 authorization server with mandatory PKCE (Proof Key for Code Exchange with `S256` challenge), accessible at `/admin/oauth`.
+diff --git a/Ticket-Screen-and-Work-Item-Features.md b/Ticket-Screen-and-Work-Item-Features.md
+index d545b20..4d48e2d 100644
+--- a/Ticket-Screen-and-Work-Item-Features.md
++++ b/Ticket-Screen-and-Work-Item-Features.md
+@@ -1,4 +1,4 @@
+-# Ticket Screen, Peek Drawer, and Work Item Architecture
++# [Informational] Ticket Screen, Peek Drawer, and Work Item Architecture
+ 
+ ## Overview
+ 
+@@ -131,6 +131,7 @@ The activity feed separates human conversation from automated audit logs and AI
+ 
+ ![Activity Stream and Audit History](images/28-activity-stream-audit.png)
+ 
++<a id="modules"></a>
+ ### Sprints, Cycles, and Functional Modules
+ Work items bind directly to sprint cycles and functional modules with real-time velocity roll-ups:
+ 
+@@ -142,3 +143,7 @@ Work items bind directly to sprint cycles and functional modules with real-time
+ Two-stage deletion safety calculates the ripple impact across child issues, dependencies, and doc links:
+ 
+ ![Delete Blast Radius Warning Modal](images/20-delete-blast-radius.png)
++
++<a id="auto-archive"></a>
++### Auto-Archive Policy
++Work items completed past the retention threshold are automatically moved to archive storage.
+diff --git a/Universal-Object-Graph-and-Link-Auditor.md b/Universal-Object-Graph-and-Link-Auditor.md
+index d98ec45..a2fe89e 100644
+--- a/Universal-Object-Graph-and-Link-Auditor.md
++++ b/Universal-Object-Graph-and-Link-Auditor.md
+@@ -1,4 +1,4 @@
+-# Universal Object Graph and Invalid Link Auditor
++# [Architectural] Universal Object Graph and Invalid Link Auditor
+ 
+ ## Overview
+ 
+diff --git a/User-Tasks-and-QA-Matrix.md b/User-Tasks-and-QA-Matrix.md
+index e639e48..7a06184 100644
+--- a/User-Tasks-and-QA-Matrix.md
++++ b/User-Tasks-and-QA-Matrix.md
+@@ -1,4 +1,4 @@
+-# 👍kanban User Task & Architecture QA Verification Matrix
++# [Architectural] 👍kanban User Task & Architecture QA Verification Matrix
+ 
+ > **Purpose:** This document maps every functional domain in [System Topology and Multi-Container Architecture](System-Topology-and-Multi-Container-Architecture) (Sections 1-15) to concrete human user tasks, live `/browser` verification scenarios, screenshot deliverables, and API/MCP schema audits.
+ 
+diff --git a/Zero-Trust-Security-and-Access-Visibility.md b/Zero-Trust-Security-and-Access-Visibility.md
+index e553a6b..7c2bc09 100644
+--- a/Zero-Trust-Security-and-Access-Visibility.md
++++ b/Zero-Trust-Security-and-Access-Visibility.md
+@@ -1,4 +1,4 @@
+-# Zero-Trust Security Architecture and Explicit Access Visibility
++# [Informational] Zero-Trust Security Architecture and Explicit Access Visibility
+ 
+ ## Overview
+ 
+diff --git a/_Sidebar.md b/_Sidebar.md
+index 02ef97c..7104acc 100644
+--- a/_Sidebar.md
++++ b/_Sidebar.md
+@@ -2,33 +2,39 @@
+ 
+ - **Overview**
+   - [Home](Home)
+-  - [Feature Comparison Matrix](Feature-Comparison)
+-  - [Architecture Delta and Gap Analysis](Architecture-Delta-and-Missing-Features)
+-  - [User Tasks and QA Matrix](User-Tasks-and-QA-Matrix)
+ 
+-- **System Architecture**
+-  - [1. System Topology and Containers](System-Topology-and-Multi-Container-Architecture)
+-  - [2. Zero-Trust Security and Access](Zero-Trust-Security-and-Access-Visibility)
+-  - [3. Multi-Card Authentication](Multi-Card-Authentication-Studio)
+-  - [4. Canonical Markdown Pipeline](Canonical-Markdown-and-Safe-Media-Pipeline)
+-  - [5. Whitespace and Kanban Board](Enterprise-Whitespace-and-Kanban-Board)
+-  - [6. Ticket Screen and Features](Ticket-Screen-and-Work-Item-Features)
+-  - [7. Hierarchical Docs and Stickies](Hierarchical-Docs-and-Stickies-with-Smart-Promotion)
+-  - [8. Sparkle Completion Engine](Blinking-Cursor-Sparkle-Completion-Engine)
+-  - [9. Multi-Provider AI Engine](Multi-Provider-AI-Engine-and-Runners)
+-  - [10. Three-Surface MCP Server](Three-Surface-MCP-Server-Architecture)
+-  - [11. Universal Object Graph](Universal-Object-Graph-and-Link-Auditor)
+-  - [12. Scripted Fields and Sandbox](Admin-Custom-Scripted-Fields-and-Sandbox)
+-  - [13. Scripted Workflows & Helpers](Scripted-Workflows-and-Transition-Helpers)
+-  - [14. Clean-DB Testing and Gates](Clean-DB-Testing-and-Governance-Gates)
+-  - [15. Promotion and Backup Runbook](Production-Promotion-and-Backup-Runbook)
+-  - [16. Migration and Cutover Runbook](Migration-and-Cutover-Runbook)
+-  - [17. Real-Time WebSockets](Real-Time-Web-and-WebSocket-Architecture)
+-  - [18. Custom Scripts and JSON Security](Custom-Scripts-and-JSON-Security-Architecture)
++- **Track 1: Step-by-Step Guides**
++  - [[Guide] Production Promotion and Backup Runbook](Production-Promotion-and-Backup-Runbook)
++  - [[Guide] Legacy Tracker Migration and Cutover Runbook](Migration-and-Cutover-Runbook)
++  - [[Guide] How to Use Custom Fields](Guide-Custom-Fields)
++  - [[Guide] Scripted Workflows and Transition Helpers](Scripted-Workflows-and-Transition-Helpers)
++  - [[Guide] Multi-Card Authentication Studio and Identity Architecture](Multi-Card-Authentication-Studio)
++  - [[Guide] Multi-Provider AI Engine, Execution Harnesses, and Runners](Multi-Provider-AI-Engine-and-Runners)
++  - [[Guide] Three-Surface Model Context Protocol (MCP) Server Architecture](Three-Surface-MCP-Server-Architecture)
+ 
+-- **Reference Guides**
+-  - [Role and Permission Matrix](Role-and-Permission-Matrix)
+-  - [Feature Comparison Matrix (35 Features)](Feature-Comparison)
+-  - [Guide: How to Use Custom Fields](Guide-Custom-Fields)
+-  - [MCP Tools Reference (24 Tools)](MCP-Tools-Reference)
+-  - [REST API and OpenAPI Guide](REST-API-Architecture-and-OpenAPI-Guide)
++- **Track 2: Feature & Field Reference**
++  - [[Informational] Studio Configuration Reference](Studio-Configuration-Reference)
++  - [[Informational] Enterprise Whitespace, Semantic Emojis, and Kanban Board](Enterprise-Whitespace-and-Kanban-Board)
++  - [[Informational] Ticket Screen, Peek Drawer, and Work Item Architecture](Ticket-Screen-and-Work-Item-Features)
++  - [[Informational] Hierarchical Docs, Project Stickies, and Smart Promotion](Hierarchical-Docs-and-Stickies-with-Smart-Promotion)
++  - [[Informational] Blinking Cursor Sparkle Completion Engine](Blinking-Cursor-Sparkle-Completion-Engine)
++  - [[Informational] Model Context Protocol (MCP) Tools Reference Manual](MCP-Tools-Reference)
++  - [[Informational] REST API Architecture and OpenAPI Integration Guide](REST-API-Architecture-and-OpenAPI-Guide)
++
++- **Track 3: Security & Adoption Overview**
++  - [[Informational] Role and Permission Matrix](Role-and-Permission-Matrix)
++  - [[Informational] Zero-Trust Security Architecture and Explicit Access Visibility](Zero-Trust-Security-and-Access-Visibility)
++  - [[Informational] Feature Comparison Matrix (35 Features)](Feature-Comparison)
++
++- **Track 4: Engineering & Security Architecture**
++  - [[Architectural] System Topology and Multi-Container Architecture](System-Topology-and-Multi-Container-Architecture)
++  - [[Architectural] Universal Object Graph and Invalid Link Auditor](Universal-Object-Graph-and-Link-Auditor)
++  - [[Architectural] Real-Time Web and WebSocket Architecture](Real-Time-Web-and-WebSocket-Architecture)
++  - [[Architectural] Canonical Markdown and Safe Media Pipeline](Canonical-Markdown-and-Safe-Media-Pipeline)
++  - [[Architectural] Clean-DB Testing and Governance Gates](Clean-DB-Testing-and-Governance-Gates)
++  - [[Architectural] Admin Custom Scripted Fields and Sandboxed Execution](Admin-Custom-Scripted-Fields-and-Sandbox)
++  - [[Architectural] Custom Scripts and JSON Security Architecture](Custom-Scripts-and-JSON-Security-Architecture)
++  - <details><summary>Engineering Appendix</summary>
++    - [[Architectural] 👍kanban: Architecture Specification Delta & Gap Analysis](Architecture-Delta-and-Missing-Features)
++    - [[Architectural] 👍kanban User Task & Architecture QA Verification Matrix](User-Tasks-and-QA-Matrix)
++    </details>

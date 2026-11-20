@@ -89,17 +89,21 @@ export function HelpDrawer({ arg, onClose }: HelpDrawerProps): JSX.Element {
     };
   }, []);
 
-  /* v8 ignore next 9 */
+  /* v8 ignore next 14 */
+  const fallbackChapter: WikiChapter = {
+    slug: 'home',
+    title: 'Documentation',
+    category: 'informational',
+    track: 'Overview',
+    subtrack: 'Overview',
+    audience: 'All Users',
+    order: 1,
+    summary: 'System documentation overview.',
+    sections: [],
+    content: '# Documentation\n\nNo content available.',
+  };
   const chapter: WikiChapter =
-    getChapter(activeSlug) ?? WIKI_CHAPTERS[0] ?? {
-      slug: 'home',
-      title: 'Documentation',
-      category: 'Overview',
-      order: 1,
-      summary: 'System documentation overview.',
-      sections: [],
-      content: '# Documentation\n\nNo content available.',
-    };
+    getChapter(activeSlug) ?? WIKI_CHAPTERS[0] ?? fallbackChapter;
 
   // Scroll to section when anchor is set or changes
   const scrollToAnchor = (anchorId: string): void => {
@@ -197,7 +201,16 @@ export function HelpDrawer({ arg, onClose }: HelpDrawerProps): JSX.Element {
       >
         <header className="kb-help-drawer-header">
           <div className="kb-help-drawer-title-group">
-            <span className="kb-help-drawer-badge">{chapter.category}</span>
+            <span
+              className={`kb-help-drawer-badge kb-badge-${chapter.category}`}
+              data-testid="help-drawer-category-badge"
+            >
+              {chapter.category === 'guide'
+                ? '[Guide]'
+                : chapter.category === 'architectural'
+                ? '[Architectural]'
+                : '[Informational]'}
+            </span>
             <h2 className="kb-help-drawer-title">{chapter.title}</h2>
           </div>
           <div className="kb-help-drawer-actions">

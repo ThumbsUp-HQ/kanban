@@ -11,6 +11,7 @@ import React, {
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { DocMarkdownViewer } from './DocMarkdownViewer';
 import {
+  CHAPTER_BY_SLUG,
   getChapter,
   resolveChapterSlug,
   searchDocs,
@@ -19,8 +20,11 @@ import {
   WIKI_CHAPTERS,
   type SearchResult,
   type WikiChapter,
+  type WikiChapterCategory,
 } from './docsService';
 import './DocsCenterPage.css';
+
+export type CategoryFilter = 'all' | WikiChapterCategory;
 
 export function DocsCenterPage(): JSX.Element {
   const { slug: rawSlug } = useParams<{ slug?: string }>();
@@ -28,22 +32,26 @@ export function DocsCenterPage(): JSX.Element {
   const navigate = useNavigate();
 
   const currentSlug = resolveChapterSlug(rawSlug ?? 'home');
-  /* v8 ignore next 9 */
+  const fallbackChapter: WikiChapter = {
+    slug: 'home',
+    title: 'Documentation',
+    category: 'informational',
+    track: 'Overview',
+    subtrack: 'Overview',
+    audience: 'All Users',
+    order: 1,
+    summary: 'System documentation overview.',
+    sections: [],
+    content: '# Documentation\n\nNo content available.',
+  };
   const chapter: WikiChapter =
-    getChapter(currentSlug) ?? WIKI_CHAPTERS[0] ?? {
-      slug: 'home',
-      title: 'Documentation',
-      category: 'Overview',
-      order: 1,
-      summary: 'System documentation overview.',
-      sections: [],
-      content: '# Documentation\n\nNo content available.',
-    };
+    getChapter(currentSlug) ?? WIKI_CHAPTERS[0] ?? fallbackChapter;
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
   const [isMobileChaptersOpen, setIsMobileChaptersOpen] = useState(false);
+  const [categoryFilter, setCategoryFilter] = useState<CategoryFilter>('all');
 
   const activeAnchor = location.hash.replace(/^#+/, '') || null;
 
@@ -126,6 +134,82 @@ export function DocsCenterPage(): JSX.Element {
       ? WIKI_CHAPTERS[currentIndex + 1]
       : null;
 
+  // Filter categories and chapters by selected category filter
+  const filteredCategories = WIKI_CATEGORIES.map((cat) => {
+    const chapters = cat.chapters.filter((ch) => {
+      if (categoryFilter === 'all') return true;
+      const chapterData = CHAPTER_BY_SLUG[ch.slug];
+      const catType = ch.category ?? chapterData?.category;
+      return catType === categoryFilter;
+    });
+    return { ...cat, chapters };
+  }).filter((cat) => cat.chapters.length > 0);
+
+  const formatCategoryBadge = (cat?: string): string => {
+    const lower = (cat ?? '').toLowerCase();
+    if (lower === 'guide') return '[Guide]';
+    if (lower === 'architectural') return '[Architectural]';
+    return '[Informational]';
+  };
+
+  const renderFilterTabs = (): JSX.Element => (
+    <div
+      className="kb-docs-filter-tabs"
+      role="tablist"
+      aria-label="Documentation category filters"
+      data-testid="docs-category-filter-bar"
+    >
+      <button
+        type="button"
+        role="tab"
+        aria-selected={categoryFilter === 'all'}
+        className={`kb-docs-filter-tab ${categoryFilter === 'all' ? 'active' : ''}`}
+        data-testid="docs-filter-all"
+        onClick={() => {
+          setCategoryFilter('all');
+        }}
+      >
+        All
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={categoryFilter === 'guide'}
+        className={`kb-docs-filter-tab ${categoryFilter === 'guide' ? 'active' : ''}`}
+        data-testid="docs-filter-guide"
+        onClick={() => {
+          setCategoryFilter('guide');
+        }}
+      >
+        Guides
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={categoryFilter === 'informational'}
+        className={`kb-docs-filter-tab ${categoryFilter === 'informational' ? 'active' : ''}`}
+        data-testid="docs-filter-informational"
+        onClick={() => {
+          setCategoryFilter('informational');
+        }}
+      >
+        Informational
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={categoryFilter === 'architectural'}
+        className={`kb-docs-filter-tab ${categoryFilter === 'architectural' ? 'active' : ''}`}
+        data-testid="docs-filter-architectural"
+        onClick={() => {
+          setCategoryFilter('architectural');
+        }}
+      >
+        Architectural
+      </button>
+    </div>
+  );
+
   return (
     <div className="kb-docs-page" data-testid="docs-center-page">
       {/* Top Header */}
@@ -198,7 +282,11 @@ export function DocsCenterPage(): JSX.Element {
                       {res.title}
                       {res.matchedSection && ` > ${res.matchedSection.title}`}
                     </div>
-                    <div className="kb-docs-search-item-cat">{res.category}</div>
+                    <div className="kb-docs-search-item-cat">
+                      <span className={`kb-docs-badge-pill kb-badge-${res.category.toLowerCase()}`}>
+                        {formatCategoryBadge(res.category)}
+                      </span>
+                    </div>
                     <div className="kb-docs-search-item-snippet">{res.snippet}</div>
                   </Link>
                 );
@@ -240,8 +328,9 @@ export function DocsCenterPage(): JSX.Element {
                 &#10005;
               </button>
             </div>
+            {renderFilterTabs()}
             <nav className="kb-docs-mobile-drawer-nav" aria-label="Mobile Chapters Navigation">
-              {WIKI_CATEGORIES.map((cat) => (
+              {filteredCategories.map((cat) => (
                 <div key={cat.name} className="kb-docs-cat-group">
                   <div className="kb-docs-cat-title">{cat.name}</div>
                   <ul className="kb-docs-nav-list">
@@ -257,7 +346,14 @@ export function DocsCenterPage(): JSX.Element {
                               setIsMobileChaptersOpen(false);
                             }}
                           >
-                            {ch.title}
+                            <span className="kb-docs-nav-link-text">{ch.title}</span>
+                            {ch.slug !== 'home' && (
+                              <span
+                                className={`kb-docs-badge-pill kb-badge-${ch.category ?? 'informational'}`}
+                              >
+                                {formatCategoryBadge(ch.category)}
+                              </span>
+                            )}
                           </Link>
                         </li>
                       );
@@ -278,7 +374,8 @@ export function DocsCenterPage(): JSX.Element {
           aria-label="Documentation Chapters"
           data-testid="docs-categories-sidebar"
         >
-          {WIKI_CATEGORIES.map((cat) => (
+          {renderFilterTabs()}
+          {filteredCategories.map((cat) => (
             <div key={cat.name} className="kb-docs-cat-group">
               <div className="kb-docs-cat-title">{cat.name}</div>
               <ul className="kb-docs-nav-list">
@@ -291,7 +388,14 @@ export function DocsCenterPage(): JSX.Element {
                         className={`kb-docs-nav-link ${isActive ? 'active' : ''}`}
                         aria-current={isActive ? 'page' : undefined}
                       >
-                        {ch.title}
+                        <span className="kb-docs-nav-link-text">{ch.title}</span>
+                        {ch.slug !== 'home' && (
+                          <span
+                            className={`kb-docs-badge-pill kb-badge-${ch.category ?? 'informational'}`}
+                          >
+                            {formatCategoryBadge(ch.category)}
+                          </span>
+                        )}
                       </Link>
                     </li>
                   );
@@ -304,9 +408,19 @@ export function DocsCenterPage(): JSX.Element {
         {/* Content Area */}
         <main className="kb-docs-main" ref={contentRef} data-testid="docs-main-content">
           <div className="kb-docs-content-wrapper">
-            <div className="kb-docs-meta-bar">
-              <span>{chapter.category}</span>
-              <span>
+            <div className="kb-docs-meta-bar" data-testid="docs-meta-bar">
+              <span
+                className={`kb-docs-badge-pill kb-badge-${chapter.category}`}
+                data-testid="docs-category-badge"
+              >
+                {formatCategoryBadge(chapter.category)}
+              </span>
+              <span className="kb-docs-meta-track">{chapter.track}</span>
+              {chapter.subtrack && (
+                <span className="kb-docs-meta-subtrack">{chapter.subtrack}</span>
+              )}
+              <span className="kb-docs-meta-audience">{chapter.audience}</span>
+              <span className="kb-docs-meta-order">
                 Chapter {chapter.order} of {WIKI_CHAPTERS.length}
               </span>
             </div>

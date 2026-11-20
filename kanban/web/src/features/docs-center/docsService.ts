@@ -13,6 +13,7 @@ import {
   type WikiSection,
   type WikiCategory,
   type ConfigReferenceItem,
+  type WikiChapterCategory,
 } from './wikiManifest';
 
 export interface SearchResult {
@@ -138,4 +139,5 @@ export {
   type WikiSection,
   type WikiCategory,
   type ConfigReferenceItem,
+  type WikiChapterCategory,
 };

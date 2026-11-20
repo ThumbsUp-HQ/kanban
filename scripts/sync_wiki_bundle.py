@@ -14,6 +14,181 @@ DEFAULT_WIKI_DIR = "/home/adamoutler/kanban/thumbs-up-kanban.wiki"
 DEFAULT_OUT_FILE = "kanban/web/src/features/docs-center/wikiManifest.ts"
 DEFAULT_PUBLIC_DIR = "kanban/web/public"
 
+CHAPTER_TAXONOMY: dict[str, dict[str, str]] = {
+    "home": {
+        "category": "informational",
+        "track": "Overview",
+        "subtrack": "Overview",
+        "audience": "All Roles & Stakeholders",
+    },
+    # Track 1: Step-by-Step Guides
+    "production-promotion-and-backup-runbook": {
+        "category": "guide",
+        "track": "Step-by-Step Guides",
+        "subtrack": "Deployment & Backups",
+        "audience": "DevOps & Platform Operators",
+    },
+    "migration-and-cutover-runbook": {
+        "category": "guide",
+        "track": "Step-by-Step Guides",
+        "subtrack": "Data Migration",
+        "audience": "Enterprise Administrators",
+    },
+    "guide-custom-fields": {
+        "category": "guide",
+        "track": "Step-by-Step Guides",
+        "subtrack": "Custom Fields",
+        "audience": "Project & Workspace Admins",
+    },
+    "scripted-workflows-and-transition-helpers": {
+        "category": "guide",
+        "track": "Step-by-Step Guides",
+        "subtrack": "Workflow Automation",
+        "audience": "Engineers & Workflow Designers",
+    },
+    "multi-card-authentication-studio": {
+        "category": "guide",
+        "track": "Step-by-Step Guides",
+        "subtrack": "Authentication & Identity",
+        "audience": "Security & Identity Administrators",
+    },
+    "multi-provider-ai-engine-and-runners": {
+        "category": "guide",
+        "track": "Step-by-Step Guides",
+        "subtrack": "AI & Distributed Runners",
+        "audience": "DevOps & Platform Architects",
+    },
+    "three-surface-mcp-server-architecture": {
+        "category": "guide",
+        "track": "Step-by-Step Guides",
+        "subtrack": "MCP & OAuth Clients",
+        "audience": "Autonomous Agent Developers",
+    },
+    # Track 2: Feature & Field Reference
+    "studio-configuration-reference": {
+        "category": "informational",
+        "track": "Feature & Field Reference",
+        "subtrack": "Studio Configuration",
+        "audience": "Workspace & Project Administrators",
+    },
+    "enterprise-whitespace-and-kanban-board": {
+        "category": "informational",
+        "track": "Feature & Field Reference",
+        "subtrack": "Board & Visual Design",
+        "audience": "End Users & Product Leads",
+    },
+    "ticket-screen-and-work-item-features": {
+        "category": "informational",
+        "track": "Feature & Field Reference",
+        "subtrack": "Issue Studio & Peek Drawer",
+        "audience": "Software Engineers & Contributors",
+    },
+    "hierarchical-docs-and-stickies-with-smart-promotion": {
+        "category": "informational",
+        "track": "Feature & Field Reference",
+        "subtrack": "Knowledge Management",
+        "audience": "Technical Writers & Product Managers",
+    },
+    "blinking-cursor-sparkle-completion-engine": {
+        "category": "informational",
+        "track": "Feature & Field Reference",
+        "subtrack": "Inline AI Completion",
+        "audience": "Authors & Engineers",
+    },
+    "mcp-tools-reference": {
+        "category": "informational",
+        "track": "Feature & Field Reference",
+        "subtrack": "Protocol Reference",
+        "audience": "AI Integrators & Developers",
+    },
+    "rest-api-architecture-and-openapi-guide": {
+        "category": "informational",
+        "track": "Feature & Field Reference",
+        "subtrack": "API & SDK Reference",
+        "audience": "Frontend & Backend Developers",
+    },
+    # Track 3: Security & Adoption Overview
+    "role-and-permission-matrix": {
+        "category": "informational",
+        "track": "Security & Adoption Overview",
+        "subtrack": "Access Control & Governance",
+        "audience": "Security Officers & Compliance Auditors",
+    },
+    "zero-trust-security-and-access-visibility": {
+        "category": "informational",
+        "track": "Security & Adoption Overview",
+        "subtrack": "Zero-Trust Architecture",
+        "audience": "Security Architects & Hardening Engineers",
+    },
+    "feature-comparison": {
+        "category": "informational",
+        "track": "Security & Adoption Overview",
+        "subtrack": "Market & Capability Analysis",
+        "audience": "Technology Evaluators & Leadership",
+    },
+    # Track 4: Engineering & Security Architecture
+    "system-topology-and-multi-container-architecture": {
+        "category": "architectural",
+        "track": "Engineering & Security Architecture",
+        "subtrack": "Functional Architecture",
+        "audience": "Infrastructure & Systems Architects",
+    },
+    "universal-object-graph-and-link-auditor": {
+        "category": "architectural",
+        "track": "Engineering & Security Architecture",
+        "subtrack": "Functional Architecture",
+        "audience": "Database Engineers & Core Architects",
+    },
+    "real-time-web-and-websocket-architecture": {
+        "category": "architectural",
+        "track": "Engineering & Security Architecture",
+        "subtrack": "Functional Architecture",
+        "audience": "Realtime Systems & Network Engineers",
+    },
+    "canonical-markdown-and-safe-media-pipeline": {
+        "category": "architectural",
+        "track": "Engineering & Security Architecture",
+        "subtrack": "Functional Architecture",
+        "audience": "Security Engineers & Content Architects",
+    },
+    "clean-db-testing-and-governance-gates": {
+        "category": "architectural",
+        "track": "Engineering & Security Architecture",
+        "subtrack": "Functional Architecture",
+        "audience": "QA Engineers & Test Automation Leads",
+    },
+    "admin-custom-scripted-fields-and-sandbox": {
+        "category": "architectural",
+        "track": "Engineering & Security Architecture",
+        "subtrack": "Security Architecture",
+        "audience": "Security Architects & Sandbox Engineers",
+    },
+    "custom-scripts-and-json-security-architecture": {
+        "category": "architectural",
+        "track": "Engineering & Security Architecture",
+        "subtrack": "Security Architecture",
+        "audience": "Application Security Engineers",
+    },
+    "architecture-delta-and-missing-features": {
+        "category": "architectural",
+        "track": "Engineering & Security Architecture",
+        "subtrack": "Engineering Appendix",
+        "audience": "Core Contributors & Maintainers",
+    },
+    "user-tasks-and-qa-matrix": {
+        "category": "architectural",
+        "track": "Engineering & Security Architecture",
+        "subtrack": "Engineering Appendix",
+        "audience": "Forensic QA & Certification Auditors",
+    },
+    "configuration-value-reference": {
+        "category": "informational",
+        "track": "Feature & Field Reference",
+        "subtrack": "Studio Configuration",
+        "audience": "System Administrators",
+    },
+}
+
 
 def slugify(text: str) -> str:
     """Generate a clean URL-safe anchor slug from heading text."""
@@ -45,7 +220,7 @@ def parse_sidebar(sidebar_content: str) -> tuple[list[dict[str, Any]], dict[str,
             categories.append(current_category)
             continue
 
-        item_match = re.match(r"^\s+-\s+\[(.*?)\]\((.*?)\)", line)
+        item_match = re.match(r"^\s*-\s+\[(.+)\]\(([^)]+)\)", line)
         if item_match and current_category:
             title = item_match.group(1).strip()
             target = item_match.group(2).strip()
@@ -63,13 +238,12 @@ def extract_sections_and_summary(content: str) -> tuple[list[dict[str, Any]], st
     title = ""
     summary = ""
     paragraph_lines: list[str] = []
-    excluded_prefixes = ("#", "-", "*", "|", ">", "```", "---")
+    excluded_prefixes = ("#", "-", "*", "|", ">", "```", "---", "<")
 
     for line in lines:
         h1_match = re.match(r"^#\s+(.+)$", line)
         if h1_match and not title:
             raw_title = h1_match.group(1).strip()
-            raw_title = re.sub(r"^\[.*?\]\s*", "", raw_title)  # strip [Guide] prefix
             title = sanitize_dashes(raw_title)
             continue
 
@@ -197,7 +371,7 @@ def build_config_chapter(order_idx: int) -> dict[str, Any]:
     ]
 
     lines = [
-        "# Configuration Value Reference",
+        "# [Informational] Configuration Value Reference",
         "",
         "Authoritative reference guide for system environment variables and execution tiers.",
         "",
@@ -239,10 +413,14 @@ def build_config_chapter(order_idx: int) -> dict[str, Any]:
     )
 
     content = sanitize_dashes("\n".join(lines))
+    meta = CHAPTER_TAXONOMY["configuration-value-reference"]
     return {
         "slug": "configuration-value-reference",
-        "title": "Configuration Value Reference",
-        "category": "Reference Guides",
+        "title": "[Informational] Configuration Value Reference",
+        "category": meta["category"],
+        "track": meta["track"],
+        "subtrack": meta["subtrack"],
+        "audience": meta["audience"],
         "order": order_idx,
         "summary": "Reference guide for system environment variables and execution tiers.",
         "sections": config_sections,
@@ -288,13 +466,31 @@ def load_chapters_from_wiki(wiki_path: Path, file_to_cat: dict[str, str]) -> lis
         slug = name.lower()
         sections, extracted_title, summary = extract_sections_and_summary(clean_content)
         title = extracted_title or name.replace("-", " ")
-        category = file_to_cat.get(slug, "Reference Guides")
+
+        taxonomy = CHAPTER_TAXONOMY.get(
+            slug,
+            {
+                "category": (
+                    "guide"
+                    if title.startswith("[Guide]")
+                    else (
+                        "architectural" if title.startswith("[Architectural]") else "informational"
+                    )
+                ),
+                "track": file_to_cat.get(slug, "Feature & Field Reference"),
+                "subtrack": "General",
+                "audience": "Developers & Operators",
+            },
+        )
 
         chapters.append(
             {
                 "slug": slug,
                 "title": title,
-                "category": category,
+                "category": taxonomy["category"],
+                "track": taxonomy["track"],
+                "subtrack": taxonomy["subtrack"],
+                "audience": taxonomy["audience"],
                 "order": order_idx,
                 "summary": summary or f"Documentation guide for {title}.",
                 "sections": sections,
@@ -307,19 +503,58 @@ def load_chapters_from_wiki(wiki_path: Path, file_to_cat: dict[str, str]) -> lis
     return chapters
 
 
-def generate_manifest_ts(chapters: list[dict[str, Any]], slug_aliases: dict[str, str]) -> str:
+def generate_manifest_ts(
+    chapters: list[dict[str, Any]],
+    slug_aliases: dict[str, str],
+    sidebar_categories: list[dict[str, Any]] | None = None,
+) -> str:
     """Format and generate the TypeScript bundle string."""
-    categories_dict: dict[str, list[dict[str, str]]] = {}
-    for ch in chapters:
-        cat_name = ch["category"]
-        if cat_name not in categories_dict:
-            categories_dict[cat_name] = []
-        categories_dict[cat_name].append({"slug": ch["slug"], "title": ch["title"]})
+    slug_to_chapter = {ch["slug"]: ch for ch in chapters}
+    categories_list: list[dict[str, Any]] = []
 
-    categories_list = [
-        {"name": cat_name, "chapters": chapter_list}
-        for cat_name, chapter_list in categories_dict.items()
-    ]
+    if sidebar_categories:
+        for cat in sidebar_categories:
+            cat_chapters = []
+            for ch in cat["chapters"]:
+                target_slug = ch["file"].lower()
+                ch_obj = slug_to_chapter.get(target_slug)
+                if ch_obj:
+                    cat_chapters.append(
+                        {
+                            "slug": target_slug,
+                            "title": ch_obj["title"],
+                            "category": ch_obj["category"],
+                        }
+                    )
+            if cat_chapters:
+                categories_list.append({"name": cat["name"], "chapters": cat_chapters})
+
+    included_slugs = {item["slug"] for cat in categories_list for item in cat["chapters"]}
+    for ch in chapters:
+        if ch["slug"] not in included_slugs:
+            target_cat_name = "Track 2: Feature & Field Reference"
+            target_cat = next((c for c in categories_list if c["name"] == target_cat_name), None)
+            if target_cat:
+                target_cat["chapters"].append(
+                    {
+                        "slug": ch["slug"],
+                        "title": ch["title"],
+                        "category": ch["category"],
+                    }
+                )
+            else:
+                categories_list.append(
+                    {
+                        "name": ch["track"],
+                        "chapters": [
+                            {
+                                "slug": ch["slug"],
+                                "title": ch["title"],
+                                "category": ch["category"],
+                            }
+                        ],
+                    }
+                )
 
     config_refs = build_configuration_reference()
     dumped_chapters = json.dumps(chapters, indent=2)
@@ -331,6 +566,8 @@ def generate_manifest_ts(chapters: list[dict[str, Any]], slug_aliases: dict[str,
 // Apache-2.0 License. See LICENSE for details.
 // Generated automatically by scripts/sync_wiki_bundle.py. Do not edit manually.
 
+export type WikiChapterCategory = 'guide' | 'informational' | 'architectural';
+
 export interface WikiSection {{
   id: string;
   title: string;
@@ -340,7 +577,10 @@ export interface WikiSection {{
 export interface WikiChapter {{
   slug: string;
   title: string;
-  category: string;
+  category: WikiChapterCategory;
+  track: string;
+  subtrack: string;
+  audience: string;
   order: number;
   summary: string;
   sections: WikiSection[];
@@ -349,7 +589,7 @@ export interface WikiChapter {{
 
 export interface WikiCategory {{
   name: string;
-  chapters: {{ slug: string; title: string }}[];
+  chapters: {{ slug: string; title: string; category?: WikiChapterCategory }}[];
 }}
 
 export type ConfigReferenceItem = Record<string, string>;
@@ -404,7 +644,7 @@ def sync_wiki(
     if sidebar_file.exists():
         sidebar_content = sidebar_file.read_text(encoding="utf-8")
 
-    _categories_spec, file_to_cat = parse_sidebar(sidebar_content)
+    categories_spec, file_to_cat = parse_sidebar(sidebar_content)
 
     slug_aliases = {
         "custom-fields": "guide-custom-fields",
@@ -420,12 +660,14 @@ def sync_wiki(
         "links": "universal-object-graph-and-link-auditor",
         "config": "configuration-value-reference",
         "configuration": "configuration-value-reference",
+        "studio-config": "studio-configuration-reference",
+        "studio-configuration": "studio-configuration-reference",
     }
 
     copied_images = sync_wiki_images(wiki_path, public_path)
 
     chapters = load_chapters_from_wiki(wiki_path, file_to_cat)
-    ts_code = generate_manifest_ts(chapters, slug_aliases)
+    ts_code = generate_manifest_ts(chapters, slug_aliases, categories_spec)
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(ts_code, encoding="utf-8")

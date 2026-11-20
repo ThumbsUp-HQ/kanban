@@ -378,6 +378,11 @@ Here is **bold text**, *italic text*, \`inline code\`, and a [TOC Anchor](#my-an
       const closeBtn = screen.getByTestId('help-drawer-close-btn');
       fireEvent.click(closeBtn);
       expect(onClose).toHaveBeenCalled();
+
+      // Category badge
+      const badge = screen.getByTestId('help-drawer-category-badge');
+      expect(badge).toBeDefined();
+      expect(badge.textContent).toBe('[Guide]');
     });
 
     it('scrolls to anchor when section link is clicked and covers anchor timer and target element fallback', async () => {
@@ -710,6 +715,105 @@ Here is **bold text**, *italic text*, \`inline code\`, and a [TOC Anchor](#my-an
         expect(screen.queryByTestId('docs-search-results')).toBeNull();
       });
     });
+
+    it('renders category filter tabs and filters sidebar categories and chapters', () => {
+      render(
+        <MemoryRouter initialEntries={['/docs/home']}>
+          <Routes>
+            <Route path="/docs/:slug" element={<DocsCenterPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      const filterBar = screen.getByTestId('docs-category-filter-bar');
+      expect(filterBar).toBeDefined();
+
+      const filterAll = screen.getByTestId('docs-filter-all');
+      const filterGuide = screen.getByTestId('docs-filter-guide');
+      const filterInfo = screen.getByTestId('docs-filter-informational');
+      const filterArch = screen.getByTestId('docs-filter-architectural');
+
+      expect(filterAll).toBeDefined();
+      expect(filterGuide).toBeDefined();
+      expect(filterInfo).toBeDefined();
+      expect(filterArch).toBeDefined();
+
+      expect(filterAll.getAttribute('aria-selected')).toBe('true');
+      expect(filterGuide.getAttribute('aria-selected')).toBe('false');
+
+      // Filter by "Guides"
+      act(() => {
+        fireEvent.click(filterGuide);
+      });
+      expect(filterGuide.getAttribute('aria-selected')).toBe('true');
+      expect(filterAll.getAttribute('aria-selected')).toBe('false');
+
+      // Sidebar should display Guide chapters
+      const sidebar = screen.getByTestId('docs-categories-sidebar');
+      expect(sidebar.textContent).toContain('Step-by-Step Guides');
+      // When filtered to guides, should NOT contain Track 4 Engineering & Security Architecture
+      expect(sidebar.textContent).not.toContain('Functional Architecture');
+
+      // Filter by "Architectural"
+      act(() => {
+        fireEvent.click(filterArch);
+      });
+      expect(filterArch.getAttribute('aria-selected')).toBe('true');
+      expect(sidebar.textContent).toContain('Track 4: Engineering & Security Architecture');
+      expect(sidebar.textContent).toContain('System Topology and Multi-Container Architecture');
+      expect(sidebar.textContent).not.toContain('Track 1: Step-by-Step Guides');
+
+      // Filter by "Informational"
+      act(() => {
+        fireEvent.click(filterInfo);
+      });
+      expect(filterInfo.getAttribute('aria-selected')).toBe('true');
+      expect(sidebar.textContent).toContain('Track 2: Feature & Field Reference');
+      expect(sidebar.textContent).not.toContain('Track 4: Engineering & Security Architecture');
+
+      // Return to "All"
+      act(() => {
+        fireEvent.click(filterAll);
+      });
+      expect(filterAll.getAttribute('aria-selected')).toBe('true');
+      expect(sidebar.textContent).toContain('Track 1: Step-by-Step Guides');
+      expect(sidebar.textContent).toContain('Track 2: Feature & Field Reference');
+      expect(sidebar.textContent).toContain('Track 4: Engineering & Security Architecture');
+    });
+
+    it('displays category badge pills in chapter meta bar, sidebar, and search results', async () => {
+      render(
+        <MemoryRouter initialEntries={['/docs/guide-custom-fields']}>
+          <Routes>
+            <Route path="/docs/:slug" element={<DocsCenterPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      // Meta bar category badge
+      const metaBadge = screen.getByTestId('docs-category-badge');
+      expect(metaBadge).toBeDefined();
+      expect(metaBadge.textContent).toBe('[Guide]');
+      expect(metaBadge.className).toContain('kb-badge-guide');
+
+      // Sidebar category badge pills
+      const sidebar = screen.getByTestId('docs-categories-sidebar');
+      const badges = sidebar.querySelectorAll('.kb-docs-badge-pill');
+      expect(badges.length).toBeGreaterThan(0);
+
+      // Instant search category badge pills
+      const searchInput = screen.getByTestId('docs-search-input');
+      act(() => {
+        fireEvent.change(searchInput, { target: { value: 'Docker' } });
+      });
+
+      await waitFor(() => {
+        expect(screen.getByTestId('docs-search-results')).toBeDefined();
+      });
+
+      const searchBadges = screen.getAllByText(/\[Guide\]|\[Informational\]|\[Architectural\]/);
+      expect(searchBadges.length).toBeGreaterThan(0);
+    });
   });
 
   describe('StudioDocLink Component', () => {
@@ -883,11 +987,12 @@ Here is **bold text**, *italic text*, \`inline code\`, and a [TOC Anchor](#my-an
   });
 
   describe('Release Candidate Polish & Accessibility (KAN-16 RC1)', () => {
-    it('places Home at Chapter 1 of 27 with Overview category', () => {
+    it('places Home at Chapter 1 of 28 with informational category and Overview track', () => {
       expect(WIKI_CHAPTERS[0]?.slug).toBe('home');
       expect(WIKI_CHAPTERS[0]?.order).toBe(1);
-      expect(WIKI_CHAPTERS[0]?.category).toBe('Overview');
-      expect(WIKI_CHAPTERS.length).toBe(27);
+      expect(WIKI_CHAPTERS[0]?.category).toBe('informational');
+      expect(WIKI_CHAPTERS[0]?.track).toBe('Overview');
+      expect(WIKI_CHAPTERS.length).toBe(28);
     });
 
     it('exercises resolveSafeDocImageUrl branches directly', () => {
