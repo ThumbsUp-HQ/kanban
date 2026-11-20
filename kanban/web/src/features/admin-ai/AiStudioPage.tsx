@@ -126,9 +126,19 @@ export function AiStudioPage(): JSX.Element {
   };
 
   const handleDragStart = (e: React.DragEvent, index: number): void => {
+    const target = e.target as HTMLElement | null;
+    if (target?.closest('button, input, select, textarea, a')) {
+      e.preventDefault();
+      return;
+    }
     setDraggedIndex(index);
     e.dataTransfer.effectAllowed = 'move';
     e.dataTransfer.setData('text/plain', String(index));
+  };
+
+  const handleDragEnd = (): void => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
   };
 
   const handleDragOver = (e: React.DragEvent, index: number): void => {
@@ -139,8 +149,10 @@ export function AiStudioPage(): JSX.Element {
     }
   };
 
-  const handleDragLeave = (): void => {
-    setDragOverIndex(null);
+  const handleDragLeave = (e: React.DragEvent): void => {
+    if (!e.currentTarget.contains(e.relatedTarget as Node | null)) {
+      setDragOverIndex(null);
+    }
   };
 
   const handleDrop = (e: React.DragEvent, targetIndex: number): void => {
@@ -256,6 +268,9 @@ export function AiStudioPage(): JSX.Element {
               <div
                 key={p.id}
                 className={`kb-provider-card kb-provider-stack-item ${isDragging ? 'kb-provider-stack-item--dragging' : ''} ${isDragOver ? 'kb-provider-stack-item--drag-over' : ''}`}
+                draggable={true}
+                onDragStart={(e) => { handleDragStart(e, index); }}
+                onDragEnd={handleDragEnd}
                 onDragOver={(e) => { handleDragOver(e, index); }}
                 onDragLeave={handleDragLeave}
                 onDrop={(e) => { handleDrop(e, index); }}
@@ -265,16 +280,14 @@ export function AiStudioPage(): JSX.Element {
                   <div className="kb-provider-card-header">
                     <div className="kb-provider-card-header-left">
                       <div className="kb-provider-order-controls">
-                        <button
-                          type="button"
+                        <span
+                          role="img"
                           className="kb-drag-handle"
-                          draggable
-                          onDragStart={(e) => { handleDragStart(e, index); }}
                           aria-label={`Drag to reorder ${p.display_name}`}
                           data-testid={`drag-handle-${p.id}`}
                         >
                           ⋮⋮
-                        </button>
+                        </span>
                         <span className="kb-provider-rank" data-testid={`provider-rank-${p.id}`}>
                           #{index + 1}
                         </span>

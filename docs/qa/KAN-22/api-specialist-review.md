@@ -69,7 +69,24 @@ All changes adhere strictly to the authoritative specifications in `docs/ARCHITE
 
 ---
 
+## 5. Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-16)
+
+- Target Branch: `fix/KAN-22-liveqa`
+- Remediation Head Commit: `9014d59`
+- Remediation Scope:
+  1. Pointer Activation & Native Drag-and-Drop: Replaced `<button draggable>` with accessible `<span role="img" aria-label="Drag to reorder..." className="kb-drag-handle">`, added `draggable={true}` on card containers guarded against interactive elements, and added `onDragEnd` and `onDragLeave` child-boundary guards.
+  2. Clean Single Disclosure Marker: Removed hardcoded character from `<summary className="kb-advanced-settings-summary">`, eliminating double disclosure triangles across light and dark themes.
+  3. Data Residency Normalization & Draft Endpoint Routing:
+     - Added `normalizeResidencyTier` mapping legacy `'cloud'` to `'cloud_standard'` and `'local'` to `'local_only'`, with `<option value="cloud">Cloud (Legacy)</option>` in the select dropdown.
+     - Initialized default `baseUrl` to `'https://api.openai.com/v1'` on draft mounts.
+     - When `baseUrl` or `providerKind` is modified on an existing provider, probe and test requests route dynamically to the draft endpoint (`targetProviderId: undefined`), ensuring modified URLs are properly tested against the API.
+  4. Zero Inline Styles & Strict CSP: Replaced `style={{ width: `${percentUsed}%` }}` in `AiBudgetModal.tsx` with semantic HTML `<progress className="kb-budget-progress" max={100} value={percentUsed} />` styled with canonical theme tokens in `aiStudio.css`.
+  5. Quality & Coverage Verification: 46 Vitest tests passing; all touched files achieve >= 95.77% branch coverage and 100% line coverage; `cssTokensAudit.test.ts` 4/4 passing; `tsc` (0 errors), `eslint` (0 warnings), `check_no_dashes` (0 em/en-dashes).
+
+---
+
 ## Verdict & Handoff
 STATUS: APPROVED
 
 The API contracts, security invariants, and test evidence are verified clean. Handoff to `@ui-spec-2` for visual, UX, and accessibility verification of `docs/qa/KAN-22/screenshots/`.
+

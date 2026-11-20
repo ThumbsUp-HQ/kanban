@@ -2,7 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+import { render, screen, fireEvent, createEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
 import { AiStudioPage } from '../AiStudioPage';
 import { AiBudgetModal } from '../AiBudgetModal';
@@ -349,8 +349,17 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
       // Drag over card #2 again (same index branch)
       fireEvent.dragOver(card2, { dataTransfer });
 
-      // Drag leave
-      fireEvent.dragLeave(card2);
+      // Drag leave moving over a child element inside card2 (should NOT clear dragOverIndex)
+      const childNode = card2.firstElementChild ?? card2;
+      const childLeaveEvent = createEvent.dragLeave(card2);
+      Object.defineProperty(childLeaveEvent, 'relatedTarget', { value: childNode });
+      fireEvent(card2, childLeaveEvent);
+      expect(card2.className).toContain('kb-provider-stack-item--drag-over');
+
+      // Drag leave moving outside card2 (should clear dragOverIndex)
+      const outsideLeaveEvent = createEvent.dragLeave(card2);
+      Object.defineProperty(outsideLeaveEvent, 'relatedTarget', { value: document.body });
+      fireEvent(card2, outsideLeaveEvent);
       expect(card2.className).not.toContain('kb-provider-stack-item--drag-over');
 
       // Drop on card #2
@@ -359,6 +368,21 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
       await waitFor(() => {
         expect(reorderSpy).toHaveBeenCalledWith(['prov-ollama-2', 'prov-openai-1']);
       });
+
+      // Test dragEnd resets drag state
+      const card1 = screen.getByTestId('provider-card-prov-openai-1');
+      fireEvent.dragStart(card1, { dataTransfer });
+      expect(card1.className).toContain('kb-provider-stack-item--dragging');
+      fireEvent.dragOver(card2, { dataTransfer });
+      expect(card2.className).toContain('kb-provider-stack-item--drag-over');
+      fireEvent.dragEnd(card1);
+      expect(card1.className).not.toContain('kb-provider-stack-item--dragging');
+      expect(card2.className).not.toContain('kb-provider-stack-item--drag-over');
+
+      // Drag start from interactive button inside card should be prevented
+      const moveUpBtn = screen.getByTestId('move-up-btn-prov-openai-1');
+      const notPrevented = fireEvent.dragStart(moveUpBtn, { dataTransfer });
+      expect(notPrevented).toBe(false);
     });
 
     it('executes Test Connection on provider card and displays latency and models', async () => {
@@ -716,6 +740,11 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
       await waitFor(() => {
         expect(screen.getByText('95% consumed')).toBeDefined();
       });
+      const progressBar = screen.getByTestId<HTMLProgressElement>('budget-progress-bar');
+      expect(progressBar.tagName.toLowerCase()).toBe('progress');
+      expect(progressBar.value).toBe(95);
+      expect(progressBar.max).toBe(100);
+      expect(progressBar.className).toContain('kb-budget-progress--danger');
     });
 
     it('renders warning consumption bar (75%) and quota exhausted message', async () => {
@@ -741,6 +770,9 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
       await waitFor(() => {
         expect(screen.getByText('75% consumed')).toBeDefined();
       });
+      const warnProgressBar = screen.getByTestId<HTMLProgressElement>('budget-progress-bar');
+      expect(warnProgressBar.value).toBe(75);
+      expect(warnProgressBar.className).toContain('kb-budget-progress--warning');
 
       // Quota exhausted (used >= cap)
       vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue([
@@ -1048,6 +1080,9 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
       // Expand Advanced Settings and override Residency Tier
       const advDetails = screen.getByTestId('advanced-settings-details');
       expect(advDetails).toBeDefined();
+      const advSummary = screen.getByText('Advanced Settings');
+      expect(advSummary.textContent.trim()).toBe('Advanced Settings');
+      expect(advSummary.textContent).not.toContain('▸');
       const residencySelect = screen.getByTestId<HTMLSelectElement>('provider-residency-select');
       fireEvent.change(residencySelect, { target: { value: 'eu-central' } });
       expect(residencySelect.value).toBe('eu-central');
@@ -1472,6 +1507,298 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
         />,
       );
       expect(container.firstChild).toBeNull();
+    });
+
+    it('normalizes legacy cloud and local residency tiers and includes legacy cloud option', () => {
+      const legacyCloudProvider: ProviderConfigPublic = {
+        ...mockProvider,
+        id: 'prov-legacy-cloud',
+        display_name: 'Legacy Cloud Provider',
+        residency_tier: 'cloud',
+      };
+      const { unmount } = render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={legacyCloudProvider}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      const residencySelect = screen.getByTestId<HTMLSelectElement>('provider-residency-select');
+      expect(residencySelect.value).toBe('cloud_standard');
+      expect(screen.getByRole('option', { name: 'Cloud (Legacy)' })).toBeDefined();
+
+      unmount();
+
+      const legacyLocalProvider: ProviderConfigPublic = {
+        ...mockProvider,
+        id: 'prov-legacy-local',
+        display_name: 'Legacy Local Provider',
+        residency_tier: 'local',
+      };
+      const { unmount: unmount2 } = render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={legacyLocalProvider}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      const residencySelect2 = screen.getByTestId<HTMLSelectElement>('provider-residency-select');
+      expect(residencySelect2.value).toBe('local_only');
+
+      unmount2();
+
+      const nullTierProvider: ProviderConfigPublic = {
+        ...mockProvider,
+        id: 'prov-null-tier',
+        display_name: 'Null Tier Provider',
+        residency_tier: '',
+      };
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={nullTierProvider}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+      const residencySelect3 = screen.getByTestId<HTMLSelectElement>('provider-residency-select');
+      expect(residencySelect3.value).toBe('cloud_standard');
+    });
+
+    it('initializes openai draft with default baseUrl and displayName when provider is null and airGapMode is false', () => {
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      const nameInput = screen.getByTestId<HTMLInputElement>('provider-name-input');
+      const urlInput = screen.getByTestId<HTMLInputElement>('provider-base-url-input');
+      expect(nameInput.value).toBe('OpenAI / OpenAI-Compatible');
+      expect(urlInput.value).toBe('https://api.openai.com/v1');
+    });
+
+    it('routes probe models and test connection to draft endpoint when editing provider with modified baseUrl', async () => {
+      const probeSpy = vi.spyOn(aiApi, 'probeAiModels').mockResolvedValue({
+        ok: true,
+        models: ['gpt-4o-custom'],
+        latency_ms: 45,
+        model_count: 1,
+      });
+      const testSpy = vi.spyOn(aiApi, 'testAiConnection').mockResolvedValue({
+        ok: true,
+        latency_ms: 45,
+        model_count: 1,
+        models: ['gpt-4o-custom'],
+      });
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={mockProvider}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      // Modify base_url and provide an API key
+      fireEvent.change(screen.getByTestId('provider-base-url-input'), {
+        target: { value: 'https://custom-gateway.corp.com/v1' },
+      });
+      fireEvent.change(screen.getByTestId('provider-key-input'), {
+        target: { value: 'sk-new-key-123' },
+      });
+
+      // Probe Models should route to draft endpoint (undefined providerId) with modified baseUrl
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(probeSpy).toHaveBeenCalledWith(
+          {
+            provider_kind: 'openai',
+            base_url: 'https://custom-gateway.corp.com/v1',
+            api_key: 'sk-new-key-123',
+          },
+          undefined,
+        );
+      });
+
+      // Test Connection should also route to draft endpoint (undefined providerId)
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(testSpy).toHaveBeenCalledWith(
+          {
+            provider_kind: 'openai',
+            base_url: 'https://custom-gateway.corp.com/v1',
+            api_key: 'sk-new-key-123',
+          },
+          undefined,
+        );
+      });
+    });
+
+    it('routes probe models and test connection to draft endpoint for local endpoint without key when modified', async () => {
+      const probeSpy = vi.spyOn(aiApi, 'probeAiModels').mockResolvedValue({
+        ok: true,
+        models: ['llama3.2:3b'],
+        latency_ms: 22,
+        model_count: 1,
+      });
+      const testSpy = vi.spyOn(aiApi, 'testAiConnection').mockResolvedValue({
+        ok: true,
+        latency_ms: 22,
+        model_count: 1,
+        models: ['llama3.2:3b'],
+      });
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={mockOllamaProvider}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      // Modify base_url to another local LAN endpoint (no key required)
+      fireEvent.change(screen.getByTestId('provider-base-url-input'), {
+        target: { value: 'http://192.168.1.99:11434' },
+      });
+
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(probeSpy).toHaveBeenCalledWith(
+          {
+            provider_kind: 'ollama',
+            base_url: 'http://192.168.1.99:11434',
+            api_key: null,
+          },
+          undefined,
+        );
+      });
+
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(testSpy).toHaveBeenCalledWith(
+          {
+            provider_kind: 'ollama',
+            base_url: 'http://192.168.1.99:11434',
+            api_key: null,
+          },
+          undefined,
+        );
+      });
+    });
+
+    it('creates provider with null api_key when key is empty', async () => {
+      const createSpy = vi.spyOn(aiApi, 'createAiProvider').mockResolvedValue(mockOllamaProvider);
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={null}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+      // Select Ollama protocol so no key is required
+      fireEvent.change(screen.getByTestId('provider-kind-select'), { target: { value: 'ollama' } });
+      fireEvent.click(screen.getByTestId('save-provider-btn'));
+      await waitFor(() => {
+        expect(createSpy).toHaveBeenCalledWith(
+          expect.objectContaining({
+            provider_kind: 'ollama',
+            api_key: null,
+          }),
+        );
+      });
+    });
+
+    it('routes probe and test connection to draft when providerKind is modified on existing provider', async () => {
+      const probeSpy = vi.spyOn(aiApi, 'probeAiModels').mockResolvedValue({
+        ok: true,
+        models: ['gemini-2.5-flash'],
+        latency_ms: 30,
+        model_count: 1,
+      });
+      const testSpy = vi.spyOn(aiApi, 'testAiConnection').mockResolvedValue({
+        ok: false,
+        error_code: 'AUTH_FAILED',
+        message: 'Invalid Google key',
+        latency_ms: 30,
+        model_count: 0,
+        models: [],
+      });
+
+      render(
+        <AiProviderEditorDrawer
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={mockProvider}
+          airGapMode={false}
+          onSaved={vi.fn()}
+        />,
+      );
+
+      // Change kind to gemini and enter key
+      fireEvent.change(screen.getByTestId('provider-kind-select'), { target: { value: 'gemini' } });
+      fireEvent.change(screen.getByTestId('provider-key-input'), { target: { value: 'gemini-key' } });
+
+      fireEvent.click(screen.getByTestId('probe-models-btn'));
+      await waitFor(() => {
+        expect(probeSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ provider_kind: 'gemini', api_key: 'gemini-key' }),
+          undefined,
+        );
+      });
+
+      fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+      await waitFor(() => {
+        expect(testSpy).toHaveBeenCalledWith(
+          expect.objectContaining({ provider_kind: 'gemini', api_key: 'gemini-key' }),
+          undefined,
+        );
+        expect(screen.getByTestId('drawer-test-status').textContent).toContain('Invalid Google key');
+      });
+    });
+
+    it('renders normal consumption progress bar (<70%) without warning or danger classes', async () => {
+      const normalBudgets: BudgetRecord[] = [
+        {
+          period_kind: 'monthly',
+          period_start: '2026-11-01',
+          token_cap: 100000,
+          tokens_used: 40000,
+          tokens_reserved: 0,
+        },
+      ];
+      vi.spyOn(aiApi, 'fetchBudgets').mockResolvedValue(normalBudgets);
+      render(
+        <AiBudgetModal
+          isOpen={true}
+          onClose={vi.fn()}
+          provider={mockProvider}
+        />,
+      );
+      await waitFor(() => {
+        expect(screen.getByText('40% consumed')).toBeDefined();
+      });
+      const normalBar = screen.getByTestId<HTMLProgressElement>('budget-progress-bar');
+      expect(normalBar.value).toBe(40);
+      expect(normalBar.className).not.toContain('kb-budget-progress--danger');
+      expect(normalBar.className).not.toContain('kb-budget-progress--warning');
     });
   });
 });

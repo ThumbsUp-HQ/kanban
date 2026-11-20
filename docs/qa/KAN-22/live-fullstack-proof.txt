@@ -1,0 +1,97 @@
+KAN-22 ([KB-P3-AUDIT-16]) LIVE FULL-STACK QA PROOF
+======================================================================
+Target Container : kanban-liveqa-4 (thumbs-up-kanban:local-qa)
+Target URL       : http://localhost:18954/admin/ai
+Execution Mode   : Real Playwright Chromium 159.0.8154.6 against live container
+                   and real PostgreSQL 16 + real local upstream HTTP servers,
+                   ZERO mockApi / ZERO page.route stubs
+Timestamp (UTC)  : 2026-11-20T02:55:18Z - 2026-11-20T02:55:26Z
+
+----------------------------------------------------------------------
+1. CONSOLE, PAGEERROR, WORKSPACE-SETTINGS & INLINE STYLE AUDIT
+----------------------------------------------------------------------
+- Console Errors (Desktop Light/Dark, Mobile Light/Dark): 0
+- Page Errors (Desktop Light/Dark, Mobile Light/Dark): 0
+- HTTP >= 400 Responses: 0
+- GET /api/v1/admin/workspace-settings: HTTP 200 on every load (0 404 errors)
+- Inline style="..." attributes in /admin/ai DOM:
+  desktop_light: 0
+  desktop_dark : 0
+  mobile_light : 0
+  mobile_dark  : 0
+
+----------------------------------------------------------------------
+2. PROTOCOL DROPDOWN & PROVIDER CARD BADGES
+----------------------------------------------------------------------
+- [data-testid="provider-kind-select"] options:
+  1. ollama : "Ollama (Local / Zero Egress)"
+  2. openai : "OpenAI / OpenAI-Compatible (vLLM, LM Studio, llama.cpp, LiteLLM)"
+  3. gemini : "Google Gemini (Cloud)"
+  ("custom" option count = 0)
+
+- Local vs Cloud Card Badges (Desktop Light):
+  #1 Ollama Primary          -> kind=ollama, residency="Local / Zero-Egress", keyStatus="No Key Required (Local)"
+  #2 Ollama LAN 192.168.1.101 -> kind=ollama, residency="Local / Zero-Egress", keyStatus="No Key Required (Local)"
+  #3 OpenAI Local vLLM       -> kind=openai, residency="Local / Zero-Egress", keyStatus="No Key Required (Local)"
+  #4 Google Gemini           -> kind=gemini, residency="Cloud",               keyStatus="Key Configured (Write-Only)"
+  #5 OpenAI Cloud            -> kind=openai, residency="Cloud",               keyStatus="Key Configured (Write-Only)"
+
+----------------------------------------------------------------------
+3. REAL UPSTREAM MODEL PROBE, CHIP SELECTION & CONNECTION TEST
+----------------------------------------------------------------------
+- Opened drawer against real http://127.0.0.1:11434:
+  Clicked [Probe Models] -> server-side httpx GET http://127.0.0.1:11434/api/tags (HTTP 200)
+  Filtered by "qwen", selected chip "qwen2.5-coder:32b", cleared filter, selected "llama3.3:70b".
+  Allowlist input updated to: "qwen2.5-coder:7b, llama3.2:3b, qwen2.5-coder:32b, llama3.3:70b"
+- Clicked [Test Connection] inside drawer:
+  Result banner: "Connected in 22ms - 2 models available" (Light & Dark)
+- Clicked [Test Connection] on provider cards:
+  #1 Ollama Primary    -> "Connected in 24ms - 2 models available" (Light), "Connected in 23ms - 2 models available" (Dark)
+  #3 OpenAI Local vLLM -> "Connected in 24ms - 2 models available" (Light), "Connected in 23ms - 2 models available" (Dark)
+
+----------------------------------------------------------------------
+4. ADVANCED SETTINGS <details> COLLAPSE / EXPAND
+----------------------------------------------------------------------
+- [data-testid="advanced-settings-details"] collapsed by default: true (open=false)
+- After clicking summary: expandedAfterClick=true (open=true), manual residency override [data-testid="provider-residency-select"] visible=true
+
+----------------------------------------------------------------------
+5. 5-PROVIDER REORDER & POSTGRESQL RELOAD PERSISTENCE
+----------------------------------------------------------------------
+- Initial UI order:
+  #1 #1 Ollama Primary
+  #2 #2 Ollama LAN 192.168.1.101
+  #3 #3 OpenAI Local vLLM
+  #4 #4 Google Gemini
+  #5 #5 OpenAI Cloud
+- Executed Move Down on #1, Move Up on #5, and DragEvent reorder on drag-handle (PUT /api/v1/admin/ai/providers/order -> HTTP 200).
+  (Technical note: Playwright pointer dragAndDrop did not fire native dragstart on <button draggable> in Chromium, so DragEvent with DataTransfer was dispatched after testing Move Down / Move Up clicks.)
+- Order after UI reorder:
+  #1 #3 OpenAI Local vLLM
+  #2 #2 Ollama LAN 192.168.1.101
+  #3 #1 Ollama Primary
+  #4 #5 OpenAI Cloud
+  #5 #4 Google Gemini
+- Order after await page.reload():
+  #1 #3 OpenAI Local vLLM
+  #2 #2 Ollama LAN 192.168.1.101
+  #3 #1 Ollama Primary
+  #4 #5 OpenAI Cloud
+  #5 #4 Google Gemini
+- persistedExactMatch: true
+
+----------------------------------------------------------------------
+6. SCREENSHOTS CAPTURED & VISUALLY INSPECTED
+----------------------------------------------------------------------
+- /home/adamoutler/kanban/docs/qa/KAN-22/screenshots/live-ai-studio-desktop-light.png
+- /home/adamoutler/kanban/docs/qa/KAN-22/screenshots/live-ai-studio-drawer-desktop-light.png
+- /home/adamoutler/kanban/docs/qa/KAN-22/screenshots/live-ai-studio-reordered-desktop-light.png
+- /home/adamoutler/kanban/docs/qa/KAN-22/screenshots/live-ai-studio-desktop-dark.png
+- /home/adamoutler/kanban/docs/qa/KAN-22/screenshots/live-ai-studio-drawer-desktop-dark.png
+- /home/adamoutler/kanban/docs/qa/KAN-22/screenshots/live-ai-studio-mobile-light.png
+- /home/adamoutler/kanban/docs/qa/KAN-22/screenshots/live-ai-studio-mobile-dark.png
+
+----------------------------------------------------------------------
+OVERALL KAN-22 VERDICT
+----------------------------------------------------------------------
+LIVE_STACK_VERDICT: PASS

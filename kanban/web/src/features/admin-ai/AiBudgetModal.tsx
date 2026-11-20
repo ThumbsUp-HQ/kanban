@@ -140,16 +140,19 @@ function AiBudgetModalContent({
               </span>
             </div>
 
-            <div className="kb-budget-progress-bar-bg" role="progressbar" aria-valuenow={percentUsed} aria-valuemin={0} aria-valuemax={100}>
-              <div
-                className={`kb-budget-progress-bar-fill ${
+            <div className="kb-budget-progress-container">
+              <progress
+                className={`kb-budget-progress ${
                   percentUsed >= 90
-                    ? 'kb-budget-progress-bar-fill--danger'
+                    ? 'kb-budget-progress--danger'
                     : percentUsed >= 70
-                      ? 'kb-budget-progress-bar-fill--warning'
+                      ? 'kb-budget-progress--warning'
                       : ''
                 }`}
-                style={{ width: `${String(percentUsed)}%` }}
+                max={100}
+                value={percentUsed}
+                aria-label="Token budget consumption"
+                data-testid="budget-progress-bar"
               />
             </div>
 
