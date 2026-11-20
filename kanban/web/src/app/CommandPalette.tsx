@@ -429,13 +429,12 @@ export function CommandPalette({
 
   useEffect(() => {
     const trimmed = query.trim();
-    if (!trimmed) {
-      setLiveSearchResults([]);
-      return;
-    }
-
     let active = true;
     const timer = setTimeout(() => {
+      if (!trimmed) {
+        if (active) setLiveSearchResults([]);
+        return;
+      }
       void (async () => {
         try {
           const res = (await apiFetch(
