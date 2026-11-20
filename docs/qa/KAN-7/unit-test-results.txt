@@ -1,7 +1,7 @@
 === PYTEST UNIT TESTS & COVERAGE ===
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-fix-705bca3c
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
@@ -47,32 +47,40 @@ tests/deploy/test_standalone_entrypoint.py::test_warm_boot_stale_alembic_digest_
 tests/deploy/test_standalone_entrypoint.py::test_ensure_backup_grants_executes_alembic_version_grant PASSED [100%]
 
 ================================ tests coverage ================================
-_______________ coverage: platform linux, python 3.12.7-final-0 ________________
-
 Name                              Stmts   Miss Branch BrPart  Cover   Missing
 -----------------------------------------------------------------------------
 deploy/standalone/entrypoint.py     286     32     72      8    87%   342-343, 471->476, 517->521, 522, 562->574, 565-570, 593-625, 631->634, 654->659, 684
 kanban/auth/setup.py                127      0     20      0   100%
 -----------------------------------------------------------------------------
 TOTAL                               413     32     92      8    91%
-============================== 38 passed in 0.71s ==============================
+============================== 38 passed in 0.38s ==============================
 
-=== VITEST UNIT TESTS & COVERAGE ===
+=== VITEST UNIT TESTS & COVERAGE (KAN-7 REMEDIATION) ===
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/kanban/web
+> @kanban/web@0.1.0 test:coverage
+> vitest run --coverage src/features/auth/SecondFactorStep.test.tsx src/realtime/index.test.tsx src/api/realtime.test.ts src/styles/__tests__/cssTokensAudit.test.ts
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-fix-705bca3c/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/auth/SecondFactorStep.test.tsx (19 tests) 479ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 19ms
+ ✓ src/api/realtime.test.ts (42 tests) 112ms
+ ✓ src/realtime/index.test.tsx (20 tests) 142ms
+ ✓ src/features/auth/SecondFactorStep.test.tsx (20 tests) 534ms
 
- Test Files  1 passed (1)
-      Tests  19 passed (19)
-   Start at  14:25:19
-   Duration  1.65s (environment 52%, tests 35%, import 8%, worker 3%, transform 1%)
+ Test Files  4 passed (4)
+      Tests  86 passed (86)
+   Duration  1.79s (environment 66%, tests 18%, import 11%, worker 5%, transform 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   98.96 |    96.25 |     100 |     100 |                   
- ...FactorStep.tsx |   98.96 |    96.25 |     100 |     100 | 46,187,207        
+All files          |   99.32 |    95.77 |     100 |   99.54 |                   
+ api               |   99.28 |    95.48 |     100 |   99.28 |                   
+  realtime.ts      |   99.28 |    95.48 |     100 |   99.28 | 271-272           
+ features/auth     |   98.97 |    96.42 |     100 |     100 |                   
+  ...actorStep.tsx |   98.97 |    96.42 |     100 |     100 | 46,187,208        
+ realtime          |     100 |    95.74 |     100 |     100 |                   
+  context.tsx      |     100 |    95.74 |     100 |     100 | 95,144            
 -------------------|---------|----------|---------|---------|-------------------

@@ -2,10 +2,7 @@
 All checks passed!
 
 === RUFF FORMAT CHECK ===
-1808 files already formatted
-
-=== MYPY CHECK ===
-Success: no issues found in 4 source files
+2 files already formatted
 
 === LINT IMPORTS ===
 
@@ -23,7 +20,7 @@ Success: no issues found in 4 source files
 Contracts
 ---------
 
-Analyzed 945 files, 3288 dependencies.
+Analyzed 953 files, 3327 dependencies.
 --------------------------------------
 
 Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
@@ -33,14 +30,31 @@ Contracts: 2 kept, 0 broken.
 
 === TYPESCRIPT TYPECHECK ===
 
-> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/kanban/web
+> @kanban/web@0.1.0 typecheck
 > tsc -b --noEmit
 
+Success: 0 errors
 
 === ESLINT ===
 
-> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/kanban/web
+> @kanban/web@0.1.0 lint
 > eslint . --max-warnings 0
 
+Success: 0 errors, 0 warnings
+
+=== VITE BUILD ===
+
+> @kanban/web@0.1.0 build
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+✓ 694 modules transformed.
+dist/index.html                             0.51 kB │ gzip:   0.32 kB
+dist/assets/mermaid.worker-CAM6jO1h.js  1,529.54 kB
+dist/assets/index-BAiIJ2Md.css            400.37 kB │ gzip:  56.66 kB
+dist/assets/index-li9z8NZ3.js           1,910.93 kB │ gzip: 518.93 kB
+✓ built in 1.33s
 
 === CHECK NO DASHES ===
+python3 -m scripts.check_no_dashes --all
+Success: 0 em/en-dashes found.

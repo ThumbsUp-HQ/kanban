@@ -71,9 +71,16 @@ function asRecord(value: unknown): Record<string, unknown> | null {
     : null;
 }
 
+export interface RealtimeSessionState {
+  authenticated?: boolean;
+  mfa_pending?: boolean;
+  [key: string]: unknown;
+}
+
 export interface RealtimeClientOptions {
   random?: () => number;
   wsPath?: string;
+  session?: RealtimeSessionState | null;
 }
 
 export class RealtimeClient {
@@ -84,6 +91,7 @@ export class RealtimeClient {
   private ws: WebSocket | null = null;
   private probe: WebSocket | null = null;
   private sse: EventSource | null = null;
+  private session: RealtimeSessionState | null = null;
   private attempt = 0;
   private failures = 0;
   private reqCounter = 0;
@@ -99,6 +107,30 @@ export class RealtimeClient {
   constructor(options: RealtimeClientOptions = {}) {
     this.random = options.random ?? Math.random;
     this.wsPath = options.wsPath ?? '/ws';
+    if (options.session !== undefined) {
+      this.session = options.session;
+    }
+  }
+
+  setSession(session: RealtimeSessionState | null): void {
+    const prevAllowed = this.isSessionAllowed();
+    this.session = session;
+    const nextAllowed = this.isSessionAllowed();
+
+    if (!nextAllowed && prevAllowed) {
+      this.close();
+    }
+  }
+
+  getSession(): RealtimeSessionState | null {
+    return this.session;
+  }
+
+  isSessionAllowed(): boolean {
+    if (this.session === null) {
+      return true;
+    }
+    return this.session.authenticated === true && this.session.mfa_pending !== true;
   }
 
   onStateChange(cb: StateChangeHandler): () => void {
@@ -117,6 +149,9 @@ export class RealtimeClient {
   }
 
   connect(): void {
+    if (!this.isSessionAllowed()) {
+      return;
+    }
     this.clearTimers();
     this.setState('connecting');
     this.openWebSocket();
@@ -199,12 +234,16 @@ export class RealtimeClient {
         this.droppedEvents += 1;
       }
     };
-    socket.onclose = () => {
+    socket.onclose = (event?: CloseEvent) => {
       if (this.ws !== socket) {
         return;
       }
       this.ws = null;
       if (this.state !== 'closed') {
+        if (event?.code === 4401 || event?.code === 4403 || event?.code === 1008 || !this.isSessionAllowed()) {
+          this.close();
+          return;
+        }
         this.onWsFailure();
       }
     };
@@ -228,6 +267,10 @@ export class RealtimeClient {
   }
 
   private onWsFailure(): void {
+    if (!this.isSessionAllowed()) {
+      this.close();
+      return;
+    }
     this.failures += 1;
     if (this.failures >= WS_FAILURES_BEFORE_SSE) {
       this.startSseFallback();
@@ -238,7 +281,7 @@ export class RealtimeClient {
     this.attempt += 1;
     this.reconnectTimer = setTimeout(() => {
       this.reconnectTimer = null;
-      if (this.state !== 'closed') {
+      if (this.state !== 'closed' && this.isSessionAllowed()) {
         this.openWebSocket();
       }
     }, delay);
