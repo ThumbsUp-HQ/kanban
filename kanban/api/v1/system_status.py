@@ -187,9 +187,7 @@ async def get_system_status_endpoint(
 
     tier_b_avail = bool(status_data["tier_b_sandbox_available"])
     supported_tiers = (
-        ["scalar", "formula", "wasm", "nsjail"]
-        if tier_b_avail
-        else ["scalar", "formula", "wasm"]
+        ["scalar", "formula", "wasm", "nsjail"] if tier_b_avail else ["scalar", "formula", "wasm"]
     )
     sandbox_reason = (
         None
@@ -253,9 +251,7 @@ async def get_admin_standalone_status_endpoint(
 
     tier_b_avail = bool(status_data["tier_b_sandbox_available"])
     supported_tiers = (
-        ["scalar", "formula", "wasm", "nsjail"]
-        if tier_b_avail
-        else ["scalar", "formula", "wasm"]
+        ["scalar", "formula", "wasm", "nsjail"] if tier_b_avail else ["scalar", "formula", "wasm"]
     )
     sandbox_reason = (
         None

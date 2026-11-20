@@ -356,4 +356,3 @@ def test_is_tier_b_available_direct_helpers() -> None:
         assert_tier_available("nsjail", tier_b_sandbox_available=False)
     assert exc_info.value.status == 422
     assert exc_info.value.code == "SANDBOX_UNAVAILABLE_IN_STANDALONE"
-

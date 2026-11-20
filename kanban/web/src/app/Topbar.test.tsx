@@ -904,6 +904,5 @@ describe('Topbar', () => {
         expect.objectContaining({ queryKey: ['system', 'status'] }),
       );
     });
-    });
   });
 });

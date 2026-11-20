@@ -59,7 +59,7 @@ All API contracts, security invariants, database constraints, CSP compliance rul
 - Serialization Points:
   - `kanban/services/issues.py` (`serialize_issue`):
     ```python
-    state=StateSummary(
+    state = StateSummary(
         id=state.id,
         name=state.name,
         group=state.state_group,
