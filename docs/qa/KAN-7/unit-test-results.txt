@@ -1,7 +1,7 @@
 === PYTEST UNIT TESTS & COVERAGE ===
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-rcfix-ca5cf51e
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-rc3-22375430
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
@@ -19,87 +19,40 @@ deploy/standalone/entrypoint.py     286     32     72      8    87%   342-343, 4
 kanban/auth/setup.py                127      0     20      0   100%
 -----------------------------------------------------------------------------
 TOTAL                               413     32     92      8    91%
-============================== 38 passed in 0.71s ==============================
+============================== 38 passed in 0.70s ==============================
 
 === VITEST UNIT TESTS & COVERAGE (KAN-7 REMEDIATION) ===
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-rcfix-ca5cf51e/kanban/web
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-rc3-22375430/kanban/web
       Coverage enabled with v8
 
-stderr | src/realtime/index.test.tsx > Realtime Module & React Hooks > Session gating & KAN-7 remediation > queries /api/v1/auth/session via useQuery when session prop is omitted on protected path
-An update to RealtimeProvider inside a test was not wrapped in act(...).
+ ✓ src/features/auth/useSessionGuard.test.tsx (18 tests) 145ms
+ ✓ src/api/realtime.test.ts (44 tests) 130ms
+ ✓ src/realtime/index.test.tsx (21 tests) 221ms
+ ✓ src/features/auth/SecondFactorStep.test.tsx (20 tests) 652ms
+ ✓ src/app/AppShell.test.tsx (6 tests) 1386ms
+   ✓ AppShell (6)
+     ✓ renders app shell with skip link, sidebar rail, topbar header, main canvas, and anchors 457ms
+     ✓ renders minimal clean shell placeholder without Topbar/Sidebar/Outlet when sessionGuard is checking or redirecting (fail-closed) 245ms
+ ✓ src/app/Topbar.test.tsx (21 tests) 1943ms
 
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-
- ✓ src/features/auth/useSessionGuard.test.tsx (16 tests) 125ms
- ✓ src/api/realtime.test.ts (44 tests) 133ms
- ✓ src/realtime/index.test.tsx (21 tests) 235ms
-stderr | src/features/auth/SecondFactorStep.test.tsx > SecondFactorStep (KB-P3-35) > prevents multiple concurrent submissions when isVerifying is active
-An update to SecondFactorStep inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-
-stderr | src/features/auth/SecondFactorStep.test.tsx > SecondFactorStep (KB-P3-35) > prevents concurrent recovery code submission when isVerifying is true
-An update to SecondFactorStep inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-
-stderr | src/features/auth/SecondFactorStep.test.tsx > SecondFactorStep (KB-P3-35) > prevents concurrent passkey assertions when isVerifying is already true
-An update to SecondFactorStep inside a test was not wrapped in act(...).
-
-When testing, code that causes React state updates should be wrapped into act(...):
-
-act(() => {
-  /* fire events that update state */
-});
-/* assert on the output */
-
-This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
-
- ✓ src/features/auth/SecondFactorStep.test.tsx (20 tests) 677ms
- ✓ src/app/Topbar.test.tsx (21 tests) 1812ms
-   ✓ Topbar (21)
-     ✓ renders breadcrumb, search trigger, header pills, and avatar menu 307ms
-     ✓ navigates via avatar menu admin links and closes menu on click 428ms
-
- Test Files  5 passed (5)
-      Tests  122 passed (122)
-   Start at  23:42:17
-   Duration  3.41s (environment 48%, tests 34%, import 11%, worker 3%, transform 2%)
+ Test Files  6 passed (6)
+      Tests  130 passed (130)
+   Duration  3.55s
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   99.18 |    95.42 |     100 |   99.66 |                   
+All files          |   99.29 |     96.3 |     100 |   99.71 |                   
  api               |   99.29 |    95.53 |     100 |   99.29 |                   
   realtime.ts      |   99.29 |    95.53 |     100 |   99.29 | 271-272           
- app               |   97.91 |    95.37 |     100 |     100 |                   
+ app               |   99.01 |    96.39 |     100 |     100 |                   
+  AppShell.tsx     |     100 |    97.67 |     100 |     100 | 112,174           
   Topbar.tsx       |   97.91 |    95.37 |     100 |     100 | ...52-158,176-187 
- features/auth     |   99.38 |    93.87 |     100 |     100 |                   
+ features/auth     |   99.37 |    95.94 |     100 |     100 |                   
   ...actorStep.tsx |   98.97 |    96.42 |     100 |     100 | 46,187,208        
-  ...ssionGuard.ts |     100 |    90.47 |     100 |     100 | ...50,167,185,191 
+  ...ssionGuard.ts |     100 |    95.31 |     100 |     100 | 61,156,193        
  realtime          |     100 |      100 |     100 |     100 |                   
   context.tsx      |     100 |      100 |     100 |     100 |                   
 -------------------|---------|----------|---------|---------|-------------------

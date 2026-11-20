@@ -3,23 +3,29 @@
 ## Audit Metadata
 - Ticket ID: KAN-7 ([KB-P3-AUDIT-01])
 - Reviewer: ui-spec-2 (Clean-Room UI/UX Specialist)
-- Date: 2026-11-19
-- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-rcfix-ca5cf51e`
-- Target Branch: fix/KAN-7-rc2
-- Base Commit: 036216b
-- Head Commit: 402a8b9
+- Date: 2026-11-20
+- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-rc3-22375430`
+- Target Branch: fix/KAN-7-rc3
+- Base Commit: 564b574
+- Head Commit: 631ee80
 - STATUS: APPROVED
 
 ---
 
 ## Executive Summary
-This review evaluates the UI layout, contrast, interaction ergonomics, mobile responsiveness, and frontend standards for ticket KAN-7 and its Clean-Room Reality-Checker Round 2 remediation ([KB-P3-AUDIT-01]).
+This review evaluates the UI layout, contrast, interaction ergonomics, mobile responsiveness, and frontend standards for ticket KAN-7 and its Clean-Room Reality-Checker Round 3 surgical polish ([KB-P3-AUDIT-01]).
 
-The Round 2 remediation resolves:
-1. Fail-closed `RealtimeProvider` state initialization in `kanban/web/src/realtime/context.tsx`: `effectiveSession` defaults strictly to `{ authenticated: false, mfa_pending: false }` whenever `sessionQuery.data` is unresolved, pending, or rejected with a network error. Unauthenticated or `mfa_pending` visitors visiting `/` directly now cleanly open zero WebSocket or SSE connections, eliminating spurious 403 console errors.
-2. Synchronized client-side logout in `Topbar.tsx` (`handleLogout`) and `useSessionGuard.ts`: dispatching `kb:auth-logout` custom events and invalidating `['auth', 'session']` so `RealtimeProvider` disconnects synchronously upon user logout or session expiration.
-3. Guard in `api/realtime.ts` (`probeWebSocket()`): exits immediately if `!this.isSessionAllowed()`, preventing background upgrade attempts from unauthorized states.
-4. Second-factor recovery responsive tab wrapping (`flex-wrap: wrap`) on 390px mobile viewports with zero horizontal overflow.
+The Round 3 remediation resolves:
+1. Fail-closed `AppShell` authentication placeholder gate in `kanban/web/src/app/AppShell.tsx`:
+   - Renders a clean `<div className="kb-app-shell" data-testid="app-shell-auth-loading" />` placeholder while `useSessionGuard` is in `checking` or `redirecting` state.
+   - Suppresses premature mounting of `<Topbar />`, `<Sidebar />`, and `<Outlet />`, eliminating spurious 401 console errors when unauthenticated users visit protected routes directly prior to redirection to `/setup` or `/login`.
+   - Properly gates `useRealtimeSubscription` and workspace queries on `isAuthReady`, preventing unauthenticated socket or API calls.
+   - Contains zero inline styles (`style={...}`), using standard CSS class `.kb-app-shell`.
+2. Fail-closed `useSessionGuard` initialization in non-test browser runtimes:
+   - Sets `status: 'checking'` immediately on protected routes until status endpoints resolve.
+   - Dispatches `kb:auth-logout` custom events to ensure clean teardown of realtime subscriptions upon redirection.
+3. Second-factor recovery responsive tab wrapping (`flex-wrap: wrap`) on 390px mobile viewports with zero horizontal overflow.
+4. Comprehensive test coverage: 130 Vitest tests passing across touched files with >95% statement and branch coverage.
 
 All visual proof screenshots across Desktop (1440x900) and Mobile (390x844) viewports in Light and Dark themes were inspected and verified via binary image analysis.
 
@@ -57,20 +63,20 @@ All visual proof screenshots across Desktop (1440x900) and Mobile (390x844) view
 - HTML5 Pattern Validation: Escaped hyphen in regex pattern (`[A-Za-z0-9\-]{8,32}`) prevents browser `SyntaxError` when compiling under modern Chromium UnicodeSets (`/v` flag).
 - Component Identifiers: `data-testid="second-factor-step"` added to the root container.
 
-### 3. Realtime Connection Lifecycle & Console Cleanliness
-- Fail-Closed Initialization:
-  - `RealtimeProvider` initializes `effectiveSession` fail-closed to `{ authenticated: false, mfa_pending: false }` while `sessionQuery` is pending or failed.
-  - `probeWebSocket()` exits immediately when `!this.isSessionAllowed()`.
-  - Disconnect handlers in `Topbar.tsx` and `useSessionGuard.ts` dispatch `kb:auth-logout` and invalidate query state, ensuring clean client teardown.
-  - Emits 0 WebSocket/SSE connection failures (`401`/`403`) in the browser console during authentication flows.
+### 3. AppShell Fail-Closed Auth State & Console Cleanliness
+- Auth Gate Placeholder:
+  - While session status is checking or redirecting, `AppShell` returns `<div className="kb-app-shell" data-testid="app-shell-auth-loading" />`.
+  - No protected components (Topbar, Sidebar, Outlet) are mounted until authentication is verified.
+  - Spurious 401 console errors on initial load of protected URLs are completely avoided.
+  - Realtime subscription and workspace metadata queries are suppressed until session authentication is active.
 
 ---
 
 ## Code Quality & Standards
 
 ### 1. Content Security Policy (CSP) Compliance
-- Zero inline `style={...}` attributes introduced in `SecondFactorStep.tsx` or `context.tsx`.
-- All styles managed in `auth.css` using canonical design tokens (`var(--space-*)`, `var(--text-*)`, `var(--tap-min)`).
+- Zero inline `style={...}` attributes introduced in `AppShell.tsx`, `SecondFactorStep.tsx`, or `context.tsx`.
+- All styling uses canonical design tokens and dedicated CSS classes.
 - Verified by automated test: `cssTokensAudit.test.ts` passes 4 of 4 tests.
 
 ### 2. Type Safety & State Hygiene
@@ -82,16 +88,17 @@ All visual proof screenshots across Desktop (1440x900) and Mobile (390x844) view
 
 ---
 
-## Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-01 Round 2)
+## Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-01 Round 3)
 
-- Target Branch: `fix/KAN-7-rc2`
-- Remediation Head Commit: `402a8b9`
+- Target Branch: `fix/KAN-7-rc3`
+- Remediation Head Commit: `631ee80`
 - Remediations Verified:
-  1. `RealtimeProvider` fail-closed session defaults prevent 403 WebSocket console errors on unauthenticated visits.
-  2. `probeWebSocket()` session guard prevents background reconnects during unauthenticated states.
-  3. `Topbar.tsx` and `useSessionGuard.ts` synchronized logout dispatches clean disconnect events.
-  4. Unit test coverage across `context.tsx`, `realtime.ts`, `Topbar.tsx`, and `useSessionGuard.ts` with >= 95% statement and branch coverage.
-  5. 100% zero em-dashes and en-dashes.
+  1. `AppShell.tsx` fail-closed auth placeholder gate prevents premature child rendering and eliminates 401 console logs.
+  2. `RealtimeProvider` fail-closed session defaults prevent 403 WebSocket console errors on unauthenticated visits.
+  3. `probeWebSocket()` session guard prevents background reconnects during unauthenticated states.
+  4. `Topbar.tsx` and `useSessionGuard.ts` synchronized logout dispatches clean disconnect events.
+  5. Unit test coverage across `AppShell.tsx`, `useSessionGuard.ts`, `context.tsx`, `realtime.ts`, and `Topbar.tsx` with >= 95% statement and branch coverage (130 tests passing).
+  6. 100% zero em-dashes and en-dashes.
 
 ---
 
@@ -102,12 +109,13 @@ All visual proof screenshots across Desktop (1440x900) and Mobile (390x844) view
 3. [x] Live-stack setup claim and second-factor screenshots verified
 4. [x] Setup Wizard layout, contrast, and responsive stacking verified
 5. [x] Mobile 390px second factor tab wrapping (`flex-wrap: wrap`) verified with 0 overflow
-6. [x] Unauthenticated and `mfa_pending` WebSocket/SSE suppression verified (0 console errors)
-7. [x] HTML5 recovery code regex pattern verified (`[A-Za-z0-9\-]{8,32}`)
-8. [x] Zero inline `style={...}` attributes (CSP compliant)
-9. [x] Canonical design tokens verified (`cssTokensAudit.test.ts` passes 4/4)
-10. [x] Strict ASCII hyphenation verified (0 em/en-dashes)
-11. [x] Frontend test suite passes: 122 Vitest unit tests passing across touched files
+6. [x] AppShell fail-closed auth gate placeholder verified (0 console 401s on initial landing)
+7. [x] Unauthenticated and `mfa_pending` WebSocket/SSE suppression verified (0 console errors)
+8. [x] HTML5 recovery code regex pattern verified (`[A-Za-z0-9\-]{8,32}`)
+9. [x] Zero inline `style={...}` attributes (CSP compliant)
+10. [x] Canonical design tokens verified (`cssTokensAudit.test.ts` passes 4/4)
+11. [x] Strict ASCII hyphenation verified (0 em/en-dashes)
+12. [x] Frontend test suite passes: 130 Vitest unit tests passing across touched files
 
 ---
 

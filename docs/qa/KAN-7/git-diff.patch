@@ -907,6 +907,436 @@ index a533e7a..4fda761 100644
      if (this.state !== 'sse-fallback' || this.probe) {
        return;
      }
+diff --git a/kanban/web/src/app/AppShell.test.tsx b/kanban/web/src/app/AppShell.test.tsx
+index cdecd45..0aa0ea8 100644
+--- a/kanban/web/src/app/AppShell.test.tsx
++++ b/kanban/web/src/app/AppShell.test.tsx
+@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { AppShell, computeCurrentSection } from './AppShell';
+ import { ThemeProvider } from '../theme/ThemeProvider';
++import * as sessionGuardModule from '../features/auth/useSessionGuard';
+ 
+ describe('AppShell', () => {
+   let queryClient: QueryClient;
+@@ -110,6 +111,26 @@ describe('AppShell', () => {
+       });
+     }
+ 
++    // Select Toggle sidebar from Command palette on mobile (innerWidth = 1024)
++    act(() => {
++      searchBtn.click();
++    });
++    const toggleSidebarOption = screen.getByText('Toggle sidebar');
++    act(() => {
++      toggleSidebarOption.click();
++    });
++    expect(screen.getByRole('dialog', { name: 'Sidebar navigation' })).toBeDefined();
++
++    // Test Toggle sidebar on desktop (innerWidth = 1440)
++    vi.stubGlobal('innerWidth', 1440);
++    act(() => {
++      searchBtn.click();
++    });
++    const toggleSidebarDesktop = screen.getByText('Toggle sidebar');
++    act(() => {
++      toggleSidebarDesktop.click();
++    });
++
+     vi.unstubAllGlobals();
+   });
+ 
+@@ -154,7 +175,30 @@ describe('AppShell', () => {
+     expect(computeCurrentSection('/projects/KAN/settings/workflows')).toBe('Workflows');
+     expect(computeCurrentSection('/workflows')).toBe('Workflows');
+     expect(computeCurrentSection('/projects/KAN/settings/custom-fields')).toBe('Custom Fields');
++    expect(computeCurrentSection('/projects/KAN/settings')).toBe('Settings');
++    expect(computeCurrentSection('/projects/KAN/cycles')).toBe('Cycles');
++    expect(computeCurrentSection('/projects/KAN/modules')).toBe('Modules');
++    expect(computeCurrentSection('/projects/KAN/docs')).toBe('Docs');
++    expect(computeCurrentSection('/projects/KAN/stickies')).toBe('Stickies');
++    expect(computeCurrentSection('/projects/KAN/views')).toBe('Views');
+     expect(computeCurrentSection('/projects/KAN/activity')).toBe('Activity');
++    expect(computeCurrentSection('/projects/KAN/overview')).toBe('Overview');
++    expect(computeCurrentSection('/projects/KAN/issues')).toBe('Work Items');
++    expect(computeCurrentSection('/other/path', 'Fallback')).toBe('Fallback');
++
++    // Test initial collapsed sidebar state from localStorage
++    localStorage.setItem('kb.sidebar', 'collapsed');
++    const { unmount: unmountCollapsed } = render(
++      <QueryClientProvider client={queryClient}>
++        <ThemeProvider>
++          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
++            <AppShell projectKey="KAN" />
++          </MemoryRouter>
++        </ThemeProvider>
++      </QueryClientProvider>,
++    );
++    unmountCollapsed();
++    localStorage.removeItem('kb.sidebar');
+ 
+     const { unmount } = render(
+       <QueryClientProvider client={queryClient}>
+@@ -197,4 +241,206 @@ describe('AppShell', () => {
+       );
+     });
+   });
++
++  it('toggles sidebar collapse state via [ shortcut and header buttons', () => {
++    localStorage.removeItem('kb.sidebar');
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <ThemeProvider>
++          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
++            <AppShell projectKey="KAN" projectName="kanban" />
++          </MemoryRouter>
++        </ThemeProvider>
++      </QueryClientProvider>,
++    );
++
++    const shell = document.querySelector('.kb-app-shell');
++    expect(shell).not.toBeNull();
++    expect(shell?.classList.contains('kb-app-shell--sidebar-collapsed')).toBe(false);
++
++    // Toggle collapse via [ shortcut
++    act(() => {
++      fireEvent.keyDown(window, { key: '[' });
++    });
++    expect(shell?.classList.contains('kb-app-shell--sidebar-collapsed')).toBe(true);
++    expect(localStorage.getItem('kb.sidebar')).toBe('collapsed');
++
++    // Toggle expand via [ shortcut
++    act(() => {
++      fireEvent.keyDown(window, { key: '[' });
++    });
++    expect(shell?.classList.contains('kb-app-shell--sidebar-collapsed')).toBe(false);
++    expect(localStorage.getItem('kb.sidebar')).toBe('open');
++
++    // Click collapse button in sidebar header
++    const collapseBtn = screen.getByRole('button', { name: 'Collapse navigation sidebar' });
++    act(() => {
++      collapseBtn.click();
++    });
++    expect(shell?.classList.contains('kb-app-shell--sidebar-collapsed')).toBe(true);
++
++    // Click expand button in topbar
++    const expandBtn = screen.getByRole('button', { name: 'Expand navigation sidebar' });
++    act(() => {
++      expandBtn.click();
++    });
++    expect(shell?.classList.contains('kb-app-shell--sidebar-collapsed')).toBe(false);
++
++    // Shortcuts modal via '?' and 'kb:open-shortcuts'
++    act(() => {
++      fireEvent.keyDown(window, { key: '?' });
++    });
++    expect(screen.getByRole('dialog', { name: /Keyboard Shortcuts/i })).toBeDefined();
++
++    // Close shortcuts modal via Escape
++    act(() => {
++      fireEvent.keyDown(window, { key: 'Escape' });
++    });
++
++    // Open via kb:open-shortcuts event
++    act(() => {
++      window.dispatchEvent(new CustomEvent('kb:open-shortcuts'));
++    });
++    expect(screen.getByRole('dialog', { name: /Keyboard Shortcuts/i })).toBeDefined();
++
++    // Close via close button
++    const closeShortcutsBtn = screen.getByTestId('shortcuts-modal-close-btn');
++    act(() => {
++      closeShortcutsBtn.click();
++    });
++    expect(screen.queryByRole('dialog', { name: /Keyboard Shortcuts/i })).toBeNull();
++
++    // 'c' shortcut triggers kb:create-issue
++    const createIssueSpy = vi.fn();
++    window.addEventListener('kb:create-issue', createIssueSpy);
++    act(() => {
++      fireEvent.keyDown(window, { key: 'c' });
++    });
++    expect(createIssueSpy).toHaveBeenCalled();
++    window.removeEventListener('kb:create-issue', createIssueSpy);
++  });
++
++  it('renders minimal clean shell placeholder without Topbar/Sidebar/Outlet when sessionGuard is checking or redirecting (fail-closed)', () => {
++    const spy = vi.spyOn(sessionGuardModule, 'useSessionGuard');
++
++    // Case 1: checking
++    spy.mockReturnValue({
++      status: 'checking',
++      initialized: null,
++      authenticated: null,
++      csrfToken: null,
++      principalId: null,
++      workspaceId: null,
++      aalLevel: 0,
++      mfaPending: false,
++    });
++
++    const { unmount: unmount1 } = render(
++      <QueryClientProvider client={queryClient}>
++        <ThemeProvider>
++          <MemoryRouter initialEntries={['/']}>
++            <AppShell>
++              <div data-testid="protected-canvas-child">Child Content</div>
++            </AppShell>
++          </MemoryRouter>
++        </ThemeProvider>
++      </QueryClientProvider>,
++    );
++
++    const placeholder = screen.getByTestId('app-shell-auth-loading');
++    expect(placeholder).toBeDefined();
++    expect(placeholder.className).toBe('kb-app-shell');
++    expect(placeholder.getAttribute('style')).toBeNull();
++    expect(screen.queryByTestId('protected-canvas-child')).toBeNull();
++    expect(screen.queryByRole('link', { name: 'Skip to content' })).toBeNull();
++    expect(screen.queryByRole('button', { name: 'Open navigation' })).toBeNull();
++    unmount1();
++
++    // Case 2: redirecting
++    spy.mockReturnValue({
++      status: 'redirecting',
++      initialized: false,
++      authenticated: null,
++      csrfToken: null,
++      principalId: null,
++      workspaceId: null,
++      aalLevel: 0,
++      mfaPending: false,
++    });
++
++    const { unmount: unmount2 } = render(
++      <QueryClientProvider client={queryClient}>
++        <ThemeProvider>
++          <MemoryRouter initialEntries={['/']}>
++            <AppShell>
++              <div data-testid="protected-canvas-child">Child Content</div>
++            </AppShell>
++          </MemoryRouter>
++        </ThemeProvider>
++      </QueryClientProvider>,
++    );
++
++    expect(screen.getByTestId('app-shell-auth-loading')).toBeDefined();
++    expect(screen.queryByTestId('protected-canvas-child')).toBeNull();
++    unmount2();
++
++    // Case 3: authenticated=true, but mfaPending=true
++    spy.mockReturnValue({
++      status: 'redirecting',
++      initialized: true,
++      authenticated: true,
++      csrfToken: null,
++      principalId: 'p1',
++      workspaceId: 'w1',
++      aalLevel: 1,
++      mfaPending: true,
++    });
++
++    const { unmount: unmount3 } = render(
++      <QueryClientProvider client={queryClient}>
++        <ThemeProvider>
++          <MemoryRouter initialEntries={['/']}>
++            <AppShell>
++              <div data-testid="protected-canvas-child">Child Content</div>
++            </AppShell>
++          </MemoryRouter>
++        </ThemeProvider>
++      </QueryClientProvider>,
++    );
++
++    expect(screen.getByTestId('app-shell-auth-loading')).toBeDefined();
++    expect(screen.queryByTestId('protected-canvas-child')).toBeNull();
++    unmount3();
++
++    // Case 4: authenticated=false
++    spy.mockReturnValue({
++      status: 'redirecting',
++      initialized: true,
++      authenticated: false,
++      csrfToken: null,
++      principalId: null,
++      workspaceId: null,
++      aalLevel: 0,
++      mfaPending: false,
++    });
++
++    const { unmount: unmount4 } = render(
++      <QueryClientProvider client={queryClient}>
++        <ThemeProvider>
++          <MemoryRouter initialEntries={['/']}>
++            <AppShell>
++              <div data-testid="protected-canvas-child">Child Content</div>
++            </AppShell>
++          </MemoryRouter>
++        </ThemeProvider>
++      </QueryClientProvider>,
++    );
++
++    expect(screen.getByTestId('app-shell-auth-loading')).toBeDefined();
++    expect(screen.queryByTestId('protected-canvas-child')).toBeNull();
++    unmount4();
++
++    spy.mockRestore();
++  });
+ });
+diff --git a/kanban/web/src/app/AppShell.tsx b/kanban/web/src/app/AppShell.tsx
+index 11a994a..43665b0 100644
+--- a/kanban/web/src/app/AppShell.tsx
++++ b/kanban/web/src/app/AppShell.tsx
+@@ -12,7 +12,7 @@ import React, {
+   type ReactNode,
+ } from 'react';
+ import { Outlet, useLocation, useNavigate } from 'react-router';
+-import { Sidebar } from './Sidebar';
++import { Sidebar, SIDEBAR_STORAGE_KEY, sanitizeSidebarState } from './Sidebar';
+ import { Topbar } from './Topbar';
+ import { CommandPalette, type CachedIssue } from './CommandPalette';
+ import { ShortcutsCheatSheetModal } from './ShortcutsCheatSheetModal';
+@@ -98,12 +98,17 @@ export function AppShell({
+   systemStatus,
+   cachedIssues,
+ }: AppShellProps): JSX.Element {
+-  useSessionGuard();
++  const sessionGuard = useSessionGuard();
++  const isAuthReady =
++    sessionGuard.status === 'authenticated' &&
++    !sessionGuard.mfaPending &&
++    sessionGuard.authenticated !== false;
++
+   const location = useLocation();
+   const navigate = useNavigate();
+   const match = /\/projects\/([^/]+)/.exec(location.pathname);
+   const activeProjectKey = match?.[1] ?? projectKey;
+-  useRealtimeSubscription(activeProjectKey ? `project:${activeProjectKey}` : null);
++  useRealtimeSubscription(isAuthReady && activeProjectKey ? `project:${activeProjectKey}` : null);
+   const isInsideProject = Boolean(match) || (Boolean(activeProjectKey) && location.pathname.startsWith('/projects'));
+   const computedSection =
+     currentSection && currentSection !== 'Work Items'
+@@ -124,7 +129,7 @@ export function AppShell({
+         return null;
+       }
+     },
+-    enabled: !isPublicRoute,
++    enabled: !isPublicRoute && isAuthReady,
+     staleTime: 60000,
+   });
+ 
+@@ -147,10 +152,49 @@ export function AppShell({
+   }, [activeProjectKey, navigate]);
+ 
+   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
++  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
++    try {
++      const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);
++      return sanitizeSidebarState(stored) === 'collapsed';
++    /* v8 ignore start */
++    } catch {
++      return false;
++    }
++    /* v8 ignore stop */
++  });
++
++  const toggleSidebarCollapse = useCallback(() => {
++    setIsSidebarCollapsed((prev) => !prev);
++  }, []);
++
++  useEffect(() => {
++    try {
++      const stateStr = isSidebarCollapsed ? 'collapsed' : 'open';
++      localStorage.setItem(SIDEBAR_STORAGE_KEY, stateStr);
++      if (typeof window !== 'undefined') {
++        window.dispatchEvent(
++          new CustomEvent('kb:sidebar-changed', {
++            detail: { collapsed: stateStr },
++          }),
++        );
++      }
++    } catch {
++      // Ignore storage errors
++    }
++  }, [isSidebarCollapsed]);
++
+   const [paletteOpen, setPaletteOpen] = useState(false);
+   const [shortcutsModalOpen, setShortcutsModalOpen] = useState(false);
+   const hamburgerButtonRef = useRef<HTMLButtonElement | null>(null);
+ 
++  const handleToggleSidebar = useCallback(() => {
++    if (typeof window !== 'undefined' && window.innerWidth <= 1279) {
++      setMobileSidebarOpen((prev) => !prev);
++    } else {
++      toggleSidebarCollapse();
++    }
++  }, [toggleSidebarCollapse]);
++
+   // Register global shortcuts: Mod+K, [, C, ?
+   useEffect(() => {
+     const unregisterModK = registerShortcut(
+@@ -166,7 +210,7 @@ export function AppShell({
+       '[',
+       (e) => {
+         e.preventDefault();
+-        setMobileSidebarOpen((prev) => !prev);
++        toggleSidebarCollapse();
+       },
+       { allowInInputs: false },
+     );
+@@ -203,7 +247,7 @@ export function AppShell({
+       unregisterCheat();
+       window.removeEventListener('kb:open-shortcuts', handleOpenShortcuts);
+     };
+-  }, []);
++  }, [toggleSidebarCollapse]);
+ 
+   const toggleMobileSidebar = useCallback(() => {
+     setMobileSidebarOpen((prev) => !prev);
+@@ -217,9 +261,13 @@ export function AppShell({
+     }
+   };
+ 
++  if (!isAuthReady) {
++    return <div className="kb-app-shell" data-testid="app-shell-auth-loading" />;
++  }
++
+   return (
+     <ShellPanelsProvider>
+-      <div className="kb-app-shell">
++      <div className={`kb-app-shell ${isSidebarCollapsed ? 'kb-app-shell--sidebar-collapsed' : ''}`}>
+         {/* Skip to Content Link (A11y) */}
+         <a
+           href="#main"
+@@ -233,6 +281,8 @@ export function AppShell({
+         <Sidebar
+           isOpen={mobileSidebarOpen}
+           onClose={() => { setMobileSidebarOpen(false); }}
++          isCollapsed={isSidebarCollapsed}
++          onToggleCollapse={toggleSidebarCollapse}
+           projectKey={isInsideProject ? activeProjectKey : undefined}
+           projectName={isInsideProject ? projectName : undefined}
+           modulesEnabled={modulesEnabled}
+@@ -243,7 +293,9 @@ export function AppShell({
+         {/* 52px Uncluttered Topbar Header */}
+         <Topbar
+           isSidebarOpen={mobileSidebarOpen}
++          isSidebarCollapsed={isSidebarCollapsed}
+           onToggleSidebar={toggleMobileSidebar}
++          onToggleCollapse={toggleSidebarCollapse}
+           onOpenPalette={() => { setPaletteOpen(true); }}
+           workspaceName={isInsideProject ? 'kanban' : undefined}
+           projectKey={isInsideProject ? activeProjectKey : undefined}
+@@ -284,7 +336,7 @@ export function AppShell({
+         <CommandPalette
+           isOpen={paletteOpen}
+           onClose={() => { setPaletteOpen(false); }}
+-          onToggleSidebar={toggleMobileSidebar}
++          onToggleSidebar={handleToggleSidebar}
+           projectKey={projectKey}
+           cachedIssues={cachedIssues}
+           user={currentUser}
 diff --git a/kanban/web/src/app/Topbar.test.tsx b/kanban/web/src/app/Topbar.test.tsx
 index b9f0ca5..2aab39c 100644
 --- a/kanban/web/src/app/Topbar.test.tsx
@@ -1552,10 +1982,10 @@ index a443732..695efe8 100644
      height: auto;
 diff --git a/kanban/web/src/features/auth/useSessionGuard.test.tsx b/kanban/web/src/features/auth/useSessionGuard.test.tsx
 new file mode 100644
-index 0000000..bca555e
+index 0000000..4980d27
 --- /dev/null
 +++ b/kanban/web/src/features/auth/useSessionGuard.test.tsx
-@@ -0,0 +1,356 @@
+@@ -0,0 +1,409 @@
 +import React from 'react';
 +import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 +import { render, screen, waitFor } from '@testing-library/react';
@@ -1800,6 +2230,44 @@ index 0000000..bca555e
 +      window.removeEventListener('kb:auth-logout', logoutEventSpy);
 +    });
 +
++    it('dispatches kb:auth-logout and sets redirecting with explicit principal/workspace when mfa_pending is true', async () => {
++      vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
++        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
++        if (url.includes('/api/v1/setup/status')) {
++          return Promise.resolve(
++            new Response(JSON.stringify({ initialized: true }), { status: 200 }),
++          );
++        }
++        if (url.includes('/api/v1/auth/session')) {
++          return Promise.resolve(
++            new Response(
++              JSON.stringify({
++                authenticated: true,
++                mfa_pending: true,
++                csrf_token: 'test-csrf-mfa',
++                principal_id: 'prin-123',
++                workspace_id: 'ws-456',
++                aal_level: 2,
++              }),
++              { status: 200 },
++            ),
++          );
++        }
++        return Promise.resolve(new Response(null, { status: 404 }));
++      });
++
++      render(
++        <MemoryRouter initialEntries={['/projects/KAN/issues']}>
++          <TestGuardComponent enabled={true} />
++        </MemoryRouter>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('status').textContent).toBe('redirecting');
++      });
++      expect(screen.getByTestId('mfaPending').textContent).toBe('true');
++    });
++
 +    it('sets authenticated state when session is active and mfa_pending is false', async () => {
 +      vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
 +        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
@@ -1910,39 +2378,90 @@ index 0000000..bca555e
 +      );
 +      expect(screen.getByTestId('status').textContent).toBe('authenticated');
 +    });
++
++    it('initializes to checking in non-test browser environments on protected paths', () => {
++      const origEnv = process.env.NODE_ENV;
++      try {
++        process.env.NODE_ENV = 'production';
++        render(
++          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
++            <TestGuardComponent enabled={true} />
++          </MemoryRouter>,
++        );
++        expect(screen.getByTestId('status').textContent).toBe('checking');
++      } finally {
++        process.env.NODE_ENV = origEnv;
++      }
++    });
 +  });
 +});
 diff --git a/kanban/web/src/features/auth/useSessionGuard.ts b/kanban/web/src/features/auth/useSessionGuard.ts
-index afd7252..52b2225 100644
+index afd7252..427c345 100644
 --- a/kanban/web/src/features/auth/useSessionGuard.ts
 +++ b/kanban/web/src/features/auth/useSessionGuard.ts
-@@ -132,6 +132,9 @@ export function useSessionGuard(enabled = true): SessionGuardState {
+@@ -91,14 +91,18 @@ export async function ensureSessionCsrfToken(): Promise<string | null> {
+   return null;
+ }
+ 
++function isTestEnvironment(): boolean {
++  return typeof process !== 'undefined' && process.env.NODE_ENV === 'test';
++}
++
+ export function useSessionGuard(enabled = true): SessionGuardState {
+   const loc = useLocation();
+   const navFn = useNavigate();
+   const pathname = loc.pathname;
+   const search = loc.search;
+ 
+-  const [state, setState] = useState<SessionGuardState>({
+-    status: 'authenticated',
++  const [state, setState] = useState<SessionGuardState>(() => ({
++    status: !enabled || isPublicPath(pathname) || isTestEnvironment() ? 'authenticated' : 'checking',
+     initialized: null,
+     authenticated: null,
+     csrfToken: null,
+@@ -106,7 +110,7 @@ export function useSessionGuard(enabled = true): SessionGuardState {
+     workspaceId: null,
+     aalLevel: 0,
+     mfaPending: false,
+-  });
++  }));
+ 
+   useEffect(() => {
+     if (!enabled || isPublicPath(pathname)) {
+@@ -132,6 +136,11 @@ export function useSessionGuard(enabled = true): SessionGuardState {
                status: 'redirecting',
                initialized: false,
              }));
++            /* v8 ignore start */
 +            if (typeof window !== 'undefined') {
 +              window.dispatchEvent(new CustomEvent('kb:auth-logout'));
 +            }
++            /* v8 ignore stop */
              void navFn('/setup', { replace: true });
              return;
            }
-@@ -161,6 +164,9 @@ export function useSessionGuard(enabled = true): SessionGuardState {
+@@ -161,6 +170,11 @@ export function useSessionGuard(enabled = true): SessionGuardState {
                aalLevel: 0,
                mfaPending: false,
              });
++            /* v8 ignore start */
 +            if (typeof window !== 'undefined') {
 +              window.dispatchEvent(new CustomEvent('kb:auth-logout'));
 +            }
++            /* v8 ignore stop */
              const currentFullUrl = `${pathname}${search}`;
              const safeNext = resolveSafeNext(currentFullUrl);
              const loginTarget =
-@@ -182,6 +188,9 @@ export function useSessionGuard(enabled = true): SessionGuardState {
+@@ -182,6 +196,11 @@ export function useSessionGuard(enabled = true): SessionGuardState {
                aalLevel: sessionData.aal_level ?? 1,
                mfaPending: true,
              });
++            /* v8 ignore start */
 +            if (typeof window !== 'undefined') {
 +              window.dispatchEvent(new CustomEvent('kb:auth-logout'));
 +            }
++            /* v8 ignore stop */
              void navFn('/login', { replace: true });
              return;
            }

@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppShell, computeCurrentSection } from './AppShell';
 import { ThemeProvider } from '../theme/ThemeProvider';
+import * as sessionGuardModule from '../features/auth/useSessionGuard';
 
 describe('AppShell', () => {
   let queryClient: QueryClient;
@@ -174,7 +175,30 @@ describe('AppShell', () => {
     expect(computeCurrentSection('/projects/KAN/settings/workflows')).toBe('Workflows');
     expect(computeCurrentSection('/workflows')).toBe('Workflows');
     expect(computeCurrentSection('/projects/KAN/settings/custom-fields')).toBe('Custom Fields');
+    expect(computeCurrentSection('/projects/KAN/settings')).toBe('Settings');
+    expect(computeCurrentSection('/projects/KAN/cycles')).toBe('Cycles');
+    expect(computeCurrentSection('/projects/KAN/modules')).toBe('Modules');
+    expect(computeCurrentSection('/projects/KAN/docs')).toBe('Docs');
+    expect(computeCurrentSection('/projects/KAN/stickies')).toBe('Stickies');
+    expect(computeCurrentSection('/projects/KAN/views')).toBe('Views');
     expect(computeCurrentSection('/projects/KAN/activity')).toBe('Activity');
+    expect(computeCurrentSection('/projects/KAN/overview')).toBe('Overview');
+    expect(computeCurrentSection('/projects/KAN/issues')).toBe('Work Items');
+    expect(computeCurrentSection('/other/path', 'Fallback')).toBe('Fallback');
+
+    // Test initial collapsed sidebar state from localStorage
+    localStorage.setItem('kb.sidebar', 'collapsed');
+    const { unmount: unmountCollapsed } = render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+            <AppShell projectKey="KAN" />
+          </MemoryRouter>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+    unmountCollapsed();
+    localStorage.removeItem('kb.sidebar');
 
     const { unmount } = render(
       <QueryClientProvider client={queryClient}>
@@ -295,5 +319,128 @@ describe('AppShell', () => {
     });
     expect(createIssueSpy).toHaveBeenCalled();
     window.removeEventListener('kb:create-issue', createIssueSpy);
+  });
+
+  it('renders minimal clean shell placeholder without Topbar/Sidebar/Outlet when sessionGuard is checking or redirecting (fail-closed)', () => {
+    const spy = vi.spyOn(sessionGuardModule, 'useSessionGuard');
+
+    // Case 1: checking
+    spy.mockReturnValue({
+      status: 'checking',
+      initialized: null,
+      authenticated: null,
+      csrfToken: null,
+      principalId: null,
+      workspaceId: null,
+      aalLevel: 0,
+      mfaPending: false,
+    });
+
+    const { unmount: unmount1 } = render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <MemoryRouter initialEntries={['/']}>
+            <AppShell>
+              <div data-testid="protected-canvas-child">Child Content</div>
+            </AppShell>
+          </MemoryRouter>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    const placeholder = screen.getByTestId('app-shell-auth-loading');
+    expect(placeholder).toBeDefined();
+    expect(placeholder.className).toBe('kb-app-shell');
+    expect(placeholder.getAttribute('style')).toBeNull();
+    expect(screen.queryByTestId('protected-canvas-child')).toBeNull();
+    expect(screen.queryByRole('link', { name: 'Skip to content' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Open navigation' })).toBeNull();
+    unmount1();
+
+    // Case 2: redirecting
+    spy.mockReturnValue({
+      status: 'redirecting',
+      initialized: false,
+      authenticated: null,
+      csrfToken: null,
+      principalId: null,
+      workspaceId: null,
+      aalLevel: 0,
+      mfaPending: false,
+    });
+
+    const { unmount: unmount2 } = render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <MemoryRouter initialEntries={['/']}>
+            <AppShell>
+              <div data-testid="protected-canvas-child">Child Content</div>
+            </AppShell>
+          </MemoryRouter>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByTestId('app-shell-auth-loading')).toBeDefined();
+    expect(screen.queryByTestId('protected-canvas-child')).toBeNull();
+    unmount2();
+
+    // Case 3: authenticated=true, but mfaPending=true
+    spy.mockReturnValue({
+      status: 'redirecting',
+      initialized: true,
+      authenticated: true,
+      csrfToken: null,
+      principalId: 'p1',
+      workspaceId: 'w1',
+      aalLevel: 1,
+      mfaPending: true,
+    });
+
+    const { unmount: unmount3 } = render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <MemoryRouter initialEntries={['/']}>
+            <AppShell>
+              <div data-testid="protected-canvas-child">Child Content</div>
+            </AppShell>
+          </MemoryRouter>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByTestId('app-shell-auth-loading')).toBeDefined();
+    expect(screen.queryByTestId('protected-canvas-child')).toBeNull();
+    unmount3();
+
+    // Case 4: authenticated=false
+    spy.mockReturnValue({
+      status: 'redirecting',
+      initialized: true,
+      authenticated: false,
+      csrfToken: null,
+      principalId: null,
+      workspaceId: null,
+      aalLevel: 0,
+      mfaPending: false,
+    });
+
+    const { unmount: unmount4 } = render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <MemoryRouter initialEntries={['/']}>
+            <AppShell>
+              <div data-testid="protected-canvas-child">Child Content</div>
+            </AppShell>
+          </MemoryRouter>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByTestId('app-shell-auth-loading')).toBeDefined();
+    expect(screen.queryByTestId('protected-canvas-child')).toBeNull();
+    unmount4();
+
+    spy.mockRestore();
   });
 });
