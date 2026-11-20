@@ -595,7 +595,7 @@ describe('TableView', () => {
     // Store column configuration with start_date enabled
     localStorage.setItem('kb.tableCols.KAN', JSON.stringify(['key', 'summary', 'state', 'priority', 'start_date', 'due_date']));
 
-    const { container } = render(
+    const { container, unmount } = render(
       <TableView
         issues={testIssues}
         projectKey="KAN"
@@ -619,6 +619,208 @@ describe('TableView', () => {
     fireEvent.click(row);
     expect(onOpenPeek).toHaveBeenCalledTimes(2);
 
+    // Click interactive element inside row (returns early, does not call onOpenPeek)
+    const rowInput = row.querySelector('input');
+    if (rowInput) {
+      fireEvent.click(rowInput);
+      expect(onOpenPeek).toHaveBeenCalledTimes(2);
+    }
+
     localStorage.removeItem('kb.tableCols.KAN');
+    unmount();
+
+    // Also verify clicking keyLink when onOpenPeek is undefined
+    const { unmount: unmountSecond } = render(
+      <TableView
+        issues={testIssues}
+        projectKey="KAN"
+        modulesEnabled={false}
+      />,
+    );
+    const unhandledKeyLink = screen.getByRole('link', { name: 'KAN-PEEK-1' });
+    fireEvent.click(unhandledKeyLink);
+    unmountSecond();
+  });
+
+  it('renders mobile compact cell classes and attributes for Key, Summary, State, and Priority', () => {
+    const testIssues: IssueItem[] = [
+      {
+        id: 'cell-1',
+        key: 'KAN-RESP-1',
+        summary: 'Responsive test task',
+        state: { id: 's-backlog', name: 'Backlog', group: 'unstarted' },
+        priority: { slug: 'high', label: 'High' },
+        assignees: [],
+      },
+    ];
+
+    const { container } = render(
+      <TableView
+        issues={testIssues}
+        projectKey="KAN"
+        capabilities={['VIEWER']}
+      />,
+    );
+
+    // Verify key cell and header
+    const keyHeader = container.querySelector('th[data-col-header="key"]');
+    expect(keyHeader).not.toBeNull();
+    const keyCell = container.querySelector('td[data-col="key"]');
+    expect(keyCell).not.toBeNull();
+    expect(keyCell?.classList.contains('table-key-cell')).toBe(true);
+
+    // Verify summary cell and header
+    const summaryHeader = container.querySelector('th[data-col-header="summary"]');
+    expect(summaryHeader).not.toBeNull();
+    const summaryCell = container.querySelector('td[data-col="summary"]');
+    expect(summaryCell).not.toBeNull();
+    expect(summaryCell?.classList.contains('table-summary-cell')).toBe(true);
+    expect(summaryCell?.querySelector('.table-summary-text')?.textContent).toBe('Responsive test task');
+
+    // Verify state cell and header
+    const stateHeader = container.querySelector('th[data-col-header="state"]');
+    expect(stateHeader).not.toBeNull();
+    const stateCell = container.querySelector('td[data-col="state"]');
+    expect(stateCell).not.toBeNull();
+    expect(stateCell?.classList.contains('table-state-cell')).toBe(true);
+
+    // Verify priority cell and header
+    const priorityHeader = container.querySelector('th[data-col-header="priority"]');
+    expect(priorityHeader).not.toBeNull();
+    const priorityCell = container.querySelector('td[data-col="priority"]');
+    expect(priorityCell).not.toBeNull();
+    expect(priorityCell?.classList.contains('table-priority-cell-wrap')).toBe(true);
+  });
+
+  it('covers custom cycle option, empty dates, and terminal state branches in inline editing', () => {
+    const onUpdateIssue = vi.fn();
+    const customCycleIssues: IssueItem[] = [
+      {
+        id: 'cust-1',
+        key: 'KAN-CUST-1',
+        summary: 'Custom cycle task',
+        state: { id: 's-todo', name: 'Todo', group: 'unstarted' },
+        priority: { slug: 'low', label: 'Low' },
+        cycle_id: 'cycle-custom-beta',
+        cycle: { id: 'cycle-custom-beta', name: 'Beta Sprint' },
+        assignees: [],
+        start_date: '2026-11-01',
+        due_date: '2020-01-01',
+      },
+      {
+        id: 'cust-raw',
+        key: 'KAN-CUST-RAW',
+        summary: 'Raw cycle task',
+        state: { id: 's-todo', name: 'Todo', group: 'unstarted' },
+        priority: { slug: 'low', label: 'Low' },
+        cycle_id: 'cycle-raw-99',
+        cycle: null,
+        assignees: [],
+        start_date: '2026-01-01',
+        due_date: '2099-01-01',
+      },
+    ];
+
+    localStorage.setItem(
+      'kb.tableCols.KAN_CUST',
+      JSON.stringify(['key', 'summary', 'state', 'priority', 'assignees', 'start_date', 'due_date', 'cycle', 'created_by']),
+    );
+
+    const { rerender } = render(
+      <TableView
+        issues={customCycleIssues}
+        projectKey="KAN_CUST"
+        capabilities={['EDIT']}
+        onUpdateIssue={onUpdateIssue}
+      />,
+    );
+
+    // Verify custom cycle option rendered
+    const cycleSelect = screen.getByRole('combobox', { name: 'Edit cycle for KAN-CUST-1' });
+    expect(screen.getByRole('option', { name: 'Beta Sprint' })).toBeDefined();
+
+    // Inline state change to Done, Cancelled, and In Review
+    const stateSelect = screen.getByRole('combobox', { name: 'Edit state for KAN-CUST-1' });
+    fireEvent.change(stateSelect, { target: { value: 'Done' } });
+    expect(onUpdateIssue).toHaveBeenCalledWith('KAN-CUST-1', expect.objectContaining({
+      state: expect.objectContaining({ name: 'Done', group: 'completed' }) as unknown as Record<string, unknown>,
+    }));
+
+    fireEvent.change(stateSelect, { target: { value: 'Cancelled' } });
+    expect(onUpdateIssue).toHaveBeenCalledWith('KAN-CUST-1', expect.objectContaining({
+      state: expect.objectContaining({ name: 'Cancelled', group: 'cancelled' }) as unknown as Record<string, unknown>,
+    }));
+
+    fireEvent.change(stateSelect, { target: { value: 'In Review' } });
+    expect(onUpdateIssue).toHaveBeenCalledWith('KAN-CUST-1', expect.objectContaining({
+      state: expect.objectContaining({ name: 'In Review', group: 'started' }) as unknown as Record<string, unknown>,
+    }));
+
+    // Start date and Due date empty clearing
+    const startDateInput = screen.getByLabelText('Edit start date for KAN-CUST-1');
+    fireEvent.change(startDateInput, { target: { value: '' } });
+    expect(onUpdateIssue).toHaveBeenCalledWith('KAN-CUST-1', { start_date: null });
+
+    const dueDateInput = screen.getByLabelText('Edit due date for KAN-CUST-1');
+    fireEvent.change(dueDateInput, { target: { value: '' } });
+    expect(onUpdateIssue).toHaveBeenCalledWith('KAN-CUST-1', { due_date: null });
+
+    // Cycle clear to empty
+    fireEvent.change(cycleSelect, { target: { value: '' } });
+    expect(onUpdateIssue).toHaveBeenCalledWith('KAN-CUST-1', { cycle_id: null, cycle: null });
+
+    // Rerender as read-only VIEWER with overdue and null start date
+    const firstCustom = customCycleIssues[0];
+    if (!firstCustom) throw new Error('Expected firstCustom');
+    const readOnlyIssues: IssueItem[] = [
+      {
+        ...firstCustom,
+        start_date: null,
+        due_date: '2020-01-01',
+      },
+      {
+        id: 'cust-2',
+        key: 'KAN-FALLBACK-1',
+        summary: 'Fallback task',
+        state: { id: 's-todo', name: 'Todo', group: 'unstarted' },
+        priority: { slug: 'custom-prio', label: '' },
+        cycle_id: 'cycle-no-name',
+        cycle: null,
+        due_date: null,
+        assignees: [
+          {
+            id: 'free-1',
+            kind: 'free_text',
+            free_text: 'External Contractor',
+            notify: false,
+            hint: '',
+          },
+          {
+            id: 'prin-1',
+            kind: 'principal',
+            principal: {
+              id: 'u-no-dn',
+              handle: 'bob',
+              display_name: '',
+              type: 'USER',
+            },
+          },
+        ],
+      },
+    ];
+    rerender(
+      <TableView
+        issues={readOnlyIssues}
+        projectKey="KAN_CUST"
+        capabilities={['VIEWER']}
+      />,
+    );
+    expect(screen.getByText(/2020-01-01/)).toBeDefined();
+    expect(screen.getByText('External Contractor')).toBeDefined();
+    expect(screen.getByText('bob')).toBeDefined();
+    expect(screen.getByText('custom-prio')).toBeDefined();
+    expect(screen.getAllByText(/Cycle/).length).toBeGreaterThan(0);
+
+    localStorage.removeItem('kb.tableCols.KAN_CUST');
   });
 });

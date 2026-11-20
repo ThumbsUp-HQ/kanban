@@ -227,7 +227,7 @@ export function Topbar({
   const isWorkspaceAdmin = Boolean(user?.is_workspace_admin ?? user?.is_server_admin);
 
   return (
-    <header className="kb-topbar">
+    <header className="kb-topbar topbar">
       {/* Left: Hamburger (<=1279px) & Expand Button (desktop >=1280px when collapsed) & Breadcrumb */}
       <div className="kb-topbar-left">
         <button
@@ -260,7 +260,7 @@ export function Topbar({
       </div>
 
       {/* Center: Search Trigger Styled as Input */}
-      <div className="kb-topbar-center">
+      <div className="kb-topbar-center topbar__search">
         <button
           type="button"
           className="kb-search-trigger"
@@ -277,7 +277,7 @@ export function Topbar({
       </div>
 
       {/* Right: Header Pills, Layout Switcher & Avatar Menu */}
-      <div className="kb-topbar-right">
+      <div className="kb-topbar-right topbar__right">
         <HeaderPills
           projectId={projectId ?? projectKey}
           projectName={projectName}

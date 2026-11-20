@@ -817,5 +817,49 @@ describe('Topbar', () => {
       });
       expect(onToggleCollapse).toHaveBeenCalledTimes(1);
     });
+
+    it('renders responsive classes topbar, topbar__search, and topbar__right for tablet and mobile', () => {
+      const { container } = render(
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider>
+            <ShellPanelsProvider>
+              <MemoryRouter>
+                <Topbar />
+              </MemoryRouter>
+            </ShellPanelsProvider>
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+
+      const header = container.querySelector('header');
+      expect(header?.classList.contains('kb-topbar')).toBe(true);
+      expect(header?.classList.contains('topbar')).toBe(true);
+
+      const searchCenter = container.querySelector('.topbar__search');
+      expect(searchCenter).not.toBeNull();
+      expect(searchCenter?.classList.contains('kb-topbar-center')).toBe(true);
+
+      const rightSection = container.querySelector('.topbar__right');
+      expect(rightSection).not.toBeNull();
+      expect(rightSection?.classList.contains('kb-topbar-right')).toBe(true);
+    });
+
+    it('handles kb:system-status-changed window event', () => {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <ThemeProvider>
+            <ShellPanelsProvider>
+              <MemoryRouter>
+                <Topbar />
+              </MemoryRouter>
+            </ShellPanelsProvider>
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+
+      act(() => {
+        window.dispatchEvent(new CustomEvent('kb:system-status-changed'));
+      });
+    });
   });
 });

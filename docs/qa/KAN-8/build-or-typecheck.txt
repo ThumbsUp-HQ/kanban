@@ -1,17 +1,14 @@
-=== 1. RUFF CHECK ===
-$ uv run ruff check .
+=== RUFF CHECK ===
 All checks passed!
 
-=== 2. RUFF FORMAT CHECK ===
-$ uv run ruff format --check .
-1900 files already formatted
+=== RUFF FORMAT CHECK ===
+1921 files already formatted
 
-=== 3. MYPY TYPE CHECK ===
-$ uv run mypy
-Success: no issues found in 1100 source files
+=== MYPY TYPECHECK ===
+Success: no issues found in 1111 source files
 
-=== 4. LINT-IMPORTS ARCHITECTURE CONTRACTS ===
-$ uv run lint-imports
+=== LINT IMPORTS ===
+
 ╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
 ╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
  ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
@@ -21,11 +18,12 @@ $ uv run lint-imports
   └──▶║║                    ▲ 
       ╚╝────────────────────┘
 
+
 ---------
 Contracts
 ---------
 
-Analyzed 964 files, 3389 dependencies.
+Analyzed 969 files, 3424 dependencies.
 --------------------------------------
 
 Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
@@ -33,16 +31,39 @@ mcp forbidden from importing database KEPT (48 ignored imports)
 
 Contracts: 2 kept, 0 broken.
 
-=== 5. CHECK NO DASHES (EM-DASH / EN-DASH AUDIT) ===
-$ uv run python -m scripts.check_no_dashes --all
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan8-3668e8ad/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+=== PNPM TYPECHECK (tsc -b) ===
 
-=== 6. FRONTEND TYPECHECK ===
-$ cd kanban/web && pnpm run typecheck
-> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan8-3668e8ad/kanban/web
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan8-rc1-c870e4a8/kanban/web
 > tsc -b --noEmit
 
-=== 7. FRONTEND ESLINT ===
-$ cd kanban/web && pnpm run lint
-> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan8-3668e8ad/kanban/web
+
+=== PNPM LINT (eslint) ===
+
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan8-rc1-c870e4a8/kanban/web
 > eslint . --max-warnings 0
+
+
+=== PNPM BUILD (vite production build) ===
+
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan8-rc1-c870e4a8/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 707 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.51 kB │ gzip:   0.31 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-BblQbwgm.css            430.48 kB │ gzip:  60.67 kB
+dist/assets/index-DKsTMRJd.js           1,982.61 kB │ gzip: 536.00 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.19s
+
+=== CHECK NO DASHES (TOUCHED KAN-8 FILES) ===
+0 forbidden dashes found in touched KAN-8 files.

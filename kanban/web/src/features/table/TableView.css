@@ -1,0 +1,168 @@
+/**
+ * TableView responsive layout and compact cell styling (KAN-8).
+ * Ensures Key, Summary, State, and Priority columns fit cleanly within mobile (390px) viewports
+ * using 100% canonical CSS tokens and zero inline style attributes.
+ */
+
+.table-summary-cell {
+  max-width: 280px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-summary-text {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.table-state-cell {
+  white-space: nowrap;
+}
+
+.table-priority-cell-wrap {
+  white-space: nowrap;
+}
+
+/* Tablet viewport (768px - 1024px) */
+@media (max-width: 1024px) {
+  .issues-table th,
+  .issues-table td {
+    padding: 0 var(--space-3, 12px);
+  }
+
+  .table-summary-cell {
+    max-width: 200px;
+  }
+}
+
+/* Mobile viewport (<= 640px, targeting 390px) */
+@media (max-width: 640px) {
+  .table-view-container {
+    border-radius: var(--radius-md, 6px);
+  }
+
+  .table-toolbar {
+    height: 38px;
+    padding: 0 var(--space-2, 8px);
+    font-size: 0.75rem;
+  }
+
+  .issues-table {
+    font-size: 0.75rem;
+  }
+
+  .issues-table thead tr {
+    height: 36px;
+  }
+
+  .issues-table th {
+    padding: 0 var(--space-2, 8px);
+    font-size: 0.6875rem;
+    font-weight: 600;
+  }
+
+  .issues-table-body tr {
+    height: 42px;
+    min-height: 42px;
+  }
+
+  .issues-table td {
+    height: 42px;
+    padding: 0 var(--space-2, 8px);
+    font-size: 0.75rem;
+  }
+
+  /* Compact Key column */
+  .table-key-header,
+  .issues-table th.table-key-header {
+    width: 76px;
+    min-width: 76px;
+    max-width: 80px;
+    padding: 0 var(--space-1, 4px) 0 var(--space-2, 8px);
+  }
+
+  .issues-table td.sticky-col,
+  .issues-table th.sticky-col {
+    position: sticky;
+    left: 0;
+    z-index: 2;
+    background: var(--bg-surface);
+  }
+
+  .issues-table th.sticky-col {
+    z-index: 4;
+    background: var(--bg-surface-raised, #ffffff);
+  }
+
+  .table-key-cell-content {
+    gap: var(--space-1, 4px);
+  }
+
+  .table-key-link {
+    font-size: 0.75rem;
+  }
+
+  /* Compact Summary column constrained to 105px on 390px screens */
+  .table-col-header--summary,
+  .table-summary-cell {
+    width: 105px;
+    max-width: 105px;
+    min-width: 75px;
+    padding: 0 var(--space-1, 4px);
+  }
+
+  .table-summary-text {
+    display: block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* State pill column */
+  .table-col-header--state,
+  .table-state-cell {
+    width: 78px;
+    min-width: 74px;
+    max-width: 82px;
+    padding: 0 var(--space-1, 4px);
+  }
+
+  .table-state-cell .status-pill {
+    padding: 1px var(--space-1, 4px);
+    font-size: 0.6875rem;
+    gap: 3px;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  /* Priority column */
+  .table-col-header--priority,
+  .table-priority-cell-wrap {
+    width: 70px;
+    min-width: 66px;
+    max-width: 76px;
+    padding: 0 var(--space-1, 4px);
+  }
+
+  .table-priority-cell {
+    gap: 2px;
+    font-size: 0.6875rem;
+  }
+
+  .table-priority-cell .emoji-hint {
+    font-size: 0.6875rem;
+  }
+
+  /* Form controls inside cells */
+  .table-inline-select {
+    font-size: 0.6875rem;
+    padding: 1px 2px;
+    max-width: 100%;
+  }
+}

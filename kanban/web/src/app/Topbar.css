@@ -62,16 +62,19 @@
   color: var(--fg-primary, #f8fafc);
 }
 
-.kb-topbar-center {
+.kb-topbar-center,
+.topbar__search {
   flex: 1;
   max-width: 540px;
+  min-width: 0;
   display: flex;
   justify-content: center;
 }
 
 .kb-search-trigger {
   width: 100%;
-  min-width: 320px;
+  min-width: 0;
+  max-width: 540px;
   height: 36px;
   display: flex;
   align-items: center;
@@ -111,11 +114,13 @@
   -webkit-user-select: none;
 }
 
-.kb-topbar-right {
+.kb-topbar-right,
+.topbar__right {
   display: flex;
   align-items: center;
   gap: var(--space-4, 16px);
   flex-shrink: 0;
+  min-width: 0;
   user-select: none;
   -webkit-user-select: none;
 }
@@ -304,18 +309,89 @@
   }
 }
 
-@media (max-width: 767px) {
-  .kb-topbar {
-    padding: 0 16px;
-    gap: 8px;
+@media (max-width: 1024px) {
+  .kb-topbar,
+  .topbar {
+    padding: 0 var(--space-4, 16px);
+    gap: var(--space-2, 8px);
   }
+
+  .kb-topbar-center,
+  .topbar__search {
+    min-width: 0;
+    flex: 1 1 auto;
+    max-width: 280px;
+  }
+
+  .kb-search-trigger {
+    min-width: 0;
+  }
+
+  .kb-search-kbd {
+    display: none;
+  }
+
+  .kb-topbar-right,
+  .topbar__right {
+    min-width: 0;
+    flex-shrink: 0;
+    gap: var(--space-2, 8px);
+  }
+}
+
+@media (max-width: 768px) {
+  .kb-topbar,
+  .topbar {
+    padding: 0 var(--space-3, 12px);
+    gap: var(--space-2, 8px);
+    overflow: hidden;
+  }
+
+  .kb-topbar-left {
+    min-width: 0;
+    flex-shrink: 1;
+  }
+
+  .kb-topbar-center,
+  .topbar__search {
+    min-width: 0;
+    flex: 0 1 auto;
+    max-width: 150px;
+  }
+
+  .kb-search-trigger {
+    min-width: 0;
+    width: 100%;
+    padding: 0 var(--space-2, 8px);
+  }
+
+  .kb-search-kbd {
+    display: none;
+  }
+
+  .kb-topbar-right,
+  .topbar__right {
+    min-width: 0;
+    flex-shrink: 0;
+    gap: var(--space-2, 8px);
+  }
+}
+
+@media (max-width: 640px) {
+  .kb-topbar,
+  .topbar {
+    padding: 0 var(--space-2, 8px);
+    gap: 6px;
+  }
+
   .kb-search-trigger {
     min-width: unset;
-    width: 44px;
-    height: 44px;
+    width: 36px;
+    height: 36px;
     padding: 0;
     justify-content: center;
   }
+
   .kb-search-trigger-text,
   .kb-search-kbd {
     display: none;

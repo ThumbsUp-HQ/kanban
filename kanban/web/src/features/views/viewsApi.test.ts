@@ -338,4 +338,34 @@ describe('viewsApi', () => {
     expect(issuesRes.items).toHaveLength(1);
     expect(issuesRes.total).toBe(1);
   });
+
+  it('covers createProjectIssue and deleteProjectIssue without CSRF token and invalid module IDs', async () => {
+    // Return empty csrf token
+    globalThis.fetch = vi.fn().mockImplementation((url: string) => {
+      if (typeof url === 'string' && url.includes('/api/v1/auth/session')) {
+        return Promise.resolve({ ok: false, status: 401 });
+      }
+      return Promise.resolve({
+        ok: true,
+        json: () => Promise.resolve({
+          id: '01931234-5678-7000-8000-000000000099',
+          key: 'KAN-99',
+          summary: 'No CSRF issue',
+          state: { id: 's-1', name: 'Todo', group: 'unstarted' },
+        }),
+      });
+    });
+
+    const res = await createProjectIssue(
+      'KAN',
+      {
+        summary: 'No CSRF issue',
+        module_ids: ['invalid-non-uuid'],
+      },
+      []
+    );
+    expect(res.key).toBe('KAN-99');
+
+    await deleteProjectIssue('KAN-99');
+  });
 });
