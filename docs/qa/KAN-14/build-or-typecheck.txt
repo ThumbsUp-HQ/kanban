@@ -1,28 +1,20 @@
 === STATIC TYPECHECK & LINTERS AUDIT ===
 
-1. TypeScript (tsc -b --noEmit):
-> @kanban/web@0.1.0 typecheck
-> tsc -b --noEmit
+1. Python MyPy (uv run mypy):
+Success: no issues found in 1149 source files
 Exit code: 0 (PASSED)
 
-2. Production Web Build (vite build):
-> @kanban/web@0.1.0 build
-> tsc -b && vite build
-dist/index.html                             0.51 kB │ gzip:   0.31 kB
-dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-dist/assets/index-CEFqsaYn.css            403.09 kB │ gzip:  57.10 kB
-dist/assets/index-D9u73ov9.js           1,917.10 kB │ gzip: 520.68 kB
-built in 1.19s
-Exit code: 0 (PASSED)
-
-3. Python Ruff (ruff check):
-uv run ruff check kanban/admin/principal_service.py kanban/api/v1/admin/principals.py kanban/tests/api/test_admin_principals.py
+2. Python Ruff (uv run ruff check .):
 All checks passed!
 Exit code: 0 (PASSED)
 
-4. Python MyPy (mypy):
-uv run mypy kanban/admin/principal_service.py kanban/api/v1/admin/principals.py kanban/tests/api/test_admin_principals.py
-Success: no issues found in 3 source files
+3. Python Import Architecture Linter (uv run lint-imports):
+Contracts: 2 kept, 0 broken.
+Exit code: 0 (PASSED)
+
+4. TypeScript (tsc -b --noEmit):
+> @kanban/web@0.1.0 typecheck
+> tsc -b --noEmit
 Exit code: 0 (PASSED)
 
 5. ESLint (eslint . --max-warnings 0):
@@ -30,5 +22,15 @@ Exit code: 0 (PASSED)
 > eslint . --max-warnings 0
 Exit code: 0 (PASSED - 0 errors, 0 warnings)
 
-6. Dash Check (python3 -m scripts.check_no_dashes --all):
+6. Production Web Build (vite build):
+> @kanban/web@0.1.0 build
+> tsc -b && vite build
+dist/index.html                             0.51 kB │ gzip:   0.31 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-Dw6CVgUb.css            404.67 kB │ gzip:  57.28 kB
+dist/assets/index-CrhklPDG.js           1,917.79 kB │ gzip: 520.90 kB
+built in 1.09s
+Exit code: 0 (PASSED)
+
+7. Dash Check (python3 -m scripts.check_no_dashes --all):
 Exit code: 0 (PASSED - 0 em/en-dashes)

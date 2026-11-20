@@ -83,6 +83,7 @@ export function FilterDisplayBar({
     let active = true;
 
     const fetches: Promise<unknown>[] = [
+      // KB-P3-AUDIT-08: fetchAssigneeSuggestions guards empty query string and returns [] without firing 422
       fetchAssigneeSuggestions(projectKey, '').then((res) => {
         if (!active) return;
         setLiveAssignees(

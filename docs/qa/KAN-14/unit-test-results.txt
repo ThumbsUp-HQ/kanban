@@ -1,10 +1,10 @@
 ========================================================================
-UNIT TEST & COVERAGE RESULTS - KAN-14 CLEAN-ROOM REMEDIATION & ROUND 3 POLISH
+UNIT TEST & COVERAGE RESULTS - KAN-14 CLEAN-ROOM REMEDIATION & ROUND 4 POLISH
 ========================================================================
 
 --- Backend Tests (Pytest) ---
-Command: uv run pytest kanban/tests/api/test_admin_principals.py
-Status: PASSED (16 passed in 7.75s)
+Command: uv run pytest kanban/tests/api/test_admin_principals.py --cov=kanban.admin.principal_service --cov=kanban.api.v1.admin.principals --cov-branch --cov-report=term-missing
+Status: PASSED (16 passed in 15.22s)
 
 Coverage Summary:
 Name                                Stmts   Miss Branch BrPart  Cover   Missing
@@ -16,7 +16,7 @@ TOTAL                                 513      9    168     16    96%
 
 --- Frontend Tests (Vitest) ---
 Command: cd kanban/web && vitest run src/app/shortcuts.test.ts src/features/views/useIssueKeyboardMap.test.tsx src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx src/features/settings/__tests__/ProjectSettingsPage.test.tsx src/features/admin-auth/AuthStudioPage.test.tsx src/features/drawer-rail/PropertiesRail.test.tsx src/features/drawer-rail/railApi.test.ts src/features/views/FilterDisplayBar.test.tsx src/features/views/viewRegistry.test.tsx
-Status: PASSED (9 passed test files, 198 passed tests in 10.23s)
+Status: PASSED (9 passed test files, 199 passed tests in 8.70s)
 
 Files Tested:
 - src/app/shortcuts.test.ts (10 passed)
@@ -26,7 +26,7 @@ Files Tested:
 - src/features/admin-auth/AuthStudioPage.test.tsx (39 passed)
 - src/features/drawer-rail/PropertiesRail.test.tsx (17 passed)
 - src/features/drawer-rail/railApi.test.ts (16 passed)
-- src/features/views/FilterDisplayBar.test.tsx (18 passed)
+- src/features/views/FilterDisplayBar.test.tsx (19 passed)
 - src/features/views/viewRegistry.test.tsx (40 passed)
 
 Coverage Highlights:

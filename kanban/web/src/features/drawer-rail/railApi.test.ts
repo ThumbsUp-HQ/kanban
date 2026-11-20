@@ -307,9 +307,11 @@ describe('railApi', () => {
     expect(await fetchProjectPriorities('')).toEqual([]);
     expect(await fetchProjectPriorities('undefined')).toEqual([]);
 
-    // 3. fetchAssigneeSuggestions empty or undefined
+    // 3. fetchAssigneeSuggestions empty or undefined, or empty/whitespace query
     expect(await fetchAssigneeSuggestions('', 'test')).toEqual([]);
     expect(await fetchAssigneeSuggestions('undefined', 'test')).toEqual([]);
+    expect(await fetchAssigneeSuggestions('KAN', '')).toEqual([]);
+    expect(await fetchAssigneeSuggestions('KAN', '   ')).toEqual([]);
 
     // 4. fetchProjectModules empty or undefined
     expect(await fetchProjectModules('')).toEqual([]);
