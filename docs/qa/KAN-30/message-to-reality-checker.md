@@ -1,8 +1,8 @@
 # Forensic Verification Packet for KAN-30
 
 **Ticket:** KAN-30 ([KB-P3-AUDIT-24] Add Workspace Admin Trash & Retention Studio, Enforce Per-Workspace Retention & RLS Boundaries, and Publish Visual Role & Permission Matrix)
-**Branch:** `feat/KAN-30`
-**Base Commit:** `23ae056d`
+**Branch:** `fix/KAN-30-rc1`
+**Base Commit:** `b3b0f4ba`
 **Wiki Commit:** `899dec9` (branch `main` in `/home/adamoutler/kanban/thumbs-up-kanban.wiki`)
 
 ---
@@ -47,6 +47,16 @@
   - `SERVER_ADMIN`-only 2-stage `[Permanent Purge]` with confirmation dialog invoking `/api/v1/admin/destructive:request` and `/api/v1/admin/destructive:execute`.
   - Zero inline JSX `style={...}` props; all styles defined using canonical CSS tokens in `ProjectSettingsPage.css` (`.kb-trash-toolbar`, `.kb-trash-search-box`, `.kb-retention-settings-card`, `.kb-visually-hidden`).
 
+### RC1 Remediation: Full-Stack 2-Stage Permanent Purge Contract Alignment
+- **Root Cause:**
+  - During live zero-mock QA (`docs/qa/KAN-30/live-fullstack-proof.txt`), Stage 1 `[Permanent Purge]` failed with `HTTP 422 VALIDATION_FAILED` (`target: Field required; target_ref: Extra inputs are not permitted; reason: Extra inputs are not permitted`) because `handleRequestPurge` passed `{ target_kind, target_ref, mode, reason }` against `DestructiveRequestIn` (`extra="forbid"`).
+  - Additionally, Stage 2 `handleExecutePurge` passed `{ confirmation_token, blast_hash, reason }` instead of the canonical `DestructiveExecuteIn` contract (`{ target_kind, target, mode, confirmation_token, confirm_phrase, reason }`).
+- **Implementation Remediation:**
+  - In `WorkspaceSettingsPage.tsx`, aligned `handleRequestPurge` to transmit the exact `DestructiveRequestIn` payload: `{ target_kind: item.kind, target: item.id, mode: 'permanent_purge' }`.
+  - Stored `confirm_phrase` returned by Stage 1 in `purgeConfirmPhrase` state and exposed it in the `permanent-purge-confirmation-dialog` modal (`data-testid="permanent-purge-confirm-phrase"`: `Confirm Phrase: <code>{purgeConfirmPhrase ?? ...}</code>`), alongside the `reason` input.
+  - Aligned `handleExecutePurge` to transmit the exact `DestructiveExecuteIn` payload: `{ target_kind: purgeTarget.kind, target: purgeTarget.id, mode: 'permanent_purge', confirmation_token: purgeConfirmationToken, confirm_phrase: expectedConfirmPhrase, reason: cleanReason }`.
+  - In `WorkspaceSettingsPage.test.tsx`, updated test mocks and added explicit assertions asserting the exact Stage 1 (`DestructiveRequestIn`) and Stage 2 (`DestructiveExecuteIn`) request payloads and the exposed confirm phrase in the DOM.
+
 ### Problem 4: Role and Permission Matrix
 - Published `/home/adamoutler/kanban/thumbs-up-kanban.wiki/Role-and-Permission-Matrix.md` and linked in `_Sidebar.md`.
 - Structured matrix using visual indicators:
@@ -61,7 +71,7 @@
 ## 2. Test Execution & Coverage Audit
 
 ### Backend Unit Tests & Coverage (`pytest --cov`)
-- 50 passed in 52.04 seconds.
+- 50 passed in 50.50 seconds.
 - Test files executed:
   - `kanban/tests/api/test_admin_trash_api.py` (5 passed)
   - `kanban/tests/api/test_workspace_settings.py` (13 passed)
@@ -83,20 +93,20 @@
 
 ### Frontend Unit Tests & Coverage (`vitest --coverage`)
 - `kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx`:
-  - 31 passed in 3.80s.
-  - Coverage: **99.76% Stmts, 95.79% Branch, 100% Funcs, 100% Lines**.
+  - 31 passed in 3.76s.
+  - Coverage: **99.77% Stmts, 95.68% Branch, 100% Funcs, 100% Lines**, 0 `act(...)` warnings.
 - `kanban/web/src/styles/__tests__/cssTokensAudit.test.ts`:
-  - 4 passed in 0.97s (100% canonical CSS tokens, 0 undefined tokens).
+  - 4 passed in 1.04s (100% canonical CSS tokens, 0 undefined tokens).
 
 ### Static Analysis & Linters
 - `kanban-ctl db check-migrations`: OK (62 migrations valid, single head).
 - `ruff check .`: Clean (0 errors).
-- `ruff format --check .`: Clean (1918 files inspected, formatted).
-- `mypy`: Clean (Success: no issues found in 1107 source files).
+- `ruff format --check .`: Clean (1943 files inspected, formatted).
+- `mypy`: Clean (Success: no issues found in 1116 source files).
 - `lint-imports`: Clean (2 contracts kept, 0 broken).
 - `tsc -b --noEmit`: Clean (0 errors).
 - `eslint . --max-warnings 0`: Clean (0 warnings, 0 errors).
-- `pnpm --dir kanban/web build`: Clean production build (dist output generated).
+- `pnpm --dir kanban/web build`: Clean production build (dist output generated in 1.52s).
 - `scripts.check_no_dashes`: Clean (0 em-dashes or en-dashes across codebase and wiki).
 
 ---
@@ -105,7 +115,7 @@
 
 - `docs/qa/KAN-30/unit-test-results.txt`: Verbatim Pytest and Vitest test outputs and coverage tables.
 - `docs/qa/KAN-30/build-or-typecheck.txt`: Verbatim migration check, Ruff, Mypy, lint-imports, TSC, ESLint, Vite build, and check_no_dashes logs.
-- `docs/qa/KAN-30/git-diff.patch`: Full unified git patch against base commit `23ae056d`.
+- `docs/qa/KAN-30/git-diff.patch`: Full unified git patch against base commit `b3b0f4ba`.
 - `docs/qa/KAN-30/wiki-diff.patch`: Unified diff of wiki commit `899dec9`.
 - `docs/qa/KAN-30/changed-files-manifest.txt`: List of all changed files.
 - `docs/qa/KAN-30/message-to-reality-checker.md`: This forensic summary.

@@ -2012,6 +2012,8 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     let restoredId: string | null = null;
     let purgeRequestedId: string | null = null;
     let purgeExecutedToken: string | null = null;
+    let lastStage1Body: Record<string, unknown> | null = null;
+    let lastStage2Body: Record<string, unknown> | null = null;
 
     vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
       await Promise.resolve();
@@ -2048,11 +2050,19 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
         const parsed = typeof bodyVal === 'string'
           ? (JSON.parse(bodyVal) as Record<string, unknown>)
           : ((bodyVal as Record<string, unknown> | undefined) ?? {});
-        purgeRequestedId = String(parsed.target_ref);
+        lastStage1Body = parsed;
+        purgeRequestedId = String(parsed.target);
         return {
-          confirmation_token: 'token-xyz-123',
+          stage: 'requested',
+          target: String(parsed.target),
+          target_kind: String(parsed.target_kind),
+          target_id: String(parsed.target),
+          mode: 'permanent_purge',
+          blast_summary: 'Target permanently deleted',
           blast_hash: 'blast-hash-789',
-          target_id: purgeRequestedId,
+          confirm_phrase: 'PURGE PROJECT PROJ',
+          confirmation_token: 'token-xyz-123',
+          expires_in_sec: 300,
         };
       }
       if (path.includes('/api/v1/admin/destructive:execute') && m === 'POST') {
@@ -2060,8 +2070,17 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
         const parsed = typeof bodyVal === 'string'
           ? (JSON.parse(bodyVal) as Record<string, unknown>)
           : ((bodyVal as Record<string, unknown> | undefined) ?? {});
+        lastStage2Body = parsed;
         purgeExecutedToken = String(parsed.confirmation_token);
-        return { status: 'purged', target_id: 'trash-item-1' };
+        return {
+          status: 'purged',
+          target: String(parsed.target),
+          target_kind: String(parsed.target_kind),
+          target_id: String(parsed.target),
+          mode: 'permanent_purge',
+          reason: String(parsed.reason),
+          blast_hash: 'blast-hash-789',
+        };
       }
       return [];
     });
@@ -2091,6 +2110,14 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
       expect(screen.getByTestId('permanent-purge-confirmation-dialog')).toBeDefined();
     });
 
+    // Assert exact Stage 1 body (DestructiveRequestIn)
+    expect(lastStage1Body).toEqual({
+      target_kind: 'project',
+      target: 'trash-item-1',
+      mode: 'permanent_purge',
+    });
+    expect(screen.getByTestId('permanent-purge-confirm-phrase').textContent).toContain('PURGE PROJECT PROJ');
+
     // 3. Permanent Purge (Stage 2 Confirm)
     const reasonInput = screen.getByTestId('permanent-purge-reason-input');
     fireEvent.change(reasonInput, { target: { value: 'Compliance retention expired' } });
@@ -2100,6 +2127,16 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     await waitFor(() => {
       expect(purgeExecutedToken).toBe('token-xyz-123');
       expect(screen.getByText('Permanently purged Project To Purge.')).toBeDefined();
+    });
+
+    // Assert exact Stage 2 body (DestructiveExecuteIn)
+    expect(lastStage2Body).toEqual({
+      target_kind: 'project',
+      target: 'trash-item-1',
+      mode: 'permanent_purge',
+      confirmation_token: 'token-xyz-123',
+      confirm_phrase: 'PURGE PROJECT PROJ',
+      reason: 'Compliance retention expired',
     });
   });
 

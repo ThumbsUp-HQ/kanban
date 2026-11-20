@@ -180,6 +180,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
   const [purgeTarget, setPurgeTarget] = useState<WorkspaceTrashedItem | null>(null);
   const [purgeConfirmationToken, setPurgeConfirmationToken] = useState<string | null>(null);
   const [purgeBlastHash, setPurgeBlastHash] = useState<string | null>(null);
+  const [purgeConfirmPhrase, setPurgeConfirmPhrase] = useState<string | null>(null);
   const [purgeReason, setPurgeReason] = useState<string>('Permanent cryptographic purge');
   const [isRequestingPurge, setIsRequestingPurge] = useState<boolean>(false);
   const [isExecutingPurge, setIsExecutingPurge] = useState<boolean>(false);
@@ -388,27 +389,30 @@ export function WorkspaceSettingsPage(): JSX.Element {
 
       const body = {
         target_kind: item.kind,
-        target_ref: item.id,
+        target: item.id,
         mode: 'permanent_purge',
-        reason: 'Permanent cryptographic purge request',
       };
       const res = (await apiFetch('POST', '/api/v1/admin/destructive:request' as never, {
         headers,
         body: JSON.stringify(body),
-      })) as { confirmation_token?: string; blast_hash?: string };
+      })) as { confirmation_token?: string; blast_hash?: string; confirm_phrase?: string };
 
       setPurgeConfirmationToken(res.confirmation_token ?? null);
       setPurgeBlastHash(res.blast_hash ?? null);
+      setPurgeConfirmPhrase(res.confirm_phrase ?? null);
     } catch (err: unknown) {
       setTrashActionError(getTrashError(err, 'Failed to request permanent purge.'));
       setPurgeTarget(null);
+      setPurgeConfirmationToken(null);
+      setPurgeBlastHash(null);
+      setPurgeConfirmPhrase(null);
     } finally {
       setIsRequestingPurge(false);
     }
   };
 
   const handleExecutePurge = async (): Promise<void> => {
-    if (!purgeConfirmationToken || !purgeBlastHash || !purgeTarget) return;
+    if (!purgeConfirmationToken || !purgeTarget) return;
     setIsExecutingPurge(true);
     setTrashActionError(null);
     setTrashActionSuccess(null);
@@ -417,10 +421,19 @@ export function WorkspaceSettingsPage(): JSX.Element {
       const headers: Record<string, string> = { 'Content-Type': 'application/json' };
       if (csrf) headers['X-CSRF-Token'] = csrf;
 
+      const defaultReason = 'Permanent cryptographic purge';
+      const cleanReason = purgeReason.trim().length >= 10 ? purgeReason.trim() : defaultReason;
+      const expectedConfirmPhrase =
+        purgeConfirmPhrase ??
+        `PURGE ${purgeTarget.kind.toUpperCase()} ${(purgeTarget.key ?? purgeTarget.id)}`;
+
       const body = {
+        target_kind: purgeTarget.kind,
+        target: purgeTarget.id,
+        mode: 'permanent_purge',
         confirmation_token: purgeConfirmationToken,
-        blast_hash: purgeBlastHash,
-        reason: purgeReason.trim() !== '' ? purgeReason : 'Permanent cryptographic purge',
+        confirm_phrase: expectedConfirmPhrase,
+        reason: cleanReason.slice(0, 500),
       };
       await apiFetch('POST', '/api/v1/admin/destructive:execute' as never, {
         headers,
@@ -433,7 +446,8 @@ export function WorkspaceSettingsPage(): JSX.Element {
       setPurgeTarget(null);
       setPurgeConfirmationToken(null);
       setPurgeBlastHash(null);
-      setPurgeReason('');
+      setPurgeConfirmPhrase(null);
+      setPurgeReason('Permanent cryptographic purge');
       await loadWorkspaceTrash();
     } catch (err: unknown) {
       setTrashActionError(getTrashError(err, 'Failed to execute permanent purge.'));
@@ -446,6 +460,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
     setPurgeTarget(null);
     setPurgeConfirmationToken(null);
     setPurgeBlastHash(null);
+    setPurgeConfirmPhrase(null);
   };
 
   const handleSaveGeneral = (e: SyntheticEvent) => {
@@ -1390,6 +1405,11 @@ export function WorkspaceSettingsPage(): JSX.Element {
                   <p className="kb-danger-purge-hint">
                     You are about to permanently purge &quot;{(purgeTarget.title ?? purgeTarget.key) ?? purgeTarget.kind}&quot; (ID: {purgeTarget.id}). This action immediately destroys all links, embeddings, and database rows with cryptographic certainty and CANNOT be undone.
                   </p>
+                  {(purgeConfirmPhrase ?? `PURGE ${purgeTarget.kind.toUpperCase()} ${(purgeTarget.key ?? purgeTarget.id)}`) && (
+                    <p className="kb-danger-purge-hint" data-testid="permanent-purge-confirm-phrase">
+                      Confirm Phrase: <code>{purgeConfirmPhrase ?? `PURGE ${purgeTarget.kind.toUpperCase()} ${(purgeTarget.key ?? purgeTarget.id)}`}</code>
+                    </p>
+                  )}
                   {purgeBlastHash && (
                     <p className="kb-danger-purge-hint">
                       Blast Hash: <code>{purgeBlastHash}</code>
