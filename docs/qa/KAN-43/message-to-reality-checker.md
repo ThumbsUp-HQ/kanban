@@ -1,84 +1,80 @@
-# Message to Reality-Checker QA Gate: KAN-43
+# Message to Reality-Checker QA Gate: KAN-43 (RC-1 Remediation)
 
 ## 1. Ticket Overview
 - **Ticket ID**: KAN-43
-- **Title**: [KB-WORKFLOW-STATE-EDIT] Full Workflow State Editing UI (Name, Group, Purple/Custom Color, WIP, Order) & Custom State Color Rendering Across Board, Badges & Views (4 Problems)
-- **Branch**: `feat/KAN-43`
-- **Base Commit**: `23ae056d`
-- **Target Worktree**: `/home/adamoutler/kanban/`
+- **Title**: [KB-WORKFLOW-STATE-EDIT] Full Workflow State Editing UI (Name, Group, Purple/Custom Color, WIP, Order) and Custom State Color Rendering Across Board, Badges and Views (4 Problems)
+- **Branch**: `fix/KAN-43-rc1`
+- **Base Commit**: `b3b0f4ba` (post-merge main)
 
 ---
 
-## 2. Implementation Summary across All 4 Problems
+## 2. RC-1 Reality-Checker Findings Remediation
 
-### Problem 1: Full Workflow State Editing UI and Atomic Reorder in ProjectSettingsPage.tsx
-- Exposes `data-testid="edit-state-btn-${st.id}"` on every workflow state row allowing full editing of:
-  * `name` (1..64 characters, catching and mapping 409 `STATE_NAME_TAKEN`).
-  * `group` (`backlog`, `unstarted`, `started`, `completed`, `cancelled`).
-  * `color_hex` (live `<ColorPresetPicker />` palette supporting purple `#7c3aed` and custom `#RRGGBB` inputs with live `<StateBadge />` preview via `data-testid="state-edit-preview-${st.id}"`).
-  * `wip_soft_limit` and `wip_hard_limit` (nullable integers with client and server enforcement of `soft <= hard`).
-  * `is_default` (checkbox designating default state with `409 DEFAULT_STATE_REQUIRED` protection).
-- Extended inline editing to Priorities (`data-testid="edit-priority-btn-${p.id}"`, `priority-edit-slug-${p.id}`, `priority-edit-label-${p.id}`, `priority-edit-emoji-${p.id}`, `priority-edit-color-${p.id}-input`, `priority-edit-sort-${p.id}`, `priority-edit-default-${p.id}`).
-- Reimplemented `handleReorderState` so BOTH swapped `sort_order` values are persisted concurrently via `Promise.all([apiFetch(...), apiFetch(...)])`.
-- Cache invalidation helper `invalidateProjectCaches` invalidates `qk.project(projectKey)`, `['project-states', projectKey]`, and `qk.issues(projectKey, {})`.
+### Finding 1: 409 ApiProblem.code Handling in ProjectSettingsPage.tsx
+- Both `handleCreateState` and `handleSaveStateEdit` now inspect `err.code` from `ApiProblem` instances in addition to `errObj.code` and fallback message/detail strings.
+- Correctly catches `STATE_NAME_TAKEN`, `LAST_STATE_IN_GROUP`, and `DEFAULT_STATE_REQUIRED` from live RFC 7807 problem payloads and displays friendly UX error messages.
+- Added comprehensive unit tests in `ProjectSettingsPage.test.tsx` verifying rejection using actual `new ApiProblem(409, { code: ... })` instances.
 
-### Problem 2: Serialize color_hex on Backend StateSummary & Render Custom State Colors
-- Backend schemas and services:
-  * Added `color_hex: str | None = None` to `StateSummary` in `/home/adamoutler/kanban/kanban/api/v1/schemas/issues.py`.
-  * Populated `color_hex=state.color_hex` in `serialize_issue` in `/home/adamoutler/kanban/kanban/services/issues.py` and `/home/adamoutler/kanban/kanban/services/issue_delete.py`.
-- Frontend schemas and APIs:
-  * Added `color_hex?: string | null` to `StateSummary` in `viewsApi.ts`, `BoardWorkflowState` in `boardApi.ts`, and `ProjectWorkflowState` in `railApi.ts`.
-- CSS Tokens and Rendering:
-  * Declared canonical CSS tokens `--state-custom-fg: #7c3aed;`, `--state-custom-bg`, `--state-custom-border` in `/home/adamoutler/kanban/kanban/web/src/styles/tokens.css` (passing `cssTokensAudit.test.ts`).
-  * Updated `StateBadge.tsx` and `StateBadge.css` to render custom hex colors validated against `/^#[0-9A-Fa-f]{6}$/`. Adheres 100% to strict CSP `style-src 'self'` with 0 inline JSX style attributes by synchronizing `--state-custom-fg` via DOM `ref.current.style.setProperty` and SVG `stroke` properties.
-  * Updated `BoardColumn.tsx` to synchronize custom state colors on lane container via `ref.current.style.setProperty('--state-custom-fg', safeHex)` and pass `colorHex={state.color_hex}` to `StateBadge`.
+### Finding 2: Direct State sort_order Editing in Inline Edit Mode
+- Added `state-edit-order-${st.id}` numeric input to inline state editing row in `ProjectSettingsPage.tsx`.
+- Matches Priority inline editing behavior and persists updated `sort_order` upon save.
 
-### Problem 3: Replace Hardcoded 6-State Lists Across Views
-- Updated `/home/adamoutler/kanban/kanban/web/src/features/table/TableView.tsx` to accept dynamic `projectStates` and resolve state identifiers and colors without falling back to hardcoded defaults.
-- Updated `/home/adamoutler/kanban/kanban/web/src/features/list/ListView.tsx` to dynamically query and filter against `projectStates`.
-- Updated `/home/adamoutler/kanban/kanban/web/src/features/views/SwimlaneBoardGrid.tsx` to group dynamic states.
-- Updated `/home/adamoutler/kanban/kanban/web/src/features/views/QuickCreateIssueModal.tsx` and `QuickFieldPopover.tsx` to populate state selections dynamically from `projectStates`.
-- Updated `/home/adamoutler/kanban/kanban/web/src/features/views/viewRegistry.tsx` (`computeStateSummary`) to dynamically resolve state definitions including `color_hex`.
+### Finding 3: Board Header Truncation and WIP Wrapping in board.css
+- Applied `white-space: nowrap; flex-shrink: 0;` on `.board-column-wip` so WIP limits like `(WIP 5)` never wrap across lines.
+- Provided generous allocation for `.board-column-title` in standard 324px lanes, preventing `"Purple Review"` from truncating to `"Purpl..."`.
+- Consumed `var(--state-custom-fg)` on `.board-column` container with a clean `border-top: 3px solid var(--state-custom-fg, transparent)` accent bar.
 
-### Problem 4: Harden Backend update_state Invariants
-- In `/home/adamoutler/kanban/kanban/services/project_config.py`:
-  * Enforced `409 LAST_STATE_IN_GROUP` when moving the sole remaining state out of required lifecycle groups (`completed`, `cancelled`, `backlog`, `started`).
-  * Enforced `409 DEFAULT_STATE_REQUIRED` when attempting to unset `is_default` on the currently active default state.
-  * Caught PostgreSQL unique violation errors (`SQLSTATE 23505`) on `session.flush()` in `create_state` and `update_state` and mapped cleanly to `409 STATE_NAME_TAKEN`.
+### Finding 4: StateBadge Synchronization via useLayoutEffect
+- Switched `useEffect` to `useLayoutEffect` in `StateBadge.tsx` so custom CSS properties are bound synchronously before browser paint, eliminating any 1-frame color flash.
+
+### Finding 5: BulkActionBar Batch State color_hex Preservation
+- Updated `onBatchUpdateState` in `viewRegistry.tsx` (line 943) to resolve and retain `color_hex` from `projectStates` when building updated state summaries.
+
+### Finding 6: Lifecycle Group Protection Alignment in delete_state
+- Updated `delete_state` in `kanban/services/project_config.py` to protect `("completed", "cancelled", "backlog", "started")`, matching `update_state`.
+- Added unit test in `test_project_config.py` ensuring deletion of the sole remaining state in the `started` group is rejected with 409 `LAST_STATE_IN_GROUP`.
 
 ---
 
-## 3. Verification and Quality Gate Proof
+## 3. Automated Test Verification and Quality Gate Proof
 
 ### Python Unit Test Coverage (pytest --cov)
 - `kanban/api/v1/schemas/issues.py`: 98%
 - `kanban/services/issue_delete.py`: 95%
 - `kanban/services/issues.py`: 95%
 - `kanban/services/project_config.py`: 95%
-- **TOTAL Backend Coverage**: **95%** (40/40 tests passed in 44.01s).
+- **TOTAL Backend Coverage**: **95%** (42/42 tests passed in 45.22s).
 - Full verbatim log saved in `docs/qa/KAN-43/unit-test-results.txt`.
 
 ### TypeScript Unit Test Coverage (vitest --coverage)
-- `src/components/state/StateBadge.tsx`: **100% Lines**, 97.77% Stmts, 97.4% Branch, 100% Funcs (8/8 tests passed)
-- `src/features/board/BoardColumn.tsx`: **100% Lines**, 100% Stmts, 100% Branch, 100% Funcs (9/9 tests passed)
-- `src/features/settings/ProjectSettingsPage.tsx`: **100% Lines**, 99.54% Stmts, 95.16% Branch, 100% Funcs (37/37 tests passed)
-- `src/styles/__tests__/cssTokensAudit.test.ts`: 4/4 tests passed (0 undeclared CSS tokens, 0 inline JSX styles)
-- **TOTAL Frontend Coverage**: **100% Lines**, 99.47% Statements, 95.8% Branches, 100% Functions (58/58 tests passed).
+- Executed across all 10 test suites directly on post-merge main:
+  * `ProjectSettingsPage.test.tsx`: 37/37 passed
+  * `StateBadge.test.tsx`: 8/8 passed
+  * `BoardColumn.test.tsx`: 9/9 passed
+  * `BoardView.test.tsx`: 20/20 passed
+  * `TableView.test.tsx`: 17/17 passed
+  * `ListView.test.tsx`: 14/14 passed
+  * `QuickCreateIssueModal.test.tsx`: 15/15 passed
+  * `QuickFieldPopover.test.tsx`: 9/9 passed
+  * `viewRegistry.test.tsx`: 41/41 passed
+  * `cssTokensAudit.test.ts`: 4/4 passed
+- **Total Tests**: **174/174 passed** (0 failures).
+- **Target Component Coverage**: 100% Lines, 99.48% Statements, 95.83% Branches, 100% Functions.
 - Full verbatim log saved in `docs/qa/KAN-43/unit-test-results.txt`.
 
 ### Static Quality Gates
 - `python3 -m scripts.check_no_dashes --all`: Exit code 0 (0 em-dashes, 0 en-dashes).
 - `uv run ruff check .`: Exit code 0 (All checks passed).
-- `uv run ruff format --check .`: Exit code 0 (1917 files already formatted).
-- `uv run mypy`: Exit code 0 (Success: no issues found in 1105 source files).
+- `uv run ruff format --check .`: Exit code 0 (1945 files already formatted).
+- `uv run mypy`: Exit code 0 (Success: no issues found in 1121 source files).
 - `uv run lint-imports`: Exit code 0 (Contracts: 2 kept, 0 broken).
-- `pnpm --dir kanban/web exec tsc -b --noEmit`: Exit code 0 (0 type errors).
-- `pnpm --dir kanban/web exec eslint . --max-warnings 0`: Exit code 0 (0 lint warnings/errors).
-- `pnpm --dir kanban/web build`: Exit code 0 (Vite production bundle built cleanly in 1.33s).
+- `pnpm --filter @kanban/web typecheck` (`tsc -b --noEmit`): Exit code 0 (0 type errors).
+- `pnpm --filter @kanban/web lint` (`eslint`): Exit code 0 (0 lint warnings or errors).
+- `pnpm --filter @kanban/web build`: Exit code 0 (Production bundle built cleanly).
 - Full verbatim log saved in `docs/qa/KAN-43/build-or-typecheck.txt`.
 
 ---
 
-## 4. Changed Files Manifest
-Full normalized list of all 24 touched files is available in `docs/qa/KAN-43/changed-files-manifest.txt`.
-Git patch is available in `docs/qa/KAN-43/git-diff.patch`.
+## 4. Manifest and Scoped Patch
+- Full normalized list of touched files: `docs/qa/KAN-43/changed-files-manifest.txt`.
+- Scoped git patch relative to base commit: `docs/qa/KAN-43/git-diff.patch`.

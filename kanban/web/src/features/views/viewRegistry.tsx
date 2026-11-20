@@ -940,10 +940,12 @@ export function IssuesWorkspaceRoute({
           onClearSelection={() => { setSelectedIds([]); }}
           modulesEnabled={modulesEnabled}
           onBatchUpdateState={(targetStateSlug) => {
+            const matchedSt = projectStates.find((s) => s.id === targetStateSlug || s.group === (targetStateSlug === 'done' ? 'completed' : 'unstarted'));
             const desiredState: StateSummary = {
               id: `state-${targetStateSlug}`,
               name: targetStateSlug.charAt(0).toUpperCase() + targetStateSlug.slice(1),
               group: targetStateSlug === 'done' ? 'completed' : 'unstarted',
+              color_hex: matchedSt?.color_hex ?? null,
             };
             setIssues((prev) =>
               prev.map((i) =>

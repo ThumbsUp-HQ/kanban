@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, type JSX } from 'react';
+import React, { useLayoutEffect, useRef, type JSX } from 'react';
 import { StateProgressRing } from '../icons/KanbanIcons';
 import './StateBadge.css';
 
@@ -71,7 +71,7 @@ export function StateBadge({
       ? rawColorHex.trim()
       : null;
 
-  useEffect(() => {
+  useLayoutEffect(() => {
     const el = badgeRef.current;
     if (!el) return;
     if (safeHex) {
