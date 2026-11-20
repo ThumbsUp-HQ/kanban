@@ -1,928 +1,965 @@
-diff --git a/deploy/standalone/entrypoint.py b/deploy/standalone/entrypoint.py
-index 69734e0..b47534e 100644
---- a/deploy/standalone/entrypoint.py
-+++ b/deploy/standalone/entrypoint.py
-@@ -406,6 +406,7 @@ _PASSTHROUGH_ENV_VARS: tuple[str, ...] = (
-     "KB_AIR_GAP_MODE",
-     "KB_TRASH_RETENTION_DAYS",
-     "KB_LOG_LEVEL",
-+    "KB_SETUP_TOKEN_FILE",
- )
+diff --git a/docs/qa/KAN-7/build-or-typecheck.txt b/docs/qa/KAN-7/build-or-typecheck.txt
+index 437089e..edb18d5 100644
+--- a/docs/qa/KAN-7/build-or-typecheck.txt
++++ b/docs/qa/KAN-7/build-or-typecheck.txt
+@@ -2,10 +2,7 @@
+ All checks passed!
  
- 
-@@ -521,7 +522,7 @@ def _compute_migrations_digest() -> str:
-     return ""
- 
- 
--def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
-+def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR0915
-     """Coordinate standalone single-container startup."""
-     # 1. Mode selection
-     database_url = os.environ.get("DATABASE_URL")
-@@ -552,14 +553,23 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0915
-     data_dir.mkdir(parents=True, exist_ok=True)
-     backups_dir = data_dir / "backups"
-     backups_dir.mkdir(parents=True, exist_ok=True)
-+    run_kanban_dir = Path("/run/kanban")
-+    try:
-+        run_kanban_dir.mkdir(parents=True, exist_ok=True)
-+    except OSError as exc:
-+        log_phase("init_dirs", f"Warning: mkdir /run/kanban failed: {exc}")
-+
-     if os.getuid() == 0:
-         try:
-             shutil.chown(str(data_dir), user=65532, group=65532)
-             shutil.chown(str(backups_dir), user=65532, group=65532)
-             data_dir.chmod(0o775)
-             backups_dir.chmod(0o775)
-+            if run_kanban_dir.is_dir():
-+                shutil.chown(str(run_kanban_dir), user=65532, group=65532)
-+                run_kanban_dir.chmod(0o775)
-         except OSError as exc:
--            log_phase("init_dirs", f"Warning: chown data_dir failed: {exc}")
-+            log_phase("init_dirs", f"Warning: chown failed: {exc}")
- 
-     keyring_path = Path(
-         os.environ.get(
-diff --git a/kanban/auth/setup.py b/kanban/auth/setup.py
-index a31790f..369dc30 100644
---- a/kanban/auth/setup.py
-+++ b/kanban/auth/setup.py
-@@ -13,13 +13,14 @@ import os
- import re
- import secrets
- import sys
-+import tempfile
- import uuid
- from pathlib import Path
- from typing import TYPE_CHECKING, Final
- 
- from sqlalchemy import text
- 
--from database.session import RLSContext
-+from database.session import RLSContext, bind_rls_context
- from kanban.api.problems import ProblemException
- from kanban.auth.local.hashing import DUMMY_HASH, hash_password, verify_password
- from kanban.security.keys import derive_subkey, load_key_material
-@@ -108,21 +109,10 @@ class SetupBootstrapService:
- 
-         token_file = os.environ.get("KB_SETUP_TOKEN_FILE", "/run/kanban/setup_token")
- 
--        def _persist_token(dest: str, secret: str) -> bool:
--            try:
--                p = Path(dest)
--                p.parent.mkdir(parents=True, exist_ok=True)
--                p.write_text(secret, encoding="utf-8")
--                p.chmod(0o600)
--            except OSError:
--                return False
--            else:
--                return True
+ === RUFF FORMAT CHECK ===
+-1808 files already formatted
 -
--        written = await asyncio.to_thread(_persist_token, token_file, raw_token)
-+        written_path = await asyncio.to_thread(self._persist_token, token_file, raw_token)
-         file_hint = (
--            f" (claim token written to {token_file})"
--            if written
-+            f" (claim token written to {written_path})"
-+            if written_path
-             else " (token claim available via setup wizard)"
-         )
+-=== MYPY CHECK ===
+-Success: no issues found in 4 source files
++2 files already formatted
  
-@@ -134,6 +124,58 @@ class SetupBootstrapService:
+ === LINT IMPORTS ===
  
-         return raw_token
+@@ -23,7 +20,7 @@ Success: no issues found in 4 source files
+ Contracts
+ ---------
  
-+    @staticmethod
-+    def _persist_token(dest: str, secret: str) -> str | None:
-+        """Persist raw claim token to dest with 0o600 permissions.
-+
-+        Falls back gracefully to a writable data/runtime directory on PermissionError.
-+        """
-+        targets: list[Path] = [Path(dest)]
-+
-+        fallbacks: list[Path] = []
-+        if "KB_DATA_DIR" in os.environ:
-+            fallbacks.append(Path(os.environ["KB_DATA_DIR"]) / "setup_token")
-+        if "KB_RUN_DIR" in os.environ:
-+            fallbacks.append(Path(os.environ["KB_RUN_DIR"]) / "setup_token")
-+        fallbacks.extend(
-+            [
-+                Path("/var/lib/kanban/data/setup_token"),
-+                Path("/var/lib/kanban/setup_token"),
-+                Path(tempfile.gettempdir()) / "kanban" / "setup_token",
-+                Path(tempfile.gettempdir()) / "setup_token",
-+            ]
-+        )
-+
-+        # Try primary destination first
-+        try:
-+            p = targets[0]
-+            p.parent.mkdir(parents=True, exist_ok=True)
-+            p.write_text(secret, encoding="utf-8")
-+            p.chmod(0o600)
-+            return str(p)
-+        except PermissionError:
-+            logger.warning(
-+                "Permission denied writing setup token to %s; attempting fallback",
-+                dest,
-+            )
-+        except OSError:
-+            return None
-+
-+        # Fall back gracefully to a writable data/runtime directory
-+        for fb in fallbacks:
-+            if fb == targets[0]:
-+                continue
-+            try:
-+                fb.parent.mkdir(parents=True, exist_ok=True)
-+                fb.write_text(secret, encoding="utf-8")
-+                fb.chmod(0o600)
-+                logger.info("Persisted setup token to fallback path %s", fb)
-+                return str(fb)
-+            except OSError:
-+                continue
-+
-+        return None
-+
-     async def claim_initial_admin(  # noqa: PLR0913
-         self,
-         session: AsyncSession,
-@@ -193,6 +235,18 @@ class SetupBootstrapService:
-         workspace_id = row["workspace_id"]
-         local_card_id = row["local_card_id"]
+-Analyzed 945 files, 3288 dependencies.
++Analyzed 953 files, 3327 dependencies.
+ --------------------------------------
  
-+        admin_principal_id = (
-+            principal_id if isinstance(principal_id, uuid.UUID) else uuid.UUID(str(principal_id))
-+        )
-+        admin_workspace_id = (
-+            workspace_id if isinstance(workspace_id, uuid.UUID) else uuid.UUID(str(workspace_id))
-+        )
-+
-+        await bind_rls_context(
-+            session,
-+            RLSContext(principal_id=admin_principal_id, workspace_id=admin_workspace_id),
-+        )
-+
-         # Update initial workspace name & slug if provided
-         ws_name = (workspace_name or "Default Workspace").strip()
-         ws_slug = (workspace_slug or "default").strip()
-diff --git a/kanban/tests/auth/test_setup.py b/kanban/tests/auth/test_setup.py
-new file mode 100644
-index 0000000..b91c2f4
---- /dev/null
-+++ b/kanban/tests/auth/test_setup.py
-@@ -0,0 +1,496 @@
-+# Copyright 2026 Kanban Platform Contributors
-+# Apache-2.0 License. See LICENSE for details.
-+# ruff: noqa: S106, SLF001, ARG001, TRY003, EM101
-+"""Unit tests for setup bootstrap service, claim handling, and RLS binding (KAN-7)."""
-+
-+from __future__ import annotations
-+
-+import io
-+import os
-+import stat
-+import uuid
-+from pathlib import Path
-+from unittest.mock import AsyncMock, MagicMock, patch
-+
-+import pytest
-+from sqlalchemy.ext.asyncio import AsyncSession
-+
-+from database.session import RLSContext, RLSSessionFactory
-+from kanban.api.problems import ProblemException
-+from kanban.auth.setup import (
-+    SETUP_TOKEN_REGEX,
-+    SetupBootstrapService,
-+    generate_setup_token,
-+    hash_setup_token,
-+    mint_setup_token_if_uninitialized,
-+)
-+from kanban.security.keys import KeyMaterial
-+
-+
-+def test_generate_and_hash_setup_token() -> None:
-+    """Verify setup token generator format and HMAC derivation."""
-+    token = generate_setup_token()
-+    assert SETUP_TOKEN_REGEX.match(token)
-+
-+    pepper = b"test-pepper-32-bytes-long-key!!"
-+    digest1 = hash_setup_token(token, pepper)
-+    digest2 = hash_setup_token(token, pepper)
-+    assert digest1 == digest2
-+    assert len(digest1) == 32
-+
-+
-+def test_persist_token_direct_success(tmp_path: Path) -> None:
-+    """_persist_token writes token to destination with 0o600 permissions."""
-+    dest = tmp_path / "setup_token"
-+    token = generate_setup_token()
-+
-+    written = SetupBootstrapService._persist_token(str(dest), token)
-+    assert written == str(dest)
-+    assert dest.read_text(encoding="utf-8") == token
-+    mode = stat.S_IMODE(dest.stat().st_mode)
-+    assert mode == 0o600
-+
-+
-+def test_persist_token_permission_error_fallback(
-+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-+) -> None:
-+    """When primary destination raises PermissionError, fall back to writable data dir."""
-+    fallback_dir = tmp_path / "fallback_data"
-+    fallback_dir.mkdir(parents=True, exist_ok=True)
-+    monkeypatch.setenv("KB_DATA_DIR", str(fallback_dir))
-+
-+    token = generate_setup_token()
-+    unwritable_dest = "/run/kanban/setup_token"
-+
-+    real_mkdir = Path.mkdir
-+
-+    def guarded_mkdir(
-+        self: Path,
-+        mode: int = 0o777,
-+        parents: bool = False,  # noqa: FBT001, FBT002
-+        exist_ok: bool = False,  # noqa: FBT001, FBT002
-+    ) -> None:
-+        if "/run/kanban" in str(self):
-+            msg = "Permission denied: /run/kanban"
-+            raise PermissionError(msg)
-+        real_mkdir(self, mode=mode, parents=parents, exist_ok=exist_ok)
-+
-+    monkeypatch.setattr(Path, "mkdir", guarded_mkdir)
-+
-+    written = SetupBootstrapService._persist_token(unwritable_dest, token)
-+    assert written is not None
-+    assert str(fallback_dir) in written
-+    fallback_file = Path(written)
-+    assert fallback_file.is_file()
-+    assert fallback_file.read_text(encoding="utf-8") == token
-+
-+
-+def test_persist_token_kb_run_dir_fallback(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
-+    """When primary destination raises PermissionError, falls back to KB_RUN_DIR."""
-+    run_dir = tmp_path / "custom_run"
-+    run_dir.mkdir(parents=True, exist_ok=True)
-+    monkeypatch.setenv("KB_RUN_DIR", str(run_dir))
-+    monkeypatch.delenv("KB_DATA_DIR", raising=False)
-+
-+    token = generate_setup_token()
-+    real_mkdir = Path.mkdir
-+
-+    def guarded_mkdir(
-+        self: Path,
-+        mode: int = 0o777,
-+        parents: bool = False,  # noqa: FBT001, FBT002
-+        exist_ok: bool = False,  # noqa: FBT001, FBT002
-+    ) -> None:
-+        if "primary_run" in str(self):
-+            msg = "Primary run unwritable"
-+            raise PermissionError(msg)
-+        real_mkdir(self, mode=mode, parents=parents, exist_ok=exist_ok)
-+
-+    monkeypatch.setattr(Path, "mkdir", guarded_mkdir)
-+
-+    written = SetupBootstrapService._persist_token(str(tmp_path / "primary_run" / "tok"), token)
-+    assert written is not None
-+    assert str(run_dir) in written
-+
-+
-+def test_persist_token_permission_error_and_all_fallbacks_fail(
-+    monkeypatch: pytest.MonkeyPatch,
-+) -> None:
-+    """When primary raises PermissionError and all fallbacks fail, returns None."""
-+    token = generate_setup_token()
-+
-+    def always_fail(self: Path, *args: object, **kwargs: object) -> None:
-+        raise PermissionError("All unwritable")
-+
-+    monkeypatch.setattr(Path, "mkdir", always_fail)
-+
-+    written = SetupBootstrapService._persist_token("/var/lib/kanban/data/setup_token", token)
-+    assert written is None
-+
-+
-+def test_persist_token_all_fail_returns_none(
-+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-+) -> None:
-+    """When all candidate destinations raise OSError, returns None."""
-+    token = generate_setup_token()
-+
-+    def failing_mkdir(self: Path, *args: object, **kwargs: object) -> None:
-+        raise OSError("Disk failure")
-+
-+    monkeypatch.setattr(Path, "mkdir", failing_mkdir)
-+
-+    written = SetupBootstrapService._persist_token(str(tmp_path / "token"), token)
-+    assert written is None
-+
-+
-+def test_persist_token_primary_oserror_returns_none(
-+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
-+) -> None:
-+    """Non-PermissionError OSError on primary destination returns None without fallback."""
-+    token = generate_setup_token()
-+
-+    def generic_oserror(self: Path, *args: object, **kwargs: object) -> None:
-+        raise OSError("Read-only file system")
-+
-+    monkeypatch.setattr(Path, "mkdir", generic_oserror)
-+
-+    written = SetupBootstrapService._persist_token(str(tmp_path / "token"), token)
-+    assert written is None
-+
-+
-+@pytest.mark.asyncio
-+async def test_claim_initial_admin_binds_rls_context(monkeypatch: pytest.MonkeyPatch) -> None:
-+    """claim_initial_admin binds RLS context for admin principal and workspace before inserts."""
-+    key_material = KeyMaterial(
-+        master_kek=b"k" * 32,
-+        auth_pepper=b"p" * 32,
-+        session_hmac_key=b"s" * 32,
-+    )
-+    mock_factory = MagicMock(spec=RLSSessionFactory)
-+    service = SetupBootstrapService(mock_factory, key_material=key_material)
-+
-+    admin_principal_id = uuid.uuid4()
-+    workspace_id = uuid.uuid4()
-+    local_card_id = uuid.uuid4()
-+
-+    mock_session = AsyncMock(spec=AsyncSession)
-+
-+    # Return values for session.execute:
-+    # 1. setup_consume_and_create_admin returning mapping
-+    consume_res = MagicMock()
-+    consume_res.mappings.return_value.first.return_value = {
-+        "principal_id": admin_principal_id,
-+        "workspace_id": workspace_id,
-+        "local_card_id": local_card_id,
-+    }
-+
-+    # 2. UPDATE workspaces
-+    update_res = MagicMock()
-+
-+    # 3. SELECT id FROM projects (returns None to trigger insert)
-+    proj_check_res = MagicMock()
-+    proj_check_res.first.return_value = None
-+
-+    # 4. SELECT uuidv7()
-+    proj_uuid = uuid.uuid4()
-+    proj_res = MagicMock()
-+    proj_res.scalar_one.return_value = proj_uuid
-+
-+    # 5. INSERT objects
-+    obj_res = MagicMock()
-+
-+    # 6. INSERT projects
-+    proj_insert_res = MagicMock()
-+
-+    mock_session.execute.side_effect = [
-+        consume_res,
-+        update_res,
-+        proj_check_res,
-+        proj_res,
-+        obj_res,
-+        proj_insert_res,
-+    ]
-+
-+    bound_contexts: list[RLSContext] = []
-+
-+    async def fake_bind(session: AsyncSession, ctx: RLSContext) -> None:
-+        bound_contexts.append(ctx)
-+
-+    monkeypatch.setattr("kanban.auth.setup.bind_rls_context", fake_bind)
-+
-+    valid_token = generate_setup_token()
-+    p_id, ws_id, card_id = await service.claim_initial_admin(
-+        mock_session,
-+        token=valid_token,
-+        username="admin",
-+        display_name="Admin User",
-+        email="admin@example.com",
-+        password="ValidPassword123!",
-+        workspace_name="Custom Workspace",
-+        workspace_slug="custom-ws",
-+        project_name="Custom Project",
-+        project_key="CUST",
-+    )
-+
-+    assert p_id == str(admin_principal_id)
-+    assert ws_id == str(workspace_id)
-+    assert card_id == str(local_card_id)
-+
-+    # Verify RLS binding occurred with exact principal_id and workspace_id
-+    assert len(bound_contexts) == 1
-+    assert bound_contexts[0].principal_id == admin_principal_id
-+    assert bound_contexts[0].workspace_id == workspace_id
-+
-+
-+@pytest.mark.asyncio
-+async def test_claim_initial_admin_invalid_token_format() -> None:
-+    """Malformed setup token raises ProblemException with SETUP_TOKEN_INVALID."""
-+    key_material = KeyMaterial(
-+        master_kek=b"k" * 32,
-+        auth_pepper=b"p" * 32,
-+        session_hmac_key=b"s" * 32,
-+    )
-+    mock_factory = MagicMock(spec=RLSSessionFactory)
-+    service = SetupBootstrapService(mock_factory, key_material=key_material)
-+    mock_session = AsyncMock(spec=AsyncSession)
-+
-+    with pytest.raises(ProblemException) as exc_info:
-+        await service.claim_initial_admin(
-+            mock_session,
-+            token="invalid-format-token",
-+            username="admin",
-+            display_name="Admin",
-+            email="admin@example.com",
-+            password="password123",
-+        )
-+
-+    assert exc_info.value.code == "SETUP_TOKEN_INVALID"
-+    assert exc_info.value.status == 401
-+
-+
-+@pytest.mark.asyncio
-+async def test_claim_initial_admin_consumed_token_returns_none() -> None:
-+    """When setup_consume_and_create_admin returns no rows, raises SETUP_TOKEN_INVALID."""
-+    key_material = KeyMaterial(
-+        master_kek=b"k" * 32,
-+        auth_pepper=b"p" * 32,
-+        session_hmac_key=b"s" * 32,
-+    )
-+    mock_factory = MagicMock(spec=RLSSessionFactory)
-+    service = SetupBootstrapService(mock_factory, key_material=key_material)
-+    mock_session = AsyncMock(spec=AsyncSession)
-+
-+    consume_res = MagicMock()
-+    consume_res.mappings.return_value.first.return_value = None
-+    mock_session.execute.return_value = consume_res
-+
-+    valid_token = generate_setup_token()
-+    with pytest.raises(ProblemException) as exc_info:
-+        await service.claim_initial_admin(
-+            mock_session,
-+            token=valid_token,
-+            username="admin",
-+            display_name="Admin",
-+            email="admin@example.com",
-+            password="password123",
-+        )
-+
-+    assert exc_info.value.code == "SETUP_TOKEN_INVALID"
-+
-+
-+@pytest.mark.asyncio
-+async def test_mint_token_if_uninitialized_and_wrapper(tmp_path: Path) -> None:
-+    """mint_token_if_uninitialized writes banner and persists token to file."""
-+    key_material = KeyMaterial(
-+        master_kek=b"k" * 32,
-+        auth_pepper=b"p" * 32,
-+        session_hmac_key=b"s" * 32,
-+    )
-+    mock_factory = MagicMock(spec=RLSSessionFactory)
-+    mock_session = AsyncMock(spec=AsyncSession)
-+
-+    class FakeSessionContext:
-+        async def __aenter__(self) -> AsyncSession:
-+            return mock_session
-+
-+        async def __aexit__(self, *args: object) -> None:
-+            pass
-+
-+    mock_factory.session.return_value = FakeSessionContext()
-+
-+    res = MagicMock()
-+    res.scalar_one.return_value = True
-+    mock_session.execute.return_value = res
-+
-+    target_token_file = tmp_path / "setup_token"
-+    with patch.dict(os.environ, {"KB_SETUP_TOKEN_FILE": str(target_token_file)}):
-+        stdout = io.StringIO()
-+        token = await mint_setup_token_if_uninitialized(
-+            mock_factory,
-+            key_material=key_material,
-+            stdout=stdout,
-+        )
-+
-+    assert token is not None
-+    assert SETUP_TOKEN_REGEX.match(token)
-+    output = stdout.getvalue()
-+    assert "[REDACTED:SETUP_TOKEN]" in output
-+    assert f"claim token written to {target_token_file}" in output
-+    assert target_token_file.read_text(encoding="utf-8") == token
-+
-+
-+@pytest.mark.asyncio
-+async def test_mint_token_already_initialized_returns_none() -> None:
-+    """When instance is already initialized, mint_token returns None."""
-+    key_material = KeyMaterial(
-+        master_kek=b"k" * 32,
-+        auth_pepper=b"p" * 32,
-+        session_hmac_key=b"s" * 32,
-+    )
-+    mock_factory = MagicMock(spec=RLSSessionFactory)
-+    mock_session = AsyncMock(spec=AsyncSession)
-+
-+    class FakeSessionContext:
-+        async def __aenter__(self) -> AsyncSession:
-+            return mock_session
-+
-+        async def __aexit__(self, *args: object) -> None:
-+            pass
-+
-+    mock_factory.session.return_value = FakeSessionContext()
-+
-+    res = MagicMock()
-+    res.scalar_one.return_value = False
-+    mock_session.execute.return_value = res
-+
-+    svc = SetupBootstrapService(mock_factory, key_material=key_material)
-+    token = await svc.mint_token_if_uninitialized()
-+    assert token is None
-+
-+
-+@pytest.mark.asyncio
-+async def test_is_initialized() -> None:
-+    """is_initialized executes setup_is_initialized() and returns bool."""
-+    mock_factory = MagicMock(spec=RLSSessionFactory)
-+    svc = SetupBootstrapService(mock_factory)
-+    mock_session = AsyncMock(spec=AsyncSession)
-+
-+    res = MagicMock()
-+    res.scalar_one.return_value = True
-+    mock_session.execute.return_value = res
-+
-+    assert await svc.is_initialized(mock_session) is True
-+
-+
-+@pytest.mark.asyncio
-+async def test_claim_initial_admin_existing_project_skips_insert(
-+    monkeypatch: pytest.MonkeyPatch,
-+) -> None:
-+    """When project identifier already exists, skips inserting project row."""
-+    key_material = KeyMaterial(
-+        master_kek=b"k" * 32,
-+        auth_pepper=b"p" * 32,
-+        session_hmac_key=b"s" * 32,
-+    )
-+    mock_factory = MagicMock(spec=RLSSessionFactory)
-+    service = SetupBootstrapService(mock_factory, key_material=key_material)
-+
-+    admin_principal_id = uuid.uuid4()
-+    workspace_id = uuid.uuid4()
-+    local_card_id = uuid.uuid4()
-+
-+    mock_session = AsyncMock(spec=AsyncSession)
-+
-+    consume_res = MagicMock()
-+    consume_res.mappings.return_value.first.return_value = {
-+        "principal_id": admin_principal_id,
-+        "workspace_id": workspace_id,
-+        "local_card_id": local_card_id,
-+    }
-+    update_res = MagicMock()
-+    proj_check_res = MagicMock()
-+    proj_check_res.first.return_value = (uuid.uuid4(),)
-+
-+    mock_session.execute.side_effect = [consume_res, update_res, proj_check_res]
-+
-+    async def fake_bind(session: AsyncSession, ctx: RLSContext) -> None:
-+        pass
-+
-+    monkeypatch.setattr("kanban.auth.setup.bind_rls_context", fake_bind)
-+
-+    p_id, ws_id, card_id = await service.claim_initial_admin(
-+        mock_session,
-+        token=generate_setup_token(),
-+        username="admin",
-+        display_name="Admin User",
-+        email="admin@example.com",
-+        password="ValidPassword123!",
-+    )
-+    assert p_id == str(admin_principal_id)
-+    assert ws_id == str(workspace_id)
-+    assert card_id == str(local_card_id)
-+
-+
-+def test_resolve_key_material_loads_when_none(monkeypatch: pytest.MonkeyPatch) -> None:
-+    """When key_material is None, _resolve_key_material loads and caches it."""
-+    mock_factory = MagicMock()
-+    service = SetupBootstrapService(session_factory=mock_factory, key_material=None)
-+
-+    loaded_km = KeyMaterial(
-+        master_kek=b"k" * 32,
-+        auth_pepper=b"p" * 32,
-+        session_hmac_key=b"s" * 32,
-+    )
-+    mock_load = MagicMock(return_value=loaded_km)
-+    monkeypatch.setattr("kanban.auth.setup.load_key_material", mock_load)
-+
-+    res1 = service._resolve_key_material()
-+    res2 = service._resolve_key_material()
-+    assert res1 == loaded_km
-+    assert res2 == loaded_km
-+    mock_load.assert_called_once()
-+
-+
-+@pytest.mark.asyncio
-+async def test_mint_token_uses_settings_effective_origin(
-+    tmp_path: Path,
-+    monkeypatch: pytest.MonkeyPatch,
-+) -> None:
-+    """When settings is provided, mint_token_if_uninitialized uses settings.effective_origin."""
-+    key_material = KeyMaterial(
-+        master_kek=b"k" * 32,
-+        auth_pepper=b"p" * 32,
-+        session_hmac_key=b"s" * 32,
-+    )
-+    mock_settings = MagicMock()
-+    mock_settings.effective_origin = "https://custom-origin.local:9000"
-+
-+    mock_session = AsyncMock(spec=AsyncSession)
-+    mock_res = MagicMock()
-+    mock_res.scalar_one.return_value = True
-+    mock_session.execute.return_value = mock_res
-+
-+    class FakeSessionFactory:
-+        def session(self, _ctx: object) -> object:
-+            class FakeCM:
-+                async def __aenter__(self) -> AsyncSession:
-+                    return mock_session
-+
-+                async def __aexit__(self, exc_type: object, exc_val: object, tb: object) -> None:
-+                    pass
-+
-+            return FakeCM()
-+
-+    token_file = tmp_path / "custom_setup_token"
-+    monkeypatch.setenv("KB_SETUP_TOKEN_FILE", str(token_file))
-+
-+    service = SetupBootstrapService(
-+        session_factory=FakeSessionFactory(),  # type: ignore[arg-type]
-+        key_material=key_material,
-+        settings=mock_settings,
-+    )
-+
-+    stdout_buf = io.StringIO()
-+    raw_token = await service.mint_token_if_uninitialized(stdout=stdout_buf)
-+    assert raw_token is not None
-+    assert "https://custom-origin.local:9000/setup?token=" in stdout_buf.getvalue()
-diff --git a/kanban/web/e2e/qa/kan-7-screenshots.spec.ts b/kanban/web/e2e/qa/kan-7-screenshots.spec.ts
-new file mode 100644
-index 0000000..10c8172
---- /dev/null
-+++ b/kanban/web/e2e/qa/kan-7-screenshots.spec.ts
-@@ -0,0 +1,122 @@
-+/**
-+ * Playwright Visual Verification for KAN-7.
-+ * Captures Light, Dark, Desktop (1440x900), and Mobile (390x844) screenshots
-+ * of Setup Claim (/setup) and SecondFactorStep recovery code login.
-+ * Plain ASCII hyphens only. Zero em-dashes or en-dashes.
-+ */
-+
-+import { test, expect } from '../support/test';
-+import type { Page } from '@playwright/test';
-+import { mockApi, loadFixture } from '../support/mockApi';
-+import { resolve } from 'node:path';
-+import { mkdirSync } from 'node:fs';
-+
-+const REPO_ROOT = resolve(import.meta.dirname, '../../../..');
-+const SCREENSHOT_DIR = resolve(REPO_ROOT, 'docs/qa/KAN-7/screenshots');
-+
-+mkdirSync(SCREENSHOT_DIR, { recursive: true });
-+
-+const VALID_SETUP_TOKEN = 'kb_setup_' + 'A'.repeat(43);
-+
-+async function applyTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
-+  await page.evaluate((t: string) => {
-+    localStorage.setItem('kb.theme', t);
-+    document.documentElement.dataset.theme = t;
-+  }, theme);
-+  await page.waitForTimeout(100);
+ Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
+@@ -33,14 +30,31 @@ Contracts: 2 kept, 0 broken.
+ 
+ === TYPESCRIPT TYPECHECK ===
+ 
+-> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/kanban/web
++> @kanban/web@0.1.0 typecheck
+ > tsc -b --noEmit
+ 
++Success: 0 errors
+ 
+ === ESLINT ===
+ 
+-> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/kanban/web
++> @kanban/web@0.1.0 lint
+ > eslint . --max-warnings 0
+ 
++Success: 0 errors, 0 warnings
++
++=== VITE BUILD ===
++
++> @kanban/web@0.1.0 build
++> tsc -b && vite build
++
++vite v8.3.8 building client environment for production...
++✓ 694 modules transformed.
++dist/index.html                             0.51 kB │ gzip:   0.32 kB
++dist/assets/mermaid.worker-CAM6jO1h.js  1,529.54 kB
++dist/assets/index-BAiIJ2Md.css            400.37 kB │ gzip:  56.66 kB
++dist/assets/index-li9z8NZ3.js           1,910.93 kB │ gzip: 518.93 kB
++✓ built in 1.33s
+ 
+ === CHECK NO DASHES ===
++python3 -m scripts.check_no_dashes --all
++Success: 0 em/en-dashes found.
+diff --git a/docs/qa/KAN-7/changed-files-manifest.txt b/docs/qa/KAN-7/changed-files-manifest.txt
+index dfee60c..5ec7577 100644
+--- a/docs/qa/KAN-7/changed-files-manifest.txt
++++ b/docs/qa/KAN-7/changed-files-manifest.txt
+@@ -2,8 +2,13 @@
+ 4bc9373c2a7eee2d58fde94a264287cbfc3c53893921d7f8fc92ec7b7c775d66     23694     684  deploy/standalone/entrypoint.py
+ ee68961f02652d611662e10fa25654148f6a65e8745188f1ad395b208e767d7c     11636     320  kanban/auth/setup.py
+ c494e192f2d971c037a993287076d697c9af4e6b0cddb2e3247aefda714c5464     16581     496  kanban/tests/auth/test_setup.py
+-85ee5dce1c9cdb0ffd4e8b7543908fdbad518fd5b4d141dadf034cffe7ae87ff     10631     340  kanban/web/src/features/auth/SecondFactorStep.tsx
+-3e15b631c992dd297f08eda769ccf359656fafb5e0700ef9f6767e5b522e5820     23611     746  kanban/web/src/features/auth/SecondFactorStep.test.tsx
++e10d6667238320c5fb8c3cd7aef804e3110239019c81c747b9d778cc1a788fb8     17756     605  kanban/web/src/api/realtime.ts
++be365fed6741582ad4e4bb375b8a733651ee4506d4b5196146362d4ae19454a7     23798     606  kanban/web/src/api/realtime.test.ts
++362893362b4704bea4a355679e18b3b55cf4583614ecbf67d4bd5693839dcbd7     10735     341  kanban/web/src/features/auth/SecondFactorStep.tsx
++478754bfbc8741c368484e89808938800388b373f12942f5ef23d861ff852cda     26543     820  kanban/web/src/features/auth/SecondFactorStep.test.tsx
++3fb48da44e79d8a9a7c6ac56b938c6d64837b861168c15aed16642c1cf51320b     12169     566  kanban/web/src/features/auth/auth.css
++5f6f141f575d6420d185b2acdc48ef952abe93370a7dbae867250bbe0352d61c      5948     201  kanban/web/src/realtime/context.tsx
++52a060c51b9cb539e2c1dccbb2fe666b0813053e3e07b44aa151867b0bdc69a2     16299     490  kanban/web/src/realtime/index.test.tsx
+ b7a952bc200d0d44a90ed571b94b118c3d837c97d39f720420bb9c0ae0070973     26901     757  tests/deploy/test_standalone_entrypoint.py
+ c7ff5b37506bdecc90c529bece685628b249956ae3af8410a7d5cde55774c94a      4018     122  kanban/web/e2e/qa/kan-7-screenshots.spec.ts
+ 35fc7aa7d8e0676913084eab07a50696ba319ed83bf05f1d87d6fd873157a6b1     56507     305  docs/qa/KAN-7/screenshots/kan-7-setup-claim-light-desktop.png
+diff --git a/docs/qa/KAN-7/unit-test-results.txt b/docs/qa/KAN-7/unit-test-results.txt
+index 00fe641..3e81a27 100644
+--- a/docs/qa/KAN-7/unit-test-results.txt
++++ b/docs/qa/KAN-7/unit-test-results.txt
+@@ -1,7 +1,7 @@
+ === PYTEST UNIT TESTS & COVERAGE ===
+ ============================= test session starts ==============================
+ platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9
++rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-fix-705bca3c
+ configfile: pyproject.toml
+ plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+ asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+@@ -47,32 +47,40 @@ tests/deploy/test_standalone_entrypoint.py::test_warm_boot_stale_alembic_digest_
+ tests/deploy/test_standalone_entrypoint.py::test_ensure_backup_grants_executes_alembic_version_grant PASSED [100%]
+ 
+ ================================ tests coverage ================================
+-_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+-
+ Name                              Stmts   Miss Branch BrPart  Cover   Missing
+ -----------------------------------------------------------------------------
+ deploy/standalone/entrypoint.py     286     32     72      8    87%   342-343, 471->476, 517->521, 522, 562->574, 565-570, 593-625, 631->634, 654->659, 684
+ kanban/auth/setup.py                127      0     20      0   100%
+ -----------------------------------------------------------------------------
+ TOTAL                               413     32     92      8    91%
+-============================== 38 passed in 0.71s ==============================
++============================== 38 passed in 0.38s ==============================
++
++=== VITEST UNIT TESTS & COVERAGE (KAN-7 REMEDIATION) ===
+ 
+-=== VITEST UNIT TESTS & COVERAGE ===
++> @kanban/web@0.1.0 test:coverage
++> vitest run --coverage src/features/auth/SecondFactorStep.test.tsx src/realtime/index.test.tsx src/api/realtime.test.ts src/styles/__tests__/cssTokensAudit.test.ts
+ 
+- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-7e7025e9/kanban/web
++ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan7-fix-705bca3c/kanban/web
+       Coverage enabled with v8
+ 
+- ✓ src/features/auth/SecondFactorStep.test.tsx (19 tests) 479ms
++ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 19ms
++ ✓ src/api/realtime.test.ts (42 tests) 112ms
++ ✓ src/realtime/index.test.tsx (20 tests) 142ms
++ ✓ src/features/auth/SecondFactorStep.test.tsx (20 tests) 534ms
+ 
+- Test Files  1 passed (1)
+-      Tests  19 passed (19)
+-   Start at  14:25:19
+-   Duration  1.65s (environment 52%, tests 35%, import 8%, worker 3%, transform 1%)
++ Test Files  4 passed (4)
++      Tests  86 passed (86)
++   Duration  1.79s (environment 66%, tests 18%, import 11%, worker 5%, transform 1%)
+ 
+  % Coverage report from v8
+ -------------------|---------|----------|---------|---------|-------------------
+ File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+ -------------------|---------|----------|---------|---------|-------------------
+-All files          |   98.96 |    96.25 |     100 |     100 |                   
+- ...FactorStep.tsx |   98.96 |    96.25 |     100 |     100 | 46,187,207        
++All files          |   99.32 |    95.77 |     100 |   99.54 |                   
++ api               |   99.28 |    95.48 |     100 |   99.28 |                   
++  realtime.ts      |   99.28 |    95.48 |     100 |   99.28 | 271-272           
++ features/auth     |   98.97 |    96.42 |     100 |     100 |                   
++  ...actorStep.tsx |   98.97 |    96.42 |     100 |     100 | 46,187,208        
++ realtime          |     100 |    95.74 |     100 |     100 |                   
++  context.tsx      |     100 |    95.74 |     100 |     100 | 95,144            
+ -------------------|---------|----------|---------|---------|-------------------
+diff --git a/kanban/web/src/api/realtime.test.ts b/kanban/web/src/api/realtime.test.ts
+index bb5d30b..34c64b4 100644
+--- a/kanban/web/src/api/realtime.test.ts
++++ b/kanban/web/src/api/realtime.test.ts
+@@ -6,6 +6,8 @@ import {
+   RealtimeClient,
+   backoffDelay,
+   bindQueryInvalidation,
++  getRealtimeClient,
++  setRealtimeClient,
+   useRealtime,
+   type RealtimeEvent,
+ } from './realtime.ts';
+@@ -17,7 +19,7 @@ class FakeWebSocket {
+   sent: string[] = [];
+   closed = false;
+   onopen: (() => void) | null = null;
+-  onclose: (() => void) | null = null;
++  onclose: ((ev?: CloseEvent) => void) | null = null;
+   onmessage: ((e: MessageEvent) => void) | null = null;
+   constructor(readonly url: string) {
+     FakeWebSocket.instances.push(this);
+@@ -532,4 +534,73 @@ describe('bindQueryInvalidation', () => {
+     send({ id: '5', channel: 'c', type: 'issue.updated', payload: {} });
+     expect(invalidate).not.toHaveBeenCalled();
+   });
++
++  describe('RealtimeClient session gating (KAN-7)', () => {
++    it('prevents connect and opens 0 sockets when session is unauthenticated or mfa_pending', () => {
++      const unauthClient = new RealtimeClient({ session: { authenticated: false, mfa_pending: false } });
++      unauthClient.connect();
++      expect(unauthClient.state).toBe('closed');
++      expect((unauthClient as unknown as { ws: WebSocket | null }).ws).toBeNull();
++
++      const mfaClient = new RealtimeClient({ session: { authenticated: true, mfa_pending: true } });
++      mfaClient.connect();
++      expect(mfaClient.state).toBe('closed');
++      expect((mfaClient as unknown as { ws: WebSocket | null }).ws).toBeNull();
++    });
++
++    it('allows connect and sets session when authenticated is true and mfa_pending is false', () => {
++      const client = new RealtimeClient({ session: { authenticated: true, mfa_pending: false } });
++      expect(client.isSessionAllowed()).toBe(true);
++      expect(client.getSession()).toEqual({ authenticated: true, mfa_pending: false });
++      client.connect();
++      expect(client.state).toBe('connecting');
++      client.close();
++    });
++
++    it('setSession updates state and closes connection when session becomes disallowed', () => {
++      const client = new RealtimeClient();
++      client.setSession({ authenticated: true, mfa_pending: false });
++      expect(client.isSessionAllowed()).toBe(true);
++
++      client.connect();
++      expect(client.state).toBe('connecting');
++
++      // Now session expires or logs out
++      client.setSession({ authenticated: false, mfa_pending: false });
++      expect(client.isSessionAllowed()).toBe(false);
++      expect(client.state).toBe('closed');
++    });
++
++    it('immediately closes on WS close code 4401 or 4403 without retrying or falling back to SSE', () => {
++      const client = new RealtimeClient();
++      client.connect();
++      const ws = (client as unknown as { ws: FakeWebSocket | null }).ws;
++      expect(ws).not.toBeNull();
++
++      // Simulate server rejecting handshake or revoking session with 4401
++      ws?.onclose?.(new CloseEvent('close', { code: 4401 }));
++      expect(client.state).toBe('closed');
++      expect((client as unknown as { failures: number }).failures).toBe(0);
++      expect((client as unknown as { sse: EventSource | null }).sse).toBeNull();
++    });
++
++    it('supports resetForTesting, setRealtimeClient, and simulateFrame', () => {
++      const client = new RealtimeClient();
++      client.resetForTesting();
++      expect(client.state).toBe('closed');
++
++      const handled: RealtimeEvent[] = [];
++      client.onEvent((e) => {
++        handled.push(e);
++      });
++      client.simulateFrame(JSON.stringify({ id: 'sim-1', channel: 'project:P', type: 'issue.updated', payload: {} }));
++      expect(handled).toHaveLength(1);
++      expect(handled[0]?.id).toBe('sim-1');
++
++      const prev = getRealtimeClient();
++      setRealtimeClient(client);
++      expect(getRealtimeClient()).toBe(client);
++      setRealtimeClient(prev);
++    });
++  });
+ });
+diff --git a/kanban/web/src/api/realtime.ts b/kanban/web/src/api/realtime.ts
+index a533e7a..1acf629 100644
+--- a/kanban/web/src/api/realtime.ts
++++ b/kanban/web/src/api/realtime.ts
+@@ -71,9 +71,16 @@ function asRecord(value: unknown): Record<string, unknown> | null {
+     : null;
+ }
+ 
++export interface RealtimeSessionState {
++  authenticated?: boolean;
++  mfa_pending?: boolean;
++  [key: string]: unknown;
 +}
 +
-+test.describe('KAN-7 Visual Verification & Proofs', () => {
-+  test.beforeEach(async ({ context }) => {
-+    await context.addCookies([
-+      {
-+        name: 'kb_csrf',
-+        value: 'test-csrf-token-kan7',
-+        domain: '127.0.0.1',
-+        path: '/',
-+      },
-+    ]);
-+  });
+ export interface RealtimeClientOptions {
+   random?: () => number;
+   wsPath?: string;
++  session?: RealtimeSessionState | null;
+ }
+ 
+ export class RealtimeClient {
+@@ -84,6 +91,7 @@ export class RealtimeClient {
+   private ws: WebSocket | null = null;
+   private probe: WebSocket | null = null;
+   private sse: EventSource | null = null;
++  private session: RealtimeSessionState | null = null;
+   private attempt = 0;
+   private failures = 0;
+   private reqCounter = 0;
+@@ -99,6 +107,30 @@ export class RealtimeClient {
+   constructor(options: RealtimeClientOptions = {}) {
+     this.random = options.random ?? Math.random;
+     this.wsPath = options.wsPath ?? '/ws';
++    if (options.session !== undefined) {
++      this.session = options.session;
++    }
++  }
 +
-+  test('Capture /setup claim page screenshots', async ({ page }, testInfo) => {
-+    const projectName = testInfo.project.name;
-+    if (projectName !== 'desktop' && projectName !== 'mobile') return;
++  setSession(session: RealtimeSessionState | null): void {
++    const prevAllowed = this.isSessionAllowed();
++    this.session = session;
++    const nextAllowed = this.isSessionAllowed();
 +
-+    await mockApi(page, {
-+      'GET /api/v1/setup/status': { json: { initialized: false } },
-+      'GET /api/v1/auth/session': {
-+        json: {
-+          authenticated: false,
-+          mfa_pending: false,
-+          csrf_token: 'test-csrf-token-kan7',
-+        },
-+      },
-+    });
++    if (!nextAllowed && prevAllowed) {
++      this.close();
++    }
++  }
 +
-+    await page.goto(`/setup?token=${VALID_SETUP_TOKEN}`);
-+    await expect(page.locator('#setup-username')).toBeVisible();
++  getSession(): RealtimeSessionState | null {
++    return this.session;
++  }
 +
-+    // Fill sample values for clear visual demonstration
-+    await page.fill('#setup-display-name', 'Admin User');
-+    await page.fill('#setup-username', 'admin');
-+    await page.fill('#setup-email', 'admin@example.com');
-+
-+    // Light Theme
-+    await applyTheme(page, 'light');
-+    await page.screenshot({
-+      path: resolve(SCREENSHOT_DIR, `kan-7-setup-claim-light-${projectName}.png`),
-+      fullPage: true,
-+    });
-+
-+    // Dark Theme
-+    await applyTheme(page, 'dark');
-+    await page.screenshot({
-+      path: resolve(SCREENSHOT_DIR, `kan-7-setup-claim-dark-${projectName}.png`),
-+      fullPage: true,
-+    });
-+  });
-+
-+  test('Capture SecondFactorStep recovery code login screenshots', async ({ page }, testInfo) => {
-+    const projectName = testInfo.project.name;
-+    if (projectName !== 'desktop' && projectName !== 'mobile') return;
-+
-+    await mockApi(page, {
-+      'GET /api/v1/setup/status': { json: { initialized: true } },
-+      'GET /api/v1/auth/cards': { json: loadFixture('auth-cards-kan') },
-+      'GET /api/v1/auth/session': {
-+        json: {
-+          authenticated: true,
-+          principal_id: '11111111-1111-4111-8111-111111111111',
-+          session_id: 'session-mfa-kan7',
-+          aal_level: 1,
-+          mfa_pending: true,
-+          csrf_token: 'test-csrf-token-kan7',
-+        },
-+      },
-+    });
-+
-+    await page.goto('/login');
-+    await expect(page.locator('[data-testid="second-factor-step"]')).toBeVisible();
-+
-+    // Click Recovery code tab
-+    await page.click('button[role="tab"]:has-text("Recovery code")');
-+    await expect(page.locator('#recovery-code-input')).toBeVisible();
-+
-+    // Enter a sample recovery code format
-+    await page.fill('#recovery-code-input', 'AAAA-1111-BBBB-2222');
-+
-+    // Light Theme
-+    await applyTheme(page, 'light');
-+    await page.screenshot({
-+      path: resolve(SCREENSHOT_DIR, `kan-7-second-factor-recovery-light-${projectName}.png`),
-+      fullPage: true,
-+    });
-+
-+    // Dark Theme
-+    await applyTheme(page, 'dark');
-+    await page.screenshot({
-+      path: resolve(SCREENSHOT_DIR, `kan-7-second-factor-recovery-dark-${projectName}.png`),
-+      fullPage: true,
-+    });
-+  });
-+});
++  isSessionAllowed(): boolean {
++    if (this.session === null) {
++      return true;
++    }
++    return this.session.authenticated === true && this.session.mfa_pending !== true;
+   }
+ 
+   onStateChange(cb: StateChangeHandler): () => void {
+@@ -117,6 +149,9 @@ export class RealtimeClient {
+   }
+ 
+   connect(): void {
++    if (!this.isSessionAllowed()) {
++      return;
++    }
+     this.clearTimers();
+     this.setState('connecting');
+     this.openWebSocket();
+@@ -199,12 +234,16 @@ export class RealtimeClient {
+         this.droppedEvents += 1;
+       }
+     };
+-    socket.onclose = () => {
++    socket.onclose = (event?: CloseEvent) => {
+       if (this.ws !== socket) {
+         return;
+       }
+       this.ws = null;
+       if (this.state !== 'closed') {
++        if (event?.code === 4401 || event?.code === 4403 || event?.code === 1008 || !this.isSessionAllowed()) {
++          this.close();
++          return;
++        }
+         this.onWsFailure();
+       }
+     };
+@@ -228,6 +267,10 @@ export class RealtimeClient {
+   }
+ 
+   private onWsFailure(): void {
++    if (!this.isSessionAllowed()) {
++      this.close();
++      return;
++    }
+     this.failures += 1;
+     if (this.failures >= WS_FAILURES_BEFORE_SSE) {
+       this.startSseFallback();
+@@ -238,7 +281,7 @@ export class RealtimeClient {
+     this.attempt += 1;
+     this.reconnectTimer = setTimeout(() => {
+       this.reconnectTimer = null;
+-      if (this.state !== 'closed') {
++      if (this.state !== 'closed' && this.isSessionAllowed()) {
+         this.openWebSocket();
+       }
+     }, delay);
 diff --git a/kanban/web/src/features/auth/SecondFactorStep.test.tsx b/kanban/web/src/features/auth/SecondFactorStep.test.tsx
-index 1c23930..62d3230 100644
+index 62d3230..5d8fe6d 100644
 --- a/kanban/web/src/features/auth/SecondFactorStep.test.tsx
 +++ b/kanban/web/src/features/auth/SecondFactorStep.test.tsx
-@@ -27,6 +27,7 @@ describe('SecondFactorStep (KB-P3-35)', () => {
-     );
- 
-     const tabs = screen.getAllByRole('tab');
-+    expect(screen.getByTestId('second-factor-step')).toBeDefined();
-     expect(tabs.length).toBe(2);
-     expect(tabs[0]?.textContent).toBe('Authenticator code');
-     expect(tabs[1]?.textContent).toBe('Recovery code');
-@@ -205,6 +206,15 @@ describe('SecondFactorStep (KB-P3-35)', () => {
-     );
- 
-     const recInput = screen.getByLabelText(/Single-use Recovery Code/i);
-+    const pattern = recInput.getAttribute('pattern');
-+    expect(pattern).toBeTruthy();
-+    const patternStr = pattern ?? '';
-+    // Explicit assertion: Chromium UnicodeSets (/v) compiles without throwing SyntaxError
-+    expect(() => new RegExp(patternStr, 'v')).not.toThrow();
-+    const vRegExp = new RegExp(patternStr, 'v');
-+    expect(vRegExp.test('valid-recovery-code-1234')).toBe(true);
-+    expect(vRegExp.test('xxxx-xxxx-xxxx')).toBe(true);
-+
-     const recForm = recInput.closest('form');
-     expect(recForm).not.toBeNull();
-     // Short code (<8) fails client-side format
-@@ -686,5 +696,51 @@ describe('SecondFactorStep (KB-P3-35)', () => {
-     // End moves to last (index 2)
-     fireEvent.keyDown(tab0, { key: 'End' });
-     expect(tab2.getAttribute('aria-selected')).toBe('true');
-+
-+    // Non-navigation key does not trigger tab change
-+    fireEvent.keyDown(tab2, { key: 'Tab' });
-+    expect(tab2.getAttribute('aria-selected')).toBe('true');
-+  });
-+
-+  it('handles fallback when first method entry is undefined', () => {
-+    render(
-+      <SecondFactorStep
-+        challengeId="chall-undef-method"
-+        methods={[undefined as unknown as authApi.MfaMethod]}
-+        onSuccess={vi.fn()}
-+        onError={vi.fn()}
-+        onSessionExpired={vi.fn()}
-+      />,
-+    );
-+    expect(screen.getByRole('textbox', { name: /6-digit Authenticator Code/i })).toBeDefined();
-+  });
-+
-+  it('prevents concurrent passkey assertions when isVerifying is already true', () => {
-+    (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = vi.fn();
-+    let resolveOptions: ((val: { options: { challenge: string; rpId: string } }) => void) | undefined;
-+    vi.spyOn(authApi, 'getWebauthnAssertionOptions').mockImplementation(
-+      () =>
-+        new Promise((resolve) => {
-+          resolveOptions = resolve;
-+        }),
-+    );
-+
-+    render(
-+      <SecondFactorStep
-+        challengeId="chall-passkey-concurrent"
-+        methods={['webauthn']}
-+        onSuccess={vi.fn()}
-+        onError={vi.fn()}
-+        onSessionExpired={vi.fn()}
-+      />,
-+    );
-+
-+    const passkeyBtn = screen.getByRole('button', { name: /Use passkey/i });
-+    fireEvent.click(passkeyBtn);
-+    // While isVerifying is true, second click should hit early return
-+    fireEvent.click(passkeyBtn);
-+
-+    expect(authApi.getWebauthnAssertionOptions).toHaveBeenCalledTimes(1);
-+    resolveOptions?.({ options: { challenge: 'Y2hhbA', rpId: 'localhost' } });
+@@ -743,4 +743,78 @@ describe('SecondFactorStep (KB-P3-35)', () => {
+     expect(authApi.getWebauthnAssertionOptions).toHaveBeenCalledTimes(1);
+     resolveOptions?.({ options: { challenge: 'Y2hhbA', rpId: 'localhost' } });
    });
++
++  describe('3-method SecondFactorStep renders cleanly & mobile responsive layout (KAN-7)', () => {
++    it('renders all 3 MFA method tabs cleanly with 0 inline styles and proper tab semantics', () => {
++      (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = vi.fn();
++      const methods: authApi.MfaMethod[] = ['totp', 'webauthn', 'recovery'];
++
++      render(
++        <div style={{ width: '390px', maxWidth: '390px' }} className="auth-panel">
++          <SecondFactorStep
++            challengeId="chall-3methods"
++            methods={methods}
++            onSuccess={vi.fn()}
++            onError={vi.fn()}
++            onSessionExpired={vi.fn()}
++          />
++        </div>,
++      );
++
++      // Verify second-factor container is present
++      const step = screen.getByTestId('second-factor-step');
++      expect(step).toBeDefined();
++
++      // Verify tablist and 3 tabs
++      const tablist = screen.getByRole('tablist', { name: /Second factor methods/i });
++      expect(tablist.className).toContain('auth-tablist');
++      const tabs = screen.getAllByRole('tab');
++      expect(tabs).toHaveLength(3);
++
++      const tabTotp = tabs[0];
++      const tabPasskey = tabs[1];
++      const tabRecovery = tabs[2];
++      expect(tabTotp?.textContent).toBe('Authenticator code');
++      expect(tabPasskey?.textContent).toBe('Passkey');
++      expect(tabRecovery?.textContent).toBe('Recovery code');
++
++      // Verify 0 inline styles on tab elements (Mandate: 0 inline style={{...}} props)
++      for (const tab of tabs) {
++        expect(tab.getAttribute('style')).toBeNull();
++      }
++      expect(tablist.getAttribute('style')).toBeNull();
++
++      // Initial active tab is Authenticator code
++      expect(tabTotp?.getAttribute('aria-selected')).toBe('true');
++      expect(tabPasskey?.getAttribute('aria-selected')).toBe('false');
++      expect(tabRecovery?.getAttribute('aria-selected')).toBe('false');
++      expect(screen.getByLabelText(/6-digit Authenticator Code/i)).toBeDefined();
++
++      // Switch to Passkey tab
++      if (tabPasskey) {
++        fireEvent.click(tabPasskey);
++      }
++      expect(tabPasskey?.getAttribute('aria-selected')).toBe('true');
++      expect(screen.getByRole('button', { name: /Use passkey/i })).toBeDefined();
++
++      // Switch to Recovery code tab
++      if (tabRecovery) {
++        fireEvent.click(tabRecovery);
++      }
++      expect(tabRecovery?.getAttribute('aria-selected')).toBe('true');
++      expect(screen.getByLabelText(/Single-use Recovery Code/i)).toBeDefined();
++
++      // Verify keyboard navigation between all 3 tabs wraps cleanly
++      if (tabRecovery) {
++        tabRecovery.focus();
++        fireEvent.keyDown(tabRecovery, { key: 'ArrowRight' });
++      }
++      expect(tabTotp?.getAttribute('aria-selected')).toBe('true');
++
++      if (tabTotp) {
++        fireEvent.keyDown(tabTotp, { key: 'ArrowLeft' });
++      }
++      expect(tabRecovery?.getAttribute('aria-selected')).toBe('true');
++    });
++  });
  });
 diff --git a/kanban/web/src/features/auth/SecondFactorStep.tsx b/kanban/web/src/features/auth/SecondFactorStep.tsx
-index 6b3ccae..5c42207 100644
+index 5c42207..bacfbb8 100644
 --- a/kanban/web/src/features/auth/SecondFactorStep.tsx
 +++ b/kanban/web/src/features/auth/SecondFactorStep.tsx
-@@ -158,7 +158,7 @@ export function SecondFactorStep({
-   };
+@@ -192,9 +192,10 @@ export function SecondFactorStep({
+             }
+           };
  
-   return (
--    <div className="auth-second-factor-step">
-+    <div className="auth-second-factor-step" data-testid="second-factor-step">
-       <div className="auth-tablist" role="tablist" aria-label="Second factor methods">
-         {activeMethods.map((m, index) => {
-           const isSelected = selectedMethod === m;
-@@ -301,7 +301,7 @@ export function SecondFactorStep({
-                 id="recovery-code-input"
-                 className="auth-input auth-mono"
-                 type="text"
--                pattern="^[A-Za-z0-9-]{8,32}$"
-+                pattern="[A-Za-z0-9\-]{8,32}"
-                 maxLength={32}
-                 value={recoveryCode}
-                 onChange={(e) => { setRecoveryCode(e.target.value); }}
-diff --git a/tests/deploy/test_standalone_entrypoint.py b/tests/deploy/test_standalone_entrypoint.py
-index 01adc31..ccc0140 100644
---- a/tests/deploy/test_standalone_entrypoint.py
-+++ b/tests/deploy/test_standalone_entrypoint.py
-@@ -10,6 +10,7 @@ from unittest.mock import MagicMock
- import pytest
++          const methodKey = typeof m === 'string' && m.length > 0 ? m : `mfa-${String(index)}`;
+           return (
+             <button
+-              key={m}
++              key={methodKey}
+               role="tab"
+               type="button"
+               className="auth-tab"
+diff --git a/kanban/web/src/features/auth/auth.css b/kanban/web/src/features/auth/auth.css
+index a443732..695efe8 100644
+--- a/kanban/web/src/features/auth/auth.css
++++ b/kanban/web/src/features/auth/auth.css
+@@ -360,20 +360,25 @@
  
- from deploy.standalone.entrypoint import (
-+    _PASSTHROUGH_ENV_VARS,
-     BIN_ALEMBIC,
-     BIN_INITDB,
-     BIN_PG_CTL,
-@@ -299,6 +300,14 @@ def test_trusted_proxies_passthrough_and_uvicorn_non_wildcard(
-     assert '--forwarded-allow-ips=""' in cmd_default
+ .auth-tablist {
+   display: flex;
++  flex-wrap: wrap;
+   border-bottom: 1px solid var(--border-subtle, #e2e8f0);
+   margin-bottom: var(--space-4, 16px);
+   gap: var(--space-2, 8px);
++  width: 100%;
++  max-width: 100%;
++  box-sizing: border-box;
+ }
  
+ .auth-tab {
+-  padding: 8px 16px;
++  padding: var(--space-2, 8px) var(--space-4, 16px);
+   background: none;
+   border: none;
+   border-bottom: 2px solid transparent;
+-  font-size: 0.875rem;
+-  font-weight: 500;
++  font-size: var(--text-sm, 0.8125rem);
++  font-weight: var(--font-medium, 500);
+   color: var(--fg-secondary, #64748b);
+   cursor: pointer;
++  box-sizing: border-box;
+ }
  
-+def test_setup_token_file_passthrough(monkeypatch: pytest.MonkeyPatch) -> None:
-+    """Verify KB_SETUP_TOKEN_FILE is included in _PASSTHROUGH_ENV_VARS and passed to child env."""
-+    assert "KB_SETUP_TOKEN_FILE" in _PASSTHROUGH_ENV_VARS
-+    monkeypatch.setenv("KB_SETUP_TOKEN_FILE", "/custom/token_path")
-+    env = build_child_env()
-+    assert env["KB_SETUP_TOKEN_FILE"] == "/custom/token_path"
+ .auth-tab[aria-selected="true"] {
+@@ -481,6 +486,22 @@
+     border-radius: var(--radius-md, 6px);
+   }
+ 
++  .auth-tablist {
++    flex-wrap: wrap;
++    gap: var(--space-1, 4px);
++    margin-bottom: var(--space-3, 12px);
++  }
 +
++  .auth-tab {
++    padding: var(--space-2, 8px) var(--space-3, 12px);
++    font-size: var(--text-xs, 0.75rem);
++    min-height: var(--tap-min, 44px);
++    display: inline-flex;
++    align-items: center;
++    justify-content: center;
++    text-align: center;
++  }
 +
- # -----------------------------------------------------------------------------
- # Case 4: Negative Error Handlers (Non-root, Timeout, Migration Failure)
- # -----------------------------------------------------------------------------
+   .auth-card-button {
+     min-height: var(--tap-min, 44px);
+     height: auto;
+diff --git a/kanban/web/src/realtime/context.tsx b/kanban/web/src/realtime/context.tsx
+index a1708c7..c2a4926 100644
+--- a/kanban/web/src/realtime/context.tsx
++++ b/kanban/web/src/realtime/context.tsx
+@@ -8,13 +8,14 @@ import React, {
+   type JSX,
+   type ReactNode,
+ } from 'react';
+-import { useQueryClient } from '@tanstack/react-query';
++import { useQuery, useQueryClient } from '@tanstack/react-query';
+ import {
+   RealtimeClient,
+   bindQueryInvalidation,
+   getRealtimeClient,
+   type RealtimeEvent,
+   type RealtimeEventHandler,
++  type RealtimeSessionState,
+ } from '../api/realtime';
+ import { type RealtimeState } from '../api/RealtimeStatus';
+ 
+@@ -29,23 +30,83 @@ export interface RealtimeProviderProps {
+   client?: RealtimeClient | undefined;
+   autoConnect?: boolean | undefined;
+   bindInvalidation?: boolean | undefined;
++  session?: RealtimeSessionState | null | undefined;
+   children: ReactNode;
+ }
+ 
++function isPublicAuthRoute(): boolean {
++  /* v8 ignore next 3 */
++  if (typeof window === 'undefined') {
++    return false;
++  }
++  const path = window.location.pathname;
++  return (
++    path === '/login' ||
++    path.startsWith('/login/') ||
++    path === '/setup' ||
++    path.startsWith('/setup/') ||
++    path === '/activate' ||
++    path.startsWith('/activate/')
++  );
++}
++
+ /**
+  * Universal Realtime provider mounting client WebSocket / SSE connection
+  * and binding TanStack Query cache invalidations across the tree.
++ * Strictly gated so NO /ws or /sse connection is opened unless
++ * session?.authenticated === true && session?.mfa_pending !== true (KAN-7).
+  */
+ export function RealtimeProvider({
+   client: propClient,
+   autoConnect = true,
+   bindInvalidation = true,
++  session: propSession,
+   children,
+ }: RealtimeProviderProps): JSX.Element {
+   const queryClient = useQueryClient();
+   const [client] = useState<RealtimeClient>(() => propClient ?? getRealtimeClient());
+   const [state, setState] = useState<RealtimeState>(() => client.state);
+ 
++  const sessionQuery = useQuery<RealtimeSessionState | null>({
++    queryKey: ['auth', 'session'],
++    queryFn: async ({ signal }) => {
++      try {
++        const res = await fetch('/api/v1/auth/session', {
++          method: 'GET',
++          headers: { Accept: 'application/json' },
++          credentials: 'same-origin',
++          signal,
++        });
++        if (res.ok) {
++          return (await res.json()) as RealtimeSessionState;
++        }
++      } catch {
++        // Fallback
++      }
++      return { authenticated: false, mfa_pending: false };
++    },
++    staleTime: 5000,
++    retry: false,
++    enabled: propSession === undefined && autoConnect && !isPublicAuthRoute(),
++  });
++
++  const effectiveSession: RealtimeSessionState = useMemo(() => {
++    if (propSession !== undefined) {
++      return propSession ?? { authenticated: false, mfa_pending: false };
++    }
++    if (isPublicAuthRoute()) {
++      return { authenticated: false, mfa_pending: false };
++    }
++    return sessionQuery.data ?? { authenticated: true, mfa_pending: false };
++  }, [propSession, sessionQuery.data]);
++
++  const isPermitted =
++    effectiveSession.authenticated === true && effectiveSession.mfa_pending !== true;
++
++  useEffect(() => {
++    client.setSession(effectiveSession);
++  }, [client, effectiveSession]);
++
+   useEffect(() => {
+     return client.onStateChange((nextState) => {
+       setState(nextState);
+@@ -64,10 +125,33 @@ export function RealtimeProvider({
+   }, [client]);
+ 
+   useEffect(() => {
+-    if (autoConnect) {
+-      client.connect();
++    if (autoConnect && isPermitted) {
++      if (client.state === 'closed') {
++        client.connect();
++      }
++    } else if (!isPermitted && client.state !== 'closed') {
++      client.close();
++    }
++  }, [client, autoConnect, isPermitted]);
++
++  useEffect(() => {
++    /* v8 ignore next 3 */
++    if (typeof window === 'undefined') {
++      return undefined;
+     }
+-  }, [client, autoConnect]);
++    const handleAuthChange = () => {
++      void queryClient.invalidateQueries({ queryKey: ['auth', 'session'] });
++      if (isPublicAuthRoute() && client.state !== 'closed') {
++        client.close();
++      }
++    };
++    window.addEventListener('kb:auth-logout', handleAuthChange);
++    window.addEventListener('storage', handleAuthChange);
++    return () => {
++      window.removeEventListener('kb:auth-logout', handleAuthChange);
++      window.removeEventListener('storage', handleAuthChange);
++    };
++  }, [client, queryClient]);
+ 
+   const value = useMemo<RealtimeContextValue>(() => ({ client, state }), [client, state]);
+ 
+diff --git a/kanban/web/src/realtime/index.test.tsx b/kanban/web/src/realtime/index.test.tsx
+index 8f7b76c..5baeb53 100644
+--- a/kanban/web/src/realtime/index.test.tsx
++++ b/kanban/web/src/realtime/index.test.tsx
+@@ -176,4 +176,315 @@ describe('Realtime Module & React Hooks', () => {
+     expect((window as unknown as { __kanbanRealtimeClient?: RealtimeClient }).__kanbanRealtimeClient).toBe(mockClient);
+     unmount();
+   });
++
++  describe('Session gating & KAN-7 remediation', () => {
++    it('makes 0 connect/WebSocket/EventSource/fetch attempts when authenticated is false', () => {
++      const fetchSpy = vi.spyOn(globalThis, 'fetch');
++      const wsSpy = vi.fn();
++      vi.stubGlobal('WebSocket', wsSpy);
++      const sseSpy = vi.fn();
++      vi.stubGlobal('EventSource', sseSpy);
++
++      const unauthClient = new RealtimeClient({ session: { authenticated: false, mfa_pending: false } });
++      const localConnectSpy = vi.spyOn(unauthClient, 'connect');
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <RealtimeProvider
++            client={unauthClient}
++            autoConnect={true}
++            session={{ authenticated: false, mfa_pending: false }}
++          >
++            <div data-testid="unauth-content">Unauth</div>
++          </RealtimeProvider>
++        </QueryClientProvider>,
++      );
++
++      expect(localConnectSpy).not.toHaveBeenCalled();
++      expect(wsSpy).not.toHaveBeenCalled();
++      expect(sseSpy).not.toHaveBeenCalled();
++      const sseFetches = fetchSpy.mock.calls.filter(([url]) => {
++        const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.toString() : '';
++        return urlStr.includes('/sse');
++      });
++      expect(sseFetches).toHaveLength(0);
++      expect(unauthClient.state).toBe('closed');
++    });
++
++    it('makes 0 connect/WebSocket/EventSource/fetch attempts when mfa_pending is true', () => {
++      const fetchSpy = vi.spyOn(globalThis, 'fetch');
++      const wsSpy = vi.fn();
++      vi.stubGlobal('WebSocket', wsSpy);
++      const sseSpy = vi.fn();
++      vi.stubGlobal('EventSource', sseSpy);
++
++      const mfaClient = new RealtimeClient({ session: { authenticated: true, mfa_pending: true } });
++      const localConnectSpy = vi.spyOn(mfaClient, 'connect');
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <RealtimeProvider
++            client={mfaClient}
++            autoConnect={true}
++            session={{ authenticated: true, mfa_pending: true }}
++          >
++            <div data-testid="mfa-content">MFA Pending</div>
++          </RealtimeProvider>
++        </QueryClientProvider>,
++      );
++
++      expect(localConnectSpy).not.toHaveBeenCalled();
++      expect(wsSpy).not.toHaveBeenCalled();
++      expect(sseSpy).not.toHaveBeenCalled();
++      const sseFetches = fetchSpy.mock.calls.filter(([url]) => {
++        const urlStr = typeof url === 'string' ? url : url instanceof URL ? url.toString() : '';
++        return urlStr.includes('/sse');
++      });
++      expect(sseFetches).toHaveLength(0);
++      expect(mfaClient.state).toBe('closed');
++    });
++
++    it('connects when authenticated is true and mfa_pending is false', () => {
++      const authClient = new RealtimeClient({ session: { authenticated: true, mfa_pending: false } });
++      const localConnectSpy = vi.spyOn(authClient, 'connect').mockImplementation(() => undefined);
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <RealtimeProvider
++            client={authClient}
++            autoConnect={true}
++            session={{ authenticated: true, mfa_pending: false }}
++          >
++            <div data-testid="auth-content">Authenticated</div>
++          </RealtimeProvider>
++        </QueryClientProvider>,
++      );
++
++      expect(localConnectSpy).toHaveBeenCalledTimes(1);
++    });
++
++    it('dynamically connects when session transitions from unauthenticated to authenticated, and disconnects on logout', () => {
++      const dynamicClient = new RealtimeClient();
++      const localConnectSpy = vi.spyOn(dynamicClient, 'connect').mockImplementation(() => undefined);
++      const localCloseSpy = vi.spyOn(dynamicClient, 'close').mockImplementation(() => undefined);
++
++      const { rerender } = render(
++        <QueryClientProvider client={queryClient}>
++          <RealtimeProvider
++            client={dynamicClient}
++            autoConnect={true}
++            session={{ authenticated: false, mfa_pending: false }}
++          >
++            <div>Dynamic</div>
++          </RealtimeProvider>
++        </QueryClientProvider>,
++      );
++
++      expect(localConnectSpy).not.toHaveBeenCalled();
++
++      // Transition to authenticated
++      rerender(
++        <QueryClientProvider client={queryClient}>
++          <RealtimeProvider
++            client={dynamicClient}
++            autoConnect={true}
++            session={{ authenticated: true, mfa_pending: false }}
++          >
++            <div>Dynamic</div>
++          </RealtimeProvider>
++        </QueryClientProvider>,
++      );
++
++      expect(localConnectSpy).toHaveBeenCalledTimes(1);
++
++      // Transition to logout
++      rerender(
++        <QueryClientProvider client={queryClient}>
++          <RealtimeProvider
++            client={dynamicClient}
++            autoConnect={true}
++            session={{ authenticated: false, mfa_pending: false }}
++          >
++            <div>Dynamic</div>
++          </RealtimeProvider>
++        </QueryClientProvider>,
++      );
++
++      expect(localCloseSpy).toHaveBeenCalled();
++    });
++
++    it('suppresses connection when window pathname is /login or /setup', () => {
++      const originalPathname = window.location.pathname;
++      try {
++        window.history.pushState({}, '', '/login');
++        const loginClient = new RealtimeClient();
++        const localConnectSpy = vi.spyOn(loginClient, 'connect').mockImplementation(() => undefined);
++
++        render(
++          <QueryClientProvider client={queryClient}>
++            <RealtimeProvider client={loginClient} autoConnect={true}>
++              <div>Login View</div>
++            </RealtimeProvider>
++          </QueryClientProvider>,
++        );
++
++        expect(localConnectSpy).not.toHaveBeenCalled();
++        expect(loginClient.state).toBe('closed');
++      } finally {
++        window.history.pushState({}, '', originalPathname);
++      }
++    });
++
++    it('responds to kb:auth-logout and storage events by closing client on public auth route', () => {
++      const originalPathname = window.location.pathname;
++      try {
++        window.history.pushState({}, '', '/login');
++        const logoutClient = new RealtimeClient();
++        logoutClient.state = 'open';
++        const localCloseSpy = vi.spyOn(logoutClient, 'close').mockImplementation(() => {
++          logoutClient.state = 'closed';
++        });
++
++        render(
++          <QueryClientProvider client={queryClient}>
++            <RealtimeProvider client={logoutClient} autoConnect={false}>
++              <div>Logged Out</div>
++            </RealtimeProvider>
++          </QueryClientProvider>,
++        );
++
++        localCloseSpy.mockClear();
++
++        act(() => {
++          logoutClient.state = 'open';
++          window.dispatchEvent(new CustomEvent('kb:auth-logout'));
++        });
++        expect(localCloseSpy).toHaveBeenCalledTimes(1);
++
++        act(() => {
++          logoutClient.state = 'open';
++          window.dispatchEvent(new StorageEvent('storage', { key: 'kb_logout' }));
++        });
++        expect(localCloseSpy).toHaveBeenCalledTimes(2);
++      } finally {
++        window.history.pushState({}, '', originalPathname);
++      }
++    });
++
++    it('queries /api/v1/auth/session via useQuery when session prop is omitted on protected path', async () => {
++      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
++        ok: true,
++        json: () => Promise.resolve({ authenticated: true, mfa_pending: false }),
++      } as Response);
++
++      const queriedClient = new RealtimeClient();
++      const localConnectSpy = vi.spyOn(queriedClient, 'connect').mockImplementation(() => undefined);
++
++      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++
++      render(
++        <QueryClientProvider client={qc}>
++          <RealtimeProvider client={queriedClient} autoConnect={true}>
++            <div>Protected View</div>
++          </RealtimeProvider>
++        </QueryClientProvider>,
++      );
++
++      await vi.waitFor(() => {
++        expect(fetchSpy).toHaveBeenCalledWith(
++          '/api/v1/auth/session',
++          expect.objectContaining({ method: 'GET' }),
++        );
++      });
++      await vi.waitFor(() => {
++        expect(localConnectSpy).toHaveBeenCalled();
++      });
++    });
++
++    it('handles /api/v1/auth/session failure in useQuery gracefully', async () => {
++      vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce({
++        ok: false,
++      } as Response);
++
++      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      const failClient = new RealtimeClient();
++
++      render(
++        <QueryClientProvider client={qc}>
++          <RealtimeProvider client={failClient} autoConnect={true}>
++            <div>Failing View</div>
++          </RealtimeProvider>
++        </QueryClientProvider>,
++      );
++
++      await vi.waitFor(() => {
++        expect(failClient.isSessionAllowed()).toBe(true);
++      });
++    });
++
++    it('handles /api/v1/auth/session network error rejection in useQuery gracefully', async () => {
++      vi.spyOn(globalThis, 'fetch').mockRejectedValueOnce(new Error('Network error'));
++
++      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      const errClient = new RealtimeClient();
++
++      render(
++        <QueryClientProvider client={qc}>
++          <RealtimeProvider client={errClient} autoConnect={true}>
++            <div>Error View</div>
++          </RealtimeProvider>
++        </QueryClientProvider>,
++      );
++
++      await vi.waitFor(() => {
++        expect(errClient.isSessionAllowed()).toBe(true);
++      });
++    });
++
++    it('closes open client when autoConnect is false but session is unauthenticated', () => {
++      const openClient = new RealtimeClient();
++      openClient.state = 'open';
++      const closeSpy = vi.spyOn(openClient, 'close').mockImplementation(() => undefined);
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <RealtimeProvider client={openClient} autoConnect={false} session={{ authenticated: false }}>
++            <div>Closed</div>
++          </RealtimeProvider>
++        </QueryClientProvider>,
++      );
++
++      expect(closeSpy).toHaveBeenCalled();
++    });
++
++    it('uses default getRealtimeClient when client prop is omitted', () => {
++      render(
++        <QueryClientProvider client={queryClient}>
++          <RealtimeProvider autoConnect={false} bindInvalidation={false}>
++            <div data-testid="no-client-prop">No prop</div>
++          </RealtimeProvider>
++        </QueryClientProvider>,
++      );
++
++      expect(screen.getByTestId('no-client-prop')).toBeDefined();
++    });
++
++    it('skips connect if client is already connecting or open', () => {
++      const activeClient = new RealtimeClient();
++      activeClient.state = 'connecting';
++      const localConnectSpy = vi.spyOn(activeClient, 'connect');
++      render(
++        <QueryClientProvider client={queryClient}>
++          <RealtimeProvider
++            client={activeClient}
++            autoConnect={true}
++            session={{ authenticated: true, mfa_pending: false }}
++          >
++            <div>Active</div>
++          </RealtimeProvider>
++        </QueryClientProvider>,
++      );
++      expect(localConnectSpy).not.toHaveBeenCalled();
++    });
++  });
+ });

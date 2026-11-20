@@ -360,20 +360,25 @@
 
 .auth-tablist {
   display: flex;
+  flex-wrap: wrap;
   border-bottom: 1px solid var(--border-subtle, #e2e8f0);
   margin-bottom: var(--space-4, 16px);
   gap: var(--space-2, 8px);
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .auth-tab {
-  padding: 8px 16px;
+  padding: var(--space-2, 8px) var(--space-4, 16px);
   background: none;
   border: none;
   border-bottom: 2px solid transparent;
-  font-size: 0.875rem;
-  font-weight: 500;
+  font-size: var(--text-sm, 0.8125rem);
+  font-weight: var(--font-medium, 500);
   color: var(--fg-secondary, #64748b);
   cursor: pointer;
+  box-sizing: border-box;
 }
 
 .auth-tab[aria-selected="true"] {
@@ -479,6 +484,22 @@
   .auth-panel {
     padding: var(--space-6, 24px);
     border-radius: var(--radius-md, 6px);
+  }
+
+  .auth-tablist {
+    flex-wrap: wrap;
+    gap: var(--space-1, 4px);
+    margin-bottom: var(--space-3, 12px);
+  }
+
+  .auth-tab {
+    padding: var(--space-2, 8px) var(--space-3, 12px);
+    font-size: var(--text-xs, 0.75rem);
+    min-height: var(--tap-min, 44px);
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
   }
 
   .auth-card-button {

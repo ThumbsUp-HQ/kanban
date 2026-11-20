@@ -192,9 +192,10 @@ export function SecondFactorStep({
             }
           };
 
+          const methodKey = typeof m === 'string' && m.length > 0 ? m : `mfa-${String(index)}`;
           return (
             <button
-              key={m}
+              key={methodKey}
               role="tab"
               type="button"
               className="auth-tab"

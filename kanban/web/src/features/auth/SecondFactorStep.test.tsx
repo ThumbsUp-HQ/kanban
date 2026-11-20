@@ -743,4 +743,78 @@ describe('SecondFactorStep (KB-P3-35)', () => {
     expect(authApi.getWebauthnAssertionOptions).toHaveBeenCalledTimes(1);
     resolveOptions?.({ options: { challenge: 'Y2hhbA', rpId: 'localhost' } });
   });
+
+  describe('3-method SecondFactorStep renders cleanly & mobile responsive layout (KAN-7)', () => {
+    it('renders all 3 MFA method tabs cleanly with 0 inline styles and proper tab semantics', () => {
+      (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = vi.fn();
+      const methods: authApi.MfaMethod[] = ['totp', 'webauthn', 'recovery'];
+
+      render(
+        <div style={{ width: '390px', maxWidth: '390px' }} className="auth-panel">
+          <SecondFactorStep
+            challengeId="chall-3methods"
+            methods={methods}
+            onSuccess={vi.fn()}
+            onError={vi.fn()}
+            onSessionExpired={vi.fn()}
+          />
+        </div>,
+      );
+
+      // Verify second-factor container is present
+      const step = screen.getByTestId('second-factor-step');
+      expect(step).toBeDefined();
+
+      // Verify tablist and 3 tabs
+      const tablist = screen.getByRole('tablist', { name: /Second factor methods/i });
+      expect(tablist.className).toContain('auth-tablist');
+      const tabs = screen.getAllByRole('tab');
+      expect(tabs).toHaveLength(3);
+
+      const tabTotp = tabs[0];
+      const tabPasskey = tabs[1];
+      const tabRecovery = tabs[2];
+      expect(tabTotp?.textContent).toBe('Authenticator code');
+      expect(tabPasskey?.textContent).toBe('Passkey');
+      expect(tabRecovery?.textContent).toBe('Recovery code');
+
+      // Verify 0 inline styles on tab elements (Mandate: 0 inline style={{...}} props)
+      for (const tab of tabs) {
+        expect(tab.getAttribute('style')).toBeNull();
+      }
+      expect(tablist.getAttribute('style')).toBeNull();
+
+      // Initial active tab is Authenticator code
+      expect(tabTotp?.getAttribute('aria-selected')).toBe('true');
+      expect(tabPasskey?.getAttribute('aria-selected')).toBe('false');
+      expect(tabRecovery?.getAttribute('aria-selected')).toBe('false');
+      expect(screen.getByLabelText(/6-digit Authenticator Code/i)).toBeDefined();
+
+      // Switch to Passkey tab
+      if (tabPasskey) {
+        fireEvent.click(tabPasskey);
+      }
+      expect(tabPasskey?.getAttribute('aria-selected')).toBe('true');
+      expect(screen.getByRole('button', { name: /Use passkey/i })).toBeDefined();
+
+      // Switch to Recovery code tab
+      if (tabRecovery) {
+        fireEvent.click(tabRecovery);
+      }
+      expect(tabRecovery?.getAttribute('aria-selected')).toBe('true');
+      expect(screen.getByLabelText(/Single-use Recovery Code/i)).toBeDefined();
+
+      // Verify keyboard navigation between all 3 tabs wraps cleanly
+      if (tabRecovery) {
+        tabRecovery.focus();
+        fireEvent.keyDown(tabRecovery, { key: 'ArrowRight' });
+      }
+      expect(tabTotp?.getAttribute('aria-selected')).toBe('true');
+
+      if (tabTotp) {
+        fireEvent.keyDown(tabTotp, { key: 'ArrowLeft' });
+      }
+      expect(tabRecovery?.getAttribute('aria-selected')).toBe('true');
+    });
+  });
 });

@@ -6,6 +6,8 @@ import {
   RealtimeClient,
   backoffDelay,
   bindQueryInvalidation,
+  getRealtimeClient,
+  setRealtimeClient,
   useRealtime,
   type RealtimeEvent,
 } from './realtime.ts';
@@ -17,7 +19,7 @@ class FakeWebSocket {
   sent: string[] = [];
   closed = false;
   onopen: (() => void) | null = null;
-  onclose: (() => void) | null = null;
+  onclose: ((ev?: CloseEvent) => void) | null = null;
   onmessage: ((e: MessageEvent) => void) | null = null;
   constructor(readonly url: string) {
     FakeWebSocket.instances.push(this);
@@ -531,5 +533,74 @@ describe('bindQueryInvalidation', () => {
     off();
     send({ id: '5', channel: 'c', type: 'issue.updated', payload: {} });
     expect(invalidate).not.toHaveBeenCalled();
+  });
+
+  describe('RealtimeClient session gating (KAN-7)', () => {
+    it('prevents connect and opens 0 sockets when session is unauthenticated or mfa_pending', () => {
+      const unauthClient = new RealtimeClient({ session: { authenticated: false, mfa_pending: false } });
+      unauthClient.connect();
+      expect(unauthClient.state).toBe('closed');
+      expect((unauthClient as unknown as { ws: WebSocket | null }).ws).toBeNull();
+
+      const mfaClient = new RealtimeClient({ session: { authenticated: true, mfa_pending: true } });
+      mfaClient.connect();
+      expect(mfaClient.state).toBe('closed');
+      expect((mfaClient as unknown as { ws: WebSocket | null }).ws).toBeNull();
+    });
+
+    it('allows connect and sets session when authenticated is true and mfa_pending is false', () => {
+      const client = new RealtimeClient({ session: { authenticated: true, mfa_pending: false } });
+      expect(client.isSessionAllowed()).toBe(true);
+      expect(client.getSession()).toEqual({ authenticated: true, mfa_pending: false });
+      client.connect();
+      expect(client.state).toBe('connecting');
+      client.close();
+    });
+
+    it('setSession updates state and closes connection when session becomes disallowed', () => {
+      const client = new RealtimeClient();
+      client.setSession({ authenticated: true, mfa_pending: false });
+      expect(client.isSessionAllowed()).toBe(true);
+
+      client.connect();
+      expect(client.state).toBe('connecting');
+
+      // Now session expires or logs out
+      client.setSession({ authenticated: false, mfa_pending: false });
+      expect(client.isSessionAllowed()).toBe(false);
+      expect(client.state).toBe('closed');
+    });
+
+    it('immediately closes on WS close code 4401 or 4403 without retrying or falling back to SSE', () => {
+      const client = new RealtimeClient();
+      client.connect();
+      const ws = (client as unknown as { ws: FakeWebSocket | null }).ws;
+      expect(ws).not.toBeNull();
+
+      // Simulate server rejecting handshake or revoking session with 4401
+      ws?.onclose?.(new CloseEvent('close', { code: 4401 }));
+      expect(client.state).toBe('closed');
+      expect((client as unknown as { failures: number }).failures).toBe(0);
+      expect((client as unknown as { sse: EventSource | null }).sse).toBeNull();
+    });
+
+    it('supports resetForTesting, setRealtimeClient, and simulateFrame', () => {
+      const client = new RealtimeClient();
+      client.resetForTesting();
+      expect(client.state).toBe('closed');
+
+      const handled: RealtimeEvent[] = [];
+      client.onEvent((e) => {
+        handled.push(e);
+      });
+      client.simulateFrame(JSON.stringify({ id: 'sim-1', channel: 'project:P', type: 'issue.updated', payload: {} }));
+      expect(handled).toHaveLength(1);
+      expect(handled[0]?.id).toBe('sim-1');
+
+      const prev = getRealtimeClient();
+      setRealtimeClient(client);
+      expect(getRealtimeClient()).toBe(client);
+      setRealtimeClient(prev);
+    });
   });
 });
