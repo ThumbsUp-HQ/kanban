@@ -454,3 +454,245 @@ async def test_unrelated_flagged_link_survives_trash_purge(
         await api_env.seed.execute(select(ObjectLink.id).where(ObjectLink.id == unrel_link_id))
     ).first()
     assert link_row is not None
+
+
+async def test_case_trash_purge_multi_object_kinds(  # noqa: PLR0915
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Multi-object sweep: expired stickies, docs, pages, cycles, modules, views, and projects."""
+    admin = await make_user("multi_purge_admin", workspace_role="WORKSPACE_ADMIN")
+    proj_id = await make_project("MPURGE", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+    client = as_principal(admin)
+
+    # 1. Sticky
+    r_sticky = await client.post(
+        "/api/v1/projects/MPURGE/stickies",
+        json={"body_markdown": "Expired sticky to sweep"},
+    )
+    assert r_sticky.status_code == 201
+    stk_id = uuid.UUID(r_sticky.json()["id"])
+
+    # 2. Cycle
+    c_id = uuid.uuid4()
+    await api_env.seed.execute(
+        text(
+            "SELECT register_object("
+            "'cycle'::object_kind, :ws, :p, 'CYC-1', 'Expired Cycle', :u, :id)"
+        ),
+        {"ws": api_env.workspace_id, "p": proj_id, "u": admin.id, "id": c_id},
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO cycles (id, project_id, workspace_id, name) "
+            "VALUES (:id, :p, :ws, 'Expired Cycle')"
+        ),
+        {"id": c_id, "p": proj_id, "ws": api_env.workspace_id},
+    )
+
+    # 3. Module
+    m_id = uuid.uuid4()
+    await api_env.seed.execute(
+        text(
+            "SELECT register_object("
+            "'module'::object_kind, :ws, :p, 'MOD-1', 'Expired Module', :u, :id)"
+        ),
+        {"ws": api_env.workspace_id, "p": proj_id, "u": admin.id, "id": m_id},
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO modules (id, project_id, workspace_id, name) "
+            "VALUES (:id, :p, :ws, 'Expired Module')"
+        ),
+        {"id": m_id, "p": proj_id, "ws": api_env.workspace_id},
+    )
+
+    # 4. View
+    v_id = uuid.uuid4()
+    await api_env.seed.execute(
+        text(
+            "SELECT register_object('view'::object_kind, :ws, :p, 'VIW-1', 'Expired View', :u, :id)"
+        ),
+        {"ws": api_env.workspace_id, "p": proj_id, "u": admin.id, "id": v_id},
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO views (id, project_id, workspace_id, owner_principal_id, name, layout) "
+            "VALUES (:id, :p, :ws, :u, 'Expired View', 'list')"
+        ),
+        {"id": v_id, "p": proj_id, "ws": api_env.workspace_id, "u": admin.id},
+    )
+
+    # 5. Doc and Page
+    d_id = uuid.uuid4()
+    await api_env.seed.execute(
+        text(
+            "SELECT register_object('doc'::object_kind, :ws, :p, 'DOC-1', 'Expired Doc', :u, :id)"
+        ),
+        {"ws": api_env.workspace_id, "p": proj_id, "u": admin.id, "id": d_id},
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO docs (id, project_id, workspace_id, title, hierarchy_path) "
+            "VALUES (:id, :p, :ws, 'Expired Doc', 'doc1')"
+        ),
+        {"id": d_id, "p": proj_id, "ws": api_env.workspace_id},
+    )
+
+    pg_id = uuid.uuid4()
+    await api_env.seed.execute(
+        text(
+            "SELECT register_object('page'::object_kind, :ws, :p, 'PG-1', 'Expired Page', :u, :id)"
+        ),
+        {"ws": api_env.workspace_id, "p": proj_id, "u": admin.id, "id": pg_id},
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO pages (id, doc_id, workspace_id, title, hierarchy_path) "
+            "VALUES (:id, :d, :ws, 'Expired Page', 'doc1.pg1')"
+        ),
+        {"id": pg_id, "d": d_id, "ws": api_env.workspace_id},
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO page_versions (page_id, version_seq, workspace_id, title, body_markdown) "
+            "VALUES (:pid, 1, :ws, 'Expired Page', 'body')"
+        ),
+        {"pid": pg_id, "ws": api_env.workspace_id},
+    )
+
+    # Page 2 belonging to d_id (swept when doc is purged)
+    pg2_id = uuid.uuid4()
+    await api_env.seed.execute(
+        text("SELECT register_object('page'::object_kind, :ws, :p, 'PG-2', 'Child Page', :u, :id)"),
+        {"ws": api_env.workspace_id, "p": proj_id, "u": admin.id, "id": pg2_id},
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO pages (id, doc_id, workspace_id, title, hierarchy_path) "
+            "VALUES (:id, :d, :ws, 'Child Page', 'doc1.pg2')"
+        ),
+        {"id": pg2_id, "d": d_id, "ws": api_env.workspace_id},
+    )
+
+    # 6. Another project to be soft-deleted
+    proj2_id = await make_project("MPURGE2", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+
+    # Populate proj2_id with child issue, sticky, cycle, module, and view
+    r_iss_p2 = await client.post("/api/v1/projects/MPURGE2/issues", json={"summary": "Proj2 Issue"})
+    assert r_iss_p2.status_code == 201
+
+    r_stk_p2 = await client.post(
+        "/api/v1/projects/MPURGE2/stickies", json={"body_markdown": "Proj2 Sticky"}
+    )
+    assert r_stk_p2.status_code == 201
+
+    c2_id = uuid.uuid4()
+    await api_env.seed.execute(
+        text(
+            "SELECT register_object('cycle'::object_kind, :ws, :p, 'CYC-2', 'Proj2 Cycle', :u, :id)"
+        ),
+        {"ws": api_env.workspace_id, "p": proj2_id, "u": admin.id, "id": c2_id},
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO cycles (id, project_id, workspace_id, name) "
+            "VALUES (:id, :p, :ws, 'Proj2 Cycle')"
+        ),
+        {"id": c2_id, "p": proj2_id, "ws": api_env.workspace_id},
+    )
+
+    m2_id = uuid.uuid4()
+    await api_env.seed.execute(
+        text(
+            "SELECT register_object("
+            "'module'::object_kind, :ws, :p, 'MOD-2', 'Proj2 Module', :u, :id)"
+        ),
+        {"ws": api_env.workspace_id, "p": proj2_id, "u": admin.id, "id": m2_id},
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO modules (id, project_id, workspace_id, name) "
+            "VALUES (:id, :p, :ws, 'Proj2 Module')"
+        ),
+        {"id": m2_id, "p": proj2_id, "ws": api_env.workspace_id},
+    )
+
+    v2_id = uuid.uuid4()
+    await api_env.seed.execute(
+        text(
+            "SELECT register_object('view'::object_kind, :ws, :p, 'VIW-2', 'Proj2 View', :u, :id)"
+        ),
+        {"ws": api_env.workspace_id, "p": proj2_id, "u": admin.id, "id": v2_id},
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO views (id, project_id, workspace_id, owner_principal_id, name, layout) "
+            "VALUES (:id, :p, :ws, :u, 'Proj2 View', 'list')"
+        ),
+        {"id": v2_id, "p": proj2_id, "ws": api_env.workspace_id, "u": admin.id},
+    )
+
+    d2_id = uuid.uuid4()
+    await api_env.seed.execute(
+        text("SELECT register_object('doc'::object_kind, :ws, :p, 'DOC-2', 'Proj2 Doc', :u, :id)"),
+        {"ws": api_env.workspace_id, "p": proj2_id, "u": admin.id, "id": d2_id},
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO docs (id, project_id, workspace_id, title, hierarchy_path) "
+            "VALUES (:id, :p, :ws, 'Proj2 Doc', 'doc2')"
+        ),
+        {"id": d2_id, "p": proj2_id, "ws": api_env.workspace_id},
+    )
+
+    pg2_child_id = uuid.uuid4()
+    await api_env.seed.execute(
+        text("SELECT register_object('page'::object_kind, :ws, :p, 'PG-3', 'Proj2 Page', :u, :id)"),
+        {"ws": api_env.workspace_id, "p": proj2_id, "u": admin.id, "id": pg2_child_id},
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO pages (id, doc_id, workspace_id, title, hierarchy_path) "
+            "VALUES (:id, :d, :ws, 'Proj2 Page', 'doc2.pg1')"
+        ),
+        {"id": pg2_child_id, "d": d2_id, "ws": api_env.workspace_id},
+    )
+
+    # Soft-delete all of them 40 days ago
+    t40 = datetime.now(UTC) - timedelta(days=40)
+    await api_env.seed.execute(
+        text("UPDATE objects SET deleted_at = :ts WHERE id IN (:s, :c, :m, :v, :d, :pg, :p2)"),
+        {
+            "ts": t40,
+            "s": stk_id,
+            "c": c_id,
+            "m": m_id,
+            "v": v_id,
+            "d": d_id,
+            "pg": pg_id,
+            "p2": proj2_id,
+        },
+    )
+    await api_env.seed.commit()
+
+    engine = api_env.seed.bind
+    assert isinstance(engine, AsyncEngine)
+    rep = await run_trash_purge(engine, now=datetime.now(UTC), batch_size=20)
+    assert rep.objects_purged >= 6
+
+    # Verify all are purged from objects table
+    rows = (
+        (
+            await api_env.seed.execute(
+                select(ObjectRecord.id).where(
+                    ObjectRecord.id.in_([stk_id, c_id, m_id, v_id, d_id, pg_id, proj2_id])
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert list(rows) == []

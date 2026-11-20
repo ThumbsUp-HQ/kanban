@@ -5,6 +5,7 @@
 from __future__ import annotations
 
 import base64
+from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING
 
 import pytest
@@ -50,7 +51,12 @@ def setup_test_key_material(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("KANBAN_MASTER_KEK_KID", "test-kid-1")
 
 
-async def _as_admin_aal2(api_env: ApiEnv, user: SeededUser) -> None:
+async def _as_admin_aal2(
+    api_env: ApiEnv,
+    user: SeededUser,
+    *,
+    aal2_verified_at: datetime | None = None,
+) -> None:
     """Enroll confirmed TOTP factor and elevate test client to AAL2 session."""
     await api_env.seed.execute(
         text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
@@ -72,11 +78,13 @@ async def _as_admin_aal2(api_env: ApiEnv, user: SeededUser) -> None:
         )
     await api_env.seed.commit()
 
+    v_time = aal2_verified_at if aal2_verified_at is not None else datetime.now(UTC)
     api_env.resolver.principal = PrincipalContext(
         principal_id=user.id,
         workspace_id=user.workspace_id,
         token_scopes=("session",),
         aal_level=2,
+        aal2_verified_at=v_time,
     )
 
 
@@ -233,10 +241,16 @@ async def test_workspace_settings_validation_boundaries(
     admin = await make_user("ws_admin_4", workspace_role="WORKSPACE_ADMIN")
     await _as_admin_aal2(api_env, admin)
 
-    # trash_retention_days out of bounds (0 and 366)
-    r1 = await api_env.client.patch(
+    # trash_retention_days out of bounds (0, 6 and 366)
+    r0 = await api_env.client.patch(
         "/api/v1/admin/workspace-settings",
         json={"trash_retention_days": 0},
+    )
+    assert r0.status_code == 422
+
+    r1 = await api_env.client.patch(
+        "/api/v1/admin/workspace-settings",
+        json={"trash_retention_days": 6},
     )
     assert r1.status_code == 422
 
@@ -452,3 +466,133 @@ async def test_workspace_settings_trash_retention_sync(
         {"ws_id": admin.workspace_id},
     )
     assert res.scalar_one() == 45
+
+
+@pytest.mark.asyncio
+async def test_workspace_settings_trash_retention_aal2_freshness(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+) -> None:
+    """Updating trash_retention_days requires fresh AAL2 (<= 900s)."""
+    admin = await make_user("ws_admin_fresh", workspace_role="WORKSPACE_ADMIN")
+
+    # 1. Stale AAL2 session (> 900s) -> 403 AAL2_STALE
+    stale_time = datetime.now(UTC) - timedelta(seconds=905)
+    await _as_admin_aal2(api_env, admin, aal2_verified_at=stale_time)
+    r_stale = await api_env.client.patch(
+        "/api/v1/admin/workspace-settings",
+        json={"trash_retention_days": 40},
+    )
+    assert r_stale.status_code == 403
+    assert r_stale.json()["code"] == "AAL2_STALE"
+
+    # 2. Missing verification timestamp -> 403 AAL2_STALE
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=admin.id,
+        workspace_id=admin.workspace_id,
+        token_scopes=("session",),
+        aal_level=2,
+        aal2_verified_at=None,
+    )
+    r_null = await api_env.client.patch(
+        "/api/v1/admin/workspace-settings",
+        json={"trash_retention_days": 40},
+    )
+    assert r_null.status_code == 403
+    assert r_null.json()["code"] == "AAL2_STALE"
+
+    # 3. AAL1 caller -> 403 AAL2_REQUIRED
+    api_env.resolver.principal = PrincipalContext(
+        principal_id=admin.id,
+        workspace_id=admin.workspace_id,
+        token_scopes=("session",),
+        aal_level=1,
+    )
+    r_aal1 = await api_env.client.patch(
+        "/api/v1/admin/workspace-settings",
+        json={"trash_retention_days": 40},
+    )
+    assert r_aal1.status_code == 403
+    assert r_aal1.json()["code"] == "AAL2_REQUIRED"
+
+    # 4. Fresh AAL2 session succeeds
+    fresh_time = datetime.now(UTC)
+    await _as_admin_aal2(api_env, admin, aal2_verified_at=fresh_time)
+    r_fresh = await api_env.client.patch(
+        "/api/v1/admin/workspace-settings",
+        json={"trash_retention_days": 40},
+    )
+    assert r_fresh.status_code == 200
+    assert r_fresh.json()["trash_retention_days"] == 40
+
+
+@pytest.mark.asyncio
+async def test_workspace_settings_trash_retention_shortening_warn(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+) -> None:
+    """Shortening trash_retention_days emits TRASH_RETENTION_SHORTENED_WARN audit record."""
+    admin = await make_user("ws_admin_warn", workspace_role="WORKSPACE_ADMIN")
+    await _as_admin_aal2(api_env, admin)
+
+    # First set retention to 60 days
+    r1 = await api_env.client.patch(
+        "/api/v1/admin/workspace-settings",
+        json={"trash_retention_days": 60},
+    )
+    assert r1.status_code == 200
+    assert r1.json()["trash_retention_days"] == 60
+
+    # Now shorten retention from 60 to 14 days
+    r2 = await api_env.client.patch(
+        "/api/v1/admin/workspace-settings",
+        json={"trash_retention_days": 14},
+    )
+    assert r2.status_code == 200
+    assert r2.json()["trash_retention_days"] == 14
+
+    # Verify TRASH_RETENTION_SHORTENED_WARN activity record was emitted
+    act_stmt = text(
+        "SELECT event_type, payload FROM activity_records "
+        "WHERE workspace_id = :ws_id AND event_type = 'TRASH_RETENTION_SHORTENED_WARN'"
+    )
+    act_row = (await api_env.seed.execute(act_stmt, {"ws_id": admin.workspace_id})).first()
+    assert act_row is not None
+    assert act_row[0] == "TRASH_RETENTION_SHORTENED_WARN"
+    payload = act_row[1]
+    assert payload["previous_retention_days"] == 60
+    assert payload["new_retention_days"] == 14
+    assert "warning" in payload
+
+
+@pytest.mark.asyncio
+async def test_workspace_settings_name_and_slug_updates(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+) -> None:
+    """Updating workspace name and slug with validation checks."""
+    admin = await make_user("ws_admin_nameslug", workspace_role="WORKSPACE_ADMIN")
+    await _as_admin_aal2(api_env, admin)
+
+    # 1. Update name without display_name
+    r1 = await api_env.client.patch(
+        "/api/v1/admin/workspace-settings",
+        json={"name": "New Team Workspace"},
+    )
+    assert r1.status_code == 200
+    assert r1.json()["name"] == "New Team Workspace"
+
+    # 2. Update slug with valid format
+    r2 = await api_env.client.patch(
+        "/api/v1/admin/workspace-settings",
+        json={"slug": "new-team-slug"},
+    )
+    assert r2.status_code == 200
+    assert r2.json()["slug"] == "new-team-slug"
+
+    # 3. Invalid slug format -> 422
+    r3 = await api_env.client.patch(
+        "/api/v1/admin/workspace-settings",
+        json={"slug": "-invalid_slug"},
+    )
+    assert r3.status_code == 422
