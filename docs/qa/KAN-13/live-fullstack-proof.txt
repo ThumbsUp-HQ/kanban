@@ -1,34 +1,23 @@
-================================================================================
-LIVE FULL-STACK ZERO-MOCK QA PROOF - KAN-13 ([KB-P3-AUDIT-07])
-================================================================================
-Started At       : 2026-11-20T05:26:25.774Z
-Finished At      : 2026-11-20T05:26:46.585Z
-Target Container : kanban-liveqa-2 (http://localhost:18952)
-Mocking / Stubs  : ZERO (0 mockApi, 0 page.route, 0 context.route)
-Backend Stack    : Real PostgreSQL 16 (FORCE ROW LEVEL SECURITY) + UID 65532
-Runner Script    : node /home/adamoutler/.gemini/antigravity-cli/brain/cec3609e-f993-4e05-b8c5-be0070e6116c/scratch/liveqa-f2/run_liveqa.mjs
+=== LIVE FULL-STACK QA VERIFICATION (ZERO-MOCK) ===
+Target: http://localhost:18952 (container: kanban-liveqa-2, commit: c43f946)
+Timestamp: 2026-11-20T06:22:18.840Z
+Virtual WebAuthn Authenticator ID: 171d38c5-86ee-4169-83a5-3b3422f89b69
 
---------------------------------------------------------------------------------
-1. CLEAN-PAGE CONSOLE & NETWORK GATE ON /projects/KAN/issues/KAN-1
---------------------------------------------------------------------------------
-- Listeners (`console`, `pageerror`, `response`) attached to fresh page BEFORE page.goto('/projects/KAN/issues/KAN-1').
-- Initial load CSP style-src 'self' errors : 0 ([])
-- Initial load /modules 404 errors         : 0 ([])
-- Initial load console.error total         : 0 ([])
-- Initial load pageerror total             : 0 ([])
-- Full-session CSP style-src errors        : 0 ([])
-- Full-session /modules 404 errors         : 0 ([])
-- Full-session console.error total         : 0 ([])
-- Full-session pageerror total             : 0 ([])
-- Full-session HTTP 404s                   : 0 ([])
+--- STEP 1: /setup claim + AAL2 WebAuthn ---
+GET /setup status: 200
+POST /api/v1/setup/claim -> HTTP 200
+WebAuthn registration response: 200 http://localhost:18952/api/v1/auth/webauthn/registration/options
+GET /api/v1/auth/session -> HTTP 200 body={"authenticated":true,"principal_id":"01a1f79e-c57c-70d5-be13-38471b3890b1","workspace_id":"01a1f79e-c57b-7576-a085-8f1970b8b040","session_id":"01a1f79e-c669-7be3-ad67-439a83cf97da","aal_level":2,"mfa_pending":false,"csrf_token":"swZrDeIpNI6ImLALnWODFA.7MBkO85WqNaiXRJR8jBQAFkRqPWzUi1iertSRXpsEyY","idle_expires_at":"2026-11-27T06:22:20.264754+00:00","absolute_expires_at":"2026-12-20T06:22:20.048853+00:00","remember_me":true}
 
---------------------------------------------------------------------------------
-2. SCOPED CHECK RESULTS (KAN-13)
---------------------------------------------------------------------------------
-[PASS] Check 2.1 - Create KAN-1 with Mermaid description : HTTP 201 key=KAN-1
-[PASS] Check 2.2 - CommentComposer double-click [aria-label="Insert Mermaid diagram"]:
-  - Two blocks check : {"blockCount": 2, "hasTrailingSemicolon": false, "hasNestedFence": false, "exactValidTwoBlocks": true}
-  - Composer markdown value:
+--- STEP 2: Create user alice, group sec-ops, project KAN (modules_enabled: false), issue KAN-1 ---
+Create user @alice via UI -> POST /api/v1/admin/principals HTTP 201
+Create group @sec-ops via UI -> POST /api/v1/admin/principals HTTP 201
+POST /api/v1/projects (KAN, modules_enabled=false) -> HTTP 201 body={"id":"01a1f79e-d344-74f8-ae23-e54b425e3d05","identifier":"KAN","name":"Kanban Core","description_markdown":"Live QA project with modules disabled","modules_enabled":false,"default_module_ids":[],"auto_archive_days":null,"access_manifest":{"pill_label":"Workspace","explicit_grant_count":0,"inherited_scope":{"kind":"workspace","scope_label":"Workspace: Kanban Workspace","workspace_id":"01a1f79e-c57b-7576-a085-8f1970b8b040","workspace_name":"Kanban Workspace","project_id":null,"project_key":null,"project_name":null},"users":[{"principal_id":"01a1f79e-c57c-70d5-be13-38471b3890b1","handle":"@admin","display_name":"Server Administrator","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"grant_source":"project_owner"},{"principal_id":"21a2aaae-c46c-4f9e-a7c9-b52993466710","handle":"@alice","display_name":"Alice Engineer","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"}],"groups":[],"agents":[],"deny_overrides":[],"redacted_entries":[],"redacted_count":0,"caller_capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"canonical_key":"KAN","object_type":"project"},"capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"is_project_admin":true,"project_role":"PROJECT_ADMIN"}
+POST /api/v1/projects/KAN/issues (KAN-1) -> HTTP 404 body={"type":"urn:kanban:problem:NOT_FOUND","title":"Not Found","status":404,"code":"NOT_FOUND","request_id":"70919c8fb4d74de88968b914d0a7e941"}
+UI QuickCreate POST http://localhost:18952/api/v1/projects/KAN/issues -> HTTP 201 body={"id":"01a1f79e-d730-7a91-98c3-482f00169b06","key":"KAN-1","summary":"KAN-1 Live QA Mermaid & MediaViewport Verification","description_markdown":"","description_sha256":"e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855","etag":"\"7c5420d1aafc06ed875be586a5975a66a57b5634cb16ab55946325970b79fa45\"","state":{"id":"01a1f79e-d349-73dd-9a47-e5dce48fd4b7","name":"Todo","group":"unstarted"},"priority":{"slug":"medium","label":"Medium","emoji":"🔹"},"start_date":null,"due_date":null,"cycle_id":null,"cycle":null,"parent":null,"labels":[],"assignees":[],"board_rank":"a000001","created_by_id":"01a1f79e-c57c-70d5-be13-38471b3890b1","provenance":{"created_by":{"id":"01a1f79e-c57c-70d5-be13-38471b3890b1","handle":"admin"},"original_created_by":{"id":"01a1f79e-c57c-70d5-be13-38471b3890b1","handle":"admin"},"overridden":false,"creator_modified_by":null,"creator_modified_at":null,"reason":null},"access_manifest":{"pill_label":"Project","explicit_grant_count":0,"inherited_scope":{"kind":"project","scope_label":"Project: KAN","workspace_id":"01a1f79e-c57b-7576-a085-8f1970b8b040","workspace_name":"Kanban Workspace","project_id":"01a1f79e-d344-74f8-ae23-e54b425e3d05","project_key":"KAN","project_name":"Kanban Core"},"users":[{"principal_id":"01a1f79e-c57c-70d5-be13-38471b3890b1","handle":"@admin","display_name":"Server Administrator","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"grant_source":"project_owner"},{"principal_id":"21a2aaae-c46c-4f9e-a7c9-b52993466710","handle":"@alice","display_name":"Alice Engineer","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"}],"groups":[],"agents":[],"deny_overrides":[],"redacted_entries":[],"redacted_count":0,"caller_capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"canonical_key":"KAN-1","object_type":"issue"},"capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"archived_at":null,"archive_eligibility":{"allowed":false,"reason":"Only completed or canceled work items can be archived"},"note":null,"pending_gate":null,"latest_gate_verdict":null}
+
+=== PART B: KAN-13 MERMAID DOUBLE-INSERT, MEDIAVIEWPORT NON-OCCLUSION, SHELL WIDTHS ===
+IssueSurface raw textarea value after 2x Mermaid click:
 ```mermaid
 graph TD
   A[Start] --> B[End]
@@ -39,106 +28,42 @@ graph TD
   A[Start] --> B[End]
 ```
 
-  - POST /api/v1/issues/KAN-1/comments : HTTP 201 id=01a1f76b-d8b8-7395-b34c-847e3930aec0
+IssueSurface checks: blocks=true, graphTD=true, semicolons=false, separatedByNewlineNewline=true
+PATCH /api/v1/issues/KAN-1 -> HTTP 200
+IssueSurface rendered Mermaid stats: {"viewportCount":2,"imgCount":2,"inlineSvgCount":0,"fallbackBannerCount":0,"blobSvgChecks":[{"srcPrefix":"blob:http://","alt":"Mermaid diagram","complete":true,"naturalWidth":150,"naturalHeight":202,"isBlobLoaded":true},{"srcPrefix":"blob:http://","alt":"Mermaid diagram","complete":true,"naturalWidth":150,"naturalHeight":202,"isBlobLoaded":true}]}
+CommentComposer raw textarea value after 2x Mermaid click:
+```mermaid
+graph TD
+  A[Start] --> B[End]
+```
 
-[PASS] Check 2.3 - All 3 Mermaid diagrams (1 description + 2 comment) live blob: SVG rendering (Light & Dark):
-  - Desktop Light DOM audit : {
-  "mermaidViewportImgCount": 3,
-  "mermaidViewportImgDetails": [
-    {
-      "srcPrefix": "blob:http://localhost:18952/048f4a4e-fe9a-4045-b",
-      "isBlob": true,
-      "naturalWidth": 295,
-      "naturalHeight": 117
-    },
-    {
-      "srcPrefix": "blob:http://localhost:18952/1120c4ec-a0bf-42d5-8",
-      "isBlob": true,
-      "naturalWidth": 150,
-      "naturalHeight": 202
-    },
-    {
-      "srcPrefix": "blob:http://localhost:18952/4b656fd1-18d0-4b5c-a",
-      "isBlob": true,
-      "naturalWidth": 150,
-      "naturalHeight": 202
-    }
-  ],
-  "inlineSvgCount": 0,
-  "errorBannerCount": 0,
-  "errorBanners": [],
-  "dupPreCount": 0,
-  "fontVariantLigatures": [
-    {
-      "tag": "TEXTAREA.comment-composer__textarea",
-      "fontVariantLigatures": "none"
-    }
-  ],
-  "hideNavButtonCount": 0,
-  "sidebarBadge": {
-    "text": "KA",
-    "className": "workspace-badge workspace-badge--md workspace-badge--tone-2"
-  },
-  "breadcrumbBadge": {
-    "text": "KA",
-    "className": "workspace-badge workspace-badge--sm workspace-badge--tone-2"
-  },
-  "hasPrefixThumb": false,
-  "expandedSurface": {
-    "cssLeft": "256px",
-    "rectLeft": 256,
-    "rectWidth": 1184
-  }
-}
-  - Desktop Dark Mermaid    : {"mermaidViewportImgCount": 3, "allBlob": true, "allLoaded": true, "errorBannerCount": 0}
+```mermaid
+graph TD
+  A[Start] --> B[End]
+```
 
-[PASS] Check 2.4 - IssueSurface header, Sidebar collapse/expand, WorkspaceBadge, Mobile Copy button:
-  - Hide Nav buttons in IssueSurface header : 0
-  - Sidebar expanded surface    : {"cssLeft": "256px", "rectLeft": 256, "rectWidth": 1184}
-  - Sidebar collapsed surface   : {"cssLeft": "0px", "rectLeft": 0, "rectWidth": 1440, "expandBtnVisible": true}
-  - Sidebar re-expanded surface : {"cssLeft": "256px", "rectLeft": 256, "rectWidth": 1184}
-  - Sidebar WorkspaceBadge      : {"text": "KA", "className": "workspace-badge workspace-badge--md workspace-badge--tone-2"}
-  - Breadcrumb WorkspaceBadge   : {"text": "KA", "className": "workspace-badge workspace-badge--sm workspace-badge--tone-2"}
-  - Contains '[\U0001f44d]' string   : False
-  - Mobile 390x844 Copy buttons : {"scrollWidth": 390, "copyButtonCount": 3, "copyButtons": [{"text": "Copy", "whiteSpace": "nowrap", "height": 28, "width": 40.8125}, {"text": "Copy", "whiteSpace": "nowrap", "height": 28, "width": 40.8125}, {"text": "Copy", "whiteSpace": "nowrap", "height": 28, "width": 40.8125}]}
+CommentComposer checks: blocks=true, graphTD=true, semicolons=false, separatedByNewlineNewline=true
+CommentComposer Preview rendered Mermaid stats: {"previewViewportCount":2,"previewImgCount":2,"previewFallbackCount":0,"previewImgsLoaded":true}
+POST comment -> HTTP 201
+IssueSurface + Comment timeline rendered Mermaid stats: {"totalViewportsOnPage":4,"commentCardCount":1,"commentViewportCount":2,"totalFallbackBanners":0,"commentBlobChecks":[{"srcPrefix":"blob:http://","alt":"Mermaid diagram","complete":true,"naturalWidth":150,"naturalHeight":202,"isBlobLoaded":true},{"srcPrefix":"blob:http://","alt":"Mermaid diagram","complete":true,"naturalWidth":150,"naturalHeight":202,"isBlobLoaded":true}]}
+Captured live-kan13-issue-desktop-light.png
+Desktop 1440x900 Sidebar Expanded metrics: {"sidebarRect":{"x":0,"y":0,"width":256,"height":900,"top":0,"right":256,"bottom":900,"left":0},"mainRect":{"x":256,"y":52,"width":1184,"height":848,"top":52,"right":1440,"bottom":900,"left":256},"mainScrollWidth":1184}
+Captured live-kan13-issue-expanded-desktop-light.png
+Desktop 1440x900 Sidebar Collapsed metrics: {"sidebarRect":{"x":0,"y":0,"width":0,"height":900,"top":0,"right":0,"bottom":900,"left":0},"mainRect":{"x":0,"y":52,"width":1440,"height":848,"top":52,"right":1440,"bottom":900,"left":0},"mainScrollWidth":1440}
+Captured live-kan13-issue-collapsed-desktop-light.png
+Captured live-kan13-issue-desktop-dark.png
+Desktop 1440x900 MediaViewport bounding rects: [{"index":0,"controlsPosition":"absolute","diagramTag":"IMG","diagramRect":{"x":612.953125,"y":256.140625,"width":150.09375,"height":201.765625,"top":256.140625,"right":763.046875,"bottom":457.90625,"left":612.953125},"canvasRect":{"x":369,"y":256.140625,"width":638,"height":201.765625,"top":256.140625,"right":1007,"bottom":457.90625,"left":369},"controlsRect":{"x":549,"y":407.90625,"width":278,"height":38,"top":407.90625,"right":827,"bottom":445.90625,"left":549},"viewportRect":{"x":369,"y":256.140625,"width":638,"height":201.765625,"top":256.140625,"right":1007,"bottom":457.90625,"left":369}},{"index":1,"controlsPosition":"absolute","diagramTag":"IMG","diagramRect":{"x":612.953125,"y":527.890625,"width":150.09375,"height":201.765625,"top":527.890625,"right":763.046875,"bottom":729.65625,"left":612.953125},"canvasRect":{"x":369,"y":527.890625,"width":638,"height":201.765625,"top":527.890625,"right":1007,"bottom":729.65625,"left":369},"controlsRect":{"x":549,"y":679.65625,"width":278,"height":38,"top":679.65625,"right":827,"bottom":717.65625,"left":549},"viewportRect":{"x":369,"y":527.890625,"width":638,"height":201.765625,"top":527.890625,"right":1007,"bottom":729.65625,"left":369}},{"index":2,"controlsPosition":"absolute","diagramTag":"IMG","diagramRect":{"x":612.953125,"y":1207.625,"width":150.09375,"height":201.765625,"top":1207.625,"right":763.046875,"bottom":1409.390625,"left":612.953125},"canvasRect":{"x":388,"y":1207.625,"width":600,"height":201.765625,"top":1207.625,"right":988,"bottom":1409.390625,"left":388},"controlsRect":{"x":549,"y":1359.390625,"width":278,"height":38,"top":1359.390625,"right":827,"bottom":1397.390625,"left":549},"viewportRect":{"x":388,"y":1207.625,"width":600,"height":201.765625,"top":1207.625,"right":988,"bottom":1409.390625,"left":388}},{"index":3,"controlsPosition":"absolute","diagramTag":"IMG","diagramRect":{"x":612.953125,"y":1479.375,"width":150.09375,"height":201.765625,"top":1479.375,"right":763.046875,"bottom":1681.140625,"left":612.953125},"canvasRect":{"x":388,"y":1479.375,"width":600,"height":201.765625,"top":1479.375,"right":988,"bottom":1681.140625,"left":388},"controlsRect":{"x":549,"y":1631.140625,"width":278,"height":38,"top":1631.140625,"right":827,"bottom":1669.140625,"left":549},"viewportRect":{"x":388,"y":1479.375,"width":600,"height":201.765625,"top":1479.375,"right":988,"bottom":1681.140625,"left":388}}]
+Mobile 390x844 metrics: {"innerWidth":390,"docScrollWidth":390,"mainScrollWidth":390,"mainClientWidth":390,"breadcrumbRect":{"x":62,"y":12.53125,"width":99,"height":25.9375,"top":12.53125,"right":161,"bottom":38.46875,"left":62},"vpDetails":[{"index":0,"controlsPosition":"static","diagramTag":"IMG","diagramBottom":577.078125,"canvasBottom":577.078125,"controlsTop":577.078125,"controlsRect":{"x":41,"y":577.078125,"width":308,"height":37,"top":577.078125,"right":349,"bottom":614.078125,"left":41},"diagramRect":{"x":119.953125,"y":375.3125,"width":150.09375,"height":201.765625,"top":375.3125,"right":270.046875,"bottom":577.078125,"left":119.953125},"nonOverlapping":true},{"index":1,"controlsPosition":"static","diagramTag":"IMG","diagramBottom":867.59375,"canvasBottom":867.59375,"controlsTop":867.59375,"controlsRect":{"x":41,"y":867.59375,"width":308,"height":37,"top":867.59375,"right":349,"bottom":904.59375,"left":41},"diagramRect":{"x":119.953125,"y":665.828125,"width":150.09375,"height":201.765625,"top":665.828125,"right":270.046875,"bottom":867.59375,"left":119.953125},"nonOverlapping":true},{"index":2,"controlsPosition":"static","diagramTag":"IMG","diagramBottom":1606.578125,"canvasBottom":1606.578125,"controlsTop":1606.578125,"controlsRect":{"x":60,"y":1606.578125,"width":270,"height":71,"top":1606.578125,"right":330,"bottom":1677.578125,"left":60},"diagramRect":{"x":119.953125,"y":1404.8125,"width":150.09375,"height":201.765625,"top":1404.8125,"right":270.046875,"bottom":1606.578125,"left":119.953125},"nonOverlapping":true},{"index":3,"controlsPosition":"static","diagramTag":"IMG","diagramBottom":1931.09375,"canvasBottom":1931.09375,"controlsTop":1931.09375,"controlsRect":{"x":60,"y":1931.09375,"width":270,"height":71,"top":1931.09375,"right":330,"bottom":2002.09375,"left":60},"diagramRect":{"x":119.953125,"y":1729.328125,"width":150.09375,"height":201.765625,"top":1729.328125,"right":270.046875,"bottom":1931.09375,"left":119.953125},"nonOverlapping":true}]}
+Captured live-kan13-issue-mobile-light.png
+Captured live-kan13-issue-mobile-dark.png
+KAN-13 console.error count: 0, pageerror count: 0
+KAN-13 Problem 1 Verdict: PASS
+KAN-13 Problem 2 Verdict: PASS
 
---------------------------------------------------------------------------------
-3. LIVE SCREENSHOTS CAPTURED
---------------------------------------------------------------------------------
-- /home/adamoutler/kanban/docs/qa/KAN-13/screenshots/live-kan13-issue-expanded-desktop-light.png
-- /home/adamoutler/kanban/docs/qa/KAN-13/screenshots/live-kan13-issue-collapsed-desktop-light.png
-- /home/adamoutler/kanban/docs/qa/KAN-13/screenshots/live-kan13-issue-desktop-dark.png
-- /home/adamoutler/kanban/docs/qa/KAN-13/screenshots/live-kan13-issue-mobile-light.png
-- /home/adamoutler/kanban/docs/qa/KAN-13/screenshots/live-kan13-issue-mobile-dark.png
+Total console.error count across entire run: 5
+console.error details: [{"url":"http://localhost:18952/workspaces/settings","text":"Failed to load resource: the server responded with a status of 404 (Not Found)"},{"url":"http://localhost:18952/projects/KAN/issues","text":"Failed to load resource: the server responded with a status of 422 (Unprocessable Entity)"},{"url":"http://localhost:18952/projects/KAN/issues","text":"Failed to load resource: the server responded with a status of 422 (Unprocessable Entity)"},{"url":"http://localhost:18952/projects/KAN/issues","text":"Failed to load resource: the server responded with a status of 422 (Unprocessable Entity)"},{"url":"http://localhost:18952/projects/KAN/issues","text":"Failed to load resource: the server responded with a status of 422 (Unprocessable Entity)"}]
+Total pageerror count across entire run: 0
 
---------------------------------------------------------------------------------
-4. RAW HTTP TRANSCRIPTS (/projects/KAN/issues/KAN-1 & ISSUE/COMMENT CREATION)
---------------------------------------------------------------------------------
-[2026-11-20T05:26:40.864Z] GET http://localhost:18952/api/v1/projects/KAN/states -> HTTP 200 | req=None | resp=[{"id":"01a1f76b-9832-72b5-9dfd-0cd29aafce0b","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","name":"Backlog","group":"backlog","color_hex":"#A3A3A3","sort_order":0,"is_default":true,"wip_soft_limit":null,"wip_hard_limit":null,"issue_count":0},{"id":"01a1f76b-9833-7e8e-a6ab-651300f3a611","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","name":"Todo","group":"unstarted","color_hex":"#3B82F6","sort_order":1,"is_default":false,"wip_soft_limit":null,"wip_hard_limit":null,"issue_count":1},{"id":"01a1f76b-9833-7c69-9830-8f5f60a7f811","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","name":"In Progress","group":"started","color_hex":"#F59E0B","sort_order":2,"is_default":false,"wip_soft_limit":null,"wip_hard_limit":null,"issue_count":0},{"id":"01a1f76b-9833-70a2-a1a5-3ee149740271","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","name":"Done","group":"completed","color_hex":"#16A34A","sort_order":3,"is_default":false,"wip_soft_limit":null,"wip_hard_limit":null,"issue_count":0},{"id":"01a1f76b-9833-78e2-a9b4-65bb477d03d7","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","name":"Cancelled","group":"cancelled","color_hex":"#DC2626","sort_order":4,"is_default":false,"wip_soft_
-[2026-11-20T05:26:40.880Z] GET http://localhost:18952/api/v1/projects/KAN -> HTTP 200 | req=None | resp={"id":"01a1f76b-982e-7596-a043-95324dc111fb","identifier":"KAN","name":"Kanban","description_markdown":"","modules_enabled":false,"default_module_ids":[],"auto_archive_days":null,"access_manifest":{"pill_label":"Workspace","explicit_grant_count":0,"inherited_scope":{"kind":"workspace","scope_label":"Workspace: Kanban","workspace_id":"01a1f76b-9820-7ce0-adb9-245ce6326b5e","workspace_name":"Kanban","project_id":null,"project_key":null,"project_name":null},"users":[{"principal_id":"01a1f76b-9821-7808-8922-c9514542e7e3","handle":"@admin","display_name":"Admin Architect","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"grant_source":"project_owner"},{"principal_id":"7b5789d0-6f06-4324-8e42-053d3c9480ee","handle":"@alice","display_name":"Alice QA","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"}],"groups":[],"agents":[],"deny_overrides":[],"redacted_entries":[],"redacted_count":0,"caller_capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"canonical_key":"KAN","object_type":"project"},"capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"is_
-[2026-11-20T05:26:40.899Z] GET http://localhost:18952/api/v1/issues/KAN-1 -> HTTP 200 | req=None | resp={"id":"01a1f76b-d09a-7184-a525-f70db380412d","key":"KAN-1","summary":"Verify Live Mermaid & WorkspaceBadge KAN-1","description_markdown":"Architect flow overview:\n\n```mermaid\ngraph LR\n  A[Client] --> B[Gateway]\n```","description_sha256":"8eee87bbdfcfd9536b2cb23932ff57f7a90fe45bd3c32ad35b64c2eb773af6a8","etag":"\"d7760aaa2a784fee538aff5eaf57f69f5b9f6e891631e3802a47fee32f145cb0\"","state":{"id":"01a1f76b-9833-7e8e-a6ab-651300f3a611","name":"Todo","group":"unstarted"},"priority":{"slug":"medium","label":"Medium","emoji":"🔹"},"start_date":null,"due_date":null,"cycle_id":null,"cycle":null,"parent":null,"labels":[],"assignees":[],"board_rank":"a000001","created_by_id":"01a1f76b-9821-7808-8922-c9514542e7e3","provenance":{"created_by":{"id":"01a1f76b-9821-7808-8922-c9514542e7e3","handle":"admin"},"original_created_by":{"id":"01a1f76b-9821-7808-8922-c9514542e7e3","handle":"admin"},"overridden":false,"creator_modified_by":null,"creator_modified_at":null,"reason":null},"access_manifest":{"pill_label":"Project","explicit_grant_count":0,"inherited_scope":{"kind":"project","scope_label":"Project: KAN","workspace_id":"01a1f76b-9820-7ce0-adb9-245ce6326b5e","workspace_name":"Kanban","project_
-[2026-11-20T05:26:40.921Z] GET http://localhost:18952/api/v1/issues/KAN-1/subscription -> HTTP 200 | req=None | resp={"subscribed":true,"muted_event_types":[],"source":"creator"}
-[2026-11-20T05:26:40.944Z] GET http://localhost:18952/api/v1/projects/KAN/custom-fields -> HTTP 200 | req=None | resp=[]
-[2026-11-20T05:26:40.944Z] GET http://localhost:18952/api/v1/issues/KAN-1/comments -> HTTP 200 | req=None | resp={"items":[],"next_cursor":null}
-[2026-11-20T05:26:40.951Z] GET http://localhost:18952/api/v1/projects/KAN -> HTTP 200 | req=None | resp={"id":"01a1f76b-982e-7596-a043-95324dc111fb","identifier":"KAN","name":"Kanban","description_markdown":"","modules_enabled":false,"default_module_ids":[],"auto_archive_days":null,"access_manifest":{"pill_label":"Workspace","explicit_grant_count":0,"inherited_scope":{"kind":"workspace","scope_label":"Workspace: Kanban","workspace_id":"01a1f76b-9820-7ce0-adb9-245ce6326b5e","workspace_name":"Kanban","project_id":null,"project_key":null,"project_name":null},"users":[{"principal_id":"01a1f76b-9821-7808-8922-c9514542e7e3","handle":"@admin","display_name":"Admin Architect","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"grant_source":"project_owner"},{"principal_id":"7b5789d0-6f06-4324-8e42-053d3c9480ee","handle":"@alice","display_name":"Alice QA","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"}],"groups":[],"agents":[],"deny_overrides":[],"redacted_entries":[],"redacted_count":0,"caller_capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"canonical_key":"KAN","object_type":"project"},"capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"is_
-[2026-11-20T05:26:40.960Z] GET http://localhost:18952/api/v1/issues/KAN-1/activity?tab=all -> HTTP 200 | req=None | resp={"tab":"all","counts":{"all":1,"comments":0,"history":1,"gates":0},"items":[{"id":"01a1f76b-d0a8-78ec-9e14-bd36ffa612eb","category":"HISTORY","event_type":"ISSUE_CREATED","actor":{"id":"01a1f76b-9821-7808-8922-c9514542e7e3","type":"USER","handle":"@admin","slug":null,"display_name":"Admin Architect"},"created_at":"2026-11-20T05:26:40.552556Z","payload":{"key":"KAN-1","copied_from":null}}],"next_cursor":null}
-[2026-11-20T05:26:40.986Z] GET http://localhost:18952/api/v1/projects/KAN/labels -> HTTP 200 | req=None | resp=[]
-[2026-11-20T05:26:40.986Z] GET http://localhost:18952/api/v1/projects/KAN/priorities -> HTTP 200 | req=None | resp=[{"id":"01a1f76b-9833-72ea-8fbf-74da827d0e44","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"urgent","label":"Urgent","emoji":"🔥","color_hex":"#DC2626","sort_order":0,"is_default":false},{"id":"01a1f76b-9834-79b9-8092-e2be304fb8f5","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"high","label":"High","emoji":"⚡","color_hex":"#F97316","sort_order":1,"is_default":false},{"id":"01a1f76b-9834-7bc0-a5df-73b8f3bc8602","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"medium","label":"Medium","emoji":"🔹","color_hex":"#EAB308","sort_order":2,"is_default":false},{"id":"01a1f76b-9834-7d1b-a287-670748bb2946","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"low","label":"Low","emoji":"💤","color_hex":"#22C55E","sort_order":3,"is_default":false},{"id":"01a1f76b-9834-788e-a295-1760817b97b8","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"none","label":"None","emoji":null,"color_hex":"#A3A3A3","sort_order":4,"is_default":true}]
-[2026-11-20T05:26:40.986Z] GET http://localhost:18952/api/v1/projects/KAN/cycles -> HTTP 200 | req=None | resp=[]
-[2026-11-20T05:26:42.636Z] POST http://localhost:18952/api/v1/issues/KAN-1/comments -> HTTP 201 | req={"body_markdown":"```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n\n```mermaid\ngraph TD\n  A[Start] --> B[End]\n```","parent_comment_id":null} | resp={"id":"01a1f76b-d8b8-7395-b34c-847e3930aec0","issue_id":"01a1f76b-d09a-7184-a525-f70db380412d","parent_comment_id":null,"author_id":"01a1f76b-9821-7808-8922-c9514542e7e3","author":{"id":"01a1f76b-9821-7808-8922-c9514542e7e3","handle":"@admin","display_name":"Admin Architect","redacted":false,"label":null},"body_markdown":"```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n\n```mermaid\ngraph TD\n  A[Start] --> B[End]\n```","body_sha256":"aeaaca13b9f25bbb2d551499dba3857b7545767ac8f85a121b08de7b4413abd2","permalink":"/projects/KAN/issues/KAN-1#comment-01a1f76b-d8b8-7395-b34c-847e3930aec0","created_at":"2026-11-20T05:26:42.617079Z","edited_at":null,"deleted":false,"reactions":[],"replies":[],"replies_next_cursor":null,"mentions":[],"unnotified_mentions":[]}
-[2026-11-20T05:26:42.671Z] GET http://localhost:18952/api/v1/issues/KAN-1/activity?tab=all -> HTTP 200 | req=None | resp={"tab":"all","counts":{"all":2,"comments":1,"history":1,"gates":0},"items":[{"id":"01a1f76b-d8c2-79c9-990f-fdaa8b78d114","category":"COMMENT","event_type":"COMMENT_CREATED","actor":{"id":"01a1f76b-9821-7808-8922-c9514542e7e3","type":"USER","handle":"@admin","slug":null,"display_name":"Admin Architect"},"created_at":"2026-11-20T05:26:42.627137Z","payload":{"comment_id":"01a1f76b-d8b8-7395-b34c-847e3930aec0","body_sha256":"aeaaca13b9f25bbb2d551499dba3857b7545767ac8f85a121b08de7b4413abd2","parent_comment_id":null,"mentioned_principal_ids":[]},"comment":{"id":"01a1f76b-d8b8-7395-b34c-847e3930aec0","body_markdown":"```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n\n```mermaid\ngraph TD\n  A[Start] --> B[End]\n```","permalink":"/projects/KAN/issues/KAN-1#comment-01a1f76b-d8b8-7395-b34c-847e3930aec0","edited_at":null,"reactions":[]}},{"id":"01a1f76b-d0a8-78ec-9e14-bd36ffa612eb","category":"HISTORY","event_type":"ISSUE_CREATED","actor":{"id":"01a1f76b-9821-7808-8922-c9514542e7e3","type":"USER","handle":"@admin","slug":null,"display_name":"Admin Architect"},"created_at":"2026-11-20T05:26:40.552556Z","payload":{"key":"KAN-1","copied_from":null}}],"next_cursor":null}
-[2026-11-20T05:26:42.671Z] GET http://localhost:18952/api/v1/issues/KAN-1/comments -> HTTP 200 | req=None | resp={"items":[{"id":"01a1f76b-d8b8-7395-b34c-847e3930aec0","issue_id":"01a1f76b-d09a-7184-a525-f70db380412d","parent_comment_id":null,"author_id":"01a1f76b-9821-7808-8922-c9514542e7e3","author":{"id":"01a1f76b-9821-7808-8922-c9514542e7e3","handle":"@admin","display_name":"Admin Architect","redacted":false,"label":null},"body_markdown":"```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n\n```mermaid\ngraph TD\n  A[Start] --> B[End]\n```","body_sha256":"aeaaca13b9f25bbb2d551499dba3857b7545767ac8f85a121b08de7b4413abd2","permalink":"/projects/KAN/issues/KAN-1#comment-01a1f76b-d8b8-7395-b34c-847e3930aec0","created_at":"2026-11-20T05:26:42.617079Z","edited_at":null,"deleted":false,"reactions":[],"replies":[],"replies_next_cursor":null,"mentions":[],"unnotified_mentions":[]}],"next_cursor":null}
-[2026-11-20T05:26:42.700Z] GET http://localhost:18952/api/v1/issues/KAN-1/activity?tab=all -> HTTP 200 | req=None | resp={"tab":"all","counts":{"all":2,"comments":1,"history":1,"gates":0},"items":[{"id":"01a1f76b-d8c2-79c9-990f-fdaa8b78d114","category":"COMMENT","event_type":"COMMENT_CREATED","actor":{"id":"01a1f76b-9821-7808-8922-c9514542e7e3","type":"USER","handle":"@admin","slug":null,"display_name":"Admin Architect"},"created_at":"2026-11-20T05:26:42.627137Z","payload":{"comment_id":"01a1f76b-d8b8-7395-b34c-847e3930aec0","body_sha256":"aeaaca13b9f25bbb2d551499dba3857b7545767ac8f85a121b08de7b4413abd2","parent_comment_id":null,"mentioned_principal_ids":[]},"comment":{"id":"01a1f76b-d8b8-7395-b34c-847e3930aec0","body_markdown":"```mermaid\ngraph TD\n  A[Start] --> B[End]\n```\n\n```mermaid\ngraph TD\n  A[Start] --> B[End]\n```","permalink":"/projects/KAN/issues/KAN-1#comment-01a1f76b-d8b8-7395-b34c-847e3930aec0","edited_at":null,"reactions":[]}},{"id":"01a1f76b-d0a8-78ec-9e14-bd36ffa612eb","category":"HISTORY","event_type":"ISSUE_CREATED","actor":{"id":"01a1f76b-9821-7808-8922-c9514542e7e3","type":"USER","handle":"@admin","slug":null,"display_name":"Admin Architect"},"created_at":"2026-11-20T05:26:40.552556Z","payload":{"key":"KAN-1","copied_from":null}}],"next_cursor":null}
-[2026-11-20T05:26:44.267Z] GET http://localhost:18952/api/v1/projects/KAN -> HTTP 200 | req=None | resp={"id":"01a1f76b-982e-7596-a043-95324dc111fb","identifier":"KAN","name":"Kanban","description_markdown":"","modules_enabled":false,"default_module_ids":[],"auto_archive_days":null,"access_manifest":{"pill_label":"Workspace","explicit_grant_count":0,"inherited_scope":{"kind":"workspace","scope_label":"Workspace: Kanban","workspace_id":"01a1f76b-9820-7ce0-adb9-245ce6326b5e","workspace_name":"Kanban","project_id":null,"project_key":null,"project_name":null},"users":[{"principal_id":"01a1f76b-9821-7808-8922-c9514542e7e3","handle":"@admin","display_name":"Admin Architect","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"grant_source":"project_owner"},{"principal_id":"7b5789d0-6f06-4324-8e42-053d3c9480ee","handle":"@alice","display_name":"Alice QA","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"}],"groups":[],"agents":[],"deny_overrides":[],"redacted_entries":[],"redacted_count":0,"caller_capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"canonical_key":"KAN","object_type":"project"},"capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"is_
-[2026-11-20T05:26:44.304Z] GET http://localhost:18952/api/v1/projects/KAN/priorities -> HTTP 200 | req=None | resp=[{"id":"01a1f76b-9833-72ea-8fbf-74da827d0e44","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"urgent","label":"Urgent","emoji":"🔥","color_hex":"#DC2626","sort_order":0,"is_default":false},{"id":"01a1f76b-9834-79b9-8092-e2be304fb8f5","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"high","label":"High","emoji":"⚡","color_hex":"#F97316","sort_order":1,"is_default":false},{"id":"01a1f76b-9834-7bc0-a5df-73b8f3bc8602","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"medium","label":"Medium","emoji":"🔹","color_hex":"#EAB308","sort_order":2,"is_default":false},{"id":"01a1f76b-9834-7d1b-a287-670748bb2946","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"low","label":"Low","emoji":"💤","color_hex":"#22C55E","sort_order":3,"is_default":false},{"id":"01a1f76b-9834-788e-a295-1760817b97b8","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"none","label":"None","emoji":null,"color_hex":"#A3A3A3","sort_order":4,"is_default":true}]
-[2026-11-20T05:26:44.304Z] GET http://localhost:18952/api/v1/projects/KAN/labels -> HTTP 200 | req=None | resp=[]
-[2026-11-20T05:26:44.305Z] GET http://localhost:18952/api/v1/projects/KAN/cycles -> HTTP 200 | req=None | resp=[]
-[2026-11-20T05:26:44.661Z] GET http://localhost:18952/api/v1/projects/KAN -> HTTP 200 | req=None | resp={"id":"01a1f76b-982e-7596-a043-95324dc111fb","identifier":"KAN","name":"Kanban","description_markdown":"","modules_enabled":false,"default_module_ids":[],"auto_archive_days":null,"access_manifest":{"pill_label":"Workspace","explicit_grant_count":0,"inherited_scope":{"kind":"workspace","scope_label":"Workspace: Kanban","workspace_id":"01a1f76b-9820-7ce0-adb9-245ce6326b5e","workspace_name":"Kanban","project_id":null,"project_key":null,"project_name":null},"users":[{"principal_id":"01a1f76b-9821-7808-8922-c9514542e7e3","handle":"@admin","display_name":"Admin Architect","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"grant_source":"project_owner"},{"principal_id":"7b5789d0-6f06-4324-8e42-053d3c9480ee","handle":"@alice","display_name":"Alice QA","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"}],"groups":[],"agents":[],"deny_overrides":[],"redacted_entries":[],"redacted_count":0,"caller_capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"canonical_key":"KAN","object_type":"project"},"capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"is_
-[2026-11-20T05:26:44.696Z] GET http://localhost:18952/api/v1/projects/KAN/priorities -> HTTP 200 | req=None | resp=[{"id":"01a1f76b-9833-72ea-8fbf-74da827d0e44","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"urgent","label":"Urgent","emoji":"🔥","color_hex":"#DC2626","sort_order":0,"is_default":false},{"id":"01a1f76b-9834-79b9-8092-e2be304fb8f5","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"high","label":"High","emoji":"⚡","color_hex":"#F97316","sort_order":1,"is_default":false},{"id":"01a1f76b-9834-7bc0-a5df-73b8f3bc8602","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"medium","label":"Medium","emoji":"🔹","color_hex":"#EAB308","sort_order":2,"is_default":false},{"id":"01a1f76b-9834-7d1b-a287-670748bb2946","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"low","label":"Low","emoji":"💤","color_hex":"#22C55E","sort_order":3,"is_default":false},{"id":"01a1f76b-9834-788e-a295-1760817b97b8","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"none","label":"None","emoji":null,"color_hex":"#A3A3A3","sort_order":4,"is_default":true}]
-[2026-11-20T05:26:44.696Z] GET http://localhost:18952/api/v1/projects/KAN/cycles -> HTTP 200 | req=None | resp=[]
-[2026-11-20T05:26:44.696Z] GET http://localhost:18952/api/v1/projects/KAN/labels -> HTTP 200 | req=None | resp=[]
-
-================================================================================
+KAN-13 Problem 1 (Consecutive 2x Mermaid Toolbar Insert in IssueSurface & CommentComposer): PASS
+KAN-13 Problem 2 (Desktop & Mobile MediaViewport Controls Non-Occlusion + Shell Widths): PASS
 LIVE_STACK_VERDICT: PASS
-All KAN-13 checks and Round-2 Console Gate (0 CSP style-src 'self' errors, 0 /modules 404s, 0 console.error, 0 pageerror) PASSED on live container kanban-liveqa-2.
-================================================================================
