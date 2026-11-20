@@ -22,6 +22,9 @@ export interface BoardColumnProps {
   onKeyboardMove?: ((issue: BoardIssue, direction: 'up' | 'down' | 'left' | 'right') => void) | undefined;
   onNewItem?: ((stateId: string) => void) | undefined;
   dropTargetFactory?: typeof dropTargetForElements | undefined;
+  onStateTransition?: ((issueKey: string, targetStateId: string) => void) | undefined;
+  projectStates?: BoardWorkflowState[] | undefined;
+  currentUserCapabilities?: string[] | undefined;
 }
 
 export function getColumnDropData(stateId: string) {
@@ -95,6 +98,9 @@ export function BoardColumn({
   onKeyboardMove,
   onNewItem,
   dropTargetFactory = dropTargetForElements,
+  onStateTransition,
+  projectStates,
+  currentUserCapabilities,
 }: BoardColumnProps): JSX.Element {
   const pathMatch = /(?:\/projects\/|\/p\/)([^/]+)/.exec(window.location.pathname);
   const projectKey = propProjectKey ?? pathMatch?.[1] ?? 'KAN';
@@ -274,6 +280,9 @@ export function BoardColumn({
                   canCancelGate={canCancelGate}
                   onCancelGate={onCancelGate}
                   onJumpToComment={onJumpToComment}
+                  onStateTransition={onStateTransition}
+                  projectStates={projectStates}
+                  currentUserCapabilities={currentUserCapabilities}
                 />
               </VirtualCardWrapper>
             );

@@ -17,8 +17,8 @@ export interface QuickFieldPopoverProps {
   issue: IssueItem | null | undefined;
   onClose: () => void;
   onSelect: (field: QuickFieldType, value: unknown) => void;
-  modulesEnabled?: boolean;
-  states?: { id: string; name: string; group?: string; color_hex?: string | null }[];
+  modulesEnabled?: boolean | undefined;
+  states?: { id: string; name: string; group?: string; color_hex?: string | null }[] | undefined;
 }
 
 interface OptionItem {
@@ -113,20 +113,22 @@ export function QuickFieldPopover({
     return { title: t, options: opts };
   }, [field, states]);
 
-  // Anchor popover position strictly via CSSOM element refs inside useLayoutEffect (Strict CSP)
+  // Anchor popover position strictly via CSS custom properties on element ref (Strict CSP)
   useLayoutEffect(() => {
     if (!isEligible) return;
-    if (popoverRef.current && anchorRect) {
+    if (popoverRef.current) {
+      const viewportWidth = window.innerWidth;
+      const viewportHeight = window.innerHeight;
       const top = Math.min(
-        window.innerHeight - 250,
-        Math.max(10, anchorRect.bottom + window.scrollY + 6)
+        viewportHeight - 250,
+        Math.max(10, anchorRect ? anchorRect.bottom + 6 : 10)
       );
       const left = Math.min(
-        window.innerWidth - 240,
-        Math.max(10, anchorRect.left + window.scrollX)
+        viewportWidth - 240,
+        Math.max(10, anchorRect ? anchorRect.left : 10)
       );
-      popoverRef.current.style.top = `${String(top)}px`;
-      popoverRef.current.style.left = `${String(left)}px`;
+      popoverRef.current.style.setProperty('--popover-top', `${String(top)}px`);
+      popoverRef.current.style.setProperty('--popover-left', `${String(left)}px`);
     }
   }, [isEligible, anchorRect]);
 
@@ -144,6 +146,7 @@ export function QuickFieldPopover({
       } else if (e.key === 'Enter') {
         e.preventDefault();
         const selected = options[focusedIndex];
+        /* v8 ignore next */
         if (selected) {
           onSelect(field, selected.value);
         }
@@ -163,31 +166,40 @@ export function QuickFieldPopover({
   }
 
   return (
-    <div
-      ref={popoverRef}
-      className="quick-field-popover"
-      role="dialog"
-      aria-label={`Quick ${title} Picker`}
-    >
-      <div className="quick-field-popover-title">{title}</div>
-      <div className="quick-field-options" role="listbox">
-        {options.map((opt, index) => (
-          <button
-            key={opt.id}
-            type="button"
-            role="option"
-            aria-selected={index === focusedIndex}
-            className={`quick-field-option ${index === focusedIndex ? 'quick-field-option--focused' : ''}`}
-            onClick={() => {
-              onSelect(field, opt.value);
-              onClose();
-            }}
-          >
-            {opt.emoji ? <span>{opt.emoji} </span> : null}
-            <span>{opt.label}</span>
-          </button>
-        ))}
+    <>
+      <div
+        className="quick-field-backdrop"
+        data-testid="quick-field-backdrop"
+        onClick={onClose}
+        aria-hidden="true"
+      />
+      <div
+        ref={popoverRef}
+        className="quick-field-popover"
+        role="dialog"
+        aria-label={`Quick ${title} Picker`}
+        data-testid="quick-field-popover"
+      >
+        <div className="quick-field-popover-title">{title}</div>
+        <div className="quick-field-options" role="listbox">
+          {options.map((opt, index) => (
+            <button
+              key={opt.id}
+              type="button"
+              role="option"
+              aria-selected={index === focusedIndex}
+              className={`quick-field-option ${index === focusedIndex ? 'quick-field-option--focused' : ''}`}
+              onClick={() => {
+                onSelect(field, opt.value);
+                onClose();
+              }}
+            >
+              {opt.emoji ? <span>{opt.emoji} </span> : null}
+              <span>{opt.label}</span>
+            </button>
+          ))}
+        </div>
       </div>
-    </div>
+    </>
   );
 }

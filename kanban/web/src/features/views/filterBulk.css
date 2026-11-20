@@ -538,9 +538,18 @@
    Quick Field Popover (S6.4 item 4, S1.3 item 3)
    ========================================================================== */
 
+.quick-field-backdrop {
+  position: fixed;
+  inset: 0;
+  background: transparent;
+  z-index: 349;
+}
+
 .quick-field-popover {
-  position: absolute;
-  z-index: 60;
+  position: fixed;
+  top: var(--popover-top, 60px);
+  left: var(--popover-left, 20px);
+  z-index: 350;
   width: 220px;
   background: var(--bg-surface-raised, #ffffff);
   border: 1px solid var(--border-strong);
@@ -583,6 +592,63 @@
 .quick-field-option--focused {
   background: var(--bg-hover);
   outline: none;
+}
+
+.list-row-state-btn {
+  background: transparent;
+  border: none;
+  padding: 0;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--radius-sm, 4px);
+  flex: 0 0 auto;
+}
+
+.list-row-state-btn:hover {
+  opacity: 0.85;
+}
+
+.list-row-state-btn:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 1px;
+}
+
+@media (max-width: 768px) {
+  .quick-field-backdrop {
+    background: rgba(0, 0, 0, 0.5);
+  }
+
+  .quick-field-popover {
+    position: fixed;
+    top: auto;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    width: 100%;
+    max-width: 100%;
+    border-radius: var(--radius-lg, 12px) var(--radius-lg, 12px) 0 0;
+    border-bottom: none;
+    z-index: 350;
+    padding: var(--space-4, 16px);
+    max-height: 80vh;
+    overflow-y: auto;
+    box-shadow: 0 -8px 24px rgba(0, 0, 0, 0.25);
+  }
+
+  .quick-field-option {
+    min-height: 44px;
+    font-size: var(--text-base, 14px);
+    padding: 10px 12px;
+  }
+
+  .list-row-state-btn {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+  }
 }
 
 /* ==========================================================================

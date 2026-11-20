@@ -1,5 +1,7 @@
 import React, { useState, useMemo, type JSX } from 'react';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
+import { QuickFieldPopover } from './QuickFieldPopover';
+import * as railApi from '../drawer-rail/railApi';
 import {
   normalizeStateKey,
   type IssueItem,
@@ -22,6 +24,8 @@ export interface SwimlaneBoardGridProps {
   focusedKey?: string | null | undefined;
   onCardClick?: ((key: string, isShift: boolean) => void) | undefined;
   onCardMove?: ((issueKey: string, targetColId: string, targetLaneId: string) => void) | undefined;
+  onStateTransition?: ((issueKey: string, targetStateId: string) => void) | undefined;
+  currentUserCapabilities?: string[] | undefined;
 }
 
 interface ColumnDef {
@@ -120,9 +124,21 @@ export function SwimlaneBoardGrid({
   onToggleSelect,
   focusedKey = null,
   onCardClick,
+  onCardMove,
+  onStateTransition,
+  currentUserCapabilities,
 }: SwimlaneBoardGridProps): JSX.Element {
   // Collapsed bands map: laneId -> boolean
   const [collapsedLanes, setCollapsedLanes] = useState<Record<string, boolean>>({});
+  const [popoverState, setPopoverState] = useState<{
+    isOpen: boolean;
+    issue: IssueItem | null;
+    anchorRect: DOMRect | null;
+  }>({
+    isOpen: false,
+    issue: null,
+    anchorRect: null,
+  });
 
   const allCycles = useMemo(() => {
     const map = new Map<string, string>();
@@ -365,6 +381,13 @@ export function SwimlaneBoardGrid({
                         else if (slug === 'high') pKind = 'priorityHigh';
                         else if (slug === 'low') pKind = 'priorityLow';
 
+                        const rawCaps = issue.capabilities ?? currentUserCapabilities;
+                        const cardCaps = rawCaps ?? ['EDIT', 'TRANSITION'];
+                        const canTransitionCard =
+                          cardCaps.includes('TRANSITION') ||
+                          cardCaps.includes('EDIT') ||
+                          cardCaps.includes('ADMIN');
+
                         return (
                           <div
                             key={issue.key}
@@ -399,6 +422,27 @@ export function SwimlaneBoardGrid({
                                 {issue.key}
                               </a>
 
+                              {canTransitionCard && (
+                                <button
+                                  type="button"
+                                  className="board-card-state-btn"
+                                  data-testid={`board-card-state-btn-${issue.key}`}
+                                  aria-label={`Move ${issue.key} to another state`}
+                                  title={`Move ${issue.key}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setPopoverState({
+                                      isOpen: true,
+                                      issue,
+                                      anchorRect: e.currentTarget.getBoundingClientRect(),
+                                    });
+                                  }}
+                                >
+                                  <span className="board-card-state-btn-glyph" aria-hidden="true">⇄</span>
+                                  <span>{issue.state.name ? issue.state.name : 'Move'}</span>
+                                </button>
+                              )}
+
                               <EmojiHint kind={pKind} />
                             </div>
 
@@ -420,6 +464,30 @@ export function SwimlaneBoardGrid({
           </div>
         );
       })}
+      {popoverState.isOpen && popoverState.issue && (
+        <QuickFieldPopover
+          isOpen={popoverState.isOpen}
+          field="state"
+          anchorRect={popoverState.anchorRect}
+          issue={popoverState.issue}
+          onClose={() => {
+            setPopoverState({ isOpen: false, issue: null, anchorRect: null });
+          }}
+          onSelect={(_field, value) => {
+            if (typeof value === 'string' && popoverState.issue) {
+              const targetKey = popoverState.issue.key;
+              if (onCardMove) {
+                onCardMove(targetKey, value, 'none');
+              } else if (onStateTransition) {
+                onStateTransition(targetKey, value);
+              } else {
+                void railApi.patchIssue(targetKey, { state_id: value });
+              }
+            }
+          }}
+          states={projectStates}
+        />
+      )}
     </div>
   );
 }

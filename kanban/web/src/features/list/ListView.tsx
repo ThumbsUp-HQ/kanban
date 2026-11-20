@@ -18,6 +18,8 @@ export interface ListViewProps {
   onOpenPeek?: ((issueKey: string) => void) | undefined;
   activeKey?: string | null | undefined;
   canManageWorkflows?: boolean | undefined;
+  onOpenFieldPopover?: ((field: 'state', issue: IssueItem, rect: DOMRect) => void) | undefined;
+  onStateSelect?: ((issueKey: string, stateId: string) => void) | undefined;
 }
 
 interface GroupSection {
@@ -42,6 +44,8 @@ export function ListView({
   onOpenPeek,
   activeKey,
   canManageWorkflows = true,
+  onOpenFieldPopover,
+  onStateSelect,
 }: ListViewProps): JSX.Element {
   // Collapsed state map: key is section name/id, value is boolean (true if collapsed)
   const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
@@ -243,7 +247,7 @@ export function ListView({
 
     // Seed sections
     for (const def of resolvedWorkflowStates) {
-      sectionMap.set(def.name, {
+      sectionMap.set(def.id, {
         id: def.id,
         name: def.name,
         sortOrder: def.sortOrder,
@@ -253,13 +257,16 @@ export function ListView({
 
     // Populate issues
     for (const issue of filteredIssues) {
+      const stateId = issue.state.id;
       const stateName = issue.state.name;
-      const existing = sectionMap.get(stateName);
-      if (existing) {
-        existing.items.push(issue);
+      let targetSection = stateId ? sectionMap.get(stateId) : undefined;
+      targetSection ??= Array.from(sectionMap.values()).find((s) => s.name === stateName);
+      if (targetSection) {
+        targetSection.items.push(issue);
       } else {
-        sectionMap.set(stateName, {
-          id: issue.state.id || stateName.toLowerCase().replace(/\s+/g, '-'),
+        const fallbackId = stateId ? stateId : stateName.toLowerCase().replace(/\s+/g, '-');
+        sectionMap.set(fallbackId, {
+          id: fallbackId,
           name: stateName,
           sortOrder: issue.state.sort_order ?? 999,
           items: [issue],
@@ -543,6 +550,9 @@ export function ListView({
                         isFocused={itemIndex === focusedIndex || focusedKey === issue.key}
                         onOpenPeek={onOpenPeek}
                         isActive={activeKey === issue.key}
+                        onOpenFieldPopover={onOpenFieldPopover}
+                        onStateSelect={onStateSelect}
+                        projectStates={projectStates}
                       />
                     );
                   })}

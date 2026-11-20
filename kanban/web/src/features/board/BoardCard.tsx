@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, type JSX } from 'react';
+import React, { useEffect, useRef, useState, type JSX } from 'react';
 import {
   draggable,
   dropTargetForElements,
@@ -7,7 +7,9 @@ import { EmojiHint } from '../../components/emoji/EmojiHint.tsx';
 import type { EmojiKey } from '../../components/emoji/emojiRegistry.ts';
 import { GateStatusPill } from '../gates/GateStatusPill.tsx';
 import { setOpenerElement } from '../drawer/IssueKeyLink.tsx';
-import type { BoardAssignee, BoardIssue, BoardPriority, StateGroup } from './boardApi.ts';
+import { QuickFieldPopover } from '../views/QuickFieldPopover.tsx';
+import type { IssueItem } from '../views/viewsApi.ts';
+import type { BoardAssignee, BoardIssue, BoardPriority, BoardWorkflowState, StateGroup } from './boardApi.ts';
 
 export interface BoardCardProps {
   issue: BoardIssue;
@@ -23,6 +25,9 @@ export interface BoardCardProps {
   onJumpToComment?: ((commentId: string) => void) | undefined;
   draggableFactory?: typeof draggable | undefined;
   dropTargetFactory?: typeof dropTargetForElements | undefined;
+  onStateTransition?: ((issueKey: string, targetStateId: string) => void) | undefined;
+  projectStates?: BoardWorkflowState[] | undefined;
+  currentUserCapabilities?: string[] | undefined;
 }
 
 export function getCardDragData(issue: BoardIssue) {
@@ -98,9 +103,28 @@ export function BoardCard({
   onJumpToComment,
   draggableFactory = draggable,
   dropTargetFactory = dropTargetForElements,
+  onStateTransition,
+  projectStates,
+  currentUserCapabilities,
 }: BoardCardProps): JSX.Element {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const isGatePending = issue.gate_status === 'pending' || Boolean(issue.pending_gate);
+  const [isStatePopoverOpen, setIsStatePopoverOpen] = useState(false);
+  const [popoverAnchor, setPopoverAnchor] = useState<DOMRect | null>(null);
+
+  const rawCaps = (issue.capabilities as string[] | undefined) ?? currentUserCapabilities;
+  const capabilities = rawCaps ?? ['EDIT', 'TRANSITION'];
+  const canTransition =
+    capabilities.includes('TRANSITION') ||
+    capabilities.includes('EDIT') ||
+    capabilities.includes('ADMIN');
+
+  const handleStateBtnClick = (e: React.MouseEvent<HTMLButtonElement>): void => {
+    e.preventDefault();
+    e.stopPropagation();
+    setPopoverAnchor(e.currentTarget.getBoundingClientRect());
+    setIsStatePopoverOpen(true);
+  };
 
   const resolvedProjectKey =
     projectKey ?? issue.project_key ?? (issue.key ? issue.key.split('-')[0] : 'KAN') ?? 'KAN';
@@ -225,6 +249,19 @@ export function BoardCard({
           {issue.key}
         </a>
         <div className="board-card-top-badges">
+          {canTransition && (
+            <button
+              type="button"
+              className="board-card-state-btn"
+              data-testid={`board-card-state-btn-${issue.key}`}
+              aria-label={`Move ${issue.key} to another state`}
+              title={`Move ${issue.key}`}
+              onClick={handleStateBtnClick}
+            >
+              <span className="board-card-state-btn-glyph" aria-hidden="true">⇄</span>
+              <span>{issue.state?.name ?? 'Move'}</span>
+            </button>
+          )}
           {isGatePending && (
             <GateStatusPill
               status="pending"
@@ -322,6 +359,27 @@ export function BoardCard({
           </span>
         )}
       </div>
+      {isStatePopoverOpen && (
+        <QuickFieldPopover
+          isOpen={isStatePopoverOpen}
+          field="state"
+          anchorRect={popoverAnchor}
+          issue={{
+            id: issue.id,
+            key: issue.key,
+            summary: issue.summary,
+            state: issue.state ?? { id: issue.state_id, name: issue.state_id, group: stateGroup },
+            priority: issue.priority ? { id: issue.priority.id, label: issue.priority.label, slug: issue.priority.slug } : { id: 'none', label: 'None', slug: 'none' },
+          } as unknown as IssueItem}
+          onClose={() => { setIsStatePopoverOpen(false); }}
+          onSelect={(field, value) => {
+            if (field === 'state' && typeof value === 'string') {
+              onStateTransition?.(issue.key, value);
+            }
+          }}
+          states={projectStates}
+        />
+      )}
     </div>
   );
 }

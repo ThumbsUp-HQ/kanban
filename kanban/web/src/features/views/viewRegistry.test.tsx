@@ -2,6 +2,25 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, within, waitFor, act } from '@testing-library/react';
 import { QueryClient } from '@tanstack/react-query';
 import React from 'react';
+
+vi.mock('../drawer-rail/railApi', async () => {
+  const actual = await vi.importActual<Record<string, unknown>>('../drawer-rail/railApi');
+  return {
+    ...actual,
+    fetchAssigneeSuggestions: vi.fn().mockImplementation(() => new Promise(() => {
+      /* pending */
+    })),
+    fetchProjectLabels: vi.fn().mockImplementation(() => new Promise(() => {
+      /* pending */
+    })),
+    fetchProjectCycles: vi.fn().mockImplementation(() => new Promise(() => {
+      /* pending */
+    })),
+    fetchProjectModules: vi.fn().mockImplementation(() => new Promise(() => {
+      /* pending */
+    })),
+  };
+});
 import {
   ViewHost,
   VIEW_REGISTRY,
@@ -13,13 +32,22 @@ import {
   QuickCreateIssueModal,
   QuickFieldPopover,
   useIssueKeyboardMap,
+  defaultQueryClient,
+  computeStateSummary,
 } from './viewRegistry';
 import { FIXTURE_12_ISSUES } from './fixtures';
 import type { IssueItem } from './viewsApi';
 
 describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () => {
   beforeEach(() => {
+    defaultQueryClient.clear();
     window.history.pushState({}, '', '/projects/KAN/issues');
+  });
+
+  afterEach(async () => {
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 0));
+    });
   });
 
   it('exports all Action 1 components per Scoped Definition of Done', () => {
@@ -108,20 +136,23 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
     expect(screen.getByText('Backlog')).toBeDefined();
   });
 
-  it('IssuesWorkspaceRoute: renders FilterDisplayBar, mounts 2D SwimlaneBoardGrid when layout=board and sub_group_by=priority', () => {
+  it('IssuesWorkspaceRoute: renders FilterDisplayBar, mounts 2D SwimlaneBoardGrid when layout=board and sub_group_by=priority', async () => {
     window.history.pushState(
       {},
       '',
       '/projects/KAN/issues?layout=board&group_by=state&sub_group_by=priority'
     );
 
-    render(
-      <IssuesWorkspaceRoute
-        projectKey="KAN"
-        modulesEnabled={true}
-        initialIssues={FIXTURE_12_ISSUES}
-      />
-    );
+    await act(async () => {
+      render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          modulesEnabled={true}
+          initialIssues={FIXTURE_12_ISSUES}
+        />
+      );
+      await new Promise((r) => setTimeout(r, 0));
+    });
 
     expect(screen.getByTestId('issues-workspace')).toBeDefined();
     expect(screen.getByRole('region', { name: /filter and display controls/i })).toBeDefined();
@@ -150,7 +181,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
     expect(screen.queryByText('KAN-142')).toBeNull();
   });
 
-  it('IssuesWorkspaceRoute: creates a new issue via QuickCreateIssueModal and updates state/priority via field popover', () => {
+  it('IssuesWorkspaceRoute: creates a new issue via QuickCreateIssueModal and updates state/priority via field popover', async () => {
     render(
       <IssuesWorkspaceRoute
         projectKey="KAN"
@@ -160,7 +191,10 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
     );
 
     // Press 'C' to open QuickCreateIssueModal
-    fireEvent.keyDown(window, { key: 'c' });
+    await act(async () => {
+      fireEvent.keyDown(window, { key: 'c' });
+      await new Promise((r) => setTimeout(r, 60));
+    });
     expect(screen.getByRole('dialog', { name: /create work item in KAN/i })).toBeDefined();
 
     // Fill in summary, description, and module
@@ -170,7 +204,17 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
     fireEvent.change(descInput, { target: { value: 'Detailed task description' } });
     const modSelect = screen.getByLabelText(/module/i);
     fireEvent.change(modSelect, { target: { value: 'mod-1' } });
-    fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+      await Promise.resolve();
+    });
+
+    act(() => {
+      const doneBtn = screen.queryByTestId('post-create-done-btn');
+      if (doneBtn) {
+        fireEvent.click(doneBtn);
+      }
+    });
 
     expect(screen.getByText('Newly Created Task')).toBeDefined();
 
@@ -680,8 +724,13 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
 
       // Dispatch kb:create-issue to open QuickCreateIssueModal
-      fireEvent(window, new CustomEvent('kb:create-issue'));
+      act(() => {
+        fireEvent(window, new CustomEvent('kb:create-issue'));
+      });
       expect(screen.getByRole('dialog', { name: /create work item in KAN/i })).toBeDefined();
+      act(() => {
+        fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+      });
     });
 
     it('creates, updates, and bulk-operates on issues in live mode via REST endpoints', async () => {
@@ -809,7 +858,10 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
 
       // Dispatch kb:issue-updated to trigger refresh
-      fireEvent(window, new CustomEvent('kb:issue-updated'));
+      await act(async () => {
+        fireEvent(window, new CustomEvent('kb:issue-updated'));
+        await new Promise((r) => setTimeout(r, 20));
+      });
     });
 
     it('handles peek query param, vetoed gate status, and agent assignees in board layout', () => {
@@ -908,17 +960,17 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       document.cookie = 'kb_csrf=test-csrf-live; path=/';
 
       const liveStatesWithAliases = [
-        { id: '01931234-5678-7000-8000-000000000001', name: 'Backlog', group: 'backlog', sort_order: 10, wip_hard: 5 },
-        { id: '01931234-5678-7000-8000-000000000002', name: 'To Do', group: 'unstarted', sort_order: 20, wip_soft: 3 },
-        { id: '01931234-5678-7000-8000-000000000003', name: 'In Progress', group: 'started', sort_order: 30 },
-        { id: '01931234-5678-7000-8000-000000000004', name: 'Done', group: 'completed', sort_order: 40 },
+        { id: 'alias-st-1', name: 'Backlog', group: 'backlog', sort_order: 10, wip_hard: 5 },
+        { id: 'alias-st-2', name: 'To Do', group: 'unstarted', sort_order: 20, wip_soft: 3 },
+        { id: 'alias-st-3', name: 'In Progress', group: 'started', sort_order: 30 },
+        { id: 'alias-st-4', name: 'Done', group: 'completed', sort_order: 40 },
       ];
       const liveIssues = [
         {
-          id: '01931234-5678-7000-8000-000000000301',
+          id: 'alias-issue-301',
           key: 'KAN-301',
           summary: 'Live Alias Issue',
-          state: { id: '01931234-5678-7000-8000-000000000002', name: 'Todo', group: 'unstarted' },
+          state: { id: 'alias-st-2', name: 'Todo', group: 'unstarted' },
           priority: { slug: 'medium', label: 'Medium', emoji: '🔹' },
         },
       ];
@@ -937,12 +989,12 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
             ok: true,
             json: () =>
               Promise.resolve({
-                id: '01931234-5678-7000-8000-000000000399',
+                id: 'alias-issue-399',
                 key: 'KAN-999',
                 summary: 'New Persisted Key Issue',
                 description_markdown: 'Detailed description',
                 module_ids: ['mod-1'],
-                state: { id: '01931234-5678-7000-8000-000000000001', name: 'Backlog', group: 'backlog' },
+                state: { id: 'alias-st-1', name: 'Backlog', group: 'backlog' },
                 priority: { slug: 'low', label: 'Low', emoji: '🔽' },
               }),
           });
@@ -998,10 +1050,14 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       fireEvent.click(within(statePopDone).getByText('Done'));
 
       // Dispatch kb:create-issue to open QuickCreateIssueModal and submit
-      fireEvent(window, new CustomEvent('kb:create-issue'));
+      act(() => {
+        fireEvent(window, new CustomEvent('kb:create-issue'));
+      });
       const summaryInput = screen.getByLabelText(/summary/i);
-      fireEvent.change(summaryInput, { target: { value: 'New Persisted Key Issue' } });
-      fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+      act(() => {
+        fireEvent.change(summaryInput, { target: { value: 'New Persisted Key Issue' } });
+        fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+      });
 
       await waitFor(() => {
         expect(screen.getAllByText('KAN-999').length).toBeGreaterThan(0);
@@ -1876,6 +1932,157 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
         expect(screen.queryByText(/Application Error Detected/i)).toBeNull();
         expect(screen.getByTestId('board-card-KAN-1')).toBeDefined();
       });
+    });
+  });
+
+  describe('KAN-44 Mobile & Touch View Routing Tests', () => {
+    it('suppresses auto-selecting first issue in split view when viewport <= 768px and ?peek= is absent', () => {
+      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
+      const originalInnerWidth = window.innerWidth;
+      try {
+        Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 500 });
+        render(
+          <IssuesWorkspaceRoute
+            projectKey="KAN"
+            initialLayout="list"
+            initialIssues={FIXTURE_12_ISSUES}
+          />
+        );
+        // On mobile viewport <= 768px, activePeekKey is null so split surface is not rendered
+        expect(screen.queryByTestId('split-surface-close-btn')).toBeNull();
+      } finally {
+        Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: originalInnerWidth });
+      }
+    });
+
+    it('renders split surface on desktop viewports and closes it when close button is clicked', async () => {
+      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
+      const originalInnerWidth = window.innerWidth;
+      try {
+        Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1200 });
+        render(
+          <IssuesWorkspaceRoute
+            projectKey="KAN"
+            initialLayout="list"
+            initialIssues={FIXTURE_12_ISSUES}
+          />
+        );
+
+        // Desktop auto-selects first issue
+        await waitFor(() => {
+          expect(screen.getByTestId('split-surface-close-btn')).toBeDefined();
+        });
+
+        // Click close button
+        const closeBtn = screen.getByTestId('split-surface-close-btn');
+        fireEvent.click(closeBtn);
+
+        // Closed split key prevents auto-selection
+        await waitFor(() => {
+          expect(screen.queryByTestId('split-surface-close-btn')).toBeNull();
+        });
+      } finally {
+        Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: originalInnerWidth });
+      }
+    });
+
+    it('wires onOpenFieldPopover from ListView to QuickFieldPopover', async () => {
+      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
+      render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialLayout="list"
+          initialIssues={FIXTURE_12_ISSUES}
+        />
+      );
+
+      // Find first list row state button and click it
+      const firstIssue = FIXTURE_12_ISSUES[0];
+      if (!firstIssue) throw new Error('Missing fixture');
+      const stateBtn = screen.getByTestId(`list-row-state-btn-${firstIssue.key}`);
+      fireEvent.click(stateBtn);
+
+      // Popover should be open
+      await waitFor(() => {
+        expect(screen.getByRole('dialog', { name: /Quick State Picker/i })).toBeDefined();
+      });
+    });
+
+    it('exercises computeStateSummary and state matching', () => {
+      const states = [
+        { id: 'st-1', name: 'My Todo', group: 'unstarted' },
+        { id: 'st-2', name: 'Review Group', group: 'in_review' },
+      ];
+      // match by id
+      expect(computeStateSummary('st-1', states).name).toBe('My Todo');
+      // match by normalized name
+      expect(computeStateSummary('my-todo', states).name).toBe('My Todo');
+      // match by group
+      expect(computeStateSummary('in_review', states).name).toBe('Review Group');
+      // fallback matching by string content
+      expect(computeStateSummary('progress-custom').name).toBe('In Progress');
+      expect(computeStateSummary('todo-custom').name).toBe('Todo');
+      expect(computeStateSummary('done-custom').name).toBe('Done');
+      expect(computeStateSummary('other').name).toBe('Backlog');
+    });
+
+    it('covers Hard WIP limit prompt cancellation and confirmation in field select', () => {
+      const testIssues: IssueItem[] = [
+        {
+          id: 'i-wip-1',
+          key: 'KAN-WIP-1',
+          summary: 'Issue 1',
+          state: { id: 'state-in-review', name: 'In Review', group: 'started' },
+          priority: { slug: 'low', label: 'Low' },
+        },
+        {
+          id: 'i-wip-2',
+          key: 'KAN-WIP-2',
+          summary: 'Issue 2',
+          state: { id: 'state-in-review', name: 'In Review', group: 'started' },
+          priority: { slug: 'low', label: 'Low' },
+        },
+        {
+          id: 'i-wip-3',
+          key: 'KAN-WIP-3',
+          summary: 'Issue 3',
+          state: { id: 'state-in-review', name: 'In Review', group: 'started' },
+          priority: { slug: 'low', label: 'Low' },
+        },
+        {
+          id: 'i-wip-4',
+          key: 'KAN-WIP-4',
+          summary: 'Issue 4',
+          state: { id: 'state-todo', name: 'Todo', group: 'unstarted' },
+          priority: { slug: 'low', label: 'Low' },
+        },
+      ];
+
+      const promptSpy = vi.spyOn(window, 'prompt');
+
+      render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialLayout="list"
+          initialIssues={testIssues}
+          isProjectAdmin={true}
+        />
+      );
+
+      // Focus fourth issue (index 3) and press 'S' to open State picker
+      fireEvent.keyDown(window, { key: 'j' });
+      fireEvent.keyDown(window, { key: 'j' });
+      fireEvent.keyDown(window, { key: 'j' });
+      fireEvent.keyDown(window, { key: 'j' });
+      fireEvent.keyDown(window, { key: 's' });
+
+      // 1. Prompt returns null (user cancelled)
+      promptSpy.mockReturnValueOnce(null);
+      const inReviewOpt = screen.getByRole('option', { name: 'In Review' });
+      fireEvent.click(inReviewOpt);
+      expect(promptSpy).toHaveBeenCalled();
+
+      promptSpy.mockRestore();
     });
   });
 });

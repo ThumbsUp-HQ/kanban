@@ -1,9 +1,12 @@
-import React, { useState, type JSX } from 'react';
+import React, { useState, useMemo, type JSX } from 'react';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import type { EmojiKey } from '../../components/emoji/emojiRegistry';
+import { StateBadge } from '../../components/state/StateBadge';
 import { AccessPill } from './AccessPill';
 import { useIssueSurfaceSlots, type IssueDetail } from './slots';
 import { copyToClipboard } from '../../utils/clipboard';
+import { patchIssue } from '../drawer-rail/railApi';
+import type { StateSummary } from '../views/viewsApi';
 import './IssueHeader.css';
 
 export interface IssueHeaderProps {
@@ -11,6 +14,9 @@ export interface IssueHeaderProps {
   mode: 'drawer' | 'full';
   onClose: () => void;
   toggleFullScreen: () => void;
+  projectStates?: StateSummary[] | undefined;
+  onStateChange?: ((stateId: string) => Promise<void>) | undefined;
+  currentUserCapabilities?: string[] | undefined;
 }
 
 function getPriorityEmojiKey(slug: string | undefined): EmojiKey | null {
@@ -35,9 +41,76 @@ export function IssueHeader({
   mode,
   onClose,
   toggleFullScreen,
+  projectStates,
+  onStateChange,
+  currentUserCapabilities,
 }: IssueHeaderProps): JSX.Element {
   const slots = useIssueSurfaceSlots();
   const priorityKey = getPriorityEmojiKey(issue.priority?.slug);
+
+  const capabilities = currentUserCapabilities ?? issue.capabilities ?? ['EDIT', 'TRANSITION'];
+  const canTransition =
+    capabilities.includes('TRANSITION') ||
+    capabilities.includes('EDIT') ||
+    capabilities.includes('ADMIN');
+
+  const availableStates = useMemo(() => {
+    if (projectStates && projectStates.length > 0) {
+      const list = [...projectStates];
+      if (issue.state && !list.some((s) => s.id === issue.state?.id)) {
+        list.push({
+          id: issue.state.id ?? 'state-current',
+          name: issue.state.name,
+          group: issue.state.group,
+        });
+      }
+      return list;
+    }
+    const defaultStates = [
+      { id: 'state-backlog', name: 'Backlog', group: 'backlog' as const },
+      { id: 'state-todo', name: 'Todo', group: 'unstarted' as const },
+      { id: 'state-in-progress', name: 'In Progress', group: 'started' as const },
+      { id: 'state-in-review', name: 'In Review', group: 'started' as const },
+      { id: 'state-done', name: 'Done', group: 'completed' as const },
+      { id: 'state-cancelled', name: 'Cancelled', group: 'cancelled' as const },
+    ];
+    if (issue.state && !defaultStates.some((s) => s.id === issue.state?.id)) {
+      defaultStates.push({
+        id: issue.state.id ?? 'state-current',
+        name: issue.state.name,
+        group: issue.state.group as 'backlog' | 'unstarted' | 'started' | 'completed' | 'cancelled',
+      });
+    }
+    return defaultStates;
+  }, [projectStates, issue.state]);
+
+  const [isTransitioning, setIsTransitioning] = useState(false);
+  const [transitionError, setTransitionError] = useState<string | null>(null);
+
+  const handleStateSelect = async (stateId: string): Promise<void> => {
+    setIsTransitioning(true);
+    setTransitionError(null);
+    try {
+      if (onStateChange) {
+        await onStateChange(stateId);
+      } else {
+        await patchIssue(issue.key, { state_id: stateId }, issue.etag);
+      }
+    } catch (err: unknown) {
+      const errObj = typeof err === 'object' && err !== null ? (err as Record<string, unknown>) : null;
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof errObj?.detail === 'string'
+            ? errObj.detail
+            : typeof errObj?.message === 'string'
+              ? errObj.message
+              : 'State transition failed';
+      setTransitionError(msg);
+    } finally {
+      setIsTransitioning(false);
+    }
+  };
 
   const priorityTooltip = issue.priority
     ? `Priority: ${issue.priority.label} - sort weight ${String(issue.priority.sort_order)}. SLA target: ${issue.priority.sla_target ?? 'not configured'}. Press P to change.`
@@ -102,6 +175,36 @@ export function IssueHeader({
           content={priorityTooltip}
           testId="priority-hint"
         />
+      )}
+
+      {canTransition ? (
+        <select
+          data-testid="header-state-select"
+          className="header-state-select"
+          aria-label="Workflow State"
+          value={issue.state?.id ?? ''}
+          disabled={isTransitioning}
+          onChange={(e) => {
+            void handleStateSelect(e.target.value);
+          }}
+        >
+          {availableStates.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+      ) : (
+        <StateBadge state={issue.state ?? undefined} testId="header-state-badge" />
+      )}
+      {transitionError && (
+        <div
+          role="alert"
+          className="header-state-error"
+          data-testid="header-state-error"
+        >
+          {transitionError}
+        </div>
       )}
 
       <div className="issue-header__key-group">

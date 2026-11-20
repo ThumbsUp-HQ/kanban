@@ -1,9 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { SwimlaneBoardGrid } from './SwimlaneBoardGrid';
 import { FIXTURE_12_ISSUES } from './fixtures';
 import type { IssueItem } from './viewsApi';
+import * as railApi from '../drawer-rail/railApi';
 
 describe('SwimlaneBoardGrid (KB-P3-40, S6.4 item 2)', () => {
   it('partitions board into 2D grid with Priority swimlanes across State columns (Test Case 1)', () => {
@@ -491,5 +492,168 @@ describe('SwimlaneBoardGrid (KB-P3-40, S6.4 item 2)', () => {
 
     // Grid renders without throwing and places issue in fallback column
     expect(screen.getByText('KAN-UNMAPPED')).toBeDefined();
+  });
+
+  describe('Touch Card State Transition & projectStates Integration (KAN-44)', () => {
+    const customProjectStates = [
+      { id: 'st-triage', name: 'Triage', group: 'unstarted' as const },
+      { id: 'st-in-progress', name: 'In Progress', group: 'started' as const },
+      { id: 'st-done', name: 'Done', group: 'completed' as const },
+    ];
+
+    it('renders state move button, opens popover with stopPropagation, and triggers onCardMove', () => {
+      const onCardClick = vi.fn();
+      const onCardMove = vi.fn();
+      const firstIssue = FIXTURE_12_ISSUES[0];
+      if (!firstIssue) throw new Error('Missing fixture');
+
+      const { rerender } = render(
+        <SwimlaneBoardGrid
+          issues={[firstIssue]}
+          projectKey="KAN"
+          groupBy="state"
+          subGroupBy="none"
+          modulesEnabled={true}
+          onCardClick={onCardClick}
+          onCardMove={onCardMove}
+          projectStates={customProjectStates}
+          currentUserCapabilities={['TRANSITION']}
+        />,
+      );
+
+      const stateBtn = screen.getByTestId(`board-card-state-btn-${firstIssue.key}`);
+      expect(stateBtn).toBeDefined();
+
+      fireEvent.click(stateBtn);
+      expect(onCardClick).not.toHaveBeenCalled();
+
+      // QuickFieldPopover is open
+      const popover = screen.getByRole('dialog', { name: 'Quick State Picker' });
+      expect(popover).toBeDefined();
+
+      // Select 'Done'
+      const doneOption = screen.getByRole('option', { name: 'Done' });
+      fireEvent.click(doneOption);
+
+      expect(onCardMove).toHaveBeenCalledWith(firstIssue.key, 'st-done', 'none');
+      expect(screen.queryByRole('dialog', { name: 'Quick State Picker' })).toBeNull();
+
+      // Test with onStateTransition when onCardMove is not provided
+      const onStateTransition = vi.fn();
+      rerender(
+        <SwimlaneBoardGrid
+          issues={[firstIssue]}
+          projectKey="KAN"
+          groupBy="state"
+          subGroupBy="none"
+          modulesEnabled={true}
+          onCardClick={onCardClick}
+          onStateTransition={onStateTransition}
+          projectStates={customProjectStates}
+          currentUserCapabilities={['TRANSITION']}
+        />,
+      );
+
+      const stateBtn2 = screen.getByTestId(`board-card-state-btn-${firstIssue.key}`);
+      fireEvent.click(stateBtn2);
+      fireEvent.click(screen.getByRole('option', { name: 'Triage' }));
+      expect(onStateTransition).toHaveBeenCalledWith(firstIssue.key, 'st-triage');
+
+      // Test popover backdrop close
+      fireEvent.click(stateBtn2);
+      const backdrop = screen.getByTestId('quick-field-backdrop');
+      fireEvent.click(backdrop);
+      expect(screen.queryByRole('dialog', { name: 'Quick State Picker' })).toBeNull();
+
+      // Read-only user lacking capability hides button
+      rerender(
+        <SwimlaneBoardGrid
+          issues={[firstIssue]}
+          projectKey="KAN"
+          groupBy="state"
+          subGroupBy="none"
+          modulesEnabled={true}
+          currentUserCapabilities={['VIEWER']}
+        />,
+      );
+      expect(screen.queryByTestId(`board-card-state-btn-${firstIssue.key}`)).toBeNull();
+    });
+
+    it('uses projectStates for columns and resolves issue placement by state id, name, and group', () => {
+      const baseFixture = FIXTURE_12_ISSUES[0];
+      if (!baseFixture) throw new Error('Missing fixture');
+      const issueById: IssueItem = {
+        ...baseFixture,
+        key: 'KAN-BY-ID',
+        state: { id: 'st-triage', name: 'Arbitrary', group: 'unstarted' },
+      };
+      const issueByName: IssueItem = {
+        ...baseFixture,
+        key: 'KAN-BY-NAME',
+        state: { id: 'other-id', name: 'In Progress', group: 'started' },
+      };
+      const issueByGroup: IssueItem = {
+        ...baseFixture,
+        key: 'KAN-BY-GROUP',
+        state: { id: 'other-id-2', name: 'Unmatched Name', group: 'completed' },
+      };
+
+      render(
+        <SwimlaneBoardGrid
+          issues={[issueById, issueByName, issueByGroup]}
+          projectKey="KAN"
+          groupBy="state"
+          subGroupBy="none"
+          modulesEnabled={true}
+          projectStates={customProjectStates}
+        />,
+      );
+
+      expect(screen.getByRole('columnheader', { name: /Triage/i })).toBeDefined();
+      expect(screen.getByRole('columnheader', { name: /In Progress/i })).toBeDefined();
+      expect(screen.getByRole('columnheader', { name: /Done/i })).toBeDefined();
+      expect(screen.getByText('KAN-BY-ID')).toBeDefined();
+      expect(screen.getByText('KAN-BY-NAME')).toBeDefined();
+      expect(screen.getByText('KAN-BY-GROUP')).toBeDefined();
+    });
+
+    it('falls back to railApi.patchIssue when neither onCardMove nor onStateTransition is provided, and renders Move fallback', async () => {
+      const patchSpy = vi.spyOn(railApi, 'patchIssue').mockResolvedValue({} as never);
+      const baseFixture = FIXTURE_12_ISSUES[0];
+      if (!baseFixture) throw new Error('Missing fixture');
+      const issueWithoutStateName: IssueItem = {
+        ...baseFixture,
+        key: 'KAN-NO-STATENAME',
+        state: { id: 'st-triage', name: '', group: 'unstarted' },
+      };
+
+      render(
+        <SwimlaneBoardGrid
+          issues={[issueWithoutStateName]}
+          projectKey="KAN"
+          groupBy="state"
+          subGroupBy="none"
+          modulesEnabled={true}
+          projectStates={customProjectStates}
+          currentUserCapabilities={['TRANSITION']}
+        />,
+      );
+
+      // Verify button renders 'Move' when state.name is empty
+      const stateBtn = screen.getByTestId('board-card-state-btn-KAN-NO-STATENAME');
+      expect(stateBtn.textContent).toContain('Move');
+
+      fireEvent.click(stateBtn);
+      const popover = screen.getByRole('dialog', { name: 'Quick State Picker' });
+      expect(popover).toBeDefined();
+
+      // Click option
+      fireEvent.click(screen.getByRole('option', { name: 'Done' }));
+
+      await waitFor(() => {
+        expect(patchSpy).toHaveBeenCalledWith('KAN-NO-STATENAME', { state_id: 'st-done' });
+      });
+      patchSpy.mockRestore();
+    });
   });
 });

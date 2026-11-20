@@ -540,4 +540,42 @@ describe('ListView', () => {
     expect(screen.getByText('Core Engine')).toBeDefined();
     expect(screen.getByText('Module mod-fa')).toBeDefined();
   });
+
+  it('covers filter popover close button, projectStates options, and onOpenFieldPopover forwarding (KAN-44)', () => {
+    const onOpenFieldPopover = vi.fn();
+    const customProjectStates = [
+      { id: 'st-triage', name: 'Triage Stage', group: 'unstarted' as const },
+      { id: 'st-qa', name: 'QA Gate', group: 'started' as const },
+    ];
+
+    render(
+      <ListView
+        issues={FIXTURE_12_ISSUES}
+        projectKey="KAN"
+        projectStates={customProjectStates}
+        onOpenFieldPopover={onOpenFieldPopover}
+      />
+    );
+
+    // Open filter popover
+    fireEvent.click(screen.getByRole('button', { name: 'Filter & Group' }));
+    const popover = screen.getByRole('dialog', { name: 'Filter and Group options' });
+    expect(popover).toBeDefined();
+
+    // Verify projectStates options rendered
+    expect(screen.getByRole('option', { name: 'Triage Stage' })).toBeDefined();
+    expect(screen.getByRole('option', { name: 'QA Gate' })).toBeDefined();
+
+    // Close via close button (✕)
+    const closeBtn = screen.getByRole('button', { name: 'Close filter popover' });
+    fireEvent.click(closeBtn);
+    expect(screen.queryByRole('dialog', { name: 'Filter and Group options' })).toBeNull();
+
+    // Click on state button in first row forwards onOpenFieldPopover
+    const firstIssue = FIXTURE_12_ISSUES[0];
+    if (!firstIssue) throw new Error('Missing fixture');
+    const stateBtn = screen.getByTestId(`list-row-state-btn-${firstIssue.key}`);
+    fireEvent.click(stateBtn);
+    expect(onOpenFieldPopover).toHaveBeenCalledWith('state', firstIssue, expect.any(Object));
+  });
 });
