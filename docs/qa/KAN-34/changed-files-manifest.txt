@@ -1,0 +1,37 @@
+# Changed Files Manifest for KAN-34 (Wave P3-7)
+# Ticket: [KB-ABOUT-SBOM] Add Buried About 👍kanban Page (/about) with Tagline, Swagger/ReDoc API Docs Links, Apache-2.0 License, and CycloneDX 1.5 SBOM
+
+Backend Implementation & Docker:
+- Dockerfile: Added COPY --chown=65532:65532 LICENSE NOTICE license-allowlist.toml /opt/kanban/ to runtime-slim stage.
+- kanban/ops/sbom.py: Core SBOM engine collecting runtime Python distributions (importlib.metadata) and web packages (sbom-web.json / package.json fallback), license classification against ALLOW_SET and license-allowlist.toml, PURL formatting (pkg:pypi and pkg:npm), CycloneDX 1.5 JSON serializer, LICENSE/NOTICE reader, and in-memory caching.
+- kanban/api/v1/system.py: Authenticated GET /api/v1/system/about and GET /api/v1/system/sbom (?download=true) endpoints with Pydantic models.
+- kanban/api/v1/__init__.py: Mounted system_router (system.py) and system_status_router (system_status.py) without path collision.
+- kanban/tests/ops/test_sbom.py: 22 unit tests for Python/Web SBOM extraction, PURL formatting, allowlist matching, CycloneDX 1.5 generation, cache clearing, and edge cases.
+- kanban/tests/api/test_system_about.py: 7 tests for /api/v1/system/about, /api/v1/system/sbom, authentication 401 gating, attachment headers, and Swagger/ReDoc/OpenAPI live endpoint resolution.
+
+Frontend Implementation & Web Build:
+- kanban/web/build/sbom.ts: Web build-time SBOM generator and Vite plugin (kanban-sbom-web) generating dist/sbom-web.json.
+- kanban/web/build/__tests__/sbom.test.ts: 7 unit tests for formatNpmPurl, classifyWebLicense, generateWebSbom, and generateSbomWebPlugin.
+- kanban/web/vite.config.ts: Registered generateSbomWebPlugin() in Vite configuration.
+- kanban/web/src/api/queryKeys.ts: Added systemAbout: () => ['system', 'about'] as const query key.
+- kanban/web/src/features/about/aboutApi.ts: TypeScript API client fetchSystemAbout() and getSbomDownloadUrl() with strict typings.
+- kanban/web/src/features/about/AboutPage.tsx: Enterprise About 👍kanban page with hero branding card, tagline, CycloneDX 1.5 download, Swagger/ReDoc/OpenAPI links, supply chain metrics, searchable/filterable SBOM table, verbatim Apache-2.0 License and Third-Party NOTICE viewer with copy button.
+- kanban/web/src/features/about/AboutPage.css: Zero inline styles, 100% canonical CSS tokens (cssTokensAudit.test.ts passed 4/4).
+- kanban/web/src/features/about/__tests__/aboutApi.test.ts: 2 unit tests for API client.
+- kanban/web/src/features/about/__tests__/AboutPage.test.tsx: 7 unit tests covering loading, error, hero, docs links, filters/search, tab switching, and clipboard copy.
+- kanban/web/src/app/routes.tsx: Registered /about (<AboutPage />) and /settings/about (<Navigate to="/about" replace />) routes inside RootShellLayout.
+- kanban/web/src/app/AppShell.tsx: Mapped /about to 'About' breadcrumb section in computeCurrentSection.
+- kanban/web/src/app/Topbar.tsx: Added ℹ️ About 👍kanban (data-testid="topbar-about-link") menu item directly above final logout divider.
+- kanban/web/src/app/Sidebar.tsx: Added .kb-sidebar-footer with muted ℹ️ v2.0.0 link (data-testid="sidebar-about-link").
+- kanban/web/src/app/Sidebar.css: Sidebar footer styling with canonical CSS tokens.
+- kanban/web/src/app/CommandPalette.tsx: Added About 👍kanban (License, API Docs & SBOM) navigation command.
+- kanban/web/src/app/__tests__/AboutNavigation.test.tsx: 5 unit tests for Topbar, Sidebar, CommandPalette, PersonalSettingsPage, and AppShell section computation.
+- kanban/web/src/features/settings/PersonalSettingsPage.tsx: Added muted footer link to /about (data-testid="personal-settings-about-link").
+- kanban/web/src/features/settings/PersonalSettingsPage.css: Footer link styling with canonical tokens.
+
+QA Evidence Packet:
+- docs/qa/KAN-34/unit-test-results.txt: Verbatim outputs of pytest (29/29 passed, 97% coverage) and vitest (25/25 passed, 100% lines / 97.63% branch coverage).
+- docs/qa/KAN-34/build-or-typecheck.txt: Verbatim outputs of ruff, mypy, lint-imports, license_gate, check_no_dashes, tsc -b, eslint, and vite build.
+- docs/qa/KAN-34/changed-files-manifest.txt: This file.
+- docs/qa/KAN-34/git-diff.patch: Scoped git diff against base commit 23ae056d.
+- docs/qa/KAN-34/message-to-reality-checker.md: Forensic verification document mapping all 4 Problems to implemented source code, test assertions, and gates.

@@ -1,10 +1,11 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { precompress } from './build/precompress.ts';
+import { generateSbomWebPlugin } from './build/sbom.ts';
 import { PRODUCTION_CSP } from './e2e/support/csp.ts';
 
 export default defineConfig({
-  plugins: [react(), precompress()],
+  plugins: [react(), precompress(), generateSbomWebPlugin()],
   worker: {
     format: 'es',
   },

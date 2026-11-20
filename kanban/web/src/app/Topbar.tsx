@@ -563,6 +563,23 @@ export function Topbar({
                 )}
               </div>
 
+              <Link
+                to="/about"
+                role="menuitem"
+                data-testid="topbar-about-link"
+                className="kb-theme-radio kb-avatar-menu-link"
+                onClick={() => {
+                  setAvatarMenuOpen(false);
+                }}
+              >
+                <span>
+                  <span aria-hidden="true" className="kb-avatar-menu-icon">
+                    ℹ️
+                  </span>
+                  About 👍kanban
+                </span>
+              </Link>
+
               <div className="kb-avatar-menu-divider" />
 
               <button

@@ -64,6 +64,7 @@ import { McpAccessStudio } from '../features/settings/McpAccessStudio';
 import { OAuthClientGovernanceStudio } from '../features/oauth/OAuthClientGovernanceStudio';
 import { PlaneImportStudio } from '../features/admin-imports/PlaneImportStudio';
 import { PersonalSettingsPage } from '../features/settings/PersonalSettingsPage';
+import { AboutPage } from '../features/about/AboutPage';
 import { WorkflowStudioPage } from '../features/workflows/WorkflowStudioPage';
 import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
 import { CreateProjectModal, type CreatedProject } from '../features/projects/CreateProjectModal';
@@ -2010,6 +2011,14 @@ export const appRoutes: RouteObject[] = [
           {
             path: 'settings/profile',
             element: <PersonalSettingsPage />,
+          },
+          {
+            path: 'about',
+            element: <AboutPage />,
+          },
+          {
+            path: 'settings/about',
+            element: <Navigate to="/about" replace />,
           },
           {
             path: 'settings/mcp',

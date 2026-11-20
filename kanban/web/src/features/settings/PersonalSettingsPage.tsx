@@ -2,6 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React, { useState, useRef, useEffect, useCallback, type JSX, type SyntheticEvent } from 'react';
+import { Link } from 'react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   fetchMyProfile,
@@ -1144,6 +1145,16 @@ export function PersonalSettingsPage(): JSX.Element {
           </p>
         )}
       </section>
+
+      <footer className="kb-personal-settings-footer">
+        <Link
+          to="/about"
+          className="kb-personal-settings-about-link"
+          data-testid="personal-settings-about-link"
+        >
+          ℹ️ About 👍kanban
+        </Link>
+      </footer>
 
       {/* TOTP Setup Modal */}
       {totpSetupStep && (

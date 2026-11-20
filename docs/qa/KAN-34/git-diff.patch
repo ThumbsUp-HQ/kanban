@@ -1,0 +1,3804 @@
+diff --git a/Dockerfile b/Dockerfile
+index 80bdf8e9..47b79d21 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -45,6 +45,7 @@ COPY --chown=65532:65532 mcp/ /opt/kanban/mcp/
+ COPY --chown=65532:65532 agent/ /opt/kanban/agent/
+ COPY --chown=65532:65532 deploy/ /opt/kanban/deploy/
+ COPY --chown=65532:65532 alembic.ini /opt/kanban/alembic.ini
++COPY --chown=65532:65532 LICENSE NOTICE license-allowlist.toml /opt/kanban/
+ COPY --chown=65532:65532 --from=web-builder /app/kanban/web/dist /opt/kanban/web/dist
+ RUN printf '#!/bin/sh\nexec /opt/kanban/.venv/bin/python -m kanban.cli.ctl "$@"\n' > /usr/local/bin/kanban-ctl && \
+     chmod 0755 /usr/local/bin/kanban-ctl && \
+diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
+index a340911e..45697948 100644
+--- a/kanban/api/v1/__init__.py
++++ b/kanban/api/v1/__init__.py
+@@ -71,9 +71,12 @@ from kanban.api.v1.search import router as search_router
+ from kanban.api.v1.stickies import router as stickies_router
+ from kanban.api.v1.sticky_promo_ai import router as sticky_promo_ai_router
+ from kanban.api.v1.subscriptions import router as subscriptions_router
++from kanban.api.v1.system import router as system_router
+ from kanban.api.v1.system_status import (
+     admin_standalone_router,
+-    system_router,
++)
++from kanban.api.v1.system_status import (
++    system_router as system_status_router,
+ )
+ from kanban.api.v1.transitions import router as transitions_router
+ from kanban.api.v1.user_settings import router as user_settings_router
+@@ -147,6 +150,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
+     v1.include_router(remote_runners_router)
+     v1.include_router(workspaces_router)
+     v1.include_router(system_router)
++    v1.include_router(system_status_router)
+     v1.include_router(admin_standalone_router)
+     v1.include_router(user_settings_router)
+     return v1
+diff --git a/kanban/api/v1/system.py b/kanban/api/v1/system.py
+index c79d641d..10e84dda 100644
+--- a/kanban/api/v1/system.py
++++ b/kanban/api/v1/system.py
+@@ -4,11 +4,25 @@
+ 
+ from __future__ import annotations
+ 
+-from typing import TYPE_CHECKING
++import json
++from typing import TYPE_CHECKING, Annotated
+ 
+-from fastapi import APIRouter
++from fastapi import APIRouter, Depends, Query, Response
+ from pydantic import BaseModel, ConfigDict, Field
+ 
++from kanban.api.deps import PrincipalContext, get_principal
++from kanban.ops.sbom import (
++    PLATFORM_LICENSE_SPDX,
++    PLATFORM_NAME,
++    PLATFORM_SLUG,
++    PLATFORM_TAGLINE,
++    PLATFORM_VERSION,
++    calculate_sbom_summary,
++    generate_cyclonedx_1_5,
++    get_license_texts,
++    get_live_components,
++)
++
+ if TYPE_CHECKING:
+     from kanban.settings import Settings
+ 
+@@ -18,7 +32,10 @@ __all__ = [
+     "FrictionFreeDeploymentCapabilities",
+     "ParityMatrixCapabilities",
+     "PlatformSummaryResponse",
++    "SbomComponentModel",
++    "SbomSummaryModel",
+     "SecurityFirstCapabilities",
++    "SystemAboutResponse",
+     "get_platform_summary",
+     "router",
+ ]
+@@ -204,6 +221,66 @@ class PlatformSummaryResponse(BaseModel):
+     )
+ 
+ 
++class SbomSummaryModel(BaseModel):
++    """Summary metrics of components and license compliance."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    total_components: int = Field(..., description="Total third-party components")
++    python_components: int = Field(..., description="Python backend dependencies")
++    web_components: int = Field(..., description="Web frontend dependencies")
++    permissive_count: int = Field(..., description="Permissive approved licenses")
++    allowlisted_count: int = Field(..., description="Explicitly allowlisted exceptions")
++    unknown_count: int = Field(..., description="Unknown or unclassified licenses")
++    deny_count: int = Field(..., description="Denylisted or copyleft licenses")
++
++
++class SbomComponentModel(BaseModel):
++    """Structured third-party component representation."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    name: str = Field(..., description="Component package name")
++    version: str = Field(..., description="Component semantic release version")
++    ecosystem: str = Field(..., description="Packaging ecosystem (python or node)")
++    purl: str = Field(..., description="Package URL (PURL)")
++    license: str = Field(..., description="SPDX license expression or name")
++    license_verdict: str = Field(
++        ..., description="License verdict (ALLOW, ALLOWLISTED, UNKNOWN, DENY)"
++    )
++    scope: str = Field(default="required", description="Dependency scope (required, dev, optional)")
++    description: str = Field(default="", description="Package description or summary")
++
++
++class SystemAboutResponse(BaseModel):
++    """Comprehensive system metadata, licensing, and supply chain inventory."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    platform: str = Field(default="👍kanban", description="Official brand name")
++    slug: str = Field(default="thumbs-up-kanban", description="Container and repository slug")
++    tagline: str = Field(
++        default="The difference between a swarm and an Agile team is a kanban.",
++        description="Official platform tagline",
++    )
++    version: str = Field(default="2.0.0", description="Platform release version")
++    license_spdx: str = Field(default="Apache-2.0", description="Primary platform license SPDX ID")
++    api_docs_urls: dict[str, str] = Field(
++        default_factory=lambda: {
++            "swagger_ui": "/api/docs",
++            "redoc": "/api/redoc",
++            "openapi_json": "/api/openapi.json",
++        },
++        description="Interactive documentation endpoints",
++    )
++    license: str = Field(description="Verbatim Apache-2.0 LICENSE file text")
++    notice: str = Field(description="Verbatim third-party NOTICE file text")
++    license_text: str | None = Field(default=None, description="Alias for license")
++    notice_text: str | None = Field(default=None, description="Alias for notice")
++    sbom_summary: SbomSummaryModel = Field(description="Supply-chain component summary")
++    components: list[SbomComponentModel] = Field(description="Discovered third-party components")
++
++
+ def get_platform_summary(settings: Settings | None = None) -> PlatformSummaryResponse:
+     """Return verified platform capability summary and world-class parity metadata."""
+     del settings  # Future-proof parameter for dynamic capability overrides if needed
+@@ -213,6 +290,77 @@ def get_platform_summary(settings: Settings | None = None) -> PlatformSummaryRes
+ router = APIRouter(prefix="/system", tags=["system"])
+ 
+ 
++@router.get(
++    "/about",
++    response_model=SystemAboutResponse,
++    summary="Get platform about metadata, licensing, and SBOM overview",
++    description=(
++        "Returns platform branding, verbatim Apache-2.0 license, interactive doc URLs, "
++        "and SBOM components."
++    ),
++)
++async def get_system_about_endpoint(
++    caller: Annotated[PrincipalContext, Depends(get_principal)],
++) -> SystemAboutResponse:
++    """Retrieve comprehensive platform metadata, verbatim licenses, and SBOM."""
++    del caller  # Authentication enforced via Depends(get_principal) -> 401 if missing
++    comps = get_live_components()
++    summary = calculate_sbom_summary(comps)
++    license_text, notice_text = get_license_texts()
++
++    return SystemAboutResponse(
++        platform=PLATFORM_NAME,
++        slug=PLATFORM_SLUG,
++        tagline=PLATFORM_TAGLINE,
++        version=PLATFORM_VERSION,
++        license_spdx=PLATFORM_LICENSE_SPDX,
++        api_docs_urls={
++            "swagger_ui": "/api/docs",
++            "redoc": "/api/redoc",
++            "openapi_json": "/api/openapi.json",
++        },
++        license=license_text,
++        notice=notice_text,
++        license_text=license_text,
++        notice_text=notice_text,
++        sbom_summary=SbomSummaryModel(**summary.to_dict()),
++        components=[SbomComponentModel(**c.to_dict()) for c in comps],
++    )
++
++
++@router.get(
++    "/sbom",
++    summary="Get CycloneDX 1.5 Software Bill of Materials (SBOM)",
++    description=(
++        "Returns complete CycloneDX 1.5 JSON manifest for Python and Web runtime dependencies."
++    ),
++)
++async def get_system_sbom_endpoint(
++    caller: Annotated[PrincipalContext, Depends(get_principal)],
++    *,
++    download: Annotated[
++        bool,
++        Query(description="Trigger file download attachment header"),
++    ] = False,
++) -> Response:
++    """Generate and return CycloneDX 1.5 Software Bill of Materials."""
++    del caller  # Authentication enforced via Depends(get_principal) -> 401 if missing
++    cdx_data = generate_cyclonedx_1_5()
++    json_bytes = json.dumps(cdx_data, indent=2, ensure_ascii=False).encode("utf-8")
++
++    headers: dict[str, str] = {
++        "X-Content-Type-Options": "nosniff",
++    }
++    if download:
++        headers["Content-Disposition"] = 'attachment; filename="thumbs-up-kanban-sbom-cdx-1.5.json"'
++
++    return Response(
++        content=json_bytes,
++        media_type="application/vnd.cyclonedx+json",
++        headers=headers,
++    )
++
++
+ @router.get(
+     "/platform-summary",
+     response_model=PlatformSummaryResponse,
+diff --git a/kanban/ops/sbom.py b/kanban/ops/sbom.py
+new file mode 100644
+index 00000000..f518f464
+--- /dev/null
++++ b/kanban/ops/sbom.py
+@@ -0,0 +1,674 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Software Bill of Materials (SBOM) generation and supply-chain auditing (KAN-34).
++
++Collects Python runtime packages from importlib.metadata and web packages from
++build-time verified manifests (sbom-web.json) or package.json/pnpm-lock.yaml fallbacks.
++Evaluates license compliance against ALLOW_SET and license-allowlist.toml, and generates
++canonical CycloneDX 1.5 JSON documents.
++"""
++
++from __future__ import annotations
++
++import functools
++import importlib.metadata
++import json
++import logging
++import os
++import re
++import tomllib
++import uuid
++from dataclasses import asdict, dataclass
++from datetime import UTC, datetime
++from pathlib import Path
++from typing import Any, Final
++
++logger = logging.getLogger(__name__)
++
++PLATFORM_NAME: Final[str] = "👍kanban"
++PLATFORM_SLUG: Final[str] = "thumbs-up-kanban"
++PLATFORM_TAGLINE: Final[str] = "The difference between a swarm and an Agile team is a kanban."
++PLATFORM_VERSION: Final[str] = "2.0.0"
++PLATFORM_LICENSE_SPDX: Final[str] = "Apache-2.0"
++
++MAX_INLINE_LICENSE_LEN: Final[int] = 100
++MAX_FIRST_LINE_LEN: Final[int] = 80
++
++ALLOW_SET: Final[frozenset[str]] = frozenset(
++    {
++        "MIT",
++        "MIT-0",
++        "ISC",
++        "BSD",
++        "BSD-2-Clause",
++        "BSD-3-Clause",
++        "0BSD",
++        "Apache-2.0",
++        "PSF-2.0",
++        "Python-2.0",
++        "PostgreSQL",
++        "Zlib",
++        "Unlicense",
++        "CC0-1.0",
++        "BlueOak-1.0.0",
++        "MPL-2.0",
++    }
++)
++
++DENY_PREFIXES: Final[tuple[str, ...]] = (
++    "GPL",
++    "AGPL",
++    "SSPL",
++    "LGPL",
++    "GNU GENERAL PUBLIC",
++    "GNU AFFERO",
++    "GNU LESSER",
++    "SERVER SIDE PUBLIC",
++    "RSAL",
++    "BUSL",
++    "COMMONS CLAUSE",
++)
++
++NORMALIZATION_MAP: Final[dict[str, str]] = {
++    "mozilla public license 2.0 (mpl 2.0)": "MPL-2.0",
++    "mozilla public license 2.0": "MPL-2.0",
++    "mozilla public license": "MPL-2.0",
++    "python software foundation license": "PSF-2.0",
++    "python software foundation": "PSF-2.0",
++    "psf license": "PSF-2.0",
++    "psf": "PSF-2.0",
++    "psfl": "PSF-2.0",
++    "python-2.0": "Python-2.0",
++    "apache software license": "Apache-2.0",
++    "apache license, version 2.0": "Apache-2.0",
++    "apache license 2.0": "Apache-2.0",
++    "apache license (v2.0)": "Apache-2.0",
++    "apache license": "Apache-2.0",
++    "apache 2.0": "Apache-2.0",
++    "apache-2.0": "Apache-2.0",
++    "apache 2": "Apache-2.0",
++    "apache-2": "Apache-2.0",
++    "mit license": "MIT",
++    "mit": "MIT",
++    "bsd license": "BSD",
++    "bsd": "BSD",
++    "3-clause bsd license": "BSD-3-Clause",
++    "bsd 3-clause license": "BSD-3-Clause",
++    "bsd 3-clause": "BSD-3-Clause",
++    "bsd-3-clause": "BSD-3-Clause",
++    "2-clause bsd license": "BSD-2-Clause",
++    "bsd 2-clause license": "BSD-2-Clause",
++    "bsd 2-clause": "BSD-2-Clause",
++    "bsd-2-clause": "BSD-2-Clause",
++    "isc license (iscl)": "ISC",
++    "isc license": "ISC",
++    "isc": "ISC",
++    "the unlicense": "Unlicense",
++    "unlicense": "Unlicense",
++    "postgresql license": "PostgreSQL",
++    "postgresql": "PostgreSQL",
++    "cmu license": "MIT",
++    "cmu": "MIT",
++    "0bsd": "0BSD",
++    "cc0-1.0": "CC0-1.0",
++    "cc0": "CC0-1.0",
++    "blueoak-1.0.0": "BlueOak-1.0.0",
++    "zlib": "Zlib",
++}
++
++
++@dataclass(frozen=True)
++class AllowlistException:
++    """Approved third-party license exception loaded from license-allowlist.toml."""
++
++    ecosystem: str
++    package: str
++    version: str
++    license: str
++    justification: str
++
++
++@dataclass(frozen=True)
++class Component:
++    """Normalized third-party software component for SBOM reporting."""
++
++    name: str
++    version: str
++    ecosystem: str
++    purl: str
++    license: str
++    license_verdict: str
++    scope: str
++    description: str = ""
++
++    def to_dict(self) -> dict[str, Any]:
++        """Convert component to dictionary."""
++        return asdict(self)
++
++
++@dataclass(frozen=True)
++class SbomSummary:
++    """Summary statistics for discovered SBOM components."""
++
++    total_components: int
++    python_components: int
++    web_components: int
++    permissive_count: int
++    allowlisted_count: int
++    unknown_count: int
++    deny_count: int
++
++    def to_dict(self) -> dict[str, Any]:
++        """Convert summary to dictionary."""
++        return asdict(self)
++
++
++def is_workspace_package(name: str) -> bool:
++    """Check if package belongs to internal Kanban workspace."""
++    lowered = name.lower()
++    return lowered in {"kanban", "kanban-platform", "kanban-monorepo"} or lowered.startswith(
++        ("kanban-", "@kanban/")
++    )
++
++
++def normalize_license_atom(atom: str) -> str:
++    """Normalize raw license name to canonical SPDX identifier when known."""
++    cleaned = " ".join(atom.strip().split())
++    lowered = cleaned.lower()
++    if lowered in NORMALIZATION_MAP:
++        return NORMALIZATION_MAP[lowered]
++    for allowed in ALLOW_SET:
++        if lowered == allowed.lower():
++            return allowed
++    return cleaned
++
++
++def _classify_atomic(cleaned: str) -> str:
++    """Classify a single atomic license string without compound operators."""
++    if " with " in cleaned.lower():
++        parts = re.split(r"\s+with\s+", cleaned, maxsplit=1, flags=re.IGNORECASE)
++        if _classify_atomic(parts[0]) == "ALLOW":
++            return "ALLOW"
++
++    normalized = normalize_license_atom(cleaned)
++    normalized_upper = normalized.upper()
++
++    for prefix in DENY_PREFIXES:
++        if normalized_upper.startswith(prefix):
++            return "DENY"
++
++    for allowed in ALLOW_SET:
++        if normalized.lower() == allowed.lower():
++            return "ALLOW"
++
++    return "UNKNOWN"
++
++
++def classify_license(license_expr: str) -> str:
++    """Classify a license expression into ALLOW, DENY, or UNKNOWN.
++
++    Follows Section 2.5/15.4 rules: permissive licenses in ALLOW_SET are ALLOW,
++    copyleft prefixes are DENY, and compound OR/AND expressions are evaluated.
++    """
++    cleaned = license_expr.strip()
++    if not cleaned or cleaned.upper() in {"UNKNOWN", "UNLICENSED", "CUSTOM", "NONE"}:
++        return "UNKNOWN"
++
++    cleaned = re.sub(r"[()]", " ", cleaned)
++    if " OR " in cleaned:
++        sub_verdicts = [classify_license(part) for part in cleaned.split(" OR ")]
++        if "ALLOW" in sub_verdicts:
++            return "ALLOW"
++        return "DENY" if "DENY" in sub_verdicts else "UNKNOWN"
++
++    if " AND " in cleaned:
++        sub_verdicts = [classify_license(part) for part in cleaned.split(" AND ")]
++        if "DENY" in sub_verdicts:
++            return "DENY"
++        return "ALLOW" if all(v == "ALLOW" for v in sub_verdicts) else "UNKNOWN"
++
++    return _classify_atomic(cleaned)
++
++
++def resolve_file_path(filename: str) -> Path | None:
++    """Find a project file across repository root, current directory, and container path."""
++    candidates = [
++        Path(filename),
++        Path(__file__).resolve().parents[2] / filename,
++        Path("/opt/kanban") / filename,
++    ]
++    for p in candidates:
++        if p.is_file():
++            return p
++    return None
++
++
++def load_allowlist(allowlist_path: Path | None = None) -> list[AllowlistException]:
++    """Parse license-allowlist.toml into structured exceptions."""
++    path = allowlist_path or resolve_file_path("license-allowlist.toml")
++    if not path or not path.is_file():
++        return []
++
++    try:
++        content = path.read_text(encoding="utf-8")
++        data = tomllib.loads(content)
++        raw_exceptions = data.get("exception", [])
++        entries: list[AllowlistException] = []
++        for item in raw_exceptions:
++            if not isinstance(item, dict):
++                continue
++            ecosystem = str(item.get("ecosystem", "")).strip().lower()
++            package = str(item.get("package", "")).strip().lower()
++            version = str(item.get("version", "")).strip()
++            lic = str(item.get("license", "")).strip()
++            justification = str(item.get("justification", "")).strip()
++            if ecosystem and package and version:
++                entries.append(
++                    AllowlistException(
++                        ecosystem=ecosystem,
++                        package=package,
++                        version=version,
++                        license=lic,
++                        justification=justification,
++                    )
++                )
++    except Exception as exc:  # noqa: BLE001
++        logger.warning("Failed to parse license-allowlist.toml: %s", exc)
++        return []
++    else:
++        return entries
++
++
++def find_allowlist_match(
++    entries: list[AllowlistException],
++    ecosystem: str,
++    package: str,
++    version: str,
++) -> AllowlistException | None:
++    """Locate matching allowlist exception by ecosystem, package name, and version."""
++    eco = ecosystem.lower()
++    pkg = package.lower()
++    for entry in entries:
++        if entry.ecosystem == eco and entry.package == pkg and entry.version == version:
++            return entry
++    return None
++
++
++def _extract_from_classifiers(
++    metadata: importlib.metadata.PackageMetadata | object,
++) -> str | None:
++    get_all_fn = getattr(metadata, "get_all", None)
++    get_fn = getattr(metadata, "get", None)
++    raw_classifiers = (
++        get_all_fn("Classifier")
++        if get_all_fn is not None
++        else (get_fn("Classifier") if get_fn is not None else None)
++    )
++    classifiers: list[str] = []
++    if isinstance(raw_classifiers, list):
++        classifiers = raw_classifiers
++    elif isinstance(raw_classifiers, str):
++        classifiers = [raw_classifiers]
++
++    for c in classifiers:
++        if "License" in c:
++            tail = c.split("::")[-1].strip()
++            norm = normalize_license_atom(tail)
++            if norm in ALLOW_SET or norm.lower() in NORMALIZATION_MAP:
++                return norm
++    return None
++
++
++def extract_python_license(dist: importlib.metadata.Distribution) -> str:
++    """Extract SPDX expression or normalized license string from distribution metadata."""
++    metadata = dist.metadata
++    lic_expr = metadata.get("License-Expression")
++    if lic_expr and lic_expr.strip():
++        return lic_expr.strip()
++
++    lic_field = metadata.get("License")
++    if lic_field:
++        lic_clean = lic_field.strip()
++        if len(lic_clean) < MAX_INLINE_LICENSE_LEN and "\n" not in lic_clean:
++            return normalize_license_atom(lic_clean)
++
++    from_classifiers = _extract_from_classifiers(metadata)
++    if from_classifiers:
++        return from_classifiers
++
++    if lic_field and lic_field.strip():
++        first_line = lic_field.strip().split("\n")[0].strip()
++        if len(first_line) < MAX_FIRST_LINE_LEN:
++            return normalize_license_atom(first_line)
++
++    return "UNKNOWN"
++
++
++def collect_python_components(
++    allowlist: list[AllowlistException] | None = None,
++) -> list[Component]:
++    """Inspect runtime environment via importlib.metadata.distributions()."""
++    entries = allowlist if allowlist is not None else load_allowlist()
++    components: list[Component] = []
++
++    try:
++        dists = list(importlib.metadata.distributions())
++    except Exception as exc:  # noqa: BLE001
++        logger.warning("Failed to inspect python distributions: %s", exc)
++        return []
++
++    for dist in dists:
++        name = dist.metadata.get("Name")
++        version = dist.metadata.get("Version")
++        if not name or not version or is_workspace_package(name):
++            continue
++
++        raw_lic = extract_python_license(dist)
++        verdict = classify_license(raw_lic)
++
++        if verdict != "ALLOW":
++            match = find_allowlist_match(entries, "python", name, version)
++            if match:
++                verdict = "ALLOWLISTED"
++                if not raw_lic or raw_lic == "UNKNOWN":
++                    raw_lic = match.license
++
++        summary = dist.metadata.get("Summary") or ""
++        purl = f"pkg:pypi/{name.lower()}@{version}"
++
++        components.append(
++            Component(
++                name=name,
++                version=version,
++                ecosystem="python",
++                purl=purl,
++                license=raw_lic,
++                license_verdict=verdict,
++                scope="required",
++                description=summary,
++            )
++        )
++
++    components.sort(key=lambda c: c.name.lower())
++    return components
++
++
++def _format_npm_purl(name: str, version: str) -> str:
++    """Format canonical npm PURL respecting scoped package percent-encoding."""
++    if name.startswith("@") and "/" in name:
++        scope, pkg = name.split("/", 1)
++        return f"pkg:npm/%40{scope[1:]}/{pkg}@{version}"
++    return f"pkg:npm/{name}@{version}"
++
++
++def _find_web_manifest() -> Path | None:
++    """Resolve pre-built sbom-web.json from dist or web directories."""
++    candidates = [
++        resolve_file_path("kanban/web/dist/sbom-web.json"),
++        resolve_file_path("kanban/web/sbom-web.json"),
++        resolve_file_path("web/dist/sbom-web.json"),
++        Path("/opt/kanban/web/dist/sbom-web.json"),
++    ]
++    env_dist = os.getenv("KB_WEB_DIST")
++    if env_dist:
++        candidates.insert(0, Path(env_dist) / "sbom-web.json")
++
++    for p in candidates:
++        if p and p.is_file():
++            return p
++    return None
++
++
++def _parse_web_manifest(
++    manifest_file: Path,
++    entries: list[AllowlistException],
++) -> list[Component] | None:
++    """Parse web manifest JSON into Component objects."""
++    try:
++        content = manifest_file.read_text(encoding="utf-8")
++        data = json.loads(content)
++        raw_comps = data.get("components", data if isinstance(data, list) else [])
++        components: list[Component] = []
++        for item in raw_comps:
++            if not isinstance(item, dict):
++                continue
++            name = str(item.get("name", "")).strip()
++            version = str(item.get("version", "")).strip()
++            if not name or not version or is_workspace_package(name):
++                continue
++            raw_lic = str(item.get("license", "UNKNOWN")).strip()
++            scope = str(item.get("scope", "required")).strip()
++            desc = str(item.get("description", "")).strip()
++            purl = str(item.get("purl") or _format_npm_purl(name, version)).strip()
++
++            verdict = classify_license(raw_lic)
++            if verdict != "ALLOW":
++                match = find_allowlist_match(entries, "node", name, version)
++                if match:
++                    verdict = "ALLOWLISTED"
++                    if raw_lic == "UNKNOWN":
++                        raw_lic = match.license
++
++            components.append(
++                Component(
++                    name=name,
++                    version=version,
++                    ecosystem="node",
++                    purl=purl,
++                    license=raw_lic,
++                    license_verdict=verdict,
++                    scope=scope,
++                    description=desc,
++                )
++            )
++        if components:
++            components.sort(key=lambda c: c.name.lower())
++            return components
++    except Exception as exc:  # noqa: BLE001
++        logger.warning("Failed to load sbom-web.json: %s", exc)
++    return None
++
++
++def _parse_web_package_json(
++    pkg_json_path: Path,
++    entries: list[AllowlistException],
++) -> list[Component]:
++    """Fallback collector parsing kanban/web/package.json."""
++    try:
++        pkg_data = json.loads(pkg_json_path.read_text(encoding="utf-8"))
++    except Exception as exc:  # noqa: BLE001
++        logger.warning("Failed to parse kanban/web/package.json: %s", exc)
++        return []
++
++    node_modules_dir = pkg_json_path.parent / "node_modules"
++    deps = pkg_data.get("dependencies", {})
++    dev_deps = pkg_data.get("devDependencies", {})
++
++    all_pkgs: list[tuple[str, str, str]] = [
++        (n, str(v).lstrip("^~"), "required") for n, v in deps.items()
++    ]
++    all_pkgs.extend((n, str(v).lstrip("^~"), "dev") for n, v in dev_deps.items())
++
++    fallback_components: list[Component] = []
++    for name, version, scope in all_pkgs:
++        if is_workspace_package(name):
++            continue
++
++        raw_lic = "UNKNOWN"
++        desc = ""
++        dep_pkg_path = node_modules_dir / name / "package.json"
++        if dep_pkg_path.is_file():
++            try:
++                dep_json = json.loads(dep_pkg_path.read_text(encoding="utf-8"))
++                raw_lic = str(dep_json.get("license") or "UNKNOWN")
++                desc = str(dep_json.get("description") or "")
++            except Exception as exc:  # noqa: BLE001
++                logger.debug("Could not inspect package.json for %s: %s", name, exc)
++
++        verdict = classify_license(raw_lic)
++        if verdict != "ALLOW":
++            match = find_allowlist_match(entries, "node", name, version)
++            if match:
++                verdict = "ALLOWLISTED"
++                if raw_lic == "UNKNOWN":
++                    raw_lic = match.license
++
++        purl = _format_npm_purl(name, version)
++        fallback_components.append(
++            Component(
++                name=name,
++                version=version,
++                ecosystem="node",
++                purl=purl,
++                license=raw_lic,
++                license_verdict=verdict,
++                scope=scope,
++                description=desc,
++            )
++        )
++
++    fallback_components.sort(key=lambda c: c.name.lower())
++    return fallback_components
++
++
++def collect_web_components(
++    allowlist: list[AllowlistException] | None = None,
++    manifest_path: Path | None = None,
++) -> list[Component]:
++    """Collect web packages from sbom-web.json or fallback to package.json/pnpm-lock.yaml."""
++    entries = allowlist if allowlist is not None else load_allowlist()
++    manifest_file = manifest_path or _find_web_manifest()
++
++    if manifest_file and manifest_file.is_file():
++        parsed = _parse_web_manifest(manifest_file, entries)
++        if parsed is not None:
++            return parsed
++
++    pkg_json_path = resolve_file_path("kanban/web/package.json")
++    if not pkg_json_path or not pkg_json_path.is_file():
++        return []
++
++    return _parse_web_package_json(pkg_json_path, entries)
++
++
++@functools.lru_cache(maxsize=1)
++def get_live_components() -> tuple[Component, ...]:
++    """Retrieve full cached collection of Python and Web runtime components."""
++    allowlist = load_allowlist()
++    py_comps = collect_python_components(allowlist)
++    web_comps = collect_web_components(allowlist)
++    return tuple(py_comps + web_comps)
++
++
++def clear_sbom_cache() -> None:
++    """Clear lru_cache for testing."""
++    get_live_components.cache_clear()
++
++
++def calculate_sbom_summary(components: list[Component] | tuple[Component, ...]) -> SbomSummary:
++    """Compute summary metrics from component list."""
++    total = len(components)
++    python_count = sum(1 for c in components if c.ecosystem == "python")
++    web_count = sum(1 for c in components if c.ecosystem == "node")
++    permissive_count = sum(1 for c in components if c.license_verdict == "ALLOW")
++    allowlisted_count = sum(1 for c in components if c.license_verdict == "ALLOWLISTED")
++    unknown_count = sum(1 for c in components if c.license_verdict == "UNKNOWN")
++    deny_count = sum(1 for c in components if c.license_verdict == "DENY")
++
++    return SbomSummary(
++        total_components=total,
++        python_components=python_count,
++        web_components=web_count,
++        permissive_count=permissive_count,
++        allowlisted_count=allowlisted_count,
++        unknown_count=unknown_count,
++        deny_count=deny_count,
++    )
++
++
++def get_license_texts() -> tuple[str, str]:
++    """Read verbatim LICENSE and NOTICE text files."""
++    license_path = resolve_file_path("LICENSE")
++    notice_path = resolve_file_path("NOTICE")
++
++    license_text = ""
++    notice_text = ""
++
++    if license_path and license_path.is_file():
++        try:
++            license_text = license_path.read_text(encoding="utf-8")
++        except Exception as exc:  # noqa: BLE001
++            logger.warning("Failed to read LICENSE: %s", exc)
++
++    if notice_path and notice_path.is_file():
++        try:
++            notice_text = notice_path.read_text(encoding="utf-8")
++        except Exception as exc:  # noqa: BLE001
++            logger.warning("Failed to read NOTICE: %s", exc)
++
++    return license_text, notice_text
++
++
++def generate_cyclonedx_1_5(
++    components: list[Component] | tuple[Component, ...] | None = None,
++    serial_number: str | None = None,
++) -> dict[str, Any]:
++    """Generate canonical CycloneDX 1.5 JSON Software Bill of Materials."""
++    comps = components if components is not None else get_live_components()
++    sn = serial_number or f"urn:uuid:{uuid.uuid4()}"
++    timestamp = datetime.now(UTC).isoformat()
++
++    cdx_components: list[dict[str, Any]] = []
++    for c in comps:
++        cdx_scope = (
++            "optional"
++            if c.scope == "dev"
++            else (c.scope if c.scope in {"required", "optional", "excluded"} else "required")
++        )
++        comp_dict: dict[str, Any] = {
++            "type": "library",
++            "bom-ref": c.purl,
++            "name": c.name,
++            "version": c.version,
++            "purl": c.purl,
++            "scope": cdx_scope,
++        }
++        if c.description:
++            comp_dict["description"] = c.description
++
++        if c.license and c.license != "UNKNOWN":
++            comp_dict["licenses"] = [{"license": {"id": c.license}}]
++        else:
++            comp_dict["licenses"] = [{"license": {"name": "Unknown"}}]
++
++        comp_dict["properties"] = [
++            {"name": "kanban:ecosystem", "value": c.ecosystem},
++            {"name": "kanban:license_verdict", "value": c.license_verdict},
++        ]
++        cdx_components.append(comp_dict)
++
++    return {
++        "bomFormat": "CycloneDX",
++        "specVersion": "1.5",
++        "serialNumber": sn,
++        "version": 1,
++        "metadata": {
++            "timestamp": timestamp,
++            "tools": [
++                {
++                    "vendor": PLATFORM_NAME,
++                    "name": PLATFORM_SLUG,
++                    "version": PLATFORM_VERSION,
++                }
++            ],
++            "component": {
++                "type": "application",
++                "name": PLATFORM_SLUG,
++                "version": PLATFORM_VERSION,
++                "description": PLATFORM_TAGLINE,
++                "licenses": [{"license": {"id": PLATFORM_LICENSE_SPDX}}],
++                "purl": f"pkg:generic/{PLATFORM_SLUG}@{PLATFORM_VERSION}",
++            },
++        },
++        "components": cdx_components,
++    }
+diff --git a/kanban/tests/api/test_system_about.py b/kanban/tests/api/test_system_about.py
+new file mode 100644
+index 00000000..4e82759d
+--- /dev/null
++++ b/kanban/tests/api/test_system_about.py
+@@ -0,0 +1,222 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Integration and unit tests for System About and CycloneDX 1.5 SBOM endpoints (KAN-34)."""
++
++from __future__ import annotations
++
++import uuid
++
++import httpx
++import pytest
++from fastapi import FastAPI
++
++from kanban.api.deps import PrincipalContext, get_principal
++from kanban.api.problems import ProblemException, problem_exception_handler
++from kanban.api.v1 import build_v1_router
++from kanban.api.v1.system import get_platform_summary
++from kanban.app import create_app
++from kanban.settings import Settings
++
++
++def _create_test_app() -> FastAPI:
++    """Create test FastAPI instance with v1 router and problem exception handler."""
++    app = FastAPI()
++    app.add_exception_handler(ProblemException, problem_exception_handler)  # type: ignore[arg-type]
++    v1 = build_v1_router()
++    app.include_router(v1, prefix="/api/v1")
++    return app
++
++
++@pytest.fixture
++def test_principal() -> PrincipalContext:
++    """Fixture providing standard authenticated user principal."""
++    return PrincipalContext(
++        principal_id=uuid.uuid4(),
++        workspace_id=uuid.uuid4(),
++        aal_level=1,
++    )
++
++
++@pytest.mark.asyncio
++async def test_system_about_unauthenticated_returns_401() -> None:
++    """Unauthenticated request to /api/v1/system/about returns 401."""
++    app = _create_test_app()
++    async with httpx.AsyncClient(
++        transport=httpx.ASGITransport(app=app),
++        base_url="http://testserver",
++    ) as client:
++        resp = await client.get("/api/v1/system/about")
++        assert resp.status_code == 401
++        data = resp.json()
++        assert data["code"] == "AUTHENTICATION_REQUIRED"
++
++
++@pytest.mark.asyncio
++async def test_system_about_authenticated_returns_full_metadata(
++    test_principal: PrincipalContext,
++) -> None:
++    """Authenticated request to /api/v1/system/about returns 200 with platform details."""
++    app = _create_test_app()
++    app.dependency_overrides[get_principal] = lambda: test_principal
++
++    async with httpx.AsyncClient(
++        transport=httpx.ASGITransport(app=app),
++        base_url="http://testserver",
++    ) as client:
++        resp = await client.get("/api/v1/system/about")
++        assert resp.status_code == 200
++        data = resp.json()
++
++        assert data["platform"] == "👍kanban"
++        assert data["slug"] == "thumbs-up-kanban"
++        assert data["tagline"] == "The difference between a swarm and an Agile team is a kanban."
++        assert data["version"] == "2.0.0"
++        assert data["license_spdx"] == "Apache-2.0"
++
++        # Interactive API Documentation URLs
++        api_docs = data["api_docs_urls"]
++        assert api_docs["swagger_ui"] == "/api/docs"
++        assert api_docs["redoc"] == "/api/redoc"
++        assert api_docs["openapi_json"] == "/api/openapi.json"
++
++        # Verbatim texts
++        assert "Apache License" in data["license"]
++        assert "Version 2.0" in data["license"]
++        assert "Kanban Platform" in data["notice"]
++        assert data["license_text"] == data["license"]
++        assert data["notice_text"] == data["notice"]
++
++        # SBOM summary and components
++        summary = data["sbom_summary"]
++        assert summary["total_components"] > 10
++        assert summary["python_components"] > 0
++        assert summary["permissive_count"] > 0
++        assert summary["deny_count"] == 0
++
++        components = data["components"]
++        assert len(components) == summary["total_components"]
++        assert any(c["name"] == "fastapi" for c in components)
++        fastapi_comp = next(c for c in components if c["name"] == "fastapi")
++        assert fastapi_comp["ecosystem"] == "python"
++        assert fastapi_comp["license_verdict"] == "ALLOW"
++        assert fastapi_comp["purl"].startswith("pkg:pypi/fastapi@")
++
++
++@pytest.mark.asyncio
++async def test_system_sbom_unauthenticated_returns_401() -> None:
++    """Unauthenticated request to /api/v1/system/sbom returns 401."""
++    app = _create_test_app()
++    async with httpx.AsyncClient(
++        transport=httpx.ASGITransport(app=app),
++        base_url="http://testserver",
++    ) as client:
++        resp = await client.get("/api/v1/system/sbom")
++        assert resp.status_code == 401
++
++
++@pytest.mark.asyncio
++async def test_system_sbom_authenticated_inline_json(
++    test_principal: PrincipalContext,
++) -> None:
++    """Authenticated GET /api/v1/system/sbom returns valid CycloneDX 1.5 JSON."""
++    app = _create_test_app()
++    app.dependency_overrides[get_principal] = lambda: test_principal
++
++    async with httpx.AsyncClient(
++        transport=httpx.ASGITransport(app=app),
++        base_url="http://testserver",
++    ) as client:
++        resp = await client.get("/api/v1/system/sbom")
++        assert resp.status_code == 200
++        assert "application/vnd.cyclonedx+json" in resp.headers["content-type"]
++        assert resp.headers["x-content-type-options"] == "nosniff"
++        assert "content-disposition" not in resp.headers
++
++        data = resp.json()
++        assert data["bomFormat"] == "CycloneDX"
++        assert data["specVersion"] == "1.5"
++        assert data["serialNumber"].startswith("urn:uuid:")
++        assert data["metadata"]["component"]["name"] == "thumbs-up-kanban"
++        assert len(data["components"]) > 10
++
++
++@pytest.mark.asyncio
++async def test_system_sbom_authenticated_download_attachment(
++    test_principal: PrincipalContext,
++) -> None:
++    """Authenticated GET /api/v1/system/sbom?download=true returns attachment header."""
++    app = _create_test_app()
++    app.dependency_overrides[get_principal] = lambda: test_principal
++
++    async with httpx.AsyncClient(
++        transport=httpx.ASGITransport(app=app),
++        base_url="http://testserver",
++    ) as client:
++        resp = await client.get("/api/v1/system/sbom?download=true")
++        assert resp.status_code == 200
++        assert resp.headers["x-content-type-options"] == "nosniff"
++        assert (
++            resp.headers["content-disposition"]
++            == 'attachment; filename="thumbs-up-kanban-sbom-cdx-1.5.json"'
++        )
++
++
++@pytest.mark.asyncio
++async def test_live_app_docs_and_openapi_endpoints_resolve_200() -> None:
++    """Verify live FastAPI app mounts /api/docs, /api/redoc, and /api/openapi.json."""
++    settings = Settings()
++    app = create_app(settings)
++
++    async with httpx.AsyncClient(
++        transport=httpx.ASGITransport(app=app),
++        base_url="http://testserver",
++    ) as client:
++        # 1. Swagger UI at /api/docs
++        resp_swagger = await client.get("/api/docs")
++        assert resp_swagger.status_code == 200
++        assert "text/html" in resp_swagger.headers["content-type"]
++        assert "SwaggerUIBundle" in resp_swagger.text or "swagger" in resp_swagger.text.lower()
++
++        # 2. ReDoc at /api/redoc
++        resp_redoc = await client.get("/api/redoc")
++        assert resp_redoc.status_code == 200
++        assert "text/html" in resp_redoc.headers["content-type"]
++        assert "redoc" in resp_redoc.text.lower()
++
++        # 3. OpenAPI specification at /api/openapi.json
++        resp_openapi = await client.get("/api/openapi.json")
++        assert resp_openapi.status_code == 200
++        openapi_data = resp_openapi.json()
++        assert "openapi" in openapi_data
++        assert "/api/v1/system/about" in openapi_data["paths"]
++        assert "/api/v1/system/sbom" in openapi_data["paths"]
++
++        # 4. Root redirect /openapi.json -> /api/openapi.json
++        resp_redirect = await client.get("/openapi.json", follow_redirects=False)
++        assert resp_redirect.status_code == 307
++        assert resp_redirect.headers["location"] == "/api/openapi.json"
++
++
++@pytest.mark.asyncio
++async def test_platform_summary_endpoints() -> None:
++    """Verify /platform-summary and alias /summary return verified capability metadata."""
++    app = _create_test_app()
++    async with httpx.AsyncClient(
++        transport=httpx.ASGITransport(app=app),
++        base_url="http://testserver",
++    ) as client:
++        resp1 = await client.get("/api/v1/system/platform-summary")
++        assert resp1.status_code == 200
++        data1 = resp1.json()
++        assert data1["platform"] == "👍kanban"
++        assert data1["pillar_1_agent_first"]["summary_token_budget"] == 1000
++
++        resp2 = await client.get("/api/v1/system/summary")
++        assert resp2.status_code == 200
++        data2 = resp2.json()
++        assert data2 == data1
++
++    # Verify get_platform_summary with settings passed
++    settings = Settings()
++    summary = get_platform_summary(settings)
++    assert summary.platform == "👍kanban"
+diff --git a/kanban/tests/ops/test_sbom.py b/kanban/tests/ops/test_sbom.py
+new file mode 100644
+index 00000000..caa74fcb
+--- /dev/null
++++ b/kanban/tests/ops/test_sbom.py
+@@ -0,0 +1,585 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unit tests for Software Bill of Materials (SBOM) generator (KAN-34)."""
++
++from __future__ import annotations
++
++import json
++from typing import TYPE_CHECKING
++from unittest.mock import MagicMock
++
++if TYPE_CHECKING:
++    from pathlib import Path
++
++    import pytest
++
++from kanban.ops.sbom import (
++    ALLOW_SET,
++    DENY_PREFIXES,
++    NORMALIZATION_MAP,
++    PLATFORM_LICENSE_SPDX,
++    PLATFORM_NAME,
++    PLATFORM_SLUG,
++    PLATFORM_TAGLINE,
++    PLATFORM_VERSION,
++    AllowlistException,
++    Component,
++    _classify_atomic,
++    _format_npm_purl,
++    _parse_web_manifest,
++    _parse_web_package_json,
++    calculate_sbom_summary,
++    classify_license,
++    clear_sbom_cache,
++    collect_python_components,
++    collect_web_components,
++    extract_python_license,
++    find_allowlist_match,
++    generate_cyclonedx_1_5,
++    get_license_texts,
++    get_live_components,
++    is_workspace_package,
++    load_allowlist,
++    normalize_license_atom,
++    resolve_file_path,
++)
++
++
++def test_platform_metadata_constants() -> None:
++    """Verify platform metadata branding invariants."""
++    assert PLATFORM_NAME == "👍kanban"
++    assert PLATFORM_SLUG == "thumbs-up-kanban"
++    assert "Agile team" in PLATFORM_TAGLINE
++    assert PLATFORM_VERSION == "2.0.0"
++    assert PLATFORM_LICENSE_SPDX == "Apache-2.0"
++    assert "MIT" in ALLOW_SET
++    assert "GPL" in DENY_PREFIXES
++    assert NORMALIZATION_MAP["mit license"] == "MIT"
++
++
++def test_is_workspace_package() -> None:
++    """Verify internal workspace package identification."""
++    assert is_workspace_package("kanban") is True
++    assert is_workspace_package("kanban-platform") is True
++    assert is_workspace_package("kanban-core") is True
++    assert is_workspace_package("@kanban/web") is True
++    assert is_workspace_package("fastapi") is False
++    assert is_workspace_package("react") is False
++
++
++def test_normalize_license_atom() -> None:
++    """Verify normalization of license identifiers."""
++    assert normalize_license_atom("mit license") == "MIT"
++    assert normalize_license_atom("apache license, version 2.0") == "Apache-2.0"
++    assert normalize_license_atom("bsd 2-clause") == "BSD-2-Clause"
++    assert normalize_license_atom("psfl") == "PSF-2.0"
++    assert normalize_license_atom("mit") == "MIT"
++    assert normalize_license_atom("UnknownLicenseX") == "UnknownLicenseX"
++
++
++def test_classify_license_atomic_and_compounds() -> None:
++    """Verify classification across single and compound license expressions."""
++    assert classify_license("") == "UNKNOWN"
++    assert classify_license("   ") == "UNKNOWN"
++    assert classify_license("UNKNOWN") == "UNKNOWN"
++    assert classify_license("Unlicensed") == "UNKNOWN"
++    assert classify_license("CUSTOM") == "UNKNOWN"
++    assert classify_license("NONE") == "UNKNOWN"
++
++    # Single Permissive
++    assert classify_license("MIT") == "ALLOW"
++    assert classify_license("Apache-2.0") == "ALLOW"
++    assert classify_license("BSD-3-Clause") == "ALLOW"
++    assert classify_license("0BSD") == "ALLOW"
++    assert classify_license("ISC") == "ALLOW"
++
++    # Copyleft Deny
++    assert classify_license("GPL-3.0") == "DENY"
++    assert classify_license("AGPL-3.0") == "DENY"
++    assert classify_license("SSPL-1.0") == "DENY"
++    assert classify_license("LGPL-2.1") == "DENY"
++
++    # Compound OR
++    assert classify_license("(MPL-2.0 OR Apache-2.0)") == "ALLOW"
++    assert classify_license("GPL-3.0 OR AGPL-3.0") == "DENY"
++    assert classify_license("FOO OR BAR") == "UNKNOWN"
++
++    # Compound AND
++    assert classify_license("MIT AND Apache-2.0") == "ALLOW"
++    assert classify_license("MIT AND GPL-3.0") == "DENY"
++    assert classify_license("MIT AND FOOBAR") == "UNKNOWN"
++
++    # WITH exception
++    assert classify_license("Apache-2.0 WITH LLVM-exception") == "ALLOW"
++    assert _classify_atomic("GPL-2.0 WITH Classpath-exception-2.0") == "DENY"
++
++
++def test_resolve_file_path() -> None:
++    """Verify resolution of existing project files."""
++    assert resolve_file_path("LICENSE") is not None
++    assert resolve_file_path("NOTICE") is not None
++    assert resolve_file_path("non_existent_file_xyz.abc") is None
++
++
++def test_load_allowlist(tmp_path: Path) -> None:
++    """Verify parsing of allowlist TOML and error resilience."""
++    # Test real repo file
++    entries = load_allowlist()
++    assert len(entries) > 0
++    assert any(e.package == "pillow" for e in entries)
++
++    # Test custom valid allowlist
++    custom_toml = tmp_path / "custom.toml"
++    custom_toml.write_text(
++        """
++[[exception]]
++ecosystem = "python"
++package = "test-pkg"
++version = "1.0.0"
++license = "MIT-CMU"
++justification = "Testing exception justification with sufficient length."
++""",
++        encoding="utf-8",
++    )
++    custom_entries = load_allowlist(custom_toml)
++    assert len(custom_entries) == 1
++    assert custom_entries[0].package == "test-pkg"
++    assert custom_entries[0].ecosystem == "python"
++
++    # Test malformed TOML
++    bad_toml = tmp_path / "bad.toml"
++    bad_toml.write_text("invalid = [toml content", encoding="utf-8")
++    assert load_allowlist(bad_toml) == []
++
++    # Non-existent file
++    assert load_allowlist(tmp_path / "ghost.toml") == []
++
++
++def test_find_allowlist_match() -> None:
++    """Verify exact matching of allowlist entries."""
++    entries = [
++        AllowlistException(
++            ecosystem="python",
++            package="pillow",
++            version="13.0.0",
++            license="MIT-CMU",
++            justification="Valid justification",
++        )
++    ]
++    assert find_allowlist_match(entries, "python", "pillow", "13.0.0") is not None
++    assert find_allowlist_match(entries, "PYTHON", "Pillow", "13.0.0") is not None
++    assert find_allowlist_match(entries, "node", "pillow", "13.0.0") is None
++    assert find_allowlist_match(entries, "python", "pillow", "12.0.0") is None
++
++
++def test_extract_python_license() -> None:
++    """Verify license extraction from distribution metadata."""
++    # 1. License-Expression
++    dist_expr = MagicMock()
++    dist_expr.metadata = {"License-Expression": "MIT"}
++    assert extract_python_license(dist_expr) == "MIT"
++
++    # 2. Short License field
++    dist_short = MagicMock()
++    dist_short.metadata = {"License": "Apache-2.0"}
++    assert extract_python_license(dist_short) == "Apache-2.0"
++
++    # 3. Classifiers
++    dist_class = MagicMock()
++    dist_class.metadata = {
++        "Classifier": [
++            "Operating System :: OS Independent",
++            "License :: OSI Approved :: MIT License",
++        ]
++    }
++    assert extract_python_license(dist_class) == "MIT"
++
++    # 4. Long text with first line fallback
++    dist_multiline = MagicMock()
++    dist_multiline.metadata = {
++        "License": "Apache License, Version 2.0\n\nFull text follows...",
++    }
++    assert extract_python_license(dist_multiline) == "Apache-2.0"
++
++    # 5. Missing license
++    dist_none = MagicMock()
++    dist_none.metadata = {}
++    assert extract_python_license(dist_none) == "UNKNOWN"
++
++
++def test_collect_python_components() -> None:
++    """Verify Python package collection from live virtual environment."""
++    components = collect_python_components()
++    assert len(components) > 10
++    assert any(c.name.lower() == "fastapi" for c in components)
++    assert all(c.ecosystem == "python" for c in components)
++    assert all(c.purl.startswith("pkg:pypi/") for c in components)
++
++
++def test_format_npm_purl() -> None:
++    """Verify npm PURL formatting with and without scope."""
++    assert _format_npm_purl("react", "19.3.1") == "pkg:npm/react@19.3.1"
++    assert (
++        _format_npm_purl("@tanstack/react-query", "5.67.1")
++        == "pkg:npm/%40tanstack/react-query@5.67.1"
++    )
++
++
++def test_collect_web_components(tmp_path: Path) -> None:
++    """Verify web component collection from manifest and package.json fallback."""
++    # 1. From valid manifest file
++    manifest_file = tmp_path / "sbom-web.json"
++    manifest_file.write_text(
++        json.dumps(
++            {
++                "bomFormat": "CycloneDX",
++                "specVersion": "1.5",
++                "components": [
++                    {
++                        "name": "react",
++                        "version": "19.3.1",
++                        "license": "MIT",
++                        "scope": "required",
++                        "description": "React library",
++                    },
++                    {
++                        "name": "elkjs",
++                        "version": "0.11.1",
++                        "license": "EPL-2.0",
++                        "scope": "required",
++                    },
++                ],
++            }
++        ),
++        encoding="utf-8",
++    )
++
++    allowlist = [
++        AllowlistException(
++            ecosystem="node",
++            package="elkjs",
++            version="0.11.1",
++            license="EPL-2.0",
++            justification="Sugiyama layout in Web Worker",
++        )
++    ]
++    manifest_comps = collect_web_components(allowlist, manifest_path=manifest_file)
++    assert len(manifest_comps) == 2
++    assert manifest_comps[0].name in ("elkjs", "react")
++    elk = next(c for c in manifest_comps if c.name == "elkjs")
++    assert elk.license_verdict == "ALLOWLISTED"
++
++    # 2. Test fallback to repo kanban/web/package.json
++    fallback_comps = collect_web_components()
++    assert len(fallback_comps) > 10
++    assert any(c.name == "react" for c in fallback_comps)
++
++
++def test_get_live_components_and_clear_cache() -> None:
++    """Verify cached live component aggregation and cache invalidation."""
++    clear_sbom_cache()
++    comps1 = get_live_components()
++    comps2 = get_live_components()
++    assert comps1 is comps2
++    assert len(comps1) > 50
++    clear_sbom_cache()
++
++
++def test_calculate_sbom_summary() -> None:
++    """Verify SBOM summary computation."""
++    comps = [
++        Component(
++            name="pkg1",
++            version="1.0",
++            ecosystem="python",
++            purl="pkg:pypi/pkg1@1.0",
++            license="MIT",
++            license_verdict="ALLOW",
++            scope="required",
++        ),
++        Component(
++            name="pkg2",
++            version="2.0",
++            ecosystem="node",
++            purl="pkg:npm/pkg2@2.0",
++            license="LGPL",
++            license_verdict="DENY",
++            scope="required",
++        ),
++        Component(
++            name="pkg3",
++            version="3.0",
++            ecosystem="node",
++            purl="pkg:npm/pkg3@3.0",
++            license="EPL-2.0",
++            license_verdict="ALLOWLISTED",
++            scope="required",
++        ),
++        Component(
++            name="pkg4",
++            version="4.0",
++            ecosystem="python",
++            purl="pkg:pypi/pkg4@4.0",
++            license="UNKNOWN",
++            license_verdict="UNKNOWN",
++            scope="required",
++        ),
++    ]
++    summary = calculate_sbom_summary(comps)
++    assert summary.total_components == 4
++    assert summary.python_components == 2
++    assert summary.web_components == 2
++    assert summary.permissive_count == 1
++    assert summary.deny_count == 1
++    assert summary.allowlisted_count == 1
++    assert summary.unknown_count == 1
++    assert summary.to_dict()["total_components"] == 4
++
++
++def test_get_license_texts() -> None:
++    """Verify reading of LICENSE and NOTICE files."""
++    license_text, notice_text = get_license_texts()
++    assert "Apache License" in license_text
++    assert "Version 2.0" in license_text
++    assert "Kanban Platform" in notice_text
++    assert "Third-Party Notices" in notice_text
++
++
++def test_generate_cyclonedx_1_5() -> None:
++    """Verify CycloneDX 1.5 JSON serialization."""
++    comps = [
++        Component(
++            name="fastapi",
++            version="0.115.0",
++            ecosystem="python",
++            purl="pkg:pypi/fastapi@0.115.0",
++            license="MIT",
++            license_verdict="ALLOW",
++            scope="required",
++            description="FastAPI web framework",
++        ),
++        Component(
++            name="unknown-lib",
++            version="0.1.0",
++            ecosystem="node",
++            purl="pkg:npm/unknown-lib@0.1.0",
++            license="UNKNOWN",
++            license_verdict="UNKNOWN",
++            scope="dev",
++        ),
++    ]
++    cdx = generate_cyclonedx_1_5(comps, serial_number="urn:uuid:test-sbom-1234")
++    assert cdx["bomFormat"] == "CycloneDX"
++    assert cdx["specVersion"] == "1.5"
++    assert cdx["serialNumber"] == "urn:uuid:test-sbom-1234"
++    assert cdx["version"] == 1
++    assert cdx["metadata"]["component"]["name"] == "thumbs-up-kanban"
++    assert cdx["metadata"]["component"]["version"] == "2.0.0"
++
++    components = cdx["components"]
++    assert len(components) == 2
++    f_comp = next(c for c in components if c["name"] == "fastapi")
++    assert f_comp["licenses"][0]["license"]["id"] == "MIT"
++    assert f_comp["scope"] == "required"
++    assert f_comp["description"] == "FastAPI web framework"
++
++    u_comp = next(c for c in components if c["name"] == "unknown-lib")
++    assert u_comp["licenses"][0]["license"]["name"] == "Unknown"
++    assert u_comp["scope"] == "optional"
++
++
++def test_load_allowlist_invalid_items(tmp_path: Path) -> None:
++    """Verify load_allowlist skips invalid or incomplete items."""
++    toml_path = tmp_path / "allowlist_edge.toml"
++    valid_entry = (
++        '{ ecosystem = "python", package = "valid-pkg", version = "2.0.0", '
++        'license = "BSD-3-Clause", justification = "Valid" }'
++    )
++    content = (
++        "exception = [\n"
++        '    "not-a-dict",\n'
++        '    { ecosystem = "", package = "foo", version = "1.0" },\n'
++        '    { ecosystem = "python", package = "", version = "1.0" },\n'
++        f"    {valid_entry},\n"
++        "]\n"
++    )
++    toml_path.write_text(content, encoding="utf-8")
++    entries = load_allowlist(toml_path)
++    assert len(entries) == 1
++    assert entries[0].package == "valid-pkg"
++
++
++def test_extract_python_license_edge_cases() -> None:
++    """Verify edge cases in classifier and multiline license extraction."""
++    # Classifier that doesn't normalize to ALLOW
++    dist_custom_class = MagicMock()
++    dist_custom_class.metadata = {
++        "Classifier": ["License :: Other / Proprietary"],
++        "License": "A" * 150,  # > MAX_INLINE_LICENSE_LEN
++    }
++    assert extract_python_license(dist_custom_class) == "UNKNOWN"
++
++    # Multiline where first line is too long
++    dist_long_first_line = MagicMock()
++    dist_long_first_line.metadata = {
++        "License": ("A" * 120) + "\nLine 2",
++    }
++    assert extract_python_license(dist_long_first_line) == "UNKNOWN"
++
++
++def test_collect_python_components_exception_handling(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify error resilience when distributions() fails."""
++    monkeypatch.setattr(
++        "importlib.metadata.distributions",
++        MagicMock(side_effect=RuntimeError("Metadata failure")),
++    )
++    assert collect_python_components() == []
++
++
++def test_collect_web_components_edge_cases(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify web manifest parsing error handling and environment variable path."""
++    # Manifest with corrupted JSON
++    corrupt_manifest = tmp_path / "corrupt.json"
++    corrupt_manifest.write_text("invalid json", encoding="utf-8")
++    assert _parse_web_manifest(corrupt_manifest, []) is None
++
++    # Manifest with non-dict items and missing name/version
++    malformed_manifest = tmp_path / "malformed.json"
++    malformed_manifest.write_text(
++        json.dumps(
++            {
++                "components": [
++                    "string-not-dict",
++                    {"name": "", "version": "1.0"},
++                    {"name": "valid-web", "version": "1.0.0", "license": "MIT"},
++                ]
++            }
++        ),
++        encoding="utf-8",
++    )
++    parsed = _parse_web_manifest(malformed_manifest, [])
++    assert parsed is not None
++    assert len(parsed) == 1
++    assert parsed[0].name == "valid-web"
++
++    # Package.json unparseable
++    bad_pkg = tmp_path / "package.json"
++    bad_pkg.write_text("not json", encoding="utf-8")
++    assert _parse_web_package_json(bad_pkg, []) == []
++
++    # Non-existent package.json
++    assert collect_web_components(manifest_path=tmp_path / "none.json") != []
++
++    # Manifest with unknown license matching allowlist
++    allow_manifest = tmp_path / "allow_manifest.json"
++    allow_manifest.write_text(
++        json.dumps(
++            {"components": [{"name": "custom-web", "version": "1.0.0", "license": "UNKNOWN"}]}
++        ),
++        encoding="utf-8",
++    )
++    custom_allow = [
++        AllowlistException(
++            ecosystem="node",
++            package="custom-web",
++            version="1.0.0",
++            license="MIT",
++            justification="Allowlisted test",
++        )
++    ]
++    custom_comps = _parse_web_manifest(allow_manifest, custom_allow)
++    assert custom_comps is not None
++    assert custom_comps[0].license == "MIT"
++    assert custom_comps[0].license_verdict == "ALLOWLISTED"
++
++    # Test KB_WEB_DIST env var
++    env_dir = tmp_path / "env_dist"
++    env_dir.mkdir()
++    env_sbom = env_dir / "sbom-web.json"
++    env_sbom.write_text(
++        json.dumps({"components": [{"name": "env-pkg", "version": "1.2.3", "license": "MIT"}]}),
++        encoding="utf-8",
++    )
++    monkeypatch.setenv("KB_WEB_DIST", str(env_dir))
++    comps = collect_web_components()
++    assert any(c.name == "env-pkg" for c in comps)
++
++
++def test_get_license_texts_io_errors(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify license reading resilience on I/O error."""
++    mock_path = MagicMock()
++    mock_path.is_file.return_value = True
++    mock_path.read_text.side_effect = OSError("Disk failure")
++
++    monkeypatch.setattr(
++        "kanban.ops.sbom.resolve_file_path",
++        lambda f: mock_path if f in ("LICENSE", "NOTICE") else None,
++    )
++    lic, notice = get_license_texts()
++    assert lic == ""
++    assert notice == ""
++
++
++def test_get_license_texts_missing_files(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify license reading when files do not exist."""
++    monkeypatch.setattr("kanban.ops.sbom.resolve_file_path", lambda _f: None)
++    lic, notice = get_license_texts()
++    assert lic == ""
++    assert notice == ""
++
++
++def test_parse_web_package_json_with_node_modules_and_allowlist(tmp_path: Path) -> None:
++    """Verify package.json fallback parsing with workspace filtering and allowlist."""
++    pkg_file = tmp_path / "package.json"
++    pkg_file.write_text(
++        json.dumps(
++            {
++                "dependencies": {
++                    "kanban-core": "1.0.0",
++                    "custom-dep": "2.0.0",
++                    "allowlisted-dep": "3.0.0",
++                },
++                "devDependencies": {
++                    "@kanban/web": "1.0.0",
++                    "dev-tool": "4.0.0",
++                },
++            }
++        ),
++        encoding="utf-8",
++    )
++
++    node_modules = tmp_path / "node_modules"
++    custom_dep_dir = node_modules / "custom-dep"
++    custom_dep_dir.mkdir(parents=True)
++    (custom_dep_dir / "package.json").write_text(
++        json.dumps(
++            {
++                "license": "MIT",
++                "description": "A custom dependency",
++            }
++        ),
++        encoding="utf-8",
++    )
++
++    allow_entries = [
++        AllowlistException(
++            ecosystem="node",
++            package="allowlisted-dep",
++            version="3.0.0",
++            license="EPL-2.0",
++            justification="Test allowlist justification",
++        )
++    ]
++
++    comps = _parse_web_package_json(pkg_file, allow_entries)
++    # kanban-core and @kanban/web should be filtered out
++    assert not any("kanban" in c.name for c in comps)
++
++    custom = next(c for c in comps if c.name == "custom-dep")
++    assert custom.license == "MIT"
++    assert custom.license_verdict == "ALLOW"
++    assert custom.description == "A custom dependency"
++
++    allowlisted = next(c for c in comps if c.name == "allowlisted-dep")
++    assert allowlisted.license_verdict == "ALLOWLISTED"
++    assert allowlisted.license == "EPL-2.0"
+diff --git a/kanban/web/build/__tests__/sbom.test.ts b/kanban/web/build/__tests__/sbom.test.ts
+new file mode 100644
+index 00000000..47d591b3
+--- /dev/null
++++ b/kanban/web/build/__tests__/sbom.test.ts
+@@ -0,0 +1,209 @@
++import { describe, it, expect } from 'vitest';
++import fs from 'node:fs';
++import path from 'node:path';
++import os from 'node:os';
++import {
++  formatNpmPurl,
++  classifyWebLicense,
++  generateWebSbom,
++  generateSbomWebPlugin,
++} from '../sbom';
++
++describe('build/sbom.ts', () => {
++  it('formatNpmPurl formats unscoped, scoped, and edge-case npm packages', () => {
++    expect(formatNpmPurl('react', '19.3.1')).toBe('pkg:npm/react@19.3.1');
++    expect(formatNpmPurl('@tanstack/react-query', '5.67.1')).toBe(
++      'pkg:npm/%40tanstack/react-query@5.67.1',
++    );
++    expect(formatNpmPurl('@types/node', '26.6.6')).toBe(
++      'pkg:npm/%40types/node@26.6.6',
++    );
++    // Edge case: malformed scoped name with empty package part
++    expect(formatNpmPurl('@/', '1.0.0')).toBe('pkg:npm/@/@1.0.0');
++  });
++
++  it('classifyWebLicense handles permissive, copyleft, and compound expressions', () => {
++    expect(classifyWebLicense('')).toBe('UNKNOWN');
++    expect(classifyWebLicense('UNKNOWN')).toBe('UNKNOWN');
++
++    // Permissive
++    expect(classifyWebLicense('MIT')).toBe('ALLOW');
++    expect(classifyWebLicense('Apache-2.0')).toBe('ALLOW');
++    expect(classifyWebLicense('ISC')).toBe('ALLOW');
++    expect(classifyWebLicense('BSD-3-Clause')).toBe('ALLOW');
++
++    // Copyleft
++    expect(classifyWebLicense('GPL-3.0')).toBe('DENY');
++    expect(classifyWebLicense('AGPL-1.0')).toBe('DENY');
++    expect(classifyWebLicense('LGPL-2.1')).toBe('DENY');
++
++    // OR Expression
++    expect(classifyWebLicense('(MPL-2.0 OR Apache-2.0)')).toBe('ALLOW');
++    expect(classifyWebLicense('GPL-3.0 OR AGPL-3.0')).toBe('DENY');
++    expect(classifyWebLicense('UNKNOWN-A OR UNKNOWN-B')).toBe('UNKNOWN');
++  });
++
++  it('generateWebSbom returns empty manifest when package.json missing', () => {
++    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-sbom-none-'));
++    const manifest = generateWebSbom(tmpDir);
++    expect(manifest.bomFormat).toBe('CycloneDX');
++    expect(manifest.components.length).toBe(0);
++    fs.rmSync(tmpDir, { recursive: true, force: true });
++  });
++
++  it('generateWebSbom reads package.json, dependencies, and writes to outDir', () => {
++    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-sbom-test-'));
++    const outDir = path.join(tmpDir, 'dist');
++    fs.mkdirSync(outDir);
++
++    const pkgJson = {
++      dependencies: {
++        'mock-dep': '1.0.0',
++      },
++      devDependencies: {
++        'mock-dev': '2.0.0',
++      },
++    };
++    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify(pkgJson));
++
++    const nodeModules = path.join(tmpDir, 'node_modules');
++    const mockDepDir = path.join(nodeModules, 'mock-dep');
++    fs.mkdirSync(mockDepDir, { recursive: true });
++    fs.writeFileSync(
++      path.join(mockDepDir, 'package.json'),
++      JSON.stringify({
++        version: '1.0.0',
++        license: 'MIT',
++        description: 'Mock dependency description',
++      }),
++    );
++
++    const manifest = generateWebSbom(tmpDir, outDir);
++    expect(manifest.components.length).toBe(2);
++
++    const depComp = manifest.components.find((c) => c.name === 'mock-dep');
++    expect(depComp).toBeDefined();
++    expect(depComp?.license).toBe('MIT');
++    expect(depComp?.license_verdict).toBe('ALLOW');
++    expect(depComp?.scope).toBe('required');
++
++    const devComp = manifest.components.find((c) => c.name === 'mock-dev');
++    expect(devComp).toBeDefined();
++    expect(devComp?.scope).toBe('dev');
++
++    // Verify file written to outDir
++    const sbomFile = path.join(outDir, 'sbom-web.json');
++    expect(fs.existsSync(sbomFile)).toBe(true);
++
++    fs.rmSync(tmpDir, { recursive: true, force: true });
++  });
++
++  it('generateSbomWebPlugin executes closeBundle and config hook', async () => {
++    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-sbom-plugin-'));
++    const distDir = path.join(tmpDir, 'dist');
++    fs.mkdirSync(distDir);
++    fs.writeFileSync(
++      path.join(tmpDir, 'package.json'),
++      JSON.stringify({ dependencies: { 'test-pkg': '1.0.0' } }),
++    );
++
++    const plugin = generateSbomWebPlugin({ webDir: tmpDir, customDir: distDir });
++    expect(plugin.name).toBe('kanban-sbom-web');
++    expect(plugin.apply).toBe('build');
++
++    if (typeof plugin.configResolved === 'function') {
++      await plugin.configResolved.call({} as never, { build: { outDir: distDir } } as never);
++    }
++    if (typeof plugin.closeBundle === 'function') {
++      await plugin.closeBundle.call({} as never);
++    }
++
++    expect(fs.existsSync(path.join(distDir, 'sbom-web.json'))).toBe(true);
++
++    // Also test default options fallback
++    const defaultPlugin = generateSbomWebPlugin();
++    if (typeof defaultPlugin.configResolved === 'function') {
++      await defaultPlugin.configResolved.call({} as never, { build: {} } as never);
++    }
++    if (typeof defaultPlugin.closeBundle === 'function') {
++      await defaultPlugin.closeBundle.call({} as never);
++    }
++
++    fs.rmSync(tmpDir, { recursive: true, force: true });
++  });
++
++  it('generateWebSbom handles object license and array licenses', () => {
++    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-sbom-types-'));
++    const pkgJson = {
++      dependencies: {
++        'obj-lic-pkg': '1.0.0',
++        'arr-lic-pkg': '2.0.0',
++      },
++    };
++    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify(pkgJson));
++
++    const nodeModules = path.join(tmpDir, 'node_modules');
++    const objDir = path.join(nodeModules, 'obj-lic-pkg');
++    fs.mkdirSync(objDir, { recursive: true });
++    fs.writeFileSync(
++      path.join(objDir, 'package.json'),
++      JSON.stringify({ license: { type: 'Apache-2.0' } }),
++    );
++
++    const arrDir = path.join(nodeModules, 'arr-lic-pkg');
++    fs.mkdirSync(arrDir, { recursive: true });
++    fs.writeFileSync(
++      path.join(arrDir, 'package.json'),
++      JSON.stringify({ licenses: [{ type: 'MIT' }, {}, 'ISC'] }),
++    );
++
++    const manifest = generateWebSbom(tmpDir);
++    expect(manifest.components.length).toBe(2);
++
++    const objComp = manifest.components.find((c) => c.name === 'obj-lic-pkg');
++    expect(objComp?.license).toBe('Apache-2.0');
++    expect(objComp?.license_verdict).toBe('ALLOW');
++
++    const arrComp = manifest.components.find((c) => c.name === 'arr-lic-pkg');
++    expect(arrComp?.license).toBe('MIT OR UNKNOWN OR ISC');
++    expect(arrComp?.license_verdict).toBe('ALLOW');
++
++    fs.rmSync(tmpDir, { recursive: true, force: true });
++  });
++
++  it('generateWebSbom handles only devDependencies, unparseable packages, and untyped license objects', () => {
++    const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kb-sbom-devonly-'));
++    const pkgJson = {
++      devDependencies: {
++        'untyped-lic-pkg': '1.0.0',
++        'corrupt-pkg': '2.0.0',
++      },
++    };
++    fs.writeFileSync(path.join(tmpDir, 'package.json'), JSON.stringify(pkgJson));
++
++    const nodeModules = path.join(tmpDir, 'node_modules');
++    const untypedDir = path.join(nodeModules, 'untyped-lic-pkg');
++    fs.mkdirSync(untypedDir, { recursive: true });
++    fs.writeFileSync(
++      path.join(untypedDir, 'package.json'),
++      JSON.stringify({ license: { url: 'https://example.com/license' } }),
++    );
++
++    const corruptDir = path.join(nodeModules, 'corrupt-pkg');
++    fs.mkdirSync(corruptDir, { recursive: true });
++    fs.writeFileSync(path.join(corruptDir, 'package.json'), 'not valid json');
++
++    const manifest = generateWebSbom(tmpDir);
++    expect(manifest.components.length).toBe(2);
++
++    const untypedComp = manifest.components.find((c) => c.name === 'untyped-lic-pkg');
++    expect(untypedComp?.license).toBe('UNKNOWN');
++    expect(untypedComp?.license_verdict).toBe('UNKNOWN');
++
++    const corruptComp = manifest.components.find((c) => c.name === 'corrupt-pkg');
++    expect(corruptComp?.license).toBe('UNKNOWN');
++    expect(corruptComp?.license_verdict).toBe('UNKNOWN');
++
++    fs.rmSync(tmpDir, { recursive: true, force: true });
++  });
++});
+diff --git a/kanban/web/build/sbom.ts b/kanban/web/build/sbom.ts
+new file mode 100644
+index 00000000..1b6d8a0f
+--- /dev/null
++++ b/kanban/web/build/sbom.ts
+@@ -0,0 +1,219 @@
++import { readFileSync, writeFileSync, existsSync } from 'node:fs';
++import { join } from 'node:path';
++import type { Plugin } from 'vite';
++
++export interface WebSbomComponent {
++  readonly name: string;
++  readonly version: string;
++  readonly ecosystem: 'node';
++  readonly purl: string;
++  readonly license: string;
++  readonly license_verdict: 'ALLOW' | 'DENY' | 'UNKNOWN' | 'ALLOWLISTED';
++  readonly scope: 'required' | 'optional' | 'dev';
++  readonly description?: string;
++}
++
++export interface WebSbomManifest {
++  readonly bomFormat: 'CycloneDX';
++  readonly specVersion: '1.5';
++  readonly components: readonly WebSbomComponent[];
++}
++
++const PERMISSIVE_LICENSES = new Set<string>([
++  'MIT',
++  'MIT-0',
++  'ISC',
++  'BSD',
++  'BSD-2-Clause',
++  'BSD-3-Clause',
++  '0BSD',
++  'Apache-2.0',
++  'PSF-2.0',
++  'Python-2.0',
++  'PostgreSQL',
++  'Zlib',
++  'Unlicense',
++  'CC0-1.0',
++  'BlueOak-1.0.0',
++  'MPL-2.0',
++]);
++
++const NORMALIZED_LICENSES: Record<string, string> = {
++  'apache-2.0': 'Apache-2.0',
++  'apache 2.0': 'Apache-2.0',
++  'apache license 2.0': 'Apache-2.0',
++  'mit': 'MIT',
++  'mit license': 'MIT',
++  'isc': 'ISC',
++  'bsd-2-clause': 'BSD-2-Clause',
++  'bsd-3-clause': 'BSD-3-Clause',
++  '0bsd': '0BSD',
++  'mpl-2.0': 'MPL-2.0',
++  'unlicense': 'Unlicense',
++  'cc0-1.0': 'CC0-1.0',
++};
++
++export function formatNpmPurl(name: string, version: string): string {
++  if (name.startsWith('@') && name.includes('/')) {
++    const parts = name.split('/');
++    const scope = parts[0];
++    const pkg = parts[1];
++    if (scope && pkg) {
++      return `pkg:npm/%40${scope.slice(1)}/${pkg}@${version}`;
++    }
++  }
++  return `pkg:npm/${name}@${version}`;
++}
++
++export function classifyWebLicense(rawLicense: string): 'ALLOW' | 'DENY' | 'UNKNOWN' {
++  const cleaned = rawLicense.trim().replace(/[()]/g, '');
++  if (!cleaned || cleaned.toUpperCase() === 'UNKNOWN') {
++    return 'UNKNOWN';
++  }
++
++  if (cleaned.includes(' OR ')) {
++    const parts = cleaned.split(' OR ').map((p) => classifyWebLicense(p));
++    if (parts.includes('ALLOW')) {
++      return 'ALLOW';
++    }
++    if (parts.includes('DENY')) {
++      return 'DENY';
++    }
++    return 'UNKNOWN';
++  }
++
++  const lowered = cleaned.toLowerCase();
++  const normalized = NORMALIZED_LICENSES[lowered] ?? cleaned;
++  if (PERMISSIVE_LICENSES.has(normalized)) {
++    return 'ALLOW';
++  }
++
++  const upper = normalized.toUpperCase();
++  if (
++    upper.startsWith('GPL') ||
++    upper.startsWith('AGPL') ||
++    upper.startsWith('SSPL') ||
++    upper.startsWith('LGPL')
++  ) {
++    return 'DENY';
++  }
++
++  return 'UNKNOWN';
++}
++
++export function generateWebSbom(webDir: string, outDir?: string): WebSbomManifest {
++  const pkgPath = join(webDir, 'package.json');
++  if (!existsSync(pkgPath)) {
++    return { bomFormat: 'CycloneDX', specVersion: '1.5', components: [] };
++  }
++
++  const pkgJson = JSON.parse(readFileSync(pkgPath, 'utf8')) as {
++    dependencies?: Record<string, string>;
++    devDependencies?: Record<string, string>;
++  };
++
++  const nodeModulesDir = join(webDir, 'node_modules');
++  const rootNodeModulesDir = join(webDir, '../../node_modules');
++
++  const components: WebSbomComponent[] = [];
++
++  const processPkg = (name: string, specVer: string, scope: 'required' | 'dev'): void => {
++    let resolvedVersion = specVer.replace(/^[\^~>=<]/, '');
++    let license = 'UNKNOWN';
++    let description = '';
++
++    const candidatePaths = [
++      join(nodeModulesDir, name, 'package.json'),
++      join(rootNodeModulesDir, name, 'package.json'),
++    ];
++
++    for (const cand of candidatePaths) {
++      if (existsSync(cand)) {
++        try {
++          const depPkg = JSON.parse(readFileSync(cand, 'utf8')) as {
++            version?: string;
++            license?: string | { type?: string };
++            licenses?: ({ type?: string } | string)[] | { type?: string };
++            description?: string;
++          };
++          if (depPkg.version) {
++            resolvedVersion = depPkg.version;
++          }
++          if (typeof depPkg.license === 'string') {
++            license = depPkg.license;
++          } else if (depPkg.license && typeof depPkg.license === 'object' && depPkg.license.type) {
++            license = depPkg.license.type;
++          } else if (Array.isArray(depPkg.licenses)) {
++            license = depPkg.licenses
++              .map((l) => (typeof l === 'string' ? l : l.type ?? 'UNKNOWN'))
++              .join(' OR ');
++          }
++          if (depPkg.description) {
++            description = depPkg.description;
++          }
++          break;
++        } catch {
++          // Ignore read error and fallback
++        }
++      }
++    }
++
++    const verdict = classifyWebLicense(license);
++    const purl = formatNpmPurl(name, resolvedVersion);
++
++    components.push({
++      name,
++      version: resolvedVersion,
++      ecosystem: 'node',
++      purl,
++      license,
++      license_verdict: verdict,
++      scope,
++      description,
++    });
++  };
++
++  if (pkgJson.dependencies) {
++    for (const [name, ver] of Object.entries(pkgJson.dependencies)) {
++      processPkg(name, ver, 'required');
++    }
++  }
++
++  if (pkgJson.devDependencies) {
++    for (const [name, ver] of Object.entries(pkgJson.devDependencies)) {
++      processPkg(name, ver, 'dev');
++    }
++  }
++
++  components.sort((a, b) => a.name.localeCompare(b.name));
++
++  const manifest: WebSbomManifest = {
++    bomFormat: 'CycloneDX',
++    specVersion: '1.5',
++    components,
++  };
++
++  if (outDir && existsSync(outDir)) {
++    const targetFile = join(outDir, 'sbom-web.json');
++    writeFileSync(targetFile, JSON.stringify(manifest, null, 2) + '\n', 'utf8');
++  }
++
++  return manifest;
++}
++
++export function generateSbomWebPlugin(options?: { webDir?: string; customDir?: string }): Plugin {
++  let resolvedOutDir = options?.customDir;
++
++  return {
++    name: 'kanban-sbom-web',
++    apply: 'build',
++    configResolved(config) {
++      resolvedOutDir ??= config.build.outDir;
++    },
++    closeBundle() {
++      const dir = resolvedOutDir ?? 'dist';
++      const webDir = options?.webDir ?? process.cwd();
++      generateWebSbom(webDir, dir);
++    },
++  };
++}
+diff --git a/kanban/web/src/api/queryKeys.ts b/kanban/web/src/api/queryKeys.ts
+index 4f7518e7..cab5e337 100644
+--- a/kanban/web/src/api/queryKeys.ts
++++ b/kanban/web/src/api/queryKeys.ts
+@@ -24,4 +24,5 @@ export const qk = {
+   objectLinks: (key: string) => ['objectLinks', key] as const,
+   canonicalUrl: (key: string) => ['canonicalUrl', key] as const,
+   deletePreview: (key: string) => ['deletePreview', key] as const,
++  systemAbout: () => ['system', 'about'] as const,
+ };
+diff --git a/kanban/web/src/app/AppShell.tsx b/kanban/web/src/app/AppShell.tsx
+index cda5424c..7aa0962e 100644
+--- a/kanban/web/src/app/AppShell.tsx
++++ b/kanban/web/src/app/AppShell.tsx
+@@ -50,6 +50,9 @@ export interface AppShellProps {
+ }
+ 
+ export function computeCurrentSection(pathname: string, fallback = 'Work Items'): string {
++  if (pathname === '/about' || pathname.startsWith('/about') || pathname.includes('/about')) {
++    return 'About';
++  }
+   if (pathname.includes('/settings/workflows') || pathname.endsWith('/workflows')) {
+     return 'Workflows';
+   }
+diff --git a/kanban/web/src/app/CommandPalette.tsx b/kanban/web/src/app/CommandPalette.tsx
+index 8ec910ae..a791e3c1 100644
+--- a/kanban/web/src/app/CommandPalette.tsx
++++ b/kanban/web/src/app/CommandPalette.tsx
+@@ -359,6 +359,15 @@ export function CommandPalette({
+             },
+           ]
+         : []),
++      {
++        id: 'nav-about',
++        title: 'About 👍kanban (License, API Docs & SBOM)',
++        icon: 'ℹ️',
++        category: 'navigation',
++        onSelect: () => {
++          void navigate('/about');
++        },
++      },
+       {
+         id: 'act-toggle-sidebar',
+         title: 'Toggle sidebar',
+diff --git a/kanban/web/src/app/Sidebar.css b/kanban/web/src/app/Sidebar.css
+index 7e19ef26..a140728a 100644
+--- a/kanban/web/src/app/Sidebar.css
++++ b/kanban/web/src/app/Sidebar.css
+@@ -370,6 +370,28 @@
+   border-top: 1px solid var(--border-subtle, #333842);
+ }
+ 
++.kb-sidebar-about-link {
++  display: flex;
++  align-items: center;
++  gap: var(--space-2);
++  color: var(--fg-muted);
++  text-decoration: none;
++  font-size: var(--text-xs);
++  padding: var(--space-1) var(--space-2);
++  border-radius: var(--radius-sm);
++  transition: color 0.15s ease, background 0.15s ease;
++}
++
++.kb-sidebar-about-link:hover {
++  color: var(--fg-primary);
++  background: var(--bg-hover);
++}
++
++.kb-sidebar-about-version {
++  font-family: var(--font-mono);
++  font-weight: 500;
++}
++
+ .kb-sidebar-collapse-btn {
+   background: transparent;
+   border: none;
+diff --git a/kanban/web/src/app/Sidebar.tsx b/kanban/web/src/app/Sidebar.tsx
+index a43d37b0..70329a68 100644
+--- a/kanban/web/src/app/Sidebar.tsx
++++ b/kanban/web/src/app/Sidebar.tsx
+@@ -14,7 +14,7 @@ import React, {
+   type JSX,
+   type KeyboardEvent,
+ } from 'react';
+-import { NavLink, useLocation, useNavigate } from 'react-router';
++import { Link, NavLink, useLocation, useNavigate } from 'react-router';
+ import { CreateProjectModal } from '../features/projects/CreateProjectModal';
+ import { CreateWorkspaceModal, type CreatedWorkspace } from '../features/workspaces/CreateWorkspaceModal';
+ import { ensureSessionCsrfToken } from '../features/auth/useSessionGuard';
+@@ -985,6 +985,20 @@ export function Sidebar({
+             })
+             )}
+           </nav>
++
++          <div className="kb-sidebar-footer">
++            <Link
++              to="/about"
++              className="kb-sidebar-about-link"
++              data-testid="sidebar-about-link"
++              title="About 👍kanban"
++            >
++              <span className="kb-sidebar-icon" aria-hidden="true">
++                ℹ️
++              </span>
++              <span className="kb-sidebar-about-version">v2.0.0</span>
++            </Link>
++          </div>
+         </div>
+       </aside>
+ 
+diff --git a/kanban/web/src/app/Topbar.tsx b/kanban/web/src/app/Topbar.tsx
+index 432164f5..c590fad0 100644
+--- a/kanban/web/src/app/Topbar.tsx
++++ b/kanban/web/src/app/Topbar.tsx
+@@ -564,6 +564,23 @@ export function Topbar({
+                 )}
+               </div>
+ 
++              <Link
++                to="/about"
++                role="menuitem"
++                data-testid="topbar-about-link"
++                className="kb-theme-radio kb-avatar-menu-link"
++                onClick={() => {
++                  setAvatarMenuOpen(false);
++                }}
++              >
++                <span>
++                  <span aria-hidden="true" className="kb-avatar-menu-icon">
++                    ℹ️
++                  </span>
++                  About 👍kanban
++                </span>
++              </Link>
++
+               <div className="kb-avatar-menu-divider" />
+ 
+               <button
+diff --git a/kanban/web/src/app/__tests__/AboutNavigation.test.tsx b/kanban/web/src/app/__tests__/AboutNavigation.test.tsx
+new file mode 100644
+index 00000000..55a901fa
+--- /dev/null
++++ b/kanban/web/src/app/__tests__/AboutNavigation.test.tsx
+@@ -0,0 +1,133 @@
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent } from '@testing-library/react';
++import React from 'react';
++import { MemoryRouter } from 'react-router';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { computeCurrentSection } from '../AppShell';
++import { Topbar } from '../Topbar';
++import { Sidebar } from '../Sidebar';
++import { CommandPalette } from '../CommandPalette';
++import { ThemeProvider } from '../../theme/ThemeProvider';
++import { ShellPanelsProvider } from '../shellPanels';
++import { PersonalSettingsPage } from '../../features/settings/PersonalSettingsPage';
++import * as personalApi from '../../features/settings/personalSettingsApi';
++import * as authApi from '../../features/auth/authApi';
++
++vi.mock('../../features/settings/personalSettingsApi');
++vi.mock('../../features/auth/authApi');
++
++describe('About Navigation Entry Points (KB-ABOUT-SBOM, KAN-34)', () => {
++  let queryClient: QueryClient;
++
++  beforeEach(() => {
++    queryClient = new QueryClient({
++      defaultOptions: { queries: { retry: false } },
++    });
++    vi.restoreAllMocks();
++  });
++
++  it('computeCurrentSection correctly maps /about and /settings/about to "About"', () => {
++    expect(computeCurrentSection('/about')).toBe('About');
++    expect(computeCurrentSection('/settings/about')).toBe('About');
++    expect(computeCurrentSection('/projects/KAN/issues')).toBe('Work Items');
++  });
++
++  it('Topbar renders ℹ️ About 👍kanban menu item above final logout divider', () => {
++    render(
++      <QueryClientProvider client={queryClient}>
++        <ThemeProvider>
++          <ShellPanelsProvider>
++            <MemoryRouter initialEntries={['/projects/KAN/issues']}>
++              <Topbar
++                onOpenPalette={vi.fn()}
++                onToggleSidebar={vi.fn()}
++                projectKey="KAN"
++                projectName="kanban"
++                currentSection="Work Items"
++              />
++            </MemoryRouter>
++          </ShellPanelsProvider>
++        </ThemeProvider>
++      </QueryClientProvider>,
++    );
++
++    // Open avatar menu
++    const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
++    fireEvent.click(avatarBtn);
++
++    // Verify About 👍kanban link exists
++    const aboutLink = screen.getByTestId('topbar-about-link');
++    expect(aboutLink).toBeDefined();
++    expect(aboutLink.getAttribute('href')).toBe('/about');
++    expect(aboutLink.textContent).toContain('About 👍kanban');
++  });
++
++  it('Sidebar renders muted ℹ️ v2.0.0 link in footer', () => {
++    render(
++      <MemoryRouter initialEntries={['/projects/KAN/issues']}>
++        <Sidebar projectKey="KAN" projectName="kanban" modulesEnabled={true} />
++      </MemoryRouter>,
++    );
++
++    const sidebarAboutLink = screen.getByTestId('sidebar-about-link');
++    expect(sidebarAboutLink).toBeDefined();
++    expect(sidebarAboutLink.getAttribute('href')).toBe('/about');
++    expect(sidebarAboutLink.textContent).toContain('v2.0.0');
++  });
++
++  it('CommandPalette includes "About 👍kanban (License, API Docs & SBOM)" navigation command', () => {
++    render(
++      <QueryClientProvider client={queryClient}>
++        <ThemeProvider>
++          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
++            <CommandPalette
++              isOpen={true}
++              onClose={vi.fn()}
++              projectKey="KAN"
++            />
++          </MemoryRouter>
++        </ThemeProvider>
++      </QueryClientProvider>,
++    );
++
++    const input = screen.getByTestId('command-palette-input');
++    fireEvent.change(input, { target: { value: 'About' } });
++
++    expect(
++      screen.getByText(/About 👍kanban \(License, API Docs & SBOM\)/i),
++    ).toBeDefined();
++  });
++
++  it('PersonalSettingsPage renders muted footer link to /about', async () => {
++    vi.mocked(personalApi.fetchMyProfile).mockResolvedValueOnce({
++      principal_id: 'usr-1',
++      username: 'testuser',
++      display_name: 'Test User',
++      email: 'test@example.com',
++      avatar_url: null,
++      timezone: 'UTC',
++      is_server_admin: false,
++    });
++    vi.mocked(personalApi.fetchMfaStatus).mockResolvedValueOnce({
++      totp_enabled: false,
++      passkeys_count: 0,
++      recovery_codes_remaining: 0,
++    });
++    vi.mocked(personalApi.fetchPasskeys).mockResolvedValueOnce([]);
++    vi.mocked(personalApi.fetchExternalIdentities).mockResolvedValueOnce([]);
++    vi.mocked(authApi.fetchAuthCards).mockResolvedValueOnce({ cards: [] });
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <MemoryRouter initialEntries={['/settings/profile']}>
++          <PersonalSettingsPage />
++        </MemoryRouter>
++      </QueryClientProvider>,
++    );
++
++    const footerAboutLink = await screen.findByTestId('personal-settings-about-link');
++    expect(footerAboutLink).toBeDefined();
++    expect(footerAboutLink.getAttribute('href')).toBe('/about');
++    expect(footerAboutLink.textContent).toContain('About 👍kanban');
++  });
++});
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index 22d20a28..d5746a79 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -64,6 +64,7 @@ import { McpAccessStudio } from '../features/settings/McpAccessStudio';
+ import { OAuthClientGovernanceStudio } from '../features/oauth/OAuthClientGovernanceStudio';
+ import { PlaneImportStudio } from '../features/admin-imports/PlaneImportStudio';
+ import { PersonalSettingsPage } from '../features/settings/PersonalSettingsPage';
++import { AboutPage } from '../features/about/AboutPage';
+ import { WorkflowStudioPage } from '../features/workflows/WorkflowStudioPage';
+ import { StandaloneStatusPanel } from '../features/standalone/StandaloneStatusPanel';
+ import { CreateProjectModal, type CreatedProject } from '../features/projects/CreateProjectModal';
+@@ -2011,6 +2012,14 @@ export const appRoutes: RouteObject[] = [
+             path: 'settings/profile',
+             element: <PersonalSettingsPage />,
+           },
++          {
++            path: 'about',
++            element: <AboutPage />,
++          },
++          {
++            path: 'settings/about',
++            element: <Navigate to="/about" replace />,
++          },
+           {
+             path: 'settings/mcp',
+             element: <McpAccessStudio />,
+diff --git a/kanban/web/src/features/about/AboutPage.css b/kanban/web/src/features/about/AboutPage.css
+new file mode 100644
+index 00000000..823fda31
+--- /dev/null
++++ b/kanban/web/src/features/about/AboutPage.css
+@@ -0,0 +1,430 @@
++/**
++ * About 👍kanban Page Styling (KB-ABOUT-SBOM, KAN-34).
++ * Strictly compliant with Content-Security-Policy style-src 'self'.
++ * Zero inline style attributes, 100% canonical CSS tokens.
++ */
++
++.kb-about-container {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-6);
++  padding: var(--space-6);
++  max-width: 1200px;
++  margin: 0 auto;
++  width: 100%;
++}
++
++.kb-about-loading,
++.kb-about-error {
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  padding: var(--space-12);
++  color: var(--fg-muted);
++  font-size: var(--text-base);
++}
++
++.kb-about-error {
++  color: var(--danger-fg);
++}
++
++/* Hero Section */
++.kb-about-hero {
++  background: var(--bg-surface);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-lg);
++  padding: var(--space-8);
++  box-shadow: var(--shadow-sm);
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-4);
++}
++
++.kb-about-hero-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  flex-wrap: wrap;
++  gap: var(--space-4);
++}
++
++.kb-about-branding {
++  display: flex;
++  align-items: center;
++  gap: var(--space-3);
++}
++
++.kb-about-logo {
++  font-size: var(--text-2xl);
++  display: flex;
++  align-items: center;
++  justify-content: center;
++}
++
++.kb-about-title {
++  font-size: var(--text-2xl);
++  font-weight: 700;
++  color: var(--fg-primary);
++  margin: 0;
++}
++
++.kb-about-badges {
++  display: flex;
++  align-items: center;
++  gap: var(--space-2);
++}
++
++.kb-about-badge {
++  display: inline-flex;
++  align-items: center;
++  padding: var(--space-1) var(--space-3);
++  font-size: var(--text-xs);
++  font-weight: 600;
++  border-radius: var(--radius-full);
++  line-height: 1.2;
++}
++
++.kb-about-badge-version {
++  background: var(--bg-hover);
++  color: var(--fg-secondary);
++  border: 1px solid var(--border-subtle);
++}
++
++.kb-about-badge-license {
++  background: var(--bg-success-subtle);
++  color: var(--ok-fg);
++  border: 1px solid var(--border-subtle);
++}
++
++.kb-about-tagline {
++  font-size: var(--text-lg);
++  color: var(--fg-secondary);
++  font-style: italic;
++  margin: 0;
++  line-height: 1.5;
++}
++
++.kb-about-hero-actions {
++  display: flex;
++  align-items: center;
++  gap: var(--space-3);
++  margin-top: var(--space-2);
++}
++
++.kb-about-btn-primary {
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-2);
++  padding: var(--space-2) var(--space-4);
++  background: var(--accent-primary);
++  color: var(--accent-primary-fg);
++  border: 1px solid transparent;
++  border-radius: var(--radius-md);
++  font-size: var(--text-sm);
++  font-weight: 600;
++  cursor: pointer;
++  text-decoration: none;
++  transition: opacity 0.15s ease;
++}
++
++.kb-about-btn-primary:hover {
++  opacity: 0.9;
++}
++
++.kb-about-btn-secondary {
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-2);
++  padding: var(--space-2) var(--space-4);
++  background: var(--bg-surface);
++  color: var(--fg-primary);
++  border: 1px solid var(--border-strong);
++  border-radius: var(--radius-md);
++  font-size: var(--text-sm);
++  font-weight: 500;
++  cursor: pointer;
++  transition: background 0.15s ease;
++}
++
++.kb-about-btn-secondary:hover {
++  background: var(--bg-hover);
++}
++
++/* API Docs Section */
++.kb-about-section {
++  background: var(--bg-surface);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-lg);
++  padding: var(--space-6);
++  box-shadow: var(--shadow-sm);
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-4);
++}
++
++.kb-about-section-header {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  border-bottom: 1px solid var(--border-subtle);
++  padding-bottom: var(--space-3);
++}
++
++.kb-about-section-title {
++  font-size: var(--text-lg);
++  font-weight: 600;
++  color: var(--fg-primary);
++  margin: 0;
++  display: flex;
++  align-items: center;
++  gap: var(--space-2);
++}
++
++.kb-about-api-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
++  gap: var(--space-4);
++}
++
++.kb-about-api-card {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-2);
++  padding: var(--space-4);
++  background: var(--bg-canvas);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-md);
++  text-decoration: none;
++  color: var(--fg-primary);
++  transition: border-color 0.15s ease, background 0.15s ease;
++}
++
++.kb-about-api-card:hover {
++  border-color: var(--accent-primary);
++  background: var(--bg-hover);
++}
++
++.kb-about-api-card-title {
++  font-size: var(--text-base);
++  font-weight: 600;
++  color: var(--accent-primary);
++  display: flex;
++  align-items: center;
++  gap: var(--space-2);
++}
++
++.kb-about-api-card-desc {
++  font-size: var(--text-sm);
++  color: var(--fg-secondary);
++  line-height: 1.4;
++}
++
++/* Supply Chain Summary Cards */
++.kb-about-metrics-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
++  gap: var(--space-3);
++}
++
++.kb-about-metric-card {
++  padding: var(--space-3) var(--space-4);
++  background: var(--bg-canvas);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-md);
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-1);
++}
++
++.kb-about-metric-label {
++  font-size: var(--text-xs);
++  color: var(--fg-muted);
++  text-transform: uppercase;
++  letter-spacing: 0.05em;
++  font-weight: 600;
++}
++
++.kb-about-metric-value {
++  font-size: var(--text-xl);
++  font-weight: 700;
++  color: var(--fg-primary);
++}
++
++.kb-about-metric-value-ok {
++  color: var(--ok-fg);
++}
++
++.kb-about-metric-value-warn {
++  color: var(--warn-fg);
++}
++
++.kb-about-metric-value-deny {
++  color: var(--danger-fg);
++}
++
++/* SBOM Table Controls */
++.kb-about-table-controls {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  flex-wrap: wrap;
++  gap: var(--space-3);
++}
++
++.kb-about-table-search {
++  flex: 1;
++  min-width: 220px;
++  max-width: 360px;
++  position: relative;
++}
++
++.kb-about-search-input {
++  width: 100%;
++  padding: var(--space-2) var(--space-3);
++  font-size: var(--text-sm);
++  background: var(--bg-surface);
++  color: var(--fg-primary);
++  border: 1px solid var(--border-strong);
++  border-radius: var(--radius-md);
++  outline: none;
++}
++
++.kb-about-search-input:focus {
++  border-color: var(--focus-ring);
++}
++
++.kb-about-table-filters {
++  display: flex;
++  align-items: center;
++  gap: var(--space-2);
++}
++
++.kb-about-tab-btn {
++  padding: var(--space-1) var(--space-3);
++  font-size: var(--text-xs);
++  font-weight: 500;
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-sm);
++  background: var(--bg-surface);
++  color: var(--fg-secondary);
++  cursor: pointer;
++  transition: background 0.15s ease;
++}
++
++.kb-about-tab-btn:hover {
++  background: var(--bg-hover);
++}
++
++.kb-about-tab-btn.active {
++  background: var(--accent-primary);
++  color: var(--accent-primary-fg);
++  border-color: var(--accent-primary);
++}
++
++/* SBOM Table */
++.kb-about-table-wrapper {
++  overflow-x: auto;
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-md);
++  max-height: 480px;
++  overflow-y: auto;
++}
++
++.kb-about-table {
++  width: 100%;
++  border-collapse: collapse;
++  font-size: var(--text-sm);
++  text-align: left;
++}
++
++.kb-about-table th {
++  background: var(--bg-canvas);
++  color: var(--fg-secondary);
++  font-weight: 600;
++  padding: var(--space-2) var(--space-3);
++  border-bottom: 1px solid var(--border-subtle);
++  position: sticky;
++  top: 0;
++  z-index: 1;
++}
++
++.kb-about-table td {
++  padding: var(--space-2) var(--space-3);
++  border-bottom: 1px solid var(--border-subtle);
++  color: var(--fg-primary);
++}
++
++.kb-about-table tr:hover td {
++  background: var(--bg-hover);
++}
++
++.kb-about-pkg-name {
++  font-weight: 600;
++  font-family: var(--font-mono);
++  font-size: var(--text-xs);
++}
++
++.kb-about-pkg-version {
++  font-family: var(--font-mono);
++  font-size: var(--text-xs);
++  color: var(--fg-secondary);
++}
++
++.kb-about-verdict-pill {
++  display: inline-flex;
++  align-items: center;
++  padding: 2px var(--space-2);
++  border-radius: var(--radius-full);
++  font-size: var(--text-xs);
++  font-weight: 600;
++}
++
++.kb-about-verdict-allow {
++  background: var(--bg-success-subtle);
++  color: var(--ok-fg);
++}
++
++.kb-about-verdict-allowlisted {
++  background: var(--bg-warning-subtle);
++  color: var(--warn-fg);
++}
++
++.kb-about-verdict-unknown {
++  background: var(--bg-hover);
++  color: var(--fg-muted);
++}
++
++.kb-about-verdict-deny {
++  background: var(--bg-danger-subtle);
++  color: var(--danger-fg);
++}
++
++.kb-about-empty-table {
++  text-align: center;
++  padding: var(--space-6);
++  color: var(--fg-muted);
++  font-style: italic;
++}
++
++/* License & Notice Viewer */
++.kb-about-license-tabs {
++  display: flex;
++  align-items: center;
++  gap: var(--space-2);
++  border-bottom: 1px solid var(--border-subtle);
++  padding-bottom: var(--space-2);
++}
++
++.kb-about-license-content {
++  background: var(--bg-canvas);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-md);
++  padding: var(--space-4);
++  max-height: 380px;
++  overflow-y: auto;
++  font-family: var(--font-mono);
++  font-size: var(--text-xs);
++  line-height: 1.6;
++  white-space: pre-wrap;
++  color: var(--fg-primary);
++}
+diff --git a/kanban/web/src/features/about/AboutPage.tsx b/kanban/web/src/features/about/AboutPage.tsx
+new file mode 100644
+index 00000000..0d57b50b
+--- /dev/null
++++ b/kanban/web/src/features/about/AboutPage.tsx
+@@ -0,0 +1,377 @@
++/**
++ * About 👍kanban Page Component (KB-ABOUT-SBOM, KAN-34).
++ * Tagline, Swagger/ReDoc API Docs Links, Apache-2.0 License, and CycloneDX 1.5 SBOM.
++ */
++
++import React, { useMemo, useState, type JSX } from 'react';
++import { useQuery } from '@tanstack/react-query';
++import { qk } from '../../api/queryKeys';
++import {
++  fetchSystemAbout,
++  getSbomDownloadUrl,
++  type SbomComponent,
++  type SystemAboutData,
++} from './aboutApi';
++import './AboutPage.css';
++
++export function AboutPage(): JSX.Element {
++  const { data, isLoading, error } = useQuery<SystemAboutData>({
++    queryKey: qk.systemAbout(),
++    queryFn: fetchSystemAbout,
++  });
++
++  const [searchQuery, setSearchQuery] = useState('');
++  const [ecosystemFilter, setEcosystemFilter] = useState<'all' | 'python' | 'node'>('all');
++  const [scopeFilter, setScopeFilter] = useState<'all' | 'runtime'>('runtime');
++  const [activeLicenseTab, setActiveLicenseTab] = useState<'license' | 'notice'>('license');
++  const [copiedLicense, setCopiedLicense] = useState(false);
++
++  const components = data?.components;
++  const filteredComponents = useMemo(() => {
++    if (!components) return [];
++    return components.filter((c: SbomComponent) => {
++      if (ecosystemFilter !== 'all') {
++        if (ecosystemFilter === 'python' && c.ecosystem !== 'python') return false;
++        if (ecosystemFilter === 'node' && c.ecosystem !== 'node' && c.ecosystem !== 'web') {
++          return false;
++        }
++      }
++      if (scopeFilter === 'runtime' && c.scope === 'dev') {
++        return false;
++      }
++      if (searchQuery.trim()) {
++        const q = searchQuery.toLowerCase().trim();
++        const matchesName = c.name.toLowerCase().includes(q);
++        const matchesLic = c.license.toLowerCase().includes(q);
++        const matchesPurl = c.purl.toLowerCase().includes(q);
++        if (!matchesName && !matchesLic && !matchesPurl) {
++          return false;
++        }
++      }
++      return true;
++    });
++  }, [components, ecosystemFilter, scopeFilter, searchQuery]);
++
++  const handleCopyLicense = async (): Promise<void> => {
++    const textToCopy = activeLicenseTab === 'license' ? (data?.license ?? '') : (data?.notice ?? '');
++    try {
++      await navigator.clipboard.writeText(textToCopy);
++      setCopiedLicense(true);
++      setTimeout(() => {
++        setCopiedLicense(false);
++      }, 2000);
++    } catch {
++      // Fallback if clipboard API unavailable
++    }
++  };
++
++  if (isLoading) {
++    return (
++      <div className="kb-about-container">
++        <div className="kb-about-loading">Loading system about metadata...</div>
++      </div>
++    );
++  }
++
++  if (error || !data) {
++    return (
++      <div className="kb-about-container">
++        <div className="kb-about-error">
++          Failed to load system information. Please ensure you are authenticated.
++        </div>
++      </div>
++    );
++  }
++
++  const {
++    platform,
++    version,
++    license_spdx,
++    tagline,
++    api_docs_urls,
++    sbom_summary,
++    license: licenseText,
++    notice: noticeText,
++  } = data;
++
++  return (
++    <div className="kb-about-container" data-testid="about-page-container">
++      {/* Hero Card */}
++      <section className="kb-about-hero" data-testid="about-hero-card">
++        <div className="kb-about-hero-header">
++          <div className="kb-about-branding">
++            <span className="kb-about-logo" aria-hidden="true">
++              👍
++            </span>
++            <h1 className="kb-about-title">{platform}</h1>
++            <div className="kb-about-badges">
++              <span className="kb-about-badge kb-about-badge-version">v{version}</span>
++              <span className="kb-about-badge kb-about-badge-license">{license_spdx}</span>
++            </div>
++          </div>
++          <div className="kb-about-hero-actions">
++            <a
++              href={getSbomDownloadUrl()}
++              download="thumbs-up-kanban-sbom-cdx-1.5.json"
++              className="kb-about-btn-primary"
++              data-testid="download-sbom-btn"
++            >
++              <span aria-hidden="true">📦</span>
++              Download CycloneDX 1.5 SBOM
++            </a>
++          </div>
++        </div>
++
++        <p className="kb-about-tagline" data-testid="about-tagline">
++          "{tagline}"
++        </p>
++      </section>
++
++      {/* REST API & OpenAPI Documentation Section */}
++      <section className="kb-about-section" data-testid="about-api-docs-section">
++        <div className="kb-about-section-header">
++          <h2 className="kb-about-section-title">
++            <span aria-hidden="true">🔌</span>
++            REST API & OpenAPI Documentation
++          </h2>
++        </div>
++        <div className="kb-about-api-grid">
++          <a
++            href={api_docs_urls.swagger_ui}
++            target="_blank"
++            rel="noopener noreferrer"
++            className="kb-about-api-card"
++            data-testid="about-swagger-link"
++          >
++            <div className="kb-about-api-card-title">
++              <span aria-hidden="true">⚡</span>
++              Swagger UI ({api_docs_urls.swagger_ui}) - Interactive Endpoint Explorer
++            </div>
++            <div className="kb-about-api-card-desc">
++              Interactive sandbox explorer allowing authenticated testing of all REST routes and schemas.
++            </div>
++          </a>
++
++          <a
++            href={api_docs_urls.redoc}
++            target="_blank"
++            rel="noopener noreferrer"
++            className="kb-about-api-card"
++            data-testid="about-redoc-link"
++          >
++            <div className="kb-about-api-card-title">
++              <span aria-hidden="true">📖</span>
++              ReDoc ({api_docs_urls.redoc}) - Schema & Reference Manual
++            </div>
++            <div className="kb-about-api-card-desc">
++              Structured API reference manual with detailed request/response payload models.
++            </div>
++          </a>
++
++          <a
++            href={api_docs_urls.openapi_json}
++            target="_blank"
++            rel="noopener noreferrer"
++            className="kb-about-api-card"
++            data-testid="about-openapi-link"
++          >
++            <div className="kb-about-api-card-title">
++              <span aria-hidden="true">📜</span>
++              OpenAPI 3.1.0 Spec ({api_docs_urls.openapi_json})
++            </div>
++            <div className="kb-about-api-card-desc">
++              Machine-readable canonical OpenAPI 3.1.0 JSON specification for code generation and tooling.
++            </div>
++          </a>
++        </div>
++      </section>
++
++      {/* Software Bill of Materials & Supply Chain Section */}
++      <section className="kb-about-section" data-testid="about-sbom-section">
++        <div className="kb-about-section-header">
++          <h2 className="kb-about-section-title">
++            <span aria-hidden="true">🛡️</span>
++            Software Bill of Materials (CycloneDX 1.5)
++          </h2>
++        </div>
++
++        {/* Summary Metric Cards */}
++        <div className="kb-about-metrics-grid" data-testid="sbom-metrics-grid">
++          <div className="kb-about-metric-card">
++            <div className="kb-about-metric-label">Total Dependencies</div>
++            <div className="kb-about-metric-value">{sbom_summary.total_components}</div>
++          </div>
++          <div className="kb-about-metric-card">
++            <div className="kb-about-metric-label">Python Backend</div>
++            <div className="kb-about-metric-value">{sbom_summary.python_components}</div>
++          </div>
++          <div className="kb-about-metric-card">
++            <div className="kb-about-metric-label">Web Frontend</div>
++            <div className="kb-about-metric-value">{sbom_summary.web_components}</div>
++          </div>
++          <div className="kb-about-metric-card">
++            <div className="kb-about-metric-label">Permissive (Approved)</div>
++            <div className="kb-about-metric-value kb-about-metric-value-ok">
++              {sbom_summary.permissive_count}
++            </div>
++          </div>
++          <div className="kb-about-metric-card">
++            <div className="kb-about-metric-label">Allowlisted Exceptions</div>
++            <div className="kb-about-metric-value kb-about-metric-value-warn">
++              {sbom_summary.allowlisted_count}
++            </div>
++          </div>
++          <div className="kb-about-metric-card">
++            <div className="kb-about-metric-label">Copyleft / Denied</div>
++            <div
++              className={`kb-about-metric-value ${
++                sbom_summary.deny_count > 0 ? 'kb-about-metric-value-deny' : 'kb-about-metric-value-ok'
++              }`}
++            >
++              {sbom_summary.deny_count}
++            </div>
++          </div>
++        </div>
++
++        {/* SBOM Filter Controls */}
++        <div className="kb-about-table-controls">
++          <div className="kb-about-table-search">
++            <input
++              type="text"
++              placeholder="Search components or licenses..."
++              value={searchQuery}
++              onChange={(e) => { setSearchQuery(e.target.value); }}
++              className="kb-about-search-input"
++              data-testid="sbom-search-input"
++            />
++          </div>
++          <div className="kb-about-table-filters">
++            <button
++              type="button"
++              className={`kb-about-tab-btn ${ecosystemFilter === 'all' ? 'active' : ''}`}
++              onClick={() => { setEcosystemFilter('all'); }}
++              data-testid="filter-ecosystem-all"
++            >
++              All Ecosystems
++            </button>
++            <button
++              type="button"
++              className={`kb-about-tab-btn ${ecosystemFilter === 'python' ? 'active' : ''}`}
++              onClick={() => { setEcosystemFilter('python'); }}
++              data-testid="filter-ecosystem-python"
++            >
++              Python ({sbom_summary.python_components})
++            </button>
++            <button
++              type="button"
++              className={`kb-about-tab-btn ${ecosystemFilter === 'node' ? 'active' : ''}`}
++              onClick={() => { setEcosystemFilter('node'); }}
++              data-testid="filter-ecosystem-node"
++            >
++              Web ({sbom_summary.web_components})
++            </button>
++            <button
++              type="button"
++              className={`kb-about-tab-btn ${scopeFilter === 'runtime' ? 'active' : ''}`}
++              onClick={() => {
++                setScopeFilter(scopeFilter === 'runtime' ? 'all' : 'runtime');
++              }}
++              data-testid="toggle-scope-runtime"
++            >
++              {scopeFilter === 'runtime' ? 'Scope: Runtime Only' : 'Scope: All (Inc. Dev)'}
++            </button>
++          </div>
++        </div>
++
++        {/* SBOM Table */}
++        <div className="kb-about-table-wrapper">
++          <table className="kb-about-table" data-testid="sbom-table">
++            <thead>
++              <tr>
++                <th>Component</th>
++                <th>Version</th>
++                <th>Ecosystem</th>
++                <th>License</th>
++                <th>Verdict</th>
++                <th>Scope</th>
++              </tr>
++            </thead>
++            <tbody>
++              {filteredComponents.length === 0 ? (
++                <tr>
++                  <td colSpan={6} className="kb-about-empty-table">
++                    No components match your search or filter criteria.
++                  </td>
++                </tr>
++              ) : (
++                filteredComponents.map((c) => (
++                  <tr key={`${c.ecosystem}-${c.name}-${c.version}`}>
++                    <td className="kb-about-pkg-name">{c.name}</td>
++                    <td className="kb-about-pkg-version">{c.version}</td>
++                    <td>{c.ecosystem}</td>
++                    <td>{c.license}</td>
++                    <td>
++                      <span
++                        className={`kb-about-verdict-pill ${
++                          c.license_verdict === 'ALLOW'
++                            ? 'kb-about-verdict-allow'
++                            : c.license_verdict === 'ALLOWLISTED'
++                              ? 'kb-about-verdict-allowlisted'
++                              : c.license_verdict === 'DENY'
++                                ? 'kb-about-verdict-deny'
++                                : 'kb-about-verdict-unknown'
++                        }`}
++                      >
++                        {c.license_verdict}
++                      </span>
++                    </td>
++                    <td>{c.scope}</td>
++                  </tr>
++                ))
++              )}
++            </tbody>
++          </table>
++        </div>
++      </section>
++
++      {/* Verbatim Apache-2.0 License & Third-Party Notice Viewer */}
++      <section className="kb-about-section" data-testid="about-license-section">
++        <div className="kb-about-section-header">
++          <div className="kb-about-license-tabs">
++            <button
++              type="button"
++              className={`kb-about-tab-btn ${activeLicenseTab === 'license' ? 'active' : ''}`}
++              onClick={() => { setActiveLicenseTab('license'); }}
++              data-testid="tab-apache-license"
++            >
++              Apache-2.0 License
++            </button>
++            <button
++              type="button"
++              className={`kb-about-tab-btn ${activeLicenseTab === 'notice' ? 'active' : ''}`}
++              onClick={() => { setActiveLicenseTab('notice'); }}
++              data-testid="tab-third-party-notice"
++            >
++              Third-Party NOTICE
++            </button>
++          </div>
++          <button
++            type="button"
++            className="kb-about-btn-secondary"
++            onClick={() => { void handleCopyLicense(); }}
++            data-testid="copy-license-btn"
++          >
++            {copiedLicense ? 'Copied!' : 'Copy License'}
++          </button>
++        </div>
++
++        <pre
++          className="kb-about-license-content"
++          data-testid="apache-license-text"
++        >
++          {activeLicenseTab === 'license' ? licenseText : noticeText}
++        </pre>
++      </section>
++    </div>
++  );
++}
+diff --git a/kanban/web/src/features/about/__tests__/AboutPage.test.tsx b/kanban/web/src/features/about/__tests__/AboutPage.test.tsx
+new file mode 100644
+index 00000000..452c85f3
+--- /dev/null
++++ b/kanban/web/src/features/about/__tests__/AboutPage.test.tsx
+@@ -0,0 +1,305 @@
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
++import React from 'react';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { AboutPage } from '../AboutPage';
++import * as aboutApi from '../aboutApi';
++
++vi.mock('../aboutApi');
++
++const mockAboutData: aboutApi.SystemAboutData = {
++  platform: '👍kanban',
++  slug: 'thumbs-up-kanban',
++  tagline: 'The difference between a swarm and an Agile team is a kanban.',
++  version: '2.0.0',
++  license_spdx: 'Apache-2.0',
++  api_docs_urls: {
++    swagger_ui: '/api/docs',
++    redoc: '/api/redoc',
++    openapi_json: '/api/openapi.json',
++  },
++  license: 'Apache License Version 2.0 (Verbatim Text)',
++  notice: 'Third-Party Software Notices (Verbatim Text)',
++  sbom_summary: {
++    total_components: 4,
++    python_components: 2,
++    web_components: 2,
++    permissive_count: 3,
++    allowlisted_count: 1,
++    unknown_count: 0,
++    deny_count: 0,
++  },
++  components: [
++    {
++      name: 'fastapi',
++      version: '0.115.0',
++      ecosystem: 'python',
++      purl: 'pkg:pypi/fastapi@0.115.0',
++      license: 'MIT',
++      license_verdict: 'ALLOW',
++      scope: 'required',
++      description: 'FastAPI web framework',
++    },
++    {
++      name: 'pillow',
++      version: '13.0.0',
++      ecosystem: 'python',
++      purl: 'pkg:pypi/pillow@13.0.0',
++      license: 'MIT-CMU',
++      license_verdict: 'ALLOWLISTED',
++      scope: 'required',
++    },
++    {
++      name: 'vitest',
++      version: '5.1.0',
++      ecosystem: 'node',
++      purl: 'pkg:npm/vitest@5.1.0',
++      license: 'MIT',
++      license_verdict: 'ALLOW',
++      scope: 'dev',
++    },
++    {
++      name: 'lucide-react',
++      version: '1.0.0',
++      ecosystem: 'web',
++      purl: 'pkg:npm/lucide-react@1.0.0',
++      license: 'ISC',
++      license_verdict: 'ALLOW',
++      scope: 'required',
++    },
++  ],
++};
++
++describe('AboutPage', () => {
++  let queryClient: QueryClient;
++  let writeTextMock: ReturnType<typeof vi.fn>;
++
++  beforeEach(() => {
++    queryClient = new QueryClient({
++      defaultOptions: { queries: { retry: false } },
++    });
++    vi.mocked(aboutApi.getSbomDownloadUrl).mockReturnValue('/api/v1/system/sbom?download=true');
++    writeTextMock = vi.fn().mockResolvedValue(undefined);
++    Object.assign(navigator, {
++      clipboard: {
++        writeText: writeTextMock,
++      },
++    });
++  });
++
++  const renderPage = (): ReturnType<typeof render> =>
++    render(
++      <QueryClientProvider client={queryClient}>
++        <AboutPage />
++      </QueryClientProvider>,
++    );
++
++  it('renders loading state initially', () => {
++    vi.mocked(aboutApi.fetchSystemAbout).mockReturnValue(
++      new Promise<aboutApi.SystemAboutData>(() => undefined),
++    );
++    renderPage();
++    expect(screen.getByText('Loading system about metadata...')).toBeDefined();
++  });
++
++  it('renders error state on query failure', async () => {
++    vi.mocked(aboutApi.fetchSystemAbout).mockRejectedValueOnce(new Error('Network error'));
++    renderPage();
++    await waitFor(() => {
++      expect(
++        screen.getByText(/Failed to load system information/i),
++      ).toBeDefined();
++    });
++  });
++
++  it('renders hero card with branding, tagline, version, license pill, and download SBOM button', async () => {
++    vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValueOnce(mockAboutData);
++    renderPage();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('about-tagline')).toBeDefined();
++    });
++
++    expect(screen.getByTestId('about-tagline').textContent).toContain(
++      'The difference between a swarm and an Agile team is a kanban.',
++    );
++    expect(screen.getByText('👍kanban')).toBeDefined();
++    expect(screen.getByText('v2.0.0')).toBeDefined();
++    expect(screen.getByText('Apache-2.0')).toBeDefined();
++
++    const downloadBtn = screen.getByTestId('download-sbom-btn');
++    expect(downloadBtn.getAttribute('href')).toBe('/api/v1/system/sbom?download=true');
++  });
++
++  it('renders REST API & OpenAPI documentation links with interactive targets', async () => {
++    vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValueOnce(mockAboutData);
++    renderPage();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('about-api-docs-section')).toBeDefined();
++    });
++
++    const swaggerLink = screen.getByTestId('about-swagger-link');
++    expect(swaggerLink.getAttribute('href')).toBe('/api/docs');
++    expect(swaggerLink.getAttribute('target')).toBe('_blank');
++
++    const redocLink = screen.getByTestId('about-redoc-link');
++    expect(redocLink.getAttribute('href')).toBe('/api/redoc');
++
++    const openapiLink = screen.getByTestId('about-openapi-link');
++    expect(openapiLink.getAttribute('href')).toBe('/api/openapi.json');
++  });
++
++  it('renders supply-chain summary metrics and filters SBOM table by search, ecosystem, and scope', async () => {
++    vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValueOnce(mockAboutData);
++    renderPage();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('sbom-table')).toBeDefined();
++    });
++
++    // Summary metrics
++    expect(screen.getByText('4')).toBeDefined(); // Total
++    expect(screen.getAllByText('2').length).toBeGreaterThan(0); // Python and Web count
++
++    // Default: scope is runtime only, so vitest (dev) is hidden, fastapi, pillow, and lucide-react shown
++    expect(screen.getByText('fastapi')).toBeDefined();
++    expect(screen.getByText('pillow')).toBeDefined();
++    expect(screen.getByText('lucide-react')).toBeDefined();
++    expect(screen.queryByText('vitest')).toBeNull();
++
++    // Toggle scope to all (inc dev)
++    fireEvent.click(screen.getByTestId('toggle-scope-runtime'));
++    expect(screen.getByText('vitest')).toBeDefined();
++
++    // Filter by Python ecosystem
++    fireEvent.click(screen.getByTestId('filter-ecosystem-python'));
++    expect(screen.getByText('fastapi')).toBeDefined();
++    expect(screen.queryByText('vitest')).toBeNull();
++    expect(screen.queryByText('lucide-react')).toBeNull();
++
++    // Filter by Web ecosystem (covers both 'node' and 'web' ecosystems)
++    fireEvent.click(screen.getByTestId('filter-ecosystem-node'));
++    expect(screen.getByText('vitest')).toBeDefined();
++    expect(screen.getByText('lucide-react')).toBeDefined();
++    expect(screen.queryByText('fastapi')).toBeNull();
++
++    // Filter all ecosystems
++    fireEvent.click(screen.getByTestId('filter-ecosystem-all'));
++
++    // Search query
++    const searchInput = screen.getByTestId('sbom-search-input');
++    fireEvent.change(searchInput, { target: { value: 'fast' } });
++    expect(screen.getByText('fastapi')).toBeDefined();
++    expect(screen.queryByText('vitest')).toBeNull();
++
++    // Search nonexistent query
++    fireEvent.change(searchInput, { target: { value: 'nonexistent-xyz' } });
++    expect(screen.getByText(/No components match your search/i)).toBeDefined();
++  });
++
++  it('switches between Apache-2.0 License and Third-Party NOTICE and copies to clipboard', async () => {
++    vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValueOnce(mockAboutData);
++    renderPage();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('apache-license-text')).toBeDefined();
++    });
++
++    // Initial: Apache-2.0 tab active
++    expect(screen.getByTestId('apache-license-text').textContent).toContain(
++      'Apache License Version 2.0 (Verbatim Text)',
++    );
++
++    // Click Copy License button and test timeout reset
++    const copyBtn = screen.getByTestId('copy-license-btn');
++    fireEvent.click(copyBtn);
++    await waitFor(() => {
++      expect(screen.getByText('Copied!')).toBeDefined();
++    });
++    expect(writeTextMock).toHaveBeenCalledWith(
++      'Apache License Version 2.0 (Verbatim Text)',
++    );
++
++    // Wait for timeout to revert copied state
++    await waitFor(
++      () => {
++        expect(screen.getByText('Copy License')).toBeDefined();
++      },
++      { timeout: 3000 },
++    );
++
++    // Switch to Third-Party NOTICE tab
++    fireEvent.click(screen.getByTestId('tab-third-party-notice'));
++    expect(screen.getByTestId('apache-license-text').textContent).toContain(
++      'Third-Party Software Notices (Verbatim Text)',
++    );
++
++    // Switch back to Apache-2.0 tab (covers line 343 onClick)
++    fireEvent.click(screen.getByTestId('tab-apache-license'));
++    expect(screen.getByTestId('apache-license-text').textContent).toContain(
++      'Apache License Version 2.0 (Verbatim Text)',
++    );
++
++    // Copy notice text
++    fireEvent.click(screen.getByTestId('tab-third-party-notice'));
++    fireEvent.click(screen.getByTestId('copy-license-btn'));
++    await waitFor(() => {
++      expect(writeTextMock).toHaveBeenCalledWith(
++        'Third-Party Software Notices (Verbatim Text)',
++      );
++    });
++  });
++
++  it('handles clipboard copy error gracefully and renders DENY/UNKNOWN pills', async () => {
++    const dataWithDeny: aboutApi.SystemAboutData = {
++      ...mockAboutData,
++      sbom_summary: {
++        ...mockAboutData.sbom_summary,
++        deny_count: 1,
++      },
++      components: [
++        {
++          name: 'gpl-pkg',
++          version: '1.0.0',
++          ecosystem: 'python',
++          purl: 'pkg:pypi/gpl-pkg@1.0.0',
++          license: 'GPL-3.0',
++          license_verdict: 'DENY',
++          scope: 'required',
++        },
++        {
++          name: 'unknown-pkg',
++          version: '1.0.0',
++          ecosystem: 'node',
++          purl: 'pkg:npm/unknown-pkg@1.0.0',
++          license: 'CUSTOM',
++          license_verdict: 'UNKNOWN',
++          scope: 'required',
++        },
++      ],
++    };
++
++    vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValueOnce(dataWithDeny);
++    Object.assign(navigator, {
++      clipboard: {
++        writeText: vi.fn().mockRejectedValueOnce(new Error('Clipboard denied')),
++      },
++    });
++
++    renderPage();
++    await waitFor(() => {
++      expect(screen.getByText('gpl-pkg')).toBeDefined();
++    });
++
++    expect(screen.getByText('DENY')).toBeDefined();
++    expect(screen.getByText('UNKNOWN')).toBeDefined();
++
++    const copyBtn = screen.getByTestId('copy-license-btn');
++    act(() => {
++      fireEvent.click(copyBtn);
++    });
++    // Should not throw or crash
++    expect(screen.queryByText('Copied!')).toBeNull();
++  });
++});
+diff --git a/kanban/web/src/features/about/__tests__/aboutApi.test.ts b/kanban/web/src/features/about/__tests__/aboutApi.test.ts
+new file mode 100644
+index 00000000..6714c029
+--- /dev/null
++++ b/kanban/web/src/features/about/__tests__/aboutApi.test.ts
+@@ -0,0 +1,62 @@
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { fetchSystemAbout, getSbomDownloadUrl } from '../aboutApi';
++import { apiFetch } from '../../../api/client';
++
++vi.mock('../../../api/client', () => ({
++  apiFetch: vi.fn(),
++}));
++
++const mockApiFetch = vi.mocked(apiFetch);
++
++describe('aboutApi', () => {
++  beforeEach(() => {
++    vi.clearAllMocks();
++  });
++
++  it('fetchSystemAbout calls /api/v1/system/about and returns typed payload', async () => {
++    const mockData = {
++      platform: '👍kanban',
++      slug: 'thumbs-up-kanban',
++      tagline: 'The difference between a swarm and an Agile team is a kanban.',
++      version: '2.0.0',
++      license_spdx: 'Apache-2.0',
++      api_docs_urls: {
++        swagger_ui: '/api/docs',
++        redoc: '/api/redoc',
++        openapi_json: '/api/openapi.json',
++      },
++      license: 'Apache-2.0 License Text',
++      notice: 'Third-Party Notice Text',
++      sbom_summary: {
++        total_components: 10,
++        python_components: 6,
++        web_components: 4,
++        permissive_count: 10,
++        allowlisted_count: 0,
++        unknown_count: 0,
++        deny_count: 0,
++      },
++      components: [
++        {
++          name: 'fastapi',
++          version: '0.115.0',
++          ecosystem: 'python' as const,
++          purl: 'pkg:pypi/fastapi@0.115.0',
++          license: 'MIT',
++          license_verdict: 'ALLOW' as const,
++          scope: 'required',
++        },
++      ],
++    };
++
++    mockApiFetch.mockResolvedValueOnce(mockData);
++
++    const result = await fetchSystemAbout();
++    expect(mockApiFetch).toHaveBeenCalledWith('GET', '/api/v1/system/about');
++    expect(result).toEqual(mockData);
++  });
++
++  it('getSbomDownloadUrl returns attachment download URL', () => {
++    expect(getSbomDownloadUrl()).toBe('/api/v1/system/sbom?download=true');
++  });
++});
+diff --git a/kanban/web/src/features/about/aboutApi.ts b/kanban/web/src/features/about/aboutApi.ts
+new file mode 100644
+index 00000000..0567d4ca
+--- /dev/null
++++ b/kanban/web/src/features/about/aboutApi.ts
+@@ -0,0 +1,54 @@
++/**
++ * System About & SBOM API client functions and types (KAN-34).
++ */
++
++import { apiFetch } from '../../api/client';
++
++export interface ApiDocsUrls {
++  readonly swagger_ui: string;
++  readonly redoc: string;
++  readonly openapi_json: string;
++}
++
++export interface SbomSummary {
++  readonly total_components: number;
++  readonly python_components: number;
++  readonly web_components: number;
++  readonly permissive_count: number;
++  readonly allowlisted_count: number;
++  readonly unknown_count: number;
++  readonly deny_count: number;
++}
++
++export interface SbomComponent {
++  readonly name: string;
++  readonly version: string;
++  readonly ecosystem: 'python' | 'node' | 'web';
++  readonly purl: string;
++  readonly license: string;
++  readonly license_verdict: 'ALLOW' | 'DENY' | 'UNKNOWN' | 'ALLOWLISTED';
++  readonly scope: string;
++  readonly description?: string;
++}
++
++export interface SystemAboutData {
++  readonly platform: string;
++  readonly slug: string;
++  readonly tagline: string;
++  readonly version: string;
++  readonly license_spdx: string;
++  readonly api_docs_urls: ApiDocsUrls;
++  readonly license: string;
++  readonly notice: string;
++  readonly sbom_summary: SbomSummary;
++  readonly components: readonly SbomComponent[];
++}
++
++export async function fetchSystemAbout(): Promise<SystemAboutData> {
++  const result = (await apiFetch('GET', '/api/v1/system/about' as never)) as SystemAboutData;
++  return result;
++}
++
++export function getSbomDownloadUrl(): string {
++  return '/api/v1/system/sbom?download=true';
++}
+diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.css b/kanban/web/src/features/settings/PersonalSettingsPage.css
+index 416b96f7..bf8a21d4 100644
+--- a/kanban/web/src/features/settings/PersonalSettingsPage.css
++++ b/kanban/web/src/features/settings/PersonalSettingsPage.css
+@@ -908,3 +908,25 @@
+     margin-right: 0;
+   }
+ }
++
++.kb-personal-settings-footer {
++  margin-top: var(--space-8);
++  padding-top: var(--space-4);
++  border-top: 1px solid var(--border-subtle);
++  display: flex;
++  justify-content: center;
++}
++
++.kb-personal-settings-about-link {
++  color: var(--fg-muted);
++  text-decoration: none;
++  font-size: var(--text-sm);
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-2);
++  transition: color 0.15s ease;
++}
++
++.kb-personal-settings-about-link:hover {
++  color: var(--fg-primary);
++}
+diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.tsx b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
+index 66a61f14..a0bab53a 100644
+--- a/kanban/web/src/features/settings/PersonalSettingsPage.tsx
++++ b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
+@@ -2,6 +2,7 @@
+ // Apache-2.0 License. See LICENSE for details.
+ 
+ import React, { useState, useRef, useEffect, type JSX, type SyntheticEvent } from 'react';
++import { Link } from 'react-router';
+ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+ import {
+   fetchMyProfile,
+@@ -1103,6 +1104,16 @@ export function PersonalSettingsPage(): JSX.Element {
+         )}
+       </section>
+ 
++      <footer className="kb-personal-settings-footer">
++        <Link
++          to="/about"
++          className="kb-personal-settings-about-link"
++          data-testid="personal-settings-about-link"
++        >
++          ℹ️ About 👍kanban
++        </Link>
++      </footer>
++
+       {/* TOTP Setup Modal */}
+       {totpSetupStep && (
+         <div className="kb-personal-settings-modal-backdrop" role="presentation">
+diff --git a/kanban/web/vite.config.ts b/kanban/web/vite.config.ts
+index 87d9e1c6..c914455f 100644
+--- a/kanban/web/vite.config.ts
++++ b/kanban/web/vite.config.ts
+@@ -1,10 +1,11 @@
+ import { defineConfig } from 'vite';
+ import react from '@vitejs/plugin-react';
+ import { precompress } from './build/precompress.ts';
++import { generateSbomWebPlugin } from './build/sbom.ts';
+ import { PRODUCTION_CSP } from './e2e/support/csp.ts';
+ 
+ export default defineConfig({
+-  plugins: [react(), precompress()],
++  plugins: [react(), precompress(), generateSbomWebPlugin()],
+   worker: {
+     format: 'es',
+   },

@@ -24,4 +24,5 @@ export const qk = {
   objectLinks: (key: string) => ['objectLinks', key] as const,
   canonicalUrl: (key: string) => ['canonicalUrl', key] as const,
   deletePreview: (key: string) => ['deletePreview', key] as const,
+  systemAbout: () => ['system', 'about'] as const,
 };
