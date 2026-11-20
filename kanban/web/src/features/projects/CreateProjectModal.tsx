@@ -76,6 +76,7 @@ export function CreateProjectModal({
   const [description, setDescription] = useState('');
   const [modulesEnabled, setModulesEnabled] = useState(true);
   const [skipLoadedSeq, setSkipLoadedSeq] = useState(false);
+  const [skipLoadedSeqTouched, setSkipLoadedSeqTouched] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
@@ -98,6 +99,7 @@ export function CreateProjectModal({
     setDescription('');
     setModulesEnabled(true);
     setSkipLoadedSeq(false);
+    setSkipLoadedSeqTouched(false);
     setErrorMessage(null);
     setIsSubmitting(false);
   };
@@ -111,6 +113,24 @@ export function CreateProjectModal({
     if (!isOpen) {
       return;
     }
+
+    const isMounted = { current: true };
+    void (async () => {
+      try {
+        const res = await fetch('/api/v1/admin/workspace-settings', {
+          headers: { Accept: 'application/json' },
+          credentials: 'same-origin',
+        });
+        if (res.ok && isMounted.current) {
+          const data = (await res.json()) as { default_skip_loaded_sequence_numbers?: boolean };
+          if (typeof data.default_skip_loaded_sequence_numbers === 'boolean') {
+            setSkipLoadedSeq(data.default_skip_loaded_sequence_numbers);
+          }
+        }
+      } catch {
+        // Inherits default gracefully on submit
+      }
+    })();
 
     const timer = setTimeout(() => {
       nameInputRef.current?.focus();
@@ -126,6 +146,7 @@ export function CreateProjectModal({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => {
+      isMounted.current = false;
       clearTimeout(timer);
       window.removeEventListener('keydown', handleKeyDown);
     };
@@ -182,17 +203,21 @@ export function CreateProjectModal({
         headers['X-CSRF-Token'] = csrfToken;
       }
 
+      const createPayload: Record<string, unknown> = {
+        name: trimmedName,
+        identifier: cleanId,
+        description_markdown: description.trim(),
+        modules_enabled: modulesEnabled,
+      };
+      if (skipLoadedSeqTouched) {
+        createPayload.skip_loaded_sequence_numbers = skipLoadedSeq;
+      }
+
       const res = await fetch('/api/v1/projects', {
         method: 'POST',
         headers,
         credentials: 'same-origin',
-        body: JSON.stringify({
-          name: trimmedName,
-          identifier: cleanId,
-          description_markdown: description.trim(),
-          modules_enabled: modulesEnabled,
-          skip_loaded_sequence_numbers: skipLoadedSeq,
-        }),
+        body: JSON.stringify(createPayload),
       });
 
       if (!res.ok) {
@@ -342,22 +367,25 @@ export function CreateProjectModal({
             <span>Enable project modules</span>
           </label>
 
-          <label
-            htmlFor="create-project-skip-loaded-seq"
-            className="kb-create-project-checkbox-row"
-          >
-            <input
-              id="create-project-skip-loaded-seq"
-              data-testid="create-project-skip-loaded-seq"
-              type="checkbox"
-              checked={skipLoadedSeq}
-              onChange={(e) => {
-                setSkipLoadedSeq(e.target.checked);
-              }}
-            />
+          <div className="kb-create-project-checkbox-row-wrap">
+            <label
+              htmlFor="create-project-skip-loaded-seq"
+              className="kb-create-project-checkbox-row"
+            >
+              <input
+                id="create-project-skip-loaded-seq"
+                data-testid="create-project-skip-loaded-seq"
+                type="checkbox"
+                checked={skipLoadedSeq}
+                onChange={(e) => {
+                  setSkipLoadedSeqTouched(true);
+                  setSkipLoadedSeq(e.target.checked);
+                }}
+              />
+              <span>Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)</span>
+            </label>
             <EmojiHint kind="agentSafeNumbering" />
-            <span>Skip distracting / culturally loaded ticket numbers (13, 69, 88, 404, 420, 666, 1337, 1488)</span>
-          </label>
+          </div>
 
           {errorMessage && (
             <div

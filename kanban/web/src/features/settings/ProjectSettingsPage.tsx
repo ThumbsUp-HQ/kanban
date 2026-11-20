@@ -1466,9 +1466,9 @@ export function ProjectSettingsPage(): JSX.Element {
                   checked={skipLoadedSeq}
                   onChange={(e) => { setSkipLoadedSeq(e.target.checked); }}
                 />
-                <EmojiHint kind="agentSafeNumbering" />
-                <span>Skip distracting / culturally loaded ticket numbers (13, 69, 88, 404, 420, 666, 1337, 1488)</span>
+                <span>Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)</span>
               </label>
+              <EmojiHint kind="agentSafeNumbering" />
             </div>
 
             {/* Default Modules Selector (when modulesEnabled is true) */}

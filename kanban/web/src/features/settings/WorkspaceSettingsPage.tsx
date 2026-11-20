@@ -18,6 +18,7 @@ import { apiFetch } from '../../api/client';
 import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { EmojiHint } from '../../components/emoji/EmojiHint';
 import './ProjectSettingsPage.css';
 
 interface WorkspaceSettingsData {
@@ -32,6 +33,7 @@ interface WorkspaceSettingsData {
   trash_retention_days?: number;
   mcp_key_max_ttl_days?: number;
   air_gap_mode?: boolean;
+  default_skip_loaded_sequence_numbers?: boolean;
   updated_at?: string;
 }
 
@@ -172,6 +174,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
   const [trashRetention, setTrashRetention] = useState<number>(30);
   const [mcpKeyMaxTtl, setMcpKeyMaxTtl] = useState<number>(90);
   const [airGapMode, setAirGapMode] = useState<boolean>(false);
+  const [defaultSkipLoadedSeq, setDefaultSkipLoadedSeq] = useState<boolean>(false);
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
   // Form Fields - New User
@@ -307,6 +310,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
           setTrashRetention(settingsRes.trash_retention_days ?? 30);
           setMcpKeyMaxTtl(settingsRes.mcp_key_max_ttl_days ?? 90);
           setAirGapMode(Boolean(settingsRes.air_gap_mode));
+          setDefaultSkipLoadedSeq(Boolean(settingsRes.default_skip_loaded_sequence_numbers));
         }
 
         // 2. Fetch workspace principals
@@ -543,6 +547,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
           trash_retention_days: trashRetention,
           mcp_key_max_ttl_days: mcpKeyMaxTtl,
           air_gap_mode: airGapMode,
+          default_skip_loaded_sequence_numbers: defaultSkipLoadedSeq,
         };
 
         const updated = (await apiFetch('PATCH', '/api/v1/admin/workspace-settings' as never, {
@@ -1017,6 +1022,23 @@ export function WorkspaceSettingsPage(): JSX.Element {
                   testId="ws-air-gap-help"
                 />
               </label>
+            </div>
+
+            <div className="kb-form-group kb-form-group-toggle">
+              <label htmlFor="ws-default-skip-loaded-seq" className="kb-toggle-label">
+                <input
+                  id="ws-default-skip-loaded-seq"
+                  type="checkbox"
+                  data-testid="workspace-default-skip-loaded-seq-checkbox"
+                  className="kb-checkbox"
+                  checked={defaultSkipLoadedSeq}
+                  onChange={(e) => { setDefaultSkipLoadedSeq(e.target.checked); }}
+                />
+                <span className="kb-toggle-text">
+                  Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)
+                </span>
+              </label>
+              <EmojiHint kind="agentSafeNumbering" />
             </div>
 
             <button

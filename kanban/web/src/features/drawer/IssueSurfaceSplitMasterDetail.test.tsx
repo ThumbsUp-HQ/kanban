@@ -321,4 +321,55 @@ describe('IssueSurface split mode (KAN-52 Problem 3)', () => {
     });
     expect(shareBtn.textContent).toContain('✓ Copied link!');
   });
+
+  it('separate copy timeouts allow both git branch and share export feedback to clear independently without timer collision', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn().mockResolvedValue(undefined),
+      },
+    });
+
+    renderSplitSurface();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('split-git-branch-copy')).toBeDefined();
+    });
+
+    const gitBranchBtn = screen.getByTestId('split-git-branch-copy');
+    const shareBtn = screen.getByTestId('split-share-btn');
+
+    await act(async () => {
+      fireEvent.click(gitBranchBtn);
+      await Promise.resolve();
+    });
+    expect(gitBranchBtn.textContent).toContain('✓ Copied!');
+
+    // Click share button 500ms later
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+
+    await act(async () => {
+      fireEvent.click(shareBtn);
+      await Promise.resolve();
+    });
+    expect(shareBtn.textContent).toContain('✓ Copied link!');
+    expect(gitBranchBtn.textContent).toContain('✓ Copied!');
+
+    // Advance 1550ms (total 2050ms for branch, 1550ms for share)
+    act(() => {
+      vi.advanceTimersByTime(1550);
+    });
+    expect(gitBranchBtn.textContent).not.toContain('✓ Copied!');
+    expect(shareBtn.textContent).toContain('✓ Copied link!');
+
+    // Advance 500ms more (total 2050ms for share)
+    act(() => {
+      vi.advanceTimersByTime(500);
+    });
+    expect(shareBtn.textContent).not.toContain('✓ Copied link!');
+
+    vi.useRealTimers();
+  });
 });

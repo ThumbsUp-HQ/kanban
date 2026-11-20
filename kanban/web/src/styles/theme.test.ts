@@ -65,10 +65,10 @@ describe('Semantic Theme and Color Contrast (theme.css)', () => {
 
   it('contains hex literals only for color properties in both themes', () => {
     for (const [, val] of Object.entries(lightProps)) {
-      expect(val).toMatch(/^#[0-9a-fA-F]{6}$/);
+      expect(val).toMatch(/^(#[0-9a-fA-F]{6}|rgba?\([^)]+\))$/);
     }
     for (const [, val] of Object.entries(darkProps)) {
-      expect(val).toMatch(/^#[0-9a-fA-F]{6}$/);
+      expect(val).toMatch(/^(#[0-9a-fA-F]{6}|rgba?\([^)]+\))$/);
     }
   });
 

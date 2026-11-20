@@ -74,7 +74,7 @@ describe('routes and AppShell integration', () => {
     expect(screen.getByRole('link', { name: /Cycles/ })).toBeDefined();
     expect(screen.getByRole('link', { name: /Modules/ })).toBeDefined();
     expect(screen.queryByRole('link', { name: /Views/ })).toBeNull();
-    expect(screen.getByRole('link', { name: /^Docs$/ })).toBeDefined();
+    expect(screen.getByTestId('sidebar-docs-link')).toBeDefined();
     expect(screen.getByRole('link', { name: /Workflows/ })).toBeDefined();
 
     // Breadcrumb
@@ -99,9 +99,9 @@ describe('routes and AppShell integration', () => {
       </QueryClientProvider>,
     );
 
-    // After normalization, List should be available
-    const listLink = await screen.findByRole('link', { name: /List/ });
-    expect(listLink).toBeDefined();
+    // After normalization, Issues view nav link is rendered
+    const issuesLink = await screen.findByRole('link', { name: 'Issues view' });
+    expect(issuesLink).toBeDefined();
   });
 
   it('renders "Not found or no access" for invalid projectKey or issueKey without fetch calls', () => {
@@ -1948,8 +1948,8 @@ describe('IssuesWorkspaceRoute', () => {
           </ProjectRouteContext.Provider>
         </QueryClientProvider>,
       );
-      const rowKeyLink = await screen.findByRole('link', { name: 'KAN-140' });
-      fireEvent.click(rowKeyLink);
+      const rowKeyCard = await screen.findByTestId('issue-list-card-KAN-140');
+      fireEvent.click(rowKeyCard);
       uIssuesPeek();
 
       // 7. DraftsWorkspaceView with cached object having key instead of identifier

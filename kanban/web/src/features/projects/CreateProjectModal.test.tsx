@@ -475,4 +475,63 @@ describe('CreateProjectModal & useSessionGuard', () => {
     // 6. Suggest project identifier branch where name has single word
     expect(suggestProjectIdentifier('Testing')).toBe('TESTI');
   });
+
+  it('pre-checks skip loaded sequences from workspace settings and omits field if untouched', async () => {
+    let sentPayload: Record<string, unknown> | null = null;
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes('/api/v1/admin/workspace-settings')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ default_skip_loaded_sequence_numbers: true }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      if (url.includes('/api/v1/auth/session')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ csrf_token: 'csrf-tok' }), { status: 200 }),
+        );
+      }
+      if (url.includes('/api/v1/projects') && init?.method === 'POST') {
+        sentPayload = typeof init.body === 'string'
+          ? (JSON.parse(init.body) as Record<string, unknown>)
+          : null;
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'p-1',
+              identifier: 'INHR',
+              name: 'Inherited Project',
+            }),
+            { status: 201, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 404 }));
+    });
+
+    render(
+      <MemoryRouter>
+        <CreateProjectModal isOpen={true} onClose={vi.fn()} onCreated={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    const nameInput = screen.getByLabelText('Project Name');
+    fireEvent.change(nameInput, { target: { value: 'Inherited Project' } });
+
+    const checkbox = await screen.findByTestId<HTMLInputElement>('create-project-skip-loaded-seq');
+    // Hydrated from workspace settings
+    await waitFor(() => {
+      expect(checkbox.checked).toBe(true);
+    });
+
+    fireEvent.click(screen.getByTestId('create-project-submit'));
+
+    await waitFor(() => {
+      expect(sentPayload).not.toBeNull();
+      // Since user did not touch the checkbox, it must be omitted so backend inherits workspace settings
+      expect(sentPayload?.skip_loaded_sequence_numbers).toBeUndefined();
+    });
+  });
 });

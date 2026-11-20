@@ -365,7 +365,7 @@ describe('Browser QA Branch Coverage Booster', () => {
         <LayoutSwitcher value={'unknown_layout' as never} className="custom-sw" />,
       );
       expect(container.querySelector('.custom-sw')).not.toBeNull();
-      expect(screen.getByRole('radio', { name: 'List' })).toBeDefined();
+      expect(screen.getByRole('radio', { name: 'Issues' })).toBeDefined();
     });
   });
 

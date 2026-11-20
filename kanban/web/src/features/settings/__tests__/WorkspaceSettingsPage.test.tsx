@@ -243,6 +243,60 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     expect(screen.getByText('alice@example.com')).toBeDefined();
   });
 
+  it('hydrates default_skip_loaded_sequence_numbers, allows toggling, and submits in PATCH payload', async () => {
+    let patchPayload: Record<string, unknown> | null = null;
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
+      await Promise.resolve();
+      const url = path;
+      const m = method.toUpperCase();
+
+      if (url.includes('/api/v1/auth/me')) {
+        return {
+          id: 'user-admin',
+          is_server_admin: true,
+          is_workspace_admin: true,
+          workspace_role: 'WORKSPACE_ADMIN',
+        };
+      }
+      if (url.includes('/api/v1/workspaces')) {
+        return [{ id: 'ws-1', name: 'Primary Workspace', slug: 'primary-workspace', is_current: true }];
+      }
+      if (url.includes('/api/v1/admin/workspace-settings') && m === 'GET') {
+        return {
+          id: 'ws-1',
+          name: 'Primary Workspace',
+          slug: 'primary-workspace',
+          default_skip_loaded_sequence_numbers: true,
+        };
+      }
+      if (url.includes('/api/v1/admin/workspace-settings') && m === 'PATCH') {
+        const rawBody = (options as { body?: string } | undefined)?.body;
+        patchPayload = typeof rawBody === 'string' ? (JSON.parse(rawBody) as Record<string, unknown>) : null;
+        return {
+          id: 'ws-1',
+          name: 'Primary Workspace',
+          default_skip_loaded_sequence_numbers: false,
+        };
+      }
+      return {};
+    });
+
+    renderComponent();
+
+    const checkbox = await screen.findByTestId<HTMLInputElement>('workspace-default-skip-loaded-seq-checkbox');
+    expect(checkbox.checked).toBe(true);
+
+    fireEvent.click(checkbox);
+    expect(checkbox.checked).toBe(false);
+
+    fireEvent.click(screen.getByTestId('save-workspace-btn'));
+
+    await waitFor(() => {
+      expect(patchPayload).not.toBeNull();
+      expect(patchPayload?.default_skip_loaded_sequence_numbers).toBe(false);
+    });
+  });
+
   it('handles workspace settings load failure gracefully', async () => {
     vi.spyOn(clientModule, 'apiFetch').mockRejectedValue(new Error('Network load timeout'));
 

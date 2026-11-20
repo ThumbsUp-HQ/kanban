@@ -944,9 +944,10 @@ describe('Hubs Coverage Booster (KANBA-221)', () => {
 
       render(
         <QueryClientProvider client={queryClient}>
-          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues?layout=board']}>
             <IssuesWorkspaceRoute
               projectKey="KAN"
+              initialLayout="board"
               initialIssues={FIXTURE_12_ISSUES}
             />
           </MemoryRouter>
