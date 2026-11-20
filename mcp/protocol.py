@@ -1193,7 +1193,7 @@ class McpProtocolHandler:
                         fix_hint = (
                             "state changes not permitted in update_ticket; use transition_ticket"
                         )
-                    elif k == "custom_fields":
+                    elif k == "custom_fields" and spec.name == "update_ticket":
                         hint = "custom fields arrive in Phase 5"
                         fix_hint = (
                             "custom fields are not supported in update_ticket; "

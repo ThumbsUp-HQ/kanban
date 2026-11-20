@@ -1,5 +1,5 @@
 diff --git a/MCP-Tools-Reference.md b/MCP-Tools-Reference.md
-index df71a26..4af0795 100644
+index df71a26..c0e0edf 100644
 --- a/MCP-Tools-Reference.md
 +++ b/MCP-Tools-Reference.md
 @@ -2,7 +2,7 @@
@@ -133,13 +133,9 @@ index df71a26..4af0795 100644
  
 -### 2. `read_doc`
 -- **Description:** Read a document or page by slug or UUID, including ltree outline and metadata.
-+### 2. `create`
-+- **Description:** Atomic authoring tool creating standalone Docs, nested child Pages in an ltree hierarchy, or ideation Stickies.
- - **Required Parameters:**
+-- **Required Parameters:**
 -  - `identifier` (string): Doc slug or UUID.
-+  - `type` (string): Entity kind: `DOC` or `STICKY`.
-+  - `title` (string): Document title or sticky summary.
- - **Optional Parameters:**
+-- **Optional Parameters:**
 -  - `lod` (string): Level of detail (`summary`, `standard`, `full`).
 -
 -### 3. `upsert_doc`
@@ -156,6 +152,28 @@ index df71a26..4af0795 100644
 -
 -### 4. `manage_stickies`
 -- **Description:** Create, update, list, or delete digital scratchpad stickies on the ideation masonry grid.
+-- **Required Parameters:**
+-  - `action` (string): `create`, `update`, `list`, `delete`.
+-- **Optional Parameters:**
+-  - `project` (string): Project context.
+-  - `sticky` (string): Sticky UUID.
+-  - `body_markdown` (string): Sticky note content.
+-  - `color` (string): `amber`, `emerald`, `sky`, `rose`, `violet`, `slate`.
+-
+-### 5. `promote_sticky_to_doc`
+-- **Description:** Losslessly transform a mature sticky note into a formal hierarchical Doc, inheriting ACL scope and archiving the sticky.
++### 2. `create`
++- **Description:** Atomic authoring tool creating standalone Docs, nested child Pages in an ltree hierarchy, or ideation Stickies.
+ - **Required Parameters:**
+-  - `sticky` (string): Sticky UUID to promote.
++  - `type` (string): Entity kind: `DOC` or `STICKY`.
++  - `title` (string): Document title or sticky summary.
+ - **Optional Parameters:**
+-  - `parent` (string): Parent doc UUID for placement in documentation tree.
+-  - `title` (string): Document title (auto-generated if omitted).
+-
+-### 6. `link_knowledge`
+-- **Description:** Bind documents to issues, modules, or external resources in the Universal Object Graph.
 +  - `project` (string): Project identifier (e.g. `KAN`). Required when creating stickies.
 +  - `content` (string): Canonical Markdown content body.
 +  - `parent` (string): Parent Doc UUID or canonical slug for nested document placement.
@@ -166,29 +184,11 @@ index df71a26..4af0795 100644
 +### 3. `update`
 +- **Description:** Unified mutation tool for updating Markdown content, properties, or executing surgical line-level diff-patching with ETag concurrency protection and smart sticky-to-doc promotion.
  - **Required Parameters:**
--  - `action` (string): `create`, `update`, `list`, `delete`.
-+  - `id` (string): Doc slug, UUID, or sticky note identifier.
- - **Optional Parameters:**
--  - `project` (string): Project context.
--  - `sticky` (string): Sticky UUID.
--  - `body_markdown` (string): Sticky note content.
--  - `color` (string): `amber`, `emerald`, `sky`, `rose`, `violet`, `slate`.
--
--### 5. `promote_sticky_to_doc`
--- **Description:** Losslessly transform a mature sticky note into a formal hierarchical Doc, inheriting ACL scope and archiving the sticky.
--- **Required Parameters:**
--  - `sticky` (string): Sticky UUID to promote.
--- **Optional Parameters:**
--  - `parent` (string): Parent doc UUID for placement in documentation tree.
--  - `title` (string): Document title (auto-generated if omitted).
--
--### 6. `link_knowledge`
--- **Description:** Bind documents to issues, modules, or external resources in the Universal Object Graph.
--- **Required Parameters:**
 -  - `source` (string): Doc UUID.
 -  - `target` (string): Target issue key, module slug, or doc UUID.
 -  - `target_kind` (string): Entity kind (`issue`, `doc`, `module`).
--- **Optional Parameters:**
++  - `id` (string): Doc slug, UUID, or sticky note identifier.
+ - **Optional Parameters:**
 -  - `link_type` (string): Relationship kind (`relates_to`, `mentions`).
 -  - `action` (string): `create` (default) or `remove`.
 +  - `type` (string): Entity kind: `DOC` or `STICKY`.
@@ -214,11 +214,16 @@ index df71a26..4af0795 100644
  
  ```mermaid
  sequenceDiagram
-@@ -235,6 +233,7 @@ sequenceDiagram
+@@ -231,10 +229,11 @@ sequenceDiagram
+ ### 1. `configure_workspace`
+ - **Description:** Read or update workspace-level settings, themes, and default project templates.
+ - **Required Parameters:**
+-  - `action` (string): `read` or `update`.
++  - `action` (string): `get` or `update`.
  - **Optional Parameters:**
    - `settings` (object): Key-value workspace configuration settings.
    - `lod` (string): Level of detail.
-+- **CLI Example:** `kanban-cli-admin configure_workspace --action="read"`
++- **CLI Example:** `kanban-cli-admin configure_workspace --action="get"`
  
  ### 2. `manage_auth_cards`
  - **Description:** Configure, reorder, test, or toggle Multi-Card authentication providers.
@@ -305,7 +310,7 @@ index df71a26..4af0795 100644
  
  ### 12. `destructive_lifecycle` (Two-Stage Confirmation Safety)
  - **Description:** Administrative destruction tool for projects, workspaces, or entire datasets. Enforces a non-bypassable two-stage confirmation protocol.
-@@ -349,3 +358,152 @@ sequenceDiagram
+@@ -349,3 +358,161 @@ sequenceDiagram
    - `confirmation_token` (string): Short-lived cryptographic token issued in Stage 1.
    - `confirm_phrase` (string): Verbatim confirmation string (e.g. `DELETE PROJECT KAN`).
    - `reason` (string): Mandatory audit justification.
@@ -346,6 +351,7 @@ index df71a26..4af0795 100644
 +  field: body
 +  valid_options: [id, type, title, content, parent, color, original_text, replacement_text, if_match, links]
 +  did_you_mean: [content]
++  hint: Unknown parameter 'body'. Did you mean 'content'?
 +  fix_hint: Unknown parameter 'body'. Did you mean 'content'?
 +  cli_example: kanban-cli-docs update --id="docs/arch" --type=DOC --content="new content"
 +```
@@ -360,6 +366,7 @@ index df71a26..4af0795 100644
 +  field: querry
 +  valid_options: [id, query, type, project, lod, include_tree, limit, cursor]
 +  did_you_mean: [query, cursor]
++  hint: Unknown parameter 'querry'. Did you mean 'query'?
 +  fix_hint: Unknown parameter 'querry'. Did you mean 'query'?
 +  cli_example: kanban-cli-docs search --query="architecture"
 +```
@@ -372,7 +379,8 @@ index df71a26..4af0795 100644
 +  code: VALIDATION_FAILED
 +  message: Missing required parameter 'title' for tool 'create'
 +  field: title
-+  fix_hint: Missing required parameter: 'title'. Provide a value to proceed.
++  hint: 'Missing required parameter: ''title''. Provide a value to proceed.'
++  fix_hint: 'Missing required parameter: ''title''. Provide a value to proceed.'
 +  cli_example: kanban-cli-docs create --type=DOC --content="# Architecture" --title="<title>"
 +```
 +
@@ -386,7 +394,8 @@ index df71a26..4af0795 100644
 +  field: type
 +  valid_options: [DOC, STICKY, doc, sticky]
 +  did_you_mean: [doc]
-+  fix_hint: Invalid value 'dco' for parameter 'type'. Did you mean 'doc'? Valid options: ['DOC', 'STICKY', 'doc', 'sticky']
++  hint: 'Invalid value ''dco'' for parameter ''type''. Did you mean ''doc''? Valid options: [''DOC'', ''STICKY'', ''doc'', ''sticky'']'
++  fix_hint: 'Invalid value ''dco'' for parameter ''type''. Did you mean ''doc''? Valid options: [''DOC'', ''STICKY'', ''doc'', ''sticky'']'
 +  cli_example: kanban-cli-docs create --type="doc" --title="System Architecture" --content="text"
 +```
 +
@@ -414,6 +423,7 @@ index df71a26..4af0795 100644
 +  message: concurrency conflict: ticket description was modified concurrently
 +  field: if_match
 +  current_etag: 9f83726abcde4582...
++  hint: 'Ticket description was modified concurrently. Retry with fresh ETag: 9f83726abcde4582...'
 +  fix_hint: Ticket description was modified concurrently. Retry with fresh ETag: 9f83726abcde4582...
 +  cli_example: kanban-cli-agent update_ticket --identifier="KAN-19" --if-match="9f83726abcde4582..."
 +```
@@ -427,6 +437,7 @@ index df71a26..4af0795 100644
 +  message: Sticky 'stk_01abc' has already been promoted to document 'DOC-KAN-42'
 +  field: id
 +  target_doc_key: DOC-KAN-42
++  hint: Sticky 'stk_01abc' has already been promoted to Doc 'DOC-KAN-42'. Use update on that Doc instead.
 +  fix_hint: Sticky 'stk_01abc' has already been promoted to Doc 'DOC-KAN-42'. Use update on that Doc instead.
 +  cli_example: kanban-cli-docs update --id="DOC-KAN-42"
 +```
@@ -440,8 +451,10 @@ index df71a26..4af0795 100644
 +  message: Target text not found in document
 +  field: original_text
 +  closest_match:
-+    - line: 3
-+      text: "Section 1: Context"
++    - line_start: 3
++      line_end: 3
++      similarity: 0.973
++      snippet: 'Section 1: Context'
 +  hint: Verify exact whitespace and indentation, or inspect closest_match suggestions.
 +  fix_hint: Target text not found in document. Inspect closest_match suggestions for exact whitespace/indentation.
 +  cli_example: kanban-cli-docs update --id="<id>" --original-text="<snippet from closest_match>" --replacement-text="<new>"
@@ -455,6 +468,7 @@ index df71a26..4af0795 100644
 +  code: PATCH_TARGET_AMBIGUOUS
 +  message: Target text appears 2 times in document
 +  field: original_text
++  hint: Target text appears 2 times at lines 1, 3. Include unique surrounding lines in original_text to disambiguate.
 +  fix_hint: Target text appears 2 times at lines 1, 3. Include unique surrounding lines in original_text to disambiguate.
 +  cli_example: kanban-cli-docs update --id="<id>" --original-text="<unique context>" --replacement-text="<new>"
 +```

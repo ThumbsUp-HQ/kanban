@@ -168,7 +168,7 @@ index de30d25..84528de 100644
      def _resolve_conflict_code(prob_type: str, prob_code: str) -> McpErrorCode:
          if prob_type.endswith("etag-mismatch"):
 diff --git a/mcp/protocol.py b/mcp/protocol.py
-index 9844e36..bdbebd9 100644
+index 9844e36..757cf95 100644
 --- a/mcp/protocol.py
 +++ b/mcp/protocol.py
 @@ -4,9 +4,11 @@
@@ -362,7 +362,7 @@ index 9844e36..bdbebd9 100644
 +                        fix_hint = (
 +                            "state changes not permitted in update_ticket; use transition_ticket"
 +                        )
-+                    elif k == "custom_fields":
++                    elif k == "custom_fields" and spec.name == "update_ticket":
 +                        hint = "custom fields arrive in Phase 5"
 +                        fix_hint = (
 +                            "custom fields are not supported in update_ticket; "
@@ -1034,10 +1034,10 @@ index 8f397cb..dc9117e 100644
 +    finally:
 +        set_current_mcp_context(None)
 diff --git a/mcp/tests/agent/test_update_ticket.py b/mcp/tests/agent/test_update_ticket.py
-index f4354e0..6316c61 100644
+index f4354e0..27f4c7f 100644
 --- a/mcp/tests/agent/test_update_ticket.py
 +++ b/mcp/tests/agent/test_update_ticket.py
-@@ -732,3 +732,186 @@ async def test_update_ticket_modules_labels_unit_branches() -> None:
+@@ -732,3 +732,187 @@ async def test_update_ticket_modules_labels_unit_branches() -> None:
          assert "parent" in res["changed"]
      finally:
          reset_current_mcp_context(token)
@@ -1147,7 +1147,8 @@ index f4354e0..6316c61 100644
 +                }
 +            )
 +        assert exc_conflict.value.code == McpErrorCode.CONFLICT_ETAG
-+        assert exc_conflict.value.hint is not None and "c" * 64 in exc_conflict.value.hint
++        assert exc_conflict.value.hint is not None
++        assert "c" * 64 in exc_conflict.value.hint
 +
 +        # 6. Assignees add & remove complex paths (lines 388-489)
 +        mock_client.request = AsyncMock(side_effect=_mock_req)
