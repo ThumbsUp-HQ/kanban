@@ -94,11 +94,8 @@ class OutboxReplayer:
     ) -> tuple[bool, int]:
         """Check if last_seq is valid or expired. Returns (resync_required, latest_seq)."""
         stats_stmt = text(
-            "SELECT coalesce(min(seq), 0) AS min_seq, "
-            "       coalesce(max(seq), 0) AS max_seq "
-            "FROM outbox_events "
-            "WHERE workspace_id = :ws_id "
-            "  AND created_at >= clock_timestamp() - (make_interval(mins => :retention_minutes))"
+            "SELECT min_seq, max_seq, overall_max "
+            "FROM get_outbox_retention_stats(:ws_id, :retention_minutes)"
         )
         stats_res = await session.execute(
             stats_stmt,
@@ -110,18 +107,12 @@ class OutboxReplayer:
         row = stats_res.mappings().first()
         min_seq = int(row["min_seq"]) if row else 0
         max_seq = int(row["max_seq"]) if row else 0
+        overall_max = int(row["overall_max"]) if row else 0
 
         if min_seq > 0 and last_seq < min_seq:
             return True, max_seq
 
         if min_seq == 0 and max_seq == 0:
-            overall_stmt = text(
-                "SELECT coalesce(max(seq), 0) AS overall_max "
-                "FROM outbox_events "
-                "WHERE workspace_id = :ws_id"
-            )
-            overall_res = await session.execute(overall_stmt, {"ws_id": workspace_id})
-            overall_max = int(overall_res.scalar_one())
             if overall_max > 0 and last_seq < overall_max:
                 return True, overall_max
             return False, last_seq
@@ -166,12 +157,7 @@ class OutboxReplayer:
         """Fetch candidate rows and filter each against delivery-time RLS."""
         events_stmt = text(
             "SELECT id, seq, workspace_id, project_id, object_id, topic, payload, created_at "
-            "FROM outbox_events "
-            "WHERE workspace_id = :ws_id "
-            "  AND seq > :last_seq "
-            "  AND created_at >= clock_timestamp() - (make_interval(mins => :retention_minutes)) "
-            "ORDER BY seq ASC "
-            "LIMIT :limit"
+            "FROM fetch_replay_outbox_events(:ws_id, :last_seq, :retention_minutes, :limit)"
         )
         events_res = await session.execute(
             events_stmt,
@@ -245,13 +231,7 @@ class OutboxReplayer:
             return ReplayResult(resync_required=True, latest_event_id=str(latest_seq), events=[])
 
         # Verify missed row count ceiling
-        count_stmt = text(
-            "SELECT count(*) "
-            "FROM outbox_events "
-            "WHERE workspace_id = :ws_id "
-            "  AND seq > :last_seq "
-            "  AND created_at >= clock_timestamp() - (make_interval(mins => :retention_minutes))"
-        )
+        count_stmt = text("SELECT get_outbox_missed_count(:ws_id, :last_seq, :retention_minutes)")
         count_res = await session.execute(
             count_stmt,
             {

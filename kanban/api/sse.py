@@ -96,7 +96,7 @@ async def handle_sse_endpoint(request: Request) -> StreamingResponse | JSONRespo
     principal_id, workspace_id, session_id, token_sha256 = session_auth
 
     # 2. Parse and validate channel parameters
-    channels_raw = request.query_params.get("channels", "")
+    channels_raw = request.query_params.get("channels") or request.query_params.get("channel", "")
     requested_channels = [c.strip() for c in channels_raw.split(",") if c.strip()]
     if len(requested_channels) > MAX_CHANNELS_PER_CONNECTION:
         return JSONResponse(
@@ -146,7 +146,7 @@ async def handle_sse_endpoint(request: Request) -> StreamingResponse | JSONRespo
         )
 
     # 5. Anti-enumeration channel subscription validation
-    if session_factory is not None:
+    if session_factory is not None and requested_channels:
         ctx = RLSContext(
             principal_id=principal_id,
             workspace_id=workspace_id,
@@ -155,9 +155,11 @@ async def handle_sse_endpoint(request: Request) -> StreamingResponse | JSONRespo
         )
         async with session_factory.session(ctx) as session:
             for ch in requested_channels:
-                can_view = await hub.check_channel_viewable(session, workspace_id, principal_id, ch)
-                if can_view:
+                resolved = await hub.resolve_channel(session, workspace_id, principal_id, ch)
+                if resolved is not None:
+                    canonical_ch, _, _ = resolved
                     conn.subscribed_channels.add(ch)
+                    conn.subscribed_channels.add(canonical_ch)
 
     last_event_id = request.headers.get("last-event-id") or request.query_params.get(
         "last_event_id"

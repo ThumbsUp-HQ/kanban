@@ -386,18 +386,55 @@ async def create_realtime_test_fixtures(  # noqa: PLR0913
             {"id": proj_id, "ws_id": ws_id},
         )
 
-        # 4. Create Issue KAN-1 in objects
+        # 4. Create Issue KAN-1 in objects and issues table
+        seq_id = await session.scalar(
+            text("SELECT allocate_issue_sequence(:pid)"),
+            {"pid": proj_id},
+        )
         await session.execute(
             text(
                 "SELECT register_object("
-                "'issue'::object_kind, :ws_id, :pid, :ckey, 'Issue 1', :aid, :iid"
+                "'issue'::object_kind, :ws_id, :pid, 'KAN-1', 'Issue 1', :aid, :iid"
                 ")"
             ),
             {
                 "aid": admin_id,
-                "ckey": f"iss-{issue_id.hex}",
                 "iid": issue_id,
                 "pid": proj_id,
+                "ws_id": ws_id,
+            },
+        )
+        st_res = await session.execute(
+            text("SELECT id FROM workflow_states WHERE project_id = :pid AND is_default"),
+            {"pid": proj_id},
+        )
+        state_id = st_res.scalar_one()
+        pr_res = await session.execute(
+            text("SELECT id FROM project_priorities WHERE project_id = :pid AND is_default"),
+            {"pid": proj_id},
+        )
+        priority_id = pr_res.scalar_one()
+        path_str = str(issue_id).replace("-", "")
+        await session.execute(
+            text(
+                "INSERT INTO issues ("
+                "  id, object_type, workspace_id, project_id, sequence_id, summary, "
+                "  state_id, priority_id, created_by_id, original_created_by_id, "
+                "  ancestry_path, board_rank"
+                ") VALUES ("
+                "  :iid, 'issue', :ws_id, :pid, :seq, 'Issue 1', "
+                "  :state_id, :priority_id, :aid, :aid, "
+                "  text2ltree(:path_str), '0|hzzzzz:'"
+                ")"
+            ),
+            {
+                "aid": admin_id,
+                "iid": issue_id,
+                "path_str": path_str,
+                "pid": proj_id,
+                "priority_id": priority_id,
+                "seq": seq_id,
+                "state_id": state_id,
                 "ws_id": ws_id,
             },
         )

@@ -108,7 +108,11 @@ export function AppShell({
   const navigate = useNavigate();
   const match = /\/projects\/([^/]+)/.exec(location.pathname);
   const activeProjectKey = match?.[1] ?? projectKey;
-  useRealtimeSubscription(isAuthReady && activeProjectKey ? `project:${activeProjectKey}` : null);
+  useRealtimeSubscription([
+    isAuthReady && activeProjectKey ? `project:${activeProjectKey}` : null,
+    isAuthReady && projectId ? `project:${projectId}` : null,
+    isAuthReady && sessionGuard.workspaceId ? `workspace:${sessionGuard.workspaceId}` : null,
+  ]);
   const isInsideProject = Boolean(match) || (Boolean(activeProjectKey) && location.pathname.startsWith('/projects'));
   const computedSection =
     currentSection && currentSection !== 'Work Items'

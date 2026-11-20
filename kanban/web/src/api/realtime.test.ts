@@ -446,27 +446,36 @@ describe('bindQueryInvalidation', () => {
   it('invalidates the issue and project issue lists on issue.updated', () => {
     const { invalidate, send } = setup();
     send({ id: '1', channel: 'project:p', type: 'issue.updated', payload: { key: 'KAN-1', project_key: 'KAN' } });
-    expect(invalidate).toHaveBeenCalledTimes(2);
+    expect(invalidate).toHaveBeenCalledTimes(7);
     expect(invalidate.mock.calls[0]?.[0]).toEqual({ queryKey: ['issue', 'KAN-1'] });
-    const predicate = (invalidate.mock.calls[1]?.[0] as unknown as { predicate: (q: { queryKey: unknown[] }) => boolean }).predicate;
-    expect(predicate({ queryKey: ['issues', 'KAN', {}] })).toBe(true);
-    expect(predicate({ queryKey: ['issues', 'OTHER', {}] })).toBe(false);
-    expect(predicate({ queryKey: ['issue', 'KAN'] })).toBe(false);
+    expect(invalidate.mock.calls[1]?.[0]).toEqual({ queryKey: ['comments', 'KAN-1'] });
+    const predActivity = (invalidate.mock.calls[2]?.[0] as unknown as { predicate: (q: { queryKey: unknown[] }) => boolean }).predicate;
+    expect(predActivity({ queryKey: ['activity', 'KAN-1'] })).toBe(true);
+    const predIssues = (invalidate.mock.calls[3]?.[0] as unknown as { predicate: (q: { queryKey: unknown[] }) => boolean }).predicate;
+    expect(predIssues({ queryKey: ['issues', 'KAN', {}] })).toBe(true);
+    expect(predIssues({ queryKey: ['issues', 'OTHER', {}] })).toBe(false);
+    expect(invalidate.mock.calls[4]?.[0]).toEqual({ queryKey: ['your-work-issues'] });
+    expect(invalidate.mock.calls[5]?.[0]).toEqual({ queryKey: ['notifications'] });
+    expect(invalidate.mock.calls[6]?.[0]).toEqual({ queryKey: ['projects'] });
   });
 
   it('invalidates every issues list when the project is unknown and tolerates a missing key', () => {
     const { invalidate, send } = setup();
     send({ id: '2', channel: 'c', type: 'issue.updated', payload: { n: 1 } });
-    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(invalidate).toHaveBeenCalledTimes(4);
     const predicate = (invalidate.mock.calls[0]?.[0] as unknown as { predicate: (q: { queryKey: unknown[] }) => boolean }).predicate;
     expect(predicate({ queryKey: ['issues', 'ANY'] })).toBe(true);
+    expect(invalidate.mock.calls[1]?.[0]).toEqual({ queryKey: ['your-work-issues'] });
+    expect(invalidate.mock.calls[2]?.[0]).toEqual({ queryKey: ['notifications'] });
+    expect(invalidate.mock.calls[3]?.[0]).toEqual({ queryKey: ['projects'] });
   });
 
   it('reads issue_key / issueKey aliases and ignores non-string fields', () => {
     const { invalidate, send } = setup();
     send({ id: '3', channel: 'c', type: 'issue.updated', payload: { issue_key: 'A-1' } });
     send({ id: '4', channel: 'c', type: 'issue.updated', payload: { issueKey: 'A-2', key: 5 } });
-    expect(invalidate.mock.calls.filter((c) => (c[0] as { queryKey?: unknown }).queryKey !== undefined)).toHaveLength(2);
+    expect(invalidate.mock.calls.some((c) => JSON.stringify(c[0]) === JSON.stringify({ queryKey: ['issue', 'A-1'] }))).toBe(true);
+    expect(invalidate.mock.calls.some((c) => JSON.stringify(c[0]) === JSON.stringify({ queryKey: ['issue', 'A-2'] }))).toBe(true);
   });
 
   it('invalidates everything on resync_required and ignores other types', () => {
@@ -481,25 +490,29 @@ describe('bindQueryInvalidation', () => {
   it('invalidates issue and activity on comment events when issueKey is present', () => {
     const { invalidate, send } = setup();
     send({ id: 'c1', channel: 'issue:KAN-5', type: 'comment.created', payload: { issue_key: 'KAN-5' } });
-    expect(invalidate).toHaveBeenCalledTimes(2);
+    expect(invalidate).toHaveBeenCalledTimes(4);
     expect(invalidate.mock.calls[0]?.[0]).toEqual({ queryKey: ['issue', 'KAN-5'] });
-    const predicate = (invalidate.mock.calls[1]?.[0] as unknown as { predicate: (q: { queryKey: unknown[] }) => boolean }).predicate;
+    expect(invalidate.mock.calls[1]?.[0]).toEqual({ queryKey: ['comments', 'KAN-5'] });
+    const predicate = (invalidate.mock.calls[2]?.[0] as unknown as { predicate: (q: { queryKey: unknown[] }) => boolean }).predicate;
     expect(predicate({ queryKey: ['activity', 'KAN-5'] })).toBe(true);
     expect(predicate({ queryKey: ['activity', 'KAN-99'] })).toBe(false);
+    expect(invalidate.mock.calls[3]?.[0]).toEqual({ queryKey: ['notifications'] });
   });
 
   it('invalidates stickies and docs on sticky lifecycle events', () => {
     const { invalidate, send } = setup();
     send({ id: 's1', channel: 'project:KAN', type: 'sticky.created', payload: { project_key: 'KAN' } });
-    expect(invalidate).toHaveBeenCalledTimes(1);
+    expect(invalidate).toHaveBeenCalledTimes(3);
     const predicate1 = (invalidate.mock.calls[0]?.[0] as unknown as { predicate: (q: { queryKey: unknown[] }) => boolean }).predicate;
     expect(predicate1({ queryKey: ['stickies', 'KAN'] })).toBe(true);
     expect(predicate1({ queryKey: ['stickies', 'OTHER'] })).toBe(false);
+    expect(invalidate.mock.calls[1]?.[0]).toEqual({ queryKey: ['stickies'] });
+    expect(invalidate.mock.calls[2]?.[0]).toEqual({ queryKey: ['workspace-stickies'] });
 
     invalidate.mockClear();
     send({ id: 's2', channel: 'project:KAN', type: 'sticky.promoted', payload: { project_key: 'KAN' } });
-    expect(invalidate).toHaveBeenCalledTimes(2);
-    const predicateDocs = (invalidate.mock.calls[1]?.[0] as unknown as { predicate: (q: { queryKey: unknown[] }) => boolean }).predicate;
+    expect(invalidate).toHaveBeenCalledTimes(4);
+    const predicateDocs = (invalidate.mock.calls[3]?.[0] as unknown as { predicate: (q: { queryKey: unknown[] }) => boolean }).predicate;
     expect(predicateDocs({ queryKey: ['docs', 'sub', 'KAN'] })).toBe(true);
     expect(predicateDocs({ queryKey: ['docs', 'sub', 'OTHER'] })).toBe(false);
   });
@@ -512,11 +525,11 @@ describe('bindQueryInvalidation', () => {
 
     invalidate.mockClear();
     send({ id: 'i1', channel: 'project:KAN', type: 'issue.transitioned', payload: { key: 'KAN-10', project_key: 'KAN' } });
-    expect(invalidate).toHaveBeenCalledTimes(2);
+    expect(invalidate).toHaveBeenCalledTimes(7);
     expect(invalidate.mock.calls[0]?.[0]).toEqual({ queryKey: ['issue', 'KAN-10'] });
 
     // Test predicate branches for gate.updated with and without project_key
-    const predicateGate = (invalidate.mock.calls[1]?.[0] as unknown as { predicate: (q: { queryKey: unknown[] }) => boolean }).predicate;
+    const predicateGate = (invalidate.mock.calls[3]?.[0] as unknown as { predicate: (q: { queryKey: unknown[] }) => boolean }).predicate;
     expect(predicateGate({ queryKey: ['issues', 'KAN'] })).toBe(true);
     expect(predicateGate({ queryKey: ['issues', 'OTHER'] })).toBe(false);
     expect(predicateGate({ queryKey: ['docs'] })).toBe(false);

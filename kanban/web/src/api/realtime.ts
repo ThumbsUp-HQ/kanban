@@ -40,11 +40,25 @@ const SSE_EVENT_NAMES: readonly string[] = [
   'server.draining',
   'issue.created',
   'issue.updated',
+  'issue.transitioned',
   'issue.moved',
   'issue.deleted',
   'comment.created',
   'comment.updated',
   'comment.deleted',
+  'sticky.created',
+  'sticky.updated',
+  'sticky.promoted',
+  'sticky.deleted',
+  'workflow.gate.dispatch',
+  'workflow.gate.pending',
+  'workflow.gate.approved',
+  'workflow.gate.rejected',
+  'workflow.gate.timed_out',
+  'workflow.gate.cancelled',
+  'workflow.gate.started',
+  'workflow.gate.completed',
+  'workflow.gate.failed',
   'gate.updated',
 ];
 
@@ -114,12 +128,29 @@ export class RealtimeClient {
 
   setSession(session: RealtimeSessionState | null): void {
     const prevAllowed = this.isSessionAllowed();
+    const prevWs = this.session?.workspace_id;
     this.session = session;
     const nextAllowed = this.isSessionAllowed();
+    const nextWs = session?.workspace_id;
 
     if (!nextAllowed && prevAllowed) {
       this.close();
+      return;
     }
+
+    if (!prevAllowed && nextAllowed) {
+      this.connect();
+      return;
+    }
+
+    if (prevWs !== undefined && nextWs !== undefined && prevWs !== nextWs && nextAllowed) {
+      this.reconnect();
+    }
+  }
+
+  reconnect(): void {
+    this.close();
+    this.connect();
   }
 
   getSession(): RealtimeSessionState | null {
@@ -175,6 +206,9 @@ export class RealtimeClient {
       handlers = new Set();
       this.subscriptions.set(channel, handlers);
       this.sendSubscribe([channel]);
+      if (this.state === 'sse-fallback') {
+        this.startSseFallback();
+      }
     }
     handlers.add(handler);
     return () => {
@@ -186,6 +220,9 @@ export class RealtimeClient {
       if (current.size === 0) {
         this.subscriptions.delete(channel);
         this.sendFrame({ op: 'unsubscribe', req_id: this.nextReqId(), channels: [channel] });
+        if (this.state === 'sse-fallback') {
+          this.startSseFallback();
+        }
       }
     };
   }
@@ -538,11 +575,19 @@ export function bindQueryInvalidation(client: RealtimeClient, queryClient: Query
 
       if (issueKey !== undefined) {
         void queryClient.invalidateQueries({ queryKey: qk.issue(issueKey) });
+        void queryClient.invalidateQueries({ queryKey: ['comments', issueKey] });
+        void queryClient.invalidateQueries({
+          predicate: (query) =>
+            query.queryKey[0] === 'activity' && (query.queryKey[1] === issueKey || query.queryKey[1] === undefined),
+        });
       }
       void queryClient.invalidateQueries({
         predicate: (query) =>
           query.queryKey[0] === 'issues' && (projectKey === undefined || query.queryKey[1] === projectKey),
       });
+      void queryClient.invalidateQueries({ queryKey: ['your-work-issues'] });
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      void queryClient.invalidateQueries({ queryKey: ['projects'] });
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('kb:issue-updated', { detail: event }));
       }
@@ -556,13 +601,22 @@ export function bindQueryInvalidation(client: RealtimeClient, queryClient: Query
       event.type === 'comment.deleted'
     ) {
       const issueKey = stringField(event.payload, 'issue_key', 'issueKey', 'key');
+      const commentId = stringField(event.payload, 'comment_id', 'commentId', 'id');
+      if (issueKey === undefined && commentId === undefined) {
+        return;
+      }
       if (issueKey !== undefined) {
         void queryClient.invalidateQueries({ queryKey: qk.issue(issueKey) });
+        void queryClient.invalidateQueries({ queryKey: ['comments', issueKey] });
         void queryClient.invalidateQueries({
           predicate: (query) =>
             query.queryKey[0] === 'activity' && (query.queryKey[1] === issueKey || query.queryKey[1] === undefined),
         });
       }
+      if (commentId !== undefined) {
+        void queryClient.invalidateQueries({ queryKey: ['comments', commentId] });
+      }
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] });
       return;
     }
 
@@ -579,6 +633,8 @@ export function bindQueryInvalidation(client: RealtimeClient, queryClient: Query
           query.queryKey[0] === 'stickies' &&
           (projectKey === undefined || query.queryKey[1] === projectKey || query.queryKey[1] === 'workspace'),
       });
+      void queryClient.invalidateQueries({ queryKey: ['stickies'] });
+      void queryClient.invalidateQueries({ queryKey: ['workspace-stickies'] });
       if (event.type === 'sticky.promoted') {
         void queryClient.invalidateQueries({
           predicate: (query) =>

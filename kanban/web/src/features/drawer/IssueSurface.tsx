@@ -106,6 +106,8 @@ export interface IssueSurfaceRootProps {
   mode: 'drawer' | 'full' | 'split';
   issueKey: string;
   projectKey: string | null;
+  issueId?: string;
+  object_id?: string;
 }
 
 interface IssueSurfaceContentProps extends IssueSurfaceRootProps {
@@ -181,6 +183,13 @@ function IssueSurfaceContent({
     },
     staleTime: 60_000,
   });
+
+  const issueObjectId = typeof issue?.object_id === 'string' ? issue.object_id : undefined;
+
+  useRealtimeSubscription([
+    issueKey ? `issue:${issueKey}` : null,
+    issueObjectId ? `issue:${issueObjectId}` : null,
+  ]);
 
   const resolvedProjectForAux =
     issue?.project_key ?? projectKey ?? issueKey.split('-')[0] ?? 'KAN';
@@ -939,7 +948,16 @@ function IssueSurfaceWithoutRouter(props: IssueSurfaceRootProps): JSX.Element {
 /* v8 ignore stop */
 
 export function IssueSurfaceRoot(props: IssueSurfaceRootProps): JSX.Element {
-  useRealtimeSubscription(props.issueKey ? `issue:${props.issueKey}` : null);
+  const issueObjectId =
+    typeof props.issueId === 'string'
+      ? props.issueId
+      : typeof props.object_id === 'string'
+        ? props.object_id
+        : undefined;
+  useRealtimeSubscription([
+    props.issueKey ? `issue:${props.issueKey}` : null,
+    issueObjectId ? `issue:${issueObjectId}` : null,
+  ]);
   const inRouter = useInRouterContext();
   if (inRouter) {
     return <IssueSurfaceWithRouter {...props} />;

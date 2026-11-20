@@ -6,6 +6,8 @@ pre-compressed single page application static assets, and security middleware.
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import importlib
 import logging
 from contextlib import asynccontextmanager
@@ -22,6 +24,8 @@ from sqlalchemy.ext.asyncio import create_async_engine
 from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import HTMLResponse, RedirectResponse
 
+from database.outbox.broker import build_realtime_broker
+from database.outbox.relay import OutboxRelay
 from database.session import RLSSessionFactory
 from kanban.api.deps import DenyAllResolver
 from kanban.api.internal.mcp_ephemeral import router as mcp_ephemeral_router
@@ -54,11 +58,13 @@ from kanban.auth.setup import mint_setup_token_if_uninitialized
 from kanban.jobs import JobScheduler
 from kanban.jobs import registry as jobs_registry
 from kanban.logging import configure_logging
+from kanban.realtime.hub import RealtimeHub
 from kanban.sandbox.nsjail_runner import TierBNsjailRunner
 from kanban.security.envelope import StaticKekProvider
 from kanban.security.headers import SecurityHeadersMiddleware
 from kanban.security.keys import load_key_material
 from kanban.services.notifications import register_notifications_listener
+from kanban.services.realtime_outbox import register_realtime_outbox_listener
 from kanban.settings import Settings
 from kanban.web_static import PrecompressedSPAStaticApp
 
@@ -159,50 +165,113 @@ async def verify_schema_head(session_factory: RLSSessionFactory) -> None:
 def _bootstrap_runtime_state(app: FastAPI) -> AsyncEngine | None:
     """Initialize RLSSessionFactory and auth state from settings when not pre-configured."""
     app_settings = getattr(app.state, "settings", None)
-    if (
-        getattr(app.state, "session_factory", None) is not None
-        or app_settings is None
-        or not app_settings.database_url
-    ):
+    if app_settings is None or not app_settings.database_url:
         return None
 
+    owned_engine: AsyncEngine | None = None
+    if getattr(app.state, "session_factory", None) is None:
+        try:
+            km = getattr(app.state, "key_material", None) or load_key_material()
+            engine = create_async_engine(
+                app_settings.database_url,
+                pool_size=10,
+                max_overflow=10,
+            )
+            session_factory = RLSSessionFactory(engine)
+            app.state.engine = engine
+            app.state.session_factory = session_factory
+            app.state.key_material = km
+            if getattr(app.state, "kek_provider", None) is None:
+                app.state.kek_provider = StaticKekProvider(
+                    {km.master_kek_kid: km.master_kek},
+                    km.master_kek_kid,
+                )
+            if getattr(app.state, "session_service", None) is None:
+                app.state.session_service = SessionService(session_hmac_key=km.session_hmac_key)
+            if isinstance(getattr(app.state, "principal_resolver", None), DenyAllResolver):
+                app.state.principal_resolver = SessionCookieResolver(
+                    app.state.session_service,
+                    session_factory,
+                )
+            owned_engine = engine
+        except Exception:
+            logger.debug("Automatic runtime database/auth wiring skipped", exc_info=True)
+            return None
+
+    session_target = getattr(app.state, "session_factory", None)
+    _bootstrap_realtime_state(app, app_settings, session_target)
+    return owned_engine
+
+
+def _bootstrap_realtime_state(
+    app: FastAPI,
+    app_settings: Settings | None,
+    session_target: RLSSessionFactory | None,
+) -> None:
+    """Wire RealtimeBroker and RealtimeHub when postgres database_url is available."""
+    db_url = getattr(app_settings, "database_url", "") if app_settings else ""
+    if getattr(app.state, "broker", None) is None and db_url.startswith("postgresql"):
+        try:
+            app.state.broker = build_realtime_broker("standalone", pg_dsn=db_url)
+        except Exception:
+            logger.debug("Automatic realtime broker wiring skipped", exc_info=True)
+
+    if getattr(app.state, "realtime_hub", None) is None and session_target is not None:
+        try:
+            app.state.realtime_hub = RealtimeHub(
+                broker=getattr(app.state, "broker", None),
+                session_factory=session_target,
+                session_service=getattr(app.state, "session_service", None),
+            )
+        except Exception:
+            logger.debug("Automatic realtime hub wiring skipped", exc_info=True)
+
+
+def _start_outbox_relay(
+    app: FastAPI, session_target: RLSSessionFactory | None
+) -> tuple[asyncio.Task[None] | None, asyncio.Event]:
+    """Start in-process OutboxRelay background task when configured."""
+    relay_stop_event = asyncio.Event()
+    app_settings = getattr(app.state, "settings", None)
+    db_url = getattr(app_settings, "database_url", None) if app_settings else None
+    broker = getattr(app.state, "broker", None)
+
+    if not (
+        db_url
+        and db_url.startswith("postgresql")
+        and broker is not None
+        and session_target is not None
+    ):
+        return None, relay_stop_event
+
+    engine = getattr(app.state, "engine", None) or getattr(session_target, "_engine", None)
+    if engine is None:
+        return None, relay_stop_event
+
     try:
-        km = getattr(app.state, "key_material", None) or load_key_material()
-        engine = create_async_engine(
-            app_settings.database_url,
-            pool_size=10,
-            max_overflow=10,
-        )
-        session_factory = RLSSessionFactory(engine)
-        app.state.engine = engine
-        app.state.session_factory = session_factory
-        app.state.key_material = km
-        if getattr(app.state, "kek_provider", None) is None:
-            app.state.kek_provider = StaticKekProvider(
-                {km.master_kek_kid: km.master_kek},
-                km.master_kek_kid,
-            )
-        if getattr(app.state, "session_service", None) is None:
-            app.state.session_service = SessionService(session_hmac_key=km.session_hmac_key)
-        if isinstance(getattr(app.state, "principal_resolver", None), DenyAllResolver):
-            app.state.principal_resolver = SessionCookieResolver(
-                app.state.session_service,
-                session_factory,
-            )
+        relay = OutboxRelay(engine=engine, listen_dsn=db_url, broker=broker)
+        app.state.outbox_relay = relay
+
+        async def _run_relay_safely() -> None:
+            try:
+                await relay.run_until_stopped(relay_stop_event)
+            except asyncio.CancelledError:
+                pass
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("In-process OutboxRelay worker stopped: %s", exc)
+
+        task = asyncio.create_task(_run_relay_safely())
+        app.state.outbox_relay_task = task
     except Exception:
-        logger.debug("Automatic runtime database/auth wiring skipped", exc_info=True)
-        return None
+        logger.debug("In-process OutboxRelay startup skipped", exc_info=True)
+        return None, relay_stop_event
     else:
-        return engine
+        return task, relay_stop_event
 
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     """Manage application lifespan, starting background workers and draining on shutdown."""
-    hub = getattr(app.state, "realtime_hub", None)
-    if hub is not None:
-        await hub.start()
-
     scheduler = JobScheduler(jobs_registry)
     app.state.job_scheduler = scheduler
     app.state.job_registry = jobs_registry
@@ -210,6 +279,10 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     owned_engine = _bootstrap_runtime_state(app)
     session_target = getattr(app.state, "session_factory", None)
     should_run = getattr(app.state, "enable_background_jobs", False)
+
+    hub = getattr(app.state, "realtime_hub", None)
+    if hub is not None:
+        await hub.start()
 
     if session_target is not None:
         try:
@@ -230,9 +303,16 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
     if should_run and session_target is not None:
         await scheduler.start(session_target)
 
+    relay_task, relay_stop_event = _start_outbox_relay(app, session_target)
+
     try:
         yield
     finally:
+        if relay_task is not None:
+            relay_stop_event.set()
+            relay_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError, Exception):
+                await relay_task
         if should_run and session_target is not None:
             await scheduler.stop()
         hub = getattr(app.state, "realtime_hub", None)
@@ -362,8 +442,9 @@ def create_app(
     app.include_router(mcp_ephemeral_router)
     app.include_router(oauth_root_router)
 
-    # Register activity listener for notifications and auto-subscriptions
+    # Register activity listeners for notifications and realtime domain outbox
     register_notifications_listener()
+    register_realtime_outbox_listener()
 
     # Mount OpenAPI redirect, web manifest, and interactive API documentation routes
     _mount_api_docs_and_manifest(app)

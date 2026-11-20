@@ -193,7 +193,7 @@ def _get_compose_template() -> str:
     mem_limit: 256m
     tmpfs:
       - /tmp
-    command: ["python", "-m", "kanban.relay_placeholder"]
+    command: ["python", "-m", "database.outbox.relay"]
     networks:
       - data_net
     depends_on:
