@@ -3,7 +3,7 @@
 ## Ticket Summary
 - **Ticket ID:** KAN-27 ([KB-P3-AUDIT-21])
 - **Title:** Wire Self-Service External Identity Linking (OIDC, OAuth2, LDAP) on /settings/profile and Fix Backend Link Initiation & Session Preservation (3 Problems)
-- **Branch:** feat/KAN-27
+- **Branch:** fix/KAN-27-rc2
 - **Target Merge Branch:** main
 
 ---
@@ -150,3 +150,51 @@
   - Zero-factor `WORKSPACE_MEMBER` (`@alice_33yuf`, `aal_level=1`) clicking `+ Connect Corp SSO` succeeds: `POST /api/v1/auth/identities/link/start` returns `HTTP 200` with `Set-Cookie` forwarded (0 FK errors), real IdP `/authorize` + `/token` + `/jwks` + `/api/v1/auth/oidc/corp-sso/callback` returns `302` to `/settings/profile?linked=corp-sso`, preserves exact `session_id` and `aal_level === 1`, and displays the confirmation banner and `corp-sso (OIDC)` row in `GET /api/v1/auth/identities` and UI.
   - `@admin` (`AAL2`) attempting to link the same `(issuer, sub)` via real OIDC callback redirects cleanly (`302`) to `/settings/profile?link_error=IDENTITY_ALREADY_LINKED`.
   - Screenshots verified via `read_file` across Desktop `1440x900` Light/Dark, Tablet `768x1024` Light, Mobile `390x844` Light (`scrollWidth=390`), LDAP credentials modal Light/Dark, and linked confirmation banner + OIDC row Light/Dark (`docs/qa/KAN-27/screenshots/live-kan27-*.png`).
+
+---
+
+## 8. Clean-Room Reality-Checker RC2 Remediation (fix/KAN-27-rc2)
+
+### Summary of RC2 Remediations
+1. **LDAP Modal UX, In-Modal Error Alert, Escape/Focus & Mobile data-label:**
+   - Inline Error Alert: Rendered inline `role="alert"` with `data-testid="ldap-modal-error"` directly INSIDE `data-testid="ldap-credentials-modal"` on LDAP linking failures. Errors are visible immediately in modal context without backdrop masking.
+   - Escape Key Dismissal: Added `Escape` key event listener on `window` while modal is active when `!isSubmittingLdap`.
+   - Focus Management: Added automatic focus on modal username input (`ldapUsernameInputRef`) on open, and restored focus to triggering `+ Connect <Provider>` button (`ldapTriggerRef`) on modal close.
+   - Close Button: Replaced duplicate header Cancel button with clean Close button (`aria-label="Close LDAP modal"` and `✕` glyph), preserving single action Cancel button in dialog actions footer.
+   - Mobile Table data-label Attributes: Added `data-label="Provider"`, `data-label="Subject / Email"`, `data-label="Linked"`, `data-label="Actions"` on all table data cells (`<td>`) matching column headers in `PersonalSettingsPage.tsx` lines ~1075-1084, ensuring clean mobile `<= 640px` card display.
+   - Vitest Test Suite Expansion: Added 6 new unit tests in `/home/adamoutler/kanban/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx` verifying inline error display, Escape key dismissal, focus restoration, and table data-label attributes (72/72 passing).
+
+2. **Backend & Frontend Automated Test Coverage (All Touched Modules >= 95%):**
+   - Authored `/home/adamoutler/kanban/kanban/tests/auth/test_kan27_targeted_coverage.py` (24 test cases, 1572 lines) systematically covering previously uncovered edge cases in `database/models/auth.py`, `kanban/api/v1/auth_identities.py`, `kanban/auth/identity_service.py`, and `kanban/auth/oidc/flow.py`.
+   - Full Pytest Coverage Output (`/home/adamoutler/kanban/docs/qa/KAN-27/unit-test-results.txt`):
+     * `database/models/auth.py`: **100%** (target >= 95%)
+     * `kanban/api/v1/auth_identities.py`: **100%** (target >= 95%)
+     * `kanban/auth/identity_service.py`: **98%** (target >= 95%)
+     * `kanban/auth/oidc/flow.py`: **97%** (target >= 95%)
+     * TOTAL Backend Module Coverage: **98%** (319/319 passed, 0 failures)
+   - Frontend Vitest Coverage Output (`/home/adamoutler/kanban/docs/qa/KAN-27/unit-test-results.txt`):
+     * `PersonalSettingsPage.tsx`:
+       - Statements: **98.49%** (target >= 95%)
+       - Branches: **95.25%** (target >= 95%)
+       - Functions: **99.05%** (target >= 95%)
+       - Lines: **100.00%** (target >= 95%)
+     * `cssTokensAudit.test.ts`: 4/4 passed (100% valid tokens, 0 undefined variables)
+
+3. **Static Quality Gates & Verifications (`/home/adamoutler/kanban/docs/qa/KAN-27/build-or-typecheck.txt`):**
+   - `uv run ruff check`: 0 errors (all checks passed).
+   - `uv run ruff format --check`: 1926 files already formatted.
+   - `uv run mypy`: Success (0 issues found across 1107 source files).
+   - `uv run kanban-ctl db check-migrations`: All 62 migrations valid, single head `p4_23_oidc_link_intent_fk`.
+   - `uv run lint-imports`: 2 contracts kept, 0 broken.
+   - `pnpm --dir kanban/web typecheck`: 0 errors.
+   - `pnpm --dir kanban/web lint`: 0 errors, 0 warnings (`--max-warnings 0`).
+   - `pnpm --dir kanban/web build`: 0 errors (production build successful).
+   - `python3 -m scripts.check_no_dashes`: 0 forbidden unicode dashes.
+
+4. **Updated QA Manifest Files in `/home/adamoutler/kanban/docs/qa/KAN-27/`:**
+   - `unit-test-results.txt`: Verbatim Pytest and Vitest test runs with complete coverage tables.
+   - `build-or-typecheck.txt`: Verbatim output of all 9 quality and build checks.
+   - `changed-files-manifest.txt`: Contains all 18 modified/added repository files.
+   - `git-diff.patch`: Complete cumulative patch across all 18 files.
+   - `ui-specialist-review.md`: Updated and signed review certifying RC2 accessibility and ergonomics enhancements.
+

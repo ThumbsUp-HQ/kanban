@@ -332,6 +332,30 @@
   color: var(--fg-primary);
 }
 
+.kb-personal-settings-modal-close-btn {
+  background: transparent;
+  border: none;
+  font-size: var(--text-lg);
+  color: var(--fg-secondary);
+  cursor: pointer;
+  padding: var(--space-1);
+  border-radius: var(--radius-sm);
+  line-height: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.kb-personal-settings-modal-close-btn:hover:not(:disabled) {
+  color: var(--fg-primary);
+  background-color: var(--bg-hover);
+}
+
+.kb-personal-settings-modal-close-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
 .kb-personal-settings-modal-body {
   padding: 20px;
   display: flex;

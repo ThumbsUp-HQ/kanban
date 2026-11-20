@@ -72,9 +72,9 @@ All 9 Playwright visual proof artifacts in `docs/qa/KAN-27/screenshots/` were au
 - Verified clean via `python3 -m scripts.check_no_dashes --all`.
 
 ### 4. Test Coverage & Verification
-- 66/66 Vitest unit tests passing in `PersonalSettingsPage.test.tsx` (7.28s).
-- `PersonalSettingsPage.tsx` coverage: 98.39% Statements, 95.43% Branch, 99.00% Functions, 100% Lines.
-- 292/292 Pytest backend tests passing in `kanban/tests/auth/`, with `auth_identities.py` achieving 95% coverage.
+- 72/72 Vitest unit tests passing in `PersonalSettingsPage.test.tsx` (7.81s).
+- `PersonalSettingsPage.tsx` coverage: 98.49% Statements, 95.25% Branch, 99.05% Functions, 100% Lines (all >= 95%).
+- 319/319 Pytest backend tests passing in `kanban/tests/auth/`, with `database.models.auth` (100%), `auth_identities.py` (100%), `identity_service.py` (98%), and `oidc/flow.py` (97%) achieving >= 95% coverage.
 - Migration lifecycle test `test_p4_23_oidc_link_intent_fk_migration.py` passed upgrade -> downgrade -> upgrade cycle on PostgreSQL 16.
 - Real PostgreSQL ASGI E2E lifecycle test `test_identity_linking_real_pg_e2e.py` passed zero-mock end-to-end verification.
 
@@ -85,19 +85,20 @@ All 9 Playwright visual proof artifacts in `docs/qa/KAN-27/screenshots/` were au
 1. [x] `+ Connect <Provider>` button rendering and filtering verified
 2. [x] OIDC/OAuth2 redirect initiation with `Set-Cookie` browser binding verified
 3. [x] AAL2 conditional requirement and step-up challenge interception verified
-4. [x] Accessible LDAP credentials modal with keyboard navigation verified
-5. [x] Empty state notice and Server Admin link to `/admin/auth` verified
-6. [x] `?linked` and `?link_error` URL parsing and `replaceState` cleanup verified
-7. [x] Zero inline `style={...}` JSX attributes (100% CSP compliant)
-8. [x] 100% canonical design tokens verified (`cssTokensAudit.test.ts` passes 4/4)
-9. [x] Strict ASCII hyphenation verified (0 em/en-dashes across repo and wiki)
-10. [x] Frontend test suite passes: 66 Vitest tests passing with 98.39% statements and 95.43% branch coverage
-11. [x] Backend test suite passes: 292 Pytest tests passing with 95% coverage on `auth_identities.py`
-12. [x] Visual evidence verified across 9 desktop, tablet, mobile, dark, light, and modal screenshots
+4. [x] Accessible LDAP credentials modal with inline alert (`data-testid="ldap-modal-error"`), Escape dismissal, autofocus on open, return focus on close, and clean Close button verified
+5. [x] Mobile responsive table cards with `data-label` attributes (`Provider`, `Subject / Email`, `Linked`, `Actions`) verified
+6. [x] Empty state notice and Server Admin link to `/admin/auth` verified
+7. [x] `?linked` and `?link_error` URL parsing and `replaceState` cleanup verified
+8. [x] Zero inline `style={...}` JSX attributes (100% CSP compliant)
+9. [x] 100% canonical design tokens verified (`cssTokensAudit.test.ts` passes 4/4)
+10. [x] Strict ASCII hyphenation verified (0 em/en-dashes across repo and wiki)
+11. [x] Frontend test suite passes: 72 Vitest tests passing with 98.49% statements and 95.25% branch coverage
+12. [x] Backend test suite passes: 319 Pytest tests passing with >= 95% coverage on all touched modules
+13. [x] Visual evidence verified across 9 desktop, tablet, mobile, dark, light, and modal screenshots
 
 ---
 
 ## Verdict & Certification
 STATUS: APPROVED
 
-All frontend ergonomics, modal accessibility, step-up authentication handling, design token contracts, and live visual artifacts for KAN-27 on `main` (commit `23ae056d`) have been verified and certified. Ready for Clean-Room Reality-Checker QA.
+All frontend ergonomics, modal accessibility, in-modal error alert, Escape dismissal, focus management, mobile data-label attributes, design token contracts, and live visual artifacts for KAN-27 RC2 have been verified and certified. Ready for Clean-Room Reality-Checker QA.
