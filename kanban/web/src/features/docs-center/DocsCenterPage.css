@@ -11,7 +11,7 @@
 }
 
 .kb-docs-header {
-  height: var(--topbar-h);
+  min-height: var(--topbar-h);
   border-bottom: 1px solid var(--border-subtle);
   background: var(--bg-surface);
   display: flex;
@@ -21,12 +21,20 @@
   position: sticky;
   top: 0;
   z-index: 200;
+  gap: 1rem;
+}
+
+.kb-docs-header-row-1 {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
 }
 
 .kb-docs-header-left {
   display: flex;
   align-items: center;
   gap: 1rem;
+  white-space: nowrap;
 }
 
 .kb-docs-logo {
@@ -37,6 +45,7 @@
   display: flex;
   align-items: center;
   gap: 0.5rem;
+  white-space: nowrap;
 }
 
 .kb-docs-badge {
@@ -47,6 +56,28 @@
   padding: 0.125rem 0.5rem;
   border-radius: 9999px;
   color: var(--fg-secondary);
+  white-space: nowrap;
+}
+
+.kb-docs-mobile-chapters-btn {
+  display: none;
+  min-height: 44px;
+  padding: 0.5rem 0.875rem;
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--fg-primary);
+  cursor: pointer;
+  align-items: center;
+  gap: 0.375rem;
+  white-space: nowrap;
+}
+
+.kb-docs-mobile-chapters-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
 }
 
 .kb-docs-search-container {
@@ -150,11 +181,11 @@
   flex-shrink: 0;
   border-right: 1px solid var(--border-subtle);
   background: var(--bg-surface);
-  padding: 1.5rem 1rem;
+  padding: 1.5rem 1rem var(--space-6);
   overflow-y: auto;
-  height: calc(100vh - var(--topbar-h));
   position: sticky;
-  top: var(--topbar-h);
+  top: 0;
+  max-height: 100vh;
 }
 
 .kb-docs-cat-group {
@@ -264,10 +295,10 @@
 .kb-docs-toc-rail {
   width: 240px;
   flex-shrink: 0;
-  padding: 2.5rem 1.5rem 1.5rem 1rem;
-  height: calc(100vh - var(--topbar-h));
+  padding: 2.5rem 1.5rem var(--space-6) 1rem;
   position: sticky;
-  top: var(--topbar-h);
+  top: 0;
+  max-height: 100vh;
   overflow-y: auto;
 }
 
@@ -309,6 +340,84 @@
   font-weight: 500;
 }
 
+/* Mobile & Tablet Chapters Drawer */
+.kb-docs-mobile-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.4);
+  z-index: 500;
+  backdrop-filter: blur(2px);
+}
+
+.kb-docs-mobile-drawer {
+  position: fixed;
+  top: 0;
+  left: 0;
+  bottom: 0;
+  width: 320px;
+  max-width: 85vw;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border-subtle);
+  box-shadow: 4px 0 24px rgba(0, 0, 0, 0.15);
+  z-index: 510;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: kbDocsMobileDrawerSlideIn 0.2s ease-out;
+}
+
+@keyframes kbDocsMobileDrawerSlideIn {
+  from {
+    transform: translateX(-100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.kb-docs-mobile-drawer-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-surface-raised);
+}
+
+.kb-docs-mobile-drawer-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--fg-primary);
+}
+
+.kb-docs-mobile-drawer-close {
+  background: transparent;
+  border: none;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--fg-muted);
+  cursor: pointer;
+  padding: 0.375rem;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+}
+
+.kb-docs-mobile-drawer-close:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+.kb-docs-mobile-drawer-nav {
+  flex: 1;
+  padding: 1.25rem;
+  overflow-y: auto;
+}
+
 @media (max-width: 1024px) {
   .kb-docs-toc-rail {
     display: none;
@@ -316,16 +425,49 @@
 }
 
 @media (max-width: 768px) {
+  .kb-docs-header {
+    height: auto;
+    padding: 0.75rem 1rem;
+    flex-wrap: wrap;
+    gap: 0.625rem;
+  }
+
+  .kb-docs-header-row-1 {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    width: 100%;
+    gap: 0.5rem;
+  }
+
+  .kb-docs-header-left {
+    gap: 0.5rem;
+    min-width: 0;
+  }
+
+  .kb-docs-logo {
+    font-size: 1rem;
+  }
+
+  .kb-docs-badge {
+    font-size: 0.6875rem;
+  }
+
+  .kb-docs-mobile-chapters-btn {
+    display: inline-flex;
+    font-size: 0.8125rem;
+  }
+
+  .kb-docs-search-container {
+    width: 100%;
+    max-width: 100%;
+  }
+
   .kb-docs-sidebar {
     display: none;
   }
+
   .kb-docs-main {
     padding: 1.5rem 1rem;
-  }
-  .kb-docs-header {
-    padding: 0 1rem;
-  }
-  .kb-docs-search-container {
-    width: 200px;
   }
 }

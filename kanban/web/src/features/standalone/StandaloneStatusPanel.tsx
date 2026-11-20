@@ -219,8 +219,20 @@ export function StandaloneStatusPanel({
         }),
       ]);
       if (schedRes.ok) {
-        const schedJson = (await schedRes.json()) as BackupScheduleState;
-        setSchedule(schedJson);
+        const schedJson = (await schedRes.json()) as Partial<BackupScheduleState>;
+        setSchedule((prev) => ({
+          enabled: typeof schedJson.enabled === 'boolean' ? schedJson.enabled : prev.enabled,
+          interval_hours:
+            typeof schedJson.interval_hours === 'number' && !isNaN(schedJson.interval_hours)
+              ? schedJson.interval_hours
+              : prev.interval_hours,
+          retention_count:
+            typeof schedJson.retention_count === 'number' && !isNaN(schedJson.retention_count)
+              ? schedJson.retention_count
+              : prev.retention_count,
+          last_run_at: schedJson.last_run_at ?? prev.last_run_at,
+          next_run_at: schedJson.next_run_at ?? prev.next_run_at,
+        }));
       } else {
         const err = await extractApiError(schedRes, 'Failed to load backup schedule');
         setApiError(err);
@@ -1066,7 +1078,7 @@ export function StandaloneStatusPanel({
               <h3 className="standalone-panel__section-title">
                 Production Compose Export & Promotion
               </h3>
-              <ComposeExportTab />
+              {activeTab === 'compose' && <ComposeExportTab />}
             </div>
           </div>
         )}

@@ -5,12 +5,14 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import shutil
 import sys
 from pathlib import Path
 from typing import Any
 
 DEFAULT_WIKI_DIR = "/home/adamoutler/kanban/thumbs-up-kanban.wiki"
 DEFAULT_OUT_FILE = "kanban/web/src/features/docs-center/wikiManifest.ts"
+DEFAULT_PUBLIC_DIR = "kanban/web/public"
 
 
 def slugify(text: str) -> str:
@@ -74,7 +76,7 @@ def extract_sections_and_summary(content: str) -> tuple[list[dict[str, Any]], st
         h_match = re.match(r"^(#{2,3})\s+(.+)$", line)
         if h_match:
             level = len(h_match.group(1))
-            sec_title = sanitize_dashes(h_match.group(2).strip())
+            sec_title = sanitize_dashes(h_match.group(2).strip().replace("`", ""))
             sec_id = slugify(sec_title)
             sections.append({"id": sec_id, "title": sec_title, "level": level})
             continue
@@ -248,19 +250,38 @@ def build_config_chapter(order_idx: int) -> dict[str, Any]:
     }
 
 
-def load_chapters_from_wiki(
-    wiki_path: Path, file_to_cat: dict[str, str]
-) -> list[dict[str, Any]]:
+def sync_wiki_images(wiki_path: Path, public_dir: Path) -> int:
+    """Copy wiki image assets into public/docs-images directory."""
+    images_src = wiki_path / "images"
+    if not images_src.exists() or not images_src.is_dir():
+        fallback = Path("/home/adamoutler/kanban/thumbs-up-kanban.wiki/images")
+        if fallback.exists() and fallback.is_dir():
+            images_src = fallback
+        else:
+            return 0
+
+    docs_images_dir = public_dir / "docs-images"
+    docs_images_dir.mkdir(parents=True, exist_ok=True)
+
+    copied = 0
+    for img in sorted(images_src.iterdir()):
+        if img.is_file() and img.suffix.lower() in {".png", ".svg", ".jpg", ".jpeg", ".webp"}:
+            shutil.copy2(img, docs_images_dir / img.name)
+            copied += 1
+    return copied
+
+
+def load_chapters_from_wiki(wiki_path: Path, file_to_cat: dict[str, str]) -> list[dict[str, Any]]:
     """Scan and parse markdown files from the wiki directory."""
     chapters: list[dict[str, Any]] = []
-    md_files = sorted(wiki_path.glob("*.md"))
+    all_files = [f for f in sorted(wiki_path.glob("*.md")) if not f.stem.startswith("_")]
+    home_files = [f for f in all_files if f.stem.lower() == "home"]
+    other_files = [f for f in all_files if f.stem.lower() != "home"]
+    md_files = home_files + other_files
     order_idx = 1
 
     for md_file in md_files:
         name = md_file.stem
-        if name.startswith("_"):
-            continue
-
         raw_content = md_file.read_text(encoding="utf-8")
         clean_content = sanitize_dashes(raw_content)
 
@@ -364,10 +385,15 @@ export function getChapter(slugOrAlias: string): WikiChapter | undefined {{
     return sanitize_dashes(ts_code)
 
 
-def sync_wiki(wiki_dir_str: str, out_file_str: str) -> None:
-    """Read wiki files, bundle into manifest, and write TypeScript module."""
+def sync_wiki(
+    wiki_dir_str: str,
+    out_file_str: str,
+    public_dir_str: str = DEFAULT_PUBLIC_DIR,
+) -> None:
+    """Read wiki files, bundle into manifest, copy images, and write TypeScript module."""
     wiki_path = Path(wiki_dir_str)
     out_path = Path(out_file_str)
+    public_path = Path(public_dir_str)
 
     if not wiki_path.exists() or not wiki_path.is_dir():
         sys.stderr.write(f"Error: wiki directory {wiki_dir_str} does not exist.\n")
@@ -396,6 +422,8 @@ def sync_wiki(wiki_dir_str: str, out_file_str: str) -> None:
         "configuration": "configuration-value-reference",
     }
 
+    copied_images = sync_wiki_images(wiki_path, public_path)
+
     chapters = load_chapters_from_wiki(wiki_path, file_to_cat)
     ts_code = generate_manifest_ts(chapters, slug_aliases)
 
@@ -404,7 +432,8 @@ def sync_wiki(wiki_dir_str: str, out_file_str: str) -> None:
     count = len(chapters)
     size = len(ts_code)
     sys.stdout.write(
-        f"Successfully synchronized {count} wiki chapters into {out_file_str} ({size} bytes).\n"
+        f"Successfully synchronized {count} wiki chapters into {out_file_str} ({size} bytes, "
+        f"{copied_images} images copied to {public_dir_str}/docs-images).\n"
     )
 
 
@@ -423,8 +452,13 @@ def main() -> None:
         default=DEFAULT_OUT_FILE,
         help="Target TypeScript file to generate.",
     )
+    parser.add_argument(
+        "--public-dir",
+        default=DEFAULT_PUBLIC_DIR,
+        help="Target public web directory for static documentation assets.",
+    )
     args = parser.parse_args()
-    sync_wiki(args.wiki_dir, args.out_file)
+    sync_wiki(args.wiki_dir, args.out_file, args.public_dir)
 
 
 if __name__ == "__main__":

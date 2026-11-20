@@ -43,11 +43,25 @@ export function DocsCenterPage(): JSX.Element {
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);
   const [isSearchOpen, setIsSearchOpen] = useState(false);
+  const [isMobileChaptersOpen, setIsMobileChaptersOpen] = useState(false);
 
   const activeAnchor = location.hash.replace(/^#+/, '') || null;
 
   const contentRef = useRef<HTMLDivElement | null>(null);
   const searchContainerRef = useRef<HTMLDivElement | null>(null);
+
+  // Close mobile chapters drawer on Escape
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape' && isMobileChaptersOpen) {
+        setIsMobileChaptersOpen(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isMobileChaptersOpen]);
 
   // Scroll to anchor on hash change or navigation
   const scrollToAnchor = (anchorId: string): void => {
@@ -116,14 +130,29 @@ export function DocsCenterPage(): JSX.Element {
     <div className="kb-docs-page" data-testid="docs-center-page">
       {/* Top Header */}
       <header className="kb-docs-header">
-        <div className="kb-docs-header-left">
-          <Link to="/" className="kb-docs-logo" aria-label="Return to Board">
-            <span role="img" aria-label="Kanban">
-              &#128077;
-            </span>{' '}
-            Kanban Docs
-          </Link>
-          <span className="kb-docs-badge">Offline Center</span>
+        <div className="kb-docs-header-row-1">
+          <div className="kb-docs-header-left">
+            <Link to="/" className="kb-docs-logo" aria-label="Return to Board">
+              <span role="img" aria-label="Kanban">
+                &#128077;
+              </span>{' '}
+              Kanban Docs
+            </Link>
+            <span className="kb-docs-badge">Offline Center</span>
+          </div>
+
+          <button
+            type="button"
+            className="kb-docs-mobile-chapters-btn"
+            data-testid="docs-mobile-chapters-btn"
+            aria-expanded={isMobileChaptersOpen}
+            aria-label="Toggle chapters navigation"
+            onClick={() => {
+              setIsMobileChaptersOpen((prev) => !prev);
+            }}
+          >
+            <span aria-hidden="true">&#128218;</span> Chapters
+          </button>
         </div>
 
         <div ref={searchContainerRef} className="kb-docs-search-container">
@@ -134,7 +163,7 @@ export function DocsCenterPage(): JSX.Element {
             type="search"
             className="kb-docs-search-input"
             data-testid="docs-search-input"
-            placeholder="Search offline documentation..."
+            placeholder="Search offline docs..."
             value={searchQuery}
             onChange={handleSearchChange}
             onFocus={() => {
@@ -178,6 +207,68 @@ export function DocsCenterPage(): JSX.Element {
           )}
         </div>
       </header>
+
+      {/* Mobile & Tablet Chapters Slide-Over Drawer */}
+      {isMobileChaptersOpen && (
+        <>
+          <div
+            className="kb-docs-mobile-drawer-backdrop"
+            data-testid="docs-mobile-drawer-backdrop"
+            onClick={() => {
+              setIsMobileChaptersOpen(false);
+            }}
+            aria-hidden="true"
+          />
+          <aside
+            className="kb-docs-mobile-drawer"
+            role="dialog"
+            aria-modal="true"
+            aria-label="Documentation Chapters"
+            data-testid="docs-mobile-chapters-drawer"
+          >
+            <div className="kb-docs-mobile-drawer-header">
+              <h2 className="kb-docs-mobile-drawer-title">Chapters</h2>
+              <button
+                type="button"
+                className="kb-docs-mobile-drawer-close"
+                data-testid="docs-mobile-drawer-close"
+                aria-label="Close chapters drawer"
+                onClick={() => {
+                  setIsMobileChaptersOpen(false);
+                }}
+              >
+                &#10005;
+              </button>
+            </div>
+            <nav className="kb-docs-mobile-drawer-nav" aria-label="Mobile Chapters Navigation">
+              {WIKI_CATEGORIES.map((cat) => (
+                <div key={cat.name} className="kb-docs-cat-group">
+                  <div className="kb-docs-cat-title">{cat.name}</div>
+                  <ul className="kb-docs-nav-list">
+                    {cat.chapters.map((ch) => {
+                      const isActive = ch.slug === chapter.slug;
+                      return (
+                        <li key={ch.slug}>
+                          <Link
+                            to={`/docs/${ch.slug}`}
+                            className={`kb-docs-nav-link ${isActive ? 'active' : ''}`}
+                            aria-current={isActive ? 'page' : undefined}
+                            onClick={() => {
+                              setIsMobileChaptersOpen(false);
+                            }}
+                          >
+                            {ch.title}
+                          </Link>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </div>
+              ))}
+            </nav>
+          </aside>
+        </>
+      )}
 
       {/* Main Body Layout */}
       <div className="kb-docs-layout">
@@ -283,7 +374,7 @@ export function DocsCenterPage(): JSX.Element {
                       scrollToAnchor(sec.id);
                     }}
                   >
-                    {sec.title}
+                    {sec.title.replace(/`/g, '')}
                   </a>
                 </li>
               ))}
