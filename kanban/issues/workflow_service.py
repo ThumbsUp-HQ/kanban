@@ -123,13 +123,30 @@ def render_proof_table(summary_markdown: str, proof: dict[str, Any]) -> str:
     )
 
 
-async def _check_if_match_etag(issue: Issue, if_match: str | None) -> None:
-    """Validate optional If-Match ETag against issue description SHA-256."""
+async def _check_if_match_etag(
+    issue: Issue,
+    if_match: str | None,
+    session: AsyncSession | None = None,
+    caller: PrincipalContext | None = None,
+) -> None:
+    """Validate optional If-Match ETag against composite issue ETag or description SHA-256."""
     if not if_match:
         return
-    current_etag = issue.description_sha256.hex() if issue.description_sha256 else ""
-    clean_match = if_match.strip().strip('"')
-    if clean_match != current_etag:
+    raw_etag = if_match.strip()
+    if raw_etag.startswith("W/"):
+        raw_etag = raw_etag[2:].strip()
+    clean_match = raw_etag.strip('"')
+    current_sha = issue.description_sha256.hex() if issue.description_sha256 else ""
+    valid_etags = [current_sha.lower()]
+
+    if session is not None and caller is not None:
+        from kanban.services.issues import serialize_issue  # noqa: PLC0415
+
+        serialized = await serialize_issue(session, caller, issue)
+        if serialized.etag:
+            valid_etags.append(serialized.etag.strip('"').lower())
+
+    if clean_match.lower() not in valid_etags:
         raise ProblemException(
             code="CONFLICT_ETAG",
             status=412,
@@ -205,7 +222,7 @@ async def begin_work(
         Capability.EDIT | Capability.TRANSITION,
     )
 
-    await _check_if_match_etag(issue, if_match)
+    await _check_if_match_etag(issue, if_match, session=session, caller=caller)
 
     if issue.pending_transition_exec_id is not None:
         raise ProblemException(
@@ -376,7 +393,7 @@ async def transition_ticket(  # noqa: PLR0913, PLR0917
     issue = await resolve_issue_ref(session, caller, issue_ref)
     await require_capability(session, caller, issue.id, Capability.TRANSITION)
 
-    await _check_if_match_etag(issue, if_match)
+    await _check_if_match_etag(issue, if_match, session=session, caller=caller)
 
     if issue.pending_transition_exec_id is not None:
         raise ProblemException(
@@ -564,7 +581,7 @@ async def complete_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
     issue = await resolve_issue_ref(session, caller, issue_ref)
     await require_capability(session, caller, issue.id, Capability.TRANSITION)
 
-    await _check_if_match_etag(issue, if_match)
+    await _check_if_match_etag(issue, if_match, session=session, caller=caller)
 
     if issue.pending_transition_exec_id is not None:
         raise ProblemException(

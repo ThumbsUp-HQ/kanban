@@ -672,16 +672,33 @@ async def test_case_8_workspaces_under_kanban_app_force_rls(
     session_service = SessionService(key_material.session_hmac_key)
     app = _create_test_app(factory, key_material, session_service)
 
-    caller = PrincipalContext(
+    issued_session = await session_service.create_after_login(
+        db_session,
         principal_id=admin_id,
         workspace_id=ws_id,
         aal_level=2,
     )
 
+    caller = PrincipalContext(
+        principal_id=admin_id,
+        workspace_id=ws_id,
+        aal_level=2,
+        session_id=issued_session.session_id,
+    )
+
     # Drop privileges to kanban_app
     await db_session.execute(text("SET LOCAL ROLE kanban_app"))
 
-    req = Request(scope={"type": "http", "app": app, "path": "/api/v1/workspaces", "headers": []})
+    cookie_hdr = f"{SESSION_COOKIE_NAME}={issued_session.cookie_val}".encode("latin-1")
+    req = Request(
+        scope={
+            "type": "http",
+            "app": app,
+            "path": "/api/v1/workspaces",
+            "headers": [(b"cookie", cookie_hdr)],
+        }
+    )
+    req.state.session_id = issued_session.session_id
 
     # 1. List workspaces under kanban_app
     ws_list = await list_workspaces_endpoint(caller=caller, session=db_session, request=req)
@@ -707,6 +724,65 @@ async def test_case_8_workspaces_under_kanban_app_force_rls(
         request=req,
     )
     assert switched_resp.status_code == 200
+
+    # 4. Direct update_workspace_endpoint coverage
+    from kanban.api.v1.workspaces import (  # noqa: PLC0415
+        UpdateWorkspaceRequest,
+        WorkspaceRoleBindingRequest,
+        bind_workspace_role_endpoint,
+        unbind_workspace_role_endpoint,
+        update_workspace_endpoint,
+    )
+
+    valid_new_slug = f"ws-rls-{uuid.uuid4().hex[:8]}"
+    patched = await update_workspace_endpoint(
+        workspace_id=ws_id,
+        body=UpdateWorkspaceRequest(name="Updated RLS Name", slug=valid_new_slug),
+        caller=caller,
+        session=db_session,
+    )
+    assert patched.name == "Updated RLS Name"
+    assert patched.slug == valid_new_slug
+
+    # Validation errors on update_workspace_endpoint
+    with pytest.raises(ProblemException) as exc_slug:
+        await update_workspace_endpoint(
+            workspace_id=ws_id,
+            body=UpdateWorkspaceRequest(slug="Invalid Slug!"),
+            caller=caller,
+            session=db_session,
+        )
+    assert exc_slug.value.code == "VALIDATION_FAILED"
+
+    # 5. Direct bind and unbind role endpoints
+    rb_req = WorkspaceRoleBindingRequest(principal_id=caller.principal_id, role="WORKSPACE_ADMIN")
+    bound = await bind_workspace_role_endpoint(
+        workspace_id=ws_id,
+        body=rb_req,
+        caller=caller,
+        session=db_session,
+    )
+    assert bound is not None
+
+    unbound = await unbind_workspace_role_endpoint(
+        workspace_id=ws_id,
+        body=rb_req,
+        caller=caller,
+        session=db_session,
+    )
+    assert unbound is not None
+
+    # WorkspaceRoleBindingRequest validation (empty role -> 422)
+    with pytest.raises(ProblemException) as exc_rb:
+        WorkspaceRoleBindingRequest(principal_id=caller.principal_id)
+    assert exc_rb.value.code == "VALIDATION_FAILED"
+
+    # WorkspaceRoleBindingRequest validation (empty role -> 422)
+    with pytest.raises(ProblemException) as exc_rb:
+        WorkspaceRoleBindingRequest(principal_id=caller.principal_id)
+    assert exc_rb.value.code == "VALIDATION_FAILED"
+
+    await db_session.execute(text("RESET ROLE"))
 
 
 @pytest.mark.asyncio

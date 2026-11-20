@@ -21,8 +21,10 @@ from kanban.admin import principal_service
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import FieldError, ProblemException
 from kanban.auth.sessions.cookies import (
+    FALLBACK_SESSION_COOKIE_NAME,
     SESSION_COOKIE_NAME,
     attach_session_and_csrf_cookies,
+    build_clear_fallback_cookie_header,
     extract_session_cookie,
     is_plain_http,
 )
@@ -223,33 +225,19 @@ async def create_workspace_endpoint(
     )
 
 
-@router.post(
-    "/{workspace_id}/switch",
-    response_model=SwitchWorkspaceResponse,
-    summary="Switch active workspace session",
-)
-async def switch_workspace_endpoint(
+async def _execute_workspace_switch_proc(
+    session: AsyncSession,
     workspace_id: uuid.UUID,
-    caller: Annotated[PrincipalContext, Depends(get_principal)],
-    session: Annotated[AsyncSession, Depends(get_rls_session)],
-    request: Request,
-) -> Response:
-    """Switch caller's active session to the target workspace."""
-    session_factory = getattr(request.app.state, "session_factory", None)
-    if session_factory is None:
-        raise ProblemException(
-            code="INTERNAL_ERROR",
-            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            title="Internal Server Error",
-            detail="Session factory is not available.",
-        )
+    principal_id: uuid.UUID,
+) -> uuid.UUID:
+    """Execute kb_auth_switch_workspace procedure and handle error codes."""
     try:
         res = (
             await session.execute(
                 text(
                     "SELECT workspace_id, principal_id FROM kb_auth_switch_workspace(:ws_id, :p_id)"
                 ),
-                {"ws_id": workspace_id, "p_id": caller.principal_id},
+                {"ws_id": workspace_id, "p_id": principal_id},
             )
         ).first()
     except Exception as exc:
@@ -277,22 +265,71 @@ async def switch_workspace_endpoint(
             title="Workspace Not Found",
             detail=f"Target workspace {workspace_id} does not exist.",
         )
+    val = res.principal_id
+    if isinstance(val, uuid.UUID):
+        return val
+    return uuid.UUID(str(val))
 
-    target_principal_id = res.principal_id
+
+@router.post(
+    "/{workspace_id}/switch",
+    response_model=SwitchWorkspaceResponse,
+    summary="Switch active workspace session",
+)
+async def switch_workspace_endpoint(
+    workspace_id: uuid.UUID,
+    caller: Annotated[PrincipalContext, Depends(get_principal)],
+    session: Annotated[AsyncSession, Depends(get_rls_session)],
+    request: Request,
+) -> Response:
+    """Switch caller's active session to the target workspace."""
+    if caller.session_id is None:
+        raise ProblemException(
+            code="SESSION_REQUIRED",
+            status=status.HTTP_401_UNAUTHORIZED,
+            title="Session Required",
+            detail="Workspace switching requires an active browser session.",
+        )
+
+    session_factory = getattr(request.app.state, "session_factory", None)
+    if session_factory is None:
+        raise ProblemException(
+            code="INTERNAL_ERROR",
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            title="Internal Server Error",
+            detail="Session factory is not available.",
+        )
+
+    target_principal_id = await _execute_workspace_switch_proc(
+        session, workspace_id, caller.principal_id
+    )
 
     session_service: SessionService | None = getattr(request.app.state, "session_service", None)
     if session_service is not None:
         cookie_hdr = request.headers.get("cookie")
-        existing_sess = extract_session_cookie(cookie_hdr) or request.cookies.get(
-            SESSION_COOKIE_NAME
+        existing_sess = (
+            extract_session_cookie(cookie_hdr)
+            or request.cookies.get(SESSION_COOKIE_NAME)
+            or request.cookies.get(FALLBACK_SESSION_COOKIE_NAME)
         )
-        issued = await session_service.create_after_login(
-            session,
-            principal_id=target_principal_id,
-            workspace_id=workspace_id,
-            aal_level=caller.aal_level,
-            existing_cookie=existing_sess,
-        )
+        orig_session = getattr(request.state, "user_session", None)
+        try:
+            issued = await session_service.rotate_for_workspace_switch(
+                session,
+                target_principal_id=target_principal_id,
+                target_workspace_id=workspace_id,
+                old_session_id=caller.session_id,
+                existing_cookie=existing_sess,
+                originating_session=orig_session,
+            )
+        except ValueError as exc:
+            raise ProblemException(
+                code="SESSION_EXPIRED",
+                status=status.HTTP_401_UNAUTHORIZED,
+                title="Session Expired",
+                detail=str(exc),
+            ) from exc
+
         await session.commit()
 
         response = JSONResponse(
@@ -309,10 +346,15 @@ async def switch_workspace_endpoint(
             issued.csrf_token,
             persistent=issued.is_persistent,
         )
-        if not is_plain_http(request) and FALLBACK_CSRF_COOKIE_NAME in request.cookies:
-            response.raw_headers.append(
-                (b"set-cookie", build_clear_fallback_csrf_cookie_header().encode("latin-1"))
-            )
+        if not is_plain_http(request):
+            if FALLBACK_SESSION_COOKIE_NAME in request.cookies:
+                response.raw_headers.append(
+                    (b"set-cookie", build_clear_fallback_cookie_header().encode("latin-1"))
+                )
+            if FALLBACK_CSRF_COOKIE_NAME in request.cookies:
+                response.raw_headers.append(
+                    (b"set-cookie", build_clear_fallback_csrf_cookie_header().encode("latin-1"))
+                )
         return response
 
     return JSONResponse(
@@ -391,7 +433,7 @@ async def update_workspace_endpoint(
         if not SLUG_REGEX.match(cleaned_slug):
             raise ProblemException(
                 code="VALIDATION_FAILED",
-                status=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                status=422,
                 title="Validation Failed",
                 detail="slug must match ^[a-z0-9][a-z0-9-]{1,62}$",
             )

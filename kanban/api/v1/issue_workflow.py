@@ -6,11 +6,12 @@ from __future__ import annotations
 
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, Header, Response, status
+from fastapi import APIRouter, Depends, Header, status
 from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.responses import JSONResponse
 
+from database.models.spine import ObjectRecord
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.timing import timing_floor
 from kanban.issues.workflow_service import begin_work, complete_work, transition_ticket
@@ -60,7 +61,6 @@ async def api_begin_work(  # noqa: PLR0913, PLR0917
     body: BeginWorkRequest,
     caller: Caller,
     session: Session,
-    response: Response,
     taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
     if_match: Annotated[str | None, Header()] = None,
 ) -> JSONResponse:
@@ -91,6 +91,12 @@ async def api_begin_work(  # noqa: PLR0913, PLR0917
                 },
             )
 
+        await session.flush()
+        await session.refresh(issue)
+        obj_rec = await session.get(ObjectRecord, issue.id, populate_existing=True)
+        if obj_rec is not None:
+            await session.refresh(obj_rec)
+
         serialized = await svc.serialize_issue(session, caller, issue)
         issue_dict = serialized.model_dump(mode="json")
         issue_dict["status"] = "started"
@@ -108,11 +114,8 @@ async def api_begin_work(  # noqa: PLR0913, PLR0917
         issue_dict["comment_ref"] = comment_ref
         issue_dict["comment_id"] = comment_ref
 
-        sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
-        if sha256_hex:
-            response.headers["ETag"] = f'"{sha256_hex}"'
-
-        return JSONResponse(status_code=status.HTTP_200_OK, content=issue_dict)
+        headers = {"ETag": serialized.etag} if serialized.etag else {}
+        return JSONResponse(status_code=status.HTTP_200_OK, content=issue_dict, headers=headers)
 
 
 @router.post(
@@ -124,7 +127,6 @@ async def api_transition_ticket(  # noqa: PLR0913, PLR0917
     body: TransitionTicketRequest,
     caller: Caller,
     session: Session,
-    response: Response,
     taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
     if_match: Annotated[str | None, Header()] = None,
 ) -> JSONResponse:
@@ -154,6 +156,12 @@ async def api_transition_ticket(  # noqa: PLR0913, PLR0917
                 },
             )
 
+        await session.flush()
+        await session.refresh(issue)
+        obj_rec = await session.get(ObjectRecord, issue.id, populate_existing=True)
+        if obj_rec is not None:
+            await session.refresh(obj_rec)
+
         serialized = await svc.serialize_issue(session, caller, issue)
         issue_dict = serialized.model_dump(mode="json")
         issue_dict["status"] = "transitioned"
@@ -170,11 +178,8 @@ async def api_transition_ticket(  # noqa: PLR0913, PLR0917
             "group": target_state.state_group,
         }
 
-        sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
-        if sha256_hex:
-            response.headers["ETag"] = f'"{sha256_hex}"'
-
-        return JSONResponse(status_code=status.HTTP_200_OK, content=issue_dict)
+        headers = {"ETag": serialized.etag} if serialized.etag else {}
+        return JSONResponse(status_code=status.HTTP_200_OK, content=issue_dict, headers=headers)
 
 
 @router.post(
@@ -186,7 +191,6 @@ async def api_complete_work(  # noqa: PLR0913, PLR0917
     body: CompleteWorkRequest,
     caller: Caller,
     session: Session,
-    response: Response,
     taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
     if_match: Annotated[str | None, Header()] = None,
 ) -> JSONResponse:
@@ -216,6 +220,12 @@ async def api_complete_work(  # noqa: PLR0913, PLR0917
                 },
             )
 
+        await session.flush()
+        await session.refresh(issue)
+        obj_rec = await session.get(ObjectRecord, issue.id, populate_existing=True)
+        if obj_rec is not None:
+            await session.refresh(obj_rec)
+
         serialized = await svc.serialize_issue(session, caller, issue)
         issue_dict = serialized.model_dump(mode="json")
         issue_dict["status"] = "completed"
@@ -235,8 +245,5 @@ async def api_complete_work(  # noqa: PLR0913, PLR0917
         issue_dict["comment_id"] = comment_ref
         issue_dict["proof"] = proof
 
-        sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
-        if sha256_hex:
-            response.headers["ETag"] = f'"{sha256_hex}"'
-
-        return JSONResponse(status_code=status.HTTP_200_OK, content=issue_dict)
+        headers = {"ETag": serialized.etag} if serialized.etag else {}
+        return JSONResponse(status_code=status.HTTP_200_OK, content=issue_dict, headers=headers)

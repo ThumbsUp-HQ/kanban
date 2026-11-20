@@ -426,7 +426,8 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
         if lbl is not None
     ]
 
-    etag = issue_data.get("description_sha256") or issue_data.get("etag")
+    etag_raw = issue_data.get("etag") or issue_data.get("description_sha256") or ""
+    etag = str(etag_raw).strip('"')
 
     access_val = issue_data.get("access")
     access_manifest_raw = issue_data.get("access_manifest")

@@ -277,10 +277,8 @@ async def test_csrf_stability_and_session_status(
 
         # Second request with existing CSRF cookie:
         # must reuse same CSRF token and emit NO Set-Cookie
-        r2 = await client.get(
-            "/api/v1/auth/session",
-            cookies={CSRF_COOKIE_NAME: csrf1},
-        )
+        client.cookies.set(CSRF_COOKIE_NAME, csrf1)
+        r2 = await client.get("/api/v1/auth/session")
         assert r2.status_code == 200
         d2 = r2.json()
         assert d2["csrf_token"] == csrf1
@@ -289,13 +287,9 @@ async def test_csrf_stability_and_session_status(
 
         # Third request with valid authenticated session cookie & valid CSRF
         valid_csrf_for_sess = issued.csrf_token
-        r3 = await client.get(
-            "/api/v1/auth/session",
-            cookies={
-                SESSION_COOKIE_NAME: issued.cookie_val,
-                CSRF_COOKIE_NAME: valid_csrf_for_sess,
-            },
-        )
+        client.cookies.set(SESSION_COOKIE_NAME, issued.cookie_val)
+        client.cookies.set(CSRF_COOKIE_NAME, valid_csrf_for_sess)
+        r3 = await client.get("/api/v1/auth/session")
         assert r3.status_code == 200
         d3 = r3.json()
         assert d3["authenticated"] is True
