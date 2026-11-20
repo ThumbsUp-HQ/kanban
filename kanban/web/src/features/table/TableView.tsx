@@ -10,6 +10,7 @@ import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { StateBadge } from '../../components/state/StateBadge';
 import { patchProjectIssue, type IssueItem, type SortDirection } from '../views/viewsApi';
 import '../views/listTable.css';
+import './TableView.css';
 
 export interface TableViewProps {
   issues: IssueItem[];
@@ -363,6 +364,7 @@ export function TableView({
                     <th
                       key={colId}
                       data-col-header={colId}
+                      className={`table-col-header table-col-header--${colId}`}
                       aria-sort={isSortable ? ariaSort : undefined}
                     >
                       {isSortable ? (
@@ -428,7 +430,7 @@ export function TableView({
                     onOpenPeek?.(issue.key);
                   }}
                 >
-                  <td className="sticky-col">
+                  <td className="sticky-col table-key-cell" data-col="key">
                     <div className="table-key-cell-content">
                       {onToggleSelect && (
                         <input
@@ -457,18 +459,32 @@ export function TableView({
                     .filter((id) => id !== 'key')
                     .map((colId) => {
                       if (colId === 'summary') {
-                        return <td key={colId}>{issue.summary}</td>;
+                        return (
+                          <td
+                            key={colId}
+                            className="table-summary-cell"
+                            data-col="summary"
+                            title={issue.summary}
+                          >
+                            <span className="table-summary-text">{issue.summary}</span>
+                          </td>
+                        );
                       }
                       if (colId === 'state') {
                         if (!canEdit) {
                           return (
-                            <td key={colId}>
+                            <td key={colId} className="table-state-cell" data-col="state">
                               <StateBadge state={issue.state} className="status-pill" />
                             </td>
                           );
                         }
                         return (
-                          <td key={colId} className="table-editable-cell" data-testid={`cell-state-${issue.id}`}>
+                          <td
+                            key={colId}
+                            className="table-editable-cell table-state-cell"
+                            data-testid={`cell-state-${issue.id}`}
+                            data-col="state"
+                          >
                             <select
                               className="table-inline-select table-inline-select--state"
                               aria-label={`Edit state for ${issue.key}`}
@@ -490,7 +506,7 @@ export function TableView({
                       if (colId === 'priority') {
                         if (!canEdit) {
                           return (
-                            <td key={colId}>
+                            <td key={colId} className="table-priority-cell-wrap" data-col="priority">
                               <span className="table-priority-cell">
                                 <EmojiHint kind={priorityKind} testId={`hint-prio-${priorityKind}`} />
                                 <span>{issue.priority.label || issue.priority.slug}</span>
@@ -499,7 +515,12 @@ export function TableView({
                           );
                         }
                         return (
-                          <td key={colId} className="table-editable-cell" data-testid={`cell-priority-${issue.id}`}>
+                          <td
+                            key={colId}
+                            className="table-editable-cell table-priority-cell-wrap"
+                            data-testid={`cell-priority-${issue.id}`}
+                            data-col="priority"
+                          >
                             <span className="table-priority-cell">
                               <EmojiHint kind={priorityKind} testId={`hint-prio-${priorityKind}`} />
                               <select

@@ -1,13 +1,11 @@
-=== BACKEND PYTEST COVERAGE ===
-Command: KB_TEST_PGHOST=/tmp/kb-pgsock-8 uv run pytest kanban/tests/api/test_assignees.py kanban/tests/api/test_issues.py --cov=kanban.api.v1.assignees --cov=kanban.services.assignees --cov=kanban.api.v1.issues --cov=kanban.services.issues --cov-report=term-missing
-
+=== BACKEND PYTEST SUITE (kanban/tests/api/test_assignees.py kanban/tests/api/test_issues.py) ===
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan8-3668e8ad
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan8-rc1-c870e4a8
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 22 items
+collected 22 items
 
 kanban/tests/api/test_assignees.py .......                               [ 31%]
 kanban/tests/api/test_issues.py ...............                          [100%]
@@ -15,45 +13,56 @@ kanban/tests/api/test_issues.py ...............                          [100%]
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.7-final-0 ________________
 
-Name                           Stmts   Miss Branch BrPart  Cover   Missing
---------------------------------------------------------------------------
-kanban/api/v1/assignees.py        25      0      0      0   100%
-kanban/api/v1/issues.py           56      1      8      1    97%   131
-kanban/services/assignees.py     121      2     36      2    97%   122, 333
-kanban/services/issues.py        446     17    180     10    95%   320-324, 427, 533, 542-560, 649->652, 807, 851, 952, 999->1002, 1092, 1171, 1172->1175
---------------------------------------------------------------------------
-TOTAL                            648     20    224     13    96%
-============================= 22 passed in 28.66s ==============================
+Name                              Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------------------------------
+kanban/api/v1/assignees.py           25      0      0      0   100%
+kanban/api/v1/schemas/issues.py     169     11     30      7    89%   141, 145->144, 158->157, 199, 203->202, 212, 216->215, 321-328
+kanban/services/assignees.py        121      2     36      2    97%   122, 333
+kanban/services/issues.py           446     17    180     10    95%   320-324, 427, 533, 542-560, 649->652, 807, 851, 952, 999->1002, 1092, 1171, 1172->1175
+-----------------------------------------------------------------------------
+TOTAL                               761     30    246     19    95%
+============================= 22 passed in 30.68s ==============================
 
+=== FRONTEND VITEST SUITE (7 TEST FILES, TOUCHED COMPONENTS + CSS TOKENS AUDIT) ===
 
-=== FRONTEND VITEST COVERAGE ===
-Command: cd kanban/web && COVERAGE_INCLUDE="src/features/table/TableView.tsx,src/features/views/ProjectSavedViewsView.tsx,src/features/views/viewsApi.ts,src/features/drawer/AccessPill.tsx,src/features/drawer/IssueHeader.tsx" ./node_modules/.bin/vitest run src/features/table/TableView.test.tsx src/features/views/ProjectSavedViewsView.test.tsx src/features/views/viewsApi.test.ts src/features/drawer/AccessPill.test.tsx src/features/drawer/IssueHeader.test.tsx --coverage
-
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan8-3668e8ad/kanban/web
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan8-rc1-c870e4a8/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/views/viewsApi.test.ts (11 tests) 57ms
- ✓ src/features/drawer/AccessPill.test.tsx (7 tests) 516ms
- ✓ src/features/views/ProjectSavedViewsView.test.tsx (9 tests) 567ms
- ✓ src/features/drawer/IssueHeader.test.tsx (5 tests) 552ms
- ✓ src/features/table/TableView.test.tsx (15 tests) 3477ms
+ ✓ src/features/views/viewsApi.test.ts (12 tests) 57ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 19ms
+ ✓ src/features/drawer/AccessPill.test.tsx (7 tests) 394ms
+ ✓ src/features/drawer/IssueHeader.test.tsx (5 tests) 420ms
+ ✓ src/features/views/ProjectSavedViewsView.test.tsx (9 tests) 415ms
+ ✓ src/app/Topbar.test.tsx (23 tests) 1986ms
+   ✓ Topbar (23)
+     ✓ renders breadcrumb, search trigger, header pills, and avatar menu 351ms
+     ✓ navigates via avatar menu admin links and closes menu on click 396ms
+     ✓ closes avatar menu when clicking navigation links or clicking outside 318ms
+Not implemented: navigation to another Document
+ ✓ src/features/table/TableView.test.tsx (17 tests) 3295ms
+   ✓ TableView (17)
+     ✓ renders default columns and cycles aria-sort ascending -> descending -> none on Priority click 549ms
+     ✓ sorts by other sortable columns (Key, Summary, State, Due date) 908ms
+     ✓ toggles Start date on, Cycle off, reorders Due date before Assignees, and persists to localStorage 701ms
 
- Test Files  5 passed (5)
-      Tests  47 passed (47)
-   Start at  08:15:41
-   Duration  5.35s (environment 46%, tests 42%, import 8%, worker 3%, transform 2%)
+ Test Files  7 passed (7)
+      Tests  77 passed (77)
+   Start at  10:09:47
+   Duration  4.92s (environment 46%, tests 43%, import 7%, worker 3%, transform 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   99.77 |    90.94 |     100 |     100 |                   
- drawer            |     100 |    98.55 |     100 |     100 |                   
+All files          |   99.26 |     95.3 |     100 |     100 |                   
+ app               |   97.14 |    94.54 |     100 |     100 |                   
+  Topbar.tsx       |   97.14 |    94.54 |     100 |     100 | ...65-171,189-200 
+ features/drawer   |     100 |    98.55 |     100 |     100 |                   
   AccessPill.tsx   |     100 |      100 |     100 |     100 |                   
   IssueHeader.tsx  |     100 |    97.36 |     100 |     100 | 64                
- table             |   99.53 |    87.39 |     100 |     100 |                   
-  TableView.tsx    |   99.53 |    87.39 |     100 |     100 | ...96-597,626,647 
- views             |     100 |    92.73 |     100 |     100 |                   
+ features/table    |   99.53 |    95.37 |     100 |     100 |                   
+  TableView.tsx    |   99.53 |    95.37 |     100 |     100 | ...50,256,354,420 
+ features/views    |     100 |    94.41 |     100 |     100 |                   
   ...ViewsView.tsx |     100 |      100 |     100 |     100 |                   
-  viewsApi.ts      |     100 |    90.44 |     100 |     100 | ...71-376,388,453 
+  viewsApi.ts      |     100 |    92.64 |     100 |     100 | ...01-308,332,376 
 -------------------|---------|----------|---------|---------|-------------------
