@@ -2,7 +2,7 @@
 # Apache-2.0 License. See LICENSE for details.
 """Comprehensive unit and edge-case tests for RealtimeHub, OutboxReplayer, WS, and SSE."""
 
-# ruff: noqa: ARG001, D102, D107, SLF001
+# ruff: noqa: ARG001, D102, D107, PLR0915, SLF001
 
 from __future__ import annotations
 
@@ -19,7 +19,15 @@ from starlette.datastructures import Headers
 from starlette.requests import Request
 from starlette.websockets import WebSocketDisconnect
 
-from database.outbox.broker import OutboxEnvelope
+from database.outbox.broker import (
+    MAX_PAYLOAD_BYTES,
+    MAX_WIRE_BYTES,
+    OutboxEnvelope,
+    OutboxPayloadTooLargeError,
+    build_realtime_broker,
+    enqueue_outbox_event,
+    topic_matches,
+)
 from database.session import RLSContext, RLSSessionFactory
 from kanban.api.sse import _resolve_authenticated_session as sse_resolve_session
 from kanban.api.ws import (
@@ -1324,3 +1332,359 @@ async def test_hub_additional_branches(
     with contextlib.suppress(asyncio.CancelledError):
         await task
     await hub.unregister_connection(sse_conn.id)
+
+
+@pytest.mark.asyncio
+async def test_hub_subscribe_with_replay_human_readable_channels(
+    pg_worker_db: AsyncEngine,
+    session_service: SessionService,
+) -> None:
+    """Test RealtimeHub subscribe with replay for human-readable project and issue keys."""
+    factory = RLSSessionFactory(pg_worker_db)
+    fixtures = await create_realtime_test_fixtures(factory)
+    hub = RealtimeHub(session_factory=factory, session_service=session_service)
+
+    ctx = RLSContext(
+        principal_id=fixtures["admin_id"],
+        workspace_id=fixtures["ws_id"],
+        token_scopes=("realtime",),
+        aal_level=1,
+    )
+    async with factory.session(ctx) as session:
+        ins_stmt = text(
+            "INSERT INTO outbox_events (topic, workspace_id, project_id, object_id, payload) "
+            "VALUES ('issue.updated', :ws_id, :pid, :oid, '{\"v\": 10}'::jsonb) "
+            "RETURNING seq"
+        )
+        res1 = await session.execute(
+            ins_stmt,
+            {
+                "oid": fixtures["issue_id"],
+                "pid": fixtures["proj_id"],
+                "ws_id": fixtures["ws_id"],
+            },
+        )
+        seq1 = int(res1.scalar_one())
+
+        res2 = await session.execute(
+            ins_stmt,
+            {
+                "oid": fixtures["issue_id"],
+                "pid": fixtures["proj_id"],
+                "ws_id": fixtures["ws_id"],
+            },
+        )
+        seq2 = int(res2.scalar_one())
+
+        # Test A: Replay using human-readable project key "project:KAN"
+        mock_ws_proj = MockWebSocket()
+        conn_proj = WebSocketConnection(
+            id=uuid.uuid4(),
+            websocket=mock_ws_proj,  # type: ignore[arg-type]
+            workspace_id=fixtures["ws_id"],
+            principal_id=fixtures["admin_id"],
+            session_id=uuid.uuid4(),
+        )
+
+        await hub.handle_subscribe(
+            session,
+            conn_proj,
+            req_id="sub-proj-replay",
+            channels=["project:KAN"],
+            last_event_id=str(seq1),
+        )
+
+        assert len(mock_ws_proj.sent_texts) == 2
+        ack_proj = json.loads(mock_ws_proj.sent_texts[0])
+        assert ack_proj["type"] == "subscribe_ack"
+        assert ack_proj["channels"] == ["project:KAN"]
+        replayed_proj = json.loads(mock_ws_proj.sent_texts[1])
+        assert replayed_proj["type"] == "event"
+        assert replayed_proj["event_id"] == str(seq2)
+
+        # Test B: Replay using human-readable issue key "issue:KAN-1"
+        mock_ws_issue = MockWebSocket()
+        conn_issue = WebSocketConnection(
+            id=uuid.uuid4(),
+            websocket=mock_ws_issue,  # type: ignore[arg-type]
+            workspace_id=fixtures["ws_id"],
+            principal_id=fixtures["admin_id"],
+            session_id=uuid.uuid4(),
+        )
+
+        await hub.handle_subscribe(
+            session,
+            conn_issue,
+            req_id="sub-issue-replay",
+            channels=["issue:KAN-1"],
+            last_event_id=str(seq1),
+        )
+
+        assert len(mock_ws_issue.sent_texts) == 2
+        ack_issue = json.loads(mock_ws_issue.sent_texts[0])
+        assert ack_issue["type"] == "subscribe_ack"
+        assert ack_issue["channels"] == ["issue:KAN-1"]
+        replayed_issue = json.loads(mock_ws_issue.sent_texts[1])
+        assert replayed_issue["type"] == "event"
+        assert replayed_issue["event_id"] == str(seq2)
+
+
+@pytest.mark.asyncio
+async def test_hub_comprehensive_branch_and_edge_coverage(
+    pg_worker_db: AsyncEngine,
+    session_service: SessionService,
+) -> None:
+    """Exercise remaining branches in hub.py and broker.py to ensure >=95% coverage."""
+    factory = RLSSessionFactory(pg_worker_db)
+    fixtures = await create_realtime_test_fixtures(factory)
+    hub = RealtimeHub(session_factory=factory, session_service=session_service)
+
+    ctx = RLSContext(
+        principal_id=fixtures["admin_id"],
+        workspace_id=fixtures["ws_id"],
+        token_scopes=("realtime",),
+        aal_level=1,
+    )
+    async with factory.session(ctx) as session:
+        # 1. _resolve_workspace_channel by slug
+        slug = f"rt-{fixtures['ws_id'].hex[:8]}"
+        res_slug = await hub._resolve_workspace_channel(session, fixtures["ws_id"], slug)
+        assert res_slug == (f"workspace:{fixtures['ws_id']}", fixtures["ws_id"], "workspace")
+
+        # 2. _resolve_workspace_channel by invalid slug
+        res_bad_slug = await hub._resolve_workspace_channel(
+            session, fixtures["ws_id"], "non-existent-slug-xyz"
+        )
+        assert res_bad_slug is None
+
+        # 3. _resolve_workspace_channel by UUID of other workspace
+        res_wrong_uuid = await hub._resolve_workspace_channel(
+            session, fixtures["ws_id"], str(uuid.uuid4())
+        )
+        assert res_wrong_uuid is None
+
+        # 4. _resolve_issue_channel with non-existent sequence or unknown identifier
+        res_bad_issue = await hub._resolve_issue_channel(
+            session, fixtures["ws_id"], fixtures["admin_id"], "KAN-99999"
+        )
+        assert res_bad_issue is None
+
+        # 5. _resolve_issue_channel with non-hyphenated unknown string
+        res_bad_key = await hub._resolve_issue_channel(
+            session, fixtures["ws_id"], fixtures["admin_id"], "completely-unknown-token"
+        )
+        assert res_bad_key is None
+
+        # 6. _resolve_doc_channel with valid registered doc
+        doc_id = uuid.uuid4()
+        await session.execute(
+            text(
+                "SELECT register_object("
+                "'doc'::object_kind, :ws_id, :pid, 'DOC-1', 'Test Document', :aid, :did"
+                ")"
+            ),
+            {
+                "aid": fixtures["admin_id"],
+                "did": doc_id,
+                "pid": fixtures["proj_id"],
+                "ws_id": fixtures["ws_id"],
+            },
+        )
+        res_doc = await hub._resolve_doc_channel(
+            session, fixtures["ws_id"], fixtures["admin_id"], str(doc_id)
+        )
+        assert res_doc == (f"doc:{doc_id}", doc_id, "doc")
+
+        # 7. resolve_channel format validations
+        res_nc = await hub.resolve_channel(
+            session, fixtures["ws_id"], fixtures["admin_id"], "nocolonhere"
+        )
+        assert res_nc is None
+        res_empty = await hub.resolve_channel(
+            session, fixtures["ws_id"], fixtures["admin_id"], "workspace:"
+        )
+        assert res_empty is None
+        res_valid_doc = await hub.resolve_channel(
+            session, fixtures["ws_id"], fixtures["admin_id"], f"doc:{doc_id}"
+        )
+        assert res_valid_doc == (f"doc:{doc_id}", doc_id, "doc")
+
+    # 8. _match_channel returns None when no channels match
+    mock_ws = MockWebSocket()
+    dummy_conn = WebSocketConnection(
+        id=uuid.uuid4(),
+        websocket=mock_ws,  # type: ignore[arg-type]
+        workspace_id=fixtures["ws_id"],
+        principal_id=fixtures["admin_id"],
+        session_id=uuid.uuid4(),
+    )
+    no_match = hub._match_channel(dummy_conn, ("nonexistent:1",), "workspace:other")
+    assert no_match is None
+
+    # 9. drain timeout branch
+    drain_hub = RealtimeHub()
+
+    async def _long_running() -> None:
+        try:
+            await asyncio.sleep(10)
+        except asyncio.CancelledError:
+            await asyncio.sleep(5)
+
+    hanging_task = asyncio.create_task(_long_running())
+    drain_hub._ping_task = hanging_task
+    await drain_hub.drain(timeout_seconds=0.01)
+    hanging_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await hanging_task
+
+    # 10. _heartbeat_loop with SSEConnection send_heartbeat
+    hb_hub = RealtimeHub()
+    sse_hb = SSEConnection(
+        id=uuid.uuid4(),
+        principal_id=fixtures["admin_id"],
+        workspace_id=fixtures["ws_id"],
+        session_id=uuid.uuid4(),
+        token_sha256=None,
+    )
+    await hb_hub.register_connection(sse_hb)
+    hb_hub._running = True
+    hb_hub._ping_interval_s = 0.01
+    hb_task = asyncio.create_task(hb_hub._heartbeat_loop())
+    await asyncio.sleep(0.04)
+    hb_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await hb_task
+    assert sse_hb.queue.qsize() > 0
+
+    # 11. _broker_listener_loop error handling resilience
+    class ExceptionBroker:
+        def __init__(self) -> None:
+            self.count = 0
+
+        def subscribe(self, topic: str = "*") -> AsyncIterator[OutboxEnvelope]:  # noqa: ARG002
+            self.count += 1
+            if self.count == 1:
+                err_msg = "simulated broker error for loop test"
+                raise RuntimeError(err_msg)
+            return self._empty()
+
+        async def _empty(self) -> AsyncIterator[OutboxEnvelope]:
+            empty_list: list[OutboxEnvelope] = []
+            for item in empty_list:
+                yield item
+
+    ex_hub = RealtimeHub(broker=ExceptionBroker())  # type: ignore[arg-type]
+    ex_hub._running = True
+    ex_task = asyncio.create_task(ex_hub._broker_listener_loop())
+    await asyncio.sleep(0.05)
+    ex_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await ex_task
+
+    # 12. _session_recheck_loop expiring and unregistering invalid session
+    class ExpiredSessionService:
+        async def resolve_session(self, session: object, token_hash: str) -> None:  # noqa: ARG002
+            return None
+
+    sess_hub = RealtimeHub(session_factory=factory, session_service=ExpiredSessionService())  # type: ignore[arg-type]
+    exp_ws = MockWebSocket()
+    exp_conn = WebSocketConnection(
+        id=uuid.uuid4(),
+        websocket=exp_ws,  # type: ignore[arg-type]
+        workspace_id=fixtures["ws_id"],
+        principal_id=fixtures["admin_id"],
+        session_id=uuid.uuid4(),
+        token_sha256=hash_session_token(b"sample-test-token"),
+    )
+    await sess_hub.register_connection(exp_conn)
+    sess_hub._running = True
+    sess_hub._session_check_interval_s = 0.01
+    recheck_task = asyncio.create_task(sess_hub._session_recheck_loop())
+    await asyncio.sleep(0.04)
+    recheck_task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await recheck_task
+    assert exp_ws.closed_code == WS_CLOSE_UNAUTHENTICATED
+    assert sess_hub.get_connection(exp_conn.id) is None
+
+
+@pytest.mark.asyncio
+async def test_database_outbox_broker_coverage(pg_worker_db: AsyncEngine) -> None:
+    """Test OutboxEnvelope serialization, topic matching, and build_realtime_broker."""
+    # 1. Topic matching patterns
+    assert topic_matches("*", "issue.created") is True
+    assert topic_matches("issue.*", "issue.created") is True
+    assert topic_matches("issue.*", "comment.created") is False
+    assert topic_matches("issue.created", "issue.created") is True
+    assert topic_matches("issue.created", "issue.updated") is False
+
+    # 2. OutboxEnvelope to_wire_json / from_wire_json
+    now = datetime.now(UTC)
+    env = OutboxEnvelope(
+        id=uuid.uuid4(),
+        seq=42,
+        workspace_id=uuid.uuid4(),
+        project_id=uuid.uuid4(),
+        object_id=uuid.uuid4(),
+        topic="issue.created",
+        payload={"key": "KAN-10"},
+        created_at=now,
+    )
+    wire = env.to_wire_json()
+    env2 = OutboxEnvelope.from_wire_json(wire)
+    assert env2.id == env.id
+    assert env2.seq == 42
+    assert env2.topic == "issue.created"
+
+    # 3. Payload size exceeding MAX_WIRE_BYTES
+    env_big = OutboxEnvelope(
+        id=uuid.uuid4(),
+        seq=43,
+        workspace_id=uuid.uuid4(),
+        project_id=None,
+        object_id=None,
+        topic="issue.created",
+        payload={"pad": "a" * (MAX_WIRE_BYTES + 50)},
+        created_at=now,
+    )
+    with pytest.raises(OutboxPayloadTooLargeError, match="exceeds"):
+        env_big.to_wire_json()
+
+    # 4. enqueue_outbox_event invalid topic or oversized payload
+    factory = RLSSessionFactory(pg_worker_db)
+    ws_id = uuid.uuid4()
+    ctx = RLSContext(principal_id=uuid.uuid4(), workspace_id=ws_id, aal_level=1)
+    async with factory.session(ctx) as session:
+        with pytest.raises(ValueError, match="Invalid outbox topic"):
+            await enqueue_outbox_event(
+                session, workspace_id=ws_id, topic="INVALID TOPIC", payload={}
+            )
+        with pytest.raises(OutboxPayloadTooLargeError, match="exceeds"):
+            await enqueue_outbox_event(
+                session,
+                workspace_id=ws_id,
+                topic="issue.created",
+                payload={"pad": "a" * (MAX_PAYLOAD_BYTES + 50)},
+            )
+
+    # 5. build_realtime_broker options
+    broker_std = build_realtime_broker("standalone", pg_dsn="postgresql://localhost:5432/test")
+    assert broker_std is not None
+
+    with pytest.raises(ValueError, match="requires a non-None valkey_client"):
+        build_realtime_broker(
+            "production",
+            pg_dsn="postgresql://localhost:5432/test",
+            require_valkey=True,
+            valkey_client=None,
+        )
+
+    class DummyValkeyClient:
+        pass
+
+    broker_valkey = build_realtime_broker(
+        "production",
+        pg_dsn="postgresql://localhost:5432/test",
+        valkey_client=DummyValkeyClient(),  # type: ignore[arg-type]
+    )
+    assert broker_valkey is not None

@@ -72,13 +72,14 @@ All 6 Playwright visual proof artifacts in `docs/qa/KAN-35/screenshots/` were au
 - Verified clean via `python3 -m scripts.check_no_dashes --all`.
 
 ### 4. Test Coverage & Verification
-- 117/117 Vitest unit tests passing across 5 suites:
-  - `boardApi.ts`: 100%
-  - `BoardView.tsx`: 96.06%
-  - `viewRegistry.tsx`: 97.05%
-  - `realtime.ts`: 97.43%
+- 138/138 Vitest unit tests passing across 6 suites in 16.19s:
+  - `boardApi.ts`: 100% statement / 100% line coverage
+  - `BoardView.tsx`: 98.36% statement / 99.4% line coverage
+  - `viewRegistry.tsx`: 97.08% statement / 98.25% line coverage
+  - `realtime.ts`: 97.43% statement / 97.43% line coverage
+  - `context.tsx`: 100% statement / 100% line coverage
   - `cssTokensAudit.test.ts`: 4/4 passed
-- 65/65 Pytest backend tests passing in `kanban/tests/realtime/`.
+- 67/67 Pytest backend tests passing in `kanban/tests/realtime/` with 97% overall statement coverage, plus 1/1 migration test.
 
 ---
 
@@ -94,8 +95,8 @@ All 6 Playwright visual proof artifacts in `docs/qa/KAN-35/screenshots/` were au
 8. [x] Zero inline `style={...}` JSX attributes (100% CSP compliant)
 9. [x] 100% canonical design tokens verified (`cssTokensAudit.test.ts` passes 4/4)
 10. [x] Strict ASCII hyphenation verified (0 em/en-dashes across codebase and docs)
-11. [x] Frontend test suite passes: 117 Vitest tests passing with >= 95% coverage on touched files
-12. [x] Backend test suite passes: 65 Pytest tests passing with >= 95% coverage on touched files
+11. [x] Frontend test suite passes: 138 Vitest tests passing with >= 95% coverage on touched files
+12. [x] Backend test suite passes: 67 Pytest tests passing with >= 95% coverage on touched files
 13. [x] Visual evidence verified across 6 desktop, tablet, mobile, dark, light, and drawer screenshots
 
 ---

@@ -1,40 +1,46 @@
-================================================================================
-BACKEND PYTHON MYPY TYPECHECK
-================================================================================
-Success: no issues found in 8 source files
+=== FRONTEND TYPECHECK ===
 
-================================================================================
-FRONTEND TYPESCRIPT TYPECHECK
-================================================================================
-
-> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan35-rc1-f1e28dab/kanban/web
+> @kanban/web@0.1.0 typecheck /home/adamoutler/kanban/kanban/web
 > tsc -b --noEmit
 
-src/features/views/viewRegistry.tsx(740,9): error TS2322: Type '{ id: string; key: string; summary: string; state_id: string; state: { id: string; name: string; group: string; color_hex: string | null; } | undefined; priority: { id: string; slug: string; label: string; }; ... 4 more ...; has_explicit_acl: boolean; }[]' is not assignable to type 'BoardIssue[]'.
-  Type '{ id: string; key: string; summary: string; state_id: string; state: { id: string; name: string; group: string; color_hex: string | null; } | undefined; priority: { id: string; slug: string; label: string; }; ... 4 more ...; has_explicit_acl: boolean; }' is not assignable to type 'BoardIssue'.
-    Types of property 'state' are incompatible.
-      Type '{ id: string; name: string; group: string; color_hex: string | null; } | undefined' is not assignable to type 'BoardIssueState | undefined'.
-        Type '{ id: string; name: string; group: string; color_hex: string | null; }' is not assignable to type 'BoardIssueState'.
-          Types of property 'group' are incompatible.
-            Type 'string' is not assignable to type 'StateGroup'.
- ELIFECYCLE  Command failed with exit code 1.
+Exit code: 0 (0 errors)
 
-================================================================================
-FRONTEND ESLINT AUDIT
-================================================================================
+=== FRONTEND LINT ===
 
-> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan35-rc1-f1e28dab/kanban/web
+> @kanban/web@0.1.0 lint /home/adamoutler/kanban/kanban/web
 > eslint . --max-warnings 0
 
+Exit code: 0 (0 warnings)
 
-================================================================================
-BACKEND RUFF LINT AUDIT
-================================================================================
+=== FRONTEND BUILD ===
+
+> @kanban/web@0.1.0 build /home/adamoutler/kanban/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 706 modules transformed.
+rendering chunks (1)...computing gzip size...
+dist/index.html                             0.51 kB │ gzip:   0.31 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-d0e6dtny.css            427.66 kB │ gzip:  60.23 kB
+dist/assets/index-BnUky4kZ.js           1,982.18 kB │ gzip: 535.91 kB
+✓ built in 1.19s
+Exit code: 0
+
+=== PYTHON RUFF CHECK ===
+uv run ruff check kanban/realtime/ database/outbox/ kanban/tests/realtime/ kanban/api/sse.py kanban/services/realtime_outbox.py
 All checks passed!
 
-================================================================================
-IMPORT CONTRACTS AUDIT (LINT-IMPORTS)
-================================================================================
+=== PYTHON RUFF FORMAT CHECK ===
+uv run ruff format --check kanban/realtime/ database/outbox/ kanban/tests/realtime/ kanban/api/sse.py kanban/services/realtime_outbox.py
+18 files already formatted
+
+=== PYTHON MYPY ===
+uv run mypy kanban/realtime/ database/outbox/ kanban/tests/realtime/test_hub_unit.py kanban/api/sse.py kanban/services/realtime_outbox.py
+Success: no issues found in 12 source files
+
+=== LINT IMPORTS ===
 
 ╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
 ╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
@@ -50,7 +56,7 @@ IMPORT CONTRACTS AUDIT (LINT-IMPORTS)
 Contracts
 ---------
 
-Analyzed 964 files, 3388 dependencies.
+Analyzed 969 files, 3424 dependencies.
 --------------------------------------
 
 Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
@@ -58,6 +64,9 @@ mcp forbidden from importing database KEPT (48 ignored imports)
 
 Contracts: 2 kept, 0 broken.
 
-================================================================================
-ZERO-DASHES AUDIT (NO EN/EM DASHES)
-================================================================================
+=== ZERO-DASHES AUDIT (NO EN/EM DASHES) ===
+python3 -m scripts.check_no_dashes docs/qa/KAN-35/api-specialist-review.md docs/qa/KAN-35/build-or-typecheck.txt docs/qa/KAN-35/changed-files-manifest.txt docs/qa/KAN-35/git-diff.patch docs/qa/KAN-35/live-fullstack-proof.txt docs/qa/KAN-35/message-to-reality-checker.md docs/qa/KAN-35/ui-specialist-review.md docs/qa/KAN-35/unit-test-results.txt
+Audited 8 verification files across docs/qa/KAN-35: 0 forbidden dashes found (exit code 0).
+python3 -m scripts.check_no_dashes --all
+Notice: skipping /home/adamoutler/kanban/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+Full repository scan: 0 forbidden dashes found (exit code 0).

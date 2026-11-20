@@ -65,13 +65,15 @@ All API contracts, security invariants, transaction boundaries, frontend cache s
 
 ### 2.4 Test Suites and Coverage
 - Backend Pytest Suite:
-  - 65/65 tests passed across `kanban/tests/realtime/` and `database/tests/migrations/test_p4_22_outbox_replay_reader_migration.py`.
+  - 67/67 tests passed in 34.70s across `kanban/tests/realtime/` with 97% statement coverage (hub 97%, broker 100%, sse 97%, replay 100%, rls_filter 95%, realtime_outbox 97%).
+  - 1/1 migration test passed in `database/tests/migrations/test_p4_22_outbox_replay_reader_migration.py`.
 - Frontend Vitest Suite:
-  - 117/117 tests passed across 5 suites:
+  - 138/138 tests passed across 6 suites in 16.19s:
     - `src/features/board/boardApi.test.ts`: 8/8 passed (100% statement coverage).
-    - `src/features/board/BoardView.test.tsx`: 20/20 passed (96.06% statement coverage).
-    - `src/features/views/viewRegistry.test.tsx`: 41/41 passed (97.05% statement coverage).
-    - `src/api/realtime.test.ts`: 21/21 passed (97.43% statement coverage).
+    - `src/features/board/BoardView.test.tsx`: 20/20 passed (98.36% statement coverage / 99.4% lines).
+    - `src/features/views/viewRegistry.test.tsx`: 41/41 passed (97.08% statement coverage / 98.25% lines).
+    - `src/api/realtime.test.ts`: 44/44 passed (97.43% statement coverage).
+    - `src/realtime/index.test.tsx`: 21/21 passed (100% statement coverage).
     - `src/styles/__tests__/cssTokensAudit.test.ts`: 4/4 passed (100% design token compliance).
 
 ---
@@ -88,10 +90,11 @@ All API contracts, security invariants, transaction boundaries, frontend cache s
 8. [x] Live container verification confirms keyboard `Alt+ArrowRight` move executes cleanly without crash
 9. [x] Delivery-time RLS rejects unauthorized subscriptions with anti-harvesting `NOT_FOUND`
 10. [x] SSE `Last-Event-ID` replay delivers authorized project events and withholds private events
-11. [x] All 117 Vitest tests passing with >= 95% coverage on touched files
-12. [x] All 65 Pytest backend realtime pipeline tests passing
-13. [x] Static typecheck and linting clean (`tsc`, `eslint`, `mypy`, `ruff`, `lint-imports`)
-14. [x] Zero em-dashes or en-dashes across all code and documentation
+11. [x] WebSocket `last_event_id` replay passes canonical channels to `_replayer.replay_events`, enabling replay with human-readable keys
+12. [x] All 138 Vitest tests passing with >= 95% coverage on touched files
+13. [x] All 67 Pytest backend realtime pipeline tests passing with >= 95% coverage on touched files
+14. [x] Static typecheck and linting clean (`tsc`, `eslint`, `mypy`, `ruff`, `lint-imports`)
+15. [x] Zero em-dashes or en-dashes across all code and documentation
 
 ---
 

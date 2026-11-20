@@ -542,7 +542,7 @@ class RealtimeHub:
                 session,
                 workspace_id=conn.workspace_id,
                 principal_id=conn.principal_id,
-                channels=successful_channels,
+                channels=list(conn.subscribed_channels),
                 last_event_id=last_event_id,
             )
             if replay_res.resync_required:
