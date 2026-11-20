@@ -1,51 +1,47 @@
 === 1. Migration Upgrade/Downgrade Lifecycle Test ===
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-rc2-a840d95f/.venv/bin/python
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-rc2-a840d95f
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/kanban
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 1 item
+collected 1 item
 
-database/tests/migrations/test_p4_23_oidc_link_intent_fk_migration.py::test_p4_23_oidc_link_intent_fk_migration_lifecycle PASSED [100%]
+database/tests/migrations/test_p4_23_oidc_link_intent_fk_migration.py .  [100%]
 
-============================== 1 passed in 0.62s ===============================
+============================== 1 passed in 0.69s ===============================
 
 === 2. ORM Schema Parity and RLS Catalog Tests ===
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-rc2-a840d95f/.venv/bin/python
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-rc2-a840d95f
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/kanban
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 6 items
+collected 6 items
 
-database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [ 16%]
-database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [ 33%]
-database/tests/test_p1_17_models.py::test_orm_round_trip_stickies_views_and_links PASSED [ 50%]
-database/tests/test_p1_17_models.py::test_ltree_type_validation PASSED   [ 66%]
-database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [ 83%]
-database/tests/test_p1_14_rls_catalog.py::test_06_rls_catalog_gate PASSED [100%]
+database/tests/test_p1_17_models.py .....                                [ 83%]
+database/tests/test_p1_14_rls_catalog.py .                               [100%]
 
-============================== 6 passed in 0.50s ===============================
+============================== 6 passed in 0.65s ===============================
 
 === 3. Real PostgreSQL E2E Identity Linking Lifecycle Test (Zero Mocks of Auth DB Functions) ===
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-rc2-a840d95f/.venv/bin/python
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-rc2-a840d95f
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/kanban
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 1 item
+collected 1 item
 
-kanban/tests/auth/test_identity_linking_real_pg_e2e.py::test_oidc_identity_linking_real_pg_lifecycle PASSED [100%]
+kanban/tests/auth/test_identity_linking_real_pg_e2e.py .                 [100%]
 
 ============================== 1 passed in 0.39s ===============================
 
 === 4. Full Auth Suite with Comprehensive Module Coverage ===
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-rc2-a840d95f
+rootdir: /home/adamoutler/kanban
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
@@ -91,7 +87,7 @@ database/tests/test_auth_provider_cards.py ..                            [100%]
 kanban/tests/auth/test_csrf.py: 18 warnings
 kanban/tests/auth/test_local_login.py: 9 warnings
 kanban/tests/auth/test_sessions.py: 1 warning
-  /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-rc2-a840d95f/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+  /home/adamoutler/kanban/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
     return await self.request(
 
 kanban/tests/auth/test_local_login.py::test_case_1_positive_login
@@ -102,7 +98,7 @@ kanban/tests/auth/test_sessions.py::test_case_1_positive_login_and_cookie_attrib
 kanban/tests/auth/test_sessions.py::test_case_9_security_logout
 kanban/tests/auth/test_sessions.py::test_case_10_mfa_pending_enforcement
 kanban/tests/auth/test_sessions.py::test_case_10_mfa_pending_enforcement
-  /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-rc2-a840d95f/.venv/lib/python3.12/site-packages/httpx/_client.py:1768: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+  /home/adamoutler/kanban/.venv/lib/python3.12/site-packages/httpx/_client.py:1768: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
     return await self.request(
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
@@ -117,28 +113,28 @@ kanban/auth/identity_service.py      339      0    130      9    98%   81->83, 1
 kanban/auth/oidc/flow.py             368      4    126      9    97%   206->209, 532->547, 571->573, 611, 657, 748->770, 750->770, 765-766, 850->852, 862->864
 ------------------------------------------------------------------------------
 TOTAL                               1019      4    290     18    98%
-================= 319 passed, 36 warnings in 76.71s (0:01:16) ==================
+================= 319 passed, 36 warnings in 87.14s (0:01:27) ==================
 
 === 5. Frontend Vitest Coverage (PersonalSettingsPage.tsx & CSS Tokens Audit) ===
-
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-rc2-a840d95f/kanban/web
+RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
       Coverage enabled with v8
 
- ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 23ms
- ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (68 tests) 6511ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 18ms
+ ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (68 tests) 7054ms
    ✓ PersonalSettingsPage (68)
-     ✓ regenerates recovery codes and displays modal 2089ms
-     ✓ cancels passkey rename modal when clicking cancel 308ms
+     ✓ regenerates recovery codes and displays modal 2107ms
+     ✓ cancels passkey rename modal when clicking cancel 339ms
+     ✓ covers show/hide password toggle and TOTP setup modal cancel 328ms
 
  Test Files  2 passed (2)
       Tests  72 passed (72)
-   Start at  10:43:26
-   Duration  7.81s (tests 79%, environment 17%, import 2%, worker 1%)
+   Start at  12:06:08
+   Duration  8.45s (tests 79%, environment 16%, import 3%, worker 1%, transform 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
 All files          |   98.49 |    95.25 |   99.05 |     100 |                   
- ...ttingsPage.tsx |   98.49 |    95.25 |   99.05 |     100 | ...47,438,465,531 
+ ...ttingsPage.tsx |   98.49 |    95.25 |   99.05 |     100 | ...48,439,466,532 
 -------------------|---------|----------|---------|---------|-------------------
