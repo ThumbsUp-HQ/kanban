@@ -3,10 +3,10 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
-import { ProjectSettingsPage } from '../ProjectSettingsPage';
+import { ProjectSettingsPage, formatPrincipalHandle } from '../ProjectSettingsPage';
 import * as clientModule from '../../../api/client';
 
 let csrfToggle = false;
@@ -2122,5 +2122,84 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     const filterBtn = screen.getByTestId('trash-filter-issue');
     fireEvent.click(filterBtn);
     expect(screen.queryByText('Item with null kind')).toBeNull();
+  });
+
+  it('KAN-14: normalizes principal handles to single @ prefix, preventing @@ in picker and table', async () => {
+    expect(formatPrincipalHandle('@alice')).toBe('@alice');
+    expect(formatPrincipalHandle('alice')).toBe('@alice');
+    expect(formatPrincipalHandle('@@@alice')).toBe('@alice');
+    expect(formatPrincipalHandle(null, '@alice')).toBe('@alice');
+    expect(formatPrincipalHandle(null, null)).toBeNull();
+    expect(formatPrincipalHandle('', '')).toBeNull();
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      const url: string = path;
+      const m = method.toUpperCase();
+
+      if (url.includes('/api/v1/admin/principals') && m === 'GET') {
+        return [
+          {
+            id: 'user-alice',
+            display_name: 'Alice QA',
+            handle: '@alice',
+            principal: '@alice',
+            principal_type: 'USER',
+          },
+          {
+            id: 'user-bob',
+            display_name: 'Bob Plain',
+            handle: 'bob',
+            principal_type: 'USER',
+          },
+        ];
+      }
+      if (url.includes('/api/v1/projects/KAN/members') && m === 'GET') {
+        return [
+          {
+            id: 'mem-1',
+            principal_id: 'user-alice',
+            role: 'MEMBER',
+            display_name: 'Alice QA',
+            handle: '@alice',
+            principal: '@alice',
+          },
+        ];
+      }
+      if (
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
+        m === 'GET'
+      ) {
+        return {
+          id: 'p-1',
+          identifier: 'KAN',
+          name: 'Kanban Platform',
+          is_project_admin: true,
+        };
+      }
+      return {};
+    });
+
+    const { container } = renderComponent('KAN');
+
+    const membersTab = await screen.findByTestId('tab-members');
+    fireEvent.click(membersTab);
+
+    // Verify Members table renders single @alice and 0 @@ strings
+    expect(await screen.findByText('(@alice)')).toBeDefined();
+    expect(screen.queryByText(/@@/)).toBeNull();
+    expect(container.textContent).not.toContain('@@');
+
+    // Open principal picker dropdown and verify autocomplete option renders @alice with 0 @@ strings
+    const input = screen.getByTestId('member-principal-id-input');
+    fireEvent.focus(input);
+    fireEvent.change(input, { target: { value: 'Alice' } });
+
+    expect(await screen.findByTestId('principal-picker-dropdown')).toBeDefined();
+    const aliceOption = screen.getByTestId('principal-option-user-alice');
+    expect(aliceOption).toBeDefined();
+    expect(within(aliceOption).getByText('@alice')).toBeDefined();
+    expect(container.textContent).not.toContain('@@');
+    expect((container.innerHTML.match(/@@/g) ?? []).length).toBe(0);
   });
 });

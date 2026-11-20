@@ -992,10 +992,41 @@ index 54ad864..47e02e2 100644
    border-right: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
    padding-right: 1rem;
 diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.tsx b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
-index 495ca5b..09f0ad7 100644
+index 495ca5b..0ba2e2e 100644
 --- a/kanban/web/src/features/settings/ProjectSettingsPage.tsx
 +++ b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
-@@ -284,16 +284,18 @@ export function ProjectSettingsPage(): JSX.Element {
+@@ -39,6 +39,7 @@ export interface ProjectMember {
+   role: 'PROJECT_ADMIN' | 'MEMBER' | 'VIEWER';
+   display_name?: string | null;
+   handle?: string | null;
++  principal?: string | null;
+   email?: string | null;
+   avatar_url?: string | null;
+   created_at: string;
+@@ -85,9 +86,22 @@ export interface WorkspacePrincipalItem {
+   principal_type: 'USER' | 'GROUP' | 'AGENT' | 'SERVICE_PRINCIPAL';
+   display_name: string;
+   handle?: string | null;
++  principal?: string | null;
+   email?: string | null;
+ }
+ 
++/**
++ * Format and normalize principal handles (KB-P3-AUDIT-08).
++ * Strips leading '@' before prepending a single '@', avoiding double '@@alice'.
++ */
++export function formatPrincipalHandle(
++  handle?: string | null,
++  principal?: string | null
++): string | null {
++  const normalized = (handle ?? principal ?? '').replace(/^@+/, '');
++  return normalized ? `@${normalized}` : null;
++}
++
+ export interface TrashedItem {
+   id: string;
+   key: string;
+@@ -284,16 +298,18 @@ export function ProjectSettingsPage(): JSX.Element {
          }
  
          // Load modules
@@ -1023,7 +1054,7 @@ index 495ca5b..09f0ad7 100644
          }
  
          // Load principals for picker
-@@ -917,7 +919,7 @@ export function ProjectSettingsPage(): JSX.Element {
+@@ -917,7 +933,7 @@ export function ProjectSettingsPage(): JSX.Element {
      if (!principalSearch) return true;
      const q = principalSearch.toLowerCase();
      return (
@@ -1032,7 +1063,7 @@ index 495ca5b..09f0ad7 100644
        (p.handle?.toLowerCase().includes(q) ?? false) ||
        p.id.toLowerCase().includes(q)
      );
-@@ -926,7 +928,7 @@ export function ProjectSettingsPage(): JSX.Element {
+@@ -926,7 +942,7 @@ export function ProjectSettingsPage(): JSX.Element {
    // Filter trashed items
    const filteredTrashed = trashedItems.filter((t) => {
      if (trashKindFilter === 'all') return true;
@@ -1041,7 +1072,32 @@ index 495ca5b..09f0ad7 100644
    });
  
    return (
-@@ -1628,7 +1630,7 @@ export function ProjectSettingsPage(): JSX.Element {
+@@ -1576,7 +1592,11 @@ export function ProjectSettingsPage(): JSX.Element {
+                                 : '👤'}
+                           </span>
+                           <span className="kb-principal-name">{p.display_name}</span>
+-                          {p.handle && <span className="kb-principal-handle">@{p.handle}</span>}
++                          {formatPrincipalHandle(p.handle, p.principal) && (
++                            <span className="kb-principal-handle">
++                              {formatPrincipalHandle(p.handle, p.principal)}
++                            </span>
++                          )}
+                         </div>
+                       ))}
+                     </div>
+@@ -1620,15 +1640,17 @@ export function ProjectSettingsPage(): JSX.Element {
+                     <td>
+                       <div>
+                         <strong>{m.display_name ?? m.principal_id}</strong>
+-                        {m.handle && (
+-                          <span className="kb-principal-handle"> (@{m.handle})</span>
++                        {formatPrincipalHandle(m.handle, m.principal) && (
++                          <span className="kb-principal-handle">
++                            {' '}({formatPrincipalHandle(m.handle, m.principal)})
++                          </span>
+                         )}
+                       </div>
+                     </td>
                      <td>
                        <span
                          data-testid="member-role-badge"
@@ -1050,7 +1106,7 @@ index 495ca5b..09f0ad7 100644
                        >
                          {m.role}
                        </span>
-@@ -1678,7 +1680,7 @@ export function ProjectSettingsPage(): JSX.Element {
+@@ -1678,7 +1700,7 @@ export function ProjectSettingsPage(): JSX.Element {
              </Link>
  
              <Link
@@ -1402,10 +1458,23 @@ index cfb529f..be281f4 100644
      </div>
    );
 diff --git a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
-index edd448c..b4f0f9d 100644
+index edd448c..9a78756 100644
 --- a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
 +++ b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
-@@ -2038,4 +2038,89 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+@@ -3,10 +3,10 @@
+ 
+ import React from 'react';
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
++import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { MemoryRouter } from 'react-router';
+-import { ProjectSettingsPage } from '../ProjectSettingsPage';
++import { ProjectSettingsPage, formatPrincipalHandle } from '../ProjectSettingsPage';
+ import * as clientModule from '../../../api/client';
+ 
+ let csrfToggle = false;
+@@ -2038,4 +2038,168 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
      fireEvent.click(screen.getByTestId('principal-option-p-wrap-1'));
      expect(screen.getByDisplayValue('Wrapped Principal')).toBeDefined();
    });
@@ -1493,6 +1562,85 @@ index edd448c..b4f0f9d 100644
 +    const filterBtn = screen.getByTestId('trash-filter-issue');
 +    fireEvent.click(filterBtn);
 +    expect(screen.queryByText('Item with null kind')).toBeNull();
++  });
++
++  it('KAN-14: normalizes principal handles to single @ prefix, preventing @@ in picker and table', async () => {
++    expect(formatPrincipalHandle('@alice')).toBe('@alice');
++    expect(formatPrincipalHandle('alice')).toBe('@alice');
++    expect(formatPrincipalHandle('@@@alice')).toBe('@alice');
++    expect(formatPrincipalHandle(null, '@alice')).toBe('@alice');
++    expect(formatPrincipalHandle(null, null)).toBeNull();
++    expect(formatPrincipalHandle('', '')).toBeNull();
++
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
++      await Promise.resolve();
++      const url: string = path;
++      const m = method.toUpperCase();
++
++      if (url.includes('/api/v1/admin/principals') && m === 'GET') {
++        return [
++          {
++            id: 'user-alice',
++            display_name: 'Alice QA',
++            handle: '@alice',
++            principal: '@alice',
++            principal_type: 'USER',
++          },
++          {
++            id: 'user-bob',
++            display_name: 'Bob Plain',
++            handle: 'bob',
++            principal_type: 'USER',
++          },
++        ];
++      }
++      if (url.includes('/api/v1/projects/KAN/members') && m === 'GET') {
++        return [
++          {
++            id: 'mem-1',
++            principal_id: 'user-alice',
++            role: 'MEMBER',
++            display_name: 'Alice QA',
++            handle: '@alice',
++            principal: '@alice',
++          },
++        ];
++      }
++      if (
++        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
++        m === 'GET'
++      ) {
++        return {
++          id: 'p-1',
++          identifier: 'KAN',
++          name: 'Kanban Platform',
++          is_project_admin: true,
++        };
++      }
++      return {};
++    });
++
++    const { container } = renderComponent('KAN');
++
++    const membersTab = await screen.findByTestId('tab-members');
++    fireEvent.click(membersTab);
++
++    // Verify Members table renders single @alice and 0 @@ strings
++    expect(await screen.findByText('(@alice)')).toBeDefined();
++    expect(screen.queryByText(/@@/)).toBeNull();
++    expect(container.textContent).not.toContain('@@');
++
++    // Open principal picker dropdown and verify autocomplete option renders @alice with 0 @@ strings
++    const input = screen.getByTestId('member-principal-id-input');
++    fireEvent.focus(input);
++    fireEvent.change(input, { target: { value: 'Alice' } });
++
++    expect(await screen.findByTestId('principal-picker-dropdown')).toBeDefined();
++    const aliceOption = screen.getByTestId('principal-option-user-alice');
++    expect(aliceOption).toBeDefined();
++    expect(within(aliceOption).getByText('@alice')).toBeDefined();
++    expect(container.textContent).not.toContain('@@');
++    expect((container.innerHTML.match(/@@/g) ?? []).length).toBe(0);
 +  });
  });
 diff --git a/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
@@ -1983,6 +2131,90 @@ index 43199c8..38239d6 100644
 +    });
 +  });
  });
+diff --git a/kanban/web/src/features/views/FilterDisplayBar.test.tsx b/kanban/web/src/features/views/FilterDisplayBar.test.tsx
+index 86a53a6..890e18c 100644
+--- a/kanban/web/src/features/views/FilterDisplayBar.test.tsx
++++ b/kanban/web/src/features/views/FilterDisplayBar.test.tsx
+@@ -332,6 +332,24 @@ describe('FilterDisplayBar (KB-P3-40, S6.3, S6.4, S7.2 8f)', () => {
+     });
+   });
+ 
++  it('KB-P3-AUDIT-08: does NOT call fetchProjectModules when modulesEnabled is false', async () => {
++    vi.spyOn(railApi, 'fetchAssigneeSuggestions').mockResolvedValue([]);
++    vi.spyOn(railApi, 'fetchProjectLabels').mockResolvedValue([]);
++    vi.spyOn(railApi, 'fetchProjectCycles').mockResolvedValue([]);
++    const modulesSpy = vi.spyOn(railApi, 'fetchProjectModules').mockResolvedValue([]);
++
++    render(
++      <FilterDisplayBar
++        projectKey="KAN"
++        modulesEnabled={false}
++      />
++    );
++
++    await Promise.resolve();
++
++    expect(modulesSpy).not.toHaveBeenCalled();
++  });
++
+   it('covers dynamic facet edge cases: fallback labels, unmount in flight, and chip removal fallbacks', () => {
+     // 1. Assignee without display_name, custom cycle, custom module
+     const { unmount: u1 } = render(
+diff --git a/kanban/web/src/features/views/FilterDisplayBar.tsx b/kanban/web/src/features/views/FilterDisplayBar.tsx
+index 61ce371..d9d4f21 100644
+--- a/kanban/web/src/features/views/FilterDisplayBar.tsx
++++ b/kanban/web/src/features/views/FilterDisplayBar.tsx
+@@ -82,7 +82,7 @@ export function FilterDisplayBar({
+     if (!projectKey || projectKey === 'undefined') return;
+     let active = true;
+ 
+-    void Promise.allSettled([
++    const fetches: Promise<unknown>[] = [
+       fetchAssigneeSuggestions(projectKey, '').then((res) => {
+         if (!active) return;
+         setLiveAssignees(
+@@ -113,22 +113,29 @@ export function FilterDisplayBar({
+           }))
+         );
+       }),
+-      fetchProjectModules(projectKey).then((res) => {
+-        if (!active) return;
+-        setLiveModules(
+-          res.map((m) => ({
+-            key: m.id,
+-            label: m.name,
+-            category: 'module',
+-          }))
+-        );
+-      }),
+-    ]);
++    ];
++
++    if (modulesEnabled) {
++      fetches.push(
++        fetchProjectModules(projectKey).then((res) => {
++          if (!active) return;
++          setLiveModules(
++            res.map((m) => ({
++              key: m.id,
++              label: m.name,
++              category: 'module',
++            }))
++          );
++        })
++      );
++    }
++
++    void Promise.allSettled(fetches);
+ 
+     return () => {
+       active = false;
+     };
+-  }, [projectKey]);
++  }, [projectKey, modulesEnabled]);
+ 
+   // Derive dynamic facets from issues collection
+   const derivedFacets = useMemo(() => {
 diff --git a/kanban/web/src/features/views/useIssueKeyboardMap.test.tsx b/kanban/web/src/features/views/useIssueKeyboardMap.test.tsx
 index 5dc1541..fcd4e0d 100644
 --- a/kanban/web/src/features/views/useIssueKeyboardMap.test.tsx
@@ -2030,3 +2262,96 @@ index fe06545..df98632 100644
        // 1. Ignore if typing in text inputs, textareas, selects, or contenteditable
        const target = e.target as HTMLElement | null;
        if (
+diff --git a/kanban/web/src/features/views/viewRegistry.test.tsx b/kanban/web/src/features/views/viewRegistry.test.tsx
+index b7e1daf..b60ecbb 100644
+--- a/kanban/web/src/features/views/viewRegistry.test.tsx
++++ b/kanban/web/src/features/views/viewRegistry.test.tsx
+@@ -1,5 +1,6 @@
+ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+ import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
++import { QueryClient } from '@tanstack/react-query';
+ import React from 'react';
+ import {
+   ViewHost,
+@@ -1693,5 +1694,28 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+       );
+       window.history.pushState({}, '', '/');
+     });
++
++    it('KB-P3-AUDIT-08: gates modulesEnabled on project query confirmation', () => {
++      const qc = new QueryClient();
++      qc.setQueryData(['project', 'KAN'], {
++        id: 'p-1',
++        identifier: 'KAN',
++        modules_enabled: false,
++      });
++
++      render(
++        <IssuesWorkspaceRoute
++          projectKey="KAN"
++          initialIssues={FIXTURE_12_ISSUES}
++          initialLayout="list"
++          queryClient={qc}
++        />,
++      );
++
++      // Group select should NOT contain module axis when modules_enabled is false
++      const groupSelect = screen.getByLabelText(/^Group by axis$/i);
++      const options = Array.from(groupSelect.querySelectorAll('option')).map((o) => o.value);
++      expect(options).not.toContain('module');
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
+index 0c7f9f4..e3ffc9b 100644
+--- a/kanban/web/src/features/views/viewRegistry.tsx
++++ b/kanban/web/src/features/views/viewRegistry.tsx
+@@ -158,7 +158,7 @@ function computeStateSummary(sId: string): StateSummary {
+ 
+ export function IssuesWorkspaceRoute({
+   projectKey,
+-  modulesEnabled = true,
++  modulesEnabled: propModulesEnabled,
+   initialIssues,
+   initialLayout,
+   queryClient = defaultQueryClient,
+@@ -168,6 +168,39 @@ export function IssuesWorkspaceRoute({
+ }: IssuesWorkspaceRouteProps): JSX.Element {
+   const isLiveMode = initialIssues === undefined;
+ 
++  const [projectMetadata, setProjectMetadata] = useState<{ modules_enabled?: boolean } | null>(() => {
++    return queryClient.getQueryData<{ modules_enabled?: boolean }>(['project', projectKey]) ?? null;
++  });
++
++  useEffect(() => {
++    if (!projectKey) return;
++    const updateFromCache = (): void => {
++      const data = queryClient.getQueryData<{ modules_enabled?: boolean }>(['project', projectKey]);
++      setProjectMetadata(data ?? null);
++    };
++    updateFromCache();
++    const unsubscribe = queryClient.getQueryCache().subscribe((event) => {
++      const keyParts = event.query.queryKey as readonly unknown[];
++      if (keyParts[0] === 'project' && keyParts[1] === projectKey) {
++        updateFromCache();
++      }
++    });
++    return () => {
++      unsubscribe();
++    };
++  }, [queryClient, projectKey]);
++
++  // KB-P3-AUDIT-08: In live mode or when project query is tracked, do NOT pass modulesEnabled=true
++  // until project query explicitly confirms project?.modules_enabled === true.
++  const hasProjectQuery = Boolean(
++    projectMetadata !== null || queryClient.getQueryState(['project', projectKey])
++  );
++  const modulesEnabled = propModulesEnabled === false
++    ? false
++    : hasProjectQuery
++      ? Boolean(projectMetadata?.modules_enabled)
++      : (propModulesEnabled ?? (isLiveMode ? false : true));
++
+   const effectiveCaps = capabilities ?? (isProjectAdmin === false ? ['VIEW', 'EDIT'] : ['EDIT', 'ADMIN']);
+   const canEdit =
+     effectiveCaps.includes('EDIT') ||

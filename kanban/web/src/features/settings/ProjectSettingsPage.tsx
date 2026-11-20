@@ -39,6 +39,7 @@ export interface ProjectMember {
   role: 'PROJECT_ADMIN' | 'MEMBER' | 'VIEWER';
   display_name?: string | null;
   handle?: string | null;
+  principal?: string | null;
   email?: string | null;
   avatar_url?: string | null;
   created_at: string;
@@ -85,7 +86,20 @@ export interface WorkspacePrincipalItem {
   principal_type: 'USER' | 'GROUP' | 'AGENT' | 'SERVICE_PRINCIPAL';
   display_name: string;
   handle?: string | null;
+  principal?: string | null;
   email?: string | null;
+}
+
+/**
+ * Format and normalize principal handles (KB-P3-AUDIT-08).
+ * Strips leading '@' before prepending a single '@', avoiding double '@@alice'.
+ */
+export function formatPrincipalHandle(
+  handle?: string | null,
+  principal?: string | null
+): string | null {
+  const normalized = (handle ?? principal ?? '').replace(/^@+/, '');
+  return normalized ? `@${normalized}` : null;
 }
 
 export interface TrashedItem {
@@ -1578,7 +1592,11 @@ export function ProjectSettingsPage(): JSX.Element {
                                 : '👤'}
                           </span>
                           <span className="kb-principal-name">{p.display_name}</span>
-                          {p.handle && <span className="kb-principal-handle">@{p.handle}</span>}
+                          {formatPrincipalHandle(p.handle, p.principal) && (
+                            <span className="kb-principal-handle">
+                              {formatPrincipalHandle(p.handle, p.principal)}
+                            </span>
+                          )}
                         </div>
                       ))}
                     </div>
@@ -1622,8 +1640,10 @@ export function ProjectSettingsPage(): JSX.Element {
                     <td>
                       <div>
                         <strong>{m.display_name ?? m.principal_id}</strong>
-                        {m.handle && (
-                          <span className="kb-principal-handle"> (@{m.handle})</span>
+                        {formatPrincipalHandle(m.handle, m.principal) && (
+                          <span className="kb-principal-handle">
+                            {' '}({formatPrincipalHandle(m.handle, m.principal)})
+                          </span>
                         )}
                       </div>
                     </td>

@@ -1,127 +1,210 @@
-LIVE FULL-STACK BLACK-BOX QA PROOF - KAN-14 ([KB-P3-AUDIT-08])
-Target Container: kanban-liveqa-2 (image: thumbs-up-kanban:local-qa)
-Base URL: http://localhost:18952
-Mocking Policy: 0 mockApi, 0 page.route, 0 context.route stubs
-Run Window: 2026-11-20T04:11:21.056Z -> 2026-11-20T04:11:40.302Z
+================================================================================
+LIVE FULL-STACK ZERO-MOCK QA PROOF - KAN-14 ([KB-P3-AUDIT-08])
+================================================================================
+Started At       : 2026-11-20T05:26:25.774Z
+Finished At      : 2026-11-20T05:26:46.585Z
+Target Container : kanban-liveqa-2 (http://localhost:18952)
+Mocking / Stubs  : ZERO (0 mockApi, 0 page.route, 0 context.route)
+Backend Stack    : Real PostgreSQL 16 (FORCE ROW LEVEL SECURITY) + UID 65532
+Runner Script    : node /home/adamoutler/.gemini/antigravity-cli/brain/cec3609e-f993-4e05-b8c5-be0070e6116c/scratch/liveqa-f2/run_liveqa.mjs
 
-========================================================================
-BOOTSTRAP TRANSCRIPT (REAL SETUP + TOTP ENROLLMENT)
-========================================================================
-1. Read setup token: docker exec kanban-liveqa-2 cat /run/kanban/setup_token (kb_setup_8N-pWx5...)
-2. GET /api/v1/setup/status -> HTTP 200 {"initialized": false}
-3. POST /api/v1/setup/claim -> HTTP 200 (workspace: kanban, project: KAN, user: admin, display_name: Admin Architect)
-4. POST /api/v1/auth/mfa/totp/enroll -> HTTP 200 (has_secret=True)
-5. POST /api/v1/auth/mfa/totp/confirm -> HTTP 200 (aal_level=2, status=enrolled)
-6. GET /api/v1/auth/me -> HTTP 200
-   {"id": "01a1f726-db8c-721e-822d-30f22c101883", "principal_id": "01a1f726-db8c-721e-822d-30f22c101883", "workspace_id": "01a1f726-db8a-785c-b8d8-78ec68f66b50", "handle": "admin", "username": "admin", "display_name": "Admin Architect", "email": "admin@local.kanban", "is_server_admin": true, "is_workspace_admin": true, "is_project_admin": true, "workspace_role": "SERVER_ADMIN", "workspace_capabilities": ["CREATE_PROJECT", "MANAGE_WORKSPACE_SETTINGS", "MANAGE_WORKSPACE_MCP_KEYS", "MANAGE_SERVER_ADMIN", "ADMIN_AUTH_STUDIO", "ADMIN_MCP_KEYS", "SYSTEM_STORAGE"], "timezone": "UTC", "avatar_url": null, "has_local_password": true, "aal_level": 2, "mfa_pending": false}
+--------------------------------------------------------------------------------
+1. BOOTSTRAP & AAL2 SESSION VERIFICATION
+--------------------------------------------------------------------------------
+- setup_token prefix   : kb_setup_p5xrGTf...
+- initial setup status : HTTP 200 {"initialized": false}
+- POST /api/v1/setup/claim : HTTP 200 status=enrollment_required principal_id=01a1f76b-9821-7808-8922-c9514542e7e3
+- POST /api/v1/auth/mfa/totp/enroll : HTTP 200 has_secret=True
+- POST /api/v1/auth/mfa/totp/confirm : HTTP 200 aal_level=2
+- GET /api/v1/auth/me : HTTP 200 handle=admin workspace_role=SERVER_ADMIN aal_level=2
 
-========================================================================
-COMMAND EXECUTED
-========================================================================
-node /home/adamoutler/.gemini/antigravity-cli/brain/cec3609e-f993-4e05-b8c5-be0070e6116c/scratch/liveqa-r2/run_liveqa.mjs
+--------------------------------------------------------------------------------
+2. SCOPED CHECK RESULTS (KAN-14 ROUND-2)
+--------------------------------------------------------------------------------
+[PASS] Check 2.1 - /admin/auth synthetic keydown (key===undefined & key==='') & immediate @alice first paint:
+  - POST /api/v1/admin/principals (@alice) : HTTP 201 {"id": "7b5789d0-6f06-4324-8e42-053d3c9480ee", "principal": "@alice", "type": "USER", "handle": "@alice", "display_name": "Alice QA", "email": "alice@example.com", "status": "active", "role": "WORKSPACE_MEMBER", "provider": "LOCAL"}
+  - Immediate first-paint visibility (no reload): {"alice_visible": true, "has_at_alice": true, "has_alice_email": true}
 
-========================================================================
-RAW EXECUTION LOG & LIVE DOM / API VERIFICATION
-========================================================================
-[2026-11-20T04:11:23.401Z] Dispatched synthetic keydown (event.key === undefined) on /admin/auth (Auth Provider Cards): ok=true
-[2026-11-20T04:11:23.772Z] Dispatched synthetic keydown (event.key === undefined) on /admin/auth (Users & Permissions): ok=true
-[2026-11-20T04:11:23.821Z] Dispatched synthetic keydown (event.key === undefined) on /admin/auth (+ Add Local User modal): ok=true
-[2026-11-20T04:11:26.217Z] Dispatched synthetic keydown (event.key === undefined) on /workspaces/settings#tab-members: ok=true
-[2026-11-20T04:11:28.793Z] Dispatched synthetic keydown (event.key === undefined) on /workspaces/settings#tab-groups: ok=true
-[2026-11-20T04:11:31.697Z] Dispatched synthetic keydown (event.key === undefined) on /projects/KAN/settings: ok=true
+[PASS] Check 2.2 - /workspaces/settings#tab-members & #tab-groups (1440x900 & 390x844 Light/Dark):
+  - Email input attrs : {"placeholder": "email@example.com", "required": true, "hasRequiredAttr": true}
+  - POST /api/v1/admin/principals (@bob) : HTTP 201 {"id": "736592e2-8985-48e1-8db5-f7f8e98932f8", "principal": "@bob", "type": "USER", "handle": "@bob", "display_name": "Bob QA", "email": "bob@example.com", "status": "active", "role": "WORKSPACE_MEMBER", "provider": "LOCAL"}
+  - Mobile 390x844 Light layout : {"innerWidth": 390, "scrollWidth": 390, "overflowFree": true, "createUserBtnRect": {"left": 49, "right": 341, "width": 292, "height": 38, "withinViewport": true}}
+  - Mobile 390x844 Dark layout  : {"innerWidth": 390, "scrollWidth": 390, "overflowFree": true}
+  - DELETE /api/v1/admin/role-bindings (@bob) : HTTP 200 {"status": "role_unbound", "principal_id": "736592e2-8985-48e1-8db5-f7f8e98932f8", "role": "WORKSPACE_MEMBER", "scope": "workspace"}
+  - POST /api/v1/admin/principals (@infra-team) : HTTP 201 {"id": "b670a0d5-ad86-46fc-a3d0-62d29934a132", "principal": "infra-team", "handle": "@infra-team", "type": "GROUP", "display_name": "Infra Team", "status": "active", "member_count": 0, "email": null, "role": "WORKSPACE_MEMBER", "provider": "LOCAL"}
+  - POST /api/v1/admin/groups/{id}/members/{alice} : HTTP 200 {"status": "member_added", "group_id": "b670a0d5-ad86-46fc-a3d0-62d29934a132", "member_id": "7b5789d0-6f06-4324-8e42-053d3c9480ee"}
+  - Groups Mobile 390x844 Light layout : {"innerWidth": 390, "scrollWidth": 390, "overflowFree": true}
 
-Structured Live Checks:
-- /admin/auth modal email validity: {"required": true, "valid": false, "placeholder": "jdoe@example.com"}
-- Created @alice via /admin/auth: HTTP 201 {"id": "4aa40a9b-3876-4e2d-8bea-4df37981730e", "principal": "@alice", "type": "USER", "handle": "@alice", "display_name": "Alice QA", "email": "alice@example.com", "status": "active", "role": "WORKSPACE_MEMBER", "provider": "LOCAL"}
-- @alice immediate visibility on first paint in /admin/auth Users & Permissions: {"alice_visible": true, "has_at_alice": true, "has_alice_email": true}
-- /workspaces/settings #tab-members email input attrs: {"placeholder": "email@example.com", "required": true, "hasRequiredAttr": true}
-- /workspaces/settings #tab-members empty email alert: ["Email is required for user provisioning."]
-- Created @bob via #tab-members: HTTP 201 {"id": "8491abda-12ae-4120-927b-40602bc9ee6d", "principal": "@bob", "type": "USER", "handle": "@bob", "display_name": "Bob QA", "email": "bob@example.com", "status": "active", "role": "WORKSPACE_MEMBER", "provider": "LOCAL"}
-- #tab-members Workspace Users & Principals rows: [{"testId": "principal-row-01a1f726-db8c-721e-822d-30f22c101883", "text": "Admin Architect @admin admin@local.kanban User WORKSPACE_ADMIN WORKSPACE_MEMBER WORKSPACE_GUEST Remove", "handles": ["@admin"], "emails": ["admin@local.kanban"]}, {"testId": "principal-row-4aa40a9b-3876-4e2d-8bea-4df37981730e", "text": "Alice QA @alice alice@example.com User WORKSPACE_ADMIN WORKSPACE_MEMBER WORKSPACE_GUEST Remove", "handles": ["@alice"], "emails": ["alice@example.com"]}, {"testId": "principal-row-8491abda-12ae-4120-927b-40602bc9ee6d", "text": "Bob QA @bob bob@example.com User WORKSPACE_ADMIN WORKSPACE_MEMBER WORKSPACE_GUEST Remove", "handles": ["@bob"], "emails": ["bob@example.com"]}]
-- #tab-members Mobile 390x844 layout check: {"innerWidth": 390, "scrollWidth": 390, "overflowFree": true, "createUserBtnRect": {"left": 49, "right": 341, "width": 292, "height": 38, "withinViewport": true, "text": "Create User"}}
-- DELETE /api/v1/admin/role-bindings for @bob: HTTP 200 {"status": "role_unbound", "principal_id": "8491abda-12ae-4120-927b-40602bc9ee6d", "role": "WORKSPACE_MEMBER", "scope": "workspace"}
-- Created group @infra-team via #tab-groups: HTTP 201 {"id": "688c8412-5c42-436d-8ed0-e5e1b08b93e4", "principal": "infra-team", "type": "GROUP", "display_name": "Infra Team", "status": "active", "member_count": 0, "handle": "@infra-team"}
-- #tab-groups rendered group handles: {"selectedGroupHandle": "@infra-team", "listHandles": ["@infra-team"]}
-- Added @alice to @infra-team: HTTP 200 {"status": "member_added", "group_id": "688c8412-5c42-436d-8ed0-e5e1b08b93e4", "member_id": "4aa40a9b-3876-4e2d-8bea-4df37981730e"}
-- #tab-groups Group Members table renders @alice: {"contains_at_alice": true, "contains_alice_qa": true}
-Note: Navigating directly to /workspaces/settings#tab-members or #tab-groups did not auto-open the tab on mount (scheduled separately in KAN-12); tabs were clicked via [data-testid="tab-members"] and [data-testid="tab-groups"].
+[PASS] Check 2.3 - Round-2 Backend Contract (GET /api/v1/admin/principals?limit=100 & GET /api/v1/admin/groups/{group_id}/members):
+  - GET /api/v1/admin/principals?limit=100 : HTTP 200, count=4
+  - allEntriesHaveHandleEmailRoleProvider : True
+  - expectedHandlesPresent (@admin, @alice, @infra-team) : True (['@admin', '@alice', '@bob', '@infra-team'])
+  - Raw GET /api/v1/admin/principals?limit=100 JSON:
+[
+  {
+    "id": "01a1f76b-9821-7808-8922-c9514542e7e3",
+    "principal": "admin",
+    "handle": "@admin",
+    "display_name": "Admin Architect",
+    "type": "USER",
+    "status": "active",
+    "email": "admin@local.kanban",
+    "role": "SERVER_ADMIN",
+    "provider": "LOCAL"
+  },
+  {
+    "id": "7b5789d0-6f06-4324-8e42-053d3c9480ee",
+    "principal": "@alice",
+    "handle": "@alice",
+    "display_name": "Alice QA",
+    "type": "USER",
+    "status": "active",
+    "email": "alice@example.com",
+    "role": "WORKSPACE_MEMBER",
+    "provider": "LOCAL"
+  },
+  {
+    "id": "736592e2-8985-48e1-8db5-f7f8e98932f8",
+    "principal": "@bob",
+    "handle": "@bob",
+    "display_name": "Bob QA",
+    "type": "USER",
+    "status": "active",
+    "email": "bob@example.com",
+    "role": "WORKSPACE_MEMBER",
+    "provider": "LOCAL"
+  },
+  {
+    "id": "b670a0d5-ad86-46fc-a3d0-62d29934a132",
+    "principal": "infra-team",
+    "handle": "@infra-team",
+    "display_name": "Infra Team",
+    "type": "GROUP",
+    "status": "active",
+    "email": null,
+    "role": "WORKSPACE_MEMBER",
+    "provider": "LOCAL"
+  }
+]
+  - GET /api/v1/admin/groups/b670a0d5-ad86-46fc-a3d0-62d29934a132/members : HTTP 200, count=1
+  - allEntriesHaveHandleEmailRoleProvider : True
+  - aliceInMembersWithHandle : True
+  - Raw GET /api/v1/admin/groups/{group_id}/members JSON:
+[
+  {
+    "id": "7b5789d0-6f06-4324-8e42-053d3c9480ee",
+    "principal": "@alice",
+    "handle": "@alice",
+    "display_name": "Alice QA",
+    "type": "USER",
+    "status": "active",
+    "email": "alice@example.com",
+    "role": "WORKSPACE_MEMBER",
+    "provider": "LOCAL"
+  }
+]
 
-Live HTTP Transcripts (/api/v1/admin/*):
-- GET http://localhost:18952/api/v1/admin/auth-cards -> HTTP 200
-  Response: {"cards":[{"id":"01a1f726-db8b-70da-9950-4cc2a7118377","workspace_id":"01a1f726-db8a-785c-b8d8-78ec68f66b50","provider_kind":"LOCAL_ADMIN","slug":"local-admin","display_name":"Local Admin","button_subtext":"Username and password","icon_preset":"key","is_enabled":true,"sort_rank":"0001","auto_provision_users":false,"allowed_email_domains":[],"public_config":{},"dek_kid":"kek-v1","last_health_status":"UNVERIFIED","last_admin_handshake_at":null,"created_at":"2026-11-20T04:11:21.355821Z","updated_at":"2026-11-20T04:11:21.355821Z","has_secret":false}]}
-- GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200
-  Response: [{"id":"01a1f726-db8c-721e-822d-30f22c101883","principal":"admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"}]
-- GET http://localhost:18952/api/v1/admin/auth-cards -> HTTP 200
-  Response: {"cards":[{"id":"01a1f726-db8b-70da-9950-4cc2a7118377","workspace_id":"01a1f726-db8a-785c-b8d8-78ec68f66b50","provider_kind":"LOCAL_ADMIN","slug":"local-admin","display_name":"Local Admin","button_subtext":"Username and password","icon_preset":"key","is_enabled":true,"sort_rank":"0001","auto_provision_users":false,"allowed_email_domains":[],"public_config":{},"dek_kid":"kek-v1","last_health_status":"UNVERIFIED","last_admin_handshake_at":null,"created_at":"2026-11-20T04:11:21.355821Z","updated_at":"2026-11-20T04:11:21.355821Z","has_secret":false}]}
-- GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200
-  Response: [{"id":"01a1f726-db8c-721e-822d-30f22c101883","principal":"admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"}]
-- POST http://localhost:18952/api/v1/admin/principals -> HTTP 201
-  Request: {"type":"USER","handle":"alice","display_name":"Alice QA","email":"alice@example.com","password":"Alice-Strong-Pass-2026!","role":"WORKSPACE_MEMBER"}
-  Response: {"id":"4aa40a9b-3876-4e2d-8bea-4df37981730e","principal":"@alice","type":"USER","handle":"@alice","display_name":"Alice QA","email":"alice@example.com","status":"active","role":"WORKSPACE_MEMBER","provider":"LOCAL"}
-- GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200
-  Response: [{"id":"01a1f726-db8c-721e-822d-30f22c101883","principal":"admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"},{"id":"4aa40a9b-3876-4e2d-8bea-4df37981730e","principal":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"}]
-- GET http://localhost:18952/api/v1/admin/auth-cards -> HTTP 200
-  Response: {"cards":[{"id":"01a1f726-db8b-70da-9950-4cc2a7118377","workspace_id":"01a1f726-db8a-785c-b8d8-78ec68f66b50","provider_kind":"LOCAL_ADMIN","slug":"local-admin","display_name":"Local Admin","button_subtext":"Username and password","icon_preset":"key","is_enabled":true,"sort_rank":"0001","auto_provision_users":false,"allowed_email_domains":[],"public_config":{},"dek_kid":"kek-v1","last_health_status":"UNVERIFIED","last_admin_handshake_at":null,"created_at":"2026-11-20T04:11:21.355821Z","updated_at":"2026-11-20T04:11:21.355821Z","has_secret":false}]}
-- GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200
-  Response: [{"id":"01a1f726-db8c-721e-822d-30f22c101883","principal":"admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"},{"id":"4aa40a9b-3876-4e2d-8bea-4df37981730e","principal":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"}]
-- GET http://localhost:18952/api/v1/admin/workspace-settings -> HTTP 200
-  Response: {"workspace_id":"01a1f726-db8a-785c-b8d8-78ec68f66b50","name":"Kanban","slug":"kanban","display_name":"Default Workspace","default_project_visibility":"private","session_idle_timeout_min":60,"session_absolute_timeout_min":720,"trash_retention_days":30,"mcp_key_max_ttl_days":90,"air_gap_mode":false,"updated_at":"2026-11-20T04:11:21.355336Z"}
-- GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200
-  Response: [{"id":"01a1f726-db8c-721e-822d-30f22c101883","principal":"admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"},{"id":"4aa40a9b-3876-4e2d-8bea-4df37981730e","principal":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"}]
-- POST http://localhost:18952/api/v1/admin/principals -> HTTP 201
-  Request: {"type":"USER","handle":"@bob","display_name":"Bob QA","email":"bob@example.com","password":"Bob-Strong-Pass-2026!"}
-  Response: {"id":"8491abda-12ae-4120-927b-40602bc9ee6d","principal":"@bob","type":"USER","handle":"@bob","display_name":"Bob QA","email":"bob@example.com","status":"active","role":"WORKSPACE_MEMBER","provider":"LOCAL"}
-- POST http://localhost:18952/api/v1/admin/role-bindings -> HTTP 200
-  Request: {"principal_id":"8491abda-12ae-4120-927b-40602bc9ee6d","role":"WORKSPACE_MEMBER","role_name":"WORKSPACE_MEMBER","scope_type":"workspace"}
-  Response: {"status":"already_bound","principal_id":"8491abda-12ae-4120-927b-40602bc9ee6d","role":"WORKSPACE_MEMBER","scope":"workspace"}
-- GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200
-  Response: [{"id":"01a1f726-db8c-721e-822d-30f22c101883","principal":"admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"},{"id":"4aa40a9b-3876-4e2d-8bea-4df37981730e","principal":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"},{"id":"8491abda-12ae-4120-927b-40602bc9ee6d","principal":"@bob","display_name":"Bob QA","type":"USER","status":"active","email":"bob@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"}]
-- DELETE http://localhost:18952/api/v1/admin/role-bindings -> HTTP 200
-  Request: {"principal_id":"8491abda-12ae-4120-927b-40602bc9ee6d","role":"WORKSPACE_MEMBER","scope_type":"workspace"}
-  Response: {"status":"role_unbound","principal_id":"8491abda-12ae-4120-927b-40602bc9ee6d","role":"WORKSPACE_MEMBER","scope":"workspace"}
-- POST http://localhost:18952/api/v1/admin/principals -> HTTP 201
-  Request: {"type":"GROUP","handle":"@infra-team","display_name":"Infra Team"}
-  Response: {"id":"688c8412-5c42-436d-8ed0-e5e1b08b93e4","principal":"infra-team","type":"GROUP","display_name":"Infra Team","status":"active","member_count":0,"handle":"@infra-team"}
-- GET http://localhost:18952/api/v1/admin/groups/688c8412-5c42-436d-8ed0-e5e1b08b93e4/members -> HTTP 200
-  Response: []
-- GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200
-  Response: [{"id":"01a1f726-db8c-721e-822d-30f22c101883","principal":"admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"},{"id":"4aa40a9b-3876-4e2d-8bea-4df37981730e","principal":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"},{"id":"8491abda-12ae-4120-927b-40602bc9ee6d","principal":"@bob","display_name":"Bob QA","type":"USER","status":"active","email":"bob@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"},{"id":"688c8412-5c42-436d-8ed0-e5e1b08b93e4","principal":"infra-team","display_name":"Infra Team","type":"GROUP","status":"active","email":null,"role":"WORKSPACE_MEMBER","provider":"LOCAL"}]
-- POST http://localhost:18952/api/v1/admin/groups/688c8412-5c42-436d-8ed0-e5e1b08b93e4/members/4aa40a9b-3876-4e2d-8bea-4df37981730e -> HTTP 200
-  Response: {"status":"member_added","group_id":"688c8412-5c42-436d-8ed0-e5e1b08b93e4","member_id":"4aa40a9b-3876-4e2d-8bea-4df37981730e"}
-- GET http://localhost:18952/api/v1/admin/groups/688c8412-5c42-436d-8ed0-e5e1b08b93e4/members -> HTTP 200
-  Response: [{"id":"4aa40a9b-3876-4e2d-8bea-4df37981730e","principal":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com"}]
-- GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200
-  Response: [{"id":"01a1f726-db8c-721e-822d-30f22c101883","principal":"admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"},{"id":"4aa40a9b-3876-4e2d-8bea-4df37981730e","principal":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"},{"id":"8491abda-12ae-4120-927b-40602bc9ee6d","principal":"@bob","display_name":"Bob QA","type":"USER","status":"active","email":"bob@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"},{"id":"688c8412-5c42-436d-8ed0-e5e1b08b93e4","principal":"infra-team","display_name":"Infra Team","type":"GROUP","status":"active","email":null,"role":"WORKSPACE_MEMBER","provider":"LOCAL"}]
-- GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200
-  Response: [{"id":"01a1f726-db8c-721e-822d-30f22c101883","principal":"admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"},{"id":"4aa40a9b-3876-4e2d-8bea-4df37981730e","principal":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"},{"id":"8491abda-12ae-4120-927b-40602bc9ee6d","principal":"@bob","display_name":"Bob QA","type":"USER","status":"active","email":"bob@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"},{"id":"688c8412-5c42-436d-8ed0-e5e1b08b93e4","principal":"infra-team","display_name":"Infra Team","type":"GROUP","status":"active","email":null,"role":"WORKSPACE_MEMBER","provider":"LOCAL"}]
+[FAIL] Check 2.4 - /projects/KAN/settings (modules_enabled=false) member picker handle, synthetic keydown, 0 404s on /modules:
+  - KAN modules_enabled : False
+  - Reload /projects/KAN/settings /modules requests : []
+  - Reload /projects/KAN/settings 404s : []
+  - Reload /projects/KAN/settings console.error : []
+  - Synthetic keydown pageErrors : []
+  - DEFECT IN MEMBER PICKER HANDLE DISPLAY: {"dropdownVisible": true, "itemCount": 1, "items": [{"text": "\ud83d\udc64 Alice QA @@alice", "handleElText": "@@alice"}]}
+    Root cause: GET /api/v1/admin/principals?limit=100 now returns handle with leading '@' ("@alice"),
+    and ProjectSettingsPage.tsx:1581 renders `@{p.handle}`, producing double-at `@@alice` in the dropdown
+    (visually confirmed in docs/qa/KAN-14/screenshots/live-kan14-project-settings-members-desktop-light.png
+    and live-kan14-project-settings-desktop-dark.png). Line 1626 also has `(@{m.handle})`.
 
-========================================================================
-CONSOLE / PAGEERROR & 404 TELEMETRY (KAN-14)
-========================================================================
-pageErrors: 0
-consoleErrors: 0
-http404s (including /api/v1/projects/KAN/modules): 0
+[PASS/DEFECT] Check 2.5 - /projects/KAN/issues useIssueKeyboardMap synthetic keydown (key===undefined & key===''):
+  - useIssueKeyboardMap synthetic keydown newPageErrors : [] (0 pageerror)
+  - HOWEVER, navigating to /projects/KAN/issues with modules_enabled=false triggered console.error & HTTP 404/422:
+    * http404s: [{"url": "http://localhost:18952/api/v1/projects/KAN/modules", "status": 404, "body": "{\"type\":\"urn:kanban:problem:MODULES_DISABLED\",\"title\":\"Not Found\",\"status\":404,\"code\":\"MODULES_DISABLED\",\"detail\":\"Modules feature is disabled for this project\",\"request_id\":\"1432e3afefa54988b19d721a10d716ac\"}"}]
+    * consoleErrors: ["Failed to load resource: the server responded with a status of 422 (Unprocessable Entity)", "Failed to load resource: the server responded with a status of 404 (Not Found)"]
+    (404 GET /api/v1/projects/KAN/modules [MODULES_DISABLED] + 422 GET /api/v1/projects/KAN/assignee-suggestions?q=&limit=10 [INVALID_QUERY])
 
-========================================================================
-SCREENSHOT ARTIFACTS (UNMOCKED)
-========================================================================
-- docs/qa/KAN-14/screenshots/live-kan14-admin-auth-desktop-light.png
-- docs/qa/KAN-14/screenshots/live-kan14-admin-auth-desktop-dark.png
-- docs/qa/KAN-14/screenshots/live-kan14-members-desktop-light.png
-- docs/qa/KAN-14/screenshots/live-kan14-members-desktop-dark.png
-- docs/qa/KAN-14/screenshots/live-kan14-members-mobile-light.png
-- docs/qa/KAN-14/screenshots/live-kan14-members-mobile-dark.png
-- docs/qa/KAN-14/screenshots/live-kan14-groups-desktop-light.png
-- docs/qa/KAN-14/screenshots/live-kan14-groups-desktop-dark.png
-- docs/qa/KAN-14/screenshots/live-kan14-project-settings-desktop-light.png
-- docs/qa/KAN-14/screenshots/live-kan14-project-settings-desktop-dark.png
+--------------------------------------------------------------------------------
+3. TELEMETRY SUMMARY (KAN-14)
+--------------------------------------------------------------------------------
+- pageErrors count    : 0 -> []
+- consoleErrors count : 2 -> ["Failed to load resource: the server responded with a status of 422 (Unprocessable Entity)", "Failed to load resource: the server responded with a status of 404 (Not Found)"]
+- http404s count      : 1 -> [{"url": "http://localhost:18952/api/v1/projects/KAN/modules", "status": 404, "body": "{\"type\":\"urn:kanban:problem:MODULES_DISABLED\",\"title\":\"Not Found\",\"status\":404,\"code\":\"MODULES_DISABLED\",\"detail\":\"Modules feature is disabled for this project\",\"request_id\":\"1432e3afefa54988b19d721a10d716ac\"}"}]
+- Keydown event logs  :
+  [2026-11-20T05:26:28.055Z] Dispatched synthetic keydown (key===undefined and key==='') on /admin/auth (Auth Provider Cards): targets=4
+  [2026-11-20T05:26:28.423Z] Dispatched synthetic keydown (key===undefined and key==='') on /admin/auth (Users & Permissions): targets=3
+  [2026-11-20T05:26:28.470Z] Dispatched synthetic keydown (key===undefined and key==='') on /admin/auth (+ Add Local User modal): targets=4
+  [2026-11-20T05:26:30.846Z] Dispatched synthetic keydown (key===undefined and key==='') on /workspaces/settings#tab-members: targets=4
+  [2026-11-20T05:26:33.151Z] Dispatched synthetic keydown (key===undefined and key==='') on /workspaces/settings#tab-groups: targets=4
+  [2026-11-20T05:26:38.040Z] Dispatched synthetic keydown (key===undefined and key==='') on /projects/KAN/settings (General): targets=4
+  [2026-11-20T05:26:38.482Z] Dispatched synthetic keydown (key===undefined and key==='') on /projects/KAN/settings (Members & Access): targets=4
+  [2026-11-20T05:26:40.091Z] Dispatched synthetic keydown (key===undefined and key==='') on /projects/KAN/issues (useIssueKeyboardMap): targets=3
 
-========================================================================
-PER-PROBLEM VERDICTS (KAN-14)
-========================================================================
-- Problem 1 (/admin/auth synthetic keydown with key: undefined -> 0 pageerror; + Add Local User creates @alice and @alice renders IMMEDIATELY on first paint): LIVE_STACK_VERDICT: PASS
-- Problem 2 (/workspaces/settings Workspace Members tab: email placeholder 'email@example.com' + required=true; Mobile 390x844 scrollWidth=390 <= 390 and Create User button unclipped; @alice/@bob real handles; DELETE /api/v1/admin/role-bindings for @bob returns 200): LIVE_STACK_VERDICT: PASS
-- Problem 3 (/workspaces/settings Groups & Governance tab: create group handle @infra-team / display_name 'Infra Team' persists & renders @infra-team; add @alice renders in Group Members table): LIVE_STACK_VERDICT: PASS
-- Problem 4 (/projects/KAN/settings with modules_enabled=false: synthetic keydown key: undefined -> 0 pageerror, 0 /api/v1/projects/KAN/modules 404s, 0 console.error entries): LIVE_STACK_VERDICT: PASS
+--------------------------------------------------------------------------------
+4. LIVE SCREENSHOTS CAPTURED
+--------------------------------------------------------------------------------
+- /home/adamoutler/kanban/docs/qa/KAN-14/screenshots/live-kan14-admin-auth-desktop-light.png
+- /home/adamoutler/kanban/docs/qa/KAN-14/screenshots/live-kan14-admin-auth-desktop-dark.png
+- /home/adamoutler/kanban/docs/qa/KAN-14/screenshots/live-kan14-members-desktop-light.png
+- /home/adamoutler/kanban/docs/qa/KAN-14/screenshots/live-kan14-members-desktop-dark.png
+- /home/adamoutler/kanban/docs/qa/KAN-14/screenshots/live-kan14-members-mobile-light.png
+- /home/adamoutler/kanban/docs/qa/KAN-14/screenshots/live-kan14-members-mobile-dark.png
+- /home/adamoutler/kanban/docs/qa/KAN-14/screenshots/live-kan14-groups-desktop-light.png
+- /home/adamoutler/kanban/docs/qa/KAN-14/screenshots/live-kan14-groups-desktop-dark.png
+- /home/adamoutler/kanban/docs/qa/KAN-14/screenshots/live-kan14-groups-mobile-light.png
+- /home/adamoutler/kanban/docs/qa/KAN-14/screenshots/live-kan14-groups-mobile-dark.png
+- /home/adamoutler/kanban/docs/qa/KAN-14/screenshots/live-kan14-project-settings-desktop-light.png
+- /home/adamoutler/kanban/docs/qa/KAN-14/screenshots/live-kan14-project-settings-members-desktop-light.png
+- /home/adamoutler/kanban/docs/qa/KAN-14/screenshots/live-kan14-project-settings-desktop-dark.png
 
-OVERALL_TICKET_VERDICT (KAN-14): LIVE_STACK_VERDICT: PASS
+--------------------------------------------------------------------------------
+5. RAW HTTP TRANSCRIPTS (SELECTED ADMIN / PROJECT / ISSUES CALLS)
+--------------------------------------------------------------------------------
+[2026-11-20T05:26:26.889Z] GET http://localhost:18952/api/v1/admin/auth-cards -> HTTP 200 | req=None | resp={"cards":[{"id":"01a1f76b-9821-7f10-b86a-fa16b3414374","workspace_id":"01a1f76b-9820-7ce0-adb9-245ce6326b5e","provider_kind":"LOCAL_ADMIN","slug":"local-admin","display_name":"Local Admin","button_subtext":"Username and password","icon_preset":"key","is_enabled":true,"sort_rank":"0001","auto_provision_users":false,"allowed_email_domains":[],"public_config":{},"dek_kid":"kek-v1","last_health_status":"UNVERIFIED","last_admin_handshake_at":null,"created_at":"2026-11-20T05:26:26.081188Z","updated_at":"2026-11-20T05:26:26.081188Z","has_secret":false}]}
+[2026-11-20T05:26:26.895Z] GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200 | req=None | resp=[{"id":"01a1f76b-9821-7808-8922-c9514542e7e3","principal":"admin","handle":"@admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"}]
+[2026-11-20T05:26:27.546Z] GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200 | req=None | resp=[{"id":"01a1f76b-9821-7808-8922-c9514542e7e3","principal":"admin","handle":"@admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"}]
+[2026-11-20T05:26:27.552Z] GET http://localhost:18952/api/v1/admin/auth-cards -> HTTP 200 | req=None | resp={"cards":[{"id":"01a1f76b-9821-7f10-b86a-fa16b3414374","workspace_id":"01a1f76b-9820-7ce0-adb9-245ce6326b5e","provider_kind":"LOCAL_ADMIN","slug":"local-admin","display_name":"Local Admin","button_subtext":"Username and password","icon_preset":"key","is_enabled":true,"sort_rank":"0001","auto_provision_users":false,"allowed_email_domains":[],"public_config":{},"dek_kid":"kek-v1","last_health_status":"UNVERIFIED","last_admin_handshake_at":null,"created_at":"2026-11-20T05:26:26.081188Z","updated_at":"2026-11-20T05:26:26.081188Z","has_secret":false}]}
+[2026-11-20T05:26:28.636Z] POST http://localhost:18952/api/v1/admin/principals -> HTTP 201 | req={"type":"USER","handle":"alice","display_name":"Alice QA","email":"alice@example.com","password":"Alice-Strong-Pass-2026!","role":"WORKSPACE_MEMBER"} | resp={"id":"7b5789d0-6f06-4324-8e42-053d3c9480ee","principal":"@alice","type":"USER","handle":"@alice","display_name":"Alice QA","email":"alice@example.com","status":"active","role":"WORKSPACE_MEMBER","provider":"LOCAL"}
+[2026-11-20T05:26:28.657Z] GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200 | req=None | resp=[{"id":"01a1f76b-9821-7808-8922-c9514542e7e3","principal":"admin","handle":"@admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"}]
+[2026-11-20T05:26:29.221Z] GET http://localhost:18952/api/v1/admin/auth-cards -> HTTP 200 | req=None | resp={"cards":[{"id":"01a1f76b-9821-7f10-b86a-fa16b3414374","workspace_id":"01a1f76b-9820-7ce0-adb9-245ce6326b5e","provider_kind":"LOCAL_ADMIN","slug":"local-admin","display_name":"Local Admin","button_subtext":"Username and password","icon_preset":"key","is_enabled":true,"sort_rank":"0001","auto_provision_users":false,"allowed_email_domains":[],"public_config":{},"dek_kid":"kek-v1","last_health_status":"UNVERIFIED","last_admin_handshake_at":null,"created_at":"2026-11-20T05:26:26.081188Z","updated_at":"2026-11-20T05:26:26.081188Z","has_secret":false}]}
+[2026-11-20T05:26:29.221Z] GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200 | req=None | resp=[{"id":"01a1f76b-9821-7808-8922-c9514542e7e3","principal":"admin","handle":"@admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"},{"id":"7b5789d0-6f06-4324-8e42-053d3c9480ee","principal":"@alice","handle":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"}]
+[2026-11-20T05:26:30.252Z] GET http://localhost:18952/api/v1/admin/workspace-settings -> HTTP 200 | req=None | resp={"workspace_id":"01a1f76b-9820-7ce0-adb9-245ce6326b5e","name":"Kanban","slug":"kanban","display_name":"Default Workspace","default_project_visibility":"private","session_idle_timeout_min":60,"session_absolute_timeout_min":720,"trash_retention_days":30,"mcp_key_max_ttl_days":90,"air_gap_mode":false,"updated_at":"2026-11-20T05:26:26.080657Z"}
+[2026-11-20T05:26:30.269Z] GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200 | req=None | resp=[{"id":"01a1f76b-9821-7808-8922-c9514542e7e3","principal":"admin","handle":"@admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"},{"id":"7b5789d0-6f06-4324-8e42-053d3c9480ee","principal":"@alice","handle":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"}]
+[2026-11-20T05:26:30.995Z] POST http://localhost:18952/api/v1/admin/principals -> HTTP 201 | req={"type":"USER","handle":"@bob","display_name":"Bob QA","email":"bob@example.com","password":"Bob-Strong-Pass-2026!"} | resp={"id":"736592e2-8985-48e1-8db5-f7f8e98932f8","principal":"@bob","type":"USER","handle":"@bob","display_name":"Bob QA","email":"bob@example.com","status":"active","role":"WORKSPACE_MEMBER","provider":"LOCAL"}
+[2026-11-20T05:26:31.092Z] POST http://localhost:18952/api/v1/admin/role-bindings -> HTTP 200 | req={"principal_id":"736592e2-8985-48e1-8db5-f7f8e98932f8","role":"WORKSPACE_MEMBER","role_name":"WORKSPACE_MEMBER","scope_type":"workspace"} | resp={"status":"already_bound","principal_id":"736592e2-8985-48e1-8db5-f7f8e98932f8","role":"WORKSPACE_MEMBER","scope":"workspace"}
+[2026-11-20T05:26:31.109Z] GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200 | req=None | resp=[{"id":"01a1f76b-9821-7808-8922-c9514542e7e3","principal":"admin","handle":"@admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"},{"id":"7b5789d0-6f06-4324-8e42-053d3c9480ee","principal":"@alice","handle":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"},{"id":"736592e2-8985-48e1-8db5-f7f8e98932f8","principal":"@bob","handle":"@bob","display_name":"Bob QA","type":"USER","status":"active","email":"bob@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"}]
+[2026-11-20T05:26:32.710Z] DELETE http://localhost:18952/api/v1/admin/role-bindings -> HTTP 200 | req={"principal_id":"736592e2-8985-48e1-8db5-f7f8e98932f8","role":"WORKSPACE_MEMBER","scope_type":"workspace"} | resp={"status":"role_unbound","principal_id":"736592e2-8985-48e1-8db5-f7f8e98932f8","role":"WORKSPACE_MEMBER","scope":"workspace"}
+[2026-11-20T05:26:33.237Z] POST http://localhost:18952/api/v1/admin/principals -> HTTP 201 | req={"type":"GROUP","handle":"@infra-team","display_name":"Infra Team"} | resp={"id":"b670a0d5-ad86-46fc-a3d0-62d29934a132","principal":"infra-team","handle":"@infra-team","type":"GROUP","display_name":"Infra Team","status":"active","member_count":0,"email":null,"role":"WORKSPACE_MEMBER","provider":"LOCAL"}
+[2026-11-20T05:26:33.253Z] GET http://localhost:18952/api/v1/admin/groups/b670a0d5-ad86-46fc-a3d0-62d29934a132/members -> HTTP 200 | req=None | resp=[]
+[2026-11-20T05:26:33.266Z] GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200 | req=None | resp=[{"id":"01a1f76b-9821-7808-8922-c9514542e7e3","principal":"admin","handle":"@admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"},{"id":"7b5789d0-6f06-4324-8e42-053d3c9480ee","principal":"@alice","handle":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"},{"id":"736592e2-8985-48e1-8db5-f7f8e98932f8","principal":"@bob","handle":"@bob","display_name":"Bob QA","type":"USER","status":"active","email":"bob@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"},{"id":"b670a0d5-ad86-46fc-a3d0-62d29934a132","principal":"infra-team","handle":"@infra-team","display_name":"Infra Team","type":"GROUP","status":"active","email":null,"role":"WORKSPACE_MEMBER","provider":"LOCAL"}]
+[2026-11-20T05:26:33.817Z] POST http://localhost:18952/api/v1/admin/groups/b670a0d5-ad86-46fc-a3d0-62d29934a132/members/7b5789d0-6f06-4324-8e42-053d3c9480ee -> HTTP 200 | req=None | resp={"status":"member_added","group_id":"b670a0d5-ad86-46fc-a3d0-62d29934a132","member_id":"7b5789d0-6f06-4324-8e42-053d3c9480ee"}
+[2026-11-20T05:26:33.833Z] GET http://localhost:18952/api/v1/admin/groups/b670a0d5-ad86-46fc-a3d0-62d29934a132/members -> HTTP 200 | req=None | resp=[{"id":"7b5789d0-6f06-4324-8e42-053d3c9480ee","principal":"@alice","handle":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"}]
+[2026-11-20T05:26:35.625Z] GET http://localhost:18952/api/v1/projects/KAN -> HTTP 200 | req=None | resp={"id":"01a1f76b-982e-7596-a043-95324dc111fb","identifier":"KAN","name":"Kanban","description_markdown":"","modules_enabled":false,"default_module_ids":[],"auto_archive_days":null,"access_manifest":{"pill_label":"Workspace","explicit_grant_count":0,"inherited_scope":{"kind":"workspace","scope_label":"Workspace: Kanban","workspace_id":"01a1f76b-9820-7ce0-adb9-245ce6326b5e","workspace_name":"Kanban","project_id":null,"project_key":null,"project_name":null},"users":[{"principal_id":"01a1f76b-9821-7808-8922-c9514542e7e3","handle":"@admin","display_name":"Admin Architect","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"grant_source":"project_owner"},{"principal_id":"7b5789d0-6f06-4324-8e42-053d3c9480ee","handle":"@alice","display_name":"Alice QA","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"}],"groups":[],"agents":[],"deny_overrides":[],"redacted_entries":[],"redacted_count":0,"caller_capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"canonical_key":"KAN","object_type":"project"},"capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"is_
+[2026-11-20T05:26:35.655Z] GET http://localhost:18952/api/v1/projects/KAN -> HTTP 200 | req=None | resp={"id":"01a1f76b-982e-7596-a043-95324dc111fb","identifier":"KAN","name":"Kanban","description_markdown":"","modules_enabled":false,"default_module_ids":[],"auto_archive_days":null,"access_manifest":{"pill_label":"Workspace","explicit_grant_count":0,"inherited_scope":{"kind":"workspace","scope_label":"Workspace: Kanban","workspace_id":"01a1f76b-9820-7ce0-adb9-245ce6326b5e","workspace_name":"Kanban","project_id":null,"project_key":null,"project_name":null},"users":[{"principal_id":"01a1f76b-9821-7808-8922-c9514542e7e3","handle":"@admin","display_name":"Admin Architect","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"grant_source":"project_owner"},{"principal_id":"7b5789d0-6f06-4324-8e42-053d3c9480ee","handle":"@alice","display_name":"Alice QA","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"}],"groups":[],"agents":[],"deny_overrides":[],"redacted_entries":[],"redacted_count":0,"caller_capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"canonical_key":"KAN","object_type":"project"},"capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"is_
+[2026-11-20T05:26:35.656Z] GET http://localhost:18952/api/v1/projects/KAN/members -> HTTP 200 | req=None | resp=[]
+[2026-11-20T05:26:35.688Z] GET http://localhost:18952/api/v1/projects/KAN/states -> HTTP 200 | req=None | resp=[{"id":"01a1f76b-9832-72b5-9dfd-0cd29aafce0b","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","name":"Backlog","group":"backlog","color_hex":"#A3A3A3","sort_order":0,"is_default":true,"wip_soft_limit":null,"wip_hard_limit":null,"issue_count":0},{"id":"01a1f76b-9833-7e8e-a6ab-651300f3a611","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","name":"Todo","group":"unstarted","color_hex":"#3B82F6","sort_order":1,"is_default":false,"wip_soft_limit":null,"wip_hard_limit":null,"issue_count":0},{"id":"01a1f76b-9833-7c69-9830-8f5f60a7f811","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","name":"In Progress","group":"started","color_hex":"#F59E0B","sort_order":2,"is_default":false,"wip_soft_limit":null,"wip_hard_limit":null,"issue_count":0},{"id":"01a1f76b-9833-70a2-a1a5-3ee149740271","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","name":"Done","group":"completed","color_hex":"#16A34A","sort_order":3,"is_default":false,"wip_soft_limit":null,"wip_hard_limit":null,"issue_count":0},{"id":"01a1f76b-9833-78e2-a9b4-65bb477d03d7","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","name":"Cancelled","group":"cancelled","color_hex":"#DC2626","sort_order":4,"is_default":false,"wip_soft_
+[2026-11-20T05:26:35.718Z] GET http://localhost:18952/api/v1/projects/KAN/priorities -> HTTP 200 | req=None | resp=[{"id":"01a1f76b-9833-72ea-8fbf-74da827d0e44","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"urgent","label":"Urgent","emoji":"🔥","color_hex":"#DC2626","sort_order":0,"is_default":false},{"id":"01a1f76b-9834-79b9-8092-e2be304fb8f5","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"high","label":"High","emoji":"⚡","color_hex":"#F97316","sort_order":1,"is_default":false},{"id":"01a1f76b-9834-7bc0-a5df-73b8f3bc8602","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"medium","label":"Medium","emoji":"🔹","color_hex":"#EAB308","sort_order":2,"is_default":false},{"id":"01a1f76b-9834-7d1b-a287-670748bb2946","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"low","label":"Low","emoji":"💤","color_hex":"#22C55E","sort_order":3,"is_default":false},{"id":"01a1f76b-9834-788e-a295-1760817b97b8","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"none","label":"None","emoji":null,"color_hex":"#A3A3A3","sort_order":4,"is_default":true}]
+[2026-11-20T05:26:35.750Z] GET http://localhost:18952/api/v1/projects/KAN/labels -> HTTP 200 | req=None | resp=[]
+[2026-11-20T05:26:35.771Z] GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200 | req=None | resp=[{"id":"01a1f76b-9821-7808-8922-c9514542e7e3","principal":"admin","handle":"@admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"},{"id":"7b5789d0-6f06-4324-8e42-053d3c9480ee","principal":"@alice","handle":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"},{"id":"736592e2-8985-48e1-8db5-f7f8e98932f8","principal":"@bob","handle":"@bob","display_name":"Bob QA","type":"USER","status":"active","email":"bob@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"},{"id":"b670a0d5-ad86-46fc-a3d0-62d29934a132","principal":"infra-team","handle":"@infra-team","display_name":"Infra Team","type":"GROUP","status":"active","email":null,"role":"WORKSPACE_MEMBER","provider":"LOCAL"}]
+[2026-11-20T05:26:35.817Z] GET http://localhost:18952/api/v1/projects/KAN/trash-items -> HTTP 200 | req=None | resp={"items":[],"retention_days":30}
+[2026-11-20T05:26:36.826Z] GET http://localhost:18952/api/v1/projects/KAN -> HTTP 200 | req=None | resp={"id":"01a1f76b-982e-7596-a043-95324dc111fb","identifier":"KAN","name":"Kanban","description_markdown":"","modules_enabled":false,"default_module_ids":[],"auto_archive_days":null,"access_manifest":{"pill_label":"Workspace","explicit_grant_count":0,"inherited_scope":{"kind":"workspace","scope_label":"Workspace: Kanban","workspace_id":"01a1f76b-9820-7ce0-adb9-245ce6326b5e","workspace_name":"Kanban","project_id":null,"project_key":null,"project_name":null},"users":[{"principal_id":"01a1f76b-9821-7808-8922-c9514542e7e3","handle":"@admin","display_name":"Admin Architect","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"grant_source":"project_owner"},{"principal_id":"7b5789d0-6f06-4324-8e42-053d3c9480ee","handle":"@alice","display_name":"Alice QA","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"}],"groups":[],"agents":[],"deny_overrides":[],"redacted_entries":[],"redacted_count":0,"caller_capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"canonical_key":"KAN","object_type":"project"},"capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"is_
+[2026-11-20T05:26:36.854Z] GET http://localhost:18952/api/v1/projects/KAN -> HTTP 200 | req=None | resp={"id":"01a1f76b-982e-7596-a043-95324dc111fb","identifier":"KAN","name":"Kanban","description_markdown":"","modules_enabled":false,"default_module_ids":[],"auto_archive_days":null,"access_manifest":{"pill_label":"Workspace","explicit_grant_count":0,"inherited_scope":{"kind":"workspace","scope_label":"Workspace: Kanban","workspace_id":"01a1f76b-9820-7ce0-adb9-245ce6326b5e","workspace_name":"Kanban","project_id":null,"project_key":null,"project_name":null},"users":[{"principal_id":"01a1f76b-9821-7808-8922-c9514542e7e3","handle":"@admin","display_name":"Admin Architect","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"grant_source":"project_owner"},{"principal_id":"7b5789d0-6f06-4324-8e42-053d3c9480ee","handle":"@alice","display_name":"Alice QA","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"}],"groups":[],"agents":[],"deny_overrides":[],"redacted_entries":[],"redacted_count":0,"caller_capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"canonical_key":"KAN","object_type":"project"},"capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"is_
+[2026-11-20T05:26:36.858Z] GET http://localhost:18952/api/v1/projects/KAN/members -> HTTP 200 | req=None | resp=[]
+[2026-11-20T05:26:36.889Z] GET http://localhost:18952/api/v1/projects/KAN/states -> HTTP 200 | req=None | resp=[{"id":"01a1f76b-9832-72b5-9dfd-0cd29aafce0b","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","name":"Backlog","group":"backlog","color_hex":"#A3A3A3","sort_order":0,"is_default":true,"wip_soft_limit":null,"wip_hard_limit":null,"issue_count":0},{"id":"01a1f76b-9833-7e8e-a6ab-651300f3a611","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","name":"Todo","group":"unstarted","color_hex":"#3B82F6","sort_order":1,"is_default":false,"wip_soft_limit":null,"wip_hard_limit":null,"issue_count":0},{"id":"01a1f76b-9833-7c69-9830-8f5f60a7f811","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","name":"In Progress","group":"started","color_hex":"#F59E0B","sort_order":2,"is_default":false,"wip_soft_limit":null,"wip_hard_limit":null,"issue_count":0},{"id":"01a1f76b-9833-70a2-a1a5-3ee149740271","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","name":"Done","group":"completed","color_hex":"#16A34A","sort_order":3,"is_default":false,"wip_soft_limit":null,"wip_hard_limit":null,"issue_count":0},{"id":"01a1f76b-9833-78e2-a9b4-65bb477d03d7","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","name":"Cancelled","group":"cancelled","color_hex":"#DC2626","sort_order":4,"is_default":false,"wip_soft_
+[2026-11-20T05:26:36.919Z] GET http://localhost:18952/api/v1/projects/KAN/priorities -> HTTP 200 | req=None | resp=[{"id":"01a1f76b-9833-72ea-8fbf-74da827d0e44","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"urgent","label":"Urgent","emoji":"🔥","color_hex":"#DC2626","sort_order":0,"is_default":false},{"id":"01a1f76b-9834-79b9-8092-e2be304fb8f5","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"high","label":"High","emoji":"⚡","color_hex":"#F97316","sort_order":1,"is_default":false},{"id":"01a1f76b-9834-7bc0-a5df-73b8f3bc8602","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"medium","label":"Medium","emoji":"🔹","color_hex":"#EAB308","sort_order":2,"is_default":false},{"id":"01a1f76b-9834-7d1b-a287-670748bb2946","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"low","label":"Low","emoji":"💤","color_hex":"#22C55E","sort_order":3,"is_default":false},{"id":"01a1f76b-9834-788e-a295-1760817b97b8","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","slug":"none","label":"None","emoji":null,"color_hex":"#A3A3A3","sort_order":4,"is_default":true}]
+[2026-11-20T05:26:36.948Z] GET http://localhost:18952/api/v1/projects/KAN/labels -> HTTP 200 | req=None | resp=[]
+[2026-11-20T05:26:36.964Z] GET http://localhost:18952/api/v1/admin/principals?limit=100 -> HTTP 200 | req=None | resp=[{"id":"01a1f76b-9821-7808-8922-c9514542e7e3","principal":"admin","handle":"@admin","display_name":"Admin Architect","type":"USER","status":"active","email":"admin@local.kanban","role":"SERVER_ADMIN","provider":"LOCAL"},{"id":"7b5789d0-6f06-4324-8e42-053d3c9480ee","principal":"@alice","handle":"@alice","display_name":"Alice QA","type":"USER","status":"active","email":"alice@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"},{"id":"736592e2-8985-48e1-8db5-f7f8e98932f8","principal":"@bob","handle":"@bob","display_name":"Bob QA","type":"USER","status":"active","email":"bob@example.com","role":"WORKSPACE_MEMBER","provider":"LOCAL"},{"id":"b670a0d5-ad86-46fc-a3d0-62d29934a132","principal":"infra-team","handle":"@infra-team","display_name":"Infra Team","type":"GROUP","status":"active","email":null,"role":"WORKSPACE_MEMBER","provider":"LOCAL"}]
+[2026-11-20T05:26:37.012Z] GET http://localhost:18952/api/v1/projects/KAN/trash-items -> HTTP 200 | req=None | resp={"items":[],"retention_days":30}
+[2026-11-20T05:26:39.038Z] GET http://localhost:18952/api/v1/projects/KAN/assignee-suggestions?q=&limit=10 -> HTTP 422 | req=None | resp={"type":"urn:kanban:problem:INVALID_QUERY","title":"Invalid Query Parameter","status":422,"code":"INVALID_QUERY","detail":"Query string 'q' must be between 1 and 64 characters","request_id":"b8bc0e3fde2d4cf0b56ea5f474ca3e8d"}
+[2026-11-20T05:26:39.045Z] GET http://localhost:18952/api/v1/projects/KAN/labels -> HTTP 200 | req=None | resp=[]
+[2026-11-20T05:26:39.048Z] GET http://localhost:18952/api/v1/projects/KAN/cycles -> HTTP 200 | req=None | resp=[]
+[2026-11-20T05:26:39.050Z] GET http://localhost:18952/api/v1/projects/KAN/modules -> HTTP 404 | req=None | resp={"type":"urn:kanban:problem:MODULES_DISABLED","title":"Not Found","status":404,"code":"MODULES_DISABLED","detail":"Modules feature is disabled for this project","request_id":"1432e3afefa54988b19d721a10d716ac"}
+[2026-11-20T05:26:39.073Z] GET http://localhost:18952/api/v1/projects/KAN/states -> HTTP 200 | req=None | resp=[{"id":"01a1f76b-9832-72b5-9dfd-0cd29aafce0b","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","name":"Backlog","group":"backlog","color_hex":"#A3A3A3","sort_order":0,"is_default":true,"wip_soft_limit":null,"wip_hard_limit":null,"issue_count":0},{"id":"01a1f76b-9833-7e8e-a6ab-651300f3a611","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","name":"Todo","group":"unstarted","color_hex":"#3B82F6","sort_order":1,"is_default":false,"wip_soft_limit":null,"wip_hard_limit":null,"issue_count":0},{"id":"01a1f76b-9833-7c69-9830-8f5f60a7f811","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","name":"In Progress","group":"started","color_hex":"#F59E0B","sort_order":2,"is_default":false,"wip_soft_limit":null,"wip_hard_limit":null,"issue_count":0},{"id":"01a1f76b-9833-70a2-a1a5-3ee149740271","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","name":"Done","group":"completed","color_hex":"#16A34A","sort_order":3,"is_default":false,"wip_soft_limit":null,"wip_hard_limit":null,"issue_count":0},{"id":"01a1f76b-9833-78e2-a9b4-65bb477d03d7","project_id":"01a1f76b-982e-7596-a043-95324dc111fb","name":"Cancelled","group":"cancelled","color_hex":"#DC2626","sort_order":4,"is_default":false,"wip_soft_
+[2026-11-20T05:26:39.076Z] GET http://localhost:18952/api/v1/projects/KAN/issues -> HTTP 200 | req=None | resp={"items":[],"next_cursor":null}
+[2026-11-20T05:26:39.089Z] GET http://localhost:18952/api/v1/projects/KAN -> HTTP 200 | req=None | resp={"id":"01a1f76b-982e-7596-a043-95324dc111fb","identifier":"KAN","name":"Kanban","description_markdown":"","modules_enabled":false,"default_module_ids":[],"auto_archive_days":null,"access_manifest":{"pill_label":"Workspace","explicit_grant_count":0,"inherited_scope":{"kind":"workspace","scope_label":"Workspace: Kanban","workspace_id":"01a1f76b-9820-7ce0-adb9-245ce6326b5e","workspace_name":"Kanban","project_id":null,"project_key":null,"project_name":null},"users":[{"principal_id":"01a1f76b-9821-7808-8922-c9514542e7e3","handle":"@admin","display_name":"Admin Architect","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"grant_source":"project_owner"},{"principal_id":"7b5789d0-6f06-4324-8e42-053d3c9480ee","handle":"@alice","display_name":"Alice QA","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"}],"groups":[],"agents":[],"deny_overrides":[],"redacted_entries":[],"redacted_count":0,"caller_capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"canonical_key":"KAN","object_type":"project"},"capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"is_
+[2026-11-20T05:26:40.589Z] POST http://localhost:18952/api/v1/projects/KAN/issues -> HTTP 201 | req={"summary":"Verify Live Mermaid & WorkspaceBadge KAN-1","description_markdown":"Architect flow overview:\n\n```mermaid\ngraph LR\n  A[Client] --> B[Gateway]\n```","priority":"medium","state_id":"01a1f76b-9833-7e8e-a6ab-651300f3a611"} | resp={"id":"01a1f76b-d09a-7184-a525-f70db380412d","key":"KAN-1","summary":"Verify Live Mermaid & WorkspaceBadge KAN-1","description_markdown":"Architect flow overview:\n\n```mermaid\ngraph LR\n  A[Client] --> B[Gateway]\n```","description_sha256":"8eee87bbdfcfd9536b2cb23932ff57f7a90fe45bd3c32ad35b64c2eb773af6a8","etag":"\"d7760aaa2a784fee538aff5eaf57f69f5b9f6e891631e3802a47fee32f145cb0\"","state":{"id":"01a1f76b-9833-7e8e-a6ab-651300f3a611","name":"Todo","group":"unstarted"},"priority":{"slug":"medium","label":"Medium","emoji":"🔹"},"start_date":null,"due_date":null,"cycle_id":null,"cycle":null,"parent":null,"labels":[],"assignees":[],"board_rank":"a000001","created_by_id":"01a1f76b-9821-7808-8922-c9514542e7e3","provenance":{"created_by":{"id":"01a1f76b-9821-7808-8922-c9514542e7e3","handle":"admin"},"original_created_by":{"id":"01a1f76b-9821-7808-8922-c9514542e7e3","handle":"admin"},"overridden":false,"creator_modified_by":null,"creator_modified_at":null,"reason":null},"access_manifest":{"pill_label":"Project","explicit_grant_count":0,"inherited_scope":{"kind":"project","scope_label":"Project: KAN","workspace_id":"01a1f76b-9820-7ce0-adb9-245ce6326b5e","workspace_name":"Kanban","project_
+
+================================================================================
+LIVE_STACK_VERDICT: FAIL
+Failure Reason 1: /projects/KAN/settings member picker displays '@@alice' instead of '@alice' due to ProjectSettingsPage.tsx:1581 prepending '@' to backend handle '@alice'.
+Failure Reason 2: /projects/KAN/issues with modules_enabled=false still fires GET /api/v1/projects/KAN/modules (HTTP 404 MODULES_DISABLED) and GET /api/v1/projects/KAN/assignee-suggestions?q=&limit=10 (HTTP 422 INVALID_QUERY), producing 2 console.error entries.
+================================================================================
