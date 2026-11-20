@@ -369,6 +369,15 @@ async def update_ticket(arguments: dict[str, Any]) -> dict[str, Any]:  # noqa: C
                     McpErrorCode.CONFLICT_ETAG,
                     "concurrency conflict: ticket description was modified concurrently",
                     hint=f"current etag: {fresh_sha}",
+                    extra={"current_etag": fresh_sha},
+                    fix_hint=(
+                        "Ticket description was modified concurrently. "
+                        f"Retry with fresh ETag: {fresh_sha}"
+                    ),
+                    cli_example=(
+                        f'kanban-cli-agent update_ticket --identifier="{issue_key}" '
+                        f'--if-match="{fresh_sha}"'
+                    ),
                 ) from None
             raise
 

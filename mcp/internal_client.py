@@ -277,6 +277,10 @@ class KanbanApiClient:
             extra_dict["tainted_by"] = problem["extra"]["tainted_by"]
         if "unauthorized_mentions" in problem:
             extra_dict["unauthorized_mentions"] = problem["unauthorized_mentions"]
+
+        enriched = self._enrich_progressive_disclosure(
+            mapped_code, problem, hint_str, extra_dict
+        )
         raise KbMcpError(
             mapped_code,
             error_message,
@@ -284,7 +288,84 @@ class KanbanApiClient:
             candidates=candidates_list,
             blockers=blockers_list,
             extra=extra_dict or None,
+            field=enriched["field"],
+            fix_hint=enriched["fix_hint"],
+            cli_example=enriched["cli_example"],
+            valid_options=enriched["valid_options"],
+            did_you_mean=enriched["did_you_mean"],
+            closest_match=enriched["closest_match"],
         )
+
+    @staticmethod
+    def _enrich_progressive_disclosure(
+        mapped_code: McpErrorCode,
+        problem: dict[str, Any],
+        hint_str: str | None,
+        extra_dict: dict[str, Any],
+    ) -> dict[str, Any]:
+        """Extract and synthesize self-correcting progressive disclosure error fields."""
+        fix_hint = problem.get("fix_hint") or hint_str
+        cli_example = problem.get("cli_example")
+        raw_options = problem.get("valid_options") or problem.get("valid_states") or (
+            problem["extra"].get("valid_states")
+            if isinstance(problem.get("extra"), dict)
+            else None
+        )
+        valid_options = list(raw_options) if isinstance(raw_options, (list, tuple)) else None
+        raw_mean = problem.get("did_you_mean")
+        did_you_mean = list(raw_mean) if isinstance(raw_mean, (list, tuple)) else None
+        raw_closest = problem.get("closest_match")
+        closest_match = [dict(c) for c in raw_closest] if isinstance(raw_closest, list) else None
+
+        if mapped_code == McpErrorCode.INVALID_TRANSITION and valid_options:
+            opts_str = ", ".join(str(s) for s in valid_options)
+            fix_hint = fix_hint or f"Allowed target states: {opts_str}"
+            first_opt = valid_options[0]
+            cli_example = cli_example or (
+                'kanban-cli-agent transition_ticket --identifier="<key>" '
+                f'--to-state="{first_opt}"'
+            )
+        elif mapped_code == McpErrorCode.CONFLICT_ETAG:
+            current_etag = (
+                problem.get("current_etag") or problem.get("etag") or problem.get("fresh_etag")
+            )
+            if current_etag:
+                extra_dict["current_etag"] = str(current_etag)
+                fix_hint = (
+                    fix_hint
+                    or f"Concurrency conflict. Retry with current ETag: {current_etag}"
+                )
+                cli_example = cli_example or (
+                    'kanban-cli-agent update_ticket --identifier="<key>" '
+                    f'--if-match="{current_etag}"'
+                )
+        elif mapped_code == McpErrorCode.ALREADY_PROMOTED:
+            target_doc = (
+                problem.get("target_doc_key")
+                or problem.get("doc_key")
+                or problem.get("promoted_to_doc_id")
+            )
+            if target_doc:
+                extra_dict["target_doc_key"] = str(target_doc)
+                fix_hint = fix_hint or (
+                    f"Sticky has already been promoted to Doc '{target_doc}'. "
+                    "Use update instead."
+                )
+                cli_example = cli_example or f'kanban-cli-docs update --id="{target_doc}"'
+        elif (
+            mapped_code in (McpErrorCode.NOT_FOUND, McpErrorCode.SECTION_NOT_FOUND)
+            and not fix_hint
+        ):
+            fix_hint = "Verify identifier or use search tool to discover valid entities."
+
+        return {
+            "field": str(problem["field"]) if "field" in problem else None,
+            "fix_hint": str(fix_hint) if fix_hint is not None else None,
+            "cli_example": str(cli_example) if cli_example is not None else None,
+            "valid_options": valid_options,
+            "did_you_mean": did_you_mean,
+            "closest_match": closest_match,
+        }
 
     @staticmethod
     def _resolve_conflict_code(prob_type: str, prob_code: str) -> McpErrorCode:

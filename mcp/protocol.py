@@ -4,9 +4,11 @@
 from __future__ import annotations
 
 import contextlib
+import difflib
 import inspect
 import json
 import logging
+import re
 import secrets
 import time
 from collections import OrderedDict
@@ -23,7 +25,7 @@ from mcp.context import (
 )
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.help import build_help
-from mcp.registry import Surface
+from mcp.registry import Surface, ToolSpec
 from mcp.yaml_out import dump_yaml
 
 if TYPE_CHECKING:
@@ -50,6 +52,73 @@ EPHEMERAL_SURFACE_READ_ONLY_TOOLS: Final[dict[Surface, frozenset[str]]] = {
     Surface.AGENT: frozenset({"search_tickets", "read_ticket"}),
     Surface.DOCS: frozenset({"search"}),
 }
+
+SEMANTIC_ALIASES: Final[dict[str, list[str]]] = {
+    "body": ["content", "description_markdown", "body_markdown"],
+    "identifier": ["id", "identifier"],
+    "kind": ["type", "target_kind", "provider_kind", "hook_kind"],
+    "ticket_id": ["identifier", "id"],
+    "ticket": ["identifier", "id"],
+    "title": ["summary", "title"],
+    "summary": ["title", "summary"],
+    "content": ["body_markdown", "description_markdown", "content"],
+    "description": ["description_markdown", "body_markdown", "content"],
+    "originalText": ["original_text"],
+    "replacementText": ["replacement_text"],
+    "original_text": ["originalText"],
+    "replacement_text": ["replacementText"],
+    "ifMatch": ["if_match"],
+    "etag": ["if_match"],
+}
+
+_SURFACE_BIN_NAMES: Final[dict[Surface, str]] = {
+    Surface.DOCS: "kanban-cli-docs",
+    Surface.AGENT: "kanban-cli-agent",
+    Surface.ADMIN: "kanban-cli-admin",
+}
+
+
+def _format_flag_val(v: object) -> str:
+    """Format single CLI flag argument scalar or JSON collection."""
+    if isinstance(v, bool):
+        return str(v).lower()
+    if isinstance(v, (int, float)):
+        return str(v)
+    if isinstance(v, str):
+        if re.match(r"^[A-Z0-9_-]+$", v):
+            return v
+        safe_v = v.replace('"', '\\"')
+        return f'"{safe_v}"'
+    if isinstance(v, (list, dict)):
+        return f"'{json.dumps(v)}'"
+    return f'"{v}"'
+
+
+def format_cli_example(surface: Surface, tool_name: str, args: dict[str, Any]) -> str:
+    """Format an intuitive CLI command example for self-correcting error UX."""
+    bin_name = _SURFACE_BIN_NAMES.get(surface, "kanban-cli")
+    cmd_parts = [bin_name, tool_name]
+    for k, v in args.items():
+        if v is not None:
+            flag = k.replace("_", "-")
+            cmd_parts.append(f"--{flag}={_format_flag_val(v)}")
+    return " ".join(cmd_parts)
+
+
+def _matches_schema_type(v: object, t: str) -> bool:
+    """Check if value matches a single JSON schema type."""
+    if t == "string":
+        return isinstance(v, str)
+    if t in ("integer", "number"):
+        return isinstance(v, (int, float)) and not isinstance(v, bool)
+    if t == "boolean":
+        return isinstance(v, bool)
+    if t == "array":
+        return isinstance(v, (list, tuple))
+    if t == "object":
+        return isinstance(v, dict)
+    return True
+
 
 _logger: Final[logging.Logger] = logging.getLogger(__name__)
 
@@ -653,10 +722,24 @@ class McpProtocolHandler:
                 )
 
         if spec is None:
+            avail_tools = [t.name for t in self.registry.list_specs()]
+            fuzzy_matches = difflib.get_close_matches(tool_name, avail_tools, n=3, cutoff=0.4)
+            did_you_mean = fuzzy_matches or None
+            fix_hint = (
+                f"Tool '{tool_name}' not found. Did you mean '{did_you_mean[0]}'?"
+                if did_you_mean
+                else "Verify tool name or switch to appropriate MCP surface endpoint"
+            )
+            cli_ex = self._format_cli_example(did_you_mean[0] if did_you_mean else "help", {})
             not_found_err = KbMcpError(
                 code=McpErrorCode.NOT_FOUND,
                 message=f"Tool '{tool_name}' not found on surface '{self.surface.value}'",
                 hint="Verify tool name or switch to appropriate MCP surface endpoint",
+                field="tool_name",
+                valid_options=avail_tools,
+                did_you_mean=did_you_mean,
+                fix_hint=fix_hint,
+                cli_example=cli_ex,
             )
             return JSONResponse(
                 {
@@ -974,6 +1057,9 @@ class McpProtocolHandler:
         ctx_token = set_current_mcp_context(ctx)
         try:
             try:
+                # Pre-dispatch schema validation
+                self._validate_tool_arguments_schema(spec, arguments)
+
                 # Invoke handler
                 handler = spec.handler
                 if inspect.iscoroutinefunction(handler):
@@ -1059,3 +1145,219 @@ class McpProtocolHandler:
                 },
             }
         )
+
+    def _format_cli_example(self, tool_name: str, args: dict[str, Any]) -> str:
+        """Format an intuitive CLI command example for self-correcting error UX."""
+        return format_cli_example(self.surface, tool_name, args)
+
+    def _validate_tool_arguments_schema(  # noqa: C901, PLR0912, PLR0915
+        self,
+        spec: ToolSpec,
+        arguments: dict[str, Any],
+    ) -> None:
+        """Validate arguments against schema with progressive self-correction."""
+        schema = spec.input_schema
+        if not schema:
+            return
+
+        properties = schema.get("properties")
+        required = schema.get("required") or []
+        add_props = schema.get("additionalProperties", True)
+
+        if not isinstance(properties, dict) and not required:
+            return
+
+        known_props: list[str] = list(properties.keys()) if isinstance(properties, dict) else []
+
+        # 1. Unknown parameter validation
+        if known_props and add_props is False:
+            for k, val in arguments.items():
+                if k not in known_props:
+                    aliases = [a for a in SEMANTIC_ALIASES.get(k, []) if a in known_props]
+                    snake_cand = re.sub(r"(?<!^)(?=[A-Z])", "_", k).lower()
+                    if snake_cand in known_props and snake_cand not in aliases:
+                        aliases.append(snake_cand)
+                    fuzzy = difflib.get_close_matches(k, known_props, n=3, cutoff=0.4)
+                    did_you_mean: list[str] = []
+                    for c in aliases + fuzzy:
+                        if c in known_props and c not in did_you_mean:
+                            did_you_mean.append(c)
+
+                    valid_options = known_props
+                    hint: str | None = None
+                    if k == "state" and spec.name == "update_ticket":
+                        hint = "use transition_ticket"
+                        fix_hint = (
+                            "state changes not permitted in update_ticket; use transition_ticket"
+                        )
+                    elif k == "custom_fields":
+                        hint = "custom fields arrive in Phase 5"
+                        fix_hint = (
+                            "custom fields are not supported in update_ticket; "
+                            "custom fields arrive in Phase 5"
+                        )
+                    elif did_you_mean:
+                        fix_hint = f"Unknown parameter '{k}'. Did you mean '{did_you_mean[0]}'?"
+                    else:
+                        fix_hint = (
+                            f"Unknown parameter '{k}'. Valid options: {', '.join(valid_options)}"
+                        )
+
+                    corrected_args: dict[str, Any] = {}
+                    for arg_k, arg_v in arguments.items():
+                        if arg_k == k:
+                            if did_you_mean:
+                                corrected_args[did_you_mean[0]] = arg_v
+                        elif arg_k in known_props:
+                            corrected_args[arg_k] = arg_v
+                    if not corrected_args and did_you_mean:
+                        corrected_args[did_you_mean[0]] = val
+                    cli_example = self._format_cli_example(spec.name, corrected_args)
+
+                    raise KbMcpError(
+                        McpErrorCode.VALIDATION_FAILED,
+                        f"Unknown parameter '{k}' for tool '{spec.name}'",
+                        hint=hint,
+                        field=k,
+                        valid_options=valid_options,
+                        did_you_mean=did_you_mean or None,
+                        fix_hint=fix_hint,
+                        cli_example=cli_example,
+                    )
+
+        # 2. Missing required parameter validation
+        if required:
+            for req_field in required:
+                if req_field not in arguments or arguments[req_field] is None:
+                    fix_hint = (
+                        f"Missing required parameter: '{req_field}'. Provide a value to proceed."
+                    )
+                    prefilled_args = {
+                        arg_k: arg_v
+                        for arg_k, arg_v in arguments.items()
+                        if arg_k in known_props and arg_k != req_field and arg_v is not None
+                    }
+                    prefilled_args[req_field] = f"<{req_field}>"
+                    cli_example = self._format_cli_example(spec.name, prefilled_args)
+
+                    raise KbMcpError(
+                        McpErrorCode.VALIDATION_FAILED,
+                        f"Missing required parameter '{req_field}' for tool '{spec.name}'",
+                        field=req_field,
+                        fix_hint=fix_hint,
+                        cli_example=cli_example,
+                    )
+
+        # 3. Invalid enum / type / format validation
+        if isinstance(properties, dict):
+            for k, v in arguments.items():
+                if k not in properties or v is None:
+                    continue
+                prop_schema = properties[k]
+                if not isinstance(prop_schema, dict):
+                    continue
+
+                # Check enum
+                if "enum" in prop_schema:
+                    enum_vals = [str(x) for x in prop_schema["enum"]]
+                    str_v = str(v)
+                    if str_v not in enum_vals and (
+                        not isinstance(v, str) or v not in prop_schema["enum"]
+                    ):
+                        valid_options = enum_vals
+                        closest = difflib.get_close_matches(str_v, valid_options, n=1, cutoff=0.3)
+                        if not closest:
+                            lower_map = {opt.lower(): opt for opt in valid_options}
+                            matched_lowers = difflib.get_close_matches(
+                                str_v.lower(), list(lower_map.keys()), n=1, cutoff=0.3
+                            )
+                            if matched_lowers:
+                                closest = [lower_map[matched_lowers[0]]]
+                        enum_did_you_mean: list[str] | None = closest or None
+                        if enum_did_you_mean:
+                            fix_hint = (
+                                f"Invalid value '{v}' for parameter '{k}'. "
+                                f"Did you mean '{enum_did_you_mean[0]}'? "
+                                f"Valid options: {valid_options}"
+                            )
+                        else:
+                            fix_hint = (
+                                f"Invalid value '{v}' for parameter '{k}'. "
+                                f"Valid options: {valid_options}"
+                            )
+
+                        corrected_args = dict(arguments)
+                        corrected_args[k] = (
+                            enum_did_you_mean[0] if enum_did_you_mean else valid_options[0]
+                        )
+                        cli_example = self._format_cli_example(spec.name, corrected_args)
+
+                        opts_str = " or ".join(repr(x) for x in valid_options)
+                        raise KbMcpError(
+                            McpErrorCode.VALIDATION_FAILED,
+                            f"Invalid value '{v}' for parameter '{k}'; {k} must be {opts_str}",
+                            field=k,
+                            valid_options=valid_options,
+                            did_you_mean=enum_did_you_mean,
+                            fix_hint=fix_hint,
+                            cli_example=cli_example,
+                        )
+
+                # Check type
+                expected_type = prop_schema.get("type")
+                types_to_check: list[str] = (
+                    expected_type
+                    if isinstance(expected_type, list)
+                    else [expected_type]
+                    if isinstance(expected_type, str)
+                    else []
+                )
+                if types_to_check and "null" in types_to_check and v is None:
+                    continue
+                valid_types = [t for t in types_to_check if t != "null"]
+                if valid_types and not any(_matches_schema_type(v, t) for t in valid_types):
+                    target_str = " or ".join(valid_types)
+                    fix_hint = (
+                        f"Parameter '{k}' must be of type {target_str}, got {type(v).__name__}"
+                    )
+                    corrected_args = dict(arguments)
+                    if "string" in valid_types:
+                        corrected_args[k] = f"<{k}>"
+                    elif "integer" in valid_types or "number" in valid_types:
+                        corrected_args[k] = 0
+                    elif "boolean" in valid_types:
+                        corrected_args[k] = True
+                    elif "array" in valid_types:
+                        corrected_args[k] = []
+                    elif "object" in valid_types:
+                        corrected_args[k] = {}
+                    cli_example = self._format_cli_example(spec.name, corrected_args)
+                    raise KbMcpError(
+                        McpErrorCode.VALIDATION_FAILED,
+                        f"Parameter '{k}' must be of type {target_str}",
+                        field=k,
+                        fix_hint=fix_hint,
+                        cli_example=cli_example,
+                    )
+
+                # Check pattern / regex format
+                if "pattern" in prop_schema and isinstance(v, str):
+                    pattern = prop_schema["pattern"]
+                    if not re.search(pattern, v):
+                        etag_note = (
+                            " (provide 64-character SHA-256 hex ETag)" if "64" in pattern else ""
+                        )
+                        fix_hint = (
+                            f"Parameter '{k}' must match format pattern '{pattern}'{etag_note}"
+                        )
+                        placeholder = "<64-hex-sha256>" if "64" in pattern else f"<{k}>"
+                        corrected_args = dict(arguments)
+                        corrected_args[k] = placeholder
+                        cli_example = self._format_cli_example(spec.name, corrected_args)
+                        raise KbMcpError(
+                            McpErrorCode.VALIDATION_FAILED,
+                            f"Parameter '{k}' does not match required format pattern",
+                            field=k,
+                            fix_hint=fix_hint,
+                            cli_example=cli_example,
+                        )

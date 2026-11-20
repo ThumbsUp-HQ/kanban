@@ -1,0 +1,30 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan19-a63c3819
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 73 items
+
+mcp/tests/test_progressive_disclosure_errors.py ...............          [ 20%]
+mcp/tests/test_protocol.py .......                                       [ 30%]
+mcp/tests/test_registry_isolation.py ...                                 [ 34%]
+mcp/tests/test_docs_kan18_coverage.py ....                               [ 39%]
+mcp/tests/docs/test_docs_surfaces_unit.py .............                  [ 57%]
+mcp/tests/test_internal_client.py ........                               [ 68%]
+mcp/tests/agent/test_transition_ticket_gate.py ...                       [ 72%]
+mcp/tests/agent/test_update_ticket.py ...........                        [ 87%]
+mcp/tests/admin/test_manage_cycles_and_modules.py .........              [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                          Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------
+mcp/errors.py                    85      0      2      0   100%
+mcp/internal_client.py          206     14     94     14    91%   150->155, 153-154, 186, 187->200, 190, 194, 197->200, 265-266, 275, 277, 279, 400, 402, 405, 495
+mcp/protocol.py                 495     39    250     33    90%   94, 102->101, 120, 230->exit, 342, 382, 396-397, 420, 426, 451-453, 479->511, 489, 501-502, 601, 609->634, 611-612, 630, 632, 712-713, 760-765, 779-784, 812-821, 832->957, 834->845, 836, 844, 889-897, 959->1036, 992, 1000-1005, 1211->1207, 1214, 1252->exit, 1258, 1316, 1332->1334
+mcp/surfaces/docs/update.py     371      9    166     17    95%   155->159, 183->189, 194->201, 207->211, 215->221, 217-218, 226-227, 236->241, 271->286, 383->403, 391->384, 412->417, 414-415, 432->418, 657, 659->662, 663->676, 754->776, 778, 795
+-------------------------------------------------------------------------
+TOTAL                          1157     62    512     64    92%
+============================= 73 passed in 20.71s ==============================
