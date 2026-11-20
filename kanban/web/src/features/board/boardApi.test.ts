@@ -185,4 +185,89 @@ describe('boardApi', () => {
     expect(resRankOnly[0]?.state_id).toBe('st-1');
     expect(resRankOnly[0]?.board_rank).toBe('r-updated');
   });
+
+  it('applyOptimisticMove preserves full IssueSummary fields and resolves state from availableStates', () => {
+    const fullIssueCache = [
+      {
+        id: '01912345-6789-7000-8000-000000000001',
+        key: 'KAN-42',
+        summary: 'Full Issue Summary',
+        description_markdown: 'Detailed description',
+        state_id: 'state-todo',
+        state: {
+          id: 'state-todo',
+          name: 'To Do',
+          group: 'unstarted',
+          color_hex: '#3b82f6',
+        },
+        priority: { slug: 'high', label: 'High', emoji: '🔺' },
+        labels: [{ id: 'lbl-1', name: 'security' }],
+        module_ids: ['mod-1'],
+        board_rank: '000010',
+      },
+    ];
+
+    const availableStates = [
+      { id: 'state-todo', name: 'To Do', group: 'unstarted', color_hex: '#3b82f6' },
+      { id: 'state-in-progress', name: 'In Progress', group: 'started', color_hex: '#f59e0b' },
+    ];
+
+    const res = applyOptimisticMove(
+      fullIssueCache,
+      {
+        projectKey: 'KAN',
+        issueKey: 'KAN-42',
+        targetStateId: 'state-in-progress',
+        boardRank: '000020',
+      },
+      availableStates,
+    );
+
+    expect(Array.isArray(res)).toBe(true);
+    const updated = res[0];
+    expect(updated?.state_id).toBe('state-in-progress');
+    expect(updated?.state).toEqual({
+      id: 'state-in-progress',
+      name: 'In Progress',
+      group: 'started',
+      color_hex: '#f59e0b',
+    });
+    expect(updated?.description_markdown).toBe('Detailed description');
+    expect(updated?.labels).toEqual([{ id: 'lbl-1', name: 'security' }]);
+    expect(updated?.module_ids).toEqual(['mod-1']);
+    expect(updated?.board_rank).toBe('000020');
+  });
+
+  it('applyOptimisticMove supports object envelope { items: [...] }', () => {
+    const envelope = {
+      items: [
+        {
+          id: '1',
+          key: 'KAN-1',
+          summary: 'Enveloped Item',
+          state_id: 'st-1',
+          board_rank: 'r1',
+        },
+      ],
+      total: 1,
+    };
+
+    const res = applyOptimisticMove(envelope, {
+      projectKey: 'KAN',
+      issueKey: 'KAN-1',
+      targetStateId: 'st-2',
+      boardRank: 'r2',
+    });
+
+    expect(typeof res).toBe('object');
+    expect('items' in res).toBe(true);
+    const updatedEnvelope = res as { items: typeof envelope.items; total: number };
+    expect(updatedEnvelope.items[0]?.state_id).toBe('st-2');
+    expect(updatedEnvelope.items[0]?.board_rank).toBe('r2');
+    expect(updatedEnvelope.total).toBe(1);
+
+    // Empty envelope
+    const emptyRes = applyOptimisticMove({ items: [] }, { projectKey: 'KAN', issueKey: 'KAN-1' });
+    expect(emptyRes).toEqual({ items: [] });
+  });
 });

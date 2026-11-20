@@ -1,5 +1,5 @@
-# Changed Files Manifest for KAN-35 (feat/KAN-35)
-# Wave P3-5: Fix End-to-End Realtime Board & View Refresh for Agent/MCP & REST Ticket Mutations (5 Problems)
+# Changed Files Manifest for KAN-35 (feat/KAN-35, fix/KAN-35-rc1)
+# Wave P3-5: Fix End-to-End Realtime Board & View Refresh for Agent/MCP & REST Ticket Mutations (5 Problems) + RC1 Live-QA Remediation
 
 ## Database Schema & Migrations
 database/migrations/sql/p4_22_outbox_replay_reader.up.sql
@@ -28,7 +28,18 @@ kanban/web/src/api/realtime.ts
 kanban/web/src/api/realtime.test.ts
 kanban/web/src/app/AppShell.tsx
 kanban/web/src/features/board/BoardView.tsx
+kanban/web/src/features/board/boardApi.ts
+kanban/web/src/features/board/boardApi.test.ts
 kanban/web/src/features/drawer/IssueSurface.tsx
 kanban/web/src/features/stickies/WorkspaceStickiesView.tsx
 kanban/web/src/features/views/viewRegistry.tsx
+kanban/web/src/features/views/viewRegistry.test.tsx
 kanban/web/src/realtime/context.tsx
+kanban/web/src/realtime/index.test.tsx
+
+## QA Verification Artifacts (docs/qa/KAN-35/)
+docs/qa/KAN-35/build-or-typecheck.txt
+docs/qa/KAN-35/changed-files-manifest.txt
+docs/qa/KAN-35/git-diff.patch
+docs/qa/KAN-35/message-to-reality-checker.md
+docs/qa/KAN-35/unit-test-results.txt
