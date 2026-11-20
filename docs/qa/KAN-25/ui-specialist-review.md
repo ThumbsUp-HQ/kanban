@@ -7,7 +7,8 @@
 - Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan25-4e735c1c`
 - Target Branch: feat/KAN-25
 - Base Commit: 887e7e029127b77b5868a4d7c35dd2b818d3a4e5
-- Head Commit: 2db09d6
+- Implementation Commit: 2db09d6
+- Documentation Commit: 918f14c
 - STATUS: APPROVED
 
 ---
