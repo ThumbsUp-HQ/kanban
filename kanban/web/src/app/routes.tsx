@@ -1928,6 +1928,10 @@ const projectRouteChildren: RouteObject[] = [
     element: <ProjectOverviewRoute />,
   },
   {
+    path: 'stickies',
+    element: <ProjectOverviewRoute />,
+  },
+  {
     path: 'docs',
     element: <ProjectDocsRoute />,
   },

@@ -10,11 +10,13 @@ import re
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Literal
 
 from agent.providers.base import StructuredRequest, ToolCallStep
 from agent.providers.errors import EgressDenied, ProviderError
 from agent.sticky_promo.schemas import (
+    MAX_ACTION_ITEM_LENGTH,
+    DocSection,
     StickyDocProposal,
     render_canonical_doc_markdown,
 )
@@ -34,6 +36,7 @@ __all__ = [
     "StickyTooLargeError",
     "StructuringResult",
     "append_missing_fenced_blocks",
+    "deterministic_fallback_structuring",
     "extract_fenced_blocks",
     "structure_sticky_to_doc_proposal",
     "verify_fenced_blocks_preserved",
@@ -177,6 +180,146 @@ class StructuringResult:
     total_latency_ms: float = 0.0
     tool_trace: tuple[ToolCallStep, ...] = ()
     spotlight_prompt: str = ""
+
+
+_MAX_ACTION_ITEMS: int = 25
+_MAX_SECTIONS: int = 20
+
+
+def _extract_title(lines: list[str]) -> str:
+    """Extract a single-line title from first heading or non-empty line."""
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            continue
+        clean_line = re.sub(r"^#{1,6}\s+", "", stripped)
+        clean_line = re.sub(r"^[-*+]\s+", "", clean_line).strip()
+        if clean_line:
+            return clean_line[:120]
+    return "Promoted Sticky Notes"
+
+
+def _extract_action_items(lines: list[str]) -> list[str]:
+    """Extract up to 25 markdown checkbox items."""
+    action_items: list[str] = []
+    for line in lines:
+        stripped = line.strip()
+        m_action = re.match(r"^[-*+]\s+\[([ xX])\]\s*(.+)$", stripped)
+        if m_action and len(action_items) < _MAX_ACTION_ITEMS:
+            item_text = m_action.group(2).strip()
+            item_text = re.sub(r"[\r\n]+", " ", item_text)[:MAX_ACTION_ITEM_LENGTH]
+            if item_text:
+                action_items.append(item_text)
+    return action_items
+
+
+def _extract_sections(lines: list[str], fallback_text: str) -> list[DocSection]:
+    """Parse heading blocks into structured DocSections."""
+    sections: list[DocSection] = []
+    current_heading = "Overview"
+    current_level: Literal[2, 3] = 2
+    current_body_lines: list[str] = []
+
+    for line in lines:
+        m_h2 = re.match(r"^##\s+(.+)$", line)
+        m_h3 = re.match(r"^###\s+(.+)$", line)
+        if m_h2 or m_h3:
+            if current_body_lines:
+                b_text = "\n".join(current_body_lines).strip()
+                if b_text and len(sections) < _MAX_SECTIONS:
+                    clean_heading = re.sub(r"[\r\n]+", " ", current_heading).strip()[:140]
+                    sections.append(
+                        DocSection(
+                            heading=clean_heading or "Section",
+                            level=current_level,
+                            body_markdown=b_text[:65536],
+                        )
+                    )
+                current_body_lines = []
+            if m_h2:
+                current_heading = m_h2.group(1).strip()
+                current_level = 2
+            elif m_h3:
+                current_heading = m_h3.group(1).strip()
+                current_level = 3
+        else:
+            current_body_lines.append(line)
+
+    if current_body_lines or not sections:
+        b_text = "\n".join(current_body_lines).strip() or fallback_text.strip() or "Notes"
+        if len(sections) < _MAX_SECTIONS:
+            clean_heading = re.sub(r"[\r\n]+", " ", current_heading).strip()[:140]
+            sections.append(
+                DocSection(
+                    heading=clean_heading or "Overview",
+                    level=current_level,
+                    body_markdown=b_text[:65536],
+                )
+            )
+    return sections
+
+
+def deterministic_fallback_structuring(
+    body_markdown: str,
+    warnings: list[str] | None = None,
+) -> StructuringResult:
+    """Deterministically transform sticky Markdown into a Doc proposal without calling an LLM."""
+    start_time = time.monotonic()
+    raw_bytes = body_markdown.encode("utf-8")
+    if len(raw_bytes) > MAX_STICKY_BYTES:
+        msg = f"Sticky body length ({len(raw_bytes)} bytes) exceeds cap of {MAX_STICKY_BYTES} bytes"
+        raise StickyTooLargeError(msg)
+
+    original_sha256 = hashlib.sha256(raw_bytes).hexdigest()
+
+    # Step 1: Outbound Secret Scrubber First
+    scrub_result = outbound_secret_scrubber(body_markdown)
+    scrubbed_markdown = scrub_result.text
+    redacted_secrets_count = scrub_result.count
+
+    # Step 2: Spotlight Sanitization
+    sanitized_source, _, _ = strip_invisible_and_control_chars(scrubbed_markdown)
+
+    # Step 3: Deterministic Section and Action-Item Extraction
+    lines = sanitized_source.splitlines()
+    title = _extract_title(lines)
+    action_items = _extract_action_items(lines)
+    sections = _extract_sections(lines, sanitized_source)
+    summary = "Scratchpad notes promoted to document (deterministic offline preview)."
+
+    proposal = StickyDocProposal(
+        schema="kb-sticky-doc-proposal/v1",
+        proposed_title=title,
+        summary_markdown=summary,
+        sections=sections,
+        extracted_action_items=action_items,
+    )
+    rendered_markdown = render_canonical_doc_markdown(proposal)
+
+    # Step 4: Lossless Fenced-Block Integrity Check
+    preserved, block_warnings, missing_blocks = verify_fenced_blocks_preserved(
+        scrubbed_markdown,
+        rendered_markdown,
+    )
+    all_warnings = list(warnings or []) + block_warnings
+    if not preserved:
+        rendered_markdown = append_missing_fenced_blocks(rendered_markdown, missing_blocks)
+
+    total_latency_ms = (time.monotonic() - start_time) * 1000.0
+
+    return StructuringResult(
+        proposal=proposal,
+        rendered_markdown=rendered_markdown,
+        original_sha256=original_sha256,
+        warnings=all_warnings,
+        redacted_secrets_count=redacted_secrets_count,
+        prompt_tokens=0,
+        completion_tokens=0,
+        ttft_ms=0.0,
+        total_latency_ms=total_latency_ms,
+        tool_trace=(),
+        spotlight_prompt="",
+    )
 
 
 async def structure_sticky_to_doc_proposal(  # noqa: PLR0913

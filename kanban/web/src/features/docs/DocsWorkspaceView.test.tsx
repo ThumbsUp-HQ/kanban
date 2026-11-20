@@ -1,8 +1,9 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter, Routes, Route } from 'react-router';
+import { ProjectRouteContext } from '../../app/ProjectRouteContext';
 import { DocsWorkspaceView } from './DocsWorkspaceView';
 import * as docsApi from './docsApi';
 import * as clientModule from '../../api/client';
@@ -441,5 +442,214 @@ describe('DocsWorkspaceView', () => {
       expect(await screen.findByTestId(tc.expectedId)).toBeDefined();
       unmount();
     }
+  });
+
+  it('KAN-9: mobile 390x844 starts with 0 backdrops, allows instant button clicks, and closes on backdrop click', async () => {
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 390 });
+    window.dispatchEvent(new Event('resize'));
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/projects/KAN/docs/page-auth-studio']}>
+          <Routes>
+            <Route path="/projects/:projectKey/docs/:pageId" element={<DocsWorkspaceView />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('docs-workspace-view')).toBeDefined();
+    });
+
+    // 1. Invariant: 0 intercepting backdrops on initial load!
+    expect(screen.queryByTestId('docs-sheet-backdrop')).toBeNull();
+
+    // 2. Mobile user can immediately tap Pages Tree button
+    const treeBtn = screen.getByTestId('toggle-tree-sheet-btn');
+    fireEvent.click(treeBtn);
+    expect(screen.getByTestId('docs-sheet-backdrop')).toBeDefined();
+
+    // 3. Tapping backdrop closes sheet
+    fireEvent.click(screen.getByTestId('docs-sheet-backdrop'));
+    expect(screen.queryByTestId('docs-sheet-backdrop')).toBeNull();
+
+    // 4. Mobile user taps Outline & History button
+    const railBtn = screen.getByTestId('toggle-rail-sheet-btn');
+    fireEvent.click(railBtn);
+    expect(screen.getByTestId('docs-sheet-backdrop')).toBeDefined();
+
+    // 5. Switching from rail to tree closes rail and opens tree
+    fireEvent.click(treeBtn);
+    expect(screen.getByTestId('docs-sheet-backdrop')).toBeDefined();
+    fireEvent.click(screen.getByTestId('docs-sheet-backdrop'));
+    expect(screen.queryByTestId('docs-sheet-backdrop')).toBeNull();
+
+    // Reset window width
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1024 });
+  });
+
+  it('KAN-9: desktop 1200px starts with rail open and 0 sheet backdrops, and handles resize', async () => {
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1200 });
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/projects/KAN/docs/page-auth-studio']}>
+          <Routes>
+            <Route path="/projects/:projectKey/docs/:pageId" element={<DocsWorkspaceView />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('docs-workspace-view')).toBeDefined();
+    });
+
+    // Desktop starts with rail open, but 0 sheet backdrops!
+    expect(screen.queryByTestId('docs-sheet-backdrop')).toBeNull();
+    expect(screen.getByTestId('docs-rail-wrapper')).toBeDefined();
+
+    // Toggle rail button from editor
+    const railToggle = screen.getByTestId('rail-toggle-btn');
+    fireEvent.click(railToggle);
+    fireEvent.click(railToggle);
+
+    // Click version pill to open history tab in rail
+    const versionPill = screen.getByTestId('page-version-pill');
+    fireEvent.click(versionPill);
+
+    // Resize to mobile
+    act(() => {
+      Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 768 });
+      window.dispatchEvent(new Event('resize'));
+    });
+
+    // Reset window width
+    Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1024 });
+  });
+
+  it('KAN-9: findFirst recursively traverses nested tree nodes with restricted parents', async () => {
+    const nestedTree: docsApi.PageTreeNode[] = [
+      {
+        id: 'parent-restricted',
+        title: 'Restricted Parent',
+        slug: 'restricted',
+        restricted: true,
+        children: [
+          {
+            id: 'child-available',
+            title: 'Available Child',
+            slug: 'child-available',
+            restricted: false,
+            children: [],
+          },
+        ],
+      },
+    ];
+    vi.spyOn(docsApi, 'fetchDocsTree').mockResolvedValue(nestedTree);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/projects/KAN/docs']}>
+          <Routes>
+            <Route path="/projects/:projectKey/docs" element={<DocsWorkspaceView />} />
+            <Route path="/projects/:projectKey/docs/:pageId" element={<DocsWorkspaceView />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('docs-workspace-view')).toBeDefined();
+    });
+  });
+
+  it('KAN-9: handles tree with all restricted nodes returning null from findFirst', async () => {
+    const restrictedTree: docsApi.PageTreeNode[] = [
+      {
+        id: 'parent-restricted',
+        title: 'Restricted Parent',
+        slug: 'restricted',
+        restricted: true,
+        children: [
+          {
+            id: 'child-restricted',
+            title: 'Child Restricted',
+            slug: 'child-restricted',
+            restricted: true,
+            children: [],
+          },
+        ],
+      },
+    ];
+    vi.spyOn(docsApi, 'fetchDocsTree').mockResolvedValue(restrictedTree);
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/projects/KAN/docs']}>
+          <Routes>
+            <Route path="/projects/:projectKey/docs" element={<DocsWorkspaceView />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('docs-workspace-view')).toBeDefined();
+    });
+  });
+
+  it('KAN-9: handles empty ctx.projectKey with read-only capabilities and isProjectAdmin', async () => {
+    vi.spyOn(docsApi, 'fetchDocsTree').mockResolvedValue(mockTreeData);
+
+    const contextVal1 = {
+      projectKey: '',
+      projectName: '',
+      modulesEnabled: true,
+      capabilities: ['VIEW'],
+      isProjectAdmin: false,
+    };
+
+    const { unmount } = render(
+      <QueryClientProvider client={queryClient}>
+        <ProjectRouteContext.Provider value={contextVal1}>
+          <MemoryRouter initialEntries={['/projects/KAN/docs/page-auth-studio']}>
+            <Routes>
+              <Route path="/projects/:projectKey/docs/:pageId" element={<DocsWorkspaceView />} />
+            </Routes>
+          </MemoryRouter>
+        </ProjectRouteContext.Provider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('docs-workspace-view')).toBeDefined();
+    });
+    unmount();
+
+    const contextVal2 = {
+      projectKey: '',
+      projectName: '',
+      modulesEnabled: true,
+      capabilities: ['VIEW'],
+      isProjectAdmin: true,
+    };
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ProjectRouteContext.Provider value={contextVal2}>
+          <MemoryRouter initialEntries={['/projects/KAN/docs/page-auth-studio']}>
+            <Routes>
+              <Route path="/projects/:projectKey/docs/:pageId" element={<DocsWorkspaceView />} />
+            </Routes>
+          </MemoryRouter>
+        </ProjectRouteContext.Provider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('docs-workspace-view')).toBeDefined();
+    });
   });
 });

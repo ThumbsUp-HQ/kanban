@@ -22,7 +22,11 @@ from agent.sticky_promo.schemas import (
 from agent.sticky_promo.structurer import (
     FencedBlockModifiedError,
     StickyTooLargeError,
+    _extract_action_items,
+    _extract_sections,
+    _extract_title,
     append_missing_fenced_blocks,
+    deterministic_fallback_structuring,
     extract_fenced_blocks,
     structure_sticky_to_doc_proposal,
     verify_fenced_blocks_preserved,
@@ -417,3 +421,34 @@ async def test_structure_sticky_air_gap_with_fixture_tier() -> None:
         air_gap=True,
     )
     assert result.proposal.proposed_title is not None
+
+
+def test_structurer_internal_helpers_coverage() -> None:
+    """Exercise fallback title, sections, action items, and fallback missing fenced blocks."""
+    # 1. _extract_title fallbacks
+    assert _extract_title(["", "   ", "\n"]) == "Promoted Sticky Notes"
+    assert _extract_title(["- some item"]) == "some item"
+    assert _extract_title(["### Important Design"]) == "Important Design"
+
+    # 2. _extract_action_items with empty text or blank lines
+    items = _extract_action_items(["- [ ]    ", "- [x] Valid task", "- [X] Another task"])
+    assert items == ["Valid task", "Another task"]
+
+    # 3. _extract_sections with h3, empty bodies, and fallback
+    secs = _extract_sections(
+        ["## Section 1", "Body 1", "### Sub Section", "Sub Body 2"],
+        fallback_text="Fallback",
+    )
+    assert len(secs) == 2
+    assert secs[0].level == 2
+    assert secs[1].level == 3
+    assert secs[1].heading == "Sub Section"
+
+    # 4. deterministic_fallback_structuring preserves fenced blocks or handles fallback
+    fb_res = deterministic_fallback_structuring(
+        body_markdown="# My Sticky\n\n```python\nprint(1)\n```\n- [ ] Todo item",
+        warnings=["INITIAL_WARN"],
+    )
+    assert fb_res.proposal.proposed_title == "My Sticky"
+    assert "INITIAL_WARN" in fb_res.warnings
+    assert len(fb_res.proposal.extracted_action_items) == 1

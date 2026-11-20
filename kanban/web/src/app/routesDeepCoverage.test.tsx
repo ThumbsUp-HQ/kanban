@@ -5,6 +5,7 @@ import { MemoryRouter, Routes, Route } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 
 import { ThemeProvider } from '../theme/ThemeProvider';
+import * as client from '../api/client';
 import {
   saveDraft,
 } from '../features/drafts/draftsStore';
@@ -1025,6 +1026,104 @@ describe('routesDeepCoverage', () => {
       );
       await waitFor(() => {
         expect(screen.getByTestId('not-found-view')).toBeDefined();
+      });
+    });
+
+    it('covers FullScreenIssueRoute query with valid issueKey and summary', async () => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      vi.spyOn(client.apiClient, 'get').mockResolvedValueOnce({
+        id: 'iss-1',
+        key: 'KAN-999',
+        summary: 'Deep Issue Detail',
+      });
+      render(
+        <QueryClientProvider client={qc}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues/KAN-999']}>
+            <Routes>
+              <Route path="/projects/:projectKey/issues/:issueKey" element={<FullScreenIssueRoute />} />
+            </Routes>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      await waitFor(() => {
+        expect(document.title).toBe('KAN-999 - Deep Issue Detail');
+      });
+    });
+
+    it('covers ProjectRouteContainer with 500 error returning null', async () => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      vi.spyOn(window, 'fetch').mockImplementation((input) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes('/api/v1/projects/KAN')) {
+          return Promise.resolve(new Response('Server Error', { status: 500 }));
+        }
+        return Promise.resolve(new Response('{}', { status: 200 }));
+      });
+      render(
+        <QueryClientProvider client={qc}>
+          <ThemeProvider>
+            <MemoryRouter initialEntries={['/projects/KAN']}>
+              <Routes>
+                <Route path="/projects/:projectKey" element={<ProjectRouteContainer />} />
+              </Routes>
+            </MemoryRouter>
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+      await waitFor(() => {
+        expect(screen.queryByTestId('not-found-view')).toBeNull();
+      });
+    });
+
+    it('covers ProjectRouteContainer with 403 error returning isNotFound', async () => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      vi.spyOn(window, 'fetch').mockImplementation((input) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes('/api/v1/projects/KAN')) {
+          return Promise.resolve(new Response('Forbidden', { status: 403 }));
+        }
+        return Promise.resolve(new Response('{}', { status: 200 }));
+      });
+      render(
+        <QueryClientProvider client={qc}>
+          <ThemeProvider>
+            <MemoryRouter initialEntries={['/projects/KAN']}>
+              <Routes>
+                <Route path="/projects/:projectKey" element={<ProjectRouteContainer />} />
+              </Routes>
+            </MemoryRouter>
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+      await waitFor(() => {
+        expect(screen.getByTestId('not-found-view')).toBeDefined();
+      });
+    });
+
+    it('covers ProjectRouteContainer with missing identifier falling back to projectKey', async () => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      vi.spyOn(window, 'fetch').mockResolvedValueOnce(
+        jsonResponse({
+          id: 'p-1',
+          name: 'Fallback Project',
+          modules_enabled: false,
+          capabilities: ['VIEW'],
+          is_project_admin: false,
+        }),
+      );
+      render(
+        <QueryClientProvider client={qc}>
+          <ThemeProvider>
+            <MemoryRouter initialEntries={['/projects/KAN']}>
+              <Routes>
+                <Route path="/projects/:projectKey" element={<ProjectRouteContainer />} />
+              </Routes>
+            </MemoryRouter>
+          </ThemeProvider>
+        </QueryClientProvider>,
+      );
+      await waitFor(() => {
+        expect(screen.queryByTestId('not-found-view')).toBeNull();
       });
     });
   });

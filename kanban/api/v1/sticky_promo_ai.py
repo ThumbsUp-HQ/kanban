@@ -6,7 +6,8 @@ from __future__ import annotations
 
 import importlib
 import uuid  # noqa: TC003  # Required at runtime by FastAPI path parameter parsing
-from typing import Annotated, Any
+from collections.abc import Callable  # noqa: TC003
+from typing import Annotated, Any, cast
 
 from fastapi import APIRouter, Depends, Request
 from sqlalchemy import select
@@ -26,6 +27,33 @@ Caller = Annotated[PrincipalContext, Depends(get_principal)]
 Session = Annotated[AsyncSession, Depends(get_rls_session)]
 
 _MAX_STICKY_BYTES: int = 131_072  # 128 KiB cap
+
+
+def _is_provider_unavailable_error(exc: Exception) -> bool:
+    """Identify if exception represents an unavailable, offline, or air-gapped LLM provider."""
+    name = type(exc).__name__
+    if name in (
+        "AllProvidersUnavailable",
+        "ProviderUnavailable",
+        "EgressDenied",
+        "ProviderTimeout",
+        "ProviderHTTPError",
+    ):
+        return True
+    code = getattr(exc, "code", None)
+    return code in (
+        "NO_PROVIDER_IN_RESIDENCY_TIER",
+        "AIR_GAP_EGRESS_DENIED",
+        "PROVIDER_UNAVAILABLE",
+        "ALL_PROVIDERS_UNAVAILABLE",
+        "PROVIDER_TIMEOUT",
+    )
+
+
+def _get_fallback_structurer() -> Callable[..., Any]:
+    """Dynamically resolve deterministic fallback structurer without violating module layers."""
+    structurer_mod = importlib.import_module("agent.sticky_promo.structurer")
+    return cast("Callable[..., Any]", structurer_mod.deterministic_fallback_structuring)
 
 
 def _get_structurer_and_router(
@@ -61,6 +89,12 @@ def _get_structurer_and_router(
     status_code=200,
     response_model=StickyPromotePreviewResponse,
     summary="Preview AI-structured Doc proposal for a sticky scratchpad",
+)
+@router.post(
+    "/stickies/{sticky_id}/preview-promotion",
+    status_code=200,
+    response_model=StickyPromotePreviewResponse,
+    summary="Preview AI-structured Doc proposal for a sticky scratchpad (alias)",
 )
 async def preview_sticky_promotion(
     sticky_id: uuid.UUID,
@@ -121,19 +155,26 @@ async def preview_sticky_promotion(
 
         # 5. Invoke AI structuring pipeline
         structure_fn, router_inst = _get_structurer_and_router(request, caller.workspace_id)
-        if router_inst is not None:
-            res = await structure_fn(
-                body_markdown=sticky.body_markdown,
-                router=router_inst,
-                caller_workspace_id=caller.workspace_id,
-                caller_project_id=sticky.project_id,
-            )
-        else:
-            res = await structure_fn(
-                body_markdown=sticky.body_markdown,
-                caller_workspace_id=caller.workspace_id,
-                caller_project_id=sticky.project_id,
-            )
+        try:
+            if router_inst is not None:
+                res = await structure_fn(
+                    body_markdown=sticky.body_markdown,
+                    router=router_inst,
+                    caller_workspace_id=caller.workspace_id,
+                    caller_project_id=sticky.project_id,
+                )
+            else:
+                res = await structure_fn(
+                    body_markdown=sticky.body_markdown,
+                    caller_workspace_id=caller.workspace_id,
+                    caller_project_id=sticky.project_id,
+                )
+        except Exception as exc:
+            if _is_provider_unavailable_error(exc):
+                fallback_fn = _get_fallback_structurer()
+                res = fallback_fn(sticky.body_markdown)
+            else:
+                raise
 
         # Invariant: Zero writes executed (only return computed proposal and preview)
         sha_hex = (
@@ -141,8 +182,11 @@ async def preview_sticky_promotion(
             if isinstance(sticky.body_sha256, (bytes, bytearray, memoryview))
             else str(sticky.body_sha256)
         )
+        proposal_dict = (
+            res.proposal.model_dump() if hasattr(res.proposal, "model_dump") else dict(res.proposal)
+        )
         return StickyPromotePreviewResponse(
-            proposal=res.proposal.model_dump(),
+            proposal=proposal_dict,
             rendered_markdown=res.rendered_markdown,
             original_sha256=sha_hex,
             warnings=res.warnings,
