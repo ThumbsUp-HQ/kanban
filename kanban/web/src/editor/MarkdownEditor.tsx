@@ -255,8 +255,22 @@ export function MarkdownEditor({
     let effAfter = after;
     const isFence = effBefore.startsWith('```') || effAfter.includes('```');
 
-    /* v8 ignore next 8 */
+    /* v8 ignore next 14 */
     if (!textarea) {
+      if (isFence) {
+        if (current.length > 0) {
+          if (current.endsWith('\n\n')) {
+            // already preceded
+          } else if (current.endsWith('\n')) {
+            effBefore = `\n${effBefore}`;
+          } else {
+            effBefore = `\n\n${effBefore}`;
+          }
+        }
+        if (effAfter.includes('```') && !effAfter.endsWith('\n')) {
+          effAfter = `${effAfter}\n`;
+        }
+      }
       const next = `${current}${effBefore}${placeholder}${effAfter}`;
       setRawText(next);
       rawTextRef.current = next;
@@ -266,11 +280,19 @@ export function MarkdownEditor({
     }
     const start = textarea.selectionStart;
     const end = textarea.selectionEnd;
-    const selected = current.slice(start, end) || placeholder;
+    const hasSelection = start !== end;
+    const selected = hasSelection ? current.slice(start, end) : placeholder;
 
     if (isFence) {
-      if (start > 0 && current[start - 1] !== '\n') {
-        effBefore = `\n${effBefore}`;
+      if (start > 0) {
+        const textBefore = current.slice(0, start);
+        if (textBefore.endsWith('\n\n')) {
+          // already preceded by blank line
+        } else if (textBefore.endsWith('\n')) {
+          effBefore = `\n${effBefore}`;
+        } else {
+          effBefore = `\n\n${effBefore}`;
+        }
       }
       if (effAfter.includes('```') && !effAfter.endsWith('\n')) {
         effAfter = `${effAfter}\n`;
@@ -283,10 +305,24 @@ export function MarkdownEditor({
     rawTextRef.current = next;
     lastSerializedRef.current = next;
     onChangeRef.current(next);
+
+    const newCursor = isFence && !hasSelection
+      ? start + replacement.length
+      : start + effBefore.length + selected.length;
+
+    try {
+      textarea.setSelectionRange(newCursor, newCursor);
+    } catch {
+      // ignore
+    }
+
     setTimeout(() => {
       textarea.focus();
-      const newCursor = start + effBefore.length + selected.length;
-      textarea.setSelectionRange(newCursor, newCursor);
+      try {
+        textarea.setSelectionRange(newCursor, newCursor);
+      } catch {
+        // ignore
+      }
     }, 0);
   };
 
@@ -359,13 +395,13 @@ export function MarkdownEditor({
 
   const handleToolbarMermaid = (): void => {
     if (isRawMode) {
-      insertTextInRaw('```mermaid\ngraph TD;\n  A-->B;\n', '```\n', '');
+      insertTextInRaw('```mermaid\ngraph TD\n  ', '\n```', 'A[Start] --> B[End]');
       return;
     }
     /* v8 ignore next */
     if (!viewRef.current) return;
     const { state, dispatch } = viewRef.current;
-    const mermaidText = 'graph TD;\n  A-->B;';
+    const mermaidText = 'graph TD\n  A[Start] --> B[End]';
     const codeBlock = editorSchema.nodes.code_block.create(
       { lang: 'mermaid' },
       editorSchema.text(mermaidText),
