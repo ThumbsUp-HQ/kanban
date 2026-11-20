@@ -41,25 +41,34 @@ const isUuid = (val: string): boolean =>
 export function formatHandle(
   handle?: string | null,
   fallbackDisplayName?: string | null,
+  principalType?: string | null,
 ): string {
+  const isGroup = principalType?.toUpperCase() === 'GROUP';
+  const slugify = (str: string): string =>
+    str
+      .toLowerCase()
+      .replace(/\s+/g, '-')
+      .replace(/[^a-z0-9._-]/g, '')
+      .replace(/^-+|-+$/g, '');
+
   if (handle) {
     const clean = handle.trim().replace(/^@+/, '');
     if (clean && !isUuid(clean)) {
+      if (isGroup) {
+        const slug = slugify(clean);
+        return slug ? `@${slug}` : '@group';
+      }
       return `@${clean}`;
     }
   }
   if (fallbackDisplayName) {
     const cleanFallback = fallbackDisplayName.trim().replace(/^@+/, '');
     if (cleanFallback && !isUuid(cleanFallback)) {
-      const slug = cleanFallback
-        .toLowerCase()
-        .replace(/\s+/g, '-')
-        .replace(/[^a-z0-9._-]/g, '')
-        .replace(/^-+|-+$/g, '');
+      const slug = slugify(cleanFallback);
       if (slug) return `@${slug}`;
     }
   }
-  return '';
+  return isGroup ? '@group' : '';
 }
 
 interface PendingMutation {
@@ -596,7 +605,7 @@ export function AuthStudioPage(): JSX.Element {
     try {
       await resetUserPassword(resetTargetUser.id, newPassword);
       setUserActionSuccess(
-        `Password reset successfully for ${formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name)}.`,
+        `Password reset successfully for ${formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name, resetTargetUser.type)}.`,
       );
       setResetTargetUser(null);
       setNewPassword('');
@@ -845,7 +854,7 @@ export function AuthStudioPage(): JSX.Element {
                               {u.display_name || (u.handle ?? u.principal)}
                             </span>
                             <span className="auth-user-handle">
-                              {formatHandle(u.handle ?? u.principal, u.display_name)}
+                              {formatHandle(u.handle ?? u.principal, u.display_name, u.type)}
                             </span>
                           </div>
                         </td>
@@ -878,7 +887,7 @@ export function AuthStudioPage(): JSX.Element {
                             onChange={(e) => {
                               void handleRoleChange(u.id, e.target.value, u.role);
                             }}
-                            aria-label={`Role for ${formatHandle(u.handle ?? u.principal, u.display_name)}`}
+                            aria-label={`Role for ${formatHandle(u.handle ?? u.principal, u.display_name, u.type)}`}
                           >
                             <option value="SERVER_ADMIN">SERVER_ADMIN (Server Admin)</option>
                             <option value="WORKSPACE_ADMIN">WORKSPACE_ADMIN (Workspace Admin)</option>
@@ -1101,7 +1110,7 @@ export function AuthStudioPage(): JSX.Element {
           >
             <div className="auth-modal-header">
               <h2 id="reset-pwd-modal-title" className="auth-modal-title">
-                Reset Password: {formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name)}
+                Reset Password: {formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name, resetTargetUser.type)}
               </h2>
               <button
                 type="button"
@@ -1116,8 +1125,8 @@ export function AuthStudioPage(): JSX.Element {
               <div className="auth-modal-body">
                 <p className="auth-card-subtext">
                   Set a new password for{' '}
-                  <strong>{resetTargetUser.display_name || formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name)}</strong> (
-                  {resetTargetUser.email ?? formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name)}).
+                  <strong>{resetTargetUser.display_name || formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name, resetTargetUser.type)}</strong> (
+                  {resetTargetUser.email ?? formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name, resetTargetUser.type)}).
                 </p>
 
                 <div className="auth-editor-field">

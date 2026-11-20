@@ -168,7 +168,7 @@ async def test_principals_lifecycle_and_group_membership(  # noqa: PLR0915
     assert maya_p["provider"] == "LOCAL"
 
     backend_p = next(p for p in p_list if p["principal"] == "Core Backend")
-    assert backend_p["handle"] == "@Core Backend"
+    assert backend_p["handle"] == "@core-backend"
     assert backend_p["email"] is None
     assert backend_p["role"] == "WORKSPACE_MEMBER"
     assert backend_p["provider"] == "LOCAL"
@@ -1460,7 +1460,7 @@ async def test_principal_service_edge_cases_and_helpers(  # noqa: PLR0915
         display_name="DevOps Security Team",
     )
     formatted_grp = await _format_principal_entry(session, admin.workspace_id, p_group_custom)
-    assert formatted_grp["handle"] == "@DevOps Security Team"
+    assert formatted_grp["handle"] == "@devops-security-team"
 
     p_group_uuid = DBPrincipal(
         id=uuid.uuid4(),
@@ -1486,7 +1486,7 @@ async def test_principal_service_edge_cases_and_helpers(  # noqa: PLR0915
     session.add(p_group_uuid)
     await session.flush()
     detail_grp = await get_principal_detail(session, admin.workspace_id, str(p_group_custom.id))
-    assert detail_grp["handle"] == "@DevOps Security Team"
+    assert detail_grp["handle"] == "@devops-security-team"
 
     detail_uuid = await get_principal_detail(session, admin.workspace_id, str(p_group_uuid.id))
     assert detail_uuid["handle"] == "@group"

@@ -64,12 +64,14 @@ All 5 Playwright visual proof artifacts in `docs/qa/KAN-12/screenshots/` were au
 - Verified clean via `python3 -m scripts.check_no_dashes --all`.
 
 ### 4. Test Coverage & Verification
-- 72/72 Vitest unit tests passing across touched test suites:
-  - `src/app/useSystemStatus.ts`: 100%
-  - `src/features/system/useSystemStatus.ts`: 100%
-  - `src/features/admin-auth/AuthStudioPage.tsx`: 98.28% Statements, 95.68% Branches, 100% Lines
-  - `src/features/settings/WorkspaceSettingsPage.tsx`: 99.67% Statements, 95.47% Branches, 100% Lines
+- 100/100 Vitest unit tests passing across touched test suites:
+  - `src/app/Topbar.tsx`: 98.05% Statements, 95.37% Branches, 100% Functions, 100% Lines
+  - `src/app/useSystemStatus.ts`: 100% Statements, 100% Branches, 100% Functions, 100% Lines
+  - `src/features/system/useSystemStatus.ts`: 100% Statements, 100% Branches, 100% Functions, 100% Lines
+  - `src/features/admin-auth/AuthStudioPage.tsx`: 98.31% Statements, 95.43% Branches, 99.00% Functions, 100% Lines
+  - `src/features/settings/WorkspaceSettingsPage.tsx`: 99.67% Statements, 95.09% Branches, 100% Functions, 100% Lines
   - `cssTokensAudit.test.ts`: 4/4 passed
+  - 0 React act(...) warnings in stderr
 - 16/16 Pytest backend tests passing in `kanban/tests/api/test_admin_principals.py` with 96% coverage on `principal_service.py`.
 
 ---
@@ -85,7 +87,7 @@ All 5 Playwright visual proof artifacts in `docs/qa/KAN-12/screenshots/` were au
 7. [x] Zero inline `style={...}` JSX attributes (100% CSP compliant)
 8. [x] 100% canonical design tokens verified (`cssTokensAudit.test.ts` passes 4/4)
 9. [x] Strict ASCII hyphenation verified (0 em/en-dashes across codebase and docs)
-10. [x] Frontend test suite passes: 72 Vitest tests passing with >= 95% coverage on touched files
+10. [x] Frontend test suite passes: 100 Vitest tests passing with >= 95% coverage on touched files
 11. [x] Backend test suite passes: 16 Pytest tests passing with >= 95% coverage on touched files
 12. [x] Visual evidence verified across 5 desktop, tablet, mobile, dark, and light screenshots
 

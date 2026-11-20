@@ -126,7 +126,6 @@ export function Topbar({
   const themeContext = useTheme();
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
     const handleStatusChanged = (): void => {
       void queryClient.invalidateQueries({ queryKey: qk.systemStatus() });
       void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });

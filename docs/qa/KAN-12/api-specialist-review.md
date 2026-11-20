@@ -20,7 +20,7 @@ All API contracts, security invariants, transaction boundaries, handle slugifica
 2. Guard Reset Password on Groups/Agents (Problem 2): In `AuthStudioPage.tsx`, strictly restricted the Reset Password action and its modal dialog to `principal.type === 'USER'`, completely hiding and disabling it for `GROUP` and `AGENT` principals where credential reset is semantically invalid.
 3. Reactive Topbar Air-Gap Sync (Problem 1): In `useSystemStatus.ts`, registered window listener for `kb:system-status-changed` (with unmount cleanup) invalidating `['system', 'status']`. Saving Workspace Settings dispatches `kb:system-status-changed` and invalidates system status queries, ensuring the topbar air-gap badge updates reactively without a full page reload.
 4. Workspace Settings Tab Anchors (Problem 4): In `WorkspaceSettingsPage.tsx`, added `id="tab-general"`, `id="tab-members"`, and `id="tab-groups"` attributes and synchronized active tab state with `window.location.hash` across mount, hashchange events, and tab clicks.
-5. High Test Coverage: 16/16 backend Pytest tests passing with 96% coverage on `kanban.admin.principal_service`. 72/72 frontend Vitest tests passing with >= 95% coverage across all touched components.
+5. High Test Coverage: 16/16 backend Pytest tests passing with 96% coverage on `kanban.admin.principal_service`. 100/100 frontend Vitest tests passing with >= 95% coverage across all 6 touched components (including Topbar.tsx).
 6. Zero Em/En-Dashes: Clean verification under `check_no_dashes` (0 em/en-dashes).
 7. Live Full-Stack Proof: 100% pass across all 4 operational scenarios on containerized live environment.
 
@@ -112,12 +112,13 @@ Verbatim inspection of `/home/adamoutler/kanban/docs/qa/KAN-12/live-fullstack-pr
 - Backend Pytest Suite: `kanban/tests/api/test_admin_principals.py` PASSED (16/16).
   - Coverage: `kanban.admin.principal_service` achieves 96% statement coverage.
 - Frontend Vitest Suites:
-  - `src/features/admin-auth/AuthStudioPage.test.tsx`: 42/42 PASSED.
-  - `src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx`: 25/25 PASSED.
-  - `src/app/useSystemStatus.test.tsx` & `src/features/system/useSystemStatus.test.tsx`: 5/5 PASSED.
+  - `src/app/Topbar.test.tsx`: 23/23 PASSED (98.05% stmts, 95.37% branch, 100% funcs, 100% lines).
+  - `src/features/admin-auth/AuthStudioPage.test.tsx`: 42/42 PASSED (98.31% stmts, 95.43% branch, 99% funcs, 100% lines).
+  - `src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx`: 26/26 PASSED (99.67% stmts, 95.09% branch, 100% funcs, 100% lines).
+  - `src/app/useSystemStatus.test.tsx` & `src/features/system/useSystemStatus.test.tsx`: 5/5 PASSED (100% across the board).
   - `src/styles/__tests__/cssTokensAudit.test.ts`: 4/4 PASSED.
-  - All touched files exceed 95% statement and branch coverage.
-- Static Analysis: `tsc -b` (0 errors), `eslint` (0 warnings), `mypy` (0 errors), `ruff check` (clean), `check_no_dashes` (0 em/en-dashes).
+  - All touched files exceed 95% statement, branch, function, and line coverage, with 0 React act(...) warnings.
+- Static Analysis: `pnpm --dir kanban/web build` (clean), `tsc -b` (0 errors), `eslint` (0 warnings), `mypy` (0 errors), `ruff check` (clean), `check_no_dashes` (0 em/en-dashes).
 
 ---
 
@@ -131,7 +132,7 @@ Verbatim inspection of `/home/adamoutler/kanban/docs/qa/KAN-12/live-fullstack-pr
 6. [x] Workspace settings tab buttons have `id="tab-*"` attributes
 7. [x] Active tab state synchronized with `window.location.hash`
 8. [x] 16/16 backend tests pass with 96% coverage on `principal_service.py`
-9. [x] 72/72 frontend tests pass with >= 95% coverage on touched files
+9. [x] 100/100 frontend tests pass with >= 95% coverage on touched files
 10. [x] Zero em-dashes or en-dashes across all code and documentation
 
 ---

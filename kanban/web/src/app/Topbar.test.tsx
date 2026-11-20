@@ -483,6 +483,44 @@ describe('Topbar', () => {
     window.removeEventListener('kb:auth-logout', logoutEventSpy);
   });
 
+  it('sends X-CSRF-Token during logout when csrfToken is present', async () => {
+    document.cookie = 'csrf_token=valid-test-csrf-token; path=/';
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(JSON.stringify({ ok: true }), { status: 200 }),
+    );
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <ShellPanelsProvider>
+            <MemoryRouter>
+              <Topbar />
+            </MemoryRouter>
+          </ShellPanelsProvider>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
+    act(() => {
+      avatarBtn.click();
+    });
+
+    const logoutBtn = screen.getByRole('menuitem', { name: /Log out/i });
+    await act(async () => {
+      logoutBtn.click();
+      await Promise.resolve();
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/v1/auth/logout', expect.anything());
+    const logoutCall = fetchSpy.mock.calls.find((call) => call[0] === '/api/v1/auth/logout');
+    expect(logoutCall).toBeDefined();
+    const callOptions = logoutCall?.[1];
+    const callHeaders = callOptions?.headers as Record<string, string> | undefined;
+    expect(callHeaders?.['X-CSRF-Token']).toBeDefined();
+    document.cookie = 'csrf_token=; Max-Age=0; path=/';
+  });
+
   describe('resolveDisplayHandle and user profile rendering (KANBA-210)', () => {
     it('normalizes handles, removes double-@ prefixes, and avoids leaking UUIDs', () => {
       // Normal handle
@@ -844,7 +882,8 @@ describe('Topbar', () => {
       expect(rightSection?.classList.contains('kb-topbar-right')).toBe(true);
     });
 
-    it('handles kb:system-status-changed window event', () => {
+    it('invalidates system status queries upon receiving kb:system-status-changed event', () => {
+      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
       render(
         <QueryClientProvider client={queryClient}>
           <ThemeProvider>
@@ -860,6 +899,11 @@ describe('Topbar', () => {
       act(() => {
         window.dispatchEvent(new CustomEvent('kb:system-status-changed'));
       });
+
+      expect(invalidateSpy).toHaveBeenCalledWith(
+        expect.objectContaining({ queryKey: ['system', 'status'] }),
+      );
+    });
     });
   });
 });

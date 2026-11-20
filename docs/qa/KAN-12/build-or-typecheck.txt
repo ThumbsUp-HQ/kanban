@@ -1,8 +1,30 @@
+=== FRONTEND BUILD (pnpm --dir kanban/web build) ===
+
+> @kanban/web@0.1.0 build /home/adamoutler/kanban/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 706 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.51 kB │ gzip:   0.31 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-d0e6dtny.css            427.66 kB │ gzip:  60.23 kB
+dist/assets/index-BHdEZDYr.js           1,982.35 kB │ gzip: 535.98 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.73s
+
 === RUFF CHECK ===
 All checks passed!
 
 === MYPY CHECK ===
-Success: no issues found in 2 source files
+Success: no issues found in 1 source file
 
 === LINT-IMPORTS ===
 
@@ -20,7 +42,7 @@ Success: no issues found in 2 source files
 Contracts
 ---------
 
-Analyzed 964 files, 3388 dependencies.
+Analyzed 969 files, 3424 dependencies.
 --------------------------------------
 
 Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
@@ -32,25 +54,4 @@ Contracts: 2 kept, 0 broken.
 
 === ESLINT ===
 
-> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan12-257137e5/kanban/web
-> eslint . --max-warnings 0
-
-
 === CHECK NO DASHES ===
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan12-257137e5/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
-
-=== CSS TOKENS AUDIT ===
-
-> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan12-257137e5/kanban/web
-> vitest run src/styles/__tests__/cssTokensAudit.test.ts
-
-
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan12-257137e5/kanban/web
-
- ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 13ms
-
- Test Files  1 passed (1)
-      Tests  4 passed (4)
-   Start at  08:42:33
-   Duration  965ms (environment 95%, import 2%, tests 2%, worker 1%, transform 1%)
-

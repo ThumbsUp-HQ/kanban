@@ -968,6 +968,9 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
 
     // Remove member
     fireEvent.click(screen.getByTestId('remove-group-member-m-nested'));
+    await waitFor(() => {
+      expect(screen.getByText('Member removed from group.')).toBeDefined();
+    });
 
     // Remove member error
     fireEvent.click(screen.getByTestId('remove-group-member-m-agent'));
@@ -986,6 +989,7 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     fireEvent.click(screen.getByText('grp-bare'));
     expect(screen.getByTestId('selected-group-name').textContent).toBe('');
     expect(screen.getByTestId('selected-group-handle').textContent).toBe('@grp-bare');
+    expect(await screen.findByTestId('empty-group-members')).toBeDefined();
   });
 
   it('covers early return guards and error fallbacks for members, users, and groups', async () => {
@@ -1769,6 +1773,59 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
     });
 
     // 4. Reset hash
+    window.location.hash = '';
+  });
+
+  it('resets activeTab to general when window.location.hash becomes empty or hash-only on browser back navigation', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      if (path.includes('/api/v1/auth/me')) {
+        return { is_server_admin: true, is_workspace_admin: true };
+      }
+      if (path.includes('/api/v1/admin/workspace-settings')) {
+        return { name: 'WS', slug: 'ws', air_gap_mode: false };
+      }
+      return [];
+    });
+
+    window.location.hash = '#tab-members';
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/workspaces/settings#tab-members']}>
+          <WorkspaceSettingsPage />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tab-members').getAttribute('aria-selected')).toBe('true');
+    });
+
+    // Simulate browser Back button navigating to base URL with empty hash ""
+    window.location.hash = '';
+    fireEvent(window, new HashChangeEvent('hashchange'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tab-general').getAttribute('aria-selected')).toBe('true');
+    });
+
+    // Switch back to groups
+    window.location.hash = '#tab-groups';
+    fireEvent(window, new HashChangeEvent('hashchange'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tab-groups').getAttribute('aria-selected')).toBe('true');
+    });
+
+    // Simulate browser Back button navigating to '#'
+    window.location.hash = '#';
+    fireEvent(window, new HashChangeEvent('hashchange'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('tab-general').getAttribute('aria-selected')).toBe('true');
+    });
+
     window.location.hash = '';
   });
 
