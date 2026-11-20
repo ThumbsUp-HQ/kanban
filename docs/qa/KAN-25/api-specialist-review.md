@@ -4,24 +4,25 @@
 - Title: Add Self-Service Passkey & FIDO2 Security Key Registration, Key Testing, and AAL2 Step-Up Handling on Profile Settings
 - Reviewer: api-spec-2 (Clean-Room Backend / API / Security Specialist)
 - Date: 2026-11-20
-- Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan25-rc1-ad1c82a2`
-- Branch: `fix/KAN-25-rc1`
-- Commit: `1508e3e`
+- Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan25-rc2-a10bba8c`
+- Branch: `fix/KAN-25-rc2`
+- Commit: `ce40ed9`
 - Status: STATUS: APPROVED
 
 ---
 
 ## 1. Executive Summary
 
-This clean-room API and Architecture audit inspects ticket KAN-25 on remediation branch `fix/KAN-25-rc1` (commit `1508e3e`). The ticket implements self-service passkey and FIDO2 hardware security key enrollment, credential testing via WebAuthn authentication assertion, device badge classification, clone detection warnings, complete AAL2 step-up interception on Profile Settings, credential scoping during key testing, accessible modal focus trapping, and backend credential ID exposure in `list_credentials`.
+This clean-room API and Architecture audit inspects ticket KAN-25 on remediation branch `fix/KAN-25-rc2` (commit `ce40ed9`). The ticket implements self-service passkey and FIDO2 hardware security key enrollment, credential testing via WebAuthn authentication assertion, device badge classification, clone detection warnings, complete AAL2 step-up interception on Profile Settings, credential scoping during key testing, accessible modal focus trapping, backend credential ID exposure in `list_credentials`, and mobile CSS specificity separation for stacked cards.
 
 All API contracts, security boundaries, and coverage requirements are verified and approved:
 1. Exact route path alignment between the frontend client (`personalSettingsApi.ts`, `PasskeyEnrollModal.tsx`, `PersonalSettingsPage.tsx`) and the live FastAPI backend router in `kanban/api/v1/auth_webauthn.py`.
 2. Binary base64url challenge and credential serialization/deserialization contracts.
 3. Cryptographic and authentication security invariants, including secure context enforcement, RP ID scoping, credential-specific challenge filtering, and anti-replay safeguards.
 4. Exposing raw WebAuthn base64url `credential_id` via `bytes_to_base64url(bytes(r.credential_id))` in `list_credentials` (`kanban/api/v1/auth_webauthn.py:579`), ensuring exact matching against `optionsJson.allowCredentials[].id` during `[Test Key]`.
-5. Robust RFC 9457 ApiProblem error handling and step-up orchestration across both `AAL2_REQUIRED` and `AAL2_STALE` challenges.
-6. High unit test coverage: 23 passing Pytest tests with 98% coverage on `kanban/api/v1/auth_webauthn.py`, and 105 passing Vitest tests with >= 95% statement and branch coverage across all touched frontend API and component files.
+5. Mobile CSS card layout specificity fix (`.kb-personal-settings-table td.kb-personal-settings-td`) preserving flex space-between alignment and clean label-value separation.
+6. Robust RFC 9457 ApiProblem error handling and step-up orchestration across both `AAL2_REQUIRED` and `AAL2_STALE` challenges.
+7. High unit test coverage: 23 passing Pytest tests with 98% coverage on `kanban/api/v1/auth_webauthn.py`, and 105 passing Vitest tests with >= 95% statement and branch coverage across all touched frontend API and component files.
 
 ---
 
@@ -93,7 +94,7 @@ All API contracts, security boundaries, and coverage requirements are verified a
 - Layering Contracts: `uv run lint-imports` verified 2 kept, 0 broken (`agent -> mcp -> kanban -> database`).
 - Static Analysis:
   - `uv run ruff check .`: 0 errors.
-  - `uv run mypy`: 0 errors across 1095 source files.
+  - `uv run mypy`: 0 errors across 1096 source files.
   - `pnpm --dir kanban/web exec tsc -b --noEmit`: 0 errors.
   - `pnpm --dir kanban/web lint`: 0 errors, 0 warnings (`eslint . --max-warnings 0`).
   - `python3 -m scripts.check_no_dashes --all`: 0 errors.
@@ -104,7 +105,7 @@ All API contracts, security boundaries, and coverage requirements are verified a
 ## 4. Test Coverage Audit
 
 - Pytest Suite:
-  - 23 passed in 9.96s across `kanban/tests/auth/`.
+  - 23 passed in 9.97s across `kanban/tests/auth/`.
   - `kanban/api/v1/auth_webauthn.py`: 98% coverage (exceeds >= 95% mandate).
 - Vitest Suite:
   - 105 passed across 5 test suites.

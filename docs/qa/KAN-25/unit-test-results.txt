@@ -1,7 +1,7 @@
 === PYTEST: kanban/tests/auth/test_webauthn.py & test_kan24_fido2_enrollment_and_guards.py ===
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan25-rc1-ad1c82a2
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan25-rc2-a10bba8c
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
@@ -18,25 +18,26 @@ Name                             Stmts   Miss Branch BrPart  Cover   Missing
 kanban/api/v1/auth_webauthn.py     257      4     74      3    98%   152, 156, 288-289, 683->695
 ----------------------------------------------------------------------------
 TOTAL                              257      4     74      3    98%
-============================== 23 passed in 9.96s ==============================
+============================== 23 passed in 9.97s ==============================
 
 === VITEST: PersonalSettingsPage, PasskeyEnrollModal, personalSettingsApi, webauthn, cssTokensAudit ===
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan25-rc1-ad1c82a2/kanban/web
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan25-rc2-a10bba8c/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/auth/webauthn.test.ts (6 tests) 21ms
- ✓ src/features/settings/personalSettingsApi.test.ts (21 tests) 32ms
- ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 14ms
- ✓ src/features/settings/__tests__/PasskeyEnrollModal.test.tsx (20 tests) 476ms
- ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (54 tests) 5127ms
+ ✓ src/features/settings/personalSettingsApi.test.ts (21 tests) 23ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 22ms
+ ✓ src/features/auth/webauthn.test.ts (6 tests) 14ms
+ ✓ src/features/settings/__tests__/PasskeyEnrollModal.test.tsx (20 tests) 494ms
+ ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (54 tests) 4993ms
    ✓ PersonalSettingsPage (54)
-     ✓ regenerates recovery codes and displays modal 2093ms
+     ✓ regenerates recovery codes and displays modal 2088ms
 
  Test Files  5 passed (5)
       Tests  105 passed (105)
-   Start at  04:23:22
-   Duration  6.42s (tests 57%, environment 36%, import 4%, worker 2%)
+   Start at  04:57:42
+   Duration  6.31s (tests 56%, environment 37%, import 4%, worker 3%, transform 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
