@@ -1,0 +1,2000 @@
+diff --git a/kanban/web/src/features/auth/webauthn.test.ts b/kanban/web/src/features/auth/webauthn.test.ts
+index 1ce28d4..fb2dd2d 100644
+--- a/kanban/web/src/features/auth/webauthn.test.ts
++++ b/kanban/web/src/features/auth/webauthn.test.ts
+@@ -5,6 +5,8 @@ import {
+   serializeAssertionCredential,
+   serializeRegistrationCredential,
+   isWebAuthnSupported,
++  prepareCreationOptions,
++  prepareRequestOptions,
+ } from './webauthn';
+ 
+ describe('webauthn base64url codecs & serializers (KB-P3-35)', () => {
+@@ -106,13 +108,33 @@ describe('webauthn base64url codecs & serializers (KB-P3-35)', () => {
+     expect(serialized.type).toBe('public-key');
+     expect(serialized.response.transports).toEqual(['internal', 'hybrid']);
+     expect(serialized.response.attestationObject).toBe(bufferToBase64url(mockAttestationObject));
++
++    // Registration credential without getTransports and without getClientExtensionResults
++    const minimalCred = {
++      id: 'min-reg-id',
++      rawId: new Uint8Array([55]).buffer,
++      type: 'public-key',
++      response: {
++        clientDataJSON: mockClientDataJSON,
++        attestationObject: mockAttestationObject,
++      },
++    } as unknown as PublicKeyCredential;
++    const minimalSerialized = serializeRegistrationCredential(minimalCred);
++    expect(minimalSerialized.response.transports).toBeUndefined();
++    expect(minimalSerialized.clientExtensionResults).toEqual({});
+   });
+ 
+-  it('detects isWebAuthnSupported based on window.PublicKeyCredential presence', () => {
++  it('detects isWebAuthnSupported verifying isSecureContext, PublicKeyCredential, and credentials methods', () => {
+     const originalPKC = (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential;
+     const originalCreds = navigator.credentials;
++    const originalSecure = window.isSecureContext;
+ 
+-    // Enabled state
++    // Enabled state with all conditions satisfied
++    Object.defineProperty(window, 'isSecureContext', {
++      writable: true,
++      configurable: true,
++      value: true,
++    });
+     (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = function () {
+       return undefined;
+     };
+@@ -120,23 +142,139 @@ describe('webauthn base64url codecs & serializers (KB-P3-35)', () => {
+       writable: true,
+       configurable: true,
+       value: {
+-        get: () => {
+-          return undefined;
+-        },
++        get: () => undefined,
++        create: () => undefined,
+       },
+     });
+     expect(isWebAuthnSupported()).toBe(true);
+ 
+-    // Disabled state
++    // Disabled when isSecureContext is false
++    Object.defineProperty(window, 'isSecureContext', {
++      writable: true,
++      configurable: true,
++      value: false,
++    });
++    expect(isWebAuthnSupported()).toBe(false);
++
++    // Restore secure context, disable PublicKeyCredential
++    Object.defineProperty(window, 'isSecureContext', {
++      writable: true,
++      configurable: true,
++      value: true,
++    });
+     (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = undefined;
+     expect(isWebAuthnSupported()).toBe(false);
+ 
+-    // Restore
++    // Restore PKC, disable create
++    (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = function () {
++      return undefined;
++    };
++    Object.defineProperty(navigator, 'credentials', {
++      writable: true,
++      configurable: true,
++      value: {
++        get: () => undefined,
++      },
++    });
++    expect(isWebAuthnSupported()).toBe(false);
++
++    // Disable get
++    Object.defineProperty(navigator, 'credentials', {
++      writable: true,
++      configurable: true,
++      value: {
++        create: () => undefined,
++      },
++    });
++    expect(isWebAuthnSupported()).toBe(false);
++
++    // Restore original globals
+     (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = originalPKC;
++    Object.defineProperty(window, 'isSecureContext', {
++      writable: true,
++      configurable: true,
++      value: originalSecure,
++    });
+     Object.defineProperty(navigator, 'credentials', {
+       writable: true,
+       configurable: true,
+       value: originalCreds,
+     });
+   });
++
++  it('prepares PublicKeyCredentialCreationOptions and PublicKeyCredentialRequestOptions', () => {
++    const creationOptionsJson = {
++      rp: { name: 'Kanban RP', id: 'localhost' },
++      user: { id: bufferToBase64url(new Uint8Array([1, 2, 3])), name: 'alice', displayName: 'Alice' },
++      challenge: bufferToBase64url(new Uint8Array([4, 5, 6])),
++      pubKeyCredParams: [{ alg: -7, type: 'public-key' }],
++      timeout: 30000,
++      excludeCredentials: [
++        { id: bufferToBase64url(new Uint8Array([7, 8, 9])), type: 'public-key', transports: ['usb'] },
++      ],
++      authenticatorSelection: { authenticatorAttachment: 'platform' as const, userVerification: 'required' as const },
++      attestation: 'none' as const,
++    };
++
++    const preparedCreation = prepareCreationOptions(creationOptionsJson);
++    expect(preparedCreation.rp.name).toBe('Kanban RP');
++    expect(preparedCreation.user.id.byteLength).toBe(3);
++    expect(preparedCreation.challenge.byteLength).toBe(3);
++    expect(preparedCreation.pubKeyCredParams).toEqual([{ alg: -7, type: 'public-key' }]);
++    expect(preparedCreation.timeout).toBe(30000);
++    expect(preparedCreation.excludeCredentials?.[0]?.id.byteLength).toBe(3);
++    expect(preparedCreation.excludeCredentials?.[0]?.transports).toEqual(['usb']);
++    expect(preparedCreation.authenticatorSelection?.authenticatorAttachment).toBe('platform');
++    expect(preparedCreation.attestation).toBe('none');
++
++    // Also without transports on credential descriptor
++    const preparedWithoutTransports = prepareCreationOptions({
++      rp: { name: 'Kanban RP' },
++      user: { id: bufferToBase64url(new Uint8Array([1])), name: 'bob', displayName: 'Bob' },
++      challenge: bufferToBase64url(new Uint8Array([2])),
++      pubKeyCredParams: [],
++      excludeCredentials: [{ id: bufferToBase64url(new Uint8Array([3])), type: 'public-key' }],
++    });
++    expect(preparedWithoutTransports.excludeCredentials?.[0]?.transports).toBeUndefined();
++
++    // Also with optional fields omitted
++    const minimalCreation = prepareCreationOptions({
++      rp: { name: 'Kanban RP' },
++      user: { id: bufferToBase64url(new Uint8Array([1])), name: 'bob', displayName: 'Bob' },
++      challenge: bufferToBase64url(new Uint8Array([2])),
++      pubKeyCredParams: [],
++    });
++    expect(minimalCreation.timeout).toBe(60000);
++    expect(minimalCreation.excludeCredentials).toBeUndefined();
++
++    // Prepare Request options
++    const requestOptionsJson = {
++      challenge: bufferToBase64url(new Uint8Array([10, 11, 12])),
++      timeout: 45000,
++      rpId: 'localhost',
++      allowCredentials: [
++        { id: bufferToBase64url(new Uint8Array([13, 14])), type: 'public-key', transports: ['internal'] },
++        { id: bufferToBase64url(new Uint8Array([15, 16])), type: 'public-key' },
++      ],
++      userVerification: 'required' as const,
++    };
++
++    const preparedRequest = prepareRequestOptions(requestOptionsJson);
++    expect(preparedRequest.challenge.byteLength).toBe(3);
++    expect(preparedRequest.timeout).toBe(45000);
++    expect(preparedRequest.rpId).toBe('localhost');
++    expect(preparedRequest.userVerification).toBe('required');
++    expect(preparedRequest.allowCredentials?.[0]?.id.byteLength).toBe(2);
++    expect(preparedRequest.allowCredentials?.[0]?.transports).toEqual(['internal']);
++    expect(preparedRequest.allowCredentials?.[1]?.transports).toBeUndefined();
++
++    // Minimal request options
++    const minimalRequest = prepareRequestOptions({
++      challenge: bufferToBase64url(new Uint8Array([99])),
++    });
++    expect(minimalRequest.timeout).toBe(60000);
++    expect(minimalRequest.userVerification).toBe('preferred');
++    expect(minimalRequest.rpId).toBeUndefined();
++    expect(minimalRequest.allowCredentials).toBeUndefined();
++  });
+ });
+diff --git a/kanban/web/src/features/auth/webauthn.ts b/kanban/web/src/features/auth/webauthn.ts
+index a6de9c1..32d3e0f 100644
+--- a/kanban/web/src/features/auth/webauthn.ts
++++ b/kanban/web/src/features/auth/webauthn.ts
+@@ -117,15 +117,94 @@ export function serializeRegistrationCredential(
+   };
+ }
+ 
++export interface PublicKeyCredentialRequestOptionsJSON {
++  challenge: string;
++  timeout?: number;
++  rpId?: string;
++  allowCredentials?: { id: string; type: string; transports?: string[] }[];
++  userVerification?: UserVerificationRequirement;
++}
++
++export interface PublicKeyCredentialCreationOptionsJSON {
++  rp: { name: string; id?: string };
++  user: { id: string; name: string; displayName: string };
++  challenge: string;
++  pubKeyCredParams: { alg: number; type: string }[];
++  timeout?: number;
++  excludeCredentials?: { id: string; type: string; transports?: string[] }[];
++  authenticatorSelection?: AuthenticatorSelectionCriteria;
++  attestation?: AttestationConveyancePreference;
++}
++
++/**
++ * Prepares browser PublicKeyCredentialCreationOptions from raw wire JSON.
++ */
++export function prepareCreationOptions(
++  options: PublicKeyCredentialCreationOptionsJSON,
++): PublicKeyCredentialCreationOptions {
++  return {
++    rp: options.rp,
++    user: {
++      ...options.user,
++      id: base64urlToBuffer(options.user.id),
++    },
++    challenge: base64urlToBuffer(options.challenge),
++    pubKeyCredParams: options.pubKeyCredParams.map((p) => ({
++      alg: p.alg,
++      type: p.type as PublicKeyCredentialType,
++    })),
++    timeout: options.timeout ?? 60000,
++    ...(options.excludeCredentials
++      ? {
++          excludeCredentials: options.excludeCredentials.map((c) => ({
++            id: base64urlToBuffer(c.id),
++            type: c.type as PublicKeyCredentialType,
++            ...(c.transports ? { transports: c.transports as AuthenticatorTransport[] } : {}),
++          })),
++        }
++      : {}),
++    ...(options.authenticatorSelection
++      ? { authenticatorSelection: options.authenticatorSelection }
++      : {}),
++    ...(options.attestation ? { attestation: options.attestation } : {}),
++  };
++}
++
++/**
++ * Prepares browser PublicKeyCredentialRequestOptions from raw wire JSON.
++ */
++export function prepareRequestOptions(
++  options: PublicKeyCredentialRequestOptionsJSON,
++): PublicKeyCredentialRequestOptions {
++  return {
++    challenge: base64urlToBuffer(options.challenge),
++    timeout: options.timeout ?? 60000,
++    userVerification: options.userVerification ?? 'preferred',
++    ...(options.rpId ? { rpId: options.rpId } : {}),
++    ...(options.allowCredentials
++      ? {
++          allowCredentials: options.allowCredentials.map((c) => ({
++            id: base64urlToBuffer(c.id),
++            type: c.type as PublicKeyCredentialType,
++            ...(c.transports ? { transports: c.transports as AuthenticatorTransport[] } : {}),
++          })),
++        }
++      : {}),
++  };
++}
++
+ /**
+  * Checks whether the current browser environment supports WebAuthn Passkeys.
++ * Verifies window.isSecureContext, window.PublicKeyCredential, and navigator.credentials.
+  */
+ export function isWebAuthnSupported(): boolean {
+   return (
+     typeof window !== 'undefined' &&
++    window.isSecureContext &&
+     typeof window.PublicKeyCredential !== 'undefined' &&
+     typeof navigator !== 'undefined' &&
+     typeof navigator.credentials !== 'undefined' &&
++    typeof navigator.credentials.create === 'function' &&
+     typeof navigator.credentials.get === 'function'
+   );
+ }
+diff --git a/kanban/web/src/features/settings/PasskeyEnrollModal.css b/kanban/web/src/features/settings/PasskeyEnrollModal.css
+new file mode 100644
+index 0000000..66ffd9b
+--- /dev/null
++++ b/kanban/web/src/features/settings/PasskeyEnrollModal.css
+@@ -0,0 +1,166 @@
++/* Copyright 2026 Kanban Platform Contributors */
++/* Apache-2.0 License. See LICENSE for details. */
++
++.kb-passkey-enroll-backdrop {
++  position: fixed;
++  inset: 0;
++  background-color: var(--scrim-bg);
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  z-index: 1000;
++  padding: var(--space-4);
++  box-sizing: border-box;
++  overflow-y: auto;
++}
++
++.kb-passkey-enroll-modal {
++  background-color: var(--bg-surface);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-lg);
++  width: 100%;
++  max-width: 520px;
++  box-sizing: border-box;
++  box-shadow: var(--shadow-xl);
++  overflow: hidden;
++  display: flex;
++  flex-direction: column;
++}
++
++.kb-passkey-enroll-header {
++  padding: 16px 20px;
++  border-bottom: 1px solid var(--border-subtle);
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++}
++
++.kb-passkey-enroll-title {
++  margin: 0;
++  font-size: var(--text-lg);
++  font-weight: 600;
++  color: var(--fg-primary);
++}
++
++.kb-passkey-enroll-body {
++  padding: 20px;
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-4);
++}
++
++.kb-passkey-enroll-intro {
++  margin: 0;
++  font-size: var(--text-sm);
++  color: var(--fg-secondary);
++  line-height: 1.5;
++}
++
++.kb-passkey-enroll-field {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-2);
++}
++
++.kb-passkey-enroll-label {
++  font-size: var(--text-sm);
++  font-weight: 600;
++  color: var(--fg-primary);
++}
++
++.kb-passkey-enroll-input {
++  width: 100%;
++  box-sizing: border-box;
++  padding: 8px 12px;
++  border: 1px solid var(--border-color);
++  border-radius: var(--radius-md);
++  background-color: var(--bg-input);
++  color: var(--fg-primary);
++  font-size: var(--text-sm);
++  font-family: inherit;
++  outline: none;
++}
++
++.kb-passkey-enroll-input:focus {
++  border-color: var(--focus-ring);
++  box-shadow: 0 0 0 2px var(--focus-ring);
++}
++
++.kb-passkey-enroll-attachment-grid {
++  display: grid;
++  grid-template-columns: 1fr;
++  gap: var(--space-2);
++}
++
++.kb-passkey-enroll-option {
++  display: flex;
++  align-items: flex-start;
++  gap: var(--space-3);
++  padding: 12px;
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-md);
++  background-color: var(--bg-surface);
++  cursor: pointer;
++  transition: border-color 0.15s ease, background-color 0.15s ease;
++}
++
++.kb-passkey-enroll-option:hover {
++  background-color: var(--bg-hover);
++}
++
++.kb-passkey-enroll-option--selected {
++  border-color: var(--brand-primary);
++  background-color: var(--bg-secondary);
++}
++
++.kb-passkey-enroll-option-radio {
++  margin-top: 2px;
++  cursor: pointer;
++}
++
++.kb-passkey-enroll-option-content {
++  display: flex;
++  flex-direction: column;
++  gap: 2px;
++}
++
++.kb-passkey-enroll-option-title {
++  font-size: var(--text-sm);
++  font-weight: 600;
++  color: var(--fg-primary);
++}
++
++.kb-passkey-enroll-option-desc {
++  font-size: var(--text-xs);
++  color: var(--fg-muted);
++}
++
++.kb-passkey-enroll-error {
++  padding: 10px 14px;
++  border-radius: var(--radius-md);
++  background-color: var(--bg-danger-subtle);
++  color: var(--text-danger);
++  border: 1px solid var(--border-danger);
++  font-size: var(--text-sm);
++}
++
++.kb-passkey-enroll-footer {
++  padding: 16px 20px;
++  border-top: 1px solid var(--border-subtle);
++  display: flex;
++  justify-content: flex-end;
++  gap: var(--space-2);
++}
++
++@media (max-width: 480px) {
++  .kb-passkey-enroll-backdrop {
++    padding: var(--space-2);
++    align-items: flex-end;
++  }
++
++  .kb-passkey-enroll-modal {
++    max-width: 100%;
++    border-bottom-left-radius: 0;
++    border-bottom-right-radius: 0;
++  }
++}
+diff --git a/kanban/web/src/features/settings/PasskeyEnrollModal.tsx b/kanban/web/src/features/settings/PasskeyEnrollModal.tsx
+new file mode 100644
+index 0000000..feba233
+--- /dev/null
++++ b/kanban/web/src/features/settings/PasskeyEnrollModal.tsx
+@@ -0,0 +1,294 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React, { useState, type JSX, type SyntheticEvent } from 'react';
++import { useQueryClient } from '@tanstack/react-query';
++import { qk } from '../../api/queryKeys';
++import { ApiProblem } from '../../api/problem';
++import {
++  prepareCreationOptions,
++  serializeRegistrationCredential,
++} from '../auth/webauthn';
++import {
++  fetchWebauthnRegistrationOptions,
++  verifyWebauthnRegistration,
++} from './personalSettingsApi';
++import './PasskeyEnrollModal.css';
++
++export type AuthenticatorAttachmentChoice = 'platform' | 'cross-platform' | 'any';
++
++export interface PasskeyEnrollModalProps {
++  isOpen: boolean;
++  onClose: () => void;
++  onSuccess: (message: string) => void;
++  initialAttachment?: 'platform' | 'cross-platform';
++  onInterceptAal2?: (err: unknown, retryAction: () => Promise<void>) => boolean;
++}
++
++export function PasskeyEnrollModal({
++  isOpen,
++  onClose,
++  onSuccess,
++  initialAttachment = 'platform',
++  onInterceptAal2,
++}: PasskeyEnrollModalProps): JSX.Element | null {
++  const queryClient = useQueryClient();
++  const [attachmentChoice, setAttachmentChoice] = useState<AuthenticatorAttachmentChoice>(
++    initialAttachment,
++  );
++  const [prevAttachment, setPrevAttachment] = useState(initialAttachment);
++  if (initialAttachment !== prevAttachment) {
++    setPrevAttachment(initialAttachment);
++    setAttachmentChoice(initialAttachment);
++  }
++  const [nickname, setNickname] = useState('');
++  const [isSubmitting, setIsSubmitting] = useState(false);
++  const [errorMsg, setErrorMsg] = useState<string | null>(null);
++
++  if (!isOpen) {
++    return null;
++  }
++
++  const handleClose = (): void => {
++    setNickname('');
++    setErrorMsg(null);
++    setIsSubmitting(false);
++    onClose();
++  };
++
++  const executeRegistration = async (): Promise<void> => {
++    setIsSubmitting(true);
++    setErrorMsg(null);
++    try {
++      const attachmentHint = attachmentChoice === 'any' ? undefined : attachmentChoice;
++      const options = await fetchWebauthnRegistrationOptions(attachmentHint);
++      const creationOptions = prepareCreationOptions(options);
++
++      const credential = (await navigator.credentials.create({
++        publicKey: creationOptions,
++      })) as PublicKeyCredential | null;
++
++      if (!credential) {
++        throw new Error('Credential creation returned null.');
++      }
++
++      const serialized = serializeRegistrationCredential(credential);
++      await verifyWebauthnRegistration({
++        nickname: nickname.trim(),
++        credential: serialized,
++      });
++
++      void queryClient.invalidateQueries({ queryKey: ['myPasskeys'] });
++      void queryClient.invalidateQueries({ queryKey: ['myMfaStatus'] });
++      void queryClient.invalidateQueries({ queryKey: qk.me() });
++      void queryClient.invalidateQueries({ queryKey: ['myProfile'] });
++      void queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
++
++      handleClose();
++      onSuccess('Passkey registered successfully.');
++    } catch (err: unknown) {
++      if (onInterceptAal2?.(err, executeRegistration)) {
++        return;
++      }
++      if (err instanceof Error && err.name === 'NotAllowedError') {
++        setErrorMsg('Passkey registration was cancelled or timed out. Please try again.');
++      } else if (err instanceof ApiProblem) {
++        setErrorMsg(err.detail ?? err.title ?? 'Failed to register passkey.');
++      } else if (err instanceof Error) {
++        setErrorMsg(err.message.length > 0 ? err.message : 'Failed to register passkey.');
++      } else {
++        setErrorMsg('An unexpected error occurred during passkey registration.');
++      }
++    } finally {
++      setIsSubmitting(false);
++    }
++  };
++
++  const handleSubmit = (e: SyntheticEvent): void => {
++    e.preventDefault();
++    const cleanNickname = nickname.trim();
++    if (!cleanNickname) {
++      setErrorMsg('Nickname is required.');
++      return;
++    }
++    if (cleanNickname.length > 64) {
++      setErrorMsg('Nickname must not exceed 64 characters.');
++      return;
++    }
++    void executeRegistration();
++  };
++
++  return (
++    <div className="kb-passkey-enroll-backdrop" role="presentation">
++      <div
++        className="kb-passkey-enroll-modal"
++        role="dialog"
++        aria-modal="true"
++        aria-labelledby="passkey-enroll-title"
++        data-testid="passkey-enroll-modal"
++      >
++        <div className="kb-passkey-enroll-header">
++          <h3
++            id="passkey-enroll-title"
++            data-testid="passkey-enroll-title"
++            className="kb-passkey-enroll-title"
++          >
++            Register Passkey or Security Key
++          </h3>
++          <button
++            type="button"
++            className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
++            data-testid="passkey-enroll-close-btn"
++            disabled={isSubmitting}
++            onClick={handleClose}
++          >
++            Cancel
++          </button>
++        </div>
++
++        <form onSubmit={handleSubmit}>
++          <div className="kb-passkey-enroll-body">
++            <p className="kb-passkey-enroll-intro">
++              Register a hardware security key or synced passkey for fast, phishing-resistant authentication.
++            </p>
++
++            {errorMsg && (
++              <div
++                className="kb-passkey-enroll-error"
++                role="alert"
++                data-testid="passkey-enroll-error"
++              >
++                {errorMsg}
++              </div>
++            )}
++
++            <div className="kb-passkey-enroll-field">
++              <label htmlFor="passkey-enroll-nickname" className="kb-passkey-enroll-label">
++                Nickname
++              </label>
++              <input
++                id="passkey-enroll-nickname"
++                data-testid="passkey-enroll-nickname-input"
++                type="text"
++                className="kb-passkey-enroll-input"
++                maxLength={64}
++                placeholder="e.g. MacBook Touch ID, YubiKey 5C NFC"
++                value={nickname}
++                onChange={(e) => {
++                  setNickname(e.target.value);
++                  if (errorMsg) setErrorMsg(null);
++                }}
++                disabled={isSubmitting}
++                required
++                autoFocus
++              />
++            </div>
++
++            <div className="kb-passkey-enroll-field">
++              <span className="kb-passkey-enroll-label">Authenticator Type</span>
++              <div className="kb-passkey-enroll-attachment-grid" role="radiogroup" aria-label="Authenticator Type">
++                <label
++                  className={`kb-passkey-enroll-option ${
++                    attachmentChoice === 'platform' ? 'kb-passkey-enroll-option--selected' : ''
++                  }`}
++                  data-testid="attachment-platform-label"
++                >
++                  <input
++                    type="radio"
++                    name="authenticator-attachment"
++                    value="platform"
++                    checked={attachmentChoice === 'platform'}
++                    onChange={() => { setAttachmentChoice('platform'); }}
++                    disabled={isSubmitting}
++                    className="kb-passkey-enroll-option-radio"
++                    data-testid="attachment-platform-radio"
++                  />
++                  <div className="kb-passkey-enroll-option-content">
++                    <span className="kb-passkey-enroll-option-title">
++                      📱 Passkey (Device / Synced)
++                    </span>
++                    <span className="kb-passkey-enroll-option-desc">
++                      Touch ID, Face ID, Windows Hello, or iCloud Keychain
++                    </span>
++                  </div>
++                </label>
++
++                <label
++                  className={`kb-passkey-enroll-option ${
++                    attachmentChoice === 'cross-platform' ? 'kb-passkey-enroll-option--selected' : ''
++                  }`}
++                  data-testid="attachment-cross-platform-label"
++                >
++                  <input
++                    type="radio"
++                    name="authenticator-attachment"
++                    value="cross-platform"
++                    checked={attachmentChoice === 'cross-platform'}
++                    onChange={() => { setAttachmentChoice('cross-platform'); }}
++                    disabled={isSubmitting}
++                    className="kb-passkey-enroll-option-radio"
++                    data-testid="attachment-cross-platform-radio"
++                  />
++                  <div className="kb-passkey-enroll-option-content">
++                    <span className="kb-passkey-enroll-option-title">
++                      🔑 FIDO2 Hardware Key (USB / NFC)
++                    </span>
++                    <span className="kb-passkey-enroll-option-desc">
++                      YubiKey, Feitian, or other external hardware security key
++                    </span>
++                  </div>
++                </label>
++
++                <label
++                  className={`kb-passkey-enroll-option ${
++                    attachmentChoice === 'any' ? 'kb-passkey-enroll-option--selected' : ''
++                  }`}
++                  data-testid="attachment-any-label"
++                >
++                  <input
++                    type="radio"
++                    name="authenticator-attachment"
++                    value="any"
++                    checked={attachmentChoice === 'any'}
++                    onChange={() => { setAttachmentChoice('any'); }}
++                    disabled={isSubmitting}
++                    className="kb-passkey-enroll-option-radio"
++                    data-testid="attachment-any-radio"
++                  />
++                  <div className="kb-passkey-enroll-option-content">
++                    <span className="kb-passkey-enroll-option-title">
++                      🛡️ Any Authenticator
++                    </span>
++                    <span className="kb-passkey-enroll-option-desc">
++                      Let browser and operating system choose available modality
++                    </span>
++                  </div>
++                </label>
++              </div>
++            </div>
++          </div>
++
++          <div className="kb-passkey-enroll-footer">
++            <button
++              type="button"
++              className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
++              data-testid="passkey-enroll-cancel-btn"
++              disabled={isSubmitting}
++              onClick={handleClose}
++            >
++              Cancel
++            </button>
++            <button
++              type="submit"
++              className="kb-personal-settings-btn kb-personal-settings-btn-primary"
++              data-testid="passkey-enroll-submit-btn"
++              disabled={isSubmitting || !nickname.trim()}
++            >
++              {isSubmitting ? 'Registering...' : 'Continue'}
++            </button>
++          </div>
++        </form>
++      </div>
++    </div>
++  );
++}
+diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.css b/kanban/web/src/features/settings/PersonalSettingsPage.css
+index c125dad..2888f78 100644
+--- a/kanban/web/src/features/settings/PersonalSettingsPage.css
++++ b/kanban/web/src/features/settings/PersonalSettingsPage.css
+@@ -4,6 +4,9 @@
+ .kb-personal-settings-container {
+   padding: var(--prose-pad);
+   max-width: 900px;
++  width: 100%;
++  box-sizing: border-box;
++  overflow-x: hidden;
+   margin: 0 auto;
+   color: var(--fg-primary);
+   font-family: var(--font-sans);
+@@ -377,6 +380,69 @@
+   display: flex;
+   justify-content: space-between;
+   align-items: center;
++  flex-wrap: wrap;
++  gap: var(--space-3);
++}
++
++.kb-personal-settings-header-actions {
++  display: flex;
++  align-items: center;
++  gap: var(--space-2);
++  flex-wrap: wrap;
++}
++
++.kb-table-scroll-container {
++  width: 100%;
++  max-width: 100%;
++  box-sizing: border-box;
++  overflow-x: auto;
++  -webkit-overflow-scrolling: touch;
++}
++
++.kb-passkey-cell-title {
++  display: flex;
++  align-items: center;
++  flex-wrap: wrap;
++  gap: var(--space-2);
++}
++
++.kb-passkey-badge {
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-1);
++  font-size: var(--text-xs);
++  font-weight: 500;
++  padding: 2px 8px;
++  border-radius: var(--radius-full);
++}
++
++.kb-passkey-badge--passkey {
++  background-color: var(--bg-secondary);
++  color: var(--fg-primary);
++  border: 1px solid var(--border-subtle);
++}
++
++.kb-passkey-badge--security-key {
++  background-color: var(--bg-hover);
++  color: var(--fg-primary);
++  border: 1px solid var(--border-strong);
++}
++
++.kb-passkey-clone-warning {
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-1);
++  font-size: var(--text-xs);
++  font-weight: 600;
++  padding: 2px 8px;
++  border-radius: var(--radius-full);
++  background-color: var(--bg-danger-subtle);
++  color: var(--text-danger);
++  border: 1px solid var(--border-danger);
++}
++
++.kb-personal-settings-modal-backdrop--stepup {
++  z-index: 1100;
+ }
+ 
+ .kb-personal-settings-mfa-actions {
+diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.tsx b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
+index 1890b77..f6bfd0c 100644
+--- a/kanban/web/src/features/settings/PersonalSettingsPage.tsx
++++ b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
+@@ -13,6 +13,8 @@ import {
+   fetchPasskeys,
+   renamePasskey,
+   deletePasskey,
++  fetchWebauthnAuthenticationOptions,
++  verifyWebauthnAuthentication,
+   enrollTotp,
+   confirmTotp,
+   deleteTotp,
+@@ -25,6 +27,12 @@ import {
+   type ExternalIdentityItem,
+ } from './personalSettingsApi';
+ import { SecondFactorStep } from '../auth/SecondFactorStep';
++import {
++  isWebAuthnSupported,
++  prepareRequestOptions,
++  serializeAssertionCredential,
++} from '../auth/webauthn';
++import { PasskeyEnrollModal } from './PasskeyEnrollModal';
+ import { ApiProblem } from '../../api/problem';
+ import type { MfaMethod } from '../auth/authApi';
+ import { copyToClipboard } from '../../utils/clipboard';
+@@ -80,6 +88,14 @@ export function PersonalSettingsPage(): JSX.Element {
+   const [totpVerificationCode, setTotpVerificationCode] = useState('');
+   const [editingPasskey, setEditingPasskey] = useState<WebauthnCredentialItem | null>(null);
+   const [passkeyNickname, setPasskeyNickname] = useState('');
++  const [enrollModal, setEnrollModal] = useState<{
++    isOpen: boolean;
++    initialAttachment: 'platform' | 'cross-platform';
++  }>({ isOpen: false, initialAttachment: 'platform' });
++  const [testingPasskeyId, setTestingPasskeyId] = useState<string | null>(null);
++
++  const isSecure = typeof window !== 'undefined' && window.isSecureContext;
++  const isSupported = isWebAuthnSupported();
+ 
+   // AAL2 Step-Up state
+   const [aal2Challenge, setAal2Challenge] = useState<{
+@@ -119,10 +135,12 @@ export function PersonalSettingsPage(): JSX.Element {
+   const currentTimezone = timezoneInput ?? profile?.timezone ?? 'UTC';
+ 
+   const handleInterceptAal2 = (err: unknown, retryAction: () => Promise<void>): boolean => {
+-    if (err instanceof ApiProblem && err.code === 'AAL2_REQUIRED') {
++    if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
+       const data = err.data as { challenge_id?: string; methods?: MfaMethod[] };
+       const challengeId = typeof data.challenge_id === 'string' ? data.challenge_id : 'stepup-challenge';
+-      const methods = Array.isArray(data.methods) ? data.methods : (['webauthn', 'totp'] as MfaMethod[]);
++      const methods = Array.isArray(data.methods) && data.methods.length > 0
++        ? data.methods
++        : (['webauthn', 'totp'] as MfaMethod[]);
+       setAal2Challenge({ challengeId, methods });
+       setPendingAction(() => retryAction);
+       return true;
+@@ -130,6 +148,45 @@ export function PersonalSettingsPage(): JSX.Element {
+     return false;
+   };
+ 
++  const handleTestKey = async (cred: WebauthnCredentialItem): Promise<void> => {
++    setTestingPasskeyId(cred.id);
++    setErrorMsg(null);
++    try {
++      const optionsJson = await fetchWebauthnAuthenticationOptions();
++      const requestOptions = prepareRequestOptions(optionsJson);
++
++      const assertion = (await navigator.credentials.get({
++        publicKey: requestOptions,
++      })) as PublicKeyCredential | null;
++
++      if (!assertion) {
++        throw new Error('WebAuthn assertion was cancelled.');
++      }
++
++      const serialized = serializeAssertionCredential(assertion);
++      await verifyWebauthnAuthentication({ credential: serialized });
++
++      setSuccessMsg('👍 Key verified');
++      setErrorMsg(null);
++      void queryClient.invalidateQueries({ queryKey: ['myPasskeys'] });
++    } catch (err: unknown) {
++      if (handleInterceptAal2(err, () => handleTestKey(cred))) {
++        return;
++      }
++      if (err instanceof Error && err.name === 'NotAllowedError') {
++        setErrorMsg('Key verification was cancelled or timed out.');
++      } else if (err instanceof ApiProblem) {
++        setErrorMsg(err.detail ?? err.title ?? 'Key verification failed.');
++      } else if (err instanceof Error) {
++        setErrorMsg(err.message.length > 0 ? err.message : 'Key verification failed.');
++      } else {
++        setErrorMsg('Key verification failed.');
++      }
++    } finally {
++      setTestingPasskeyId(null);
++    }
++  };
++
+   // Mutations
+   const updateProfileMutation = useMutation({
+     mutationFn: updateMyProfile,
+@@ -610,55 +667,128 @@ export function PersonalSettingsPage(): JSX.Element {
+               Fast, phishing-resistant authentication with WebAuthn / FIDO2 security keys or biometrics.
+             </p>
+           </div>
++          <div className="kb-personal-settings-header-actions">
++            <button
++              type="button"
++              className="kb-personal-settings-btn kb-personal-settings-btn-primary kb-personal-settings-btn--mr"
++              data-testid="add-passkey-btn"
++              disabled={!isSecure || !isSupported}
++              onClick={() => {
++                setEnrollModal({ isOpen: true, initialAttachment: 'platform' });
++              }}
++            >
++              + Add Passkey
++            </button>
++            <button
++              type="button"
++              className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
++              data-testid="add-fido2-key-btn"
++              disabled={!isSecure || !isSupported}
++              onClick={() => {
++                setEnrollModal({ isOpen: true, initialAttachment: 'cross-platform' });
++              }}
++            >
++              + Add FIDO2 Security Key
++            </button>
++          </div>
+         </div>
+ 
++        {!isSecure && (
++          <div
++            className="kb-personal-settings-alert kb-personal-settings-alert-warning"
++            role="status"
++            data-testid="webauthn-insecure-context-notice"
++          >
++            Browser WebAuthn requires HTTPS or localhost to register and use passkeys or security keys.
++          </div>
++        )}
++
+         {passkeys && passkeys.length > 0 ? (
+-          <table className="kb-personal-settings-table" data-testid="passkeys-table">
+-            <thead>
+-              <tr>
+-                <th className="kb-personal-settings-th">Name</th>
+-                <th className="kb-personal-settings-th">Created</th>
+-                <th className="kb-personal-settings-th">Last Used</th>
+-                <th className="kb-personal-settings-th kb-personal-settings-th-right">Actions</th>
+-              </tr>
+-            </thead>
+-            <tbody>
+-              {passkeys.map((pk) => (
+-                <tr key={pk.id} data-testid={`passkey-row-${pk.id}`}>
+-                  <td className="kb-personal-settings-td">
+-                    <strong>{pk.nickname && pk.nickname.length > 0 ? pk.nickname : 'Passkey'}</strong>
+-                  </td>
+-                  <td className="kb-personal-settings-td">
+-                    {new Date(pk.created_at).toLocaleDateString()}
+-                  </td>
+-                  <td className="kb-personal-settings-td">
+-                    {pk.last_used_at ? new Date(pk.last_used_at).toLocaleDateString() : 'Never'}
+-                  </td>
+-                  <td className="kb-personal-settings-td kb-personal-settings-td-right">
+-                    <button
+-                      type="button"
+-                      className="kb-personal-settings-btn kb-personal-settings-btn-secondary kb-personal-settings-btn--mr"
+-                      data-testid={`rename-passkey-${pk.id}`}
+-                      onClick={() => {
+-                        setEditingPasskey(pk);
+-                        setPasskeyNickname(pk.nickname ?? '');
+-                      }}
+-                    >
+-                      Rename
+-                    </button>
+-                    <button
+-                      type="button"
+-                      className="kb-personal-settings-btn kb-personal-settings-btn-danger"
+-                      data-testid={`delete-passkey-${pk.id}`}
+-                      onClick={() => { void handleDeletePasskey(pk.id); }}
+-                    >
+-                      Remove
+-                    </button>
+-                  </td>
++          <div className="kb-table-scroll-container">
++            <table className="kb-personal-settings-table" data-testid="passkeys-table">
++              <thead>
++                <tr>
++                  <th className="kb-personal-settings-th">Name</th>
++                  <th className="kb-personal-settings-th">Created</th>
++                  <th className="kb-personal-settings-th">Last Used</th>
++                  <th className="kb-personal-settings-th kb-personal-settings-th-right">Actions</th>
+                 </tr>
+-              ))}
+-            </tbody>
+-          </table>
++              </thead>
++              <tbody>
++                {passkeys.map((pk) => {
++                  const transports = (pk.transports ?? []).map((t) => t.toLowerCase());
++                  const isFido2Key =
++                    transports.some((t) => t === 'usb' || t === 'nfc' || t === 'ble') &&
++                    !transports.some((t) => t === 'internal' || t === 'hybrid');
++                  const badgeKind = isFido2Key ? 'security-key' : 'passkey';
++                  const badgeLabel = isFido2Key ? '🔑 FIDO2 Security Key' : '📱 Passkey';
++
++                  return (
++                    <tr key={pk.id} data-testid={`passkey-row-${pk.id}`}>
++                      <td className="kb-personal-settings-td">
++                        <div className="kb-passkey-cell-title">
++                          <strong>
++                            {pk.nickname && pk.nickname.length > 0 ? pk.nickname : 'Passkey'}
++                          </strong>
++                          <span
++                            className={`kb-passkey-badge kb-passkey-badge--${badgeKind}`}
++                            data-testid={`passkey-badge-${pk.id}`}
++                          >
++                            {badgeLabel}
++                          </span>
++                          {pk.suspect_clone_at && (
++                            <span
++                              className="kb-passkey-clone-warning"
++                              data-testid={`passkey-clone-warning-${pk.id}`}
++                              title={`Suspected clone recorded at ${pk.suspect_clone_at}`}
++                            >
++                              ⚠️ Suspected Clone
++                            </span>
++                          )}
++                        </div>
++                      </td>
++                      <td className="kb-personal-settings-td">
++                        {new Date(pk.created_at).toLocaleDateString()}
++                      </td>
++                      <td className="kb-personal-settings-td">
++                        {pk.last_used_at ? new Date(pk.last_used_at).toLocaleDateString() : 'Never'}
++                      </td>
++                      <td className="kb-personal-settings-td kb-personal-settings-td-right">
++                        <button
++                          type="button"
++                          className="kb-personal-settings-btn kb-personal-settings-btn-secondary kb-personal-settings-btn--mr"
++                          data-testid={`test-passkey-${pk.id}`}
++                          disabled={testingPasskeyId === pk.id}
++                          onClick={() => { void handleTestKey(pk); }}
++                        >
++                          {testingPasskeyId === pk.id ? 'Testing...' : 'Test Key'}
++                        </button>
++                        <button
++                          type="button"
++                          className="kb-personal-settings-btn kb-personal-settings-btn-secondary kb-personal-settings-btn--mr"
++                          data-testid={`rename-passkey-${pk.id}`}
++                          onClick={() => {
++                            setEditingPasskey(pk);
++                            setPasskeyNickname(pk.nickname ?? '');
++                          }}
++                        >
++                          Rename
++                        </button>
++                        <button
++                          type="button"
++                          className="kb-personal-settings-btn kb-personal-settings-btn-danger"
++                          data-testid={`delete-passkey-${pk.id}`}
++                          onClick={() => { void handleDeletePasskey(pk.id); }}
++                        >
++                          Remove
++                        </button>
++                      </td>
++                    </tr>
++                  );
++                })}
++              </tbody>
++            </table>
++          </div>
+         ) : (
+           <p className="kb-personal-settings-empty">
+             No passkeys registered yet.
+@@ -983,7 +1113,7 @@ export function PersonalSettingsPage(): JSX.Element {
+ 
+       {/* AAL2 Step-Up Dialog */}
+       {aal2Challenge && (
+-        <div className="kb-personal-settings-modal-backdrop" role="presentation">
++        <div className="kb-personal-settings-modal-backdrop kb-personal-settings-modal-backdrop--stepup" role="presentation">
+           <div
+             className="kb-personal-settings-modal"
+             role="dialog"
+@@ -1036,6 +1166,21 @@ export function PersonalSettingsPage(): JSX.Element {
+         </div>
+       )}
+ 
++      {/* Passkey / FIDO2 Security Key Enrollment Modal */}
++      <PasskeyEnrollModal
++        key={`${enrollModal.initialAttachment}-${String(enrollModal.isOpen)}`}
++        isOpen={enrollModal.isOpen}
++        initialAttachment={enrollModal.initialAttachment}
++        onClose={() => {
++          setEnrollModal((prev) => ({ ...prev, isOpen: false }));
++        }}
++        onSuccess={(msg) => {
++          setSuccessMsg(msg);
++          setErrorMsg(null);
++        }}
++        onInterceptAal2={handleInterceptAal2}
++      />
++
+       {cropFile && (
+         <AvatarCropModal
+           file={cropFile}
+diff --git a/kanban/web/src/features/settings/__tests__/PasskeyEnrollModal.test.tsx b/kanban/web/src/features/settings/__tests__/PasskeyEnrollModal.test.tsx
+new file mode 100644
+index 0000000..bf3795b
+--- /dev/null
++++ b/kanban/web/src/features/settings/__tests__/PasskeyEnrollModal.test.tsx
+@@ -0,0 +1,334 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React from 'react';
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { PasskeyEnrollModal } from '../PasskeyEnrollModal';
++import * as personalSettingsApi from '../personalSettingsApi';
++import { ApiProblem } from '../../../api/problem';
++
++function renderModal(
++  props: Partial<React.ComponentProps<typeof PasskeyEnrollModal>> = {},
++  client = new QueryClient({ defaultOptions: { queries: { retry: false } } }),
++) {
++  const defaultProps: React.ComponentProps<typeof PasskeyEnrollModal> = {
++    isOpen: true,
++    onClose: vi.fn(),
++    onSuccess: vi.fn(),
++    initialAttachment: 'platform',
++    ...props,
++  };
++
++  return {
++    ...render(
++      <QueryClientProvider client={client}>
++        <PasskeyEnrollModal {...defaultProps} />
++      </QueryClientProvider>,
++    ),
++    client,
++    props: defaultProps,
++  };
++}
++
++describe('PasskeyEnrollModal (KAN-25)', () => {
++  const mockOptions: personalSettingsApi.PublicKeyCredentialCreationOptionsJSON = {
++    rp: { name: 'Kanban RP' },
++    user: { id: 'dXNlcjE', name: 'alice', displayName: 'Alice' },
++    challenge: 'Y2hhbGxlbmdlMQ',
++    pubKeyCredParams: [{ alg: -7, type: 'public-key' }],
++    timeout: 60000,
++  };
++
++  const mockCred = {
++    id: 'cred-mock-id',
++    rawId: new Uint8Array([1, 2, 3]).buffer,
++    type: 'public-key',
++    response: {
++      clientDataJSON: new TextEncoder().encode('{"type":"webauthn.create"}').buffer,
++      attestationObject: new Uint8Array([4, 5, 6]).buffer,
++      getTransports: () => ['internal', 'hybrid'],
++    },
++    getClientExtensionResults: () => ({}),
++  } as unknown as PublicKeyCredential;
++
++  let mockCredentials: {
++    create: ReturnType<typeof vi.fn>;
++    get: ReturnType<typeof vi.fn>;
++  };
++
++  beforeEach(() => {
++    vi.restoreAllMocks();
++
++    mockCredentials = {
++      create: vi.fn().mockResolvedValue(mockCred),
++      get: vi.fn().mockResolvedValue(null),
++    };
++
++    Object.defineProperty(navigator, 'credentials', {
++      writable: true,
++      configurable: true,
++      value: mockCredentials,
++    });
++  });
++
++  it('renders nothing when isOpen is false', () => {
++    const { container } = renderModal({ isOpen: false });
++    expect(container.firstChild).toBeNull();
++  });
++
++  it('renders modal with initial attachment and switches radio choices', () => {
++    renderModal({ initialAttachment: 'cross-platform' });
++
++    expect(screen.getByRole('dialog')).toBeDefined();
++    expect(screen.getByTestId('passkey-enroll-title')).toBeDefined();
++
++    const crossRadio = screen.getByTestId<HTMLInputElement>('attachment-cross-platform-radio');
++    expect(crossRadio.checked).toBe(true);
++
++    const platformRadio = screen.getByTestId<HTMLInputElement>('attachment-platform-radio');
++    fireEvent.click(platformRadio);
++    expect(platformRadio.checked).toBe(true);
++
++    const anyRadio = screen.getByTestId<HTMLInputElement>('attachment-any-radio');
++    fireEvent.click(anyRadio);
++    expect(anyRadio.checked).toBe(true);
++
++    fireEvent.click(crossRadio);
++    expect(crossRadio.checked).toBe(true);
++  });
++
++  it('calls onClose when clicking Cancel button or header close', () => {
++    const onClose = vi.fn();
++    renderModal({ onClose });
++
++    fireEvent.click(screen.getByTestId('passkey-enroll-close-btn'));
++    expect(onClose).toHaveBeenCalledTimes(1);
++
++    fireEvent.click(screen.getByTestId('passkey-enroll-cancel-btn'));
++    expect(onClose).toHaveBeenCalledTimes(2);
++  });
++
++  it('prevents submission when nickname is empty or whitespace', () => {
++    renderModal();
++
++    const input = screen.getByTestId('passkey-enroll-nickname-input');
++    const form = input.closest('form');
++    expect(form).not.toBeNull();
++    if (form) {
++      fireEvent.submit(form);
++    }
++
++    expect(screen.getByTestId('passkey-enroll-error')).toBeDefined();
++    expect(screen.getByTestId('passkey-enroll-error').textContent).toContain('Nickname is required.');
++  });
++
++  it('prevents submission when nickname exceeds 64 characters', () => {
++    renderModal();
++
++    const input = screen.getByTestId<HTMLInputElement>('passkey-enroll-nickname-input');
++    fireEvent.change(input, { target: { value: 'a'.repeat(65) } });
++
++    const form = input.closest('form');
++    expect(form).not.toBeNull();
++    if (form) {
++      fireEvent.submit(form);
++    }
++
++    expect(screen.getByTestId('passkey-enroll-error')).toBeDefined();
++    expect(screen.getByTestId('passkey-enroll-error').textContent).toContain('Nickname must not exceed 64 characters.');
++  });
++
++  it('completes passkey registration flow successfully', async () => {
++    const getOptionsSpy = vi
++      .spyOn(personalSettingsApi, 'fetchWebauthnRegistrationOptions')
++      .mockResolvedValueOnce(mockOptions);
++    const verifySpy = vi
++      .spyOn(personalSettingsApi, 'verifyWebauthnRegistration')
++      .mockResolvedValueOnce({ verified: true, credential_id: 'cred-123', nickname: 'MacBook Touch ID' });
++
++    const onSuccess = vi.fn();
++    const onClose = vi.fn();
++    const { client } = renderModal({ onSuccess, onClose, initialAttachment: 'platform' });
++
++    const invalidateSpy = vi.spyOn(client, 'invalidateQueries');
++
++    const input = screen.getByTestId('passkey-enroll-nickname-input');
++    fireEvent.change(input, { target: { value: 'MacBook Touch ID' } });
++
++    const submitBtn = screen.getByTestId('passkey-enroll-submit-btn');
++    fireEvent.click(submitBtn);
++
++    await waitFor(() => {
++      expect(getOptionsSpy).toHaveBeenCalledWith('platform');
++      expect(mockCredentials.create).toHaveBeenCalled();
++      expect(verifySpy).toHaveBeenCalledWith(
++        expect.objectContaining({
++          nickname: 'MacBook Touch ID',
++        }),
++      );
++      const verifyCall = verifySpy.mock.calls[0]?.[0];
++      expect(verifyCall?.credential.id).toBe('cred-mock-id');
++      expect(onSuccess).toHaveBeenCalledWith('Passkey registered successfully.');
++      expect(onClose).toHaveBeenCalled();
++      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['myPasskeys'] });
++      expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['myMfaStatus'] });
++    });
++  });
++
++  it('handles any authenticator choice passing undefined to registration options', async () => {
++    const getOptionsSpy = vi
++      .spyOn(personalSettingsApi, 'fetchWebauthnRegistrationOptions')
++      .mockResolvedValueOnce(mockOptions);
++    vi.spyOn(personalSettingsApi, 'verifyWebauthnRegistration').mockResolvedValueOnce({
++      verified: true,
++      credential_id: 'cred-any',
++      nickname: 'Any Key',
++    });
++
++    renderModal({ initialAttachment: 'platform' });
++
++    fireEvent.click(screen.getByTestId('attachment-any-radio'));
++    fireEvent.change(screen.getByTestId('passkey-enroll-nickname-input'), {
++      target: { value: 'Any Key' },
++    });
++    fireEvent.click(screen.getByTestId('passkey-enroll-submit-btn'));
++
++    await waitFor(() => {
++      expect(getOptionsSpy).toHaveBeenCalledWith(undefined);
++    });
++  });
++
++  it('handles null credential from navigator.credentials.create', async () => {
++    vi.spyOn(personalSettingsApi, 'fetchWebauthnRegistrationOptions').mockResolvedValueOnce(mockOptions);
++    mockCredentials.create.mockResolvedValueOnce(null);
++
++    renderModal();
++
++    fireEvent.change(screen.getByTestId('passkey-enroll-nickname-input'), {
++      target: { value: 'Null Key' },
++    });
++    fireEvent.click(screen.getByTestId('passkey-enroll-submit-btn'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('passkey-enroll-error').textContent).toContain('Credential creation returned null.');
++    });
++  });
++
++  it('handles NotAllowedError user cancellation or timeout', async () => {
++    vi.spyOn(personalSettingsApi, 'fetchWebauthnRegistrationOptions').mockResolvedValueOnce(mockOptions);
++    const notAllowed = new Error('The operation was cancelled by the user.');
++    notAllowed.name = 'NotAllowedError';
++    mockCredentials.create.mockRejectedValueOnce(notAllowed);
++
++    renderModal();
++
++    fireEvent.change(screen.getByTestId('passkey-enroll-nickname-input'), {
++      target: { value: 'Cancelled Key' },
++    });
++    fireEvent.click(screen.getByTestId('passkey-enroll-submit-btn'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('passkey-enroll-error').textContent).toContain(
++        'Passkey registration was cancelled or timed out. Please try again.',
++      );
++    });
++  });
++
++  it('handles ApiProblem during registration options or verify', async () => {
++    const problem = new ApiProblem(409, { code: 'CREDENTIAL_LIMIT', detail: 'Maximum of 10 credentials reached.' });
++    vi.spyOn(personalSettingsApi, 'fetchWebauthnRegistrationOptions').mockRejectedValueOnce(problem);
++
++    renderModal();
++
++    const input = screen.getByTestId('passkey-enroll-nickname-input');
++    fireEvent.change(input, {
++      target: { value: 'YubiKey 5C' },
++    });
++    fireEvent.click(screen.getByTestId('passkey-enroll-submit-btn'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('passkey-enroll-error').textContent).toContain('Maximum of 10 credentials reached.');
++    });
++
++    // Typing in nickname input clears errorMsg
++    fireEvent.change(input, {
++      target: { value: 'YubiKey 5C New' },
++    });
++    expect(screen.queryByTestId('passkey-enroll-error')).toBeNull();
++  });
++
++  it('handles ApiProblem with title fallback and generic fallback', async () => {
++    const problemWithTitle = new ApiProblem(400, { title: 'Registration Rejected' });
++    vi.spyOn(personalSettingsApi, 'fetchWebauthnRegistrationOptions').mockRejectedValueOnce(problemWithTitle);
++
++    renderModal();
++
++    const input = screen.getByTestId('passkey-enroll-nickname-input');
++    fireEvent.change(input, { target: { value: 'Title Only Key' } });
++    fireEvent.click(screen.getByTestId('passkey-enroll-submit-btn'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('passkey-enroll-error').textContent).toContain('Registration Rejected');
++    });
++
++    // ApiProblem without detail and without title
++    const problemEmpty = new ApiProblem(500, {});
++    vi.spyOn(personalSettingsApi, 'fetchWebauthnRegistrationOptions').mockRejectedValueOnce(problemEmpty);
++
++    fireEvent.click(screen.getByTestId('passkey-enroll-submit-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('passkey-enroll-error').textContent).toContain('Failed to register passkey.');
++    });
++  });
++
++  it('handles non-Error thrown during registration', async () => {
++    vi.spyOn(personalSettingsApi, 'fetchWebauthnRegistrationOptions').mockRejectedValueOnce('Network failure');
++
++    renderModal();
++
++    fireEvent.change(screen.getByTestId('passkey-enroll-nickname-input'), {
++      target: { value: 'Test String Throw' },
++    });
++    fireEvent.click(screen.getByTestId('passkey-enroll-submit-btn'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('passkey-enroll-error').textContent).toContain(
++        'An unexpected error occurred during passkey registration.',
++      );
++    });
++  });
++
++  it('handles generic Error during registration with empty message fallback', async () => {
++    vi.spyOn(personalSettingsApi, 'fetchWebauthnRegistrationOptions').mockRejectedValueOnce(new Error(''));
++
++    renderModal();
++
++    fireEvent.change(screen.getByTestId('passkey-enroll-nickname-input'), {
++      target: { value: 'Empty Msg Key' },
++    });
++    fireEvent.click(screen.getByTestId('passkey-enroll-submit-btn'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('passkey-enroll-error').textContent).toContain('Failed to register passkey.');
++    });
++  });
++
++  it('delegates to onInterceptAal2 when AAL2 stepup is challenged', async () => {
++    const aal2Problem = new ApiProblem(403, { code: 'AAL2_REQUIRED', challenge_id: 'stepup-123', methods: ['webauthn', 'totp'] });
++    vi.spyOn(personalSettingsApi, 'fetchWebauthnRegistrationOptions').mockRejectedValueOnce(aal2Problem);
++
++    const onInterceptAal2 = vi.fn().mockReturnValue(true);
++    renderModal({ onInterceptAal2 });
++
++    fireEvent.change(screen.getByTestId('passkey-enroll-nickname-input'), {
++      target: { value: 'AAL2 Key' },
++    });
++    fireEvent.click(screen.getByTestId('passkey-enroll-submit-btn'));
++
++    await waitFor(() => {
++      expect(onInterceptAal2).toHaveBeenCalledWith(aal2Problem, expect.any(Function));
++    });
++  });
++});
+diff --git a/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
+index 37461b3..af16738 100644
+--- a/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
+@@ -1619,4 +1619,308 @@ describe('PersonalSettingsPage', () => {
+     fireEvent.change(screen.getByTestId('avatar-file-input'), { target: { files: [svgFile2] } });
+     expect(screen.getByTestId('alert-error').textContent).toContain('SVG avatars are rejected for security.');
+   });
++
++  it('renders insecure context notice when isSecureContext is false and disables enrollment buttons', async () => {
++    Object.defineProperty(window, 'isSecureContext', {
++      writable: true,
++      configurable: true,
++      value: false,
++    });
++
++    renderComponent();
++    await waitFor(() => {
++      expect(screen.getByTestId('webauthn-insecure-context-notice')).toBeDefined();
++    });
++
++    const addPasskeyBtn = screen.getByTestId<HTMLButtonElement>('add-passkey-btn');
++    const addFido2Btn = screen.getByTestId<HTMLButtonElement>('add-fido2-key-btn');
++    expect(addPasskeyBtn.disabled).toBe(true);
++    expect(addFido2Btn.disabled).toBe(true);
++  });
++
++  it('opens PasskeyEnrollModal when clicking Add Passkey or Add FIDO2 Security Key in secure context', async () => {
++    Object.defineProperty(window, 'isSecureContext', {
++      writable: true,
++      configurable: true,
++      value: true,
++    });
++    (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = function () {
++      return undefined;
++    };
++    Object.defineProperty(navigator, 'credentials', {
++      writable: true,
++      configurable: true,
++      value: {
++        get: vi.fn(),
++        create: vi.fn(),
++      },
++    });
++
++    renderComponent();
++    await waitFor(() => {
++      expect(screen.queryByTestId('webauthn-insecure-context-notice')).toBeNull();
++    });
++
++    const addPasskeyBtn = screen.getByTestId<HTMLButtonElement>('add-passkey-btn');
++    expect(addPasskeyBtn.disabled).toBe(false);
++
++    fireEvent.click(addPasskeyBtn);
++    await waitFor(() => {
++      expect(screen.getByTestId('passkey-enroll-modal')).toBeDefined();
++    });
++
++    // Close enroll modal
++    fireEvent.click(screen.getByTestId('passkey-enroll-close-btn'));
++    expect(screen.queryByTestId('passkey-enroll-modal')).toBeNull();
++
++    // Click Add FIDO2 Key
++    const addFido2Btn = screen.getByTestId<HTMLButtonElement>('add-fido2-key-btn');
++    fireEvent.click(addFido2Btn);
++    await waitFor(() => {
++      expect(screen.getByTestId('passkey-enroll-modal')).toBeDefined();
++    });
++    const crossRadio = screen.getByTestId<HTMLInputElement>('attachment-cross-platform-radio');
++    expect(crossRadio.checked).toBe(true);
++
++    // Complete enrollment from modal to cover onSuccess in PersonalSettingsPage
++    const mockRegOptions: api.PublicKeyCredentialCreationOptionsJSON = {
++      rp: { name: 'KB' },
++      user: { id: 'u1', name: 'u', displayName: 'U' },
++      challenge: 'c1',
++      pubKeyCredParams: [],
++    };
++    vi.mocked(api.fetchWebauthnRegistrationOptions).mockResolvedValueOnce(mockRegOptions);
++    vi.mocked(api.verifyWebauthnRegistration).mockResolvedValueOnce({
++      verified: true,
++      credential_id: 'pk-new',
++      nickname: 'New YubiKey',
++    });
++    const mockCreate = vi.fn().mockResolvedValueOnce({
++      id: 'mock-reg-id',
++      rawId: new Uint8Array([1]).buffer,
++      type: 'public-key',
++      response: {
++        clientDataJSON: new TextEncoder().encode('{}').buffer,
++        attestationObject: new Uint8Array([2]).buffer,
++      },
++      getClientExtensionResults: () => ({}),
++    });
++    Object.defineProperty(navigator, 'credentials', {
++      writable: true,
++      configurable: true,
++      value: { create: mockCreate, get: vi.fn() },
++    });
++
++    fireEvent.change(screen.getByTestId('passkey-enroll-nickname-input'), {
++      target: { value: 'New YubiKey' },
++    });
++    fireEvent.click(screen.getByTestId('passkey-enroll-submit-btn'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('alert-success').textContent).toContain('Passkey registered successfully.');
++    });
++  });
++
++  it('renders device badges and clone warning pill in passkeys table', async () => {
++    vi.mocked(api.fetchPasskeys).mockResolvedValueOnce([
++      {
++        id: 'pk-internal',
++        nickname: 'Mac Touch ID',
++        transports: ['internal'],
++        created_at: '2026-01-01T00:00:00Z',
++        last_used_at: '2026-02-01T00:00:00Z',
++        aaguid: '00000000-0000-0000-0000-000000000000',
++      },
++      {
++        id: 'pk-usb',
++        nickname: 'YubiKey 5C',
++        transports: ['usb', 'nfc'],
++        created_at: '2026-01-02T00:00:00Z',
++        last_used_at: null,
++        aaguid: null,
++      },
++      {
++        id: 'pk-cloned',
++        nickname: 'Suspicious Key',
++        transports: ['hybrid'],
++        suspect_clone_at: '2026-03-01T12:00:00Z',
++        created_at: '2026-01-03T00:00:00Z',
++        last_used_at: '2026-03-01T12:00:00Z',
++        aaguid: null,
++      },
++    ]);
++
++    renderComponent();
++    await waitFor(() => {
++      expect(screen.getByTestId('passkey-row-pk-internal')).toBeDefined();
++    });
++
++    expect(screen.getByTestId('passkey-badge-pk-internal').textContent).toContain('📱 Passkey');
++    expect(screen.getByTestId('passkey-badge-pk-usb').textContent).toContain('🔑 FIDO2 Security Key');
++    expect(screen.getByTestId('passkey-badge-pk-cloned').textContent).toContain('📱 Passkey');
++    expect(screen.getByTestId('passkey-clone-warning-pk-cloned')).toBeDefined();
++    expect(screen.getByTestId('passkey-clone-warning-pk-cloned').textContent).toContain('⚠️ Suspected Clone');
++  });
++
++  it('handles Test Key button execution and shows verified banner', async () => {
++    const mockAuthOptions: api.PublicKeyCredentialRequestOptionsJSON = { challenge: 'chall-auth', rpId: 'localhost' };
++    const mockAssertion = {
++      id: 'cred-1',
++      rawId: new Uint8Array([1, 2]).buffer,
++      type: 'public-key',
++      response: {
++        clientDataJSON: new TextEncoder().encode('{}').buffer,
++        authenticatorData: new Uint8Array([3]).buffer,
++        signature: new Uint8Array([4]).buffer,
++        userHandle: null,
++      },
++      getClientExtensionResults: () => ({}),
++    } as unknown as PublicKeyCredential;
++
++    vi.mocked(api.fetchWebauthnAuthenticationOptions).mockResolvedValueOnce(mockAuthOptions);
++    vi.mocked(api.verifyWebauthnAuthentication).mockResolvedValueOnce({ verified: true, credential_id: 'pk-1', aal_level: 2 });
++
++    const mockGet = vi.fn().mockResolvedValue(mockAssertion);
++    Object.defineProperty(navigator, 'credentials', {
++      writable: true,
++      configurable: true,
++      value: {
++        get: mockGet,
++        create: vi.fn(),
++      },
++    });
++
++    renderComponent();
++    await waitFor(() => {
++      expect(screen.getByTestId('test-passkey-pk-1')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('test-passkey-pk-1'));
++
++    await waitFor(() => {
++      expect(api.fetchWebauthnAuthenticationOptions).toHaveBeenCalled();
++      expect(mockGet).toHaveBeenCalled();
++      expect(api.verifyWebauthnAuthentication).toHaveBeenCalled();
++      expect(screen.getByTestId('alert-success').textContent).toContain('👍 Key verified');
++    });
++  });
++
++  it('handles Test Key cancellation and error conditions', async () => {
++    // Null assertion returned
++    const mockCancelOptions: api.PublicKeyCredentialRequestOptionsJSON = { challenge: 'c1' };
++    vi.mocked(api.fetchWebauthnAuthenticationOptions).mockResolvedValueOnce(mockCancelOptions);
++    Object.defineProperty(navigator, 'credentials', {
++      writable: true,
++      configurable: true,
++      value: { get: vi.fn().mockResolvedValue(null) },
++    });
++
++    renderComponent();
++    await waitFor(() => {
++      expect(screen.getByTestId('test-passkey-pk-1')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('test-passkey-pk-1'));
++    await waitFor(() => {
++      expect(screen.getByTestId('alert-error').textContent).toContain('WebAuthn assertion was cancelled.');
++    });
++
++    // NotAllowedError
++    const notAllowed = new Error('Cancelled');
++    notAllowed.name = 'NotAllowedError';
++    vi.mocked(api.fetchWebauthnAuthenticationOptions).mockRejectedValueOnce(notAllowed);
++
++    fireEvent.click(screen.getByTestId('test-passkey-pk-1'));
++    await waitFor(() => {
++      expect(screen.getByTestId('alert-error').textContent).toContain('Key verification was cancelled or timed out.');
++    });
++
++    // ApiProblem error
++    const problem = new ApiProblem(400, { detail: 'Custom key problem' });
++    vi.mocked(api.fetchWebauthnAuthenticationOptions).mockRejectedValueOnce(problem);
++
++    fireEvent.click(screen.getByTestId('test-passkey-pk-1'));
++    await waitFor(() => {
++      expect(screen.getByTestId('alert-error').textContent).toContain('Custom key problem');
++    });
++
++    // Generic Error with empty message fallback
++    vi.mocked(api.fetchWebauthnAuthenticationOptions).mockRejectedValueOnce(new Error(''));
++
++    fireEvent.click(screen.getByTestId('test-passkey-pk-1'));
++    await waitFor(() => {
++      expect(screen.getByTestId('alert-error').textContent).toContain('Key verification failed.');
++    });
++
++    // String throw
++    vi.mocked(api.fetchWebauthnAuthenticationOptions).mockRejectedValueOnce('raw-key-err');
++
++    fireEvent.click(screen.getByTestId('test-passkey-pk-1'));
++    await waitFor(() => {
++      expect(screen.getByTestId('alert-error').textContent).toContain('Key verification failed.');
++    });
++  });
++
++  it('intercepts AAL2_STALE on sensitive actions and completes step-up', async () => {
++    const aal2StaleProblem = new ApiProblem(403, {
++      code: 'AAL2_STALE',
++      challenge_id: 'stale-chall',
++      methods: ['webauthn', 'totp'],
++    });
++
++    // 1. Password change with AAL2_STALE
++    vi.mocked(api.changePassword).mockRejectedValueOnce(aal2StaleProblem);
++
++    renderComponent();
++    await waitFor(() => {
++      expect(screen.getByTestId('current-password-input')).toBeDefined();
++    });
++
++    fireEvent.change(screen.getByTestId('current-password-input'), { target: { value: 'ValidPass123!long' } });
++    fireEvent.change(screen.getByTestId('new-password-input'), { target: { value: 'ValidPass123!longer' } });
++    fireEvent.change(screen.getByTestId('confirm-password-input'), { target: { value: 'ValidPass123!longer' } });
++
++    fireEvent.click(screen.getByTestId('change-password-btn'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('aal2-stepup-dialog')).toBeDefined();
++    });
++
++    // Mock successful password change on retry after step-up
++    vi.mocked(api.changePassword).mockResolvedValueOnce({ ok: true, message: 'Password updated' });
++    fireEvent.click(screen.getByTestId('mock-2fa-success'));
++
++    await waitFor(() => {
++      expect(screen.queryByTestId('aal2-stepup-dialog')).toBeNull();
++      expect(api.changePassword).toHaveBeenCalledTimes(2);
++    });
++
++    // 2. Passkey delete with AAL2_STALE
++    const confirmSpy = vi.spyOn(window, 'confirm').mockReturnValue(true);
++    vi.mocked(api.deletePasskey).mockRejectedValueOnce(aal2StaleProblem);
++
++    fireEvent.click(screen.getByTestId('delete-passkey-pk-1'));
++    await waitFor(() => {
++      expect(screen.getByTestId('aal2-stepup-dialog')).toBeDefined();
++    });
++
++    vi.mocked(api.deletePasskey).mockResolvedValueOnce(undefined);
++    fireEvent.click(screen.getByTestId('mock-2fa-success'));
++
++    await waitFor(() => {
++      expect(screen.queryByTestId('aal2-stepup-dialog')).toBeNull();
++      expect(api.deletePasskey).toHaveBeenCalledTimes(2);
++    });
++
++    // 3. Test Key with AAL2_STALE
++    vi.mocked(api.fetchWebauthnAuthenticationOptions).mockRejectedValueOnce(aal2StaleProblem);
++    fireEvent.click(screen.getByTestId('test-passkey-pk-1'));
++    await waitFor(() => {
++      expect(screen.getByTestId('aal2-stepup-dialog')).toBeDefined();
++    });
++    fireEvent.click(screen.getByTestId('mock-2fa-cancel'));
++    expect(screen.queryByTestId('aal2-stepup-dialog')).toBeNull();
++
++    confirmSpy.mockRestore();
++  });
+ });
+diff --git a/kanban/web/src/features/settings/personalSettingsApi.test.ts b/kanban/web/src/features/settings/personalSettingsApi.test.ts
+index 2fc5462..8daef26 100644
+--- a/kanban/web/src/features/settings/personalSettingsApi.test.ts
++++ b/kanban/web/src/features/settings/personalSettingsApi.test.ts
+@@ -13,6 +13,10 @@ import {
+   fetchPasskeys,
+   renamePasskey,
+   deletePasskey,
++  fetchWebauthnRegistrationOptions,
++  verifyWebauthnRegistration,
++  fetchWebauthnAuthenticationOptions,
++  verifyWebauthnAuthentication,
+   enrollTotp,
+   confirmTotp,
+   deleteTotp,
+@@ -143,6 +147,98 @@ describe('personalSettingsApi', () => {
+     );
+   });
+ 
++  it('fetchWebauthnRegistrationOptions invokes POST with attachment hint or empty body', async () => {
++    const mockOpts = { challenge: 'chall1', rp: { name: 'KB' }, user: { id: 'u1', name: 'u', displayName: 'U' }, pubKeyCredParams: [] };
++    const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockOpts);
++
++    const resWithAttach = await fetchWebauthnRegistrationOptions('platform');
++    expect(apiFetchSpy).toHaveBeenCalledWith(
++      'POST',
++      '/api/v1/auth/webauthn/register/options',
++      {
++        body: JSON.stringify({ authenticator_attachment: 'platform' }),
++        headers: { 'Content-Type': 'application/json' },
++      },
++    );
++    expect(resWithAttach).toEqual(mockOpts);
++
++    const resWithoutAttach = await fetchWebauthnRegistrationOptions();
++    expect(apiFetchSpy).toHaveBeenCalledWith(
++      'POST',
++      '/api/v1/auth/webauthn/register/options',
++      {
++        body: JSON.stringify({}),
++        headers: { 'Content-Type': 'application/json' },
++      },
++    );
++    expect(resWithoutAttach).toEqual(mockOpts);
++  });
++
++  it('verifyWebauthnRegistration invokes POST /api/v1/auth/webauthn/register/verify', async () => {
++    const mockVerifyRes = { verified: true, credential_id: 'cred-123', nickname: 'My Key' };
++    const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockVerifyRes);
++
++    const payload = {
++      nickname: 'My Key',
++      credential: {
++        id: 'c1',
++        rawId: 'c1',
++        type: 'public-key',
++        response: { clientDataJSON: 'cd', attestationObject: 'att' },
++      },
++    };
++    const res = await verifyWebauthnRegistration(payload);
++    expect(apiFetchSpy).toHaveBeenCalledWith(
++      'POST',
++      '/api/v1/auth/webauthn/register/verify',
++      {
++        body: JSON.stringify(payload),
++        headers: { 'Content-Type': 'application/json' },
++      },
++    );
++    expect(res).toEqual(mockVerifyRes);
++  });
++
++  it('fetchWebauthnAuthenticationOptions invokes POST /api/v1/auth/webauthn/authenticate/options', async () => {
++    const mockAuthOpts = { challenge: 'chall-auth', rpId: 'localhost' };
++    const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockAuthOpts);
++
++    const res = await fetchWebauthnAuthenticationOptions();
++    expect(apiFetchSpy).toHaveBeenCalledWith(
++      'POST',
++      '/api/v1/auth/webauthn/authenticate/options',
++      {
++        body: JSON.stringify({}),
++        headers: { 'Content-Type': 'application/json' },
++      },
++    );
++    expect(res).toEqual(mockAuthOpts);
++  });
++
++  it('verifyWebauthnAuthentication invokes POST /api/v1/auth/webauthn/authenticate/verify', async () => {
++    const mockAuthVerify = { verified: true, credential_id: 'c1', aal_level: 2 };
++    const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockAuthVerify);
++
++    const payload = {
++      credential: {
++        id: 'c1',
++        rawId: 'c1',
++        type: 'public-key',
++        response: { clientDataJSON: 'cd', authenticatorData: 'ad', signature: 'sig', userHandle: null },
++      },
++    };
++    const res = await verifyWebauthnAuthentication(payload);
++    expect(apiFetchSpy).toHaveBeenCalledWith(
++      'POST',
++      '/api/v1/auth/webauthn/authenticate/verify',
++      {
++        body: JSON.stringify(payload),
++        headers: { 'Content-Type': 'application/json' },
++      },
++    );
++    expect(res).toEqual(mockAuthVerify);
++  });
++
+   it('enrollTotp invokes POST /api/v1/auth/mfa/totp/enroll', async () => {
+     const mockEnroll = { secret: 'SECRET123', provisioning_uri: 'otpauth://...' };
+     const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockEnroll);
+diff --git a/kanban/web/src/features/settings/personalSettingsApi.ts b/kanban/web/src/features/settings/personalSettingsApi.ts
+index dae89a9..910a572 100644
+--- a/kanban/web/src/features/settings/personalSettingsApi.ts
++++ b/kanban/web/src/features/settings/personalSettingsApi.ts
+@@ -2,6 +2,19 @@
+ // Apache-2.0 License. See LICENSE for details.
+ 
+ import { apiFetch } from '../../api/client';
++import type {
++  PublicKeyCredentialCreationOptionsJSON,
++  PublicKeyCredentialRequestOptionsJSON,
++  SerializedRegistrationCredential,
++  SerializedAssertionCredential,
++} from '../auth/webauthn';
++
++export type {
++  PublicKeyCredentialCreationOptionsJSON,
++  PublicKeyCredentialRequestOptionsJSON,
++  SerializedRegistrationCredential,
++  SerializedAssertionCredential,
++};
+ 
+ export interface UserProfileResponse {
+   id?: string;
+@@ -40,6 +53,9 @@ export interface WebauthnCredentialItem {
+   created_at: string;
+   last_used_at: string | null;
+   aaguid: string | null;
++  transports?: string[] | null;
++  sign_count?: number;
++  suspect_clone_at?: string | null;
+ }
+ 
+ export interface MfaStatusResponse {
+@@ -126,6 +142,42 @@ export async function deletePasskey(credentialId: string): Promise<void> {
+   });
+ }
+ 
++export async function fetchWebauthnRegistrationOptions(
++  attachment?: 'platform' | 'cross-platform',
++): Promise<PublicKeyCredentialCreationOptionsJSON> {
++  const body = attachment ? { authenticator_attachment: attachment } : {};
++  return (await apiFetch('POST', '/api/v1/auth/webauthn/register/options' as never, {
++    body: JSON.stringify(body),
++    headers: { 'Content-Type': 'application/json' },
++  })) as PublicKeyCredentialCreationOptionsJSON;
++}
++
++export async function verifyWebauthnRegistration(payload: {
++  nickname?: string;
++  credential: SerializedRegistrationCredential;
++}): Promise<{ verified: boolean; credential_id: string; nickname?: string }> {
++  return (await apiFetch('POST', '/api/v1/auth/webauthn/register/verify' as never, {
++    body: JSON.stringify(payload),
++    headers: { 'Content-Type': 'application/json' },
++  })) as { verified: boolean; credential_id: string; nickname?: string };
++}
++
++export async function fetchWebauthnAuthenticationOptions(): Promise<PublicKeyCredentialRequestOptionsJSON> {
++  return (await apiFetch('POST', '/api/v1/auth/webauthn/authenticate/options' as never, {
++    body: JSON.stringify({}),
++    headers: { 'Content-Type': 'application/json' },
++  })) as PublicKeyCredentialRequestOptionsJSON;
++}
++
++export async function verifyWebauthnAuthentication(payload: {
++  credential: SerializedAssertionCredential;
++}): Promise<{ verified: boolean; credential_id?: string; aal_level?: number }> {
++  return (await apiFetch('POST', '/api/v1/auth/webauthn/authenticate/verify' as never, {
++    body: JSON.stringify(payload),
++    headers: { 'Content-Type': 'application/json' },
++  })) as { verified: boolean; credential_id?: string; aal_level?: number };
++}
++
+ export async function enrollTotp(): Promise<TotpEnrollResponse> {
+   return (await apiFetch('POST', '/api/v1/auth/mfa/totp/enroll' as never)) as TotpEnrollResponse;
+ }

@@ -1,0 +1,33 @@
+
+> @kanban/web@0.1.0 test:coverage
+> vitest run --coverage src/features/settings/__tests__/PersonalSettingsPage.test.tsx src/features/settings/__tests__/PasskeyEnrollModal.test.tsx src/features/settings/personalSettingsApi.test.ts src/features/auth/webauthn.test.ts
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan25-4e735c1c/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/auth/webauthn.test.ts (6 tests) 19ms
+ ✓ src/features/settings/personalSettingsApi.test.ts (21 tests) 23ms
+ ✓ src/features/settings/__tests__/PasskeyEnrollModal.test.tsx (14 tests) 505ms
+ ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (52 tests) 5451ms
+   ✓ PersonalSettingsPage (52)
+     ✓ regenerates recovery codes and displays modal 2089ms
+     ✓ cancels passkey rename modal when clicking cancel 355ms
+
+ Test Files  4 passed (4)
+      Tests  93 passed (93)
+   Start at  02:57:26
+   Duration  7.02s (tests 60%, environment 32%, import 4%, transform 3%, worker 2%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |      99 |    96.73 |   99.17 |   99.48 |                   
+ auth              |     100 |    97.56 |     100 |     100 |                   
+  webauthn.ts      |     100 |    97.56 |     100 |     100 | 15                
+ settings          |   98.92 |     96.6 |   99.09 |   99.44 |                   
+  ...rollModal.tsx |   96.77 |    97.61 |     100 |   96.72 | 41-42             
+  ...tingsPage.tsx |   99.29 |    96.31 |   98.78 |     100 | ...24,246,337,364 
+  ...ettingsApi.ts |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------
