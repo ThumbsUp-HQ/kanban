@@ -17,6 +17,7 @@ from database.session import RLSContext, RLSSessionFactory
 from kanban.app import create_app
 from kanban.auth.sessions.service import IssuedSession, SessionService
 from kanban.realtime.hub import RealtimeHub
+from kanban.services.realtime_outbox import register_realtime_outbox_listener
 from kanban.settings import Settings
 from kanban.tests.contract import ContractRecorder
 
@@ -266,6 +267,12 @@ def hmac_key() -> bytes:
 def session_service(hmac_key: bytes) -> SessionService:
     """Provide SessionService bound to test HMAC key."""
     return SessionService(hmac_key)
+
+
+@pytest.fixture(autouse=True)
+def _ensure_realtime_outbox_registered() -> None:
+    """Ensure realtime outbox activity listener is registered for all realtime tests."""
+    register_realtime_outbox_listener()
 
 
 def build_realtime_test_app(

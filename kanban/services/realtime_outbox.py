@@ -18,6 +18,7 @@ from kanban.services.activity import (
     ActivityEnvelope,
     ActivityEventType,
     EphemeralEnvelope,
+    _listeners,
     register_activity_listener,
 )
 
@@ -184,12 +185,14 @@ async def handle_activity_event(
 def register_realtime_outbox_listener() -> None:
     """Register the realtime outbox activity listener idempotently."""
     global _registered  # noqa: PLW0603
-    if not _registered:
+    if handle_activity_event not in _listeners:
         register_activity_listener(handle_activity_event)
-        _registered = True
+    _registered = True
 
 
 def clear_realtime_outbox_listener() -> None:
     """Reset registration status for hermetic test suites."""
     global _registered  # noqa: PLW0603
+    if handle_activity_event in _listeners:
+        _listeners.remove(handle_activity_event)
     _registered = False
