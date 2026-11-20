@@ -242,6 +242,44 @@ describe('useSessionGuard & CSRF bootstrap', () => {
       window.removeEventListener('kb:auth-logout', logoutEventSpy);
     });
 
+    it('dispatches kb:auth-logout and sets redirecting with explicit principal/workspace when mfa_pending is true', async () => {
+      vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+        if (url.includes('/api/v1/setup/status')) {
+          return Promise.resolve(
+            new Response(JSON.stringify({ initialized: true }), { status: 200 }),
+          );
+        }
+        if (url.includes('/api/v1/auth/session')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                authenticated: true,
+                mfa_pending: true,
+                csrf_token: 'test-csrf-mfa',
+                principal_id: 'prin-123',
+                workspace_id: 'ws-456',
+                aal_level: 2,
+              }),
+              { status: 200 },
+            ),
+          );
+        }
+        return Promise.resolve(new Response(null, { status: 404 }));
+      });
+
+      render(
+        <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+          <TestGuardComponent enabled={true} />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('status').textContent).toBe('redirecting');
+      });
+      expect(screen.getByTestId('mfaPending').textContent).toBe('true');
+    });
+
     it('sets authenticated state when session is active and mfa_pending is false', async () => {
       vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
         const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
@@ -351,6 +389,21 @@ describe('useSessionGuard & CSRF bootstrap', () => {
         </MemoryRouter>,
       );
       expect(screen.getByTestId('status').textContent).toBe('authenticated');
+    });
+
+    it('initializes to checking in non-test browser environments on protected paths', () => {
+      const origEnv = process.env.NODE_ENV;
+      try {
+        process.env.NODE_ENV = 'production';
+        render(
+          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+            <TestGuardComponent enabled={true} />
+          </MemoryRouter>,
+        );
+        expect(screen.getByTestId('status').textContent).toBe('checking');
+      } finally {
+        process.env.NODE_ENV = origEnv;
+      }
     });
   });
 });

@@ -98,12 +98,17 @@ export function AppShell({
   systemStatus,
   cachedIssues,
 }: AppShellProps): JSX.Element {
-  useSessionGuard();
+  const sessionGuard = useSessionGuard();
+  const isAuthReady =
+    sessionGuard.status === 'authenticated' &&
+    !sessionGuard.mfaPending &&
+    sessionGuard.authenticated !== false;
+
   const location = useLocation();
   const navigate = useNavigate();
   const match = /\/projects\/([^/]+)/.exec(location.pathname);
   const activeProjectKey = match?.[1] ?? projectKey;
-  useRealtimeSubscription(activeProjectKey ? `project:${activeProjectKey}` : null);
+  useRealtimeSubscription(isAuthReady && activeProjectKey ? `project:${activeProjectKey}` : null);
   const isInsideProject = Boolean(match) || (Boolean(activeProjectKey) && location.pathname.startsWith('/projects'));
   const computedSection =
     currentSection && currentSection !== 'Work Items'
@@ -124,7 +129,7 @@ export function AppShell({
         return null;
       }
     },
-    enabled: !isPublicRoute,
+    enabled: !isPublicRoute && isAuthReady,
     staleTime: 60000,
   });
 
@@ -151,10 +156,11 @@ export function AppShell({
     try {
       const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);
       return sanitizeSidebarState(stored) === 'collapsed';
-    /* v8 ignore next 3 */
+    /* v8 ignore start */
     } catch {
       return false;
     }
+    /* v8 ignore stop */
   });
 
   const toggleSidebarCollapse = useCallback(() => {
@@ -254,6 +260,10 @@ export function AppShell({
       mainEl.focus();
     }
   };
+
+  if (!isAuthReady) {
+    return <div className="kb-app-shell" data-testid="app-shell-auth-loading" />;
+  }
 
   return (
     <ShellPanelsProvider>

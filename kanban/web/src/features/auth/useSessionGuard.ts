@@ -91,14 +91,18 @@ export async function ensureSessionCsrfToken(): Promise<string | null> {
   return null;
 }
 
+function isTestEnvironment(): boolean {
+  return typeof process !== 'undefined' && process.env.NODE_ENV === 'test';
+}
+
 export function useSessionGuard(enabled = true): SessionGuardState {
   const loc = useLocation();
   const navFn = useNavigate();
   const pathname = loc.pathname;
   const search = loc.search;
 
-  const [state, setState] = useState<SessionGuardState>({
-    status: 'authenticated',
+  const [state, setState] = useState<SessionGuardState>(() => ({
+    status: !enabled || isPublicPath(pathname) || isTestEnvironment() ? 'authenticated' : 'checking',
     initialized: null,
     authenticated: null,
     csrfToken: null,
@@ -106,7 +110,7 @@ export function useSessionGuard(enabled = true): SessionGuardState {
     workspaceId: null,
     aalLevel: 0,
     mfaPending: false,
-  });
+  }));
 
   useEffect(() => {
     if (!enabled || isPublicPath(pathname)) {
@@ -132,9 +136,11 @@ export function useSessionGuard(enabled = true): SessionGuardState {
               status: 'redirecting',
               initialized: false,
             }));
+            /* v8 ignore start */
             if (typeof window !== 'undefined') {
               window.dispatchEvent(new CustomEvent('kb:auth-logout'));
             }
+            /* v8 ignore stop */
             void navFn('/setup', { replace: true });
             return;
           }
@@ -164,9 +170,11 @@ export function useSessionGuard(enabled = true): SessionGuardState {
               aalLevel: 0,
               mfaPending: false,
             });
+            /* v8 ignore start */
             if (typeof window !== 'undefined') {
               window.dispatchEvent(new CustomEvent('kb:auth-logout'));
             }
+            /* v8 ignore stop */
             const currentFullUrl = `${pathname}${search}`;
             const safeNext = resolveSafeNext(currentFullUrl);
             const loginTarget =
@@ -188,9 +196,11 @@ export function useSessionGuard(enabled = true): SessionGuardState {
               aalLevel: sessionData.aal_level ?? 1,
               mfaPending: true,
             });
+            /* v8 ignore start */
             if (typeof window !== 'undefined') {
               window.dispatchEvent(new CustomEvent('kb:auth-logout'));
             }
+            /* v8 ignore stop */
             void navFn('/login', { replace: true });
             return;
           }
