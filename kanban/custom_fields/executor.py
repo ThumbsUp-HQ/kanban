@@ -5,7 +5,6 @@
 from __future__ import annotations
 
 import ast
-import base64
 import hashlib
 import json
 import logging
@@ -21,7 +20,6 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import (
-    ApprovedWasmModule,
     CustomFieldDefinition,
     CustomFieldValue,
     LinkKind,
@@ -38,6 +36,7 @@ from kanban.custom_fields.approvals import (
     assert_execution_authorized,
     compute_cache_partition_key,
 )
+from kanban.custom_fields.builtin_wasm import resolve_wasm_module_bytes
 from kanban.custom_fields.output_formats import (
     parse_output_format_metadata,
     validate_field_output_value,
@@ -669,52 +668,14 @@ class CustomFieldExecutor:
                 output_bytes = json.dumps(val).encode("utf-8")
                 latency_ms = 1
                 fuel_consumed = 50
-            elif definition.wasm_module_sha256 is not None:
-                raw_sha: bytes = bytes(definition.wasm_module_sha256)
-                mod_stmt = select(ApprovedWasmModule).where(
-                    ApprovedWasmModule.workspace_id == definition.workspace_id,
-                    ApprovedWasmModule.sha256 == raw_sha,
-                )
-                wasm_mod = (await active_session.execute(mod_stmt)).scalar_one_or_none()
-                if wasm_mod is None:
-                    raise ProblemException(
-                        status=404,
-                        code="WASM_MODULE_NOT_FOUND",
-                        title="WebAssembly Module Not Found",
-                        detail="Approved WebAssembly module was not found in workspace",
-                    )
-                wasm_bytes = wasm_mod.wasm_bytes
-                try:
-                    run_res = await self._tier_a.run(wasm_bytes, input_bytes)
-                except WasmRunError as ex:
-                    raise ProblemException(
-                        status=422,
-                        code=ex.code,
-                        title=ex.code.replace("_", " ").title(),
-                        detail=ex.message,
-                    ) from ex
-                output_bytes = run_res.output_bytes
-                latency_ms = max(0, int(run_res.duration_ms))
-                fuel_consumed = run_res.fuel_consumed
             else:
-                clean_lines = [
-                    line
-                    for line in source.splitlines()
-                    if not line.strip().startswith("//") and not line.strip().startswith("#")
-                ]
-                clean_source = "\n".join(clean_lines).strip()
-                try:
-                    wasm_bytes = bytes.fromhex(clean_source)
-                except ValueError:
-                    try:
-                        wasm_bytes = base64.b64decode(clean_source)
-                    except Exception as err:
-                        raise ProblemException(
-                            status=422,
-                            code="WASM_BINARY_INVALID",
-                            title="Invalid WebAssembly Binary",
-                            detail=f"Cannot decode WebAssembly module bytes: {err}",
-                        ) from err
+                wasm_bytes, _ = await resolve_wasm_module_bytes(
+                    active_session,
+                    definition.workspace_id,
+                    sha256=definition.wasm_module_sha256,
+                    source=source,
+                    allow_raw_bytecode=(definition.wasm_module_sha256 is None),
+                )
                 try:
                     run_res = await self._tier_a.run(wasm_bytes, input_bytes)
                 except WasmRunError as ex:
@@ -984,7 +945,7 @@ class CustomFieldExecutor:
                 )
         return results
 
-    async def test_execute(  # noqa: C901, PLR0912, PLR0915
+    async def test_execute(  # noqa: C901, PLR0915
         self,
         session: AsyncSession,
         caller: PrincipalContext,
@@ -1048,61 +1009,17 @@ class CustomFieldExecutor:
                     output_bytes = json.dumps(val).encode("utf-8")
                     latency_ms = 1
                     logs += "Evaluated legacy return statement.\n"
-                elif body.wasm_module_sha256 is not None:
-                    raw_sha = bytes.fromhex(body.wasm_module_sha256)
-                    mod_stmt = select(ApprovedWasmModule).where(
-                        ApprovedWasmModule.workspace_id == caller.workspace_id,
-                        ApprovedWasmModule.sha256 == raw_sha,
+                else:
+                    wasm_bytes, _ = await resolve_wasm_module_bytes(
+                        session,
+                        caller.workspace_id,
+                        sha256=body.wasm_module_sha256,
+                        source=body.script_source,
                     )
-                    wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
-                    if wasm_mod is None:
-                        msg = "Approved WebAssembly module was not found in workspace"
-                        raise ProblemException(  # noqa: TRY301
-                            status=404,
-                            code="WASM_MODULE_NOT_FOUND",
-                            title="WebAssembly Module Not Found",
-                            detail=msg,
-                        )
-                    run_res = await self._tier_a.run(wasm_mod.wasm_bytes, input_bytes)
+                    run_res = await self._tier_a.run(wasm_bytes, input_bytes)
                     output_bytes = run_res.output_bytes
                     latency_ms = max(1, int(run_res.duration_ms))
                     logs += f"Executed Wasm module: fuel={run_res.fuel_consumed}\n"
-                else:
-                    clean_lines = [
-                        line
-                        for line in source.splitlines()
-                        if not line.strip().startswith("//") and not line.strip().startswith("#")
-                    ]
-                    clean_source = "\n".join(clean_lines).strip()
-                    try:
-                        wasm_bytes = bytes.fromhex(clean_source)
-                    except ValueError:
-                        try:
-                            wasm_bytes = base64.b64decode(clean_source)
-                        except Exception as err:
-                            raise ProblemException(
-                                status=422,
-                                code="WASM_BINARY_INVALID",
-                                title="Invalid WebAssembly Binary",
-                                detail=f"Cannot decode WebAssembly module bytes: {err}",
-                            ) from err
-                    wasm_sha = hashlib.sha256(wasm_bytes).digest()
-                    mod_stmt = select(ApprovedWasmModule).where(
-                        ApprovedWasmModule.workspace_id == caller.workspace_id,
-                        ApprovedWasmModule.sha256 == wasm_sha,
-                    )
-                    wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
-                    if wasm_mod is None:
-                        raise ProblemException(  # noqa: TRY301
-                            status=404,
-                            code="WASM_MODULE_NOT_FOUND",
-                            title="WebAssembly Module Not Found",
-                            detail="Approved WebAssembly module was not found in workspace",
-                        )
-                    run_res = await self._tier_a.run(wasm_mod.wasm_bytes, input_bytes)
-                    output_bytes = run_res.output_bytes
-                    latency_ms = max(1, int(run_res.duration_ms))
-                    logs += f"Executed Wasm bytecode: fuel={run_res.fuel_consumed}\n"
             elif tier_val == "nsjail":
                 output_bytes = await self._tier_b.run(body.script_source or "", input_bytes)
                 latency_ms = max(1, int((time.perf_counter() - start_time) * 1000))

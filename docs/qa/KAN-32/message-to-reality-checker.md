@@ -1,59 +1,47 @@
-# Reality-Checker Verification Packet: KAN-32
+# Reality-Checker Verification Packet: KAN-32 (RC1 Fixes)
 
 **Ticket ID:** KAN-32  
-**Title:** [KB-P3-AUDIT-26] Gate Custom Fields nsjail Sandbox in Standalone Mode, Fix tier_b_runner Wiring, and Publish Step-by-Step [Guide] How to Use Custom Fields (3 Problems)  
-**Branch:** `feat/KAN-32`  
+**Title:** [KB-P3-AUDIT-26] Gate Custom Fields nsjail Sandbox in Standalone Mode, Fix tier_b_runner Wiring, Publish Step-by-Step [Guide] How to Use Custom Fields, and Resolve Dark Mode Contrast and Built-in Wasm Fallback (RC1)  
+**Branch:** `fix/KAN-32-rc1`  
 
 ---
 
-## 1. Executive Summary & Verification Proof
+## 1. Executive Summary and Verification Proof
 
-All 3 scoped problems for ticket KAN-32 have been fully implemented, verified with automated test suites, checked against strict static gates, and documented without em-dashes or en-dashes.
+This packet provides forensic verification for ticket KAN-32 and its Release Candidate 1 (RC1) remediation addressing live QA findings from `docs/qa/KAN-32/live-fullstack-proof.txt`.
 
-### Problem 1: Standalone `nsjail` Fail-Closed Gating & Multi-Container `tier_b_runner` Wiring
-- Extended `SystemStatusResponse` in `kanban/api/v1/system_status.py` and TypeScript interface `SystemStatus` in `kanban/web/src/app/useSystemStatus.ts` with:
-  * `supported_custom_field_tiers`: `["scalar", "formula", "wasm"]` in Standalone mode (`tier_b_sandbox_available == False`), and `["scalar", "formula", "wasm", "nsjail"]` in Multi-Container mode (`tier_b_sandbox_available == True`).
-  * `sandbox_unavailable_reason`: Plain ASCII explanation when `tier_b_sandbox_available == False` (`"Isolated nsjail sandbox execution is unavailable in standalone mode. Multi-container compose deployment is required."`), and `None` when `True`.
-- In `kanban/custom_fields/service.py`:
-  * Added `is_tier_b_available` and `assert_tier_available` helper functions enforcing fail-closed gating.
-  * In `create_definition`: Reject `tier == "nsjail"` when `tier_b_sandbox_available == False` with HTTP `422 SANDBOX_UNAVAILABLE_IN_STANDALONE`.
-  * In `update_definition`: Reject patching `payload.tier == "nsjail"` when `tier_b_sandbox_available == False` with HTTP `422 SANDBOX_UNAVAILABLE_IN_STANDALONE`. Pre-existing `nsjail` definitions imported from backup can update metadata (name, description, enabled) without error.
-- In `kanban/api/v1/custom_field_execution.py`:
-  * In `test_execute_custom_field`: Enforce `assert_tier_available("nsjail", request=request)`. Reject `nsjail` test-execute in Standalone mode with HTTP `422 SANDBOX_UNAVAILABLE_IN_STANDALONE`.
-  * In `list_custom_fields_for_issue`, `execute_custom_field_for_issue`, and `test_execute_custom_field`: Fixed `CustomFieldExecutor(session, tier_b_runner=getattr(request.app.state, "tier_b_runner", None))` wiring so multi-container deployments execute Tier B nsjail scripts seamlessly.
-- In `kanban/app.py`: Initialized `app.state.tier_b_sandbox_available` during startup using `get_standalone_status(settings=settings)`.
+All defects identified in live zero-mock stack testing have been resolved, verified with unit test suites (>=95% coverage), validated against all static quality gates, and authored with zero em-dashes and zero en-dashes.
 
-### Problem 2: Disabled/Badged Unavailable `nsjail` Options in Web UI
-- Connected `CustomFieldDefinitionEditor.tsx` and `PresetGallery.tsx` to `useSystemStatus()`.
-- When `tier_b_sandbox_available === false`:
-  * Rendered inline Standalone Guidance Callout (`standalone-guidance-callout`) in `CustomFieldDefinitionEditor.tsx` explaining that `Scalar` (<1ms), `Formula` (<5ms), and `WebAssembly` (<25ms) work out of the box in Standalone mode, with links to `[Guide] How to Use Custom Fields ->` (`/docs/Guide-Custom-Fields`) and `Promote to Multi-Container ->` (`/admin/standalone`).
-  * In `CustomFieldDefinitionEditor.tsx`: Disabled `nsjail` options in both Field Flavor (`field-flavor-select`) and Execution Sandbox Tier (`field-tier-select`) selects, badged with `[Multi-Container Compose Required]`.
-  * Rendered Pre-Existing nsjail Warning Banner (`preexisting-nsjail-warning-banner`) when inspecting an imported `nsjail` definition in Standalone mode.
-  * In `FlavorDecisionMatrix.tsx`: Badged and disabled the `nsjail` card with `Multi-Container Compose Required` and tooltip when `!tierBAvailable`.
-  * In `PresetGallery.tsx`: Badged and disabled `nsjail`-dependent presets (`total-project-issues` and `git-pr-link`) with `Multi-Container Compose Required`.
-- Styled all callouts, banners, and badges using 100% canonical `theme.css` tokens with zero inline `style={...}` props, verified via `cssTokensAudit.test.ts`.
+### RC1 Defect 1: Dark Mode WCAG Contrast Fix in Custom Fields Studio
+- **Defect:** In Dark Mode (`[data-theme="dark"]`), `.custom-fields-def-item--selected` in `kanban/web/src/features/custom-fields/custom-fields.css` hardcoded light-theme colors (`background-color: #eff6ff; border-color: #bfdbfe;`) while inheriting dark-mode white `var(--fg-primary)` text. This created unreadable white-on-light-blue text in dark mode (`live-desktop-dark.png`).
+- **Remediation:**
+  * Added canonical semantic dark-aware CSS tokens in `kanban/web/src/styles/theme.css`: `--bg-accent-subtle`, `--bg-surface-selected`, and `--border-accent-subtle` defined across `:root`, `[data-theme="dark"]`, and `@media (prefers-color-scheme: dark)`.
+  * Updated `kanban/web/src/features/custom-fields/custom-fields.css` to use semantic CSS variables for `.custom-fields-def-item--selected` (`background-color: var(--bg-surface-selected); border-color: var(--border-accent-subtle); color: var(--fg-primary);`) and explicit dark theme rules (`[data-theme="dark"] .custom-fields-def-item--selected`).
+  * Replaced all legacy hardcoded hex backgrounds across `custom-fields.css` with semantic theme tokens.
+  * Verified 100% token resolution and zero regressions via `cssTokensAudit.test.ts` (4/4 passing).
 
-### Problem 3: Published Step-by-Step Wiki Guide
-- Published `/home/adamoutler/kanban/thumbs-up-kanban.wiki/Guide-Custom-Fields.md` starting with `# [Guide] How to Use Custom Fields` and linked in `_Sidebar.md` under `Reference Guides`.
-- Covered all 4 required sections:
-  1. What Custom Fields do and where values appear (Issue Properties Rail, Table View, Board Cards, Filters and Search).
-  2. Choosing between `Scalar`, `Safe Formula`, `WebAssembly (wasmtime)`, and `Isolated Sandbox (nsjail)` (Standalone vs Multi-Container Compose gating and promotion path).
-  3. Step-by-step walkthroughs with copy-paste examples:
-     * `Priority SLA Days`: Safe Formula (`1 if priority == 'URGENT' else 3 if priority == 'HIGH' else 7 if priority == 'MEDIUM' else 14`) -> format `number` with unit `d`.
-     * `Sub-Issue Progress %`: Safe Formula (`round((completed_sub_issue_count * 100.0) / sub_issue_count, 1) if sub_issue_count > 0 else 100.0`) -> format `number` with unit `%`.
-     * `CVSS Severity Pill`: Dynamic severity formula -> format `severity_pill`.
-     * `Total Project Issues Rollup`: WebAssembly / nsjail project metric rollup -> format `number`.
-     * Detailed specification and format metadata JSON schemas for all 7 canonical output formats (`text`, `number`, `badge`, `severity_pill`, `url`, `markdown_snippet`, `json_table`).
-  4. Safe formula AST execution context reference and built-in function allowlist.
-  5. Dry-running with `Test Execute` and `WORKSPACE`/`SERVER` scope escalation dual-control AAL2 approval workflows.
-- Checked against `check_no_dashes` (strictly 0 em-dashes and 0 en-dashes).
-- Committed to wiki repository on branch `main` (`bc6b15a`).
+### RC1 Defect 2: Horizontal Log Overflow Fix in Test Execute Card
+- **Defect:** `pre.custom-field-test-logs` overflowed horizontally beyond its card border on long log output lines (`live-desktop-test-exec.png`).
+- **Remediation:**
+  * Updated `kanban/web/src/features/custom-fields/custom-fields.css` for `pre.custom-field-test-logs` and `.custom-field-logs` with `white-space: pre-wrap; overflow-wrap: anywhere; word-break: break-word; max-width: 100%; box-sizing: border-box;`.
+  * Logs wrap cleanly within their card container without horizontal distortion.
+
+### RC1 Defect 3: Built-In Starter Preset echo_cvss.wasm Resolution Out-of-the-Box
+- **Defect:** On a fresh project with zero rows in `approved_wasm_modules`, clicking "Use Preset" on `cvss-score` (`wasm`) and clicking "Test Execute" returned HTTP `404 WASM_MODULE_NOT_FOUND` unless `echo_cvss.wasm` had been manually uploaded first.
+- **Remediation:**
+  * Created `kanban/custom_fields/builtin_wasm.py` exporting built-in starter preset bytecode (`ECHO_CVSS_WASM_BYTES`, `ECHO_CVSS_SHA256_BYTES`, `ECHO_CVSS_SHA256_HEX`) and module resolver `resolve_wasm_module_bytes`.
+  * `resolve_wasm_module_bytes` resolves Wasm modules seamlessly:
+    1. Workspace DB check (`ApprovedWasmModule`) runs first. If a workspace administrator has uploaded an explicit module with matching name or sha256, the DB row overrides the built-in module.
+    2. If no DB row exists, starter presets (`echo_cvss`, `echo_cvss.wasm`, `cvss-score`, or script source with comments referencing `echo_cvss`) resolve directly to the embedded binary.
+    3. Untrusted, unattributed bytecode continues to be strictly gated and rejected with HTTP 404 or 422 to preserve security invariants.
+  * Updated `kanban/custom_fields/executor.py` (`evaluate_field_definition` and `test_execute`) and `kanban/api/v1/custom_field_execution.py` (`test_execute_custom_field`) to route through `resolve_wasm_module_bytes`.
+  * Added comprehensive test suite `kanban/tests/custom_fields/test_builtin_wasm_preset.py` (7 tests, 100% coverage on `builtin_wasm.py`) verifying name resolution, sha256 resolution, comments resolution, workspace DB override, error conditions, and end-to-end HTTP 200 OK test-execute on fresh projects.
 
 ---
 
-## 2. Test Suite & Coverage Evidence
+## 2. Test Suite and Coverage Evidence
 
-### Python Pytest & Coverage
+### Python Pytest and Coverage
 Command:
 ```bash
 KB_TEST_PGSOCKET_DIR=/tmp/kb-pgsock-b-kan32 KB_TEST_PGHOST=/tmp/kb-pgsock-b-kan32 uv run pytest \
@@ -61,25 +49,28 @@ KB_TEST_PGSOCKET_DIR=/tmp/kb-pgsock-b-kan32 KB_TEST_PGHOST=/tmp/kb-pgsock-b-kan3
   kanban/tests/custom_fields/test_custom_fields_api.py \
   kanban/tests/custom_fields/test_execution_api.py \
   kanban/tests/custom_fields/test_manifest_and_formula_security.py \
+  kanban/tests/custom_fields/test_builtin_wasm_preset.py \
   --cov=kanban.custom_fields.service \
+  --cov=kanban.custom_fields.builtin_wasm \
   --cov=kanban.api.v1.custom_field_execution \
   --cov=kanban.api.v1.custom_fields \
   --cov-report=term-missing
 ```
 
 Results:
-- **Test Files:** 4 passed (4 total)
-- **Tests:** 26 passed (26 total)
+- **Test Files:** 5 passed (5 total)
+- **Tests:** 33 passed (33 total)
 - **Pass Rate:** 100%
 
-| Name | Stmts | Miss | Branch | BrPart | Cover | Missing |
+| Module Name | Stmts | Miss | Branch | BrPart | Cover | Missing Lines |
 | :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| `kanban/api/v1/custom_field_execution.py` | 120 | 1 | 26 | 4 | **97%** | 71->74, 109->125, 261->282, 283 |
-| `kanban/api/v1/custom_fields.py` | 30 | 0 | 0 | 0 | **100%** | |
+| `kanban/custom_fields/builtin_wasm.py` | 77 | 0 | 30 | 0 | **100%** | None |
+| `kanban/api/v1/custom_fields.py` | 30 | 0 | 0 | 0 | **100%** | None |
 | `kanban/custom_fields/service.py` | 163 | 0 | 42 | 2 | **99%** | 355->359, 361->365 |
-| **TOTAL** | **313** | **1** | **68** | **6** | **98%** | |
+| `kanban/api/v1/custom_field_execution.py` | 99 | 0 | 18 | 2 | **98%** | 71->74, 109->125 |
+| **TOTAL** | **369** | **0** | **90** | **4** | **99%** | |
 
-### TypeScript Vitest & Coverage
+### TypeScript Vitest and Coverage
 Command:
 ```bash
 COVERAGE_INCLUDE="src/features/custom-fields/CustomFieldDefinitionEditor.tsx,src/features/custom-fields/PresetGallery.tsx,src/features/custom-fields/FlavorDecisionMatrix.tsx,src/app/useSystemStatus.ts" \
@@ -93,25 +84,33 @@ Results:
 
 | File | % Stmts | % Branch | % Funcs | % Lines |
 | :--- | :---: | :---: | :---: | :---: |
-| **All files** | **100%** | **95.69%** | **100%** | **100%** |
+| **All files** | **100%** | **95.65%** | **100%** | **100%** |
 | `src/app/useSystemStatus.ts` | 100% | 100% | 100% | 100% |
 | `src/features/custom-fields/CustomFieldDefinitionEditor.tsx` | 100% | 95.74% | 100% | 100% |
 | `src/features/custom-fields/FlavorDecisionMatrix.tsx` | 100% | 92.30% | 100% | 100% |
 | `src/features/custom-fields/PresetGallery.tsx` | 100% | 96.87% | 100% | 100% |
 
+### CSS Tokens and Theme Audit
+Command:
+```bash
+(cd kanban/web && npx vitest run src/styles/__tests__/cssTokensAudit.test.ts)
+```
+Results:
+- **Passed:** 4/4 tests passed (100% token resolution, 0 missing variables, 0 inline JSX style regressions).
+
 ---
 
 ## 3. Mandatory Static Quality Gates
 
-All 7 mandatory checks execute cleanly with zero errors:
+All 7 mandatory checks execute cleanly with zero errors and zero warnings:
 
-1. **Ruff Check:** Passed (`All checks passed!`).
-2. **Mypy Typecheck:** Passed (`Success: no issues found in 7 source files`).
-3. **Lint-Imports Architectural Boundary Gate:** Passed (`Contracts: 2 kept, 0 broken`).
-4. **TypeScript Compiler (`tsc -b`):** Passed with zero diagnostics.
-5. **ESLint (`eslint . --max-warnings 0`):** Passed across entire frontend repository with zero warnings/errors.
-6. **No Dashes Guard (`check_no_dashes --all`):** Passed with 0 em/en-dashes.
-7. **CSS Tokens Audit (`cssTokensAudit.test.ts`):** Passed (4/4 tests passed, 0 inline JSX styles).
+1. **Ruff Check:** Passed (`uv run ruff check .` -> `All checks passed!`).
+2. **Ruff Format Check:** Passed (`uv run ruff format --check .` -> `1945 files already formatted`).
+3. **Mypy Typecheck:** Passed (`uv run mypy` -> `Success: no issues found in 1121 source files`).
+4. **Lint-Imports Architectural Boundary Gate:** Passed (`Contracts: 2 kept, 0 broken`).
+5. **TypeScript Compiler and Vite Build:** Passed (`pnpm --filter @kanban/web build` -> `tsc -b && vite build` built in 1.80s).
+6. **ESLint:** Passed (`pnpm --filter @kanban/web lint` -> `eslint . --max-warnings 0` with 0 warnings/errors).
+7. **No Dashes Guard:** Passed (`python3 -m scripts.check_no_dashes --all` -> strictly 0 em/en-dashes).
 
 ---
 
@@ -119,7 +118,7 @@ All 7 mandatory checks execute cleanly with zero errors:
 
 - `docs/qa/KAN-32/unit-test-results.txt`: Verbatim pytest and vitest test execution logs and coverage tables.
 - `docs/qa/KAN-32/build-or-typecheck.txt`: Verbatim outputs of ruff, mypy, lint-imports, tsc, eslint, check_no_dashes, and cssTokensAudit.
-- `docs/qa/KAN-32/git-diff.patch`: Complete diff of all touched code on branch `feat/KAN-32`.
-- `docs/qa/KAN-32/wiki-diff.patch`: Complete diff of published wiki documentation (`Guide-Custom-Fields.md` and `_Sidebar.md`).
-- `docs/qa/KAN-32/changed-files-manifest.txt`: List of all modified and added files.
+- `docs/qa/KAN-32/git-diff.patch`: Scoped patch containing all changes on `fix/KAN-32-rc1` relative to `main` (`b3b0f4ba`).
+- `docs/qa/KAN-32/live-fullstack-proof.txt`: Raw evidence log from zero-mock live stack verification.
+- `docs/qa/KAN-32/changed-files-manifest.txt`: List of all modified and created files.
 - `docs/qa/KAN-32/message-to-reality-checker.md`: This forensic audit document.

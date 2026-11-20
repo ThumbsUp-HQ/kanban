@@ -25,6 +25,7 @@ from kanban.api.v1.schemas.custom_fields import (
     WasmModuleResponse,
     WasmModuleUploadRequest,
 )
+from kanban.custom_fields.builtin_wasm import resolve_wasm_module_bytes
 from kanban.custom_fields.executor import CustomFieldExecutor
 from kanban.custom_fields.service import CustomFieldDefinitionService
 from kanban.sandbox.wasm_runner import TierAWasmRunner, WasmRunError
@@ -221,7 +222,7 @@ async def upload_wasm_module(
     response_model=CustomFieldTestExecuteResponse,
     summary="Evaluate custom field definition draft against an issue without saving",
 )
-async def test_execute_custom_field(  # noqa: C901
+async def test_execute_custom_field(
     project: str,
     body: CustomFieldTestExecuteRequest,
     caller: Caller,
@@ -247,58 +248,12 @@ async def test_execute_custom_field(  # noqa: C901
                 re.search(r"return\s+([^;]+)", source)
             )
             if not is_interpreted:
-                raw_sha: bytes | None = None
-                if body.wasm_module_sha256:
-                    try:
-                        raw_sha = bytes.fromhex(body.wasm_module_sha256)
-                    except ValueError as ex:
-                        raise ProblemException(
-                            status=422,
-                            code="INVALID_WASM_SHA256",
-                            title="Invalid WASM SHA256",
-                            detail=f"WASM SHA256 must be valid hex: {ex}",
-                        ) from ex
-                elif source:
-                    clean_lines = [
-                        line
-                        for line in source.splitlines()
-                        if not line.strip().startswith("//") and not line.strip().startswith("#")
-                    ]
-                    clean_source = "\n".join(clean_lines).strip()
-                    try:
-                        wasm_bytes = bytes.fromhex(clean_source)
-                    except ValueError:
-                        try:
-                            wasm_bytes = base64.b64decode(clean_source)
-                        except Exception as err:
-                            raise ProblemException(
-                                status=422,
-                                code="WASM_BINARY_INVALID",
-                                title="Invalid WebAssembly Binary",
-                                detail=f"Cannot decode WebAssembly module bytes: {err}",
-                            ) from err
-                    raw_sha = hashlib.sha256(wasm_bytes).digest()
-
-                if raw_sha is None:
-                    raise ProblemException(
-                        status=404,
-                        code="WASM_MODULE_NOT_FOUND",
-                        title="WebAssembly Module Not Found",
-                        detail="Approved WebAssembly module was not found in workspace",
-                    )
-
-                mod_stmt = select(ApprovedWasmModule).where(
-                    ApprovedWasmModule.workspace_id == caller.workspace_id,
-                    ApprovedWasmModule.sha256 == raw_sha,
+                await resolve_wasm_module_bytes(
+                    session=session,
+                    workspace_id=caller.workspace_id,
+                    sha256=body.wasm_module_sha256,
+                    source=body.script_source,
                 )
-                wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
-                if wasm_mod is None:
-                    raise ProblemException(
-                        status=404,
-                        code="WASM_MODULE_NOT_FOUND",
-                        title="WebAssembly Module Not Found",
-                        detail="Approved WebAssembly module was not found in workspace",
-                    )
 
         rate_limiter = _execute_rate_limiter(session)
         policy = RateLimitPolicy(name="custom_field_test_execute", limit=10, window_seconds=60)
