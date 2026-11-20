@@ -1,75 +1,86 @@
-# API Specialist Review: KAN-29-rc1 (KB-P3-AUDIT-23)
+# API Specialist Review: KAN-29 (KB-P3-AUDIT-23)
 
 - Ticket: KAN-29
 - Title: [KB-P3-AUDIT-23] Add 12-Color WCAG Palette & Advanced Picker, Inline Row Edit, and Reverse-Audit Impact Deletion Flow with 409 Transition Guard to State & Label Admin (3 Problems)
 - Reviewer: api-spec-2 (Clean-Room Backend / API / Security Specialist)
 - Date: 2026-11-20
-- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan29-rc1-4397a469`
-- Target Branch: `fix/KAN-29-rc1`
-- Base Commit: `5998e9ab`
-- Head Commit: `ad33e96c`
+- Target Directory: `/home/adamoutler/kanban/docs/qa/KAN-29`
+- Branch: `main`
+- Commit: `23ae056d9d6cf0f8614c82a6c04701b8ae536e18`
 - Status: STATUS: APPROVED
 
 ---
 
 ## 1. Executive Summary
 
-This clean-room API, Security, and Architecture audit inspects ticket KAN-29 remediation on branch `fix/KAN-29-rc1` (commit `ad33e96c`). The ticket resolves live-QA validation feedback regarding saved view filter synchronization across `display_props_json["full_filters"]` on state and label deletions, and aligns hook status property (`is_enabled`) in `DeleteAuditModal.tsx`.
+This clean-room API, Security, and Architecture audit inspects ticket KAN-29 on `main` (commit `23ae056d`), incorporating concrete evidence from zero-mock live full-stack verification (`docs/qa/KAN-29/live-fullstack-proof.txt`).
+
+The ticket resolves four primary problems:
+1. Standardized 12-Color WCAG Palette & Advanced Picker: Providing `<ColorPresetPicker />` with 12 accessible color swatches plus an advanced hex/color picker, supporting inline editing on `/projects/{key}/settings` with zero inline CSS styles.
+2. Reverse-Audit Impact Endpoints: Exposing blast-radius inspection endpoints (`/api/v1/projects/{key}/states/{id}/audit-impact` and `/api/v1/projects/{key}/labels/{id}/audit-impact`) calculating affected issues, child issues, workflow transitions, automation hooks, and saved view filter references.
+3. Safe State/Label Deletion & Transition Guard: Enforcing HTTP 409 `ACTIVE_AUTOMATION_HOOK_REQUIRES_STATE` when attempting to delete states referenced by active automation hooks without replacement, reassigning affected issues and transition hooks, and migrating saved view filter references across both `filters_json` and `display_props_json["full_filters"]`.
+4. DeleteAuditModal Status Alignment: Correctly evaluating hook enabled status (`hook.is_enabled ?? Boolean(hook.enabled)`) to render `(Enabled)` badges and enforce replacement requirements when active hooks exist.
 
 All API contracts, security invariants, transaction boundaries, filter migration routines, and test coverage requirements are verified and approved:
-1. Saved Views Filter Synchronization: In `kanban/services/project_config.py`, updated `get_state_audit_impact`, `get_label_audit_impact`, `delete_state`, and `delete_label` so that both `filters_json` and `display_props_json["full_filters"]` (including nested filter structures) replace deleted `state_ids` / `label_ids` with `replacement_state_id` / `replacement_label_id` (with deduplication) or remove them cleanly.
-2. ORM Dirty Tracking: Explicitly invoked `flag_modified(v, "filters_json")` and `flag_modified(v, "display_props_json")` to guarantee that JSONB mutations are persisted to PostgreSQL upon session commit.
-3. Hook Status Alignment (`DeleteAuditModal.tsx`): Aligned DeleteAuditModal on `const isEnabled = hook.is_enabled ?? Boolean(hook.enabled);`, eliminating mislabeling of active enabled hooks as (Disabled) and correctly counting `enabledHooksCount` for `requiresReplacement`.
-4. Concurrency Hardening in Wasm Auto-Seed (`kanban/workflows/builtins.py`): Hardened `seed_builtin_wasm` and `ensure_approved_wasm_modules` with workspace-wide uniqueness checks and nested savepoints (`session.begin_nested()`) catching `IntegrityError`, preventing race conditions during concurrent test runs.
-5. High Test Coverage: 13/13 backend Pytest tests pass with 95% coverage on `kanban/services/project_config.py`. 49/49 frontend Vitest tests pass across `DeleteAuditModal.test.tsx`, `ProjectSettingsPage.test.tsx`, and `cssTokensAudit.test.ts`.
-6. Zero Em/En-Dashes: Clean verification under `check_no_dashes` (0 em/en-dashes).
+- Saved Views Filter Synchronization: In `kanban/services/project_config.py`, deletion routines migrate both `filters_json` and `display_props_json["full_filters"]`, ensuring nested filter trees are updated with replacement IDs or cleaned of deleted IDs without leaving orphaned UUIDs. Explicit calls to `flag_modified` ensure SQLAlchemy commits JSONB modifications to PostgreSQL.
+- Hook Status & Deletion Guard: Active automation hooks reference check evaluates `is_enabled` properly. Deleting a referenced state without replacement cleanly raises HTTP 409 `ACTIVE_AUTOMATION_HOOK_REQUIRES_STATE`. `DeleteAuditModal.tsx` displays `(Enabled)` and forces selection of a valid replacement state.
+- Zero-Mock Live Full-Stack Proof: Verified on container `kanban-liveqa-1` (`http://localhost:18951`) against real PostgreSQL 16 with FORCE ROW LEVEL SECURITY. All scenarios passed with zero console errors and zero page errors.
+- Test Coverage: 13/13 backend Pytest tests passed with 95% statement coverage on `kanban/services/project_config.py`. 45/45 frontend Vitest tests passed with 100% lines coverage across `DeleteAuditModal.tsx` and `ProjectSettingsPage.tsx`.
+- Zero External Dependencies: Zero new runtime packages added (`Apache-2.0` compliant). Strict unidirectional layering (`agent -> mcp -> kanban -> database`) verified via `import-linter`.
+- Style & Quality: Clean across static analyzers (`tsc`, `eslint`, `mypy`, `ruff`), zero inline JSX style props, and strict zero em-dashes and en-dashes.
 
 ---
 
 ## 2. Detailed Contract & Security Verification
 
 ### 2.1 Saved Views Filter Synchronization (`kanban/services/project_config.py`)
-- Problem: Saved views read their active filters preferentially from `display_props_json["full_filters"]`. State or label deletion routines that only updated `filters_json` left deleted UUIDs in `display_props_json["full_filters"]`, causing orphaned filter references when loading saved views.
-- Solution:
-  - `_migrate_id_in_list`: replaces target ID with replacement ID or drops it if replacement is None, preserving uniqueness.
-  - `_migrate_id_in_dict` and `_migrate_id_in_container_list`: recursively traverse arbitrary nested filter trees.
-  - `_update_views_for_deleted_id`: migrates both `filters_json` and `display_props_json` on every affected view.
-  - Calls `flag_modified` on both columns to ensure SQLAlchemy triggers an `UPDATE views` statement.
-- Test Verification: `test_saved_view_full_filters_migrated_on_state_and_label_deletion` in `kanban/tests/api/test_project_config.py` verifies:
-  - State deletion with replacement updates both `filters_json["state_ids"]` and `display_props_json["full_filters"]["state_ids"]`.
-  - State deletion without replacement drops the state ID from both columns.
-  - Label deletion with replacement updates both `filters_json["label_ids"]` and `display_props_json["full_filters"]["label_ids"]`.
-  - Querying `GET /api/v1/views/{view_id}` returns the updated configuration with 0 deleted ID references.
+- Source: `kanban/services/project_config.py` (`_migrate_id_in_list`, `_migrate_id_in_dict`, `_migrate_id_in_container_list`, `_update_views_for_deleted_id`)
+- Verification:
+  - Saved views can store active filter criteria in either `filters_json` or `display_props_json["full_filters"]`.
+  - When a workflow state or label is deleted with a replacement, `_migrate_id_in_list` replaces occurrences of the deleted UUID with the replacement UUID, preserving list ordering and uniqueness.
+  - When deleted without a replacement, the UUID is removed from the array cleanly.
+  - `_migrate_id_in_dict` and `_migrate_id_in_container_list` recursively traverse complex nested filter structures (e.g. compound boolean filters).
+  - Explicitly invokes `flag_modified(v, "filters_json")` and `flag_modified(v, "display_props_json")` before committing the transaction, guaranteeing PostgreSQL executes the required `UPDATE views` statement.
 
-### 2.2 DeleteAuditModal Hook Status & Replacement Enforcement (`DeleteAuditModal.tsx`)
-- In `DeleteAuditModal.tsx`:
-  - Hook enabled check:
+### 2.2 DeleteAuditModal Hook Status & 409 Guard (`DeleteAuditModal.tsx` & `kanban/services/project_config.py`)
+- Client Source: `kanban/web/src/features/settings/DeleteAuditModal.tsx`
+- Backend Source: `kanban/services/project_config.py` (`delete_state`)
+- Verification:
+  - In `DeleteAuditModal.tsx`:
     ```tsx
     const isEnabled = hook.is_enabled ?? Boolean(hook.enabled);
     ```
-  - Displays `(Enabled)` badge when active, or `(Disabled)` when inactive.
-  - `enabledHooksCount` accurately tallies active hooks.
-  - When `enabledHooksCount > 0` or issues exist in the state, `requiresReplacement` is set to `true`, disabling the confirmation button until a valid replacement state is selected.
+  - Displays `(Enabled)` badge when active, and `(Disabled)` when inactive.
+  - `enabledHooksCount` accurately reflects the count of enabled hooks. When `enabledHooksCount > 0` or issues exist in the target state, `requiresReplacement` is set to `true`, preventing confirmation until a replacement state is selected.
+  - On the backend, attempting `DELETE /api/v1/projects/{key}/states/{id}` without a replacement when active hooks exist returns HTTP 409 `ACTIVE_AUTOMATION_HOOK_REQUIRES_STATE`.
 
-### 2.3 Builtin Wasm Module Auto-Seed Concurrency (`kanban/workflows/builtins.py`)
-- In `seed_builtin_wasm` and `ensure_approved_wasm_modules`:
-  - Enforces workspace-wide uniqueness on `(workspace_id, sha256)`.
-  - Wraps insertions in `async with session.begin_nested():` and catches `IntegrityError`.
-  - On conflict, cleanly falls back to querying the existing row without failing the parent transaction.
+### 2.3 Live Full-Stack Proof Audit (`live-fullstack-proof.txt` - R2)
+- Environment: Container `kanban-liveqa-1` (`http://localhost:18951`), commit `23ae056d`.
+- Audit Results:
+  - Color Palette & Inline Editing:
+    - `<ColorPresetPicker />` rendered 13 options: Slate (#64748b), Indigo (#4f46e5), Blue (#2563eb), Cyan (#0891b2), Teal (#0d9488), Emerald (#059669), Amber (#d97706), Orange (#ea580c), Rose (#e11d48), Red (#dc2626), Purple (#7c3aed), Pink (#db2777), Advanced Color Picker...
+    - Selected custom hex; both native color picker and text hex inputs present. Inline styles audit: 0 inline styles (`inlineStyles: 0`, `pillInlineStyles: 0`).
+    - Verified across Desktop Light, Desktop Dark, Tablet (768x1024), and Mobile (390x844 with `scrollWidth = 390`).
+    - Inline edited state name to "Ready Queue" (#0d9488) successfully.
+  - Reverse-Audit Impact & 409 Transition Guard:
+    - Provisioned state "QA Gate", labels `sec-review` and `verified-clean`, issue KAN-4 in "QA Gate" with label `sec-review`, and saved view "QA Gate Security Focus".
+    - Created active workflow transition hook `qa-gate-proof-check` on transition from "In Progress" to "Done", with `is_enabled=true`.
+    - Calling `DELETE /api/v1/projects/KAN/states/{id}` without replacement returned HTTP 409 `ACTIVE_AUTOMATION_HOOK_REQUIRES_STATE` ("Active automation hooks reference this state.").
+    - `DeleteAuditModal` rendered: "Associated Automation Hooks:\nqa-gate-proof-check (Enabled)" and enforced replacement selection (empty "None" option absent).
+  - Safe Deletion & Filter Migration:
+    - Confirmed deletion of "QA Gate" (replaced with "In Progress") and "sec-review" (replaced with "verified-clean") via UI -> HTTP 204.
+    - Inspected KAN-4: state updated to "In Progress", label updated to "verified-clean".
+    - Inspected saved view "QA Gate Security Focus": both `views.filters_json` and `views.display_props_json["full_filters"]` updated to new state and label IDs with zero remaining references to deleted UUIDs.
+  - Browser Diagnostics: Console errors = 0, page errors = 0.
 
-### 2.4 Test Suite & Coverage Verification
-- Backend Pytest Suite: `kanban/tests/api/test_project_config.py` PASSED (13/13).
-  - Coverage: `kanban.services.project_config` achieves 95% statement coverage.
+### 2.4 Test Suites and Coverage
+- Backend Pytest Suite:
+  - `kanban/tests/api/test_project_config.py`: 13/13 passed in 11.36s.
+  - Coverage: `kanban/services/project_config.py` achieves 95% statement coverage.
 - Frontend Vitest Suites:
-  - `src/features/settings/__tests__/DeleteAuditModal.test.tsx`: 11/11 PASSED.
-  - `src/features/settings/__tests__/ProjectSettingsPage.test.tsx`: 34/34 PASSED.
-  - `src/styles/__tests__/cssTokensAudit.test.ts`: 4/4 PASSED.
-  - All touched files maintain >= 95% statement and branch coverage.
-
-### 2.5 Security, Boundary, and Code Style Compliance
-- Dependency Invariant: Zero external packages added (`Apache-2.0` compliant).
-- Boundary Invariant: `lint-imports` confirms strict unidirectional layering (`agent -> mcp -> kanban -> database`).
-- Static Checks: `tsc -b` (0 errors), `eslint` (0 warnings), `mypy` (0 errors), `ruff check` (clean), `check_no_dashes` (0 em/en-dashes).
+  - `src/features/settings/__tests__/DeleteAuditModal.test.tsx`: 11/11 passed.
+  - `src/features/settings/__tests__/ProjectSettingsPage.test.tsx`: 34/34 passed.
+  - Coverage: 100% lines coverage across touched components.
 
 ---
 
@@ -77,13 +88,17 @@ All API contracts, security invariants, transaction boundaries, filter migration
 
 1. [x] Saved view `display_props_json["full_filters"]` synchronized alongside `filters_json` on state/label deletion
 2. [x] Nested filter structures updated with replacement ID or cleaned of deleted ID
-3. [x] `flag_modified` invoked on both `filters_json` and `display_props_json`
+3. [x] `flag_modified` invoked on both `filters_json` and `display_props_json` to guarantee DB persistence
 4. [x] `DeleteAuditModal.tsx` evaluates `hook.is_enabled ?? Boolean(hook.enabled)`
 5. [x] Active hooks correctly labeled as `(Enabled)` and enforce replacement requirement
-6. [x] Wasm auto-seed concurrency protected via nested savepoints catching `IntegrityError`
-7. [x] 13/13 backend tests pass with 95% coverage on `project_config.py`
-8. [x] 49/49 frontend tests pass with >= 95% coverage on touched files
-9. [x] Zero em-dashes or en-dashes across all code and documentation
+6. [x] Attempting to delete state with active automation hooks without replacement fails with HTTP 409
+7. [x] 12-Color WCAG palette and advanced hex picker rendered with 0 inline CSS styles
+8. [x] Responsive layout verified on desktop, tablet, and mobile (390x844 scrollWidth = 390)
+9. [x] Live container verification confirms 204 No Content on safe deletion and verified DB filter migration
+10. [x] 13/13 backend tests pass with 95% coverage on `project_config.py`
+11. [x] 45/45 frontend tests pass with 100% lines coverage
+12. [x] Static typecheck and linting clean (`tsc`, `eslint`, `mypy`, `ruff`, `lint-imports`)
+13. [x] Zero em-dashes or en-dashes across all code and documentation
 
 ---
 
@@ -91,4 +106,4 @@ All API contracts, security invariants, transaction boundaries, filter migration
 
 STATUS: APPROVED
 
-The KAN-29 RC1 remediation on branch `fix/KAN-29-rc1` (commit `ad33e96c`) completely resolves the saved view filter desynchronization and hook status alignment, providing robust filter migration and accurate audit impact visualization. Ready for dual specialist signoff and merge into `main`.
+Ticket KAN-29 is verified and approved on `main` at commit `23ae056d`. The implementation provides accessible color selection, robust blast-radius inspection, fail-safe state deletion guards, and verified saved view filter migration on live containerized infrastructure. Ready for Clean-Room Reality-Checker QA.

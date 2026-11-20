@@ -6,12 +6,19 @@ from __future__ import annotations
 
 import uuid
 from typing import TYPE_CHECKING
+from unittest.mock import patch
 
 import pytest
 from sqlalchemy import text
+from sqlalchemy.exc import IntegrityError
 
 from database.models import WorkflowTransitionExecution, WorkflowTransitionHook
 from kanban.tests.security.helpers import add_role_binding, rebuild_era
+from kanban.workflows.builtins import (
+    BUILTIN_WASM_FORMULAS,
+    ensure_approved_wasm_modules,
+    seed_builtin_wasm,
+)
 from kanban.workflows.manifest import compute_hook_manifest_sha256
 
 if TYPE_CHECKING:
@@ -1614,3 +1621,131 @@ async def test_saved_view_full_filters_migrated_on_state_and_label_deletion(
     assert del_lbl_detach.status_code == 204
     v_after_detach = (await client.get(f"/api/v1/views/{view_id}")).json()
     assert v_after_detach["filters"]["label_ids"] == []
+
+
+async def test_state_audit_impact_archived_and_deleted_issues_parity(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Verify get_state_audit_impact counts archived and soft-deleted issues (KAN-29).
+
+    Ensures issues_count parity with delete_state foreign-key verification,
+    preventing unexpected 409 STATE_IN_USE errors when states hold archived issues.
+    """
+    proj_id, pref, admin, _, _, _, client = await _setup_project_with_roles(
+        api_env, make_user, as_principal, identifier="STTRASH"
+    )
+    as_principal(admin)
+
+    states = (await client.get(f"/api/v1/projects/{pref}/states")).json()
+    st_from = next(s for s in states if s["group"] == "unstarted" and not s["is_default"])
+    st_replace = next(s for s in states if s["group"] == "started")
+    prios = (await client.get(f"/api/v1/projects/{pref}/priorities")).json()
+
+    # Seed 2 issues in st_from
+    iss_1 = await _seed_issue(
+        api_env, proj_id, pref, admin.id, st_from["id"], prios[0]["id"], "Archived Issue"
+    )
+    iss_2 = await _seed_issue(
+        api_env, proj_id, pref, admin.id, st_from["id"], prios[0]["id"], "Trashed Issue"
+    )
+
+    # Set iss_1 as archived, iss_2 as soft-deleted in objects spine
+    await api_env.seed.execute(
+        text("UPDATE objects SET archived_at = NOW() WHERE id = :id"), {"id": iss_1}
+    )
+    await api_env.seed.execute(
+        text("UPDATE objects SET deleted_at = NOW() WHERE id = :id"), {"id": iss_2}
+    )
+    await api_env.seed.commit()
+
+    # Query audit-impact for st_from
+    impact_resp = await client.get(f"/api/v1/projects/{pref}/states/{st_from['id']}/audit-impact")
+    assert impact_resp.status_code == 200
+    impact = impact_resp.json()
+
+    # Both archived and soft-deleted issues must be counted to match FK delete check
+    assert impact["issues_count"] == 2
+    assert len(impact["sample_issue_keys"]) == 2
+
+    # Attempt delete without replacement -> must fail with 409 STATE_IN_USE
+    del_fail = await client.delete(f"/api/v1/projects/{pref}/states/{st_from['id']}")
+    assert del_fail.status_code == 409
+    assert del_fail.json()["code"] == "STATE_IN_USE"
+
+    # Delete with valid replacement -> succeeds 204
+    del_ok = await client.delete(
+        f"/api/v1/projects/{pref}/states/{st_from['id']}?replacement_state_id={st_replace['id']}"
+    )
+    assert del_ok.status_code == 204
+
+    # Verify both issues were reassigned to replacement state in the database
+    res = await api_env.seed.execute(
+        text("SELECT state_id FROM issues WHERE id IN (:i1, :i2)"),
+        {"i1": iss_1, "i2": iss_2},
+    )
+    state_ids = [str(row[0]) for row in res.fetchall()]
+    assert len(state_ids) == 2
+    assert all(sid == st_replace["id"] for sid in state_ids)
+
+
+async def test_builtin_wasm_formulas_and_seeders_coverage(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Test seed_builtin_wasm and ensure_approved_wasm_modules coverage (KAN-29)."""
+    _, _, admin, _, _, _, _ = await _setup_project_with_roles(
+        api_env, make_user, as_principal, identifier="WASMCOV"
+    )
+    ws_id = admin.workspace_id
+    uid = admin.id
+
+    # 1. Unknown sha returns None
+    assert await seed_builtin_wasm(api_env.seed, ws_id, uid, b"\x00" * 32) is None
+
+    # 2. Seed first builtin formula creates module
+    f0 = BUILTIN_WASM_FORMULAS[0]
+    mod1 = await seed_builtin_wasm(api_env.seed, ws_id, uid, f0.sha256_bytes)
+    assert mod1 is not None
+    assert mod1.name == f0.name
+
+    # 3. Seed again returns existing module
+    mod2 = await seed_builtin_wasm(api_env.seed, ws_id, uid, f0.sha256_bytes)
+    assert mod2 is not None
+    assert mod2.id == mod1.id
+
+    # 4. Seed legacy preset
+    leg_sha = bytes.fromhex("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
+    mod_leg = await seed_builtin_wasm(api_env.seed, ws_id, uid, leg_sha)
+    assert mod_leg is not None
+
+    # 5. ensure_approved_wasm_modules seeds all remaining formulas and returns summaries
+    summaries = await ensure_approved_wasm_modules(api_env.seed, ws_id, uid)
+    assert len(summaries) >= 3
+    shas = {s.sha256 for s in summaries}
+    assert f0.sha256_hex in shas
+
+    # 6. Call again is idempotent and exercises duplicate sha filtering
+    summaries2 = await ensure_approved_wasm_modules(api_env.seed, ws_id, uid)
+    assert len(summaries2) == len(summaries)
+
+    # 7. Exercise IntegrityError race handling in seed_builtin_wasm and ensure_approved_wasm_modules
+    # Unknown module hitting IntegrityError on flush returns existing/None safely
+    with patch.object(
+        api_env.seed,
+        "flush",
+        side_effect=[IntegrityError("dup", {}, Exception("dup")), None],
+    ):
+        await seed_builtin_wasm(
+            api_env.seed, uuid.uuid4(), uid, BUILTIN_WASM_FORMULAS[1].sha256_bytes
+        )
+
+    # ensure_approved_wasm_modules handles IntegrityError race safely
+    with patch.object(
+        api_env.seed,
+        "flush",
+        side_effect=[IntegrityError("dup", {}, Exception("dup")), None, None, None, None],
+    ):
+        await ensure_approved_wasm_modules(api_env.seed, uuid.uuid4(), uid)

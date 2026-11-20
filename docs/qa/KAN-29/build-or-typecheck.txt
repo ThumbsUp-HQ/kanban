@@ -1,10 +1,21 @@
-=== PYTHON RUFF CHECK ===
+==========================================
+1. RUFF CHECK
+==========================================
 All checks passed!
-=== PYTHON RUFF FORMAT CHECK ===
-3 files already formatted
-=== PYTHON MYPY ===
-Success: no issues found in 3 source files
-=== LINT IMPORTS ===
+
+==========================================
+2. RUFF FORMAT CHECK
+==========================================
+1924 files already formatted
+
+==========================================
+3. MYPY TYPECHECK
+==========================================
+Success: no issues found in 1106 source files
+
+==========================================
+4. IMPORT LINT
+==========================================
 
 ╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
 ╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
@@ -20,24 +31,55 @@ Success: no issues found in 3 source files
 Contracts
 ---------
 
-Analyzed 964 files, 3388 dependencies.
+Analyzed 969 files, 3425 dependencies.
 --------------------------------------
 
 Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
 mcp forbidden from importing database KEPT (48 ignored imports)
 
 Contracts: 2 kept, 0 broken.
-=== FRONTEND TYPECHECK ===
 
-> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan29-rc1-4397a469/kanban/web
+==========================================
+5. FRONTEND TYPECHECK
+==========================================
+
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan29-rc2-0d0b771c/kanban/web
 > tsc -b --noEmit
 
-=== FRONTEND LINT ===
 
-> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan29-rc1-4397a469/kanban/web
+==========================================
+6. FRONTEND LINT
+==========================================
+
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan29-rc2-0d0b771c/kanban/web
 > eslint . --max-warnings 0
 
-=== ZERO DASHES AUDIT ===
-ZERO_DASHES_OK
-=== ZERO INLINE STYLES AUDIT ===
-ZERO_INLINE_STYLES_OK
+
+==========================================
+7. FRONTEND BUILD
+==========================================
+
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan29-rc2-0d0b771c/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 706 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.51 kB │ gzip:   0.32 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-32xJHi0W.css            427.86 kB │ gzip:  60.27 kB
+dist/assets/index-CrE49DxG.js           1,982.51 kB │ gzip: 535.97 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.24s
+
+==========================================
+8. CHECK NO DASHES (0 EM/EN-DASHES)
+==========================================
+PASSED: Zero em/en-dashes detected.

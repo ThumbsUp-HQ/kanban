@@ -1401,7 +1401,8 @@ export function ProjectSettingsPage(): JSX.Element {
             </form>
 
             {/* States Table */}
-            <table className="kb-table" data-testid="states-table">
+            <div className="kb-table-scroll-container">
+              <table className="kb-table" data-testid="states-table">
               <thead>
                 <tr>
                   <th>Order</th>
@@ -1571,6 +1572,7 @@ export function ProjectSettingsPage(): JSX.Element {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
 
@@ -1647,50 +1649,52 @@ export function ProjectSettingsPage(): JSX.Element {
             </form>
 
             {/* Priorities Table */}
-            <table className="kb-table" data-testid="priorities-table">
-              <thead>
-                <tr>
-                  <th>Order</th>
-                  <th>Emoji</th>
-                  <th>Label</th>
-                  <th>Slug</th>
-                  <th>Color</th>
-                  <th>Default</th>
-                  <th>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {priorities.map((p) => (
-                  <tr key={p.id} data-testid={`priority-row-${p.id}`}>
-                    <td>{p.sort_order}</td>
-                    <td>{p.emoji ?? '-'}</td>
-                    <td>
-                      <strong>{p.label}</strong>
-                    </td>
-                    <td>
-                      <code>{p.slug}</code>
-                    </td>
-                    <td>
-                      <ColoredPill
-                        colorHex={p.color_hex}
-                        testId={`priority-pill-${p.id}`}
-                      />
-                    </td>
-                    <td>{p.is_default ? '⭐ Default' : '-'}</td>
-                    <td>
-                      <button
-                        type="button"
-                        data-testid={`delete-priority-btn-${p.id}`}
-                        className="kb-btn-danger-sm"
-                        onClick={() => { handleDeletePriority(p.id); }}
-                      >
-                        Delete
-                      </button>
-                    </td>
+            <div className="kb-table-scroll-container">
+              <table className="kb-table" data-testid="priorities-table">
+                <thead>
+                  <tr>
+                    <th>Order</th>
+                    <th>Emoji</th>
+                    <th>Label</th>
+                    <th>Slug</th>
+                    <th>Color</th>
+                    <th>Default</th>
+                    <th>Actions</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {priorities.map((p) => (
+                    <tr key={p.id} data-testid={`priority-row-${p.id}`}>
+                      <td>{p.sort_order}</td>
+                      <td>{p.emoji ?? '-'}</td>
+                      <td>
+                        <strong>{p.label}</strong>
+                      </td>
+                      <td>
+                        <code>{p.slug}</code>
+                      </td>
+                      <td>
+                        <ColoredPill
+                          colorHex={p.color_hex}
+                          testId={`priority-pill-${p.id}`}
+                        />
+                      </td>
+                      <td>{p.is_default ? '⭐ Default' : '-'}</td>
+                      <td>
+                        <button
+                          type="button"
+                          data-testid={`delete-priority-btn-${p.id}`}
+                          className="kb-btn-danger-sm"
+                          onClick={() => { handleDeletePriority(p.id); }}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
 
@@ -1737,7 +1741,8 @@ export function ProjectSettingsPage(): JSX.Element {
             </form>
 
             {/* Labels Table */}
-            <table className="kb-table" data-testid="labels-table">
+            <div className="kb-table-scroll-container">
+              <table className="kb-table" data-testid="labels-table">
               <thead>
                 <tr>
                   <th>Label Name</th>
@@ -1845,6 +1850,7 @@ export function ProjectSettingsPage(): JSX.Element {
                 })}
               </tbody>
             </table>
+            </div>
           </div>
         )}
 
@@ -1941,7 +1947,8 @@ export function ProjectSettingsPage(): JSX.Element {
               </div>
             </form>
 
-            <table className="kb-table" data-testid="members-table">
+            <div className="kb-table-scroll-container">
+              <table className="kb-table" data-testid="members-table">
               <thead>
                 <tr>
                   <th>Principal</th>
@@ -1984,6 +1991,7 @@ export function ProjectSettingsPage(): JSX.Element {
                 ))}
               </tbody>
             </table>
+            </div>
           </div>
         )}
 
@@ -2061,7 +2069,8 @@ export function ProjectSettingsPage(): JSX.Element {
                 No trashed items in this project.
               </div>
             ) : (
-              <table className="kb-table" data-testid="trash-items-table">
+              <div className="kb-table-scroll-container">
+                <table className="kb-table" data-testid="trash-items-table">
                 <thead>
                   <tr>
                     <th>Type</th>
@@ -2119,6 +2128,7 @@ export function ProjectSettingsPage(): JSX.Element {
                   ))}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         )}

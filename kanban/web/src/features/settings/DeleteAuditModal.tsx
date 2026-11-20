@@ -271,7 +271,7 @@ export function DeleteAuditModal({
                         {workflowHooks.length}
                       </span>
                       {enabledHooksCount > 0 && (
-                        <span className="kb-audit-sample-keys">
+                        <span className="kb-audit-hook-notice">
                           {enabledHooksCount} active hook(s) require migration
                         </span>
                       )}
