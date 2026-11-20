@@ -3,51 +3,98 @@ BACKEND PYTEST TEST SUITES (KAN-35 REALTIME PIPELINE, OUTBOX & REPLAY)
 ================================================================================
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan35-rc1-f1e28dab
+rootdir: /home/adamoutler/kanban
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 65 items
+collected 67 items
 
-kanban/tests/realtime/test_hub_unit.py ........................          [ 36%]
-kanban/tests/realtime/test_realtime_e2e_pipeline.py ......               [ 46%]
-kanban/tests/realtime/test_rls_event_filter.py ........                  [ 58%]
-kanban/tests/realtime/test_sse_resume.py .......                         [ 69%]
-kanban/tests/realtime/test_ws_hub.py ............                        [ 87%]
-kanban/tests/services/test_realtime_outbox.py .......                    [ 98%]
+kanban/tests/realtime/test_hub_unit.py ...........................       [ 40%]
+kanban/tests/realtime/test_realtime_e2e_pipeline.py ......               [ 49%]
+kanban/tests/realtime/test_rls_event_filter.py ........                  [ 61%]
+kanban/tests/realtime/test_sse_resume.py .......                         [ 71%]
+kanban/tests/realtime/test_ws_hub.py ............                        [ 89%]
+kanban/tests/services/test_realtime_outbox.py .......                    [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                 Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------------
+database/outbox/broker.py               70      0     14      0   100%
+kanban/api/sse.py                       83      2     30      1    97%   209, 212
+kanban/realtime/hub.py                 389      7    128     11    97%   256-257, 381->403, 417, 476->478, 652->645, 694->exit, 696->694, 697->696, 714->exit, 724->720, 729-730, 734->exit, 759->744, 764-765
+kanban/realtime/replay.py              107      0     32      0   100%
+kanban/realtime/rls_filter.py           43      1     20      2    95%   95->98, 111
+kanban/services/realtime_outbox.py      61      0     26      3    97%   90->100, 95->100, 97->100
+--------------------------------------------------------------------------------
+TOTAL                                  753     10    250     17    97%
+============================= 67 passed in 34.70s ==============================
+
+================================================================================
+BACKEND DATABASE MIGRATION TEST (P4_22 OUTBOX REPLAY READER)
+================================================================================
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 1 item
+
 database/tests/migrations/test_p4_22_outbox_replay_reader_migration.py . [100%]
 
-============================= 65 passed in 19.26s ==============================
+============================== 1 passed in 0.57s ===============================
 
 ================================================================================
 FRONTEND VITEST TEST SUITES (REALTIME, VIEW REGISTRY, BOARDVIEW, CSS TOKENS)
 ================================================================================
 
-> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan35-rc1-f1e28dab/kanban/web
-> vitest run src/api/realtime.test.ts src/features/views/viewRegistry.test.tsx src/features/board/boardApi.test.ts src/features/board/BoardView.test.tsx src/styles/__tests__/cssTokensAudit.test.ts
+> @kanban/web@0.1.0 test:unit /home/adamoutler/kanban/kanban/web
+> vitest run --coverage --coverage.thresholds.branches 85 src/realtime/index.test.tsx src/api/realtime.test.ts src/features/board/boardApi.test.ts src/features/board/BoardView.test.tsx src/features/views/viewRegistry.test.tsx src/styles/__tests__/cssTokensAudit.test.ts
 
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan35-rc1-f1e28dab/kanban/web
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
+      Coverage enabled with v8
 
- ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 16ms
- ✓ src/features/board/boardApi.test.ts (8 tests) 15ms
- ✓ src/api/realtime.test.ts (44 tests) 148ms
- ✓ src/features/board/BoardView.test.tsx (20 tests) 966ms
- ✓ src/features/views/viewRegistry.test.tsx (41 tests) 9347ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 22ms
+ ✓ src/features/board/boardApi.test.ts (8 tests) 16ms
+ ✓ src/api/realtime.test.ts (44 tests) 103ms
+ ✓ src/realtime/index.test.tsx (21 tests) 179ms
+ ✓ src/features/board/BoardView.test.tsx (20 tests) 1359ms
+ ✓ src/features/views/viewRegistry.test.tsx (41 tests) 14277ms
    ✓ viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) (41)
-     ✓ IssuesWorkspaceRoute: creates a new issue via QuickCreateIssueModal and updates state/priority via field popover 840ms
-     ✓ IssuesWorkspaceRoute: handles multi-select, batch archive, and batch delete in BulkActionBar 680ms
-     ✓ IssuesWorkspaceRoute: filters by Priority, Assignee (unassigned and alice), Cycle, Module, Due Date 1917ms
-     ✓ IssuesWorkspaceRoute: tests state filter Active preset, alice assignee, and select-all 447ms
-     ✓ IssuesWorkspaceRoute: tests field popovers for high/low priority and in-progress/backlog state, and / shortcut 419ms
-     ✓ IssuesWorkspaceRoute: covers handleToggleSelect 100 cap and unassigned I shortcut 1251ms
+     ✓ IssuesWorkspaceRoute: creates a new issue via QuickCreateIssueModal and updates state/priority via field popover 1162ms
+     ✓ IssuesWorkspaceRoute: handles multi-select, batch archive, and batch delete in BulkActionBar 671ms
+     ✓ IssuesWorkspaceRoute: filters by Priority, Assignee (unassigned and alice), Cycle, Module, Due Date 2200ms
+     ✓ IssuesWorkspaceRoute: tests state filter Active preset, alice assignee, and select-all 815ms
+     ✓ IssuesWorkspaceRoute: covers batch update state with Shift (todo) and batch update priority with Shift (medium) 330ms
+     ✓ IssuesWorkspaceRoute: tests field popovers for high/low priority and in-progress/backlog state, and / shortcut 737ms
+     ✓ IssuesWorkspaceRoute: covers handleToggleSelect 100 cap and unassigned I shortcut 2908ms
      ✓ Live Mode API Wiring & Board State Normalization (KANBA-164) (21)
-       ✓ creates, updates, and bulk-operates on issues in live mode via REST endpoints 397ms
-       ✓ covers opening, cancelling, and saving custom view via SaveViewModal in IssuesWorkspaceRoute 383ms
-       ✓ covers BulkActionBar batch delete and archive in table layout 325ms
+       ✓ creates, updates, and bulk-operates on issues in live mode via REST endpoints 663ms
+       ✓ enforces Hard WIP limits on state transition: blocks standard member with snapback, prompts admin for override 387ms
+       ✓ handles live mode patch failure and state fetch failure gracefully 355ms
+       ✓ covers opening, cancelling, and saving custom view via SaveViewModal in IssuesWorkspaceRoute 734ms
+       ✓ covers BulkActionBar batch delete and archive in table layout 582ms
 
- Test Files  5 passed (5)
-      Tests  117 passed (117)
-   Start at  08:29:24
-   Duration  11.20s (tests 65%, environment 26%, import 7%, transform 2%)
+ Test Files  6 passed (6)
+      Tests  138 passed (138)
+   Start at  10:56:41
+   Duration  16.19s (tests 71%, environment 22%, import 5%, worker 1%, transform 1%)
 
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-----------------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s           
+-------------------|---------|----------|---------|---------|-----------------------------
+All files          |   97.77 |    89.77 |   95.98 |   98.38 |                             
+ api               |   97.43 |    91.58 |   98.24 |   97.43 |                             
+  realtime.ts      |   97.43 |    91.58 |   98.24 |   97.43 | 147-153,210,224,308-309,617 
+ features/board    |   98.62 |    93.33 |   97.56 |    99.5 |                             
+  BoardView.tsx    |   98.36 |    92.85 |   97.22 |    99.4 | 474                         
+  boardApi.ts      |     100 |    94.64 |     100 |     100 | 186,204,220                 
+ features/views    |   97.08 |    85.88 |      93 |   98.25 |                             
+  viewRegistry.tsx |   97.08 |    85.88 |      93 |   98.25 | 247-248,389,644,661,749     
+ realtime          |     100 |      100 |     100 |     100 |                             
+  context.tsx      |     100 |      100 |     100 |     100 |                             
+-------------------|---------|----------|---------|---------|-----------------------------
