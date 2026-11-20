@@ -70,7 +70,15 @@ The ticket resolves all forensic findings from `reality-checker-report.md`, veri
    - Endpoint: `POST http://127.0.0.1:18961/api/v1/projects/SEC2/custom-fields/test-execute`
    - Payload: Bare expression from `Guide-Custom-Fields.md` Example 3 without `"formula: "` prefix:
      ```python
-     {"level": "critical", "score": 9.5, "label": "Critical"} if priority == "URGENT" else ({"level": "high", "score": 8.0, "label": "High"} if priority == "HIGH" else ({"level": "medium", "score": 5.0, "label": "Medium"} if priority == "MEDIUM" else {"level": "low", "score": 2.0, "label": "Low"}))
+     {"level": "critical", "score": 9.5, "label": "Critical"} if priority == "URGENT" else (
+         {"level": "high", "score": 8.0, "label": "High"}
+         if priority == "HIGH"
+         else (
+             {"level": "medium", "score": 5.0, "label": "Medium"}
+             if priority == "MEDIUM"
+             else {"level": "low", "score": 2.0, "label": "Low"}
+         )
+     )
      ```
    - Response: HTTP 200 OK in 3ms.
      ```json
