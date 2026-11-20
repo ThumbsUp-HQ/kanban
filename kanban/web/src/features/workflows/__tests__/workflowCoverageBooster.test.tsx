@@ -473,6 +473,69 @@ describe('Workflow Studio Coverage Booster', () => {
         expect(screen.getByText('Copied!')).toBeDefined();
       });
     });
+
+    it('exercises copy SHA timeout reset, repeat click, and unmount cleanup', async () => {
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: vi.fn().mockResolvedValue(undefined),
+        },
+      });
+
+      const { unmount } = render(
+        <HookPipelineRow
+          hook={DEFAULT_TEST_HOOK}
+          index={0}
+          total={1}
+          projectKey="KAN"
+        />,
+      );
+
+      const copyBtn = screen.getByRole('button', { name: /Copy SHA256/i });
+      fireEvent.click(copyBtn);
+      await waitFor(() => {
+        expect(screen.getByText('Copied!')).toBeDefined();
+      });
+
+      // Click again while timeout is pending to exercise clearTimeout branch (line 86)
+      fireEvent.click(copyBtn);
+      await waitFor(() => {
+        expect(screen.getByText('Copied!')).toBeDefined();
+      });
+
+      // Wait 2050ms inside act for real timer to expire and reset
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 2050));
+      });
+      await waitFor(() => {
+        expect(screen.queryByText('Copied!')).toBeNull();
+      });
+
+      // Click once more and unmount while timer is pending to exercise unmount cleanup (lines 47-49)
+      fireEvent.click(copyBtn);
+      unmount();
+    }, 10000);
+
+    it('exercises copy SHA clipboard rejection catch branch', async () => {
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: vi.fn().mockRejectedValueOnce(new Error('clipboard denied')),
+        },
+      });
+
+      render(
+        <HookPipelineRow
+          hook={DEFAULT_TEST_HOOK}
+          index={0}
+          total={1}
+          projectKey="KAN"
+        />,
+      );
+
+      const copyBtn = screen.getByRole('button', { name: /Copy SHA256/i });
+      fireEvent.click(copyBtn);
+      await Promise.resolve();
+      expect(screen.queryByText('Copied!')).toBeNull();
+    });
   });
 
   describe('TransitionRuleCard edge cases', () => {

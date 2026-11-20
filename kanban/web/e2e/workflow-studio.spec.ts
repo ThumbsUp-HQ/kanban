@@ -23,7 +23,7 @@ import { annotatedScreenshot } from './support/annotate';
 
 const SCREENSHOT_DIR = resolve(
   import.meta.dirname,
-  '../../../docs/qa/KANBA-158/screenshots',
+  '../test-results/workflow-studio',
 );
 
 const defaultHooks = [
