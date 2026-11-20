@@ -27,10 +27,85 @@ export type ConfigReferenceItem = Record<string, string>;
 
 export const WIKI_CHAPTERS: WikiChapter[] = [
   {
+    "slug": "home",
+    "title": "\ud83d\udc4dkanban: Executive Architecture and System Overview",
+    "category": "Overview",
+    "order": 1,
+    "summary": "Welcome to the authoritative technical documentation and wiki for **\ud83d\udc4dkanban** (`thumbs-up-kanban`), an open-source, enterprise-grade project management, ticketing, and knowledge platform built from the ground up on two fundamental pillars: 1. **Security-First (Priority 0):** Hardened zero-trust infrastructure, PostgreSQL Row-Level Security (`FORCE RLS`), five-tier network isolation, AAL2 administrative authorization, and hostile input sanitization. 2. **Agent-First (Priority 1):** Purpose-built for autonomous AI agents and human teams alike, replacing the context-bloating CRUD-wrapper anti-pattern with an intent-driven, three-surface Model Context Protocol (MCP) server, deterministic workflow gates, and sub-second execution loops.",
+    "sections": [
+      {
+        "id": "core-system-architecture",
+        "title": "Core System Architecture",
+        "level": 2
+      },
+      {
+        "id": "visual-tour-platform-highlights",
+        "title": "Visual Tour: Platform Highlights",
+        "level": 2
+      },
+      {
+        "id": "enterprise-workspace-and-project-hub",
+        "title": "Enterprise Workspace and Project Hub",
+        "level": 3
+      },
+      {
+        "id": "breathable-whitespace-board-and-high-contrast-theming",
+        "title": "Breathable Whitespace Board and High-Contrast Theming",
+        "level": 3
+      },
+      {
+        "id": "keyboard-driven-command-palette",
+        "title": "Keyboard-Driven Command Palette",
+        "level": 3
+      },
+      {
+        "id": "multi-view-projections-table-inline-editing-and-timeline-dependencies",
+        "title": "Multi-View Projections: Table Inline Editing and Timeline Dependencies",
+        "level": 3
+      },
+      {
+        "id": "fullscreen-issue-studio-and-access-visibility-inspector",
+        "title": "Fullscreen Issue Studio and Access Visibility Inspector",
+        "level": 3
+      },
+      {
+        "id": "advanced-governance-and-administrative-studios",
+        "title": "Advanced Governance and Administrative Studios",
+        "level": 3
+      },
+      {
+        "id": "architectural-distinctions-kanban-vs-traditional-tools",
+        "title": "Architectural Distinctions: \ud83d\udc4dkanban vs Traditional Tools",
+        "level": 2
+      },
+      {
+        "id": "non-bypassable-engineering-and-security-invariants",
+        "title": "Non-Bypassable Engineering and Security Invariants",
+        "level": 2
+      },
+      {
+        "id": "complete-table-of-contents",
+        "title": "Complete Table of Contents",
+        "level": 2
+      },
+      {
+        "id": "system-architecture-domains",
+        "title": "System Architecture Domains",
+        "level": 3
+      },
+      {
+        "id": "reference-manuals-verification-matrices",
+        "title": "Reference Manuals & Verification Matrices",
+        "level": 3
+      }
+    ],
+    "content": "# \ud83d\udc4dkanban: Executive Architecture and System Overview\n\nWelcome to the authoritative technical documentation and wiki for **\ud83d\udc4dkanban** (`thumbs-up-kanban`), an open-source, enterprise-grade project management, ticketing, and knowledge platform built from the ground up on two fundamental pillars:\n1. **Security-First (Priority 0):** Hardened zero-trust infrastructure, PostgreSQL Row-Level Security (`FORCE RLS`), five-tier network isolation, AAL2 administrative authorization, and hostile input sanitization.\n2. **Agent-First (Priority 1):** Purpose-built for autonomous AI agents and human teams alike, replacing the context-bloating CRUD-wrapper anti-pattern with an intent-driven, three-surface Model Context Protocol (MCP) server, deterministic workflow gates, and sub-second execution loops.\n\nLicensed under the strictly permissive **Apache-2.0** license, \ud83d\udc4dkanban eliminates SaaS AI paywalls and per-seat subscription lock-in while competing globally against Jira, Vibe Kanban, and commercial issue trackers with drop-in enterprise migration support.\n\n---\n\n## Core System Architecture\n\n```mermaid\nflowchart TD\n    subgraph Clients[\"Client Surfaces\"]\n        SPA[\"React 19 SPA (Desktop, Tablet, Mobile)\"]\n        Agents[\"Autonomous Agents (Cursor, Claude, Codex, Agy)\"]\n    end\n\n    subgraph Entrypoints[\"API & Protocol Gateways\"]\n        FastAPI[\"FastAPI Application Server<br/>- Multi-Card Auth (AAL2)<br/>- Canonical Markdown Pipe<br/>- WebSocket Realtime Hub<br/>- REST API (184 routes)\"]\n        MCP[\"3-Surface MCP Server<br/>- /mcp/agent (9 tools)<br/>- /mcp/docs (6 tools)<br/>- /mcp/admin (12 tools)<br/>- InlineSafeDumper YAML\"]\n    end\n\n    subgraph Core[\"Database Engine & Object Graph\"]\n        UOG[\"Universal Object Graph (UOG)<br/>PostgreSQL 16 with FORCE ROW LEVEL SECURITY (100%)<br/>- Typed object_links, Spine records, Append-only Ledger<br/>- ltree Hierarchical Docs, pgvector Embeddings, Full-Text<br/>- Invalid Object Link Auditor & Purger\"]\n    end\n\n    subgraph Runtimes[\"Execution Engines\"]\n        AIEngine[\"AI Engine & Orchestration<br/>- OpenAI, Ollama, Gemini<br/>- agy -p, codex -p pipes<br/>- Async Gate Interceptors\"]\n        Sandbox[\"Sandbox Execution Runtime<br/>- Tier A: Wasmtime engine<br/>- Tier B: nsjail runner<br/>- Scoped Ephemeral Tokens\"]\n    end\n\n    SPA -->|HTTP / WebSocket| FastAPI\n    Agents -->|HTTP / SSE / STDIO| MCP\n    Agents -->|HTTP REST| FastAPI\n    FastAPI --> Core\n    MCP --> Core\n    Core --> AIEngine\n    Core --> Sandbox\n```\n\n---\n\n## Visual Tour: Platform Highlights\n\n### Enterprise Workspace and Project Hub\nThe workspace home delivers clear project visibility, team velocity metrics, and seamless multi-project navigation with responsive layouts across desktop, tablet, and mobile displays.\n\n![Workspace Home and Project Overview](images/05-workspace-home.png)\n\n### Breathable Whitespace Board and High-Contrast Theming\nThe core Kanban board features sub-16ms smooth drag-and-drop, semantic emoji hints, configurable WIP limits, and an enterprise dark theme for reduced eye strain during extended operational sessions.\n\n![Enterprise Whitespace Board View](images/06-board-view.png)\n\n![Dark Theme Enterprise Kanban Board](images/22-dark-theme-board.png)\n\n### Keyboard-Driven Command Palette\nGlobal keyboard shortcuts (`Ctrl+K` / `Cmd+K`) provide instant fuzzy navigation across tickets, documents, projects, and administrative studios without context switching.\n\n![Global Command Palette Navigation](images/23-command-palette.png)\n\n### Multi-View Projections: Table Inline Editing and Timeline Dependencies\nEngineers can switch instantly between Kanban Board, 3-pane List, Table with capability-gated inline cell editing, Calendar, and Timeline with SVG Bezier BLOCKS dependency arrows.\n\n![Table View Inline Editing](images/37-table-inline-editing.png)\n\n### Fullscreen Issue Studio and Access Visibility Inspector\nExpanding any ticket unlocks the Fullscreen Issue Studio, featuring a Rich Markdown authoring toolbar, Sparkle 320ms Fill-in-the-Middle (FIM) ghost-text completion, the `\ud83d\udee1\ufe0f` Effective Access Inspector, and a 4-tab activity stream.\n\n![Fullscreen Issue View with Rich Markdown Toolbar and Access Inspector](images/39-fullscreen-issue-view.png)\n\n### Advanced Governance and Administrative Studios\nPlatform administrators manage enterprise governance through dedicated studios:\n- **AI Providers & Token Caps Studio (`/admin/ai`):** Write-only key custody, monthly token budgets, and air-gap policies (`images/43-admin-ai-studio-providers.png`).\n- **Invalid Object Link Auditor (`/admin/link-auditor`):** Continuous graph integrity verification, inspect drawer, and two-stage audited purge (`images/46-admin-link-auditor.png`).\n- **Workflow Transition Studio & Dry-Run Drawer (`/projects/:key/settings/workflows`):** Zero-persistence dry-run simulation with step timings and copyable CLI commands (`images/50-workflow-studio-dry-run-drawer.png`).\n- **Plane Migration Import Studio (`/admin/imports`):** Single-click bundle ingestion, dry-run diff preview, and transactional live migration (`images/49-admin-plane-import-studio.png`).\n\n![Admin Invalid Object Link Auditor Studio](images/46-admin-link-auditor.png)\n\n---\n\n## Architectural Distinctions: \ud83d\udc4dkanban vs Traditional Tools\n\n| Dimension | Legacy Trackers & Paywalled SaaS (Jira / Vibe Kanban) | \ud83d\udc4dkanban Platform |\n| :--- | :--- | :--- |\n| **License & Cost** | Commercial SaaS / AGPL with paid AI paywalls | Pure Apache-2.0, zero paywalled features |\n| **Agent Interface** | 70-120 raw CRUD tool wrappers (15k-25k tokens) | 27 intent-driven MCP tools across 3 surfaces (<= 1.8k tokens for agent) |\n| **Database Security** | Application-layer authorization checks | Hardware-enforced PostgreSQL `FORCE ROW LEVEL SECURITY` on all tenant tables |\n| **Network Isolation** | Monolithic container or open Docker bridge | Hardened 5-network isolation matrix (`edge`, `app`, `data`, `sandbox`, `egress`) |\n| **Workflow Interceptors** | Basic webhooks with no blocking execution | Atomic synchronous Wasm validators/mutators and async AI agent gates |\n| **Input Sanitization** | Basic HTML strip | Hostile Unicode lone-surrogate rejection, hidden-DOM pruner, SVG sandbox |\n| **Deployment Mode** | Complex multi-service Kubernetes only | Single-container standalone (`docker run`) or full multi-container production |\n\nFor an exhaustive feature-by-feature evaluation across 35 criteria, see the [Feature Comparison Matrix](Feature-Comparison).\n\n---\n\n## Non-Bypassable Engineering and Security Invariants\n\n1. **Plain ASCII Hyphen Invariant:** All public documentation, wiki articles, and commit messages strictly mandate plain ASCII hyphens (`-`). Unicode em-dashes (U+2014) and en-dashes (U+2013) are strictly forbidden across the codebase and wiki.\n2. **Zero-Context Fail-Closed Database:** In the absence of an explicit session context (`SET LOCAL app.current_principal_id`), all queries against tenant tables return zero rows. The application role `kanban_app` is stripped of `SUPERUSER` and `BYPASSRLS`.\n3. **Hostile Unicode Rejection:** Text ingestion rejects UTF-16 lone surrogates (`0xD800` through `0xDFFF`) prior to UTF-8 encoding, preventing memory corruptions and parser desynchronization.\n4. **Paste-Jacking Defense:** Clipboard inputs are aggressively stripped of hidden-DOM payloads, zero-width spaces, and invisible injection sequences.\n5. **AAL2 Admin Route Enforcement:** Every endpoint under `/api/v1/admin/*` and every administrative tool on `/mcp/admin` requires Authenticator Assurance Level 2 (AAL2) credentials.\n6. **95% Automated Test Coverage:** All core modules maintain at least 95% unit test coverage running on clean-DB fixtures with sub-millisecond `SAVEPOINT` isolation.\n\n---\n\n## Complete Table of Contents\n\n### System Architecture Domains\n1. [System Topology and Multi-Container Architecture](System-Topology-and-Multi-Container-Architecture) - Standalone embedded PostgreSQL Unix socket and 5-network production container stack.\n2. [Zero-Trust Security and Access Visibility](Zero-Trust-Security-and-Access-Visibility) - PostgreSQL FORCE RLS, dynamic sharing pill, access manifests, and STRIDE threat mitigation.\n3. [Multi-Card Authentication Studio](Multi-Card-Authentication-Studio) - Pluggable auth cards (OAuth2, LDAP, WebAuthn Passkeys, TOTP, Local Admin) with break-glass protection.\n4. [Canonical Markdown and Safe Media Pipeline](Canonical-Markdown-and-Safe-Media-Pipeline) - Hostile input sanitization, safe Mermaid rendering, SVG sandboxing, and media proxying.\n5. [Enterprise Whitespace and Kanban Board](Enterprise-Whitespace-and-Kanban-Board) - 5 native view layouts, 2D swimlanes, sub-16ms drag-and-drop, and the `<EmojiHint>` semantic hover system.\n6. [Ticket Screen and Work Item Features](Ticket-Screen-and-Work-Item-Features) - 960px peek drawer, 17 enterprise work-item features, properties rail, and 4-tab activity stream.\n7. [Hierarchical Docs and Stickies with Smart Promotion](Hierarchical-Docs-and-Stickies-with-Smart-Promotion) - ltree page trees, color-coded sticky masonry, and lossless AI-assisted promotion to Docs.\n8. [Blinking Cursor Sparkle Completion Engine](Blinking-Cursor-Sparkle-Completion-Engine) - Sub-300ms inline Fill-In-the-Middle (FIM) ghost text with surgical right-click disambiguation.\n9. [Multi-Provider AI Engine and Runners](Multi-Provider-AI-Engine-and-Runners) - OpenAI, Ollama, Gemini integrations, local CLI pipe harnesses (`agy -p`, `codex -p`), and mTLS runners.\n10. [Three-Surface MCP Server Architecture](Three-Surface-MCP-Server-Architecture) - Dedicated streamable endpoints (`/mcp/agent`, `/mcp/docs`, `/mcp/admin`) with InlineSafeDumper YAML.\n11. [Universal Object Graph and Link Auditor](Universal-Object-Graph-and-Link-Auditor) - Unified object spine, 13 typed object relationships, and automated invalid link detection/purging.\n12. [Admin Custom Scripted Fields and Sandbox](Admin-Custom-Scripted-Fields-and-Sandbox) - Wasmtime (Tier A) and nsjail (Tier B) sandboxed execution with cryptographic tier escalation.\n13. [ScriptRunner Workflows and Transition Interceptors](ScriptRunner-Workflows-and-Transition-Interceptors) - Synchronous transition validators/mutators and asynchronous AI agent gates.\n14. [Clean-DB Testing and Governance Gates](Clean-DB-Testing-and-Governance-Gates) - Fast parallel test execution, tmpfs template database, pluggable AI fixtures, and CI/CD validation.\n15. [Production Promotion and Backup Runbook](Production-Promotion-and-Backup-Runbook) - Single-command standalone promotion, encrypted KBBAK1 backup format, and disaster recovery.\n16. [Migration and Cutover Runbook](Migration-and-Cutover-Runbook) - 7-phase zero-downtime cutover plan, dry-run reconciliation, and rollback procedures.\n17. [Real-Time Web and WebSocket Architecture](Real-Time-Web-and-WebSocket-Architecture) - Distributed WebSocket hub, connection throttling, channel subscriptions, and board state synchronization.\n\n### Reference Manuals & Verification Matrices\n- [Feature Comparison Matrix (35 Features)](Feature-Comparison) - Comprehensive capability comparison across 35 features evaluating \ud83d\udc4dkanban against Jira, Plane, GitHub, Vibe Kanban, Businessmap, and Codebeamer.\n- [MCP Tools Reference (27 Tools)](MCP-Tools-Reference) - Exhaustive specification of all 27 MCP tools, parameter schemas, LOD tiers, and destructive token workflows.\n- [REST API Architecture and OpenAPI Guide](REST-API-Architecture-and-OpenAPI-Guide) - Technical guide to the 184-route FastAPI backend, interactive OpenAPI documentation, and TypeScript SDK.\n- [User Tasks and QA Verification Matrix](User-Tasks-and-QA-Matrix) - Verification audit mapping tasks UT-01 through UT-16 to live browser checks and screenshot deliverables.\n- [Architecture Delta and Gap Analysis](Architecture-Delta-and-Missing-Features) - Forensic analysis of specification requirements versus codebase implementation and tracking backlog.\n"
+  },
+  {
     "slug": "admin-custom-scripted-fields-and-sandbox",
     "title": "Admin Custom Scripted Fields and Sandboxed Execution",
     "category": "System Architecture",
-    "order": 1,
+    "order": 2,
     "summary": "Modern software development requires dynamic metadata: calculated story points, security compliance flags, release readiness scores, and SLA countdowns. However, permitting custom scripts to run inside a project management system has historically introduced catastrophic security vulnerabilities, including server-side request forgery (SSRF), infinite loops, and arbitrary code execution.",
     "sections": [
       {
@@ -90,7 +165,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "slug": "architecture-delta-and-missing-features",
     "title": "\ud83d\udc4dkanban: Architecture Specification Delta & Gap Analysis",
     "category": "Overview",
-    "order": 2,
+    "order": 3,
     "summary": "This document presents a section-by-section architectural delta and gap analysis comparing the authoritative specification (`docs/ARCHITECTURE_AND_PRODUCT_SPEC.md`, Sections 1 through 15) against the actual implementation codebase across `kanban/`, `database/`, `mcp/`, `agent/`, and `kanban/web/`, active unit and integration test suites, and project documentation topics.",
     "sections": [
       {
@@ -165,7 +240,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
       },
       {
         "id": "section-9-blinking-cursor-sparkle-completion-surgical-right-click-engine-req-7",
-        "title": "Section 9: Blinking Cursor Sparkle (`\u2728`) Completion & Surgical Right-Click Engine (Req 7)",
+        "title": "Section 9: Blinking Cursor Sparkle (\u2728) Completion & Surgical Right-Click Engine (Req 7)",
         "level": 3
       },
       {
@@ -219,8 +294,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 3
       },
       {
-        "id": "published-container-image-for",
-        "title": "4. Published Container Image for `thumbs-up-kanban:sandbox`",
+        "id": "published-container-image-for-thumbs-up-kanbansandbox",
+        "title": "4. Published Container Image for thumbs-up-kanban:sandbox",
         "level": 3
       },
       {
@@ -244,8 +319,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 3
       },
       {
-        "id": "drift-3-workflow-models-missing-from",
-        "title": "Drift 3: Workflow Models Missing from `database/models/__init__.py`",
+        "id": "drift-3-workflow-models-missing-from-databasemodels-init-py",
+        "title": "Drift 3: Workflow Models Missing from database/models/__init__.py",
         "level": 3
       },
       {
@@ -280,7 +355,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "slug": "blinking-cursor-sparkle-completion-engine",
     "title": "Blinking Cursor Sparkle Completion Engine",
     "category": "System Architecture",
-    "order": 3,
+    "order": 4,
     "summary": "Software documentation, bug reports, and requirements specifications benefit greatly from AI assistance, but disruptive popups and intrusive autocomplete modals create frustration. \ud83d\udc4dkanban introduces the **Blinking Cursor Sparkle (`\u2728`) Completion Engine**: an unobtrusive, editor-integrated Fill-In-the-Middle (FIM) completion system.",
     "sections": [
       {
@@ -325,7 +400,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "slug": "canonical-markdown-and-safe-media-pipeline",
     "title": "Canonical Markdown and Safe Media Pipeline",
     "category": "System Architecture",
-    "order": 4,
+    "order": 5,
     "summary": "The storage and rendering of rich text is a primary vector for both data corruption and cross-site scripting (XSS) vulnerabilities. Many project management tools store raw HTML or proprietary JSON formats, leading to database bloat, rendering inconsistencies across platforms, and prompt injection vulnerabilities when ingested by AI agents.",
     "sections": [
       {
@@ -359,8 +434,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 2
       },
       {
-        "id": "client-side-mermaid-diagrams",
-        "title": "Client-Side Mermaid Diagrams (`beautiful-mermaid`)",
+        "id": "client-side-mermaid-diagrams-beautiful-mermaid",
+        "title": "Client-Side Mermaid Diagrams (beautiful-mermaid)",
         "level": 3
       },
       {
@@ -380,7 +455,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "slug": "clean-db-testing-and-governance-gates",
     "title": "Clean-DB Testing and Governance Gates",
     "category": "System Architecture",
-    "order": 5,
+    "order": 6,
     "summary": "Software quality and security cannot be tested into a system as an afterthought. \ud83d\udc4dkanban operates under a strict **Shift-Left Mandate**: all code must achieve and maintain a minimum of **95% automated test coverage**, zero compiler or linter warnings, sub-second test execution speeds, and verifiable CI/CD build proofs before merging.",
     "sections": [
       {
@@ -399,8 +474,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 3
       },
       {
-        "id": "the-role-isolation-invariant",
-        "title": "The Role Isolation Invariant (`KANBA-162`)",
+        "id": "the-role-isolation-invariant-kanba-162",
+        "title": "The Role Isolation Invariant (KANBA-162)",
         "level": 2
       },
       {
@@ -420,7 +495,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "slug": "custom-scripts-and-json-security-architecture",
     "title": "Custom Scripts and JSON Security Architecture",
     "category": "System Architecture",
-    "order": 6,
+    "order": 7,
     "summary": "Extensibility is central to \ud83d\udc4dkanban: administrators can author custom fields, dynamic computed formulas, and WebAssembly (Wasm) logic to compute metadata in real time. However, allowing untrusted or semi-trusted script execution and arbitrary JSON payloads introduces critical attack vectors: 1. **Supply-chain and Binary Tampering:** Substituting an approved Wasm module binary with a malicious payload after approval. 2. **Re-entrant Elevation:** Calling privileged endpoints (such as `test-execute` or `dry-run`) from within custom field scripts or workflow hooks to bypass security boundaries. 3. **Event-Loop CPU and Memory Denial-of-Service:** Exploiting Python abstract syntax tree (AST) evaluation through exponential operations, unbounded sequence allocations, or deep syntax tree exhaustion. 4. **JSON Payload Bombs:** Crashing or freezing ASGI servers via nested JSON recursion (stack overflow), unbounded key allocation (memory exhaustion), or invalid UTF-16 lone surrogates. 5. **Client-Side Prototype Pollution and DOM XSS:** Polluting JavaScript object prototypes via `__proto__` or `constructor` keys in parsed JSON, or injecting unvalidated HTML strings into the document object model.",
     "sections": [
       {
@@ -504,8 +579,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 2
       },
       {
-        "id": "safe-json-parsing",
-        "title": "Safe JSON Parsing (`safeJsonParse`)",
+        "id": "safe-json-parsing-safejsonparse",
+        "title": "Safe JSON Parsing (safeJsonParse)",
         "level": 3
       },
       {
@@ -525,7 +600,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "slug": "enterprise-whitespace-and-kanban-board",
     "title": "Enterprise Whitespace, Semantic Emojis, and Kanban Board",
     "category": "System Architecture",
-    "order": 7,
+    "order": 8,
     "summary": "High-performing engineering teams require interfaces that balance visual clarity with deep technical density. Cluttered, cramped dashboards create cognitive fatigue, while overly sparse designs hide crucial metadata. \ud83d\udc4dkanban delivers a refined **Enterprise Whitespace Design System**, combining generous breathing room with dense information display, sub-16ms drag-and-drop responsiveness, and the intuitive `<EmojiHint>` hover elaboration system.",
     "sections": [
       {
@@ -539,8 +614,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 2
       },
       {
-        "id": "the-semantic-hover-system",
-        "title": "The `<EmojiHint>` Semantic Hover System",
+        "id": "the-emojihint-semantic-hover-system",
+        "title": "The <EmojiHint> Semantic Hover System",
         "level": 2
       },
       {
@@ -559,28 +634,28 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 2
       },
       {
-        "id": "board-view",
-        "title": "1. Board View (`?layout=board`)",
+        "id": "board-view-layoutboard",
+        "title": "1. Board View (?layout=board)",
         "level": 3
       },
       {
-        "id": "list-view",
-        "title": "2. List View (`?layout=list`)",
+        "id": "list-view-layoutlist",
+        "title": "2. List View (?layout=list)",
         "level": 3
       },
       {
-        "id": "table-view",
-        "title": "3. Table View (`?layout=table`)",
+        "id": "table-view-layouttable",
+        "title": "3. Table View (?layout=table)",
         "level": 3
       },
       {
-        "id": "calendar-view",
-        "title": "4. Calendar View (`?layout=calendar`)",
+        "id": "calendar-view-layoutcalendar",
+        "title": "4. Calendar View (?layout=calendar)",
         "level": 3
       },
       {
-        "id": "timeline-gantt-view",
-        "title": "5. Timeline (Gantt) View (`?layout=timeline`)",
+        "id": "timeline-gantt-view-layouttimeline",
+        "title": "5. Timeline (Gantt) View (?layout=timeline)",
         "level": 3
       },
       {
@@ -610,7 +685,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "slug": "feature-comparison",
     "title": "Feature Comparison",
     "category": "Reference Guides",
-    "order": 8,
+    "order": 9,
     "summary": "A kanban is just a kanban until you start digging deeper. On the surface, every issue tracker presents identical columns, draggable cards, and basic workflow states. The real architectural divergence begins the moment you inspect paywalled enterprise controls, database-level security invariants, canonical Markdown integrity, and native agent/MCP execution gates. While commercial SaaS and copyleft alternatives lock custom properties, audit logs, Single Sign-On, and AI integrations behind steep per-seat subscription tiers or bloated CRUD APIs, `\ud83d\udc4dkanban` ships an uncompromising, security-first, agent-first platform under a pure Apache-2.0 license. Below is the full 35-feature technical capability matrix comparing `\ud83d\udc4dkanban` directly against legacy and modern project management systems.",
     "sections": [
       {
@@ -640,7 +715,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "slug": "guide-custom-fields",
     "title": "How to Use Custom Fields",
     "category": "Reference Guides",
-    "order": 9,
+    "order": 10,
     "summary": "Custom Fields extend your projects and issues with dynamic calculations, computed business metrics, compliance indicators, and metadata without modifying the core database schema or writing custom server plugins.",
     "sections": [
       {
@@ -689,38 +764,38 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 2
       },
       {
-        "id": "section",
-        "title": "1. `text`",
+        "id": "text",
+        "title": "1. text",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "2. `number`",
+        "id": "number",
+        "title": "2. number",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "3. `badge`",
+        "id": "badge",
+        "title": "3. badge",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "4. `severity_pill`",
+        "id": "severity-pill",
+        "title": "4. severity_pill",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "5. `url`",
+        "id": "url",
+        "title": "5. url",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "6. `markdown_snippet`",
+        "id": "markdown-snippet",
+        "title": "6. markdown_snippet",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "7. `json_table`",
+        "id": "json-table",
+        "title": "7. json_table",
         "level": 3
       },
       {
@@ -755,7 +830,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "slug": "hierarchical-docs-and-stickies-with-smart-promotion",
     "title": "Hierarchical Docs, Project Stickies, and Smart Promotion",
     "category": "System Architecture",
-    "order": 10,
+    "order": 11,
     "summary": "Software engineering encompasses both informal, ephemeral scratchpads (meeting notes, architecture brainstorming, quick snippets) and formal, structured documentation (system specifications, API references, runbooks). In conventional tools, informal notes either get lost in chat threads or prematurely clutter formal document trees.",
     "sections": [
       {
@@ -789,8 +864,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 2
       },
       {
-        "id": "postgresql-tree-engine",
-        "title": "PostgreSQL `ltree` Tree Engine",
+        "id": "postgresql-ltree-tree-engine",
+        "title": "PostgreSQL ltree Tree Engine",
         "level": 3
       },
       {
@@ -799,8 +874,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 2
       },
       {
-        "id": "visual-diff-and-instant-restore",
-        "title": "1. `PageVersion` Visual Diff and Instant Restore",
+        "id": "pageversion-visual-diff-and-instant-restore",
+        "title": "1. PageVersion Visual Diff and Instant Restore",
         "level": 3
       },
       {
@@ -817,81 +892,6 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "content": "# Hierarchical Docs, Project Stickies, and Smart Promotion\n\n## Overview\n\nSoftware engineering encompasses both informal, ephemeral scratchpads (meeting notes, architecture brainstorming, quick snippets) and formal, structured documentation (system specifications, API references, runbooks). In conventional tools, informal notes either get lost in chat threads or prematurely clutter formal document trees.\n\n\ud83d\udc4dkanban resolves this divide through two integrated systems:\n1. **Project Stickies:** Lightweight, color-coded digital sticky notes on an interactive masonry grid for rapid ideation.\n2. **Hierarchical Docs (`ltree`):** Deeply nested, versioned technical documentation powered by PostgreSQL tree hierarchies.\n3. **Smart AI Doc Promotion:** An intelligent bridge that detects when a scratchpad has matured into an architectural specification and transforms it into a formal Doc with a single click.\n\n---\n\n## Project Stickies and Ideation Grid\n\nProject Stickies live at `/stickies` (workspace scope) and `/projects/KAN/overview` (project scope).\n\n![Project Stickies and Smart Promotion Modal](images/10-stickies-and-doc-promotion.png)\n\n![Six-Color Semantic Sticky Palette Grid](images/33-stickies-palette-grid.png)\n\n### Stickies Architecture\n\n- **6 Semantic Color Palettes:** Amber, Emerald, Sky, Rose, Violet, and Slate cards for visual categorization.\n- **Masonry Layout:** Responsive CSS masonry layout that dynamically packs cards of varying heights.\n- **Fast Markdown Editing:** Double-click or select to edit Markdown inline with instant autosave.\n- **Real-Time Collaboration:** Changes synchronize across connected team members via WebSocket broadcasts within 50 milliseconds.\n\n---\n\n## Smart AI-Assisted Sticky-to-Doc Promotion\n\n```mermaid\nflowchart TD\n    Sticky[\"Scratchpad Sticky Note<br/>(Markdown text & initial thoughts)\"] --> Heuristics[\"Debounced Complexity Heuristic<br/>- Word count > 150 words<br/>- Headings (##), tables, code blocks<br/>- Checkboxes (- [ ])\"]\n    Heuristics -->|Threshold reached| RecPill[\"Display 'Promotion Recommended' Pill\"]\n    RecPill -->|Click Promote to Doc| AIStudio[\"AI Promotion Studio<br/>Multi-Provider AI drafts formal structure,<br/>executive summary & sections\"]\n    AIStudio --> Confirm[\"Operator Reviews & Accepts\"]\n    Confirm --> NewDoc[\"Formal Hierarchical Doc (ltree)\"]\n    Confirm --> Link[\"UOG records typed PROMOTED_TO link\"]\n    Confirm --> Archive[\"Original sticky marked promoted & archived\"]\n```\n\nAs brainstorming progresses, stickies often accumulate detailed requirements, code snippets, and diagrams. \ud83d\udc4dkanban monitors stickies using debounced complexity heuristics:\n- Word count exceeding 150 words.\n- Presence of structured headings (`## `), markdown tables, or fenced code blocks.\n- Multiple bullet points or task checkboxes (`- [ ]`).\n\n### The Promotion Workflow and Preview Modal\n\nWhen these heuristics trigger, the sticky displays a `promotion_recommended` indicator. Clicking **Promote to Doc** opens the interactive AI Promotion Preview Modal:\n\n```mermaid\nsequenceDiagram\n    autonumber\n    actor User as Engineer / Architect\n    participant Sticky as Stickies Board\n    participant Modal as AI Promotion Modal\n    participant AI as Multi-Provider AI Engine\n    participant DB as Universal Object Graph\n\n    User->>Sticky: Click \"Promote to Doc\" button\n    Sticky->>Modal: Open Promotion Preview Modal\n    Modal->>AI: Synthesize notes into formal structured document\n    AI-->>Modal: Return generated title, executive summary, sections, target project\n    User->>Modal: Inspect preview, adjust target project / ltree path\n    User->>Modal: Click \"Accept & Create Doc\"\n    Modal->>DB: INSERT into docs (ltree path, markdown, creator)\n    Modal->>DB: INSERT into object_links (kind: PROMOTED_TO)\n    Modal->>DB: UPDATE stickies SET state = 'promoted'\n    DB-->>Sticky: Real-time update: replace sticky with promoted stub\n```\n\n![AI Sticky to Doc Promotion Preview Modal](images/40-ai-sticky-doc-promotion-modal.png)\n\n1. **AI Structure Preview:** The multi-provider AI engine drafts formal headings, executive summaries, and organized subsections from the raw notes.\n2. **Target Project and Path Selection:** Operators can choose the destination project and parent document node in the `ltree` hierarchy.\n3. **ACL Scope Preservation:** The newly created document automatically inherits the project ACL permissions and explicit sharing rules of the origin sticky.\n4. **Bidirectional Object Link:** A typed `PROMOTED_TO` link is recorded in the Universal Object Graph connecting the original sticky and the new Doc.\n5. **Clean Archival & Promoted Stub:** The original sticky is converted into a promoted stub pointing to the new document URL, keeping the ideation board tidy while preserving audit history.\n\n---\n\n## Hierarchical Docs and Nested Tree Navigation\n\nFormal specifications and engineering documentation reside under the project Docs view (`/projects/KAN/docs`).\n\n![Hierarchical Docs Tree and Outline View](images/11-docs-hierarchy-view.png)\n\n![Three-Pane Interactive Documentation Editor](images/32-docs-three-pane-editor.png)\n\n### PostgreSQL `ltree` Tree Engine\n\nDocumentation hierarchies are modeled using PostgreSQL's native `ltree` extension (`database/models/knowledge.py`):\n- Path representations such as `workspace_1.project_kan.architecture.security`.\n- Sub-millisecond subtree queries, ancestral lookups, and branch moves.\n- Circular hierarchy prevention guaranteed by database constraints.\n\n```mermaid\ngraph TD\n    Root[\"Root: workspace_1.project_kan\"]\n    Arch[\"architecture (workspace_1.project_kan.architecture)\"]\n    API[\"api (workspace_1.project_kan.api)\"]\n    Sec[\"security (workspace_1.project_kan.architecture.security)\"]\n    Perf[\"perf (workspace_1.project_kan.architecture.perf)\"]\n    REST[\"rest (workspace_1.project_kan.api.rest)\"]\n    MCPDoc[\"mcp (workspace_1.project_kan.api.mcp)\"]\n\n    Root --> Arch\n    Root --> API\n    Arch --> Sec\n    Arch --> Perf\n    API --> REST\n    API --> MCPDoc\n```\n\n---\n\n## PageVersion Diff, Restore, and Highlight-to-Issue Linking\n\nTechnical documentation evolves across releases. \ud83d\udc4dkanban provides deep revision governance and bidirectional issue linking directly inside the editor:\n\n```mermaid\nflowchart LR\n    subgraph DocEvolution[\"Documentation Lifecycle\"]\n        V1[\"PageVersion 1<br/>Initial Spec\"] --> V2[\"PageVersion 2<br/>Architecture Review\"]\n        V2 --> V3[\"PageVersion 3<br/>Active Production\"]\n        \n        V3 -.->|Inspect Diff| DiffView[\"Side-by-Side Diff Modal<br/>Green additions / Red deletions\"]\n        DiffView -.->|One-Click Restore| V2\n        \n        V3 -->|Highlight text| Highlight[\"Selection Popover<br/>'Link to Issue' / 'New Issue'\"]\n        Highlight -->|typed object_link| Issue[\"Linked Work Item KAN-142\"]\n    end\n```\n\n![Docs PageVersion Diff Restore and Highlight Linking](images/41-docs-pageversion-diff-restore.png)\n\n### 1. `PageVersion` Visual Diff and Instant Restore\n- **Immutable Revision Snapshots:** Every manual save or autosave milestone writes an immutable snapshot to `page_versions`.\n- **Side-by-Side and Unified Diffs:** Compare any two revisions with syntax-highlighted additions (green) and deletions (red).\n- **One-Click Restore:** Roll back any document to a previous revision without losing intervening history.\n\n### 2. Highlight-to-Issue Linking\n- **Inline Text Selection:** Selecting any phrase, sentence, or technical requirement inside a document displays an instant action pill.\n- **Bi-Directional Traceability:** Link the highlighted text to an existing ticket or click to spawn a new work item with the highlighted text pre-filled into the description.\n- **Universal Graph Integrity:** Creates typed `REFERENCED_IN` / `MENTIONS` links in the Universal Object Graph.\n\n### Key Capabilities of the Docs System\n\n- **Nested Page Tree:** Expandable sidebar tree allowing arbitrary nesting of documents, specifications, and runbooks.\n- **Auto-Extracted Outline Rail:** The right-hand rail parses headings in real time (`H1`, `H2`, `H3`), providing one-click jump links to document sections.\n- **Append-Only Version History:** Every document save appends an immutable snapshot. Authors can inspect visual diffs between revisions and restore previous versions with a single click.\n- **Mermaid and Diagram Support:** Native rendering of architecture flows, sequence diagrams, and class models directly within the document.\n"
   },
   {
-    "slug": "home",
-    "title": "\ud83d\udc4dkanban: Executive Architecture and System Overview",
-    "category": "Overview",
-    "order": 11,
-    "summary": "Welcome to the authoritative technical documentation and wiki for **\ud83d\udc4dkanban** (`thumbs-up-kanban`), an open-source, enterprise-grade project management, ticketing, and knowledge platform built from the ground up on two fundamental pillars: 1. **Security-First (Priority 0):** Hardened zero-trust infrastructure, PostgreSQL Row-Level Security (`FORCE RLS`), five-tier network isolation, AAL2 administrative authorization, and hostile input sanitization. 2. **Agent-First (Priority 1):** Purpose-built for autonomous AI agents and human teams alike, replacing the context-bloating CRUD-wrapper anti-pattern with an intent-driven, three-surface Model Context Protocol (MCP) server, deterministic workflow gates, and sub-second execution loops.",
-    "sections": [
-      {
-        "id": "core-system-architecture",
-        "title": "Core System Architecture",
-        "level": 2
-      },
-      {
-        "id": "visual-tour-platform-highlights",
-        "title": "Visual Tour: Platform Highlights",
-        "level": 2
-      },
-      {
-        "id": "enterprise-workspace-and-project-hub",
-        "title": "Enterprise Workspace and Project Hub",
-        "level": 3
-      },
-      {
-        "id": "breathable-whitespace-board-and-high-contrast-theming",
-        "title": "Breathable Whitespace Board and High-Contrast Theming",
-        "level": 3
-      },
-      {
-        "id": "keyboard-driven-command-palette",
-        "title": "Keyboard-Driven Command Palette",
-        "level": 3
-      },
-      {
-        "id": "multi-view-projections-table-inline-editing-and-timeline-dependencies",
-        "title": "Multi-View Projections: Table Inline Editing and Timeline Dependencies",
-        "level": 3
-      },
-      {
-        "id": "fullscreen-issue-studio-and-access-visibility-inspector",
-        "title": "Fullscreen Issue Studio and Access Visibility Inspector",
-        "level": 3
-      },
-      {
-        "id": "advanced-governance-and-administrative-studios",
-        "title": "Advanced Governance and Administrative Studios",
-        "level": 3
-      },
-      {
-        "id": "architectural-distinctions-kanban-vs-traditional-tools",
-        "title": "Architectural Distinctions: \ud83d\udc4dkanban vs Traditional Tools",
-        "level": 2
-      },
-      {
-        "id": "non-bypassable-engineering-and-security-invariants",
-        "title": "Non-Bypassable Engineering and Security Invariants",
-        "level": 2
-      },
-      {
-        "id": "complete-table-of-contents",
-        "title": "Complete Table of Contents",
-        "level": 2
-      },
-      {
-        "id": "system-architecture-domains",
-        "title": "System Architecture Domains",
-        "level": 3
-      },
-      {
-        "id": "reference-manuals-verification-matrices",
-        "title": "Reference Manuals & Verification Matrices",
-        "level": 3
-      }
-    ],
-    "content": "# \ud83d\udc4dkanban: Executive Architecture and System Overview\n\nWelcome to the authoritative technical documentation and wiki for **\ud83d\udc4dkanban** (`thumbs-up-kanban`), an open-source, enterprise-grade project management, ticketing, and knowledge platform built from the ground up on two fundamental pillars:\n1. **Security-First (Priority 0):** Hardened zero-trust infrastructure, PostgreSQL Row-Level Security (`FORCE RLS`), five-tier network isolation, AAL2 administrative authorization, and hostile input sanitization.\n2. **Agent-First (Priority 1):** Purpose-built for autonomous AI agents and human teams alike, replacing the context-bloating CRUD-wrapper anti-pattern with an intent-driven, three-surface Model Context Protocol (MCP) server, deterministic workflow gates, and sub-second execution loops.\n\nLicensed under the strictly permissive **Apache-2.0** license, \ud83d\udc4dkanban eliminates SaaS AI paywalls and per-seat subscription lock-in while competing globally against Jira, Vibe Kanban, and commercial issue trackers with drop-in enterprise migration support.\n\n---\n\n## Core System Architecture\n\n```mermaid\nflowchart TD\n    subgraph Clients[\"Client Surfaces\"]\n        SPA[\"React 19 SPA (Desktop, Tablet, Mobile)\"]\n        Agents[\"Autonomous Agents (Cursor, Claude, Codex, Agy)\"]\n    end\n\n    subgraph Entrypoints[\"API & Protocol Gateways\"]\n        FastAPI[\"FastAPI Application Server<br/>- Multi-Card Auth (AAL2)<br/>- Canonical Markdown Pipe<br/>- WebSocket Realtime Hub<br/>- REST API (184 routes)\"]\n        MCP[\"3-Surface MCP Server<br/>- /mcp/agent (9 tools)<br/>- /mcp/docs (6 tools)<br/>- /mcp/admin (12 tools)<br/>- InlineSafeDumper YAML\"]\n    end\n\n    subgraph Core[\"Database Engine & Object Graph\"]\n        UOG[\"Universal Object Graph (UOG)<br/>PostgreSQL 16 with FORCE ROW LEVEL SECURITY (100%)<br/>- Typed object_links, Spine records, Append-only Ledger<br/>- ltree Hierarchical Docs, pgvector Embeddings, Full-Text<br/>- Invalid Object Link Auditor & Purger\"]\n    end\n\n    subgraph Runtimes[\"Execution Engines\"]\n        AIEngine[\"AI Engine & Orchestration<br/>- OpenAI, Ollama, Gemini<br/>- agy -p, codex -p pipes<br/>- Async Gate Interceptors\"]\n        Sandbox[\"Sandbox Execution Runtime<br/>- Tier A: Wasmtime engine<br/>- Tier B: nsjail runner<br/>- Scoped Ephemeral Tokens\"]\n    end\n\n    SPA -->|HTTP / WebSocket| FastAPI\n    Agents -->|HTTP / SSE / STDIO| MCP\n    Agents -->|HTTP REST| FastAPI\n    FastAPI --> Core\n    MCP --> Core\n    Core --> AIEngine\n    Core --> Sandbox\n```\n\n---\n\n## Visual Tour: Platform Highlights\n\n### Enterprise Workspace and Project Hub\nThe workspace home delivers clear project visibility, team velocity metrics, and seamless multi-project navigation with responsive layouts across desktop, tablet, and mobile displays.\n\n![Workspace Home and Project Overview](images/05-workspace-home.png)\n\n### Breathable Whitespace Board and High-Contrast Theming\nThe core Kanban board features sub-16ms smooth drag-and-drop, semantic emoji hints, configurable WIP limits, and an enterprise dark theme for reduced eye strain during extended operational sessions.\n\n![Enterprise Whitespace Board View](images/06-board-view.png)\n\n![Dark Theme Enterprise Kanban Board](images/22-dark-theme-board.png)\n\n### Keyboard-Driven Command Palette\nGlobal keyboard shortcuts (`Ctrl+K` / `Cmd+K`) provide instant fuzzy navigation across tickets, documents, projects, and administrative studios without context switching.\n\n![Global Command Palette Navigation](images/23-command-palette.png)\n\n### Multi-View Projections: Table Inline Editing and Timeline Dependencies\nEngineers can switch instantly between Kanban Board, 3-pane List, Table with capability-gated inline cell editing, Calendar, and Timeline with SVG Bezier BLOCKS dependency arrows.\n\n![Table View Inline Editing](images/37-table-inline-editing.png)\n\n### Fullscreen Issue Studio and Access Visibility Inspector\nExpanding any ticket unlocks the Fullscreen Issue Studio, featuring a Rich Markdown authoring toolbar, Sparkle 320ms Fill-in-the-Middle (FIM) ghost-text completion, the `\ud83d\udee1\ufe0f` Effective Access Inspector, and a 4-tab activity stream.\n\n![Fullscreen Issue View with Rich Markdown Toolbar and Access Inspector](images/39-fullscreen-issue-view.png)\n\n### Advanced Governance and Administrative Studios\nPlatform administrators manage enterprise governance through dedicated studios:\n- **AI Providers & Token Caps Studio (`/admin/ai`):** Write-only key custody, monthly token budgets, and air-gap policies (`images/43-admin-ai-studio-providers.png`).\n- **Invalid Object Link Auditor (`/admin/link-auditor`):** Continuous graph integrity verification, inspect drawer, and two-stage audited purge (`images/46-admin-link-auditor.png`).\n- **Workflow Transition Studio & Dry-Run Drawer (`/projects/:key/settings/workflows`):** Zero-persistence dry-run simulation with step timings and copyable CLI commands (`images/50-workflow-studio-dry-run-drawer.png`).\n- **Plane Migration Import Studio (`/admin/imports`):** Single-click bundle ingestion, dry-run diff preview, and transactional live migration (`images/49-admin-plane-import-studio.png`).\n\n![Admin Invalid Object Link Auditor Studio](images/46-admin-link-auditor.png)\n\n---\n\n## Architectural Distinctions: \ud83d\udc4dkanban vs Traditional Tools\n\n| Dimension | Legacy Trackers & Paywalled SaaS (Jira / Vibe Kanban) | \ud83d\udc4dkanban Platform |\n| :--- | :--- | :--- |\n| **License & Cost** | Commercial SaaS / AGPL with paid AI paywalls | Pure Apache-2.0, zero paywalled features |\n| **Agent Interface** | 70-120 raw CRUD tool wrappers (15k-25k tokens) | 27 intent-driven MCP tools across 3 surfaces (<= 1.8k tokens for agent) |\n| **Database Security** | Application-layer authorization checks | Hardware-enforced PostgreSQL `FORCE ROW LEVEL SECURITY` on all tenant tables |\n| **Network Isolation** | Monolithic container or open Docker bridge | Hardened 5-network isolation matrix (`edge`, `app`, `data`, `sandbox`, `egress`) |\n| **Workflow Interceptors** | Basic webhooks with no blocking execution | Atomic synchronous Wasm validators/mutators and async AI agent gates |\n| **Input Sanitization** | Basic HTML strip | Hostile Unicode lone-surrogate rejection, hidden-DOM pruner, SVG sandbox |\n| **Deployment Mode** | Complex multi-service Kubernetes only | Single-container standalone (`docker run`) or full multi-container production |\n\nFor an exhaustive feature-by-feature evaluation across 35 criteria, see the [Feature Comparison Matrix](Feature-Comparison).\n\n---\n\n## Non-Bypassable Engineering and Security Invariants\n\n1. **Plain ASCII Hyphen Invariant:** All public documentation, wiki articles, and commit messages strictly mandate plain ASCII hyphens (`-`). Unicode em-dashes (U+2014) and en-dashes (U+2013) are strictly forbidden across the codebase and wiki.\n2. **Zero-Context Fail-Closed Database:** In the absence of an explicit session context (`SET LOCAL app.current_principal_id`), all queries against tenant tables return zero rows. The application role `kanban_app` is stripped of `SUPERUSER` and `BYPASSRLS`.\n3. **Hostile Unicode Rejection:** Text ingestion rejects UTF-16 lone surrogates (`0xD800` through `0xDFFF`) prior to UTF-8 encoding, preventing memory corruptions and parser desynchronization.\n4. **Paste-Jacking Defense:** Clipboard inputs are aggressively stripped of hidden-DOM payloads, zero-width spaces, and invisible injection sequences.\n5. **AAL2 Admin Route Enforcement:** Every endpoint under `/api/v1/admin/*` and every administrative tool on `/mcp/admin` requires Authenticator Assurance Level 2 (AAL2) credentials.\n6. **95% Automated Test Coverage:** All core modules maintain at least 95% unit test coverage running on clean-DB fixtures with sub-millisecond `SAVEPOINT` isolation.\n\n---\n\n## Complete Table of Contents\n\n### System Architecture Domains\n1. [System Topology and Multi-Container Architecture](System-Topology-and-Multi-Container-Architecture) - Standalone embedded PostgreSQL Unix socket and 5-network production container stack.\n2. [Zero-Trust Security and Access Visibility](Zero-Trust-Security-and-Access-Visibility) - PostgreSQL FORCE RLS, dynamic sharing pill, access manifests, and STRIDE threat mitigation.\n3. [Multi-Card Authentication Studio](Multi-Card-Authentication-Studio) - Pluggable auth cards (OAuth2, LDAP, WebAuthn Passkeys, TOTP, Local Admin) with break-glass protection.\n4. [Canonical Markdown and Safe Media Pipeline](Canonical-Markdown-and-Safe-Media-Pipeline) - Hostile input sanitization, safe Mermaid rendering, SVG sandboxing, and media proxying.\n5. [Enterprise Whitespace and Kanban Board](Enterprise-Whitespace-and-Kanban-Board) - 5 native view layouts, 2D swimlanes, sub-16ms drag-and-drop, and the `<EmojiHint>` semantic hover system.\n6. [Ticket Screen and Work Item Features](Ticket-Screen-and-Work-Item-Features) - 960px peek drawer, 17 enterprise work-item features, properties rail, and 4-tab activity stream.\n7. [Hierarchical Docs and Stickies with Smart Promotion](Hierarchical-Docs-and-Stickies-with-Smart-Promotion) - ltree page trees, color-coded sticky masonry, and lossless AI-assisted promotion to Docs.\n8. [Blinking Cursor Sparkle Completion Engine](Blinking-Cursor-Sparkle-Completion-Engine) - Sub-300ms inline Fill-In-the-Middle (FIM) ghost text with surgical right-click disambiguation.\n9. [Multi-Provider AI Engine and Runners](Multi-Provider-AI-Engine-and-Runners) - OpenAI, Ollama, Gemini integrations, local CLI pipe harnesses (`agy -p`, `codex -p`), and mTLS runners.\n10. [Three-Surface MCP Server Architecture](Three-Surface-MCP-Server-Architecture) - Dedicated streamable endpoints (`/mcp/agent`, `/mcp/docs`, `/mcp/admin`) with InlineSafeDumper YAML.\n11. [Universal Object Graph and Link Auditor](Universal-Object-Graph-and-Link-Auditor) - Unified object spine, 13 typed object relationships, and automated invalid link detection/purging.\n12. [Admin Custom Scripted Fields and Sandbox](Admin-Custom-Scripted-Fields-and-Sandbox) - Wasmtime (Tier A) and nsjail (Tier B) sandboxed execution with cryptographic tier escalation.\n13. [ScriptRunner Workflows and Transition Interceptors](ScriptRunner-Workflows-and-Transition-Interceptors) - Synchronous transition validators/mutators and asynchronous AI agent gates.\n14. [Clean-DB Testing and Governance Gates](Clean-DB-Testing-and-Governance-Gates) - Fast parallel test execution, tmpfs template database, pluggable AI fixtures, and CI/CD validation.\n15. [Production Promotion and Backup Runbook](Production-Promotion-and-Backup-Runbook) - Single-command standalone promotion, encrypted KBBAK1 backup format, and disaster recovery.\n16. [Migration and Cutover Runbook](Migration-and-Cutover-Runbook) - 7-phase zero-downtime cutover plan, dry-run reconciliation, and rollback procedures.\n17. [Real-Time Web and WebSocket Architecture](Real-Time-Web-and-WebSocket-Architecture) - Distributed WebSocket hub, connection throttling, channel subscriptions, and board state synchronization.\n\n### Reference Manuals & Verification Matrices\n- [Feature Comparison Matrix (35 Features)](Feature-Comparison) - Comprehensive capability comparison across 35 features evaluating \ud83d\udc4dkanban against Jira, Plane, GitHub, Vibe Kanban, Businessmap, and Codebeamer.\n- [MCP Tools Reference (27 Tools)](MCP-Tools-Reference) - Exhaustive specification of all 27 MCP tools, parameter schemas, LOD tiers, and destructive token workflows.\n- [REST API Architecture and OpenAPI Guide](REST-API-Architecture-and-OpenAPI-Guide) - Technical guide to the 184-route FastAPI backend, interactive OpenAPI documentation, and TypeScript SDK.\n- [User Tasks and QA Verification Matrix](User-Tasks-and-QA-Matrix) - Verification audit mapping tasks UT-01 through UT-16 to live browser checks and screenshot deliverables.\n- [Architecture Delta and Gap Analysis](Architecture-Delta-and-Missing-Features) - Forensic analysis of specification requirements versus codebase implementation and tracking backlog.\n"
-  },
-  {
     "slug": "mcp-tools-reference",
     "title": "Model Context Protocol (MCP) Tools Reference Manual",
     "category": "Reference Guides",
@@ -904,138 +904,138 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 2
       },
       {
-        "id": "surface-1-execution-and-qa-tools",
-        "title": "Surface 1: `/mcp/agent` (Execution and QA Tools)",
+        "id": "surface-1-mcpagent-execution-and-qa-tools",
+        "title": "Surface 1: /mcp/agent (Execution and QA Tools)",
         "level": 2
       },
       {
-        "id": "section",
-        "title": "1. `search_tickets`",
+        "id": "search-tickets",
+        "title": "1. search_tickets",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "2. `read_ticket`",
+        "id": "read-ticket",
+        "title": "2. read_ticket",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "3. `create_ticket`",
+        "id": "create-ticket",
+        "title": "3. create_ticket",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "4. `update_ticket`",
+        "id": "update-ticket",
+        "title": "4. update_ticket",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "5. `begin_work`",
+        "id": "begin-work",
+        "title": "5. begin_work",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "6. `transition_ticket`",
+        "id": "transition-ticket",
+        "title": "6. transition_ticket",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "7. `complete_work`",
+        "id": "complete-work",
+        "title": "7. complete_work",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "8. `add_comment`",
+        "id": "add-comment",
+        "title": "8. add_comment",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "9. `link_objects`",
+        "id": "link-objects",
+        "title": "9. link_objects",
         "level": 3
       },
       {
-        "id": "surface-2-consolidated-3-tool-suite",
-        "title": "Surface 2: `/mcp/docs` (Consolidated 3-Tool Suite)",
+        "id": "surface-2-mcpdocs-consolidated-3-tool-suite",
+        "title": "Surface 2: /mcp/docs (Consolidated 3-Tool Suite)",
         "level": 2
       },
       {
-        "id": "section",
-        "title": "1. `search`",
+        "id": "search",
+        "title": "1. search",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "2. `create`",
+        "id": "create",
+        "title": "2. create",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "3. `update`",
+        "id": "update",
+        "title": "3. update",
         "level": 3
       },
       {
-        "id": "surface-3-governance-and-lifecycle-tools",
-        "title": "Surface 3: `/mcp/admin` (Governance and Lifecycle Tools)",
+        "id": "surface-3-mcpadmin-governance-and-lifecycle-tools",
+        "title": "Surface 3: /mcp/admin (Governance and Lifecycle Tools)",
         "level": 2
       },
       {
-        "id": "section",
-        "title": "1. `configure_workspace`",
+        "id": "configure-workspace",
+        "title": "1. configure_workspace",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "2. `manage_auth_cards`",
+        "id": "manage-auth-cards",
+        "title": "2. manage_auth_cards",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "3. `manage_principals_and_groups`",
+        "id": "manage-principals-and-groups",
+        "title": "3. manage_principals_and_groups",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "4. `manage_access_policies`",
+        "id": "manage-access-policies",
+        "title": "4. manage_access_policies",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "5. `architect_project`",
+        "id": "architect-project",
+        "title": "5. architect_project",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "6. `manage_cycles_and_modules`",
+        "id": "manage-cycles-and-modules",
+        "title": "6. manage_cycles_and_modules",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "7. `manage_custom_fields_and_scripts`",
+        "id": "manage-custom-fields-and-scripts",
+        "title": "7. manage_custom_fields_and_scripts",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "8. `manage_workflow_interceptors`",
+        "id": "manage-workflow-interceptors",
+        "title": "8. manage_workflow_interceptors",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "9. `manage_ai_and_agent_runners`",
+        "id": "manage-ai-and-agent-runners",
+        "title": "9. manage_ai_and_agent_runners",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "10. `override_ticket_provenance`",
+        "id": "override-ticket-provenance",
+        "title": "10. override_ticket_provenance",
         "level": 3
       },
       {
-        "id": "section",
-        "title": "11. `audit_and_purge_object_links`",
+        "id": "audit-and-purge-object-links",
+        "title": "11. audit_and_purge_object_links",
         "level": 3
       },
       {
-        "id": "two-stage-confirmation-safety",
-        "title": "12. `destructive_lifecycle` (Two-Stage Confirmation Safety)",
+        "id": "destructive-lifecycle-two-stage-confirmation-safety",
+        "title": "12. destructive_lifecycle (Two-Stage Confirmation Safety)",
         "level": 3
       },
       {
@@ -1109,8 +1109,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 3
       },
       {
-        "id": "plane-migration-import-studio",
-        "title": "Plane Migration Import Studio (`/admin/imports`)",
+        "id": "plane-migration-import-studio-adminimports",
+        "title": "Plane Migration Import Studio (/admin/imports)",
         "level": 2
       },
       {
@@ -1139,8 +1139,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 2
       },
       {
-        "id": "first-boot-setup-wizard",
-        "title": "First-Boot Setup Wizard (`/setup`)",
+        "id": "first-boot-setup-wizard-setup",
+        "title": "First-Boot Setup Wizard (/setup)",
         "level": 2
       },
       {
@@ -1149,8 +1149,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 3
       },
       {
-        "id": "multi-card-login-experience",
-        "title": "Multi-Card Login Experience (`/login`)",
+        "id": "multi-card-login-experience-login",
+        "title": "Multi-Card Login Experience (/login)",
         "level": 2
       },
       {
@@ -1159,8 +1159,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 3
       },
       {
-        "id": "admin-authentication-studio",
-        "title": "Admin Authentication Studio (`/admin/auth`)",
+        "id": "admin-authentication-studio-adminauth",
+        "title": "Admin Authentication Studio (/admin/auth)",
         "level": 2
       },
       {
@@ -1169,13 +1169,13 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 3
       },
       {
-        "id": "envelope-encryption",
-        "title": "Envelope Encryption (`MASTER_KEK`)",
+        "id": "envelope-encryption-master-kek",
+        "title": "Envelope Encryption (MASTER_KEK)",
         "level": 3
       },
       {
-        "id": "the-invariant",
-        "title": "The `LOCKOUT_PREVENTED` Invariant",
+        "id": "the-lockout-prevented-invariant",
+        "title": "The LOCKOUT_PREVENTED Invariant",
         "level": 3
       },
       {
@@ -1209,13 +1209,13 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 3
       },
       {
-        "id": "zero-shell-cli-pipe-harnesses",
-        "title": "Zero-Shell CLI Pipe Harnesses (`agy -p` / `codex -p`)",
+        "id": "zero-shell-cli-pipe-harnesses-agy--p-codex--p",
+        "title": "Zero-Shell CLI Pipe Harnesses (agy -p / codex -p)",
         "level": 2
       },
       {
-        "id": "ai-providers-and-token-caps-studio",
-        "title": "AI Providers and Token Caps Studio (`/admin/ai`)",
+        "id": "ai-providers-and-token-caps-studio-adminai",
+        "title": "AI Providers and Token Caps Studio (/admin/ai)",
         "level": 2
       },
       {
@@ -1224,8 +1224,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 3
       },
       {
-        "id": "agent-definitions-studio",
-        "title": "Agent Definitions Studio (`/admin/agents`)",
+        "id": "agent-definitions-studio-adminagents",
+        "title": "Agent Definitions Studio (/admin/agents)",
         "level": 2
       },
       {
@@ -1234,8 +1234,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 3
       },
       {
-        "id": "agent-runners-studio-and-distributed-mtls-daemon",
-        "title": "Agent Runners Studio and Distributed mTLS Daemon (`/admin/agent-runners`)",
+        "id": "agent-runners-studio-and-distributed-mtls-daemon-adminagent-runners",
+        "title": "Agent Runners Studio and Distributed mTLS Daemon (/admin/agent-runners)",
         "level": 2
       },
       {
@@ -1309,8 +1309,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 3
       },
       {
-        "id": "visual-backup-and-disaster-recovery-studio",
-        "title": "Visual Backup and Disaster Recovery Studio (`/admin/standalone`)",
+        "id": "visual-backup-and-disaster-recovery-studio-adminstandalone",
+        "title": "Visual Backup and Disaster Recovery Studio (/admin/standalone)",
         "level": 2
       },
       {
@@ -1364,8 +1364,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 3
       },
       {
-        "id": "concurrency-protection-with-etag-and",
-        "title": "3. Concurrency Protection with ETag and `If-Match`",
+        "id": "concurrency-protection-with-etag-and-if-match",
+        "title": "3. Concurrency Protection with ETag and If-Match",
         "level": 3
       },
       {
@@ -1549,8 +1549,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 2
       },
       {
-        "id": "standalone-single-container-deployment",
-        "title": "Standalone Single-Container Deployment (`docker run`)",
+        "id": "standalone-single-container-deployment-docker-run",
+        "title": "Standalone Single-Container Deployment (docker run)",
         "level": 2
       },
       {
@@ -1564,8 +1564,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 3
       },
       {
-        "id": "multi-container-production-architecture",
-        "title": "Multi-Container Production Architecture (`docker compose`)",
+        "id": "multi-container-production-architecture-docker-compose",
+        "title": "Multi-Container Production Architecture (docker compose)",
         "level": 2
       },
       {
@@ -1604,18 +1604,18 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 2
       },
       {
-        "id": "9-execution-and-qa-tools",
-        "title": "1. `/mcp/agent` (9 Execution and QA Tools)",
+        "id": "mcpagent-9-execution-and-qa-tools",
+        "title": "1. /mcp/agent (9 Execution and QA Tools)",
         "level": 3
       },
       {
-        "id": "6-knowledge-and-specification-tools",
-        "title": "2. `/mcp/docs` (6 Knowledge and Specification Tools)",
+        "id": "mcpdocs-6-knowledge-and-specification-tools",
+        "title": "2. /mcp/docs (6 Knowledge and Specification Tools)",
         "level": 3
       },
       {
-        "id": "12-governance-and-lifecycle-tools",
-        "title": "3. `/mcp/admin` (12 Governance and Lifecycle Tools)",
+        "id": "mcpadmin-12-governance-and-lifecycle-tools",
+        "title": "3. /mcp/admin (12 Governance and Lifecycle Tools)",
         "level": 3
       },
       {
@@ -1624,18 +1624,18 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 2
       },
       {
-        "id": "compact-yaml-output",
-        "title": "`InlineSafeDumper` Compact YAML Output",
+        "id": "inlinesafedumper-compact-yaml-output",
+        "title": "InlineSafeDumper Compact YAML Output",
         "level": 3
       },
       {
-        "id": "human-readable-identifiers",
-        "title": "`EntityResolver` Human-Readable Identifiers",
+        "id": "entityresolver-human-readable-identifiers",
+        "title": "EntityResolver Human-Readable Identifiers",
         "level": 3
       },
       {
-        "id": "level-of-detail-filtering",
-        "title": "Level-of-Detail (`lod`) Filtering",
+        "id": "level-of-detail-lod-filtering",
+        "title": "Level-of-Detail (lod) Filtering",
         "level": 3
       },
       {
@@ -1649,8 +1649,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 3
       },
       {
-        "id": "admin-oauth-21-governance-studio",
-        "title": "Admin OAuth 2.1 Governance Studio (`/admin/oauth`)",
+        "id": "admin-oauth-21-governance-studio-adminoauth",
+        "title": "Admin OAuth 2.1 Governance Studio (/admin/oauth)",
         "level": 2
       },
       {
@@ -1674,8 +1674,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 2
       },
       {
-        "id": "quick-create-work-item-modal",
-        "title": "Quick-Create Work Item Modal (`C`)",
+        "id": "quick-create-work-item-modal-c",
+        "title": "Quick-Create Work Item Modal (C)",
         "level": 2
       },
       {
@@ -1684,8 +1684,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 3
       },
       {
-        "id": "the-960px-ticket-peek-drawer",
-        "title": "The 960px Ticket Peek Drawer (`?peek=`)",
+        "id": "the-960px-ticket-peek-drawer-peek",
+        "title": "The 960px Ticket Peek Drawer (?peek=)",
         "level": 2
       },
       {
@@ -1774,8 +1774,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
         "level": 3
       },
       {
-        "id": "admin-link-auditor-studio",
-        "title": "Admin Link Auditor Studio (`/admin/link-auditor`)",
+        "id": "admin-link-auditor-studio-adminlink-auditor",
+        "title": "Admin Link Auditor Studio (/admin/link-auditor)",
         "level": 2
       },
       {
@@ -1825,7 +1825,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
       },
       {
         "id": "group-c-canonical-markdown-stickies-docs-sparkle-ai-completion-spec-s5-s8-s9",
-        "title": "Group C: Canonical Markdown, Stickies, Docs & Sparkle (`\u2728`) AI Completion (Spec S5, S8, S9)",
+        "title": "Group C: Canonical Markdown, Stickies, Docs & Sparkle (\u2728) AI Completion (Spec S5, S8, S9)",
         "level": 3
       },
       {
@@ -1925,6 +1925,23 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
 
 export const WIKI_CATEGORIES: WikiCategory[] = [
   {
+    "name": "Overview",
+    "chapters": [
+      {
+        "slug": "home",
+        "title": "\ud83d\udc4dkanban: Executive Architecture and System Overview"
+      },
+      {
+        "slug": "architecture-delta-and-missing-features",
+        "title": "\ud83d\udc4dkanban: Architecture Specification Delta & Gap Analysis"
+      },
+      {
+        "slug": "user-tasks-and-qa-matrix",
+        "title": "\ud83d\udc4dkanban User Task & Architecture QA Verification Matrix"
+      }
+    ]
+  },
+  {
     "name": "System Architecture",
     "chapters": [
       {
@@ -1998,23 +2015,6 @@ export const WIKI_CATEGORIES: WikiCategory[] = [
       {
         "slug": "zero-trust-security-and-access-visibility",
         "title": "Zero-Trust Security Architecture and Explicit Access Visibility"
-      }
-    ]
-  },
-  {
-    "name": "Overview",
-    "chapters": [
-      {
-        "slug": "architecture-delta-and-missing-features",
-        "title": "\ud83d\udc4dkanban: Architecture Specification Delta & Gap Analysis"
-      },
-      {
-        "slug": "home",
-        "title": "\ud83d\udc4dkanban: Executive Architecture and System Overview"
-      },
-      {
-        "slug": "user-tasks-and-qa-matrix",
-        "title": "\ud83d\udc4dkanban User Task & Architecture QA Verification Matrix"
       }
     ]
   },

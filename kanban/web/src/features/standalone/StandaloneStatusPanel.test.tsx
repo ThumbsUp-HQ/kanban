@@ -382,7 +382,9 @@ describe('StandaloneStatusPanel', () => {
     );
 
     const warnPill = screen.getByRole('button', { name: 'Standalone mode warning' });
-    warnPill.focus();
+    act(() => {
+      warnPill.focus();
+    });
 
     // Click ⚠️ pill to open panel
     act(() => {
@@ -405,20 +407,26 @@ describe('StandaloneStatusPanel', () => {
     const firstFocusable = focusables[0];
     const lastFocusable = focusables[focusables.length - 1];
 
-    firstFocusable?.focus();
-    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    act(() => {
+      firstFocusable?.focus();
+      fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    });
     expect(document.activeElement).toBe(lastFocusable);
 
     // Tab on last element wraps to first element
-    lastFocusable?.focus();
-    fireEvent.keyDown(document, { key: 'Tab', shiftKey: false });
+    act(() => {
+      lastFocusable?.focus();
+      fireEvent.keyDown(document, { key: 'Tab', shiftKey: false });
+    });
     expect(document.activeElement).toBe(firstFocusable);
 
     // Tab on middle element does not wrap
     const middleFocusable = focusables[1];
-    middleFocusable?.focus();
-    fireEvent.keyDown(document, { key: 'Tab', shiftKey: false });
-    fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    act(() => {
+      middleFocusable?.focus();
+      fireEvent.keyDown(document, { key: 'Tab', shiftKey: false });
+      fireEvent.keyDown(document, { key: 'Tab', shiftKey: true });
+    });
 
     // Escape key closes dialog
     act(() => {
@@ -625,7 +633,7 @@ describe('StandaloneStatusPanel', () => {
     });
   });
 
-  it('switches between 3 tabs and renders respective panels', () => {
+  it('switches between 3 tabs and renders respective panels', async () => {
     const adminStatus: SystemStatus = {
       deployment_mode: 'standalone_embedded_pg',
       persistent_volume: true,
@@ -649,15 +657,17 @@ describe('StandaloneStatusPanel', () => {
     expect(backupTab.getAttribute('aria-selected')).toBe('false');
 
     // Switch to Backup tab
-    act(() => {
+    await act(async () => {
       fireEvent.click(backupTab);
+      await Promise.resolve();
     });
     expect(backupTab.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByText('Manual Encrypted Backup (.kbbak)')).toBeDefined();
 
     // Switch to Compose tab
-    act(() => {
+    await act(async () => {
       fireEvent.click(composeTab);
+      await Promise.resolve();
     });
     expect(composeTab.getAttribute('aria-selected')).toBe('true');
     expect(screen.getByText('Production Compose Export & Promotion')).toBeDefined();
@@ -750,7 +760,7 @@ describe('StandaloneStatusPanel', () => {
     });
   });
 
-  it('KANBA-208: supports WAI-ARIA tab navigation with ArrowRight, ArrowLeft, Home, and End keys', () => {
+  it('KANBA-208: supports WAI-ARIA tab navigation with ArrowRight, ArrowLeft, Home, and End keys', async () => {
     const adminStatus: SystemStatus = {
       deployment_mode: 'standalone_embedded_pg',
       persistent_volume: true,
@@ -776,34 +786,56 @@ describe('StandaloneStatusPanel', () => {
     expect(composeTab.getAttribute('tabindex')).toBe('-1');
 
     // ArrowRight -> backup
-    fireEvent.keyDown(tablist, { key: 'ArrowRight' });
+    await act(async () => {
+      fireEvent.keyDown(tablist, { key: 'ArrowRight' });
+      await Promise.resolve();
+    });
     expect(backupTab.getAttribute('tabindex')).toBe('0');
     expect(healthTab.getAttribute('tabindex')).toBe('-1');
 
     // ArrowRight -> compose
-    fireEvent.keyDown(tablist, { key: 'ArrowRight' });
+    await act(async () => {
+      fireEvent.keyDown(tablist, { key: 'ArrowRight' });
+      await Promise.resolve();
+    });
     expect(composeTab.getAttribute('tabindex')).toBe('0');
 
     // ArrowRight -> wrap to health
-    fireEvent.keyDown(tablist, { key: 'ArrowRight' });
+    await act(async () => {
+      fireEvent.keyDown(tablist, { key: 'ArrowRight' });
+      await Promise.resolve();
+    });
     expect(healthTab.getAttribute('tabindex')).toBe('0');
 
     // ArrowLeft -> wrap back to compose
-    fireEvent.keyDown(tablist, { key: 'ArrowLeft' });
+    await act(async () => {
+      fireEvent.keyDown(tablist, { key: 'ArrowLeft' });
+      await Promise.resolve();
+    });
     expect(composeTab.getAttribute('tabindex')).toBe('0');
 
     // Home -> health
-    fireEvent.keyDown(tablist, { key: 'Home' });
+    await act(async () => {
+      fireEvent.keyDown(tablist, { key: 'Home' });
+      await Promise.resolve();
+    });
     expect(healthTab.getAttribute('tabindex')).toBe('0');
 
     // End -> compose
-    fireEvent.keyDown(tablist, { key: 'End' });
+    await act(async () => {
+      fireEvent.keyDown(tablist, { key: 'End' });
+      await Promise.resolve();
+    });
     expect(composeTab.getAttribute('tabindex')).toBe('0');
 
     // Non-navigation keys (e.g. Tab, Escape) do not change roving index
-    fireEvent.keyDown(tablist, { key: 'Tab' });
+    act(() => {
+      fireEvent.keyDown(tablist, { key: 'Tab' });
+    });
     expect(composeTab.getAttribute('tabindex')).toBe('0');
-    fireEvent.keyDown(tablist, { key: 'x' });
+    act(() => {
+      fireEvent.keyDown(tablist, { key: 'x' });
+    });
     expect(composeTab.getAttribute('tabindex')).toBe('0');
   });
 

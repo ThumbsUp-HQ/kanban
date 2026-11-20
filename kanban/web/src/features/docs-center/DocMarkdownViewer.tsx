@@ -26,6 +26,34 @@ function isSafeUrl(url: string): boolean {
   );
 }
 
+export function resolveSafeDocImageUrl(url: string): string | null {
+  const trimmed = url.trim();
+  const lower = trimmed.toLowerCase();
+  // 0 external URLs allowed!
+  if (
+    lower.startsWith('http://') ||
+    lower.startsWith('https://') ||
+    lower.startsWith('//') ||
+    lower.startsWith('data:') ||
+    lower.startsWith('javascript:')
+  ) {
+    return null;
+  }
+  if (lower.startsWith('images/')) {
+    return `/docs-images/${trimmed.slice('images/'.length)}`;
+  }
+  if (lower.startsWith('./images/')) {
+    return `/docs-images/${trimmed.slice('./images/'.length)}`;
+  }
+  if (lower.startsWith('/docs-images/')) {
+    return trimmed;
+  }
+  if (lower.startsWith('docs-images/')) {
+    return `/${trimmed}`;
+  }
+  return null;
+}
+
 export function renderInlineMarkdown(
   text: string,
   keyPrefix: string,
@@ -33,7 +61,7 @@ export function renderInlineMarkdown(
 ): ReactNode[] {
   const nodes: ReactNode[] = [];
   const pattern =
-    /(`[^`]+`)|(\[([^\]]+)\]\(((?:[^()]+|\([^()]*\))*)\))|(\*\*([^*]+)\*\*)|(\*([^*]+)\*)/g;
+    /(!\[([^\]]*)\]\(((?:[^()]+|\([^()]*\))*)\))|(`[^`]+`)|(\[([^\]]+)\]\(((?:[^()]+|\([^()]*\))*)\))|(\*\*([^*]+)\*\*)|(\*([^*]+)\*)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   let tokenIdx = 0;
@@ -45,6 +73,9 @@ export function renderInlineMarkdown(
 
     const [
       ,
+      imgMatch,
+      imgAlt,
+      imgSrc,
       codeSpan,
       linkMatch,
       linkText,
@@ -55,7 +86,24 @@ export function renderInlineMarkdown(
       italicText,
     ] = match;
 
-    if (codeSpan) {
+    if (imgMatch !== undefined && imgSrc !== undefined) {
+      const safeSrc = resolveSafeDocImageUrl(imgSrc);
+      if (safeSrc) {
+        const altLabel = (imgAlt ?? '').trim();
+        nodes.push(
+          <img
+            key={`${keyPrefix}-img-${String(tokenIdx)}`}
+            src={safeSrc}
+            alt={altLabel.length > 0 ? altLabel : 'Documentation image'}
+            className="kb-doc-image"
+            loading="lazy"
+            data-testid="doc-inline-image"
+          />,
+        );
+      } else {
+        nodes.push(imgAlt ?? '');
+      }
+    } else if (codeSpan) {
       nodes.push(
         <code key={`${keyPrefix}-code-${String(tokenIdx)}`} className="kb-doc-inline-code">
           {codeSpan.slice(1, -1)}
@@ -328,6 +376,31 @@ export function DocMarkdownViewer({
     if (trimmed === '---' || trimmed === '***' || trimmed === '___') {
       flushAll();
       blocks.push(<hr key={`hr-${String(blockIdx++)}`} className="kb-doc-hr" />);
+      continue;
+    }
+
+    // Standalone Image Line
+    const standaloneImgMatch = /^!\[([^\]]*)\]\(((?:[^()]+|\([^()]*\))*)\)$/.exec(trimmed);
+    if (standaloneImgMatch?.[1] !== undefined && standaloneImgMatch[2] !== undefined) {
+      flushAll();
+      const altText = standaloneImgMatch[1].trim();
+      const safeSrc = resolveSafeDocImageUrl(standaloneImgMatch[2]);
+      if (safeSrc) {
+        blocks.push(
+          <figure key={`fig-${String(blockIdx++)}`} className="kb-doc-figure">
+            <img
+              src={safeSrc}
+              alt={altText || 'Documentation media'}
+              className="kb-doc-image"
+              loading="lazy"
+              data-testid="doc-image"
+            />
+            {altText && (
+              <figcaption className="kb-doc-figcaption">{altText}</figcaption>
+            )}
+          </figure>,
+        );
+      }
       continue;
     }
 

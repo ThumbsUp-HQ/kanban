@@ -2034,22 +2034,6 @@ export const appRoutes: RouteObject[] = [
             element: <AboutPage />,
           },
           {
-            path: 'docs',
-            element: <DocsCenterPage />,
-          },
-          {
-            path: 'docs/:slug',
-            element: <DocsCenterPage />,
-          },
-          {
-            path: 'help',
-            element: <DocsCenterPage />,
-          },
-          {
-            path: 'help/:slug',
-            element: <DocsCenterPage />,
-          },
-          {
             path: 'settings/about',
             element: <Navigate to="/about" replace />,
           },

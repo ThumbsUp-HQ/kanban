@@ -27,8 +27,13 @@ import {
   getChapterCategories,
   getConfigReference,
   WIKI_CHAPTERS,
+  CHAPTER_BY_SLUG,
 } from '../docsService';
-import { DocMarkdownViewer, renderInlineMarkdown } from '../DocMarkdownViewer';
+import {
+  DocMarkdownViewer,
+  renderInlineMarkdown,
+  resolveSafeDocImageUrl,
+} from '../DocMarkdownViewer';
 import { HelpDrawer } from '../HelpDrawer';
 import { DocsCenterPage } from '../DocsCenterPage';
 import { StudioDocLink } from '../../../components/help/StudioDocLink';
@@ -874,6 +879,263 @@ Here is **bold text**, *italic text*, \`inline code\`, and a [TOC Anchor](#my-an
       // 7. Form inputs still 100% intact
       expect(nameInput.value).toBe('Unsaved Critical Draft Work 1234');
       expect(timeoutInput.value).toBe('7200');
+    });
+  });
+
+  describe('Release Candidate Polish & Accessibility (KAN-16 RC1)', () => {
+    it('places Home at Chapter 1 of 27 with Overview category', () => {
+      expect(WIKI_CHAPTERS[0]?.slug).toBe('home');
+      expect(WIKI_CHAPTERS[0]?.order).toBe(1);
+      expect(WIKI_CHAPTERS[0]?.category).toBe('Overview');
+      expect(WIKI_CHAPTERS.length).toBe(27);
+    });
+
+    it('exercises resolveSafeDocImageUrl branches directly', () => {
+      expect(resolveSafeDocImageUrl('images/test.png')).toBe('/docs-images/test.png');
+      expect(resolveSafeDocImageUrl('./images/test.png')).toBe('/docs-images/test.png');
+      expect(resolveSafeDocImageUrl('/docs-images/test.png')).toBe('/docs-images/test.png');
+      expect(resolveSafeDocImageUrl('docs-images/test.png')).toBe('/docs-images/test.png');
+      expect(resolveSafeDocImageUrl('https://evil.com/x.png')).toBeNull();
+      expect(resolveSafeDocImageUrl('http://evil.com/x.png')).toBeNull();
+      expect(resolveSafeDocImageUrl('//evil.com/x.png')).toBeNull();
+      expect(resolveSafeDocImageUrl('data:image/png;base64,...')).toBeNull();
+      expect(resolveSafeDocImageUrl('javascript:alert(1)')).toBeNull();
+      expect(resolveSafeDocImageUrl('other/unknown/path.png')).toBeNull();
+    });
+
+    it('safely renders markdown images mapping images/... to /docs-images/..., rejecting external URLs', () => {
+      const markdown = `
+![Block Architecture](images/14-custom-fields-studio.png)
+
+![](images/53-custom-fields-test-execute.png)
+
+![Unsafe Standalone](https://evil.com/leak2.png)
+
+Paragraph with inline ![Inline Icon](./images/01-first-boot-setup.png) media, ![](images/02-multi-card-login.png) empty alt, and ![Unsafe Remote](https://evil.com/leak.png) attempt.
+`;
+      render(<DocMarkdownViewer content={markdown} />);
+
+      // Block-level figure and img
+      const blockImgs = screen.getAllByTestId('doc-image');
+      expect(blockImgs[0]?.getAttribute('src')).toBe('/docs-images/14-custom-fields-studio.png');
+      expect(blockImgs[0]?.getAttribute('alt')).toBe('Block Architecture');
+      expect(blockImgs[0]?.getAttribute('loading')).toBe('lazy');
+      expect(screen.getByText('Block Architecture')).toBeDefined();
+
+      // Empty alt fallback
+      expect(blockImgs[1]?.getAttribute('src')).toBe('/docs-images/53-custom-fields-test-execute.png');
+      expect(blockImgs[1]?.getAttribute('alt')).toBe('Documentation media');
+
+      // Inline images
+      const inlineImgs = screen.getAllByTestId('doc-inline-image');
+      expect(inlineImgs[0]?.getAttribute('src')).toBe('/docs-images/01-first-boot-setup.png');
+      expect(inlineImgs[0]?.getAttribute('alt')).toBe('Inline Icon');
+      expect(inlineImgs[1]?.getAttribute('src')).toBe('/docs-images/02-multi-card-login.png');
+      expect(inlineImgs[1]?.getAttribute('alt')).toBe('Documentation image');
+
+      // Unsafe remote image must NOT be rendered as an img tag
+      const allImgs = screen.getAllByRole('img');
+      allImgs.forEach((img) => {
+        expect(img.getAttribute('src')).not.toContain('evil.com');
+      });
+      expect(screen.getByText(/Unsafe Remote/)).toBeDefined();
+    });
+
+    it('opens mobile chapters drawer, selects a chapter to auto-close, and dismisses on Escape or backdrop click', () => {
+      render(
+        <MemoryRouter initialEntries={['/docs/home']}>
+          <DocsCenterPage />
+        </MemoryRouter>,
+      );
+
+      // 1. Mobile chapters toggle button is present
+      const toggleBtn = screen.getByTestId('docs-mobile-chapters-btn');
+      expect(toggleBtn).toBeDefined();
+      expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByTestId('docs-mobile-chapters-drawer')).toBeNull();
+
+      // 1b. Test non-Escape key and Escape while drawer is closed
+      act(() => {
+        fireEvent.keyDown(window, { key: 'Enter' });
+        fireEvent.keyDown(window, { key: 'Escape' });
+      });
+      expect(screen.queryByTestId('docs-mobile-chapters-drawer')).toBeNull();
+
+      // 2. Open drawer
+      act(() => {
+        fireEvent.click(toggleBtn);
+      });
+      expect(toggleBtn.getAttribute('aria-expanded')).toBe('true');
+      const drawer = screen.getByTestId('docs-mobile-chapters-drawer');
+      expect(drawer).toBeDefined();
+
+      // 3. Close via close button
+      const closeBtn = screen.getByTestId('docs-mobile-drawer-close');
+      act(() => {
+        fireEvent.click(closeBtn);
+      });
+      expect(screen.queryByTestId('docs-mobile-chapters-drawer')).toBeNull();
+
+      // 4. Re-open and dismiss via Escape key
+      act(() => {
+        fireEvent.click(toggleBtn);
+      });
+      expect(screen.getByTestId('docs-mobile-chapters-drawer')).toBeDefined();
+      act(() => {
+        fireEvent.keyDown(window, { key: 'Escape' });
+      });
+      expect(screen.queryByTestId('docs-mobile-chapters-drawer')).toBeNull();
+
+      // 5. Re-open and auto-close on chapter link click
+      act(() => {
+        fireEvent.click(toggleBtn);
+      });
+      const chapterLinks = screen.getByTestId('docs-mobile-chapters-drawer').querySelectorAll('a');
+      expect(chapterLinks.length).toBeGreaterThan(0);
+      const firstChapterLink = chapterLinks[0];
+      expect(firstChapterLink).toBeDefined();
+      if (firstChapterLink) {
+        act(() => {
+          fireEvent.click(firstChapterLink);
+        });
+      }
+      expect(screen.queryByTestId('docs-mobile-chapters-drawer')).toBeNull();
+
+      // 6. Dismiss via backdrop click
+      act(() => {
+        fireEvent.click(toggleBtn);
+      });
+      const backdrop = screen.getByTestId('docs-mobile-drawer-backdrop');
+      act(() => {
+        fireEvent.click(backdrop);
+      });
+      expect(screen.queryByTestId('docs-mobile-chapters-drawer')).toBeNull();
+    });
+
+    it('manages WAI-ARIA modal dialog focus, traps Tab/Shift+Tab, restores trigger focus on close, and resyncs on arg change', async () => {
+      const triggerBtn = document.createElement('button');
+      triggerBtn.textContent = 'Open Help Trigger';
+      document.body.appendChild(triggerBtn);
+      triggerBtn.focus();
+      expect(document.activeElement).toBe(triggerBtn);
+
+      const onClose = vi.fn();
+      const { rerender, unmount } = render(
+        <MemoryRouter>
+          <HelpDrawer
+            arg={{ slug: 'guide-custom-fields', anchor: 'custom-fields' }}
+            onClose={onClose}
+          />
+        </MemoryRouter>,
+      );
+
+      const drawer = screen.getByTestId('help-drawer');
+      expect(drawer).toBeDefined();
+
+      // Verify close button receives initial focus
+      const closeBtn = screen.getByTestId('help-drawer-close-btn');
+      await waitFor(() => {
+        expect(document.activeElement).toBe(closeBtn);
+      });
+
+      // Verify focus trap on Tab and Shift+Tab
+      const focusables = drawer.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      expect(focusables.length).toBeGreaterThan(1);
+      const firstFocusable = focusables[0];
+      const lastFocusable = focusables[focusables.length - 1];
+      expect(firstFocusable).toBeDefined();
+      expect(lastFocusable).toBeDefined();
+
+      // Shift+Tab from first element wraps to last element
+      firstFocusable?.focus();
+      act(() => {
+        fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+      });
+      expect(document.activeElement).toBe(lastFocusable);
+
+      // Tab from last element wraps to first element
+      lastFocusable?.focus();
+      act(() => {
+        fireEvent.keyDown(window, { key: 'Tab', shiftKey: false });
+      });
+      expect(document.activeElement).toBe(firstFocusable);
+
+      // Tab on middle element does not wrap
+      const middleFocusable = focusables[1];
+      if (middleFocusable) {
+        middleFocusable.focus();
+        act(() => {
+          fireEvent.keyDown(window, { key: 'Tab', shiftKey: false });
+          fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+        });
+      }
+
+      // Escape on drawer container triggers onClose
+      act(() => {
+        fireEvent.keyDown(drawer, { key: 'Escape' });
+      });
+      expect(onClose).toHaveBeenCalled();
+
+      // Verify arg prop resync while mounted
+      rerender(
+        <MemoryRouter>
+          <HelpDrawer
+            arg={{ slug: 'multi-card-authentication-studio', anchor: 'ldap-settings' }}
+            onClose={onClose}
+          />
+        </MemoryRouter>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByText('Multi-Card Authentication Studio')).toBeDefined();
+      });
+
+      // Unmount / close restores focus to invoking trigger
+      unmount();
+      expect(document.activeElement).toBe(triggerBtn);
+      document.body.removeChild(triggerBtn);
+    });
+
+    it('strips raw markdown backticks from TOC section labels in HelpDrawer and DocsCenterPage', () => {
+      const originalHome = CHAPTER_BY_SLUG.home;
+      if (!originalHome) throw new Error('Home chapter not found');
+
+      CHAPTER_BY_SLUG.home = {
+        ...originalHome,
+        sections: [
+          { id: 'sec-code', title: 'Using `kubectl` and `docker` CLI', level: 2 },
+          { id: 'sec-env', title: 'The `DATABASE_URL` setting', level: 3 },
+        ],
+      };
+
+      try {
+        const { unmount } = render(
+          <MemoryRouter initialEntries={['/docs/home']}>
+            <DocsCenterPage />
+          </MemoryRouter>,
+        );
+
+        const tocRail = screen.getByTestId('docs-toc-rail');
+        expect(tocRail.textContent).toContain('Using kubectl and docker CLI');
+        expect(tocRail.textContent).not.toContain('`');
+        expect(tocRail.textContent).toContain('The DATABASE_URL setting');
+        unmount();
+
+        // In HelpDrawer
+        render(
+          <MemoryRouter>
+            <HelpDrawer arg={{ slug: 'home' }} onClose={() => { /* noop */ }} />
+          </MemoryRouter>,
+        );
+
+        const drawerBody = screen.getByTestId('help-drawer-body');
+        expect(drawerBody.textContent).toContain('Using kubectl and docker CLI');
+        expect(drawerBody.textContent).not.toContain('`kubectl`');
+      } finally {
+        CHAPTER_BY_SLUG.home = originalHome;
+      }
     });
   });
 });

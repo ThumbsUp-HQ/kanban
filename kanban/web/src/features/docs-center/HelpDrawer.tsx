@@ -34,23 +34,64 @@ export function HelpDrawer({ arg, onClose }: HelpDrawerProps): JSX.Element {
   const navigate = useNavigate();
   const drawerRef = useRef<HTMLDivElement | null>(null);
   const bodyRef = useRef<HTMLDivElement | null>(null);
+  const closeButtonRef = useRef<HTMLButtonElement | null>(null);
+  const previousActiveElementRef = useRef<HTMLElement | null>(null);
 
   const parsedArg: HelpDrawerArg =
     typeof arg === 'object' && arg !== null ? arg : {};
 
-  const { slug: initialSlug, anchor: initialAnchor } = parsedArg.href
+  const { slug: resolvedSlug, anchor: resolvedAnchor } = parsedArg.href
     ? parseDocHref(parsedArg.href)
     : {
         slug: parsedArg.slug ?? 'guide-custom-fields',
         anchor: parsedArg.anchor,
       };
 
-  const currentSlug = initialSlug;
-  const [activeAnchor, setActiveAnchor] = useState<string | undefined>(initialAnchor);
+  const [activeSlug, setActiveSlug] = useState<string>(resolvedSlug);
+  const [activeAnchor, setActiveAnchor] = useState<string | undefined>(resolvedAnchor);
+
+  // Resync activeSlug and activeAnchor if arg changes while already mounted
+  const [prevResolvedSlug, setPrevResolvedSlug] = useState(resolvedSlug);
+  const [prevResolvedAnchor, setPrevResolvedAnchor] = useState(resolvedAnchor);
+
+  if (resolvedSlug !== prevResolvedSlug || resolvedAnchor !== prevResolvedAnchor) {
+    setPrevResolvedSlug(resolvedSlug);
+    setPrevResolvedAnchor(resolvedAnchor);
+    setActiveSlug(resolvedSlug);
+    setActiveAnchor(resolvedAnchor);
+  }
+
+  // Save document.activeElement on open and restore on unmount
+  useEffect(() => {
+    previousActiveElementRef.current = document.activeElement as HTMLElement | null;
+    return () => {
+      if (
+        previousActiveElementRef.current &&
+        typeof previousActiveElementRef.current.focus === 'function'
+      ) {
+        previousActiveElementRef.current.focus();
+      }
+    };
+  }, []);
+
+  // Move initial focus into the dialog on open
+  useEffect(() => {
+    const timer = window.setTimeout(() => {
+      /* v8 ignore next 5 */
+      if (closeButtonRef.current) {
+        closeButtonRef.current.focus();
+      } else if (drawerRef.current) {
+        drawerRef.current.focus();
+      }
+    }, 10);
+    return () => {
+      window.clearTimeout(timer);
+    };
+  }, []);
 
   /* v8 ignore next 9 */
   const chapter: WikiChapter =
-    getChapter(currentSlug) ?? WIKI_CHAPTERS[0] ?? {
+    getChapter(activeSlug) ?? WIKI_CHAPTERS[0] ?? {
       slug: 'home',
       title: 'Documentation',
       category: 'Overview',
@@ -81,14 +122,40 @@ export function HelpDrawer({ arg, onClose }: HelpDrawerProps): JSX.Element {
         window.clearTimeout(timer);
       };
     }
-  }, [activeAnchor, currentSlug]);
+  }, [activeAnchor, activeSlug]);
 
-  // Global Escape key listener
+  // Global Escape and Tab focus trap listener
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
       if (e.key === 'Escape') {
         e.preventDefault();
         onClose();
+        return;
+      }
+
+      if (e.key === 'Tab' && drawerRef.current) {
+        const focusableElements = drawerRef.current.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        );
+        /* v8 ignore next */
+        if (focusableElements.length === 0) return;
+
+        const firstElement = focusableElements[0];
+        const lastElement = focusableElements[focusableElements.length - 1];
+        /* v8 ignore next */
+        if (!firstElement || !lastElement) return;
+
+        if (e.shiftKey) {
+          if (document.activeElement === firstElement) {
+            e.preventDefault();
+            lastElement.focus();
+          }
+        } else {
+          if (document.activeElement === lastElement) {
+            e.preventDefault();
+            firstElement.focus();
+          }
+        }
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -125,6 +192,7 @@ export function HelpDrawer({ arg, onClose }: HelpDrawerProps): JSX.Element {
         aria-label={`Help: ${chapter.title}`}
         aria-modal="true"
         data-testid="help-drawer"
+        tabIndex={-1}
         onKeyDown={handleTrapKeyDown}
       >
         <header className="kb-help-drawer-header">
@@ -143,6 +211,7 @@ export function HelpDrawer({ arg, onClose }: HelpDrawerProps): JSX.Element {
               Open in /docs -&gt;
             </button>
             <button
+              ref={closeButtonRef}
               type="button"
               className="kb-help-drawer-close-btn"
               data-testid="help-drawer-close-btn"
@@ -169,7 +238,7 @@ export function HelpDrawer({ arg, onClose }: HelpDrawerProps): JSX.Element {
                         scrollToAnchor(sec.id);
                       }}
                     >
-                      {sec.title}
+                      {sec.title.replace(/`/g, '')}
                     </a>
                   </li>
                 ))}
