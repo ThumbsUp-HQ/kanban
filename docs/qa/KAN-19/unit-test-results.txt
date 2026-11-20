@@ -1,30 +1,89 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan19-a63c3819
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan19-rc1-d8275cde
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 73 items
+collecting ... 
+collecting 37 items                                                            
+collecting 87 items                                                            
+collecting 127 items                                                           
+collecting 199 items                                                           
+collecting 237 items                                                           
+collecting 300 items                                                           
+collecting 334 items                                                           
+collected 354 items                                                            
 
-mcp/tests/test_progressive_disclosure_errors.py ...............          [ 20%]
-mcp/tests/test_protocol.py .......                                       [ 30%]
-mcp/tests/test_registry_isolation.py ...                                 [ 34%]
-mcp/tests/test_docs_kan18_coverage.py ....                               [ 39%]
-mcp/tests/docs/test_docs_surfaces_unit.py .............                  [ 57%]
-mcp/tests/test_internal_client.py ........                               [ 68%]
-mcp/tests/agent/test_transition_ticket_gate.py ...                       [ 72%]
-mcp/tests/agent/test_update_ticket.py ...........                        [ 87%]
-mcp/tests/admin/test_manage_cycles_and_modules.py .........              [100%]
+mcp/tests/admin/test_architect_project.py .......                        [  1%]
+mcp/tests/admin/test_audit_and_purge_links.py .........                  [  4%]
+mcp/tests/admin/test_bind_project_repo.py ...                            [  5%]
+mcp/tests/admin/test_configure_workspace.py ........                     [  7%]
+mcp/tests/admin/test_destructive_lifecycle.py ..........                 [ 10%]
+mcp/tests/admin/test_manage_access_policies.py ......                    [ 12%]
+mcp/tests/admin/test_manage_ai_and_agent_runners.py .......              [ 14%]
+mcp/tests/admin/test_manage_ai_and_agent_runners_full.py .....           [ 15%]
+mcp/tests/admin/test_manage_auth_cards.py ......                         [ 17%]
+mcp/tests/admin/test_manage_custom_fields_and_scripts.py ...........     [ 20%]
+mcp/tests/admin/test_manage_cycles_and_modules.py ..........             [ 23%]
+mcp/tests/admin/test_manage_principals.py .....                          [ 24%]
+mcp/tests/admin/test_manage_workflow_interceptors.py ..............      [ 28%]
+mcp/tests/admin/test_override_ticket_provenance.py ..........            [ 31%]
+mcp/tests/agent/test_add_comment.py ........                             [ 33%]
+mcp/tests/agent/test_create_ticket.py ........                           [ 35%]
+mcp/tests/agent/test_link_objects.py ........                            [ 38%]
+mcp/tests/agent/test_pending_gate_contract.py ...                        [ 38%]
+mcp/tests/agent/test_read_ticket.py ............                         [ 42%]
+mcp/tests/agent/test_search_tickets.py ......                            [ 44%]
+mcp/tests/agent/test_transition_ticket_gate.py ...                       [ 44%]
+mcp/tests/agent/test_update_ticket.py ............                       [ 48%]
+mcp/tests/agent/test_workflow_argument_validation.py ......              [ 50%]
+mcp/tests/agent/test_workflow_tools.py .........                         [ 52%]
+mcp/tests/docs/test_docs_surfaces_unit.py .............                  [ 56%]
+mcp/tests/docs/test_docs_tools.py .......                                [ 58%]
+mcp/tests/test_admin_scope_requirements_all_12.py ..                     [ 58%]
+mcp/tests/test_app.py ................                                   [ 63%]
+mcp/tests/test_auth.py .............                                     [ 66%]
+mcp/tests/test_connection_scoping.py ..............                      [ 70%]
+mcp/tests/test_docs_kan18_coverage.py ....                               [ 72%]
+mcp/tests/test_ephemeral_auth.py ...................                     [ 77%]
+mcp/tests/test_internal_client.py ........                               [ 79%]
+mcp/tests/test_key_narrowing.py ...                                      [ 80%]
+mcp/tests/test_lod_help.py ...............                               [ 84%]
+mcp/tests/test_markdown_sections.py .......                              [ 86%]
+mcp/tests/test_metadata.py ..                                            [ 87%]
+mcp/tests/test_progressive_disclosure_errors.py ...............          [ 91%]
+mcp/tests/test_protocol.py .......                                       [ 93%]
+mcp/tests/test_registry_isolation.py ...                                 [ 94%]
+mcp/tests/test_resolver.py ....                                          [ 95%]
+mcp/tests/test_schema_budget.py ..                                       [ 96%]
+mcp/tests/test_smoke.py .                                                [ 96%]
+mcp/tests/test_token_benchmark.py .....                                  [ 97%]
+mcp/tests/test_yaml_out.py ........                                      [100%]
 
+=============================== warnings summary ===============================
+mcp/tests/admin/test_manage_ai_and_agent_runners_full.py::test_mcp_mint_enrollment_token_and_list_runners
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan19-rc1-d8275cde/.venv/lib/python3.12/site-packages/fastapi/routing.py:372: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    return await dependant.call(**values)
+
+mcp/tests/test_app.py::test_kanban_app_lifespan_defaults_and_exception_branches
+  /home/adamoutler/.local/share/uv/python/cpython-3.12.7-linux-x86_64-gnu/lib/python3.12/weakref.py:415: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    return self.data[ref(key)]
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.7-final-0 ________________
 
-Name                          Stmts   Miss Branch BrPart  Cover   Missing
--------------------------------------------------------------------------
-mcp/errors.py                    85      0      2      0   100%
-mcp/internal_client.py          206     14     94     14    91%   150->155, 153-154, 186, 187->200, 190, 194, 197->200, 265-266, 275, 277, 279, 400, 402, 405, 495
-mcp/protocol.py                 495     39    250     33    90%   94, 102->101, 120, 230->exit, 342, 382, 396-397, 420, 426, 451-453, 479->511, 489, 501-502, 601, 609->634, 611-612, 630, 632, 712-713, 760-765, 779-784, 812-821, 832->957, 834->845, 836, 844, 889-897, 959->1036, 992, 1000-1005, 1211->1207, 1214, 1252->exit, 1258, 1316, 1332->1334
-mcp/surfaces/docs/update.py     371      9    166     17    95%   155->159, 183->189, 194->201, 207->211, 215->221, 217-218, 226-227, 236->241, 271->286, 383->403, 391->384, 412->417, 414-415, 432->418, 657, 659->662, 663->676, 754->776, 778, 795
--------------------------------------------------------------------------
-TOTAL                          1157     62    512     64    92%
-============================= 73 passed in 20.71s ==============================
+Name                                              Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------------------
+mcp/errors.py                                        85      0      2      0   100%
+mcp/internal_client.py                              206      5     94      5    97%   150->155, 153-154, 187->200, 398, 400, 403
+mcp/protocol.py                                     495     16    250     18    95%   94, 102->101, 120, 230->exit, 342, 382, 396-397, 451-453, 479->511, 489, 501-502, 609->634, 832->957, 844, 1214->1210, 1217, 1255->exit, 1261, 1319, 1335->1337
+mcp/surfaces/admin/manage_cycles_and_modules.py     344      4    178     11    97%   217->221, 239->243, 241->240, 264->267, 268->267, 327->338, 408->410, 569->572, 657->659, 760-761, 786-787
+mcp/surfaces/agent/transition_ticket.py              94      4     38      2    95%   102-103, 125, 137
+mcp/surfaces/agent/update_ticket.py                 243      1    158     10    97%   302->307, 307->312, 324->329, 329->334, 354->385, 366->368, 382, 388->446, 448->489, 500->504
+mcp/surfaces/docs/update.py                         371      6    166     11    96%   155->159, 183->189, 194->201, 207->211, 215->221, 217-218, 226-227, 236->241, 271->286, 383->403, 391->384, 412->417, 414-415, 432->418
+---------------------------------------------------------------------------------------------
+TOTAL                                              1838     36    886     57    97%
+================= 354 passed, 2 warnings in 108.83s (0:01:48) ==================

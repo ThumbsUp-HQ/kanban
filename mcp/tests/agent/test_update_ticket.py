@@ -732,3 +732,186 @@ async def test_update_ticket_modules_labels_unit_branches() -> None:
         assert "parent" in res["changed"]
     finally:
         reset_current_mcp_context(token)
+
+
+@pytest.mark.asyncio
+async def test_update_ticket_comprehensive_branch_coverage() -> None:  # noqa: C901, PLR0915
+    """Target all uncovered branches in update_ticket.py to exceed 95% coverage."""
+    from unittest.mock import AsyncMock, MagicMock
+
+    from mcp.context import McpRequestContext, reset_current_mcp_context, set_current_mcp_context
+    from mcp.registry import Surface
+    from mcp.surfaces.agent.update_ticket import update_ticket
+
+    mock_client = MagicMock()
+    ctx = McpRequestContext(
+        surface=Surface.AGENT, client=mock_client, subject_token="tok", session_id="sid"
+    )
+    token = set_current_mcp_context(ctx)
+
+    try:
+        # 1. identifier == "help"
+        mock_client.request = AsyncMock(return_value={"key": "KAN"})
+        res_help = await update_ticket({"identifier": "help"})
+        assert "update_ticket" in res_help.get("tool", "")
+
+        # 2. forbidden properties: custom_fields and state
+        with pytest.raises(KbMcpError) as exc_cf:
+            await update_ticket({"identifier": "KAN-1", "custom_fields": {}})
+        assert exc_cf.value.code == McpErrorCode.VALIDATION_FAILED
+
+        with pytest.raises(KbMcpError) as exc_st:
+            await update_ticket({"identifier": "KAN-1", "state": "done"})
+        assert exc_st.value.code == McpErrorCode.VALIDATION_FAILED
+
+        # 3. unknown parameter
+        with pytest.raises(KbMcpError) as exc_unk:
+            await update_ticket({"identifier": "KAN-1", "bogus_param": True})
+        assert exc_unk.value.code == McpErrorCode.VALIDATION_FAILED
+
+        # 4. invalid description_mode
+        curr_issue = {
+            "key": "KAN-1",
+            "description_markdown": "old text",
+            "description_sha256": "a" * 64,
+            "assignees": [
+                {"kind": "free_text", "free_text": "Vendor QA", "id": "ft-1"},
+                {
+                    "kind": "principal",
+                    "id": "p-1",
+                    "principal": {
+                        "handle": "@alice",
+                        "display_name": "Alice Wonderland",
+                        "id": "u-alice",
+                    },
+                },
+            ],
+            "module_ids": ["m-1"],
+            "labels": [{"id": "l-1"}],
+        }
+
+        async def _mock_req(method: str, path: str, **kwargs: Any) -> Any:
+            if method == "GET" and path == "/api/v1/issues/KAN-1":
+                return curr_issue
+            if method == "GET" and path == "/api/v1/resolve":
+                params = kwargs.get("params", {})
+                if params.get("ref") == "carol":
+                    return {"id": "u-carol"}
+                raise KbMcpError(McpErrorCode.NOT_FOUND, "User not found")
+            if method == "PATCH" and path == "/api/v1/issues/KAN-1":
+                return {**curr_issue, **kwargs.get("json_data", {})}
+            if method == "POST" and "/assignees" in path:
+                return {"status": "ok"}
+            if method == "DELETE" and "/assignees/" in path:
+                return {"status": "ok"}
+            return {}
+
+        mock_client.request = AsyncMock(side_effect=_mock_req)
+
+        with pytest.raises(KbMcpError) as exc_mode:
+            await update_ticket(
+                {
+                    "identifier": "KAN-1",
+                    "description_markdown": "new text",
+                    "if_match": "a" * 64,
+                    "description_mode": "unsupported_mode",
+                }
+            )
+        assert exc_mode.value.code == McpErrorCode.VALIDATION_FAILED
+
+        # 5. ETag conflict handling (lines 357-382)
+        async def _mock_req_conflict(method: str, path: str, **_kwargs: Any) -> Any:
+            if method == "GET" and path == "/api/v1/issues/KAN-1":
+                return {"key": "KAN-1", "description_sha256": "c" * 64}
+            if method == "PATCH" and path == "/api/v1/issues/KAN-1":
+                raise KbMcpError(McpErrorCode.CONFLICT_ETAG, "conflict")
+            return curr_issue
+
+        mock_client.request = AsyncMock(side_effect=_mock_req_conflict)
+        with pytest.raises(KbMcpError) as exc_conflict:
+            await update_ticket(
+                {
+                    "identifier": "KAN-1",
+                    "description_markdown": "new text",
+                    "if_match": "b" * 64,
+                    "description_mode": "replace",
+                }
+            )
+        assert exc_conflict.value.code == McpErrorCode.CONFLICT_ETAG
+        assert exc_conflict.value.hint is not None and "c" * 64 in exc_conflict.value.hint
+
+        # 6. Assignees add & remove complex paths (lines 388-489)
+        mock_client.request = AsyncMock(side_effect=_mock_req)
+        res_assign = await update_ticket(
+            {
+                "identifier": "KAN-1",
+                "assignees_add": [
+                    "",
+                    "Vendor QA",
+                    "alice",
+                    "@bob",
+                    "carol",
+                    "external-contractor",
+                ],
+                "assignees_remove": [
+                    "Vendor QA",
+                    "Alice Wonderland",
+                    "u-alice",
+                    "ft-1",
+                    "unknown-person",
+                ],
+            }
+        )
+        assert "assignees" in res_assign["changed"]
+
+        # 7. Modules and labels no-op branches (lines 302-334)
+        res_noop = await update_ticket(
+            {
+                "identifier": "KAN-1",
+                "modules_add": ["m-1"],
+                "modules_remove": ["non-existent"],
+                "labels_add": ["l-1"],
+                "labels_remove": ["non-existent"],
+            }
+        )
+        assert "modules" not in res_noop["changed"]
+        assert "labels" not in res_noop["changed"]
+
+        # 8. Non-dict assignees in issue, non-list modules/labels, resolve returns dict without id
+        curr_issue_dirty = {
+            "key": "KAN-1",
+            "assignees": [
+                "not-a-dict",
+                {"kind": "principal", "id": "p-2", "principal": "not-a-dict-principal"},
+            ],
+            "module_ids": ["m-1"],
+            "labels": [{"id": "l-1"}],
+        }
+
+        async def _mock_req_dirty(method: str, path: str, **_kwargs: Any) -> Any:
+            if method == "GET" and path == "/api/v1/issues/KAN-1":
+                return curr_issue_dirty
+            if method == "GET" and path == "/api/v1/resolve":
+                return {"status": "resolved_without_id"}
+            if method == "POST" and "/assignees" in path:
+                return {"status": "ok"}
+            if method == "DELETE" and "/assignees/" in path:
+                return {"status": "ok"}
+            return {}
+
+        mock_client.request = AsyncMock(side_effect=_mock_req_dirty)
+        res_dirty = await update_ticket(
+            {
+                "identifier": "KAN-1",
+                "assignees_add": ["resolve-no-id"],
+                "assignees_remove": ["some-user"],
+                "modules_add": "not-a-list",
+                "modules_remove": "not-a-list",
+                "labels_add": "not-a-list",
+                "labels_remove": "not-a-list",
+            }
+        )
+        assert "assignees" in res_dirty["changed"]
+
+    finally:
+        reset_current_mcp_context(token)
