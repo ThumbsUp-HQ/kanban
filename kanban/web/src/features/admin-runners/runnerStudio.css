@@ -20,6 +20,13 @@
   gap: var(--space-4, 16px);
 }
 
+.kb-runner-studio-header-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
 .kb-runner-studio-title-group h1 {
   font-size: var(--text-2xl, 24px);
   font-weight: 700;
@@ -34,6 +41,85 @@
   color: var(--kb-color-text-secondary, #4b5563);
   font-size: var(--text-sm, 14px);
   margin: 0;
+}
+
+.kb-runner-studio-error {
+  color: var(--danger-fg);
+}
+
+.kb-empty-runners-placeholder {
+  padding: var(--space-8);
+  text-align: center;
+  background-color: var(--kb-color-bg-surface, #ffffff);
+  border-radius: var(--radius-md, 8px);
+  border: 1px dashed var(--kb-color-border-subtle, #d1d5db);
+}
+
+.kb-empty-runners-text {
+  margin: 0;
+  color: var(--kb-color-text-secondary, #4b5563);
+}
+
+.kb-runner-pool-badge {
+  font-size: var(--text-xs);
+  color: var(--kb-color-text-secondary, #6b7280);
+}
+
+.kb-runner-caps-container {
+  margin-top: var(--space-2);
+}
+
+.kb-runner-caps-label {
+  font-size: var(--text-xs);
+  color: var(--kb-color-text-secondary, #6b7280);
+}
+
+.kb-runner-caps-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.kb-revoke-runner-title {
+  margin: 0 0 var(--space-3) 0;
+  color: var(--danger-fg);
+}
+
+.kb-revoke-runner-text {
+  margin: 0 0 var(--space-4) 0;
+  line-height: 1.5;
+}
+
+.kb-revoke-runner-banner {
+  margin-bottom: var(--space-4);
+}
+
+.kb-mint-token-error {
+  color: var(--danger-fg);
+  margin: var(--space-2) 0;
+}
+
+.kb-mint-form-group-spaced {
+  margin-top: var(--space-4);
+}
+
+.kb-copy-token-btn {
+  min-width: 80px;
+  padding: 6px 12px;
+}
+
+.kb-mint-expires-hint {
+  margin-bottom: var(--space-4);
+}
+
+.kb-runner-cli-pre {
+  background-color: #1f2937;
+  color: #e5e7eb;
+  padding: var(--space-2) var(--space-3);
+  border-radius: var(--radius-md);
+  font-size: var(--text-xs);
+  overflow-x: auto;
 }
 
 /* Runner Filter Pills */

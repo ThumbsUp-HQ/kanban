@@ -2,7 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
 import { RunnerStudioPage } from '../RunnerStudioPage';
 import { MintEnrollmentTokenModal } from '../MintEnrollmentTokenModal';
@@ -387,7 +387,9 @@ describe('RunnerStudioPage & Components (KANBA-219)', () => {
         expect(screen.getByTestId('copy-token-btn').textContent).toContain('Copied');
       });
 
-      await new Promise((r) => setTimeout(r, 2100));
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 2100));
+      });
       await waitFor(() => {
         expect(screen.getByTestId('copy-token-btn').textContent).toBe('Copy');
       });

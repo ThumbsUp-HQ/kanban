@@ -12,6 +12,7 @@ import React, {
 import { defaultHintController, type HintController } from '../emoji/hintTiming';
 import { HintPortal } from '../emoji/HintPortal';
 import { positionHint } from '../emoji/positionHint';
+import { useOptionalShellPanels } from '../../app/shellPanels';
 import './FieldHelpHint.css';
 
 export interface FieldHelpValueItem {
@@ -20,9 +21,11 @@ export interface FieldHelpValueItem {
 }
 
 export interface FieldHelpHintProps {
-  title: string;
+  title?: string;
+  fieldKey?: string;
   summary: string;
-  validValues?: FieldHelpValueItem[] | Record<string, string>;
+  validValues?: (FieldHelpValueItem | string)[] | Record<string, string>;
+  defaultValue?: string;
   example?: string;
   caution?: string;
   docHref?: string;
@@ -49,6 +52,7 @@ export function FieldHelpHint({
   controller,
 }: FieldHelpHintProps): JSX.Element {
   const ctrl = controller ?? defaultHintController;
+  const shellPanels = useOptionalShellPanels();
 
   const rawId = useId();
   const sanitizedId = rawId.replace(/[^a-zA-Z0-9_-]/g, '');
@@ -278,14 +282,26 @@ export function FieldHelpHint({
   // Normalize validValues into array
   const normalizedValues: FieldHelpValueItem[] = React.useMemo(() => {
     if (!validValues) return [];
-    if (Array.isArray(validValues)) return validValues;
+    if (Array.isArray(validValues)) {
+      return validValues.map((v) =>
+        typeof v === 'string' ? { label: v, description: '' } : v,
+      );
+    }
     return Object.entries(validValues).map(([label, description]) => ({
       label,
       description,
     }));
   }, [validValues]);
 
-  const effectiveAriaLabel = ariaLabel ?? `Help for ${title}`;
+  const handleDocLinkClick = (e: React.MouseEvent<HTMLAnchorElement>): void => {
+    if (shellPanels && docHref) {
+      e.preventDefault();
+      ctrl.close(popupId);
+      shellPanels.openPanel('help', { href: docHref, title });
+    }
+  };
+
+  const effectiveAriaLabel = ariaLabel ?? (title ? `Help for ${title}` : 'Help information');
 
   return (
     <>
@@ -371,6 +387,7 @@ export function FieldHelpHint({
                 target="_blank"
                 rel="noopener noreferrer"
                 data-testid={testId ? `${testId}-doc-link` : 'field-help-doc-link'}
+                onClick={handleDocLinkClick}
               >
                 More info -&gt;
               </a>

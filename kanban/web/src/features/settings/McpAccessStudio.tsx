@@ -26,6 +26,8 @@ import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { useSystemStatus } from '../../app/useSystemStatus';
 import { apiFetch } from '../../api/client';
 import { NotFoundView } from '../../app/routes';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './McpAccessStudio.css';
 
 export const SURFACE_TOOLS: Record<'agent' | 'docs' | 'admin', readonly string[]> = {
@@ -624,14 +626,21 @@ export function McpAccessStudio({
             Mint and manage Model Context Protocol API keys with explicit scope tiers and one-click revocation.
           </p>
         </div>
-        <button
-          type="button"
-          className="kb-mcp-studio-mint-btn"
-          data-testid="mint-key-button"
-          onClick={handleOpenMintModal}
-        >
-          + Mint MCP Key
-        </button>
+        <div className="kb-mcp-header-actions">
+          <StudioDocLink
+            href="/docs/three-surface-mcp-server-architecture"
+            title="MCP Architecture & Tool Reference"
+            testId="mcp-studio-doc-link"
+          />
+          <button
+            type="button"
+            className="kb-mcp-studio-mint-btn"
+            data-testid="mint-key-button"
+            onClick={handleOpenMintModal}
+          >
+            + Mint MCP Key
+          </button>
+        </div>
       </header>
 
       {studioError && (
@@ -1096,6 +1105,18 @@ export function McpAccessStudio({
               <div className="kb-mcp-form-row">
                 <label htmlFor="mint-scope-select" className="kb-mcp-form-label">
                   Scope Tier:
+                  <FieldHelpHint
+                    title="MCP Scope Tier"
+                    summary="Security boundary governing which workspace or project resources this key can read or mutate."
+                    validValues={[
+                      { label: 'Workspace', description: 'Access scoped to the current active workspace.' },
+                      { label: 'Project', description: 'Restricted strictly to one designated project.' },
+                      { label: 'Server / Global', description: 'Unrestricted server admin cross-workspace key.' },
+                      { label: 'Personal User', description: 'Inherits invoking user personal credentials.' },
+                    ]}
+                    docHref="/docs/three-surface-mcp-server-architecture#scope-tiers"
+                    testId="mint-scope-help"
+                  />
                 </label>
                 <select
                   id="mint-scope-select"

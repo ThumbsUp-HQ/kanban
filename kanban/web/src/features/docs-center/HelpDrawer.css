@@ -1,0 +1,179 @@
+/* Copyright 2026 Kanban Platform Contributors */
+/* Apache-2.0 License. See LICENSE for details. */
+
+.kb-help-drawer-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(17, 24, 39, 0.4);
+  z-index: 500;
+  backdrop-filter: blur(2px);
+}
+
+.kb-help-drawer {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 480px;
+  max-width: 100vw;
+  background: var(--bg-surface);
+  border-left: 1px solid var(--border-subtle);
+  box-shadow: -4px 0 24px rgba(0, 0, 0, 0.12);
+  z-index: 510;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: kbHelpDrawerSlideIn 0.2s ease-out;
+}
+
+@keyframes kbHelpDrawerSlideIn {
+  from {
+    transform: translateX(100%);
+  }
+  to {
+    transform: translateX(0);
+  }
+}
+
+.kb-help-drawer-header {
+  padding: 1rem 1.25rem;
+  border-bottom: 1px solid var(--border-subtle);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--bg-surface-raised);
+}
+
+.kb-help-drawer-title-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: 0;
+}
+
+.kb-help-drawer-badge {
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  color: var(--accent-primary);
+  letter-spacing: 0.05em;
+}
+
+.kb-help-drawer-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--fg-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.kb-help-drawer-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.kb-help-drawer-open-btn {
+  font-size: 0.8125rem;
+  color: var(--accent-primary);
+  background: transparent;
+  border: 1px solid var(--border-subtle);
+  padding: 0.375rem 0.625rem;
+  border-radius: 4px;
+  cursor: pointer;
+  text-decoration: none;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+.kb-help-drawer-open-btn:hover {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.kb-help-drawer-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.25rem;
+  line-height: 1;
+  color: var(--fg-muted);
+  cursor: pointer;
+  padding: 0.375rem;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  min-height: 32px;
+}
+
+.kb-help-drawer-close-btn:hover {
+  background: var(--bg-hover);
+  color: var(--fg-primary);
+}
+
+.kb-help-drawer-body {
+  flex: 1;
+  padding: 1.25rem;
+  overflow-y: auto;
+}
+
+.kb-help-drawer-toc {
+  background: var(--bg-canvas);
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.25rem;
+}
+
+.kb-help-drawer-toc-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--fg-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 0.5rem;
+}
+
+.kb-help-drawer-toc-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.375rem;
+}
+
+.kb-help-drawer-toc-link {
+  font-size: 0.8125rem;
+  color: var(--fg-secondary);
+  text-decoration: none;
+}
+
+.kb-help-drawer-toc-link:hover,
+.kb-help-drawer-toc-link.active {
+  color: var(--accent-primary);
+  font-weight: 500;
+}
+
+.kb-help-drawer-footer {
+  padding: 0.75rem 1.25rem;
+  border-top: 1px solid var(--border-subtle);
+  background: var(--bg-surface-raised);
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.kb-help-drawer-footer-text {
+  font-size: 0.75rem;
+  color: var(--fg-muted);
+}
+
+@media (max-width: 768px) {
+  .kb-help-drawer {
+    width: 100vw;
+  }
+}

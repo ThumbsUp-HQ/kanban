@@ -27,6 +27,7 @@ import {
 } from './adminAuthApi';
 import { SecondFactorStep } from '../auth/SecondFactorStep';
 import type { MfaMethod } from '../auth/authApi';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './adminAuth.css';
 
 interface CurrentUserResponse {
@@ -648,6 +649,11 @@ export function AuthStudioPage(): JSX.Element {
             kind="access"
             label="Authentication architecture info"
             content="Simultaneous OIDC, OAuth2, LDAPS/StartTLS, and Local Admin cards. Matching email addresses never auto-merge accounts across cards (bound strictly by auth_card_id + immutable_subject_id)."
+          />
+          <StudioDocLink
+            href="/docs/multi-card-authentication-studio"
+            title="Multi-Card Authentication Studio Documentation"
+            testId="auth-studio-doc-link"
           />
         </div>
 

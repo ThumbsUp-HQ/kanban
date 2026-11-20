@@ -12,6 +12,8 @@ import {
 } from './oauthApi';
 import { copyToClipboard } from '../../utils/clipboard';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './OAuthClientGovernanceStudio.css';
 
 export function OAuthClientGovernanceStudio(): JSX.Element {
@@ -212,16 +214,23 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
             with zero-trust administrative approval and revocation.
           </p>
         </div>
-        <button
-          type="button"
-          className="kb-oauth-gov-refresh-btn"
-          data-testid="refresh-clients-btn"
-          onClick={() => {
-            void loadClients();
-          }}
-        >
-          <span aria-hidden="true">🔄</span> Refresh
-        </button>
+        <div className="kb-oauth-header-actions">
+          <StudioDocLink
+            href="/docs/three-surface-mcp-server-architecture"
+            title="OAuth 2.1 Governance Documentation"
+            testId="oauth-studio-doc-link"
+          />
+          <button
+            type="button"
+            className="kb-oauth-gov-refresh-btn"
+            data-testid="refresh-clients-btn"
+            onClick={() => {
+              void loadClients();
+            }}
+          >
+            <span aria-hidden="true">🔄</span> Refresh
+          </button>
+        </div>
       </header>
 
       <nav className="kb-mcp-admin-subnav" aria-label="Admin MCP and Governance Navigation">
@@ -625,6 +634,13 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
                   <div className="kb-oauth-form-field">
                     <label htmlFor="reg-redirect-uris" className="kb-oauth-form-label">
                       Redirect URIs (one per line, HTTPS or loopback HTTP)
+                      <FieldHelpHint
+                        title="Redirect URIs"
+                        summary="Strict allowlist of OAuth redirect destinations. RFC 8252 requires HTTPS for web or 127.0.0.1 loopback for native clients."
+                        caution="Wildcards, non-loopback http://, and fragments (#) are strictly rejected."
+                        docHref="/docs/three-surface-mcp-server-architecture#oauth-21--pkce"
+                        testId="reg-redirect-uris-help"
+                      />
                     </label>
                     <textarea
                       id="reg-redirect-uris"

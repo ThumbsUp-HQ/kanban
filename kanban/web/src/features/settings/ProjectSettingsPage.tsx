@@ -23,6 +23,8 @@ import { StateBadge } from '../../components/state/StateBadge';
 import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
 import { ColorPresetPicker, ColoredPill } from './ColorPresetPicker';
 import { DeleteAuditModal } from './DeleteAuditModal';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './ProjectSettingsPage.css';
 
 export interface ProjectDetail {
@@ -1287,14 +1289,21 @@ export function ProjectSettingsPage(): JSX.Element {
   return (
     <div data-testid="project-settings-page" className="kb-settings-container">
       <header className="kb-settings-header">
-        <h1 className="kb-settings-title">
-          Project Settings:{' '}
-          {project?.name !== undefined && project.name.length > 0 ? project.name : projectKey}
-        </h1>
-        <p className="kb-settings-subtitle">
-          Manage general metadata, workflow states, WIP limits, priorities, labels, access, trash,
-          and lifecycle.
-        </p>
+        <div>
+          <h1 className="kb-settings-title">
+            Project Settings:{' '}
+            {project?.name !== undefined && project.name.length > 0 ? project.name : projectKey}
+          </h1>
+          <p className="kb-settings-subtitle">
+            Manage general metadata, workflow states, WIP limits, priorities, labels, access, trash,
+            and lifecycle.
+          </p>
+        </div>
+        <StudioDocLink
+          href="/docs/ticket-screen-and-work-item-features"
+          title="Project Settings Documentation"
+          testId="project-settings-doc-link"
+        />
       </header>
 
       {errorMessage && (
@@ -1415,6 +1424,12 @@ export function ProjectSettingsPage(): JSX.Element {
                   onChange={(e) => { setModulesEnabled(e.target.checked); }}
                 />
                 <span>Enable Modules for this project</span>
+                <FieldHelpHint
+                  title="Project Modules"
+                  summary="Enables multi-milestone and component bundling across project issues."
+                  docHref="/docs/ticket-screen-and-work-item-features#modules"
+                  testId="proj-modules-help"
+                />
               </label>
             </div>
 
@@ -1452,7 +1467,16 @@ export function ProjectSettingsPage(): JSX.Element {
             )}
 
             <div className="kb-form-group">
-              <label htmlFor="proj-auto-archive-input">Auto-Archive Days (optional)</label>
+              <label htmlFor="proj-auto-archive-input">
+                Auto-Archive Days (optional)
+                <FieldHelpHint
+                  title="Auto-Archive Days"
+                  summary="Number of days after completion or cancellation before work items are automatically archived from active views."
+                  example="30"
+                  docHref="/docs/ticket-screen-and-work-item-features#auto-archive"
+                  testId="proj-auto-archive-help"
+                />
+              </label>
               <input
                 id="proj-auto-archive-input"
                 data-testid="project-auto-archive-input"

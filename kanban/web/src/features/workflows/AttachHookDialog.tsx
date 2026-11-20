@@ -3,6 +3,7 @@
 
 import React, { useState, type JSX } from 'react';
 import { Link } from 'react-router';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import {
   MUTABLE_FIELD_UNIVERSE,
   IMMUTABLE_FIELDS_NOTICE,
@@ -216,7 +217,20 @@ function AttachHookDialogInner({
 
             {/* Hook Kind RadioGroup */}
             <div className="workflow-form-group">
-              <label className="workflow-form-label">Hook Kind</label>
+              <label className="workflow-form-label">
+                Hook Kind
+                <FieldHelpHint
+                  title="Workflow Hook Kind"
+                  summary="The execution tier for this transition interceptor rule."
+                  validValues={[
+                    { label: 'Sync Wasm Validator', description: 'Fast <25ms in-process WebAssembly validator that checks conditions and can veto.' },
+                    { label: 'Async Wasm Post-Mutation', description: 'Background WebAssembly post-action that mutates allowed fields.' },
+                    { label: 'Agent Interceptor', description: 'Autonomous agent (CLI, SDK, or Runner) executing forensic QA gates.' },
+                  ]}
+                  docHref="/docs/scriptrunner-workflows-and-transition-interceptors#interceptor-architecture"
+                  testId="hook-kind-help"
+                />
+              </label>
               <div className="workflow-radiogroup" role="radiogroup" aria-label="Hook Kind">
                 <label className="workflow-radio-label">
                   <input
@@ -351,6 +365,16 @@ function AttachHookDialogInner({
             <div className="workflow-form-group">
               <label htmlFor="failure-policy-select" className="workflow-form-label">
                 Failure Policy
+                <FieldHelpHint
+                  title="Failure Policy"
+                  summary="Specifies behavior when interceptor times out, returns an error, or crashes."
+                  validValues={[
+                    { label: 'Fail-Closed', description: 'Blocks transition immediately, rejecting state change.' },
+                    { label: 'Fail-Open (Warn)', description: 'Records audit warning and allows transition to proceed.' },
+                  ]}
+                  docHref="/docs/scriptrunner-workflows-and-transition-interceptors#failure-policies"
+                  testId="failure-policy-help"
+                />
               </label>
               <select
                 id="failure-policy-select"

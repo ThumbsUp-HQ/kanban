@@ -18,6 +18,7 @@ import { useSystemStatus, type SystemStatus } from '../../app/useSystemStatus';
 import { getCsrfToken } from '../../editor/sparkle/sparkleClient';
 import { safeCopyToClipboard } from '../../utils/uuid';
 import { ComposeExportTab } from './ComposeExportTab';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './StandaloneStatusPanel.css';
 
 export type StandaloneTabId = 'health' | 'backup' | 'compose';
@@ -579,14 +580,21 @@ export function StandaloneStatusPanel({
         {/* Header */}
         <div className="standalone-panel__header">
           <h2 className="standalone-panel__title">System Storage, Backups & Deployment</h2>
-          <button
-            type="button"
-            className="standalone-panel__close"
-            aria-label="Close"
-            onClick={onClose}
-          >
-            ×
-          </button>
+          <div className="standalone-panel__header-actions">
+            <StudioDocLink
+              href="/docs/production-promotion-and-backup-runbook"
+              title="Backup and Promotion Runbook"
+              testId="standalone-doc-link"
+            />
+            <button
+              type="button"
+              className="standalone-panel__close"
+              aria-label="Close"
+              onClick={onClose}
+            >
+              ×
+            </button>
+          </div>
         </div>
 
         {/* Tab Navigation */}

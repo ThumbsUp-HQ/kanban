@@ -2,6 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React, { useState, type JSX } from 'react';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import {
   createAgentDefinition,
   updateAgentDefinition,
@@ -165,7 +166,7 @@ function AgentDefinitionEditorContent({
       </div>
 
       {error && (
-        <div className="kb-form-hint" style={{ color: '#ef4444', margin: '8px 0' }} data-testid="agent-editor-error">
+        <div className="kb-form-hint kb-agent-drawer-error" data-testid="agent-editor-error">
           {error}
         </div>
       )}
@@ -208,6 +209,14 @@ function AgentDefinitionEditorContent({
         <div className="kb-form-group">
           <label htmlFor="agent-harness-select" className="kb-form-label">
             Autonomous Execution Harness
+            <FieldHelpHint
+              title="Autonomous Execution Harness"
+              fieldKey="agent_harness_kind"
+              docHref="/docs/multi-provider-ai-engine-and-runners#execution-harnesses"
+              summary="Selects runtime execution harness: In-App SDK, sandboxed CLI Pipe, or mTLS Remote Runner."
+              validValues={['in_app_sdk', 'cli_pipe', 'remote_runner']}
+              defaultValue="in_app_sdk"
+            />
           </label>
           <select
             id="agent-harness-select"
@@ -303,7 +312,7 @@ function AgentDefinitionEditorContent({
 
               {!cliValidation.valid && (
                 <div
-                  style={{ color: '#ef4444', fontSize: '12px', marginTop: '4px' }}
+                  className="kb-agent-cli-validation-error"
                   data-testid="cli-validation-error-hint"
                 >
                   ⚠️ {cliValidation.error}
@@ -351,6 +360,14 @@ function AgentDefinitionEditorContent({
         <div className="kb-form-group">
           <label htmlFor="agent-repo-mode-select" className="kb-form-label">
             Repository Access Mode
+            <FieldHelpHint
+              title="Repository Access Mode"
+              fieldKey="agent_repo_access_mode"
+              docHref="/docs/multi-provider-ai-engine-and-runners#repository-access"
+              summary="Restricts filesystem/git access: None (Zero local egress), Read-Only Bare Git Tools, or Read-Only VFS Mount."
+              validValues={['none', 'bare_git_tools', 'ro_vfs_mount']}
+              defaultValue="none"
+            />
           </label>
           <select
             id="agent-repo-mode-select"
@@ -367,9 +384,9 @@ function AgentDefinitionEditorContent({
 
         <div className="kb-form-group">
           <label className="kb-form-label">Allowed MCP Agent Tools</label>
-          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+          <div className="kb-agent-tools-grid">
             {ALL_MCP_TOOLS.map((tool) => (
-              <label key={tool} style={{ display: 'flex', alignItems: 'center', gap: '6px', fontSize: '13px' }}>
+              <label key={tool} className="kb-agent-tool-item">
                 <input
                   type="checkbox"
                   checked={selectedTools.includes(tool)}

@@ -8,6 +8,7 @@ import {
   type RemoteRunnerResponse,
 } from './runnersAdminApi';
 import { MintEnrollmentTokenModal } from './MintEnrollmentTokenModal';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './runnerStudio.css';
 
 export function RunnerStudioPage(): JSX.Element {
@@ -80,14 +81,21 @@ export function RunnerStudioPage(): JSX.Element {
           </p>
         </div>
 
-        <button
-          type="button"
-          className="kb-btn kb-btn-primary"
-          onClick={() => { setIsMintModalOpen(true); }}
-          data-testid="open-mint-modal-btn"
-        >
-          + Mint Enrollment Token
-        </button>
+        <div className="kb-runner-studio-header-actions">
+          <StudioDocLink
+            href="/docs/multi-provider-ai-engine-and-runners#remote-runners"
+            title="Remote Runners Documentation"
+            testId="runner-studio-doc-link"
+          />
+          <button
+            type="button"
+            className="kb-btn kb-btn-primary"
+            onClick={() => { setIsMintModalOpen(true); }}
+            data-testid="open-mint-modal-btn"
+          >
+            + Mint Enrollment Token
+          </button>
+        </div>
       </div>
 
       <div className="kb-runner-filters" data-testid="runner-status-filters">
@@ -126,7 +134,7 @@ export function RunnerStudioPage(): JSX.Element {
       </div>
 
       {error && (
-        <div className="kb-form-hint" style={{ color: '#ef4444' }} data-testid="runner-studio-error">
+        <div className="kb-form-hint kb-runner-studio-error" data-testid="runner-studio-error">
           {error}
         </div>
       )}
@@ -137,16 +145,10 @@ export function RunnerStudioPage(): JSX.Element {
         </div>
       ) : runners.length === 0 ? (
         <div
-          style={{
-            padding: '32px',
-            textAlign: 'center',
-            backgroundColor: 'var(--kb-color-bg-surface, #ffffff)',
-            borderRadius: '8px',
-            border: '1px dashed var(--kb-color-border-subtle, #d1d5db)',
-          }}
+          className="kb-empty-runners-placeholder"
           data-testid="empty-runners-placeholder"
         >
-          <p style={{ margin: 0, color: 'var(--kb-color-text-secondary, #4b5563)' }}>
+          <p className="kb-empty-runners-text">
             No remote runners registered for this filter. Mint an enrollment token to connect a new runner.
           </p>
         </div>
@@ -169,7 +171,7 @@ export function RunnerStudioPage(): JSX.Element {
                     >
                       {r.status}
                     </span>
-                    <span style={{ fontSize: '12px', color: 'var(--kb-color-text-secondary, #6b7280)' }}>
+                    <span className="kb-runner-pool-badge">
                       Pool: <strong>{r.pool_slug}</strong>
                     </span>
                   </div>
@@ -196,11 +198,11 @@ export function RunnerStudioPage(): JSX.Element {
                   </div>
 
                   {Object.keys(r.capabilities).length > 0 && (
-                    <div style={{ marginTop: '8px' }}>
-                      <span style={{ fontSize: '11px', color: 'var(--kb-color-text-secondary, #6b7280)' }}>
+                    <div className="kb-runner-caps-container">
+                      <span className="kb-runner-caps-label">
                         Capabilities:
                       </span>
-                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '2px' }}>
+                      <div className="kb-runner-caps-chips">
                         {Object.entries(r.capabilities).map(([k, v]) => (
                           <span key={k} className="kb-model-chip">
                             {k}: {String(v)}
@@ -245,13 +247,13 @@ export function RunnerStudioPage(): JSX.Element {
           data-testid="revoke-runner-modal"
         >
           <div className="kb-modal-card">
-            <h2 id="revoke-runner-title" style={{ margin: '0 0 12px 0', color: '#b91c1c' }}>
+            <h2 id="revoke-runner-title" className="kb-revoke-runner-title">
               Confirm Remote Runner Revocation
             </h2>
-            <p style={{ margin: '0 0 16px 0', lineHeight: 1.5 }}>
+            <p className="kb-revoke-runner-text">
               Are you sure you want to revoke remote runner <strong>{runnerToRevoke.hostname}</strong> (Pool: <code>{runnerToRevoke.pool_slug}</code>)?
             </p>
-            <div className="kb-air-gap-banner" style={{ marginBottom: '16px' }}>
+            <div className="kb-air-gap-banner kb-revoke-runner-banner">
               <span className="kb-air-gap-banner-icon" aria-hidden="true">
                 ⚠️
               </span>

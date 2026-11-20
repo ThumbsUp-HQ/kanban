@@ -286,6 +286,16 @@ export function Topbar({
 
         {isIssuesRoute && <LayoutSwitcher />}
 
+        <Link
+          to="/docs"
+          className="kb-topbar-docs-btn"
+          data-testid="topbar-docs-link"
+          title="Documentation Center"
+          aria-label="Documentation Center"
+        >
+          <span aria-hidden="true">&#128214;</span>
+        </Link>
+
         <NotificationsBell />
 
         <div ref={avatarRef} className="kb-avatar-wrapper">
@@ -562,6 +572,23 @@ export function Topbar({
                   </>
                 )}
               </div>
+
+              <Link
+                to="/docs"
+                role="menuitem"
+                data-testid="topbar-avatar-docs-link"
+                className="kb-theme-radio kb-avatar-menu-link"
+                onClick={() => {
+                  setAvatarMenuOpen(false);
+                }}
+              >
+                <span>
+                  <span aria-hidden="true" className="kb-avatar-menu-icon">
+                    📖
+                  </span>
+                  Documentation
+                </span>
+              </Link>
 
               <Link
                 to="/about"

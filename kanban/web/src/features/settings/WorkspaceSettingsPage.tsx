@@ -16,6 +16,8 @@ import { Link, useLocation } from 'react-router';
 import { useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client';
 import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './ProjectSettingsPage.css';
 
 interface WorkspaceSettingsData {
@@ -732,6 +734,11 @@ export function WorkspaceSettingsPage(): JSX.Element {
           <h1 className="kb-settings-title">Workspace Settings</h1>
           <p className="kb-settings-subtitle">Configure organization policies, membership, and workspace integrations.</p>
         </div>
+        <StudioDocLink
+          href="/docs/role-and-permission-matrix"
+          title="Workspace Settings Documentation"
+          testId="workspace-settings-doc-link"
+        />
       </header>
 
       {errorMessage && (
@@ -837,7 +844,19 @@ export function WorkspaceSettingsPage(): JSX.Element {
             </div>
 
             <div className="kb-form-group">
-              <label htmlFor="ws-visibility-select">Default Project Visibility</label>
+              <label htmlFor="ws-visibility-select">
+                Default Project Visibility
+                <FieldHelpHint
+                  title="Default Project Visibility"
+                  summary="Controls whether newly created projects default to workspace-wide visibility or strict private access."
+                  validValues={[
+                    { label: 'Workspace', description: 'All members of the workspace can discover and view by default.' },
+                    { label: 'Private', description: 'Restricted strictly to explicitly invited members.' },
+                  ]}
+                  docHref="/docs/role-and-permission-matrix#workspace-level-roles"
+                  testId="ws-visibility-help"
+                />
+              </label>
               <select
                 id="ws-visibility-select"
                 data-testid="workspace-visibility-select"
@@ -851,7 +870,15 @@ export function WorkspaceSettingsPage(): JSX.Element {
             </div>
 
             <div className="kb-form-group">
-              <label htmlFor="ws-idle-timeout-input">Session Idle Timeout (Minutes)</label>
+              <label htmlFor="ws-idle-timeout-input">
+                Session Idle Timeout (Minutes)
+                <FieldHelpHint
+                  title="Session Idle Timeout"
+                  summary="Minutes of user inactivity before the session is expired and re-authentication is enforced."
+                  docHref="/docs/multi-card-authentication-studio"
+                  testId="ws-idle-timeout-help"
+                />
+              </label>
               <input
                 id="ws-idle-timeout-input"
                 type="number"
@@ -921,6 +948,13 @@ export function WorkspaceSettingsPage(): JSX.Element {
                 <span className="kb-toggle-text">
                   📴 Air-Gap Mode (Strict local execution; disables external outbound telemetry)
                 </span>
+                <FieldHelpHint
+                  title="Air-Gap Mode"
+                  summary="Disables all outbound external network egress, telemetry, and external SaaS AI providers."
+                  caution="External AI integrations requiring internet access will fail while Air-Gap mode is enabled."
+                  docHref="/docs/zero-trust-security-and-access-visibility"
+                  testId="ws-air-gap-help"
+                />
               </label>
             </div>
 

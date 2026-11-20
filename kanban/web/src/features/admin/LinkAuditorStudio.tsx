@@ -6,6 +6,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch, getCsrfToken } from '../../api/client';
 import { qk } from '../../api/queryKeys';
 import { NotFoundView } from '../../app/routes';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './LinkAuditorStudio.css';
 
 export type InvalidLinkReason =
@@ -335,6 +336,11 @@ export function LinkAuditorStudio(): JSX.Element {
         </div>
 
         <div className="link-auditor-header__actions">
+          <StudioDocLink
+            href="/docs/universal-object-graph-and-link-auditor"
+            title="Link Auditor Documentation"
+            testId="link-auditor-doc-link"
+          />
           <button
             type="button"
             className="link-auditor-btn link-auditor-btn--scan"

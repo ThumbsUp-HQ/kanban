@@ -9,6 +9,7 @@ import {
 } from './agentDefinitionsApi';
 import { AgentValidationModal } from './AgentValidationModal';
 import { AgentDefinitionEditorDrawer } from './AgentDefinitionEditorDrawer';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './agentStudio.css';
 
 export function AgentStudioPage(): JSX.Element {
@@ -76,21 +77,28 @@ export function AgentStudioPage(): JSX.Element {
           </p>
         </div>
 
-        <button
-          type="button"
-          className="kb-btn kb-btn-primary"
-          onClick={() => {
-            setEditingAgent(null);
-            setIsDrawerOpen(true);
-          }}
-          data-testid="register-agent-btn"
-        >
-          + Register Agent
-        </button>
+        <div className="kb-agent-studio-header-actions">
+          <StudioDocLink
+            href="/docs/multi-provider-ai-engine-and-runners"
+            title="Autonomous Agents Documentation"
+            testId="agent-studio-doc-link"
+          />
+          <button
+            type="button"
+            className="kb-btn kb-btn-primary"
+            onClick={() => {
+              setEditingAgent(null);
+              setIsDrawerOpen(true);
+            }}
+            data-testid="register-agent-btn"
+          >
+            + Register Agent
+          </button>
+        </div>
       </div>
 
       {error && (
-        <div className="kb-form-hint" style={{ color: '#ef4444' }} data-testid="agent-studio-error">
+        <div className="kb-form-hint kb-agent-studio-error" data-testid="agent-studio-error">
           {error}
         </div>
       )}
@@ -244,10 +252,10 @@ export function AgentStudioPage(): JSX.Element {
           data-testid="delete-agent-modal"
         >
           <div className="kb-modal-card">
-            <h2 id="delete-agent-title" style={{ margin: '0 0 12px 0' }}>
+            <h2 id="delete-agent-title" className="kb-modal-title">
               Confirm Agent Removal
             </h2>
-            <p style={{ margin: '0 0 20px 0' }}>
+            <p className="kb-modal-desc">
               Are you sure you want to remove agent definition <strong>@{agentToDelete.slug}</strong> ({agentToDelete.display_name})? Any workflow hooks referencing this agent will need to be reconfigured.
             </p>
             <div className="kb-modal-footer">

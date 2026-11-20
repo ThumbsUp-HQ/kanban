@@ -2,6 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import React, { useState, type JSX } from 'react';
+import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import {
   createAiProvider,
   updateAiProvider,
@@ -334,6 +335,17 @@ function AiProviderEditorContent({
         <div className="kb-form-group">
           <label htmlFor="provider-kind-select" className="kb-form-label">
             Protocol & Provider Engine
+            <FieldHelpHint
+              title="AI Provider Engine"
+              summary="The underlying runtime and API protocol for AI completions and evaluations."
+              validValues={[
+                { label: 'Ollama', description: 'Local, zero-egress self-hosted runtime.' },
+                { label: 'OpenAI', description: 'OpenAI API or compatible vLLM/LiteLLM server.' },
+                { label: 'Google Gemini', description: 'Cloud Gemini models with high throughput.' },
+              ]}
+              docHref="/docs/multi-provider-ai-engine-and-runners#supported-runtimes"
+              testId="provider-kind-help"
+            />
           </label>
           <select
             id="provider-kind-select"

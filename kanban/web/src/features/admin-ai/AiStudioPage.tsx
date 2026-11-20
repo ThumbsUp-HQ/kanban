@@ -15,6 +15,7 @@ import {
 } from './aiAdminApi';
 import { AiBudgetModal } from './AiBudgetModal';
 import { AiProviderEditorDrawer } from './AiProviderEditorDrawer';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './aiStudio.css';
 
 interface CardTestStatus {
@@ -213,17 +214,24 @@ export function AiStudioPage(): JSX.Element {
           </p>
         </div>
 
-        <button
-          type="button"
-          className="kb-btn kb-btn-primary"
-          onClick={() => {
-            setEditingProvider(null);
-            setIsDrawerOpen(true);
-          }}
-          data-testid="register-provider-btn"
-        >
-          + Register Provider
-        </button>
+        <div className="kb-ai-studio-header-actions">
+          <StudioDocLink
+            href="/docs/multi-provider-ai-engine-and-runners"
+            title="Multi-Provider AI Engine Documentation"
+            testId="ai-studio-doc-link"
+          />
+          <button
+            type="button"
+            className="kb-btn kb-btn-primary"
+            onClick={() => {
+              setEditingProvider(null);
+              setIsDrawerOpen(true);
+            }}
+            data-testid="register-provider-btn"
+          >
+            + Register Provider
+          </button>
+        </div>
       </div>
 
       {airGapMode && (

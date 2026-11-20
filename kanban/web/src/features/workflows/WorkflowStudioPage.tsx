@@ -30,6 +30,7 @@ import {
   type CreateWorkflowHookPayload,
   type ReorderHooksPayload,
 } from './api';
+import { StudioDocLink } from '../../components/help/StudioDocLink';
 import './workflows.css';
 
 export interface WorkflowStudioPageProps {
@@ -280,18 +281,25 @@ export function WorkflowStudioPage({
           <span className="workflow-studio-title-badge">{projectKey}</span>
           <span>&gt; Workflow &amp; Transition Interceptors</span>
         </h1>
-        <button
-          type="button"
-          className="workflow-btn workflow-btn-primary"
-          onClick={() => {
-            setEditingHook(null);
-            setActiveTransition(null);
-            setIsAttachDialogOpen(true);
-          }}
-          aria-label="Add Transition Rule"
-        >
-          + Add Transition Rule
-        </button>
+        <div className="workflow-studio-actions">
+          <StudioDocLink
+            href="/docs/scriptrunner-workflows-and-transition-interceptors"
+            title="Workflow Interceptor Documentation"
+            testId="workflow-studio-doc-link"
+          />
+          <button
+            type="button"
+            className="workflow-btn workflow-btn-primary"
+            onClick={() => {
+              setEditingHook(null);
+              setActiveTransition(null);
+              setIsAttachDialogOpen(true);
+            }}
+            aria-label="Add Transition Rule"
+          >
+            + Add Transition Rule
+          </button>
+        </div>
       </header>
 
       {/* General Alert */}
