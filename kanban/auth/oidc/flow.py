@@ -434,7 +434,8 @@ class OidcFlow:
         code_verifier_sealed: bytes = bytes(row["code_verifier_sealed"])
         return_to: str = str(row["return_to"])
         remember_me: bool = bool(row["remember_me"]) if row.get("remember_me") is not None else True
-        resolved_link_intent_id: uuid.UUID | None = row["link_intent_id"] or link_intent_id
+        del link_intent_id  # Intent ID must originate from cryptographically bound row
+        resolved_link_intent_id: uuid.UUID | None = row["link_intent_id"]
 
         # Unseal code_verifier
         sub_key = derive_subkey(self._key_material.master_kek, "oidc/code-verifier")
@@ -797,6 +798,38 @@ class OidcFlow:
                     "headers": [],
                 }
             )
+
+        # Link flow: preserve caller session and redirect cleanly to /settings/profile
+        if resolved_link_intent_id is not None:
+            try:
+                await self._identity_resolver.resolve(
+                    assertion, dummy_req, resolved_link_intent_id
+                )
+            except ProblemException as exc:
+                err_code = exc.code or "LINK_FAILED"
+                target_url = f"/settings/profile?link_error={err_code}"
+                response = RedirectResponse(url=target_url, status_code=302)
+                response.headers.append("Set-Cookie", build_clear_browser_binding_cookie())
+                if request is not None:
+                    host_name = (request.headers.get("host") or "").split(":")[0].lower()
+                    if request.url.scheme == "http" and host_name not in ("testserver", "test"):
+                        response.headers.append(
+                            "Set-Cookie",
+                            build_clear_fallback_browser_binding_cookie(),
+                        )
+                return response
+
+            target_url = f"/settings/profile?linked={slug}"
+            response = RedirectResponse(url=target_url, status_code=302)
+            response.headers.append("Set-Cookie", build_clear_browser_binding_cookie())
+            if request is not None:
+                host_name = (request.headers.get("host") or "").split(":")[0].lower()
+                if request.url.scheme == "http" and host_name not in ("testserver", "test"):
+                    response.headers.append(
+                        "Set-Cookie",
+                        build_clear_fallback_browser_binding_cookie(),
+                    )
+            return response
 
         resolved_login = await self._identity_resolver.resolve(
             assertion, dummy_req, resolved_link_intent_id

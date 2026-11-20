@@ -9,6 +9,7 @@ import os
 import urllib.parse
 import uuid
 from typing import TYPE_CHECKING
+from unittest.mock import AsyncMock
 
 import httpx
 import pytest
@@ -1616,3 +1617,205 @@ async def test_fastapi_oidc_routes(  # noqa: PLR0915
             )
             assert cb_local_res.status_code == 302
             assert cb_local_res.headers["Location"] == "/"
+
+
+@pytest.mark.asyncio
+async def test_oidc_callback_link_flow_preserves_session_and_redirects(
+    db_session: AsyncSession,
+    key_material: KeyMaterial,
+    kek_provider: StaticKekProvider,
+    fake_idp: FakeIdP,
+    recording_resolver: RecordingIdentityResolver,
+) -> None:
+    """Test callback with resolved_link_intent_id preserves caller session.
+
+    Redirects cleanly to /settings/profile?linked=slug.
+    """
+    ws_id, admin_id = await _setup_workspace_and_admin(db_session)
+    card_id = await _seed_oidc_card(
+        db_session,
+        ws_id,
+        kek_provider,
+        slug="link-test",
+        issuer=fake_idp.issuer,
+        client_id=fake_idp.client_id,
+        client_secret=fake_idp.client_secret.encode("utf-8"),
+    )
+    s_id = uuid.uuid4()
+    await db_session.execute(
+        text(
+            "INSERT INTO sessions ("
+            "  id, token_sha256, principal_id, workspace_id, auth_card_id, aal_level, "
+            "  aal2_verified_at, idle_expires_at, absolute_expires_at"
+            ") VALUES ("
+            "  :id, :token_sha, :p_id, :ws_id, :card_id, 2, "
+            "  clock_timestamp(), clock_timestamp() + interval '1 hour', "
+            "  clock_timestamp() + interval '8 hours'"
+            ")"
+        ),
+        {
+            "id": s_id,
+            "token_sha": uuid.uuid4().bytes + uuid.uuid4().bytes,
+            "p_id": admin_id,
+            "ws_id": ws_id,
+            "card_id": card_id,
+        },
+    )
+    await db_session.scalar(
+        text("SELECT kb_auth.identity_link_intent_create(:p_id, :s_id, :card_id, 300)"),
+        {"p_id": admin_id, "s_id": s_id, "card_id": card_id},
+    )
+
+    mock_session_service = AsyncMock()
+    async with httpx.AsyncClient(transport=fake_idp.as_transport()) as http_client:
+        flow = OidcFlow(
+            key_material=key_material,
+            identity_resolver=recording_resolver,
+            http_client=http_client,
+            session_service=mock_session_service,
+        )
+
+        start_resp = await flow.start(
+            db_session,
+            "link-test",
+            return_to="/settings/profile",
+            link_intent_id=admin_id,
+        )
+        params = dict(
+            urllib.parse.parse_qsl(urllib.parse.urlsplit(start_resp.headers["Location"]).query)
+        )
+
+        cb_url = fake_idp.authorize_url_for_params(
+            client_id=params["client_id"],
+            redirect_uri=params["redirect_uri"],
+            state=params["state"],
+            nonce=params["nonce"],
+            code_challenge=params["code_challenge"],
+        )
+        cb_params = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(cb_url).query))
+
+        cb_resp = await flow.callback(
+            db_session,
+            "link-test",
+            code=cb_params["code"],
+            state=cb_params["state"],
+            browser_binding_cookie=start_resp.browser_binding,
+        )
+
+        # 1. Success redirects cleanly to /settings/profile?linked=link-test
+        assert cb_resp.status_code == 302
+        assert cb_resp.headers["Location"] == "/settings/profile?linked=link-test"
+
+        # 2. Clears browser binding cookie
+        set_cookie_header = cb_resp.headers.get("Set-Cookie", "")
+        assert "Max-Age=0" in set_cookie_header or "expires=" in set_cookie_header
+
+        # 3. Caller session is preserved: create_after_login was NEVER called
+        assert mock_session_service.create_after_login.call_count == 0
+
+        # 4. Resolver was invoked with link_intent_id
+        assert admin_id in recording_resolver.intents
+
+
+@pytest.mark.asyncio
+async def test_oidc_callback_link_flow_conflict_redirects_error(
+    db_session: AsyncSession,
+    key_material: KeyMaterial,
+    kek_provider: StaticKekProvider,
+    fake_idp: FakeIdP,
+) -> None:
+    """Test callback with resolved_link_intent_id redirects on ProblemException.
+
+    Redirects cleanly to /settings/profile?link_error=<code>.
+    """
+    ws_id, admin_id = await _setup_workspace_and_admin(db_session)
+    card_id = await _seed_oidc_card(
+        db_session,
+        ws_id,
+        kek_provider,
+        slug="link-conflict-test",
+        issuer=fake_idp.issuer,
+        client_id=fake_idp.client_id,
+        client_secret=fake_idp.client_secret.encode("utf-8"),
+    )
+    s_id = uuid.uuid4()
+    await db_session.execute(
+        text(
+            "INSERT INTO sessions ("
+            "  id, token_sha256, principal_id, workspace_id, auth_card_id, aal_level, "
+            "  aal2_verified_at, idle_expires_at, absolute_expires_at"
+            ") VALUES ("
+            "  :id, :token_sha, :p_id, :ws_id, :card_id, 2, "
+            "  clock_timestamp(), clock_timestamp() + interval '1 hour', "
+            "  clock_timestamp() + interval '8 hours'"
+            ")"
+        ),
+        {
+            "id": s_id,
+            "token_sha": uuid.uuid4().bytes + uuid.uuid4().bytes,
+            "p_id": admin_id,
+            "ws_id": ws_id,
+            "card_id": card_id,
+        },
+    )
+    await db_session.scalar(
+        text("SELECT kb_auth.identity_link_intent_create(:p_id, :s_id, :card_id, 300)"),
+        {"p_id": admin_id, "s_id": s_id, "card_id": card_id},
+    )
+
+    mock_resolver = AsyncMock()
+    mock_resolver.resolve = AsyncMock(
+        side_effect=ProblemException(
+            code="IDENTITY_ALREADY_LINKED",
+            status=409,
+            title="Identity Already Linked",
+            detail="External identity is already linked to another account",
+        )
+    )
+    mock_session_service = AsyncMock()
+
+    async with httpx.AsyncClient(transport=fake_idp.as_transport()) as http_client:
+        flow = OidcFlow(
+            key_material=key_material,
+            identity_resolver=mock_resolver,
+            http_client=http_client,
+            session_service=mock_session_service,
+        )
+
+        start_resp = await flow.start(
+            db_session,
+            "link-conflict-test",
+            return_to="/settings/profile",
+            link_intent_id=admin_id,
+        )
+        params = dict(
+            urllib.parse.parse_qsl(urllib.parse.urlsplit(start_resp.headers["Location"]).query)
+        )
+
+        cb_url = fake_idp.authorize_url_for_params(
+            client_id=params["client_id"],
+            redirect_uri=params["redirect_uri"],
+            state=params["state"],
+            nonce=params["nonce"],
+            code_challenge=params["code_challenge"],
+        )
+        cb_params = dict(urllib.parse.parse_qsl(urllib.parse.urlsplit(cb_url).query))
+
+        cb_resp = await flow.callback(
+            db_session,
+            "link-conflict-test",
+            code=cb_params["code"],
+            state=cb_params["state"],
+            browser_binding_cookie=start_resp.browser_binding,
+        )
+
+        # 1. Conflict redirects cleanly to /settings/profile?link_error=IDENTITY_ALREADY_LINKED
+        assert cb_resp.status_code == 302
+        assert cb_resp.headers["Location"] == "/settings/profile?link_error=IDENTITY_ALREADY_LINKED"
+
+        # 2. Clears browser binding cookie
+        set_cookie_header = cb_resp.headers.get("Set-Cookie", "")
+        assert "Max-Age=0" in set_cookie_header or "expires=" in set_cookie_header
+
+        # 3. Caller session is preserved: create_after_login was NEVER called
+        assert mock_session_service.create_after_login.call_count == 0

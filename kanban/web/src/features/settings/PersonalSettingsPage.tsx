@@ -1,7 +1,7 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import React, { useState, useRef, type JSX, type SyntheticEvent } from 'react';
+import React, { useState, useRef, useEffect, type JSX, type SyntheticEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   fetchMyProfile,
@@ -21,11 +21,14 @@ import {
   regenerateRecoveryCodes,
   fetchExternalIdentities,
   unlinkIdentity,
+  startLinkIdentity,
+  linkLdapIdentity,
   type UserProfileResponse,
   type WebauthnCredentialItem,
   type MfaStatusResponse,
   type ExternalIdentityItem,
 } from './personalSettingsApi';
+import { fetchAuthCards, type AuthCardsResponse, type AuthCard } from '../auth/authApi';
 import { SecondFactorStep } from '../auth/SecondFactorStep';
 import {
   isWebAuthnSupported,
@@ -64,8 +67,27 @@ export function PersonalSettingsPage(): JSX.Element {
   const queryClient = useQueryClient();
 
   // Notification state
-  const [successMsg, setSuccessMsg] = useState<string | null>(null);
-  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    const linkedSlug = params.get('linked');
+    if (linkedSlug) {
+      return `Account successfully linked (${linkedSlug}).`;
+    }
+    return null;
+  });
+  const [errorMsg, setErrorMsg] = useState<string | null>(() => {
+    if (typeof window === 'undefined') return null;
+    const params = new URLSearchParams(window.location.search);
+    const linkErrorCode = params.get('link_error');
+    if (linkErrorCode) {
+      if (linkErrorCode === 'IDENTITY_ALREADY_LINKED') {
+        return 'External identity is already linked to another account.';
+      }
+      return `Failed to link external identity (${linkErrorCode}).`;
+    }
+    return null;
+  });
   const [passkeyVerifiedBanner, setPasskeyVerifiedBanner] = useState<string | null>(null);
 
   // Form states (controlled with fallback to profile)
@@ -131,6 +153,25 @@ export function PersonalSettingsPage(): JSX.Element {
     queryKey: ['myIdentities'],
     queryFn: fetchExternalIdentities,
   });
+
+  const { data: authCardsData } = useQuery<AuthCardsResponse>({
+    queryKey: ['publicAuthCards'],
+    queryFn: fetchAuthCards,
+  });
+
+  const [ldapModalCard, setLdapModalCard] = useState<AuthCard | null>(null);
+  const [ldapUsername, setLdapUsername] = useState('');
+  const [ldapPassword, setLdapPassword] = useState('');
+  const [isSubmittingLdap, setIsSubmittingLdap] = useState(false);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get('linked') || params.get('link_error')) {
+      const cleanUrl = window.location.pathname;
+      window.history.replaceState({}, '', cleanUrl);
+    }
+  }, []);
 
   const currentDisplayName = displayNameInput ?? profile?.display_name ?? '';
   const currentTimezone = timezoneInput ?? profile?.timezone ?? 'UTC';
@@ -432,6 +473,61 @@ export function PersonalSettingsPage(): JSX.Element {
     };
     await action();
   };
+
+  const handleConnectOidc = async (cardSlug: string): Promise<void> => {
+    const action = async (): Promise<void> => {
+      try {
+        const res = await startLinkIdentity(cardSlug);
+        if (res.mode === 'redirect' && res.authorize_url) {
+          window.location.href = res.authorize_url;
+        }
+      } catch (err) {
+        if (!handleInterceptAal2(err, action)) {
+          setErrorMsg(err instanceof Error ? err.message : 'Failed to initiate account linking.');
+        }
+      }
+    };
+    await action();
+  };
+
+  const handleLdapLinkSubmit = async (e: SyntheticEvent): Promise<void> => {
+    e.preventDefault();
+    if (!ldapModalCard) return;
+    const targetCard = ldapModalCard;
+    const user = ldapUsername;
+    const pass = ldapPassword;
+
+    const action = async (): Promise<void> => {
+      try {
+        setIsSubmittingLdap(true);
+        const startRes = await startLinkIdentity(targetCard.slug);
+        if (!startRes.link_intent_id) {
+          throw new Error('Missing link intent ID from server.');
+        }
+        await linkLdapIdentity(startRes.link_intent_id, user, pass);
+        setLdapModalCard(null);
+        setLdapUsername('');
+        setLdapPassword('');
+        setSuccessMsg(`Account successfully linked (${targetCard.display_name}).`);
+        setErrorMsg(null);
+        void queryClient.invalidateQueries({ queryKey: ['myIdentities'] });
+      } catch (err) {
+        if (!handleInterceptAal2(err, action)) {
+          setErrorMsg(err instanceof Error ? err.message : 'Failed to link LDAP account.');
+        }
+      } finally {
+        setIsSubmittingLdap(false);
+      }
+    };
+    await action();
+  };
+
+  const externalCards = (authCardsData?.cards ?? []).filter(
+    (card) => card.provider_kind !== 'LOCAL_ADMIN',
+  );
+  const connectableCards = externalCards.filter(
+    (card) => !identities?.some((id) => id.card_slug === card.slug),
+  );
 
   if (isProfileLoading) {
     return (
@@ -913,15 +1009,58 @@ export function PersonalSettingsPage(): JSX.Element {
 
       {/* Section 5: Connected Accounts & External Identities */}
       <section className="kb-personal-settings-section" aria-labelledby="section-identities-title">
-        <h2 id="section-identities-title" className="kb-personal-settings-section-title">
-          Connected Accounts & External Identities
-        </h2>
-        <p className="kb-personal-settings-section-desc">
-          Link external single sign-on identities (OIDC, OAuth2, LDAP) to your user profile. Unlinking requires fresh second-factor verification.
-        </p>
+        <div className="kb-personal-settings-header-row">
+          <div>
+            <h2 id="section-identities-title" className="kb-personal-settings-section-title">
+              Connected Accounts & External Identities
+            </h2>
+            <p className="kb-personal-settings-section-desc">
+              Link external single sign-on identities (OIDC, OAuth2, LDAP) to your user profile. Unlinking requires fresh second-factor verification.
+            </p>
+          </div>
+          <div className="kb-personal-settings-header-actions">
+            {connectableCards.map((card) => (
+              <button
+                key={card.id || card.slug}
+                type="button"
+                className="kb-personal-settings-btn kb-personal-settings-btn-primary"
+                data-testid={`connect-provider-${card.slug}`}
+                onClick={() => {
+                  if (card.provider_kind === 'LDAP') {
+                    setLdapModalCard(card);
+                  } else {
+                    void handleConnectOidc(card.slug);
+                  }
+                }}
+              >
+                + Connect {card.display_name}
+              </button>
+            ))}
+          </div>
+        </div>
+
+        {externalCards.length === 0 && (
+          <div className="kb-personal-settings-empty-providers" data-testid="no-external-providers-notice">
+            <p className="kb-personal-settings-empty">
+              No external identity providers (OIDC, OAuth2, LDAP) are currently enabled in this workspace.
+            </p>
+            {profile?.is_server_admin && (
+              <p className="kb-personal-settings-admin-link">
+                <a
+                  href="/admin/auth"
+                  className="kb-personal-settings-link"
+                  data-testid="configure-providers-link"
+                >
+                  Configure Providers in Admin Auth Studio -&gt;
+                </a>
+              </p>
+            )}
+          </div>
+        )}
 
         {identities && identities.length > 0 ? (
-          <table className="kb-personal-settings-table" data-testid="identities-table">
+          <div className="kb-table-scroll-container">
+            <table className="kb-personal-settings-table" data-testid="identities-table">
             <thead>
               <tr>
                 <th className="kb-personal-settings-th">Provider</th>
@@ -956,6 +1095,7 @@ export function PersonalSettingsPage(): JSX.Element {
               ))}
             </tbody>
           </table>
+        </div>
         ) : (
           <p className="kb-personal-settings-empty">
             No external identities linked.
@@ -1224,6 +1364,94 @@ export function PersonalSettingsPage(): JSX.Element {
         }}
         onInterceptAal2={handleInterceptAal2}
       />
+
+      {/* LDAP Credentials Modal */}
+      {ldapModalCard && (
+        <div className="kb-personal-settings-modal-backdrop" role="presentation">
+          <div
+            className="kb-personal-settings-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="ldap-modal-title"
+            data-testid="ldap-credentials-modal"
+          >
+            <div className="kb-personal-settings-modal-header">
+              <h3 id="ldap-modal-title" className="kb-personal-settings-modal-title">
+                Connect {ldapModalCard.display_name}
+              </h3>
+              <button
+                type="button"
+                className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
+                onClick={() => {
+                  setLdapModalCard(null);
+                  setLdapUsername('');
+                  setLdapPassword('');
+                }}
+              >
+                Cancel
+              </button>
+            </div>
+            <form onSubmit={(e) => { void handleLdapLinkSubmit(e); }}>
+              <div className="kb-personal-settings-modal-body">
+                <p className="kb-personal-settings-modal-text">
+                  Enter your directory credentials for {ldapModalCard.display_name} to link your account.
+                </p>
+                <div className="kb-personal-settings-field">
+                  <label htmlFor="ldap-link-username" className="kb-personal-settings-label">
+                    Username
+                  </label>
+                  <input
+                    id="ldap-link-username"
+                    data-testid="ldap-link-username-input"
+                    type="text"
+                    className="kb-personal-settings-input"
+                    value={ldapUsername}
+                    onChange={(e) => { setLdapUsername(e.target.value); }}
+                    autoComplete="username"
+                    required
+                  />
+                </div>
+                <div className="kb-personal-settings-field">
+                  <label htmlFor="ldap-link-password" className="kb-personal-settings-label">
+                    Password
+                  </label>
+                  <input
+                    id="ldap-link-password"
+                    data-testid="ldap-link-password-input"
+                    type="password"
+                    className="kb-personal-settings-input"
+                    value={ldapPassword}
+                    onChange={(e) => { setLdapPassword(e.target.value); }}
+                    autoComplete="current-password"
+                    required
+                  />
+                </div>
+              </div>
+              <div className="kb-personal-settings-modal-footer">
+                <button
+                  type="button"
+                  className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
+                  onClick={() => {
+                    setLdapModalCard(null);
+                    setLdapUsername('');
+                    setLdapPassword('');
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  className="kb-personal-settings-btn kb-personal-settings-btn-primary"
+                  data-testid="submit-ldap-link-btn"
+                  disabled={isSubmittingLdap}
+                >
+                  {isSubmittingLdap ? 'Connecting...' : 'Connect'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       {cropFile && (
         <AvatarCropModal

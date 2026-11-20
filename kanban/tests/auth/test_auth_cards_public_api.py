@@ -379,14 +379,14 @@ async def test_public_start_endpoint_success_and_oidc_errors(
             assert r_next.headers["location"] == "https://idp.example.com/auth"
             assert mock_flow.start.call_args[1]["return_to"] == "/dashboard"
 
-            # Success with ?return_to= and ?link_intent_id=
+            # Verify unauthenticated link_intent_id query param is ignored / rejected
             intent_id = uuid.uuid4()
             r_intent = await client.get(
                 f"/api/v1/auth/cards/active-oidc/start?return_to=/profile&link_intent_id={intent_id}"
             )
             assert r_intent.status_code == 302
             assert mock_flow.start.call_args[1]["return_to"] == "/profile"
-            assert mock_flow.start.call_args[1]["link_intent_id"] == intent_id
+            assert mock_flow.start.call_args[1].get("link_intent_id") is None
 
             # OidcError with DISCOVERY_FAILED -> 502
             mock_flow.start.side_effect = OidcError("DISCOVERY_FAILED", "IdP unreachable")
