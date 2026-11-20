@@ -226,18 +226,18 @@ index c79d641d..10e84dda 100644
      response_model=PlatformSummaryResponse,
 diff --git a/kanban/ops/sbom.py b/kanban/ops/sbom.py
 new file mode 100644
-index 00000000..f518f464
+index 00000000..199ea942
 --- /dev/null
 +++ b/kanban/ops/sbom.py
-@@ -0,0 +1,674 @@
+@@ -0,0 +1,680 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Software Bill of Materials (SBOM) generation and supply-chain auditing (KAN-34).
 +
 +Collects Python runtime packages from importlib.metadata and web packages from
-+build-time verified manifests (sbom-web.json) or package.json/pnpm-lock.yaml fallbacks.
-+Evaluates license compliance against ALLOW_SET and license-allowlist.toml, and generates
-+canonical CycloneDX 1.5 JSON documents.
++build-time verified manifests (sbom-web.json) or package.json fallback with
++local and hoisted node_modules inspection. Evaluates license compliance against
++ALLOW_SET and license-allowlist.toml, and generates canonical CycloneDX 1.5 JSON documents.
 +"""
 +
 +from __future__ import annotations
@@ -705,7 +705,7 @@ index 00000000..f518f464
 +    pkg_json_path: Path,
 +    entries: list[AllowlistException],
 +) -> list[Component]:
-+    """Fallback collector parsing kanban/web/package.json."""
++    """Fallback collector parsing kanban/web/package.json and local/hoisted node_modules."""
 +    try:
 +        pkg_data = json.loads(pkg_json_path.read_text(encoding="utf-8"))
 +    except Exception as exc:  # noqa: BLE001
@@ -713,6 +713,7 @@ index 00000000..f518f464
 +        return []
 +
 +    node_modules_dir = pkg_json_path.parent / "node_modules"
++    root_node_modules_dir = pkg_json_path.parent.parent.parent / "node_modules"
 +    deps = pkg_data.get("dependencies", {})
 +    dev_deps = pkg_data.get("devDependencies", {})
 +
@@ -728,14 +729,19 @@ index 00000000..f518f464
 +
 +        raw_lic = "UNKNOWN"
 +        desc = ""
-+        dep_pkg_path = node_modules_dir / name / "package.json"
-+        if dep_pkg_path.is_file():
-+            try:
-+                dep_json = json.loads(dep_pkg_path.read_text(encoding="utf-8"))
-+                raw_lic = str(dep_json.get("license") or "UNKNOWN")
-+                desc = str(dep_json.get("description") or "")
-+            except Exception as exc:  # noqa: BLE001
-+                logger.debug("Could not inspect package.json for %s: %s", name, exc)
++        candidate_paths = [
++            node_modules_dir / name / "package.json",
++            root_node_modules_dir / name / "package.json",
++        ]
++        for dep_pkg_path in candidate_paths:
++            if dep_pkg_path.is_file():
++                try:
++                    dep_json = json.loads(dep_pkg_path.read_text(encoding="utf-8"))
++                    raw_lic = str(dep_json.get("license") or "UNKNOWN")
++                    desc = str(dep_json.get("description") or "")
++                    break
++                except Exception as exc:  # noqa: BLE001
++                    logger.debug("Could not inspect package.json for %s: %s", name, exc)
 +
 +        verdict = classify_license(raw_lic)
 +        if verdict != "ALLOW":
@@ -767,7 +773,7 @@ index 00000000..f518f464
 +    allowlist: list[AllowlistException] | None = None,
 +    manifest_path: Path | None = None,
 +) -> list[Component]:
-+    """Collect web packages from sbom-web.json or fallback to package.json/pnpm-lock.yaml."""
++    """Collect web packages from sbom-web.json or fallback to package.json and node_modules."""
 +    entries = allowlist if allowlist is not None else load_allowlist()
 +    manifest_file = manifest_path or _find_web_manifest()
 +
@@ -2275,10 +2281,45 @@ index a43d37b0..70329a68 100644
        </aside>
  
 diff --git a/kanban/web/src/app/Topbar.tsx b/kanban/web/src/app/Topbar.tsx
-index 432164f5..c590fad0 100644
+index 432164f5..91530f37 100644
 --- a/kanban/web/src/app/Topbar.tsx
 +++ b/kanban/web/src/app/Topbar.tsx
-@@ -564,6 +564,23 @@ export function Topbar({
+@@ -126,7 +126,6 @@ export function Topbar({
+   const themeContext = useTheme();
+ 
+   useEffect(() => {
+-    if (typeof window === 'undefined') return;
+     const handleStatusChanged = (): void => {
+       void queryClient.invalidateQueries({ queryKey: qk.systemStatus() });
+       void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
+@@ -227,7 +226,7 @@ export function Topbar({
+   const isWorkspaceAdmin = Boolean(user?.is_workspace_admin ?? user?.is_server_admin);
+ 
+   return (
+-    <header className="kb-topbar">
++    <header className="kb-topbar topbar">
+       {/* Left: Hamburger (<=1279px) & Expand Button (desktop >=1280px when collapsed) & Breadcrumb */}
+       <div className="kb-topbar-left">
+         <button
+@@ -260,7 +259,7 @@ export function Topbar({
+       </div>
+ 
+       {/* Center: Search Trigger Styled as Input */}
+-      <div className="kb-topbar-center">
++      <div className="kb-topbar-center topbar__search">
+         <button
+           type="button"
+           className="kb-search-trigger"
+@@ -277,7 +276,7 @@ export function Topbar({
+       </div>
+ 
+       {/* Right: Header Pills, Layout Switcher & Avatar Menu */}
+-      <div className="kb-topbar-right">
++      <div className="kb-topbar-right topbar__right">
+         <HeaderPills
+           projectId={projectId ?? projectKey}
+           projectName={projectName}
+@@ -564,6 +563,23 @@ export function Topbar({
                  )}
                </div>
  
@@ -2470,10 +2511,10 @@ index 22d20a28..d5746a79 100644
              element: <McpAccessStudio />,
 diff --git a/kanban/web/src/features/about/AboutPage.css b/kanban/web/src/features/about/AboutPage.css
 new file mode 100644
-index 00000000..823fda31
+index 00000000..88c6e1a1
 --- /dev/null
 +++ b/kanban/web/src/features/about/AboutPage.css
-@@ -0,0 +1,430 @@
+@@ -0,0 +1,437 @@
 +/**
 + * About 👍kanban Page Styling (KB-ABOUT-SBOM, KAN-34).
 + * Strictly compliant with Content-Security-Policy style-src 'self'.
@@ -2527,6 +2568,7 @@ index 00000000..823fda31
 +.kb-about-branding {
 +  display: flex;
 +  align-items: center;
++  flex-wrap: wrap;
 +  gap: var(--space-3);
 +}
 +
@@ -2558,6 +2600,7 @@ index 00000000..823fda31
 +  font-weight: 600;
 +  border-radius: var(--radius-full);
 +  line-height: 1.2;
++  white-space: nowrap;
 +}
 +
 +.kb-about-badge-version {
@@ -2689,6 +2732,10 @@ index 00000000..823fda31
 +  gap: var(--space-2);
 +}
 +
++[data-theme="dark"] .kb-about-api-card-title {
++  color: var(--focus-ring);
++}
++
 +.kb-about-api-card-desc {
 +  font-size: var(--text-sm);
 +  color: var(--fg-secondary);
@@ -2772,6 +2819,7 @@ index 00000000..823fda31
 +.kb-about-table-filters {
 +  display: flex;
 +  align-items: center;
++  flex-wrap: wrap;
 +  gap: var(--space-2);
 +}
 +
@@ -2906,10 +2954,10 @@ index 00000000..823fda31
 +}
 diff --git a/kanban/web/src/features/about/AboutPage.tsx b/kanban/web/src/features/about/AboutPage.tsx
 new file mode 100644
-index 00000000..0d57b50b
+index 00000000..bb49f70e
 --- /dev/null
 +++ b/kanban/web/src/features/about/AboutPage.tsx
-@@ -0,0 +1,377 @@
+@@ -0,0 +1,398 @@
 +/**
 + * About 👍kanban Page Component (KB-ABOUT-SBOM, KAN-34).
 + * Tagline, Swagger/ReDoc API Docs Links, Apache-2.0 License, and CycloneDX 1.5 SBOM.
@@ -2939,6 +2987,30 @@ index 00000000..0d57b50b
 +  const [copiedLicense, setCopiedLicense] = useState(false);
 +
 +  const components = data?.components;
++  const sbomSummary = data?.sbom_summary;
++
++  const { pythonCount, webCount } = useMemo(() => {
++    if (!components) {
++      return {
++        pythonCount: sbomSummary?.python_components ?? 0,
++        webCount: sbomSummary?.web_components ?? 0,
++      };
++    }
++    let py = 0;
++    let web = 0;
++    for (const c of components) {
++      if (scopeFilter === 'runtime' && c.scope === 'dev') {
++        continue;
++      }
++      if (c.ecosystem === 'python') {
++        py += 1;
++      } else {
++        web += 1;
++      }
++    }
++    return { pythonCount: py, webCount: web };
++  }, [components, scopeFilter, sbomSummary]);
++
 +  const filteredComponents = useMemo(() => {
 +    if (!components) return [];
 +    return components.filter((c: SbomComponent) => {
@@ -3012,9 +3084,6 @@ index 00000000..0d57b50b
 +      <section className="kb-about-hero" data-testid="about-hero-card">
 +        <div className="kb-about-hero-header">
 +          <div className="kb-about-branding">
-+            <span className="kb-about-logo" aria-hidden="true">
-+              👍
-+            </span>
 +            <h1 className="kb-about-title">{platform}</h1>
 +            <div className="kb-about-badges">
 +              <span className="kb-about-badge kb-about-badge-version">v{version}</span>
@@ -3172,7 +3241,7 @@ index 00000000..0d57b50b
 +              onClick={() => { setEcosystemFilter('python'); }}
 +              data-testid="filter-ecosystem-python"
 +            >
-+              Python ({sbom_summary.python_components})
++              Python ({pythonCount})
 +            </button>
 +            <button
 +              type="button"
@@ -3180,7 +3249,7 @@ index 00000000..0d57b50b
 +              onClick={() => { setEcosystemFilter('node'); }}
 +              data-testid="filter-ecosystem-node"
 +            >
-+              Web ({sbom_summary.web_components})
++              Web ({webCount})
 +            </button>
 +            <button
 +              type="button"
@@ -3289,10 +3358,10 @@ index 00000000..0d57b50b
 +}
 diff --git a/kanban/web/src/features/about/__tests__/AboutPage.test.tsx b/kanban/web/src/features/about/__tests__/AboutPage.test.tsx
 new file mode 100644
-index 00000000..452c85f3
+index 00000000..841bdab8
 --- /dev/null
 +++ b/kanban/web/src/features/about/__tests__/AboutPage.test.tsx
-@@ -0,0 +1,305 @@
+@@ -0,0 +1,313 @@
 +import { describe, it, expect, vi, beforeEach } from 'vitest';
 +import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 +import React from 'react';
@@ -3463,9 +3532,17 @@ index 00000000..452c85f3
 +    expect(screen.getByText('lucide-react')).toBeDefined();
 +    expect(screen.queryByText('vitest')).toBeNull();
 +
++    // Verify dynamic ecosystem button counts match runtime scope
++    expect(screen.getByTestId('filter-ecosystem-python').textContent).toContain('Python (2)');
++    expect(screen.getByTestId('filter-ecosystem-node').textContent).toContain('Web (1)');
++
 +    // Toggle scope to all (inc dev)
 +    fireEvent.click(screen.getByTestId('toggle-scope-runtime'));
 +    expect(screen.getByText('vitest')).toBeDefined();
++
++    // Verify dynamic ecosystem button counts update to all scope
++    expect(screen.getByTestId('filter-ecosystem-python').textContent).toContain('Python (2)');
++    expect(screen.getByTestId('filter-ecosystem-node').textContent).toContain('Web (2)');
 +
 +    // Filter by Python ecosystem
 +    fireEvent.click(screen.getByTestId('filter-ecosystem-python'));
@@ -3727,10 +3804,41 @@ index 00000000..0567d4ca
 +  return '/api/v1/system/sbom?download=true';
 +}
 diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.css b/kanban/web/src/features/settings/PersonalSettingsPage.css
-index 416b96f7..bf8a21d4 100644
+index 416b96f7..e6dc8cd3 100644
 --- a/kanban/web/src/features/settings/PersonalSettingsPage.css
 +++ b/kanban/web/src/features/settings/PersonalSettingsPage.css
-@@ -908,3 +908,25 @@
+@@ -332,6 +332,30 @@
+   color: var(--fg-primary);
+ }
+ 
++.kb-personal-settings-modal-close-btn {
++  background: transparent;
++  border: none;
++  font-size: var(--text-lg);
++  color: var(--fg-secondary);
++  cursor: pointer;
++  padding: var(--space-1);
++  border-radius: var(--radius-sm);
++  line-height: 1;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++}
++
++.kb-personal-settings-modal-close-btn:hover:not(:disabled) {
++  color: var(--fg-primary);
++  background-color: var(--bg-hover);
++}
++
++.kb-personal-settings-modal-close-btn:disabled {
++  opacity: 0.5;
++  cursor: not-allowed;
++}
++
+ .kb-personal-settings-modal-body {
+   padding: 20px;
+   display: flex;
+@@ -908,3 +932,25 @@
      margin-right: 0;
    }
  }
@@ -3757,18 +3865,122 @@ index 416b96f7..bf8a21d4 100644
 +  color: var(--fg-primary);
 +}
 diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.tsx b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
-index 66a61f14..a0bab53a 100644
+index 66a61f14..f5610a97 100644
 --- a/kanban/web/src/features/settings/PersonalSettingsPage.tsx
 +++ b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
-@@ -2,6 +2,7 @@
+@@ -1,7 +1,8 @@
+ // Copyright 2026 Kanban Platform Contributors
  // Apache-2.0 License. See LICENSE for details.
  
- import React, { useState, useRef, useEffect, type JSX, type SyntheticEvent } from 'react';
+-import React, { useState, useRef, useEffect, type JSX, type SyntheticEvent } from 'react';
++import React, { useState, useRef, useEffect, useCallback, type JSX, type SyntheticEvent } from 'react';
 +import { Link } from 'react-router';
  import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
  import {
    fetchMyProfile,
-@@ -1103,6 +1104,16 @@ export function PersonalSettingsPage(): JSX.Element {
+@@ -163,6 +164,42 @@ export function PersonalSettingsPage(): JSX.Element {
+   const [ldapUsername, setLdapUsername] = useState('');
+   const [ldapPassword, setLdapPassword] = useState('');
+   const [isSubmittingLdap, setIsSubmittingLdap] = useState(false);
++  const [ldapErrorMsg, setLdapErrorMsg] = useState<string | null>(null);
++  const ldapTriggerRef = useRef<HTMLElement | null>(null);
++  const ldapUsernameInputRef = useRef<HTMLInputElement>(null);
++
++  const closeLdapModal = useCallback(() => {
++    setLdapModalCard(null);
++    setLdapUsername('');
++    setLdapPassword('');
++    setLdapErrorMsg(null);
++    ldapTriggerRef.current?.focus();
++  }, []);
++
++  useEffect(() => {
++    if (ldapModalCard) {
++      const timer = setTimeout(() => {
++        ldapUsernameInputRef.current?.focus();
++      }, 0);
++      return () => {
++        clearTimeout(timer);
++      };
++    }
++  }, [ldapModalCard]);
++
++  useEffect(() => {
++    if (!ldapModalCard) return;
++    const handleKeyDown = (e: KeyboardEvent): void => {
++      if (e.key === 'Escape' && !isSubmittingLdap) {
++        e.preventDefault();
++        closeLdapModal();
++      }
++    };
++    window.addEventListener('keydown', handleKeyDown);
++    return () => {
++      window.removeEventListener('keydown', handleKeyDown);
++    };
++  }, [ldapModalCard, isSubmittingLdap, closeLdapModal]);
+ 
+   useEffect(() => {
+     if (typeof window === 'undefined') return;
+@@ -500,6 +537,7 @@ export function PersonalSettingsPage(): JSX.Element {
+     const action = async (): Promise<void> => {
+       try {
+         setIsSubmittingLdap(true);
++        setLdapErrorMsg(null);
+         const startRes = await startLinkIdentity(targetCard.slug);
+         if (!startRes.link_intent_id) {
+           throw new Error('Missing link intent ID from server.');
+@@ -508,12 +546,15 @@ export function PersonalSettingsPage(): JSX.Element {
+         setLdapModalCard(null);
+         setLdapUsername('');
+         setLdapPassword('');
++        setLdapErrorMsg(null);
+         setSuccessMsg(`Account successfully linked (${targetCard.display_name}).`);
+         setErrorMsg(null);
++        ldapTriggerRef.current?.focus();
+         void queryClient.invalidateQueries({ queryKey: ['myIdentities'] });
+       } catch (err) {
+         if (!handleInterceptAal2(err, action)) {
+-          setErrorMsg(err instanceof Error ? err.message : 'Failed to link LDAP account.');
++          const message = err instanceof Error ? err.message : 'Failed to link LDAP account.';
++          setLdapErrorMsg(message);
+         }
+       } finally {
+         setIsSubmittingLdap(false);
+@@ -1025,9 +1066,11 @@ export function PersonalSettingsPage(): JSX.Element {
+                 type="button"
+                 className="kb-personal-settings-btn kb-personal-settings-btn-primary"
+                 data-testid={`connect-provider-${card.slug}`}
+-                onClick={() => {
++                onClick={(e) => {
+                   if (card.provider_kind === 'LDAP') {
++                    ldapTriggerRef.current = e.currentTarget;
+                     setLdapModalCard(card);
++                    setLdapErrorMsg(null);
+                   } else {
+                     void handleConnectOidc(card.slug);
+                   }
+@@ -1072,16 +1115,16 @@ export function PersonalSettingsPage(): JSX.Element {
+             <tbody>
+               {identities.map((ident) => (
+                 <tr key={ident.id} data-testid={`identity-row-${ident.id}`}>
+-                  <td className="kb-personal-settings-td">
++                  <td className="kb-personal-settings-td" data-label="Provider">
+                     <strong>{ident.card_slug}</strong> ({(ident.provider_kind ?? ident.provider_type ?? '').toUpperCase()})
+                   </td>
+-                  <td className="kb-personal-settings-td">
++                  <td className="kb-personal-settings-td" data-label="Subject / Email">
+                     {ident.subject_email_at_link ?? ident.immutable_subject_id ?? ident.card_display_name ?? ident.display_name ?? ident.email ?? ident.subject_id ?? 'Unknown'}
+                   </td>
+-                  <td className="kb-personal-settings-td">
++                  <td className="kb-personal-settings-td" data-label="Linked">
+                     {ident.created_at ? new Date(ident.created_at).toLocaleDateString() : 'N/A'}
+                   </td>
+-                  <td className="kb-personal-settings-td kb-personal-settings-td-right">
++                  <td className="kb-personal-settings-td kb-personal-settings-td-right" data-label="Actions">
+                     <button
+                       type="button"
+                       className="kb-personal-settings-btn kb-personal-settings-btn-danger"
+@@ -1103,6 +1146,16 @@ export function PersonalSettingsPage(): JSX.Element {
          )}
        </section>
  
@@ -3785,6 +3997,61 @@ index 66a61f14..a0bab53a 100644
        {/* TOTP Setup Modal */}
        {totpSetupStep && (
          <div className="kb-personal-settings-modal-backdrop" role="presentation">
+@@ -1381,18 +1434,25 @@ export function PersonalSettingsPage(): JSX.Element {
+               </h3>
+               <button
+                 type="button"
+-                className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
+-                onClick={() => {
+-                  setLdapModalCard(null);
+-                  setLdapUsername('');
+-                  setLdapPassword('');
+-                }}
++                className="kb-personal-settings-modal-close-btn"
++                aria-label="Close LDAP modal"
++                disabled={isSubmittingLdap}
++                onClick={closeLdapModal}
+               >
+-                Cancel
++                ✕
+               </button>
+             </div>
+             <form onSubmit={(e) => { void handleLdapLinkSubmit(e); }}>
+               <div className="kb-personal-settings-modal-body">
++                {ldapErrorMsg && (
++                  <div
++                    role="alert"
++                    className="kb-personal-settings-alert kb-personal-settings-alert-error"
++                    data-testid="ldap-modal-error"
++                  >
++                    <span>{ldapErrorMsg}</span>
++                  </div>
++                )}
+                 <p className="kb-personal-settings-modal-text">
+                   Enter your directory credentials for {ldapModalCard.display_name} to link your account.
+                 </p>
+@@ -1401,6 +1461,7 @@ export function PersonalSettingsPage(): JSX.Element {
+                     Username
+                   </label>
+                   <input
++                    ref={ldapUsernameInputRef}
+                     id="ldap-link-username"
+                     data-testid="ldap-link-username-input"
+                     type="text"
+@@ -1431,11 +1492,8 @@ export function PersonalSettingsPage(): JSX.Element {
+                 <button
+                   type="button"
+                   className="kb-personal-settings-btn kb-personal-settings-btn-secondary"
+-                  onClick={() => {
+-                    setLdapModalCard(null);
+-                    setLdapUsername('');
+-                    setLdapPassword('');
+-                  }}
++                  disabled={isSubmittingLdap}
++                  onClick={closeLdapModal}
+                 >
+                   Cancel
+                 </button>
 diff --git a/kanban/web/vite.config.ts b/kanban/web/vite.config.ts
 index 87d9e1c6..c914455f 100644
 --- a/kanban/web/vite.config.ts

@@ -1,0 +1,29 @@
+
+=== Problem 1 & 2: Unauthenticated 401 + Authenticated /api/v1/system/about, /sbom, Swagger/ReDoc/OpenAPI ===
+Unauthenticated GET /api/v1/system/about -> HTTP 401 body={"type":"urn:kanban:problem:AUTHENTICATION_REQUIRED","title":"Authentication Required","status":401,"code":"AUTHENTICATION_REQUIRED","request_id":"c5e880891916449785c7cda2c3bdc149"}
+Authenticated GET /api/v1/system/about -> HTTP 200
+  platform=👍kanban, slug=thumbs-up-kanban, version=2.0.0, license_spdx=Apache-2.0
+  tagline=The difference between a swarm and an Agile team is a kanban.
+  api_docs_urls={"swagger_ui":"/api/docs","redoc":"/api/redoc","openapi_json":"/api/openapi.json"}
+  sbom_summary={"total_components":118,"python_components":78,"web_components":40,"permissive_count":117,"allowlisted_count":1,"unknown_count":0,"deny_count":0}
+GET /api/v1/system/sbom?download=true -> HTTP 200
+  X-Content-Type-Options: nosniff
+  Content-Disposition: attachment; filename="thumbs-up-kanban-sbom-cdx-1.5.json"
+  bomFormat=CycloneDX, specVersion=1.5, components=118
+GET /api/docs -> HTTP 200 (len=594663)
+GET /api/redoc -> HTTP 200 (len=615346)
+GET /api/openapi.json -> HTTP 200 (openapi=3.1.0, title=👍kanban API)
+LIVE_STACK_VERDICT [API_SBOM_AND_DOCS]: PASS - unauth401=true, about200=true, sbomCdx15=true, docs200=true
+
+=== Problem 3 & 4: Buried UI Links, Redirect, Filters/Search, License/NOTICE Tabs, Responsive Light/Dark Screenshots ===
+Navigated via sidebar-about-link -> http://localhost:18963/about | tagline=""The difference between a swarm and an Agile team is a kanban.""
+Navigated via topbar-about-link -> http://localhost:18963/about
+Navigated via personal-settings-about-link -> http://localhost:18963/about
+Navigated via Cmd+K command -> http://localhost:18963/about
+Redirect /settings/about -> http://localhost:18963/about
+SBOM table rows: all=102, python=78, node=24, search('fastapi')=1, toggledScope=118
+License tabs: Apache len=10173, Notice len=545
+Console errors: 0 | Page errors: 0 | 5xx responses: 0 | CSP violations: 0
+LIVE_STACK_VERDICT [BURIED_NAV_AND_ABOUT_UI]: PASS - allNavLinks+redirect+filters+tabs+0errors=true
+
+OVERALL LIVE_STACK_VERDICT (KAN-34): PASS
