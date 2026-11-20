@@ -1802,3 +1802,121 @@ async def test_case_13_admin_register_oauth_client(
         },
     )
     assert resp_bad_type.status_code == 400
+
+
+# =========================================================================
+# Test Case 14: Decision Security with Origin: null under Referrer-Policy
+# =========================================================================
+
+
+async def test_oauth_authorize_decision_origin_null_referrer_policy_security(
+    api_env: ApiEnv,
+    make_user: Callable[..., Any],
+    as_principal: Callable[..., Any],
+) -> None:
+    """Security test: Prove POST /oauth/authorize/decision under Origin: null.
+
+    Under WHATWG Fetch spec with Referrer-Policy: no-referrer, Chromium form POST sends
+    Origin: null and Sec-Fetch-Site: same-origin. Verify:
+    a) Origin: null + Sec-Fetch-Site: same-origin + valid HMAC csrf_token -> 302 redirect with code
+    b) Origin: null + Sec-Fetch-Site: cross-site -> 403 CSRF_INVALID
+    c) Origin: null + Sec-Fetch-Site: none or missing -> 403 CSRF_INVALID
+    d) Origin: null + Sec-Fetch-Site: same-origin + forged csrf_token -> 403 CSRF_INVALID
+    """
+    client = api_env.client
+    redirect_uri = "http://127.0.0.1:8080/callback"
+    resource = "http://test/mcp/agent"
+
+    user = await make_user("origin_null_user", workspace_role="WORKSPACE_ADMIN")
+    as_principal(user)
+    _v, challenge = _generate_pkce()
+
+    resp_reg = await client.post(
+        "/oauth/register",
+        json={"client_name": "Origin Null Test Client", "redirect_uris": [redirect_uri]},
+    )
+    assert resp_reg.status_code == 201
+    client_id = resp_reg.json()["client_id"]
+
+    resp_auth = await client.get(
+        "/oauth/authorize",
+        params={
+            "response_type": "code",
+            "client_id": client_id,
+            "redirect_uri": redirect_uri,
+            "code_challenge": challenge,
+            "code_challenge_method": "S256",
+            "state": "state-null-origin",
+            "resource": resource,
+        },
+    )
+    assert resp_auth.status_code == 200
+    csrf_token = _extract_csrf(resp_auth.text)
+
+    decision_data = {
+        "client_id": client_id,
+        "redirect_uri": redirect_uri,
+        "resource": resource,
+        "code_challenge": challenge,
+        "code_challenge_method": "S256",
+        "state": "state-null-origin",
+        "action": "approve",
+        "csrf_token": csrf_token,
+        "scopes": ["agent:read"],
+    }
+
+    # b) Origin: null + Sec-Fetch-Site: cross-site -> 403 CSRF_INVALID
+    resp_b = await client.post(
+        "/oauth/authorize/decision",
+        data=decision_data,
+        headers={"Origin": "null", "Sec-Fetch-Site": "cross-site"},
+        follow_redirects=False,
+    )
+    assert resp_b.status_code == 403
+    assert resp_b.json()["code"] == "CSRF_INVALID"
+
+    # c1) Origin: null + Sec-Fetch-Site: none -> 403 CSRF_INVALID
+    resp_c1 = await client.post(
+        "/oauth/authorize/decision",
+        data=decision_data,
+        headers={"Origin": "null", "Sec-Fetch-Site": "none"},
+        follow_redirects=False,
+    )
+    assert resp_c1.status_code == 403
+    assert resp_c1.json()["code"] == "CSRF_INVALID"
+
+    # c2) Origin: null + missing Sec-Fetch-Site -> 403 CSRF_INVALID
+    resp_c2 = await client.post(
+        "/oauth/authorize/decision",
+        data=decision_data,
+        headers={"Origin": "null"},
+        follow_redirects=False,
+    )
+    assert resp_c2.status_code == 403
+    assert resp_c2.json()["code"] == "CSRF_INVALID"
+
+    # d) Origin: null + Sec-Fetch-Site: same-origin + forged csrf_token -> 403 CSRF_INVALID
+    forged_data = dict(decision_data)
+    forged_data["csrf_token"] = csrf_token + "forged"
+    resp_d = await client.post(
+        "/oauth/authorize/decision",
+        data=forged_data,
+        headers={"Origin": "null", "Sec-Fetch-Site": "same-origin"},
+        follow_redirects=False,
+    )
+    assert resp_d.status_code == 403
+    assert resp_d.json()["code"] == "CSRF_INVALID"
+
+    # a) Origin: null + Sec-Fetch-Site: same-origin + valid HMAC csrf_token -> 302 code redirect
+    resp_a = await client.post(
+        "/oauth/authorize/decision",
+        data=decision_data,
+        headers={"Origin": "null", "Sec-Fetch-Site": "same-origin"},
+        follow_redirects=False,
+    )
+    assert resp_a.status_code == 302
+    loc = urllib.parse.urlparse(resp_a.headers["location"])
+    params = urllib.parse.parse_qs(loc.query)
+    assert "code" in params
+    assert len(params["code"][0]) > 10
+    assert params["state"][0] == "state-null-origin"

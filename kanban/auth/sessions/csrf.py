@@ -226,7 +226,15 @@ def verify_same_origin_request(request: Request) -> bool:
     origin = request.headers.get("origin")
     if origin:
         clean_origin = origin.strip().rstrip("/")
-        if not allowed_origins or clean_origin not in allowed_origins:
+        if clean_origin.lower() == "null":
+            # WHATWG Fetch spec ("Append a request-origin header"):
+            # When document has Referrer-Policy: no-referrer, native HTML form POST
+            # navigations in Chromium send Origin: null, omit Referer, and send
+            # browser-enforced Sec-Fetch-Site: same-origin.
+            # Accept Origin: null ONLY when Sec-Fetch-Site is explicitly "same-origin".
+            if not sec_fetch_site or sec_fetch_site.strip().lower() != "same-origin":
+                return False
+        elif not allowed_origins or clean_origin not in allowed_origins:
             return False
     else:
         referer = request.headers.get("referer")

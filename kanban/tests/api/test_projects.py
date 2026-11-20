@@ -436,3 +436,36 @@ async def test_patch_unchanged_description_and_module_toggle(
     bad = await client.patch("/api/v1/projects/TOG", json={"description_markdown": "x"})
     assert bad.status_code == 422
     assert bad.json()["code"] == "INVALID_CONTENT"
+
+
+async def test_project_members_endpoints(
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Verify list, add, and remove project members endpoints with commit semantics."""
+    admin = await make_user("admin_proj_mem", workspace_role="WORKSPACE_ADMIN")
+    member = await make_user("target_proj_mem", workspace_role="WORKSPACE_MEMBER")
+    client = as_principal(admin)
+
+    # 1. Create project
+    resp_create = await client.post(
+        "/api/v1/projects",
+        json={"identifier": "PMEM", "name": "Project Members Test"},
+    )
+    assert resp_create.status_code == 201
+
+    # 2. List members initially
+    resp_list = await client.get("/api/v1/projects/PMEM/members")
+    assert resp_list.status_code == 200
+    assert isinstance(resp_list.json(), list)
+
+    # 3. Add member
+    resp_add = await client.post(
+        "/api/v1/projects/PMEM/members",
+        json={"principal_id": str(member.id), "role": "MEMBER"},
+    )
+    assert resp_add.status_code == 201
+
+    # 4. Remove member
+    resp_del = await client.delete(f"/api/v1/projects/PMEM/members/{member.id}")
+    assert resp_del.status_code == 204

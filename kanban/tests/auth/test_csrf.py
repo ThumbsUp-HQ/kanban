@@ -29,6 +29,7 @@ from kanban.auth.sessions.csrf import (
     extract_csrf_cookie,
     generate_csrf_token,
     validate_csrf_token,
+    verify_same_origin_request,
 )
 from kanban.security.keys import KeyMaterial
 from kanban.settings import get_settings
@@ -641,3 +642,76 @@ async def test_csrf_middleware_dead_session_clears_cookies(hmac_key: bytes) -> N
         assert res_claim.status_code == 200
         set_cookies_claim = res_claim.headers.get_list("set-cookie")
         assert any("Max-Age=0" in c for c in set_cookies_claim)
+
+
+def test_verify_same_origin_request_origin_null_referrer_policy() -> None:
+    """Validate verify_same_origin_request handling of Origin: null.
+
+    Under Referrer-Policy: no-referrer, accept null origin only with same-origin site.
+    """
+    # 1. Origin: null with Sec-Fetch-Site: same-origin is accepted
+    req_null_same = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "scheme": "http",
+            "server": ("127.0.0.1", 8000),
+            "path": "/oauth/authorize/decision",
+            "headers": [
+                (b"host", b"127.0.0.1:8000"),
+                (b"sec-fetch-site", b"same-origin"),
+                (b"origin", b"null"),
+            ],
+        }
+    )
+    assert verify_same_origin_request(req_null_same) is True
+
+    # 2. Origin: null with Sec-Fetch-Site: cross-site is rejected
+    req_null_cross = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "scheme": "http",
+            "server": ("127.0.0.1", 8000),
+            "path": "/oauth/authorize/decision",
+            "headers": [
+                (b"host", b"127.0.0.1:8000"),
+                (b"sec-fetch-site", b"cross-site"),
+                (b"origin", b"null"),
+            ],
+        }
+    )
+    assert verify_same_origin_request(req_null_cross) is False
+
+    # 3. Origin: null with Sec-Fetch-Site: none is rejected
+    req_null_none = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "scheme": "http",
+            "server": ("127.0.0.1", 8000),
+            "path": "/oauth/authorize/decision",
+            "headers": [
+                (b"host", b"127.0.0.1:8000"),
+                (b"sec-fetch-site", b"none"),
+                (b"origin", b"null"),
+            ],
+        }
+    )
+    assert verify_same_origin_request(req_null_none) is False
+
+    # 4. Origin: null with missing Sec-Fetch-Site is rejected
+    req_null_missing = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "scheme": "http",
+            "server": ("127.0.0.1", 8000),
+            "path": "/oauth/authorize/decision",
+            "headers": [
+                (b"host", b"127.0.0.1:8000"),
+                (b"origin", b"null"),
+            ],
+        }
+    )
+    assert verify_same_origin_request(req_null_missing) is False

@@ -353,6 +353,117 @@ index 023c741..d3bc6db 100644
  @oauth_v1_router.get(
      "/admin/oauth-clients",
      summary="Admin list registered OAuth 2.1 clients (AAL2)",
+diff --git a/kanban/api/v1/projects.py b/kanban/api/v1/projects.py
+index 429c1bf..5e9631c 100644
+--- a/kanban/api/v1/projects.py
++++ b/kanban/api/v1/projects.py
+@@ -36,6 +36,7 @@ async def create_project(
+     Requires workspace admin or server admin role.
+     """
+     result = await svc.create_project(session, caller, body)
++    await session.commit()
+     response.headers["Location"] = f"/api/v1/projects/{result.identifier}"
+     return result
+ 
+@@ -74,7 +75,9 @@ async def patch_project(
+     Requires project ADMIN role.
+     """
+     async with timing_floor(floor_ms=25.0):
+-        return await svc.update_project(session, caller, project_ref, body)
++        result = await svc.update_project(session, caller, project_ref, body)
++        await session.commit()
++        return result
+ 
+ 
+ @router.put(
+@@ -90,7 +93,9 @@ async def put_module_defaults(
+     Requires project ADMIN role.
+     """
+     async with timing_floor(floor_ms=25.0):
+-        return await svc.replace_module_defaults(session, caller, project_ref, body.module_ids)
++        result = await svc.replace_module_defaults(session, caller, project_ref, body.module_ids)
++        await session.commit()
++        return result
+ 
+ 
+ @router.get(
+@@ -120,7 +125,9 @@ async def add_project_member(
+     Requires project ADMIN role.
+     """
+     async with timing_floor(floor_ms=25.0):
+-        return await svc.add_project_member(session, caller, project_ref, body)
++        result = await svc.add_project_member(session, caller, project_ref, body)
++        await session.commit()
++        return result
+ 
+ 
+ @router.delete(
+@@ -137,4 +144,5 @@ async def delete_project_member(
+     """
+     async with timing_floor(floor_ms=25.0):
+         await svc.delete_project_member(session, caller, project_ref, principal_id)
++        await session.commit()
+         return Response(status_code=204)
+diff --git a/kanban/auth/sessions/csrf.py b/kanban/auth/sessions/csrf.py
+index 1c870c9..52c13d4 100644
+--- a/kanban/auth/sessions/csrf.py
++++ b/kanban/auth/sessions/csrf.py
+@@ -46,6 +46,7 @@ __all__ = [
+     "extract_csrf_cookie",
+     "generate_csrf_token",
+     "validate_csrf_token",
++    "verify_same_origin_request",
+ ]
+ 
+ CSRF_COOKIE_NAME: Final[str] = "__Host-kb_csrf"
+@@ -176,6 +177,10 @@ def _get_allowed_origins(request: Request, public_origin: str | None) -> set[str
+         allowed.add(f"{request.url.scheme}://{clean_host}")
+         allowed.add(f"https://{clean_host}")
+         allowed.add(f"http://{clean_host}")
++    elif hasattr(request, "base_url"):
++        base_origin = str(request.base_url).rstrip("/")
++        if base_origin:
++            allowed.add(base_origin)
+     return allowed
+ 
+ 
+@@ -210,6 +215,36 @@ def _check_referer_header(
+     return None
+ 
+ 
++def verify_same_origin_request(request: Request) -> bool:
++    """Validate Sec-Fetch-Site and Origin/Referer headers against permitted origins."""
++    sec_fetch_site = request.headers.get("sec-fetch-site")
++    if sec_fetch_site and sec_fetch_site.strip().lower() not in ("same-origin", "none"):
++        return False
++
++    public_origin = _resolve_public_origin()
++    allowed_origins = _get_allowed_origins(request, public_origin)
++    origin = request.headers.get("origin")
++    if origin:
++        clean_origin = origin.strip().rstrip("/")
++        if clean_origin.lower() == "null":
++            # WHATWG Fetch spec ("Append a request-origin header"):
++            # When document has Referrer-Policy: no-referrer, native HTML form POST
++            # navigations in Chromium send Origin: null, omit Referer, and send
++            # browser-enforced Sec-Fetch-Site: same-origin.
++            # Accept Origin: null ONLY when Sec-Fetch-Site is explicitly "same-origin".
++            if not sec_fetch_site or sec_fetch_site.strip().lower() != "same-origin":
++                return False
++        elif not allowed_origins or clean_origin not in allowed_origins:
++            return False
++    else:
++        referer = request.headers.get("referer")
++        if referer:
++            err = _check_referer_header(referer, allowed_origins, public_origin)
++            if err:
++                return False
++    return True
++
++
+ class CsrfMiddleware(BaseHTTPMiddleware):
+     """ASGI middleware enforcing session-bound double-submit CSRF and browser metadata defenses."""
+ 
 diff --git a/kanban/oauth/server.py b/kanban/oauth/server.py
 index f7c23ef..9c8a075 100644
 --- a/kanban/oauth/server.py
@@ -720,8 +831,138 @@ index f7c23ef..9c8a075 100644
                  "frame-ancestors 'none'; "
                  "base-uri 'none';"
              ),
+diff --git a/kanban/tests/api/test_projects.py b/kanban/tests/api/test_projects.py
+index 301259c..623b362 100644
+--- a/kanban/tests/api/test_projects.py
++++ b/kanban/tests/api/test_projects.py
+@@ -436,3 +436,36 @@ async def test_patch_unchanged_description_and_module_toggle(
+     bad = await client.patch("/api/v1/projects/TOG", json={"description_markdown": "x"})
+     assert bad.status_code == 422
+     assert bad.json()["code"] == "INVALID_CONTENT"
++
++
++async def test_project_members_endpoints(
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify list, add, and remove project members endpoints with commit semantics."""
++    admin = await make_user("admin_proj_mem", workspace_role="WORKSPACE_ADMIN")
++    member = await make_user("target_proj_mem", workspace_role="WORKSPACE_MEMBER")
++    client = as_principal(admin)
++
++    # 1. Create project
++    resp_create = await client.post(
++        "/api/v1/projects",
++        json={"identifier": "PMEM", "name": "Project Members Test"},
++    )
++    assert resp_create.status_code == 201
++
++    # 2. List members initially
++    resp_list = await client.get("/api/v1/projects/PMEM/members")
++    assert resp_list.status_code == 200
++    assert isinstance(resp_list.json(), list)
++
++    # 3. Add member
++    resp_add = await client.post(
++        "/api/v1/projects/PMEM/members",
++        json={"principal_id": str(member.id), "role": "MEMBER"},
++    )
++    assert resp_add.status_code == 201
++
++    # 4. Remove member
++    resp_del = await client.delete(f"/api/v1/projects/PMEM/members/{member.id}")
++    assert resp_del.status_code == 204
+diff --git a/kanban/tests/auth/test_csrf.py b/kanban/tests/auth/test_csrf.py
+index 56cadf1..cd9c0ca 100644
+--- a/kanban/tests/auth/test_csrf.py
++++ b/kanban/tests/auth/test_csrf.py
+@@ -29,6 +29,7 @@ from kanban.auth.sessions.csrf import (
+     extract_csrf_cookie,
+     generate_csrf_token,
+     validate_csrf_token,
++    verify_same_origin_request,
+ )
+ from kanban.security.keys import KeyMaterial
+ from kanban.settings import get_settings
+@@ -641,3 +642,76 @@ async def test_csrf_middleware_dead_session_clears_cookies(hmac_key: bytes) -> N
+         assert res_claim.status_code == 200
+         set_cookies_claim = res_claim.headers.get_list("set-cookie")
+         assert any("Max-Age=0" in c for c in set_cookies_claim)
++
++
++def test_verify_same_origin_request_origin_null_referrer_policy() -> None:
++    """Validate verify_same_origin_request handling of Origin: null.
++
++    Under Referrer-Policy: no-referrer, accept null origin only with same-origin site.
++    """
++    # 1. Origin: null with Sec-Fetch-Site: same-origin is accepted
++    req_null_same = Request(
++        {
++            "type": "http",
++            "method": "POST",
++            "scheme": "http",
++            "server": ("127.0.0.1", 8000),
++            "path": "/oauth/authorize/decision",
++            "headers": [
++                (b"host", b"127.0.0.1:8000"),
++                (b"sec-fetch-site", b"same-origin"),
++                (b"origin", b"null"),
++            ],
++        }
++    )
++    assert verify_same_origin_request(req_null_same) is True
++
++    # 2. Origin: null with Sec-Fetch-Site: cross-site is rejected
++    req_null_cross = Request(
++        {
++            "type": "http",
++            "method": "POST",
++            "scheme": "http",
++            "server": ("127.0.0.1", 8000),
++            "path": "/oauth/authorize/decision",
++            "headers": [
++                (b"host", b"127.0.0.1:8000"),
++                (b"sec-fetch-site", b"cross-site"),
++                (b"origin", b"null"),
++            ],
++        }
++    )
++    assert verify_same_origin_request(req_null_cross) is False
++
++    # 3. Origin: null with Sec-Fetch-Site: none is rejected
++    req_null_none = Request(
++        {
++            "type": "http",
++            "method": "POST",
++            "scheme": "http",
++            "server": ("127.0.0.1", 8000),
++            "path": "/oauth/authorize/decision",
++            "headers": [
++                (b"host", b"127.0.0.1:8000"),
++                (b"sec-fetch-site", b"none"),
++                (b"origin", b"null"),
++            ],
++        }
++    )
++    assert verify_same_origin_request(req_null_none) is False
++
++    # 4. Origin: null with missing Sec-Fetch-Site is rejected
++    req_null_missing = Request(
++        {
++            "type": "http",
++            "method": "POST",
++            "scheme": "http",
++            "server": ("127.0.0.1", 8000),
++            "path": "/oauth/authorize/decision",
++            "headers": [
++                (b"host", b"127.0.0.1:8000"),
++                (b"origin", b"null"),
++            ],
++        }
++    )
++    assert verify_same_origin_request(req_null_missing) is False
 diff --git a/kanban/tests/oauth/test_oauth_flow.py b/kanban/tests/oauth/test_oauth_flow.py
-index be77104..555965f 100644
+index be77104..072140e 100644
 --- a/kanban/tests/oauth/test_oauth_flow.py
 +++ b/kanban/tests/oauth/test_oauth_flow.py
 @@ -7,6 +7,7 @@ from __future__ import annotations
@@ -959,7 +1200,7 @@ index be77104..555965f 100644
      assert "http://127.0.0.1:*" in csp
  
      # 4. Unauthenticated browser request to /oauth/authorize redirects to relative /login?next=...
-@@ -1338,3 +1445,360 @@ async def test_case_11_mcp_api_key_label_and_project_scoping(
+@@ -1338,3 +1445,478 @@ async def test_case_11_mcp_api_key_label_and_project_scoping(
      target_key = next((k for k in keys if k["id"] == mint_data["id"]), None)
      assert target_key is not None
      assert target_key["label"] == "My Personal Assistant Key"
@@ -1320,8 +1561,126 @@ index be77104..555965f 100644
 +        },
 +    )
 +    assert resp_bad_type.status_code == 400
++
++
++# =========================================================================
++# Test Case 14: Decision Security with Origin: null under Referrer-Policy
++# =========================================================================
++
++
++async def test_oauth_authorize_decision_origin_null_referrer_policy_security(
++    api_env: ApiEnv,
++    make_user: Callable[..., Any],
++    as_principal: Callable[..., Any],
++) -> None:
++    """Security test: Prove POST /oauth/authorize/decision under Origin: null.
++
++    Under WHATWG Fetch spec with Referrer-Policy: no-referrer, Chromium form POST sends
++    Origin: null and Sec-Fetch-Site: same-origin. Verify:
++    a) Origin: null + Sec-Fetch-Site: same-origin + valid HMAC csrf_token -> 302 redirect with code
++    b) Origin: null + Sec-Fetch-Site: cross-site -> 403 CSRF_INVALID
++    c) Origin: null + Sec-Fetch-Site: none or missing -> 403 CSRF_INVALID
++    d) Origin: null + Sec-Fetch-Site: same-origin + forged csrf_token -> 403 CSRF_INVALID
++    """
++    client = api_env.client
++    redirect_uri = "http://127.0.0.1:8080/callback"
++    resource = "http://test/mcp/agent"
++
++    user = await make_user("origin_null_user", workspace_role="WORKSPACE_ADMIN")
++    as_principal(user)
++    _v, challenge = _generate_pkce()
++
++    resp_reg = await client.post(
++        "/oauth/register",
++        json={"client_name": "Origin Null Test Client", "redirect_uris": [redirect_uri]},
++    )
++    assert resp_reg.status_code == 201
++    client_id = resp_reg.json()["client_id"]
++
++    resp_auth = await client.get(
++        "/oauth/authorize",
++        params={
++            "response_type": "code",
++            "client_id": client_id,
++            "redirect_uri": redirect_uri,
++            "code_challenge": challenge,
++            "code_challenge_method": "S256",
++            "state": "state-null-origin",
++            "resource": resource,
++        },
++    )
++    assert resp_auth.status_code == 200
++    csrf_token = _extract_csrf(resp_auth.text)
++
++    decision_data = {
++        "client_id": client_id,
++        "redirect_uri": redirect_uri,
++        "resource": resource,
++        "code_challenge": challenge,
++        "code_challenge_method": "S256",
++        "state": "state-null-origin",
++        "action": "approve",
++        "csrf_token": csrf_token,
++        "scopes": ["agent:read"],
++    }
++
++    # b) Origin: null + Sec-Fetch-Site: cross-site -> 403 CSRF_INVALID
++    resp_b = await client.post(
++        "/oauth/authorize/decision",
++        data=decision_data,
++        headers={"Origin": "null", "Sec-Fetch-Site": "cross-site"},
++        follow_redirects=False,
++    )
++    assert resp_b.status_code == 403
++    assert resp_b.json()["code"] == "CSRF_INVALID"
++
++    # c1) Origin: null + Sec-Fetch-Site: none -> 403 CSRF_INVALID
++    resp_c1 = await client.post(
++        "/oauth/authorize/decision",
++        data=decision_data,
++        headers={"Origin": "null", "Sec-Fetch-Site": "none"},
++        follow_redirects=False,
++    )
++    assert resp_c1.status_code == 403
++    assert resp_c1.json()["code"] == "CSRF_INVALID"
++
++    # c2) Origin: null + missing Sec-Fetch-Site -> 403 CSRF_INVALID
++    resp_c2 = await client.post(
++        "/oauth/authorize/decision",
++        data=decision_data,
++        headers={"Origin": "null"},
++        follow_redirects=False,
++    )
++    assert resp_c2.status_code == 403
++    assert resp_c2.json()["code"] == "CSRF_INVALID"
++
++    # d) Origin: null + Sec-Fetch-Site: same-origin + forged csrf_token -> 403 CSRF_INVALID
++    forged_data = dict(decision_data)
++    forged_data["csrf_token"] = csrf_token + "forged"
++    resp_d = await client.post(
++        "/oauth/authorize/decision",
++        data=forged_data,
++        headers={"Origin": "null", "Sec-Fetch-Site": "same-origin"},
++        follow_redirects=False,
++    )
++    assert resp_d.status_code == 403
++    assert resp_d.json()["code"] == "CSRF_INVALID"
++
++    # a) Origin: null + Sec-Fetch-Site: same-origin + valid HMAC csrf_token -> 302 code redirect
++    resp_a = await client.post(
++        "/oauth/authorize/decision",
++        data=decision_data,
++        headers={"Origin": "null", "Sec-Fetch-Site": "same-origin"},
++        follow_redirects=False,
++    )
++    assert resp_a.status_code == 302
++    loc = urllib.parse.urlparse(resp_a.headers["location"])
++    params = urllib.parse.parse_qs(loc.query)
++    assert "code" in params
++    assert len(params["code"][0]) > 10
++    assert params["state"][0] == "state-null-origin"
 diff --git a/kanban/tests/oauth/test_oauth_unit.py b/kanban/tests/oauth/test_oauth_unit.py
-index 8971fd0..d1b27cf 100644
+index 8971fd0..235cd2e 100644
 --- a/kanban/tests/oauth/test_oauth_unit.py
 +++ b/kanban/tests/oauth/test_oauth_unit.py
 @@ -7,13 +7,19 @@ from __future__ import annotations
@@ -1365,7 +1724,7 @@ index 8971fd0..d1b27cf 100644
      verify_pkce_s256,
  )
  
-@@ -330,3 +341,502 @@ def test_format_validation_error() -> None:
+@@ -330,3 +341,569 @@ def test_format_validation_error() -> None:
      cleaned = format_validation_error(Exception(raw))
      assert "https://errors.pydantic.dev" not in cleaned
      assert "extra field not permitted" in cleaned
@@ -1725,6 +2084,73 @@ index 8971fd0..d1b27cf 100644
 +        }
 +    )
 +    assert not verify_same_origin_request(req_bad_referer)
++
++    # 7. Origin: null with Sec-Fetch-Site: same-origin is accepted (Referrer-Policy: no-referrer)
++    req_null_same = Request(
++        {
++            "type": "http",
++            "method": "POST",
++            "scheme": "http",
++            "server": ("127.0.0.1", 8000),
++            "path": "/oauth/authorize/decision",
++            "headers": [
++                (b"host", b"127.0.0.1:8000"),
++                (b"sec-fetch-site", b"same-origin"),
++                (b"origin", b"null"),
++            ],
++        }
++    )
++    assert verify_same_origin_request(req_null_same)
++
++    # 8. Origin: null with Sec-Fetch-Site: cross-site is rejected
++    req_null_cross = Request(
++        {
++            "type": "http",
++            "method": "POST",
++            "scheme": "http",
++            "server": ("127.0.0.1", 8000),
++            "path": "/oauth/authorize/decision",
++            "headers": [
++                (b"host", b"127.0.0.1:8000"),
++                (b"sec-fetch-site", b"cross-site"),
++                (b"origin", b"null"),
++            ],
++        }
++    )
++    assert not verify_same_origin_request(req_null_cross)
++
++    # 9. Origin: null with Sec-Fetch-Site: none is rejected
++    req_null_none = Request(
++        {
++            "type": "http",
++            "method": "POST",
++            "scheme": "http",
++            "server": ("127.0.0.1", 8000),
++            "path": "/oauth/authorize/decision",
++            "headers": [
++                (b"host", b"127.0.0.1:8000"),
++                (b"sec-fetch-site", b"none"),
++                (b"origin", b"null"),
++            ],
++        }
++    )
++    assert not verify_same_origin_request(req_null_none)
++
++    # 10. Origin: null with missing Sec-Fetch-Site is rejected
++    req_null_missing = Request(
++        {
++            "type": "http",
++            "method": "POST",
++            "scheme": "http",
++            "server": ("127.0.0.1", 8000),
++            "path": "/oauth/authorize/decision",
++            "headers": [
++                (b"host", b"127.0.0.1:8000"),
++                (b"origin", b"null"),
++            ],
++        }
++    )
++    assert not verify_same_origin_request(req_null_missing)
 +
 +
 +def test_resolve_public_base_url_and_parse_target(monkeypatch: pytest.MonkeyPatch) -> None:

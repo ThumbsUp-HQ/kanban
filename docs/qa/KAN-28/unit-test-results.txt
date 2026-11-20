@@ -1,61 +1,57 @@
 === PYTEST UNIT TESTS & COVERAGE ===
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-rcfix-5b04ce70
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-rc4-6bab3503
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 44 items
+collected 65 items
 
-kanban/tests/oauth/test_oauth_flow.py .............                      [ 29%]
-kanban/tests/oauth/test_oauth_unit.py ....................               [ 75%]
-kanban/tests/test_web_static.py ........                                 [ 93%]
-kanban/tests/auth/test_aal2_policy.py ...                                [100%]
+kanban/tests/oauth/test_oauth_flow.py ..............                     [ 21%]
+kanban/tests/oauth/test_oauth_unit.py ....................               [ 52%]
+kanban/tests/test_web_static.py ........                                 [ 64%]
+kanban/tests/auth/test_csrf.py ...........                               [ 81%]
+kanban/tests/api/test_projects.py ............                           [100%]
 
-============================= 44 passed in 23.12s ==============================
-Name                     Stmts   Miss Branch BrPart  Cover   Missing
---------------------------------------------------------------------
-kanban/oauth/server.py     202      3     64      3    97%   220, 340-341, 618->620
-kanban/web_static.py       163      0     58      0   100%
---------------------------------------------------------------------
-TOTAL                      365      3    122      3    98%
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                           Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------
+kanban/api/v1/projects.py         54      0      0      0   100%
+kanban/auth/sessions/csrf.py     240      9     98      8    95%   158-159, 170->174, 172-173, 180->184, 183, 208-209, 351, 360, 386->390, 428->432, 436->443
+kanban/oauth/server.py           202      3     64      3    97%   220, 340-341, 618->620
+kanban/web_static.py             163      0     58      0   100%
+--------------------------------------------------------------------------
+TOTAL                            659     12    220     11    97%
+======================= 65 passed, 18 warnings in 27.95s =======================
 
 === VITEST UNIT TESTS & COVERAGE ===
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-rcfix-5b04ce70/kanban/web
-      Coverage enabled with v8
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-rc4-6bab3503/kanban/web
 
- ✓ src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx (10 tests) 398ms
- ✓ src/features/oauth/__tests__/DeviceActivatePage.test.tsx (13 tests) 455ms
- ✓ src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx (17 tests) 1300ms
-   ✓ OAuthClientGovernanceStudio (17)
-     ✓ inspects client details in modal and closes modal 419ms
+ ✓ src/features/oauth/__tests__/oauthApi.test.ts (5 tests) 19ms
+ ✓ src/features/settings/__tests__/ConnectOAuthAppModal.test.tsx (10 tests) 252ms
+ ✓ src/features/oauth/__tests__/DeviceActivatePage.test.tsx (13 tests) 333ms
+ ✓ src/features/oauth/__tests__/OAuthClientGovernanceStudio.test.tsx (17 tests) 980ms
 
- Test Files  3 passed (3)
-      Tests  40 passed (40)
-   Start at  23:54:12
-   Duration  2.77s (environment 48%, tests 39%, import 10%, worker 2%, transform 1%)
-
- % Coverage report from v8
--------------------|---------|----------|---------|---------|-------------------
-File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
--------------------|---------|----------|---------|---------|-------------------
-All files          |    99.7 |    96.38 |   99.02 |     100 |                   
- oauth             |   99.62 |    96.25 |   98.73 |     100 |                   
-  ...ivatePage.tsx |   99.27 |    93.96 |   97.14 |     100 | 51-52,109         
-  ...nceStudio.tsx |     100 |      100 |     100 |     100 |                   
- settings          |     100 |    96.77 |     100 |     100 |                   
-  ...hAppModal.tsx |     100 |    96.77 |     100 |     100 | 65,80             
--------------------|---------|----------|---------|---------|-------------------
+ Test Files  4 passed (4)
+      Tests  45 passed (45)
+   Start at  01:28:13
+   Duration  2.16s (environment 59%, tests 30%, import 9%, transform 1%, worker 1%)
 
 === CSS TOKENS AUDIT ===
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-rcfix-5b04ce70/kanban/web
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan28-rc4-6bab3503/kanban/web
 
  ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 11ms
+   ✓ CSS Tokens & Contrast Audit Gate (KANBA-190) (4)
+     ✓ verifies 100% of var(--*) usages across all CSS files resolve to canonical tokens 6ms
+     ✓ verifies all static auth-* classes in AuthStudioPage.tsx and AuthCardEditorDrawer.tsx exist in adminAuth.css 1ms
+     ✓ verifies base.css defines color-scheme and button/input/select/textarea color inheritance 1ms
+     ✓ ensures simulated undefined token reference is caught by audit scanner 1ms
 
  Test Files  1 passed (1)
       Tests  4 passed (4)
-   Start at  23:54:16
-   Duration  887ms (environment 94%, import 2%, tests 2%, worker 1%, transform 1%)
-
+   Start at  01:37:08
+   Duration  922ms (environment 90%, transform 4%, import 2%, tests 2%, worker 1%)

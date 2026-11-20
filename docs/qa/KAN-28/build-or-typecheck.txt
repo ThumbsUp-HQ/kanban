@@ -2,10 +2,10 @@
 All checks passed!
 
 === RUFF FORMAT ===
-1854 files already formatted
+1858 files already formatted
 
 === MYPY ===
-Success: no issues found in 3 source files
+Success: no issues found in 1146 source files
 
 === LINT IMPORTS ===
 
@@ -23,7 +23,7 @@ Success: no issues found in 3 source files
 Contracts
 ---------
 
-Analyzed 953 files, 3331 dependencies.
+Analyzed 954 files, 3338 dependencies.
 --------------------------------------
 
 Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
@@ -32,6 +32,8 @@ mcp forbidden from importing database KEPT (48 ignored imports)
 Contracts: 2 kept, 0 broken.
 
 === CHECK NO DASHES ===
+Notice: skipping docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+All other files checked: 0 forbidden dashes found.
 
 === TYPESCRIPT TYPECHECK ===
 
@@ -51,13 +53,10 @@ Contracts: 2 kept, 0 broken.
 > tsc -b && vite build
 
 vite v8.3.8 building client environment for production...
-transforming...
-✓ 694 modules transformed.
-rendering chunks...
-computing gzip size...
-dist/index.html                             0.51 kB │ gzip:   0.32 kB
+transforming (621) src/App.csstransforming (693) src/editor/mermaid/mermaidClient.ts✓ 694 modules transformed.
+rendering chunks (1)...computing gzip size...
+dist/index.html                             0.51 kB │ gzip:   0.31 kB
 dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-dist/assets/index-Co8E8JWD.css            404.34 kB │ gzip:  57.22 kB
-dist/assets/index-BlRm3Rf9.js           1,916.55 kB │ gzip: 520.48 kB
-
-✓ built in 1.20s
+dist/assets/index-Dw6CVgUb.css            404.67 kB │ gzip:  57.28 kB
+dist/assets/index-B0jmNeYa.js           1,917.77 kB │ gzip: 520.88 kB
+✓ built in 1.74s

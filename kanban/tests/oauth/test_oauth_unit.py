@@ -698,6 +698,73 @@ def test_verify_same_origin_request_scenarios() -> None:
     )
     assert not verify_same_origin_request(req_bad_referer)
 
+    # 7. Origin: null with Sec-Fetch-Site: same-origin is accepted (Referrer-Policy: no-referrer)
+    req_null_same = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "scheme": "http",
+            "server": ("127.0.0.1", 8000),
+            "path": "/oauth/authorize/decision",
+            "headers": [
+                (b"host", b"127.0.0.1:8000"),
+                (b"sec-fetch-site", b"same-origin"),
+                (b"origin", b"null"),
+            ],
+        }
+    )
+    assert verify_same_origin_request(req_null_same)
+
+    # 8. Origin: null with Sec-Fetch-Site: cross-site is rejected
+    req_null_cross = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "scheme": "http",
+            "server": ("127.0.0.1", 8000),
+            "path": "/oauth/authorize/decision",
+            "headers": [
+                (b"host", b"127.0.0.1:8000"),
+                (b"sec-fetch-site", b"cross-site"),
+                (b"origin", b"null"),
+            ],
+        }
+    )
+    assert not verify_same_origin_request(req_null_cross)
+
+    # 9. Origin: null with Sec-Fetch-Site: none is rejected
+    req_null_none = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "scheme": "http",
+            "server": ("127.0.0.1", 8000),
+            "path": "/oauth/authorize/decision",
+            "headers": [
+                (b"host", b"127.0.0.1:8000"),
+                (b"sec-fetch-site", b"none"),
+                (b"origin", b"null"),
+            ],
+        }
+    )
+    assert not verify_same_origin_request(req_null_none)
+
+    # 10. Origin: null with missing Sec-Fetch-Site is rejected
+    req_null_missing = Request(
+        {
+            "type": "http",
+            "method": "POST",
+            "scheme": "http",
+            "server": ("127.0.0.1", 8000),
+            "path": "/oauth/authorize/decision",
+            "headers": [
+                (b"host", b"127.0.0.1:8000"),
+                (b"origin", b"null"),
+            ],
+        }
+    )
+    assert not verify_same_origin_request(req_null_missing)
+
 
 def test_resolve_public_base_url_and_parse_target(monkeypatch: pytest.MonkeyPatch) -> None:
     """Test resolve_public_base_url env, headers, and fallback paths."""
