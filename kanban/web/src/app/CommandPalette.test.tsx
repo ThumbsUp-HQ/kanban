@@ -889,4 +889,44 @@ describe('CommandPalette', () => {
       await new Promise((r) => setTimeout(r, 250));
     });
   });
+
+  it('renders synaptic match_reason badge pill and sends mode=hybrid in query', async () => {
+    mockApiFetch.mockReset();
+    mockApiFetch.mockResolvedValueOnce({
+      items: [
+        {
+          id: 'iss-syn-20',
+          kind: 'issue',
+          key: 'KAN-20',
+          title: 'Live Synaptic Search Issue',
+          project_identifier: 'KAN',
+          match_reason: 'Linked via VERIFIED_BY_DOC to ARCH-1',
+        },
+      ],
+    });
+
+    renderWithProviders(<CommandPalette isOpen={true} onClose={noop} />);
+
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 20));
+    });
+
+    const input = screen.getByRole('combobox');
+    fireEvent.change(input, { target: { value: 'Live' } });
+
+    await waitFor(() => {
+      expect(screen.getByText('KAN-20 - Live Synaptic Search Issue')).toBeDefined();
+    });
+
+    const badge = screen.getByTestId('match-reason-search-issue-iss-syn-20');
+    expect(badge.textContent).toBe('Linked via VERIFIED_BY_DOC to ARCH-1');
+    expect(badge.className).toContain('kb-palette-badge');
+
+    expect(mockApiFetch).toHaveBeenCalled();
+    const lastCall = mockApiFetch.mock.lastCall;
+    expect(lastCall?.[0]).toBe('GET');
+    expect(lastCall?.[1]).toBe('/api/v1/search');
+    const callOpts = lastCall?.[2] as { query?: { mode?: string } } | undefined;
+    expect(callOpts?.query?.mode).toBe('hybrid');
+  });
 });

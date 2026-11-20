@@ -17,6 +17,9 @@ from agent.embeddings.indexer import (
 from agent.embeddings.onnx_embedder import (
     BGE_SMALL_INT8_ONNX_SHA256,
     BGE_SMALL_TOKENIZER_SHA256,
+    EmbeddedChunkPayload,
+    FixtureEmbedder,
+    MatryoshkaQuantizer,
     OnnxBgeSmallEmbedder,
 )
 
@@ -26,11 +29,14 @@ __all__ = [
     "DEFAULT_CHUNK_SIZE",
     "DEFAULT_MAX_CHUNKS",
     "DEFAULT_OVERLAP",
+    "EmbeddedChunkPayload",
     "Embedder",
     "EmbedderDimensionMismatchError",
     "EmbedderError",
     "EmbedderIntegrityError",
     "EmbeddingIndexer",
+    "FixtureEmbedder",
+    "MatryoshkaQuantizer",
     "OnnxBgeSmallEmbedder",
     "ProviderEmbedder",
     "chunk_markdown",

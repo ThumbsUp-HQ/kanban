@@ -32,6 +32,7 @@ export interface CommandOption {
     | 'stickies';
   readonly onSelect: () => void;
   readonly meta?: string;
+  readonly matchReason?: string | undefined;
 }
 
 export interface CachedIssue {
@@ -439,7 +440,7 @@ export function CommandPalette({
           const res = (await apiFetch(
             'GET',
             '/api/v1/search' as never,
-            { query: { q: trimmed, limit: 15 } },
+            { query: { q: trimmed, limit: 15, mode: 'hybrid' } },
           )) as {
             items?: {
               id: string;
@@ -449,6 +450,7 @@ export function CommandPalette({
               summary?: string | null;
               snippet?: string | null;
               project_identifier?: string | null;
+              match_reason?: string | null;
             }[];
           };
           if (!active) return;
@@ -456,6 +458,7 @@ export function CommandPalette({
           const items = rawItems ?? [];
           const mapped: CommandOption[] = items.map((item) => {
             const pKey = item.project_identifier ?? projectKey;
+            const matchReason = item.match_reason ?? undefined;
             if (item.kind === 'issue') {
               const keyStr = item.key ?? '';
               const titlePart = item.title.trim() ? item.title : (item.summary ?? '');
@@ -466,6 +469,7 @@ export function CommandPalette({
                 icon: '🎫',
                 category: 'issues' as const,
                 meta: keyStr,
+                matchReason,
                 onSelect: () => {
                   void navigate(keyStr ? `/projects/${pKey}/issues?peek=${keyStr}` : `/projects/${pKey}/issues`);
                 },
@@ -478,6 +482,7 @@ export function CommandPalette({
                 icon: '📄',
                 category: 'docs' as const,
                 meta: `Doc (${pKey})`,
+                matchReason,
                 onSelect: () => {
                   void navigate(`/projects/${pKey}/docs`);
                 },
@@ -490,6 +495,7 @@ export function CommandPalette({
                 icon: '📑',
                 category: 'pages' as const,
                 meta: `Page (${pKey})`,
+                matchReason,
                 onSelect: () => {
                   void navigate(`/projects/${pKey}/docs/${item.id}`);
                 },
@@ -502,6 +508,7 @@ export function CommandPalette({
               icon: '🟨',
               category: 'stickies' as const,
               meta: `Sticky (${pKey})`,
+              matchReason,
               onSelect: () => {
                 void navigate(item.project_identifier ? `/projects/${pKey}/overview` : '/stickies');
               },
@@ -663,9 +670,19 @@ export function CommandPalette({
                     {opt.icon}
                   </span>
                   <div className="kb-palette-option-content">
-                    <span className="kb-palette-option-title">
-                      {opt.title}
-                    </span>
+                    <div className="kb-palette-option-header">
+                      <span className="kb-palette-option-title">
+                        {opt.title}
+                      </span>
+                      {opt.matchReason && (
+                        <span
+                          className="kb-palette-badge"
+                          data-testid={`match-reason-${opt.id}`}
+                        >
+                          {opt.matchReason}
+                        </span>
+                      )}
+                    </div>
                   </div>
                 </li>
               );

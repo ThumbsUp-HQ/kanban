@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import hashlib
+import inspect
 import json
 import logging
 import uuid
@@ -187,7 +188,7 @@ class EmbeddingIndexer:
         proj_id = uuid.UUID(str(row[1])) if row[1] else None
         return str(row[0]), proj_id
 
-    async def index_object(  # noqa: PLR0913
+    async def index_object(  # noqa: C901, PLR0913
         self,
         session: AsyncSession,
         *,
@@ -261,7 +262,12 @@ class EmbeddingIndexer:
         writes_count = 0
         if chunks_to_embed:
             raw_texts = [c[1] for c in chunks_to_embed]
-            vectors = await self._embedder.embed_batch(raw_texts)
+            embed_rich = getattr(self._embedder, "embed_batch_rich", None)
+            if callable(embed_rich) and inspect.iscoroutinefunction(embed_rich):
+                rich_payloads = await embed_rich(raw_texts)
+                vectors = [p.embedding for p in rich_payloads]
+            else:
+                vectors = await self._embedder.embed_batch(raw_texts)
 
             for (idx, _, sha), vec in zip(chunks_to_embed, vectors, strict=True):
                 if len(vec) != TARGET_DIMENSION:

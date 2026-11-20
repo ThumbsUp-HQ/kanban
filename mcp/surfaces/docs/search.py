@@ -536,9 +536,12 @@ async def search_handler(  # noqa: C901, PLR0911, PLR0912, PLR0915
             if anchor:
                 hit["anchor"] = anchor
             hit["snippet"] = snippet
+            if it.get("match_reason"):
+                hit["match_reason"] = it["match_reason"]
             formatted_items.append(hit)
 
         out_search: dict[str, Any] = {
+            "mode": resp.get("executed_mode", "lexical"),
             "total": resp.get("total", len(formatted_items)),
             "items": formatted_items,
         }

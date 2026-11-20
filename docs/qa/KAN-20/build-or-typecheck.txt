@@ -1,0 +1,84 @@
+================================================================================
+1. CHECK MIGRATIONS (STATIC ONLY)
+================================================================================
+OK: All 62 migrations valid. Single head: p4_23_oidc_link_intent_fk
+
+================================================================================
+2. RUFF LINT CHECK
+================================================================================
+All checks passed!
+
+================================================================================
+3. RUFF FORMAT CHECK
+================================================================================
+1947 files already formatted
+
+================================================================================
+4. MYPY STATIC TYPECHECK (agent kanban mcp database)
+================================================================================
+Success: no issues found in 979 source files
+
+================================================================================
+5. IMPORT LINTER (agent -> mcp -> kanban -> database)
+================================================================================
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 979 files, 3472 dependencies.
+--------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
+mcp forbidden from importing database KEPT (48 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+
+================================================================================
+6. FRONTEND TYPECHECK (tsc -b --noEmit)
+================================================================================
+
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-c87f6716/kanban/web
+> tsc -b --noEmit
+
+
+================================================================================
+7. FRONTEND ESLINT (eslint . --max-warnings 0)
+================================================================================
+
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-c87f6716/kanban/web
+> eslint . --max-warnings 0
+
+
+================================================================================
+8. FRONTEND BUILD (vite build)
+================================================================================
+
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-c87f6716/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 710 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.51 kB │ gzip:   0.32 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-CPxKkU57.css            442.73 kB │ gzip:  62.23 kB
+dist/assets/index-Dar6Bpf1.js           2,013.12 kB │ gzip: 542.71 kB
+
+✓ built in 2.92s
+
+================================================================================
+9. FORBIDDEN UNICODE DASH AUDIT
+================================================================================
