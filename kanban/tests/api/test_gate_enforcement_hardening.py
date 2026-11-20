@@ -17,6 +17,7 @@ from __future__ import annotations
 import uuid
 from typing import TYPE_CHECKING
 
+import httpx
 import pytest
 from sqlalchemy import text
 
@@ -30,8 +31,6 @@ from kanban.issues.proof import (
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
-
-    import httpx
 
     from kanban.tests.api.conftest import ApiEnv, SeededUser
 
@@ -466,3 +465,106 @@ async def test_patch_returns_409_transition_held_during_active_gate(
     )
     assert patch_resp.status_code == 409
     assert patch_resp.json()["code"] == "TRANSITION_HELD"
+
+
+async def test_agent_bearer_token_bypasses_csrf_and_enforces_gates(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Stateless Authorization: Bearer token requests bypass CsrfMiddleware and enforce gates."""
+    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
+    proj_id = await make_project("BEAR", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+    client = as_principal(admin)
+
+    # Create issue
+    resp = await client.post(
+        "/api/v1/projects/BEAR/issues",
+        json={"summary": "Bearer agent test issue", "description_markdown": "Desc"},
+    )
+    assert resp.status_code == 201
+    issue_key = resp.json()["key"]
+
+    states = (
+        await api_env.seed.execute(
+            text("SELECT id, name, state_group FROM workflow_states WHERE project_id = :p"),
+            {"p": proj_id},
+        )
+    ).all()
+    done_state = next(s for s in states if s[1] == "Done")
+
+    # Set principal to have agent:issue:write scope
+    as_principal(admin, scopes=("session", "agent:issue:write"))
+
+    # Create an isolated client WITHOUT CSRF cookie or CSRF header
+    bearer_token = "kb_agt_test_bearer_token_12345"
+    async with httpx.AsyncClient(
+        transport=api_env.client._transport,  # noqa: SLF001
+        base_url="http://test",
+        headers={"Authorization": f"Bearer {bearer_token}"},
+    ) as bearer_client:
+        # 1. Agent PATCH -> passes CsrfMiddleware, returns 422 USE_COMPLETE_WORK
+        patch_resp = await bearer_client.patch(
+            f"/api/v1/issues/{issue_key}",
+            json={"state_id": str(done_state[0])},
+        )
+        assert patch_resp.status_code == 422
+        assert patch_resp.json()["code"] == "USE_COMPLETE_WORK"
+
+        # 2. Agent POST transition -> passes CsrfMiddleware, returns 422 USE_COMPLETE_WORK
+        trans_resp = await bearer_client.post(
+            f"/api/v1/issues/{issue_key}/transition",
+            json={"to_state": "Done"},
+        )
+        assert trans_resp.status_code == 422
+        assert trans_resp.json()["code"] == "USE_COMPLETE_WORK"
+
+        # 3. Agent POST move -> passes CsrfMiddleware, returns 422 USE_COMPLETE_WORK
+        move_resp = await bearer_client.post(
+            f"/api/v1/issues/{issue_key}/move",
+            json={"target_state_id": str(done_state[0])},
+        )
+        assert move_resp.status_code == 422
+        assert move_resp.json()["code"] == "USE_COMPLETE_WORK"
+
+        # 4. Agent POST complete-work (short/invalid report) -> 422 INVALID_REALITY_CHECKER_REPORT
+        bad_report_resp = await bearer_client.post(
+            f"/api/v1/issues/{issue_key}/complete-work",
+            json={
+                "verification_proof": {
+                    "reality_checker": {
+                        "verdict": "READY",
+                        "grade": "A",
+                        "report_path": f"docs/qa/{issue_key}/reality-checker-report.md",
+                    },
+                    "qa_dir": f"docs/qa/{issue_key}",
+                    "ci_run_url": "https://github.com/org/repo/actions/runs/123",
+                    "artifacts": [f"docs/qa/{issue_key}/unit-test.txt"],
+                },
+                "summary_markdown": "Too short report without required canonical headers",
+            },
+        )
+        assert bad_report_resp.status_code == 422
+        assert bad_report_resp.json()["code"] == "INVALID_REALITY_CHECKER_REPORT"
+
+        # 5. Agent POST complete-work (valid report) -> passes CsrfMiddleware, returns 200 OK
+        valid_report = _make_canonical_report("READY", "A")
+        good_report_resp = await bearer_client.post(
+            f"/api/v1/issues/{issue_key}/complete-work",
+            json={
+                "verification_proof": {
+                    "reality_checker": {
+                        "verdict": "READY",
+                        "grade": "A",
+                        "report_path": f"docs/qa/{issue_key}/reality-checker-report.md",
+                    },
+                    "qa_dir": f"docs/qa/{issue_key}",
+                    "ci_run_url": "https://github.com/org/repo/actions/runs/123",
+                    "artifacts": [f"docs/qa/{issue_key}/unit-test.txt"],
+                },
+                "summary_markdown": valid_report,
+            },
+        )
+        assert good_report_resp.status_code == 200
+        assert good_report_resp.json()["status"] == "completed"

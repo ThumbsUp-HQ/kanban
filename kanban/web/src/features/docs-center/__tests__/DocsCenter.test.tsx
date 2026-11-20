@@ -1272,5 +1272,51 @@ Paragraph with inline ![Inline Icon](./images/01-first-boot-setup.png) media, ![
         CHAPTER_BY_SLUG.home = originalHome;
       }
     });
+
+    it('renders category badge pill for Home in left sidebar and unclipped filter bar (KAN-33)', () => {
+      render(
+        <MemoryRouter initialEntries={['/docs/home']}>
+          <DocsCenterPage />
+        </MemoryRouter>,
+      );
+
+      // Filter bar has class docs-category-filter-bar and all 4 buttons
+      const filterBar = screen.getByTestId('docs-category-filter-bar');
+      expect(filterBar.classList.contains('docs-category-filter-bar')).toBe(true);
+      expect(screen.getByTestId('docs-filter-all')).toBeDefined();
+      expect(screen.getByTestId('docs-filter-guide')).toBeDefined();
+      expect(screen.getByTestId('docs-filter-informational')).toBeDefined();
+      expect(screen.getByTestId('docs-filter-architectural')).toBeDefined();
+
+      // Sidebar link for Home includes [Informational] badge pill
+      const sidebar = screen.getByTestId('docs-categories-sidebar');
+      const homeLink = sidebar.querySelector('a[href="/docs/home"]');
+      expect(homeLink).not.toBeNull();
+      expect(homeLink?.textContent).toContain('[Informational]');
+    });
+
+    it('strips empty anchor tags and formats inline code spans in headings (KAN-33)', () => {
+      const markdown = `
+<a id="test-anchor"></a>
+<a name="old-anchor"></a>
+## Heading with \`inline_code\` and <a id="inner-anchor"></a> anchor (\`#ignored-anchor\`)
+
+Content paragraph with <a id="p-anchor"></a> text and \`code\`.
+`;
+      const { container } = render(<DocMarkdownViewer content={markdown} />);
+
+      // Ensure no literal <a id> or <a name> string is printed
+      expect(container.textContent).not.toContain('<a id=');
+      expect(container.textContent).not.toContain('<a name=');
+      expect(container.textContent).not.toContain('(#ignored-anchor)');
+
+      // Heading 2 should contain <code> element for inline_code
+      const h2 = container.querySelector('h2');
+      expect(h2).not.toBeNull();
+      const codeEl = h2?.querySelector('code');
+      expect(codeEl).not.toBeNull();
+      expect(codeEl?.textContent).toBe('inline_code');
+      expect(h2?.textContent).not.toContain('`inline_code`');
+    });
   });
 });

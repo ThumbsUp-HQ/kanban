@@ -154,7 +154,7 @@ export function DocsCenterPage(): JSX.Element {
 
   const renderFilterTabs = (): JSX.Element => (
     <div
-      className="kb-docs-filter-tabs"
+      className="kb-docs-filter-tabs docs-category-filter-bar"
       role="tablist"
       aria-label="Documentation category filters"
       data-testid="docs-category-filter-bar"
@@ -347,13 +347,11 @@ export function DocsCenterPage(): JSX.Element {
                             }}
                           >
                             <span className="kb-docs-nav-link-text">{ch.title}</span>
-                            {ch.slug !== 'home' && (
-                              <span
-                                className={`kb-docs-badge-pill kb-badge-${ch.category ?? 'informational'}`}
-                              >
-                                {formatCategoryBadge(ch.category)}
-                              </span>
-                            )}
+                            <span
+                              className={`kb-docs-badge-pill kb-badge-${ch.category ?? 'informational'}`}
+                            >
+                              {formatCategoryBadge(ch.category)}
+                            </span>
                           </Link>
                         </li>
                       );
@@ -389,13 +387,11 @@ export function DocsCenterPage(): JSX.Element {
                         aria-current={isActive ? 'page' : undefined}
                       >
                         <span className="kb-docs-nav-link-text">{ch.title}</span>
-                        {ch.slug !== 'home' && (
-                          <span
-                            className={`kb-docs-badge-pill kb-badge-${ch.category ?? 'informational'}`}
-                          >
-                            {formatCategoryBadge(ch.category)}
-                          </span>
-                        )}
+                        <span
+                          className={`kb-docs-badge-pill kb-badge-${ch.category ?? 'informational'}`}
+                        >
+                          {formatCategoryBadge(ch.category)}
+                        </span>
                       </Link>
                     </li>
                   );

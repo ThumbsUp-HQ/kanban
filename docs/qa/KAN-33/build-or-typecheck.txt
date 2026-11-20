@@ -2,26 +2,23 @@
 All checks passed!
 
 === 2. RUFF FORMAT CHECK ===
-3 files already formatted
+2 files already formatted
 
-=== 3. MYPY STRICT TYPECHECK ===
-Success: no issues found in 2 source files
+=== 3. WEB TSC TYPECHECK ===
 
-=== 4. WEB TSC TYPECHECK ===
-
-> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan33-c5645351/kanban/web
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan33-45-fix-999f22b1/kanban/web
 > tsc -b --noEmit
 
 
-=== 5. WEB ESLINT ===
+=== 4. WEB ESLINT ===
 
-> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan33-c5645351/kanban/web
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan33-45-fix-999f22b1/kanban/web
 > eslint . --max-warnings 0
 
 
-=== 6. WEB PRODUCTION BUILD ===
+=== 5. WEB PRODUCTION BUILD ===
 
-> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan33-c5645351/kanban/web
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan33-45-fix-999f22b1/kanban/web
 > tsc -b && vite build
 
 vite v8.3.8 building client environment for production...
@@ -31,36 +28,13 @@ rendering chunks...
 computing gzip size...
 dist/index.html                             0.51 kB │ gzip:   0.31 kB
 dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-dist/assets/index-Dlc2sTvs.css            479.12 kB │ gzip:  67.22 kB
-dist/assets/index-B0Ohl6KW.js           2,441.69 kB │ gzip: 676.50 kB
+dist/assets/index-D2zctBD7.css            482.38 kB │ gzip:  67.77 kB
+dist/assets/index-BA4EvweE.js           2,448.08 kB │ gzip: 678.23 kB
 
 [plugin builtin:vite-reporter] 
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 1.21s
+✓ built in 1.16s
 
-=== 7. LINT-IMPORTS MODULE CONTRACTS ===
-
-╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
-╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
- ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
- ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
-╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
-╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
-  └──▶║║                    ▲ 
-      ╚╝────────────────────┘
-
-
----------
-Contracts
----------
-
-Analyzed 990 files, 3522 dependencies.
---------------------------------------
-
-Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
-mcp forbidden from importing database KEPT (48 ignored imports)
-
-Contracts: 2 kept, 0 broken.

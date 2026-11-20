@@ -59,6 +59,7 @@ export function renderInlineMarkdown(
   keyPrefix: string,
   onNavigateSection?: (anchor: string) => void,
 ): ReactNode[] {
+  const cleanText = text.replace(/<a\s+(?:id|name)=["'][^"']*["']\s*>\s*<\/a>/gi, '');
   const nodes: ReactNode[] = [];
   const pattern =
     /(!\[([^\]]*)\]\(((?:[^()]+|\([^()]*\))*)\))|(`[^`]+`)|(\[([^\]]+)\]\(((?:[^()]+|\([^()]*\))*)\))|(\*\*([^*]+)\*\*)|(\*([^*]+)\*)/g;
@@ -66,9 +67,9 @@ export function renderInlineMarkdown(
   let match: RegExpExecArray | null;
   let tokenIdx = 0;
 
-  while ((match = pattern.exec(text)) !== null) {
+  while ((match = pattern.exec(cleanText)) !== null) {
     if (match.index > lastIndex) {
-      nodes.push(text.slice(lastIndex, match.index));
+      nodes.push(cleanText.slice(lastIndex, match.index));
     }
 
     const [
@@ -151,8 +152,8 @@ export function renderInlineMarkdown(
     lastIndex = pattern.lastIndex;
   }
 
-  if (lastIndex < text.length) {
-    nodes.push(text.slice(lastIndex));
+  if (lastIndex < cleanText.length) {
+    nodes.push(cleanText.slice(lastIndex));
   }
 
   return nodes;
@@ -214,7 +215,9 @@ export function DocMarkdownViewer({
   onNavigateSection,
 }: DocMarkdownViewerProps): JSX.Element {
   const blocks: ReactNode[] = [];
-  const normalized = content.replace(/\r\n/g, '\n');
+  const normalized = content
+    .replace(/\r\n/g, '\n')
+    .replace(/<a\s+(?:id|name)=["'][^"']*["']\s*>\s*<\/a>/gi, '');
   const lines = normalized.split('\n');
 
   let inCodeBlock = false;
@@ -404,15 +407,18 @@ export function DocMarkdownViewer({
       continue;
     }
 
-    // Headings H1, H2, H3
+    // Headings H1, H2, H3, H4
     const h1Match = /^#\s+(.+)$/.exec(trimmed);
     if (h1Match?.[1] !== undefined) {
       flushAll();
-      const rawTitle = h1Match[1].trim();
+      const rawTitle = h1Match[1]
+        .replace(/<a\s+(?:id|name)=["'][^"']*["']\s*>\s*<\/a>/gi, '')
+        .replace(/\s*\(`#[^`]+`\)$/, '')
+        .trim();
       const headingId = slugifyAnchor(rawTitle);
       blocks.push(
         <h1 key={`h1-${String(blockIdx++)}`} id={headingId} className="kb-doc-h1">
-          {rawTitle}
+          {renderInlineMarkdown(rawTitle, `h1-${String(blockIdx)}`, onNavigateSection)}
         </h1>,
       );
       continue;
@@ -421,15 +427,18 @@ export function DocMarkdownViewer({
     const h2Match = /^##\s+(.+)$/.exec(trimmed);
     if (h2Match?.[1] !== undefined) {
       flushAll();
-      const rawTitle = h2Match[1].trim();
+      const rawTitle = h2Match[1]
+        .replace(/<a\s+(?:id|name)=["'][^"']*["']\s*>\s*<\/a>/gi, '')
+        .replace(/\s*\(`#[^`]+`\)$/, '')
+        .trim();
       const headingId = slugifyAnchor(rawTitle);
       blocks.push(
         <h2 key={`h2-${String(blockIdx++)}`} id={headingId} className="kb-doc-h2">
-          {rawTitle}
+          {renderInlineMarkdown(rawTitle, `h2-${String(blockIdx)}`, onNavigateSection)}
           <a
             href={`#${headingId}`}
             className="kb-doc-anchor-link"
-            aria-label={`Link to ${rawTitle}`}
+            aria-label={`Link to ${rawTitle.replace(/`/g, '')}`}
             onClick={(e) => {
               if (onNavigateSection) {
                 e.preventDefault();
@@ -447,15 +456,18 @@ export function DocMarkdownViewer({
     const h3Match = /^###\s+(.+)$/.exec(trimmed);
     if (h3Match?.[1] !== undefined) {
       flushAll();
-      const rawTitle = h3Match[1].trim();
+      const rawTitle = h3Match[1]
+        .replace(/<a\s+(?:id|name)=["'][^"']*["']\s*>\s*<\/a>/gi, '')
+        .replace(/\s*\(`#[^`]+`\)$/, '')
+        .trim();
       const headingId = slugifyAnchor(rawTitle);
       blocks.push(
         <h3 key={`h3-${String(blockIdx++)}`} id={headingId} className="kb-doc-h3">
-          {rawTitle}
+          {renderInlineMarkdown(rawTitle, `h3-${String(blockIdx)}`, onNavigateSection)}
           <a
             href={`#${headingId}`}
             className="kb-doc-anchor-link"
-            aria-label={`Link to ${rawTitle}`}
+            aria-label={`Link to ${rawTitle.replace(/`/g, '')}`}
             onClick={(e) => {
               if (onNavigateSection) {
                 e.preventDefault();
@@ -466,6 +478,22 @@ export function DocMarkdownViewer({
             #
           </a>
         </h3>,
+      );
+      continue;
+    }
+
+    const h4Match = /^####\s+(.+)$/.exec(trimmed);
+    if (h4Match?.[1] !== undefined) {
+      flushAll();
+      const rawTitle = h4Match[1]
+        .replace(/<a\s+(?:id|name)=["'][^"']*["']\s*>\s*<\/a>/gi, '')
+        .replace(/\s*\(`#[^`]+`\)$/, '')
+        .trim();
+      const headingId = slugifyAnchor(rawTitle);
+      blocks.push(
+        <h4 key={`h4-${String(blockIdx++)}`} id={headingId} className="kb-doc-h4">
+          {renderInlineMarkdown(rawTitle, `h4-${String(blockIdx)}`, onNavigateSection)}
+        </h4>,
       );
       continue;
     }

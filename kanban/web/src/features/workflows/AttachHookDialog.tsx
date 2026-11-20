@@ -224,7 +224,7 @@ function AttachHookDialogInner({
                   summary="The execution tier for this transition helper rule."
                   validValues={[
                     { label: 'Sync Wasm Validator', description: 'Fast <25ms in-process WebAssembly validator that checks conditions and can veto.' },
-                    { label: 'Async Wasm Post-Mutation', description: 'Background WebAssembly post-action that mutates allowed fields.' },
+                    { label: 'Sync Wasm Mutator', description: 'Synchronous WebAssembly mutator (< 25ms Tier A) that updates allowed issue fields during transition.' },
                     { label: 'Agent Transition Helper', description: 'Autonomous agent (CLI, SDK, or Runner) executing forensic QA gates.' },
                   ]}
                   docHref="/docs/scripted-workflows-and-transition-helpers#helper-architecture"
