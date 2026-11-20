@@ -3,7 +3,8 @@
 
 import { apiFetch } from '../../api/client';
 
-export type ScopeTier = 'personal_user' | 'project' | 'workspace' | 'global';
+export type ScopeTier = 'personal_user' | 'project' | 'workspace' | 'global' | 'server';
+export type OwnerKind = 'personal_user' | 'service_bot';
 
 export interface McpApiKeyItem {
   id: string;
@@ -11,6 +12,7 @@ export interface McpApiKeyItem {
   display_hint: string;
   surface: 'agent' | 'docs' | 'admin';
   scope_tier: ScopeTier;
+  owner_kind?: OwnerKind | undefined;
   scopes: string[];
   allowed_projects: string[] | null;
   created_at: string;
@@ -32,6 +34,8 @@ export interface MintMcpKeyRequest {
   surface: 'agent' | 'docs' | 'admin';
   scopes: string[];
   scope_tier?: ScopeTier | undefined;
+  owner_kind?: OwnerKind | undefined;
+  project_ref?: string | undefined;
   allowed_projects?: string[] | undefined;
   expires_in_days?: number | null | undefined;
   unlimited?: boolean | undefined;
@@ -69,6 +73,7 @@ function normalizeMcpKeyItem(
     revoked_at: raw.revoked_at ?? null,
     disabled_tools: raw.disabled_tools ?? [],
     allowed_tools: raw.allowed_tools ?? null,
+    ...(raw.owner_kind !== undefined ? { owner_kind: raw.owner_kind } : {}),
     ...(raw.raw_key !== undefined ? { raw_key: raw.raw_key } : {}),
   };
 }

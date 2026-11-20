@@ -100,6 +100,28 @@ All 16 high-resolution Playwright screenshots verified via direct image inspecti
 
 ---
 
+## Clean-Room Reality-Checker Remediation (Round 2) Audit
+
+### 1. Root-Cause Remediation Verification
+1. **Wired Unified API in `McpAccessStudio.tsx` (`fetchUnifiedMcpKeys`, `mintUnifiedMcpKey`, `revokeUnifiedMcpKey`):**
+   - Eliminated HTTP 404 in Governance view (`activeView === 'governance'`) when revoking a `service_bot` or foreign user key by migrating calls from legacy `/api/v1/auth/mcp-keys` to `/api/v1/mcp-keys`.
+   - Wired `fetchUnifiedMcpKeys` across both `mine` and `governance` views.
+   - Surfaced non-AAL2 revocation and mint errors in an inline alert banner (`role="alert"` / `studio-error-banner`) instead of silently swallowing errors.
+   - Added `await session.commit()` before HTTP responses in `kanban/api/v1/mcp_keys.py` (`mint_unified_mcp_key`, `revoke_unified_mcp_key`) and `kanban/api/v1/auth_mcp_keys.py` (`mint_personal_key`, `revoke_personal_key`) to eliminate immediate read-after-write commit races.
+2. **Fixed `scope_tier: "personal_user"` 422 Bug & Separated `owner_kind` vs `scope_tier`:**
+   - Decoupled Key Type (`owner_kind`: `personal_user` vs `service_bot`) from Scope Tier (`scope_tier`: `workspace` | `project` | `global` | `server`) in `McpAccessStudio.tsx` mint modal.
+   - Minting requests now cleanly transmit both valid `owner_kind` and valid `scope_tier`, with zero 422 `VALIDATION_FAILED` errors.
+3. **UI Polish & React Warning Elimination:**
+   - Interpolated `currentWorkspaceSlug` in `getTierBadge` (`Workspace: ${currentWorkspaceSlug}`).
+   - Passed `newKeyProject.trim() || effectiveProjectKey` into `McpConfigSnippetModal`.
+   - Disabled background workspace and project queries when user access is denied (`enabled: !isDenied`), completely eliminating React `act(...)` stderr warnings in `McpAccessStudio.test.tsx`.
+4. **Automated Unit Test Coverage & Static Gates:**
+   - Frontend Vitest: 52/52 tests passing across 5 suites (98.55% statements, 96.35% branches, 100% functions, 98.45% lines) with 0 console warnings and 0 act errors.
+   - Backend Pytest: 21/21 tests passing (97% line coverage on `kanban/api/v1/mcp_keys.py`).
+   - Static Gates: `tsc -b --noEmit` (0 errors), `eslint . --max-warnings 0` (0 warnings), `vite build` (clean in 1.12s), `ruff check` (clean), `mypy` (clean across touched files), `cssTokensAudit.test.ts` (4/4 passed), `check_no_dashes --all` (0 em/en-dashes).
+
+---
+
 ## Realistic Quality Certification
 - Overall Quality Rating: A
 - Design Implementation Level: Excellent
@@ -117,6 +139,6 @@ All 16 high-resolution Playwright screenshots verified via direct image inspecti
 ---
 
 **Integration Agent**: RealityIntegration (rc-gate-2)
-**Assessment Date**: 2026-11-19
-**Evidence Location**: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan31-394cc1ee/docs/qa/KAN-31/`
-**Handoff**: Certified Grade-A READY. Notifying `@merge-ci-2` for integration into `main`.
+**Assessment Date**: 2026-11-20
+**Evidence Location**: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan31-rcfix-6c02ef64/docs/qa/KAN-31/`
+**Handoff**: Certified Grade-A READY. Notifying `@api-spec-2 @ui-spec-2` and `@coordinator` for merge into `main`.

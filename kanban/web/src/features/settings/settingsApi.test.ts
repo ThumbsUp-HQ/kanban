@@ -6,9 +6,12 @@ import * as clientModule from '../../api/client';
 import {
   fetchConnectedApps,
   fetchPersonalMcpKeys,
+  fetchUnifiedMcpKeys,
   mintPersonalMcpKey,
+  mintUnifiedMcpKey,
   revokeConnectedApp,
   revokePersonalMcpKey,
+  revokeUnifiedMcpKey,
 } from './settingsApi';
 
 describe('settingsApi', () => {
@@ -118,6 +121,87 @@ describe('settingsApi', () => {
     await revokePersonalMcpKey('k-glob-2', 'global');
     expect(spy).toHaveBeenCalledWith('DELETE', '/api/v1/admin/mcp-keys/{key_id}', {
       params: { key_id: 'k-glob-2' },
+    });
+  });
+
+  it('fetchUnifiedMcpKeys constructs query params and normalizes returned keys', async () => {
+    const spy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValueOnce({
+      keys: [
+        {
+          id: 'k-u1',
+          surface: 'agent',
+          scope_tier: 'workspace',
+          owner_kind: 'personal_user',
+          display_hint: 'kb_u1',
+        },
+      ],
+    });
+
+    const res = await fetchUnifiedMcpKeys({
+      view: 'governance',
+      scope_tier: 'workspace',
+      project_ref: 'PROJ-1',
+      surface: 'agent',
+    });
+
+    expect(spy).toHaveBeenCalledWith(
+      'GET',
+      '/api/v1/mcp-keys?view=governance&scope_tier=workspace&project_ref=PROJ-1&surface=agent',
+    );
+    expect(res).toHaveLength(1);
+    expect(res[0]?.id).toBe('k-u1');
+    expect(res[0]?.owner_kind).toBe('personal_user');
+
+    // Test with array response and no options
+    spy.mockResolvedValueOnce([
+      {
+        id: 'k-u2',
+        surface: 'docs',
+      },
+    ] as never);
+
+    const res2 = await fetchUnifiedMcpKeys();
+    expect(spy).toHaveBeenCalledWith('GET', '/api/v1/mcp-keys');
+    expect(res2[0]?.id).toBe('k-u2');
+  });
+
+  it('mintUnifiedMcpKey calls POST /api/v1/mcp-keys and normalizes response', async () => {
+    const spy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValueOnce({
+      id: 'k-u3',
+      surface: 'agent',
+      scope_tier: 'workspace',
+      owner_kind: 'service_bot',
+      raw_key: 'kb_pat_bot_secret',
+    });
+
+    const created = await mintUnifiedMcpKey({
+      label: 'Bot Key',
+      surface: 'agent',
+      scopes: ['read'],
+      scope_tier: 'workspace',
+      owner_kind: 'service_bot',
+    });
+
+    expect(spy).toHaveBeenCalledWith('POST', '/api/v1/mcp-keys', {
+      body: JSON.stringify({
+        label: 'Bot Key',
+        surface: 'agent',
+        scopes: ['read'],
+        scope_tier: 'workspace',
+        owner_kind: 'service_bot',
+      }),
+      headers: { 'Content-Type': 'application/json' },
+    });
+    expect(created.id).toBe('k-u3');
+    expect(created.owner_kind).toBe('service_bot');
+    expect(created.raw_key).toBe('kb_pat_bot_secret');
+  });
+
+  it('revokeUnifiedMcpKey calls DELETE /api/v1/mcp-keys/{key_id}', async () => {
+    const spy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValueOnce({});
+    await revokeUnifiedMcpKey('k-u4');
+    expect(spy).toHaveBeenCalledWith('DELETE', '/api/v1/mcp-keys/{key_id}', {
+      params: { key_id: 'k-u4' },
     });
   });
 });

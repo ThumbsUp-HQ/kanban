@@ -380,6 +380,8 @@ async def mint_unified_mcp_key(  # noqa: C901
         if keys_res:
             resolved_proj_keys = [str(k) for k in keys_res]
 
+    await session.commit()
+
     return UnifiedMcpKeyMintResponse(
         id=key_record.id,
         token=plaintext_token,
@@ -482,3 +484,4 @@ async def revoke_unified_mcp_key(
         key_id=key_id,
         caller_principal_id=caller.principal_id,
     )
+    await session.commit()
