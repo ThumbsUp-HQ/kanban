@@ -437,8 +437,18 @@ async def search_handler(  # noqa: C901, PLR0911, PLR0912, PLR0915
             if sticky_data is not None:
                 return await _read_sticky(sticky_data, lod, active_client, active_token)
             if target_type == "STICKY":
+                safe_id = clean_id.replace('"', '\\"')
                 msg = f"Sticky note '{clean_id}' not found"
-                raise KbMcpError(McpErrorCode.NOT_FOUND, msg)
+                raise KbMcpError(
+                    McpErrorCode.NOT_FOUND,
+                    msg,
+                    field="id",
+                    fix_hint=(
+                        f"Sticky note '{clean_id}' was not found or you do not have access. "
+                        "Search accessible stickies first."
+                    ),
+                    cli_example=f'kanban-cli-docs search --type=STICKY --query="{safe_id}"',
+                )
 
         if target_type in ("DOC", "ALL"):
             found = await _try_get_page_or_doc(
@@ -456,8 +466,18 @@ async def search_handler(  # noqa: C901, PLR0911, PLR0912, PLR0915
                     active_token,
                 )
 
+        safe_id = clean_id.replace('"', '\\"')
         msg = f"Document, page, or sticky '{clean_id}' not found"
-        raise KbMcpError(McpErrorCode.NOT_FOUND, msg)
+        raise KbMcpError(
+            McpErrorCode.NOT_FOUND,
+            msg,
+            field="id",
+            fix_hint=(
+                f"Document, page, or sticky '{clean_id}' was not found "
+                "or you do not have access. Search accessible documents first."
+            ),
+            cli_example=f'kanban-cli-docs search --query="{safe_id}"',
+        )
 
     # -------------------------------------------------------------------------
     # MODE 3: Hybrid Search
@@ -564,8 +584,17 @@ async def search_handler(  # noqa: C901, PLR0911, PLR0912, PLR0915
                     if isinstance(proj_resp, dict) and "id" in proj_resp:
                         project_uuid = str(proj_resp["id"])
                     else:
+                        safe_proj = clean_proj.replace('"', '\\"')
                         msg = f"Project '{clean_proj}' not found"
-                        raise KbMcpError(McpErrorCode.NOT_FOUND, msg)
+                        raise KbMcpError(
+                            McpErrorCode.NOT_FOUND,
+                            msg,
+                            field="project",
+                            fix_hint=(
+                                f"Project '{clean_proj}' was not found or you do not have access."
+                            ),
+                            cli_example=f'kanban-cli-docs search --query="{safe_proj}"',
+                        )
 
                 docs_resp = await active_client.request(
                     "GET",

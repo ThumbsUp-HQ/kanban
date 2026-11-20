@@ -100,3 +100,11 @@ sample_10_domain_patch_target_ambiguous:
     cli_example: kanban-cli-docs update --id="<id>" --original-text="<unique context>" --replacement-text="<new>"
     line_hints: [1, 3]
     count: 2
+sample_11_domain_entity_not_found:
+  error:
+    code: NOT_FOUND
+    message: ticket not found
+    field: identifier
+    hint: Ticket 'KAN-99999' was not found or you do not have access. Search accessible tickets first.
+    fix_hint: Ticket 'KAN-99999' was not found or you do not have access. Search accessible tickets first.
+    cli_example: kanban-cli-agent search_tickets --query="KAN-99999"

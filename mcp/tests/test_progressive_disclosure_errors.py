@@ -458,6 +458,7 @@ def test_enrich_progressive_disclosure_domain_errors() -> None:
         extra_dict={},
     )
     assert "Verify identifier or use search tool" in nf_enriched["fix_hint"]
+    assert nf_enriched["cli_example"] == 'kanban-cli-agent search_tickets --query=""'
 
     # 5. Fallback branches when details missing or custom fix_hint provided
     custom_enriched = KanbanApiClient._enrich_progressive_disclosure(
@@ -771,3 +772,61 @@ async def test_docs_update_sticky_diff_patch_and_links_coverage() -> None:
     assert res["status"] == "updated"
     assert res["kind"] == "sticky"
     assert res["links"] == [{"action": "added", "target": "KAN-10", "link_type": "RELATES_TO"}]
+
+
+@pytest.mark.asyncio
+async def test_not_found_regression_progressive_disclosure() -> None:
+    """Verify NOT_FOUND on read_ticket and docs update return YAML with hint and cli_example."""
+    from mcp.context import McpRequestContext, reset_current_mcp_context, set_current_mcp_context
+    from mcp.surfaces.agent.read_ticket import read_ticket
+    from mcp.surfaces.docs.update import update_handler
+
+    async def mock_handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(404, json={"detail": "not found"})
+
+    client = KanbanApiClient(
+        McpSettings(mode="standalone_inprocess"),
+        transport=httpx.MockTransport(mock_handler),
+    )
+    ctx = McpRequestContext(surface=Surface.AGENT, client=client)
+    token = set_current_mcp_context(ctx)
+    try:
+        # 1. read_ticket NOT_FOUND regression
+        with pytest.raises(KbMcpError) as exc_ticket:
+            await read_ticket({"identifier": "KAN-99999"})
+        err_ticket = exc_ticket.value
+        assert err_ticket.code == McpErrorCode.NOT_FOUND
+        assert err_ticket.field == "identifier"
+        assert err_ticket.fix_hint is not None
+        assert "KAN-99999" in err_ticket.fix_hint
+        assert err_ticket.cli_example is not None
+        assert 'kanban-cli-agent search_tickets --query="KAN-99999"' in err_ticket.cli_example
+
+        yaml_ticket = err_ticket.to_yaml()
+        assert "code: NOT_FOUND" in yaml_ticket
+        assert "hint:" in yaml_ticket
+        assert "fix_hint:" in yaml_ticket
+        assert "cli_example:" in yaml_ticket
+        assert 'kanban-cli-agent search_tickets --query="KAN-99999"' in yaml_ticket
+
+        # 2. docs update NOT_FOUND regression
+        with pytest.raises(KbMcpError) as exc_doc:
+            await update_handler(
+                {"id": "DOC-99999", "type": "DOC", "content": "Updated content"},
+                client=client,
+            )
+        err_doc = exc_doc.value
+        assert err_doc.code == McpErrorCode.NOT_FOUND
+        assert err_doc.field == "id"
+        assert err_doc.fix_hint is not None
+        assert err_doc.cli_example is not None
+        assert 'kanban-cli-docs search --query="DOC-99999"' in err_doc.cli_example
+
+        yaml_doc = err_doc.to_yaml()
+        assert "code: NOT_FOUND" in yaml_doc
+        assert "hint:" in yaml_doc
+        assert "fix_hint:" in yaml_doc
+        assert "cli_example:" in yaml_doc
+        assert 'kanban-cli-docs search --query="DOC-99999"' in yaml_doc
+    finally:
+        reset_current_mcp_context(token)

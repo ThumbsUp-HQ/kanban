@@ -215,8 +215,18 @@ async def read_doc_handler(  # noqa: C901, PLR0912, PLR0915
     # Try doc or page
     found = await _try_get_page_or_doc(active_client, clean_id, active_token)
     if found is None:
+        safe_id = clean_id.replace('"', '\\"')
         msg = f"Document, page, or sticky '{clean_id}' not found"
-        raise KbMcpError(McpErrorCode.NOT_FOUND, msg)
+        raise KbMcpError(
+            McpErrorCode.NOT_FOUND,
+            msg,
+            field="id",
+            fix_hint=(
+                f"Document, page, or sticky '{clean_id}' was not found "
+                "or you do not have access. Search accessible documents first."
+            ),
+            cli_example=f'kanban-cli-docs search --query="{safe_id}"',
+        )
 
     kind, entity_data = found
 

@@ -120,7 +120,9 @@
   color: var(--fg-secondary);
 }
 
-.ProseMirror pre.kb-code-block {
+.ProseMirror pre,
+.ProseMirror pre.kb-code-block,
+pre.kb-code-block {
   font-family: var(--font-mono);
   font-variant-ligatures: none;
   font-feature-settings: "liga" 0, "calt" 0;
@@ -130,17 +132,25 @@
   margin: 16px 0;
   background-color: var(--bg-surface-raised);
   border: 1px solid var(--border-subtle);
-  border-radius: 6px;
+  border-radius: var(--radius-md, 6px);
   overflow-x: auto;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
-.ProseMirror pre.kb-code-block code {
+.ProseMirror pre code,
+.ProseMirror pre.kb-code-block code,
+pre.kb-code-block code {
   font-family: var(--font-mono);
   font-variant-ligatures: none;
   font-feature-settings: "liga" 0, "calt" 0;
   background: transparent;
   padding: 0;
   border: none;
+  white-space: pre-wrap;
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 .ProseMirror code.kb-inline-code {

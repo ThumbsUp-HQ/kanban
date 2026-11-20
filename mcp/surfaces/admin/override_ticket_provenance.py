@@ -220,6 +220,14 @@ async def override_ticket_provenance(  # noqa: C901, PLR0912, PLR0915
             raise KbMcpError(
                 McpErrorCode.NOT_FOUND,
                 f"Workflow state '{target_state_input}' not found in target project",
+                field="target_state",
+                fix_hint=(
+                    "Verify workflow state name or list project states "
+                    "using architect_project --action=get."
+                ),
+                cli_example=(
+                    f'kanban-cli-admin architect_project --action=get --project="{project_id}"'
+                ),
             )
 
         state_id = str(matching_state["id"])

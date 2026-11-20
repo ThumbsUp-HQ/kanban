@@ -351,6 +351,7 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
     if arguments.get("workspace"):
         req_params["workspace"] = arguments["workspace"]
 
+    safe_identifier = identifier.replace('"', '\\"')
     try:
         issue_data = await ctx.client.request(
             "GET",
@@ -361,11 +362,43 @@ async def read_ticket(arguments: dict[str, Any]) -> dict[str, Any]:
         )
     except KbMcpError as err:
         if err.code == McpErrorCode.NOT_FOUND:
-            raise KbMcpError(McpErrorCode.NOT_FOUND, "ticket not found") from None
+            fix_hint = (
+                err.fix_hint
+                if err.fix_hint
+                and err.fix_hint
+                != "Verify identifier or use search tool to discover valid entities."
+                else (
+                    f"Ticket '{identifier}' was not found or you do not have access. "
+                    "Search accessible tickets first."
+                )
+            )
+            cli_example = (
+                err.cli_example
+                if err.cli_example
+                and err.cli_example != 'kanban-cli-agent search_tickets --query=""'
+                else f'kanban-cli-agent search_tickets --query="{safe_identifier}"'
+            )
+            raise KbMcpError(
+                McpErrorCode.NOT_FOUND,
+                message="ticket not found",
+                field="identifier",
+                fix_hint=fix_hint,
+                cli_example=cli_example,
+                closest_match=err.closest_match,
+            ) from None
         raise
 
     if not isinstance(issue_data, dict):
-        raise KbMcpError(McpErrorCode.NOT_FOUND, "ticket not found")
+        raise KbMcpError(
+            McpErrorCode.NOT_FOUND,
+            message=f"ticket not found: {identifier}",
+            field="identifier",
+            fix_hint=(
+                f"Ticket '{identifier}' was not found or you do not have access. "
+                "Search accessible tickets first."
+            ),
+            cli_example=f'kanban-cli-agent search_tickets --query="{safe_identifier}"',
+        )
 
     issue_key = str(issue_data.get("key", identifier))
     state_val = issue_data.get("state")

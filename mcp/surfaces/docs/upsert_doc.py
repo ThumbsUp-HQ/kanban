@@ -101,8 +101,18 @@ async def _fetch_current_entity(
     except KbMcpError:
         pass
 
+    safe_id = clean_id.replace('"', '\\"')
     msg = f"Document or page '{clean_id}' not found"
-    raise KbMcpError(McpErrorCode.NOT_FOUND, msg)
+    raise KbMcpError(
+        McpErrorCode.NOT_FOUND,
+        msg,
+        field="id",
+        fix_hint=(
+            f"Document or page '{clean_id}' was not found or you do not have access. "
+            "Search accessible documents first."
+        ),
+        cli_example=f'kanban-cli-docs search --query="{safe_id}"',
+    )
 
 
 async def upsert_doc_handler(  # noqa: C901, PLR0912, PLR0915

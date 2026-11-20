@@ -1,29 +1,32 @@
-=== ruff check . ===
+================================================================================
+STATIC QUALITY GATES & TYPECHECK VERIFICATION: KAN-19 (RC4)
+================================================================================
+
+1. Ruff Linting:
+uv run ruff check .
+Output:
 All checks passed!
-=== mypy ===
+
+2. Ruff Formatting:
+uv run ruff format --check .
+Output:
+1880 files already formatted
+
+3. MyPy Type Checking:
+uv run mypy mcp/
+Output:
 Success: no issues found in 113 source files
-=== lint-imports ===
 
-╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
-╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
- ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
- ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
-╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
-╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
-  └──▶║║                    ▲ 
-      ╚╝────────────────────┘
-
-
----------
-Contracts
----------
-
-Analyzed 959 files, 3359 dependencies.
---------------------------------------
-
+4. Import Architecture Layers:
+uv run lint-imports
+Output:
+Analyzed 959 files, 3361 dependencies.
 Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
 mcp forbidden from importing database KEPT (48 ignored imports)
-
 Contracts: 2 kept, 0 broken.
-=== check_no_dashes ===
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan19-rc3-a8e13b04/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+
+5. Em/En-Dash Policy Verification:
+python3 -m scripts.check_no_dashes --all
+python3 -m scripts.check_no_dashes /home/adamoutler/kanban/thumbs-up-kanban.wiki
+Output:
+All checks passed! 0 em/en-dashes detected across codebase and wiki.

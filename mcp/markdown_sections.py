@@ -105,8 +105,15 @@ def patch_markdown_section(body: str, section_heading: str, replacement: str) ->
             matched.append(h)
 
     if not matched:
+        safe_heading = section_heading.replace('"', '\\"')
         msg = f"Heading '{section_heading}' not found in document"
-        raise KbMcpError(McpErrorCode.SECTION_NOT_FOUND, msg)
+        raise KbMcpError(
+            McpErrorCode.SECTION_NOT_FOUND,
+            msg,
+            field="section",
+            fix_hint="Verify section heading or inspect document structure.",
+            cli_example=f'kanban-cli-docs search --query="{safe_heading}"',
+        )
 
     if len(matched) > 1:
         msg = (
