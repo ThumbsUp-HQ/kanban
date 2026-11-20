@@ -10,13 +10,23 @@ from unittest.mock import AsyncMock
 import pytest
 import yaml
 
-from mcp.context import McpRequestContext
+from mcp.context import McpRequestContext, reset_current_mcp_context, set_current_mcp_context
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.registry import Surface
 from mcp.surfaces.agent.read_ticket import (
+    _compact_link_endpoint,
+    _compact_single_activity,
+    _compact_single_comment,
+    _extract_assignee_name,
+    _extract_principal_name,
+    _format_activity_actor,
     _format_assignees,
+    _format_comment_author,
     _format_parent,
+    _load_activity,
+    _load_comments,
     _load_links,
+    _project_compact_link_entries,
     _validate_read_arguments,
     read_ticket,
 )
@@ -160,11 +170,16 @@ async def test_case_2_rls_security_identical_404(agent_test_env: AgentTestEnv) -
     assert res_missing["isError"] is True
     text_missing = res_missing["content"][0]["text"]
 
-    # Byte-identical assertion
-    assert text_sec == text_missing
+    # Byte-identical structure assertion (anti-enumeration: unauthorized and missing
+    # must follow byte-identical error structure modulo identifier)
+    assert text_sec.replace("SEC-1", "TARGET") == text_missing.replace("KAN-99999", "TARGET"), (
+        "Anti-enumeration: unauthorized and missing must follow byte-identical error structure!"
+    )
     parsed = yaml.safe_load(text_sec)
     assert parsed["error"]["code"] == "NOT_FOUND"
     assert parsed["error"]["message"] == "ticket not found"
+    assert "fix_hint" in parsed["error"]
+    assert "cli_example" in parsed["error"]
 
 
 @pytest.mark.asyncio
@@ -514,3 +529,145 @@ async def test_read_ticket_free_text_secret_scrubbing(agent_test_env: AgentTestE
     assert "[REDACTED:API_KEY]" in parsed["description_markdown"]
     assert len(parsed["comments"]) > 0
     assert "[REDACTED:API_KEY]" in parsed["comments"][0]["body_markdown"]
+
+
+def test_read_ticket_unit_formatters() -> None:
+    """Cover unit formatters and argument validations in read_ticket."""
+    # 1. _validate_read_arguments
+    with pytest.raises(KbMcpError) as exc_unk:
+        _validate_read_arguments({"identifier": "KAN-1", "unknown_param": 123})
+    assert exc_unk.value.code == McpErrorCode.VALIDATION_FAILED
+
+    with pytest.raises(KbMcpError) as exc_no_id:
+        _validate_read_arguments({})
+    assert exc_no_id.value.code == McpErrorCode.VALIDATION_FAILED
+
+    with pytest.raises(KbMcpError) as exc_lod:
+        _validate_read_arguments({"identifier": "KAN-1", "lod": "invalid_lod"})
+    assert exc_lod.value.code == McpErrorCode.VALIDATION_FAILED
+
+    # 2. _extract_principal_name
+    assert _extract_principal_name({}) is None
+    assert _extract_principal_name({"handle": "bob"}) == "@bob"
+    assert _extract_principal_name({"handle": "@bob"}) == "@bob"
+    assert _extract_principal_name({"display_name": "Bob Smith"}) == "@bobsmith"
+    assert _extract_principal_name({"id": "user-uuid"}) == "user-uuid"
+
+    # 3. _extract_assignee_name
+    assert _extract_assignee_name(12345) is None
+    assert _extract_assignee_name({}) is None
+    assert _extract_assignee_name({"kind": "free_text", "free_text": "contractor"}) == "contractor"
+    assert _extract_assignee_name({"principal": {"handle": "alice"}}) == "@alice"
+    assert _extract_assignee_name({"handle": "charlie"}) == "@charlie"
+
+    # 4. _compact_link_endpoint
+    assert _compact_link_endpoint("not-a-dict") == "not-a-dict"
+    assert _compact_link_endpoint({"restricted": True, "label": "Secret"}) == {
+        "restricted": True,
+        "label": "Secret",
+    }
+    assert _compact_link_endpoint({"restricted": True}) == {
+        "restricted": True,
+        "label": "🔒 Restricted Object",
+    }
+    assert _compact_link_endpoint({"summary": "Feature"}) == {"summary": "Feature"}
+
+    # 5. _project_compact_link_entries
+    assert _project_compact_link_entries(
+        ["not-a-dict", {"link_type": "RELATES_TO", "target": {"key": "KAN-2"}}], "target"
+    ) == [{"link_type": "RELATES_TO", "target": {"key": "KAN-2"}}]
+
+    # 6. _format_parent
+    assert _format_parent(None) is None
+    assert _format_parent("raw-str") == "raw-str"
+    assert _format_parent({"summary": "Parent Issue"}) == "Parent Issue"
+    assert _format_parent({"key": "KAN-10", "summary": "Parent Issue"}) == "KAN-10"
+
+    # 7. _format_comment_author & _compact_single_comment
+    assert _format_comment_author("alice") == "@alice"
+    assert _format_comment_author("@alice") == "@alice"
+    assert _format_comment_author({"handle": "bob"}) == "@bob"
+    assert _format_comment_author({"name": "charlie"}) == "@charlie"
+    assert _format_comment_author({"id": "uuid-1"}) == "@uuid-1"
+
+    c1 = _compact_single_comment({"id": "c1", "author_id": "user-1", "body_markdown": 12345})
+    assert c1["author"] == "@user-1"
+    assert c1["body_markdown"] == 12345
+
+    # 8. _format_activity_actor & _compact_single_activity
+    assert _format_activity_actor("sys") == "@sys"
+    assert _format_activity_actor("@sys") == "@sys"
+    assert _format_activity_actor({"handle": "alice", "type": "USER"}) == "@alice"
+    assert _format_activity_actor({"slug": "ci-bot", "type": "AGENT"}) == "ci-bot"
+
+    act1 = _compact_single_activity(
+        {
+            "event_type": "STATUS_CHANGED",
+            "actor": "admin",
+            "created_at": "2026-01-01",
+            "payload": {"from_state_id": "s1", "to_state_id": "s2", "extra_field": "val"},
+        }
+    )
+    assert act1["event_type"] == "STATUS_CHANGED"
+    assert act1["actor"] == "@admin"
+    assert act1["payload"] == {"extra_field": "val"}
+
+    act_empty_payload = _compact_single_activity(
+        {
+            "event_type": "COMMENTED",
+            "payload": {"comment": "hello", "body_markdown": "world"},
+        }
+    )
+    assert "payload" not in act_empty_payload
+
+
+@pytest.mark.asyncio
+async def test_read_ticket_load_and_dispatch_branches() -> None:
+    """Cover async loading and dispatch branches in read_ticket."""
+    dummy_ctx_no_client = McpRequestContext(surface=Surface.AGENT, client=None)
+    assert await _load_links("KAN-1", dummy_ctx_no_client) is None
+    assert await _load_comments("KAN-1", 10, dummy_ctx_no_client) == []
+    assert await _load_comments("KAN-1", 0, dummy_ctx_no_client) == []
+    assert await _load_activity("KAN-1", dummy_ctx_no_client) == []
+
+    mock_client = AsyncMock()
+    dummy_ctx = McpRequestContext(surface=Surface.AGENT, client=mock_client)
+
+    # Empty / non-dict responses
+    mock_client.request.return_value = "not-a-dict"
+    assert await _load_links("KAN-1", dummy_ctx) is None
+    assert await _load_comments("KAN-1", 10, dummy_ctx) == []
+    assert await _load_activity("KAN-1", dummy_ctx) == []
+
+    # Raising KbMcpError
+    mock_client.request.side_effect = KbMcpError(McpErrorCode.NOT_FOUND, "fail")
+    assert await _load_links("KAN-1", dummy_ctx) is None
+    assert await _load_comments("KAN-1", 10, dummy_ctx) == []
+    assert await _load_activity("KAN-1", dummy_ctx) == []
+    mock_client.request.side_effect = None
+
+    # Truncated links
+    mock_client.request.return_value = {
+        "outbound": [{"link_type": "BLOCKS", "target": {"key": "KAN-3"}}],
+        "inbound": [{"link_type": "BLOCKED_BY", "source": {"key": "KAN-1"}}],
+        "truncated": True,
+    }
+    loaded_links = await _load_links("KAN-2", dummy_ctx)
+    assert loaded_links is not None
+    assert loaded_links.get("truncated") is True
+    assert "outbound" in loaded_links
+    assert "inbound" in loaded_links
+
+    # read_ticket("help") and non-dict issue_data
+    token = set_current_mcp_context(dummy_ctx)
+    try:
+        mock_client.request.return_value = {"tool": "read_ticket", "description": "help text"}
+        help_res = await read_ticket({"identifier": "help"})
+        assert help_res["tool"] == "read_ticket"
+
+        mock_client.request.return_value = "not-a-dict"
+        with pytest.raises(KbMcpError) as exc_int:
+            await read_ticket({"identifier": "KAN-1"})
+        assert exc_int.value.code == McpErrorCode.NOT_FOUND
+    finally:
+        reset_current_mcp_context(token)

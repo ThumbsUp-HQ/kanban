@@ -220,7 +220,19 @@ async def _resolve_cycle_id(ctx: McpRequestContext, project_ref: str, cycle_ref:
             if isinstance(c, dict) and c.get("name") == cycle_ref:
                 return str(c["id"])
     msg = f"Cycle '{cycle_ref}' not found in project '{project_ref}'"
-    raise KbMcpError(McpErrorCode.NOT_FOUND, msg)
+    raise KbMcpError(
+        McpErrorCode.NOT_FOUND,
+        msg,
+        field="cycle",
+        fix_hint=(
+            "Verify cycle name or list project cycles using "
+            "manage_cycles_and_modules --action=list_cycles."
+        ),
+        cli_example=(
+            "kanban-cli-admin manage_cycles_and_modules "
+            f'--action=list_cycles --project="{project_ref}"'
+        ),
+    )
 
 
 async def _resolve_module_id(ctx: McpRequestContext, project_ref: str, module_ref: str) -> str:
@@ -242,7 +254,19 @@ async def _resolve_module_id(ctx: McpRequestContext, project_ref: str, module_re
             if isinstance(m, dict) and m.get("name") == module_ref:
                 return str(m["id"])
     msg = f"Module '{module_ref}' not found in project '{project_ref}'"
-    raise KbMcpError(McpErrorCode.NOT_FOUND, msg)
+    raise KbMcpError(
+        McpErrorCode.NOT_FOUND,
+        msg,
+        field="module",
+        fix_hint=(
+            "Verify module name or list project modules using "
+            "manage_cycles_and_modules --action=list_modules."
+        ),
+        cli_example=(
+            "kanban-cli-admin manage_cycles_and_modules "
+            f'--action=list_modules --project="{project_ref}"'
+        ),
+    )
 
 
 async def _resolve_view_id(ctx: McpRequestContext, project_ref: str, view_ref: str) -> str:
@@ -269,7 +293,19 @@ async def _resolve_view_id(ctx: McpRequestContext, project_ref: str, view_ref: s
         if isinstance(v, dict) and v.get("name") == view_ref:
             return str(v["id"])
     msg = f"View '{view_ref}' not found in project '{project_ref}'"
-    raise KbMcpError(McpErrorCode.NOT_FOUND, msg)
+    raise KbMcpError(
+        McpErrorCode.NOT_FOUND,
+        msg,
+        field="view",
+        fix_hint=(
+            "Verify view name or list project views using "
+            "manage_cycles_and_modules --action=list_views."
+        ),
+        cli_example=(
+            "kanban-cli-admin manage_cycles_and_modules "
+            f'--action=list_views --project="{project_ref}"'
+        ),
+    )
 
 
 async def manage_cycles_and_modules(arguments: dict[str, Any]) -> str:  # noqa: C901, PLR0911, PLR0912, PLR0915

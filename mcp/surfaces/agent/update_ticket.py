@@ -207,15 +207,53 @@ async def update_ticket(arguments: dict[str, Any]) -> dict[str, Any]:  # noqa: C
         )
 
     # 3. Fetch existing ticket
-    curr_issue = await ctx.client.request(
-        "GET",
-        f"/api/v1/issues/{identifier}",
-        subject_token=ctx.subject_token,
-        mcp_session_id=ctx.session_id,
-    )
+    safe_identifier = identifier.replace('"', '\\"')
+    try:
+        curr_issue = await ctx.client.request(
+            "GET",
+            f"/api/v1/issues/{identifier}",
+            subject_token=ctx.subject_token,
+            mcp_session_id=ctx.session_id,
+        )
+    except KbMcpError as err:
+        if err.code == McpErrorCode.NOT_FOUND:
+            fix_hint = (
+                err.fix_hint
+                if err.fix_hint
+                and err.fix_hint
+                != "Verify identifier or use search tool to discover valid entities."
+                else (
+                    f"Ticket '{identifier}' was not found or you do not have access. "
+                    "Search accessible tickets first."
+                )
+            )
+            cli_example = (
+                err.cli_example
+                if err.cli_example
+                and err.cli_example != 'kanban-cli-agent search_tickets --query=""'
+                else f'kanban-cli-agent search_tickets --query="{safe_identifier}"'
+            )
+            raise KbMcpError(
+                McpErrorCode.NOT_FOUND,
+                err.message or f"ticket not found: {identifier}",
+                field=err.field or "identifier",
+                fix_hint=fix_hint,
+                cli_example=cli_example,
+                closest_match=err.closest_match,
+            ) from None
+        raise
 
     if not isinstance(curr_issue, dict):
-        raise KbMcpError(McpErrorCode.NOT_FOUND, "ticket not found")
+        raise KbMcpError(
+            McpErrorCode.NOT_FOUND,
+            f"ticket not found: {identifier}",
+            field="identifier",
+            fix_hint=(
+                f"Ticket '{identifier}' was not found or you do not have access. "
+                "Search accessible tickets first."
+            ),
+            cli_example=f'kanban-cli-agent search_tickets --query="{safe_identifier}"',
+        )
 
     issue_key = str(curr_issue.get("key", identifier))
     current_desc = str(curr_issue.get("description_markdown") or "")

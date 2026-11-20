@@ -136,8 +136,15 @@ async def _resolve_parent_ids(
     except KbMcpError:
         pass
 
+    safe_parent = str(parent_ref).replace('"', '\\"')
     msg = f"Parent document or page '{parent_ref}' not found"
-    raise KbMcpError(McpErrorCode.NOT_FOUND, msg)
+    raise KbMcpError(
+        McpErrorCode.NOT_FOUND,
+        msg,
+        field="parent",
+        fix_hint="Verify parent identifier or discover valid parent documents using docs search.",
+        cli_example=f'kanban-cli-docs search --query="{safe_parent}"',
+    )
 
 
 async def _try_get_sticky(
@@ -238,8 +245,15 @@ async def _fetch_current_entity(  # noqa: C901, PLR0912
     except KbMcpError:
         pass
 
+    safe_id = str(clean_id).replace('"', '\\"')
     msg = f"Document or page '{clean_id}' not found"
-    raise KbMcpError(McpErrorCode.NOT_FOUND, msg)
+    raise KbMcpError(
+        McpErrorCode.NOT_FOUND,
+        msg,
+        field="id",
+        fix_hint="Verify document identifier or discover valid documents using docs search.",
+        cli_example=f'kanban-cli-docs search --query="{safe_id}"',
+    )
 
 
 def _find_closest_matches(

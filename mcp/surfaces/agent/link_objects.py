@@ -238,7 +238,13 @@ async def link_objects(arguments: dict[str, Any]) -> dict[str, Any]:  # noqa: C9
 
     if target_link_id is None:
         msg = f"No link of type '{link_type}' found between '{source_key}' and '{target_key}'"
-        raise KbMcpError(McpErrorCode.NOT_FOUND, msg)
+        raise KbMcpError(
+            McpErrorCode.NOT_FOUND,
+            msg,
+            field="link_type",
+            fix_hint=f"Verify existing links on ticket '{source_key}' before unlinking.",
+            cli_example=f'kanban-cli-agent read_ticket --identifier="{source_key}"',
+        )
 
     await ctx.client.request(
         "DELETE",

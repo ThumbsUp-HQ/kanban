@@ -73,7 +73,19 @@ def _map_api_error_to_mcp_error(exc: KbMcpError) -> KbMcpError:
     if code_str in ("VALIDATION_FAILED", "INSUFFICIENT_CAPABILITY", "INVALID_WIP_LIMITS"):
         return KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
     if code_str == "NOT_FOUND":
-        return KbMcpError(McpErrorCode.NOT_FOUND, msg)
+        return KbMcpError(
+            McpErrorCode.NOT_FOUND,
+            msg,
+            field=exc.field or "project",
+            fix_hint=(
+                exc.fix_hint
+                or "Verify project identifier or use admin tools to discover valid projects."
+            ),
+            cli_example=(
+                exc.cli_example
+                or 'kanban-cli-admin architect_project --action=get --project="<project>"'
+            ),
+        )
     return exc
 
 

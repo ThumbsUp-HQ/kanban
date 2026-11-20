@@ -351,10 +351,34 @@ class KanbanApiClient:
                     f"Sticky has already been promoted to Doc '{target_doc}'. Use update instead."
                 )
                 cli_example = cli_example or f'kanban-cli-docs update --id="{target_doc}"'
-        elif (
-            mapped_code in (McpErrorCode.NOT_FOUND, McpErrorCode.SECTION_NOT_FOUND) and not fix_hint
-        ):
-            fix_hint = "Verify identifier or use search tool to discover valid entities."
+        elif mapped_code in (McpErrorCode.NOT_FOUND, McpErrorCode.SECTION_NOT_FOUND):
+            if not fix_hint:
+                fix_hint = (
+                    "Verify identifier or use search tool to discover valid entities."
+                    if mapped_code == McpErrorCode.NOT_FOUND
+                    else "Verify section heading or inspect document structure."
+                )
+            if not cli_example:
+                ident = (
+                    problem.get("identifier")
+                    or problem.get("id")
+                    or problem.get("key")
+                    or problem.get("doc_id")
+                    or problem.get("ticket_id")
+                )
+                safe_ident = str(ident).replace('"', '\\"') if ident else ""
+                if mapped_code == McpErrorCode.SECTION_NOT_FOUND:
+                    cli_example = (
+                        f'kanban-cli-docs read --id="{safe_ident}"'
+                        if safe_ident
+                        else 'kanban-cli-docs search --query=""'
+                    )
+                else:
+                    cli_example = (
+                        f'kanban-cli-agent search_tickets --query="{safe_ident}"'
+                        if safe_ident
+                        else 'kanban-cli-agent search_tickets --query=""'
+                    )
 
         return {
             "field": str(problem["field"]) if "field" in problem else None,

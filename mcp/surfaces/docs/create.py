@@ -303,8 +303,18 @@ async def create_handler(  # noqa: C901, PLR0912, PLR0915
                 if isinstance(proj_resp, dict) and "id" in proj_resp:
                     doc_payload["project_id"] = str(proj_resp["id"])
                 else:
+                    safe_proj = clean_proj.replace('"', '\\"')
                     msg = f"Project '{clean_proj}' not found"
-                    raise KbMcpError(McpErrorCode.NOT_FOUND, msg)
+                    raise KbMcpError(
+                        McpErrorCode.NOT_FOUND,
+                        msg,
+                        field="project",
+                        fix_hint=(
+                            "Verify project identifier or discover valid projects "
+                            "using workspace configuration."
+                        ),
+                        cli_example=f'kanban-cli-docs search --query="{safe_proj}"',
+                    )
 
         create_resp = await active_client.request(
             "POST",

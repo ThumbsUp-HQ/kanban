@@ -147,9 +147,12 @@ async def test_kanban_app_lifespan_and_runtime_bootstrap(tmp_path: Path) -> None
             mock_sf = mock.MagicMock()
             mock_sf_cls.return_value = mock_sf
 
-            with mock.patch(
-                "kanban.app.mint_setup_token_if_uninitialized",
-                new_callable=mock.AsyncMock,
+            with (
+                mock.patch("kanban.app.verify_schema_head", new_callable=mock.AsyncMock),
+                mock.patch(
+                    "kanban.app.mint_setup_token_if_uninitialized",
+                    new_callable=mock.AsyncMock,
+                ),
             ):
                 async with lifespan(app):
                     pass
@@ -192,6 +195,7 @@ async def test_kanban_app_lifespan_defaults_and_exception_branches(tmp_path: Pat
         mf.return_value = mock.AsyncMock()
         with (
             mock.patch("kanban.app.RLSSessionFactory"),
+            mock.patch("kanban.app.verify_schema_head", new_callable=mock.AsyncMock),
             mock.patch(
                 "kanban.app.mint_setup_token_if_uninitialized",
                 side_effect=RuntimeError("setup token check error"),
