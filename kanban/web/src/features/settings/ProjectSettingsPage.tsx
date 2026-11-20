@@ -18,6 +18,8 @@ import { Link, useNavigate, useParams } from 'react-router';
 import { QueryClientContext } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client';
 import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
+import { ColorPresetPicker, ColoredPill } from './ColorPresetPicker';
+import { DeleteAuditModal } from './DeleteAuditModal';
 import './ProjectSettingsPage.css';
 
 export interface ProjectDetail {
@@ -200,6 +202,25 @@ export function ProjectSettingsPage(): JSX.Element {
   const [labelName, setLabelName] = useState<string>('');
   const [labelColor, setLabelColor] = useState<string>('#2563eb');
   const [labelExclusiveGroup, setLabelExclusiveGroup] = useState<string>('');
+
+  // Pre-Delete Reverse Audit Modal State (KB-P3-AUDIT-23)
+  const [auditModalKind, setAuditModalKind] = useState<'state' | 'label' | null>(null);
+  const [auditModalItem, setAuditModalItem] = useState<{ id: string; name: string } | null>(null);
+
+  // Inline Row Edit State (KB-P3-AUDIT-23)
+  const [editingStateId, setEditingStateId] = useState<string | null>(null);
+  const [editStateName, setEditStateName] = useState<string>('');
+  const [editStateGroup, setEditStateGroup] = useState<
+    'backlog' | 'unstarted' | 'started' | 'completed' | 'cancelled'
+  >('started');
+  const [editStateColor, setEditStateColor] = useState<string>('#4f46e5');
+  const [editStateWipSoft, setEditStateWipSoft] = useState<string>('');
+  const [editStateWipHard, setEditStateWipHard] = useState<string>('');
+
+  const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
+  const [editLabelName, setEditLabelName] = useState<string>('');
+  const [editLabelColor, setEditLabelColor] = useState<string>('#2563eb');
+  const [editLabelExclusiveGroup, setEditLabelExclusiveGroup] = useState<string>('');
 
   // Members Tab State (Principal Picker)
   const [newPrincipalId, setNewPrincipalId] = useState<string>('');
@@ -584,23 +605,65 @@ export function ProjectSettingsPage(): JSX.Element {
   };
 
   const handleDeleteState = (stateId: string) => {
+    const st = states.find((s) => s.id === stateId);
+    if (st) {
+      setAuditModalKind('state');
+      setAuditModalItem({ id: st.id, name: st.name });
+    }
+  };
+
+  const handleStartEditState = (st: WorkflowStateItem) => {
+    setEditingStateId(st.id);
+    setEditStateName(st.name);
+    setEditStateGroup(st.group);
+    setEditStateColor(st.color_hex || '#4f46e5');
+    setEditStateWipSoft(st.wip_soft_limit != null ? String(st.wip_soft_limit) : '');
+    setEditStateWipHard(st.wip_hard_limit != null ? String(st.wip_hard_limit) : '');
+  };
+
+  const handleSaveStateEdit = (stateId: string) => {
+    if (!editStateName.trim()) return;
+
+    if (editStateWipSoft !== '' && editStateWipHard !== '') {
+      const s = parseInt(editStateWipSoft, 10);
+      const h = parseInt(editStateWipHard, 10);
+      if (!isNaN(s) && !isNaN(h) && s > h) {
+        setErrorMessage('Soft WIP limit cannot exceed Hard WIP limit');
+        return;
+      }
+    }
+
     void (async () => {
       setErrorMessage(null);
+      setSuccessMessage(null);
       try {
         const csrf = await ensureSessionCsrfToken();
-        const headers: Record<string, string> = {};
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (csrf) headers['X-CSRF-Token'] = csrf;
 
-        await apiFetch(
-          'DELETE',
+        const payload = {
+          name: editStateName.trim(),
+          group: editStateGroup,
+          color_hex: editStateColor.trim(),
+          wip_soft_limit: editStateWipSoft !== '' ? parseInt(editStateWipSoft, 10) : null,
+          wip_hard_limit: editStateWipHard !== '' ? parseInt(editStateWipHard, 10) : null,
+        };
+
+        const updated = (await apiFetch(
+          'PATCH',
           `/api/v1/projects/${encodeURIComponent(projectKey)}/states/${encodeURIComponent(stateId)}` as never,
-          { headers },
-        );
-        setStates((prev) => prev.filter((s) => s.id !== stateId));
-        setSuccessMessage('Workflow state deleted.');
+          {
+            headers,
+            body: JSON.stringify(payload),
+          },
+        )) as WorkflowStateItem;
+
+        setStates((prev) => prev.map((s) => (s.id === stateId ? { ...s, ...updated } : s)));
+        setEditingStateId(null);
+        setSuccessMessage(`Workflow state "${updated.name}" updated.`);
       } catch (err: unknown) {
         const errObj = err as { message?: string };
-        setErrorMessage(errObj.message ?? 'Failed to delete workflow state.');
+        setErrorMessage(errObj.message ?? 'Failed to update workflow state.');
       }
     })();
   };
@@ -709,25 +772,103 @@ export function ProjectSettingsPage(): JSX.Element {
   };
 
   const handleDeleteLabel = (labelId: string) => {
+    const lbl = labels.find((l) => l.id === labelId);
+    if (lbl) {
+      setAuditModalKind('label');
+      setAuditModalItem({ id: lbl.id, name: lbl.name });
+    }
+  };
+
+  const handleStartEditLabel = (lbl: ProjectLabelItem) => {
+    setEditingLabelId(lbl.id);
+    setEditLabelName(lbl.name);
+    setEditLabelColor(lbl.color_hex || '#2563eb');
+    setEditLabelExclusiveGroup(lbl.exclusive_group ?? '');
+  };
+
+  const handleSaveLabelEdit = (labelId: string) => {
+    if (!editLabelName.trim()) return;
+
     void (async () => {
       setErrorMessage(null);
+      setSuccessMessage(null);
       try {
         const csrf = await ensureSessionCsrfToken();
-        const headers: Record<string, string> = {};
+        const headers: Record<string, string> = { 'Content-Type': 'application/json' };
         if (csrf) headers['X-CSRF-Token'] = csrf;
 
-        await apiFetch(
-          'DELETE',
+        const payload = {
+          name: editLabelName.trim(),
+          color_hex: editLabelColor.trim(),
+          exclusive_group: editLabelExclusiveGroup.trim() || null,
+        };
+
+        const updated = (await apiFetch(
+          'PATCH',
           `/api/v1/projects/${encodeURIComponent(projectKey)}/labels/${encodeURIComponent(labelId)}` as never,
-          { headers },
-        );
-        setLabels((prev) => prev.filter((l) => l.id !== labelId));
-        setSuccessMessage('Label deleted.');
+          {
+            headers,
+            body: JSON.stringify(payload),
+          },
+        )) as ProjectLabelItem;
+
+        setLabels((prev) => prev.map((l) => (l.id === labelId ? { ...l, ...updated } : l)));
+        setEditingLabelId(null);
+        setSuccessMessage(`Label "${updated.name}" updated.`);
       } catch (err: unknown) {
         const errObj = err as { message?: string };
-        setErrorMessage(errObj.message ?? 'Failed to delete label.');
+        setErrorMessage(errObj.message ?? 'Failed to update label.');
       }
     })();
+  };
+
+  const handleConfirmedDelete = async (replacementId?: string, migrateHooks?: boolean) => {
+    if (!auditModalItem || !auditModalKind) return;
+    setErrorMessage(null);
+    try {
+      const csrf = await ensureSessionCsrfToken();
+      const headers: Record<string, string> = {};
+      if (csrf) headers['X-CSRF-Token'] = csrf;
+
+      if (auditModalKind === 'state') {
+        const params = new URLSearchParams();
+        if (replacementId) {
+          params.set('replacement_state_id', replacementId);
+        }
+        if (migrateHooks !== undefined) {
+          params.set('migrate_hooks', String(migrateHooks));
+        }
+        const qs = params.toString() ? `?${params.toString()}` : '';
+        await apiFetch(
+          'DELETE',
+          `/api/v1/projects/${encodeURIComponent(projectKey)}/states/${encodeURIComponent(auditModalItem.id)}${qs}` as never,
+          { headers },
+        );
+        setStates((prev) => prev.filter((s) => s.id !== auditModalItem.id));
+        setSuccessMessage('Workflow state deleted.');
+      } else {
+        const params = new URLSearchParams();
+        if (replacementId) {
+          params.set('replacement_label_id', replacementId);
+        }
+        const qs = params.toString() ? `?${params.toString()}` : '';
+        await apiFetch(
+          'DELETE',
+          `/api/v1/projects/${encodeURIComponent(projectKey)}/labels/${encodeURIComponent(auditModalItem.id)}${qs}` as never,
+          { headers },
+        );
+        setLabels((prev) => prev.filter((l) => l.id !== auditModalItem.id));
+        setSuccessMessage('Label deleted.');
+      }
+    } catch (err: unknown) {
+      const errObj = err as { message?: string };
+      const fallbackMsg =
+        auditModalKind === 'state'
+          ? 'Failed to delete workflow state.'
+          : 'Failed to delete label.';
+      const msg = errObj.message ?? fallbackMsg;
+      throw new Error(msg);
+    }
   };
 
   // Members Handlers (Principal Picker)
@@ -1204,13 +1345,10 @@ export function ProjectSettingsPage(): JSX.Element {
                   <option value="completed">Completed</option>
                   <option value="cancelled">Cancelled</option>
                 </select>
-                <input
-                  type="text"
-                  data-testid="state-color-input"
-                  className="kb-input"
-                  placeholder="Color Hex (#4f46e5)"
+                <ColorPresetPicker
+                  testId="state-color-input"
                   value={stateColor}
-                  onChange={(e) => { setStateColor(e.target.value); }}
+                  onChange={setStateColor}
                 />
                 <input
                   type="number"
@@ -1276,66 +1414,161 @@ export function ProjectSettingsPage(): JSX.Element {
                 </tr>
               </thead>
               <tbody>
-                {states.map((st) => (
-                  <tr key={st.id} data-testid={`state-row-${st.id}`}>
-                    <td>
-                      <button
-                        type="button"
-                        data-testid={`state-up-${st.id}`}
-                        className="kb-btn kb-btn-secondary"
-                        onClick={() => { handleReorderState(st.id, 'up'); }}
-                        title="Move Up"
-                      >
-                        ▲
-                      </button>{' '}
-                      <button
-                        type="button"
-                        data-testid={`state-down-${st.id}`}
-                        className="kb-btn kb-btn-secondary"
-                        onClick={() => { handleReorderState(st.id, 'down'); }}
-                        title="Move Down"
-                      >
-                        ▼
-                      </button>{' '}
-                      {st.sort_order}
-                    </td>
-                    <td>
-                      <span
-                        className="kb-color-swatch"
-                        style={{ backgroundColor: st.color_hex || '#4f46e5' }}
-                      />
-                      <strong>{st.name}</strong>
-                    </td>
-                    <td>
-                      <span className="kb-role-badge kb-role-member">{st.group}</span>
-                    </td>
-                    <td>
-                      {st.wip_soft_limit != null ? (
-                        <span className="kb-wip-pill">Soft: {st.wip_soft_limit}</span>
-                      ) : (
-                        '-'
-                      )}
-                    </td>
-                    <td>
-                      {st.wip_hard_limit != null ? (
-                        <span className="kb-wip-pill">Hard: {st.wip_hard_limit}</span>
-                      ) : (
-                        '-'
-                      )}
-                    </td>
-                    <td>{st.is_default ? '⭐ Default' : '-'}</td>
-                    <td>
-                      <button
-                        type="button"
-                        data-testid={`delete-state-btn-${st.id}`}
-                        className="kb-btn-danger-sm"
-                        onClick={() => { handleDeleteState(st.id); }}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {states.map((st) => {
+                  const isEditing = editingStateId === st.id;
+                  if (isEditing) {
+                    return (
+                      <tr key={st.id} data-testid={`state-row-${st.id}`}>
+                        <td>{st.sort_order}</td>
+                        <td>
+                          <div className="kb-edit-cell-row">
+                            <input
+                              type="text"
+                              data-testid={`state-edit-name-${st.id}`}
+                              className="kb-input"
+                              value={editStateName}
+                              onChange={(e) => { setEditStateName(e.target.value); }}
+                            />
+                            <ColorPresetPicker
+                              testId={`state-edit-color-${st.id}-input`}
+                              value={editStateColor}
+                              onChange={setEditStateColor}
+                            />
+                          </div>
+                        </td>
+                        <td>
+                          <select
+                            data-testid={`state-edit-group-${st.id}`}
+                            className="kb-select"
+                            value={editStateGroup}
+                            onChange={(e) => {
+                              setEditStateGroup(
+                                e.target.value as
+                                  | 'backlog'
+                                  | 'unstarted'
+                                  | 'started'
+                                  | 'completed'
+                                  | 'cancelled',
+                              );
+                            }}
+                          >
+                            <option value="backlog">Backlog</option>
+                            <option value="unstarted">Unstarted</option>
+                            <option value="started">Started</option>
+                            <option value="completed">Completed</option>
+                            <option value="cancelled">Cancelled</option>
+                          </select>
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            data-testid={`state-edit-wip-soft-${st.id}`}
+                            className="kb-input"
+                            value={editStateWipSoft}
+                            onChange={(e) => { setEditStateWipSoft(e.target.value); }}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="number"
+                            data-testid={`state-edit-wip-hard-${st.id}`}
+                            className="kb-input"
+                            value={editStateWipHard}
+                            onChange={(e) => { setEditStateWipHard(e.target.value); }}
+                          />
+                        </td>
+                        <td>{st.is_default ? '⭐ Default' : '-'}</td>
+                        <td>
+                          <button
+                            type="button"
+                            data-testid={`save-state-btn-${st.id}`}
+                            className="kb-btn kb-btn-primary"
+                            onClick={() => { handleSaveStateEdit(st.id); }}
+                          >
+                            Save
+                          </button>{' '}
+                          <button
+                            type="button"
+                            data-testid={`cancel-state-btn-${st.id}`}
+                            className="kb-btn kb-btn-secondary"
+                            onClick={() => { setEditingStateId(null); }}
+                          >
+                            Cancel
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return (
+                    <tr key={st.id} data-testid={`state-row-${st.id}`}>
+                      <td>
+                        <button
+                          type="button"
+                          data-testid={`state-up-${st.id}`}
+                          className="kb-btn kb-btn-secondary"
+                          onClick={() => { handleReorderState(st.id, 'up'); }}
+                          title="Move Up"
+                        >
+                          ▲
+                        </button>{' '}
+                        <button
+                          type="button"
+                          data-testid={`state-down-${st.id}`}
+                          className="kb-btn kb-btn-secondary"
+                          onClick={() => { handleReorderState(st.id, 'down'); }}
+                          title="Move Down"
+                        >
+                          ▼
+                        </button>{' '}
+                        {st.sort_order}
+                      </td>
+                      <td>
+                        <ColoredPill
+                          colorHex={st.color_hex}
+                          text={st.name}
+                          testId={`state-pill-${st.id}`}
+                        />
+                      </td>
+                      <td>
+                        <span className="kb-role-badge kb-role-member">{st.group}</span>
+                      </td>
+                      <td>
+                        {st.wip_soft_limit != null ? (
+                          <span className="kb-wip-pill">Soft: {st.wip_soft_limit}</span>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
+                      <td>
+                        {st.wip_hard_limit != null ? (
+                          <span className="kb-wip-pill">Hard: {st.wip_hard_limit}</span>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
+                      <td>{st.is_default ? '⭐ Default' : '-'}</td>
+                      <td>
+                        <button
+                          type="button"
+                          data-testid={`edit-state-btn-${st.id}`}
+                          className="kb-btn kb-btn-secondary"
+                          onClick={() => { handleStartEditState(st); }}
+                        >
+                          Edit
+                        </button>{' '}
+                        <button
+                          type="button"
+                          data-testid={`delete-state-btn-${st.id}`}
+                          className="kb-btn-danger-sm"
+                          onClick={() => { handleDeleteState(st.id); }}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1381,13 +1614,10 @@ export function ProjectSettingsPage(): JSX.Element {
                   value={priorityEmoji}
                   onChange={(e) => { setPriorityEmoji(e.target.value); }}
                 />
-                <input
-                  type="text"
-                  data-testid="priority-color-input"
-                  className="kb-input"
-                  placeholder="Color (#dc2626)"
+                <ColorPresetPicker
+                  testId="priority-color-input"
                   value={priorityColor}
-                  onChange={(e) => { setPriorityColor(e.target.value); }}
+                  onChange={setPriorityColor}
                 />
                 <input
                   type="number"
@@ -1441,11 +1671,10 @@ export function ProjectSettingsPage(): JSX.Element {
                       <code>{p.slug}</code>
                     </td>
                     <td>
-                      <span
-                        className="kb-color-swatch"
-                        style={{ backgroundColor: p.color_hex || '#dc2626' }}
+                      <ColoredPill
+                        colorHex={p.color_hex}
+                        testId={`priority-pill-${p.id}`}
                       />
-                      {p.color_hex}
                     </td>
                     <td>{p.is_default ? '⭐ Default' : '-'}</td>
                     <td>
@@ -1488,13 +1717,10 @@ export function ProjectSettingsPage(): JSX.Element {
                   onChange={(e) => { setLabelName(e.target.value); }}
                   required
                 />
-                <input
-                  type="text"
-                  data-testid="label-color-input"
-                  className="kb-input"
-                  placeholder="Color Hex (#2563eb)"
+                <ColorPresetPicker
+                  testId="label-color-input"
                   value={labelColor}
-                  onChange={(e) => { setLabelColor(e.target.value); }}
+                  onChange={setLabelColor}
                 />
                 <input
                   type="text"
@@ -1521,35 +1747,102 @@ export function ProjectSettingsPage(): JSX.Element {
                 </tr>
               </thead>
               <tbody>
-                {labels.map((lbl) => (
-                  <tr key={lbl.id} data-testid={`label-row-${lbl.id}`}>
-                    <td>
-                      <span
-                        className="kb-color-swatch"
-                        style={{ backgroundColor: lbl.color_hex || '#2563eb' }}
-                      />
-                      <strong>{lbl.name}</strong>
-                    </td>
-                    <td>{lbl.color_hex}</td>
-                    <td>
-                      {lbl.exclusive_group ? (
-                        <span className="kb-exclusive-pill">{lbl.exclusive_group}</span>
-                      ) : (
-                        '-'
-                      )}
-                    </td>
-                    <td>
-                      <button
-                        type="button"
-                        data-testid={`delete-label-btn-${lbl.id}`}
-                        className="kb-btn-danger-sm"
-                        onClick={() => { handleDeleteLabel(lbl.id); }}
-                      >
-                        Delete
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {labels.map((lbl) => {
+                  const isEditing = editingLabelId === lbl.id;
+                  if (isEditing) {
+                    return (
+                      <tr key={lbl.id} data-testid={`label-row-${lbl.id}`}>
+                        <td>
+                          <input
+                            type="text"
+                            data-testid={`label-edit-name-${lbl.id}`}
+                            className="kb-input"
+                            value={editLabelName}
+                            onChange={(e) => { setEditLabelName(e.target.value); }}
+                          />
+                        </td>
+                        <td>
+                          <ColorPresetPicker
+                            testId={`label-edit-color-${lbl.id}-input`}
+                            value={editLabelColor}
+                            onChange={setEditLabelColor}
+                          />
+                        </td>
+                        <td>
+                          <input
+                            type="text"
+                            data-testid={`label-edit-group-${lbl.id}`}
+                            className="kb-input"
+                            placeholder="Exclusive Group (optional)"
+                            value={editLabelExclusiveGroup}
+                            onChange={(e) => { setEditLabelExclusiveGroup(e.target.value); }}
+                          />
+                        </td>
+                        <td>
+                          <button
+                            type="button"
+                            data-testid={`save-label-btn-${lbl.id}`}
+                            className="kb-btn kb-btn-primary"
+                            onClick={() => { handleSaveLabelEdit(lbl.id); }}
+                          >
+                            Save
+                          </button>{' '}
+                          <button
+                            type="button"
+                            data-testid={`cancel-label-btn-${lbl.id}`}
+                            className="kb-btn kb-btn-secondary"
+                            onClick={() => { setEditingLabelId(null); }}
+                          >
+                            Cancel
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  }
+
+                  return (
+                    <tr key={lbl.id} data-testid={`label-row-${lbl.id}`}>
+                      <td>
+                        <ColoredPill
+                          colorHex={lbl.color_hex}
+                          text={lbl.name}
+                          testId={`label-pill-${lbl.id}`}
+                        />
+                      </td>
+                      <td>
+                        <ColoredPill
+                          colorHex={lbl.color_hex}
+                          testId={`label-color-pill-${lbl.id}`}
+                        />
+                      </td>
+                      <td>
+                        {lbl.exclusive_group ? (
+                          <span className="kb-exclusive-pill">{lbl.exclusive_group}</span>
+                        ) : (
+                          '-'
+                        )}
+                      </td>
+                      <td>
+                        <button
+                          type="button"
+                          data-testid={`edit-label-btn-${lbl.id}`}
+                          className="kb-btn kb-btn-secondary"
+                          onClick={() => { handleStartEditLabel(lbl); }}
+                        >
+                          Edit
+                        </button>{' '}
+                        <button
+                          type="button"
+                          data-testid={`delete-label-btn-${lbl.id}`}
+                          className="kb-btn-danger-sm"
+                          onClick={() => { handleDeleteLabel(lbl.id); }}
+                        >
+                          Delete
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
@@ -1957,6 +2250,18 @@ export function ProjectSettingsPage(): JSX.Element {
           </div>
         )}
       </div>
+
+      <DeleteAuditModal
+        isOpen={Boolean(auditModalKind && auditModalItem)}
+        onClose={() => {
+          setAuditModalKind(null);
+          setAuditModalItem(null);
+        }}
+        onConfirmedDelete={handleConfirmedDelete}
+        kind={auditModalKind ?? 'state'}
+        item={auditModalItem}
+        projectKey={projectKey}
+      />
     </div>
   );
 }

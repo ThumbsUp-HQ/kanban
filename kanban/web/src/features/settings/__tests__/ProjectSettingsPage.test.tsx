@@ -905,6 +905,17 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       const url: string = path;
       const m = method.toUpperCase();
 
+      if (
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
+        m === 'GET'
+      ) {
+        return {
+          id: 'p-1',
+          identifier: 'KAN',
+          name: 'Kanban Platform',
+          is_project_admin: true,
+        };
+      }
       if (url.includes('/api/v1/projects/KAN/states') && m === 'GET') {
         return stateList;
       }
@@ -1004,6 +1015,8 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     // Test delete state
     const deleteBtn = screen.getByTestId('delete-state-btn-st-3');
     fireEvent.click(deleteBtn);
+    const confirmDeleteBtn = await screen.findByTestId('audit-confirm-delete-btn');
+    fireEvent.click(confirmDeleteBtn);
 
     await waitFor(() => {
       expect(screen.queryByText('Review')).toBeNull();
@@ -1175,6 +1188,8 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     // Delete label
     const deleteBtn = screen.getByTestId('delete-label-btn-lbl-1');
     fireEvent.click(deleteBtn);
+    const confirmDeleteBtn = await screen.findByTestId('audit-confirm-delete-btn');
+    fireEvent.click(confirmDeleteBtn);
 
     await waitFor(() => {
       expect(screen.queryByText('frontend')).toBeNull();
@@ -1572,6 +1587,8 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     });
 
     fireEvent.click(screen.getByTestId('delete-state-btn-st-fail'));
+    const confirmStateDeleteBtn = await screen.findByTestId('audit-confirm-delete-btn');
+    fireEvent.click(confirmStateDeleteBtn);
     await waitFor(() => {
       expect(screen.getByText('Cannot delete active state')).toBeDefined();
     });
@@ -1603,6 +1620,8 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     });
 
     fireEvent.click(screen.getByTestId('delete-label-btn-lbl-fail'));
+    const confirmLabelDeleteBtn = await screen.findByTestId('audit-confirm-delete-btn');
+    fireEvent.click(confirmLabelDeleteBtn);
     await waitFor(() => {
       expect(screen.getByText('Cannot delete label')).toBeDefined();
     });
@@ -1948,6 +1967,8 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     });
 
     fireEvent.click(screen.getByTestId('delete-state-btn-st-e1'));
+    const confirmStateE1Btn = await screen.findByTestId('audit-confirm-delete-btn');
+    fireEvent.click(confirmStateE1Btn);
     await waitFor(() => {
       expect(screen.getByText('Failed to delete workflow state.')).toBeDefined();
     });
@@ -1979,6 +2000,8 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     });
 
     fireEvent.click(screen.getByTestId('delete-label-btn-lbl-e1'));
+    const confirmLabelE1Btn = await screen.findByTestId('audit-confirm-delete-btn');
+    fireEvent.click(confirmLabelE1Btn);
     await waitFor(() => {
       expect(screen.getByText('Failed to delete label.')).toBeDefined();
     });
@@ -2377,5 +2400,598 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
     await waitFor(() => {
       expect(screen.getByText('Failed to update project settings.')).toBeDefined();
     });
+  });
+
+  it('supports inline row edit for workflow states and labels (KAN-29 Problem 1)', async () => {
+    const stateList: Record<string, unknown>[] = [
+      {
+        id: 'st-edit-1',
+        name: 'Initial State',
+        group: 'unstarted',
+        sort_order: 1,
+        color_hex: '#64748b',
+        is_default: false,
+        wip_soft_limit: 2,
+        wip_hard_limit: 5,
+      },
+    ];
+
+    const labelList: Record<string, unknown>[] = [
+      {
+        id: 'lbl-edit-1',
+        name: 'initial-label',
+        color_hex: '#2563eb',
+        exclusive_group: null,
+      },
+    ];
+
+    interface PatchedState {
+      name?: string;
+      group?: string;
+      wip_soft_limit?: number | null;
+      wip_hard_limit?: number | null;
+    }
+    interface PatchedLabel {
+      name?: string;
+      color_hex?: string;
+      exclusive_group?: string | null;
+    }
+    let patchedStateBody: PatchedState | null = null;
+    let patchedLabelBody: PatchedLabel | null = null;
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
+      await Promise.resolve();
+      const url: string = path;
+      const m = method.toUpperCase();
+
+      if (
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
+        m === 'GET'
+      ) {
+        return {
+          id: 'p-1',
+          identifier: 'KAN',
+          name: 'Kanban Platform',
+          is_project_admin: true,
+        };
+      }
+      if (url.includes('/api/v1/projects/KAN/states') && m === 'GET') {
+        return stateList;
+      }
+      if (url.includes('/api/v1/projects/KAN/labels') && m === 'GET') {
+        return labelList;
+      }
+      if (url.includes('/api/v1/projects/KAN/states/st-edit-1') && m === 'PATCH') {
+        patchedStateBody = JSON.parse(String((options as { body?: string }).body)) as Record<string, unknown>;
+        return {
+          ...stateList[0],
+          ...patchedStateBody,
+        };
+      }
+      if (url.includes('/api/v1/projects/KAN/labels/lbl-edit-1') && m === 'PATCH') {
+        patchedLabelBody = JSON.parse(String((options as { body?: string }).body)) as Record<string, unknown>;
+        return {
+          ...labelList[0],
+          ...patchedLabelBody,
+        };
+      }
+      return {};
+    });
+
+    renderComponent('KAN');
+
+    // 1. Test Workflow State Inline Edit
+    const statesTab = await screen.findByTestId('tab-states');
+    fireEvent.click(statesTab);
+
+    expect(await screen.findByTestId('state-pill-st-edit-1')).toBeDefined();
+    const editStateBtn = screen.getByTestId('edit-state-btn-st-edit-1');
+    fireEvent.click(editStateBtn);
+
+    // Editing inputs appear
+    const nameInput = screen.getByTestId('state-edit-name-st-edit-1');
+    fireEvent.change(nameInput, { target: { value: 'Updated State' } });
+
+    // Change group select
+    const groupSelect = screen.getByTestId('state-edit-group-st-edit-1');
+    fireEvent.change(groupSelect, { target: { value: 'completed' } });
+
+    // Test soft > hard validation
+    const softInput = screen.getByTestId('state-edit-wip-soft-st-edit-1');
+    const hardInput = screen.getByTestId('state-edit-wip-hard-st-edit-1');
+    fireEvent.change(softInput, { target: { value: '10' } });
+    fireEvent.change(hardInput, { target: { value: '5' } });
+    fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
+
+    expect(await screen.findByText('Soft WIP limit cannot exceed Hard WIP limit')).toBeDefined();
+
+    // Test empty name guard (does not save)
+    fireEvent.change(nameInput, { target: { value: '   ' } });
+    fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
+
+    // Fix name and soft limit and save
+    fireEvent.change(nameInput, { target: { value: 'Updated State' } });
+    fireEvent.change(softInput, { target: { value: '4' } });
+    fireEvent.change(hardInput, { target: { value: '8' } });
+    fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Workflow state "Updated State" updated.')).toBeDefined();
+    });
+    expect(patchedStateBody).toBeDefined();
+    const statePayload = patchedStateBody as unknown as PatchedState;
+    expect(statePayload.name).toBe('Updated State');
+    expect(statePayload.group).toBe('completed');
+    expect(statePayload.wip_soft_limit).toBe(4);
+    expect(statePayload.wip_hard_limit).toBe(8);
+
+    // Test Cancel on state edit
+    fireEvent.click(screen.getByTestId('edit-state-btn-st-edit-1'));
+    expect(screen.getByTestId('cancel-state-btn-st-edit-1')).toBeDefined();
+    fireEvent.click(screen.getByTestId('cancel-state-btn-st-edit-1'));
+    expect(screen.queryByTestId('cancel-state-btn-st-edit-1')).toBeNull();
+
+    // 2. Test Label Inline Edit
+    const labelsTab = screen.getByTestId('tab-labels');
+    fireEvent.click(labelsTab);
+
+    expect(await screen.findByTestId('label-pill-lbl-edit-1')).toBeDefined();
+    const editLabelBtn = screen.getByTestId('edit-label-btn-lbl-edit-1');
+    fireEvent.click(editLabelBtn);
+
+    const labelNameInput = screen.getByTestId('label-edit-name-lbl-edit-1');
+    fireEvent.change(labelNameInput, { target: { value: 'updated-label' } });
+    const labelGroupInput = screen.getByTestId('label-edit-group-lbl-edit-1');
+    fireEvent.change(labelGroupInput, { target: { value: 'prio' } });
+    const labelColorInput = screen.getByTestId('label-edit-color-lbl-edit-1-input');
+    fireEvent.change(labelColorInput, { target: { value: '#dc2626' } });
+
+    // Test empty name guard on label
+    fireEvent.change(labelNameInput, { target: { value: '   ' } });
+    fireEvent.click(screen.getByTestId('save-label-btn-lbl-edit-1'));
+
+    // Fix name and save
+    fireEvent.change(labelNameInput, { target: { value: 'updated-label' } });
+    fireEvent.click(screen.getByTestId('save-label-btn-lbl-edit-1'));
+
+    await waitFor(() => {
+      expect(screen.getByText('Label "updated-label" updated.')).toBeDefined();
+    });
+    expect(patchedLabelBody).toBeDefined();
+    const labelPayload = patchedLabelBody as unknown as PatchedLabel;
+    expect(labelPayload.name).toBe('updated-label');
+    expect(labelPayload.color_hex).toBe('#dc2626');
+    expect(labelPayload.exclusive_group).toBe('prio');
+
+    // Test Cancel on label edit
+    fireEvent.click(screen.getByTestId('edit-label-btn-lbl-edit-1'));
+    expect(screen.getByTestId('cancel-label-btn-lbl-edit-1')).toBeDefined();
+    fireEvent.click(screen.getByTestId('cancel-label-btn-lbl-edit-1'));
+    expect(screen.queryByTestId('cancel-label-btn-lbl-edit-1')).toBeNull();
+  });
+
+  it('performs pre-delete reverse audit and passes migration options (KAN-29 Problems 2, 3, 4)', async () => {
+    let capturedDeleteUrl = '';
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      const url: string = path;
+      const m = method.toUpperCase();
+
+      if (
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
+        m === 'GET'
+      ) {
+        return {
+          id: 'p-1',
+          identifier: 'KAN',
+          name: 'Kanban Platform',
+          is_project_admin: true,
+        };
+      }
+      if (url.includes('/api/v1/projects/KAN/states') && m === 'GET' && !url.includes('audit-impact')) {
+        return [
+          {
+            id: 'st-audit-1',
+            name: 'State To Delete',
+            group: 'started',
+            sort_order: 1,
+            color_hex: '#ea580c',
+            is_default: false,
+          },
+        ];
+      }
+      if (url.includes('/api/v1/projects/KAN/states/st-audit-1/audit-impact') && m === 'GET') {
+        return {
+          state_id: 'st-audit-1',
+          state_name: 'State To Delete',
+          issues_count: 3,
+          sample_issue_keys: ['KAN-10', 'KAN-11'],
+          workflow_hooks: [
+            {
+              id: 'hook-100',
+              name: 'Deploy Hook',
+              from_state_id: 'st-audit-1',
+              to_state_id: 'st-audit-2',
+              enabled: true,
+            },
+          ],
+          pending_executions_count: 0,
+          historical_executions_count: 4,
+          saved_views: [{ id: 'v-10', name: 'Roadmap View' }],
+          is_default: false,
+          blocking_reasons: [],
+          valid_replacement_states: [
+            { id: 'st-audit-2', name: 'Fallback State', group: 'started', color_hex: '#2563eb' },
+          ],
+        };
+      }
+      if (url.includes('/api/v1/projects/KAN/states/st-audit-1') && m === 'DELETE') {
+        capturedDeleteUrl = url;
+        return { status: 'deleted' };
+      }
+      if (url.includes('/api/v1/projects/KAN/labels') && m === 'GET' && !url.includes('audit-impact')) {
+        return [
+          {
+            id: 'lbl-audit-1',
+            name: 'label-to-delete',
+            color_hex: '#10b981',
+            exclusive_group: null,
+          },
+        ];
+      }
+      if (url.includes('/api/v1/projects/KAN/labels/lbl-audit-1/audit-impact') && m === 'GET') {
+        return {
+          label_id: 'lbl-audit-1',
+          label_name: 'label-to-delete',
+          issues_count: 2,
+          sample_issue_keys: ['KAN-20'],
+          saved_views: [],
+          blocking_reasons: [],
+          valid_replacement_labels: [
+            { id: 'lbl-audit-2', name: 'fallback-label', color_hex: '#64748b' },
+          ],
+        };
+      }
+      if (url.includes('/api/v1/projects/KAN/labels/lbl-audit-1') && m === 'DELETE') {
+        capturedDeleteUrl = url;
+        return { status: 'deleted' };
+      }
+      return {};
+    });
+
+    renderComponent('KAN');
+
+    const statesTab = await screen.findByTestId('tab-states');
+    fireEvent.click(statesTab);
+
+    const deleteBtn = await screen.findByTestId('delete-state-btn-st-audit-1');
+    fireEvent.click(deleteBtn);
+
+    // Verify modal opens with blast radius and controls
+    expect(await screen.findByTestId('delete-audit-modal')).toBeDefined();
+    await waitFor(() => {
+      expect(screen.getByTestId('audit-issues-count').textContent).toBe('3');
+    });
+
+    expect(screen.getByTestId('audit-sample-keys').textContent).toContain('KAN-10');
+    expect(screen.getByTestId('audit-hooks-count').textContent).toBe('1');
+    expect(screen.getByTestId('audit-historical-count').textContent).toBe('4');
+
+    // Confirm deletion
+    const confirmBtn = screen.getByTestId('audit-confirm-delete-btn');
+    fireEvent.click(confirmBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Workflow state deleted.')).toBeDefined();
+    });
+
+    expect(capturedDeleteUrl).toContain('replacement_state_id=st-audit-2');
+    expect(capturedDeleteUrl).toContain('migrate_hooks=true');
+
+    // Now test Label deletion with audit modal
+    const labelsTab = screen.getByTestId('tab-labels');
+    fireEvent.click(labelsTab);
+
+    const deleteLabelBtn = await screen.findByTestId('delete-label-btn-lbl-audit-1');
+    fireEvent.click(deleteLabelBtn);
+
+    expect(await screen.findByTestId('delete-audit-modal')).toBeDefined();
+    await waitFor(() => {
+      expect(screen.getByTestId('audit-issues-count').textContent).toBe('2');
+    });
+
+    const confirmLabelBtn = screen.getByTestId('audit-confirm-delete-btn');
+    fireEvent.click(confirmLabelBtn);
+
+    await waitFor(() => {
+      expect(screen.getByText('Label deleted.')).toBeDefined();
+    });
+
+    expect(capturedDeleteUrl).toContain('replacement_label_id=lbl-audit-2');
+  });
+
+  it('supports inline row editing of workflow states: start, edit fields, cancel, save, error, soft>hard validation', async () => {
+    let stateList: Record<string, unknown>[] = [
+      {
+        id: 'st-edit-1',
+        name: 'Backlog Item',
+        group: 'backlog',
+        sort_order: 1,
+        color_hex: '',
+        is_default: true,
+        wip_soft_limit: null,
+        wip_hard_limit: null,
+      },
+      {
+        id: 'st-edit-2',
+        name: 'Second Item',
+        group: 'started',
+        sort_order: 2,
+        color_hex: '#2563eb',
+        is_default: false,
+        wip_soft_limit: 5,
+        wip_hard_limit: 10,
+      },
+    ];
+
+    let failPatch = false;
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
+      await Promise.resolve();
+      const url: string = path;
+      const m = method.toUpperCase();
+
+      if (
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
+        m === 'GET'
+      ) {
+        return {
+          id: 'p-1',
+          identifier: 'KAN',
+          name: 'Kanban Platform',
+          is_project_admin: true,
+        };
+      }
+      if (url.includes('/api/v1/projects/KAN/states') && m === 'GET') {
+        return stateList;
+      }
+      if (url.includes('/api/v1/projects/KAN/states/') && m === 'PATCH') {
+        if (failPatch) {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error
+          throw {};
+        }
+        const body = JSON.parse(String((options as { body?: string }).body)) as Record<string, unknown>;
+        stateList = stateList.map((s) => (s.id === 'st-edit-1' ? { ...s, ...body } : s));
+        return { ...stateList[0], ...body };
+      }
+      return {};
+    });
+
+    renderComponent('KAN');
+
+    const statesTab = await screen.findByTestId('tab-states');
+    fireEvent.click(statesTab);
+
+    expect(await screen.findByText('Backlog Item')).toBeDefined();
+
+    // Start inline edit
+    const editBtn = screen.getByTestId('edit-state-btn-st-edit-1');
+    fireEvent.click(editBtn);
+
+    const softInput = screen.getByTestId('state-edit-wip-soft-st-edit-1');
+    const hardInput = screen.getByTestId('state-edit-wip-hard-st-edit-1');
+    const saveBtn = screen.getByTestId('save-state-btn-st-edit-1');
+    const cancelBtn = screen.getByTestId('cancel-state-btn-st-edit-1');
+
+    // Soft > Hard validation
+    fireEvent.change(softInput, { target: { value: '25' } });
+    fireEvent.change(hardInput, { target: { value: '10' } });
+    fireEvent.click(saveBtn);
+    expect(await screen.findByText('Soft WIP limit cannot exceed Hard WIP limit')).toBeDefined();
+
+    // Cancel edit
+    fireEvent.click(cancelBtn);
+    expect(screen.queryByTestId('state-edit-name-st-edit-1')).toBeNull();
+
+    // Re-enter edit, test empty name guard
+    fireEvent.click(screen.getByTestId('edit-state-btn-st-edit-1'));
+    const nameInput2 = screen.getByTestId('state-edit-name-st-edit-1');
+    fireEvent.change(nameInput2, { target: { value: '   ' } });
+    fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
+    // Should not save
+    expect(screen.getByTestId('state-edit-name-st-edit-1')).toBeDefined();
+
+    // Test error branch
+    failPatch = true;
+    fireEvent.change(nameInput2, { target: { value: 'Valid Name' } });
+    fireEvent.change(screen.getByTestId('state-edit-wip-soft-st-edit-1'), { target: { value: '' } });
+    fireEvent.change(screen.getByTestId('state-edit-wip-hard-st-edit-1'), { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
+    expect(await screen.findByText('Failed to update workflow state.')).toBeDefined();
+
+    // Test successful patch
+    failPatch = false;
+    fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
+    await waitFor(() => {
+      expect(screen.getByText('Workflow state "Valid Name" updated.')).toBeDefined();
+    });
+  });
+
+  it('supports inline row editing of labels: start, edit fields, cancel, save, error handling, and empty guard', async () => {
+    let labelList: Record<string, unknown>[] = [
+      {
+        id: 'lbl-edit-1',
+        name: 'backend',
+        color_hex: '',
+        exclusive_group: null,
+      },
+      {
+        id: 'lbl-edit-2',
+        name: 'frontend',
+        color_hex: '#3b82f6',
+        exclusive_group: 'layer',
+      },
+    ];
+
+    let failPatch = false;
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path, options) => {
+      await Promise.resolve();
+      const url: string = path;
+      const m = method.toUpperCase();
+
+      if (
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
+        m === 'GET'
+      ) {
+        return {
+          id: 'p-1',
+          identifier: 'KAN',
+          name: 'Kanban Platform',
+          is_project_admin: true,
+        };
+      }
+      if (url.includes('/api/v1/projects/KAN/labels') && m === 'GET') {
+        return labelList;
+      }
+      if (url.includes('/api/v1/projects/KAN/labels/') && m === 'PATCH') {
+        if (failPatch) {
+          // eslint-disable-next-line @typescript-eslint/only-throw-error
+          throw {};
+        }
+        const body = JSON.parse(String((options as { body?: string }).body)) as Record<string, unknown>;
+        labelList = labelList.map((l) => (l.id === 'lbl-edit-1' ? { ...l, ...body } : l));
+        return { ...labelList[0], ...body };
+      }
+      return {};
+    });
+
+    renderComponent('KAN');
+
+    const labelsTab = await screen.findByTestId('tab-labels');
+    fireEvent.click(labelsTab);
+
+    expect(await screen.findByText('backend')).toBeDefined();
+
+    // Start inline edit
+    const editBtn = screen.getByTestId('edit-label-btn-lbl-edit-1');
+    fireEvent.click(editBtn);
+
+    const nameInput = screen.getByTestId('label-edit-name-lbl-edit-1');
+    const groupInput = screen.getByTestId('label-edit-group-lbl-edit-1');
+    const cancelBtn = screen.getByTestId('cancel-label-btn-lbl-edit-1');
+
+    // Cancel edit
+    fireEvent.change(nameInput, { target: { value: 'cancelled-name' } });
+    fireEvent.click(cancelBtn);
+    expect(screen.queryByTestId('label-edit-name-lbl-edit-1')).toBeNull();
+
+    // Re-enter edit, test empty name guard
+    fireEvent.click(screen.getByTestId('edit-label-btn-lbl-edit-1'));
+    const nameInput2 = screen.getByTestId('label-edit-name-lbl-edit-1');
+    fireEvent.change(nameInput2, { target: { value: '   ' } });
+    fireEvent.click(screen.getByTestId('save-label-btn-lbl-edit-1'));
+    // Should not save
+    expect(screen.getByTestId('label-edit-name-lbl-edit-1')).toBeDefined();
+
+    // Test error branch
+    failPatch = true;
+    fireEvent.change(nameInput2, { target: { value: 'backend-v2' } });
+    fireEvent.change(groupInput, { target: { value: 'core' } });
+    fireEvent.click(screen.getByTestId('save-label-btn-lbl-edit-1'));
+    expect(await screen.findByText('Failed to update label.')).toBeDefined();
+
+    // Test successful patch
+    failPatch = false;
+    fireEvent.click(screen.getByTestId('save-label-btn-lbl-edit-1'));
+    await waitFor(() => {
+      expect(screen.getByText('Label "backend-v2" updated.')).toBeDefined();
+    });
+  });
+
+  it('covers permanent purge guard when project is not trashed and delete modal error handling', async () => {
+    const stateList: Record<string, unknown>[] = [
+      {
+        id: 'st-err-1',
+        name: 'Ready',
+        group: 'unstarted',
+        sort_order: 1,
+        color_hex: '#64748b',
+        is_default: false,
+      },
+    ];
+
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      const url: string = path;
+      const m = method.toUpperCase();
+
+      if (url.includes('/api/v1/auth/me')) {
+        return { is_server_admin: true };
+      }
+      if (
+        (url === '/api/v1/projects/KAN' || url.endsWith('/api/v1/projects/KAN')) &&
+        m === 'GET'
+      ) {
+        return {
+          id: 'p-1',
+          identifier: 'KAN',
+          name: 'Kanban Platform',
+          is_project_admin: true,
+          status: 'active',
+        };
+      }
+      if (url.includes('/api/v1/projects/KAN/states') && m === 'GET') {
+        return stateList;
+      }
+      if (url.includes('/audit-impact') && m === 'GET') {
+        return {
+          state_id: 'st-err-1',
+          project_id: 'p-1',
+          issues_count: 0,
+          sample_issue_keys: [],
+          workflow_hooks: [],
+          pending_executions_count: 0,
+          saved_views: [],
+          is_default: false,
+          blocking_reasons: [],
+          valid_replacement_states: [],
+        };
+      }
+      if (url.includes('/api/v1/projects/KAN/states/') && m === 'DELETE') {
+        throw new Error('Deletion rejected by server invariant');
+      }
+      return {};
+    });
+
+    renderComponent('KAN');
+
+    // Test danger zone permanent purge guard when project is not trashed
+    const dangerTab = await screen.findByTestId('tab-danger');
+    fireEvent.click(dangerTab);
+
+    const purgeBtn = await screen.findByTestId('request-purge-btn');
+    purgeBtn.removeAttribute('disabled');
+    fireEvent.click(purgeBtn);
+
+    expect(
+      await screen.findByText(
+        'Stage 1 (Move Project to Trash) must be completed before permanent purge.',
+      ),
+    ).toBeDefined();
+
+    // Now test state delete modal error handling
+    const statesTab = screen.getByTestId('tab-states');
+    fireEvent.click(statesTab);
+
+    const deleteBtn = await screen.findByTestId('delete-state-btn-st-err-1');
+    fireEvent.click(deleteBtn);
+
+    expect(await screen.findByTestId('delete-audit-modal')).toBeDefined();
+    const confirmBtn = screen.getByTestId('audit-confirm-delete-btn');
+    fireEvent.click(confirmBtn);
+
+    expect(await screen.findByText('Deletion rejected by server invariant')).toBeDefined();
   });
 });

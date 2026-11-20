@@ -10,7 +10,9 @@ from typing import TYPE_CHECKING
 import pytest
 from sqlalchemy import text
 
+from database.models import WorkflowTransitionExecution, WorkflowTransitionHook
 from kanban.tests.security.helpers import add_role_binding, rebuild_era
+from kanban.workflows.manifest import compute_hook_manifest_sha256
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -545,6 +547,14 @@ async def test_priority_crud_and_edge_cases(
     assert p_body["emoji"] == "🔥"
     assert p_body["color_hex"] == "#DC2626"
 
+    # Patch slug specifically to verify slug update branch
+    patch_slug = await client.patch(
+        f"/api/v1/projects/{pref}/priorities/{prio_to_patch['id']}",
+        json={"slug": "urgent-super"},
+    )
+    assert patch_slug.status_code == 200
+    assert patch_slug.json()["slug"] == "urgent-super"
+
     # Patch with duplicate slug on another priority
     patch_dup_slug = await client.patch(
         f"/api/v1/projects/{pref}/priorities/{prio_to_patch['id']}",
@@ -978,3 +988,541 @@ async def test_full_branch_coverage_and_404_preconditions(  # noqa: PLR0915
     )
     assert del_pr_overflow.status_code == 409
     assert del_pr_overflow.json()["code"] == "MIGRATION_TOO_LARGE"
+
+
+async def test_state_reverse_audit_impact_and_deletion_guards(  # noqa: PLR0915
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Verify state audit-impact blast radius, blocking reasons, and atomic migration (KAN-29)."""
+    proj_id, pref, admin, _editor, viewer, _outsider, client = await _setup_project_with_roles(
+        api_env, make_user, as_principal, identifier="STREV"
+    )
+    as_principal(admin)
+
+    states = (await client.get(f"/api/v1/projects/{pref}/states")).json()
+    default_state = next(s for s in states if s["is_default"])
+    st_from = next(s for s in states if s["group"] == "unstarted" and not s["is_default"])
+    st_to = next(s for s in states if s["group"] == "started")
+    st_replacement = next(s for s in states if s["group"] == "backlog")
+    prios = (await client.get(f"/api/v1/projects/{pref}/priorities")).json()
+
+    # Seed issues in st_from
+    iss_1 = await _seed_issue(
+        api_env, proj_id, pref, admin.id, st_from["id"], prios[0]["id"], "Audit Issue 1"
+    )
+    iss_2 = await _seed_issue(
+        api_env, proj_id, pref, admin.id, st_from["id"], prios[0]["id"], "Audit Issue 2"
+    )
+
+    # Add enabled hook referencing st_from -> st_to
+    hook_id = uuid.uuid4()
+    manifest_sha = compute_hook_manifest_sha256(
+        hook_kind="sync_validator",
+        wasm_module_sha256=b"\x00" * 32,
+        from_state_id=uuid.UUID(st_from["id"]),
+        to_state_id=uuid.UUID(st_to["id"]),
+    )
+    hook = WorkflowTransitionHook(
+        id=hook_id,
+        workspace_id=admin.workspace_id,
+        project_id=uuid.UUID(proj_id),
+        from_state_id=uuid.UUID(st_from["id"]),
+        to_state_id=uuid.UUID(st_to["id"]),
+        sort_rank="0|hzzzzz:",
+        name="Security Validator",
+        hook_kind="sync_validator",
+        is_enabled=True,
+        wasm_module_sha256=b"\x00" * 32,
+        allowed_mutable_fields=[],
+        failure_policy="fail_closed",
+        manifest_sha256=manifest_sha,
+    )
+    api_env.seed.add(hook)
+
+    # Add disabled hook referencing st_from
+    disabled_hook_id = uuid.uuid4()
+    dis_manifest_sha = compute_hook_manifest_sha256(
+        hook_kind="sync_validator",
+        wasm_module_sha256=b"\x00" * 32,
+        from_state_id=uuid.UUID(st_from["id"]),
+        to_state_id=uuid.UUID(st_to["id"]),
+    )
+    disabled_hook = WorkflowTransitionHook(
+        id=disabled_hook_id,
+        workspace_id=admin.workspace_id,
+        project_id=uuid.UUID(proj_id),
+        from_state_id=uuid.UUID(st_from["id"]),
+        to_state_id=uuid.UUID(st_to["id"]),
+        sort_rank="0|hzzzzz:",
+        name="Disabled Validator",
+        hook_kind="sync_validator",
+        is_enabled=False,
+        wasm_module_sha256=b"\x00" * 32,
+        allowed_mutable_fields=[],
+        failure_policy="fail_closed",
+        manifest_sha256=dis_manifest_sha,
+    )
+    api_env.seed.add(disabled_hook)
+    await api_env.seed.commit()
+
+    # Create saved view referencing st_from and st_replacement
+    v_resp = await client.post(
+        f"/api/v1/projects/{pref}/views",
+        json={
+            "name": "Audit View",
+            "layout": "board",
+            "is_shared": True,
+            "filters": {"state_ids": [st_from["id"], st_replacement["id"]]},
+        },
+    )
+    assert v_resp.status_code == 201, v_resp.text
+    view_id = v_resp.json()["id"]
+
+    # 404 on audit-impact for non-existent state
+    rnd_state = str(uuid.uuid4())
+    assert (
+        await client.get(f"/api/v1/projects/{pref}/states/{rnd_state}/audit-impact")
+    ).status_code == 404
+
+    # 1. Audit impact on default state and last state in group
+    resp_def = await client.get(
+        f"/api/v1/projects/{pref}/states/{default_state['id']}/audit-impact"
+    )
+    assert resp_def.status_code == 200
+    impact_def = resp_def.json()
+    assert impact_def["is_default"] is True
+    assert any("Default State" in r for r in impact_def["blocking_reasons"])
+
+    cancelled_st = next((s for s in states if s["group"] == "cancelled"), None)
+    if cancelled_st:
+        resp_canc = await client.get(
+            f"/api/v1/projects/{pref}/states/{cancelled_st['id']}/audit-impact"
+        )
+        assert resp_canc.status_code == 200
+        assert any("Last State in Group" in r for r in resp_canc.json()["blocking_reasons"])
+
+    # 2. Audit impact on st_from: issues_count=2, hooks=2, saved_views=1
+    resp_from = await client.get(f"/api/v1/projects/{pref}/states/{st_from['id']}/audit-impact")
+    assert resp_from.status_code == 200
+    impact_from = resp_from.json()
+    assert impact_from["issues_count"] == 2
+    assert len(impact_from["sample_issue_keys"]) == 2
+    assert len(impact_from["workflow_hooks"]) == 2
+    assert len(impact_from["saved_views"]) == 1
+    assert impact_from["saved_views"][0]["id"] == view_id
+    assert len(impact_from["valid_replacement_states"]) == len(states) - 1
+
+    # 3. Capability check: VIEWER gets 403 on audit-impact
+    as_principal(viewer)
+    resp_forbidden = await client.get(
+        f"/api/v1/projects/{pref}/states/{st_from['id']}/audit-impact"
+    )
+    assert resp_forbidden.status_code == 403
+    as_principal(admin)
+
+    # 4. Delete without replacement while active hook exists
+    del_no_repl = await client.delete(f"/api/v1/projects/{pref}/states/{st_from['id']}")
+    assert del_no_repl.status_code == 409
+    assert del_no_repl.json()["code"] == "ACTIVE_AUTOMATION_HOOK_REQUIRES_STATE"
+
+    # 5. Delete with replacement but migrate_hooks=false while active hook exists
+    del_no_hook_mig = await client.delete(
+        f"/api/v1/projects/{pref}/states/{st_from['id']}"
+        f"?replacement_state_id={st_replacement['id']}&migrate_hooks=false"
+    )
+    assert del_no_hook_mig.status_code == 409
+    assert del_no_hook_mig.json()["code"] == "ACTIVE_AUTOMATION_HOOK_REQUIRES_STATE"
+
+    # 6. In-flight execution test -> 409 TRANSITION_IN_FLIGHT
+    exec_id = uuid.uuid4()
+    exec_row = WorkflowTransitionExecution(
+        id=exec_id,
+        workspace_id=admin.workspace_id,
+        project_id=uuid.UUID(proj_id),
+        issue_id=iss_1,
+        invoking_principal_id=admin.id,
+        from_state_id=uuid.UUID(st_from["id"]),
+        to_state_id=uuid.UUID(st_to["id"]),
+        status="pending_async",
+        hop_depth=0,
+        issue_body_sha256_snapshot=b"\x00" * 32,
+    )
+    api_env.seed.add(exec_row)
+    await api_env.seed.commit()
+
+    # Verify In-Flight Gate in audit impact
+    impact_inflight = (
+        await client.get(f"/api/v1/projects/{pref}/states/{st_from['id']}/audit-impact")
+    ).json()
+    assert impact_inflight["pending_executions_count"] == 1
+    assert any("In-Flight Gate" in r for r in impact_inflight["blocking_reasons"])
+
+    del_inflight = await client.delete(
+        f"/api/v1/projects/{pref}/states/{st_from['id']}?replacement_state_id={st_replacement['id']}"
+    )
+    assert del_inflight.status_code == 409
+    assert del_inflight.json()["code"] == "TRANSITION_IN_FLIGHT"
+
+    # Mark execution as approved (historical execution)
+    await api_env.seed.execute(
+        text("UPDATE workflow_transition_executions SET status = 'approved' WHERE id = :id"),
+        {"id": exec_id},
+    )
+    await api_env.seed.commit()
+
+    # Temporarily move issues and disable hook so only historical executions remain on st_from
+    await api_env.seed.execute(
+        text("SELECT set_config('app.transition_exec_id', 'bypass', true)")
+    )
+    await api_env.seed.execute(
+        text("UPDATE issues SET state_id = :st WHERE state_id = :old"),
+        {"st": uuid.UUID(st_replacement["id"]), "old": uuid.UUID(st_from["id"])},
+    )
+    await api_env.seed.execute(
+        text("UPDATE workflow_transition_hooks SET is_enabled = false WHERE id = :h"),
+        {"h": hook_id},
+    )
+    await api_env.seed.commit()
+
+    del_hist_block = await client.delete(f"/api/v1/projects/{pref}/states/{st_from['id']}")
+    assert del_hist_block.status_code == 409
+    assert del_hist_block.json()["code"] == "HISTORICAL_EXECUTIONS_REQUIRE_STATE"
+
+    # Restore issues back to st_from for atomic migration test
+    await api_env.seed.execute(
+        text("SELECT set_config('app.transition_exec_id', 'bypass', true)")
+    )
+    await api_env.seed.execute(
+        text("UPDATE issues SET state_id = :old WHERE id IN (:i1, :i2)"),
+        {"old": uuid.UUID(st_from["id"]), "i1": iss_1, "i2": iss_2},
+    )
+    # Re-enable hook_id
+    await api_env.seed.execute(
+        text("UPDATE workflow_transition_hooks SET is_enabled = true WHERE id = :h"),
+        {"h": hook_id},
+    )
+    # Set disabled_hook to_state_id to st_replacement so migration cleanly prunes disabled self-loop
+    await api_env.seed.execute(
+        text("UPDATE workflow_transition_hooks SET to_state_id = :st WHERE id = :h"),
+        {"st": uuid.UUID(st_replacement["id"]), "h": disabled_hook_id},
+    )
+    await api_env.seed.commit()
+
+    # 7. Self-loop prevention check -> 409 HOOK_MIGRATION_CREATES_SELF_LOOP
+    await api_env.seed.execute(
+        text("UPDATE workflow_transition_hooks SET to_state_id = :st WHERE id = :h"),
+        {"st": uuid.UUID(st_replacement["id"]), "h": hook_id},
+    )
+    await api_env.seed.commit()
+
+    del_self_loop = await client.delete(
+        f"/api/v1/projects/{pref}/states/{st_from['id']}?replacement_state_id={st_replacement['id']}"
+    )
+    assert del_self_loop.status_code == 409
+    assert del_self_loop.json()["code"] == "HOOK_MIGRATION_CREATES_SELF_LOOP"
+
+    # Reset hook to_state_id to st_to so it doesn't self-loop
+    await api_env.seed.execute(
+        text("UPDATE workflow_transition_hooks SET to_state_id = :st WHERE id = :h"),
+        {"st": uuid.UUID(st_to["id"]), "h": hook_id},
+    )
+    await api_env.seed.commit()
+
+    # 8. Successful atomic delete with replacement_state_id and migrate_hooks=true
+    del_ok = await client.delete(
+        f"/api/v1/projects/{pref}/states/{st_from['id']}?replacement_state_id={st_replacement['id']}&migrate_hooks=true"
+    )
+    assert del_ok.status_code == 204
+
+    # Verify Issue state updated
+    assert (
+        await _count(
+            api_env,
+            "SELECT count(*) FROM issues WHERE id = :id AND state_id = :st",
+            id=iss_1,
+            st=uuid.UUID(st_replacement["id"]),
+        )
+        == 1
+    )
+
+    # Verify Hook from_state_id migrated and manifest recomputed
+    await api_env.seed.rollback()
+    hook_row = (
+        await api_env.seed.execute(
+            text(
+                "SELECT from_state_id, to_state_id, manifest_sha256 "
+                "FROM workflow_transition_hooks WHERE id = :id"
+            ),
+            {"id": hook_id},
+        )
+    ).one()
+    assert hook_row[0] == uuid.UUID(st_replacement["id"])
+    assert hook_row[1] == uuid.UUID(st_to["id"])
+    expected_sha = compute_hook_manifest_sha256(
+        hook_kind="sync_validator",
+        wasm_module_sha256=b"\x00" * 32,
+        from_state_id=uuid.UUID(st_replacement["id"]),
+        to_state_id=uuid.UUID(st_to["id"]),
+    )
+    assert bytes(hook_row[2]) == expected_sha
+
+    # Verify historical execution migrated
+    assert (
+        await _count(
+            api_env,
+            "SELECT count(*) FROM workflow_transition_executions "
+            "WHERE id = :id AND from_state_id = :st",
+            id=exec_id,
+            st=uuid.UUID(st_replacement["id"]),
+        )
+        == 1
+    )
+
+    # Verify View filters_json deduplicated
+    await api_env.seed.rollback()
+    view_filters = (
+        await api_env.seed.execute(
+            text("SELECT filters_json FROM views WHERE id = :id"),
+            {"id": uuid.UUID(view_id)},
+        )
+    ).scalar_one()
+    assert view_filters["state_ids"] == [st_replacement["id"]]
+
+
+async def test_label_reverse_audit_impact_and_safe_reassignment(  # noqa: PLR0915
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Verify label audit-impact and safe DELETE reassignment (KAN-29)."""
+    proj_id, pref, admin, _editor, viewer, _outsider, client = await _setup_project_with_roles(
+        api_env, make_user, as_principal, identifier="LBLREV"
+    )
+    as_principal(admin)
+
+    states = (await client.get(f"/api/v1/projects/{pref}/states")).json()
+    prios = (await client.get(f"/api/v1/projects/{pref}/priorities")).json()
+
+    # Create 3 labels
+    l_bug = (
+        await client.post(
+            f"/api/v1/projects/{pref}/labels",
+            json={"name": "type:bug", "color_hex": "#EF4444", "exclusive_group": "type"},
+        )
+    ).json()
+    l_feat = (
+        await client.post(
+            f"/api/v1/projects/{pref}/labels",
+            json={"name": "type:feature", "color_hex": "#3B82F6", "exclusive_group": "type"},
+        )
+    ).json()
+    l_urgent = (
+        await client.post(
+            f"/api/v1/projects/{pref}/labels",
+            json={"name": "urgent", "color_hex": "#F59E0B", "exclusive_group": None},
+        )
+    ).json()
+
+    # Seed 3 issues
+    iss_1 = await _seed_issue(
+        api_env, proj_id, pref, admin.id, states[0]["id"], prios[0]["id"], "Issue 1"
+    )
+    iss_2 = await _seed_issue(
+        api_env, proj_id, pref, admin.id, states[0]["id"], prios[0]["id"], "Issue 2"
+    )
+    iss_3 = await _seed_issue(
+        api_env, proj_id, pref, admin.id, states[0]["id"], prios[0]["id"], "Issue 3"
+    )
+
+    # Tag Issue 1 with l_bug
+    await api_env.seed.execute(
+        text("INSERT INTO issue_labels (issue_id, label_id) VALUES (:i, :l)"),
+        {"i": iss_1, "l": uuid.UUID(l_bug["id"])},
+    )
+    # Tag Issue 2 with l_bug and non-exclusive l_urgent
+    await api_env.seed.execute(
+        text("INSERT INTO issue_labels (issue_id, label_id) VALUES (:i, :l)"),
+        {"i": iss_2, "l": uuid.UUID(l_bug["id"])},
+    )
+    await api_env.seed.execute(
+        text("INSERT INTO issue_labels (issue_id, label_id) VALUES (:i, :l)"),
+        {"i": iss_2, "l": uuid.UUID(l_urgent["id"])},
+    )
+    # Tag Issue 3 with l_urgent AND l_feat
+    await api_env.seed.execute(
+        text("INSERT INTO issue_labels (issue_id, label_id) VALUES (:i, :l)"),
+        {"i": iss_3, "l": uuid.UUID(l_urgent["id"])},
+    )
+    await api_env.seed.execute(
+        text("INSERT INTO issue_labels (issue_id, label_id) VALUES (:i, :l)"),
+        {"i": iss_3, "l": uuid.UUID(l_feat["id"])},
+    )
+    await api_env.seed.commit()
+
+    # Saved view referencing l_bug and l_feat
+    v_resp = await client.post(
+        f"/api/v1/projects/{pref}/views",
+        json={
+            "name": "Bugs View",
+            "layout": "board",
+            "is_shared": True,
+            "filters": {"label_ids": [l_bug["id"], l_feat["id"]]},
+        },
+    )
+    assert v_resp.status_code == 201, v_resp.text
+    view_id = v_resp.json()["id"]
+
+    # 1. Audit impact
+    rnd_lbl = str(uuid.uuid4())
+    assert (
+        await client.get(f"/api/v1/projects/{pref}/labels/{rnd_lbl}/audit-impact")
+    ).status_code == 404
+
+    resp_impact = await client.get(f"/api/v1/projects/{pref}/labels/{l_bug['id']}/audit-impact")
+    assert resp_impact.status_code == 200
+    impact = resp_impact.json()
+    assert impact["issues_count"] == 2
+    assert len(impact["sample_issue_keys"]) == 2
+    assert len(impact["saved_views"]) == 1
+    assert impact["saved_views"][0]["id"] == view_id
+    assert len(impact["valid_replacement_labels"]) == 2
+
+    # 2. VIEWER gets 403 on audit-impact
+    as_principal(viewer)
+    res_403 = await client.get(f"/api/v1/projects/{pref}/labels/{l_bug['id']}/audit-impact")
+    assert res_403.status_code == 403
+    as_principal(admin)
+
+    # 3. Invalid migration target -> 422
+    assert (
+        await client.delete(
+            f"/api/v1/projects/{pref}/labels/{l_bug['id']}?replacement_label_id={l_bug['id']}"
+        )
+    ).status_code == 422
+    assert (
+        await client.delete(
+            f"/api/v1/projects/{pref}/labels/{l_bug['id']}?replacement_label_id={rnd_lbl}"
+        )
+    ).status_code == 422
+
+    # 4. Delete l_bug with replacement l_feat (reassignment)
+    # iss_1 had l_bug -> now l_feat
+    # iss_2 had l_bug and l_urgent -> now l_feat and l_urgent
+    del_resp = await client.delete(
+        f"/api/v1/projects/{pref}/labels/{l_bug['id']}?replacement_label_id={l_feat['id']}"
+    )
+    assert del_resp.status_code == 204
+
+    # Verify iss_1 has l_feat
+    assert (
+        await _count(
+            api_env,
+            "SELECT count(*) FROM issue_labels WHERE issue_id = :id AND label_id = :l",
+            id=iss_1,
+            l=uuid.UUID(l_feat["id"]),
+        )
+        == 1
+    )
+
+    # Verify iss_2 has l_feat and l_urgent
+    assert (
+        await _count(
+            api_env,
+            "SELECT count(*) FROM issue_labels WHERE issue_id = :id AND label_id = :l",
+            id=iss_2,
+            l=uuid.UUID(l_feat["id"]),
+        )
+        == 1
+    )
+    assert (
+        await _count(
+            api_env,
+            "SELECT count(*) FROM issue_labels WHERE issue_id = :id AND label_id = :l",
+            id=iss_2,
+            l=uuid.UUID(l_urgent["id"]),
+        )
+        == 1
+    )
+
+    # 5. Test PK collision avoidance: delete l_urgent with replacement l_feat
+    # iss_3 already has l_feat, so l_urgent is cleanly detached without duplicate PK crash
+    del_urg = await client.delete(
+        f"/api/v1/projects/{pref}/labels/{l_urgent['id']}?replacement_label_id={l_feat['id']}"
+    )
+    assert del_urg.status_code == 204
+
+    assert (
+        await _count(
+            api_env,
+            "SELECT count(*) FROM issue_labels WHERE issue_id = :id AND label_id = :l",
+            id=iss_3,
+            l=uuid.UUID(l_feat["id"]),
+        )
+        == 1
+    )
+
+    # 6. Test exclusive group conflict pruning on replacement
+    l_type_extra = (
+        await client.post(
+            f"/api/v1/projects/{pref}/labels",
+            json={"name": "type:chore", "color_hex": "#64748B", "exclusive_group": "type"},
+        )
+    ).json()
+    iss_4 = await _seed_issue(
+        api_env, proj_id, pref, admin.id, states[0]["id"], prios[0]["id"], "Issue 4"
+    )
+    l_misc = (
+        await client.post(
+            f"/api/v1/projects/{pref}/labels",
+            json={"name": "misc", "color_hex": "#64748B", "exclusive_group": None},
+        )
+    ).json()
+    await api_env.seed.execute(
+        text("INSERT INTO issue_labels (issue_id, label_id) VALUES (:i, :l)"),
+        {"i": iss_4, "l": uuid.UUID(l_type_extra["id"])},
+    )
+    await api_env.seed.execute(
+        text("INSERT INTO issue_labels (issue_id, label_id) VALUES (:i, :l)"),
+        {"i": iss_4, "l": uuid.UUID(l_misc["id"])},
+    )
+    await api_env.seed.commit()
+
+    # Deleting l_misc with replacement l_feat deletes conflicting l_type_extra in group
+    del_misc = await client.delete(
+        f"/api/v1/projects/{pref}/labels/{l_misc['id']}?replacement_label_id={l_feat['id']}"
+    )
+    assert del_misc.status_code == 204
+    assert (
+        await _count(
+            api_env,
+            "SELECT count(*) FROM issue_labels WHERE issue_id = :id AND label_id = :l",
+            id=iss_4,
+            l=uuid.UUID(l_feat["id"]),
+        )
+        == 1
+    )
+    assert (
+        await _count(
+            api_env,
+            "SELECT count(*) FROM issue_labels WHERE issue_id = :id AND label_id = :l",
+            id=iss_4,
+            l=uuid.UUID(l_type_extra["id"]),
+        )
+        == 0
+    )
+
+    # 7. Delete label without replacement_label_id (clean detach)
+    del_detach = await client.delete(f"/api/v1/projects/{pref}/labels/{l_type_extra['id']}")
+    assert del_detach.status_code == 204
+
+    # Verify View deduplication
+    await api_env.seed.rollback()
+    view_filters = (
+        await api_env.seed.execute(
+            text("SELECT filters_json FROM views WHERE id = :id"),
+            {"id": uuid.UUID(view_id)},
+        )
+    ).scalar_one()
+    assert view_filters["label_ids"] == [l_feat["id"]]

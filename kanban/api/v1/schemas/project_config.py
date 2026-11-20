@@ -186,3 +186,58 @@ class LabelResponse(BaseModel):
     name: str
     color_hex: str
     exclusive_group: str | None = None
+
+
+class WorkflowHookSummary(BaseModel):
+    """Summary of a workflow transition hook referencing a state."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    name: str
+    hook_kind: str
+    is_enabled: bool
+    from_state_id: uuid.UUID | None = None
+    to_state_id: uuid.UUID
+
+
+class SavedViewSummary(BaseModel):
+    """Summary of a saved view referencing a state or label."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    id: uuid.UUID
+    name: str
+
+
+class StateAuditImpactResponse(BaseModel):
+    """Reverse-audit impact response for deleting a workflow state."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    state_id: uuid.UUID
+    project_id: uuid.UUID
+    issues_count: int
+    sample_issue_keys: list[str] = Field(default_factory=list)
+    workflow_hooks: list[WorkflowHookSummary] = Field(default_factory=list)
+    pending_executions_count: int = 0
+    historical_executions_count: int = 0
+    saved_views: list[SavedViewSummary] = Field(default_factory=list)
+    is_default: bool
+    blocking_reasons: list[str] = Field(default_factory=list)
+    valid_replacement_states: list[StateResponse] = Field(default_factory=list)
+
+
+class LabelAuditImpactResponse(BaseModel):
+    """Reverse-audit impact response for deleting a project label."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    label_id: uuid.UUID
+    project_id: uuid.UUID
+    issues_count: int
+    sample_issue_keys: list[str] = Field(default_factory=list)
+    saved_views: list[SavedViewSummary] = Field(default_factory=list)
+    blocking_reasons: list[str] = Field(default_factory=list)
+    valid_replacement_labels: list[LabelResponse] = Field(default_factory=list)
+

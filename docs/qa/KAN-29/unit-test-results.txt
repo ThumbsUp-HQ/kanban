@@ -1,0 +1,43 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan29-92d52807
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 12 items
+
+kanban/tests/api/test_project_config.py ............                     [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                      Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------------
+kanban/api/v1/project_config.py              74      0      0      0   100%
+kanban/api/v1/schemas/project_config.py     146      0      8      0   100%
+kanban/services/project_config.py           406      5    200     16    96%   416->415, 433->436, 525->534, 617->630, 630->649, 670-671, 674->693, 701->700, 703->700, 902-903, 977, 1001->1033, 1264->1263, 1266->1263, 1364->1385, 1406->1405
+-------------------------------------------------------------------------------------
+TOTAL                                       626      5    208     16    97%
+============================== 12 passed in 9.38s ==============================
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan29-92d52807/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/settings/__tests__/ColorPresetPicker.test.tsx (7 tests) 122ms
+ ✓ src/features/settings/__tests__/DeleteAuditModal.test.tsx (10 tests) 235ms
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (34 tests) 2426ms
+
+ Test Files  3 passed (3)
+      Tests  51 passed (51)
+   Start at  06:24:02
+   Duration  3.71s (tests 51%, environment 38%, import 8%, worker 2%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.14 |    95.27 |     100 |   99.68 |                   
+ ...esetPicker.tsx |     100 |      100 |     100 |     100 |                   
+ ...AuditModal.tsx |    98.9 |    95.65 |     100 |     100 | ...17-124,128-135 
+ ...ttingsPage.tsx |   99.13 |    94.89 |     100 |   99.61 | 1004-1005         
+-------------------|---------|----------|---------|---------|-------------------
