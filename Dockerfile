@@ -23,7 +23,7 @@ COPY agent/pyproject.toml ./agent/
 RUN uv sync --locked --no-dev --no-install-workspace --no-build-isolation && \
     echo "/opt/kanban" > /opt/kanban/.venv/lib/python3.12/site-packages/kanban.pth
 
-# Stage 3: runtime-slim (python:3.12-slim-bookworm + tini + libpq5, USER 65532:65532)
+# Stage 3: runtime-slim (python:3.12-slim-bookworm + tini + libpq5 + git, USER 65532:65532)
 FROM python:3.12-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df AS runtime-slim
 WORKDIR /opt/kanban
 # Base image digest is cryptographically pinned; allowing Debian security updates to flow
@@ -32,7 +32,8 @@ RUN apt-get update && \
     apt-get install -y --no-install-recommends \
         tini \
         libpq5 \
-        ca-certificates && \
+        ca-certificates \
+        git && \
     rm -rf /var/lib/apt/lists/* && \
     rm -f /usr/local/bin/pip*
 RUN groupadd -r -g 65532 kanban && \
@@ -59,14 +60,9 @@ USER 65532:65532
 ENTRYPOINT ["/usr/bin/tini", "--"]
 CMD ["uvicorn", "kanban.app:create_app", "--factory", "--host", "0.0.0.0", "--port", "8000"]
 
-# Stage 4: agent-runner (extends runtime-slim + git, USER 65532:65532, zero EXPOSE directives)
+# Stage 4: agent-runner (extends runtime-slim, USER 65532:65532, zero EXPOSE directives)
 FROM runtime-slim AS agent-runner
 USER root
-# hadolint ignore=DL3008
-RUN apt-get update && \
-    apt-get install -y --no-install-recommends \
-        git && \
-    rm -rf /var/lib/apt/lists/*
 RUN printf '#!/bin/sh\nexec /opt/kanban/.venv/bin/python -m agent.remote_runner.cli "$@"\n' > /usr/local/bin/kanban-agent-runner && \
     chmod 0755 /usr/local/bin/kanban-agent-runner
 USER 65532:65532
