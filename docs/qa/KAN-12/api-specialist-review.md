@@ -4,25 +4,25 @@
 - Title: [KB-P3-AUDIT-06] Sync Topbar Air-Gap Indicator on kb:system-status-changed, Hide Reset Password on Groups/Agents, Use Group @slug Handles, and Add #tab-* Hash Anchors (4 Problems)
 - Reviewer: api-spec-2 (Clean-Room Backend / API / Security Specialist)
 - Date: 2026-11-20
-- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan12-257137e5`
-- Target Branch: `feat/KAN-12`
-- Base Commit: `5998e9ab`
-- Head Commit: `5d31927a`
+- Target Directory: `/home/adamoutler/kanban/docs/qa/KAN-12`
+- Branch: `main`
+- Commit: `23ae056d9d6cf0f8614c82a6c04701b8ae536e18`
 - Status: STATUS: APPROVED
 
 ---
 
 ## 1. Executive Summary
 
-This clean-room API, Security, and Architecture audit inspects ticket KAN-12 on branch `feat/KAN-12` (commit `5d31927a`). The ticket resolves 4 distinct problems across administrative principal formatting, UI authorization guarding, real-time topbar system status synchronization, and deep-linkable tab navigation.
+This clean-room API, Security, and Architecture audit inspects ticket KAN-12 on `main` (commit `23ae056d`), incorporating evidence from live full-stack verification (`live-fullstack-proof.txt`). The ticket resolves 4 distinct problems across administrative principal formatting, UI authorization guarding, real-time topbar system status synchronization, and deep-linkable tab navigation.
 
 All API contracts, security invariants, transaction boundaries, handle slugification rules, and test coverage requirements are verified and approved:
 1. Group `@slug` Handle Formatting (Problem 3): In `kanban/admin/principal_service.py`, implemented `_slugify_or_default()` and updated `get_principal_detail` and `_format_principal_entry`. Generates clean `@slug` handles from group display names (e.g., `@infra-team`) or falls back safely to `@group` / `@agent` / `@user`, eliminating RFC 4122 UUID leakage across `/api/v1/admin/principals` endpoints.
 2. Guard Reset Password on Groups/Agents (Problem 2): In `AuthStudioPage.tsx`, strictly restricted the Reset Password action and its modal dialog to `principal.type === 'USER'`, completely hiding and disabling it for `GROUP` and `AGENT` principals where credential reset is semantically invalid.
 3. Reactive Topbar Air-Gap Sync (Problem 1): In `useSystemStatus.ts`, registered window listener for `kb:system-status-changed` (with unmount cleanup) invalidating `['system', 'status']`. Saving Workspace Settings dispatches `kb:system-status-changed` and invalidates system status queries, ensuring the topbar air-gap badge updates reactively without a full page reload.
 4. Workspace Settings Tab Anchors (Problem 4): In `WorkspaceSettingsPage.tsx`, added `id="tab-general"`, `id="tab-members"`, and `id="tab-groups"` attributes and synchronized active tab state with `window.location.hash` across mount, hashchange events, and tab clicks.
-5. High Test Coverage: 16/16 backend Pytest tests passing with 96% coverage on `kanban.admin.principal_service`. 72/72 frontend Vitest tests passing with >= 95% coverage across all touched components.
+5. High Test Coverage: 16/16 backend Pytest tests passing with 96% coverage on `kanban.admin.principal_service`. 100/100 frontend Vitest tests passing with >= 95% coverage across all 6 touched components (including Topbar.tsx).
 6. Zero Em/En-Dashes: Clean verification under `check_no_dashes` (0 em/en-dashes).
+7. Live Full-Stack Proof: 100% pass across all 4 operational scenarios on containerized live environment.
 
 ---
 
@@ -85,24 +85,44 @@ All API contracts, security invariants, transaction boundaries, handle slugifica
   - On `hashchange` event: updates tab state dynamically.
   - On tab click: updates `window.location.hash` via `history.replaceState`.
 
-### 2.5 Test Suite & Coverage Verification
-- Backend Pytest Suite: `kanban/tests/api/test_admin_principals.py` PASSED (16/16).
-  - Coverage: `kanban.admin.principal_service` achieves 96% statement coverage.
-- Frontend Vitest Suites:
-  - `src/features/admin-auth/AuthStudioPage.test.tsx`: 42/42 PASSED.
-  - `src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx`: 25/25 PASSED.
-  - `src/app/useSystemStatus.test.tsx` & `src/features/system/useSystemStatus.test.tsx`: 5/5 PASSED.
-  - `src/styles/__tests__/cssTokensAudit.test.ts`: 4/4 PASSED.
-  - All touched files exceed 95% statement and branch coverage.
+---
 
-### 2.6 Security, Boundary, and Code Style Compliance
-- Dependency Invariant: Zero external packages added (`Apache-2.0` compliant).
-- Boundary Invariant: `lint-imports` confirms strict unidirectional layering (`agent -> mcp -> kanban -> database`).
-- Static Checks: `tsc -b` (0 errors), `eslint` (0 warnings), `mypy` (0 errors), `ruff check` (clean), `check_no_dashes` (0 em/en-dashes).
+## 3. Live Full-Stack Proof Verification (`live-fullstack-proof.txt`)
+
+Verbatim inspection of `/home/adamoutler/kanban/docs/qa/KAN-12/live-fullstack-proof.txt` against commit `23ae056d`:
+1. Problem 1 (Air-gap topbar sync zero reload):
+   - Topbar badge before air-gap toggle: `⚠️ ✕`.
+   - Immediately after toggle Air-Gap ON (NO reload): `⚠️ ✕ 📴` present.
+   - Immediately after toggle Air-Gap OFF (NO reload): `⚠️ ✕` returns.
+2. Problem 2 & 3 (Group @slug & no reset password for non-users):
+   - Auth Studio table inspection:
+     - "Infra Team" (Group): `handleText: "@infra-team"`, `typePill: "Group"`, `resetButtons: 0`, `rawHasUuid: false`.
+     - "Triage Bot" (Agent): `handleText: "@triage-bot"`, `typePill: "Agent"`, `resetButtons: 0`, `rawHasUuid: false`.
+     - "Admin User" (User): `handleText: "@admin"`, `resetButtons: 1`.
+     - "Read Only Viewer" (User): `handleText: "@viewer"`, `resetButtons: 1`.
+3. Problem 4 (Workspace Settings tab anchors):
+   - Initial `#tab-groups` check: `hasGeneral: true`, `hasMembers: true`, `hasGroups: true`, `groupsVisible: true`, `hash: "#tab-groups"`.
+   - Clicking `#tab-members` updates `window.location.hash=#tab-members`.
+4. Overall Stability: Console errors: 0, Page errors: 0, 5xx responses: 0. `LIVE_STACK_VERDICT: PASS`.
 
 ---
 
-## 3. Specialist Checklist
+## 4. Test Suite & Coverage Verification
+
+- Backend Pytest Suite: `kanban/tests/api/test_admin_principals.py` PASSED (16/16).
+  - Coverage: `kanban.admin.principal_service` achieves 96% statement coverage.
+- Frontend Vitest Suites:
+  - `src/app/Topbar.test.tsx`: 23/23 PASSED (98.05% stmts, 95.37% branch, 100% funcs, 100% lines).
+  - `src/features/admin-auth/AuthStudioPage.test.tsx`: 42/42 PASSED (98.31% stmts, 95.43% branch, 99% funcs, 100% lines).
+  - `src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx`: 26/26 PASSED (99.67% stmts, 95.09% branch, 100% funcs, 100% lines).
+  - `src/app/useSystemStatus.test.tsx` & `src/features/system/useSystemStatus.test.tsx`: 5/5 PASSED (100% across the board).
+  - `src/styles/__tests__/cssTokensAudit.test.ts`: 4/4 PASSED.
+  - All touched files exceed 95% statement, branch, function, and line coverage, with 0 React act(...) warnings.
+- Static Analysis: `pnpm --dir kanban/web build` (clean), `tsc -b` (0 errors), `eslint` (0 warnings), `mypy` (0 errors), `ruff check` (clean), `check_no_dashes` (0 em/en-dashes).
+
+---
+
+## 5. Specialist Checklist
 
 1. [x] Group principal handles formatted cleanly as `@slug` without leaking RFC 4122 UUIDs
 2. [x] Agent and group principals fall back to `@group` / `@agent` instead of raw UUIDs
@@ -112,13 +132,13 @@ All API contracts, security invariants, transaction boundaries, handle slugifica
 6. [x] Workspace settings tab buttons have `id="tab-*"` attributes
 7. [x] Active tab state synchronized with `window.location.hash`
 8. [x] 16/16 backend tests pass with 96% coverage on `principal_service.py`
-9. [x] 72/72 frontend tests pass with >= 95% coverage on touched files
+9. [x] 100/100 frontend tests pass with >= 95% coverage on touched files
 10. [x] Zero em-dashes or en-dashes across all code and documentation
 
 ---
 
-## 4. Verdict & Certification
+## 6. Verdict & Certification
 
 STATUS: APPROVED
 
-The KAN-12 implementation on branch `feat/KAN-12` (commit `5d31927a`) resolves all 4 scoped problems with pristine code quality, robust security boundaries, and complete test coverage. Ready for dual specialist signoff and merge into `main`.
+All API contracts, security invariants, handle formatting, and live full-stack proof for KAN-12 on `main` (commit `23ae056d`) are fully verified and certified.

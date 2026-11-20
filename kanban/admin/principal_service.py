@@ -179,15 +179,10 @@ async def get_principal_detail(
         g_stmt = select(Group.name).where(Group.id == p_id)
         g_name = (await session.execute(g_stmt)).scalar_one_or_none()
         raw_principal = g_name or principal.display_name
-        if raw_principal and not _RFC4122_UUID_REGEX.match(raw_principal.strip().lstrip("@")):
-            handle = f"@{raw_principal.lstrip('@')}"
-        elif principal.display_name and not _RFC4122_UUID_REGEX.match(
-            principal.display_name.strip().lstrip("@")
-        ):
-            slug = re.sub(r"[^a-z0-9._-]+", "-", principal.display_name.strip().lower()).strip("-")
-            handle = f"@{slug or 'group'}"
-        else:
-            handle = "@group"
+        slug = _slugify_or_default(raw_principal, "")
+        if not slug and principal.display_name:
+            slug = _slugify_or_default(principal.display_name, "")
+        handle = f"@{slug or 'group'}"
 
     # Retrieve groups via closure
     closure_stmt = (
@@ -349,18 +344,15 @@ async def _format_principal_entry(
         raw_principal = g_name or p.display_name
 
     if p.principal_type == "GROUP":
-        if raw_principal and not _RFC4122_UUID_REGEX.match(raw_principal.strip().lstrip("@")):
-            handle = f"@{raw_principal.lstrip('@')}"
-        elif p.display_name and not _RFC4122_UUID_REGEX.match(p.display_name.strip().lstrip("@")):
-            slug = re.sub(r"[^a-z0-9._-]+", "-", p.display_name.strip().lower()).strip("-")
-            handle = f"@{slug or 'group'}"
-        else:
-            handle = "@group"
+        slug = _slugify_or_default(raw_principal, "")
+        if not slug and p.display_name:
+            slug = _slugify_or_default(p.display_name, "")
+        handle = f"@{slug or 'group'}"
     elif raw_principal and not _RFC4122_UUID_REGEX.match(raw_principal.strip().lstrip("@")):
         handle = f"@{raw_principal.lstrip('@')}"
     elif p.display_name and not _RFC4122_UUID_REGEX.match(p.display_name.strip().lstrip("@")):
-        slug = re.sub(r"[^a-z0-9._-]+", "-", p.display_name.strip().lower()).strip("-")
-        handle = f"@{slug or 'user'}"
+        slug = _slugify_or_default(p.display_name, "user")
+        handle = f"@{slug}"
     else:
         handle = f"@{p.principal_type.lower() if p.principal_type else 'user'}"
 

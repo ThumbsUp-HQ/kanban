@@ -5,16 +5,15 @@
 - Title: Fix Air-Gap Topbar Event Sync, Auth Studio Group Reset-Password & @slug Display, and Workspace Settings #tab-* Hash Anchors (4 Problems)
 - Reviewer: ui-spec-2 (Clean-Room UI/UX Specialist)
 - Date: 2026-11-20
-- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan12-257137e5`
-- Target Branch: `feat/KAN-12`
-- Base Commit: `5998e9ab`
-- Head Commit: `5d31927a`
+- Target Directory: `/home/adamoutler/kanban/docs/qa/KAN-12`
+- Target Branch: `main`
+- Merged HEAD SHA: `23ae056d`
 - STATUS: APPROVED
 
 ---
 
 ## Executive Summary
-This clean-room review evaluates frontend reactive event synchronization, admin user management ergonomics, handle formatting, tab accessibility and fragment hash navigation, design token compliance, and CSP adherence for ticket KAN-12 ([KB-P3-AUDIT-06]) on branch `feat/KAN-12` (commit `5d31927a`).
+This clean-room review evaluates frontend reactive event synchronization, admin user management ergonomics, handle formatting, tab accessibility and fragment hash navigation, design token compliance, CSP adherence, and zero-mock live container screenshot artifacts for ticket KAN-12 ([KB-P3-AUDIT-06]) on `main` (commit `23ae056d`).
 
 The ticket resolves all 4 scoped problems:
 1. **Sync Topbar Air-Gap Indicator on `kb:system-status-changed` (`useSystemStatus.ts`, `Topbar.tsx`, `WorkspaceSettingsPage.tsx`):**
@@ -36,27 +35,21 @@ The ticket resolves all 4 scoped problems:
 
 ---
 
-## UI/UX & Interaction Ergonomics Audit
+## UI/UX & Live Visual Artifact Verification
 
-### 1. Air-Gap Indicator Reactivity
-- Toggling Air-Gap Mode in Workspace Settings immediately reflects in the topbar pill badge across the application shell.
-- Zero desynchronization between workspace configuration and topbar security status.
-
-### 2. Admin Auth Studio Cleanliness (`AuthStudioPage.tsx`)
-- The Users & Permissions table now clearly delineates between User, Group, and Agent principal rows with semantic type pills.
-- Non-user principals have clean action cells without misleading password reset triggers.
-- Group handles display human-readable `@slug` identifiers instead of confusing UUID strings.
-
-### 3. Workspace Settings Deep Linking (`WorkspaceSettingsPage.tsx`)
-- External links or bookmark hashes (`/settings/workspace#tab-members` or `#tab-groups`) directly activate the requested tab on initial mount.
-- Browser back and forward history buttons seamlessly transition between tabs.
+All 5 Playwright visual proof artifacts in `docs/qa/KAN-12/screenshots/` were audited:
+1. `live-kan12-auth-studio-groups-desktop-light.png`: Verified light mode Users & Permissions table displaying `@infra-team` group handle with Group pill and null Reset Password action cell.
+2. `live-kan12-auth-studio-groups-desktop-dark.png`: Verified dark mode Auth Studio table with WCAG AA compliant text contrast and intact dark background tokens.
+3. `live-kan12-auth-studio-mobile-light.png`: Verified mobile viewport (390px) responsiveness of Auth Studio users table with horizontal scroll support.
+4. `live-kan12-workspace-tabs-airgap-sync-desktop-light.png`: Verified Workspace Settings tabs rendering with `id="tab-*"` attributes, active URL fragment `#tab-general`, and topbar air-gap badge synchronized upon setting save.
+5. `live-kan12-workspace-tabs-tablet-light.png`: Verified tablet viewport (768px) responsiveness with wrapped settings tabs and accessible touch targets.
 
 ---
 
 ## Code Quality & Standards
 
 ### 1. Content Security Policy (CSP) Compliance
-- 0 inline `style={...}` JSX attributes added across all touched files.
+- Zero inline `style={...}` JSX attributes added across all touched files.
 - `cssTokensAudit.test.ts` passes 4/4 tests cleanly.
 
 ### 2. Static Analysis & Type Safety
@@ -71,12 +64,14 @@ The ticket resolves all 4 scoped problems:
 - Verified clean via `python3 -m scripts.check_no_dashes --all`.
 
 ### 4. Test Coverage & Verification
-- 72/72 Vitest unit tests passing across touched test suites:
-  - `src/app/useSystemStatus.ts`: 100%
-  - `src/features/system/useSystemStatus.ts`: 100%
-  - `src/features/admin-auth/AuthStudioPage.tsx`: 98.28% Statements, 95.68% Branches, 100% Lines
-  - `src/features/settings/WorkspaceSettingsPage.tsx`: 99.67% Statements, 95.47% Branches, 100% Lines
+- 100/100 Vitest unit tests passing across touched test suites:
+  - `src/app/Topbar.tsx`: 98.05% Statements, 95.37% Branches, 100% Functions, 100% Lines
+  - `src/app/useSystemStatus.ts`: 100% Statements, 100% Branches, 100% Functions, 100% Lines
+  - `src/features/system/useSystemStatus.ts`: 100% Statements, 100% Branches, 100% Functions, 100% Lines
+  - `src/features/admin-auth/AuthStudioPage.tsx`: 98.31% Statements, 95.43% Branches, 99.00% Functions, 100% Lines
+  - `src/features/settings/WorkspaceSettingsPage.tsx`: 99.67% Statements, 95.09% Branches, 100% Functions, 100% Lines
   - `cssTokensAudit.test.ts`: 4/4 passed
+  - 0 React act(...) warnings in stderr
 - 16/16 Pytest backend tests passing in `kanban/tests/api/test_admin_principals.py` with 96% coverage on `principal_service.py`.
 
 ---
@@ -92,12 +87,13 @@ The ticket resolves all 4 scoped problems:
 7. [x] Zero inline `style={...}` JSX attributes (100% CSP compliant)
 8. [x] 100% canonical design tokens verified (`cssTokensAudit.test.ts` passes 4/4)
 9. [x] Strict ASCII hyphenation verified (0 em/en-dashes across codebase and docs)
-10. [x] Frontend test suite passes: 72 Vitest tests passing with >= 95% coverage on touched files
+10. [x] Frontend test suite passes: 100 Vitest tests passing with >= 95% coverage on touched files
 11. [x] Backend test suite passes: 16 Pytest tests passing with >= 95% coverage on touched files
+12. [x] Visual evidence verified across 5 desktop, tablet, mobile, dark, and light screenshots
 
 ---
 
 ## Verdict & Certification
 STATUS: APPROVED
 
-All reactive event synchronization, admin table ergonomics, handle sanitization, tab fragment hash navigation, design tokens, and unit test suites for KAN-12 have been verified and certified. Ready for dual specialist signoff and coordinator merge into `main`.
+All reactive event synchronization, admin table ergonomics, handle sanitization, tab fragment hash navigation, design tokens, and live visual artifacts for KAN-12 on `main` (commit `23ae056d`) have been verified and certified. Ready for Clean-Room Reality-Checker QA.

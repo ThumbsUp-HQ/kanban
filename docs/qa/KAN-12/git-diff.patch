@@ -1,5 +1,5 @@
 diff --git a/kanban/admin/principal_service.py b/kanban/admin/principal_service.py
-index 92280fa6..3279df56 100644
+index 92280fa6..dd691a7b 100644
 --- a/kanban/admin/principal_service.py
 +++ b/kanban/admin/principal_service.py
 @@ -59,6 +59,17 @@ def normalize_handle(handle: str) -> str:
@@ -20,26 +20,19 @@ index 92280fa6..3279df56 100644
  async def resolve_principal_id(  # noqa: RET503
      session: AsyncSession,
      workspace_id: uuid.UUID,
-@@ -168,7 +179,17 @@ async def get_principal_detail(
+@@ -168,7 +179,10 @@ async def get_principal_detail(
          g_stmt = select(Group.name).where(Group.id == p_id)
          g_name = (await session.execute(g_stmt)).scalar_one_or_none()
          raw_principal = g_name or principal.display_name
 -        handle = f"@{raw_principal.lstrip('@')}" if raw_principal else None
-+        if raw_principal and not _RFC4122_UUID_REGEX.match(raw_principal.strip().lstrip("@")):
-+            handle = f"@{raw_principal.lstrip('@')}"
-+        elif principal.display_name and not _RFC4122_UUID_REGEX.match(
-+            principal.display_name.strip().lstrip("@")
-+        ):
-+            slug = re.sub(
-+                r"[^a-z0-9._-]+", "-", principal.display_name.strip().lower()
-+            ).strip("-")
-+            handle = f"@{slug or 'group'}"
-+        else:
-+            handle = "@group"
++        slug = _slugify_or_default(raw_principal, "")
++        if not slug and principal.display_name:
++            slug = _slugify_or_default(principal.display_name, "")
++        handle = f"@{slug or 'group'}"
  
      # Retrieve groups via closure
      closure_stmt = (
-@@ -327,10 +348,23 @@ async def _format_principal_entry(
+@@ -327,10 +341,20 @@ async def _format_principal_entry(
      elif p.principal_type == "GROUP":
          g_stmt = select(Group.name).where(Group.id == p.id)
          g_name = (await session.execute(g_stmt)).scalar_one_or_none()
@@ -50,25 +43,22 @@ index 92280fa6..3279df56 100644
 +        raw_principal = g_name or p.display_name
 +
 +    if p.principal_type == "GROUP":
-+        if raw_principal and not _RFC4122_UUID_REGEX.match(raw_principal.strip().lstrip("@")):
-+            handle = f"@{raw_principal.lstrip('@')}"
-+        elif p.display_name and not _RFC4122_UUID_REGEX.match(p.display_name.strip().lstrip("@")):
-+            slug = re.sub(r"[^a-z0-9._-]+", "-", p.display_name.strip().lower()).strip("-")
-+            handle = f"@{slug or 'group'}"
-+        else:
-+            handle = "@group"
++        slug = _slugify_or_default(raw_principal, "")
++        if not slug and p.display_name:
++            slug = _slugify_or_default(p.display_name, "")
++        handle = f"@{slug or 'group'}"
 +    elif raw_principal and not _RFC4122_UUID_REGEX.match(raw_principal.strip().lstrip("@")):
 +        handle = f"@{raw_principal.lstrip('@')}"
 +    elif p.display_name and not _RFC4122_UUID_REGEX.match(p.display_name.strip().lstrip("@")):
-+        slug = re.sub(r"[^a-z0-9._-]+", "-", p.display_name.strip().lower()).strip("-")
-+        handle = f"@{slug or 'user'}"
++        slug = _slugify_or_default(p.display_name, "user")
++        handle = f"@{slug}"
 +    else:
 +        handle = f"@{p.principal_type.lower() if p.principal_type else 'user'}"
  
      return {
          "id": str(p.id),
 diff --git a/kanban/tests/api/test_admin_principals.py b/kanban/tests/api/test_admin_principals.py
-index 5d5f02c1..d6969b30 100644
+index 5d5f02c1..79c1ee6f 100644
 --- a/kanban/tests/api/test_admin_principals.py
 +++ b/kanban/tests/api/test_admin_principals.py
 @@ -15,8 +15,10 @@ from database.models import Principal as DBPrincipal
@@ -82,6 +72,15 @@ index 5d5f02c1..d6969b30 100644
      _validate_principal_filter,
      add_group_member,
      bind_role,
+@@ -166,7 +168,7 @@ async def test_principals_lifecycle_and_group_membership(  # noqa: PLR0915
+     assert maya_p["provider"] == "LOCAL"
+ 
+     backend_p = next(p for p in p_list if p["principal"] == "Core Backend")
+-    assert backend_p["handle"] == "@Core Backend"
++    assert backend_p["handle"] == "@core-backend"
+     assert backend_p["email"] is None
+     assert backend_p["role"] == "WORKSPACE_MEMBER"
+     assert backend_p["provider"] == "LOCAL"
 @@ -1064,8 +1066,16 @@ async def test_provision_group_with_handle_slug(
      group_entry = next((p for p in p_list if p["id"] == data["id"]), None)
      assert group_entry is not None
@@ -99,7 +98,7 @@ index 5d5f02c1..d6969b30 100644
  
  @pytest.mark.asyncio
  async def test_admin_principals_endpoints_additional_coverage(
-@@ -1440,3 +1450,85 @@ async def test_principal_service_edge_cases_and_helpers(  # noqa: PLR0915
+@@ -1440,3 +1450,81 @@ async def test_principal_service_edge_cases_and_helpers(  # noqa: PLR0915
          session, admin.workspace_id, admin.id, user_pw_id, "WORKSPACE_GUEST", "workspace"
      )
      assert ub_res2["status"] == "role_unbound"
@@ -113,7 +112,7 @@ index 5d5f02c1..d6969b30 100644
 +        display_name="DevOps Security Team",
 +    )
 +    formatted_grp = await _format_principal_entry(session, admin.workspace_id, p_group_custom)
-+    assert formatted_grp["handle"] == "@DevOps Security Team"
++    assert formatted_grp["handle"] == "@devops-security-team"
 +
 +    p_group_uuid = DBPrincipal(
 +        id=uuid.uuid4(),
@@ -139,7 +138,7 @@ index 5d5f02c1..d6969b30 100644
 +    session.add(p_group_uuid)
 +    await session.flush()
 +    detail_grp = await get_principal_detail(session, admin.workspace_id, str(p_group_custom.id))
-+    assert detail_grp["handle"] == "@DevOps Security Team"
++    assert detail_grp["handle"] == "@devops-security-team"
 +
 +    detail_uuid = await get_principal_detail(session, admin.workspace_id, str(p_group_uuid.id))
 +    assert detail_uuid["handle"] == "@group"
@@ -151,9 +150,7 @@ index 5d5f02c1..d6969b30 100644
 +        name=str(uuid.uuid4()),
 +        display_name="Cloud Security",
 +    )
-+    detail_uuid_name = await get_principal_detail(
-+        session, admin.workspace_id, grp_uuid_name["id"]
-+    )
++    detail_uuid_name = await get_principal_detail(session, admin.workspace_id, grp_uuid_name["id"])
 +    assert detail_uuid_name["handle"] == "@cloud-security"
 +
 +    p_group_row = (
@@ -161,9 +158,7 @@ index 5d5f02c1..d6969b30 100644
 +            select(DBPrincipal).where(DBPrincipal.id == uuid.UUID(grp_uuid_name["id"]))
 +        )
 +    ).scalar_one()
-+    formatted_uuid_name = await _format_principal_entry(
-+        session, admin.workspace_id, p_group_row
-+    )
++    formatted_uuid_name = await _format_principal_entry(session, admin.workspace_id, p_group_row)
 +    assert formatted_uuid_name["handle"] == "@cloud-security"
 +
 +    p_eph = DBPrincipal(
@@ -185,8 +180,86 @@ index 5d5f02c1..d6969b30 100644
 +    await add_group_member(session, admin.workspace_id, admin.id, gid, user_pw_id)
 +    dup_mem = await add_group_member(session, admin.workspace_id, admin.id, gid, user_pw_id)
 +    assert dup_mem["status"] == "ok"
+diff --git a/kanban/web/src/app/Topbar.test.tsx b/kanban/web/src/app/Topbar.test.tsx
+index 2aab39ca..47a0a562 100644
+--- a/kanban/web/src/app/Topbar.test.tsx
++++ b/kanban/web/src/app/Topbar.test.tsx
+@@ -483,6 +483,44 @@ describe('Topbar', () => {
+     window.removeEventListener('kb:auth-logout', logoutEventSpy);
+   });
+ 
++  it('sends X-CSRF-Token during logout when csrfToken is present', async () => {
++    document.cookie = 'csrf_token=valid-test-csrf-token; path=/';
++    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
++      new Response(JSON.stringify({ ok: true }), { status: 200 }),
++    );
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <ThemeProvider>
++          <ShellPanelsProvider>
++            <MemoryRouter>
++              <Topbar />
++            </MemoryRouter>
++          </ShellPanelsProvider>
++        </ThemeProvider>
++      </QueryClientProvider>,
++    );
++
++    const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
++    act(() => {
++      avatarBtn.click();
++    });
++
++    const logoutBtn = screen.getByRole('menuitem', { name: /Log out/i });
++    await act(async () => {
++      logoutBtn.click();
++      await Promise.resolve();
++    });
++
++    expect(fetchSpy).toHaveBeenCalledWith('/api/v1/auth/logout', expect.anything());
++    const logoutCall = fetchSpy.mock.calls.find((call) => call[0] === '/api/v1/auth/logout');
++    expect(logoutCall).toBeDefined();
++    const callOptions = logoutCall?.[1];
++    const callHeaders = callOptions?.headers as Record<string, string> | undefined;
++    expect(callHeaders?.['X-CSRF-Token']).toBeDefined();
++    document.cookie = 'csrf_token=; Max-Age=0; path=/';
++  });
++
+   describe('resolveDisplayHandle and user profile rendering (KANBA-210)', () => {
+     it('normalizes handles, removes double-@ prefixes, and avoids leaking UUIDs', () => {
+       // Normal handle
+@@ -817,5 +855,28 @@ describe('Topbar', () => {
+       });
+       expect(onToggleCollapse).toHaveBeenCalledTimes(1);
+     });
++
++    it('invalidates system status queries upon receiving kb:system-status-changed event', () => {
++      const invalidateSpy = vi.spyOn(queryClient, 'invalidateQueries');
++      render(
++        <QueryClientProvider client={queryClient}>
++          <ThemeProvider>
++            <ShellPanelsProvider>
++              <MemoryRouter>
++                <Topbar />
++              </MemoryRouter>
++            </ShellPanelsProvider>
++          </ThemeProvider>
++        </QueryClientProvider>,
++      );
++
++      act(() => {
++        window.dispatchEvent(new CustomEvent('kb:system-status-changed'));
++      });
++
++      expect(invalidateSpy).toHaveBeenCalledWith(
++        expect.objectContaining({ queryKey: ['system', 'status'] }),
++      );
++    });
+   });
+ });
 diff --git a/kanban/web/src/app/Topbar.tsx b/kanban/web/src/app/Topbar.tsx
-index bcf7366e..432164f5 100644
+index bcf7366e..30ee35bb 100644
 --- a/kanban/web/src/app/Topbar.tsx
 +++ b/kanban/web/src/app/Topbar.tsx
 @@ -14,6 +14,7 @@ import React, {
@@ -197,12 +270,11 @@ index bcf7366e..432164f5 100644
  import { Breadcrumb } from './Breadcrumb';
  import { HeaderPills, type AccessManifestData } from './HeaderPills';
  import { LayoutSwitcher } from './LayoutSwitcher';
-@@ -124,6 +125,18 @@ export function Topbar({
+@@ -124,6 +125,17 @@ export function Topbar({
    const menuRef = useRef<HTMLDivElement>(null);
    const themeContext = useTheme();
  
 +  useEffect(() => {
-+    if (typeof window === 'undefined') return;
 +    const handleStatusChanged = (): void => {
 +      void queryClient.invalidateQueries({ queryKey: qk.systemStatus() });
 +      void queryClient.invalidateQueries({ queryKey: ['system', 'status'] });
@@ -321,7 +393,7 @@ index d2322bb2..7d45a260 100644
      queryKey: qk.systemStatus(),
      queryFn: ({ signal }) => fetchSystemStatus(signal),
 diff --git a/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx b/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx
-index 061583ca..d81b4ef1 100644
+index 061583ca..25da804c 100644
 --- a/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx
 +++ b/kanban/web/src/features/admin-auth/AuthStudioPage.test.tsx
 @@ -1,6 +1,7 @@
@@ -645,7 +717,7 @@ index 061583ca..d81b4ef1 100644
  
        await waitFor(() => {
          expect(screen.getByText('Okta SSO')).toBeDefined();
-@@ -1711,5 +1864,196 @@ describe('AuthStudioPage (KB-P3-36)', () => {
+@@ -1711,5 +1864,204 @@ describe('AuthStudioPage (KB-P3-36)', () => {
        fireEvent.click(screen.getByRole('button', { name: /Close/i }));
        expect(screen.queryByRole('heading', { name: /Reset Password: @local\.user/i })).toBeNull();
      });
@@ -744,6 +816,14 @@ index 061583ca..d81b4ef1 100644
 +      expect(formatHandle('')).toBe('');
 +      expect(formatHandle('   ')).toBe('');
 +      expect(formatHandle('@user')).toBe('@user');
++
++      // Group normalization to lowercase @slug for space/uppercase names (KAN-12)
++      expect(formatHandle('DevOps Security Team', null, 'GROUP')).toBe('@devops-security-team');
++      expect(formatHandle('@DevOps Security Team', null, 'GROUP')).toBe('@devops-security-team');
++      expect(formatHandle('801f9859-9944-42f0-9831-279c13dcbdb6', 'DevOps Security Team', 'GROUP')).toBe('@devops-security-team');
++      expect(formatHandle(null, 'DevOps Security Team', 'GROUP')).toBe('@devops-security-team');
++      expect(formatHandle('801f9859-9944-42f0-9831-279c13dcbdb6', null, 'GROUP')).toBe('@group');
++      expect(formatHandle('801f9859-9944-42f0-9831-279c13dcbdb6', '801f9859-9944-42f0-9831-279c13dcbdb6', 'GROUP')).toBe('@group');
 +    });
 +
 +    it('dismisses userActionError and userActionSuccess banners and handles draft handshake and add modal X close', async () => {
@@ -843,10 +923,10 @@ index 061583ca..d81b4ef1 100644
    });
  });
 diff --git a/kanban/web/src/features/admin-auth/AuthStudioPage.tsx b/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
-index 07fbf2e6..5cbc38c0 100644
+index 07fbf2e6..1c188598 100644
 --- a/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
 +++ b/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
-@@ -35,10 +35,31 @@ interface CurrentUserResponse {
+@@ -35,10 +35,40 @@ interface CurrentUserResponse {
    is_server_admin?: boolean;
  }
  
@@ -860,60 +940,69 @@ index 07fbf2e6..5cbc38c0 100644
 +export function formatHandle(
 +  handle?: string | null,
 +  fallbackDisplayName?: string | null,
++  principalType?: string | null,
 +): string {
++  const isGroup = principalType?.toUpperCase() === 'GROUP';
++  const slugify = (str: string): string =>
++    str
++      .toLowerCase()
++      .replace(/\s+/g, '-')
++      .replace(/[^a-z0-9._-]/g, '')
++      .replace(/^-+|-+$/g, '');
++
 +  if (handle) {
 +    const clean = handle.trim().replace(/^@+/, '');
 +    if (clean && !isUuid(clean)) {
++      if (isGroup) {
++        const slug = slugify(clean);
++        return slug ? `@${slug}` : '@group';
++      }
 +      return `@${clean}`;
 +    }
 +  }
 +  if (fallbackDisplayName) {
 +    const cleanFallback = fallbackDisplayName.trim().replace(/^@+/, '');
 +    if (cleanFallback && !isUuid(cleanFallback)) {
-+      const slug = cleanFallback
-+        .toLowerCase()
-+        .replace(/\s+/g, '-')
-+        .replace(/[^a-z0-9._-]/g, '')
-+        .replace(/^-+|-+$/g, '');
++      const slug = slugify(cleanFallback);
 +      if (slug) return `@${slug}`;
 +    }
 +  }
-+  return '';
++  return isGroup ? '@group' : '';
  }
  
  interface PendingMutation {
-@@ -574,7 +595,9 @@ export function AuthStudioPage(): JSX.Element {
+@@ -574,7 +604,9 @@ export function AuthStudioPage(): JSX.Element {
  
      try {
        await resetUserPassword(resetTargetUser.id, newPassword);
 -      setUserActionSuccess(`Password reset successfully for ${formatHandle(resetTargetUser.handle ?? resetTargetUser.principal)}.`);
 +      setUserActionSuccess(
-+        `Password reset successfully for ${formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name)}.`,
++        `Password reset successfully for ${formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name, resetTargetUser.type)}.`,
 +      );
        setResetTargetUser(null);
        setNewPassword('');
        setConfirmPassword('');
-@@ -821,7 +844,9 @@ export function AuthStudioPage(): JSX.Element {
+@@ -821,7 +853,9 @@ export function AuthStudioPage(): JSX.Element {
                              <span className="auth-user-display-name">
                                {u.display_name || (u.handle ?? u.principal)}
                              </span>
 -                            <span className="auth-user-handle">{formatHandle(u.handle ?? u.principal)}</span>
 +                            <span className="auth-user-handle">
-+                              {formatHandle(u.handle ?? u.principal, u.display_name)}
++                              {formatHandle(u.handle ?? u.principal, u.display_name, u.type)}
 +                            </span>
                            </div>
                          </td>
                          <td className="auth-users-td">
-@@ -853,7 +878,7 @@ export function AuthStudioPage(): JSX.Element {
+@@ -853,7 +887,7 @@ export function AuthStudioPage(): JSX.Element {
                              onChange={(e) => {
                                void handleRoleChange(u.id, e.target.value, u.role);
                              }}
 -                            aria-label={`Role for ${formatHandle(u.handle ?? u.principal)}`}
-+                            aria-label={`Role for ${formatHandle(u.handle ?? u.principal, u.display_name)}`}
++                            aria-label={`Role for ${formatHandle(u.handle ?? u.principal, u.display_name, u.type)}`}
                            >
                              <option value="SERVER_ADMIN">SERVER_ADMIN (Server Admin)</option>
                              <option value="WORKSPACE_ADMIN">WORKSPACE_ADMIN (Workspace Admin)</option>
-@@ -862,19 +887,32 @@ export function AuthStudioPage(): JSX.Element {
+@@ -862,19 +896,32 @@ export function AuthStudioPage(): JSX.Element {
                            </select>
                          </td>
                          <td className="auth-users-td">
@@ -959,7 +1048,7 @@ index 07fbf2e6..5cbc38c0 100644
                          </td>
                        </tr>
                      ))
-@@ -1048,7 +1086,12 @@ export function AuthStudioPage(): JSX.Element {
+@@ -1048,7 +1095,12 @@ export function AuthStudioPage(): JSX.Element {
        ) : null}
  
        {/* Reset Password Modal */}
@@ -973,28 +1062,28 @@ index 07fbf2e6..5cbc38c0 100644
          <div className="auth-modal-backdrop" role="presentation">
            <div
              className="auth-modal-dialog"
-@@ -1058,7 +1101,7 @@ export function AuthStudioPage(): JSX.Element {
+@@ -1058,7 +1110,7 @@ export function AuthStudioPage(): JSX.Element {
            >
              <div className="auth-modal-header">
                <h2 id="reset-pwd-modal-title" className="auth-modal-title">
 -                Reset Password: {formatHandle(resetTargetUser.handle ?? resetTargetUser.principal)}
-+                Reset Password: {formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name)}
++                Reset Password: {formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name, resetTargetUser.type)}
                </h2>
                <button
                  type="button"
-@@ -1073,8 +1116,8 @@ export function AuthStudioPage(): JSX.Element {
+@@ -1073,8 +1125,8 @@ export function AuthStudioPage(): JSX.Element {
                <div className="auth-modal-body">
                  <p className="auth-card-subtext">
                    Set a new password for{' '}
 -                  <strong>{resetTargetUser.display_name || (resetTargetUser.handle ?? resetTargetUser.principal)}</strong> (
 -                  {resetTargetUser.email ?? formatHandle(resetTargetUser.handle ?? resetTargetUser.principal)}).
-+                  <strong>{resetTargetUser.display_name || formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name)}</strong> (
-+                  {resetTargetUser.email ?? formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name)}).
++                  <strong>{resetTargetUser.display_name || formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name, resetTargetUser.type)}</strong> (
++                  {resetTargetUser.email ?? formatHandle(resetTargetUser.handle ?? resetTargetUser.principal, resetTargetUser.display_name, resetTargetUser.type)}).
                  </p>
  
                  <div className="auth-editor-field">
 diff --git a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
-index be281f43..1e2538fb 100644
+index be281f43..cbb1653f 100644
 --- a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
 +++ b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
 @@ -12,7 +12,8 @@
@@ -1007,7 +1096,7 @@ index be281f43..1e2538fb 100644
  import { apiFetch } from '../../api/client';
  import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
  import './ProjectSettingsPage.css';
-@@ -50,8 +51,49 @@ export function formatHandle(handle?: string | null): string {
+@@ -50,8 +51,54 @@ export function formatHandle(handle?: string | null): string {
    return clean ? `@${clean}` : '';
  }
  
@@ -1033,7 +1122,12 @@ index be281f43..1e2538fb 100644
 +
 +  useEffect(() => {
 +    const syncFromHash = (): void => {
-+      const currentHash = window.location.hash || locationHash;
++      const currentHash = window.location.hash;
++      const clean = currentHash.replace(/^#+/, '').trim();
++      if (!clean) {
++        setActiveTab('general');
++        return;
++      }
 +      const parsed = parseTabFromHash(currentHash);
 +      if (parsed) {
 +        setActiveTab(parsed);
@@ -1046,7 +1140,7 @@ index be281f43..1e2538fb 100644
 +    return () => {
 +      window.removeEventListener('hashchange', syncFromHash);
 +    };
-+  }, [locationHash]);
++  }, []);
 +
 +  const handleTabChange = (tab: 'general' | 'members' | 'groups'): void => {
 +    setActiveTab(tab);
@@ -1058,7 +1152,7 @@ index be281f43..1e2538fb 100644
    const [, setSettings] = useState<WorkspaceSettingsData | null>(null);
    const [principals, setPrincipals] = useState<WorkspacePrincipal[]>([]);
    const [isLoading, setIsLoading] = useState<boolean>(true);
-@@ -226,8 +268,10 @@ export function WorkspaceSettingsPage(): JSX.Element {
+@@ -226,8 +273,10 @@ export function WorkspaceSettingsPage(): JSX.Element {
  
          setSettings(updated);
          setSuccessMessage('Workspace settings updated successfully.');
@@ -1070,7 +1164,7 @@ index be281f43..1e2538fb 100644
        } catch (err: unknown) {
          const errObj = err as { message?: string; detail?: string };
          setErrorMessage(errObj.detail ?? errObj.message ?? 'Failed to update workspace settings.');
-@@ -482,30 +526,33 @@ export function WorkspaceSettingsPage(): JSX.Element {
+@@ -482,30 +531,33 @@ export function WorkspaceSettingsPage(): JSX.Element {
          <button
            type="button"
            role="tab"
@@ -1108,7 +1202,7 @@ index be281f43..1e2538fb 100644
            Groups & Governance
          </button>
 diff --git a/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
-index 38239d6d..7c13e2ba 100644
+index 38239d6d..185b0ae0 100644
 --- a/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
 +++ b/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
 @@ -6,7 +6,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
@@ -1128,7 +1222,25 @@ index 38239d6d..7c13e2ba 100644
      queryClient = new QueryClient({
        defaultOptions: {
          queries: { retry: false },
-@@ -1698,4 +1699,133 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
+@@ -967,6 +968,9 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
+ 
+     // Remove member
+     fireEvent.click(screen.getByTestId('remove-group-member-m-nested'));
++    await waitFor(() => {
++      expect(screen.getByText('Member removed from group.')).toBeDefined();
++    });
+ 
+     // Remove member error
+     fireEvent.click(screen.getByTestId('remove-group-member-m-agent'));
+@@ -985,6 +989,7 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
+     fireEvent.click(screen.getByText('grp-bare'));
+     expect(screen.getByTestId('selected-group-name').textContent).toBe('');
+     expect(screen.getByTestId('selected-group-handle').textContent).toBe('@grp-bare');
++    expect(await screen.findByTestId('empty-group-members')).toBeDefined();
+   });
+ 
+   it('covers early return guards and error fallbacks for members, users, and groups', async () => {
+@@ -1698,4 +1703,186 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
        expect(screen.getByText('Failed to remove group member.')).toBeDefined();
      });
    });
@@ -1202,6 +1314,59 @@ index 38239d6d..7c13e2ba 100644
 +    });
 +
 +    // 4. Reset hash
++    window.location.hash = '';
++  });
++
++  it('resets activeTab to general when window.location.hash becomes empty or hash-only on browser back navigation', async () => {
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
++      await Promise.resolve();
++      if (path.includes('/api/v1/auth/me')) {
++        return { is_server_admin: true, is_workspace_admin: true };
++      }
++      if (path.includes('/api/v1/admin/workspace-settings')) {
++        return { name: 'WS', slug: 'ws', air_gap_mode: false };
++      }
++      return [];
++    });
++
++    window.location.hash = '#tab-members';
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <MemoryRouter initialEntries={['/workspaces/settings#tab-members']}>
++          <WorkspaceSettingsPage />
++        </MemoryRouter>
++      </QueryClientProvider>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('tab-members').getAttribute('aria-selected')).toBe('true');
++    });
++
++    // Simulate browser Back button navigating to base URL with empty hash ""
++    window.location.hash = '';
++    fireEvent(window, new HashChangeEvent('hashchange'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('tab-general').getAttribute('aria-selected')).toBe('true');
++    });
++
++    // Switch back to groups
++    window.location.hash = '#tab-groups';
++    fireEvent(window, new HashChangeEvent('hashchange'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('tab-groups').getAttribute('aria-selected')).toBe('true');
++    });
++
++    // Simulate browser Back button navigating to '#'
++    window.location.hash = '#';
++    fireEvent(window, new HashChangeEvent('hashchange'));
++
++    await waitFor(() => {
++      expect(screen.getByTestId('tab-general').getAttribute('aria-selected')).toBe('true');
++    });
++
 +    window.location.hash = '';
 +  });
 +

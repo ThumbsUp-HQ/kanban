@@ -72,7 +72,12 @@ export function WorkspaceSettingsPage(): JSX.Element {
 
   useEffect(() => {
     const syncFromHash = (): void => {
-      const currentHash = window.location.hash || locationHash;
+      const currentHash = window.location.hash;
+      const clean = currentHash.replace(/^#+/, '').trim();
+      if (!clean) {
+        setActiveTab('general');
+        return;
+      }
       const parsed = parseTabFromHash(currentHash);
       if (parsed) {
         setActiveTab(parsed);
@@ -85,7 +90,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
     return () => {
       window.removeEventListener('hashchange', syncFromHash);
     };
-  }, [locationHash]);
+  }, []);
 
   const handleTabChange = (tab: 'general' | 'members' | 'groups'): void => {
     setActiveTab(tab);

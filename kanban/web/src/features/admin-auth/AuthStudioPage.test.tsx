@@ -1959,6 +1959,14 @@ describe('AuthStudioPage (KB-P3-36)', () => {
       expect(formatHandle('')).toBe('');
       expect(formatHandle('   ')).toBe('');
       expect(formatHandle('@user')).toBe('@user');
+
+      // Group normalization to lowercase @slug for space/uppercase names (KAN-12)
+      expect(formatHandle('DevOps Security Team', null, 'GROUP')).toBe('@devops-security-team');
+      expect(formatHandle('@DevOps Security Team', null, 'GROUP')).toBe('@devops-security-team');
+      expect(formatHandle('801f9859-9944-42f0-9831-279c13dcbdb6', 'DevOps Security Team', 'GROUP')).toBe('@devops-security-team');
+      expect(formatHandle(null, 'DevOps Security Team', 'GROUP')).toBe('@devops-security-team');
+      expect(formatHandle('801f9859-9944-42f0-9831-279c13dcbdb6', null, 'GROUP')).toBe('@group');
+      expect(formatHandle('801f9859-9944-42f0-9831-279c13dcbdb6', '801f9859-9944-42f0-9831-279c13dcbdb6', 'GROUP')).toBe('@group');
     });
 
     it('dismisses userActionError and userActionSuccess banners and handles draft handshake and add modal X close', async () => {
