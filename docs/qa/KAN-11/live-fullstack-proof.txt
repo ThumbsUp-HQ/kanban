@@ -1,0 +1,53 @@
+KAN-11 [KB-P3-AUDIT-05] LIVE FULL-STACK VERIFICATION PROOF
+Target: http://localhost:18951 (container kanban-liveqa-1, commit cd89d77)
+Timestamp: 2026-11-20T08:48:46.857Z
+Mode: ZERO-MOCK real headless Chromium Playwright against live embedded PostgreSQL 16 + FORCE RLS
+
+--- EXECUTION LOG ---
+GET /api/v1/projects/ACME -> 200 identifier=ACME modules_enabled=false
+Problem 3 (/drafts empty-state CTA): href="/projects/ACME/issues?create=1"
+Captured live-kan11-drafts-empty-desktop-light.png
+Captured live-kan11-drafts-empty-desktop-dark.png
+Mobile 390x844 (/drafts): scrollWidth=390
+Captured live-kan11-drafts-empty-mobile-light.png
+Pre-step enable Modules on ACME: PATCH /api/v1/projects/ACME -> 200 modules_enabled=true
+Problem 1 (before save, modules_enabled=true): sidebar Modules link count=1
+PATCH /api/v1/projects/ACME -> 200 modules_enabled=false
+Problem 1 (after save, 0 reloads, framenavigated=0): sidebar Modules link count=0
+Captured live-kan11-modules-toggled-off-desktop-light.png
+Captured live-kan11-modules-toggled-off-desktop-dark.png
+Problem 2 (Danger Zone guard): disabled=true, aria-disabled="true", hint="Stage 1 (Move Project to Trash) must be completed before permanent purge."
+Captured live-kan11-danger-zone-purge-guarded-desktop-light.png
+Captured live-kan11-danger-zone-purge-guarded-desktop-dark.png
+Mobile 390x844 (Danger Zone): scrollWidth=390
+Captured live-kan11-danger-zone-purge-guarded-mobile-light.png
+Captured live-kan11-danger-zone-purge-guarded-mobile-dark.png
+
+--- HTTP TELEMETRY ---
+  GET /api/v1/projects -> 200
+  GET /api/v1/projects/ACME -> 200
+  GET /api/v1/projects/ACME/labels -> 200
+  GET /api/v1/projects/ACME/issues -> 200
+  GET /api/v1/projects/ACME/states -> 200
+  GET /api/v1/projects -> 200
+  GET /api/v1/projects/ACME/cycles -> 200
+  GET /api/v1/projects -> 200
+  GET /api/v1/projects -> 200
+  GET /api/v1/projects/ACME -> 200
+  GET /api/v1/projects -> 200
+  GET /api/v1/projects/ACME -> 200
+  GET /api/v1/projects/ACME/members -> 200
+  GET /api/v1/projects/ACME/states -> 200
+  GET /api/v1/projects/ACME/priorities -> 200
+  GET /api/v1/projects/ACME/labels -> 200
+  GET /api/v1/projects/ACME/trash-items -> 200
+  PATCH /api/v1/projects/ACME -> 200
+  GET /api/v1/projects/ACME -> 200
+  PATCH /api/v1/projects/ACME -> 200
+  GET /api/v1/projects/ACME -> 200
+
+--- ERROR TELEMETRY ---
+console.error count: 0
+pageerror count: 0
+
+LIVE_STACK_VERDICT: PASS
