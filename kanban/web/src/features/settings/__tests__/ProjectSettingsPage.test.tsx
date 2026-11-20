@@ -8,6 +8,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { ProjectSettingsPage, formatPrincipalHandle } from '../ProjectSettingsPage';
 import * as clientModule from '../../../api/client';
+import { ApiProblem } from '../../../api/problem';
 
 let csrfToggle = false;
 vi.mock('../../auth/useSessionGuard', () => ({
@@ -3051,13 +3052,19 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       }
       if (url.includes('/api/v1/projects/KAN/states/st-edit-1') && m === 'PATCH') {
         if (mockErrorType === 'TAKEN') {
-          throw new Error('STATE_NAME_TAKEN: state name already exists');
+          throw new ApiProblem(409, { code: 'STATE_NAME_TAKEN', title: 'State Name Taken' });
         }
         if (mockErrorType === 'LAST_GROUP') {
-          throw new Error('LAST_STATE_IN_GROUP');
+          throw new ApiProblem(409, {
+            code: 'LAST_STATE_IN_GROUP',
+            title: 'Cannot Move Last State Out Of Group',
+          });
         }
         if (mockErrorType === 'DEFAULT_REQ') {
-          throw new Error('DEFAULT_STATE_REQUIRED');
+          throw new ApiProblem(409, {
+            code: 'DEFAULT_STATE_REQUIRED',
+            title: 'Default State Required',
+          });
         }
         patchedStateBody = JSON.parse(String((options as { body?: string }).body)) as Record<string, unknown>;
         return {
@@ -3138,8 +3145,11 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       expect(screen.getByText('Workflow state "Purple Backlog" updated.')).toBeDefined();
     });
 
-    // Reopen and save with is_default: true
+    // Reopen and save with updated sort_order and is_default: true
     fireEvent.click(screen.getByTestId('edit-state-btn-st-edit-1'));
+    const orderInput = screen.getByTestId('state-edit-order-st-edit-1');
+    expect(orderInput).toBeDefined();
+    fireEvent.change(orderInput, { target: { value: '7' } });
     fireEvent.click(screen.getByTestId('state-edit-default-st-edit-1'));
     fireEvent.click(screen.getByTestId('save-state-btn-st-edit-1'));
 
@@ -3151,6 +3161,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       name: 'Purple Backlog',
       group: 'unstarted',
       color_hex: '#7c3aed',
+      sort_order: 7,
       wip_soft_limit: 5,
       wip_hard_limit: 10,
       is_default: true,
@@ -3216,7 +3227,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
         return stateList;
       }
       if (url.includes('/api/v1/projects/KAN/states') && m === 'POST') {
-        throw new Error('STATE_NAME_TAKEN: state name already exists');
+        throw new ApiProblem(409, { code: 'STATE_NAME_TAKEN', title: 'State Name Taken' });
       }
       if (url.includes('/api/v1/projects/KAN/states/') && m === 'PATCH') {
         const bodyStr = typeof (options as { body?: unknown }).body === 'string'

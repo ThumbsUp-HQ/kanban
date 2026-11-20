@@ -1848,6 +1848,12 @@ async def test_kan43_state_update_invariants_and_color_hex(
     assert patch_prio.status_code == 200
     assert patch_prio.json()["color_hex"].lower() == "#7c3aed"
 
+    # 8. Reject deleting sole remaining state in 'started' group with 409 LAST_STATE_IN_GROUP
+    started_st = next(s for s in states if s["group"] == "started")
+    del_started = await client.delete(f"/api/v1/projects/{pref}/states/{started_st['id']}")
+    assert del_started.status_code == 409
+    assert del_started.json()["code"] == "LAST_STATE_IN_GROUP"
+
 
 def test_kan43_is_unique_violation_helper() -> None:
     """Validate _is_unique_violation correctly classifies SQLSTATE 23505."""

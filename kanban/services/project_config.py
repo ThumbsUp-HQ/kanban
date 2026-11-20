@@ -692,8 +692,8 @@ async def delete_state(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
             detail=None,
         )
 
-    # Rule: cannot delete last state in completed, cancelled, or backlog
-    if state.state_group in ("completed", "cancelled", "backlog"):
+    # Rule: cannot delete last state in completed, cancelled, backlog, or started
+    if state.state_group in ("completed", "cancelled", "backlog", "started"):
         grp_count_res = await session.execute(
             select(func.count(WorkflowState.id)).where(
                 WorkflowState.project_id == project.id,

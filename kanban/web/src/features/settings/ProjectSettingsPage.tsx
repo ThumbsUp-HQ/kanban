@@ -17,6 +17,7 @@ import React, { useContext, useEffect, useState, type JSX, type SyntheticEvent }
 import { Link, useNavigate, useParams } from 'react-router';
 import { QueryClientContext } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client';
+import { ApiProblem } from '../../api/problem';
 import { qk } from '../../api/queryKeys';
 import { StateBadge } from '../../components/state/StateBadge';
 import { ensureSessionCsrfToken } from '../auth/useSessionGuard';
@@ -223,6 +224,7 @@ export function ProjectSettingsPage(): JSX.Element {
     'backlog' | 'unstarted' | 'started' | 'completed' | 'cancelled'
   >('started');
   const [editStateColor, setEditStateColor] = useState<string>('#4f46e5');
+  const [editStateSortOrder, setEditStateSortOrder] = useState<string>('0');
   const [editStateWipSoft, setEditStateWipSoft] = useState<string>('');
   const [editStateWipHard, setEditStateWipHard] = useState<string>('');
   const [editStateIsDefault, setEditStateIsDefault] = useState<boolean>(false);
@@ -576,9 +578,15 @@ export function ProjectSettingsPage(): JSX.Element {
         setSuccessMessage(`Workflow state "${created.name}" created.`);
         invalidateProjectCaches();
       } catch (err: unknown) {
-        const errObj = err as { message?: string; detail?: string };
-        const rawMsg = errObj.detail ?? errObj.message ?? '';
+        const errObj = err as { message?: string; detail?: string; code?: string };
+        const rawCode = err instanceof ApiProblem ? err.code : (errObj.code ?? '');
+        const rawMsg =
+          err instanceof ApiProblem
+            ? (err.detail ?? err.message)
+            : (errObj.detail ?? errObj.message ?? '');
         if (
+          rawCode === 'STATE_NAME_TAKEN' ||
+          rawCode.includes('STATE_NAME_TAKEN') ||
           rawMsg.includes('STATE_NAME_TAKEN') ||
           rawMsg.includes('already exists') ||
           rawMsg.includes('unique')
@@ -667,6 +675,7 @@ export function ProjectSettingsPage(): JSX.Element {
     setEditStateName(st.name);
     setEditStateGroup(st.group);
     setEditStateColor(st.color_hex || '#4f46e5');
+    setEditStateSortOrder(String(st.sort_order));
     setEditStateWipSoft(st.wip_soft_limit != null ? String(st.wip_soft_limit) : '');
     setEditStateWipHard(st.wip_hard_limit != null ? String(st.wip_hard_limit) : '');
     setEditStateIsDefault(st.is_default);
@@ -704,6 +713,7 @@ export function ProjectSettingsPage(): JSX.Element {
           name: trimmedName,
           group: editStateGroup,
           color_hex: editStateColor.trim(),
+          sort_order: parseInt(editStateSortOrder, 10) || 0,
           wip_soft_limit: editStateWipSoft !== '' ? parseInt(editStateWipSoft, 10) : null,
           wip_hard_limit: editStateWipHard !== '' ? parseInt(editStateWipHard, 10) : null,
           is_default: editStateIsDefault,
@@ -733,17 +743,31 @@ export function ProjectSettingsPage(): JSX.Element {
         setSuccessMessage(`Workflow state "${updated.name}" updated.`);
         invalidateProjectCaches();
       } catch (err: unknown) {
-        const errObj = err as { message?: string; detail?: string };
-        const rawMsg = errObj.detail ?? errObj.message ?? '';
+        const errObj = err as { message?: string; detail?: string; code?: string };
+        const rawCode = err instanceof ApiProblem ? err.code : (errObj.code ?? '');
+        const rawMsg =
+          err instanceof ApiProblem
+            ? (err.detail ?? err.message)
+            : (errObj.detail ?? errObj.message ?? '');
         if (
+          rawCode === 'STATE_NAME_TAKEN' ||
+          rawCode.includes('STATE_NAME_TAKEN') ||
           rawMsg.includes('STATE_NAME_TAKEN') ||
           rawMsg.includes('already exists') ||
           rawMsg.includes('unique')
         ) {
           setErrorMessage('A workflow state with this name already exists in this project.');
-        } else if (rawMsg.includes('LAST_STATE_IN_GROUP')) {
+        } else if (
+          rawCode === 'LAST_STATE_IN_GROUP' ||
+          rawCode.includes('LAST_STATE_IN_GROUP') ||
+          rawMsg.includes('LAST_STATE_IN_GROUP')
+        ) {
           setErrorMessage('Cannot move the last remaining state out of this lifecycle group.');
-        } else if (rawMsg.includes('DEFAULT_STATE_REQUIRED')) {
+        } else if (
+          rawCode === 'DEFAULT_STATE_REQUIRED' ||
+          rawCode.includes('DEFAULT_STATE_REQUIRED') ||
+          rawMsg.includes('DEFAULT_STATE_REQUIRED')
+        ) {
           setErrorMessage(
             'A default state is required. Designate another default state before removing this one.',
           );
@@ -1572,7 +1596,17 @@ export function ProjectSettingsPage(): JSX.Element {
                   if (isEditing) {
                     return (
                       <tr key={st.id} data-testid={`state-row-${st.id}`}>
-                        <td>{st.sort_order}</td>
+                        <td>
+                          <input
+                            type="number"
+                            data-testid={`state-edit-order-${st.id}`}
+                            className="kb-input"
+                            value={editStateSortOrder}
+                            onChange={(e) => {
+                              setEditStateSortOrder(e.target.value);
+                            }}
+                          />
+                        </td>
                         <td>
                           <div className="kb-edit-cell-row">
                             <StateBadge

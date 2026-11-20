@@ -1,50 +1,480 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan43-ff9d8e26
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan43-rc1-3a58271b
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 40 items
+collected 42 items
 
-kanban/tests/api/test_project_config.py ................                 [ 40%]
+kanban/tests/api/test_project_config.py ..................               [ 42%]
 kanban/tests/api/test_issues.py ................                         [ 80%]
 kanban/tests/api/test_issue_delete.py ........                           [100%]
 
 ================================ tests coverage ================================
 _______________ coverage: platform linux, python 3.12.7-final-0 ________________
 
-Name                                Stmts   Miss Branch BrPart  Cover   Missing
--------------------------------------------------------------------------------
-kanban/api/v1/schemas/issues.py       170      1     30      2    98%   325->329, 331
-kanban/services/issue_delete.py       159      3     42      7    95%   139, 237, 318->327, 320->327, 328->336, 330->336, 434
-kanban/services/issues.py             446     21    180     11    95%   320-324, 427, 533, 542-560, 570-573, 649->652, 812, 856, 957, 1004->1007, 1097, 1176, 1177->1180
-kanban/services/project_config.py     464     15    226     13    95%   124->120, 127-130, 166->171, 171->165, 294-302, 403->412, 465-473, 614->617, 706->715, 798->811, 851-852, 855->874, 1140, 1164->1196, 1523->1544
--------------------------------------------------------------------------------
-TOTAL                                1239     40    478     33    95%
-============================= 40 passed in 44.01s ==============================
+Name                                Stmts   Miss Branch BrPart  Cover
+---------------------------------------------------------------------
+kanban/api/v1/schemas/issues.py       170      1     30      2    98%
+kanban/services/issue_delete.py       163      3     42      7    95%
+kanban/services/issues.py             446     21    180     11    95%
+kanban/services/project_config.py     464     15    226     12    95%
+---------------------------------------------------------------------
+TOTAL                                1243     40    478     32    95%
+============================= 42 passed in 45.22s ==============================
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan43-ff9d8e26/kanban/web
+
+> @kanban/web@0.1.0 test:coverage /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan43-rc1-3a58271b/kanban/web
+> vitest run --coverage src/features/settings/__tests__/ProjectSettingsPage.test.tsx src/components/state/StateBadge.test.tsx src/features/board/BoardColumn.test.tsx src/features/board/BoardView.test.tsx src/features/table/TableView.test.tsx src/features/list/ListView.test.tsx src/features/views/QuickCreateIssueModal.test.tsx src/features/views/QuickFieldPopover.test.tsx src/features/views/viewRegistry.test.tsx src/styles/__tests__/cssTokensAudit.test.ts
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan43-rc1-3a58271b/kanban/web
       Coverage enabled with v8
 
- ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 16ms
- ✓ src/components/state/StateBadge.test.tsx (8 tests) 125ms
- ✓ src/features/board/BoardColumn.test.tsx (9 tests) 235ms
- ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (37 tests) 3355ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 26ms
+ ✓ src/components/state/StateBadge.test.tsx (8 tests) 178ms
+ ✓ src/features/board/BoardColumn.test.tsx (9 tests) 354ms
+ ✓ src/features/views/QuickFieldPopover.test.tsx (9 tests) 483ms
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+stderr | src/features/views/QuickCreateIssueModal.test.tsx > QuickCreateIssueModal (KB-P3-40, KANBA-173) > locks create button while submission is in-flight (disabled and aria-busy)
+An update to QuickCreateIssueModal inside a test was not wrapped in act(...).
 
- Test Files  4 passed (4)
-      Tests  58 passed (58)
-   Start at  10:43:31
-   Duration  5.00s (tests 45%, environment 42%, import 7%, transform 4%, worker 2%)
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to QuickCreateIssueModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/views/QuickCreateIssueModal.test.tsx (15 tests) 1460ms
+   ✓ QuickCreateIssueModal (KB-P3-40, KANBA-173) (15)
+     ✓ renders summary, description, state, priority, and module fields when open and transitions to post-dialog on create 374ms
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > IssuesWorkspaceRoute: renders FilterDisplayBar, mounts 2D SwimlaneBoardGrid when layout=board and sub_group_by=priority
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > IssuesWorkspaceRoute: filters issues by Gate Status (e.g. pending shows ⏳🤖)
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/board/BoardView.test.tsx (20 tests) 1984ms
+ ✓ src/features/list/ListView.test.tsx (14 tests) 3708ms
+   ✓ ListView (14)
+     ✓ renders external assignee with literal hint and links KAN-142 to peek 672ms
+     ✓ renders Single Filter Card Dropdown and handles search, state, priority, and + New (KANBA-174) 651ms
+     ✓ covers state filter, key search, groupBy none, custom priority, and outside click 1000ms
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > IssuesWorkspaceRoute: creates a new issue via QuickCreateIssueModal and updates state/priority via field popover
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to QuickCreateIssueModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to QuickCreateIssueModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+Not implemented: navigation to another Document
+ ✓ src/features/table/TableView.test.tsx (17 tests) 4405ms
+   ✓ TableView (17)
+     ✓ renders default columns and cycles aria-sort ascending -> descending -> none on Priority click 719ms
+     ✓ sorts by other sortable columns (Key, Summary, State, Due date) 1329ms
+     ✓ toggles Start date on, Cycle off, reorders Due date before Assignees, and persists to localStorage 809ms
+     ✓ renders Load more button and triggers onLoadMore 354ms
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (37 tests) 4662ms
+   ✓ ProjectSettingsPage (KANBA-202) (37)
+     ✓ renders project settings page tabs and switches between them 390ms
+     ✓ handles error states on workflow states, priorities, labels, and trash restore 448ms
+     ✓ covers fallback error messages when error object has no message property 354ms
+     ✓ supports full workflow state editing UI, live StateBadge preview, and cache invalidation (KAN-43 Problem 1) 339ms
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > IssuesWorkspaceRoute: handles multi-select, batch archive, and batch delete in BulkActionBar
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > IssuesWorkspaceRoute: triggers onCreateIssue modal and covers BulkActionBar batch updates
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > IssuesWorkspaceRoute: filters by Priority, Assignee (unassigned and alice), Cycle, Module, Due Date
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > IssuesWorkspaceRoute: tests state filter Active preset, alice assignee, and select-all
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > IssuesWorkspaceRoute: batch archives completed issues when Archive is clicked
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > IssuesWorkspaceRoute: covers batch update state with Shift (todo) and batch update priority with Shift (medium)
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > IssuesWorkspaceRoute: toggles Adam assignment via I shortcut
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > IssuesWorkspaceRoute: mounts 2D Swimlane grid when board layout and subGroupBy is active
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > IssuesWorkspaceRoute: tests field popovers for high/low priority and in-progress/backlog state, and / shortcut
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > IssuesWorkspaceRoute: initializes activeFilters from URL query params (filter_label, filter_priority, filter_state, and gate_status)
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > IssuesWorkspaceRoute: covers handleToggleSelect 100 cap and unassigned I shortcut
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > Live Mode API Wiring & Board State Normalization (KANBA-164) > creates, updates, and bulk-operates on issues in live mode via REST endpoints
+An update to IssuesWorkspaceRoute inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > Live Mode API Wiring & Board State Normalization (KANBA-164) > handles peek query param, vetoed gate status, and agent assignees in board layout
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > Live Mode API Wiring & Board State Normalization (KANBA-164) > handles bulk archive, custom priority emojis, and clear selection
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > Live Mode API Wiring & Board State Normalization (KANBA-164) > covers live mode optimistic creation with new key, backlog state selection, and wip_hard/wip_soft aliases
+Encountered two children with the same key, `01931234-5678-7000-8000-000000000002`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted - the behavior is unsupported and could change in a future version.
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > Live Mode API Wiring & Board State Normalization (KANBA-164) > covers live mode optimistic creation with new key, backlog state selection, and wip_hard/wip_soft aliases
+Encountered two children with the same key, `01931234-5678-7000-8000-000000000002`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted - the behavior is unsupported and could change in a future version.
+Encountered two children with the same key, `01931234-5678-7000-8000-000000000002`. Keys should be unique so that components maintain their identity across updates. Non-unique keys may cause children to be duplicated and/or omitted - the behavior is unsupported and could change in a future version.
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > Live Mode API Wiring & Board State Normalization (KANBA-164) > opens peek drawer via onOpenPeek and URL search param popstate
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > Live Mode API Wiring & Board State Normalization (KANBA-164) > covers handleSelectAll unselecting all issues via TableView master checkbox
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > Live Mode API Wiring & Board State Normalization (KANBA-164) > covers SaveViewModal with pre-existing active filters from query params
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > Live Mode API Wiring & Board State Normalization (KANBA-164) > handles states fetch failure in live mode
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > Live Mode API Wiring & Board State Normalization (KANBA-164) > covers onCreateIssue from ViewHost table layout empty state
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > Live Mode API Wiring & Board State Normalization (KANBA-164) > covers camelCase groupBy and subGroupBy query params and invalid fallbacks
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > Live Mode API Wiring & Board State Normalization (KANBA-164) > covers boardIssues state resolution fallback branches (name match, group match, completely unknown state)
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > Live Mode API Wiring & Board State Normalization (KANBA-164) > covers BulkActionBar batch delete and archive in table layout
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > Live Mode API Wiring & Board State Normalization (KANBA-164) > covers table layout with read-only viewer and bulk state toggle to todo
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/views/viewRegistry.test.tsx > viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) > Live Mode API Wiring & Board State Normalization (KANBA-164) > KB-P3-AUDIT-08: gates modulesEnabled on project query confirmation
+An update to FilterDisplayBar inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/views/viewRegistry.test.tsx (41 tests) 19018ms
+   ✓ viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) (41)
+     ✓ renders TableView when layout is table 457ms
+     ✓ IssuesWorkspaceRoute: creates a new issue via QuickCreateIssueModal and updates state/priority via field popover 2018ms
+     ✓ IssuesWorkspaceRoute: handles multi-select, batch archive, and batch delete in BulkActionBar 1031ms
+     ✓ IssuesWorkspaceRoute: triggers onCreateIssue modal and covers BulkActionBar batch updates 318ms
+     ✓ IssuesWorkspaceRoute: filters by Priority, Assignee (unassigned and alice), Cycle, Module, Due Date 2768ms
+     ✓ IssuesWorkspaceRoute: tests state filter Active preset, alice assignee, and select-all 994ms
+     ✓ IssuesWorkspaceRoute: covers batch update state with Shift (todo) and batch update priority with Shift (medium) 471ms
+     ✓ IssuesWorkspaceRoute: tests field popovers for high/low priority and in-progress/backlog state, and / shortcut 933ms
+     ✓ IssuesWorkspaceRoute: covers handleToggleSelect 100 cap and unassigned I shortcut 3938ms
+     ✓ Live Mode API Wiring & Board State Normalization (KANBA-164) (21)
+       ✓ creates, updates, and bulk-operates on issues in live mode via REST endpoints 751ms
+       ✓ covers live mode optimistic creation with new key, backlog state selection, and wip_hard/wip_soft aliases 335ms
+       ✓ enforces Hard WIP limits on state transition: blocks standard member with snapback, prompts admin for override 318ms
+       ✓ handles live mode patch failure and state fetch failure gracefully 441ms
+       ✓ covers opening, cancelling, and saving custom view via SaveViewModal in IssuesWorkspaceRoute 938ms
+       ✓ covers BulkActionBar batch delete and archive in table layout 684ms
+
+ Test Files  10 passed (10)
+      Tests  174 passed (174)
+   Start at  12:16:40
+   Duration  22.23s (tests 66%, environment 25%, import 6%, worker 1%, transform 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   99.47 |     95.8 |     100 |     100 |                   
+All files          |   99.48 |    95.83 |     100 |     100 |                   
  components/state  |   97.77 |     97.4 |     100 |     100 |                   
   StateBadge.tsx   |   97.77 |     97.4 |     100 |     100 | 76,92             
  features/board    |     100 |      100 |     100 |     100 |                   
   BoardColumn.tsx  |     100 |      100 |     100 |     100 |                   
- features/settings |   99.54 |    95.16 |     100 |     100 |                   
-  ...tingsPage.tsx |   99.54 |    95.16 |     100 |     100 | ...25,976,988-991 
+ features/settings |   99.55 |    95.23 |     100 |     100 |                   
+  ...tingsPage.tsx |   99.55 |    95.23 |     100 |     100 | ...1000,1012-1015 
 -------------------|---------|----------|---------|---------|-------------------
