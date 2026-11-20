@@ -11,6 +11,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import delete, func, select, text, update
+from sqlalchemy.orm.attributes import flag_modified
 
 from database.models import (
     Issue,
@@ -45,12 +46,134 @@ from kanban.workflows.manifest import compute_hook_manifest_sha256
 
 if TYPE_CHECKING:
     import uuid
+    from collections.abc import Sequence
 
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from kanban.api.deps import PrincipalContext
 
 MAX_MIGRATION_ISSUES: int = 500
+
+
+def _migrate_id_in_list(
+    raw_list: list[object],
+    target_str: str,
+    replacement_str: str | None,
+) -> tuple[list[str], bool]:
+    """Replace target_str with replacement_str (deduplicating), or remove if replacement is None."""
+    new_items: list[str] = []
+    seen: set[str] = set()
+    modified = False
+    for item in raw_list:
+        item_str = str(item)
+        if item_str == target_str:
+            modified = True
+            if replacement_str and replacement_str not in seen:
+                seen.add(replacement_str)
+                new_items.append(replacement_str)
+        elif item_str not in seen:
+            seen.add(item_str)
+            new_items.append(item_str)
+    return new_items, modified
+
+
+def _migrate_id_in_dict(
+    d: dict[str, Any],
+    field: str,
+    target_str: str,
+    replacement_str: str | None,
+) -> tuple[dict[str, Any], bool]:
+    """Recursively replace or remove target_str in dict occurrences of field."""
+    new_dict: dict[str, Any] = {}
+    any_modified = False
+    for k, v in d.items():
+        if k == field and isinstance(v, list):
+            new_list, mod = _migrate_id_in_list(v, target_str, replacement_str)
+            new_dict[k] = new_list
+            if mod:
+                any_modified = True
+        elif isinstance(v, dict):
+            new_sub_dict, mod = _migrate_id_in_dict(v, field, target_str, replacement_str)
+            new_dict[k] = new_sub_dict
+            if mod:
+                any_modified = True
+        elif isinstance(v, list):
+            new_sub_list, mod = _migrate_id_in_container_list(v, field, target_str, replacement_str)
+            new_dict[k] = new_sub_list
+            if mod:
+                any_modified = True
+        else:
+            new_dict[k] = v
+    return new_dict, any_modified
+
+
+def _migrate_id_in_container_list(
+    items: list[Any],
+    field: str,
+    target_str: str,
+    replacement_str: str | None,
+) -> tuple[list[Any], bool]:
+    """Recursively replace or remove target_str inside nested list elements."""
+    new_items: list[Any] = []
+    any_modified = False
+    for item in items:
+        if isinstance(item, dict):
+            new_d, mod = _migrate_id_in_dict(item, field, target_str, replacement_str)
+            new_items.append(new_d)
+            if mod:
+                any_modified = True
+        elif isinstance(item, list):
+            new_l, mod = _migrate_id_in_container_list(item, field, target_str, replacement_str)
+            new_items.append(new_l)
+            if mod:
+                any_modified = True
+        else:
+            new_items.append(item)
+    return new_items, any_modified
+
+
+def _nested_references_id(obj: object, field: str, target_str: str) -> bool:
+    """Recursively check if field contains target_str in nested dicts/lists."""
+    if isinstance(obj, dict):
+        raw_val = obj.get(field)
+        if isinstance(raw_val, list) and any(str(x) == target_str for x in raw_val):
+            return True
+        return any(_nested_references_id(v, field, target_str) for v in obj.values())
+    if isinstance(obj, list):
+        return any(_nested_references_id(item, field, target_str) for item in obj)
+    return False
+
+
+def _view_references_id(view: View, field: str, target_id: uuid.UUID) -> bool:
+    """Check if view references target_id in filters_json or display_props_json."""
+    target_str = str(target_id)
+    return _nested_references_id(view.filters_json, field, target_str) or _nested_references_id(
+        view.display_props_json, field, target_str
+    )
+
+
+def _update_views_for_deleted_id(
+    views: Sequence[View],
+    field: str,
+    target_id: uuid.UUID,
+    replacement_id: uuid.UUID | None,
+) -> None:
+    """Migrate references to target_id across filters_json and display_props_json in saved views."""
+    target_str = str(target_id)
+    repl_str = str(replacement_id) if replacement_id else None
+    for v in views:
+        if isinstance(v.filters_json, dict):
+            new_filters, mod = _migrate_id_in_dict(v.filters_json, field, target_str, repl_str)
+            if mod:
+                v.filters_json = new_filters
+                flag_modified(v, "filters_json")
+        if isinstance(v.display_props_json, dict):
+            new_display, mod = _migrate_id_in_dict(
+                v.display_props_json, field, target_str, repl_str
+            )
+            if mod:
+                v.display_props_json = new_display
+                flag_modified(v, "display_props_json")
 
 
 # ---------------------------------------------------------------------------
@@ -408,13 +531,11 @@ async def get_state_audit_impact(
     # 4. Saved views referencing this state
     views_res = await session.execute(select(View).where(View.project_id == project.id))
     views = views_res.scalars().all()
-    target_state_str = str(state_id)
-    saved_views: list[SavedViewSummary] = []
-    for v in views:
-        if isinstance(v.filters_json, dict):
-            s_ids = v.filters_json.get("state_ids")
-            if isinstance(s_ids, list) and target_state_str in s_ids:
-                saved_views.append(SavedViewSummary(id=v.id, name=v.name))
+    saved_views = [
+        SavedViewSummary(id=v.id, name=v.name)
+        for v in views
+        if _view_references_id(v, "state_ids", state_id)
+    ]
 
     # 5. Blocking reasons
     blocking_reasons: list[str] = []
@@ -690,23 +811,7 @@ async def delete_state(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     # 4. Update saved views
     views_res = await session.execute(select(View).where(View.project_id == project.id))
     views = views_res.scalars().all()
-    target_str = str(state_id)
-    repl_str = str(effective_replacement_id) if effective_replacement_id else None
-
-    for v in views:
-        if "state_ids" in v.filters_json:
-            raw_sids = v.filters_json.get("state_ids")
-            if isinstance(raw_sids, list) and target_str in raw_sids:
-                new_sids: list[str] = []
-                seen: set[str] = set()
-                for sid in raw_sids:
-                    s = (repl_str or None) if sid == target_str else sid
-                    if s and s not in seen:
-                        seen.add(s)
-                        new_sids.append(s)
-                updated_filters = dict(v.filters_json)
-                updated_filters["state_ids"] = new_sids
-                v.filters_json = updated_filters
+    _update_views_for_deleted_id(views, "state_ids", state_id, effective_replacement_id)
 
     await session.delete(state)
     await session.flush()
@@ -1252,13 +1357,11 @@ async def get_label_audit_impact(
     # 2. Saved views referencing this label
     views_res = await session.execute(select(View).where(View.project_id == project.id))
     views = views_res.scalars().all()
-    target_label_str = str(label_id)
-    saved_views: list[SavedViewSummary] = []
-    for v in views:
-        if isinstance(v.filters_json, dict):
-            l_ids = v.filters_json.get("label_ids")
-            if isinstance(l_ids, list) and target_label_str in l_ids:
-                saved_views.append(SavedViewSummary(id=v.id, name=v.name))
+    saved_views = [
+        SavedViewSummary(id=v.id, name=v.name)
+        for v in views
+        if _view_references_id(v, "label_ids", label_id)
+    ]
 
     # 3. Blocking reasons (labels have no hard invariants blocking delete)
     blocking_reasons: list[str] = []
@@ -1278,7 +1381,7 @@ async def get_label_audit_impact(
     )
 
 
-async def delete_label(  # noqa: C901, PLR0912
+async def delete_label(
     session: AsyncSession,
     caller: PrincipalContext,
     project_ref: str,
@@ -1391,23 +1494,7 @@ async def delete_label(  # noqa: C901, PLR0912
     # Saved views update
     views_res = await session.execute(select(View).where(View.project_id == project.id))
     views = views_res.scalars().all()
-    target_str = str(label_id)
-    repl_str = str(replacement_label_id) if replacement_label_id else None
-
-    for v in views:
-        if "label_ids" in v.filters_json:
-            raw_lids = v.filters_json.get("label_ids")
-            if isinstance(raw_lids, list) and target_str in raw_lids:
-                new_lids: list[str] = []
-                seen_l: set[str] = set()
-                for lid in raw_lids:
-                    lbl_item = (repl_str or None) if lid == target_str else lid
-                    if lbl_item and lbl_item not in seen_l:
-                        seen_l.add(lbl_item)
-                        new_lids.append(lbl_item)
-                updated_filters = dict(v.filters_json)
-                updated_filters["label_ids"] = new_lids
-                v.filters_json = updated_filters
+    _update_views_for_deleted_id(views, "label_ids", label_id, replacement_label_id)
 
     await session.delete(label)
     await session.flush()

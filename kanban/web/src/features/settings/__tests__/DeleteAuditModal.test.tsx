@@ -51,14 +51,14 @@ describe('DeleteAuditModal', () => {
           name: 'Slack Hook',
           from_state_id: 'state-1',
           to_state_id: 'state-2',
-          enabled: true,
+          is_enabled: true,
         },
         {
           id: 'hook-2',
           name: 'Inactive Hook',
           from_state_id: 'state-1',
           to_state_id: 'state-3',
-          enabled: false,
+          is_enabled: false,
         },
       ],
       pending_executions_count: 0,
@@ -429,5 +429,75 @@ describe('DeleteAuditModal', () => {
     await waitFor(() => {
       expect(screen.getAllByTestId('audit-issues-count')[1]?.textContent).toBe('0');
     });
+  });
+
+  it('correctly reads is_enabled: true, renders (Enabled), and enforces replacement requirement', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockResolvedValueOnce({
+      state_id: 'state-active-hook',
+      state_name: 'In Review',
+      issues_count: 0,
+      sample_issue_keys: [],
+      workflow_hooks: [
+        {
+          id: 'hook-active-1',
+          name: 'CI Guard Hook',
+          from_state_id: 'state-active-hook',
+          to_state_id: 'state-target',
+          is_enabled: true,
+        },
+        {
+          id: 'hook-disabled-2',
+          name: 'Legacy Audit Hook',
+          from_state_id: 'state-active-hook',
+          to_state_id: 'state-target',
+          enabled: false,
+        },
+        {
+          id: 'hook-legacy-active-3',
+          name: 'Legacy Active Hook',
+          from_state_id: 'state-active-hook',
+          to_state_id: 'state-target',
+          enabled: true,
+        },
+      ],
+      pending_executions_count: 0,
+      historical_executions_count: 0,
+      saved_views: [],
+      is_default: false,
+      blocking_reasons: [],
+      valid_replacement_states: [
+        { id: 'state-target', name: 'Done', group: 'completed', color_hex: '#10b981' },
+      ],
+    });
+
+    render(
+      <DeleteAuditModal
+        isOpen={true}
+        onClose={vi.fn()}
+        onConfirmedDelete={vi.fn()}
+        kind="state"
+        item={{ id: 'state-active-hook', name: 'In Review' }}
+        projectKey="KAN"
+      />
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('audit-hooks-count').textContent).toBe('3');
+    });
+
+    const hooksList = screen.getByTestId('audit-hooks-list');
+    expect(hooksList.textContent).toContain('CI Guard Hook (Enabled)');
+    expect(hooksList.textContent).not.toContain('CI Guard Hook (Disabled)');
+    expect(hooksList.textContent).toContain('Legacy Audit Hook (Disabled)');
+    expect(hooksList.textContent).toContain('Legacy Active Hook (Enabled)');
+
+    // Because an active hook exists, replacement is required
+    const confirmBtn = screen.getByTestId('audit-confirm-delete-btn');
+    expect(confirmBtn.hasAttribute('disabled')).toBe(false);
+
+    // If replacement selection is cleared/empty, confirm button is blocked
+    const select = screen.getByTestId<HTMLSelectElement>('audit-replacement-select');
+    fireEvent.change(select, { target: { value: '' } });
+    expect(confirmBtn.hasAttribute('disabled')).toBe(true);
   });
 });

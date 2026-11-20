@@ -1286,6 +1286,11 @@ async def test_state_reverse_audit_impact_and_deletion_guards(  # noqa: PLR0915
     ).scalar_one()
     assert view_filters["state_ids"] == [st_replacement["id"]]
 
+    # Verify GET /api/v1/views/{id} returns migrated replacement ID and 0 references to deleted
+    v_get = (await client.get(f"/api/v1/views/{view_id}")).json()
+    assert v_get["filters"]["state_ids"] == [st_replacement["id"]]
+    assert st_from["id"] not in v_get["filters"]["state_ids"]
+
 
 async def test_label_reverse_audit_impact_and_safe_reassignment(  # noqa: PLR0915
     api_env: ApiEnv,
@@ -1522,3 +1527,90 @@ async def test_label_reverse_audit_impact_and_safe_reassignment(  # noqa: PLR091
         )
     ).scalar_one()
     assert view_filters["label_ids"] == [l_feat["id"]]
+
+    # Verify GET /api/v1/views/{id} returns replacement label ID and 0 deleted references
+    v_get = (await client.get(f"/api/v1/views/{view_id}")).json()
+    assert v_get["filters"]["label_ids"] == [l_feat["id"]]
+    assert l_bug["id"] not in v_get["filters"]["label_ids"]
+
+
+async def test_saved_view_full_filters_migrated_on_state_and_label_deletion(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Explicitly verify display_props_json full_filters and GET /views/{id} (KAN-29)."""
+    _, pref, admin, _, _, _, client = await _setup_project_with_roles(
+        api_env, make_user, as_principal, identifier="VWMIG"
+    )
+    as_principal(admin)
+
+    # Fetch states
+    states = (await client.get(f"/api/v1/projects/{pref}/states")).json()
+    st_delete = next(s for s in states if s["group"] == "unstarted" and not s["is_default"])
+    st_replace = next(s for s in states if s["group"] == "started")
+
+    # Create 2 labels
+    l1 = (
+        await client.post(
+            f"/api/v1/projects/{pref}/labels",
+            json={"name": "backend", "color_hex": "#3B82F6"},
+        )
+    ).json()
+    l2 = (
+        await client.post(
+            f"/api/v1/projects/{pref}/labels",
+            json={"name": "frontend", "color_hex": "#10B981"},
+        )
+    ).json()
+
+    # Create a Saved View via POST /api/v1/projects/{key}/views
+    # which populates display_props_json["full_filters"]
+    view_resp = await client.post(
+        f"/api/v1/projects/{pref}/views",
+        json={
+            "name": "E2E Contract View",
+            "layout": "board",
+            "is_shared": True,
+            "filters": {
+                "state_ids": [st_delete["id"], st_replace["id"]],
+                "label_ids": [l1["id"], l2["id"]],
+            },
+        },
+    )
+    assert view_resp.status_code == 201
+    view_id = view_resp.json()["id"]
+
+    # Verify initial view has both state_ids and label_ids in GET /api/v1/views/{view_id}
+    v_init = (await client.get(f"/api/v1/views/{view_id}")).json()
+    assert st_delete["id"] in v_init["filters"]["state_ids"]
+    assert l1["id"] in v_init["filters"]["label_ids"]
+
+    # 1. Delete referenced state with replacement_state_id
+    del_st = await client.delete(
+        f"/api/v1/projects/{pref}/states/{st_delete['id']}"
+        f"?replacement_state_id={st_replace['id']}&migrate_hooks=true"
+    )
+    assert del_st.status_code == 204
+
+    # Assert GET /api/v1/views/{view_id} returns replacement ID and 0 references to deleted ID
+    v_after_st = (await client.get(f"/api/v1/views/{view_id}")).json()
+    assert v_after_st["filters"]["state_ids"] == [st_replace["id"]]
+    assert st_delete["id"] not in v_after_st["filters"]["state_ids"]
+
+    # 2. Delete referenced label with replacement_label_id
+    del_lbl = await client.delete(
+        f"/api/v1/projects/{pref}/labels/{l1['id']}?replacement_label_id={l2['id']}"
+    )
+    assert del_lbl.status_code == 204
+
+    # Assert GET /api/v1/views/{view_id} returns replacement label and 0 deleted references
+    v_after_lbl = (await client.get(f"/api/v1/views/{view_id}")).json()
+    assert v_after_lbl["filters"]["label_ids"] == [l2["id"]]
+    assert l1["id"] not in v_after_lbl["filters"]["label_ids"]
+
+    # 3. Also verify deleting remaining label without replacement removes it cleanly
+    del_lbl_detach = await client.delete(f"/api/v1/projects/{pref}/labels/{l2['id']}")
+    assert del_lbl_detach.status_code == 204
+    v_after_detach = (await client.get(f"/api/v1/views/{view_id}")).json()
+    assert v_after_detach["filters"]["label_ids"] == []
