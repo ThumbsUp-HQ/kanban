@@ -324,6 +324,35 @@ describe('PropertiesRail', () => {
     expect(container.querySelector('[data-prop="modules"]')).toBeNull();
   });
 
+  it('does not fire fetchProjectModules when initialMetadata has modules_enabled: undefined and resolved metadata has modules_enabled: false', async () => {
+    vi.mocked(railApi.fetchProjectMetadata).mockResolvedValueOnce({
+      ...mockMetadata,
+      modules_enabled: false,
+    });
+
+    const metaWithoutModules: ProjectMetadata = {
+      key: 'KAN',
+      name: 'Kanban Project',
+      states: mockMetadata.states ?? [],
+    };
+
+    const { container } = render(
+      <PropertiesRail issue={mockIssue} projectMetadata={metaWithoutModules} />,
+    );
+
+    await waitFor(() => {
+      expect(railApi.fetchProjectMetadata).toHaveBeenCalledWith('KAN');
+    });
+
+    // Verify fetchProjectModules was never fired
+    expect(railApi.fetchProjectModules).not.toHaveBeenCalled();
+
+    // Verify modules row unmounts once resolved
+    await waitFor(() => {
+      expect(container.querySelector('[data-prop="modules"]')).toBeNull();
+    });
+  });
+
   it('handles fallbacks for unknown state, unknown priority, default capabilities, and error handling', async () => {
     vi.mocked(railApi.fetchProjectMetadata).mockRejectedValueOnce(new Error('Meta fetch failed'));
     vi.mocked(railApi.fetchProjectModules).mockRejectedValueOnce(new Error('Modules fetch failed'));
@@ -634,5 +663,79 @@ describe('PropertiesRail', () => {
     vi.mocked(railApi.fetchProjectCycles).mockResolvedValueOnce([]);
     const { unmount: unmount3 } = render(<PropertiesRail issue={mockIssue} />);
     unmount3();
+  });
+
+  it('covers updated.etag on dates and cycle updates and priority name/icon fallbacks', async () => {
+    vi.mocked(railApi.patchIssue).mockResolvedValue({
+      ...mockIssue,
+      etag: '"etag-updated-123"',
+    });
+
+    const metaWithCustomPriorities: ProjectMetadata = {
+      ...mockMetadata,
+      priorities: [
+        { slug: 'custom-prio', name: 'Custom Name', icon: '⭐', sort_order: 1 },
+      ],
+    };
+
+    render(<PropertiesRail issue={mockIssue} projectMetadata={metaWithCustomPriorities} />);
+
+    // Priority with name + icon fallback
+    const prioritySelect = screen.getByLabelText<HTMLSelectElement>('Priority');
+    fireEvent.change(prioritySelect, { target: { value: 'custom-prio' } });
+
+    await waitFor(() => {
+      expect(railApi.patchIssue).toHaveBeenCalledWith(
+        'KAN-142',
+        { priority: 'custom-prio' },
+        '"etag-142"',
+      );
+    });
+
+    // Priority with completely unknown slug (tests found === undefined branch)
+    fireEvent.change(prioritySelect, { target: { value: 'completely-unknown-slug' } });
+
+    // Dates update returning etag
+    const startInput = screen.getByLabelText('Start date');
+    fireEvent.change(startInput, { target: { value: '2026-11-05' } });
+
+    await waitFor(() => {
+      expect(railApi.patchIssue).toHaveBeenCalledWith(
+        'KAN-142',
+        { start_date: '2026-11-05', due_date: '2026-11-20' },
+        '"etag-142"',
+      );
+    });
+
+    // Dates update with no etag returned in response (tests false branch of line 192)
+    vi.mocked(railApi.patchIssue).mockResolvedValueOnce({
+      ...mockIssue,
+      etag: undefined,
+    });
+    fireEvent.change(startInput, { target: { value: '2026-11-06' } });
+
+    // Wait for cycle options to load
+    await waitFor(() => {
+      expect(screen.getByRole('option', { name: /Sprint 1/ })).toBeDefined();
+    });
+
+    // Cycle update returning etag
+    const cycleSelect = screen.getByLabelText<HTMLSelectElement>('Cycle');
+    fireEvent.change(cycleSelect, { target: { value: 'cyc-1' } });
+
+    await waitFor(() => {
+      expect(railApi.patchIssue).toHaveBeenCalledWith(
+        'KAN-142',
+        { cycle_id: 'cyc-1' },
+        '"etag-updated-123"',
+      );
+    });
+
+    // Cycle update with no etag returned (tests false branch of line 221)
+    vi.mocked(railApi.patchIssue).mockResolvedValueOnce({
+      ...mockIssue,
+      etag: undefined,
+    });
+    fireEvent.change(cycleSelect, { target: { value: '' } });
   });
 });
