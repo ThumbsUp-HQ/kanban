@@ -307,6 +307,7 @@ async def _execute_search_request(
     executed_mode = res.get("executed_mode") or payload.get("mode", "lexical")
     out: dict[str, Any] = {
         "mode": executed_mode,
+        "executed_mode": executed_mode,
         "total": total,
         "items": projected_items,
     }
@@ -323,6 +324,7 @@ async def search_tickets(arguments: dict[str, Any]) -> dict[str, Any]:
     if gate_status in ("approved", "rejected"):
         return {
             "mode": "lexical",
+            "executed_mode": "lexical",
             "total": 0,
             "items": [],
             "note": "gate history available in Phase 5",
@@ -343,6 +345,7 @@ async def search_tickets(arguments: dict[str, Any]) -> dict[str, Any]:
     if not proj_found:
         return {
             "mode": "lexical",
+            "executed_mode": "lexical",
             "total": 0,
             "items": [],
         }

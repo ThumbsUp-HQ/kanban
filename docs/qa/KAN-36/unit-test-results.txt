@@ -1,28 +1,27 @@
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan36-6b065404
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-fix-3a415088
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collecting 5 items                                                             collected 97 items                                                             
+collected 110 items
 
-kanban/tests/auth/test_workspace_switch_session_persistence.py ...       [  3%]
-kanban/tests/api/test_issue_patch_etag_parity.py ..                      [  5%]
-kanban/tests/auth/test_session_persistence.py ....                       [  9%]
-kanban/tests/api/test_workspaces_api.py .........                        [ 18%]
-kanban/tests/api/test_issues.py ................                         [ 35%]
-kanban/tests/api/test_issue_workflow.py .............                    [ 48%]
-kanban/tests/api/test_issue_provenance.py ........                       [ 56%]
-mcp/tests/agent/test_update_ticket.py ............                       [ 69%]
-mcp/tests/agent/test_read_ticket.py ..............                       [ 83%]
+kanban/tests/auth/test_workspace_switch_session_persistence.py ...       [  2%]
+kanban/tests/api/test_issue_patch_etag_parity.py ..                      [  4%]
+kanban/tests/auth/test_session_persistence.py ....                       [  8%]
+kanban/tests/api/test_workspaces_api.py .........                        [ 16%]
+kanban/tests/api/test_workspace_settings.py .............                [ 28%]
+kanban/tests/api/test_issues.py ................                         [ 42%]
+kanban/tests/api/test_issue_workflow.py .............                    [ 54%]
+kanban/tests/api/test_issue_provenance.py ........                       [ 61%]
+mcp/tests/agent/test_update_ticket.py ............                       [ 72%]
+mcp/tests/agent/test_read_ticket.py ..............                       [ 85%]
 kanban/tests/workflows/test_transition_engine.py ................        [100%]
 
-================================ tests coverage ================================
-_______________ coverage: platform linux, python 3.12.7-final-0 ________________
-
+======================= 110 passed in 119.26s (0:01:59) ========================
 Name                                  Stmts   Miss Branch BrPart  Cover   Missing
 ---------------------------------------------------------------------------------
-kanban/api/v1/issue_workflow.py          98      0     12      3    97%   97->100, 162->165, 226->229
+kanban/api/v1/issue_workflow.py         104      0     12      3    97%   98->101, 165->168, 231->234
 kanban/api/v1/workspaces.py             188     14     58     16    88%   135, 160->172, 216, 259, 262, 271, 287, 296, 325-326, 403, 416, 428->431, 431->456, 440->456, 448, 512, 544
 kanban/auth/sessions/service.py         158      2     28      3    97%   161->167, 164->167, 247-248
 kanban/issues/workflow_service.py       255      9     84     15    93%   142->149, 146->149, 174->179, 238, 319, 421, 461, 521, 527, 541, 558->538, 560->538, 635, 704, 724->743
@@ -32,5 +31,4 @@ kanban/workflows/engine.py              261     10     64     11    94%   135->1
 mcp/surfaces/agent/read_ticket.py       244      4    124     14    95%   129->127, 168->170, 201->204, 206->209, 228->230, 232->234, 234->237, 265, 288->290, 294->303, 325, 352, 389, 434->437
 mcp/surfaces/agent/update_ticket.py     251      2    160     11    97%   244, 340->345, 345->350, 362->367, 367->372, 392->427, 404->410, 424, 430->488, 490->531, 542->546
 ---------------------------------------------------------------------------------
-TOTAL                                  2002     49    740     82    95%
-======================== 97 passed in 129.47s (0:02:09) ========================
+TOTAL                                  2008     49    740     82    95%

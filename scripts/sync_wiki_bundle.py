@@ -248,9 +248,7 @@ def build_config_chapter(order_idx: int) -> dict[str, Any]:
     }
 
 
-def load_chapters_from_wiki(
-    wiki_path: Path, file_to_cat: dict[str, str]
-) -> list[dict[str, Any]]:
+def load_chapters_from_wiki(wiki_path: Path, file_to_cat: dict[str, str]) -> list[dict[str, Any]]:
     """Scan and parse markdown files from the wiki directory."""
     chapters: list[dict[str, Any]] = []
     md_files = sorted(wiki_path.glob("*.md"))

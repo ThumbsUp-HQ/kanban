@@ -106,6 +106,7 @@ async def patch_issue(  # noqa: PLR0913, PLR0917
         issue = await svc.get_issue_or_404(session, caller, issue_key)
         await taint_guard.check_write(issue.project_id, tool_name="update_ticket")
         result, new_etag = await svc.update_issue(session, caller, issue_key, body, if_match)
+        await session.commit()
         response.headers["ETag"] = new_etag
         return result
 

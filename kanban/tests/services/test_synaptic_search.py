@@ -8,9 +8,11 @@ import datetime as dt
 import hashlib
 import math
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import patch
 
+import asyncpg  # type: ignore[import-untyped]
+import numpy as np
 import pytest
 from sqlalchemy import text
 
@@ -25,8 +27,10 @@ from kanban.services.search import (
     search_unified,
 )
 from kanban.services.synaptic_rescorer import (
+    MatryoshkaQuantizer,
     SynapticSeed,
     _compute_recency_decay,
+    extract_heading_anchors,
     spread_synaptic_activation,
 )
 from kanban.tests.security.helpers import rebuild_era
@@ -725,3 +729,94 @@ async def test_synaptic_rescorer_edge_cases(api_env: ApiEnv) -> None:
     )
     assert u_id in lex_res
     assert lex_res[u_id].match_reason == "Lexical match"
+
+
+async def test_synaptic_statement_timeout_graceful_degradation(api_env: ApiEnv) -> None:
+    """Verify statement_timeout or DB errors inside spreading degrade gracefully."""
+    ws_id = api_env.workspace_id
+    caller = PrincipalContext(principal_id=uuid.uuid4(), workspace_id=ws_id)
+    u_id = uuid.uuid4()
+    seed = SynapticSeed(
+        object_id=u_id,
+        object_type="issue",
+        score=7.5,
+        key="TO-1",
+        title="Timeout Test",
+        had_semantic_match=True,
+        had_lexical_match=True,
+    )
+
+    orig_execute = api_env.seed.execute
+
+    async def _failing_execute(*args: Any, **kwargs: Any) -> Any:  # noqa: ANN401
+        if args and "FROM object_links ol" in str(args[0]):
+            msg = "canceling statement due to statement timeout"
+            raise asyncpg.exceptions.QueryCanceledError(msg)
+        return await orig_execute(*args, **kwargs)
+
+    with patch.object(api_env.seed, "execute", side_effect=_failing_execute):
+        res = await spread_synaptic_activation(
+            session=api_env.seed,
+            caller=caller,
+            seeds=[seed],
+            workspace_id=ws_id,
+            max_hops=2,
+        )
+
+    assert u_id in res
+    assert res[u_id].activation_score == 7.5
+
+
+def test_synaptic_quantizer_and_maxsim_units() -> None:
+    """Exercise MatryoshkaQuantizer and maxsim helpers in synaptic_rescorer."""
+    vec = [0.1 * i for i in range(128)]
+    head = MatryoshkaQuantizer.extract_head(vec, dim=64)
+    assert len(head) == 64
+    zero_head = MatryoshkaQuantizer.extract_head([0.0] * 64, dim=64)
+    assert zero_head == [0.0] * 64
+
+    sign = MatryoshkaQuantizer.binary_sign(vec, dim=64)
+    assert len(sign) == 8
+    short_sign = MatryoshkaQuantizer.binary_sign([0.5, -0.5], dim=16)
+    assert len(short_sign) == 2
+
+    q8, scale = MatryoshkaQuantizer.quantize(vec)
+    assert len(q8) == 128
+    assert scale > 0.0
+
+    empty_q8, empty_scale = MatryoshkaQuantizer.quantize([])
+    assert empty_q8 == b""
+    assert empty_scale == 1.0
+
+    deq = MatryoshkaQuantizer.dequantize(q8, scale)
+    assert len(deq) == 128
+
+    deq_np = MatryoshkaQuantizer.dequantize(np.array([1, 2, 3], dtype=np.int8), 1.0)
+    assert len(deq_np) == 3
+
+    dp = MatryoshkaQuantizer.dot_product(q8, scale, q8, scale)
+    assert dp > 0.0
+    assert MatryoshkaQuantizer.dot_product(b"", 1.0, q8, scale) == 0.0
+
+    boost1 = MatryoshkaQuantizer.maxsim_boost("KEY-1", "Some title", identifier="KEY-1")
+    assert boost1 >= 10.0
+    boost_empty = MatryoshkaQuantizer.maxsim_boost("", "title")
+    assert boost_empty == 0.0
+    assert MatryoshkaQuantizer.maxsim_boost("x", "title") == 0.0
+    assert MatryoshkaQuantizer.maxsim_boost("hello", "x", headings=["y"]) == 0.0
+    boost_nomatch = MatryoshkaQuantizer.maxsim_boost("alpha", "beta")
+    assert boost_nomatch == 0.0
+    boost_heading = MatryoshkaQuantizer.maxsim_boost(
+        "search query", "My Title", headings=["search query"]
+    )
+    assert boost_heading > 0.0
+
+    u1, u2 = uuid.uuid4(), uuid.uuid4()
+    rrf = MatryoshkaQuantizer.rrf([[u1, u2], [u2, u1]])
+    assert u1 in rrf
+    assert u2 in rrf
+
+    anchors = extract_heading_anchors("# Heading One\nText\n## Sub heading\n")
+    assert len(anchors) == 2
+    assert anchors[0]["anchor"] == "#heading-one"
+    assert extract_heading_anchors("") == []

@@ -80,6 +80,7 @@ async def api_begin_work(  # noqa: PLR0913, PLR0917
         )
 
         if gate_hold is not None:
+            await session.commit()
             return JSONResponse(
                 status_code=status.HTTP_202_ACCEPTED,
                 content={
@@ -114,6 +115,7 @@ async def api_begin_work(  # noqa: PLR0913, PLR0917
         issue_dict["comment_ref"] = comment_ref
         issue_dict["comment_id"] = comment_ref
 
+        await session.commit()
         headers = {"ETag": serialized.etag} if serialized.etag else {}
         return JSONResponse(status_code=status.HTTP_200_OK, content=issue_dict, headers=headers)
 
@@ -145,6 +147,7 @@ async def api_transition_ticket(  # noqa: PLR0913, PLR0917
         )
 
         if gate_hold is not None:
+            await session.commit()
             return JSONResponse(
                 status_code=status.HTTP_202_ACCEPTED,
                 content={
@@ -178,6 +181,7 @@ async def api_transition_ticket(  # noqa: PLR0913, PLR0917
             "group": target_state.state_group,
         }
 
+        await session.commit()
         headers = {"ETag": serialized.etag} if serialized.etag else {}
         return JSONResponse(status_code=status.HTTP_200_OK, content=issue_dict, headers=headers)
 
@@ -209,6 +213,7 @@ async def api_complete_work(  # noqa: PLR0913, PLR0917
         )
 
         if gate_hold is not None:
+            await session.commit()
             return JSONResponse(
                 status_code=status.HTTP_202_ACCEPTED,
                 content={
@@ -245,5 +250,6 @@ async def api_complete_work(  # noqa: PLR0913, PLR0917
         issue_dict["comment_id"] = comment_ref
         issue_dict["proof"] = proof
 
+        await session.commit()
         headers = {"ETag": serialized.etag} if serialized.etag else {}
         return JSONResponse(status_code=status.HTTP_200_OK, content=issue_dict, headers=headers)

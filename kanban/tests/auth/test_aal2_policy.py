@@ -257,6 +257,9 @@ async def test_case_9_aal2_policy_enforcement(  # noqa: PLR0915
         res_f = await client.get("/api/v1/sensitive/action")
         assert res_f.status_code == 403
         assert res_f.json()["code"] == "AAL2_STALE"
+        res_f_admin = await client.get("/api/v1/admin/server/settings")
+        assert res_f_admin.status_code == 403
+        assert res_f_admin.json()["code"] == "AAL2_STALE"
 
         # Scenario G: AAL1 session on require_aal2 -> 403 AAL2_REQUIRED
         client.cookies.set(SESSION_COOKIE_NAME, sess_aal1.cookie_val)
@@ -274,6 +277,9 @@ async def test_case_9_aal2_policy_enforcement(  # noqa: PLR0915
         res_h = await client.get("/api/v1/sensitive/action")
         assert res_h.status_code == 403
         assert res_h.json()["code"] == "AAL2_STALE"
+        res_h_admin = await client.get("/api/v1/admin/server/settings")
+        assert res_h_admin.status_code == 403
+        assert res_h_admin.json()["code"] == "AAL2_STALE"
 
 
 @pytest.mark.asyncio

@@ -308,7 +308,7 @@ def _compute_recency_decay(updated_at: dt.datetime | None) -> float:
     return max(0.1, min(1.0, decay))
 
 
-async def spread_synaptic_activation(  # noqa: C901
+async def spread_synaptic_activation(  # noqa: C901, PLR0912, PLR0915
     session: AsyncSession,
     caller: PrincipalContext,
     seeds: list[SynapticSeed],
@@ -396,12 +396,17 @@ async def spread_synaptic_activation(  # noqa: C901
             "  )"
         )
 
-        rows = (
-            await session.execute(
-                query,
-                {"f_ids": frontier_ids, "ws_id": workspace_id},
-            )
-        ).all()
+        try:
+            async with session.begin_nested():
+                await session.execute(text("SET LOCAL statement_timeout = '100ms'"))
+                res = await session.execute(
+                    query,
+                    {"f_ids": frontier_ids, "ws_id": workspace_id},
+                )
+                await session.execute(text("SET LOCAL statement_timeout = 0"))
+                rows = res.all()
+        except Exception:  # noqa: BLE001
+            break
 
         next_frontier: list[tuple[uuid.UUID, float, str | None, str | None]] = []
 

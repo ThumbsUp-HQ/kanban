@@ -2,11 +2,11 @@
 1. VITEST: src/app/CommandPalette.test.tsx
 ================================================================================
 
-> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-c87f6716/kanban/web
+> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-fix-3a415088/kanban/web
 > vitest run src/app/CommandPalette.test.tsx
 
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-c87f6716/kanban/web
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-fix-3a415088/kanban/web
 
  ✓ src/app/CommandPalette.test.tsx (28 tests) 3160ms
    ✓ CommandPalette (28)
@@ -23,11 +23,11 @@
 2. VITEST: src/styles/__tests__/cssTokensAudit.test.ts
 ================================================================================
 
-> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-c87f6716/kanban/web
+> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-fix-3a415088/kanban/web
 > vitest run src/styles/__tests__/cssTokensAudit.test.ts
 
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-c87f6716/kanban/web
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-fix-3a415088/kanban/web
 
  ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 13ms
 
@@ -42,7 +42,7 @@
 ================================================================================
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-c87f6716
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-fix-3a415088
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
@@ -57,22 +57,22 @@ agent/tests/embeddings/test_matryoshka_quantizer.py ...................  [100%]
 ================================================================================
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-c87f6716
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-fix-3a415088
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 7 items
+collected 9 items
 
-kanban/tests/services/test_synaptic_search.py .......                    [100%]
+kanban/tests/services/test_synaptic_search.py .........                  [100%]
 
-============================== 7 passed in 1.28s ===============================
+============================== 9 passed in 1.76s ===============================
 
 ================================================================================
 5. BACKEND COVERAGE REPORT
 ================================================================================
-Name                                   Stmts   Miss Branch BrPart  Cover   Missing
-----------------------------------------------------------------------------------
-agent/embeddings/quantizer.py              3      0      0      0   100%
-kanban/services/synaptic_rescorer.py     218      5     58      3    97%   291, 423, 428, 454-455
-----------------------------------------------------------------------------------
-TOTAL                                    221      5     58      3    97%
+Name                                                  Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------------------------
+agent/embeddings/quantizer.py                             3      0      0      0   100%
+kanban/services/synaptic_rescorer.py                    225      4     58      3    98%   428, 433, 459-460
+-------------------------------------------------------------------------------------------------
+TOTAL                                                   228      4     58      3    98%
