@@ -751,6 +751,12 @@ class McpProtocolHandler:
                 if self.surface == Surface.DOCS and tool_name == "search":
                     if auth_context.allowed_tools and "search" in auth_context.allowed_tools:
                         introspect_tool = "search"
+                    elif (
+                        auth_context.allowed_tools
+                        and "read_doc" in auth_context.allowed_tools
+                        and "search_knowledge" not in auth_context.allowed_tools
+                    ):
+                        introspect_tool = "read_doc"
                     else:
                         introspect_tool = "search_knowledge"
                 try:

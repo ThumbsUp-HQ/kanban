@@ -339,6 +339,8 @@ def enforce_connection_scope_on_tool_call(
     # Check issue key identifier for mutating tools
     mutating_tools: Final[frozenset[str]] = frozenset(
         {
+            "create",
+            "update",
             "create_ticket",
             "update_ticket",
             "delete_ticket",
@@ -350,7 +352,12 @@ def enforce_connection_scope_on_tool_call(
             "architect_project",
         }
     )
-    ident = arguments.get("identifier") or arguments.get("parent") or arguments.get("ticket")
+    ident = (
+        arguments.get("identifier")
+        or arguments.get("parent")
+        or arguments.get("ticket")
+        or arguments.get("id")
+    )
     if ident and isinstance(ident, str) and tool_name in mutating_tools:
         match = _ISSUE_KEY_REGEX.match(ident)
         if match:

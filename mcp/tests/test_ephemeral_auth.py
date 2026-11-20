@@ -28,6 +28,7 @@ from kanban.api.deps import PrincipalContext
 from kanban.app import create_app
 from kanban.security.ephemeral_mcp_tokens import (
     EPHEMERAL_TOKEN_PREFIX,
+    introspect_and_consume_ephemeral_token,
     mint_ephemeral_token,
 )
 from kanban.settings import Settings
@@ -932,3 +933,221 @@ async def test_case_5_mtls_mint_boundary(db_session: AsyncSession) -> None:
         data = res_agt.json()
         assert data["token"].startswith(EPHEMERAL_TOKEN_PREFIX)
         assert data["max_calls"] == 5
+
+
+@pytest.mark.asyncio
+@pytest.mark.committed_db
+async def test_case_6_kan18_ephemeral_docs_tools_and_security(
+    committed_db_session: AsyncSession,
+) -> None:
+    """Test Case 6 (KAN-18): Verify ephemeral tokens on /mcp/docs.
+
+    1. Tokens minted with allowed_tools=['search'], ['search_knowledge'], or ['read_doc']
+       all work seamlessly with introspect_and_consume_ephemeral_token and on /mcp/docs.
+    2. Ephemeral tokens strictly block mutating tools ('create', 'update') with
+       403 / EPHEMERAL_TOOL_FORBIDDEN.
+    """
+    ws_id = await create_workspace(committed_db_session, name="WS-Docs-Eph")
+    adam_id = await create_user(
+        committed_db_session, ws_id, handle="@eph-docs-user", display_name="Eph Docs User"
+    )
+    agent_id = await create_agent(committed_db_session, ws_id, display_name="eph-docs-agent")
+    proj_id = await create_project(
+        committed_db_session, ws_id, identifier="DOCP", name="Docs Project", created_by_id=adam_id
+    )
+    await add_role_binding(
+        committed_db_session, ws_id, adam_id, role="WORKSPACE_ADMIN", scope_type="workspace"
+    )
+    await rebuild_era(committed_db_session, ws_id)
+    await committed_db_session.commit()
+
+    exec_id = uuid.uuid4()
+
+    # 1. Mint with allowed_tools=['search']
+    _rec1, tok_search = await mint_ephemeral_token(
+        committed_db_session,
+        workspace_id=ws_id,
+        execution_id=exec_id,
+        invoking_principal_id=adam_id,
+        agent_principal_id=agent_id,
+        project_id=proj_id,
+        allowed_tools=["search"],
+        ttl_seconds=60,
+        max_calls=5,
+    )
+
+    # 2. Mint with allowed_tools=['search_knowledge']
+    _rec2, tok_sk = await mint_ephemeral_token(
+        committed_db_session,
+        workspace_id=ws_id,
+        execution_id=exec_id,
+        invoking_principal_id=adam_id,
+        agent_principal_id=agent_id,
+        project_id=proj_id,
+        allowed_tools=["search_knowledge"],
+        ttl_seconds=60,
+        max_calls=5,
+    )
+
+    # 3. Mint with allowed_tools=['read_doc']
+    _rec3, tok_rd = await mint_ephemeral_token(
+        committed_db_session,
+        workspace_id=ws_id,
+        execution_id=exec_id,
+        invoking_principal_id=adam_id,
+        agent_principal_id=agent_id,
+        project_id=proj_id,
+        allowed_tools=["read_doc"],
+        ttl_seconds=60,
+        max_calls=5,
+    )
+    await committed_db_session.commit()
+
+    # Test direct introspection for each token on surface='docs'
+    for tok, label in [(tok_search, "search"), (tok_sk, "search_knowledge"), (tok_rd, "read_doc")]:
+        # Non-consuming check (tools/list)
+        res_list = await introspect_and_consume_ephemeral_token(
+            committed_db_session,
+            token=tok,
+            surface="docs",
+            consume_call=False,
+        )
+        assert res_list.active is True, f"Failed on {label}"
+        assert res_list.allowed_tools is not None
+        assert "search" in res_list.allowed_tools, f"search missing in allowed_tools for {label}"
+
+        # Consuming call for search
+        res_call = await introspect_and_consume_ephemeral_token(
+            committed_db_session,
+            token=tok,
+            surface="docs",
+            consume_call=True,
+            tool_name="search",
+        )
+        assert res_call.active is True, f"Consume failed for {label}"
+        assert res_call.calls_used == 1
+
+        # Attempting create or update MUST be blocked
+        res_create = await introspect_and_consume_ephemeral_token(
+            committed_db_session,
+            token=tok,
+            surface="docs",
+            consume_call=True,
+            tool_name="create",
+        )
+        assert res_create.active is False
+        assert res_create.reason == "EPHEMERAL_TOOL_FORBIDDEN"
+
+        res_update = await introspect_and_consume_ephemeral_token(
+            committed_db_session,
+            token=tok,
+            surface="docs",
+            consume_call=True,
+            tool_name="update",
+        )
+        assert res_update.active is False
+        assert res_update.reason == "EPHEMERAL_TOOL_FORBIDDEN"
+
+    # Test over HTTP via create_mcp_app with real introspect router
+    agent_reg, docs_reg, admin_reg = _build_test_registries()
+    settings = McpSettings(mode="standalone_inprocess", auth_enabled=True)
+
+    async def _introspect_handler(req: Request) -> JSONResponse:
+        body = await req.json()
+        tool = body.get("tool_name")
+        tok = str(body.get("token", ""))
+        consume = bool(body.get("consume_call", False))
+        res = await introspect_and_consume_ephemeral_token(
+            committed_db_session,
+            token=tok,
+            surface="docs",
+            consume_call=consume,
+            tool_name=tool,
+        )
+        return JSONResponse(
+            {
+                "active": res.active,
+                "token_kind": res.token_kind,
+                "allowed_tools": res.allowed_tools,
+                "scopes": [str(s) for s in res.scopes] if res.scopes else [],
+                "principal_id": str(res.principal_id) if res.principal_id else None,
+                "workspace_id": str(res.workspace_id) if res.workspace_id else None,
+                "project_id": str(res.project_id) if res.project_id else None,
+                "execution_id": str(res.execution_id) if res.execution_id else None,
+                "calls_used": res.calls_used,
+                "max_calls": res.max_calls,
+                "reason": res.reason,
+            }
+        )
+
+    mock_kanban_app = Starlette(
+        routes=[
+            Route("/internal/v1/mcp/introspect", _introspect_handler, methods=["POST"]),
+        ]
+    )
+
+    mcp_app = create_mcp_app(
+        settings,
+        kanban_app=mock_kanban_app,
+        agent_registry=agent_reg,
+        docs_registry=docs_reg,
+        admin_registry=admin_reg,
+    )
+
+    transport = httpx.ASGITransport(app=mcp_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        sess = await _init_session(client, "/mcp/docs", tok_search)
+
+        # tools/list MUST return only search
+        list_res = await client.post(
+            "/mcp/docs",
+            headers={"Authorization": f"Bearer {tok_search}", "mcp-session-id": sess},
+            json={"jsonrpc": "2.0", "id": 10, "method": "tools/list"},
+        )
+        assert list_res.status_code == 200
+        tools = [t["name"] for t in list_res.json()["result"]["tools"]]
+        assert tools == ["search"]
+
+        # Call search -> success
+        c_search = await client.post(
+            "/mcp/docs",
+            headers={"Authorization": f"Bearer {tok_search}", "mcp-session-id": sess},
+            json={
+                "jsonrpc": "2.0",
+                "id": 11,
+                "method": "tools/call",
+                "params": {"name": "search", "arguments": {"id": "help"}},
+            },
+        )
+        assert c_search.status_code == 200
+        assert c_search.json()["result"]["isError"] is False
+
+        # Call create -> 403 / EPHEMERAL_TOOL_FORBIDDEN
+        c_create = await client.post(
+            "/mcp/docs",
+            headers={"Authorization": f"Bearer {tok_search}", "mcp-session-id": sess},
+            json={
+                "jsonrpc": "2.0",
+                "id": 12,
+                "method": "tools/call",
+                "params": {"name": "create", "arguments": {"type": "DOC", "title": "Illegal"}},
+            },
+        )
+        assert c_create.status_code == 200
+        assert c_create.json()["result"]["isError"] is True
+        assert "EPHEMERAL_TOOL_FORBIDDEN" in c_create.json()["result"]["content"][0]["text"]
+
+        # Call update -> 403 / EPHEMERAL_TOOL_FORBIDDEN
+        c_update = await client.post(
+            "/mcp/docs",
+            headers={"Authorization": f"Bearer {tok_search}", "mcp-session-id": sess},
+            json={
+                "jsonrpc": "2.0",
+                "id": 13,
+                "method": "tools/call",
+                "params": {"name": "update", "arguments": {"id": "docs/test"}},
+            },
+        )
+        assert c_update.status_code == 200
+        assert c_update.json()["result"]["isError"] is True
+        assert "EPHEMERAL_TOOL_FORBIDDEN" in c_update.json()["result"]["content"][0]["text"]

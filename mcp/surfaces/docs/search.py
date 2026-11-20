@@ -143,14 +143,21 @@ async def _try_get_sticky(
     return None
 
 
-async def _try_get_page_or_doc(  # noqa: C901
+def _clean_etag(raw: object) -> str:
+    """Normalize raw ETag or body_sha256 to clean unquoted 64-hex string."""
+    return str(raw or "").strip().strip('"')
+
+
+async def _try_get_page_or_doc(  # noqa: C901, PLR0911, PLR0912
     client: KanbanApiClient,
     identifier: str,
     subject_token: str | None,
+    type_filter: str | None = None,
 ) -> tuple[str, dict[str, Any]] | None:
     """Attempt to fetch page or doc by path or UUID."""
     clean_id = identifier.strip().lstrip("/")
 
+    # If explicitly pages/, resolve Page first
     if clean_id.startswith("pages/"):
         page_path = clean_id.removeprefix("pages/")
         try:
@@ -162,7 +169,8 @@ async def _try_get_page_or_doc(  # noqa: C901
         except KbMcpError:
             pass
 
-    if "/" in clean_id:
+    # Nested page path (e.g. docs/<doc-slug>/<page-slug>), resolve Page first
+    if clean_id.count("/") >= 2:  # noqa: PLR2004
         try:
             resp = await client.request(
                 "GET", f"/api/v1/pages/{clean_id}", subject_token=subject_token
@@ -172,6 +180,28 @@ async def _try_get_page_or_doc(  # noqa: C901
         except KbMcpError:
             pass
 
+    # When id starts with "docs/" and has single doc slug (count("/") == 1) or type_filter == "DOC",
+    # try GET /api/v1/docs/{doc_slug} FIRST before falling back to GET /api/v1/pages/...
+    if (clean_id.startswith("docs/") and clean_id.count("/") == 1) or type_filter == "DOC":
+        doc_slug = clean_id.removeprefix("docs/")
+        try:
+            resp = await client.request(
+                "GET", f"/api/v1/docs/{doc_slug}", subject_token=subject_token
+            )
+            if isinstance(resp, dict):
+                return "doc", resp
+        except KbMcpError:
+            pass
+        try:
+            resp = await client.request(
+                "GET", f"/api/v1/pages/{clean_id}", subject_token=subject_token
+            )
+            if isinstance(resp, dict):
+                return "page", resp
+        except KbMcpError:
+            pass
+
+    # Fallback resolution
     doc_path = clean_id.removeprefix("docs/")
     try:
         resp = await client.request("GET", f"/api/v1/docs/{doc_path}", subject_token=subject_token)
@@ -213,7 +243,7 @@ async def _read_sticky(
 
     standard_out = dict(summary_out)
     standard_out["body_markdown"] = s_body
-    standard_out["etag"] = sticky_data.get("etag", "")
+    standard_out["etag"] = _clean_etag(sticky_data.get("body_sha256") or sticky_data.get("etag"))
     standard_out["access"] = _format_access_pill(sticky_data.get("access_manifest"))
     if lod == Lod.STANDARD:
         return standard_out
@@ -283,7 +313,7 @@ async def _read_doc_or_page(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     body_markdown = str(
         entity_data.get("body_markdown") or entity_data.get("content_markdown") or ""
     )
-    etag = str(entity_data.get("etag") or entity_data.get("body_sha256") or "")
+    etag = str(entity_data.get("body_sha256") or entity_data.get("etag") or "").strip().strip('"')
     access_manifest = entity_data.get("access_manifest")
     access = _format_access_pill(access_manifest if isinstance(access_manifest, dict) else None)
 
@@ -411,7 +441,9 @@ async def search_handler(  # noqa: C901, PLR0911, PLR0912, PLR0915
                 raise KbMcpError(McpErrorCode.NOT_FOUND, msg)
 
         if target_type in ("DOC", "ALL"):
-            found = await _try_get_page_or_doc(active_client, clean_id, active_token)
+            found = await _try_get_page_or_doc(
+                active_client, clean_id, active_token, type_filter=target_type
+            )
             if found is not None:
                 kind, entity_data = found
                 return await _read_doc_or_page(
@@ -520,28 +552,41 @@ async def search_handler(  # noqa: C901, PLR0911, PLR0912, PLR0915
                 except KbMcpError:
                     out_list["tree"] = []
             else:
-                try:
-                    docs_resp = await active_client.request(
+                clean_proj = str(project).strip()
+                if _UUID_REGEX.match(clean_proj):
+                    project_uuid = clean_proj
+                else:
+                    proj_resp = await active_client.request(
                         "GET",
-                        "/api/v1/docs",
+                        f"/api/v1/projects/{clean_proj}",
                         subject_token=active_token,
                     )
-                    docs_list = []
-                    if isinstance(docs_resp, list):
-                        for d in docs_resp:
-                            if not isinstance(d, dict):
-                                continue
-                            docs_list.append(
-                                {
-                                    "id": str(d.get("id", "")),
-                                    "key": str(d.get("canonical_key", "")),
-                                    "title": str(d.get("title", "")),
-                                    "version_seq": d.get("version_seq", 1),
-                                }
-                            )
-                    out_list["docs"] = docs_list
-                except KbMcpError:
-                    out_list["docs"] = []
+                    if isinstance(proj_resp, dict) and "id" in proj_resp:
+                        project_uuid = str(proj_resp["id"])
+                    else:
+                        msg = f"Project '{clean_proj}' not found"
+                        raise KbMcpError(McpErrorCode.NOT_FOUND, msg)
+
+                docs_resp = await active_client.request(
+                    "GET",
+                    "/api/v1/docs",
+                    params={"project": project_uuid},
+                    subject_token=active_token,
+                )
+                docs_list = []
+                if isinstance(docs_resp, list):
+                    for d in docs_resp:
+                        if not isinstance(d, dict):
+                            continue
+                        docs_list.append(
+                            {
+                                "id": str(d.get("id", "")),
+                                "key": str(d.get("canonical_key", "")),
+                                "title": str(d.get("title", "")),
+                                "version_seq": d.get("version_seq", 1),
+                            }
+                        )
+                out_list["docs"] = docs_list
 
         if target_type in ("STICKY", "ALL"):
             try:

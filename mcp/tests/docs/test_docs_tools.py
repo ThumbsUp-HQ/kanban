@@ -7,10 +7,12 @@ from __future__ import annotations
 
 import json
 import uuid
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, cast
 
 import httpx
 import pytest
+import yaml
 from sqlalchemy import select
 
 from database.models import ObjectLink, ResourceAclEntry
@@ -1200,3 +1202,448 @@ async def test_case_6_handler_exhaustive_branches(
         assert create_docs_search_tool().name == "search"
         assert create_docs_create_tool().name == "create"
         assert create_docs_update_tool().name == "update"
+
+
+# =============================================================================
+# TEST CASE 6: Clean-Room Remediation Regressions (KAN-18)
+# =============================================================================
+
+
+async def test_case_6_kan18_cleanroom_regressions(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Test Case 6: Forensic regression tests for KAN-18 remediation:
+
+    (a) passing res['etag'] directly (unstripped) into update(if_match=res['etag']) succeeds,
+    (b) search(id='docs/<slug>') and update(id='docs/<slug>') on multi-page Doc return kind: doc,
+    (c) search(project='ARCH', type='DOC', include_tree=False) returns project doc and excludes workspace doc,
+    (d) half-supplied original_text/replacement_text raises VALIDATION_FAILED,
+    (e) unknown project/parent raises NOT_FOUND, and sticky update with title raises VALIDATION_FAILED.
+    """
+    user = await make_user("kan18_reg_author", workspace_role="WORKSPACE_ADMIN")
+    as_principal(user)
+
+    # Create project ARCH
+    p_resp = await api_env.client.post(
+        "/api/v1/projects",
+        json={"identifier": "ARCH", "name": "Architecture Project"},
+    )
+    assert p_resp.status_code == 201, p_resp.text
+
+    kanban_app = api_env.client._transport.app  # type: ignore[attr-defined]
+    settings = McpSettings(mode="standalone_inprocess", auth_enabled=False)
+    mcp_app = create_mcp_app(settings, kanban_app=kanban_app)
+    transport = httpx.ASGITransport(app=mcp_app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as mcp_client:
+        sess = await _init_mcp_session(mcp_client)
+
+        # ---------------------------------------------------------------------
+        # (a) ETag normalization & unstripped if_match
+        # ---------------------------------------------------------------------
+        res_stk = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "create",
+            {
+                "type": "STICKY",
+                "project": "ARCH",
+                "title": "Clean ETag Sticky",
+                "content": "line 1\nline 2 typo\nline 3",
+            },
+        )
+        assert res_stk["isError"] is False
+        stk_txt = res_stk["content"][0]["text"]
+        stk_id = (
+            [line for line in stk_txt.splitlines() if line.startswith("id:")][0]
+            .split(":", 1)[1]
+            .strip()
+        )
+        stk_etag = (
+            [line for line in stk_txt.splitlines() if line.startswith("etag:")][0]
+            .split(":", 1)[1]
+            .strip()
+        )
+        assert len(stk_etag) == 64
+        assert '"' not in stk_etag
+
+        # Pass res["etag"] directly into update
+        up_stk_direct = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "update",
+            {
+                "id": stk_id,
+                "original_text": "line 2 typo",
+                "replacement_text": "line 2 fixed",
+                "if_match": stk_etag,
+            },
+        )
+        assert up_stk_direct["isError"] is False
+        up_stk_txt = up_stk_direct["content"][0]["text"]
+        new_stk_etag = (
+            [line for line in up_stk_txt.splitlines() if line.startswith("etag:")][0]
+            .split(":", 1)[1]
+            .strip()
+        )
+        assert len(new_stk_etag) == 64
+        assert '"' not in new_stk_etag
+
+        # Pass quoted if_match into update
+        up_stk_quoted = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "update",
+            {
+                "id": stk_id,
+                "original_text": "line 2 fixed",
+                "replacement_text": "line 2 quoted match",
+                "if_match": f'"{new_stk_etag}"',
+            },
+        )
+        assert up_stk_quoted["isError"] is False
+
+        # Stale if_match raises CONFLICT_ETAG
+        up_stk_stale = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "update",
+            {
+                "id": stk_id,
+                "original_text": "line 2 quoted match",
+                "replacement_text": "fail",
+                "if_match": "0" * 64,
+            },
+        )
+        assert up_stk_stale["isError"] is True
+        assert "CONFLICT_ETAG" in up_stk_stale["content"][0]["text"]
+
+        # ---------------------------------------------------------------------
+        # (b) Doc vs Page resolution order on multi-page Doc
+        # ---------------------------------------------------------------------
+        res_cr_doc = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "create",
+            {
+                "type": "DOC",
+                "project": "ARCH",
+                "title": "Clean Multi Doc",
+                "content": "# Clean Multi Doc\nRoot document body.",
+            },
+        )
+        assert res_cr_doc["isError"] is False
+        doc_txt = res_cr_doc["content"][0]["text"]
+        doc_etag = (
+            [line for line in doc_txt.splitlines() if line.startswith("etag:")][0]
+            .split(":", 1)[1]
+            .strip()
+        )
+
+        # Add child page under the doc
+        res_cr_child = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "create",
+            {
+                "type": "DOC",
+                "parent": "docs/clean-multi-doc",
+                "title": "Sub Page One",
+                "content": "Sub page one body content.",
+            },
+        )
+        assert res_cr_child["isError"] is False
+
+        # search(id="docs/clean-multi-doc") MUST resolve to kind: doc (NOT page)
+        srch_doc = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "search",
+            {"id": "docs/clean-multi-doc"},
+        )
+        assert srch_doc["isError"] is False
+        assert "kind: doc" in srch_doc["content"][0]["text"]
+        assert "kind: page" not in srch_doc["content"][0]["text"]
+
+        # update(id="docs/clean-multi-doc") MUST update kind: doc
+        up_doc = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "update",
+            {
+                "id": "docs/clean-multi-doc",
+                "title": "Renamed Clean Multi Doc",
+                "if_match": doc_etag,
+            },
+        )
+        assert up_doc["isError"] is False
+        assert "kind: doc" in up_doc["content"][0]["text"]
+
+        # search(id="docs/clean-multi-doc/sub-page-one") MUST resolve to kind: page
+        srch_page = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "search",
+            {"id": "docs/clean-multi-doc/sub-page-one"},
+        )
+        assert srch_page["isError"] is False
+        assert "kind: page" in srch_page["content"][0]["text"]
+
+        # ---------------------------------------------------------------------
+        # (c) search(project="ARCH", type="DOC", include_tree=False) project filter
+        # ---------------------------------------------------------------------
+        # Create workspace root doc (project_id is None)
+        res_ws_doc = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "create",
+            {
+                "type": "DOC",
+                "title": "Workspace Wide Doc",
+                "content": "Cross workspace document.",
+            },
+        )
+        assert res_ws_doc["isError"] is False
+
+        # search(project="ARCH", type="DOC", include_tree=False)
+        srch_proj_docs = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "search",
+            {"project": "ARCH", "type": "DOC", "include_tree": False},
+        )
+        assert srch_proj_docs["isError"] is False
+        proj_docs_txt = srch_proj_docs["content"][0]["text"]
+        assert "Renamed Clean Multi Doc" in proj_docs_txt
+        assert "Workspace Wide Doc" not in proj_docs_txt
+
+        # ---------------------------------------------------------------------
+        # (d) Half-supplied original_text / replacement_text validation
+        # ---------------------------------------------------------------------
+        up_half_1 = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "update",
+            {
+                "id": "docs/clean-multi-doc",
+                "original_text": "Root document",
+            },
+        )
+        assert up_half_1["isError"] is True
+        assert "VALIDATION_FAILED" in up_half_1["content"][0]["text"]
+
+        up_half_2 = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "update",
+            {
+                "id": "docs/clean-multi-doc",
+                "replacement_text": "Replacement only",
+            },
+        )
+        assert up_half_2["isError"] is True
+        assert "VALIDATION_FAILED" in up_half_2["content"][0]["text"]
+
+        # ---------------------------------------------------------------------
+        # (e) Unknown project / parent NOT_FOUND & Sticky title validation
+        # ---------------------------------------------------------------------
+        # Unknown project on create
+        cr_bad_proj = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "create",
+            {
+                "type": "DOC",
+                "project": "NONEXISTENT_PROJ",
+                "title": "Bad Project Doc",
+            },
+        )
+        assert cr_bad_proj["isError"] is True
+        assert "NOT_FOUND" in cr_bad_proj["content"][0]["text"]
+
+        # Unknown parent on update sticky promotion
+        up_bad_parent = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "update",
+            {
+                "id": stk_id,
+                "type": "DOC",
+                "parent": "docs/nonexistent-doc-parent",
+            },
+        )
+        assert up_bad_parent["isError"] is True
+        assert "NOT_FOUND" in up_bad_parent["content"][0]["text"]
+
+        # Sticky update with title without type="DOC"
+        up_stk_title = await _call_mcp_tool(
+            mcp_client,
+            sess,
+            "update",
+            {
+                "id": stk_id,
+                "title": "Illegal Title on Sticky",
+            },
+        )
+        assert up_stk_title["isError"] is True
+        assert "VALIDATION_FAILED" in up_stk_title["content"][0]["text"]
+
+
+async def test_case_7_programmatic_contract_sample_generator(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Programmatically generate docs/qa/KAN-18/contract-sample.yaml from real tool execution outputs."""
+    user = await make_user("contract_generator", workspace_role="WORKSPACE_ADMIN")
+    as_principal(user)
+
+    # Create ARCH project first
+    p_resp = await api_env.client.post(
+        "/api/v1/projects",
+        json={"identifier": "ARCH", "name": "Architecture Project"},
+    )
+    assert p_resp.status_code == 201
+
+    kanban_app = api_env.client._transport.app
+    settings = McpSettings(mode="standalone_inprocess", auth_enabled=False)
+    mcp_app = create_mcp_app(settings, kanban_app=kanban_app)
+    transport = httpx.ASGITransport(app=mcp_app)
+
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as mcp_client:
+        sess = await _init_mcp_session(mcp_client)
+
+        # 1. search(id="help")
+        args_help = {"id": "help"}
+        c_help = await _call_mcp_tool(mcp_client, sess, "search", args_help)
+        assert c_help["isError"] is False
+        res_help = yaml.safe_load(c_help["content"][0]["text"])
+
+        # 2. create doc "Architecture"
+        args_create_doc = {
+            "type": "DOC",
+            "title": "Architecture",
+            "project": "ARCH",
+            "content": "# Architecture\nOverview of system architecture.",
+            "links": ["+REL:ARCH-1"],
+        }
+        c_create_doc = await _call_mcp_tool(mcp_client, sess, "create", args_create_doc)
+        assert c_create_doc["isError"] is False
+        res_create_doc = yaml.safe_load(c_create_doc["content"][0]["text"])
+
+        # 3. create page "Auth Studio" under docs/architecture
+        args_create_page = {
+            "type": "DOC",
+            "parent": "docs/architecture",
+            "title": "Auth Studio",
+            "content": "## PKCE S256\nInitial PKCE content.\n\n## Overview\nAuthentication overview.",
+        }
+        c_create_page = await _call_mcp_tool(mcp_client, sess, "create", args_create_page)
+        assert c_create_page["isError"] is False
+
+        # 4. create sticky
+        args_create_sticky = {
+            "type": "STICKY",
+            "project": "ARCH",
+            "title": "Quick Sticky Note",
+            "content": "Need to verify TLS certificates on MCP client.",
+            "color": "sky",
+        }
+        c_create_sticky = await _call_mcp_tool(mcp_client, sess, "create", args_create_sticky)
+        assert c_create_sticky["isError"] is False
+        res_create_sticky = yaml.safe_load(c_create_sticky["content"][0]["text"])
+        sticky_uuid = res_create_sticky["id"]
+
+        # 5. search(id="docs/architecture/auth-studio", lod="standard")
+        args_read_std = {"id": "docs/architecture/auth-studio", "lod": "standard"}
+        c_read_std = await _call_mcp_tool(mcp_client, sess, "search", args_read_std)
+        assert c_read_std["isError"] is False
+        res_read_std = yaml.safe_load(c_read_std["content"][0]["text"])
+        page_etag = res_read_std["etag"]
+        assert len(page_etag) == 64
+        assert not page_etag.startswith('"')
+
+        # 6. update diff-patch
+        args_diff_patch = {
+            "id": "docs/architecture/auth-studio",
+            "original_text": "Initial PKCE content.",
+            "replacement_text": "Hardened PKCE token verification.",
+            "if_match": page_etag,
+        }
+        c_diff_patch = await _call_mcp_tool(mcp_client, sess, "update", args_diff_patch)
+        assert c_diff_patch["isError"] is False
+        res_diff_patch = yaml.safe_load(c_diff_patch["content"][0]["text"])
+        assert len(res_diff_patch["etag"]) == 64
+
+        # 7. update sticky auto-promotion
+        args_sticky_promo = {
+            "id": sticky_uuid,
+            "type": "DOC",
+            "title": "TLS Verification Guide",
+            "parent": "docs/architecture",
+            "content": "# TLS Verification Guide\n\nPreserved permissions and converted to Doc.",
+        }
+        c_sticky_promo = await _call_mcp_tool(mcp_client, sess, "update", args_sticky_promo)
+        assert c_sticky_promo["isError"] is False
+        res_sticky_promo = yaml.safe_load(c_sticky_promo["content"][0]["text"])
+        assert res_sticky_promo["status"] == "promoted"
+        assert res_sticky_promo["link"] == "PROMOTED_TO_DOC"
+
+        # 8. update inline links
+        args_inline_links = {
+            "id": "docs/architecture/auth-studio",
+            "links": ["+ARCH-2", "-ARCH-1"],
+        }
+        c_inline_links = await _call_mcp_tool(mcp_client, sess, "update", args_inline_links)
+        assert c_inline_links["isError"] is False
+        res_inline_links = yaml.safe_load(c_inline_links["content"][0]["text"])
+        assert len(res_inline_links["etag"]) == 64
+
+        # Build contract sample structure
+        contract_data = {
+            "search_help": {
+                "tool": "search",
+                "surface": "/mcp/docs",
+                "purpose": "CLI-modeled unified search, id read, and tree inspector",
+                "arguments": args_help,
+                "response": res_help,
+            },
+            "search_read_doc_standard": {
+                "tool": "search",
+                "arguments": args_read_std,
+                "response": res_read_std,
+            },
+            "create_doc": {
+                "tool": "create",
+                "arguments": args_create_doc,
+                "response": res_create_doc,
+            },
+            "create_sticky": {
+                "tool": "create",
+                "arguments": args_create_sticky,
+                "response": res_create_sticky,
+            },
+            "update_diff_patch": {
+                "tool": "update",
+                "arguments": args_diff_patch,
+                "response": res_diff_patch,
+            },
+            "update_sticky_auto_promotion": {
+                "tool": "update",
+                "arguments": args_sticky_promo,
+                "response": res_sticky_promo,
+            },
+            "update_inline_links": {
+                "tool": "update",
+                "arguments": args_inline_links,
+                "response": res_inline_links,
+            },
+        }
+
+        # Write programmatically to docs/qa/KAN-18/contract-sample.yaml
+        target_path = Path("docs/qa/KAN-18/contract-sample.yaml")
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        dumped_yaml = yaml.safe_dump(contract_data, sort_keys=False, width=120)
+        target_path.write_text(dumped_yaml, encoding="utf-8")  # noqa: ASYNC240
