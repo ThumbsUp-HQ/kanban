@@ -1,98 +1,105 @@
-# UI Specialist Review: KAN-56
+# Clean-Room UI Specialist Review: KAN-56 (RC1 Remediation)
 
-**Ticket ID:** KAN-56  
-**Title:** [KB-BRAND-CLEAN-03] Rename Wiki Scripted-Workflows-and-Transition-Helpers.md & Add Brand Audit CI Gate  
-**Branch:** `feat/KAN-56`  
-**Commit:** `70b7738259366bf1fb3b91849dc37154ec5637a7`  
-**Reviewer:** ui-spec-2 (Clean-Room UI Specialist)  
+**Reviewer:** `ui-spec-2` (Clean-Room UI/UX Specialist, System Architect)  
 **Date:** 2026-11-20  
-**Status:** `STATUS: APPROVED`  
+**Branch:** `fix/KAN-56-rc1`  
+**Commit Under Audit:** `97ab8829d2d0ff3c742d6fb3faeb46ba8bf97b09`  
+**API Review Reference:** `docs/qa/KAN-56/api-specialist-review.md` (Commit `809053dd`)  
+**Status:** APPROVED  
 
 ---
 
 ## 1. Executive Summary
 
-A clean-room UI and UX architectural audit was conducted on ticket KAN-56 on branch `feat/KAN-56` at commit `70b7738259366bf1fb3b91849dc37154ec5637a7` pursuant to the mandatory Dual Specialist Gate defined in `GEMINI.md`. This audit incorporates direct verification of the implementation diff, automated brand audit gates, documentation link alignment in Workflow Studio, wiki repository link integrity (`thumbs-up-kanban.wiki` commit `c646b342`), unit test execution logs (`unit-test-results.txt`), and static build gates (`build-or-typecheck.txt`).
+This clean-room audit evaluates ticket **KAN-56** on branch `fix/KAN-56-rc1` at commit `97ab8829`. It verifies the complete UI, UX, and architectural remediation of all findings recorded in `docs/qa/KAN-56/reality-checker-report.md`.
 
-The ticket successfully completes the brand terminology cleanup by renaming the canonical wiki workflow chapter to `Scripted-Workflows-and-Transition-Helpers.md`, synchronizing all inbound links and media references across 10 wiki documents (0 broken links, 0 broken images), updating documentation deep-links in Workflow Studio (`AttachHookDialog.tsx` and `WorkflowStudioPage.tsx`), and introducing an automated brand hygiene CI gate enforcing zero banned competitor phrases across UI, CSS, Python, manifests, docs, and wiki articles.
+The remediation hardens both the Brand Terminology and Wiki Media CI audit gates, ensuring that documentation links, anchor fragments, media references, and brand hygiene are validated automatically across all deployment environments (including containerized CI where the wiki git repository is not checked out separately).
 
-All user-facing elements, documentation links, and terminology strictly conform to canonical design system standards, maintain strict CSP compliance (`style-src 'self'`), eliminate competitor self-descriptions, preserve wire protocol compatibility tokens, and contain zero em-dashes or en-dashes.
-
----
-
-## 2. Frontend / UX Ergonomics & Terminology Alignment
-
-### 2.1 Workflow Studio Documentation Deep-Links
-- **Direct Documentation Anchors:**
-  - In `kanban/web/src/features/workflows/AttachHookDialog.tsx` (lines 230, 375), updated contextual help links from legacy interceptor slugs to:
-    * `/docs/scripted-workflows-and-transition-helpers#helper-architecture`
-    * `/docs/scripted-workflows-and-transition-helpers#failure-policies`
-  - In `kanban/web/src/features/workflows/WorkflowStudioPage.tsx` (line 286), updated the studio header documentation link to:
-    * `/docs/scripted-workflows-and-transition-helpers`
-  - When administrators configure transition helpers, clicking documentation triggers resolves seamlessly without 404 errors, dead ends, or redirect traps.
-
-### 2.2 Wiki Nomenclature & Diagram Polish (`thumbs-up-kanban.wiki/`)
-- **Canonical Chapter Renaming:**
-  - Renamed `ScriptRunner-Workflows-and-Transition-Interceptors.md` to `Scripted-Workflows-and-Transition-Helpers.md` in `thumbs-up-kanban.wiki/` (committed at `c646b342bd5352cfb221d31b086e07aac68f51cd`).
-  - Updated headings, Mermaid diagram node labels (`HelperEngine["Transition Helper Engine"]`), sequence diagram participant (`participant Engine as Helper Engine (Sandbox)`), and added structured subsections (`## Helper Architecture`, `### Failure Policies`).
-- **Inbound Link Resolution:**
-  - Updated inbound links across `_Sidebar.md`, `Home.md`, `Architecture-Delta-and-Missing-Features.md`, `Enterprise-Whitespace-and-Kanban-Board.md`, `MCP-Tools-Reference.md`, `Multi-Provider-AI-Engine-and-Runners.md`, `REST-API-Architecture-and-OpenAPI-Guide.md`, `Three-Surface-MCP-Server-Architecture.md`, and `User-Tasks-and-QA-Matrix.md`.
-  - Zero broken links (`Broken links: 0`) and zero broken image references (`Broken images: 0`) confirmed via automated audit gate.
-
-### 2.3 Automated Brand Hygiene CI Gate
-- **Enforcement Scope (`kanban/tests/platform/test_brand_terminology_audit.py`):**
-  - Scans all UI files (`.tsx`, `.ts`), CSS stylesheets (`.css`), Python source code (`.py`), manifests (`.toml`, `.json`, `.md`), docs (`docs/`), and wiki articles.
-  - Enforces 0 occurrences of banned phrases: `scriptrunner`, `transition interceptor`, `plane-parity`, `plane-calm`, `plane-style`, `jira/plane`, and `jira-surpassing`.
-  - Authorized spec-mandated exemptions: comparison tables in `docs/FEATURE_COMPARISON.md`, `docs/CUTOVER.md`, historical `docs/qa/`, `kanban/importer/plane_*`, and `wikiManifest.ts`.
-  - Preserves wire schema enum tokens (`agent_interceptor`, `manage_workflow_interceptors`) ensuring zero protocol breakage.
-
-### 2.4 Sibling Isolation & Strict Boundaries
-- **Collision-Free Branch:** Maintained strict zero-touch boundaries for `Sidebar.tsx` (owned by KAN-52) and `DocsCenterPage.tsx` / `wikiManifest.ts` (owned by KAN-16).
-- **Clean Hygiene:** Untracked `.backup_schedule.json` and `backups/` directories were strictly excluded from staging.
+The UI Specialist audit confirms:
+1. **Dynamic Path Resolution & Zero Skipped Tests:** Added `resolve_wiki_dir` in `test_brand_terminology_audit.py` and `get_wiki_dir` in `test_wiki_media_audit.py`. When no standalone wiki checkout exists, tests automatically parse and validate the bundled `wikiManifest.ts`, achieving 17/17 tests passing with zero skipped tests (`pytest.skip` eliminated).
+2. **Robust Anchor Slug Validation:** Implemented GitHub-compatible heading slug calculation and anchor extraction (`github_heading_slug`, `extract_heading_slugs`). All internal markdown links and `#anchor` fragments across both documentation chapters and Workflow Studio contextual links (`AttachHookDialog.tsx` and `WorkflowStudioPage.tsx`) resolve to valid heading targets.
+3. **Heading Regex & Forward-Compatible Taxonomy:** Fixed line-anchored regex `^### Failure Policies$` matching canonical h3 headings, and updated H1 title checks to accept optional category tag prefixes (`[Guide]`, `[Informational]`, `[Architectural]`), establishing seamless forward-compatibility with KAN-33.
+4. **Public CI Enforcement:** Both audit suites are wired into `.github/workflows/ci.yml` under `Fast smoke unit tests`, preventing regressions on every push.
+5. **Strict Design System & CSP Compliance:** Exactly zero inline `style={{...}}` JSX attributes introduced. All styles utilize canonical design tokens from `tokens.css` and `theme.css`. `cssTokensAudit.test.ts` passes 4/4.
+6. **Brand Hygiene & Typography:** Exactly zero competitor self-descriptions and zero em-dashes (`\u2014`) or en-dashes (`\u2013`) across code, tests, and documentation.
+7. **Sibling Boundary Integrity:** Zero touches to `thumbs-up-kanban.wiki/`, `DocsCenterPage.tsx`, or `wikiManifest.ts` (owned by `b-kan33`).
+8. **Test Verification:** 17/17 Pytest tests passed in 2.29s (98% coverage), 107/107 Vitest tests passed across 8 test suites with 0 `act(...)` warnings, and all static analysis gates (`tsc -b`, `eslint`, `vite build`, `ruff`, `mypy`) passed cleanly.
 
 ---
 
-## 3. Design System, Accessibility & Strict CSP
+## 2. Technical & UX Audit Findings
 
-- **Strict CSP `style-src 'self'` Adherence:** Zero inline JSX `style={...}` attributes introduced (`cssTokensAudit.test.ts` passed 4/4).
-- **Canonical Design Tokens:** 100% of styles resolve to canonical tokens in `theme.css` and `tokens.css`.
-- **Contrast & Legibility:** Text, badges, and interactive controls strictly exceed WCAG AA standards (>= 4.5:1) in both Light and Dark themes.
-- **Typography & Dashes:** Zero em-dashes and zero en-dashes across code, styles, tests, and documentation (`check_no_dashes` passed cleanly across main repo and wiki).
+### 2.1. Documentation Navigation & Anchor Integrity
+- **Contextual Workflow Studio Links:**
+  * Contextual help links in `AttachHookDialog.tsx` point directly to:
+    - `/docs/scripted-workflows-and-transition-helpers#helper-architecture`
+    - `/docs/scripted-workflows-and-transition-helpers#failure-policies`
+  * Header documentation link in `WorkflowStudioPage.tsx` points to:
+    - `/docs/scripted-workflows-and-transition-helpers`
+- **Heading Slug Verification:**
+  * `test_wiki_media_audit.py` extracts heading slugs using GitHub's exact punctuation-stripping and hyphenation rules (`github_heading_slug`).
+  * Both `#helper-architecture` and `#failure-policies` match extracted slugs (`## Helper Architecture` -> `helper-architecture`, `### Failure Policies` -> `failure-policies`).
+  * Clicking these links in the web UI smoothly scrolls to the exact section in the Docs Center without anchor mismatch or 404 errors.
 
----
+### 2.2. Zero-Skip Manifest Fallback in Containerized CI
+- **Problem Remediation:** In containerized CI environments without a local git clone of `thumbs-up-kanban.wiki`, earlier test suites skipped execution via `pytest.skip`.
+- **Solution:** Removed blanket exclusions of `wikiManifest.ts` from `DEFAULT_EXCLUDED_PATHS`. Added `scan_wiki_manifest_for_violations` which parses `WIKI_CHAPTERS` directly and scans all chapter titles, summaries, and contents.
+- **Verification:** Tested with `KANBAN_WIKI_PATH=/nonexistent`:
+  * All 17 unit tests execute and pass cleanly.
+  * Exactly zero tests skipped.
+  * Guarantees brand hygiene across hermetic container builds and remote runners.
 
-## 4. Automated Test Verification
-
-All unit tests and static quality gates executed and passed cleanly:
-
-1. **Brand & Media Audit Pytest Suites:**
-   - `kanban/tests/platform/test_brand_terminology_audit.py`: 3 passed.
-   - `kanban/tests/docs/test_wiki_media_audit.py`: 4 passed.
-   - Duration: 4.34s, Coverage: 98% on `test_brand_terminology_audit.py`.
-
-2. **Frontend Vitest Suites:**
-   - 7 test files passed, 72/72 tests passed in 4.90s with exactly 0 `act(...)` warnings:
-     * `AttachHookDialog.test.tsx`: 6 passed.
-     * `WorkflowStudioPage.test.tsx`: 11 passed.
-     * `workflowCoverageBooster.test.tsx`: 28 passed.
-     * `GitRepoBindingsSection.test.tsx`: 16 passed.
-     * `DryRunDrawer.test.tsx`: 5 passed.
-     * `TransitionRuleCardEdge.test.tsx`: 2 passed.
-     * `cssTokensAudit.test.ts`: 4 passed.
-
-3. **Static Quality Gates:**
-   - TypeScript (`tsc -b --noEmit`): 0 errors.
-   - ESLint (`eslint . --max-warnings 0`): 0 errors, 0 warnings.
-   - Vite Production Build: Completed with exit code 0.
-   - Python Linting & Formatting: `ruff check` and `ruff format --check` passed cleanly across 1007 files.
-   - Type Checking: `mypy` passed with 0 issues in 1130 source files.
-   - Architectural Layering: `lint-imports` confirmed 2 contracts kept, 0 broken.
-   - Typography Guard: `python3 -m scripts.check_no_dashes` passed cleanly across main repository and wiki.
+### 2.3. Forward-Compatible Heading Check for KAN-33
+- The H1 regex check in `test_wiki_media_audit.py` line ~104:
+  ```python
+  re.search(
+      r"^#\s+(?:\[(?:Guide|Informational|Architectural)\]\s+)?Scripted Workflows",
+      content,
+      re.MULTILINE,
+  )
+  ```
+  Permits incoming KAN-33 taxonomy labels (e.g., `# [Guide] Scripted Workflows and Transition Helpers`) without failing the media audit gate, eliminating merge conflicts.
 
 ---
 
-## 5. Certification Verdict
+## 3. Test Suites, Coverage & Quality Gates
 
-The brand terminology updates, wiki renaming, and automated brand hygiene gates implemented for KAN-56 fulfill all architectural, documentation, usability, and design system requirements.
+### 3.1. Backend Pytest Suites
+- **Standard Execution:**
+  `PYTEST_XDIST_WORKER=gw_kan56rc1 uv run pytest kanban/tests/platform/test_brand_terminology_audit.py kanban/tests/docs/test_wiki_media_audit.py --cov=kanban/tests/platform/test_brand_terminology_audit --cov=kanban/tests/docs/test_wiki_media_audit --cov-report=term-missing`
+  * Results: 17/17 passed in 2.29s.
+  * Coverage: 98% (459 statements, 3 missed, 146 branches).
+- **Clean-Room Nonexistent Wiki Fallback:**
+  `KANBAN_WIKI_PATH=/nonexistent PYTEST_XDIST_WORKER=gw_kan56rc1 uv run pytest ...`
+  * Results: 17/17 passed in 2.42s with exactly 0 skipped tests.
 
-**STATUS: APPROVED**
+### 3.2. Frontend Vitest Suites
+Command executed:
+`pnpm --dir kanban/web exec vitest run src/features/workflows/ src/features/docs-center/__tests__/DocsCenter.test.tsx src/styles/__tests__/cssTokensAudit.test.ts`
+- Results: 8 test files, 107/107 passed in 4.96s with 0 `act(...)` warnings:
+  * `DocsCenter.test.tsx`: 35 passed.
+  * `workflowCoverageBooster.test.tsx`: 28 passed.
+  * `GitRepoBindingsSection.test.tsx`: 16 passed.
+  * `WorkflowStudioPage.test.tsx`: 11 passed.
+  * `AttachHookDialog.test.tsx`: 6 passed.
+  * `DryRunDrawer.test.tsx`: 5 passed.
+  * `cssTokensAudit.test.ts`: 4 passed.
+  * `TransitionRuleCardEdge.test.tsx`: 2 passed.
+
+### 3.3. Static Analysis & Build Verification
+- **TypeScript:** `pnpm --dir kanban/web exec tsc -b --noEmit` -> Clean (exit code 0, 0 errors).
+- **ESLint:** `pnpm --dir kanban/web exec eslint . --max-warnings 0` -> Clean (exit code 0, 0 warnings).
+- **Vite Build:** `pnpm --dir kanban/web run build` -> Clean (production bundle built in 1.18s, exit code 0).
+- **Python Lint & Format:** `ruff check` (clean), `ruff format --check` (clean across 1992 files), `mypy` (clean across 1135 source files).
+- **Dashes Audit:** `python3 -m scripts.check_no_dashes` -> Clean (exit code 0, 0 em/en-dashes).
+- **Untracked Safeguard:** `.backup_schedule.json` and `backups/` strictly preserved unstaged.
+
+---
+
+## 4. Certification & Sign-off
+
+The remediation for **KAN-56-rc1** completely resolves all reality-checker findings, hardens brand terminology and wiki media CI audit gates, ensures zero-skip fallback execution, and maintains pristine design system, documentation, and quality standards.
+
+- **UI Specialist Sign-off:** APPROVED
+- **Dual Specialist Gate Status:** COMPLETE (Both API Specialist commit `809053dd` and UI Specialist commit are signed off).
+- **Recommendation:** Proceed immediately to reality-checker QA gate and merge coordination.
