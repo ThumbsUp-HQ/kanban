@@ -5,16 +5,16 @@
 - Title: Wire Self-Service External Identity Linking (OIDC, OAuth2, LDAP) on /settings/profile and Fix Backend Link Initiation & Session Preservation (3 Problems)
 - Reviewer: ui-spec-2 (Clean-Room UI/UX Specialist)
 - Date: 2026-11-20
-- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-47504391`
-- Target Branch: `feat/KAN-27`
-- Base Commit: `53f7b6e`
-- Head Commit: `4fd4c203`
+- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan27-rc1-0fa848cb`
+- Target Branch: `fix/KAN-27-rc1`
+- Base Commit: `5998e9ab`
+- Head Commit: `d61b35d0`
 - STATUS: APPROVED
 
 ---
 
 ## Executive Summary
-This clean-room review evaluates the frontend user experience, interaction flows, accessibility (WCAG AA), modal ergonomics, design token adherence, and CSP compliance for ticket KAN-27 ([KB-P3-AUDIT-21]) on branch `feat/KAN-27` (commit `4fd4c203`).
+This clean-room review evaluates the frontend user experience, interaction flows, accessibility (WCAG AA), modal ergonomics, design token adherence, CSP compliance, and live visual artifact verification for ticket KAN-27 ([KB-P3-AUDIT-21]) on branch `fix/KAN-27-rc1` (commit `d61b35d0`).
 
 The ticket implements self-service external identity linking directly on the `/settings/profile` page with comprehensive error handling, AAL2 step-up support, and zero-CSP violations:
 1. **`+ Connect <Provider>` Provider Buttons (`PersonalSettingsPage.tsx`):**
@@ -33,6 +33,10 @@ The ticket implements self-service external identity linking directly on the `/s
    - 0 inline `style={...}` JSX attributes (`style-src 'self'`).
    - 100% canonical CSS design tokens (`cssTokensAudit.test.ts` passes 4/4).
    - Strict ASCII hyphens (-), zero em/en-dashes.
+5. **RC1 Live-QA Remediation Verification:**
+   - Single-head migration `p4_23_oidc_link_intent_fk` corrected the foreign key reference from `principals(id)` to `identity_link_intents(id)`.
+   - Proved zero FK constraint failures during real fullstack ASGI POST `/api/v1/auth/identities/link/start`.
+   - Verified session preservation (@alice, aal_level=1) and duplicate conflict rejection (@admin, IDENTITY_ALREADY_LINKED).
 
 ---
 
@@ -48,6 +52,15 @@ The ticket implements self-service external identity linking directly on the `/s
 ### 3. Step-Up Authentication UX
 - High-privilege operators (administrators or users with enrolled MFA) attempting to link a new external identity are seamlessly guided through AAL2 step-up re-authentication before sensitive provider linking executes, eliminating silent authorization drops.
 
+### 4. Live Visual & Screenshot Artifact Verification
+All 6 Playwright visual proof artifacts in `docs/qa/KAN-27/screenshots/` were audited:
+- `live-kan27-connect-buttons-desktop-dark.png`: Verified dark mode contrast (>= 4.5:1), button spacing (8px gap), and zero text clipping.
+- `live-kan27-connect-buttons-desktop-light.png`: Verified light mode breathable padding (16px/24px) and circular provider badges.
+- `live-kan27-connect-buttons-mobile-light.png`: Verified mobile viewport responsive wrapping and >= 44x44px touch targets.
+- `live-kan27-empty-providers-desktop-light.png`: Verified empty state message typography and accessible link to `/admin/auth`.
+- `live-kan27-ldap-modal-desktop-dark.png`: Verified dark mode modal backdrop blur, accessible labels, input contrast, and button hierarchy.
+- `live-kan27-ldap-modal-desktop-light.png`: Verified light mode modal alignment, keyboard focus rings, and action button contrast.
+
 ---
 
 ## Code Quality & Standards
@@ -61,7 +74,7 @@ The ticket implements self-service external identity linking directly on the `/s
 - `pnpm --dir kanban/web exec tsc -b --noEmit`: Clean (0 errors).
 - `pnpm --dir kanban/web exec eslint . --max-warnings 0`: Clean (0 errors).
 - `uv run ruff check .` and `uv run ruff format --check .`: Clean (0 errors).
-- `uv run mypy`: Clean (0 errors across 1091 source files).
+- `uv run mypy`: Clean (0 errors across 1099 source files).
 - `uv run lint-imports`: Clean (2 kept, 0 broken).
 
 ### 3. Punctuation & Style Standard
@@ -71,7 +84,9 @@ The ticket implements self-service external identity linking directly on the `/s
 ### 4. Test Coverage & Verification
 - 66/66 Vitest unit tests passing in `PersonalSettingsPage.test.tsx` (7.28s).
 - `PersonalSettingsPage.tsx` coverage: 98.39% Statements, 95.43% Branch, 99.00% Functions, 100% Lines (all >= 95%).
-- 43/43 Pytest unit tests passing (4.25s), with `auth_identities.py` achieving 95% coverage.
+- 292/292 Pytest backend tests passing in `kanban/tests/auth/`, with `auth_identities.py` achieving 95% coverage.
+- Migration lifecycle test (`test_p4_23_oidc_link_intent_fk_migration.py`) passed upgrade -> downgrade -> upgrade cycle on PostgreSQL 16.
+- Real PostgreSQL ASGI E2E lifecycle test (`test_identity_linking_real_pg_e2e.py`) passed zero-mock end-to-end verification.
 
 ---
 
@@ -87,11 +102,12 @@ The ticket implements self-service external identity linking directly on the `/s
 8. [x] 100% canonical design tokens verified (`cssTokensAudit.test.ts` passes 4/4)
 9. [x] Strict ASCII hyphenation verified (0 em/en-dashes across repo and wiki)
 10. [x] Frontend test suite passes: 66 Vitest tests passing with 98.39% statements and 95.43% branch coverage
-11. [x] Backend test suite passes: 43 Pytest tests passing with 95% coverage on `auth_identities.py`
+11. [x] Backend test suite passes: 292 Pytest tests passing with 95% coverage on `auth_identities.py`
+12. [x] Visual evidence verified across 6 annotated desktop, mobile, dark, and light screenshots
 
 ---
 
 ## Verdict & Certification
 STATUS: APPROVED
 
-All frontend ergonomics, modal accessibility, step-up authentication handling, design token contracts, and test coverage for KAN-27 have been verified and certified. Ready for dual specialist signoff and coordinator merge into `main`.
+All frontend ergonomics, modal accessibility, step-up authentication handling, design token contracts, visual artifacts, and test coverage for KAN-27 RC1 have been verified and certified. Ready for dual specialist signoff and coordinator merge into `main`.
