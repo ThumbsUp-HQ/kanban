@@ -583,6 +583,10 @@ async def test_manage_cycles_and_modules_direct_unit_branches() -> None:  # noqa
     assert e1.code == McpErrorCode.MODULES_DISABLED
     e2 = _map_cycle_error(KbMcpError(McpErrorCode.NOT_FOUND, "not found"))
     assert e2.code == McpErrorCode.NOT_FOUND
+    assert (
+        e2.cli_example
+        == 'kanban-cli-admin manage_cycles_and_modules --action=list_cycles --project="<project>"'
+    )
     e3 = _map_cycle_error(KbMcpError(McpErrorCode.VALIDATION_FAILED, "other"))
     assert e3.code == McpErrorCode.VALIDATION_FAILED
 

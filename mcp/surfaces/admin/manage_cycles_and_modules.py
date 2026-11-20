@@ -194,7 +194,8 @@ def _map_cycle_error(exc: KbMcpError) -> KbMcpError:
             msg,
             fix_hint="Cycle or module not found. Verify identifier or list project cycles/modules.",
             cli_example=(
-                'kanban-cli-admin manage_cycles_and_modules --action=list --project="<project>"'
+                "kanban-cli-admin manage_cycles_and_modules "
+                '--action=list_cycles --project="<project>"'
             ),
         )
     return exc

@@ -61,7 +61,6 @@ sample_7_domain_conflict_etag:
   error:
     code: CONFLICT_ETAG
     message: 'concurrency conflict: ticket description was modified concurrently'
-    field: if_match
     hint: 'current etag: 9f83726abcde...'
     fix_hint: 'Ticket description was modified concurrently. Retry with fresh ETag: 9f83726abcde...'
     cli_example: kanban-cli-agent update_ticket --identifier="KAN-19" --if-match="9f83726abcde..."
