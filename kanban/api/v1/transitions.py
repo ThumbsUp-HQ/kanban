@@ -77,11 +77,12 @@ async def _attach_issue_etag(
 ) -> None:
     """Attempt to resolve and attach fresh ETag header for issue."""
     try:
-        from kanban.services.issues import get_issue_or_404  # noqa: PLC0415
+        from kanban.services.issues import get_issue_or_404, serialize_issue  # noqa: PLC0415
 
-        fresh_issue = await get_issue_or_404(session, caller, issue_key)
-        if fresh_issue.etag:
-            headers["ETag"] = fresh_issue.etag
+        issue_row = await get_issue_or_404(session, caller, issue_key)
+        serialized = await serialize_issue(session, caller, issue_row)
+        if serialized.etag:
+            headers["ETag"] = serialized.etag
     except Exception:  # noqa: BLE001
         logger.debug("Could not attach fresh ETag for %s", issue_key)
 
