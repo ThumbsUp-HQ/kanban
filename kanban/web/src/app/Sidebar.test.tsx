@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router';
 import {
   Sidebar,
   sanitizeSidebarState,
+  extractProjectKeyFromPath,
   SIDEBAR_STORAGE_KEY,
 } from './Sidebar';
 
@@ -206,8 +207,8 @@ describe('Sidebar', () => {
     window.addEventListener('kb:create-issue', listener);
 
     render(
-      <MemoryRouter>
-        <Sidebar />
+      <MemoryRouter initialEntries={['/']}>
+        <Sidebar projectKey="KAN" projectName="kanban" />
       </MemoryRouter>,
     );
 
@@ -299,8 +300,10 @@ describe('Sidebar', () => {
     document.cookie = 'csrf_token=test-csrf-token';
     const nameInput = screen.getByLabelText(/Project Name/i);
     const idInput = screen.getByLabelText(/Identifier/i);
-    fireEvent.change(nameInput, { target: { value: 'New Project' } });
-    fireEvent.change(idInput, { target: { value: 'NEW' } });
+    act(() => {
+      fireEvent.change(nameInput, { target: { value: 'New Project' } });
+      fireEvent.change(idInput, { target: { value: 'NEW' } });
+    });
     const form = screen.getByTestId('create-project-submit').closest('form');
     expect(form).not.toBeNull();
     if (form) {
@@ -309,8 +312,15 @@ describe('Sidebar', () => {
       });
     }
 
+    await waitFor(() => {
+      expect(screen.queryByTestId('create-project-modal')).toBeNull();
+    });
+
     act(() => {
       window.dispatchEvent(new CustomEvent('kb:project-created'));
+    });
+    await waitFor(() => {
+      expect(screen.getByText('Security')).toBeDefined();
     });
   });
 
@@ -383,6 +393,9 @@ describe('Sidebar', () => {
     const targetWsBtn = screen.getByRole('menuitem', { name: /Design Systems WS/ });
     act(() => {
       fireEvent.click(targetWsBtn);
+    });
+    await waitFor(() => {
+      expect(screen.queryByRole('menu')).toBeNull();
     });
   });
 
@@ -593,7 +606,7 @@ describe('Sidebar', () => {
     });
   });
 
-  it('handles workspace switch to workspace without projects and sets CSRF token', () => {
+  it('handles workspace switch to workspace without projects and sets CSRF token', async () => {
     vi.spyOn(window, 'fetch').mockImplementation((input: RequestInfo | URL) => {
       const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
       if (urlStr.includes('/switch')) {
@@ -626,8 +639,14 @@ describe('Sidebar', () => {
 
     // Click workspace item if available
     const items = screen.getAllByRole('menuitem');
-    if (items[0]) {
-      fireEvent.click(items[0]);
+    const firstItem = items[0];
+    if (firstItem) {
+      act(() => {
+        fireEvent.click(firstItem);
+      });
+      await waitFor(() => {
+        expect(screen.queryByRole('menu')).toBeNull();
+      });
     }
   });
 
@@ -728,6 +747,9 @@ describe('Sidebar', () => {
       act(() => {
         fireEvent.click(firstItem);
       });
+      await waitFor(() => {
+        expect(screen.queryByRole('menu')).toBeNull();
+      });
     }
 
     await waitFor(() => {
@@ -825,6 +847,9 @@ describe('Sidebar', () => {
       act(() => {
         fireEvent.click(firstItem);
       });
+      await waitFor(() => {
+        expect(screen.queryByRole('menu')).toBeNull();
+      });
     }
   });
 
@@ -862,6 +887,9 @@ describe('Sidebar', () => {
     if (firstWs) {
       act(() => {
         fireEvent.click(firstWs);
+      });
+      await waitFor(() => {
+        expect(screen.queryByRole('menu')).toBeNull();
       });
     }
 
@@ -954,5 +982,387 @@ describe('Sidebar', () => {
 
     unmount();
     fetchSpy.mockRestore();
+  });
+
+  it('extractProjectKeyFromPath extracts project keys from project and workspace routes', () => {
+    expect(extractProjectKeyFromPath('/projects/KAN/issues')).toBe('KAN');
+    expect(extractProjectKeyFromPath('/projects/SEC')).toBe('SEC');
+    expect(extractProjectKeyFromPath('/projects/PRJ-123/settings/workflows?foo=bar')).toBe('PRJ-123');
+    expect(extractProjectKeyFromPath('/w/engineering/p/SEC/cycles')).toBe('SEC');
+    expect(extractProjectKeyFromPath('/w/my-ws/p/OPS')).toBe('OPS');
+    expect(extractProjectKeyFromPath('/w/default/projects/CORE/settings#hash')).toBe('CORE');
+    expect(extractProjectKeyFromPath('/')).toBeNull();
+    expect(extractProjectKeyFromPath('/drafts')).toBeNull();
+    expect(extractProjectKeyFromPath('/your-work')).toBeNull();
+    expect(extractProjectKeyFromPath('/stickies')).toBeNull();
+    expect(extractProjectKeyFromPath('/docs')).toBeNull();
+    expect(extractProjectKeyFromPath('/about')).toBeNull();
+    expect(extractProjectKeyFromPath('')).toBeNull();
+    expect(extractProjectKeyFromPath(null)).toBeNull();
+    expect(extractProjectKeyFromPath(undefined)).toBeNull();
+  });
+
+  it('auto-collapses non-focused projects on route navigation or sub-route clicks while preserving manual toggles (KAN-53)', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes('/api/v1/projects')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                { identifier: 'KAN', name: 'kanban', modules_enabled: true },
+                { identifier: 'SEC', name: 'Security', modules_enabled: true },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.resolve(new Response('[]', { status: 200 }));
+    });
+
+    // 1. Initial render on /projects/KAN/issues: KAN should be expanded, SEC collapsed
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+        <Sidebar projectKey="KAN" projectName="kanban" modulesEnabled={true} />
+      </MemoryRouter>,
+    );
+
+    const kanRow = await screen.findByRole('button', { name: 'Project: kanban' });
+    const secRow = await screen.findByRole('button', { name: 'Project: Security' });
+
+    expect(kanRow.getAttribute('aria-expanded')).toBe('true');
+    expect(secRow.getAttribute('aria-expanded')).toBe('false');
+
+    // KAN subitems present, SEC subitems absent
+    expect(screen.getByRole('link', { name: /Issues view/i })).toBeDefined();
+
+    // 2. Manual expand SEC via arrow button: preserves manual toggle independently
+    act(() => {
+      secRow.click();
+    });
+    expect(secRow.getAttribute('aria-expanded')).toBe('true');
+    expect(kanRow.getAttribute('aria-expanded')).toBe('true');
+
+    // 3. Manual collapse KAN via arrow button: KAN collapsed, SEC still expanded
+    act(() => {
+      kanRow.click();
+    });
+    expect(kanRow.getAttribute('aria-expanded')).toBe('false');
+    expect(secRow.getAttribute('aria-expanded')).toBe('true');
+
+    // Re-expand KAN manually
+    act(() => {
+      kanRow.click();
+    });
+    expect(kanRow.getAttribute('aria-expanded')).toBe('true');
+    expect(secRow.getAttribute('aria-expanded')).toBe('true');
+
+    // 4. Click sub-route under SEC (e.g., Work Items or Cycles or subitems container):
+    // Auto-collapses non-focused project (KAN) to false and keeps SEC true!
+    const secSubitems = document.querySelectorAll('.kb-project-subitems');
+    expect(secSubitems.length).toBe(2);
+    const secLinks = screen.getAllByRole('link', { name: /Cycles/i });
+    expect(secLinks.length).toBe(2);
+    act(() => {
+      secLinks[1]?.click();
+    });
+    expect(secRow.getAttribute('aria-expanded')).toBe('true');
+    expect(kanRow.getAttribute('aria-expanded')).toBe('false');
+
+    unmount();
+  });
+
+  it('preserves manual expand/collapse state when on non-project route / and updates on navigation (KAN-53)', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes('/api/v1/projects')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                { identifier: 'KAN', name: 'kanban', modules_enabled: true },
+                { identifier: 'SEC', name: 'Security', modules_enabled: true },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.resolve(new Response('[]', { status: 200 }));
+    });
+
+    // Render on / (non-project route): both projects default to expanded
+    const { rerender } = render(
+      <MemoryRouter initialEntries={['/']}>
+        <Sidebar activePath="/" />
+      </MemoryRouter>,
+    );
+
+    const kanRow = await screen.findByRole('button', { name: 'Project: kanban' });
+    const secRow = await screen.findByRole('button', { name: 'Project: Security' });
+
+    expect(kanRow.getAttribute('aria-expanded')).toBe('true');
+    expect(secRow.getAttribute('aria-expanded')).toBe('true');
+
+    // Manually collapse KAN on /
+    act(() => {
+      kanRow.click();
+    });
+    expect(kanRow.getAttribute('aria-expanded')).toBe('false');
+    expect(secRow.getAttribute('aria-expanded')).toBe('true');
+
+    // Navigate to /stickies (another non-project route): manual state preserved!
+    rerender(
+      <MemoryRouter initialEntries={['/stickies']}>
+        <Sidebar activePath="/stickies" />
+      </MemoryRouter>,
+    );
+    expect(kanRow.getAttribute('aria-expanded')).toBe('false');
+    expect(secRow.getAttribute('aria-expanded')).toBe('true');
+
+    // Navigate to /w/default/p/SEC/issues: focuses SEC, auto-collapses non-focused KAN
+    rerender(
+      <MemoryRouter initialEntries={['/w/default/p/SEC/issues']}>
+        <Sidebar activePath="/w/default/p/SEC/issues" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(secRow.getAttribute('aria-expanded')).toBe('true');
+      expect(kanRow.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    // Navigate to /projects/KAN/issues: focuses KAN, auto-collapses SEC
+    rerender(
+      <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+        <Sidebar activePath="/projects/KAN/issues" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(kanRow.getAttribute('aria-expanded')).toBe('true');
+      expect(secRow.getAttribute('aria-expanded')).toBe('false');
+    });
+  });
+
+  it('handles workspace created callback from CreateWorkspaceModal and switches workspace', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes('/api/v1/workspaces') && init?.method === 'POST') {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ id: 'created-ws', name: 'Created WS', slug: 'created-ws' }),
+            { status: 201, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      if (url.includes('/switch')) {
+        return Promise.resolve(new Response(JSON.stringify({ csrf_token: 'ws-csrf' }), { status: 200 }));
+      }
+      return Promise.resolve(new Response('[]', { status: 200 }));
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Sidebar projectKey="KAN" projectName="kanban" />
+      </MemoryRouter>,
+    );
+
+    // Open workspace dropdown
+    const switcherBtn = screen.getByRole('button', { name: /Workspace switcher:/i });
+    act(() => {
+      switcherBtn.click();
+    });
+
+    // Click "+ Create New Workspace"
+    const createWsBtn = screen.getByRole('menuitem', { name: /Create New Workspace/i });
+    act(() => {
+      createWsBtn.click();
+    });
+
+    const modal = screen.getByRole('dialog', { name: 'Create New Workspace' });
+    expect(modal).toBeDefined();
+
+    const nameInput = screen.getByLabelText(/Workspace Name/i);
+    act(() => {
+      fireEvent.change(nameInput, { target: { value: 'New Test WS' } });
+    });
+
+    const submitBtn = screen.getByRole('button', { name: 'Create Workspace' });
+    act(() => {
+      fireEvent.click(submitBtn);
+    });
+
+    await waitFor(() => {
+      expect(screen.queryByRole('dialog', { name: 'Create New Workspace' })).toBeNull();
+    });
+  });
+
+  it('covers remaining branch variations for coverage threshold (KAN-53)', async () => {
+    // 1. isOpen = false
+    const { unmount: uClosed } = render(
+      <MemoryRouter>
+        <Sidebar isOpen={false} />
+      </MemoryRouter>,
+    );
+    expect(document.querySelector('.kb-sidebar-scrim-active')).toBeNull();
+    uClosed();
+
+    // 2. /docs routes for docs link
+    const { unmount: uHelp } = render(
+      <MemoryRouter initialEntries={['/docs/getting-started']}>
+        <Sidebar activePath="/docs/getting-started" />
+      </MemoryRouter>,
+    );
+    expect(screen.getByTestId('sidebar-docs-link').getAttribute('aria-current')).toBe('page');
+    uHelp();
+
+    // 3. Layout board active subnav
+    const { unmount: uBoard } = render(
+      <MemoryRouter initialEntries={['/projects/KAN/issues?layout=board']}>
+        <Sidebar projectKey="KAN" activePath="/projects/KAN/issues" />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('link', { name: 'Board view' }).className).toContain('kb-subnav-active');
+    uBoard();
+
+    // 4. User permissions branches: is_server_admin true, is_workspace_admin false
+    const { unmount: uAdmin1 } = render(
+      <MemoryRouter>
+        <Sidebar user={{ is_server_admin: true, is_workspace_admin: false }} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('button', { name: 'Create project' })).toBeDefined();
+    uAdmin1();
+
+    // 5. User permissions: viewer role (canCreateProject false, canCreateWorkItem false)
+    const { unmount: uViewer } = render(
+      <MemoryRouter>
+        <Sidebar user={{ is_server_admin: false, is_workspace_admin: false, workspace_role: 'VIEWER' }} />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('button', { name: 'Create project' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /New work item/ })).toBeNull();
+    uViewer();
+
+    // 6. fetchProjects array payload & invalid item handling
+    const fetchSpy = vi.spyOn(window, 'fetch').mockImplementation((input: RequestInfo | URL) => {
+      const u = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (u.includes('/api/v1/projects')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify([
+              { key: 'DIR1', name: 'Direct Array Project' },
+              { key: '', name: 'Invalid' },
+              { key: 'INV2', name: 123 },
+            ]),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.resolve(new Response('[]', { status: 200 }));
+    });
+
+    const { unmount: uArray } = render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText('Direct Array Project')).toBeDefined();
+    });
+    uArray();
+    fetchSpy.mockRestore();
+
+    // 7. handleCreateIssue on existing issues route (skips navigateFn branch)
+    const { unmount: uOnIssues } = render(
+      <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+        <Sidebar projectKey="KAN" activePath="/projects/KAN/issues" />
+      </MemoryRouter>,
+    );
+    const newIssueBtn = screen.getByRole('button', { name: /New work item/ });
+    act(() => {
+      newIssueBtn.click();
+    });
+    uOnIssues();
+
+    // 8. projectList merge with undefined projectName and non-array workspaces
+    const fetchSpy2 = vi.spyOn(window, 'fetch').mockImplementation((input: RequestInfo | URL) => {
+      const u = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (u.includes('/api/v1/workspaces')) {
+        return Promise.resolve(new Response(JSON.stringify({ notAnArray: true }), { status: 200 }));
+      }
+      if (u.includes('/api/v1/projects')) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [
+                { identifier: 'KAN', name: 'Existing Kanban', modules_enabled: true },
+                { identifier: 'NO_MODS', name: 'No Mod Project' },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.resolve(new Response('{}', { status: 200 }));
+    });
+
+    const { unmount: uMerge } = render(
+      <MemoryRouter>
+        <Sidebar projectKey="KAN" />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByText('Existing Kanban')).toBeDefined();
+    });
+    uMerge();
+    fetchSpy2.mockRestore();
+
+    // 9. Mobile key down non-escape, non-tab key
+    const triggerRef = { current: document.createElement('button') };
+    const { unmount: uKey } = render(
+      <MemoryRouter>
+        <Sidebar isOpen={true} triggerButtonRef={triggerRef} />
+      </MemoryRouter>,
+    );
+    const dialog = screen.getByRole('dialog', { name: 'Sidebar navigation' });
+    fireEvent.keyDown(dialog, { key: 'ArrowDown' });
+    uKey();
+
+    // 10. User with workspace_admin=true, server_admin=false; user with undefined admin flags
+    const { unmount: uWsAdmin } = render(
+      <MemoryRouter>
+        <Sidebar user={{ is_workspace_admin: true, is_server_admin: false }} />
+      </MemoryRouter>,
+    );
+    expect(screen.getByRole('button', { name: 'Create project' })).toBeDefined();
+    uWsAdmin();
+
+    const { unmount: uUndefAdmin } = render(
+      <MemoryRouter>
+        <Sidebar user={{ workspace_role: 'MEMBER' }} />
+      </MemoryRouter>,
+    );
+    expect(screen.queryByRole('button', { name: 'Create project' })).toBeNull();
+    uUndefAdmin();
+
+    // 11. fetchProjects with empty object (data.items ?? [] fallback)
+    const fetchSpyEmpty = vi.spyOn(window, 'fetch').mockImplementation((input: RequestInfo | URL) => {
+      const u = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (u.includes('/api/v1/projects')) {
+        return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
+      }
+      return Promise.resolve(new Response('[]', { status: 200 }));
+    });
+    const { unmount: uEmptyItems } = render(
+      <MemoryRouter>
+        <Sidebar />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('sidebar-no-projects')).toBeDefined();
+    });
+    uEmptyItems();
+    fetchSpyEmpty.mockRestore();
   });
 });

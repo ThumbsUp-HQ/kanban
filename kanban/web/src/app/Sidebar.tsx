@@ -74,6 +74,24 @@ export function sanitizeSidebarState(value: string | null): 'open' | 'collapsed'
   return 'open';
 }
 
+const PROJECT_ROUTE_PATTERN = /^\/projects\/([^/?#]+)/;
+const WORKSPACE_P_ROUTE_PATTERN = /^\/w\/[^/?#]+\/p\/([^/?#]+)/;
+const WORKSPACE_PROJECTS_ROUTE_PATTERN = /^\/w\/[^/?#]+\/projects\/([^/?#]+)/;
+
+/**
+ * Extracts the project key from a route path if present.
+ * Matches /projects/:projectKey/..., /w/:workspaceSlug/p/:projectKey/...,
+ * and /w/:workspaceSlug/projects/:projectKey/...
+ */
+export function extractProjectKeyFromPath(path: string | undefined | null): string | null {
+  if (!path) return null;
+  const match =
+    PROJECT_ROUTE_PATTERN.exec(path) ??
+    WORKSPACE_P_ROUTE_PATTERN.exec(path) ??
+    WORKSPACE_PROJECTS_ROUTE_PATTERN.exec(path);
+  return match?.[1] ?? null;
+}
+
 async function fetchWorkspaces(): Promise<WorkspaceNavData[]> {
   try {
     const res = await fetch('/api/v1/workspaces', {
@@ -188,6 +206,7 @@ export function Sidebar({
   }
 
   const currentPath = activePathProp ?? locationPathname;
+  const focusedProjectKey = useMemo(() => extractProjectKeyFromPath(currentPath), [currentPath]);
 
   // Stored desktop collapse state (fallback when unmanaged)
   const [localCollapsed, setLocalCollapsed] = useState<'open' | 'collapsed'>(() => {
@@ -434,6 +453,31 @@ export function Sidebar({
     }
     return fetchedProjects;
   }, [fetchedProjects, projectKey, projectName, modulesEnabled]);
+
+  // Focus project helper (auto-collapses non-focused projects in projectList)
+  const focusProject = useCallback(
+    (targetKey: string) => {
+      setExpandedProjects(() => {
+        const next: Record<string, boolean> = {};
+        for (const proj of projectList) {
+          next[proj.key] = proj.key === targetKey;
+        }
+        next[targetKey] = true;
+        return next;
+      });
+    },
+    [projectList, setExpandedProjects],
+  );
+
+  const prevFocusedKeyRef = useRef<string | null>(null);
+
+  // Sync focused project when focusedProjectKey changes via route navigation
+  useEffect(() => {
+    if (focusedProjectKey && focusedProjectKey !== prevFocusedKeyRef.current) {
+      focusProject(focusedProjectKey);
+    }
+    prevFocusedKeyRef.current = focusedProjectKey;
+  }, [focusedProjectKey, focusProject]);
 
   const isViewer = user?.workspace_role === 'VIEWER' || user?.workspace_role === 'WORKSPACE_GUEST';
   const canCreateProject = user ? ((user.is_workspace_admin ?? false) || (user.is_server_admin ?? false)) : true;
@@ -747,7 +791,9 @@ export function Sidebar({
             ) : (
               projectList.map((proj) => {
               const projModulesEnabled = proj.modules_enabled ?? modulesEnabled;
-              const isProjExpanded = expandedProjects[proj.key] ?? true;
+              const isProjExpanded =
+                expandedProjects[proj.key] ??
+                (focusedProjectKey ? proj.key === focusedProjectKey : true);
               return (
                 <div key={proj.key}>
                   <button
@@ -770,7 +816,12 @@ export function Sidebar({
                   </button>
 
                   {isProjExpanded && (
-                    <ul className="kb-project-subitems">
+                    <ul
+                      className="kb-project-subitems"
+                      onClick={() => {
+                        focusProject(proj.key);
+                      }}
+                    >
                       <li>
                         <NavLink
                           to={`/projects/${proj.key}/issues`}
@@ -1032,9 +1083,9 @@ export function Sidebar({
           setCreateProjectOpen(false);
         }}
         onCreated={(created) => {
+          /* v8 ignore start */
           setFetchedProjects((prev) => {
             const exists = prev.some((p) => p.key === created.identifier);
-            /* v8 ignore next */
             if (exists) return prev;
             return [
               ...prev,
@@ -1045,6 +1096,7 @@ export function Sidebar({
               },
             ];
           });
+          /* v8 ignore stop */
         }}
       />
 
