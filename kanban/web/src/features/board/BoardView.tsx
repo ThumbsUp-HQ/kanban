@@ -212,7 +212,7 @@ export function BoardView({
   const moveMutation = useOptimisticMutation<IssueMoveParams, IssueMoveResponse, BoardIssue[]>({
     mutationFn: (vars) => moveIssueApi(vars),
     queryKey: qk.issues(projectKey, {}),
-    apply: (cache, vars) => applyOptimisticMove(cache, vars),
+    apply: (cache, vars) => applyOptimisticMove(cache, vars, states),
     onRollbackMessage: () => 'Failed to move issue. Changes were reverted.',
   });
 
@@ -220,7 +220,7 @@ export function BoardView({
     async (moveParams: IssueMoveParams) => {
       // Optimistically update local issues synchronously (< 12ms budget)
       const previousIssues = issues;
-      const updatedIssues = applyOptimisticMove(previousIssues, moveParams);
+      const updatedIssues = applyOptimisticMove(previousIssues, moveParams, states);
       setLocalIssues(updatedIssues);
 
       try {
@@ -231,7 +231,7 @@ export function BoardView({
         setLocalIssues(previousIssues);
       }
     },
-    [issues, moveMutation, onMoveSuccess],
+    [issues, moveMutation, onMoveSuccess, states],
   );
 
   const handlePerformMove = useCallback(

@@ -7,15 +7,23 @@ Success: no issues found in 8 source files
 FRONTEND TYPESCRIPT TYPECHECK
 ================================================================================
 
-> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan35-301b718d/kanban/web
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan35-rc1-f1e28dab/kanban/web
 > tsc -b --noEmit
 
+src/features/views/viewRegistry.tsx(740,9): error TS2322: Type '{ id: string; key: string; summary: string; state_id: string; state: { id: string; name: string; group: string; color_hex: string | null; } | undefined; priority: { id: string; slug: string; label: string; }; ... 4 more ...; has_explicit_acl: boolean; }[]' is not assignable to type 'BoardIssue[]'.
+  Type '{ id: string; key: string; summary: string; state_id: string; state: { id: string; name: string; group: string; color_hex: string | null; } | undefined; priority: { id: string; slug: string; label: string; }; ... 4 more ...; has_explicit_acl: boolean; }' is not assignable to type 'BoardIssue'.
+    Types of property 'state' are incompatible.
+      Type '{ id: string; name: string; group: string; color_hex: string | null; } | undefined' is not assignable to type 'BoardIssueState | undefined'.
+        Type '{ id: string; name: string; group: string; color_hex: string | null; }' is not assignable to type 'BoardIssueState'.
+          Types of property 'group' are incompatible.
+            Type 'string' is not assignable to type 'StateGroup'.
+ ELIFECYCLE  Command failed with exit code 1.
 
 ================================================================================
 FRONTEND ESLINT AUDIT
 ================================================================================
 
-> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan35-301b718d/kanban/web
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan35-rc1-f1e28dab/kanban/web
 > eslint . --max-warnings 0
 
 
@@ -42,7 +50,7 @@ IMPORT CONTRACTS AUDIT (LINT-IMPORTS)
 Contracts
 ---------
 
-Analyzed 964 files, 3379 dependencies.
+Analyzed 964 files, 3388 dependencies.
 --------------------------------------
 
 Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
@@ -53,4 +61,3 @@ Contracts: 2 kept, 0 broken.
 ================================================================================
 ZERO-DASHES AUDIT (NO EN/EM DASHES)
 ================================================================================
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan35-301b718d/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)

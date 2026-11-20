@@ -380,23 +380,36 @@ export function IssuesWorkspaceRoute({
   // Filter issues based on activeFilters
   const filteredIssues = useMemo(() => {
     return issues.filter((issue) => {
+      const rawState = (issue as { state?: { id?: string; name?: string; group?: string; color_hex?: string } }).state;
+      const explicitStateId = (issue as { state_id?: string }).state_id ?? rawState?.id;
+      const hasCompleteState = Boolean(rawState?.name) && Boolean(rawState?.group);
+      const resolvedState =
+        hasCompleteState
+          ? rawState
+          : (explicitStateId ? projectStates.find((s) => s.id === explicitStateId) : undefined) ?? rawState;
+
+      const stateGroup = resolvedState?.group ?? 'unstarted';
+      const stateName = resolvedState?.name ?? '';
+      const stateId = resolvedState?.id ?? explicitStateId ?? '';
+
       // 1. State filter
       if (activeFilters.state && activeFilters.state.length > 0) {
         const matchesActive =
           activeFilters.state.includes('active') &&
-          ['backlog', 'unstarted', 'started'].includes(issue.state.group);
+          ['backlog', 'unstarted', 'started'].includes(stateGroup);
         const matchesSpecific = activeFilters.state.some(
           (s) =>
-            s === issue.state.group ||
-            s === issue.state.name.toLowerCase() ||
-            s === issue.state.id
+            s === stateGroup ||
+            (stateName ? s.toLowerCase() === stateName.toLowerCase() : false) ||
+            s === stateId
         );
         if (!matchesActive && !matchesSpecific) return false;
       }
 
       // 2. Priority filter
       if (activeFilters.priority && activeFilters.priority.length > 0) {
-        const pSlug = issue.priority.slug.toLowerCase();
+        const rawPriority = (issue as { priority?: { slug?: string } }).priority;
+        const pSlug = rawPriority?.slug ? rawPriority.slug.toLowerCase() : 'none';
         if (!activeFilters.priority.includes(pSlug)) return false;
       }
 
@@ -463,15 +476,15 @@ export function IssuesWorkspaceRoute({
         const isOverdue =
           issue.due_date &&
           issue.due_date < today &&
-          issue.state.group !== 'completed' &&
-          issue.state.group !== 'cancelled';
+          stateGroup !== 'completed' &&
+          stateGroup !== 'cancelled';
         if (activeFilters.due_date.includes('overdue') && !isOverdue) return false;
         if (activeFilters.due_date.includes('no_due_date') && issue.due_date) return false;
       }
 
       return true;
     });
-  }, [issues, activeFilters, modulesEnabled]);
+  }, [issues, activeFilters, modulesEnabled, projectStates]);
 
   // Normalize board workflow states and issues so "Todo" and "To Do" match seamlessly (KANBA-164)
   const boardStates: BoardWorkflowState[] = useMemo(() => {
@@ -623,19 +636,35 @@ export function IssuesWorkspaceRoute({
           (s) => s.id === sId || normalizeStateKey(s.name) === normalizeStateKey(sId),
         );
 
+      const curRawState = currentIssue.state as { id?: string; name?: string } | undefined;
+      const curStateId = (currentIssue as { state_id?: string }).state_id ?? curRawState?.id ?? '';
+      const curResolvedState =
+        curRawState?.name
+          ? curRawState
+          : (curStateId ? projectStates.find((s) => s.id === curStateId) : undefined) ?? curRawState;
+      const curStateName = curResolvedState?.name ?? '';
+
       const targetStateName = targetState?.name ?? sId;
       const isCrossState =
-        currentIssue.state.id !== sId &&
-        normalizeStateKey(currentIssue.state.name) !== normalizeStateKey(targetStateName);
+        curStateId !== sId &&
+        normalizeStateKey(curStateName) !== normalizeStateKey(targetStateName);
 
       const targetStateAny = targetState as { wip_hard_limit?: number | null } | undefined;
       if (isCrossState && targetStateAny?.wip_hard_limit != null) {
-        const targetCount = issues.filter(
-          (i) =>
-            i.key !== targetKey &&
-            (i.state.id === targetState?.id ||
-              normalizeStateKey(i.state.name) === normalizeStateKey(targetStateName)),
-        ).length;
+        const targetCount = issues.filter((i) => {
+          if (i.key === targetKey) return false;
+          const iRawState = i.state as { id?: string; name?: string } | undefined;
+          const iStateId = (i as { state_id?: string }).state_id ?? iRawState?.id ?? '';
+          const iResolvedState =
+            iRawState?.name
+              ? iRawState
+              : (iStateId ? projectStates.find((s) => s.id === iStateId) : undefined) ?? iRawState;
+          const iStateName = iResolvedState?.name ?? '';
+          return (
+            iStateId === targetState?.id ||
+            (targetStateName ? normalizeStateKey(iStateName) === normalizeStateKey(targetStateName) : false)
+          );
+        }).length;
 
         if (targetCount >= targetStateAny.wip_hard_limit) {
           if (!canAdmin) {
@@ -711,12 +740,23 @@ export function IssuesWorkspaceRoute({
   const boardIssues: BoardIssue[] = useMemo(() => {
     const fallbackStateId = boardStates[0]?.id ?? 'state-backlog';
     return filteredIssues.map((issue, idx) => {
-      const explicitStateId = (issue as { state_id?: string }).state_id ?? issue.state.id;
-      const exactMatch = boardStates.find((s) => s.id === explicitStateId);
-      const nameMatch = boardStates.find(
-        (s) => normalizeStateKey(s.name) === normalizeStateKey(issue.state.name)
-      );
-      const groupMatch = boardStates.find((s) => s.group === issue.state.group);
+      const rawState = (issue as { state?: { id?: string; name?: string; group?: string; color_hex?: string } }).state;
+      const explicitStateId = (issue as { state_id?: string }).state_id ?? rawState?.id;
+      const hasCompleteState = Boolean(rawState?.name) && Boolean(rawState?.group);
+      const resolvedState =
+        hasCompleteState
+          ? rawState
+          : (explicitStateId ? projectStates.find((s) => s.id === explicitStateId) : undefined) ?? rawState;
+
+      const stateId = resolvedState?.id ?? explicitStateId;
+      const stateName = resolvedState?.name ?? '';
+      const stateGroup = resolvedState?.group ?? 'unstarted';
+
+      const exactMatch = boardStates.find((s) => s.id === stateId);
+      const nameMatch = stateName
+        ? boardStates.find((s) => normalizeStateKey(s.name) === normalizeStateKey(stateName))
+        : undefined;
+      const groupMatch = boardStates.find((s) => s.group === stateGroup);
       const resolvedStateId =
         exactMatch?.id ?? nameMatch?.id ?? groupMatch?.id ?? fallbackStateId;
 
@@ -741,15 +781,27 @@ export function IssuesWorkspaceRoute({
           ? 'rejected'
           : issue.gate_status ?? null;
 
+      const rawPriority = (issue as { priority?: { slug?: string; label?: string } }).priority;
+      const pSlug = rawPriority?.slug ?? 'none';
+      const pLabel = rawPriority?.label ?? 'None';
+
       return {
         id: issue.id,
         key: issue.key,
         summary: issue.summary,
         state_id: resolvedStateId,
+        state: resolvedState
+          ? {
+              id: resolvedState.id ?? resolvedStateId,
+              name: resolvedState.name ?? stateName,
+              group: resolvedState.group ?? 'unstarted',
+              color_hex: (resolvedState as { color_hex?: string | null | undefined }).color_hex ?? null,
+            }
+          : undefined,
         priority: {
-          id: issue.priority.slug,
-          slug: issue.priority.slug,
-          label: issue.priority.label,
+          id: pSlug,
+          slug: pSlug,
+          label: pLabel,
         },
         board_rank: issue.board_rank ?? String(idx + 1).padStart(6, '0'),
         assignees: boardAssignees,
@@ -758,7 +810,7 @@ export function IssuesWorkspaceRoute({
         has_explicit_acl: Boolean(issue.has_explicit_acl),
       };
     });
-  }, [filteredIssues, boardStates]);
+  }, [filteredIssues, boardStates, projectStates]);
 
   // 2D Swimlane condition: layout === 'board' and custom grouping or sub-grouping
   const is2DSwimlane = layout === 'board' && (subGroupBy !== 'none' || groupBy !== 'state');

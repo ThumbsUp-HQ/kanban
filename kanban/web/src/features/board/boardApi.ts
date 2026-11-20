@@ -26,21 +26,31 @@ export interface BoardCycle {
   name: string;
 }
 
+export interface BoardIssueState {
+  id: string;
+  name: string;
+  group: StateGroup;
+  color_hex?: string | null | undefined;
+  slug?: string | undefined;
+}
+
 export interface BoardIssue {
   id: string;
   key: string;
   project_key?: string | null | undefined;
   summary: string;
   state_id: string;
-  priority?: BoardPriority | null;
+  state?: BoardIssueState | undefined;
+  priority?: BoardPriority | null | undefined;
   board_rank: string;
-  assignees?: BoardAssignee[];
-  cycle?: BoardCycle | null;
-  due_date?: string | null;
-  gate_status?: 'pending' | 'rejected' | 'approved' | null;
-  pending_gate?: PendingGateInfo | null;
-  latest_gate_verdict?: LatestGateVerdict | null;
-  has_explicit_acl?: boolean;
+  assignees?: BoardAssignee[] | undefined;
+  cycle?: BoardCycle | null | undefined;
+  due_date?: string | null | undefined;
+  gate_status?: 'pending' | 'rejected' | 'approved' | null | undefined;
+  pending_gate?: PendingGateInfo | null | undefined;
+  latest_gate_verdict?: LatestGateVerdict | null | undefined;
+  has_explicit_acl?: boolean | undefined;
+  [key: string]: unknown;
 }
 
 export type StateGroup = 'backlog' | 'unstarted' | 'started' | 'completed' | 'cancelled';
@@ -109,37 +119,117 @@ export async function moveIssueApi(params: IssueMoveParams): Promise<IssueMoveRe
   });
 }
 
+export interface AvailableStateRef {
+  id: string;
+  name?: string | undefined;
+  group?: string | undefined;
+  color_hex?: string | null | undefined;
+}
+
 /**
  * Synchronous 1-row cache updater.
- * Replaces strictly the moved issue object reference in the array.
+ * Replaces strictly the moved issue object reference in the array or items envelope.
+ * Preserves all existing IssueSummary / IssueItem fields (...item) and updates state_id and state.
  * Completes well under the < 12ms budget even on 500+ items.
  */
-export function applyOptimisticMove(
-  cache: BoardIssue[] | undefined,
+export function applyOptimisticMove<
+  T extends {
+    key: string;
+    state_id?: string | undefined;
+    state?: { id?: string | undefined; name?: string | undefined; group?: string | undefined; color_hex?: string | null | undefined } | undefined;
+    board_rank?: string | undefined;
+    [key: string]: unknown;
+  },
+>(
+  cache: T[] | undefined,
   params: IssueMoveParams,
-): BoardIssue[] {
-  if (!cache || cache.length === 0) {
+  availableStates?: AvailableStateRef[],
+): T[];
+export function applyOptimisticMove<
+  T extends {
+    key: string;
+    state_id?: string | undefined;
+    state?: { id?: string | undefined; name?: string | undefined; group?: string | undefined; color_hex?: string | null | undefined } | undefined;
+    board_rank?: string | undefined;
+    [key: string]: unknown;
+  },
+>(
+  cache: { items: T[] } | undefined,
+  params: IssueMoveParams,
+  availableStates?: AvailableStateRef[],
+): { items: T[] };
+export function applyOptimisticMove<
+  T extends {
+    key: string;
+    state_id?: string | undefined;
+    state?: { id?: string | undefined; name?: string | undefined; group?: string | undefined; color_hex?: string | null | undefined } | undefined;
+    board_rank?: string | undefined;
+    [key: string]: unknown;
+  },
+>(
+  cache: T[] | { items: T[] } | undefined,
+  params: IssueMoveParams,
+  availableStates?: AvailableStateRef[],
+): T[] | { items: T[] } {
+  if (!cache) {
     return [];
   }
 
-  const target = cache.find((item) => item.key === params.issueKey);
+  const isObjectEnvelope =
+    !Array.isArray(cache) &&
+    typeof cache === 'object' &&
+    'items' in cache &&
+    Array.isArray(cache.items);
+
+  const items: T[] = isObjectEnvelope
+    ? cache.items
+    : Array.isArray(cache)
+      ? cache
+      : [];
+
+  if (items.length === 0) {
+    return isObjectEnvelope ? { ...cache, items: [] } : [];
+  }
+
+  const target = items.find((item) => item.key === params.issueKey);
   if (!target) {
     return cache;
   }
 
-  const updated: BoardIssue = {
-    id: target.id,
-    key: target.key,
-    summary: target.summary,
-    state_id: params.targetStateId ?? target.state_id,
-    board_rank: params.boardRank ?? target.board_rank,
-    ...(target.priority !== undefined ? { priority: target.priority } : {}),
-    ...(target.assignees !== undefined ? { assignees: target.assignees } : {}),
-    ...(target.cycle !== undefined ? { cycle: target.cycle } : {}),
-    ...(target.due_date !== undefined ? { due_date: target.due_date } : {}),
-    ...(target.gate_status !== undefined ? { gate_status: target.gate_status } : {}),
-    ...(target.has_explicit_acl !== undefined ? { has_explicit_acl: target.has_explicit_acl } : {}),
+  const targetState =
+    params.targetStateId && availableStates
+      ? availableStates.find((s) => s.id === params.targetStateId)
+      : undefined;
+
+  const targetStateId = params.targetStateId ?? target.state_id ?? target.state?.id;
+
+  let updatedState = target.state;
+  if (params.targetStateId !== undefined) {
+    const rawTargetState = target.state as { name?: string | undefined; group?: string | undefined; color_hex?: string | null | undefined } | undefined;
+    updatedState = {
+      ...(rawTargetState ?? {}),
+      id: params.targetStateId,
+      name: targetState?.name ?? rawTargetState?.name ?? '',
+      group: targetState?.group ?? rawTargetState?.group ?? 'unstarted',
+      color_hex: targetState?.color_hex ?? rawTargetState?.color_hex ?? null,
+    };
+  }
+
+  const updated: T = {
+    ...target,
+    ...(targetStateId !== undefined ? { state_id: targetStateId } : {}),
+    ...(params.boardRank !== undefined ? { board_rank: params.boardRank } : {}),
+    ...(updatedState !== undefined ? { state: updatedState } : {}),
   };
 
-  return cache.map((item) => (item.key === params.issueKey ? updated : item));
+  const updatedItems = items.map((item) => (item.key === params.issueKey ? updated : item));
+
+  if (isObjectEnvelope) {
+    return {
+      ...cache,
+      items: updatedItems,
+    };
+  }
+
+  return updatedItems;
 }

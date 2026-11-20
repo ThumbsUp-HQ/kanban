@@ -273,8 +273,12 @@ describe('Realtime Module & React Hooks', () => {
 
     it('dynamically connects when session transitions from unauthenticated to authenticated, and disconnects on logout', () => {
       const dynamicClient = new RealtimeClient();
-      const localConnectSpy = vi.spyOn(dynamicClient, 'connect').mockImplementation(() => undefined);
-      const localCloseSpy = vi.spyOn(dynamicClient, 'close').mockImplementation(() => undefined);
+      const localConnectSpy = vi.spyOn(dynamicClient, 'connect').mockImplementation(() => {
+        dynamicClient.state = 'connecting';
+      });
+      const localCloseSpy = vi.spyOn(dynamicClient, 'close').mockImplementation(() => {
+        dynamicClient.state = 'closed';
+      });
 
       const { rerender } = render(
         <QueryClientProvider client={queryClient}>

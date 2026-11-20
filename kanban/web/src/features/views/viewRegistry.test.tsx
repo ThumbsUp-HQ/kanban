@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { render, screen, fireEvent, within, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, within, waitFor, act } from '@testing-library/react';
 import { QueryClient } from '@tanstack/react-query';
 import React from 'react';
 import {
@@ -1723,6 +1723,159 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       const groupSelect = screen.getByLabelText(/^Group by axis$/i);
       const options = Array.from(groupSelect.querySelectorAll('option')).map((o) => o.value);
       expect(options).not.toContain('module');
+    });
+
+    it('KAN-35 regression: optimistic BoardView move followed by realtime issue.transitioned maintains valid IssueSummary cache with 0 TypeError crash', async () => {
+      Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+        configurable: true,
+        value: 900,
+      });
+      Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
+        configurable: true,
+        value: 124,
+      });
+      Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
+        configurable: true,
+        value: () => ({
+          top: 0,
+          left: 0,
+          bottom: 900,
+          right: 324,
+          width: 324,
+          height: 900,
+          x: 0,
+          y: 0,
+        }),
+      });
+
+      window.history.pushState({}, '', '/projects/KAN/issues?layout=board');
+
+      const qc = new QueryClient({
+        defaultOptions: {
+          queries: {
+            retry: false,
+          },
+        },
+      });
+
+      // Mock move API & queries
+      vi.spyOn(globalThis, 'fetch').mockImplementation((input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.includes('/api/v1/issues/KAN-1/move')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({
+              issue_key: 'KAN-1',
+              state_id: 'state-todo',
+              board_rank: '000020',
+              rebalance_scheduled: false,
+            }),
+          } as Response);
+        }
+        if (url.includes('/api/v1/projects/KAN/issues')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({
+              items: [
+                {
+                  id: '01912345-6789-7000-8000-000000000001',
+                  key: 'KAN-1',
+                  summary: 'Optimistic Move Test Issue',
+                  state: { id: 'state-todo', name: 'To Do', group: 'unstarted' },
+                  priority: { slug: 'medium', label: 'Medium', emoji: '🔹' },
+                  board_rank: '000020',
+                },
+              ],
+              total: 1,
+            }),
+          } as Response);
+        }
+        if (url.includes('/api/v1/projects/KAN/states') || url.includes('/api/v1/projects/KAN')) {
+          return Promise.resolve({
+            ok: true,
+            status: 200,
+            json: () => Promise.resolve({
+              id: 'p-kan',
+              key: 'KAN',
+              name: 'Kanban',
+              states: [
+                { id: 'state-backlog', name: 'Backlog', group: 'backlog', sort_order: 1 },
+                { id: 'state-todo', name: 'To Do', group: 'unstarted', sort_order: 2 },
+                { id: 'state-in-progress', name: 'In Progress', group: 'started', sort_order: 3 },
+              ],
+            }),
+          } as Response);
+        }
+        return Promise.resolve({
+          ok: true,
+          status: 200,
+          json: () => Promise.resolve({}),
+        } as Response);
+      });
+
+      const initialTestIssues: IssueItem[] = [
+        {
+          id: '01912345-6789-7000-8000-000000000001',
+          key: 'KAN-1',
+          summary: 'Optimistic Move Test Issue',
+          state: { id: 'state-backlog', name: 'Backlog', group: 'backlog' },
+          priority: { slug: 'medium', label: 'Medium', emoji: '🔹' },
+          board_rank: '000010',
+        },
+      ];
+
+      render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialIssues={initialTestIssues}
+          initialLayout="board"
+          capabilities={['VIEW', 'EDIT', 'ADMIN']}
+          queryClient={qc}
+        />,
+      );
+
+      // Verify card rendered
+      const card = screen.getByTestId('board-card-KAN-1');
+      expect(card).toBeDefined();
+
+      // Trigger Alt+ArrowRight on card
+      fireEvent.keyDown(card, { key: 'ArrowRight', altKey: true });
+
+      // Check cache on qk.issues('KAN', {}) - must have preserved summary, priority, and updated state without crash!
+      const cacheAfterMove = qc.getQueryData<IssueItem[]>(['issues', 'KAN', {}]);
+      expect(cacheAfterMove).toBeDefined();
+      const firstIssue = cacheAfterMove ? cacheAfterMove[0] : undefined;
+      expect(firstIssue?.key).toBe('KAN-1');
+      expect(firstIssue?.summary).toBe('Optimistic Move Test Issue');
+      expect(firstIssue?.state.name).toBeDefined();
+      expect(firstIssue?.state.group).toBeDefined();
+
+      // Remote issue.transitioned realtime event arrives
+      act(() => {
+        window.dispatchEvent(
+          new CustomEvent('kb:issue-updated', {
+            detail: {
+              type: 'issue.transitioned',
+              payload: {
+                key: 'KAN-1',
+                issue_key: 'KAN-1',
+                project_key: 'KAN',
+                from_state: 'Backlog',
+                to_state: 'To Do',
+                to_state_id: 'state-todo',
+              },
+            },
+          }),
+        );
+      });
+
+      // Zero TypeError crash and card movement clean
+      await waitFor(() => {
+        expect(screen.queryByText(/Application Error Detected/i)).toBeNull();
+        expect(screen.getByTestId('board-card-KAN-1')).toBeDefined();
+      });
     });
   });
 });
