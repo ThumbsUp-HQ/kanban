@@ -168,9 +168,17 @@ describe('AboutPage', () => {
     expect(screen.getByText('lucide-react')).toBeDefined();
     expect(screen.queryByText('vitest')).toBeNull();
 
+    // Verify dynamic ecosystem button counts match runtime scope
+    expect(screen.getByTestId('filter-ecosystem-python').textContent).toContain('Python (2)');
+    expect(screen.getByTestId('filter-ecosystem-node').textContent).toContain('Web (1)');
+
     // Toggle scope to all (inc dev)
     fireEvent.click(screen.getByTestId('toggle-scope-runtime'));
     expect(screen.getByText('vitest')).toBeDefined();
+
+    // Verify dynamic ecosystem button counts update to all scope
+    expect(screen.getByTestId('filter-ecosystem-python').textContent).toContain('Python (2)');
+    expect(screen.getByTestId('filter-ecosystem-node').textContent).toContain('Web (2)');
 
     // Filter by Python ecosystem
     fireEvent.click(screen.getByTestId('filter-ecosystem-python'));

@@ -1,7 +1,7 @@
 === PYTHON PYTEST & COVERAGE (kanban/tests/ops/test_sbom.py, kanban/tests/api/test_system_about.py) ===
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan34-96c38e21
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan34-rc1-482bf99d
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
@@ -12,7 +12,7 @@ kanban/tests/api/test_system_about.py .......                            [100%]
 
 =============================== warnings summary ===============================
 kanban/tests/api/test_system_about.py::test_live_app_docs_and_openapi_endpoints_resolve_200
-  /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan34-96c38e21/.venv/lib/python3.12/site-packages/fastapi/openapi/utils.py:295: UserWarning: Duplicate Operation ID admin_validate_agent_definition_api_v1_admin_agent_definitions__agent__validate_post for function admin_validate_agent_definition at /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan34-96c38e21/kanban/api/v1/agent_definitions.py
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan34-rc1-482bf99d/.venv/lib/python3.12/site-packages/fastapi/openapi/utils.py:295: UserWarning: Duplicate Operation ID admin_validate_agent_definition_api_v1_admin_agent_definitions__agent__validate_post for function admin_validate_agent_definition at /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan34-rc1-482bf99d/kanban/api/v1/agent_definitions.py
     warnings.warn(message, stacklevel=1)
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
@@ -22,37 +22,37 @@ _______________ coverage: platform linux, python 3.12.7-final-0 ________________
 Name                      Stmts   Miss Branch BrPart  Cover   Missing
 ---------------------------------------------------------------------
 kanban/api/v1/system.py     115      0      2      0   100%
-kanban/ops/sbom.py          333      6    126     10    97%   311, 371->376, 374, 417->416, 419, 447->452, 464->469, 505-506, 513->516, 544->547, 549
+kanban/ops/sbom.py          336      5    128      8    97%   311, 371->376, 374, 447->452, 464->469, 511-512, 519->522, 550->553, 555
 ---------------------------------------------------------------------
-TOTAL                       448      6    128     10    97%
-======================== 29 passed, 1 warning in 15.38s ========================
+TOTAL                       451      5    130      8    98%
+======================== 29 passed, 1 warning in 16.62s ========================
 
 === WEB VITEST & COVERAGE (AboutPage, aboutApi, sbom.ts, AboutNavigation, cssTokensAudit) ===
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan34-96c38e21/kanban/web
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan34-rc1-482bf99d/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/about/__tests__/aboutApi.test.ts (2 tests) 17ms
- ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 29ms
- ✓ build/__tests__/sbom.test.ts (7 tests) 35ms
- ✓ src/app/__tests__/AboutNavigation.test.tsx (5 tests) 388ms
- ✓ src/features/about/__tests__/AboutPage.test.tsx (7 tests) 2392ms
+ ✓ src/features/about/__tests__/aboutApi.test.ts (2 tests) 15ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 17ms
+ ✓ build/__tests__/sbom.test.ts (7 tests) 41ms
+ ✓ src/app/__tests__/AboutNavigation.test.tsx (5 tests) 483ms
+ ✓ src/features/about/__tests__/AboutPage.test.tsx (7 tests) 2431ms
    ✓ AboutPage (7)
-     ✓ switches between Apache-2.0 License and Third-Party NOTICE and copies to clipboard 2067ms
+     ✓ switches between Apache-2.0 License and Third-Party NOTICE and copies to clipboard 2068ms
 
  Test Files  5 passed (5)
       Tests  25 passed (25)
-   Start at  10:11:09
-   Duration  4.19s (environment 52%, tests 30%, import 11%, worker 4%, transform 3%)
+   Start at  11:59:49
+   Duration  4.36s (environment 53%, tests 29%, import 10%, transform 5%, worker 3%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |     100 |    97.63 |     100 |     100 |                   
+All files          |     100 |     97.2 |     100 |     100 |                   
  build             |     100 |      100 |     100 |     100 |                   
   sbom.ts          |     100 |      100 |     100 |     100 |                   
- ...features/about |     100 |    95.45 |     100 |     100 |                   
-  AboutPage.tsx    |     100 |    95.45 |     100 |     100 | 56,277            
+ ...features/about |     100 |    95.12 |     100 |     100 |                   
+  AboutPage.tsx    |     100 |    95.12 |     100 |     100 | 47,80,298         
   aboutApi.ts      |     100 |      100 |     100 |     100 |                   
 -------------------|---------|----------|---------|---------|-------------------

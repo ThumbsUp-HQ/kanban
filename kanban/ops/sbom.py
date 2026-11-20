@@ -3,9 +3,9 @@
 """Software Bill of Materials (SBOM) generation and supply-chain auditing (KAN-34).
 
 Collects Python runtime packages from importlib.metadata and web packages from
-build-time verified manifests (sbom-web.json) or package.json/pnpm-lock.yaml fallbacks.
-Evaluates license compliance against ALLOW_SET and license-allowlist.toml, and generates
-canonical CycloneDX 1.5 JSON documents.
+build-time verified manifests (sbom-web.json) or package.json fallback with
+local and hoisted node_modules inspection. Evaluates license compliance against
+ALLOW_SET and license-allowlist.toml, and generates canonical CycloneDX 1.5 JSON documents.
 """
 
 from __future__ import annotations
@@ -473,7 +473,7 @@ def _parse_web_package_json(
     pkg_json_path: Path,
     entries: list[AllowlistException],
 ) -> list[Component]:
-    """Fallback collector parsing kanban/web/package.json."""
+    """Fallback collector parsing kanban/web/package.json and local/hoisted node_modules."""
     try:
         pkg_data = json.loads(pkg_json_path.read_text(encoding="utf-8"))
     except Exception as exc:  # noqa: BLE001
@@ -481,6 +481,7 @@ def _parse_web_package_json(
         return []
 
     node_modules_dir = pkg_json_path.parent / "node_modules"
+    root_node_modules_dir = pkg_json_path.parent.parent.parent / "node_modules"
     deps = pkg_data.get("dependencies", {})
     dev_deps = pkg_data.get("devDependencies", {})
 
@@ -496,14 +497,19 @@ def _parse_web_package_json(
 
         raw_lic = "UNKNOWN"
         desc = ""
-        dep_pkg_path = node_modules_dir / name / "package.json"
-        if dep_pkg_path.is_file():
-            try:
-                dep_json = json.loads(dep_pkg_path.read_text(encoding="utf-8"))
-                raw_lic = str(dep_json.get("license") or "UNKNOWN")
-                desc = str(dep_json.get("description") or "")
-            except Exception as exc:  # noqa: BLE001
-                logger.debug("Could not inspect package.json for %s: %s", name, exc)
+        candidate_paths = [
+            node_modules_dir / name / "package.json",
+            root_node_modules_dir / name / "package.json",
+        ]
+        for dep_pkg_path in candidate_paths:
+            if dep_pkg_path.is_file():
+                try:
+                    dep_json = json.loads(dep_pkg_path.read_text(encoding="utf-8"))
+                    raw_lic = str(dep_json.get("license") or "UNKNOWN")
+                    desc = str(dep_json.get("description") or "")
+                    break
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("Could not inspect package.json for %s: %s", name, exc)
 
         verdict = classify_license(raw_lic)
         if verdict != "ALLOW":
@@ -535,7 +541,7 @@ def collect_web_components(
     allowlist: list[AllowlistException] | None = None,
     manifest_path: Path | None = None,
 ) -> list[Component]:
-    """Collect web packages from sbom-web.json or fallback to package.json/pnpm-lock.yaml."""
+    """Collect web packages from sbom-web.json or fallback to package.json and node_modules."""
     entries = allowlist if allowlist is not None else load_allowlist()
     manifest_file = manifest_path or _find_web_manifest()
 

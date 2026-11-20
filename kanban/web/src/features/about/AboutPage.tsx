@@ -27,6 +27,30 @@ export function AboutPage(): JSX.Element {
   const [copiedLicense, setCopiedLicense] = useState(false);
 
   const components = data?.components;
+  const sbomSummary = data?.sbom_summary;
+
+  const { pythonCount, webCount } = useMemo(() => {
+    if (!components) {
+      return {
+        pythonCount: sbomSummary?.python_components ?? 0,
+        webCount: sbomSummary?.web_components ?? 0,
+      };
+    }
+    let py = 0;
+    let web = 0;
+    for (const c of components) {
+      if (scopeFilter === 'runtime' && c.scope === 'dev') {
+        continue;
+      }
+      if (c.ecosystem === 'python') {
+        py += 1;
+      } else {
+        web += 1;
+      }
+    }
+    return { pythonCount: py, webCount: web };
+  }, [components, scopeFilter, sbomSummary]);
+
   const filteredComponents = useMemo(() => {
     if (!components) return [];
     return components.filter((c: SbomComponent) => {
@@ -100,9 +124,6 @@ export function AboutPage(): JSX.Element {
       <section className="kb-about-hero" data-testid="about-hero-card">
         <div className="kb-about-hero-header">
           <div className="kb-about-branding">
-            <span className="kb-about-logo" aria-hidden="true">
-              👍
-            </span>
             <h1 className="kb-about-title">{platform}</h1>
             <div className="kb-about-badges">
               <span className="kb-about-badge kb-about-badge-version">v{version}</span>
@@ -260,7 +281,7 @@ export function AboutPage(): JSX.Element {
               onClick={() => { setEcosystemFilter('python'); }}
               data-testid="filter-ecosystem-python"
             >
-              Python ({sbom_summary.python_components})
+              Python ({pythonCount})
             </button>
             <button
               type="button"
@@ -268,7 +289,7 @@ export function AboutPage(): JSX.Element {
               onClick={() => { setEcosystemFilter('node'); }}
               data-testid="filter-ecosystem-node"
             >
-              Web ({sbom_summary.web_components})
+              Web ({webCount})
             </button>
             <button
               type="button"
