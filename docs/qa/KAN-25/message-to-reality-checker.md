@@ -4,7 +4,7 @@
 - Ticket ID: KAN-25 ([KB-P3-AUDIT-19])
 - Title: Add Self-Service Passkey & FIDO2 Security Key Registration, Key Testing, and AAL2 Step-Up Handling on Profile Settings
 - Branch: fix/KAN-25-rc2
-- Base Commit: 887e7e029127b77b5868a4d7c35dd2b818d3a4e5
+- Base Commit: 53f7b6e (53f7b6eb516a1a8c7e24f7c8b3a8d6c6a4c7a478)
 - Scoped Files Touched:
   - `kanban/api/v1/auth_webauthn.py`
   - `kanban/tests/auth/test_webauthn.py`
@@ -91,11 +91,21 @@
 
 ## Artifacts in `docs/qa/KAN-25/`
 - `changed-files-manifest.txt`
-- `git-diff.patch` (clean diff against 887e7e0 across all 12 touched code and test files, 0 docs/qa/* files inside)
+- `git-diff.patch` (clean diff against 53f7b6e across all 12 touched code and test files, 0 docs/qa/* files inside)
 - `unit-test-results.txt` (verbatim Pytest and Vitest coverage output)
 - `build-or-typecheck.txt` (verbatim output of ruff, mypy, lint-imports, typecheck, lint, build, check_no_dashes)
-- `live-fullstack-proof.txt` (verbatim zero-mock CDP Playwright CTAP2 live execution proof)
-- `screenshots/` (9 live unmocked screenshots on desktop 1440x900 and mobile 390x844 light/dark modes, including live-kan25-clone-warning-desktop-light.png and live-kan25-insecure-context-desktop-light.png)
+- `live-fullstack-proof.txt` (verbatim zero-mock CDP Playwright CTAP2 live execution proof at commit 53f7b6e, including !window.isSecureContext viewport check and Problem 3 AAL2_REQUIRED / AAL2_STALE interception + automatic retry)
+- `screenshots/` (10 live unmocked screenshots on desktop 1440x900 and mobile 390x844 light/dark modes):
+  - `docs/qa/KAN-25/screenshots/live-kan25-aal2-stepup-desktop-light.png`
+  - `docs/qa/KAN-25/screenshots/live-kan25-clone-warning-desktop-light.png`
+  - `docs/qa/KAN-25/screenshots/live-kan25-enroll-modal-desktop-dark.png`
+  - `docs/qa/KAN-25/screenshots/live-kan25-enroll-modal-desktop-light.png`
+  - `docs/qa/KAN-25/screenshots/live-kan25-enroll-modal-mobile-light.png`
+  - `docs/qa/KAN-25/screenshots/live-kan25-insecure-context-desktop-light.png`
+  - `docs/qa/KAN-25/screenshots/live-kan25-profile-mobile-dark.png`
+  - `docs/qa/KAN-25/screenshots/live-kan25-profile-mobile-light.png`
+  - `docs/qa/KAN-25/screenshots/live-kan25-profile-verified-desktop-dark.png`
+  - `docs/qa/KAN-25/screenshots/live-kan25-profile-verified-desktop-light.png`
 - `message-to-reality-checker.md`
 - `api-specialist-review.md`
 - `ui-specialist-review.md`

@@ -5,74 +5,63 @@
 - Title: Add Self-Service Passkey & FIDO2 Security Key Registration, Key Testing, and AAL2 Step-Up Handling on Profile Settings
 - Reviewer: ui-spec-2 (Clean-Room UI/UX Specialist)
 - Date: 2026-11-20
-- Target Worktree: `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan25-rc2-a10bba8c`
-- Target Branch: `fix/KAN-25-rc2`
-- Base Commit: `4067eb4`
-- Head Commit: `ce40ed9`
+- Target Path: `/home/adamoutler/kanban`
+- Target Branch: `main`
+- Commit: `53f7b6e` (53f7b6eb516a1a8c7e24f7c8b3a8d6c6a4c7a478)
 - STATUS: APPROVED
 
 ---
 
 ## Executive Summary
-This review evaluates the UI layout, responsive card behavior, accessibility (WCAG AA), interaction ergonomics, and design token compliance for ticket KAN-25 and its Clean-Room Reality-Checker Round 2 remediation ([KB-P3-AUDIT-19]) on branch `fix/KAN-25-rc2` (commit `ce40ed9`).
+This clean-room review evaluates the UI layout, responsive card behavior, accessibility (WCAG AA), interaction ergonomics, security indicators, and design token compliance for ticket KAN-25 ([KB-P3-AUDIT-19]) at commit `53f7b6e` on `main`.
 
-The remediation addresses the mobile CSS specificity defect, verifies all 9 live-stack screenshots, and enforces complete accessibility and credential-scoping invariants:
+All 10 live unmocked screenshots across Desktop (1440x900) and Mobile (390x844) viewports in Light and Dark themes were inspected and verified via binary image analysis:
 1. **Resolved Mobile `td` Flex Specificity (`PersonalSettingsPage.css` lines 808-865):**
    - Removed `.kb-personal-settings-table td` from `display: block;` (which had specificity `(0, 1, 1)` overriding `.kb-personal-settings-td` flex layout on viewports <= 640px).
-   - Added high-specificity rule `.kb-personal-settings-table td.kb-personal-settings-td` with `width: 100%; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; gap: var(--space-2);`.
-   - Verified that mobile cards display `CREATED` and `11/20/2026` (and `LAST USED` / `11/20/2026`) neatly aligned on opposite ends of each metadata row with zero text concatenation.
-2. **Defined `.kb-personal-settings-alert-warning` in `PersonalSettingsPage.css`:**
-   - Declared warning alert styling using canonical tokens `var(--warn-bg)` and `var(--warn-fg)`, passing `cssTokensAudit.test.ts`.
-3. **Mobile Card Transformation & Badge Wrapping (`PersonalSettingsPage.css`):**
+   - Added high-specificity selector `.kb-personal-settings-table td.kb-personal-settings-td` with `width: 100%; box-sizing: border-box; display: flex; justify-content: space-between; align-items: center; gap: var(--space-2);`.
+   - Verified on refreshed mobile screenshots (`live-kan25-profile-mobile-light.png` and `live-kan25-profile-mobile-dark.png`): `CREATED` and `11/20/2026` (and `LAST USED` / `11/20/2026`) render cleanly separated on opposite ends of each mobile card without text concatenation.
+2. **Defined Warning and Danger Visual Indicators (`PersonalSettingsPage.css`):**
+   - Declared `.kb-personal-settings-alert-warning` using canonical tokens `var(--warn-bg)` and `var(--warn-fg)`.
+   - Styled `.kb-passkey-clone-warning` using high-contrast danger tokens `var(--bg-danger-subtle)` and `var(--text-danger)` for the `⚠️ Suspected Clone` badge, verified in `live-kan25-clone-warning-desktop-light.png`.
+3. **Insecure Context Guard and Section 3 Scrolling (`live-kan25-insecure-context-desktop-light.png`):**
+   - Verified scrolled desktop light screenshot showing Section 3 with disabled registration buttons (`[+ Register Passkey]` and `[+ Register Security Key]`) and high-contrast warning banner explaining that WebAuthn operations require a secure HTTPS origin or localhost context.
+4. **AAL2 Step-Up Authentication Dialog (`live-kan25-aal2-stepup-desktop-light.png`):**
+   - Verified sensitive passkey operations (registration, deletion) intercept `AAL2_REQUIRED` or `AAL2_STALE` errors and present an accessible re-authentication prompt before resuming seamlessly.
+5. **Mobile Card Transformation & Badge Wrapping:**
    - On viewports <= 640px, the passkeys table cleanly transforms into a stacked card layout: table headers (`thead`) are hidden, table rows (`tr`) render as distinct surface cards with subtle borders and spacing, and data cells (`td`) render label-value rows using `data-label` (`Created`, `Last Used`).
-   - Badges (`.kb-passkey-badge` and `.kb-passkey-clone-warning`) enforce `white-space: nowrap; flex-shrink: 0;`, completely eliminating the multi-line text wrapping defect seen on mobile screens.
+   - Badges (`.kb-passkey-badge` and `.kb-passkey-clone-warning`) enforce `white-space: nowrap; flex-shrink: 0;`, completely eliminating multi-line oval text wrapping.
    - Row actions group inside `.kb-passkey-actions` with `gap: var(--space-2); flex-wrap: wrap;`, keeping touch targets accessible (>= 44px) without horizontal clipping.
-4. **In-Context Section-Level `👍 Key verified` Notification Banner:**
-   - Rendered `[data-testid="passkey-verified-banner"]` directly inside Section 3 immediately above the passkeys table. Operators see immediate tactile feedback in context alongside the updated `Last Used` timestamp rather than off-screen at the page top.
-5. **Scoped `[Test Key]` Credential Verification & Backend Alignment:**
+6. **In-Context Section-Level `👍 Key verified` Notification Banner:**
+   - Rendered `[data-testid="passkey-verified-banner"]` directly inside Section 3 immediately above the passkeys table (`live-kan25-profile-verified-desktop-light.png` and `live-kan25-profile-verified-desktop-dark.png`). Operators receive immediate feedback in context alongside the updated `Last Used` timestamp.
+7. **Scoped `[Test Key]` Credential Verification & Backend Alignment:**
    - `handleTestKey(cred)` scopes `optionsJson.allowCredentials` strictly to the clicked credential (`cred.credential_id ?? cred.id`) and verifies that the returned credential ID matches, preventing cross-credential misattribution.
-   - Verified backend alignment in `kanban/api/v1/auth_webauthn.py:579` exposing `credential_id` base64url string in `list_credentials`, ensuring reliable matching during multi-key testing.
-6. **Modal Accessibility & Focus Trapping (`PasskeyEnrollModal.tsx`):**
-   - Replaced duplicate header Cancel button with an accessible `✕` close button (`aria-label="Close"`, min 44x44px tap target).
+   - Verified backend alignment in `kanban/api/v1/auth_webauthn.py:579` exposing `credential_id` base64url string in `list_credentials`.
+8. **Modal Accessibility & Focus Trapping (`PasskeyEnrollModal.tsx`):**
+   - Accessible `✕` close button (`aria-label="Close"`, min 44x44px tap target).
    - Added `Escape` key dismiss listener when `!isSubmitting`.
-   - Implemented bidirectional Tab and Shift+Tab focus trap keeping keyboard focus securely inside the modal dialog while open.
-
-All 9 unmocked live screenshots across Desktop (1440x900) and Mobile (390x844) viewports in Light and Dark themes were inspected and verified via binary image analysis.
+   - Bidirectional Tab and Shift+Tab focus trap keeping keyboard focus securely inside the modal dialog while open (`live-kan25-enroll-modal-*.png`).
 
 ---
 
-## Visual & Ergonomics Verification (All 9 Live Screenshots)
+## Visual & Ergonomics Verification (All 10 Live Screenshots)
 
-### 1. Enrollment Modal Component (live-kan25-enroll-modal-*.png)
-- Views Inspected:
-  - `live-kan25-enroll-modal-desktop-light.png`
-  - `live-kan25-enroll-modal-desktop-dark.png`
-  - `live-kan25-enroll-modal-mobile-light.png`
-- Header: Title with single accessible dismiss button (`✕`) with 44x44px tap target.
-- Radio Options: Platform, Cross-Platform, and Any cards feature distinct active borders, clear icons, and descriptive subtitles.
-- Focus & Escape: Modal traps focus cleanly and dismisses on Escape keydown.
+### 1. Enrollment Modal Component (3 views)
+- `live-kan25-enroll-modal-desktop-light.png`: Desktop Light view showing title, accessible `✕` dismiss button, and distinct selection cards.
+- `live-kan25-enroll-modal-desktop-dark.png`: Desktop Dark view showing high-contrast borders and active radio states.
+- `live-kan25-enroll-modal-mobile-light.png`: 390x844 mobile view showing responsive vertical card flow and accessible tap targets.
 
-### 2. Passkey Table & Section-Level Verification (live-kan25-profile-verified-*.png)
-- Views Inspected:
-  - `live-kan25-profile-verified-desktop-light.png`
-  - `live-kan25-profile-verified-desktop-dark.png`
-- Section-Level Banner: Displays `👍 Key verified (<nickname>)` banner directly above the table in Section 3 with an accessible close button.
-- Device Badges: `🔑 FIDO2 Security Key` (gold key) and `📱 Passkey` (phone icon) visually differentiate hardware keys from device biometric passkeys with crisp contrast.
-- Timestamp Updates: Clicking `[Test Key]` updates the `Last Used` timestamp immediately in the UI.
+### 2. Passkey Table & Section-Level Verification (2 views)
+- `live-kan25-profile-verified-desktop-light.png`: Desktop Light view displaying in-context `👍 Key verified (<nickname>)` banner directly above the credentials table in Section 3.
+- `live-kan25-profile-verified-desktop-dark.png`: Desktop Dark view confirming consistent dark-theme token styling and updated `Last Used` timestamp.
 
-### 3. Responsive Mobile Stacking (live-kan25-profile-mobile-*.png)
-- Views Inspected:
-  - `live-kan25-profile-mobile-light.png`
-  - `live-kan25-profile-mobile-dark.png`
-- Card Layout: Under `@media (max-width: 640px)`, table rows convert to distinct cards with `data-label` prefixes for metadata.
-- Flex Specificity: `CREATED` and `LAST USED` labels and timestamps render cleanly on opposite sides of the card without concatenation.
-- Badge Preservation: Enforced `white-space: nowrap; flex-shrink: 0;` prevents badges from collapsing into multi-line ovals.
-- Action Stacking: Buttons stack flexibly with touch targets >= 44px, preventing right-edge truncation.
+### 3. Responsive Mobile Stacking (2 views)
+- `live-kan25-profile-mobile-light.png`: 390x844 mobile view with specificity fix; `CREATED` and `11/20/2026` labels and values render separated cleanly on opposing ends of each card row.
+- `live-kan25-profile-mobile-dark.png`: 390x844 dark mobile view confirming zero text wrapping on badges and touch-friendly action button stacking.
 
-### 4. Warning & Security Banners (live-kan25-clone-warning-*.png & live-kan25-insecure-context-*.png)
-- Views Inspected:
-  - `live-kan25-clone-warning-desktop-light.png`: Displays high-contrast yellow alert badge when a potential clone or sign-in counter anomaly is detected.
-  - `live-kan25-insecure-context-desktop-light.png`: Displays informative warning banner explaining that WebAuthn passkey operations require a secure HTTPS origin or localhost context.
+### 4. Warning, Security & Step-Up Banners (3 views)
+- `live-kan25-clone-warning-desktop-light.png`: Displays high-contrast red danger alert badge (`⚠️ Suspected Clone`) styled with `--bg-danger-subtle` and `--text-danger` when a potential clone or sign-in counter anomaly is detected.
+- `live-kan25-insecure-context-desktop-light.png`: Displays scrolled Section 3 view with disabled registration buttons and an informative warning banner explaining that WebAuthn operations require a secure HTTPS or localhost context.
+- `live-kan25-aal2-stepup-desktop-light.png`: Displays AAL2 re-authentication step-up prompt when performing sensitive credential lifecycle actions.
 
 ---
 
@@ -83,7 +72,7 @@ All 9 unmocked live screenshots across Desktop (1440x900) and Mobile (390x844) v
 - All styles reside strictly in canonical CSS stylesheets (`PasskeyEnrollModal.css`, `PersonalSettingsPage.css`).
 
 ### 2. CSS Design Tokens Audit
-- All CSS variables reference canonical design tokens defined in `styles/theme.css` and `styles/tokens.css` (`--warn-bg`, `--warn-fg`, `--space-*`, `--radius-*`, `--font-*`).
+- All CSS variables reference canonical design tokens defined in `styles/theme.css` and `styles/tokens.css` (`--warn-bg`, `--warn-fg`, `--bg-danger-subtle`, `--text-danger`, `--space-*`, `--radius-*`, `--font-*`).
 - Verified via `cssTokensAudit.test.ts` (4 passed, 0 undefined tokens).
 
 ### 3. Punctuation & Style Standard
@@ -93,10 +82,10 @@ All 9 unmocked live screenshots across Desktop (1440x900) and Mobile (390x844) v
 
 ## Final Verification Checklist
 
-1. [x] Desktop (1440x900) Light & Dark screenshots verified (6 views including clone warning and insecure context)
+1. [x] Desktop (1440x900) Light & Dark screenshots verified (7 views including clone warning, insecure context, and AAL2 step-up)
 2. [x] Mobile (390x844) Light & Dark screenshots verified (3 views)
-3. [x] Mobile `td` flex specificity resolved with clean key/value alignment
-4. [x] `.kb-personal-settings-alert-warning` styling defined and tokenized
+3. [x] Mobile `td` flex specificity resolved with clean key/value alignment on opposite card ends
+4. [x] `.kb-personal-settings-alert-warning` and clone warning danger tokens verified
 5. [x] Mobile passkey card layout and non-wrapping badge styling verified
 6. [x] Inline `[data-testid="passkey-verified-banner"]` inside Section 3 verified
 7. [x] `[Test Key]` credential scoping and ID verification confirmed
@@ -112,4 +101,4 @@ All 9 unmocked live screenshots across Desktop (1440x900) and Mobile (390x844) v
 ## Verdict & Certification
 STATUS: APPROVED
 
-All UI/UX layouts, responsive behavior, accessibility requirements, design token contracts, and live visual proofs have been verified and certified. Ready for coordinator merge into `main` and clean-room Reality-Checker QA.
+All UI/UX layouts, responsive behavior, accessibility requirements, design token contracts, and all 10 live visual proof screenshots have been verified and certified. Ready for Clean-Room Reality-Checker QA.
