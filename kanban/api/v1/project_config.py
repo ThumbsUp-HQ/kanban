@@ -13,12 +13,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.timing import timing_floor
 from kanban.api.v1.schemas.project_config import (
+    LabelAuditImpactResponse,
     LabelCreate,
     LabelPatch,
     LabelResponse,
     PriorityCreate,
     PriorityPatch,
     PriorityResponse,
+    StateAuditImpactResponse,
     StateCreate,
     StatePatch,
     StateResponse,
@@ -80,20 +82,43 @@ async def patch_state(
         return await svc.update_state(session, caller, project_ref, state_id, body)
 
 
-@router.delete("/states/{state_id}", status_code=204, summary="Delete a workflow state")
-async def delete_state(
+@router.get(
+    "/states/{state_id}/audit-impact",
+    response_model=StateAuditImpactResponse,
+    summary="Reverse-audit impact of deleting a workflow state",
+)
+async def get_state_audit_impact(
     project_ref: str,
     state_id: uuid.UUID,
     caller: Caller,
     session: Session,
-    migrate_to: Annotated[uuid.UUID | None, Query()] = None,
-) -> None:
-    """Delete a workflow state with optional migration of associated issues.
-
-    Optionally migrates associated issues to a replacement state (project ADMIN only).
-    """
+) -> StateAuditImpactResponse:
+    """Return blast radius and migration readiness before deleting a workflow state."""
     async with timing_floor(floor_ms=25.0):
-        await svc.delete_state(session, caller, project_ref, state_id, migrate_to=migrate_to)
+        return await svc.get_state_audit_impact(session, caller, project_ref, state_id)
+
+
+@router.delete("/states/{state_id}", status_code=204, summary="Delete a workflow state")
+async def delete_state(  # noqa: PLR0913, PLR0917
+    project_ref: str,
+    state_id: uuid.UUID,
+    caller: Caller,
+    session: Session,
+    replacement_state_id: Annotated[uuid.UUID | None, Query()] = None,
+    migrate_to: Annotated[uuid.UUID | None, Query()] = None,
+    migrate_hooks: Annotated[bool, Query()] = True,  # noqa: FBT002
+) -> None:
+    """Delete a workflow state with hardened reverse-audit and migration of associated issues."""
+    async with timing_floor(floor_ms=25.0):
+        await svc.delete_state(
+            session,
+            caller,
+            project_ref,
+            state_id,
+            replacement_state_id=replacement_state_id,
+            migrate_to=migrate_to,
+            migrate_hooks=migrate_hooks,
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -210,16 +235,39 @@ async def patch_label(
         return await svc.update_label(session, caller, project_ref, label_id, body)
 
 
+@router.get(
+    "/labels/{label_id}/audit-impact",
+    response_model=LabelAuditImpactResponse,
+    summary="Reverse-audit impact of deleting a project label",
+)
+async def get_label_audit_impact(
+    project_ref: str,
+    label_id: uuid.UUID,
+    caller: Caller,
+    session: Session,
+) -> LabelAuditImpactResponse:
+    """Return blast radius and migration readiness before deleting a project label."""
+    async with timing_floor(floor_ms=25.0):
+        return await svc.get_label_audit_impact(session, caller, project_ref, label_id)
+
+
 @router.delete("/labels/{label_id}", status_code=204, summary="Delete a label")
 async def delete_label(
     project_ref: str,
     label_id: uuid.UUID,
     caller: Caller,
     session: Session,
+    replacement_label_id: Annotated[uuid.UUID | None, Query()] = None,
 ) -> None:
-    """Permanently delete a project label, removing it from all tagged issues.
+    """Permanently delete a project label, optionally reassigning tagged issues.
 
     Requires project ADMIN role.
     """
     async with timing_floor(floor_ms=25.0):
-        await svc.delete_label(session, caller, project_ref, label_id)
+        await svc.delete_label(
+            session,
+            caller,
+            project_ref,
+            label_id,
+            replacement_label_id=replacement_label_id,
+        )

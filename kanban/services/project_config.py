@@ -18,23 +18,30 @@ from database.models import (
     ObjectRecord,
     ProjectPriority,
     WorkflowState,
+    WorkflowTransitionExecution,
+    WorkflowTransitionHook,
 )
-from database.models.projects import ProjectLabel
+from database.models.projects import ProjectLabel, View
 from kanban.api.problems import ProblemException, not_found
 from kanban.api.v1.schemas.project_config import (
+    LabelAuditImpactResponse,
     LabelCreate,
     LabelPatch,
     LabelResponse,
     PriorityCreate,
     PriorityPatch,
     PriorityResponse,
+    SavedViewSummary,
+    StateAuditImpactResponse,
     StateCreate,
     StatePatch,
     StateResponse,
+    WorkflowHookSummary,
 )
 from kanban.security.permissions import Capability, require_capability
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.projects import get_project_or_404
+from kanban.workflows.manifest import compute_hook_manifest_sha256
 
 if TYPE_CHECKING:
     import uuid
@@ -320,14 +327,13 @@ async def update_state(  # noqa: C901, PLR0912
     )
 
 
-async def delete_state(  # noqa: C901
+async def get_state_audit_impact(
     session: AsyncSession,
     caller: PrincipalContext,
     project_ref: str,
     state_id: uuid.UUID,
-    migrate_to: uuid.UUID | None = None,
-) -> None:
-    """Delete a workflow state, optionally migrating in-flight issues."""
+) -> StateAuditImpactResponse:
+    """Compute reverse-audit impact of deleting a workflow state."""
     project = await get_project_or_404(session, caller, project_ref)
     await require_capability(session, caller, project.id, Capability.ADMIN)
 
@@ -341,9 +347,144 @@ async def delete_state(  # noqa: C901
     if state is None:
         not_found()
 
-    # Validate migrate_to if provided
-    if migrate_to is not None:
-        if migrate_to == state_id:
+    # 1. Issues count and sample keys
+    issues_res = await session.execute(
+        select(Issue.sequence_id)
+        .join(ObjectRecord, ObjectRecord.id == Issue.id)
+        .where(
+            Issue.project_id == project.id,
+            Issue.state_id == state_id,
+            ObjectRecord.archived_at.is_(None),
+            ObjectRecord.deleted_at.is_(None),
+        )
+        .order_by(Issue.sequence_id.desc())
+    )
+    issue_seqs = issues_res.scalars().all()
+    issues_count = len(issue_seqs)
+    sample_issue_keys = [f"{project.identifier}-{seq}" for seq in issue_seqs[:5]]
+
+    # 2. Workflow automation hooks referencing this state
+    hooks_res = await session.execute(
+        select(WorkflowTransitionHook).where(
+            WorkflowTransitionHook.project_id == project.id,
+            (WorkflowTransitionHook.from_state_id == state_id)
+            | (WorkflowTransitionHook.to_state_id == state_id),
+        )
+    )
+    hooks = hooks_res.scalars().all()
+    workflow_hooks = [
+        WorkflowHookSummary(
+            id=h.id,
+            name=h.name,
+            hook_kind=h.hook_kind,
+            is_enabled=h.is_enabled,
+            from_state_id=h.from_state_id,
+            to_state_id=h.to_state_id,
+        )
+        for h in hooks
+    ]
+
+    # 3. In-flight and historical executions
+    pending_cnt_res = await session.execute(
+        select(func.count(WorkflowTransitionExecution.id)).where(
+            WorkflowTransitionExecution.project_id == project.id,
+            (WorkflowTransitionExecution.from_state_id == state_id)
+            | (WorkflowTransitionExecution.to_state_id == state_id),
+            WorkflowTransitionExecution.status.in_(["running_sync", "pending_async"]),
+        )
+    )
+    pending_executions_count = pending_cnt_res.scalar_one()
+
+    hist_cnt_res = await session.execute(
+        select(func.count(WorkflowTransitionExecution.id)).where(
+            WorkflowTransitionExecution.project_id == project.id,
+            (WorkflowTransitionExecution.from_state_id == state_id)
+            | (WorkflowTransitionExecution.to_state_id == state_id),
+            WorkflowTransitionExecution.status.notin_(["running_sync", "pending_async"]),
+        )
+    )
+    historical_executions_count = hist_cnt_res.scalar_one()
+
+    # 4. Saved views referencing this state
+    views_res = await session.execute(
+        select(View).where(View.project_id == project.id)
+    )
+    views = views_res.scalars().all()
+    target_state_str = str(state_id)
+    saved_views: list[SavedViewSummary] = []
+    for v in views:
+        if isinstance(v.filters_json, dict):
+            s_ids = v.filters_json.get("state_ids")
+            if isinstance(s_ids, list) and target_state_str in s_ids:
+                saved_views.append(SavedViewSummary(id=v.id, name=v.name))
+
+    # 5. Blocking reasons
+    blocking_reasons: list[str] = []
+    if state.is_default:
+        blocking_reasons.append("Default State: Default workflow state cannot be deleted.")
+
+    if state.state_group in ("completed", "cancelled", "backlog"):
+        grp_cnt_res = await session.execute(
+            select(func.count(WorkflowState.id)).where(
+                WorkflowState.project_id == project.id,
+                WorkflowState.state_group == state.state_group,
+            )
+        )
+        if grp_cnt_res.scalar_one() <= 1:
+            blocking_reasons.append("Last State in Group: Cannot delete the last state in group.")
+
+    if pending_executions_count > 0:
+        blocking_reasons.append(
+            "In-Flight Gate: Transitions are currently in flight for this state."
+        )
+
+    # 6. Valid replacement states (all other states in same project)
+    other_states = await list_states(session, caller, project_ref)
+    valid_replacement_states = [s for s in other_states if s.id != state_id]
+
+    return StateAuditImpactResponse(
+        state_id=state.id,
+        project_id=project.id,
+        issues_count=issues_count,
+        sample_issue_keys=sample_issue_keys,
+        workflow_hooks=workflow_hooks,
+        pending_executions_count=pending_executions_count,
+        historical_executions_count=historical_executions_count,
+        saved_views=saved_views,
+        is_default=state.is_default,
+        blocking_reasons=blocking_reasons,
+        valid_replacement_states=valid_replacement_states,
+    )
+
+
+async def delete_state(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
+    session: AsyncSession,
+    caller: PrincipalContext,
+    project_ref: str,
+    state_id: uuid.UUID,
+    replacement_state_id: uuid.UUID | None = None,
+    migrate_to: uuid.UUID | None = None,
+    migrate_hooks: bool = True,  # noqa: FBT001, FBT002
+) -> None:
+    """Delete a workflow state with hardened reverse-audit and migration."""
+    project = await get_project_or_404(session, caller, project_ref)
+    await require_capability(session, caller, project.id, Capability.ADMIN)
+
+    res = await session.execute(
+        select(WorkflowState).where(
+            WorkflowState.project_id == project.id,
+            WorkflowState.id == state_id,
+        )
+    )
+    state = res.scalar_one_or_none()
+    if state is None:
+        not_found()
+
+    effective_replacement_id = replacement_state_id or migrate_to
+
+    # Validate effective_replacement_id if provided
+    if effective_replacement_id is not None:
+        if effective_replacement_id == state_id:
             raise ProblemException(
                 status=422,
                 code="MIGRATE_TARGET_INVALID",
@@ -353,7 +494,7 @@ async def delete_state(  # noqa: C901
         target_res = await session.execute(
             select(WorkflowState).where(
                 WorkflowState.project_id == project.id,
-                WorkflowState.id == migrate_to,
+                WorkflowState.id == effective_replacement_id,
             )
         )
         if target_res.scalar_one_or_none() is None:
@@ -389,6 +530,56 @@ async def delete_state(  # noqa: C901
                 detail=None,
             )
 
+    # Rule: Fail closed if in-flight transition executions exist
+    pending_cnt_res = await session.execute(
+        select(func.count(WorkflowTransitionExecution.id)).where(
+            WorkflowTransitionExecution.project_id == project.id,
+            (WorkflowTransitionExecution.from_state_id == state_id)
+            | (WorkflowTransitionExecution.to_state_id == state_id),
+            WorkflowTransitionExecution.status.in_(["running_sync", "pending_async"]),
+        )
+    )
+    if pending_cnt_res.scalar_one() > 0:
+        raise ProblemException(
+            status=409,
+            code="TRANSITION_IN_FLIGHT",
+            title="Transition In Flight",
+            detail="In-flight transition gate is active for this state.",
+        )
+
+    # Check workflow transition hooks
+    hooks_res = await session.execute(
+        select(WorkflowTransitionHook).where(
+            WorkflowTransitionHook.project_id == project.id,
+            (WorkflowTransitionHook.from_state_id == state_id)
+            | (WorkflowTransitionHook.to_state_id == state_id),
+        )
+    )
+    hooks = hooks_res.scalars().all()
+    enabled_hooks = [h for h in hooks if h.is_enabled]
+    disabled_hooks = [h for h in hooks if not h.is_enabled]
+
+    if enabled_hooks and (effective_replacement_id is None or not migrate_hooks):
+        raise ProblemException(
+            status=409,
+            code="ACTIVE_AUTOMATION_HOOK_REQUIRES_STATE",
+            title="Active Automation Hook Requires State",
+            detail="Active automation hooks reference this state.",
+        )
+
+    # Check self-loops if migrating hooks
+    if effective_replacement_id is not None and migrate_hooks:
+        for h in enabled_hooks:
+            new_from = effective_replacement_id if h.from_state_id == state_id else h.from_state_id
+            new_to = effective_replacement_id if h.to_state_id == state_id else h.to_state_id
+            if new_from is not None and new_from == new_to:
+                raise ProblemException(
+                    status=409,
+                    code="HOOK_MIGRATION_CREATES_SELF_LOOP",
+                    title="Hook Migration Creates Self Loop",
+                    detail="Migrating hook would create a self-loop transition.",
+                )
+
     # Query issues currently using this state
     issues_res = await session.execute(
         select(Issue).where(
@@ -399,7 +590,7 @@ async def delete_state(  # noqa: C901
     issues = issues_res.scalars().all()
 
     if issues:
-        if migrate_to is None:
+        if effective_replacement_id is None:
             raise ProblemException(
                 status=409,
                 code="STATE_IN_USE",
@@ -414,9 +605,32 @@ async def delete_state(  # noqa: C901
                 detail=None,
             )
 
+    # Historical executions check if no replacement provided
+    if effective_replacement_id is None:
+        hist_exec_res = await session.execute(
+            select(func.count(WorkflowTransitionExecution.id)).where(
+                WorkflowTransitionExecution.project_id == project.id,
+                (WorkflowTransitionExecution.from_state_id == state_id)
+                | (WorkflowTransitionExecution.to_state_id == state_id),
+            )
+        )
+        if hist_exec_res.scalar_one() > 0:
+            raise ProblemException(
+                status=409,
+                code="HISTORICAL_EXECUTIONS_REQUIRE_STATE",
+                title="Historical Executions Require State",
+                detail=(
+                    "Historical transition executions reference this state. "
+                    "Provide a replacement state to preserve execution history."
+                ),
+            )
+
+    # Perform atomic migrations BEFORE deleting state_id
+    # 1. Migrate issues
+    if issues and effective_replacement_id is not None:
         await session.execute(text("SELECT set_config('app.transition_exec_id', 'bypass', true)"))
         for issue in issues:
-            issue.state_id = migrate_to
+            issue.state_id = effective_replacement_id
             await record_activity(
                 session,
                 workspace_id=caller.workspace_id,
@@ -426,10 +640,77 @@ async def delete_state(  # noqa: C901
                 payload={
                     "field": "state_id",
                     "old": str(state_id),
-                    "new": str(migrate_to),
+                    "new": str(effective_replacement_id),
                     "reason": "state_deleted",
                 },
             )
+
+    # 2. Migrate or safely clean hooks
+    if effective_replacement_id is not None and migrate_hooks:
+        for h in hooks:
+            new_from = effective_replacement_id if h.from_state_id == state_id else h.from_state_id
+            new_to = effective_replacement_id if h.to_state_id == state_id else h.to_state_id
+            if new_from is not None and new_from == new_to:
+                # Disabled self-loop hook removed safely
+                await session.delete(h)
+                continue
+            h.from_state_id = new_from
+            h.to_state_id = new_to
+            h.manifest_sha256 = compute_hook_manifest_sha256(
+                hook_kind=h.hook_kind,
+                wasm_module_sha256=h.wasm_module_sha256,
+                agent_definition_id=h.agent_definition_id,
+                allowed_mutable_fields=h.allowed_mutable_fields,
+                failure_policy=h.failure_policy,
+                from_state_id=h.from_state_id,
+                to_state_id=h.to_state_id,
+            )
+    else:
+        # Clean disabled hooks safely
+        for dh in disabled_hooks:
+            await session.delete(dh)
+
+    # 3. Migrate historical executions
+    if effective_replacement_id is not None:
+        await session.execute(
+            update(WorkflowTransitionExecution)
+            .where(
+                WorkflowTransitionExecution.project_id == project.id,
+                WorkflowTransitionExecution.from_state_id == state_id,
+            )
+            .values(from_state_id=effective_replacement_id)
+        )
+        await session.execute(
+            update(WorkflowTransitionExecution)
+            .where(
+                WorkflowTransitionExecution.project_id == project.id,
+                WorkflowTransitionExecution.to_state_id == state_id,
+            )
+            .values(to_state_id=effective_replacement_id)
+        )
+
+    # 4. Update saved views
+    views_res = await session.execute(
+        select(View).where(View.project_id == project.id)
+    )
+    views = views_res.scalars().all()
+    target_str = str(state_id)
+    repl_str = str(effective_replacement_id) if effective_replacement_id else None
+
+    for v in views:
+        if "state_ids" in v.filters_json:
+            raw_sids = v.filters_json.get("state_ids")
+            if isinstance(raw_sids, list) and target_str in raw_sids:
+                new_sids: list[str] = []
+                seen: set[str] = set()
+                for sid in raw_sids:
+                    s = (repl_str or None) if sid == target_str else sid
+                    if s and s not in seen:
+                        seen.add(s)
+                        new_sids.append(s)
+                updated_filters = dict(v.filters_json)
+                updated_filters["state_ids"] = new_sids
+                v.filters_json = updated_filters
 
     await session.delete(state)
     await session.flush()
@@ -443,7 +724,7 @@ async def delete_state(  # noqa: C901
         payload={
             "state_id": str(state_id),
             "migrated_issue_count": len(issues),
-            "migrate_to": str(migrate_to) if migrate_to else None,
+            "migrate_to": str(effective_replacement_id) if effective_replacement_id else None,
         },
     )
 
@@ -935,13 +1216,13 @@ async def update_label(
     )
 
 
-async def delete_label(
+async def get_label_audit_impact(
     session: AsyncSession,
     caller: PrincipalContext,
     project_ref: str,
     label_id: uuid.UUID,
-) -> None:
-    """Delete a project label and detach it from all issues (project ADMIN only)."""
+) -> LabelAuditImpactResponse:
+    """Compute reverse-audit impact of deleting a project label."""
     project = await get_project_or_404(session, caller, project_ref)
     await require_capability(session, caller, project.id, Capability.ADMIN)
 
@@ -955,8 +1236,186 @@ async def delete_label(
     if label is None:
         not_found()
 
-    # Detach label from all issues in this project
-    await session.execute(delete(IssueLabel).where(IssueLabel.label_id == label_id))
+    # 1. Issues count and sample keys
+    issues_res = await session.execute(
+        select(Issue.sequence_id)
+        .join(IssueLabel, IssueLabel.issue_id == Issue.id)
+        .join(ObjectRecord, ObjectRecord.id == Issue.id)
+        .where(
+            Issue.project_id == project.id,
+            IssueLabel.label_id == label_id,
+            ObjectRecord.archived_at.is_(None),
+            ObjectRecord.deleted_at.is_(None),
+        )
+        .order_by(Issue.sequence_id.desc())
+    )
+    issue_seqs = issues_res.scalars().all()
+    issues_count = len(issue_seqs)
+    sample_issue_keys = [f"{project.identifier}-{seq}" for seq in issue_seqs[:5]]
+
+    # 2. Saved views referencing this label
+    views_res = await session.execute(
+        select(View).where(View.project_id == project.id)
+    )
+    views = views_res.scalars().all()
+    target_label_str = str(label_id)
+    saved_views: list[SavedViewSummary] = []
+    for v in views:
+        if isinstance(v.filters_json, dict):
+            l_ids = v.filters_json.get("label_ids")
+            if isinstance(l_ids, list) and target_label_str in l_ids:
+                saved_views.append(SavedViewSummary(id=v.id, name=v.name))
+
+    # 3. Blocking reasons (labels have no hard invariants blocking delete)
+    blocking_reasons: list[str] = []
+
+    # 4. Valid replacement labels
+    other_labels = await list_labels(session, caller, project_ref)
+    valid_replacement_labels = [lbl for lbl in other_labels if lbl.id != label_id]
+
+    return LabelAuditImpactResponse(
+        label_id=label.id,
+        project_id=project.id,
+        issues_count=issues_count,
+        sample_issue_keys=sample_issue_keys,
+        saved_views=saved_views,
+        blocking_reasons=blocking_reasons,
+        valid_replacement_labels=valid_replacement_labels,
+    )
+
+
+async def delete_label(  # noqa: C901, PLR0912
+    session: AsyncSession,
+    caller: PrincipalContext,
+    project_ref: str,
+    label_id: uuid.UUID,
+    replacement_label_id: uuid.UUID | None = None,
+) -> None:
+    """Delete a project label and optionally reassign tagged issues (project ADMIN only)."""
+    project = await get_project_or_404(session, caller, project_ref)
+    await require_capability(session, caller, project.id, Capability.ADMIN)
+
+    res = await session.execute(
+        select(ProjectLabel).where(
+            ProjectLabel.project_id == project.id,
+            ProjectLabel.id == label_id,
+        )
+    )
+    label = res.scalar_one_or_none()
+    if label is None:
+        not_found()
+
+    replacement_label: ProjectLabel | None = None
+    if replacement_label_id is not None:
+        if replacement_label_id == label_id:
+            raise ProblemException(
+                status=422,
+                code="MIGRATE_TARGET_INVALID",
+                title="Invalid Migration Target",
+                detail=None,
+            )
+        repl_res = await session.execute(
+            select(ProjectLabel).where(
+                ProjectLabel.project_id == project.id,
+                ProjectLabel.id == replacement_label_id,
+            )
+        )
+        replacement_label = repl_res.scalar_one_or_none()
+        if replacement_label is None:
+            raise ProblemException(
+                status=422,
+                code="MIGRATE_TARGET_INVALID",
+                title="Invalid Migration Target",
+                detail=None,
+            )
+
+    # Find issues tagged with this label
+    tagged_rows = await session.execute(
+        select(IssueLabel.issue_id, IssueLabel.workspace_id)
+        .join(Issue, Issue.id == IssueLabel.issue_id)
+        .where(
+            Issue.project_id == project.id,
+            IssueLabel.label_id == label_id,
+        )
+    )
+    tagged_issues = tagged_rows.all()
+
+    if replacement_label is not None:
+        for iss_id, _ in tagged_issues:
+            # 1. If issue already has replacement_label_id,
+            # simply delete the old (issue_id, label_id)
+            existing_repl = await session.execute(
+                select(IssueLabel).where(
+                    IssueLabel.issue_id == iss_id,
+                    IssueLabel.label_id == replacement_label.id,
+                )
+            )
+            if existing_repl.scalar_one_or_none() is not None:
+                await session.execute(
+                    delete(IssueLabel).where(
+                        IssueLabel.issue_id == iss_id,
+                        IssueLabel.label_id == label_id,
+                    )
+                )
+                continue
+
+            # 2. If replacement_label has exclusive_group,
+            # delete any conflicting label in that group on this issue
+            if replacement_label.exclusive_group:
+                conflict_rows = await session.execute(
+                    select(IssueLabel.label_id)
+                    .join(ProjectLabel, ProjectLabel.id == IssueLabel.label_id)
+                    .where(
+                        IssueLabel.issue_id == iss_id,
+                        ProjectLabel.project_id == project.id,
+                        ProjectLabel.exclusive_group == replacement_label.exclusive_group,
+                        IssueLabel.label_id != label_id,
+                    )
+                )
+                conflict_label_ids = conflict_rows.scalars().all()
+                if conflict_label_ids:
+                    await session.execute(
+                        delete(IssueLabel).where(
+                            IssueLabel.issue_id == iss_id,
+                            IssueLabel.label_id.in_(conflict_label_ids),
+                        )
+                    )
+
+            # 3. Update the IssueLabel to replacement_label.id
+            await session.execute(
+                update(IssueLabel)
+                .where(
+                    IssueLabel.issue_id == iss_id,
+                    IssueLabel.label_id == label_id,
+                )
+                .values(label_id=replacement_label.id)
+            )
+    else:
+        # Detach label from all issues in this project
+        await session.execute(delete(IssueLabel).where(IssueLabel.label_id == label_id))
+
+    # Saved views update
+    views_res = await session.execute(
+        select(View).where(View.project_id == project.id)
+    )
+    views = views_res.scalars().all()
+    target_str = str(label_id)
+    repl_str = str(replacement_label_id) if replacement_label_id else None
+
+    for v in views:
+        if "label_ids" in v.filters_json:
+            raw_lids = v.filters_json.get("label_ids")
+            if isinstance(raw_lids, list) and target_str in raw_lids:
+                new_lids: list[str] = []
+                seen_l: set[str] = set()
+                for lid in raw_lids:
+                    lbl_item = (repl_str or None) if lid == target_str else lid
+                    if lbl_item and lbl_item not in seen_l:
+                        seen_l.add(lbl_item)
+                        new_lids.append(lbl_item)
+                updated_filters = dict(v.filters_json)
+                updated_filters["label_ids"] = new_lids
+                v.filters_json = updated_filters
 
     await session.delete(label)
     await session.flush()
@@ -970,5 +1429,7 @@ async def delete_label(
         payload={
             "label_id": str(label_id),
             "name": label.name,
+            "reassigned_to": str(replacement_label_id) if replacement_label_id else None,
+            "reassigned_issue_count": len(tagged_issues) if replacement_label_id else 0,
         },
     )
