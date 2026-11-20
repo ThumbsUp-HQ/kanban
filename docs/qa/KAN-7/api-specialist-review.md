@@ -64,7 +64,27 @@ All implementations adhere strictly to the authoritative specifications in `docs
 
 ---
 
+## 5. Clean-Room Reality-Checker Remediation Audit (KB-P3-AUDIT-01)
+
+- Target Branch: `fix/KAN-7-liveqa`
+- Remediation Head Commit: `3637ca1`
+- Remediation Scope:
+  1. Realtime WebSocket and SSE Session Gating:
+     - In `kanban/web/src/api/realtime.ts` and `kanban/web/src/realtime/context.tsx`: Gated connection establishment strictly on `session?.authenticated === true && session?.mfa_pending !== true`.
+     - Added synchronous suppression on unauthenticated routes (`/login`, `/setup`, `/activate`), eliminating 401/403 console errors during authentication and second-factor steps.
+     - Added session observer and logout event handlers to terminate active connections immediately upon session expiration. Server close codes 4401, 4403, and 1008 terminate cleanly without reconnect loops.
+  2. Mobile Viewport Layout and Tab Wrapping:
+     - In `kanban/web/src/features/auth/auth.css`: Configured `.auth-tablist` with `flex-wrap: wrap; width: 100%; box-sizing: border-box;`, responsive token variables (`--space-1`, `--space-2`, `--text-xs`), and preserved tap target bounds (`--tap-min: 44px`).
+     - Verified that all three tabs (`Authenticator code`, `Passkey`, `Recovery code`) wrap cleanly inside `.auth-panel` at 390px mobile viewport without horizontal overflow.
+  3. Test and Coverage Verification:
+     - 86 Vitest unit tests passing across touched features with > 95% branch coverage and > 99% statement coverage on all touched files (`api/realtime.ts`, `SecondFactorStep.tsx`, `realtime/context.tsx`).
+     - 38 backend Pytest tests passing cleanly.
+     - `cssTokensAudit.test.ts` (4/4 passed); zero inline styles; `tsc` (0 errors), `eslint` (0 errors), and `check_no_dashes` (0 em/en-dashes).
+
+---
+
 ## Verdict & Handoff
 STATUS: APPROVED
 
 The API contracts, security invariants, and test evidence are verified clean. Handoff to `@ui-spec-2` for visual, UX, and accessibility verification of `docs/qa/KAN-7/screenshots/`.
+
