@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import uuid
 from types import SimpleNamespace
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, patch
 
 import httpx
@@ -281,6 +281,24 @@ async def _login_and_elevate(  # noqa: PLR0913, PLR0917
     return sess.cookie_val, sess.csrf_token
 
 
+def _assert_admin_status(data: dict[str, Any]) -> None:
+    assert data["deployment_mode"] == "standalone_embedded_pg"
+    assert data["persistent_volume"] is False
+    assert data["data_mount_point"] == "/var/lib/kanban/data"
+    assert data["data_mount_fstype"] == "overlay"
+    assert data["tier_b_sandbox_available"] is False
+    assert data["supported_custom_field_tiers"] == ["scalar", "formula", "wasm"]
+    assert data["sandbox_unavailable_reason"] is not None
+    assert "nsjail" in data["sandbox_unavailable_reason"]
+    assert data["local_llm_endpoint_host"] == "http://host.docker.internal:11434"
+    assert data["is_server_admin"] is True
+    assert data["git_commit"] is not None
+    assert "build_timestamp" in data
+    assert data["openapi_version"] == "2.0.0"
+    assert "openapi_bundle_hash" in data
+    assert "frontend_bundle_hash" in data
+
+
 @pytest.mark.asyncio
 async def test_case_1_system_status_admin_full_fields_and_member_redaction(
     db_session: AsyncSession,
@@ -314,22 +332,7 @@ async def test_case_1_system_status_admin_full_fields_and_member_redaction(
         await _login_and_elevate(client, session_service, db_session, admin_id, ws_id, aal_level=2)
         resp_admin = await client.get("/api/v1/system/status")
         assert resp_admin.status_code == 200
-        data_admin = resp_admin.json()
-        assert data_admin["deployment_mode"] == "standalone_embedded_pg"
-        assert data_admin["persistent_volume"] is False
-        assert data_admin["data_mount_point"] == "/var/lib/kanban/data"
-        assert data_admin["data_mount_fstype"] == "overlay"
-        assert data_admin["tier_b_sandbox_available"] is False
-        assert data_admin["supported_custom_field_tiers"] == ["scalar", "formula", "wasm"]
-        assert data_admin["sandbox_unavailable_reason"] is not None
-        assert "nsjail" in data_admin["sandbox_unavailable_reason"]
-        assert data_admin["local_llm_endpoint_host"] == "http://host.docker.internal:11434"
-        assert data_admin["is_server_admin"] is True
-        assert data_admin["git_commit"] is not None
-        assert "build_timestamp" in data_admin
-        assert data_admin["openapi_version"] == "2.0.0"
-        assert "openapi_bundle_hash" in data_admin
-        assert "frontend_bundle_hash" in data_admin
+        _assert_admin_status(resp_admin.json())
 
         # Test admin standalone status endpoint
         resp_admin_sa = await client.get("/api/v1/admin/standalone/status")
@@ -339,7 +342,7 @@ async def test_case_1_system_status_admin_full_fields_and_member_redaction(
         assert data_admin_sa["supported_custom_field_tiers"] == ["scalar", "formula", "wasm"]
         assert data_admin_sa["sandbox_unavailable_reason"] is not None
         assert data_admin_sa["git_commit"] is not None
-        assert "build_timestamp" in data_admin
+        assert "build_timestamp" in data_admin_sa
         assert data_admin_sa["openapi_version"] == "2.0.0"
 
         # 2. As regular MEMBER: sensitive host topology redacted to null
