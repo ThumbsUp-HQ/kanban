@@ -610,13 +610,33 @@ class PlaneImporter:
                         "id": mod_id,
                     },
                 )
+                raw_mod_status = (mod.status or "planned").lower().replace("-", "_")
+                if raw_mod_status == "canceled":
+                    raw_mod_status = "cancelled"
+                if raw_mod_status not in (
+                    "backlog",
+                    "planned",
+                    "in_progress",
+                    "paused",
+                    "completed",
+                    "cancelled",
+                ):
+                    raw_mod_status = "planned"
+
+                m_start_date = _parse_iso_date(mod.start_date)
+                m_target_date = _parse_iso_date(mod.target_date)
+                if m_start_date and m_target_date and m_target_date < m_start_date:
+                    m_target_date = m_start_date
+
                 new_mod = Module(
                     id=mod_id,
                     workspace_id=workspace_id,
                     project_id=mod_proj,
                     name=mod.name,
                     description_markdown=mod.description or "",
-                    status=mod.status or "planned",
+                    status=raw_mod_status,
+                    start_date=m_start_date,
+                    target_date=m_target_date,
                 )
                 self.session.add(new_mod)
                 await self.session.flush()
