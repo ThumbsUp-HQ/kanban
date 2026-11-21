@@ -39,7 +39,7 @@ from kanban.attachments.pdf import sanitize_and_validate_pdf
 from kanban.attachments.raster import sanitize_and_reencode_raster
 from kanban.attachments.sniff import sniff_media_type
 from kanban.attachments.storage import LocalFilesystemBlobStore
-from kanban.content.normalize import normalize_to_markdown
+from kanban.content.normalize import normalize_plain_text, normalize_to_markdown
 from kanban.content.svg_sanitizer import sanitize_svg
 from kanban.importer.plane_mapper import (
     PRIORITY_MAP,
@@ -198,11 +198,24 @@ class PlaneImporter:
         target_project_id: uuid.UUID | None = None
         target_project_ident: str | None = self.target_project_identifier
 
+        # Excluded projects set: identifiers and IDs
+        excluded_project_ids = {
+            p.id
+            for p in bundle.projects
+            if p.identifier.upper() in self.exclude_project_identifiers
+        }
+        excluded_project_idents = {
+            p.identifier.upper()
+            for p in bundle.projects
+            if p.identifier.upper() in self.exclude_project_identifiers
+        } | self.exclude_project_identifiers
+
         # Filter out excluded projects
         active_bundle_projects = [
             p
             for p in bundle.projects
-            if p.identifier.upper() not in self.exclude_project_identifiers
+            if p.identifier.upper() not in excluded_project_idents
+            and p.id not in excluded_project_ids
         ]
 
         if self.target_project_identifier:
@@ -272,6 +285,9 @@ class PlaneImporter:
                         p_id = existing_proj.id
                         report.unchanged += 1
                     else:
+                        clean_proj_name = (
+                            normalize_plain_text(p.name)[:500] if p.name else ""
+                        ) or "(untitled project)"
                         p_id = (
                             await self.session.execute(
                                 text(
@@ -283,7 +299,7 @@ class PlaneImporter:
                                 {
                                     "ws": workspace_id,
                                     "ident": p.identifier,
-                                    "name": p.name,
+                                    "name": clean_proj_name,
                                     "creator": self.caller.principal_id,
                                 },
                             )
@@ -293,7 +309,7 @@ class PlaneImporter:
                             id=p_id,
                             workspace_id=workspace_id,
                             identifier=p.identifier,
-                            name=p.name,
+                            name=clean_proj_name,
                             description_markdown=p.description or "",
                             modules_enabled=len(bundle.modules) > 0,
                         )
@@ -358,6 +374,10 @@ class PlaneImporter:
         states_by_group = {s.state_group.lower(): s for s in existing_states}
 
         for s in bundle.states:
+            if s.project in excluded_project_ids or (
+                s.project and s.project.upper() in excluded_project_idents
+            ):
+                continue
             source_key = ("state", s.id)
             sha = compute_source_sha256(s)
             state_proj = project_map.get(s.project or "", target_project_id)
@@ -370,7 +390,8 @@ class PlaneImporter:
                 else:
                     report.to_update += 1
             else:
-                s_name_lower = s.name.lower()
+                clean_state_name = (normalize_plain_text(s.name)[:500] if s.name else "") or "State"
+                s_name_lower = clean_state_name.lower()
                 mapped_group = STATE_GROUP_MAP.get(s.group.lower(), "unstarted")
 
                 if s_name_lower in states_by_name:
@@ -389,7 +410,7 @@ class PlaneImporter:
                     new_state = WorkflowState(
                         workspace_id=workspace_id,
                         project_id=state_proj,
-                        name=s.name,
+                        name=clean_state_name,
                         state_group=mapped_group,
                         color_hex=s.color or "#A3A3A3",
                         sort_order=s.sequence or 0,
@@ -439,6 +460,10 @@ class PlaneImporter:
         labels_by_name = {lbl.name.lower(): lbl for lbl in existing_labels}
 
         for lbl in bundle.labels:
+            if lbl.project in excluded_project_ids or (
+                lbl.project and lbl.project.upper() in excluded_project_idents
+            ):
+                continue
             source_key = ("label", lbl.id)
             sha = compute_source_sha256(lbl)
             lbl_proj = project_map.get(lbl.project or "", target_project_id)
@@ -451,7 +476,10 @@ class PlaneImporter:
                 else:
                     report.to_update += 1
             else:
-                lbl_name_lower = lbl.name.lower()
+                clean_label_name = (
+                    normalize_plain_text(lbl.name)[:500] if lbl.name else ""
+                ) or "Label"
+                lbl_name_lower = clean_label_name.lower()
                 if lbl_name_lower in labels_by_name:
                     target_lbl_id = labels_by_name[lbl_name_lower].id
                     report.unchanged += 1
@@ -459,7 +487,7 @@ class PlaneImporter:
                     new_lbl = ProjectLabel(
                         workspace_id=workspace_id,
                         project_id=lbl_proj,
-                        name=lbl.name,
+                        name=clean_label_name,
                         color_hex=lbl.color or "#3B82F6",
                     )
                     self.session.add(new_lbl)
@@ -483,6 +511,10 @@ class PlaneImporter:
         # 5. Cycles
         cycle_map: dict[str, uuid.UUID] = {}
         for c in bundle.cycles:
+            if c.project in excluded_project_ids or (
+                c.project and c.project.upper() in excluded_project_idents
+            ):
+                continue
             source_key = ("cycle", c.id)
             sha = compute_source_sha256(c)
             c_proj = project_map.get(c.project or "", target_project_id)
@@ -495,6 +527,9 @@ class PlaneImporter:
                 else:
                     report.to_update += 1
             else:
+                clean_cycle_name = (
+                    normalize_plain_text(c.name)[:500] if c.name else ""
+                ) or "(untitled cycle)"
                 cycle_id = uuid.uuid4()
                 canonical_key = f"cycle-{str(cycle_id)[:8]}"
                 await self.session.execute(
@@ -507,7 +542,7 @@ class PlaneImporter:
                         "ws": workspace_id,
                         "proj": c_proj,
                         "ckey": canonical_key,
-                        "title": c.name,
+                        "title": clean_cycle_name,
                         "creator": self.caller.principal_id,
                         "id": cycle_id,
                     },
@@ -554,7 +589,7 @@ class PlaneImporter:
                     id=cycle_id,
                     workspace_id=workspace_id,
                     project_id=c_proj,
-                    name=c.name,
+                    name=clean_cycle_name,
                     status=c_status,
                     start_date=s_date,
                     end_date=e_date,
@@ -597,9 +632,17 @@ class PlaneImporter:
         }
 
         for mod in bundle.modules:
+            if mod.project in excluded_project_ids or (
+                mod.project and mod.project.upper() in excluded_project_idents
+            ):
+                continue
             source_key = ("module", mod.id)
             sha = compute_source_sha256(mod)
             mod_proj = project_map.get(mod.project or "", target_project_id)
+
+            clean_mod_name = (
+                normalize_plain_text(mod.name)[:500] if mod.name else ""
+            ) or "(untitled module)"
 
             if source_key in mapping_cache:
                 m = mapping_cache[source_key]
@@ -608,8 +651,8 @@ class PlaneImporter:
                     report.unchanged += 1
                 else:
                     report.to_update += 1
-            elif (mod_proj, mod.name.lower()) in modules_by_proj_and_name:
-                existing_mod = modules_by_proj_and_name[(mod_proj, mod.name.lower())]
+            elif (mod_proj, clean_mod_name.lower()) in modules_by_proj_and_name:
+                existing_mod = modules_by_proj_and_name[(mod_proj, clean_mod_name.lower())]
                 module_map[mod.id] = existing_mod.id
                 report.unchanged += 1
 
@@ -636,7 +679,7 @@ class PlaneImporter:
                         "ws": workspace_id,
                         "proj": mod_proj,
                         "ckey": canonical_key,
-                        "title": mod.name,
+                        "title": clean_mod_name,
                         "creator": self.caller.principal_id,
                         "id": mod_id,
                     },
@@ -663,7 +706,7 @@ class PlaneImporter:
                     id=mod_id,
                     workspace_id=workspace_id,
                     project_id=mod_proj,
-                    name=mod.name,
+                    name=clean_mod_name,
                     description_markdown=mod.description or "",
                     status=raw_mod_status,
                     start_date=m_start_date,
@@ -671,7 +714,7 @@ class PlaneImporter:
                 )
                 self.session.add(new_mod)
                 await self.session.flush()
-                modules_by_proj_and_name[(mod_proj, mod.name.lower())] = new_mod
+                modules_by_proj_and_name[(mod_proj, clean_mod_name.lower())] = new_mod
 
                 new_mapping = ImportEntityMapping(
                     workspace_id=workspace_id,
@@ -694,7 +737,9 @@ class PlaneImporter:
             if att_filename == "manifest.json":
                 continue
             source_key = ("attachment", att_filename)
-            raw_sha = hashlib.sha256(raw_bytes).digest()  # Actual 32-byte sha256
+            source_raw_sha = hashlib.sha256(
+                raw_bytes
+            ).digest()  # Actual 32-byte sha256 of source payload
             safe_source_id = att_filename[:128]
 
             if source_key in mapping_cache:
@@ -723,7 +768,7 @@ class PlaneImporter:
                         source_kind="attachment",
                         source_id=safe_source_id,
                         target_id=att_id,
-                        source_sha256=raw_sha,
+                        source_sha256=source_raw_sha,
                     )
                     self.session.add(new_mapping)
                     mapping_cache[source_key] = new_mapping
@@ -735,9 +780,11 @@ class PlaneImporter:
                         detected_type = "image/svg+xml"
                         p_w, p_h, page_cnt = None, None, None
                     elif is_pdf:
+                        detected_type = sniff_media_type(
+                            raw_bytes[:4096], "application/pdf", att_filename
+                        )
                         pdf_res = await sanitize_and_validate_pdf(raw_bytes)
                         clean_bytes = pdf_res.clean_bytes
-                        detected_type = "application/pdf"
                         p_w, p_h, page_cnt = None, None, pdf_res.page_count
                     else:
                         detected_type = sniff_media_type(raw_bytes[:4096], None, att_filename)
@@ -745,7 +792,7 @@ class PlaneImporter:
                         clean_bytes = processed.clean_bytes
                         p_w, p_h, page_cnt = processed.pixel_width, processed.pixel_height, None
 
-                    storage_key, raw_sha = self.blob_store.store(clean_bytes)
+                    storage_key, clean_sha = self.blob_store.store(clean_bytes)
                     att_id = uuid.uuid4()
                     att = Attachment(
                         id=att_id,
@@ -758,7 +805,7 @@ class PlaneImporter:
                         pixel_width=p_w,
                         pixel_height=p_h,
                         page_count=page_cnt,
-                        blob_sha256=raw_sha,
+                        blob_sha256=clean_sha,
                         storage_key=storage_key,
                     )
                     self.session.add(att)
@@ -770,7 +817,7 @@ class PlaneImporter:
                         source_kind="attachment",
                         source_id=safe_source_id,
                         target_id=att_id,
-                        source_sha256=raw_sha,
+                        source_sha256=source_raw_sha,
                     )
                     self.session.add(new_mapping)
                     mapping_cache[source_key] = new_mapping
@@ -783,8 +830,10 @@ class PlaneImporter:
         active_issues = [
             iss
             for iss in bundle.issues
-            if project_ident_map.get(iss.project or "", target_project_ident or "").upper()
-            not in self.exclude_project_identifiers
+            if iss.project not in excluded_project_ids
+            and (not iss.project or iss.project.upper() not in excluded_project_idents)
+            and project_ident_map.get(iss.project or "", target_project_ident or "").upper()
+            not in excluded_project_idents
         ]
 
         unmapped_issues = [iss for iss in active_issues if ("issue", iss.id) not in mapping_cache]
@@ -819,6 +868,8 @@ class PlaneImporter:
                 key_remap_manifest[old_key] = new_key
                 issue_seq_map[iss.id] = new_seq
                 issue_key_map[iss.id] = new_key
+
+        report.key_remap_manifest = dict(key_remap_manifest)
 
         # Sort all issues topologically (parents first)
         sorted_issues, depth_warnings = self.mapper.sort_issues_topologically(active_issues)
@@ -913,34 +964,43 @@ class PlaneImporter:
                 # Resolve mapped creator if available
                 mapped_creator_id = _resolve_principal(issue.created_by) or self.caller.principal_id
 
-                # Register object in spine
-                issue_id = (
-                    await self.session.execute(
-                        text(
-                            "SELECT register_object("
-                            "  CAST('issue' AS object_kind), :ws, :proj, :key, :title, :creator"
-                            ")"
-                        ),
-                        {
-                            "ws": workspace_id,
-                            "proj": issue_proj,
-                            "key": canonical_key,
-                            "title": issue.name,
-                            "creator": mapped_creator_id,
-                        },
-                    )
-                ).scalar_one()
+                clean_issue_name = (
+                    normalize_plain_text(issue.name)[:500] if issue.name else ""
+                ) or "(untitled issue)"
 
-                # Preserve objects archived_at timestamp if present
+                iss_created_at = _parse_iso_datetime(getattr(issue, "created_at", None))
+                iss_updated_at = _parse_iso_datetime(getattr(issue, "updated_at", None))
                 iss_archived_at = _parse_iso_datetime(getattr(issue, "archived_at", None))
-                if iss_archived_at:
-                    await self.session.execute(
-                        text("UPDATE objects SET archived_at = :archived_at WHERE id = :id"),
-                        {
-                            "id": issue_id,
-                            "archived_at": iss_archived_at,
-                        },
-                    )
+
+                issue_id = uuid.uuid4()
+                obj_created_at = iss_created_at or datetime.datetime.now(tz=datetime.UTC)
+                obj_updated_at = iss_updated_at or obj_created_at
+
+                # Register object in spine directly preserving historical created_at and updated_at
+                # without violating objects_guard_bu trigger (which strictly enforces immutability
+                # on UPDATE, rejecting NEW.created_at <> OLD.created_at with OBJECT_CREATED_AT_IMMUTABLE).
+                await self.session.execute(
+                    text(
+                        "INSERT INTO objects ("
+                        "  id, object_type, workspace_id, project_id, canonical_key, display_title, "
+                        "  created_by_id, created_at, updated_at, archived_at"
+                        ") VALUES ("
+                        "  :id, CAST('issue' AS object_kind), :ws, :proj, :key, :title, "
+                        "  :creator, :created_at, :updated_at, :archived_at"
+                        ")"
+                    ),
+                    {
+                        "id": issue_id,
+                        "ws": workspace_id,
+                        "proj": issue_proj,
+                        "key": canonical_key,
+                        "title": clean_issue_name,
+                        "creator": mapped_creator_id,
+                        "created_at": obj_created_at,
+                        "updated_at": obj_updated_at,
+                        "archived_at": iss_archived_at,
+                    },
+                )
 
                 # Normalize description and rewrite attachment URLs
                 raw_desc = issue.description_html or issue.description_stripped or ""
@@ -1017,7 +1077,7 @@ class PlaneImporter:
                     workspace_id=workspace_id,
                     project_id=issue_proj,
                     sequence_id=effective_seq,
-                    summary=issue.name,
+                    summary=clean_issue_name,
                     description_markdown=clean_desc,
                     state_id=target_state_id,
                     priority_id=target_prio_id,
@@ -1152,6 +1212,9 @@ class PlaneImporter:
                     _resolve_principal(comm.actor or comm.created_by) or self.caller.principal_id
                 )
                 target_parent_comm = comment_map.get(comm.parent_comment or "")
+                comm_created_at = _parse_iso_datetime(
+                    getattr(comm, "created_at", None)
+                ) or datetime.datetime.now(tz=datetime.UTC)
 
                 new_comment = IssueComment(
                     workspace_id=workspace_id,
@@ -1159,6 +1222,7 @@ class PlaneImporter:
                     author_id=mapped_author_id,
                     body_markdown=clean_comment,
                     parent_comment_id=target_parent_comm,
+                    created_at=comm_created_at,
                 )
                 self.session.add(new_comment)
                 await self.session.flush()

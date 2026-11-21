@@ -36,6 +36,7 @@ class ImportDiffReport(BaseModel):
     rewritten_attachments: int = 0
     invalid_link_count: int = 0
     warnings: list[str] = Field(default_factory=list)
+    key_remap_manifest: dict[str, str] = Field(default_factory=dict)
 
 
 STATE_GROUP_MAP: dict[str, str] = {

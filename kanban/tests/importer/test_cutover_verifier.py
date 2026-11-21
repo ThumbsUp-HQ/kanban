@@ -798,3 +798,54 @@ async def test_check_qa_proofs_external_project() -> None:
     )
     assert result.passed is True
     assert result.metadata.get("external_project") is True
+
+
+def test_verify_single_proof_bundle_edge_cases(tmp_path: Path) -> None:
+    """Verify _verify_single_proof_bundle detects missing dir, empty files, and alternate build files."""
+    from kanban.importer.cutover_verifier import _verify_single_proof_bundle
+
+    # 1. Missing directory
+    missing_dir = tmp_path / "does_not_exist"
+    errs_missing_dir = _verify_single_proof_bundle(missing_dir)
+    assert any("directory missing" in e for e in errs_missing_dir)
+
+    # 2. 0-byte git-diff.patch and 0-byte unit-test-results.txt
+    bundle_empty = tmp_path / "empty_files"
+    bundle_empty.mkdir()
+    (bundle_empty / "git-diff.patch").write_bytes(b"")
+    (bundle_empty / "unit-test-results.txt").write_bytes(b"")
+    (bundle_empty / "build-check.txt").write_bytes(b"")
+
+    errs_empty = _verify_single_proof_bundle(bundle_empty)
+    assert "git-diff.patch is 0 bytes" in errs_empty
+    assert "unit-test-results.txt is 0 bytes" in errs_empty
+    assert "build-check.txt is 0 bytes" in errs_empty
+
+    # 3. 0-byte build-or-typecheck.txt
+    bundle_alt_empty = tmp_path / "alt_empty"
+    bundle_alt_empty.mkdir()
+    (bundle_alt_empty / "git-diff.patch").write_text("patch", encoding="utf-8")
+    (bundle_alt_empty / "unit-test-results.txt").write_text("passed", encoding="utf-8")
+    (bundle_alt_empty / "build-or-typecheck.txt").write_bytes(b"")
+
+    errs_alt_empty = _verify_single_proof_bundle(bundle_alt_empty)
+    assert "build-or-typecheck.txt is 0 bytes" in errs_alt_empty
+
+
+@pytest.mark.asyncio
+async def test_check_qa_proofs_missing_proj_id() -> None:
+    """Verify _check_qa_proofs returns PROJECT_NOT_RESOLVED if proj_id is None."""
+    from unittest.mock import AsyncMock
+
+    from kanban.importer.cutover_verifier import _check_qa_proofs
+
+    mock_session = AsyncMock()
+    result = await _check_qa_proofs(
+        session=mock_session,
+        proj_id=None,
+        project_identifier="KAN",
+        qa_root=Path("/tmp"),
+        exempt_keys=set(),
+    )
+    assert result.passed is False
+    assert result.error_code == "PROJECT_NOT_RESOLVED"
