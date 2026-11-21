@@ -873,6 +873,7 @@ async def test_ollama_generate_structured_system_prompt_options_and_dereference(
 @pytest.mark.asyncio
 async def test_ollama_generate_structured_strips_think_tags() -> None:
     """Verify reasoning model <think>...</think> traces are stripped before parsing."""
+
     class MockReasoningTransport(httpx.AsyncBaseTransport):
         async def handle_async_request(self, _request: httpx.Request) -> httpx.Response:
             raw_content = (
@@ -903,4 +904,3 @@ async def test_ollama_generate_structured_strips_think_tags() -> None:
     assert res.parsed.ok is True
     assert "<think>" not in res.raw_json
     assert res.raw_json == '{"echo": "verified", "ok": true}'
-

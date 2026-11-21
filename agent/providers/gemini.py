@@ -200,9 +200,8 @@ class GeminiProvider(LLMProvider):
         )
 
         api_key_val = settings.api_key.get_secret_value() if settings.api_key else None
-        is_vertex_express = (
-            settings.mode == "vertex_express"
-            or (api_key_val is not None and api_key_val.startswith("AQ."))
+        is_vertex_express = settings.mode == "vertex_express" or (
+            api_key_val is not None and api_key_val.startswith("AQ.")
         )
 
         if settings.mode == "vertex":

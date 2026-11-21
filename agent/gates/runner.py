@@ -10,7 +10,7 @@ import datetime as dt
 import inspect
 import logging
 import uuid
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from sqlalchemy import select, text
 
@@ -251,9 +251,7 @@ class GateWorkerRunner:
                 else None
             )
             hook = (
-                await session.get(WorkflowTransitionHook, hook_uuid_val)
-                if hook_uuid_val
-                else None
+                await session.get(WorkflowTransitionHook, hook_uuid_val) if hook_uuid_val else None
             )
             agent_def = (
                 await session.get(AgentDefinition, uuid.UUID(agent_def_id_str))
@@ -303,12 +301,8 @@ class GateWorkerRunner:
                 "model": agent_def.model_id if agent_def else None,
                 "model_identifier": agent_def.model_id if agent_def else None,
                 "provider_kind": agent_def.provider_kind if agent_def else None,
-                "system_instructions_md": (
-                    agent_def.system_instructions_md if agent_def else ""
-                ),
-                "mcp_allowed_tools": (
-                    list(agent_def.mcp_allowed_tools or []) if agent_def else []
-                ),
+                "system_instructions_md": (agent_def.system_instructions_md if agent_def else ""),
+                "mcp_allowed_tools": (list(agent_def.mcp_allowed_tools or []) if agent_def else []),
             }
 
             live_provider = None
@@ -330,8 +324,6 @@ class GateWorkerRunner:
                 )
                 prov_res = await session.execute(provider_stmt)
                 provider_row = prov_res.scalar_one_or_none()
-                if inspect.isawaitable(provider_row):
-                    provider_row = await provider_row
 
                 if isinstance(provider_row, AIProviderConfig):
                     base_url_val = (provider_row.base_url or "").lower()
@@ -388,7 +380,9 @@ class GateWorkerRunner:
                             elif p_kind == "gemini":
                                 from agent.providers.gemini import GeminiSettings  # noqa: PLC0415
 
-                                gemini_mode = (
+                                gemini_mode: Literal[
+                                    "vertex", "ai_studio_paid", "vertex_express"
+                                ] = (
                                     "vertex_express"
                                     if (api_key_str and api_key_str.startswith("AQ."))
                                     else "ai_studio_paid"

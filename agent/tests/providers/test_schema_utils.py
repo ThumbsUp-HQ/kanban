@@ -100,21 +100,10 @@ def test_strip_think_tags() -> None:
     no_tags = '{"decision": "approve"}'
     assert strip_think_tags(no_tags) == '{"decision": "approve"}'
 
-    with_tags = (
-        "<think>\n"
-        "Let me analyze the logs.\n"
-        "Tests pass.\n"
-        "</think>\n"
-        '{"decision": "approve"}'
-    )
+    with_tags = '<think>\nLet me analyze the logs.\nTests pass.\n</think>\n{"decision": "approve"}'
     assert strip_think_tags(with_tags) == '{"decision": "approve"}'
 
-    multiple_tags = (
-        "<think>thought 1</think>\n"
-        "  {"
-        "\n<think>thought 2</think>"
-        '"ok": true}'
-    )
+    multiple_tags = '<think>thought 1</think>\n  {\n<think>thought 2</think>"ok": true}'
     assert strip_think_tags(multiple_tags) == '{\n"ok": true}'
 
     surrounding_whitespace = "   <think>done</think>  \n  42   "
@@ -164,4 +153,3 @@ def test_clean_gemini_schema_from_dict() -> None:
     assert "title" not in cleaned
     assert "default" not in cleaned["properties"]["field"]
     assert cleaned["properties"]["field"]["type"] == "string"
-

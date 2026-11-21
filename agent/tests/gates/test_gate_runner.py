@@ -490,6 +490,7 @@ async def test_gate_worker_runner_load_entities_wires_live_provider_and_timeout(
 
         _ex, _iss, agent_dict, _rc, _mcp = await runner._load_entities(event)  # noqa: SLF001
 
+        assert isinstance(agent_dict, dict)
         assert agent_dict["model"] == "gemini-2.5-flash-lite"
         assert agent_dict["model_identifier"] == "gemini-2.5-flash-lite"
         assert agent_dict["provider_kind"] == "gemini"
@@ -542,7 +543,8 @@ async def test_gate_worker_runner_load_entities_wires_ollama_and_openai_provider
     mock_session_ollama.execute.return_value = mock_result_ollama
 
     runner_ollama = GateWorkerRunner(
-        session_factory=MockSessionFactory(mock_session_ollama), workspace_id=ws_id  # type: ignore[arg-type]
+        session_factory=MockSessionFactory(mock_session_ollama),  # type: ignore[arg-type]
+        workspace_id=ws_id,
     )
     event_ollama = {
         "execution_id": str(exec_id),
@@ -550,6 +552,7 @@ async def test_gate_worker_runner_load_entities_wires_ollama_and_openai_provider
         "agent_definition_id": str(uuid.uuid4()),
     }
     _ex, _iss, agent_dict_ollama, _rc, _mcp = await runner_ollama._load_entities(event_ollama)  # noqa: SLF001
+    assert isinstance(agent_dict_ollama, dict)
     assert isinstance(agent_dict_ollama["provider"], OllamaProvider)
     assert agent_dict_ollama["timeout_ms"] == 30000
 
@@ -586,7 +589,8 @@ async def test_gate_worker_runner_load_entities_wires_ollama_and_openai_provider
         return_value=b"sk-test-openai-key-valid-12345",
     ):
         runner_openai = GateWorkerRunner(
-            session_factory=MockSessionFactory(mock_session_openai), workspace_id=ws_id  # type: ignore[arg-type]
+            session_factory=MockSessionFactory(mock_session_openai),  # type: ignore[arg-type]
+            workspace_id=ws_id,
         )
         event_openai = {
             "execution_id": str(exec_id),
@@ -594,6 +598,7 @@ async def test_gate_worker_runner_load_entities_wires_ollama_and_openai_provider
             "agent_definition_id": str(uuid.uuid4()),
         }
         _ex, _iss, agent_dict_openai, _rc, _mcp = await runner_openai._load_entities(event_openai)  # noqa: SLF001
+        assert isinstance(agent_dict_openai, dict)
         assert isinstance(agent_dict_openai["provider"], OpenAIProvider)
         assert agent_dict_openai["timeout_ms"] == 40000
 
@@ -603,7 +608,8 @@ async def test_gate_worker_runner_load_entities_wires_ollama_and_openai_provider
         side_effect=ValueError("Corrupted key envelope"),
     ):
         runner_openai_fail = GateWorkerRunner(
-            session_factory=MockSessionFactory(mock_session_openai), workspace_id=ws_id  # type: ignore[arg-type]
+            session_factory=MockSessionFactory(mock_session_openai),  # type: ignore[arg-type]
+            workspace_id=ws_id,
         )
         event_openai_fail = {
             "execution_id": str(exec_id),
@@ -613,9 +619,9 @@ async def test_gate_worker_runner_load_entities_wires_ollama_and_openai_provider
         _ex, _iss, agent_dict_openai_fail, _rc, _mcp = await runner_openai_fail._load_entities(  # noqa: SLF001
             event_openai_fail
         )
+        assert isinstance(agent_dict_openai_fail, dict)
         assert agent_dict_openai_fail.get("provider") is None
         assert agent_dict_openai_fail["timeout_ms"] == 40000
-
 
 
 @pytest.mark.asyncio
@@ -629,7 +635,7 @@ async def test_gate_worker_fail_closed_on_provider_timeout() -> None:
             msg = "Upstream request timed out: deadline breached"
             raise ProviderTimeout(msg, code="TIMEOUT")
 
-    registry.register("in_app_sdk", TimingOutHarness())  # type: ignore[arg-type]
+    registry.register("in_app_sdk", TimingOutHarness())
 
     worker = GateWorker(registry=registry, coordinator=mock_coordinator)
 
@@ -648,4 +654,3 @@ async def test_gate_worker_fail_closed_on_provider_timeout() -> None:
         "0196ed40-7b2a-7000-8000-223344556677",
         "GATE_TIMEOUT",
     )
-

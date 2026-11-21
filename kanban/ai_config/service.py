@@ -789,9 +789,7 @@ class AIProviderConfigService:
                     settings_json = dict(row[0])
 
             effective_timeout_ms = (
-                timeout_ms
-                or (settings_json.get("timeout_ms") if settings_json else None)
-                or 8000
+                timeout_ms or (settings_json.get("timeout_ms") if settings_json else None) or 8000
             )
             probe_timeout_s = float(effective_timeout_ms) / 1000.0
 

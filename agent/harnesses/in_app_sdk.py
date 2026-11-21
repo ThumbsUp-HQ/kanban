@@ -257,9 +257,7 @@ class InAppSdkHarness:
             or FixtureLLMProvider([])
         )
         cutoff_ms = int(
-            getattr(agent_def, "timeout_ms", None)
-            or agent_dict.get("timeout_ms")
-            or 30000
+            getattr(agent_def, "timeout_ms", None) or agent_dict.get("timeout_ms") or 30000
         )
         t_start = time.perf_counter()
 

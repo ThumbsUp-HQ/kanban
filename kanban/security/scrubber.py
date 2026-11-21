@@ -32,9 +32,7 @@ _RE_AWS_ACCESS_KEY: Final[re.Pattern[str]] = re.compile(r"\b(?:AKIA|ASIA)[A-Z2-7
 _RE_API_KEY: Final[re.Pattern[str]] = re.compile(
     r"(?<![A-Za-z0-9_-])sk-(?:proj-|ant-api\d{2}-|live-|test-)?([A-Za-z0-9_-]{20,256})(?![A-Za-z0-9_-])"
 )
-_RE_AQ_KEY: Final[re.Pattern[str]] = re.compile(
-    r"\bAQ\.[A-Za-z0-9_-]{20,}\b"
-)
+_RE_AQ_KEY: Final[re.Pattern[str]] = re.compile(r"\bAQ\.[A-Za-z0-9_-]{20,}\b")
 _RE_BEARER_TOKEN: Final[re.Pattern[str]] = re.compile(
     r"(?i)\b(Bearer)(\s+)[A-Za-z0-9._~+/=-]{20,2048}(?![A-Za-z0-9._~+/=-])"
 )

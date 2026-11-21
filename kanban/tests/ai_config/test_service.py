@@ -963,4 +963,3 @@ async def test_probe_provider_strict_timeout_cutoff(
         assert res["ok"] is False
         assert res["error_code"] == "UPSTREAM_TIMEOUT"
         assert res["latency_ms"] == 100.0
-

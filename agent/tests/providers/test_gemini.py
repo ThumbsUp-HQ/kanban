@@ -998,6 +998,7 @@ async def test_gemini_vertex_express_aq_key() -> None:
 @pytest.mark.asyncio
 async def test_gemini_generate_structured_strips_think_tags() -> None:
     """Verify thinking traces <think>...</think> are stripped before parsing Gemini output."""
+
     class MockThinkingTransport(httpx.AsyncBaseTransport):
         async def handle_async_request(self, _request: httpx.Request) -> httpx.Response:
             raw_text = (
@@ -1038,8 +1039,7 @@ def test_gemini_aq_secret_redaction() -> None:
     from kanban.security.scrubber import outbound_secret_scrubber  # noqa: PLC0415
 
     raw_err = (
-        "Auth failed with key AQ.AbCdEf1234567890_xyz1234567890 "
-        "and sk-proj-12345678901234567890"
+        "Auth failed with key AQ.AbCdEf1234567890_xyz1234567890 and sk-proj-12345678901234567890"
     )
     redacted = redact_secrets(raw_err)
     assert "AQ.AbCdEf" not in redacted
@@ -1052,4 +1052,3 @@ def test_gemini_aq_secret_redaction() -> None:
     assert scrub_res.redacted is True
     assert "AQ.AbCdEf" not in scrub_res.text
     assert "[REDACTED:API_KEY]" in scrub_res.text
-

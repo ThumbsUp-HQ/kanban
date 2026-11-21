@@ -80,19 +80,13 @@ def dereference_json_schema(schema: dict[str, Any]) -> dict[str, Any]:  # noqa: 
     if isinstance(dereferenced, dict):
         dereferenced.pop("$defs", None)
         dereferenced.pop("definitions", None)
-    return dereferenced
+        return dereferenced
+    return schema_copy
 
 
 def clean_gemini_schema(schema: dict[str, Any] | type[BaseModel]) -> dict[str, Any]:
     """Produce Gemini-compatible OpenAPI subset schema without $defs, $ref, title, or default."""
-    raw_schema: dict[str, Any]
-    if isinstance(schema, type) and issubclass(schema, BaseModel):
-        raw_schema = schema.model_json_schema()
-    elif isinstance(schema, dict):
-        raw_schema = schema
-    else:
-        msg = f"Expected dict or BaseModel class, got {type(schema).__name__}"
-        raise TypeError(msg)
+    raw_schema: dict[str, Any] = schema if isinstance(schema, dict) else schema.model_json_schema()
 
     derefed = dereference_json_schema(raw_schema)
 
@@ -108,7 +102,8 @@ def clean_gemini_schema(schema: dict[str, Any] | type[BaseModel]) -> dict[str, A
             return [_strip_unsupported(item) for item in node]
         return node
 
-    return _strip_unsupported(derefed)
+    res = _strip_unsupported(derefed)
+    return res if isinstance(res, dict) else {}
 
 
 def _enforce_strict_dict(node: dict[str, Any]) -> None:
@@ -134,9 +129,7 @@ def _enforce_strict(node: object) -> None:
             _enforce_strict(item)
 
 
-def make_strict_json_schema(
-    model: type[BaseModel], *, dereference: bool = False
-) -> dict[str, Any]:
+def make_strict_json_schema(model: type[BaseModel], *, dereference: bool = False) -> dict[str, Any]:
     """Generate OpenAI-compliant strict JSON schema with additionalProperties=False.
 
     If dereference=True, inlines any $defs or $ref references.
