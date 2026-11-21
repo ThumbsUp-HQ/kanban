@@ -321,9 +321,9 @@ def validate_reality_checker_report(  # noqa: C901, PLR0912, PLR0915
             )
             raise ValueError(msg)
 
-    claims_ready = "READY" in combined_check or bool(
-        re.search(r"\bA\b", cert_body) or "A-" in cert_body or "A+" in cert_body
-    )
+    has_ready_keyword = bool(re.search(r"\bREADY\b", combined_check))
+    has_grade_a = bool(re.search(r"\bA\b", cert_body) or "A-" in cert_body or "A+" in cert_body)
+    claims_ready = has_ready_keyword and has_grade_a
     if require_ready and not claims_ready:
         msg = (
             "Reality-checker report summary_markdown must certify READY with grade A "

@@ -11,7 +11,7 @@ import logging
 import uuid
 from typing import TYPE_CHECKING, Any
 
-from sqlalchemy import select
+from sqlalchemy import select, text
 
 from agent.gates.worker import GateWorker, HarnessRegistry
 from database.models.agent_definition import AgentDefinition
@@ -44,33 +44,86 @@ class GateWorkerRunner:
         session_factory: RLSSessionFactory | None = None,
         harness_registry: HarnessRegistry | None = None,
         poll_interval_s: float = 1.0,
+        workspace_id: uuid.UUID | None = None,
+        admin_principal_id: uuid.UUID | None = None,
     ) -> None:
         """Initialize runner with session factory, harness registry, and poll interval."""
         self.session_factory = session_factory
         self.registry = harness_registry or HarnessRegistry()
         self.poll_interval_s = poll_interval_s
+        self.workspace_id = workspace_id
+        self.admin_principal_id = admin_principal_id
         self.worker = GateWorker(
             registry=self.registry,
             coordinator=self,
             entity_loader=self._load_entities,
         )
         self._active_invocations: set[uuid.UUID] = set()
+        self._execution_contexts: dict[uuid.UUID, dict[str, Any]] = {}
 
     @property
     def active_invocations(self) -> frozenset[uuid.UUID]:
         """Active leased invocation IDs currently being processed."""
         return frozenset(self._active_invocations)
 
+    async def _resolve_workspace_and_admin(
+        self,
+    ) -> tuple[uuid.UUID | None, uuid.UUID | None]:
+        """Resolve target workspace and administrative/agent principal."""
+        ws_id = self.workspace_id
+        admin_pid = self.admin_principal_id
+
+        if ws_id is not None and admin_pid is not None:
+            return ws_id, admin_pid
+
+        if self.session_factory is None:
+            return ws_id, admin_pid
+
+        engine = getattr(self.session_factory, "engine", None) or getattr(
+            self.session_factory, "_engine", None
+        )
+        if engine is not None:
+            try:
+                async with engine.connect() as conn:
+                    if ws_id is None:
+                        res = await conn.execute(text("SELECT get_default_workspace_id()"))
+                        ws_id = res.scalar()
+                    if admin_pid is None:
+                        res = await conn.execute(
+                            text("SELECT principal_id FROM kb_auth.local_get_credential('admin')")
+                        )
+                        row = res.first()
+                        if row is not None:
+                            admin_pid = row[0]
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Could not resolve workspace/admin from DB: %s", exc)
+
+        return ws_id, admin_pid
+
     async def record_decision(
         self, execution_id: object, hook_id: object, decision: object
     ) -> None:
-        """Forward validated decision to GateCoordinator within an administrative session."""
+        """Forward validated decision to GateCoordinator within an authorized RLS session."""
         if self.session_factory is None:
             return
 
+        exec_uuid = (
+            execution_id
+            if isinstance(execution_id, uuid.UUID)
+            else (uuid.UUID(str(execution_id)) if execution_id else None)
+        )
+        ctx_info = self._execution_contexts.get(exec_uuid, {}) if exec_uuid else {}
+        ws_id = ctx_info.get("workspace_id") or self.workspace_id or uuid.UUID(int=0)
+        p_id = (
+            ctx_info.get("admin_principal_id")
+            or self.admin_principal_id
+            or ctx_info.get("agent_principal_id")
+            or uuid.UUID(int=0)
+        )
+
         admin_ctx = RLSContext(
-            principal_id=uuid.UUID(int=0),
-            workspace_id=uuid.UUID(int=0),
+            principal_id=p_id,
+            workspace_id=ws_id,
             token_scopes=("admin",),
             aal_level=2,
         )
@@ -83,24 +136,54 @@ class GateWorkerRunner:
             )
             await session.commit()
 
-    async def record_failure(self, execution_id: object, hook_id: object, code: str) -> None:
-        """Forward failure or timeout to GateCoordinator within an administrative session."""
+    async def record_failure(
+        self,
+        execution_id: object,
+        hook_id: object,
+        code: str,
+        *,
+        invocation_id: object = None,
+        detail: str | None = None,
+    ) -> None:
+        """Forward failure or timeout to GateCoordinator within an authorized RLS session."""
         if self.session_factory is None:
             return
 
+        exec_uuid = (
+            execution_id
+            if isinstance(execution_id, uuid.UUID)
+            else (uuid.UUID(str(execution_id)) if execution_id else None)
+        )
+        ctx_info = self._execution_contexts.get(exec_uuid, {}) if exec_uuid else {}
+        ws_id = ctx_info.get("workspace_id") or self.workspace_id or uuid.UUID(int=0)
+        p_id = (
+            ctx_info.get("admin_principal_id")
+            or self.admin_principal_id
+            or ctx_info.get("agent_principal_id")
+            or uuid.UUID(int=0)
+        )
+
         admin_ctx = RLSContext(
-            principal_id=uuid.UUID(int=0),
-            workspace_id=uuid.UUID(int=0),
+            principal_id=p_id,
+            workspace_id=ws_id,
             token_scopes=("admin",),
             aal_level=2,
         )
         async with self.session_factory.session(admin_ctx) as session:
-            await GateCoordinator.record_failure(
-                session=session,
-                execution_id=execution_id,  # type: ignore[arg-type]
-                hook_id=hook_id,  # type: ignore[arg-type]
-                code=code,
-            )
+            if invocation_id is not None:
+                await GateCoordinator(session).record_failure(
+                    invocation_id=invocation_id,
+                    error_code=code,
+                    detail=detail,
+                )
+            else:
+                await GateCoordinator.record_failure(
+                    session=session,
+                    execution_id=execution_id,  # type: ignore[arg-type]
+                    hook_id=hook_id,  # type: ignore[arg-type]
+                    code=code,
+                    detail=detail,
+                )
             await session.commit()
 
     async def _load_entities(
@@ -131,17 +214,37 @@ class GateWorkerRunner:
                 payload.get("mcp_urls"),
             )
 
+        exec_uuid = uuid.UUID(execution_id_str) if execution_id_str else None
+        ctx_info = self._execution_contexts.get(exec_uuid, {}) if exec_uuid else {}
+        ws_id_val = payload.get("workspace_id")
+        ws_id = (
+            (uuid.UUID(str(ws_id_val)) if ws_id_val else None)
+            or ctx_info.get("workspace_id")
+            or self.workspace_id
+            or uuid.UUID(int=0)
+        )
+        admin_pid_val = payload.get("admin_principal_id")
+        agent_pid_val = payload.get("agent_principal_id")
+        p_id = (
+            (uuid.UUID(str(admin_pid_val)) if admin_pid_val else None)
+            or ctx_info.get("admin_principal_id")
+            or self.admin_principal_id
+            or (uuid.UUID(str(agent_pid_val)) if agent_pid_val else None)
+            or ctx_info.get("agent_principal_id")
+            or uuid.UUID(int=0)
+        )
+
         admin_ctx = RLSContext(
-            principal_id=uuid.UUID(int=0),
-            workspace_id=uuid.UUID(int=0),
+            principal_id=p_id,
+            workspace_id=ws_id,
             token_scopes=("admin",),
             aal_level=2,
         )
         async with self.session_factory.session(admin_ctx) as session:
-            exec_uuid = uuid.UUID(execution_id_str)
-            hook_uuid = uuid.UUID(hook_id_str)
-            execution = await session.get(WorkflowTransitionExecution, exec_uuid)
-            hook = await session.get(WorkflowTransitionHook, hook_uuid)
+            exec_uuid_val = uuid.UUID(execution_id_str)
+            hook_uuid_val = uuid.UUID(hook_id_str)
+            execution = await session.get(WorkflowTransitionExecution, exec_uuid_val)
+            hook = await session.get(WorkflowTransitionHook, hook_uuid_val)
             agent_def = (
                 await session.get(AgentDefinition, uuid.UUID(agent_def_id_str))
                 if agent_def_id_str
@@ -191,89 +294,141 @@ class GateWorkerRunner:
             }
             return exec_dict, issue_dict, agent_dict, None, None
 
-    async def poll_once(self) -> int:  # noqa: C901
+    async def poll_once(self) -> int:  # noqa: C901, PLR0912, PLR0915
         """Poll for pending running gate hook invocations with lease claiming and timeout sweep."""
         if self.session_factory is None:
             return 0
 
-        admin_ctx = RLSContext(
-            principal_id=uuid.UUID(int=0),
-            workspace_id=uuid.UUID(int=0),
-            token_scopes=("admin",),
-            aal_level=2,
-        )
         handled = 0
         now = dt.datetime.now(dt.UTC)
 
+        ws_id, admin_pid = await self._resolve_workspace_and_admin()
+        bound_ws = ws_id or uuid.UUID(int=0)
+        bound_pid = admin_pid or uuid.UUID(int=0)
+
+        # 1. Short read transaction to claim/resolve invocations with
+        # ZERO row locks held across dispatch
+        admin_ctx = RLSContext(
+            principal_id=bound_pid,
+            workspace_id=bound_ws,
+            token_scopes=("admin",),
+            aal_level=2,
+        )
+
+        expired_candidates: list[dict[str, Any]] = []
+        active_candidates: list[dict[str, Any]] = []
+
         async with self.session_factory.session(admin_ctx) as session:
-            # 1. Sweep expired invocations with SKIP LOCKED
+            # Query ONLY valid status 'running' and hook_kind 'agent_interceptor'
             sweep_stmt = (
                 select(WorkflowHookInvocation)
                 .where(
-                    WorkflowHookInvocation.status.in_(["running", "pending_async"]),
+                    WorkflowHookInvocation.status == "running",
                     WorkflowHookInvocation.hook_kind == "agent_interceptor",
                 )
-                .with_for_update(skip_locked=True)
                 .order_by(WorkflowHookInvocation.started_at)
                 .limit(50)
             )
-            candidates = list((await session.execute(sweep_stmt)).scalars().all())
-            expired_invs: list[WorkflowHookInvocation] = []
-            active_invs: list[WorkflowHookInvocation] = []
+            raw_candidates = list((await session.execute(sweep_stmt)).scalars().all())
 
-            for inv in candidates:
+            for inv in raw_candidates:
+                agent_pid = None
+                agent_def_id = None
+                timeout_ms = 60000
+                if hasattr(session, "get"):
+                    try:
+                        hook = await session.get(WorkflowTransitionHook, inv.hook_id)
+                        if hook and hook.agent_definition_id:
+                            agent_def_id = hook.agent_definition_id
+                            agent_def = await session.get(AgentDefinition, hook.agent_definition_id)
+                            if agent_def:
+                                agent_pid = agent_def.principal_id
+                                if agent_def.timeout_ms:
+                                    timeout_ms = agent_def.timeout_ms
+                    except (AttributeError, KeyError, TypeError) as exc:
+                        logger.debug("Failed resolving hook agent info for sweep: %s", exc)
+
                 deadline = getattr(inv, "deadline_at", None)
-                if deadline is None:
-                    hook = await session.get(WorkflowTransitionHook, inv.hook_id)
-                    agent_def = (
-                        await session.get(AgentDefinition, hook.agent_definition_id)
-                        if hook and hook.agent_definition_id
-                        else None
-                    )
-                    timeout_ms = (
-                        agent_def.timeout_ms if agent_def and agent_def.timeout_ms else 60000
-                    )
-                    if inv.started_at is not None:
-                        deadline = inv.started_at + dt.timedelta(milliseconds=timeout_ms)
+                if deadline is None and getattr(inv, "started_at", None) is not None:
+                    deadline = inv.started_at + dt.timedelta(milliseconds=timeout_ms)
 
-                if deadline is not None and deadline < now:
-                    expired_invs.append(inv)
-                elif inv.status == "running":
-                    active_invs.append(inv)
-
-            # Record failure for expired invocations
-            for inv in expired_invs:
-                try:
-                    await GateCoordinator(session).record_failure(
-                        invocation_id=inv.id,
-                        error_code="GATE_TIMEOUT",
-                        detail="Async agent gate exceeded deadline_at",
-                    )
-                    self._active_invocations.discard(inv.id)
-                    handled += 1
-                except Exception as exc:  # noqa: BLE001
-                    logger.debug("Error recording gate timeout failure: %s", exc)
-
-            # 2. Dispatch active non-expired invocations with in-memory lease guard
-            for inv in active_invs:
-                if inv.id in self._active_invocations:
-                    # Already claimed and executing; prevent double-dispatch
-                    continue
-
-                self._active_invocations.add(inv.id)
-                event = {
-                    "execution_id": str(inv.execution_id),
-                    "hook_id": str(inv.hook_id),
+                info = {
+                    "invocation_id": inv.id,
+                    "execution_id": inv.execution_id,
+                    "hook_id": inv.hook_id,
+                    "workspace_id": getattr(inv, "workspace_id", bound_ws),
+                    "agent_definition_id": agent_def_id,
+                    "agent_principal_id": agent_pid,
+                    "admin_principal_id": bound_pid,
+                    "deadline_at": deadline,
+                    "started_at": getattr(inv, "started_at", now),
                 }
-                try:
-                    await self.worker.handle_dispatch(event)
-                    handled += 1
-                except Exception as exc:  # noqa: BLE001
-                    logger.debug("Error handling gate dispatch: %s", exc)
-                finally:
-                    self._active_invocations.discard(inv.id)
+                if deadline is not None and deadline < now:
+                    expired_candidates.append(info)
+                elif inv.status == "running":
+                    active_candidates.append(info)
 
-            await session.commit()
+        # Notice: The read session above is COMMITTED and CLOSED!
+        # ZERO row locks are held on PostgreSQL across dispatch!
+
+        # 2. Process expired invocations (GATE_TIMEOUT)
+        for item in expired_candidates:
+            inv_id = item["invocation_id"]
+            exec_id = item["execution_id"]
+            hook_id = item["hook_id"]
+            if inv_id in self._active_invocations:
+                continue
+
+            self._active_invocations.add(inv_id)
+            self._execution_contexts[exec_id] = item
+            try:
+                await self.record_failure(
+                    exec_id,
+                    hook_id,
+                    "GATE_TIMEOUT",
+                    invocation_id=inv_id,
+                    detail="Async agent gate exceeded deadline_at",
+                )
+                handled += 1
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Error recording gate timeout failure: %s", exc)
+            finally:
+                self._active_invocations.discard(inv_id)
+                self._execution_contexts.pop(exec_id, None)
+
+        # 3. Dispatch active non-expired invocations with in-memory lease guard
+        for item in active_candidates:
+            inv_id = item["invocation_id"]
+            exec_id = item["execution_id"]
+            hook_id = item["hook_id"]
+            if inv_id in self._active_invocations:
+                continue
+
+            self._active_invocations.add(inv_id)
+            self._execution_contexts[exec_id] = item
+            event = {
+                "execution_id": str(exec_id),
+                "hook_id": str(hook_id),
+                "agent_definition_id": (
+                    str(item["agent_definition_id"]) if item.get("agent_definition_id") else ""
+                ),
+                "workspace_id": str(item["workspace_id"]),
+                "agent_principal_id": (
+                    str(item["agent_principal_id"]) if item.get("agent_principal_id") else ""
+                ),
+                "admin_principal_id": (
+                    str(item["admin_principal_id"]) if item.get("admin_principal_id") else ""
+                ),
+            }
+            try:
+                await self.worker.handle_dispatch(event)
+                handled += 1
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("Error handling gate dispatch: %s", exc)
+            finally:
+                self._active_invocations.discard(inv_id)
+                self._execution_contexts.pop(exec_id, None)
+
         return handled
 
     async def run(self, stop_event: asyncio.Event) -> None:
@@ -288,13 +443,20 @@ class GateWorkerRunner:
 
 
 async def start_gate_worker(
-    app: object, session_target: RLSSessionFactory | None = None
+    app: object,
+    session_target: RLSSessionFactory | None = None,
+    workspace_id: uuid.UUID | None = None,
+    admin_principal_id: uuid.UUID | None = None,
 ) -> tuple[asyncio.Task[None], asyncio.Event]:
     """Start background gate worker task during application lifespan."""
     stop_event = asyncio.Event()
     sf = session_target
     if sf is None and hasattr(app, "state"):
         sf = getattr(app.state, "session_factory", None)
-    runner = GateWorkerRunner(session_factory=sf)
+    runner = GateWorkerRunner(
+        session_factory=sf,
+        workspace_id=workspace_id,
+        admin_principal_id=admin_principal_id,
+    )
     task = asyncio.create_task(runner.run(stop_event))
     return task, stop_event

@@ -5,7 +5,9 @@
 
 from __future__ import annotations
 
+import datetime as dt
 import hashlib
+import json
 import uuid
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -13,6 +15,8 @@ from typing import TYPE_CHECKING
 import pytest
 from sqlalchemy import select, text
 
+from agent.gates.runner import GateWorkerRunner
+from agent.gates.worker import HarnessRegistry
 from database.models.activity import ActivityRecord
 from database.models.agent_definition import AgentDefinition
 from database.models.issues import Issue, IssueComment
@@ -1496,3 +1500,223 @@ async def test_completed_state_forces_fail_closed(
     assert len(comments) == 1
     assert "🛑🤖" in comments[0].body_markdown
     assert "Gate failed: TRANSIENT_TIMEOUT" in comments[0].body_markdown
+
+
+class FixtureApprovalHarness:
+    """Fixture harness that returns an approve decision."""
+
+    async def run(self, ctx: object, agent_def: object) -> bytes:
+        """Run fixture harness returning an approve verdict."""
+        del agent_def
+        nonce = getattr(ctx, "verdict_nonce", getattr(ctx, "nonce", ""))
+        payload = {
+            "schema": "kb-transition-verdict/v1",
+            "nonce": nonce,
+            "decision": "approve",
+            "reason_markdown": "Forensic verification verified all proofs and invariants.",
+            "cited_files": ["docs/qa/KAN-45/reality-checker-report.md"],
+        }
+        return f"```json\n{json.dumps(payload)}\n```".encode()
+
+
+async def test_gate_worker_runner_real_rls_approval_and_comment(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Verify GateWorkerRunner.poll_once executes end-to-end on live PostgreSQL under FORCE RLS."""
+    admin = await make_user("gw_admin", workspace_role="WORKSPACE_ADMIN")
+    proj_id = await make_project("GWP", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+    client = as_principal(admin)
+
+    states = await _get_states(api_env.seed, proj_id)
+    in_prog_id = states["In Progress"]
+    done_id = states["Done"]
+
+    agent_def, agent_p = await create_agent_definition(
+        api_env.seed,
+        api_env.workspace_id,
+        proj_id,
+        slug="qa-gate-runner-bot",
+        display_name="QA Gate Runner Bot",
+    )
+
+    await create_agent_hook(
+        api_env.seed,
+        api_env.workspace_id,
+        proj_id,
+        agent_def.id,
+        to_state_id=done_id,
+        from_state_id=None,
+        sort_rank="10",
+        name="gw_approval_gate",
+    )
+
+    create_resp = await client.post(
+        "/api/v1/projects/GWP/issues",
+        json={
+            "summary": "Gate Worker RLS Issue",
+            "description_markdown": "Test body",
+            "state_id": str(in_prog_id),
+        },
+    )
+    assert create_resp.status_code == 201
+    issue_key = create_resp.json()["key"]
+    issue_id = uuid.UUID(create_resp.json()["id"])
+    await api_env.seed.rollback()
+
+    # POST transition to Done -> 202 pending_agent_gate
+    t_resp = await client.post(
+        f"/api/v1/issues/{issue_key}/transitions",
+        json={"to_state": "Done"},
+    )
+    assert t_resp.status_code == 202
+    exec_id = uuid.UUID(t_resp.json()["execution_id"])
+
+    # Instantiate GateWorkerRunner with real session factory and fixture harness
+    registry = HarnessRegistry(auto_register_defaults=False)
+    registry.register("in_app_sdk", FixtureApprovalHarness())
+
+    runner = GateWorkerRunner(
+        session_factory=api_env.client._transport.app.state.session_factory,  # noqa: SLF001
+        harness_registry=registry,
+        workspace_id=api_env.workspace_id,
+        admin_principal_id=admin.id,
+    )
+
+    # Execute poll_once against real PostgreSQL
+    handled = await runner.poll_once()
+    assert handled == 1
+
+    # Verify issue state is Done and hold is released
+    await api_env.seed.rollback()
+    exec_row = (
+        await api_env.seed.execute(
+            select(WorkflowTransitionExecution).where(WorkflowTransitionExecution.id == exec_id)
+        )
+    ).scalar_one()
+    issue_row = (await api_env.seed.execute(select(Issue).where(Issue.id == issue_id))).scalar_one()
+    assert issue_row.state_id == done_id
+    assert issue_row.pending_transition_exec_id is None
+
+    # Verify execution is approved
+    exec_row = (
+        await api_env.seed.execute(
+            select(WorkflowTransitionExecution).where(WorkflowTransitionExecution.id == exec_id)
+        )
+    ).scalar_one()
+    assert exec_row.status == "approved"
+
+    # Verify IssueComment authored by agent principal exists with approved header
+    comment_rows = (
+        (await api_env.seed.execute(select(IssueComment).where(IssueComment.issue_id == issue_id)))
+        .scalars()
+        .all()
+    )
+    assert len(comment_rows) == 1
+    assert comment_rows[0].author_id == agent_p.id
+    assert "## ✅🤖 Workflow Transition Gate Approved" in comment_rows[0].body_markdown
+
+
+async def test_gate_worker_runner_real_rls_timeout_sweep(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Verify GateWorkerRunner.poll_once sweeps expired invocations on live PostgreSQL under FORCE RLS."""
+    admin = await make_user("gw_timeout_admin", workspace_role="WORKSPACE_ADMIN")
+    proj_id = await make_project("GWT", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+    client = as_principal(admin)
+
+    states = await _get_states(api_env.seed, proj_id)
+    in_prog_id = states["In Progress"]
+    done_id = states["Done"]
+
+    agent_def, _agent_p = await create_agent_definition(
+        api_env.seed,
+        api_env.workspace_id,
+        proj_id,
+        slug="qa-timeout-bot",
+        display_name="QA Timeout Bot",
+    )
+
+    await create_agent_hook(
+        api_env.seed,
+        api_env.workspace_id,
+        proj_id,
+        agent_def.id,
+        to_state_id=done_id,
+        from_state_id=None,
+        sort_rank="10",
+        name="gw_timeout_gate",
+        failure_policy="fail_closed",
+    )
+
+    create_resp = await client.post(
+        "/api/v1/projects/GWT/issues",
+        json={
+            "summary": "Gate Worker Timeout Issue",
+            "description_markdown": "Test body",
+            "state_id": str(in_prog_id),
+        },
+    )
+    assert create_resp.status_code == 201
+    issue_key = create_resp.json()["key"]
+    issue_id = uuid.UUID(create_resp.json()["id"])
+    await api_env.seed.rollback()
+
+    # POST transition to Done -> 202 pending_agent_gate
+    t_resp = await client.post(
+        f"/api/v1/issues/{issue_key}/transitions",
+        json={"to_state": "Done"},
+    )
+    assert t_resp.status_code == 202
+    exec_id = uuid.UUID(t_resp.json()["execution_id"])
+
+    # Update invocation started_at and deadline_at to the past
+    past = dt.datetime.now(dt.UTC) - dt.timedelta(seconds=120)
+    await api_env.seed.execute(
+        text(
+            "UPDATE workflow_hook_invocations "
+            "SET started_at = :past, "
+            "output_json = jsonb_build_object('deadline_at', CAST(:past_iso AS text)) "
+            "WHERE execution_id = :exec_id"
+        ),
+        {"past": past, "past_iso": past.isoformat(), "exec_id": exec_id},
+    )
+    await api_env.seed.commit()
+
+    runner = GateWorkerRunner(
+        session_factory=api_env.client._transport.app.state.session_factory,  # noqa: SLF001
+        workspace_id=api_env.workspace_id,
+        admin_principal_id=admin.id,
+    )
+
+    # Sweep expired invocations via poll_once
+    handled = await runner.poll_once()
+    assert handled == 1
+
+    # Verify execution failed closed (timed_out or rejected)
+    await api_env.seed.rollback()
+    exec_row = (
+        await api_env.seed.execute(
+            select(WorkflowTransitionExecution).where(WorkflowTransitionExecution.id == exec_id)
+        )
+    ).scalar_one()
+    assert exec_row.status in ("timed_out", "rejected")
+
+    # Issue must remain in In Progress and hold must be cleared
+    issue_row = (await api_env.seed.execute(select(Issue).where(Issue.id == issue_id))).scalar_one()
+    assert issue_row.state_id == in_prog_id
+    assert issue_row.pending_transition_exec_id is None
+
+    # Veto comment posted
+    comment_rows = (
+        (await api_env.seed.execute(select(IssueComment).where(IssueComment.issue_id == issue_id)))
+        .scalars()
+        .all()
+    )
+    assert len(comment_rows) == 1
+    assert "🛑🤖" in comment_rows[0].body_markdown
