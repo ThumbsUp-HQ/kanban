@@ -1,0 +1,57 @@
+Zero-Mock Live Full-Stack QA Proof - KAN-59 ([KB-AUTH-PASSKEY-01])
+====================================================================
+Target Container: kanban-liveqa-1 (http://localhost:18961)
+Image / Build Commit: thumbs-up-kanban:local-qa (KB_GIT_COMMIT=9d5577ad9b50)
+Database: Embedded PostgreSQL 16 + FORCE ROW LEVEL SECURITY
+Execution Timestamp: 2026-11-21T06:26:22.311Z
+Mocks / Route Interception: ZERO (zero page.route, zero context.route, zero source edits)
+Page Runtime Errors: 0
+
+1. Step 1 (/setup Passkey-First Default & Virtual WebAuthn Registration)
+-----------------------------------------------------------------------
+- Opened http://localhost:18961/setup?token=<claim_token> and completed Step 1 (username=admin).
+- On Step 2 (Mandatory Two-Factor Authentication Setup):
+  * Passkey (Recommended) tab selected by default: aria-selected="true"
+  * Authenticator App tab unselected: aria-selected="false"
+  * "Register a passkey" primary button visible
+  * Captured:
+    - docs/qa/KAN-59/screenshots/live-setup-step2-passkey-default-desktop-light.png (1440x900)
+    - docs/qa/KAN-59/screenshots/live-setup-step2-passkey-default-mobile.png (390x844)
+- Attached CDP Virtual Authenticator (WebAuthn.enable + WebAuthn.addVirtualAuthenticator:
+  protocol=ctap2, transport=internal, hasResidentKey=true, hasUserVerification=true,
+  isUserVerified=true, automaticPresenceSimulation=true; authenticatorId=cc5967de-0706-4a94-a2a8-6b3ec1e5f496).
+- Clicked "Register a passkey":
+  * Observed POST /api/v1/auth/webauthn/registration/verify -> HTTP 200
+  * Verified 10 one-time recovery_codes returned in JSON payload and 10 code items rendered on Step 3.
+  * Confirmed Step 3 completion and navigated into workspace.
+
+2. Step 2 (Personal Settings /settings/profile - Both Passkey & TOTP Enrolled)
+-----------------------------------------------------------------------------
+- Navigated to http://localhost:18961/settings/profile.
+- Verified "Passkeys (Primary 2FA)" ([data-testid="mfa-status-passkeys"]) is the first card in the 2FA grid ("1 Enrolled").
+- Enrolled TOTP via [data-testid="enable-totp-btn"] + RFC 6238 code verification so @admin has BOTH Passkey AND TOTP active:
+  * Card 1: "1 Enrolled" - Passkeys (Primary 2FA)
+  * Card 2: "Active" - Authenticator App (Backup TOTP)
+  * Card 3: "10" - Remaining Recovery Codes
+- Captured: docs/qa/KAN-59/screenshots/live-personal-settings-2fa-passkey-primary.png
+
+3. Step 3 (Fresh Browser Context Login & SecondFactorStep Passkey-First Default)
+-------------------------------------------------------------------------------
+- Opened a fresh Playwright BrowserContext (clean cookies/storage) at http://localhost:18961/login.
+- Submitted Local Admin login (admin).
+- Observed POST /api/v1/auth/local/login -> HTTP 200:
+  * status: "mfa_required"
+  * methods: ["webauthn", "totp", "recovery"] ("webauthn" FIRST)
+  * preferred_method: "webauthn"
+- Verified SecondFactorStep ([data-testid="second-factor-step"]):
+  * Passkey tab active by default (aria-selected="true")
+  * [data-testid="webauthn-verify-btn"] ("Use passkey") visible
+  * [data-testid="use-totp-fallback-btn"] ("Use 6-digit authenticator code instead") visible
+- Captured & visually inspected:
+  * docs/qa/KAN-59/screenshots/live-login-2fa-passkey-default-desktop-light.png (1440x900)
+  * docs/qa/KAN-59/screenshots/live-login-2fa-passkey-default-desktop-dark.png (1440x900)
+  * docs/qa/KAN-59/screenshots/live-login-2fa-passkey-default-tablet.png (768x1024)
+  * docs/qa/KAN-59/screenshots/live-login-2fa-passkey-default-mobile.png (390x844)
+- Clicked [data-testid="use-totp-fallback-btn"] and completed login with live 6-digit TOTP code against PostgreSQL 16 -> authenticated session established.
+
+VERDICT: PASS (100% Zero-Mock Live Full-Stack Verified)

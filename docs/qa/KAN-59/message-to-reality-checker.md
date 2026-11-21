@@ -3,7 +3,9 @@
 ## Ticket Identification
 - **Ticket ID:** KAN-59
 - **Title:** [KB-AUTH-PASSKEY-01] Switch Passkey (WebAuthn) to Default 2FA Across Backend, Login AAL2, & Setup Claim
-- **Branch:** `feat/KAN-59-passkey-default`
+- **Branch:** `main` (commit `9d5577ad9b50`)
+- **Container Environment:** `http://localhost:18961` (container: `kanban-liveqa-1`)
+- **Live Stack Status:** `OVERALL LIVE_STACK_VERDICT: PASS`
 - **Scope Classification:** Full-Stack (Backend MFA policy, WebAuthn endpoints, Local login step-up discovery, React SecondFactorStep, SetupClaimPage, LoginPage, and PersonalSettingsPage)
 
 ---
@@ -36,12 +38,32 @@ Ticket KAN-59 transitions 👍kanban's multi-factor authentication architecture 
 
 ---
 
-## 2. Forensic Proof Inventory & Evidence Mapping
+## 2. Zero-Mock Live Container Verification (`kanban-liveqa-1`, `:18961`, commit `9d5577ad9b50`)
+- **Live Stack Proof:** `docs/qa/KAN-59/live-fullstack-proof.txt` (VERDICT: PASS, 0 page errors, 0 runtime errors).
+- **Setup Step 2 Passkey Default:** Passkey (Recommended) tab selected by default (`aria-selected="true"`) on fresh setup. Virtual Authenticator registration returns 10 one-time recovery codes in HTTP 200 payload.
+- **Personal Settings 2FA Grid:** "Passkeys (Primary 2FA)" is displayed as the first card in the 2FA grid. Tested with both Passkey ("1 Enrolled") and TOTP ("Active") active simultaneously.
+- **Login Step-Up Discovery:** `POST /api/v1/auth/local/login` returns `status: "mfa_required"`, `methods: ["webauthn", "totp", "recovery"]`, and `preferred_method: "webauthn"`.
+- **SecondFactorStep User Experience:** SecondFactorStep opens with Passkey tab active by default (`[data-testid="webauthn-verify-btn"]`). Clicking fallback action `[data-testid="use-totp-fallback-btn"]` switches cleanly to TOTP input.
+- **Live Screenshots in `docs/qa/KAN-59/screenshots/`:**
+  1. `live-setup-step2-passkey-default-desktop-light.png`
+  2. `live-setup-step2-passkey-default-mobile.png`
+  3. `live-personal-settings-2fa-passkey-primary.png`
+  4. `live-login-2fa-passkey-default-desktop-light.png`
+  5. `live-login-2fa-passkey-default-desktop-dark.png`
+  6. `live-login-2fa-passkey-default-tablet.png`
+  7. `live-login-2fa-passkey-default-mobile.png`
+
+---
+
+## 3. Forensic Proof Inventory & Evidence Mapping
 
 | Artifact Name | Path | Description |
 | :--- | :--- | :--- |
+| Live Full-Stack Proof | `docs/qa/KAN-59/live-fullstack-proof.txt` | Zero-mock execution telemetry against kanban-liveqa-1 |
+| API Specialist Review | `docs/qa/KAN-59/api-specialist-review.md` | Independent backend and security audit signoff |
+| UI Specialist Review | `docs/qa/KAN-59/ui-specialist-review.md` | Independent UI and UX audit signoff |
 | Build & Lint Logs | `docs/qa/KAN-59/build-or-typecheck.txt` | Raw logs of all 7 passing quality gates |
 | Test & Coverage Output | `docs/qa/KAN-59/unit-test-results.txt` | Complete test output for 77 backend and 218 frontend tests |
-| Changed Files Manifest | `docs/qa/KAN-59/changed-files-manifest.txt` | SHA256 checksums verified with `sha256sum -c` |
-| Unified Git Diff | `docs/qa/KAN-59/git-diff.patch` | Unified patch against base commit `3663ef46b4819201280351633030c8a9acc5b74d` |
+| Changed Files Manifest | `docs/qa/KAN-59/changed-files-manifest.txt` | SHA256 checksums verified with sha256sum |
+| Unified Git Diff | `docs/qa/KAN-59/git-diff.patch` | Unified patch against base commit |
 | Verification Summary | `docs/qa/KAN-59/verification-summary.md` | Complete architectural documentation |
