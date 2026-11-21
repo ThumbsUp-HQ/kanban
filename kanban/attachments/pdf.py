@@ -137,8 +137,12 @@ def check_uri_destination(uri_payload: bytes) -> None:
     url_str = url_bytes.decode("latin-1", errors="replace").strip()
     lower_url = url_str.lower()
 
-    # Reject dangerous protocols and non-https/mailto schemes
-    if not (lower_url.startswith("https://") or lower_url.startswith("mailto:")):
+    # Reject dangerous protocols and non-safe schemes (allow https, mailto, tel)
+    if not (
+        lower_url.startswith("https://")
+        or lower_url.startswith("mailto:")
+        or lower_url.startswith("tel:")
+    ):
         raise ProblemException(
             code="UNSAFE_PDF_CONTENT",
             status=422,

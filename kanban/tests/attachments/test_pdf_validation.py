@@ -221,6 +221,11 @@ async def test_accept_safe_https_uri() -> None:
     res_mailto = await sanitize_and_validate_pdf(doc_mailto)
     assert res_mailto.page_count == 3
 
+    # Safe tel URI
+    doc_tel = _make_pdf_with_content(b"/URI (tel:+1337-424-7459)")
+    res_tel = await sanitize_and_validate_pdf(doc_tel)
+    assert res_tel.page_count == 3
+
 
 @pytest.mark.asyncio
 async def test_flate_stream_and_objstm_decompression() -> None:
