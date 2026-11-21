@@ -120,6 +120,8 @@ export function Topbar({
       !/\/issues\/[A-Z0-9]+-[0-9]+/.exec(locationPathname));
 
   const [avatarMenuOpen, setAvatarMenuOpen] = useState(false);
+  const [failedAvatarUrl, setFailedAvatarUrl] = useState<string | null>(null);
+  const isAvatarBroken = Boolean(user?.avatar_url && failedAvatarUrl === user.avatar_url);
   const avatarRef = useRef<HTMLDivElement>(null);
   const avatarButtonRef = useRef<HTMLButtonElement>(null);
   const menuRef = useRef<HTMLDivElement>(null);
@@ -311,13 +313,16 @@ export function Topbar({
               setAvatarMenuOpen(!avatarMenuOpen);
             }}
           >
-            {user?.avatar_url ? (
+            {user?.avatar_url && !isAvatarBroken ? (
               <img
                 src={user.avatar_url}
                 alt={user.display_name ?? 'User avatar'}
                 className="kb-avatar-img"
                 data-testid="topbar-avatar-img"
                 draggable={false}
+                onError={() => {
+                  setFailedAvatarUrl(user.avatar_url ?? null);
+                }}
               />
             ) : (
               <span data-testid="topbar-avatar-initial">{userInitial}</span>
@@ -336,12 +341,15 @@ export function Topbar({
                 <>
                   <div className="kb-avatar-user-card" data-testid="topbar-user-profile">
                     <div className="kb-avatar-user-card-avatar">
-                      {user.avatar_url ? (
+                      {user.avatar_url && !isAvatarBroken ? (
                         <img
                           src={user.avatar_url}
                           alt={user.display_name ?? 'User avatar'}
                           className="kb-avatar-img"
                           draggable={false}
+                          onError={() => {
+                            setFailedAvatarUrl(user.avatar_url ?? null);
+                          }}
                         />
                       ) : (
                         <span className="kb-avatar-fallback">{userInitial}</span>

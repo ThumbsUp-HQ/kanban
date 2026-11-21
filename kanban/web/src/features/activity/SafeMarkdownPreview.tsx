@@ -8,7 +8,7 @@ import React, { type JSX, type ReactNode } from 'react';
 import { MediaViewport } from '../../editor/media/MediaViewport';
 import { MermaidBlockView } from '../../editor/mermaid/MermaidBlockView';
 import { resolveMediaUrl } from '../../editor/media/mediaUrlResolver';
-import { PdfAttachmentCard } from './PdfAttachmentCard';
+import { PdfAttachmentCard } from '../../components/attachments/PdfAttachmentCard';
 
 export type CommentBodyRenderer = (markdown: string) => ReactNode;
 

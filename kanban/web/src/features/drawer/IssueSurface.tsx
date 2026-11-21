@@ -49,7 +49,8 @@ import {
 import { pruneHiddenDom } from '../../editor/clipboard/hiddenDomPruner';
 import { SanitizedPastePill } from '../../editor/clipboard/SanitizedPastePill';
 import { SafeMarkdownPreview } from '../activity/SafeMarkdownPreview';
-import { PdfAttachmentCard } from '../activity/PdfAttachmentCard';
+import { PdfAttachmentCard } from '../../components/attachments/PdfAttachmentCard';
+import { fetchComments, type CommentResponse, type CommentList } from '../activity/activityApi';
 import { copyToClipboard } from '../../utils/clipboard';
 import './IssueSurface.css';
 
@@ -75,14 +76,35 @@ export interface ExtractedAttachment {
   readonly url: string;
 }
 
+function extractCommentBody(item: unknown): string | null {
+  if (typeof item === 'string') {
+    return item;
+  }
+  if (item && typeof item === 'object' && 'body_markdown' in item) {
+    const val = (item as { readonly body_markdown?: unknown }).body_markdown;
+    if (typeof val === 'string') {
+      return val;
+    }
+  }
+  return null;
+}
+
 /**
- * Extract attachments from issue model or description markdown links.
+ * Extract attachments from issue model or description markdown links and threaded comments.
  */
-export function getIssueAttachments(issue: IssueDetail | null | undefined): ExtractedAttachment[] {
+export function getIssueAttachments(
+  issue: IssueDetail | null | undefined,
+  comments?: readonly (CommentResponse | { readonly body_markdown?: string | null })[] | null,
+): ExtractedAttachment[] {
   if (!issue) return [];
+
+  const byId = new Map<string, ExtractedAttachment>();
+
+  // 1. Model attachments array if present on issue
   const rawAttachments = issue.attachments;
-  if (Array.isArray(rawAttachments) && rawAttachments.length > 0) {
-    return (rawAttachments as readonly RawAttachmentItem[]).map((att, idx) => {
+  if (Array.isArray(rawAttachments)) {
+    for (let idx = 0; idx < rawAttachments.length; idx += 1) {
+      const att = rawAttachments[idx] as RawAttachmentItem;
       const id = att.id ?? `att_${String(idx)}`;
       const filename = att.original_filename ?? att.filename ?? 'attachment';
       const contentType = att.content_type ?? '';
@@ -90,42 +112,72 @@ export function getIssueAttachments(issue: IssueDetail | null | undefined): Extr
       const pageCount = att.page_count;
       const sha256 = att.blob_sha256;
       const cleanId = id.replace(/^att_/, '');
-      return {
+      byId.set(cleanId, {
         id: cleanId,
         filename,
         contentType,
         byteSize,
         pageCount,
         sha256,
-        url: `/api/v1/attachments/${cleanId}`,
-      };
-    });
+        url: `/api/v1/attachments/${cleanId}?download=1`,
+      });
+    }
   }
 
-  const desc = issue.description_markdown ?? '';
+  // 2. Markdown prose in description_markdown and comments
+  const markdownSources: string[] = [];
+  if (issue.description_markdown) {
+    markdownSources.push(issue.description_markdown);
+  }
+
+  const rawFallback = (issue as Record<string, unknown>).comments;
+  const commentItems: readonly unknown[] = Array.isArray(comments)
+    ? comments
+    : Array.isArray(rawFallback)
+      ? rawFallback
+      : [];
+
+  for (const comm of commentItems) {
+    const body = extractCommentBody(comm);
+    if (body) {
+      markdownSources.push(body);
+    }
+  }
+
   const regex =
     /(?:!\[([^\]]*)\]|\[([^\]]+)\])\(((?:attachment:\/\/|\/api\/v1\/attachments\/)[^)]+)\)/g;
-  const found: ExtractedAttachment[] = [];
-  let m: RegExpExecArray | null;
-  while ((m = regex.exec(desc)) !== null) {
-    const rawAlt = m[1];
-    const rawName = m[2];
-    const altOrName = (rawAlt && rawAlt !== '' ? rawAlt : undefined) ?? (rawName && rawName !== '' ? rawName : undefined) ?? 'attachment';
-    const rawUri = m[3] ?? '';
-    const cleanId = rawUri
-      .replace(/^attachment:\/\//, '')
-      .replace(/^\/api\/v1\/attachments\//, '')
-      .replace(/^att_/, '');
-    const isPdf =
-      altOrName.toLowerCase().endsWith('.pdf') || rawUri.toLowerCase().endsWith('.pdf');
-    found.push({
-      id: cleanId,
-      filename: altOrName,
-      contentType: isPdf ? 'application/pdf' : 'image/png',
-      url: `/api/v1/attachments/${cleanId}`,
-    });
+
+  for (const text of markdownSources) {
+    let m: RegExpExecArray | null;
+    while ((m = regex.exec(text)) !== null) {
+      const rawAlt = m[1];
+      const rawName = m[2];
+      const altOrName =
+        (rawAlt && rawAlt !== '' ? rawAlt : undefined) ??
+        (rawName && rawName !== '' ? rawName : undefined) ??
+        'attachment';
+      const rawUri = m[3] ?? '';
+      const cleanId =
+        (rawUri
+          .replace(/^attachment:\/\//, '')
+          .replace(/^\/api\/v1\/attachments\//, '')
+          .replace(/^att_/, '')
+          .split('?')[0]) ?? '';
+      if (!cleanId) continue;
+      if (!byId.has(cleanId)) {
+        const isPdf =
+          altOrName.toLowerCase().endsWith('.pdf') || rawUri.toLowerCase().endsWith('.pdf');
+        byId.set(cleanId, {
+          id: cleanId,
+          filename: altOrName,
+          contentType: isPdf ? 'application/pdf' : 'image/png',
+          url: `/api/v1/attachments/${cleanId}?download=1`,
+        });
+      }
+    }
   }
-  return found;
+
+  return Array.from(byId.values());
 }
 
 /**
@@ -286,6 +338,13 @@ function IssueSurfaceContent({
       return normalizeIssueDetail(raw, projectKey);
     },
     staleTime: 60_000,
+  });
+
+  const { data: commentsData } = useQuery<CommentList>({
+    queryKey: ['comments', issueKey],
+    queryFn: () => fetchComments(issueKey),
+    enabled: Boolean(issueKey),
+    staleTime: 30_000,
   });
 
   const issueObjectId = typeof issue?.object_id === 'string' ? issue.object_id : undefined;
@@ -621,7 +680,7 @@ function IssueSurfaceContent({
       return <></>;
     }
     const currentIssue: IssueDetail = issue;
-    const issueAttachments = getIssueAttachments(currentIssue);
+    const issueAttachments = getIssueAttachments(currentIssue, commentsData?.items);
 
     const handleIssueUpdate = (updated: IssueDetail): void => {
       queryClient.setQueryData<IssueDetail>(

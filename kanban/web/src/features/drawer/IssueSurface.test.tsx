@@ -2,8 +2,9 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, waitFor, act, within } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter, Route, Routes, useNavigate, createMemoryRouter, RouterProvider, type NavigateFunction } from 'react-router';
+import * as reactRouter from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { IssueSurface, IssueSurfaceRoot, normalizeIssueDetail } from './IssueSurface';
+import { IssueSurface, IssueSurfaceRoot, normalizeIssueDetail, getIssueAttachments } from './IssueSurface';
 import { setOpenerElement } from './IssueKeyLink';
 import { apiClient } from '../../api/client';
 import { ApiProblem } from '../../api/problem';
@@ -2263,6 +2264,133 @@ describe('IssueSurface', () => {
       await waitFor(() => {
         expect(screen.getByText('KAN-42')).toBeDefined();
       });
+      unmount();
+    });
+
+    it('verifies navigate is called with { replace: true } on canonical alias normalization', async () => {
+      const canonicalIssue: IssueDetail = {
+        ...validIssue,
+        key: 'KAN-42',
+        project_key: 'KAN',
+      };
+      vi.spyOn(apiClient, 'get').mockResolvedValue(canonicalIssue);
+      const navSpy = vi.fn();
+      vi.spyOn(reactRouter, 'useNavigate').mockReturnValue(navSpy);
+
+      const queryClient = new QueryClient({
+        defaultOptions: { queries: { retry: false, staleTime: 60_000 } },
+      });
+
+      const { unmount } = render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KANBA-119']}>
+            <div id="kb-issue-surface-host">
+              <IssueSurface />
+            </div>
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(navSpy).toHaveBeenCalledWith(
+          expect.stringContaining('peek=KAN-42'),
+          expect.objectContaining({ replace: true }),
+        );
+      });
+      unmount();
+    });
+  });
+
+  describe('getIssueAttachments helper and split-section-attachments', () => {
+    it('returns empty array when issue is null or undefined', () => {
+      expect(getIssueAttachments(null)).toEqual([]);
+      expect(getIssueAttachments(undefined)).toEqual([]);
+    });
+
+    it('extracts attachments from issue.attachments with ?download=1', () => {
+      const issueWithAtts: IssueDetail = {
+        ...validIssue,
+        attachments: [
+          {
+            id: 'att_123',
+            original_filename: 'spec.pdf',
+            content_type: 'application/pdf',
+            byte_size: 5000,
+            page_count: 2,
+            blob_sha256: 'abcdef1234567890',
+          },
+        ],
+      };
+      const atts = getIssueAttachments(issueWithAtts);
+      expect(atts).toHaveLength(1);
+      expect(atts[0]?.id).toBe('123');
+      expect(atts[0]?.filename).toBe('spec.pdf');
+      expect(atts[0]?.contentType).toBe('application/pdf');
+      expect(atts[0]?.byteSize).toBe(5000);
+      expect(atts[0]?.pageCount).toBe(2);
+      expect(atts[0]?.url).toBe('/api/v1/attachments/123?download=1');
+    });
+
+    it('extracts attachments from description_markdown and comments and deduplicates them', () => {
+      const issueWithDesc: IssueDetail = {
+        ...validIssue,
+        description_markdown:
+          'See [arch.pdf](attachment://att_456) and ![img.png](/api/v1/attachments/att_789)',
+      };
+      const comments = [
+        {
+          body_markdown:
+            'Also see updated [arch.pdf](attachment://att_456) and [notes.pdf](attachment://att_999)',
+        },
+      ];
+      const atts = getIssueAttachments(issueWithDesc, comments);
+      expect(atts).toHaveLength(3);
+      const ids = atts.map((a) => a.id);
+      expect(ids).toContain('456');
+      expect(ids).toContain('789');
+      expect(ids).toContain('999');
+
+      const archAtt = atts.find((a) => a.id === '456');
+      expect(archAtt?.filename).toBe('arch.pdf');
+      expect(archAtt?.contentType).toBe('application/pdf');
+      expect(archAtt?.url).toBe('/api/v1/attachments/456?download=1');
+
+      const imgAtt = atts.find((a) => a.id === '789');
+      expect(imgAtt?.filename).toBe('img.png');
+      expect(imgAtt?.contentType).toBe('image/png');
+      expect(imgAtt?.url).toBe('/api/v1/attachments/789?download=1');
+    });
+
+    it('renders split-section-attachments with PdfAttachmentCard when attachments are present', async () => {
+      const issueWithPdf: IssueDetail = {
+        ...validIssue,
+        description_markdown: 'Deliverable: [deliverable-spec.pdf](attachment://att_pdf_1)',
+      };
+      vi.spyOn(apiClient, 'get').mockResolvedValue(issueWithPdf);
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const { unmount } = render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+            <IssueSurfaceRoot mode="split" issueKey="KAN-142" projectKey="KAN" />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('split-section-attachments')).toBeDefined();
+      });
+
+      const attachmentsSection = screen.getByTestId('split-section-attachments');
+      expect(attachmentsSection).toBeDefined();
+      expect(within(attachmentsSection).getByText('deliverable-spec.pdf')).toBeDefined();
+      expect(within(attachmentsSection).getByTestId('issue-attachment-pdf-pdf_1')).toBeDefined();
+
+      const downloadLink = within(attachmentsSection).getByRole('link', {
+        name: 'Download deliverable-spec.pdf',
+      });
+      expect(downloadLink.getAttribute('href')).toContain('/api/v1/attachments/pdf_1?download=1');
+
       unmount();
     });
   });

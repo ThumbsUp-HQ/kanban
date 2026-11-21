@@ -20,7 +20,10 @@ from kanban.attachments.pdf import (
     MAX_PDF_BYTES,
     _check_flate_bounds,
     _execute_subprocess,
+    _find_stream_blocks,
+    _parse_pdf_literal_string,
     _run_subprocess_worker,
+    _unescape_pdf_literal_string,
     check_uri_destination,
     decode_pdf_name,
     extract_and_scan_streams,
@@ -298,14 +301,17 @@ async def test_flate_decompression_bomb_ratio_defense() -> None:
         scan_and_validate_pdf_in_process(doc_bomb)
     assert exc_bomb_inproc.value.status == 422
 
-    # Corrupt flate stream handles zlib error gracefully
+    # Corrupt flate stream fails closed with UNSAFE_PDF_CONTENT (HTTP 422)
     corrupted_stream = (
         b"%PDF-1.5\n"
         b"4 0 obj\n"
         b"<< /Filter /FlateDecode /Length 10 >>\nstream\n"
         b"\x00\x00\x00\x00\x00\x00\x00\x00\x00\x00\nendstream\nendobj\n" + SAMPLE_VALID_PDF[9:]
     )
-    scan_and_validate_pdf_in_process(corrupted_stream)
+    with pytest.raises(ProblemException) as exc_corrupt:
+        scan_and_validate_pdf_in_process(corrupted_stream)
+    assert exc_corrupt.value.status == 422
+    assert exc_corrupt.value.code == "UNSAFE_PDF_CONTENT"
 
 
 @pytest.mark.asyncio
@@ -554,3 +560,171 @@ def test_run_subprocess_worker_direct(mock_setrlimit: MagicMock) -> None:
     res_fatal = json.loads(stdout_fatal.getvalue())
     assert res_fatal["status"] == "error"
     assert "simulated crash" in res_fatal["detail"]
+
+
+def test_reject_circular_pages_kids_cycle() -> None:
+    """Verify circular reference cycle in /Pages /Kids raises UNSAFE_PDF_CONTENT."""
+    circular_kids_pdf = b"""%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Pages /Kids [2 0 R] /Count 1 >>
+endobj
+xref
+0 4
+trailer
+<< /Size 4 /Root 1 0 R >>
+startxref
+100
+%%EOF"""
+    with pytest.raises(ProblemException) as exc_cycle:
+        scan_and_validate_pdf_in_process(circular_kids_pdf)
+    assert exc_cycle.value.status == 422
+    assert exc_cycle.value.code == "UNSAFE_PDF_CONTENT"
+    assert "Circular reference cycle" in str(exc_cycle.value.detail)
+
+
+def test_reject_circular_parent_cycle() -> None:
+    """Verify circular reference cycle in /Parent raises UNSAFE_PDF_CONTENT."""
+    circular_parent_pdf = b"""%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Parent 3 0 R >>
+endobj
+3 0 obj
+<< /Type /Pages /Parent 2 0 R >>
+endobj
+xref
+0 4
+trailer
+<< /Size 4 /Root 1 0 R >>
+startxref
+100
+%%EOF"""
+    with pytest.raises(ProblemException) as exc_cycle:
+        scan_and_validate_pdf_in_process(circular_parent_pdf)
+    assert exc_cycle.value.status == 422
+    assert exc_cycle.value.code == "UNSAFE_PDF_CONTENT"
+    assert "Circular reference cycle" in str(exc_cycle.value.detail)
+
+
+def test_nested_dictionary_stream_header_and_hex_filter() -> None:
+    """Verify nested << ... >> in stream dict and hex /#46ilter /#46lateDecode are parsed."""
+    clean_payload = b"1 0 obj << /Type /Page >> endobj"
+    compressed = zlib.compress(clean_payload)
+    nested_header_pdf = (
+        b"%PDF-1.5\n"
+        b"4 0 obj\n"
+        b"<< /DecodeParms << /Columns 4 /Predictor 12 >> /#46ilter /#46lateDecode /Length "
+        + str(len(compressed)).encode()
+        + b" >>\nstream\n"
+        + compressed
+        + b"\nendstream\nendobj\n"
+        + SAMPLE_VALID_PDF[9:]
+    )
+    page_count, digest = scan_and_validate_pdf_in_process(nested_header_pdf)
+    assert page_count >= 1
+    assert len(digest) == 32
+
+
+def test_hex_uri_name_resolution() -> None:
+    """Verify hex name /#55#52#49 is recognized as /URI and inspected."""
+    # Safe https passes
+    safe_hex_uri_pdf = _make_pdf_with_content(b"/#55#52#49 (https://safe.example.com/spec)")
+    res = scan_and_validate_pdf_in_process(safe_hex_uri_pdf)
+    assert res[0] >= 1
+
+    # Unsafe destination fails
+    unsafe_hex_uri_pdf = _make_pdf_with_content(b"/#55#52#49 (http://evil.example.com)")
+    with pytest.raises(ProblemException) as exc:
+        scan_and_validate_pdf_in_process(unsafe_hex_uri_pdf)
+    assert exc.value.status == 422
+    assert exc.value.code == "UNSAFE_PDF_CONTENT"
+
+    # UNC destination fails
+    unc_hex_uri_pdf = _make_pdf_with_content(b"/#55#52#49 (\\\\attacker-host\\share)")
+    with pytest.raises(ProblemException) as exc_unc:
+        scan_and_validate_pdf_in_process(unc_hex_uri_pdf)
+    assert exc_unc.value.status == 422
+    assert exc_unc.value.code == "UNSAFE_PDF_CONTENT"
+
+
+def test_indirect_object_cap_with_objstm() -> None:
+    """Verify indirect objects + /ObjStm /N count against MAX_PDF_OBJECTS."""
+    with patch("kanban.attachments.pdf.MAX_PDF_OBJECTS", 10):
+        # 3 direct objects + /ObjStm with /N 10 -> total 13 > 10
+        stream_payload = b"test"
+        objstm_pdf = (
+            b"%PDF-1.5\n"
+            b"1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj\n"
+            b"2 0 obj << /Type /Pages /Count 1 >> endobj\n"
+            b"3 0 obj << /Type /ObjStm /N 10 /First 10 >> stream\n"
+            + stream_payload
+            + b"\nendstream endobj\n%%EOF"
+        )
+        with pytest.raises(ProblemException) as exc:
+            scan_and_validate_pdf_in_process(objstm_pdf)
+        assert exc.value.status == 422
+        assert exc.value.code == "UNSAFE_PDF_CONTENT"
+        assert "maximum allowed object count" in str(exc.value.detail)
+
+
+def test_pdf_string_and_stream_edge_branches() -> None:
+    """Verify octal escapes, hex URIs, unclosed literal strings, and broken stream headers."""
+    # 1. Octal and character escapes
+    escaped_in = b"\\101\\n\\r\\t\\b\\f\\(\\)\\\\ \\999"
+    norm = _unescape_pdf_literal_string(escaped_in)
+    assert b"A" in norm
+    assert b"\n" in norm
+    assert b"\r" in norm
+    assert b"\t" in norm
+
+    # 2. Unclosed literal string
+    unclosed, end_pos = _parse_pdf_literal_string(b"(unclosed", 0)
+    assert unclosed == b"(unclosed"
+    assert end_pos == len(b"(unclosed")
+
+    # 3. Hex string formatted /URI
+    # <68747470733a2f2f736166652e636f6d> == https://safe.com
+    safe_hex_doc = _make_pdf_with_content(b"/URI <68747470733a2f2f736166652e636f6d>")
+    res_safe = scan_and_validate_pdf_in_process(safe_hex_doc)
+    assert res_safe[0] >= 1
+
+    # <687474703a2f2f6576696c2e636f6d> == http://evil.com
+    unsafe_hex_doc = _make_pdf_with_content(b"/URI <687474703a2f2f6576696c2e636f6d>")
+    with pytest.raises(ProblemException) as exc_unsafe_hex:
+        scan_and_validate_pdf_in_process(unsafe_hex_doc)
+    assert exc_unsafe_hex.value.status == 422
+
+    # 4. Stream header without << or missing endstream
+    broken_stream_1 = b"stream\ncontent\nendstream"
+    assert _find_stream_blocks(broken_stream_1) == []
+
+    broken_stream_2 = b"<< /Length 10 >> stream\ncontent without end"
+    assert _find_stream_blocks(broken_stream_2) == []
+
+    # 5. Subprocess timeout and unexpected crash error paths
+    timeout_err = subprocess.TimeoutExpired(cmd="scan", timeout=3.0)
+    with patch("kanban.attachments.pdf.subprocess.run", side_effect=timeout_err):
+        with pytest.raises(ProblemException) as exc_to:
+            _execute_subprocess(SAMPLE_VALID_PDF)
+        assert exc_to.value.status == 422
+        assert exc_to.value.code == "UNSAFE_PDF_CONTENT"
+        assert "timed out" in str(exc_to.value.detail)
+
+    mock_fail = MagicMock()
+    mock_fail.returncode = 1
+    mock_fail.stdout = b""
+    mock_fail.stderr = b"Fatal error"
+    with patch("kanban.attachments.pdf.subprocess.run", return_value=mock_fail):
+        with pytest.raises(ProblemException) as exc_crash:
+            _execute_subprocess(SAMPLE_VALID_PDF)
+        assert exc_crash.value.status == 422
+        assert exc_crash.value.code == "UNSAFE_PDF_CONTENT"
+        assert "Subprocess terminated unexpectedly" in str(exc_crash.value.detail)

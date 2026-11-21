@@ -35,3 +35,14 @@ class SignedUrlResponse(BaseModel):
 
     signed_url: Annotated[str, Field(description="HMAC-SHA256 signed content retrieval URL")]
     expires_in: Annotated[int, Field(default=300, description="TTL in seconds for signed URL")]
+
+
+class AttachmentMetaResponse(BaseModel):
+    """Lightweight metadata response for an attachment."""
+
+    id: uuid.UUID
+    original_filename: Annotated[str, Field(description="Original filename")]
+    content_type: Annotated[str, Field(description="MIME media type")]
+    byte_size: Annotated[int, Field(description="Payload byte size")]
+    page_count: Annotated[int | None, Field(default=None, description="Document page count")]
+    blob_sha256: Annotated[str, Field(description="Hex-encoded SHA-256 digest")]

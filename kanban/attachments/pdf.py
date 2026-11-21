@@ -87,7 +87,7 @@ def decode_pdf_name(name_bytes: bytes) -> bytes:
     def _replace_hex(match: re.Match[bytes]) -> bytes:
         return bytes([int(match.group(1), 16)])
 
-    return re.sub(b"#([0-9a-fA-F]{2})", _replace_hex, name_bytes)
+    return re.sub(rb"#([0-9a-fA-F]{2})", _replace_hex, name_bytes)
 
 
 def _unescape_pdf_literal_string(s: bytes) -> bytes:
@@ -116,8 +116,36 @@ def _unescape_pdf_literal_string(s: bytes) -> bytes:
     return re.sub(rb"\\([0-7]{1,3}|[nrtbf()\\\/])", repl, s)
 
 
+def _parse_pdf_literal_string(data: bytes, start_pos: int) -> tuple[bytes, int]:
+    """Parse a balanced PDF literal string starting with '(' handling escapes."""
+    depth = 0
+    i = start_pos
+    escaped = False
+    while i < len(data):
+        b = data[i]
+        if escaped:
+            escaped = False
+            i += 1
+            continue
+        if b == ord("\\"):
+            escaped = True
+            i += 1
+            continue
+        if b == ord("("):
+            depth += 1
+        elif b == ord(")"):
+            depth -= 1
+            if depth == 0:
+                return data[start_pos : i + 1], i + 1
+        i += 1
+    return data[start_pos:], len(data)
+
+
 def check_uri_destination(uri_payload: bytes) -> None:
-    """Enforce safe URI destinations (https, mailto), rejecting UNC, http, and protocol exploits."""
+    """Enforce safe URI destinations (https, mailto, tel).
+
+    Rejects UNC, http, and protocol exploits.
+    """
     trimmed = uri_payload.strip()
     if trimmed.startswith(b"<") and trimmed.endswith(b">"):
         hex_str = trimmed[1:-1].strip()
@@ -138,8 +166,13 @@ def check_uri_destination(uri_payload: bytes) -> None:
     url_str = url_bytes.decode("latin-1", errors="replace").strip()
     lower_url = url_str.lower()
 
-    # Reject dangerous protocols and non-safe schemes (allow https, mailto, tel)
-    if not lower_url.startswith(("https://", "mailto:", "tel:")):
+    # Reject dangerous protocols and non-safe schemes (allow only https, mailto, tel)
+    # Strictly reject http, javascript, data, file, smb, UNC \\
+    if (
+        lower_url.startswith(("\\", "smb:", "http:", "file:", "javascript:", "data:"))
+        or not lower_url.startswith(("https://", "mailto:", "tel:"))
+        or "\\\\" in lower_url
+    ):
         raise ProblemException(
             code="UNSAFE_PDF_CONTENT",
             status=422,
@@ -150,9 +183,9 @@ def check_uri_destination(uri_payload: bytes) -> None:
 
 def scan_buffer_for_active_content(data: bytes) -> None:
     """Inspect byte buffer for forbidden active content dictionary keys and dangerous URIs."""
-    # 1. Scan names
-    raw_names = re.findall(rb"/([^\s\x00()<>{}\[\]/%]+)", data)
-    for raw in raw_names:
+    # 1. Scan names and forbidden keys
+    for m in re.finditer(rb"/([^\s\x00()<>{}\[\]/%]+)", data):
+        raw = m.group(1)
         decoded = decode_pdf_name(raw)
         if decoded in FORBIDDEN_NAME_SET:
             key_name = decoded.decode("latin-1", errors="replace")
@@ -162,10 +195,19 @@ def scan_buffer_for_active_content(data: bytes) -> None:
                 title="Unsafe PDF Content",
                 detail=f"PDF contains forbidden active content dictionary key: /{key_name}",
             )
-
-    # 2. Scan /URI actions
-    for m in re.finditer(rb"/URI\s*(\([^)]*\)|<[0-9a-fA-F]+>)", data):
-        check_uri_destination(m.group(1))
+        # 2. Scan /URI actions (handling #XX hex-encoded names such as /#55#52#49)
+        if decoded == b"URI":
+            pos = m.end()
+            while pos < len(data) and data[pos] in b" \t\r\n\x00":
+                pos += 1
+            if pos < len(data):
+                if data[pos] == ord("<"):
+                    hex_end = data.find(b">", pos + 1)
+                    if hex_end != -1:
+                        check_uri_destination(data[pos : hex_end + 1])
+                elif data[pos] == ord("("):
+                    literal_payload, _ = _parse_pdf_literal_string(data, pos)
+                    check_uri_destination(literal_payload)
 
 
 def _check_flate_bounds(stream_len: int, total_len: int, compressed_len: int) -> None:
@@ -209,8 +251,13 @@ def _decompress_and_scan_single_flate_stream(stream_data: bytes, total_decompres
         chunk = stream_data[offset : offset + chunk_size]
         try:
             out = decomp.decompress(chunk)
-        except (zlib.error, ValueError):
-            out = b""
+        except (zlib.error, ValueError) as exc:
+            raise ProblemException(
+                code="UNSAFE_PDF_CONTENT",
+                status=422,
+                title="Unsafe PDF Content",
+                detail=f"Flate decompression error: {exc}",
+            ) from exc
         if out:
             stream_uncompressed_len += len(out)
             total_decompressed += len(out)
@@ -219,8 +266,13 @@ def _decompress_and_scan_single_flate_stream(stream_data: bytes, total_decompres
 
     try:
         remaining = decomp.flush()
-    except (zlib.error, ValueError):
-        remaining = b""
+    except (zlib.error, ValueError) as exc:
+        raise ProblemException(
+            code="UNSAFE_PDF_CONTENT",
+            status=422,
+            title="Unsafe PDF Content",
+            detail=f"Flate decompression flush error: {exc}",
+        ) from exc
     if remaining:
         stream_uncompressed_len += len(remaining)
         total_decompressed += len(remaining)
@@ -231,32 +283,167 @@ def _decompress_and_scan_single_flate_stream(stream_data: bytes, total_decompres
     return total_decompressed
 
 
+def _find_stream_blocks(pdf_bytes: bytes) -> list[tuple[bytes, bytes]]:
+    """Locate stream dictionary headers (handling nested << ... >>) and matching stream bodies."""
+    blocks: list[tuple[bytes, bytes]] = []
+    for match in re.finditer(rb"\bstream[\r\n]{1,2}", pdf_bytes):
+        stream_kw_start = match.start()
+        stream_data_start = match.end()
+
+        # Scan backwards before stream keyword to find matching balanced << ... >>
+        p = stream_kw_start - 1
+        while p >= 0 and pdf_bytes[p] in b" \t\r\n":
+            p -= 1
+        if p < 1 or pdf_bytes[p - 1 : p + 1] != b">>":
+            continue
+
+        depth = 0
+        dict_end = p + 1
+        dict_start = -1
+        scan_pos = p
+        while scan_pos >= 1:
+            if pdf_bytes[scan_pos - 1 : scan_pos + 1] == b">>":
+                depth += 1
+                scan_pos -= 2
+            elif pdf_bytes[scan_pos - 1 : scan_pos + 1] == b"<<":
+                depth -= 1
+                scan_pos -= 2
+                if depth == 0:
+                    dict_start = scan_pos + 2
+                    break
+            else:
+                scan_pos -= 1
+
+        if dict_start == -1:
+            continue
+
+        dict_header = pdf_bytes[dict_start:dict_end]
+
+        # Locate endstream
+        end_match = re.search(rb"[\r\n]*endstream", pdf_bytes[stream_data_start:])
+        if not end_match:
+            continue
+        stream_data = pdf_bytes[stream_data_start : stream_data_start + end_match.start()]
+        blocks.append((dict_header, stream_data))
+
+    return blocks
+
+
 def extract_and_scan_streams(pdf_bytes: bytes) -> int:
     """Extract streams, decompress Flate streams with bounds, and scan for active content."""
     total_decompressed = 0
-    stream_count = 0
+    stream_blocks = _find_stream_blocks(pdf_bytes)
+    stream_count = len(stream_blocks)
 
-    for match in re.finditer(
-        rb"(<<[\s\S]*?>>)\s*stream[\r\n]{1,2}([\s\S]*?)[\r\n]*endstream", pdf_bytes
-    ):
-        stream_count += 1
-        if stream_count > MAX_PDF_OBJECTS:
-            raise ProblemException(
-                code="UNSAFE_PDF_CONTENT",
-                status=422,
-                title="Unsafe PDF Content",
-                detail="PDF exceeds maximum allowed object count (50,000)",
-            )
+    if stream_count > MAX_PDF_OBJECTS:
+        raise ProblemException(
+            code="UNSAFE_PDF_CONTENT",
+            status=422,
+            title="Unsafe PDF Content",
+            detail=f"PDF exceeds maximum allowed object count ({MAX_PDF_OBJECTS})",
+        )
 
-        dict_header = match.group(1)
-        stream_data = match.group(2)
-        is_flate = rb"/FlateDecode" in dict_header or rb"/Fl\b" in dict_header
+    for dict_header, stream_data in stream_blocks:
+        decoded_header = decode_pdf_name(dict_header)
+        is_flate = rb"/FlateDecode" in decoded_header or rb"/Fl\b" in decoded_header
         if is_flate and stream_data:
             total_decompressed = _decompress_and_scan_single_flate_stream(
                 stream_data, total_decompressed
             )
 
     return stream_count
+
+
+def _count_pdf_objects(pdf_bytes: bytes) -> int:
+    """Count indirect objects (direct + /ObjStm)."""
+    direct_matches = list(re.finditer(rb"\b\d+\s+\d+\s+obj\b", pdf_bytes))
+    direct_count = len(direct_matches)
+
+    objstm_count = 0
+    stream_blocks = _find_stream_blocks(pdf_bytes)
+    for dict_header, _ in stream_blocks:
+        decoded_header = decode_pdf_name(dict_header)
+        if rb"/ObjStm" in decoded_header:
+            m_n = re.search(rb"/N\s+(\d+)", decoded_header)
+            if m_n:
+                objstm_count += int(m_n.group(1))
+
+    return direct_count + objstm_count
+
+
+def _detect_kids_cycles(kids_graph: dict[int, list[int]]) -> None:
+    """Detect cycles in /Kids graph using DFS."""
+    visited_kids: dict[int, int] = {}
+
+    def dfs_kids(node: int) -> None:
+        visited_kids[node] = 1
+        for child in kids_graph.get(node, []):
+            st = visited_kids.get(child, 0)
+            if st == 1:
+                raise ProblemException(
+                    code="UNSAFE_PDF_CONTENT",
+                    status=422,
+                    title="Unsafe PDF Content",
+                    detail="Circular reference cycle detected in /Pages /Kids graph",
+                )
+            if st == 0:
+                dfs_kids(child)
+        visited_kids[node] = 2
+
+    for root_id in list(kids_graph.keys()):
+        if visited_kids.get(root_id, 0) == 0:
+            dfs_kids(root_id)
+
+
+def _detect_parent_cycles(parent_graph: dict[int, int]) -> None:
+    """Detect cycles in /Parent graph."""
+    for start_node in parent_graph:
+        path: set[int] = set()
+        curr: int | None = start_node
+        while curr is not None and curr in parent_graph:
+            if curr in path:
+                raise ProblemException(
+                    code="UNSAFE_PDF_CONTENT",
+                    status=422,
+                    title="Unsafe PDF Content",
+                    detail="Circular reference cycle detected in /Parent graph",
+                )
+            path.add(curr)
+            curr = parent_graph.get(curr)
+
+
+def _check_object_count_and_cycles(pdf_bytes: bytes) -> None:
+    """Count indirect objects and verify acyclicity of /Pages graph."""
+    total_objects = _count_pdf_objects(pdf_bytes)
+    if total_objects > MAX_PDF_OBJECTS:
+        raise ProblemException(
+            code="UNSAFE_PDF_CONTENT",
+            status=422,
+            title="Unsafe PDF Content",
+            detail=f"PDF exceeds maximum allowed object count ({MAX_PDF_OBJECTS})",
+        )
+
+    direct_matches = list(re.finditer(rb"\b(\d+)\s+(\d+)\s+obj\b([\s\S]*?)endobj", pdf_bytes))
+    kids_graph: dict[int, list[int]] = {}
+    parent_graph: dict[int, int] = {}
+
+    for m in direct_matches:
+        obj_id = int(m.group(1))
+        body = m.group(3)
+
+        kids_match = re.search(rb"/Kids\s*\[([^\]]*)\]", body)
+        if kids_match:
+            kids_raw = kids_match.group(1)
+            child_refs = [int(k.group(1)) for k in re.finditer(rb"(\d+)\s+\d+\s+R", kids_raw)]
+            kids_graph[obj_id] = child_refs
+
+        parent_match = re.search(rb"/Parent\s+(\d+)\s+\d+\s+R", body)
+        if parent_match:
+            parent_id = int(parent_match.group(1))
+            parent_graph[obj_id] = parent_id
+
+    _detect_kids_cycles(kids_graph)
+    _detect_parent_cycles(parent_graph)
 
 
 def extract_page_count(pdf_bytes: bytes) -> int:
@@ -306,16 +493,19 @@ def scan_and_validate_pdf_in_process(raw_bytes: bytes) -> tuple[int, bytes]:
             detail="Invalid PDF header: magic bytes %PDF-1. or %PDF-2. required at offset 0",
         )
 
-    # 1. Scan raw PDF body
+    # 1. Verify object count limit and check for circular /Pages cycles
+    _check_object_count_and_cycles(raw_bytes)
+
+    # 2. Scan raw PDF body
     scan_buffer_for_active_content(raw_bytes)
 
-    # 2. Decompress and scan all streams
+    # 3. Decompress and scan all streams
     extract_and_scan_streams(raw_bytes)
 
-    # 3. Extract document page count
+    # 4. Extract document page count
     page_count = extract_page_count(raw_bytes)
 
-    # 4. Compute SHA-256 digest
+    # 5. Compute SHA-256 digest
     digest = sha256(raw_bytes).digest()
 
     return page_count, digest

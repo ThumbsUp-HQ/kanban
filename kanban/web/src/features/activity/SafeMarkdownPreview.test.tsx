@@ -104,7 +104,7 @@ describe('SafeMarkdownPreview', () => {
       expect(screen.getByTestId('p-0-pdf-0')).toBeDefined();
       expect(screen.getByText('specification.pdf')).toBeDefined();
       const link = screen.getByRole('link', { name: 'Download specification.pdf' });
-      expect(link.getAttribute('href')).toBe('/api/v1/attachments/spec_1');
+      expect(link.getAttribute('href')).toBe('/api/v1/attachments/spec_1?download=1');
       expect(link.getAttribute('download')).toBe('specification.pdf');
     });
 

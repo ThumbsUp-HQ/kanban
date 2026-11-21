@@ -17,7 +17,11 @@ from database.models import Issue
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import ProblemException, not_found
 from kanban.api.timing import timing_floor
-from kanban.api.v1.schemas.attachments import AttachmentResponse, SignedUrlResponse
+from kanban.api.v1.schemas.attachments import (
+    AttachmentMetaResponse,
+    AttachmentResponse,
+    SignedUrlResponse,
+)
 from kanban.attachments.service import AttachmentService
 from kanban.attachments.signing import verify_attachment_url
 from kanban.attachments.sniff import (
@@ -277,6 +281,36 @@ async def create_signed_url(
 
 
 @router.get(
+    "/attachments/{attachment_id}/meta",
+    response_model=AttachmentMetaResponse,
+    summary="Retrieve attachment metadata",
+)
+async def get_attachment_meta(
+    attachment_id: uuid.UUID,
+    request: Request,
+    caller: Caller,
+    session: Session,
+) -> AttachmentMetaResponse:
+    """Retrieve attachment metadata enforcing caller VIEW capability."""
+    async with timing_floor(floor_ms=25.0):
+        service = get_attachment_service(request)
+        attachment = await service.get_attachment_or_404(session, attachment_id)
+        target_resource = (
+            attachment.issue_id if attachment.issue_id is not None else attachment.project_id
+        )
+        await require_capability(session, caller, target_resource, Capability.VIEW)
+        sha_hex = attachment.blob_sha256.hex() if attachment.blob_sha256 else ""
+        return AttachmentMetaResponse(
+            id=attachment.id,
+            original_filename=attachment.original_filename,
+            content_type=attachment.content_type,
+            byte_size=attachment.byte_size,
+            page_count=attachment.page_count,
+            blob_sha256=sha_hex,
+        )
+
+
+@router.get(
     "/attachments/{attachment_id}",
     summary="Retrieve attachment blob directly for authenticated caller",
 )
@@ -307,15 +341,19 @@ async def get_attachment_direct(
         attachment.content_type,
     )
 
+    is_download_requested = request.query_params.get("download") == "1"
+
     if attachment.content_type == "image/svg+xml":
         headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
         sec_dest = (request.headers.get("sec-fetch-dest") or "").strip().lower()
-        if sec_dest == "image":
+        if sec_dest == "image" and not is_download_requested:
             headers["Content-Disposition"] = f'inline; filename="{safe_filename}"'
         else:
             headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
     elif attachment.content_type == "application/pdf":
         headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
+        headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
+    elif is_download_requested:
         headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
     else:
         headers["Content-Disposition"] = f'inline; filename="{safe_filename}"'
@@ -388,15 +426,19 @@ async def get_attachment_content(  # noqa: PLR0913, PLR0917
     )
 
     # 5. .svg Direct-URL Navigation Shield
+    is_download_requested = request.query_params.get("download") == "1"
+
     if attachment.content_type == "image/svg+xml":
         headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
         sec_dest = (request.headers.get("sec-fetch-dest") or "").strip().lower()
-        if sec_dest == "image":
+        if sec_dest == "image" and not is_download_requested:
             headers["Content-Disposition"] = f'inline; filename="{safe_filename}"'
         else:
             headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
     elif attachment.content_type == "application/pdf":
         headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
+        headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
+    elif is_download_requested:
         headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
     else:
         headers["Content-Disposition"] = f'inline; filename="{safe_filename}"'
