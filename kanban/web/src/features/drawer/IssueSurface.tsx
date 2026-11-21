@@ -225,9 +225,6 @@ function IssueSurfaceContent({
     issue?.project_key ?? projectKey ?? issueKey.split('-')[0] ?? 'KAN';
 
   useEffect(() => {
-    if (!resolvedProjectForAux) {
-      return;
-    }
     let active = true;
     void ensureCsrfToken();
     void fetchProjectStates(resolvedProjectForAux)
@@ -330,7 +327,6 @@ function IssueSurfaceContent({
   const [favoriteRevision, setFavoriteRevision] = useState<number>(0);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
     const handleFavChange = (): void => {
       setFavoriteRevision((r) => r + 1);
     };
@@ -342,7 +338,6 @@ function IssueSurfaceContent({
 
   const isFavorite = useMemo(() => {
     if (favoriteRevision < 0) return false;
-    if (typeof window === 'undefined') return false;
     try {
       const raw = localStorage.getItem('kb_favorite_issues');
       if (!raw) return false;
@@ -880,7 +875,7 @@ function IssueSurfaceContent({
         )}
         <SummaryField issue={currentIssue} descriptionFocusRef={descRef} />
         <div className="surface__quick-props" data-testid="quick-properties-bar">
-          <div className="quick-props__group">
+          <div className="quick-props__group quick-props__group--state">
             <span className="quick-props__label">State:</span>
             {canTransition ? (
               <select
@@ -1311,26 +1306,6 @@ function IssueSurfaceContent({
 
             <span className="mono issue-header__key">#{currentIssue.key}</span>
 
-            {canTransition ? (
-              <select
-                data-testid="header-state-select"
-                className="header-state-select"
-                aria-label="Workflow State"
-                value={currentIssue.state?.id ?? ''}
-                onChange={(e) => {
-                  void handleHeaderStateChange(e.target.value);
-                }}
-              >
-                {headerStates.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <StateBadge state={currentIssue.state ?? undefined} testId="header-state-badge" />
-            )}
-
             {/* Sequential Pager */}
             <div className="split-pager" data-testid="split-pager">
               <span className="issue-navigator-position" data-testid="issue-navigator-position">
@@ -1479,7 +1454,7 @@ function IssueSurfaceContent({
                     <summary className="split-section-summary">Details</summary>
                     <div className="split-section-body">
                       <div className="surface__quick-props" data-testid="quick-properties-bar">
-                        <div className="quick-props__group">
+                        <div className="quick-props__group quick-props__group--state">
                           <span className="quick-props__label">State:</span>
                           {canTransition ? (
                             <select

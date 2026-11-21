@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
 import { act, fireEvent, render, screen } from '@testing-library/react';
 import { FieldHelpHint } from './FieldHelpHint';
 import { createHintController, type HintClock } from '../emoji/hintTiming';
-import { registerShellPanel, ShellPanelsProvider } from '../../app/shellPanels';
+import { registerShellPanel, ShellPanelsProvider, useShellPanels } from '../../app/shellPanels';
 
 class TestClock implements HintClock {
   currentTime = 1000;
@@ -703,5 +703,95 @@ describe('FieldHelpHint Component', () => {
 
     expect(screen.getByTestId('mock-panel')).toBeDefined();
     expect(document.activeElement).toBe(trigger);
+  });
+
+  it('suppresses focus when data-kb-suppress-focus attribute is present and handles empty value label (KAN-16)', () => {
+    const { unmount } = render(
+      <FieldHelpHint
+        title="Suppress Test"
+        summary="Testing suppress focus attribute."
+        validValues={[{ label: '', description: 'empty label test' }]}
+        testId="suppress-attr-hint"
+      />,
+    );
+
+    const trigger = screen.getByTestId('suppress-attr-hint');
+    trigger.setAttribute('data-kb-suppress-focus', 'true');
+
+    act(() => {
+      trigger.focus();
+    });
+
+    // Attribute should be removed and popover should NOT open
+    // Clicking doc link without docHref
+    const { unmount: unmountNoHref } = render(
+      <ShellPanelsProvider>
+        <FieldHelpHint
+          title="No Href"
+          summary="No docHref provided."
+          validValues={[{ label: '', description: 'index key test' }]}
+          testId="no-href-hint"
+        />
+      </ShellPanelsProvider>,
+    );
+    const noHrefTrigger = screen.getByTestId('no-href-hint');
+    act(() => {
+      noHrefTrigger.focus();
+    });
+    const noHrefLink = screen.getByTestId('no-href-hint-doc-link');
+    fireEvent.click(noHrefLink);
+    unmountNoHref();
+
+    expect(trigger.getAttribute('data-kb-suppress-focus')).toBeNull();
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
+
+    // Pointer down followed by focus covers !isPointerDownRef.current false branch
+    fireEvent.pointerDown(trigger);
+    fireEvent.focus(trigger);
+
+    unmount();
+  });
+
+  it('covers suppressNextFocusRef branch in handleFocus when panel closes (KAN-16)', () => {
+    function TestConsumer() {
+      const { openPanel, closePanel } = useShellPanels();
+      return (
+        <div>
+          <FieldHelpHint
+            title="Close Test"
+            summary="Testing panel close focus suppression."
+            testId="close-test-hint"
+          />
+          <button type="button" onClick={() => { openPanel('help'); }} data-testid="open-panel-btn">
+            Open
+          </button>
+          <button type="button" onClick={() => { closePanel(); }} data-testid="close-panel-btn">
+            Close
+          </button>
+        </div>
+      );
+    }
+    render(
+      <ShellPanelsProvider>
+        <TestConsumer />
+      </ShellPanelsProvider>,
+    );
+
+    // Open help panel
+    act(() => {
+      fireEvent.click(screen.getByTestId('open-panel-btn'));
+    });
+
+    // Close help panel
+    act(() => {
+      fireEvent.click(screen.getByTestId('close-panel-btn'));
+    });
+
+    // Trigger focus: suppressNextFocusRef is true, so it returns early and does not open popover
+    const trigger = screen.getByTestId('close-test-hint');
+    act(() => {
+      trigger.focus();
+    });
+    expect(trigger.getAttribute('aria-expanded')).toBe('false');
   });
 });

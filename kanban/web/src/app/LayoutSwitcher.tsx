@@ -96,14 +96,13 @@ export function LayoutSwitcher({
       const nextOpt = LAYOUT_OPTIONS[nextIndex];
       if (nextOpt) {
         handleSelect(nextOpt.id);
+        buttonRefs.current[nextIndex]?.focus();
       }
-      buttonRefs.current[nextIndex]?.focus();
     }
   };
 
   const activeConfig =
-    LAYOUT_OPTIONS.find((o) => o.id === activeLayout) ??
-    (LAYOUT_OPTIONS[0] ?? { id: 'list', label: 'Issues' });
+    LAYOUT_OPTIONS.find((o) => o.id === activeLayout) ?? LAYOUT_OPTIONS[0] ?? { id: 'list' as LayoutOption, label: 'Issues' };
 
   return (
     <div

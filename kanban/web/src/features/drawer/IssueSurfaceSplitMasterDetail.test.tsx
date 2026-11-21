@@ -7,7 +7,7 @@ import { IssueSurfaceRoot } from './IssueSurface';
 import { apiClient } from '../../api/client';
 import * as railApi from '../drawer-rail/railApi';
 import { ApiProblem } from '../../api/problem';
-import type { IssueDetail } from './slots';
+import { IssueSurfaceSlotsContext, type IssueDetail } from './slots';
 import type { IssueItem } from '../views/viewsApi';
 
 const mockIssue: IssueDetail = {
@@ -371,5 +371,208 @@ describe('IssueSurface split mode (KAN-52 Problem 3)', () => {
     expect(shareBtn.textContent).not.toContain('✓ Copied link!');
 
     vi.useRealTimers();
+  });
+
+  it('split mode description editor formatting tools and quick-props state select work cleanly', async () => {
+    const patchSpy = vi.spyOn(railApi, 'patchIssue').mockResolvedValue(mockIssue);
+    renderSplitSurface();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('split-edit-btn')).toBeDefined();
+    });
+
+    // 1. Quick-props state select in split details
+    const quickPropsState = screen.getByTestId('quick-props-state-select');
+    expect(quickPropsState).toBeDefined();
+    await act(async () => {
+      fireEvent.change(quickPropsState, { target: { value: 'state-done' } });
+      await Promise.resolve();
+    });
+    expect(patchSpy).toHaveBeenCalled();
+
+    // 2. Click split-edit-btn to open description editor
+    const editBtn = screen.getByTestId('split-edit-btn');
+    fireEvent.click(editBtn);
+
+    expect(screen.getByTestId('description-editor-toolbar')).toBeDefined();
+
+    // Test formatting tools: bold, italic, code, link, tasklist, mermaid
+    const boldBtn = screen.getByTestId('description-editor-tool-bold');
+    fireEvent.click(boldBtn);
+
+    const italicBtn = screen.getByTestId('description-editor-tool-italic');
+    fireEvent.click(italicBtn);
+
+    const codeBtn = screen.getByTestId('description-editor-tool-code');
+    fireEvent.click(codeBtn);
+
+    const linkBtn = screen.getByTestId('description-editor-tool-link');
+    fireEvent.click(linkBtn);
+
+    const taskBtn = screen.getByTestId('description-editor-tool-tasklist');
+    fireEvent.click(taskBtn);
+
+    const mermaidBtn = screen.getByTestId('description-editor-tool-mermaid');
+    fireEvent.click(mermaidBtn);
+
+    // Toggle preview on
+    const previewToggle = screen.getByTestId('description-editor-tool-raw');
+    fireEvent.click(previewToggle);
+    expect(screen.getByTestId('desc-preview')).toBeDefined();
+
+    // Toggle preview off back to raw textarea
+    fireEvent.click(previewToggle);
+    const textarea = screen.getByTestId('description-editor-raw');
+
+    // Cmd+Shift+M keyboard toggle preview
+    fireEvent.keyDown(textarea, { key: 'm', metaKey: true, shiftKey: true });
+    expect(screen.getByTestId('desc-preview')).toBeDefined();
+    fireEvent.click(screen.getByTestId('description-editor-tool-raw'));
+
+    // Test file input selection
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ id: 'att-1', markdownUri: 'attachment://att-1' }), { status: 200 })
+    );
+    const fileInput = screen.getByTestId('desc-file-input');
+    const testFile = new File(['test image data'], 'diagram.png', { type: 'image/png' });
+    await act(async () => {
+      fireEvent.change(fileInput, { target: { files: [testFile] } });
+      await Promise.resolve();
+    });
+    fetchSpy.mockRestore();
+
+    // Re-query raw textarea after preview toggle off
+    const rawEditor = screen.getByTestId('description-editor-raw');
+
+    // Test HTML paste with sanitized pill
+    fireEvent.paste(rawEditor, {
+      clipboardData: {
+        files: [],
+        getData: (format: string) => (format === 'text/html' ? '<p>Hello <span style="display:none">hidden</span></p>' : ''),
+      },
+    });
+
+    const sanitizedPill = await screen.findByTestId('desc-sanitized-pill');
+    expect(sanitizedPill).toBeDefined();
+
+    // Dismiss sanitized pill via Escape key
+    fireEvent.keyDown(window, { key: 'Escape' });
+    await waitFor(() => {
+      expect(screen.queryByTestId('desc-sanitized-pill')).toBeNull();
+    });
+
+    fireEvent.change(rawEditor, { target: { value: 'Updated description from test' } });
+
+    // Save description
+    const saveBtn = screen.getByRole('button', { name: 'Save description' });
+    await act(async () => {
+      fireEvent.click(saveBtn);
+      await Promise.resolve();
+    });
+    expect(patchSpy).toHaveBeenCalled();
+    patchSpy.mockRestore();
+  });
+
+  it('covers split mode slots, null priority label, empty description preview, fence newlines, and string error rollback', async () => {
+    // 1. Issue with null priority, null description_markdown, and string assignee
+    const sparseIssue: IssueDetail = {
+      ...mockIssue,
+      priority: null,
+      description_markdown: null,
+      assignees: ['@adam'],
+    };
+    vi.spyOn(apiClient, 'get').mockResolvedValue(sparseIssue);
+
+    const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { unmount } = render(
+      <QueryClientProvider client={queryClient}>
+        <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+          <IssueSurfaceSlotsContext.Provider
+            value={{
+              description: () => <div data-testid="split-custom-desc">Custom Split Desc</div>,
+              activity: () => <div data-testid="split-custom-act">Custom Split Activity</div>,
+            }}
+          >
+            <IssueSurfaceRoot
+              mode="split"
+              issueKey="KAN-52"
+              projectKey="KAN"
+              issuesList={mockIssuesList}
+            />
+          </IssueSurfaceSlotsContext.Provider>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('split-custom-desc')).toBeDefined();
+      expect(screen.getByTestId('split-custom-act')).toBeDefined();
+      expect(screen.getByText('None')).toBeDefined();
+    });
+    unmount();
+
+    // 2. Fence with double newline preceding
+    vi.spyOn(apiClient, 'get').mockResolvedValue({
+      ...mockIssue,
+      description_markdown: 'Preceding line\n\n',
+    });
+    const queryClient2 = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { unmount: unmount2 } = render(
+      <QueryClientProvider client={queryClient2}>
+        <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+          <IssueSurfaceRoot
+            mode="split"
+            issueKey="KAN-52"
+            projectKey="KAN"
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('split-edit-btn')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('split-edit-btn'));
+    const rawEditor = screen.getByTestId('description-editor-raw');
+    (rawEditor as HTMLTextAreaElement).setSelectionRange(16, 16);
+    fireEvent.click(screen.getByTestId('description-editor-tool-mermaid'));
+
+    // Empty description draft preview
+    fireEvent.change(rawEditor, { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('description-editor-tool-raw'));
+    expect(screen.getByText('No description')).toBeDefined();
+
+    // Revert state change with non-object error
+    vi.spyOn(railApi, 'patchIssue').mockRejectedValueOnce('Simple string error');
+    const quickPropsState = screen.getByTestId('quick-props-state-select');
+    await act(async () => {
+      fireEvent.change(quickPropsState, { target: { value: 'state-done' } });
+      await Promise.resolve();
+    });
+    await waitFor(() => {
+      expect(screen.getByRole('alert')).toBeDefined();
+    });
+
+    unmount2();
+
+    // 3. Error state with mode="full"
+    vi.spyOn(apiClient, 'get').mockRejectedValueOnce(new Error('Load failure'));
+    const queryClient3 = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    const { unmount: unmount3 } = render(
+      <QueryClientProvider client={queryClient3}>
+        <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+          <IssueSurfaceRoot
+            mode="full"
+            issueKey="KAN-52"
+            projectKey="KAN"
+          />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByLabelText('Return to side panel')).toBeDefined();
+    });
+    unmount3();
   });
 });

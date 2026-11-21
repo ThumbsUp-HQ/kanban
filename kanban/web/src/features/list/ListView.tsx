@@ -171,13 +171,14 @@ export function ListView({
   });
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
     const handleFavChange = (): void => {
       try {
         const stored = localStorage.getItem('kb_favorite_issues');
         if (stored) {
           const parsed: unknown = JSON.parse(stored);
           setFavoriteKeys(new Set(Array.isArray(parsed) ? (parsed as unknown[]).filter((x): x is string => typeof x === 'string') : []));
+        } else {
+          setFavoriteKeys(new Set());
         }
       } catch {
         // ignore
@@ -282,7 +283,7 @@ export function ListView({
           onClick={() => {
             if (onRefresh) {
               onRefresh();
-            } else if (typeof window !== 'undefined') {
+            } else {
               window.dispatchEvent(new CustomEvent('kb:refresh-issues'));
             }
           }}
@@ -388,16 +389,19 @@ export function ListView({
                       }
                     }
 
+                    const issueState = (issue as { state?: StateSummary }).state;
+                    const stateName = issueState?.name ?? '';
+
                     if (!canTransition) {
                       return (
                         <span
                           className="list-row-state-readonly"
                           data-testid={`list-row-state-readonly-${issue.key}`}
-                          aria-label={`Status: ${issue.state.name}`}
-                          title={`Status: ${issue.state.name}`}
+                          aria-label={`Status: ${stateName}`}
+                          title={`Status: ${stateName}`}
                         >
                           <StateBadge
-                            state={issue.state}
+                            state={issueState ?? { id: '', name: '', group: 'unstarted' }}
                             showLabel={false}
                             className="list-row-state-icon"
                           />
@@ -410,12 +414,12 @@ export function ListView({
                         type="button"
                         className="list-row-state-btn"
                         data-testid={`list-row-state-btn-${issue.key}`}
-                        aria-label={`Status: ${issue.state.name}`}
-                        title={`Status: ${issue.state.name}`}
+                        aria-label={`Status: ${stateName}`}
+                        title={`Status: ${stateName}`}
                         onClick={handleStateClick}
                       >
                         <StateBadge
-                          state={issue.state}
+                          state={issueState ?? { id: '', name: '', group: 'unstarted' }}
                           showLabel={false}
                           className="list-row-state-icon"
                         />
@@ -426,7 +430,7 @@ export function ListView({
                   <button
                     type="button"
                     className={`issue-card-star-btn ${isFav ? 'issue-card-star-btn--active' : ''}`}
-                    data-testid="favorite-issue-toggle"
+                    data-testid={`rail-favorite-toggle-${issue.key}`}
                     aria-label={isFav ? `Unfavorite ${issue.key}` : `Favorite ${issue.key}`}
                     onClick={(e) => {
                       e.stopPropagation();
@@ -471,10 +475,8 @@ export function ListView({
           onClose={() => {
             setLocalPopoverIssue(null);
           }}
-          onSelect={(field, value) => {
-            if (field === 'state' && typeof value === 'string') {
-              onStateSelect?.(localPopoverIssue.key, value);
-            }
+          onSelect={(_field, value) => {
+            onStateSelect?.(localPopoverIssue.key, String(value));
           }}
           states={projectStates}
         />

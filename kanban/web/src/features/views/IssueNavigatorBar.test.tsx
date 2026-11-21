@@ -31,7 +31,10 @@ describe('IssueNavigatorBar (KAN-52 Problem 1)', () => {
       summary: 'Database migration',
       state: { id: 'state-done', name: 'Done', group: 'completed' },
       priority: { slug: 'low', label: 'Low' },
-      assignees: [],
+      assignees: [
+        { id: 'asg-free', kind: 'free_text', free_text: 'contractor', notify: false, hint: '' },
+      ],
+      module_ids: ['m-extra'],
     },
   ];
 
@@ -53,16 +56,23 @@ describe('IssueNavigatorBar (KAN-52 Problem 1)', () => {
   ];
 
   it('renders issue navigator bar with basic mode filter dropdowns and search input', () => {
+    const onSearchQueryChange = vi.fn();
     render(
       <IssueNavigatorBar
         projectKey="KAN"
         issues={mockIssues}
+        projectStates={[{ id: 's-custom', name: 'Custom State', group: 'unstarted' }]}
         queryMode="basic"
+        onSearchQueryChange={onSearchQueryChange}
       />,
     );
 
     expect(screen.getByTestId('issue-navigator-bar')).toBeDefined();
-    expect(screen.getByTestId('navigator-search-input')).toBeDefined();
+    const searchInput = screen.getByTestId('navigator-search-input');
+    expect(searchInput).toBeDefined();
+    fireEvent.change(searchInput, { target: { value: 'test search' } });
+    expect(onSearchQueryChange).toHaveBeenCalledWith('test search');
+
     expect(screen.getByTestId('navigator-search-btn')).toBeDefined();
     expect(screen.getByTestId('navigator-mode-toggle')).toBeDefined();
     expect(screen.getByTestId('navigator-filter-state')).toBeDefined();
@@ -80,10 +90,14 @@ describe('IssueNavigatorBar (KAN-52 Problem 1)', () => {
       <IssueNavigatorBar
         projectKey="KAN"
         issues={mockIssues}
-        queryMode="basic"
+        queryMode="query"
         onQueryModeChange={onQueryModeChange}
       />,
     );
+
+    const basicBtn = screen.getByTestId('mode-basic-btn');
+    fireEvent.click(basicBtn);
+    expect(onQueryModeChange).toHaveBeenCalledWith('basic');
 
     const queryBtn = screen.getByTestId('mode-query-btn');
     fireEvent.click(queryBtn);
@@ -124,6 +138,8 @@ describe('IssueNavigatorBar (KAN-52 Problem 1)', () => {
         projectKey="KAN"
         issues={mockIssues}
         queryMode="basic"
+        activeFilters={{ state: ['todo'], priority: ['urgent'] }}
+        modulesEnabled={true}
         onFiltersChange={onFiltersChange}
       />,
     );
@@ -131,23 +147,43 @@ describe('IssueNavigatorBar (KAN-52 Problem 1)', () => {
     // State filter
     const stateSelect = screen.getByTestId('navigator-filter-state');
     fireEvent.change(stateSelect, { target: { value: 'todo' } });
-    expect(onFiltersChange).toHaveBeenCalledWith({ state: ['todo'] });
+    expect(onFiltersChange).toHaveBeenCalledWith({ state: ['todo'], priority: ['urgent'] });
 
     // Priority filter
     const prioSelect = screen.getByTestId('navigator-filter-priority');
     fireEvent.change(prioSelect, { target: { value: 'urgent' } });
-    expect(onFiltersChange).toHaveBeenCalledWith({ priority: ['urgent'] });
+    expect(onFiltersChange).toHaveBeenCalledWith({ state: ['todo'], priority: ['urgent'] });
+
+    // Assignee filter
+    const asgSelect = screen.getByTestId('navigator-filter-assignee');
+    fireEvent.change(asgSelect, { target: { value: 'alice' } });
+    expect(onFiltersChange).toHaveBeenCalledWith({ state: ['todo'], priority: ['urgent'], assignee: ['alice'] });
+
+    // Label filter
+    const lblSelect = screen.getByTestId('navigator-filter-label');
+    fireEvent.change(lblSelect, { target: { value: 'auth' } });
+    expect(onFiltersChange).toHaveBeenCalledWith({ state: ['todo'], priority: ['urgent'], label: ['auth'] });
+
+    // Cycle filter
+    const cycleSelect = screen.getByTestId('navigator-filter-cycle');
+    fireEvent.change(cycleSelect, { target: { value: 'c-1' } });
+    expect(onFiltersChange).toHaveBeenCalledWith({ state: ['todo'], priority: ['urgent'], cycle: ['c-1'] });
+
+    // Module filter (with modulesEnabled)
+    const modSelect = screen.getByTestId('navigator-filter-module');
+    fireEvent.change(modSelect, { target: { value: 'm-1' } });
+    expect(onFiltersChange).toHaveBeenCalledWith({ state: ['todo'], priority: ['urgent'], module: ['m-1'] });
 
     // Reset filter to all
     fireEvent.change(stateSelect, { target: { value: 'all' } });
-    expect(onFiltersChange).toHaveBeenCalledWith({});
+    expect(onFiltersChange).toHaveBeenCalledWith({ priority: ['urgent'] });
   });
 
   it('handles favorites toggle and saved view selection', () => {
     const onToggleFavoritesOnly = vi.fn();
     const onSelectSavedView = vi.fn();
 
-    render(
+    const { rerender } = render(
       <IssueNavigatorBar
         projectKey="KAN"
         issues={mockIssues}
@@ -160,8 +196,22 @@ describe('IssueNavigatorBar (KAN-52 Problem 1)', () => {
     );
 
     const favToggle = screen.getByTestId('filter-favorites-toggle');
+    expect(favToggle.textContent).toContain('☆ Favorites only');
     fireEvent.click(favToggle);
     expect(onToggleFavoritesOnly).toHaveBeenCalled();
+
+    rerender(
+      <IssueNavigatorBar
+        projectKey="KAN"
+        issues={mockIssues}
+        favoritesOnly={true}
+        onToggleFavoritesOnly={onToggleFavoritesOnly}
+        savedViews={mockSavedViews}
+        activeViewId="view-1"
+        onSelectSavedView={onSelectSavedView}
+      />,
+    );
+    expect(screen.getByTestId('filter-favorites-toggle').textContent).toContain('⭐ Favorites only');
 
     const savedViewsStrip = screen.getByTestId('navigator-saved-views-strip');
     expect(savedViewsStrip).toBeDefined();
@@ -172,5 +222,43 @@ describe('IssueNavigatorBar (KAN-52 Problem 1)', () => {
     const view2Chip = screen.getByTestId('saved-view-chip-view-2');
     fireEvent.click(view2Chip);
     expect(onSelectSavedView).toHaveBeenCalledWith('view-2');
+  });
+
+  it('covers defensive branches for missing assignees, display_name, cycle name, module_ids, and omitted onFiltersChange', () => {
+    const defensiveIssues: IssueItem[] = [
+      {
+        id: 'i-def',
+        key: 'KAN-DEF',
+        summary: 'Defensive issue',
+        state: { id: 's-1', name: 'Todo', group: 'unstarted' },
+        priority: { slug: 'low', label: 'Low' },
+        assignees: [
+          {
+            id: 'asg-nodisp',
+            kind: 'principal',
+            principal: { id: 'u-2', handle: 'bob', display_name: '', type: 'USER' },
+          },
+        ],
+        cycle_id: 'cycle-nocycleobj',
+      },
+      {
+        id: 'i-noasg',
+        key: 'KAN-NOASG',
+        summary: 'No assignees',
+        state: { id: 's-1', name: 'Todo', group: 'unstarted' },
+        priority: { slug: 'low', label: 'Low' },
+      },
+    ];
+
+    render(
+      <IssueNavigatorBar
+        projectKey="KAN"
+        issues={defensiveIssues}
+      />,
+    );
+
+    // Filter change without onFiltersChange does not crash
+    const stateSelect = screen.getByTestId('navigator-filter-state');
+    fireEvent.change(stateSelect, { target: { value: 'todo' } });
   });
 });

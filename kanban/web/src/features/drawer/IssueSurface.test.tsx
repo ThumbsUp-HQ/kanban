@@ -13,6 +13,7 @@ import * as autoConvertPasteMod from '../../editor/clipboard/autoConvertPaste';
 import * as hiddenDomPrunerMod from '../../editor/clipboard/hiddenDomPruner';
 import * as viewsApi from '../views/viewsApi';
 import * as railApi from '../drawer-rail/railApi';
+import * as clipboardUtils from '../../utils/clipboard';
 
 const validIssue: IssueDetail = {
   key: 'KAN-142',
@@ -1405,7 +1406,7 @@ describe('IssueSurface', () => {
       expect(onCloseError).toHaveBeenCalledTimes(1);
     });
 
-    it('transitions state via header-state-select in split mode, calling patchIssue and handling success', async () => {
+    it('transitions state via split-state-select in split mode, calling patchIssue and handling success', async () => {
       vi.spyOn(apiClient, 'get').mockResolvedValue({
         ...validIssue,
         state: { id: 'state-todo', name: 'Todo', group: 'unstarted' },
@@ -1422,6 +1423,44 @@ describe('IssueSurface', () => {
           <MemoryRouter initialEntries={['/projects/KAN/issues']}>
             <IssueSurfaceRoot
               mode="split"
+              issueKey="KAN-142"
+              projectKey="KAN"
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('split-state-select')).toBeDefined();
+      });
+
+      const select = screen.getByTestId('split-state-select');
+      expect(within(select).getByRole('option', { name: 'In Progress' })).toBeDefined();
+      fireEvent.change(select, { target: { value: 'state-in-progress' } });
+
+      await waitFor(() => {
+        expect(patchSpy).toHaveBeenCalledWith('KAN-142', { state_id: 'state-in-progress' }, validIssue.etag);
+      });
+      patchSpy.mockRestore();
+    });
+
+    it('transitions state via header-state-select in drawer mode, calling patchIssue and handling success', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue({
+        ...validIssue,
+        state: { id: 'state-todo', name: 'Todo', group: 'unstarted' },
+      });
+      const patchSpy = vi.spyOn(railApi, 'patchIssue').mockResolvedValue({
+        ...validIssue,
+        state: { id: 'state-in-progress', name: 'In Progress', group: 'started' },
+      });
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+            <IssueSurfaceRoot
+              mode="drawer"
               issueKey="KAN-142"
               projectKey="KAN"
             />
@@ -1470,10 +1509,10 @@ describe('IssueSurface', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTestId('header-state-select')).toBeDefined();
+        expect(screen.getByTestId('split-state-select')).toBeDefined();
       });
 
-      const select = screen.getByTestId('header-state-select');
+      const select = screen.getByTestId('split-state-select');
       expect(within(select).getByRole('option', { name: 'Done' })).toBeDefined();
       fireEvent.change(select, { target: { value: 'state-done' } });
 
@@ -1506,10 +1545,10 @@ describe('IssueSurface', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTestId('header-state-select')).toBeDefined();
+        expect(screen.getByTestId('split-state-select')).toBeDefined();
       });
 
-      const select = screen.getByTestId('header-state-select');
+      const select = screen.getByTestId('split-state-select');
       expect(within(select).getByRole('option', { name: 'Done' })).toBeDefined();
       fireEvent.change(select, { target: { value: 'state-done' } });
 
@@ -1577,8 +1616,8 @@ describe('IssueSurface', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTestId('header-state-badge')).toBeDefined();
-        expect(screen.queryByTestId('header-state-select')).toBeNull();
+        expect(screen.getByTestId('split-state-badge')).toBeDefined();
+        expect(screen.queryByTestId('split-state-select')).toBeNull();
         expect(screen.queryByTestId('quick-props-state-select')).toBeNull();
       });
     });
@@ -1684,10 +1723,10 @@ describe('IssueSurface', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByTestId('header-state-select')).toBeDefined();
+        expect(screen.getByTestId('split-state-select')).toBeDefined();
       });
 
-      const select = screen.getByTestId('header-state-select');
+      const select = screen.getByTestId('split-state-select');
       expect(within(select).getByRole('option', { name: 'Ready' })).toBeDefined();
       expect(within(select).getByRole('option', { name: 'Custom' })).toBeDefined();
       // Change to st-prog
@@ -1726,7 +1765,7 @@ describe('IssueSurface', () => {
           state: { id: 'st-ready', name: 'Ready', group: 'unstarted' },
         });
       });
-      expect(screen.getByTestId('header-state-select')).toBeDefined();
+      expect(screen.getByTestId('split-state-select')).toBeDefined();
 
       // Test when issue state is null with projectStates populated
       act(() => {
@@ -1735,7 +1774,7 @@ describe('IssueSurface', () => {
           state: null,
         });
       });
-      expect(screen.getByTestId('header-state-select')).toBeDefined();
+      expect(screen.getByTestId('split-state-select')).toBeDefined();
 
       await waitFor(() => {
         expect(screen.getByTestId('split-surface-close-btn')).toBeDefined();
@@ -1815,6 +1854,323 @@ describe('IssueSurface', () => {
       await waitFor(() => {
         expect(screen.getByTestId('header-state-select')).toBeDefined();
       });
+    });
+
+    it('covers favorite toggle off, corrupt storage fallback, copy fallbacks, auth/me failure, and description cancel', async () => {
+      // 1. Pre-seed favorite in localStorage
+      localStorage.setItem('kb_favorite_issues', JSON.stringify(['KAN-142']));
+
+      vi.spyOn(apiClient, 'get').mockImplementation((url: string) => {
+        if (url.includes('/api/v1/auth/me')) {
+          return Promise.reject(new Error('Auth endpoint down'));
+        }
+        return Promise.resolve(validIssue);
+      });
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+      const { unmount } = render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KAN-142']}>
+            <IssueSurfaceRoot
+              mode="split"
+              issueKey="KAN-142"
+              projectKey="KAN"
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('split-action-toolbar')).toBeDefined();
+      });
+
+      // Toggle favorite off
+      const favBtn = screen.getByTestId('favorite-issue-toggle');
+      fireEvent.click(favBtn);
+      const stored = localStorage.getItem('kb_favorite_issues');
+      expect(stored).toBe('[]');
+
+      // Corrupt localStorage and dispatch change event
+      localStorage.setItem('kb_favorite_issues', '{corrupt json');
+      act(() => {
+        window.dispatchEvent(new CustomEvent('kb:favorites-changed'));
+      });
+
+      // Assign to me when auth/me rejects
+      vi.spyOn(railApi, 'addAssignee').mockResolvedValueOnce({
+        id: 'asg-u-me',
+        kind: 'principal',
+        principal: { id: 'u-me', handle: 'me', display_name: 'Current User', type: 'USER' },
+      });
+      queryClient.setQueryData(['issues', 'KAN'], [validIssue]);
+      const assignBtn = screen.getByTestId('split-assign-btn');
+      await act(async () => {
+        fireEvent.click(assignBtn);
+        await Promise.resolve();
+      });
+
+      // Second assign click when already assigned
+      await act(async () => {
+        fireEvent.click(assignBtn);
+        await Promise.resolve();
+      });
+
+      // Add comment button click when comment composer is present in document
+      const dummyComposer = document.createElement('textarea');
+      dummyComposer.className = 'surface__comment-input';
+      const mockScroll = vi.fn();
+      dummyComposer.scrollIntoView = mockScroll;
+      document.body.appendChild(dummyComposer);
+
+      const addCommentBtn = screen.getByTestId('split-add-comment-btn');
+      fireEvent.click(addCommentBtn);
+      expect(mockScroll).toHaveBeenCalled();
+      dummyComposer.remove();
+
+      // Double-click share button and branch button to cover timeout clearance
+      const shareBtn = screen.getByTestId('split-share-btn');
+      const branchBtn = screen.getByTestId('split-git-branch-copy');
+      await act(async () => {
+        fireEvent.click(shareBtn);
+        fireEvent.click(shareBtn);
+        fireEvent.click(branchBtn);
+        fireEvent.click(branchBtn);
+        await Promise.resolve();
+      });
+
+      // Test clipboard failure fallback
+      Object.assign(navigator, {
+        clipboard: {
+          writeText: vi.fn().mockRejectedValue(new Error('no clipboard')),
+        },
+      });
+      vi.spyOn(clipboardUtils, 'copyToClipboard').mockRejectedValue(new Error('execCommand failed'));
+      await act(async () => {
+        fireEvent.click(shareBtn);
+        await Promise.resolve();
+      });
+
+      // Edit description, click media tool, and cancel edit
+      const editDescBtn = screen.getByTestId('split-edit-btn');
+      fireEvent.click(editDescBtn);
+
+      const mediaBtn = screen.getByTestId('description-editor-tool-media');
+      fireEvent.click(mediaBtn);
+
+      const cancelBtn = screen.getByRole('button', { name: 'Cancel description edit' });
+      fireEvent.click(cancelBtn);
+
+      unmount();
+      localStorage.clear();
+    });
+
+    it('covers pager without onNavigate, storage parse error, and alreadyAssigned branch', async () => {
+      // 1. Storage not an array for isFavorite and toggleFavorite
+      localStorage.setItem('kb_favorite_issues', JSON.stringify({ not: 'an_array' }));
+
+      // 2. Mock auth/me returning object without id: { handle: 'adam', display_name: 'Adam Outler' }
+      vi.spyOn(apiClient, 'get').mockImplementation((url: string) => {
+        if (url.includes('/api/v1/auth/me')) {
+          return Promise.resolve({ handle: 'adam', display_name: 'Adam Outler' });
+        }
+        return Promise.resolve({
+          ...validIssue,
+          description_markdown: undefined,
+          project_name: undefined,
+          assignees: [
+            'adam',
+            'u-me',
+            { handle: 'adam' },
+            { principal: { handle: 'adam' } },
+            { id: 'u-me' },
+            { principal: { id: 'u-me' } },
+            { principal_id: 'u-me' },
+          ],
+        });
+      });
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const issuesListMock = [
+        { key: 'KAN-141', summary: 'Prev' },
+        { key: 'KAN-142', summary: 'Current' },
+        { key: 'KAN-143', summary: 'Next' },
+      ];
+
+      const { unmount } = render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KAN-142']}>
+            <IssueSurfaceRoot
+              mode="split"
+              issueKey="KAN-142"
+              projectKey="KAN"
+              issuesList={issuesListMock as unknown as viewsApi.IssueItem[]}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('split-action-toolbar')).toBeDefined();
+      });
+
+      // Pager prev and next buttons without onNavigateIssue
+      const prevBtn = screen.getByTestId('issue-prev-btn');
+      const nextBtn = screen.getByTestId('issue-next-btn');
+      fireEvent.click(prevBtn);
+      fireEvent.click(nextBtn);
+
+      // Toggle favorite when storage has non-array JSON
+      const favBtn = screen.getByTestId('favorite-issue-toggle');
+      fireEvent.click(favBtn);
+
+      // Click assign button when assignees already include all variations of adam / u-me
+      const assignBtn = screen.getByTestId('split-assign-btn');
+      await act(async () => {
+        fireEvent.click(assignBtn);
+        await Promise.resolve();
+      });
+
+      unmount();
+      localStorage.clear();
+    });
+
+    it('covers addAssignee returning payload without id and query cache mapping', async () => {
+      vi.spyOn(apiClient, 'get').mockImplementation((url: string) => {
+        if (url.includes('/api/v1/auth/me')) {
+          return Promise.resolve({ handle: 'adam', display_name: 'Adam Outler' });
+        }
+        return Promise.resolve({
+          ...validIssue,
+          assignees: [],
+        });
+      });
+
+      const addSpy = vi
+        .spyOn(railApi, 'addAssignee')
+        .mockResolvedValueOnce({ success: true } as unknown as railApi.AssigneeItem);
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      queryClient.setQueryData(['issues', 'KAN'], [validIssue, { key: 'OTHER-99' }]);
+
+      const { unmount } = render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KAN-142']}>
+            <IssueSurfaceRoot
+              mode="split"
+              issueKey="KAN-142"
+              projectKey="KAN"
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('split-assign-btn')).toBeDefined();
+      });
+
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('split-assign-btn'));
+        await Promise.resolve();
+      });
+
+      expect(addSpy).toHaveBeenCalled();
+      unmount();
+    });
+
+    it('covers handleAssignToMe error branches: ApiProblem detail/title/message, numeric status, Error, and fallback', async () => {
+      vi.spyOn(apiClient, 'get').mockImplementation((url: string) => {
+        if (url.includes('/api/v1/auth/me')) {
+          return Promise.resolve({ handle: 'testuser', display_name: 'Test User' });
+        }
+        return Promise.resolve({
+          ...validIssue,
+          assignees: [],
+        });
+      });
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+
+      const { unmount } = render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KAN-142']}>
+            <IssueSurfaceRoot
+              mode="split"
+              issueKey="KAN-142"
+              projectKey="KAN"
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('split-assign-btn')).toBeDefined();
+      });
+
+      // a. ApiProblem with detail
+      vi.spyOn(railApi, 'addAssignee').mockRejectedValueOnce(
+        new ApiProblem(422, { detail: 'Cannot assign detail' }),
+      );
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('split-assign-btn'));
+        await Promise.resolve();
+      });
+      await waitFor(() => {
+        expect(screen.getByText('Cannot assign detail')).toBeDefined();
+      });
+
+      // b. ApiProblem with title
+      vi.spyOn(railApi, 'addAssignee').mockRejectedValueOnce(
+        new ApiProblem(422, { title: 'Cannot assign title' }),
+      );
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('split-assign-btn'));
+        await Promise.resolve();
+      });
+      await waitFor(() => {
+        expect(screen.getByText('Cannot assign title')).toBeDefined();
+      });
+
+      // c. ApiProblem with message
+      vi.spyOn(railApi, 'addAssignee').mockRejectedValueOnce(
+        new ApiProblem(500, { message: 'Cannot assign message' }),
+      );
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('split-assign-btn'));
+        await Promise.resolve();
+      });
+
+      // d. Object with status number
+      vi.spyOn(railApi, 'addAssignee').mockRejectedValueOnce({
+        status: 400,
+        message: 'Obj status error',
+      });
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('split-assign-btn'));
+        await Promise.resolve();
+      });
+
+      // e. Standard Error
+      vi.spyOn(railApi, 'addAssignee').mockRejectedValueOnce(new Error('Standard assign error'));
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('split-assign-btn'));
+        await Promise.resolve();
+      });
+      await waitFor(() => {
+        expect(screen.getByText('Standard assign error')).toBeDefined();
+      });
+
+      // f. Primitive string error
+      vi.spyOn(railApi, 'addAssignee').mockRejectedValueOnce('Primitive assign error');
+      await act(async () => {
+        fireEvent.click(screen.getByTestId('split-assign-btn'));
+        await Promise.resolve();
+      });
+      await waitFor(() => {
+        expect(screen.getByText('Failed to assign issue')).toBeDefined();
+      });
+
+      unmount();
     });
   });
 });
