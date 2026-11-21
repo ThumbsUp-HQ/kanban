@@ -251,6 +251,7 @@ export function SecondFactorStep({
               <button
                 type="button"
                 className="auth-submit-btn"
+                data-testid="webauthn-verify-btn"
                 onClick={() => {
                   void handleAssertion();
                 }}

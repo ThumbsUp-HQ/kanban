@@ -407,6 +407,9 @@ _PASSTHROUGH_ENV_VARS: tuple[str, ...] = (
     "KB_TRASH_RETENTION_DAYS",
     "KB_LOG_LEVEL",
     "KB_SETUP_TOKEN_FILE",
+    "KB_GIT_COMMIT",
+    "GIT_SHA",
+    "KB_BUILD_TIMESTAMP",
 )
 
 

@@ -74,14 +74,13 @@ async def get_issue(  # noqa: PLR0913, PLR0917
         desc_sha = issue.description_sha256.hex() if issue.description_sha256 else ""
         etag = serialized.etag or (f'"{desc_sha}"' if desc_sha else '""')
         etag_hex = etag.strip('"')
-        sha256_hex = desc_sha
 
         if if_none_match is not None:
             raw_header = if_none_match.strip()
             if raw_header.startswith("W/"):
                 raw_header = raw_header[2:].strip()
             client_hex = raw_header.strip('"')
-            if client_hex.lower() in (etag_hex.lower(), sha256_hex.lower()) or raw_header == etag:
+            if client_hex.lower() == etag_hex.lower() or raw_header == etag:
                 return Response(status_code=304, headers={"ETag": etag})
 
         response.headers["ETag"] = etag

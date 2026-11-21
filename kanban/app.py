@@ -197,6 +197,8 @@ def _bootstrap_runtime_state(app: FastAPI) -> AsyncEngine | None:
                     session_factory,
                 )
             owned_engine = engine
+            if getattr(app.state, "enable_background_jobs", None) is None:
+                app.state.enable_background_jobs = True
         except Exception:
             logger.debug("Automatic runtime database/auth wiring skipped", exc_info=True)
             return None

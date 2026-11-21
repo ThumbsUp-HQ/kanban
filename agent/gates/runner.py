@@ -339,7 +339,11 @@ class GateWorkerRunner:
                         agent_dict["timeout_ms"] = cutoff_ms
 
                         api_key_str: str | None = None
-                        if provider_row.wrapped_api_key is not None:
+                        has_wrapped_key = (
+                            provider_row.dek_kid is not None
+                            or provider_row.__dict__.get("wrapped_api_key") is not None
+                        )
+                        if has_wrapped_key:
                             from kanban.ai_config.service import AIProviderConfigService  # noqa: PLC0415
 
                             cfg_svc = AIProviderConfigService(session)

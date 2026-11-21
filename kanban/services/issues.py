@@ -578,6 +578,16 @@ def compute_issue_etag(
     updated_at_str = (
         updated_at.isoformat() if isinstance(updated_at, datetime) else str(updated_at or "")
     )
+    pending_gate_repr = (
+        f"{issue_resp.pending_gate.execution_id}:{issue_resp.pending_gate.hook_name}"
+        if issue_resp.pending_gate
+        else ""
+    )
+    latest_verdict_repr = (
+        f"{issue_resp.latest_gate_verdict.decision}:{issue_resp.latest_gate_verdict.verdict_sha256}"
+        if issue_resp.latest_gate_verdict
+        else ""
+    )
     parts = [
         issue_resp.description_sha256 or "",
         issue_resp.summary,
@@ -594,6 +604,8 @@ def compute_issue_etag(
         f"{issue_resp.access_manifest.pill_label}:{issue_resp.access_manifest.explicit_grant_count}",
         str(issue_resp.board_rank),
         updated_at_str,
+        pending_gate_repr,
+        latest_verdict_repr,
     ]
     raw = "|".join(parts)
     digest = hashlib.sha256(raw.encode("utf-8")).hexdigest()

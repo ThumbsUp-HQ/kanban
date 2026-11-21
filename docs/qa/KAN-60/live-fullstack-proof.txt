@@ -1,0 +1,53 @@
+=== KAN-60 ZERO-MOCK LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, main 02f8851e) ===
+Timestamp: 2026-11-21T06:02:25Z
+Environment: Standalone container kanban-liveqa-2 (http://127.0.0.1:18962, embedded PostgreSQL 16 + FORCE ROW LEVEL SECURITY)
+Authentication: First-boot /api/v1/setup/claim -> /api/v1/auth/mfa/totp/enroll -> /api/v1/auth/mfa/totp/confirm (AAL2) -> Browser login + TOTP verify (HTTP 200, aal_level=2)
+
+1. API Secret Key Position & Empty Default Model Allowlist:
+   - Opened + Register Provider drawer on /admin/ai (AiProviderEditorDrawer).
+   - Verified vertical DOM geometry (getBoundingClientRect().y):
+     * #provider-key-input (type="password"): y=408 (TOP of connection fields)
+     * #provider-base-url-input: y=522
+     * #provider-timeout-ms-input: y=656
+     * #probe-models-btn: y=741
+     * #provider-models-input: y=787
+   - Verified #provider-models-input initializes empty ("") across openai, ollama, and gemini (ZERO qwen2.5-coder:7b, llama3.2:3b, gpt-4o, or gpt-4o-mini defaults).
+
+2. Live Provider 1 - Fast GPU Ollama (http://192.168.1.115:11434, cutoff 20000ms):
+   - Clicked Probe Models -> populated exclusively with live probed models:
+     son-of-emoji-monster:latest, deepseek-r1:7b, granite3.3:2b, gemma3:4b, qwen3-vl:4b
+   - Zero stale defaults present. Saved provider successfully.
+
+3. Live Provider 2 - Google Gemini (AQ.Ab8R...REDACTED, cutoff 20000ms):
+   - Entered masked secret key (type="password") at top of form.
+   - Clicked Probe Models -> discovered 50 live Gemini models (including gemini-2.5-flash-lite, gemini-2.5-flash, gemini-2.5-pro).
+   - Selected gemini-2.5-flash-lite via "Only This" chip button. Saved provider successfully.
+
+4. Live Provider 3 - OpenAI Cloud (sk-proj-...REDACTED, cutoff 20000ms):
+   - Entered masked secret key (type="password") at top of form.
+   - Clicked Probe Models -> discovered 99 live OpenAI models (including gpt-4o-mini).
+   - Selected gpt-4o-mini via "Only This" chip button. Saved provider successfully.
+
+5. AttachHookDialog /admin/agents Link & AgentDefinitionEditorDrawer Quick-Picks:
+   - Navigated to /w/kanban/p/KAN/settings/workflows?to_state=Done&attach=1 with 0 agents configured.
+   - Selected Agent Transition Helper -> verified [data-testid="configure-agents-link"] href="/admin/agents".
+   - Clicked link to /admin/agents -> opened + Register Agent -> selected Provider Kind: ollama.
+   - Verified [data-testid="agent-model-quickpicks"] rendered probed chips:
+     ["son-of-emoji-monster:latest","deepseek-r1:7b","granite3.3:2b","gemma3:4b","qwen3-vl:4b"]
+   - Selected gemma3:4b via quick-pick chip, configured timeout 20000ms, saved @qa-done-gate.
+
+6. Visual Proof Screenshots (inspected via read_file):
+   - docs/qa/KAN-60/screenshots/live-ai-provider-ollama-115-probed-desktop-light.png (1440x900 light)
+   - docs/qa/KAN-60/screenshots/live-ai-provider-ollama-115-probed-desktop-dark.png (1440x900 dark)
+   - docs/qa/KAN-60/screenshots/live-ai-provider-gemini-top-key-probed-desktop.png (1440x900 desktop)
+   - docs/qa/KAN-60/screenshots/live-ai-provider-gemini-tablet.png (768x1024 tablet)
+   - docs/qa/KAN-60/screenshots/live-ai-provider-gemini-mobile.png (390x844 mobile)
+   - docs/qa/KAN-60/screenshots/live-agent-editor-probed-quickpick-desktop.png (1440x900 desktop)
+
+7. Runtime Telemetry:
+   - Console errors: 0
+   - Page errors: 0
+   - HTTP 5xx responses: 0
+   - Secret leakage check: ZERO raw AQ. or sk-proj- keys written to disk or DOM.
+
+OVERALL LIVE_STACK_VERDICT (KAN-60): PASS
