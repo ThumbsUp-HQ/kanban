@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import logging
 import re
 import time
 import urllib.parse
@@ -39,6 +40,9 @@ from kanban.security.envelope import (
     open_bound,
     seal_bound,
 )
+from kanban.security.scrubber import scrub_text
+
+logger = logging.getLogger(__name__)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -846,34 +850,69 @@ class AIProviderConfigService:
                         _HTTP_FORBIDDEN,
                     )
                     if active_key.startswith("AQ.") and resp.status_code in bad_statuses:
-                        vertex_url = (
-                            "https://aiplatform.googleapis.com/v1/publishers/google/"
-                            "models/gemini-2.5-flash-lite:countTokens"
-                        )
-                        v_headers = {
-                            "x-goog-api-key": active_key,
-                            "Content-Type": "application/json",
-                        }
-                        v_resp = await client.post(
-                            vertex_url,
-                            headers=v_headers,
-                            json={"contents": [{"parts": [{"text": "ping"}]}]},
-                            params={"key": active_key},
-                        )
-                        if v_resp.status_code == _HTTP_OK:
-                            models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro"]
-                            msg = (
-                                "Successfully connected to Gemini (Vertex Express) "
-                                f"({len(models)} models available)"
+                        v_host = "aiplatform.googleapis.com"
+                        v_port = 443
+                        try:
+                            v_raw_pinned: Any = await resolve_and_pin(
+                                v_host,
+                                v_port,
+                                allowed_cidrs=allowed_cidrs,
+                                resolver=active_resolver,
                             )
-                            return {
-                                "ok": True,
-                                "latency_ms": round((time.monotonic() - start_time) * 1000.0, 2),
-                                "models": models,
-                                "model_count": len(models),
-                                "error_code": None,
-                                "message": msg,
+                            v_pinned_ip = (
+                                v_raw_pinned
+                                if isinstance(
+                                    v_raw_pinned,
+                                    (ipaddress.IPv4Address, ipaddress.IPv6Address),
+                                )
+                                else ipaddress.ip_address("127.0.0.1")
+                            )
+                            v_host_repr = (
+                                f"[{v_pinned_ip}]"
+                                if v_pinned_ip.version == _IPV6_VERSION
+                                else str(v_pinned_ip)
+                            )
+                            vertex_url = (
+                                f"https://{v_host_repr}/v1/publishers/google/"
+                                "models/gemini-2.5-flash-lite:countTokens"
+                            )
+                            v_headers = {
+                                "Host": v_host,
+                                "x-goog-api-key": active_key,
+                                "Content-Type": "application/json",
                             }
+                            v_extensions: dict[str, Any] = {"sni_hostname": v_host}
+                            v_resp = await client.post(
+                                vertex_url,
+                                headers=v_headers,
+                                json={"contents": [{"parts": [{"text": "ping"}]}]},
+                                extensions=v_extensions,
+                            )
+                            if v_resp.status_code == _HTTP_OK:
+                                models = [
+                                    "gemini-2.5-flash-lite",
+                                    "gemini-2.5-flash",
+                                    "gemini-2.5-pro",
+                                ]
+                                msg = (
+                                    "Successfully connected to Gemini (Vertex Express) "
+                                    f"({len(models)} models available)"
+                                )
+                                return {
+                                    "ok": True,
+                                    "latency_ms": round(
+                                        (time.monotonic() - start_time) * 1000.0, 2
+                                    ),
+                                    "models": models,
+                                    "model_count": len(models),
+                                    "error_code": None,
+                                    "message": msg,
+                                }
+                        except Exception as v_exc:  # noqa: BLE001
+                            logger.debug(
+                                "Vertex express fallback probe failed: %s",
+                                scrub_text(str(v_exc)),
+                            )
                     if resp.status_code in (_HTTP_UNAUTHORIZED, _HTTP_FORBIDDEN):
                         return {
                             "ok": False,
@@ -963,7 +1002,7 @@ class AIProviderConfigService:
                 "models": [],
                 "model_count": 0,
                 "error_code": "CONNECTION_REFUSED",
-                "message": f"Connection refused: {exc}",
+                "message": f"Connection refused: {scrub_text(str(exc))}",
             }
         except (httpx.TimeoutException, TimeoutError) as exc:
             lat = float(effective_timeout_ms if "effective_timeout_ms" in locals() else 8000.0)
@@ -973,7 +1012,7 @@ class AIProviderConfigService:
                 "models": [],
                 "model_count": 0,
                 "error_code": "UPSTREAM_TIMEOUT",
-                "message": f"Connection timed out: {exc}",
+                "message": f"Connection timed out: {scrub_text(str(exc))}",
             }
         except Exception as exc:  # noqa: BLE001
             return {
@@ -982,7 +1021,7 @@ class AIProviderConfigService:
                 "models": [],
                 "model_count": 0,
                 "error_code": "PROBE_ERROR",
-                "message": str(exc),
+                "message": scrub_text(str(exc)),
             }
         finally:
             if key_material is not None:

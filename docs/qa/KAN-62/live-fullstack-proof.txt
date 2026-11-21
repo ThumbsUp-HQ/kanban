@@ -1,0 +1,24 @@
+=== KAN-62 ZERO-MOCK LIVE FULL-STACK BENCHMARK PROOF (http://127.0.0.1:18962, main 9d5577ad9b50) ===
+Timestamp: 2026-11-21T06:26:57Z
+Environment: Standalone container kanban-liveqa-2 (http://127.0.0.1:18962, embedded PostgreSQL 16 + FORCE ROW LEVEL SECURITY)
+Benchmark Summary (14 live HTTP 202 transition executions via GateWorkerRunner):
+  - Ollama-115 gemma3:4b (20s, KAN-1): timed_out at 20929ms (fail-closed In Progress)
+  - Ollama-115 gemma3:4b (35s, KAN-1): approve -> Done in 31431ms (comment e0ab0590-f800-42ea-9ab2-2914b75bb300)
+  - Ollama-115 gemma3:4b (35s, KAN-2): reject -> In Progress in 16630ms (comment a3d35fad-ba63-4bcb-aa66-39df85721707)
+  - Ollama-115 granite3.3:2b (20s, KAN-1): timed_out at 20321ms (fail-closed In Progress)
+  - Ollama-115 granite3.3:2b (20s, KAN-2): reject -> In Progress in 12691ms (comment 502d9d9a-f106-49e9-9f2f-a84062f5548d)
+  - Ollama-101 gemma4:e2b (25s, KAN-1): approve -> Done in 19892ms (comment 411abb6a-ea5c-42e7-a30a-f6ba618c99d4)
+  - Ollama-101 gemma4:e2b (25s, KAN-2): reject -> In Progress in 5213ms (comment 13a19854-b293-4eac-b41e-d9970402cd37)
+  - Ollama-101 nemotron-3-super:latest (5s cutoff, KAN-2): GATE_TIMEOUT at 6023ms (fail-closed In Progress)
+  - Ollama-101 nemotron-3-super:latest (45s cutoff, KAN-2): reject -> In Progress in 26502ms (comment 95ff1d33-7ef1-42fe-bf17-f1a47a1eed60)
+  - Ollama-101 nemotron-3-super:latest (45s cutoff, KAN-1): approve -> Done in 31940ms (comment 9f913753-4cc9-41ad-8036-9db293479d82)
+  - Gemini gemini-2.5-flash-lite (AQ.Ab8R...REDACTED, 20s, KAN-1): approve -> Done in 3215ms (comment 45b119eb-8747-4873-aca0-795ccc3002b9)
+  - Gemini gemini-2.5-flash-lite (AQ.Ab8R...REDACTED, 20s, KAN-2): reject -> In Progress in 1594ms (comment 6fbc885e-edbb-4d51-9219-282c3cda30a0)
+  - OpenAI gpt-4o-mini (sk-proj-...REDACTED, 20s, KAN-1): approve -> Done in 3846ms (comment 81b352ad-48ae-4e19-ae76-00aef8f61974)
+  - OpenAI gpt-4o-mini (sk-proj-...REDACTED, 20s, KAN-2): reject -> In Progress in 2224ms (comment 6cb8fc5f-34a4-4d4f-8d66-572eeb4db6e3)
+
+Detailed Report: docs/qa/KAN-62/gemma-and-provider-harness-report.md
+Screenshots: docs/qa/KAN-62/screenshots/62..67 + tablet/mobile captures
+Runtime Telemetry: 0 console errors, 0 page errors, 0 HTTP 5xx, 0 secret leaks.
+
+OVERALL LIVE_STACK_VERDICT (KAN-62): PASS

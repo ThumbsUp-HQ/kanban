@@ -722,3 +722,23 @@
   margin: 6px 0 6px 20px;
   padding: 0;
 }
+
+/* Safe Markdown Heading Elements */
+.safe-md__h1,
+.safe-md__h2,
+.safe-md__h3,
+.safe-md__h4,
+.safe-md__h5,
+.safe-md__h6 {
+  font-weight: 600;
+  color: var(--fg-primary);
+  margin: 10px 0 6px 0;
+  line-height: 1.35;
+}
+
+.safe-md__h1 { font-size: 1.25rem; }
+.safe-md__h2 { font-size: 1.125rem; }
+.safe-md__h3 { font-size: 1rem; }
+.safe-md__h4 { font-size: 0.9375rem; }
+.safe-md__h5 { font-size: 0.875rem; }
+.safe-md__h6 { font-size: 0.8125rem; }

@@ -44,7 +44,9 @@ function updateBoardIssueWithGate(
       execution_id: p.execution_id,
       hook_name: p.hook_name,
       agent_slug: p.agent_slug ?? 'agent',
-      harness_label: p.harness_label ?? p.harness_kind ?? 'cli: agy -p',
+      harness_label:
+        p.harness_label ??
+        (p.harness_kind === 'in_app_sdk' ? 'in_app_sdk' : (p.harness_kind ?? 'cli: agy -p')),
       started_at: p.started_at ?? new Date().toISOString(),
       repo_mount_ro: p.repo_mount_ro !== false,
       from_state: p.from_state,
@@ -158,7 +160,9 @@ export function handleGateEvent(
         execution_id: payload.execution_id,
         hook_name: payload.hook_name,
         agent_slug: payload.agent_slug ?? 'agent',
-        harness_label: payload.harness_label ?? payload.harness_kind ?? 'cli: agy -p',
+        harness_label:
+          payload.harness_label ??
+          (payload.harness_kind === 'in_app_sdk' ? 'in_app_sdk' : (payload.harness_kind ?? 'cli: agy -p')),
         started_at: payload.started_at ?? new Date().toISOString(),
         repo_mount_ro: payload.repo_mount_ro !== false,
         from_state: payload.from_state,
@@ -305,6 +309,18 @@ export function handleGateEvent(
   }
 
   // 4. Notifications & Callbacks
+  if (
+    eventType === 'workflow.gate.approved' ||
+    eventType === 'workflow.gate.rejected' ||
+    eventType === 'workflow.gate.timed_out' ||
+    eventType === 'workflow.gate.cancelled'
+  ) {
+    void queryClient.invalidateQueries({ queryKey: ['comments', issue_key] });
+    void queryClient.invalidateQueries({
+      predicate: (q) => q.queryKey[0] === 'activity' && q.queryKey[1] === issue_key,
+    });
+  }
+
   if (eventType === 'workflow.gate.pending') {
     options.onGatePending?.(payload);
   } else if (eventType === 'workflow.gate.approved') {

@@ -417,3 +417,59 @@ async def test_in_app_sdk_invalid_repo_and_undeclared_tools() -> None:
     # Calling with empty provider to verify repo init failure falls back to None without crashing
     with pytest.raises(Exception):
         await harness.run(ctx, agent_def)
+
+
+def test_strict_verdict_schema_fields_and_canonical_mapping() -> None:
+    """StrictVerdictSchema has strictly defined fields and maps into canonical verdict payload."""
+    from pydantic import ValidationError
+
+    from agent.harnesses.in_app_sdk import StrictVerdictSchema
+
+    # Valid schema with all fields
+    verdict = StrictVerdictSchema(
+        decision="approve",
+        reason_markdown="Verified all Definition of Done items",
+        add_labels=["qa-certified", "ready-for-merge"],
+        cited_files=["database/schema.sql", "src/app.py"],
+    )
+    assert verdict.decision == "approve"
+    assert verdict.reason_markdown == "Verified all Definition of Done items"
+    assert verdict.add_labels == ["qa-certified", "ready-for-merge"]
+    assert verdict.cited_files == ["database/schema.sql", "src/app.py"]
+
+    # Reject verdict with minimal fields
+    verdict_reject = StrictVerdictSchema(
+        decision="reject",
+        reason_markdown="Missing test coverage for edge case",
+    )
+    assert verdict_reject.decision == "reject"
+    assert verdict_reject.add_labels == []
+    assert verdict_reject.cited_files == []
+
+    # Extra fields ignored (extra="ignore")
+    verdict_extra = StrictVerdictSchema.model_validate(
+        {
+            "decision": "approve",
+            "reason_markdown": "OK",
+            "hallucinated_field": 12345,
+        }
+    )
+    assert verdict_extra.decision == "approve"
+
+    # Invalid decision raises ValidationError
+    with pytest.raises(ValidationError):
+        StrictVerdictSchema.model_validate(
+            {
+                "decision": "maybe",
+                "reason_markdown": "Not sure",
+            }
+        )
+
+    # Empty reason_markdown raises ValidationError (min_length=1)
+    with pytest.raises(ValidationError):
+        StrictVerdictSchema.model_validate(
+            {
+                "decision": "approve",
+                "reason_markdown": "",
+            }
+        )

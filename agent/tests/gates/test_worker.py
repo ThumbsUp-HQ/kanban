@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 from typing import TYPE_CHECKING
+from unittest import mock
 
 from agent.gates.worker import (
     GateWorker,
@@ -257,3 +258,36 @@ async def test_worker_entity_load_failure() -> None:
     assert len(coordinator.failures) == 1
     assert coordinator.failures[0][0] == "exec-bad"
     assert "ENTITY_LOAD_FAILED" in coordinator.failures[0][2]
+
+
+async def test_worker_register_defaults_import_error() -> None:
+    """_register_defaults catches and ignores ImportError."""
+    with mock.patch.dict("sys.modules", {"agent.harnesses.in_app_sdk": None}):
+        reg = HarnessRegistry(register_defaults=True)
+        assert reg.get("in_app_sdk") is None
+
+
+async def test_worker_invoke_coordinator_none() -> None:
+    """_invoke_coordinator returns None if coordinator is None."""
+    worker = GateWorker(registry=HarnessRegistry(), coordinator=None)
+    await worker._invoke_coordinator("record_decision", "ex", "hk", {})  # noqa: SLF001
+
+
+async def test_worker_handle_dispatch_unexpected_exception() -> None:
+    """Worker records VERDICT_MALFORMED when verdict parsing raises unexpected exception."""
+    coordinator = MockCoordinator()
+    registry = HarnessRegistry()
+
+    class CorruptHarness:
+        async def run(self, _ctx: object, _agent_def: object) -> bytes:
+            return b"some-output"
+
+    registry.register("in_app_sdk", CorruptHarness())
+    worker = GateWorker(registry=registry, coordinator=coordinator)
+    event = _make_event("in_app_sdk")
+
+    with mock.patch("agent.gates.worker.parse_verdict_output", side_effect=ValueError("Corrupt")):
+        await worker.handle_dispatch(event)
+
+    assert len(coordinator.failures) == 1
+    assert "VERDICT_MALFORMED: Corrupt" in coordinator.failures[0][2]

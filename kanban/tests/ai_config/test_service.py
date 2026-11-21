@@ -11,6 +11,7 @@ from unittest import mock
 
 import httpx
 import pytest
+from sqlalchemy import text
 
 from database.tests.conftest import bootstrap_workspace_admin
 from kanban.ai_config.net_guard import EgressDeniedError
@@ -935,10 +936,117 @@ async def test_probe_provider_gemini_aq_key_fallback(
         assert res["models"] == ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro"]
         assert "Vertex Express" in res["message"]
         mock_post.assert_called_once()
-        post_url = mock_post.call_args[0][0]
-        assert "aiplatform.googleapis.com" in post_url
         headers = mock_post.call_args[1].get("headers", {})
+        assert headers.get("Host") == "aiplatform.googleapis.com"
         assert headers.get("x-goog-api-key") == "AQ.mockgeminikey1234567890"
+        # Zero query-string secret leak
+        call_kwargs = mock_post.call_args[1]
+        assert "params" not in call_kwargs or call_kwargs.get("params") is None
+        # SSRF sni_hostname extension pinned
+        sni = call_kwargs.get("extensions", {}).get("sni_hostname")
+        assert sni == "aiplatform.googleapis.com"
+
+
+@pytest.mark.asyncio
+async def test_probe_provider_exception_scrubs_secrets(
+    db_session: AsyncSession,
+    kek_provider: StaticKekProvider,
+) -> None:
+    """Verify probe_provider scrubs API keys from exception messages."""
+    await bootstrap_workspace_admin(db_session)
+    service = AIProviderConfigService(db_session, kek_provider)
+
+    with (
+        mock.patch("kanban.ai_config.service.resolve_and_pin", new_callable=mock.AsyncMock),
+        mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get,
+    ):
+        mock_get.side_effect = RuntimeError(
+            "HTTP failure on https://generativelanguage.googleapis.com?key=AQ.leakedSecretKey9876543210"
+        )
+        res = await service.probe_provider(
+            provider_kind="gemini",
+            api_key="AQ.leakedSecretKey9876543210",
+        )
+        assert res["ok"] is False
+        assert res["error_code"] == "PROBE_ERROR"
+        assert "AQ.leakedSecretKey9876543210" not in res["message"]
+        assert "[REDACTED:API_KEY]" in res["message"]
+
+
+@pytest.mark.asyncio
+async def test_service_coverage_branches(
+    db_session: AsyncSession,
+    kek_provider: StaticKekProvider,
+) -> None:
+    """Cover clear_api_key, missing unwrap, cap validation, and probe branches."""
+    ws_id, _ = await bootstrap_workspace_admin(db_session)
+    service = AIProviderConfigService(db_session, kek_provider)
+
+    # 1. create config then clear_api_key
+    cfg = await service.create_config(
+        workspace_id=ws_id,
+        provider_kind="openai",
+        display_name="OpenAI Clear Test",
+        model_allowlist=["gpt-4o"],
+        api_key=bytearray(b"initial-key-material"),
+    )
+    assert cfg.wrapped_api_key is not None
+
+    cleared = await service.update_config(cfg.id, clear_api_key=True)
+    assert cleared.wrapped_api_key is None
+    assert cleared.api_key_nonce is None
+    assert cleared.wrapped_dek is None
+    assert cleared.dek_kid is None
+
+    # 2. unwrap_api_key with missing config_id
+    missing_id = uuid.uuid4()
+    with pytest.raises(AIConfigNotFoundError):
+        await service.unwrap_api_key(missing_id)
+
+    # 3. set_budget cap less than used + reserved
+    await service.set_budget(
+        workspace_id=ws_id,
+        provider_config_id=cfg.id,
+        period_kind="monthly",
+        token_cap=1000,
+    )
+    # simulate usage by updating db row (400 used + 200 reserved = 600 <= 1000)
+    update_sql = (
+        "UPDATE ai_token_ledgers SET tokens_used = 400, tokens_reserved = 200 "
+        "WHERE workspace_id = :ws"
+    )
+    await db_session.execute(text(update_sql), {"ws": ws_id})
+    with pytest.raises(AIConfigValidationError):
+        await service.set_budget(
+            workspace_id=ws_id,
+            provider_config_id=cfg.id,
+            period_kind="monthly",
+            token_cap=500,  # 500 < 400 + 200 = 600
+        )
+
+    # 4. probe_provider with nonexistent config_id handles AIConfigNotFoundError gracefully
+    with (
+        mock.patch("kanban.ai_config.service.resolve_and_pin", new_callable=mock.AsyncMock),
+        mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get,
+    ):
+        mock_resp = mock.MagicMock(spec=httpx.Response)
+        mock_resp.status_code = 500
+        mock_resp.text = "Internal Server Error"
+        mock_get.return_value = mock_resp
+
+        res_gemini_500 = await service.probe_provider(
+            provider_kind="gemini",
+            config_id=missing_id,
+        )
+        assert res_gemini_500["ok"] is False
+        assert res_gemini_500["error_code"] == "HTTP_500"
+
+        res_openai_500 = await service.probe_provider(
+            provider_kind="openai",
+            api_key="sk-test",
+        )
+        assert res_openai_500["ok"] is False
+        assert res_openai_500["error_code"] == "HTTP_500"
 
 
 @pytest.mark.asyncio

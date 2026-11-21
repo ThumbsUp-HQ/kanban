@@ -1,0 +1,1487 @@
+diff --git a/agent/gates/runner.py b/agent/gates/runner.py
+index 5f26f86d..9d131a1f 100644
+--- a/agent/gates/runner.py
++++ b/agent/gates/runner.py
+@@ -383,21 +383,31 @@ class GateWorkerRunner:
+                             elif p_kind == "gemini":
+                                 from agent.providers.gemini import GeminiSettings  # noqa: PLC0415
+ 
++                                gemini_base_url = (
++                                    HttpUrl(provider_row.base_url)
++                                    if provider_row.base_url
++                                    else (
++                                        HttpUrl("https://generativelanguage.googleapis.com")
++                                        if (api_key_str and api_key_str.startswith("AQ."))
++                                        else None
++                                    )
++                                )
+                                 gemini_mode: Literal[
+                                     "vertex", "ai_studio_paid", "vertex_express"
+                                 ] = (
+                                     "vertex_express"
+-                                    if (api_key_str and api_key_str.startswith("AQ."))
++                                    if (
++                                        api_key_str
++                                        and api_key_str.startswith("AQ.")
++                                        and "aiplatform.googleapis.com"
++                                        in str(gemini_base_url or "").lower()
++                                    )
+                                     else "ai_studio_paid"
+                                 )
+                                 gemini_settings = GeminiSettings(
+                                     mode=gemini_mode,
+                                     api_key=SecretStr(api_key_str) if api_key_str else None,
+-                                    base_url=(
+-                                        HttpUrl(provider_row.base_url)
+-                                        if provider_row.base_url
+-                                        else None
+-                                    ),
++                                    base_url=gemini_base_url,
+                                     model_allowlist=model_list,
+                                     timeout_s=cutoff_s,
+                                 )
+@@ -485,10 +495,38 @@ class GateWorkerRunner:
+                                 agent_pid = agent_def.principal_id
+                                 if agent_def.timeout_ms:
+                                     timeout_ms = agent_def.timeout_ms
++                                if agent_def.provider_kind:
++                                    prov_stmt = (
++                                        select(AIProviderConfig)
++                                        .where(
++                                            AIProviderConfig.workspace_id == bound_ws,
++                                            AIProviderConfig.provider_kind
++                                            == agent_def.provider_kind,
++                                            AIProviderConfig.is_enabled.is_(True),
++                                        )
++                                        .order_by(AIProviderConfig.priority.asc())
++                                        .limit(1)
++                                    )
++                                    prov_res = await session.execute(prov_stmt)
++                                    provider_row = prov_res.scalar_one_or_none()
++                                    if provider_row and provider_row.settings_json:
++                                        prov_settings = dict(provider_row.settings_json or {})
++                                        prov_timeout = prov_settings.get("timeout_ms")
++                                        if prov_timeout:
++                                            timeout_ms = min(int(prov_timeout), int(timeout_ms))
+                     except (AttributeError, KeyError, TypeError) as exc:
+                         logger.debug("Failed resolving hook agent info for sweep: %s", exc)
+ 
+-                deadline = getattr(inv, "deadline_at", None)
++                out_json = getattr(inv, "output_json", None) or {}
++                raw_deadline = getattr(inv, "deadline_at", None) or out_json.get("deadline_at")
++                if isinstance(raw_deadline, str):
++                    try:
++                        deadline = dt.datetime.fromisoformat(raw_deadline)
++                    except ValueError:
++                        deadline = None
++                else:
++                    deadline = raw_deadline
++
+                 if deadline is None and getattr(inv, "started_at", None) is not None:
+                     deadline = inv.started_at + dt.timedelta(milliseconds=timeout_ms)
+ 
+diff --git a/agent/providers/gemini.py b/agent/providers/gemini.py
+index 25591e30..df8814d7 100644
+--- a/agent/providers/gemini.py
++++ b/agent/providers/gemini.py
+@@ -193,17 +193,43 @@ class GeminiProvider(LLMProvider):
+         if transport is not None:
+             async_client_args["transport"] = transport
+ 
++        api_key_val = settings.api_key.get_secret_value() if settings.api_key else None
++        base_url_str = str(settings.base_url).lower() if settings.base_url is not None else ""
++        is_ai_studio_url = "generativelanguage.googleapis.com" in base_url_str
++        is_vertex_express = (settings.mode == "vertex_express" and not is_ai_studio_url) or (
++            api_key_val is not None
++            and api_key_val.startswith("AQ.")
++            and "aiplatform.googleapis.com" in base_url_str
++        )
++        self._is_vertex_express = is_vertex_express
++
++        api_version = (
++            "v1beta"
++            if (
++                api_key_val
++                and api_key_val.startswith("AQ.")
++                and (is_ai_studio_url or not base_url_str)
++            )
++            else None
++        )
++
++        effective_base_url = (
++            str(settings.base_url)
++            if settings.base_url is not None
++            else (
++                "https://generativelanguage.googleapis.com"
++                if (api_key_val and api_key_val.startswith("AQ.") and not is_vertex_express)
++                else None
++            )
++        )
++
+         http_options = types.HttpOptions(
+-            base_url=str(settings.base_url) if settings.base_url is not None else None,
++            base_url=effective_base_url,
++            api_version=api_version,
+             timeout=int(settings.timeout_s * 1000),
+             async_client_args=async_client_args,
+         )
+ 
+-        api_key_val = settings.api_key.get_secret_value() if settings.api_key else None
+-        is_vertex_express = settings.mode == "vertex_express" or (
+-            api_key_val is not None and api_key_val.startswith("AQ.")
+-        )
+-
+         if settings.mode == "vertex":
+             self._client = genai.Client(
+                 vertexai=True,
+@@ -230,10 +256,7 @@ class GeminiProvider(LLMProvider):
+         """Return data residency tier identifier."""
+         if self._settings.mode == "vertex":
+             return f"gemini-vertex:{self._settings.vertex_location}"
+-        api_val = self._settings.api_key.get_secret_value() if self._settings.api_key else None
+-        if self._settings.mode == "vertex_express" or (
+-            api_val is not None and api_val.startswith("AQ.")
+-        ):
++        if self._is_vertex_express:
+             loc = self._settings.vertex_location or "us-central1"
+             return f"gemini-vertex-express:{loc}"
+         return "gemini-ai-studio-paid"
+diff --git a/agent/providers/schema_utils.py b/agent/providers/schema_utils.py
+index 567370cd..8250cf70 100644
+--- a/agent/providers/schema_utils.py
++++ b/agent/providers/schema_utils.py
+@@ -87,7 +87,13 @@ def dereference_json_schema(schema: dict[str, Any]) -> dict[str, Any]:  # noqa:
+ 
+ def clean_gemini_schema(schema: dict[str, Any] | type[BaseModel]) -> dict[str, Any]:
+     """Produce Gemini-compatible OpenAPI subset schema without $defs, $ref, title, or default."""
+-    raw_schema: dict[str, Any] = schema if isinstance(schema, dict) else schema.model_json_schema()
++    if isinstance(schema, dict):
++        raw_schema: dict[str, Any] = schema
++    elif hasattr(schema, "model_json_schema"):
++        raw_schema = schema.model_json_schema()
++    else:
++        msg = "Expected dict or BaseModel class"
++        raise TypeError(msg)
+ 
+     derefed = dereference_json_schema(raw_schema)
+ 
+diff --git a/agent/tests/gates/test_gate_runner.py b/agent/tests/gates/test_gate_runner.py
+index 18cce835..f7fdcae6 100644
+--- a/agent/tests/gates/test_gate_runner.py
++++ b/agent/tests/gates/test_gate_runner.py
+@@ -13,7 +13,7 @@ from __future__ import annotations
+ import asyncio
+ import datetime as dt
+ import uuid
+-from typing import TYPE_CHECKING
++from typing import TYPE_CHECKING, Any
+ from unittest.mock import AsyncMock, MagicMock, patch
+ 
+ import pytest
+@@ -249,7 +249,7 @@ async def test_gate_worker_runner_load_entities_no_session_factory() -> None:
+ 
+ 
+ @pytest.mark.asyncio
+-async def test_gate_worker_runner_load_entities() -> None:
++async def test_gate_worker_runner_load_entities() -> None:  # noqa: PLR0915
+     """_load_entities loads entities from DB when session_factory is present."""
+     exec_id = uuid.uuid4()
+     hook_id = uuid.uuid4()
+@@ -305,6 +305,9 @@ async def test_gate_worker_runner_load_entities() -> None:
+     async def fake_get(model_cls: type, _key: uuid.UUID) -> object:
+         return entity_map.get(model_cls)
+ 
++    mock_res = MagicMock()
++    mock_res.scalar_one_or_none.return_value = None
++    mock_session.execute.return_value = mock_res
+     mock_session.get.side_effect = fake_get
+     session_factory = MockSessionFactory(mock_session)
+     runner = GateWorkerRunner(session_factory=session_factory)  # type: ignore[arg-type]
+@@ -360,6 +363,9 @@ async def test_gate_worker_runner_poll_once_inferred_deadline_and_exceptions() -
+     async def fake_get(model_cls: type, _key: uuid.UUID) -> object:
+         return hook_map.get(model_cls)
+ 
++    mock_res = MagicMock()
++    mock_res.scalar_one_or_none.return_value = None
++    mock_session.execute.return_value = mock_res
+     mock_session.get.side_effect = fake_get
+     session_factory = MockSessionFactory(mock_session)
+     runner = GateWorkerRunner(session_factory=session_factory)  # type: ignore[arg-type]
+@@ -466,6 +472,9 @@ async def test_gate_worker_runner_load_entities_wires_live_provider_and_timeout(
+             return mock_hook
+         return None
+ 
++    mock_res = MagicMock()
++    mock_res.scalar_one_or_none.return_value = None
++    mock_session.execute.return_value = mock_res
+     mock_session.get.side_effect = fake_get
+ 
+     mock_exec_result = MagicMock()
+@@ -654,3 +663,252 @@ async def test_gate_worker_fail_closed_on_provider_timeout() -> None:
+         "0196ed40-7b2a-7000-8000-223344556677",
+         "GATE_TIMEOUT",
+     )
++
++
++@pytest.mark.asyncio
++async def test_gate_worker_runner_resolve_workspace_and_admin_branches() -> None:
++    """_resolve_workspace_and_admin handles preset, no-session-factory, and engine queries."""
++    # 1. Preset ws and admin
++    ws_preset = uuid.uuid4()
++    admin_preset = uuid.uuid4()
++    r1 = GateWorkerRunner(workspace_id=ws_preset, admin_principal_id=admin_preset)
++    assert await r1._resolve_workspace_and_admin() == (ws_preset, admin_preset)  # noqa: SLF001
++
++    # 2. No session factory
++    r2 = GateWorkerRunner(session_factory=None)
++    assert await r2._resolve_workspace_and_admin() == (None, None)  # noqa: SLF001
++
++    # 3. Engine query execution
++    mock_conn = AsyncMock()
++    mock_res_ws = MagicMock()
++    mock_res_ws.scalar.return_value = ws_preset
++    mock_res_admin = MagicMock()
++    mock_res_admin.first.return_value = (admin_preset,)
++
++    mock_conn.execute.side_effect = [mock_res_ws, mock_res_admin]
++
++    mock_engine = MagicMock()
++
++    class FakeConnContext:
++        async def __aenter__(self) -> AsyncMock:
++            return mock_conn
++
++        async def __aexit__(self, *args: object) -> None:
++            pass
++
++    mock_engine.connect.return_value = FakeConnContext()
++
++    mock_sf = MagicMock()
++    mock_sf.engine = mock_engine
++    r3 = GateWorkerRunner(session_factory=mock_sf)
++    resolved_ws, resolved_admin = await r3._resolve_workspace_and_admin()  # noqa: SLF001
++    assert resolved_ws == ws_preset
++    assert resolved_admin == admin_preset
++
++    # 4. Engine exception handled cleanly
++    mock_conn_err = AsyncMock()
++    mock_conn_err.execute.side_effect = RuntimeError("DB connection error")
++    mock_engine_err = MagicMock()
++
++    class FakeConnContextErr:
++        async def __aenter__(self) -> AsyncMock:
++            return mock_conn_err
++
++        async def __aexit__(self, *args: object) -> None:
++            pass
++
++    mock_engine_err.connect.return_value = FakeConnContextErr()
++    mock_sf_err = MagicMock()
++    mock_sf_err.engine = mock_engine_err
++    r4 = GateWorkerRunner(session_factory=mock_sf_err)
++    assert await r4._resolve_workspace_and_admin() == (None, None)  # noqa: SLF001
++
++
++@pytest.mark.asyncio
++async def test_gate_worker_runner_record_decision_no_sf() -> None:
++    """record_decision returns early when session_factory is None."""
++    r = GateWorkerRunner(session_factory=None)
++    await r.record_decision("exec", "hook", "decision")
++
++
++@pytest.mark.asyncio
++async def test_gate_worker_runner_poll_once_no_sf_and_active_skip() -> None:
++    """poll_once returns 0 with no session factory and skips active invocations."""
++    r_no_sf = GateWorkerRunner(session_factory=None)
++    assert await r_no_sf.poll_once() == 0
++
++    inv_id = uuid.uuid4()
++    exec_id = uuid.uuid4()
++    hook_id = uuid.uuid4()
++
++    mock_inv = MagicMock()
++    mock_inv.id = inv_id
++    mock_inv.execution_id = exec_id
++    mock_inv.hook_id = hook_id
++    mock_inv.status = "running"
++    mock_inv.hook_kind = "agent_interceptor"
++    mock_inv.started_at = dt.datetime.now(dt.UTC) - dt.timedelta(seconds=120)
++    past_iso = (dt.datetime.now(dt.UTC) - dt.timedelta(seconds=10)).isoformat()
++    mock_inv.output_json = {"deadline_at": past_iso}
++    mock_inv.deadline_at = None
++
++    mock_session = AsyncMock()
++    mock_execute_res = MagicMock()
++    mock_execute_res.scalars.return_value.all.return_value = [mock_inv]
++    mock_session.execute.return_value = mock_execute_res
++
++    sf = MockSessionFactory(mock_session)
++    runner = GateWorkerRunner(session_factory=sf)  # type: ignore[arg-type]
++    runner._active_invocations.add(inv_id)  # noqa: SLF001
++
++    handled = await runner.poll_once()
++    assert handled == 0
++
++
++@pytest.mark.asyncio
++async def test_gate_worker_runner_additional_branches() -> None:  # noqa: PLR0915
++    """Cover remaining runner branches: dummy fixture, unknown p_kind, and sweep."""
++    # 1. _load_entities with dummy fixture
++    exec_id = uuid.uuid4()
++    hook_id = uuid.uuid4()
++    agent_id = uuid.uuid4()
++    mock_exec = MagicMock()
++    mock_exec.id = exec_id
++    mock_exec.issue_id = uuid.uuid4()
++    mock_exec.project_id = uuid.uuid4()
++    mock_exec.from_state_id = uuid.uuid4()
++    mock_exec.to_state_id = uuid.uuid4()
++    mock_exec.invoking_principal_id = uuid.uuid4()
++
++    mock_hook = MagicMock()
++    mock_hook.agent_definition_id = agent_id
++    mock_hook.allowed_mutable_fields = ()
++
++    mock_agent = MagicMock()
++    mock_agent.slug = "fixture-agent"
++    mock_agent.harness_kind = "fixture"
++    mock_agent.timeout_ms = 10000
++    mock_agent.repo_access_mode = "read-only"
++    mock_agent.provider_kind = "ollama"
++
++    mock_prov = MagicMock()
++    mock_prov.base_url = "http://fixture-llm"
++    mock_prov.provider_kind = "ollama"
++
++    entity_map: dict[type, Any] = {
++        WorkflowTransitionExecution: mock_exec,
++        WorkflowTransitionHook: mock_hook,
++        AgentDefinition: mock_agent,
++        Issue: MagicMock(
++            id=mock_exec.issue_id, sequence_id=1, summary="S", description_markdown="D"
++        ),
++        Project: MagicMock(identifier="PRJ"),
++        WorkflowState: MagicMock(name="Done"),
++    }
++
++    mock_session = AsyncMock()
++    mock_res_prov = MagicMock()
++    mock_res_prov.scalar_one_or_none.return_value = mock_prov
++    mock_session.execute.return_value = mock_res_prov
++
++    async def fake_get(model_cls: type, _key: uuid.UUID) -> object:
++        return entity_map.get(model_cls)
++
++    mock_session.get.side_effect = fake_get
++    sf = MockSessionFactory(mock_session)
++    runner = GateWorkerRunner(session_factory=sf)  # type: ignore[arg-type]
++
++    evt = {
++        "execution_id": str(exec_id),
++        "hook_id": str(hook_id),
++        "agent_definition_id": str(agent_id),
++    }
++    _e_dict, _i_dict, a_dict, _, _ = await runner._load_entities(evt)  # noqa: SLF001
++    assert isinstance(a_dict, dict)
++    assert a_dict["slug"] == "fixture-agent"
++    assert a_dict.get("provider") is None  # Skipped because is_dummy_fixture
++
++    # 2. _load_entities with unknown provider kind (hits exception logger branch)
++    mock_agent.harness_kind = "in_app_sdk"
++    mock_prov.base_url = "http://custom-url"
++    mock_prov.provider_kind = "unsupported_unknown_kind"
++    mock_prov.dek_kid = None
++    mock_prov.__dict__["wrapped_api_key"] = None
++    mock_prov.settings_json = {"timeout_ms": 15000}
++
++    _e2, _i2, a_dict2, _, _ = await runner._load_entities(evt)  # noqa: SLF001
++    assert isinstance(a_dict2, dict)
++    assert a_dict2.get("provider") is None  # Unknown kind caught and live_provider is None
++
++    # 3. poll_once with invalid deadline string and sweep
++    inv_id = uuid.uuid4()
++    mock_inv = MagicMock()
++    mock_inv.id = inv_id
++    mock_inv.execution_id = exec_id
++    mock_inv.hook_id = hook_id
++    mock_inv.status = "running"
++    mock_inv.hook_kind = "agent_interceptor"
++    mock_inv.started_at = dt.datetime.now(dt.UTC) - dt.timedelta(seconds=120)
++    mock_inv.output_json = {"deadline_at": "not-a-valid-iso-date"}
++    mock_inv.deadline_at = None
++
++    mock_agent_def = MagicMock()
++    mock_agent_def.principal_id = uuid.uuid4()
++    mock_agent_def.timeout_ms = 50000
++    mock_agent_def.provider_kind = "ollama"
++
++    mock_hook_rec = MagicMock()
++    mock_hook_rec.agent_definition_id = agent_id
++
++    async def fake_get_poll(model_cls: type, _key: uuid.UUID) -> object:
++        if model_cls == WorkflowTransitionHook:
++            return mock_hook_rec
++        if model_cls == AgentDefinition:
++            return mock_agent_def
++        return None
++
++    mock_session_poll = AsyncMock()
++    mock_session_poll.get.side_effect = fake_get_poll
++
++    mock_sweep_res = MagicMock()
++    mock_sweep_res.scalars.return_value.all.return_value = [mock_inv]
++
++    mock_prov_config = MagicMock()
++    mock_prov_config.settings_json = {"timeout_ms": 10000}
++    mock_prov_res = MagicMock()
++    mock_prov_res.scalar_one_or_none.return_value = mock_prov_config
++
++    mock_session_poll.execute.side_effect = [mock_sweep_res, mock_prov_res]
++
++    sf_poll = MockSessionFactory(mock_session_poll)
++    runner_poll = GateWorkerRunner(session_factory=sf_poll)  # type: ignore[arg-type]
++    runner_poll.record_failure = AsyncMock()  # type: ignore[method-assign]
++
++    handled = await runner_poll.poll_once()
++    assert handled == 1
++
++    # 4. poll_once with record_failure exception and dispatch exception
++    runner_err = GateWorkerRunner(session_factory=sf_poll)  # type: ignore[arg-type]
++    runner_err.record_failure = AsyncMock(side_effect=RuntimeError("timeout write failure"))  # type: ignore[method-assign]
++    mock_session_poll.execute.side_effect = [mock_sweep_res, mock_prov_res]
++    assert await runner_err.poll_once() == 0  # Exception caught and logged
++
++    # Active candidate dispatch error
++    mock_inv_active = MagicMock()
++    mock_inv_active.id = uuid.uuid4()
++    mock_inv_active.execution_id = exec_id
++    mock_inv_active.hook_id = hook_id
++    mock_inv_active.status = "running"
++    mock_inv_active.hook_kind = "agent_interceptor"
++    mock_inv_active.started_at = dt.datetime.now(dt.UTC)
++    mock_inv_active.deadline_at = dt.datetime.now(dt.UTC) + dt.timedelta(seconds=60)
++    mock_inv_active.output_json = None
++
++    mock_sweep_active = MagicMock()
++    mock_sweep_active.scalars.return_value.all.return_value = [mock_inv_active]
++    mock_session_active = AsyncMock()
++    mock_session_active.execute.return_value = mock_sweep_active
++    sf_active = MockSessionFactory(mock_session_active)
++    runner_active = GateWorkerRunner(session_factory=sf_active)  # type: ignore[arg-type]
++    runner_active.worker.handle_dispatch = AsyncMock(side_effect=RuntimeError("dispatch boom"))  # type: ignore[method-assign]
++    assert await runner_active.poll_once() == 0
+diff --git a/agent/tests/gates/test_worker.py b/agent/tests/gates/test_worker.py
+index 5b4f510a..10f5b3b1 100644
+--- a/agent/tests/gates/test_worker.py
++++ b/agent/tests/gates/test_worker.py
+@@ -7,6 +7,7 @@ from __future__ import annotations
+ import asyncio
+ import json
+ from typing import TYPE_CHECKING
++from unittest import mock
+ 
+ from agent.gates.worker import (
+     GateWorker,
+@@ -257,3 +258,36 @@ async def test_worker_entity_load_failure() -> None:
+     assert len(coordinator.failures) == 1
+     assert coordinator.failures[0][0] == "exec-bad"
+     assert "ENTITY_LOAD_FAILED" in coordinator.failures[0][2]
++
++
++async def test_worker_register_defaults_import_error() -> None:
++    """_register_defaults catches and ignores ImportError."""
++    with mock.patch.dict("sys.modules", {"agent.harnesses.in_app_sdk": None}):
++        reg = HarnessRegistry(register_defaults=True)
++        assert reg.get("in_app_sdk") is None
++
++
++async def test_worker_invoke_coordinator_none() -> None:
++    """_invoke_coordinator returns None if coordinator is None."""
++    worker = GateWorker(registry=HarnessRegistry(), coordinator=None)
++    await worker._invoke_coordinator("record_decision", "ex", "hk", {})  # noqa: SLF001
++
++
++async def test_worker_handle_dispatch_unexpected_exception() -> None:
++    """Worker records VERDICT_MALFORMED when verdict parsing raises unexpected exception."""
++    coordinator = MockCoordinator()
++    registry = HarnessRegistry()
++
++    class CorruptHarness:
++        async def run(self, _ctx: object, _agent_def: object) -> bytes:
++            return b"some-output"
++
++    registry.register("in_app_sdk", CorruptHarness())
++    worker = GateWorker(registry=registry, coordinator=coordinator)
++    event = _make_event("in_app_sdk")
++
++    with mock.patch("agent.gates.worker.parse_verdict_output", side_effect=ValueError("Corrupt")):
++        await worker.handle_dispatch(event)
++
++    assert len(coordinator.failures) == 1
++    assert "VERDICT_MALFORMED: Corrupt" in coordinator.failures[0][2]
+diff --git a/agent/tests/harnesses/test_in_app_sdk.py b/agent/tests/harnesses/test_in_app_sdk.py
+index c10cc25c..9ffaf21f 100644
+--- a/agent/tests/harnesses/test_in_app_sdk.py
++++ b/agent/tests/harnesses/test_in_app_sdk.py
+@@ -417,3 +417,59 @@ async def test_in_app_sdk_invalid_repo_and_undeclared_tools() -> None:
+     # Calling with empty provider to verify repo init failure falls back to None without crashing
+     with pytest.raises(Exception):
+         await harness.run(ctx, agent_def)
++
++
++def test_strict_verdict_schema_fields_and_canonical_mapping() -> None:
++    """StrictVerdictSchema has strictly defined fields and maps into canonical verdict payload."""
++    from pydantic import ValidationError
++
++    from agent.harnesses.in_app_sdk import StrictVerdictSchema
++
++    # Valid schema with all fields
++    verdict = StrictVerdictSchema(
++        decision="approve",
++        reason_markdown="Verified all Definition of Done items",
++        add_labels=["qa-certified", "ready-for-merge"],
++        cited_files=["database/schema.sql", "src/app.py"],
++    )
++    assert verdict.decision == "approve"
++    assert verdict.reason_markdown == "Verified all Definition of Done items"
++    assert verdict.add_labels == ["qa-certified", "ready-for-merge"]
++    assert verdict.cited_files == ["database/schema.sql", "src/app.py"]
++
++    # Reject verdict with minimal fields
++    verdict_reject = StrictVerdictSchema(
++        decision="reject",
++        reason_markdown="Missing test coverage for edge case",
++    )
++    assert verdict_reject.decision == "reject"
++    assert verdict_reject.add_labels == []
++    assert verdict_reject.cited_files == []
++
++    # Extra fields ignored (extra="ignore")
++    verdict_extra = StrictVerdictSchema.model_validate(
++        {
++            "decision": "approve",
++            "reason_markdown": "OK",
++            "hallucinated_field": 12345,
++        }
++    )
++    assert verdict_extra.decision == "approve"
++
++    # Invalid decision raises ValidationError
++    with pytest.raises(ValidationError):
++        StrictVerdictSchema.model_validate(
++            {
++                "decision": "maybe",
++                "reason_markdown": "Not sure",
++            }
++        )
++
++    # Empty reason_markdown raises ValidationError (min_length=1)
++    with pytest.raises(ValidationError):
++        StrictVerdictSchema.model_validate(
++            {
++                "decision": "approve",
++                "reason_markdown": "",
++            }
++        )
+diff --git a/kanban/ai_config/service.py b/kanban/ai_config/service.py
+index a79548e6..48030f26 100644
+--- a/kanban/ai_config/service.py
++++ b/kanban/ai_config/service.py
+@@ -6,6 +6,7 @@ from __future__ import annotations
+ 
+ import asyncio
+ import ipaddress
++import logging
+ import re
+ import time
+ import urllib.parse
+@@ -39,6 +40,9 @@ from kanban.security.envelope import (
+     open_bound,
+     seal_bound,
+ )
++from kanban.security.scrubber import scrub_text
++
++logger = logging.getLogger(__name__)
+ 
+ if TYPE_CHECKING:
+     from sqlalchemy.ext.asyncio import AsyncSession
+@@ -846,34 +850,69 @@ class AIProviderConfigService:
+                         _HTTP_FORBIDDEN,
+                     )
+                     if active_key.startswith("AQ.") and resp.status_code in bad_statuses:
+-                        vertex_url = (
+-                            "https://aiplatform.googleapis.com/v1/publishers/google/"
+-                            "models/gemini-2.5-flash-lite:countTokens"
+-                        )
+-                        v_headers = {
+-                            "x-goog-api-key": active_key,
+-                            "Content-Type": "application/json",
+-                        }
+-                        v_resp = await client.post(
+-                            vertex_url,
+-                            headers=v_headers,
+-                            json={"contents": [{"parts": [{"text": "ping"}]}]},
+-                            params={"key": active_key},
+-                        )
+-                        if v_resp.status_code == _HTTP_OK:
+-                            models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro"]
+-                            msg = (
+-                                "Successfully connected to Gemini (Vertex Express) "
+-                                f"({len(models)} models available)"
++                        v_host = "aiplatform.googleapis.com"
++                        v_port = 443
++                        try:
++                            v_raw_pinned: Any = await resolve_and_pin(
++                                v_host,
++                                v_port,
++                                allowed_cidrs=allowed_cidrs,
++                                resolver=active_resolver,
++                            )
++                            v_pinned_ip = (
++                                v_raw_pinned
++                                if isinstance(
++                                    v_raw_pinned,
++                                    (ipaddress.IPv4Address, ipaddress.IPv6Address),
++                                )
++                                else ipaddress.ip_address("127.0.0.1")
++                            )
++                            v_host_repr = (
++                                f"[{v_pinned_ip}]"
++                                if v_pinned_ip.version == _IPV6_VERSION
++                                else str(v_pinned_ip)
+                             )
+-                            return {
+-                                "ok": True,
+-                                "latency_ms": round((time.monotonic() - start_time) * 1000.0, 2),
+-                                "models": models,
+-                                "model_count": len(models),
+-                                "error_code": None,
+-                                "message": msg,
++                            vertex_url = (
++                                f"https://{v_host_repr}/v1/publishers/google/"
++                                "models/gemini-2.5-flash-lite:countTokens"
++                            )
++                            v_headers = {
++                                "Host": v_host,
++                                "x-goog-api-key": active_key,
++                                "Content-Type": "application/json",
+                             }
++                            v_extensions: dict[str, Any] = {"sni_hostname": v_host}
++                            v_resp = await client.post(
++                                vertex_url,
++                                headers=v_headers,
++                                json={"contents": [{"parts": [{"text": "ping"}]}]},
++                                extensions=v_extensions,
++                            )
++                            if v_resp.status_code == _HTTP_OK:
++                                models = [
++                                    "gemini-2.5-flash-lite",
++                                    "gemini-2.5-flash",
++                                    "gemini-2.5-pro",
++                                ]
++                                msg = (
++                                    "Successfully connected to Gemini (Vertex Express) "
++                                    f"({len(models)} models available)"
++                                )
++                                return {
++                                    "ok": True,
++                                    "latency_ms": round(
++                                        (time.monotonic() - start_time) * 1000.0, 2
++                                    ),
++                                    "models": models,
++                                    "model_count": len(models),
++                                    "error_code": None,
++                                    "message": msg,
++                                }
++                        except Exception as v_exc:  # noqa: BLE001
++                            logger.debug(
++                                "Vertex express fallback probe failed: %s",
++                                scrub_text(str(v_exc)),
++                            )
+                     if resp.status_code in (_HTTP_UNAUTHORIZED, _HTTP_FORBIDDEN):
+                         return {
+                             "ok": False,
+@@ -963,7 +1002,7 @@ class AIProviderConfigService:
+                 "models": [],
+                 "model_count": 0,
+                 "error_code": "CONNECTION_REFUSED",
+-                "message": f"Connection refused: {exc}",
++                "message": f"Connection refused: {scrub_text(str(exc))}",
+             }
+         except (httpx.TimeoutException, TimeoutError) as exc:
+             lat = float(effective_timeout_ms if "effective_timeout_ms" in locals() else 8000.0)
+@@ -973,7 +1012,7 @@ class AIProviderConfigService:
+                 "models": [],
+                 "model_count": 0,
+                 "error_code": "UPSTREAM_TIMEOUT",
+-                "message": f"Connection timed out: {exc}",
++                "message": f"Connection timed out: {scrub_text(str(exc))}",
+             }
+         except Exception as exc:  # noqa: BLE001
+             return {
+@@ -982,7 +1021,7 @@ class AIProviderConfigService:
+                 "models": [],
+                 "model_count": 0,
+                 "error_code": "PROBE_ERROR",
+-                "message": str(exc),
++                "message": scrub_text(str(exc)),
+             }
+         finally:
+             if key_material is not None:
+diff --git a/kanban/issues/serializers.py b/kanban/issues/serializers.py
+index 28e77af9..98e4155b 100644
+--- a/kanban/issues/serializers.py
++++ b/kanban/issues/serializers.py
+@@ -28,16 +28,23 @@ def compute_harness_label_for_agent(agent_def: AgentDefinition | None) -> str:
+     """Compute human-facing harness label for display and event payloads."""
+     if agent_def is None:
+         return "in_app_sdk"
+-    if agent_def.harness_kind == "cli_pipe":
++    kind = agent_def.harness_kind
++    if kind == "cli_pipe":
+         bin_id = agent_def.cli_binary_allowlist_id or "cli"
+-        if bin_id in ("agy", "codex"):
+-            return f"cli: {bin_id} -p"
+-        return f"cli: {bin_id}"
+-    if agent_def.harness_kind == "in_app_sdk":
+-        return agent_def.provider_kind or "sdk"
+-    if agent_def.harness_kind == "remote_runner":
++        return f"cli: {bin_id} -p" if bin_id in ("agy", "codex") else f"cli: {bin_id}"
++    if kind == "in_app_sdk":
++        provider = agent_def.provider_kind or "sdk"
++        model = getattr(agent_def, "model_id", None) or getattr(agent_def, "default_model", None)
++        if model:
++            suffix = f" ({provider}/{model})"
++        elif provider != "sdk":
++            suffix = f" ({provider})"
++        else:
++            suffix = ""
++        return f"in_app_sdk{suffix}"
++    if kind == "remote_runner":
+         return f"remote: {agent_def.remote_runner_pool_slug or 'runner'}"
+-    return agent_def.harness_kind
++    return kind
+ 
+ 
+ class PendingGateSummary(BaseModel):
+diff --git a/kanban/tests/ai_config/test_service.py b/kanban/tests/ai_config/test_service.py
+index 5347a1e5..601728fb 100644
+--- a/kanban/tests/ai_config/test_service.py
++++ b/kanban/tests/ai_config/test_service.py
+@@ -11,6 +11,7 @@ from unittest import mock
+ 
+ import httpx
+ import pytest
++from sqlalchemy import text
+ 
+ from database.tests.conftest import bootstrap_workspace_admin
+ from kanban.ai_config.net_guard import EgressDeniedError
+@@ -935,10 +936,117 @@ async def test_probe_provider_gemini_aq_key_fallback(
+         assert res["models"] == ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro"]
+         assert "Vertex Express" in res["message"]
+         mock_post.assert_called_once()
+-        post_url = mock_post.call_args[0][0]
+-        assert "aiplatform.googleapis.com" in post_url
+         headers = mock_post.call_args[1].get("headers", {})
++        assert headers.get("Host") == "aiplatform.googleapis.com"
+         assert headers.get("x-goog-api-key") == "AQ.mockgeminikey1234567890"
++        # Zero query-string secret leak
++        call_kwargs = mock_post.call_args[1]
++        assert "params" not in call_kwargs or call_kwargs.get("params") is None
++        # SSRF sni_hostname extension pinned
++        sni = call_kwargs.get("extensions", {}).get("sni_hostname")
++        assert sni == "aiplatform.googleapis.com"
++
++
++@pytest.mark.asyncio
++async def test_probe_provider_exception_scrubs_secrets(
++    db_session: AsyncSession,
++    kek_provider: StaticKekProvider,
++) -> None:
++    """Verify probe_provider scrubs API keys from exception messages."""
++    await bootstrap_workspace_admin(db_session)
++    service = AIProviderConfigService(db_session, kek_provider)
++
++    with (
++        mock.patch("kanban.ai_config.service.resolve_and_pin", new_callable=mock.AsyncMock),
++        mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get,
++    ):
++        mock_get.side_effect = RuntimeError(
++            "HTTP failure on https://generativelanguage.googleapis.com?key=AQ.leakedSecretKey9876543210"
++        )
++        res = await service.probe_provider(
++            provider_kind="gemini",
++            api_key="AQ.leakedSecretKey9876543210",
++        )
++        assert res["ok"] is False
++        assert res["error_code"] == "PROBE_ERROR"
++        assert "AQ.leakedSecretKey9876543210" not in res["message"]
++        assert "[REDACTED:API_KEY]" in res["message"]
++
++
++@pytest.mark.asyncio
++async def test_service_coverage_branches(
++    db_session: AsyncSession,
++    kek_provider: StaticKekProvider,
++) -> None:
++    """Cover clear_api_key, missing unwrap, cap validation, and probe branches."""
++    ws_id, _ = await bootstrap_workspace_admin(db_session)
++    service = AIProviderConfigService(db_session, kek_provider)
++
++    # 1. create config then clear_api_key
++    cfg = await service.create_config(
++        workspace_id=ws_id,
++        provider_kind="openai",
++        display_name="OpenAI Clear Test",
++        model_allowlist=["gpt-4o"],
++        api_key=bytearray(b"initial-key-material"),
++    )
++    assert cfg.wrapped_api_key is not None
++
++    cleared = await service.update_config(cfg.id, clear_api_key=True)
++    assert cleared.wrapped_api_key is None
++    assert cleared.api_key_nonce is None
++    assert cleared.wrapped_dek is None
++    assert cleared.dek_kid is None
++
++    # 2. unwrap_api_key with missing config_id
++    missing_id = uuid.uuid4()
++    with pytest.raises(AIConfigNotFoundError):
++        await service.unwrap_api_key(missing_id)
++
++    # 3. set_budget cap less than used + reserved
++    await service.set_budget(
++        workspace_id=ws_id,
++        provider_config_id=cfg.id,
++        period_kind="monthly",
++        token_cap=1000,
++    )
++    # simulate usage by updating db row (400 used + 200 reserved = 600 <= 1000)
++    update_sql = (
++        "UPDATE ai_token_ledgers SET tokens_used = 400, tokens_reserved = 200 "
++        "WHERE workspace_id = :ws"
++    )
++    await db_session.execute(text(update_sql), {"ws": ws_id})
++    with pytest.raises(AIConfigValidationError):
++        await service.set_budget(
++            workspace_id=ws_id,
++            provider_config_id=cfg.id,
++            period_kind="monthly",
++            token_cap=500,  # 500 < 400 + 200 = 600
++        )
++
++    # 4. probe_provider with nonexistent config_id handles AIConfigNotFoundError gracefully
++    with (
++        mock.patch("kanban.ai_config.service.resolve_and_pin", new_callable=mock.AsyncMock),
++        mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get,
++    ):
++        mock_resp = mock.MagicMock(spec=httpx.Response)
++        mock_resp.status_code = 500
++        mock_resp.text = "Internal Server Error"
++        mock_get.return_value = mock_resp
++
++        res_gemini_500 = await service.probe_provider(
++            provider_kind="gemini",
++            config_id=missing_id,
++        )
++        assert res_gemini_500["ok"] is False
++        assert res_gemini_500["error_code"] == "HTTP_500"
++
++        res_openai_500 = await service.probe_provider(
++            provider_kind="openai",
++            api_key="sk-test",
++        )
++        assert res_openai_500["ok"] is False
++        assert res_openai_500["error_code"] == "HTTP_500"
+ 
+ 
+ @pytest.mark.asyncio
+diff --git a/kanban/web/public/docs-images/63-ai-provider-ollama-probed-models.png b/kanban/web/public/docs-images/63-ai-provider-ollama-probed-models.png
+index 0eee7666..424ad4c7 100644
+Binary files a/kanban/web/public/docs-images/63-ai-provider-ollama-probed-models.png and b/kanban/web/public/docs-images/63-ai-provider-ollama-probed-models.png differ
+diff --git a/kanban/web/public/docs-images/64-agent-qa-done-definition.png b/kanban/web/public/docs-images/64-agent-qa-done-definition.png
+index 82cf426e..ec68b121 100644
+Binary files a/kanban/web/public/docs-images/64-agent-qa-done-definition.png and b/kanban/web/public/docs-images/64-agent-qa-done-definition.png differ
+diff --git a/kanban/web/public/docs-images/65-workflow-attach-qa-done-gate.png b/kanban/web/public/docs-images/65-workflow-attach-qa-done-gate.png
+index b51acee1..45ed485f 100644
+Binary files a/kanban/web/public/docs-images/65-workflow-attach-qa-done-gate.png and b/kanban/web/public/docs-images/65-workflow-attach-qa-done-gate.png differ
+diff --git a/kanban/web/public/docs-images/66-qa-gate-positive-approved-done.png b/kanban/web/public/docs-images/66-qa-gate-positive-approved-done.png
+new file mode 100644
+index 00000000..65a19884
+Binary files /dev/null and b/kanban/web/public/docs-images/66-qa-gate-positive-approved-done.png differ
+diff --git a/kanban/web/public/docs-images/67-qa-gate-negative-saturn-ice-cream-vetoed.png b/kanban/web/public/docs-images/67-qa-gate-negative-saturn-ice-cream-vetoed.png
+new file mode 100644
+index 00000000..7770714f
+Binary files /dev/null and b/kanban/web/public/docs-images/67-qa-gate-negative-saturn-ice-cream-vetoed.png differ
+diff --git a/kanban/web/src/features/activity/ActivityEventRow.tsx b/kanban/web/src/features/activity/ActivityEventRow.tsx
+index ad7e3bad..cb60fc7d 100644
+--- a/kanban/web/src/features/activity/ActivityEventRow.tsx
++++ b/kanban/web/src/features/activity/ActivityEventRow.tsx
+@@ -112,9 +112,29 @@ export function ActivityEventRow({
+   if (item.event_type === 'GATE_PENDING') {
+     const gp = payload as GatePayload;
+     const hookName = gp.hook_name ?? 'Workflow Gate';
+-    const harness = gp.harness ?? 'cli: agy -p';
++    const rawHarness = gp.harness_label ?? gp.harness ?? 'cli: agy -p';
++    const isInAppSdk =
++      rawHarness.startsWith('in_app_sdk') ||
++      gp.harness_kind === 'in_app_sdk' ||
++      ['ollama', 'gemini', 'openai'].includes(gp.provider_kind ?? '') ||
++      rawHarness === 'sdk';
++
++    let displayHarness = rawHarness;
++    if (isInAppSdk) {
++      if (!displayHarness.startsWith('in_app_sdk (')) {
++        const prov =
++          gp.provider_kind ??
++          (rawHarness !== 'in_app_sdk' && rawHarness !== 'sdk' ? rawHarness : 'ollama');
++        const mod = gp.model_id ? `/${gp.model_id}` : '';
++        displayHarness = `in_app_sdk (${prov}${mod})`;
++      }
++    }
++
+     const ro = gp.repo_mount_ro !== false ? ':ro' : ':rw';
+-    const tooltipText = `Gate: ${hookName} | Harness: ${harness} | Repo mount: ${ro} | Status: Pending`;
++    const summaryText = isInAppSdk
++      ? `evaluating gate via ${displayHarness}`
++      : `evaluating gate via ${rawHarness} (${ro})`;
++    const tooltipText = `Gate: ${hookName} | Harness: ${displayHarness} | Repo mount: ${ro} | Status: Pending`;
+ 
+     return (
+       <div className="activity-event-row activity-event-row--gate-pending" data-testid="gate-pending-row">
+@@ -127,7 +147,7 @@ export function ActivityEventRow({
+         <div className="event-row__content">
+           <span className="event-row__actor">{hookName}</span>
+           <span className="event-row__summary">
+-            evaluating gate via {harness} ({ro})
++            {summaryText}
+           </span>
+           <time dateTime={item.created_at} className="event-row__time">
+             {formattedDate}
+diff --git a/kanban/web/src/features/activity/ActivitySection.tsx b/kanban/web/src/features/activity/ActivitySection.tsx
+index 14094736..ff627723 100644
+--- a/kanban/web/src/features/activity/ActivitySection.tsx
++++ b/kanban/web/src/features/activity/ActivitySection.tsx
+@@ -83,11 +83,14 @@ export function ActivitySection({
+     staleTime: 30_000,
+   });
+ 
+-  const counts = activityData?.counts ?? {
+-    all: 0,
+-    comments: commentsData?.items.length ?? 0,
+-    history: 0,
+-    gates: 0,
++  const counts = {
++    all: activityData?.counts.all ?? 0,
++    comments: Math.max(
++      activityData?.counts.comments ?? 0,
++      commentsData?.items.length ?? 0,
++    ),
++    history: activityData?.counts.history ?? 0,
++    gates: activityData?.counts.gates ?? 0,
+   };
+ 
+   // Scroll to targeted comment if #comment-<uuid> is present in hash
+diff --git a/kanban/web/src/features/activity/SafeMarkdownPreview.tsx b/kanban/web/src/features/activity/SafeMarkdownPreview.tsx
+index 04e20bed..5b9e7e0c 100644
+--- a/kanban/web/src/features/activity/SafeMarkdownPreview.tsx
++++ b/kanban/web/src/features/activity/SafeMarkdownPreview.tsx
+@@ -143,56 +143,140 @@ export function SafeMarkdownPreview({
+ 
+   const flushTextLines = (): void => {
+     if (textLines.length === 0) return;
+-    const text = textLines.join('\n').trim();
++    const rawLines = textLines;
+     textLines = [];
+-    if (!text) return;
+ 
+-    // Check if it's a list
+-    const sublines = text.split('\n');
+-    const isBulletList = sublines.every((l) => l.trim().startsWith('- ') || l.trim().startsWith('* '));
+-    const isNumberedList = sublines.every((l) => /^\d+\.\s/.test(l.trim()));
++    let currentListType: 'ul' | 'ol' | null = null;
++    let listItems: string[] = [];
++    let paraLines: string[] = [];
+ 
+-    if (isBulletList) {
+-      blocks.push(
+-        <ul key={`ul-${String(blockIdx++)}`} className="safe-md__ul">
+-          {sublines.map((l, i) => (
+-            <li key={`li-${String(i)}`}>
+-              {renderInlineContent(l.trim().replace(/^[-*]\s+/, ''), `ul-${String(blockIdx)}-${String(i)}`)}
+-            </li>
+-          ))}
+-        </ul>,
+-      );
+-    } else if (isNumberedList) {
+-      blocks.push(
+-        <ol key={`ol-${String(blockIdx++)}`} className="safe-md__ol">
+-          {sublines.map((l, i) => (
+-            <li key={`li-${String(i)}`}>
+-              {renderInlineContent(l.trim().replace(/^\d+\.\s+/, ''), `ol-${String(blockIdx)}-${String(i)}`)}
+-            </li>
+-          ))}
+-        </ol>,
+-      );
+-    } else {
+-      // Split into paragraphs by blank lines
+-      const paragraphs = text.split(/\n\s*\n/).filter((p) => p.trim() !== '');
+-      paragraphs.forEach((p, pIdx) => {
+-        const content = renderInlineContent(p.trim(), `p-${String(blockIdx)}-${String(pIdx)}`);
+-        const hasMedia = p.includes('![');
+-        if (hasMedia) {
+-          blocks.push(
+-            <div key={`p-${String(blockIdx++)}-${String(pIdx)}`} className="safe-md__p safe-md__media-block">
+-              {content}
+-            </div>,
+-          );
+-        } else {
+-          blocks.push(
+-            <p key={`p-${String(blockIdx++)}-${String(pIdx)}`} className="safe-md__p">
+-              {content}
+-            </p>,
+-          );
++    const flushList = (): void => {
++      if (currentListType === null || listItems.length === 0) return;
++      if (currentListType === 'ul') {
++        const uIdx = blockIdx++;
++        blocks.push(
++          <ul key={`ul-${String(uIdx)}`} className="safe-md__ul">
++            {listItems.map((item, idx) => (
++              <li key={`li-${String(idx)}`}>
++                {renderInlineContent(item, `ul-${String(uIdx)}-${String(idx)}`)}
++              </li>
++            ))}
++          </ul>,
++        );
++      } else {
++        const oIdx = blockIdx++;
++        blocks.push(
++          <ol key={`ol-${String(oIdx)}`} className="safe-md__ol">
++            {listItems.map((item, idx) => (
++              <li key={`li-${String(idx)}`}>
++                {renderInlineContent(item, `ol-${String(oIdx)}-${String(idx)}`)}
++              </li>
++            ))}
++          </ol>,
++        );
++      }
++      currentListType = null;
++      listItems = [];
++    };
++
++    const flushParagraph = (): void => {
++      if (paraLines.length === 0) return;
++      const text = paraLines.join('\n').trim();
++      paraLines = [];
++      if (!text) return;
++
++      const pIdx = blockIdx++;
++      const content = renderInlineContent(text, `p-${String(pIdx)}`);
++      const hasMedia = text.includes('![');
++      if (hasMedia) {
++        blocks.push(
++          <div key={`p-${String(pIdx)}`} className="safe-md__p safe-md__media-block">
++            {content}
++          </div>,
++        );
++      } else {
++        blocks.push(
++          <p key={`p-${String(pIdx)}`} className="safe-md__p">
++            {content}
++          </p>,
++        );
++      }
++    };
++
++    for (const rawLine of rawLines) {
++      const trimmed = rawLine.trim();
++      if (!trimmed) {
++        flushList();
++        flushParagraph();
++        continue;
++      }
++
++      // Check Heading: # through ######
++      const headingMatch = /^(#{1,6})\s+(.+)$/.exec(trimmed);
++      if (headingMatch) {
++        flushList();
++        flushParagraph();
++        const level = (headingMatch[1] ?? '').length;
++        const titleText = headingMatch[2] ?? '';
++        const hIdx = blockIdx++;
++        const content = renderInlineContent(titleText, `h-${String(hIdx)}`);
++        const headingClassName = `safe-md__h${String(level)}`;
++        switch (level) {
++          case 1:
++            blocks.push(<h1 key={`h-${String(hIdx)}`} className={headingClassName}>{content}</h1>);
++            break;
++          case 2:
++            blocks.push(<h2 key={`h-${String(hIdx)}`} className={headingClassName}>{content}</h2>);
++            break;
++          case 3:
++            blocks.push(<h3 key={`h-${String(hIdx)}`} className={headingClassName}>{content}</h3>);
++            break;
++          case 4:
++            blocks.push(<h4 key={`h-${String(hIdx)}`} className={headingClassName}>{content}</h4>);
++            break;
++          case 5:
++            blocks.push(<h5 key={`h-${String(hIdx)}`} className={headingClassName}>{content}</h5>);
++            break;
++          default:
++            blocks.push(<h6 key={`h-${String(hIdx)}`} className={headingClassName}>{content}</h6>);
++            break;
++        }
++        continue;
++      }
++
++      // Check Unordered List item: - or *
++      const bulletMatch = /^[-*]\s+(.+)$/.exec(trimmed);
++      if (bulletMatch) {
++        if (currentListType !== 'ul') {
++          flushList();
++          flushParagraph();
++          currentListType = 'ul';
+         }
+-      });
++        listItems.push(bulletMatch[1] ?? '');
++        continue;
++      }
++
++      // Check Ordered List item: \d+\.
++      const orderedMatch = /^\d+\.\s+(.+)$/.exec(trimmed);
++      if (orderedMatch) {
++        if (currentListType !== 'ol') {
++          flushList();
++          flushParagraph();
++          currentListType = 'ol';
++        }
++        listItems.push(orderedMatch[1] ?? '');
++        continue;
++      }
++
++      // Plain text line: if in list, end list
++      if (currentListType !== null) {
++        flushList();
++      }
++      paraLines.push(trimmed);
+     }
++
++    flushList();
++    flushParagraph();
+   };
+ 
+   for (const line of lines) {
+diff --git a/kanban/web/src/features/activity/activity.css b/kanban/web/src/features/activity/activity.css
+index fc2da111..e170f7a0 100644
+--- a/kanban/web/src/features/activity/activity.css
++++ b/kanban/web/src/features/activity/activity.css
+@@ -722,3 +722,23 @@
+   margin: 6px 0 6px 20px;
+   padding: 0;
+ }
++
++/* Safe Markdown Heading Elements */
++.safe-md__h1,
++.safe-md__h2,
++.safe-md__h3,
++.safe-md__h4,
++.safe-md__h5,
++.safe-md__h6 {
++  font-weight: 600;
++  color: var(--fg-primary);
++  margin: 10px 0 6px 0;
++  line-height: 1.35;
++}
++
++.safe-md__h1 { font-size: 1.25rem; }
++.safe-md__h2 { font-size: 1.125rem; }
++.safe-md__h3 { font-size: 1rem; }
++.safe-md__h4 { font-size: 0.9375rem; }
++.safe-md__h5 { font-size: 0.875rem; }
++.safe-md__h6 { font-size: 0.8125rem; }
+diff --git a/kanban/web/src/features/activity/activityApi.ts b/kanban/web/src/features/activity/activityApi.ts
+index c564b1d6..7f46e97e 100644
+--- a/kanban/web/src/features/activity/activityApi.ts
++++ b/kanban/web/src/features/activity/activityApi.ts
+@@ -22,6 +22,11 @@ export interface ActorSummary {
+ export interface GatePayload {
+   readonly hook_name?: string;
+   readonly harness?: string;
++  readonly harness_label?: string;
++  readonly harness_kind?: string;
++  readonly provider_kind?: string;
++  readonly model_id?: string;
++  readonly agent_slug?: string;
+   readonly repo_mount_ro?: boolean;
+   readonly from_state?: string;
+   readonly to_state?: string;
+diff --git a/kanban/web/src/features/docs-center/wikiManifest.ts b/kanban/web/src/features/docs-center/wikiManifest.ts
+index 22055a50..ab41e95d 100644
+--- a/kanban/web/src/features/docs-center/wikiManifest.ts
++++ b/kanban/web/src/features/docs-center/wikiManifest.ts
+@@ -1392,9 +1392,24 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+         "id": "local-agent-cli-diagnostics",
+         "title": "Local Agent CLI Diagnostics",
+         "level": 3
++      },
++      {
++        "id": "multi-provider-benchmark-cutoff-timeout-guide",
++        "title": "Multi-Provider Benchmark & Cutoff Timeout Guide",
++        "level": 2
++      },
++      {
++        "id": "live-full-stack-in-transition-benchmark-matrix-in-progress---done",
++        "title": "Live Full-Stack In-Transition Benchmark Matrix (In Progress -> Done)",
++        "level": 3
++      },
++      {
++        "id": "choosing-a-cutoff-timeout",
++        "title": "Choosing a Cutoff Timeout",
++        "level": 3
+       }
+     ],
+-    "content": "# [Guide] Multi-Provider AI Engine, Execution Harnesses, and Runners\n\n## Overview\n\nUnlike commercial SaaS ticketing platforms that hardcode proprietary cloud models behind expensive monthly add-ons, \ud83d\udc4dkanban features an open, multi-provider **AI Orchestration Engine** (`agent/`). Organizations can leverage cloud AI providers, local open-source models, or zero-shell isolated command-line pipes without changing application code.\n\nSupported provider ecosystems:\n- **Cloud LLMs:** OpenAI (GPT-4o, o3-mini), Google Gemini (Gemini 2.5 Flash/Pro), and OpenAI-compatible gateways.\n- **Local Private LLMs:** Ollama (Llama 3, DeepSeek-R1, Qwen 2.5) running completely on-premise with zero data egress.\n- **Zero-Shell CLI Pipe Harnesses:** Direct pipe execution (`agy -p`, `codex -p`) running inside hardened Linux sandboxes.\n- **Remote Read-Only mTLS Runners:** Distributed runners executing builds and code inspections over encrypted WebSockets.\n\n```mermaid\nflowchart TD\n    subgraph Core[\"\ud83d\udc4dkanban Agent Runtime\"]\n        App[\"FastAPI & Worker Dispatcher\"]\n        Protocol[\"LLMProvider Interface (agent/providers/base.py)\"]\n    end\n\n    subgraph Providers[\"Multi-Provider Implementations\"]\n        OpenAI[\"OpenAI Provider<br/>GPT-4o, o3-mini, compatible gateways\"]\n        Gemini[\"Google Gemini Provider<br/>Gemini 2.5 Flash / Pro (native tools)\"]\n        Ollama[\"Local Ollama Provider<br/>Llama 3, DeepSeek-R1, Qwen 2.5\"]\n        CLIPipe[\"Zero-Shell CLI Pipe<br/>agy -p / codex -p in nsjail\"]\n        Runner[\"Remote mTLS Runner<br/>Encrypted WSS, read-only repo\"]\n    end\n\n    App --> Protocol\n    Protocol --> OpenAI\n    Protocol --> Gemini\n    Protocol --> Ollama\n    Protocol --> CLIPipe\n    Protocol --> Runner\n```\n\n![Async Agent Gate Card States and Transition Lifecycle](images/16-async-agent-gate-states.png)\n\n---\n\n## Provider Architecture and Abstraction Layer\n\nThe engine abstracts all AI interactions behind a clean, asynchronous provider protocol (`agent/providers/base.py`):\n\n```python\nclass LLMProvider(ABC):\n    @abstractmethod\n    async def complete(self, prompt: str, system: str | None = None, **kwargs) -> CompletionResult:\n        \"\"\"Execute a text completion or FIM generation.\"\"\"\n\n    @abstractmethod\n    async def chat(self, messages: list[ChatMessage], **kwargs) -> ChatResult:\n        \"\"\"Execute a multi-turn conversation with tool calling.\"\"\"\n\n    @abstractmethod\n    async def embed(self, texts: list[str]) -> list[list[float]]:\n        \"\"\"Generate vector embeddings for semantic search.\"\"\"\n```\n\n<a id=\"supported-runtimes\"></a>\n### Supported Providers Matrix\n\n| Provider Key | Primary Use Cases | Streaming Support | Function / Tool Calling | Network Boundary |\n| :--- | :--- | :---: | :---: | :--- |\n| **`openai`** | Complex planning, synthesis | Yes | Yes (Native JSON Schema) | `egress_llm_net` |\n| **`gemini`** | Large context specs, vision | Yes | Yes (Native Function Calling) | `egress_llm_net` |\n| **`ollama`** | Air-gapped workstations, privacy | Yes | Yes (Model dependent) | `data_net` / local |\n| **`cli_pipe`** | Deterministic CI agents, bash-less | No (Batch) | Pipe JSON protocol | `sandbox_net` (nsjail) |\n| **`remote_runner`** | Forensic code audits, test gates | Yes (WSS) | Streamable RPC | Dedicated mTLS |\n\n---\n\n<a id=\"execution-harnesses\"></a>\n## Zero-Shell CLI Pipe Harnesses (`agy -p` / `codex -p`)\n\n```mermaid\nsequenceDiagram\n    autonumber\n    participant Engine as AI Orchestrator\n    participant Sandbox as nsjail Sandbox Runner\n    participant Model as CLI Pipe (agy -p / codex -p)\n\n    Engine->>Sandbox: Spawn isolated container (CLONE_NEWNET, read-only FS, 512MB RAM)\n    Engine->>Sandbox: Pipe prompt.json over STDIN\n    Sandbox->>Model: Execute deterministic harness without shell/bash\n    Model->>Sandbox: Generate tool call / response JSON over STDOUT\n    Sandbox-->>Engine: Structured JSON stream (Zero bash exposure)\n    Engine->>Engine: Validate response against Pydantic schema\n```\n\nAutonomous agents frequently need to inspect code, run validators, or check commit history. However, granting an LLM arbitrary bash or shell access introduces severe remote code execution (RCE) hazards.\n\n\ud83d\udc4dkanban resolves this with **Zero-Shell CLI Pipes**:\n- Agents do not receive an interactive shell or bash process.\n- Execution communicates strictly over standard input (`stdin`) and standard output (`stdout`) using structured JSON pipes.\n- Commands run inside a sandboxed Linux jail (`nsjail` / `setpriv`):\n  - Read-only root filesystem.\n  - Network namespace disabled (`CLONE_NEWNET`).\n  - Memory limit capped at 512 MB.\n  - Execution time limited to 15 seconds.\n\n```bash\n# Example invocation of pipe harness:\ncat prompt.json | agy -p --sandbox-jail > response.json\n```\n\n---\n\n## AI Providers and Token Caps Studio (`/admin/ai`)\n\nWorkspace and server administrators manage LLM provider registrations, write-only API key custody, monthly token budgets, and zero-egress policies in the visual studio at `/admin/ai`.\n\n```mermaid\nflowchart TD\n    subgraph AIStudio[\"AI Providers & Token Caps Architecture\"]\n        AdminUser[\"Administrator (AAL2)\"] --> Reg[\"Register / Edit Provider\"]\n        Reg --> ProvidersList[\"Configured Providers<br/>- OpenAI (Cloud, priority 10)<br/>- Gemini (Cloud, priority 20)<br/>- Ollama (Local Air-Gap, priority 5)\"]\n        \n        ProvidersList --> AirGapCheck{\"Air-Gap Policy Active?\"}\n        AirGapCheck -->|Yes| BlockCloud[\"Cloud Providers Blocked<br/>Only Local Zero-Egress Ollama Allowed\"]\n        AirGapCheck -->|No| AllowCloud[\"Dispatched by Priority Tier\"]\n        \n        AllowCloud --> BudgetGate{\"Monthly Token Budget Gate\"}\n        BlockCloud --> BudgetGate\n        \n        BudgetGate -->|Within Cap| Exec[\"Execute Completion / Tool Call\"]\n        BudgetGate -->|Cap Exceeded| Reject[\"429 Budget Exceeded<br/>Alert Admin to Reset or Expand Cap\"]\n    end\n```\n\n![AI Providers and Token Caps Studio](images/43-admin-ai-studio-providers.png)\n\n### Key Provider Governance Features:\n1. **Write-Only API Key Custody:** API keys are submitted over encrypted TLS, stored encrypted in the database, and never echoed back to the browser.\n2. **Enterprise Air-Gap Mode:** When activated, all cloud egress to external AI services is blocked at the network layer. Only local, on-premise runtimes (such as Ollama) are authorized for completions.\n3. **Monthly Token Budgets & Ledgers:** Each provider configuration enforces monthly input/output token caps with automated rollover and audit ledger accounting.\n\n---\n\n## Agent Definitions Studio (`/admin/agents`)\n\nAdministrators define and customize autonomous agent personas, tool permissions, and system prompt templates at `/admin/agents`.\n\n```mermaid\nflowchart LR\n    subgraph AgentDefFlow[\"Agent Definition & Validation Lifecycle\"]\n        Def[\"Agent Definition<br/>Name, Slug, Model, Prompt Template\"] --> Scope[\"Tool Allowlist Scoping<br/>Permitted MCP Tools (read_ticket, add_comment, etc.)\"]\n        Scope --> Modal[\"Validation Modal (/admin/agents)<br/>Simulate test prompt against agent schema\"]\n        Modal --> Verdict{\"Validation Passes?\"}\n        Verdict -->|Yes| Active[\"Registered as Active Agent Principal\"]\n        Verdict -->|No| Fix[\"Report Schema / Prompt Errors for Correction\"]\n    end\n```\n\n![Agent Definitions Studio Overview](images/44-admin-agent-definitions.png)\n\n![Agent Validation Modal](images/60-agent-validation-modal.png)\n\n### Definition Capabilities:\n- **Role and Model Mapping:** Bind specific personas (e.g. `reality-checker`, `security-auditor`, `code-reviewer`) to optimal models (Gemini 2.5 Flash, GPT-4o, DeepSeek-R1).\n- **Tool Allowlist Scoping:** Strictly restrict which MCP tools each agent principal can invoke, enforcing least privilege.\n- **Interactive Validation Modal:** Test and validate agent definitions before deploying them to live project workflows.\n\n---\n\n## Agent Runners Studio and Distributed mTLS Daemon (`/admin/agent-runners`)\n\nFor heavy build verification, sandbox test execution, and isolated code review, \ud83d\udc4dkanban deploys distributed **Agent Runners** managed through `/admin/agent-runners`.\n\n```mermaid\nsequenceDiagram\n    autonumber\n    actor Admin as Server Administrator\n    participant Studio as Runner Studio (/admin/agent-runners)\n    participant Server as \ud83d\udc4dkanban Orchestrator\n    participant Daemon as Remote Runner Daemon\n\n    Admin->>Studio: Click \"+ Mint Runner Token\"\n    Studio->>Server: Generate ephemeral enrollment token & mTLS cert\n    Server-->>Studio: Return copyable docker/cli run snippet\n    Admin->>Daemon: Launch daemon with enrollment token\n    Daemon->>Server: Establish mTLS WebSocket handshake\n    Server->>Server: Verify cryptographic certificate fingerprint\n    Server-->>Daemon: Channel verified: Runner enters \"ONLINE\"\n    Daemon->>Server: Heartbeat ping every 15s (CPU, RAM, active jobs)\n```\n\n![Agent Runner Studio Overview](images/45-admin-runner-studio.png)\n\n![Runner Mint Token Modal](images/61-runner-mint-token-modal.png)\n\n### Runner Infrastructure:\n- **mTLS Mutual Authentication:** Cryptographic X.509 mutual TLS guarantees that only authorized worker nodes connect to the orchestrator.\n- **Copyable Enrollment Snippets:** One-click copyable `docker run` and CLI commands for instant daemon deployment on build hosts.\n- **Heartbeat Monitoring:** Real-time visibility into runner health, active execution count, CPU load, and container status.\n\n---\n\n## Agent Revocation and Security Controls\n\nWhen an agent session exhibits anomalous activity or a credential leak is detected, administrators can invoke an instant Kill Switch across all surfaces:\n\n![Agent Kill Switch and Immediate Session Revocation](images/18-agent-kill-switch.png)\n\n---\n\n## Remote mTLS Repository Runners\n\nFor long-running verification tasks (e.g. compiling large C++ or Rust binaries, running full end-to-end Playwright suites), tasks are dispatched to external **mTLS Runners**:\n- **Mutual TLS Authentication (mTLS):** Both the \ud83d\udc4dkanban server and the runner verify cryptographic X.509 certificates.\n- **WebSocket Streaming:** Real-time log output and build artifacts stream back over encrypted WebSocket channels.\n- **Read-Only Volume Mounting:** The repository is mounted read-only to prevent unauthorized code mutations on the build host.\n\n---\n\n## Testable AI: Pluggable Fixtures and CLI Validation\n\nAI agent workflows can be notoriously difficult to test deterministically in CI pipelines due to model drift, token costs, and rate limits. \ud83d\udc4dkanban enforces **100% Deterministic AI Testing**:\n\n### Pluggable AI Response Fixtures\nIn test suites, providers are swapped with `FixtureLLMProvider` and `FixtureCLIRunner`:\n- Replays recorded, deterministic JSON responses without making network calls.\n- Simulates network timeouts, rate limit errors (`429`), and malformed responses to verify system resilience.\n\n### Local Agent CLI Diagnostics\nEngineers can validate transition helpers and AI workflows locally via the command line:\n\n```bash\n# Validate a transition helper against a ticket fixture\nkanban-agent validate-transition \\\n  --ticket-file test_ticket.json \\\n  --from-state in_progress \\\n  --to-state done \\\n  --dry-run\n```\n\n<a id=\"remote-runners\"></a>\n<a id=\"repository-access\"></a>\n"
++    "content": "# [Guide] Multi-Provider AI Engine, Execution Harnesses, and Runners\n\n## Overview\n\nUnlike commercial SaaS ticketing platforms that hardcode proprietary cloud models behind expensive monthly add-ons, \ud83d\udc4dkanban features an open, multi-provider **AI Orchestration Engine** (`agent/`). Organizations can leverage cloud AI providers, local open-source models, or zero-shell isolated command-line pipes without changing application code.\n\nSupported provider ecosystems:\n- **Cloud LLMs:** OpenAI (GPT-4o, o3-mini), Google Gemini (Gemini 2.5 Flash/Pro), and OpenAI-compatible gateways.\n- **Local Private LLMs:** Ollama (Llama 3, DeepSeek-R1, Qwen 2.5) running completely on-premise with zero data egress.\n- **Zero-Shell CLI Pipe Harnesses:** Direct pipe execution (`agy -p`, `codex -p`) running inside hardened Linux sandboxes.\n- **Remote Read-Only mTLS Runners:** Distributed runners executing builds and code inspections over encrypted WebSockets.\n\n```mermaid\nflowchart TD\n    subgraph Core[\"\ud83d\udc4dkanban Agent Runtime\"]\n        App[\"FastAPI & Worker Dispatcher\"]\n        Protocol[\"LLMProvider Interface (agent/providers/base.py)\"]\n    end\n\n    subgraph Providers[\"Multi-Provider Implementations\"]\n        OpenAI[\"OpenAI Provider<br/>GPT-4o, o3-mini, compatible gateways\"]\n        Gemini[\"Google Gemini Provider<br/>Gemini 2.5 Flash / Pro (native tools)\"]\n        Ollama[\"Local Ollama Provider<br/>Llama 3, DeepSeek-R1, Qwen 2.5\"]\n        CLIPipe[\"Zero-Shell CLI Pipe<br/>agy -p / codex -p in nsjail\"]\n        Runner[\"Remote mTLS Runner<br/>Encrypted WSS, read-only repo\"]\n    end\n\n    App --> Protocol\n    Protocol --> OpenAI\n    Protocol --> Gemini\n    Protocol --> Ollama\n    Protocol --> CLIPipe\n    Protocol --> Runner\n```\n\n![Async Agent Gate Card States and Transition Lifecycle](images/16-async-agent-gate-states.png)\n\n---\n\n## Provider Architecture and Abstraction Layer\n\nThe engine abstracts all AI interactions behind a clean, asynchronous provider protocol (`agent/providers/base.py`):\n\n```python\nclass LLMProvider(ABC):\n    @abstractmethod\n    async def complete(self, prompt: str, system: str | None = None, **kwargs) -> CompletionResult:\n        \"\"\"Execute a text completion or FIM generation.\"\"\"\n\n    @abstractmethod\n    async def chat(self, messages: list[ChatMessage], **kwargs) -> ChatResult:\n        \"\"\"Execute a multi-turn conversation with tool calling.\"\"\"\n\n    @abstractmethod\n    async def embed(self, texts: list[str]) -> list[list[float]]:\n        \"\"\"Generate vector embeddings for semantic search.\"\"\"\n```\n\n<a id=\"supported-runtimes\"></a>\n### Supported Providers Matrix\n\n| Provider Key | Primary Use Cases | Streaming Support | Function / Tool Calling | Network Boundary |\n| :--- | :--- | :---: | :---: | :--- |\n| **`openai`** | Complex planning, synthesis | Yes | Yes (Native JSON Schema) | `egress_llm_net` |\n| **`gemini`** | Large context specs, vision | Yes | Yes (Native Function Calling) | `egress_llm_net` |\n| **`ollama`** | Air-gapped workstations, privacy | Yes | Yes (Model dependent) | `data_net` / local |\n| **`cli_pipe`** | Deterministic CI agents, bash-less | No (Batch) | Pipe JSON protocol | `sandbox_net` (nsjail) |\n| **`remote_runner`** | Forensic code audits, test gates | Yes (WSS) | Streamable RPC | Dedicated mTLS |\n\n---\n\n<a id=\"execution-harnesses\"></a>\n## Zero-Shell CLI Pipe Harnesses (`agy -p` / `codex -p`)\n\n```mermaid\nsequenceDiagram\n    autonumber\n    participant Engine as AI Orchestrator\n    participant Sandbox as nsjail Sandbox Runner\n    participant Model as CLI Pipe (agy -p / codex -p)\n\n    Engine->>Sandbox: Spawn isolated container (CLONE_NEWNET, read-only FS, 512MB RAM)\n    Engine->>Sandbox: Pipe prompt.json over STDIN\n    Sandbox->>Model: Execute deterministic harness without shell/bash\n    Model->>Sandbox: Generate tool call / response JSON over STDOUT\n    Sandbox-->>Engine: Structured JSON stream (Zero bash exposure)\n    Engine->>Engine: Validate response against Pydantic schema\n```\n\nAutonomous agents frequently need to inspect code, run validators, or check commit history. However, granting an LLM arbitrary bash or shell access introduces severe remote code execution (RCE) hazards.\n\n\ud83d\udc4dkanban resolves this with **Zero-Shell CLI Pipes**:\n- Agents do not receive an interactive shell or bash process.\n- Execution communicates strictly over standard input (`stdin`) and standard output (`stdout`) using structured JSON pipes.\n- Commands run inside a sandboxed Linux jail (`nsjail` / `setpriv`):\n  - Read-only root filesystem.\n  - Network namespace disabled (`CLONE_NEWNET`).\n  - Memory limit capped at 512 MB.\n  - Execution time limited to 15 seconds.\n\n```bash\n# Example invocation of pipe harness:\ncat prompt.json | agy -p --sandbox-jail > response.json\n```\n\n---\n\n## AI Providers and Token Caps Studio (`/admin/ai`)\n\nWorkspace and server administrators manage LLM provider registrations, write-only API key custody, monthly token budgets, and zero-egress policies in the visual studio at `/admin/ai`.\n\n```mermaid\nflowchart TD\n    subgraph AIStudio[\"AI Providers & Token Caps Architecture\"]\n        AdminUser[\"Administrator (AAL2)\"] --> Reg[\"Register / Edit Provider\"]\n        Reg --> ProvidersList[\"Configured Providers<br/>- OpenAI (Cloud, priority 10)<br/>- Gemini (Cloud, priority 20)<br/>- Ollama (Local Air-Gap, priority 5)\"]\n        \n        ProvidersList --> AirGapCheck{\"Air-Gap Policy Active?\"}\n        AirGapCheck -->|Yes| BlockCloud[\"Cloud Providers Blocked<br/>Only Local Zero-Egress Ollama Allowed\"]\n        AirGapCheck -->|No| AllowCloud[\"Dispatched by Priority Tier\"]\n        \n        AllowCloud --> BudgetGate{\"Monthly Token Budget Gate\"}\n        BlockCloud --> BudgetGate\n        \n        BudgetGate -->|Within Cap| Exec[\"Execute Completion / Tool Call\"]\n        BudgetGate -->|Cap Exceeded| Reject[\"429 Budget Exceeded<br/>Alert Admin to Reset or Expand Cap\"]\n    end\n```\n\n![AI Providers and Token Caps Studio](images/43-admin-ai-studio-providers.png)\n\n### Key Provider Governance Features:\n1. **Write-Only API Key Custody:** API keys are submitted over encrypted TLS, stored encrypted in the database, and never echoed back to the browser.\n2. **Enterprise Air-Gap Mode:** When activated, all cloud egress to external AI services is blocked at the network layer. Only local, on-premise runtimes (such as Ollama) are authorized for completions.\n3. **Monthly Token Budgets & Ledgers:** Each provider configuration enforces monthly input/output token caps with automated rollover and audit ledger accounting.\n\n---\n\n## Agent Definitions Studio (`/admin/agents`)\n\nAdministrators define and customize autonomous agent personas, tool permissions, and system prompt templates at `/admin/agents`.\n\n```mermaid\nflowchart LR\n    subgraph AgentDefFlow[\"Agent Definition & Validation Lifecycle\"]\n        Def[\"Agent Definition<br/>Name, Slug, Model, Prompt Template\"] --> Scope[\"Tool Allowlist Scoping<br/>Permitted MCP Tools (read_ticket, add_comment, etc.)\"]\n        Scope --> Modal[\"Validation Modal (/admin/agents)<br/>Simulate test prompt against agent schema\"]\n        Modal --> Verdict{\"Validation Passes?\"}\n        Verdict -->|Yes| Active[\"Registered as Active Agent Principal\"]\n        Verdict -->|No| Fix[\"Report Schema / Prompt Errors for Correction\"]\n    end\n```\n\n![Agent Definitions Studio Overview](images/44-admin-agent-definitions.png)\n\n![Agent Validation Modal](images/60-agent-validation-modal.png)\n\n### Definition Capabilities:\n- **Role and Model Mapping:** Bind specific personas (e.g. `reality-checker`, `security-auditor`, `code-reviewer`) to optimal models (Gemini 2.5 Flash, GPT-4o, DeepSeek-R1).\n- **Tool Allowlist Scoping:** Strictly restrict which MCP tools each agent principal can invoke, enforcing least privilege.\n- **Interactive Validation Modal:** Test and validate agent definitions before deploying them to live project workflows.\n\n---\n\n## Agent Runners Studio and Distributed mTLS Daemon (`/admin/agent-runners`)\n\nFor heavy build verification, sandbox test execution, and isolated code review, \ud83d\udc4dkanban deploys distributed **Agent Runners** managed through `/admin/agent-runners`.\n\n```mermaid\nsequenceDiagram\n    autonumber\n    actor Admin as Server Administrator\n    participant Studio as Runner Studio (/admin/agent-runners)\n    participant Server as \ud83d\udc4dkanban Orchestrator\n    participant Daemon as Remote Runner Daemon\n\n    Admin->>Studio: Click \"+ Mint Runner Token\"\n    Studio->>Server: Generate ephemeral enrollment token & mTLS cert\n    Server-->>Studio: Return copyable docker/cli run snippet\n    Admin->>Daemon: Launch daemon with enrollment token\n    Daemon->>Server: Establish mTLS WebSocket handshake\n    Server->>Server: Verify cryptographic certificate fingerprint\n    Server-->>Daemon: Channel verified: Runner enters \"ONLINE\"\n    Daemon->>Server: Heartbeat ping every 15s (CPU, RAM, active jobs)\n```\n\n![Agent Runner Studio Overview](images/45-admin-runner-studio.png)\n\n![Runner Mint Token Modal](images/61-runner-mint-token-modal.png)\n\n### Runner Infrastructure:\n- **mTLS Mutual Authentication:** Cryptographic X.509 mutual TLS guarantees that only authorized worker nodes connect to the orchestrator.\n- **Copyable Enrollment Snippets:** One-click copyable `docker run` and CLI commands for instant daemon deployment on build hosts.\n- **Heartbeat Monitoring:** Real-time visibility into runner health, active execution count, CPU load, and container status.\n\n---\n\n## Agent Revocation and Security Controls\n\nWhen an agent session exhibits anomalous activity or a credential leak is detected, administrators can invoke an instant Kill Switch across all surfaces:\n\n![Agent Kill Switch and Immediate Session Revocation](images/18-agent-kill-switch.png)\n\n---\n\n## Remote mTLS Repository Runners\n\nFor long-running verification tasks (e.g. compiling large C++ or Rust binaries, running full end-to-end Playwright suites), tasks are dispatched to external **mTLS Runners**:\n- **Mutual TLS Authentication (mTLS):** Both the \ud83d\udc4dkanban server and the runner verify cryptographic X.509 certificates.\n- **WebSocket Streaming:** Real-time log output and build artifacts stream back over encrypted WebSocket channels.\n- **Read-Only Volume Mounting:** The repository is mounted read-only to prevent unauthorized code mutations on the build host.\n\n---\n\n## Testable AI: Pluggable Fixtures and CLI Validation\n\nAI agent workflows can be notoriously difficult to test deterministically in CI pipelines due to model drift, token costs, and rate limits. \ud83d\udc4dkanban enforces **100% Deterministic AI Testing**:\n\n### Pluggable AI Response Fixtures\nIn test suites, providers are swapped with `FixtureLLMProvider` and `FixtureCLIRunner`:\n- Replays recorded, deterministic JSON responses without making network calls.\n- Simulates network timeouts, rate limit errors (`429`), and malformed responses to verify system resilience.\n\n### Local Agent CLI Diagnostics\nEngineers can validate transition helpers and AI workflows locally via the command line:\n\n```bash\n# Validate a transition helper against a ticket fixture\nkanban-agent validate-transition \\\n  --ticket-file test_ticket.json \\\n  --from-state in_progress \\\n  --to-state done \\\n  --dry-run\n```\n\n---\n\n## Multi-Provider Benchmark & Cutoff Timeout Guide\n\nEvery AI provider configuration and agent definition exposes a configurable hard cutoff timeout (`timeout_ms`, `1000` to `300000` ms). At runtime, `GateWorkerRunner` enforces `cutoff_ms = min(provider.timeout_ms, agent.timeout_ms)`. When an upstream model exceeds `cutoff_ms`, the worker raises `GATE_TIMEOUT` and **fails closed**, leaving the ticket in its source state with zero hung workers.\n\n### Live Full-Stack In-Transition Benchmark Matrix (`In Progress -> Done`)\n\nMeasured end-to-end against `kanban-liveqa-2` (embedded PostgreSQL 16 + `FORCE ROW LEVEL SECURITY`) using `StrictVerdictSchema` (`kb-transition-verdict/v1`) on a Positive software ticket (`KAN-1`) and a Negative impossible/unverified ticket (`KAN-2: \"Build a rocket ship and serve ice cream on Saturn\"`):\n\n| Runtime & Model | Cutoff (`timeout_ms`) | Positive (`KAN-1`) | Positive Latency | Negative (`KAN-2`) | Negative Latency | Operational Guidance |\n| :--- | :---: | :--- | :---: | :--- | :---: | :--- |\n| **Google Gemini** (`gemini-2.5-flash-lite`) | `20000` | `approve` (`Done`) | `3,215 ms` | `reject` (`In Progress`) | `1,594 ms` | Fastest overall cloud model with strict schema compliance and `v1beta` AI Studio routing. |\n| **OpenAI Cloud** (`gpt-4o-mini`) | `20000` | `approve` (`Done`) | `3,846 ms` | `reject` (`In Progress`) | `2,224 ms` | Fast cloud fallback with strict JSON schema adherence. |\n| **Local Ollama Supercomputer** (`gemma4:e2b`) | `25000` | `approve` (`Done`) | `19,892 ms` | `reject` (`In Progress`) | `5,213 ms` | Strong air-gapped 2B edge choice; `20000`-`25000 ms` cutoff recommended. |\n| **Local Ollama GPU/CPU** (`gemma3:4b`) | `20000` / `35000` | `timed_out` (20s) / `approve` (35s) | `20,929 ms` / `31,431 ms` | `reject` (`In Progress`) | `16,630 ms` | If VRAM is shared with another pinned model (CPU fallback), set `timeout_ms >= 35000`. |\n| **Local Ollama GPU/CPU** (`granite3.3:2b`) | `20000` | `timed_out` (fail-closed) | `20,321 ms` | `reject` (`In Progress`) | `12,691 ms` | Warm-keep or `25000 ms` cutoff avoids cold-load timeout on long prompts. |\n| **Local Ollama Reasoning** (`nemotron-3-super:latest`) | `5000` (Strict) | N/A | N/A | `GATE_TIMEOUT` (fail-closed) | `6,023 ms` | Validates hard 5s cutoff protection with clean fail-closed veto. |\n| **Local Ollama Reasoning** (`nemotron-3-super:latest`) | `45000` (Extended) | `approve` (`Done`) | `31,940 ms` | `reject` (`In Progress`) | `26,502 ms` | Heavy reasoning models (`<think>` tags stripped) should use `45000`-`60000 ms`. |\n\n### Choosing a Cutoff Timeout\n- **Fast Cloud Models (`gpt-4o-mini`, `gemini-2.5-flash-lite`):** `15000` to `20000` ms.\n- **Local 2B-4B Edge Models (`gemma4:e2b`, `gemma3:4b`, `granite3.3:2b`):** `25000` to `35000` ms (covers occasional model reload or shared VRAM).\n- **Heavy Reasoning Models (`nemotron-3-super:latest`, `deepseek-r1`):** `45000` to `60000` ms, or pair with a strict `5000`-`10000` ms cutoff on latency-sensitive columns so stuck calls fail closed immediately.\n\n<a id=\"remote-runners\"></a>\n<a id=\"repository-access\"></a>\n"
+   },
+   {
+     "slug": "production-promotion-and-backup-runbook",
+@@ -1677,9 +1692,49 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+         "id": "the-board-interaction-states",
+         "title": "The Board Interaction States",
+         "level": 3
++      },
++      {
++        "id": "the-easiest-3-step-recipe-to-implement-an-automated-qa-gate-on-done",
++        "title": "The Easiest 3-Step Recipe to Implement an Automated QA Gate on Done",
++        "level": 2
++      },
++      {
++        "id": "step-1-register-and-probe-your-ai-provider-adminai",
++        "title": "Step 1: Register and Probe Your AI Provider (/admin/ai)",
++        "level": 3
++      },
++      {
++        "id": "step-2-register-an-agent-definition-adminagents",
++        "title": "Step 2: Register an Agent Definition (/admin/agents)",
++        "level": 3
++      },
++      {
++        "id": "step-3-attach-the-hook-to-in-progress---done-via-workflow",
++        "title": "Step 3: Attach the Hook to In Progress -> Done via + Workflow",
++        "level": 3
++      },
++      {
++        "id": "in-transition-gate-ideas-gallery",
++        "title": "In-Transition Gate Ideas Gallery",
++        "level": 2
++      },
++      {
++        "id": "idea-1-fast-2b4b-gemma-triage-auto-labeler-backlog---todo",
++        "title": "Idea 1: Fast 2B/4B Gemma Triage & Auto-Labeler (Backlog -> Todo)",
++        "level": 3
++      },
++      {
++        "id": "idea-2-security-secret-scan-gate-todo---in-progress",
++        "title": "Idea 2: Security & Secret Scan Gate (Todo -> In Progress)",
++        "level": 3
++      },
++      {
++        "id": "idea-3-automated-definition-of-done-qa-gate-in-progress---done",
++        "title": "Idea 3: Automated Definition-of-Done QA Gate (In Progress -> Done)",
++        "level": 3
+       }
+     ],
+-    "content": "# [Guide] Scripted Workflows and Transition Helpers\n\n## Overview\n\nIn traditional project management tools, workflow rules are either simple notification triggers or inflexible webhooks that fire only *after* a change has occurred. If an issue is improperly moved to \"Done\" without meeting code coverage requirements or QA verification, the damage is already done.\n\n\ud83d\udc4dkanban implements a **Scripted Workflow Engine** with **Pre-Transition Helpers**. When an operator or agent attempts to move a work item between states (`from_state -> to_state`), the transition is evaluated through an ordered pipeline of synchronous validators, field mutators, and asynchronous AI agent gates.\n\n---\n\n## The Transition Helper Pipeline\n\n```mermaid\nflowchart TD\n    Drag[\"User / Agent moves card: In Progress -> Done\"] --> HelperEngine[\"Transition Helper Engine\"]\n    HelperEngine --> Stage1[\"Stage 1: Synchronous Validator (Tier A Wasm)<br/>- Verify blockers resolved<br/>- Verify Definition of Done criteria & PR links\"]\n    Stage1 -->|PASS| Stage2[\"Stage 2: Synchronous Field Mutator (Tier A)<br/>- Auto-set closed_at timestamp<br/>- Update cycle velocity counters\"]\n    Stage1 -->|VETO| VetoInstant[\"Transition Rejected (422 Unprocessable)\"]\n    Stage2 --> Stage3[\"Stage 3: Asynchronous Gate Hold (Tier B Async Agent)<br/>- Card enters pending_agent_gate hold (\u23f3\ud83e\udd16)<br/>- Dispatches forensic audit to agent\"]\n    Stage3 -->|Approved| Approved[\"Gate Approved (\u2705\ud83e\udd16)<br/>Card lands cleanly in Done column\"]\n    Stage3 -->|Vetoed| VetoSnap[\"Gate Veto (\ud83d\uded1\ud83e\udd16)<br/>240ms spring snap-back to In Progress<br/>Itemized rejection posted to activity feed\"]\n```\n\n---\n\n## Helper Architecture\n\nTransition helpers operate across two execution tiers to balance latency and verification depth:\n\n1. **Tier A (Synchronous Wasm / In-Process):** Fast sub-25ms validators and mutators executing in memory or within sandboxed WebAssembly runtimes. These guarantee instantaneous rejection or field stamping without network round-trips.\n2. **Tier B (Asynchronous Autonomous Agent Gates):** Non-blocking background gates dispatched to local CLI harnesses (`agy -p`, `codex -p`), in-app SDK runners, or remote bare Git mirrors. These run comprehensive multi-file audits, build verifications, and forensic QA checks before approving the transition.\n\n### Failure Policies\n\nEvery attached transition helper specifies an explicit failure policy to determine behavior when a helper times out, errors, or fails execution:\n\n- **Fail-Closed:** Blocks the transition immediately. The card snaps back to its origin column and an itemized failure explanation is appended to the ticket timeline.\n- **Fail-Open (Warn):** Logs an audit warning to the activity feed and ledger while allowing the transition to proceed. This is reserved for non-critical informational checks.\n\n---\n\n## Admin Workflow Transition Studio\n\nProject Administrators configure transition pipelines through the visual studio at `/projects/KAN/settings/workflows`.\n\n![Workflow Transition Studio and Dry-Run Drawer](images/15-workflow-transition-studio.png)\n\n### Studio Capabilities\n- **State Transition Matrix:** Select any valid transition path (e.g. `In Progress -> In Review`, `In Review -> Done`).\n- **Pipeline Reordering:** Drag to reorder validators and mutators in the execution chain.\n- **Mutable Field Checkboxes:** Explicitly define which fields the transition helper is permitted to modify, enforcing least-privilege mutation boundaries.\n\n### The Non-Persistent Dry-Run Drawer\nTesting workflow logic against live tickets risks corrupting sprint metrics. The Workflow Studio provides a **Zero-Persistence Dry-Run Drawer**:\n- Select an existing ticket fixture or pick a live issue.\n- Execute the transition pipeline in a simulated sandbox without mutating the database.\n- Inspect per-step execution timings (e.g. `1.2ms` Wasm validator, `3.4ms` security invariant validator, `2.1ms` auto-label mutator).\n- Preview proposed property mutations (such as automatically applied labels).\n- Copy the exact CLI validation command (`kanban-agent validate-transition`) for local offline debugging.\n\n```mermaid\nsequenceDiagram\n    autonumber\n    actor Admin as Workflow Architect\n    participant Studio as Workflow Studio\n    participant Drawer as Dry-Run Drawer\n    participant Engine as Helper Engine (Sandbox)\n\n    Admin->>Studio: Select \"In Review -> Done\" rule\n    Admin->>Studio: Click \"Dry-Run Against Sample Ticket\"\n    Studio->>Drawer: Open Dry-Run Drawer with sample payload\n    Admin->>Drawer: Click \"Run Dry-Run\"\n    Drawer->>Engine: Dispatch pipeline in dry_run=True mode\n    Engine->>Engine: Run Hook 1: qa-proof-validator (1.2ms, Allowed)\n    Engine->>Engine: Run Hook 2: security-invariant-validator (3.4ms, Allowed)\n    Engine->>Engine: Run Hook 3: auto-label-mutator (2.1ms, Applied labels)\n    Engine-->>Drawer: Return execution report & copyable CLI snippet\n    Drawer-->>Admin: Display green \"Transition Allowed: Changes would commit\"\n```\n\n![Workflow Studio Dry-Run Drawer Simulation](images/50-workflow-studio-dry-run-drawer.png)\n\n---\n\n## Read-Only Bare Git Repository Bindings\n\nAutonomous agents evaluating transition gates often require access to source code, diff trees, and commit histories. To satisfy this requirement securely without risking repository corruption:\n- Administrators can bind local bare Git mirrors directly to a project through the **Git Repository Bindings** dialog.\n- The volume mount is strictly enforced as read-only (`:ro bare mirror`).\n- Agents can run `git diff`, `git log`, and code analysis against the mirror, but all write attempts fail at the OS kernel boundary.\n\n![Git Repository Bindings Modal](images/51-workflow-bind-git-repo-modal.png)\n\n---\n\n## Asynchronous Agent Gate Lifecycle on the Board\n\nWhen an issue transition requires complex verification (such as forensic QA certification or automated security audits), the transition operates asynchronously without blocking the user interface.\n\n```mermaid\nstateDiagram-v2\n    [*] --> InProgress\n    InProgress --> PendingGate: Move to Done (Trigger Transition Helper)\n    PendingGate --> Done: Agent Certifies Criteria (\u2705\ud83e\udd16 Approved)\n    PendingGate --> InProgress: Agent Rejects (\ud83d\uded1\ud83e\udd16 240ms Snap-Back)\n    Done --> [*]\n```\n\n![Async Agent Gate Card States and Snap-Back Lifecycle](images/16-async-agent-gate-states.png)\n\n![Board Pending Gate State in Active Sprint](images/35-board-pending-gate.png)\n\n### The Board Interaction States\n\n1. **Pending Hold (`\u23f3\ud83e\udd16`):**\n   - The card displays an amber countdown timer and progress indicator.\n   - The ticket enters database status `pending_agent_gate`.\n   - Other users viewing the board see the real-time hold status over WebSockets.\n2. **Gate Veto and 240ms Spring Snap-Back (`\ud83d\uded1\ud83e\udd16`):**\n   - If the agent discovers a defect or missing verification proof, the gate is vetoed.\n   - The board executes a physics-based 240ms spring snap-back animation, returning the card to its original column.\n   - A non-intrusive toast notification alerts the user, and the agent automatically posts an itemized rejection explanation to the ticket's `\ud83e\udd16 Gates` activity feed.\n3. **Gate Approval (`\u2705\ud83e\udd16`):**\n   - When all criteria are certified, the gate resolves to approved.\n   - The card transitions smoothly into the destination column, stamped with an immutable cryptographic verification badge.\n"
++    "content": "# [Guide] Scripted Workflows and Transition Helpers\n\n## Overview\n\nIn traditional project management tools, workflow rules are either simple notification triggers or inflexible webhooks that fire only *after* a change has occurred. If an issue is improperly moved to \"Done\" without meeting code coverage requirements or QA verification, the damage is already done.\n\n\ud83d\udc4dkanban implements a **Scripted Workflow Engine** with **Pre-Transition Helpers**. When an operator or agent attempts to move a work item between states (`from_state -> to_state`), the transition is evaluated through an ordered pipeline of synchronous validators, field mutators, and asynchronous AI agent gates.\n\n---\n\n## The Transition Helper Pipeline\n\n```mermaid\nflowchart TD\n    Drag[\"User / Agent moves card: In Progress -> Done\"] --> HelperEngine[\"Transition Helper Engine\"]\n    HelperEngine --> Stage1[\"Stage 1: Synchronous Validator (Tier A Wasm)<br/>- Verify blockers resolved<br/>- Verify Definition of Done criteria & PR links\"]\n    Stage1 -->|PASS| Stage2[\"Stage 2: Synchronous Field Mutator (Tier A)<br/>- Auto-set closed_at timestamp<br/>- Update cycle velocity counters\"]\n    Stage1 -->|VETO| VetoInstant[\"Transition Rejected (422 Unprocessable)\"]\n    Stage2 --> Stage3[\"Stage 3: Asynchronous Gate Hold (Tier B Async Agent)<br/>- Card enters pending_agent_gate hold (\u23f3\ud83e\udd16)<br/>- Dispatches forensic audit to agent\"]\n    Stage3 -->|Approved| Approved[\"Gate Approved (\u2705\ud83e\udd16)<br/>Card lands cleanly in Done column\"]\n    Stage3 -->|Vetoed| VetoSnap[\"Gate Veto (\ud83d\uded1\ud83e\udd16)<br/>240ms spring snap-back to In Progress<br/>Itemized rejection posted to activity feed\"]\n```\n\n---\n\n## Helper Architecture\n\nTransition helpers operate across two execution tiers to balance latency and verification depth:\n\n1. **Tier A (Synchronous Wasm / In-Process):** Fast sub-25ms validators and mutators executing in memory or within sandboxed WebAssembly runtimes. These guarantee instantaneous rejection or field stamping without network round-trips.\n2. **Tier B (Asynchronous Autonomous Agent Gates):** Non-blocking background gates dispatched to local CLI harnesses (`agy -p`, `codex -p`), in-app SDK runners, or remote bare Git mirrors. These run comprehensive multi-file audits, build verifications, and forensic QA checks before approving the transition.\n\n### Failure Policies\n\nEvery attached transition helper specifies an explicit failure policy to determine behavior when a helper times out, errors, or fails execution:\n\n- **Fail-Closed:** Blocks the transition immediately. The card snaps back to its origin column and an itemized failure explanation is appended to the ticket timeline.\n- **Fail-Open (Warn):** Logs an audit warning to the activity feed and ledger while allowing the transition to proceed. This is reserved for non-critical informational checks.\n\n---\n\n## Admin Workflow Transition Studio\n\nProject Administrators configure transition pipelines through the visual studio at `/projects/KAN/settings/workflows`.\n\n![Workflow Transition Studio and Dry-Run Drawer](images/15-workflow-transition-studio.png)\n\n### Studio Capabilities\n- **State Transition Matrix:** Select any valid transition path (e.g. `In Progress -> In Review`, `In Review -> Done`).\n- **Pipeline Reordering:** Drag to reorder validators and mutators in the execution chain.\n- **Mutable Field Checkboxes:** Explicitly define which fields the transition helper is permitted to modify, enforcing least-privilege mutation boundaries.\n\n### The Non-Persistent Dry-Run Drawer\nTesting workflow logic against live tickets risks corrupting sprint metrics. The Workflow Studio provides a **Zero-Persistence Dry-Run Drawer**:\n- Select an existing ticket fixture or pick a live issue.\n- Execute the transition pipeline in a simulated sandbox without mutating the database.\n- Inspect per-step execution timings (e.g. `1.2ms` Wasm validator, `3.4ms` security invariant validator, `2.1ms` auto-label mutator).\n- Preview proposed property mutations (such as automatically applied labels).\n- Copy the exact CLI validation command (`kanban-agent validate-transition`) for local offline debugging.\n\n```mermaid\nsequenceDiagram\n    autonumber\n    actor Admin as Workflow Architect\n    participant Studio as Workflow Studio\n    participant Drawer as Dry-Run Drawer\n    participant Engine as Helper Engine (Sandbox)\n\n    Admin->>Studio: Select \"In Review -> Done\" rule\n    Admin->>Studio: Click \"Dry-Run Against Sample Ticket\"\n    Studio->>Drawer: Open Dry-Run Drawer with sample payload\n    Admin->>Drawer: Click \"Run Dry-Run\"\n    Drawer->>Engine: Dispatch pipeline in dry_run=True mode\n    Engine->>Engine: Run Hook 1: qa-proof-validator (1.2ms, Allowed)\n    Engine->>Engine: Run Hook 2: security-invariant-validator (3.4ms, Allowed)\n    Engine->>Engine: Run Hook 3: auto-label-mutator (2.1ms, Applied labels)\n    Engine-->>Drawer: Return execution report & copyable CLI snippet\n    Drawer-->>Admin: Display green \"Transition Allowed: Changes would commit\"\n```\n\n![Workflow Studio Dry-Run Drawer Simulation](images/50-workflow-studio-dry-run-drawer.png)\n\n---\n\n## Read-Only Bare Git Repository Bindings\n\nAutonomous agents evaluating transition gates often require access to source code, diff trees, and commit histories. To satisfy this requirement securely without risking repository corruption:\n- Administrators can bind local bare Git mirrors directly to a project through the **Git Repository Bindings** dialog.\n- The volume mount is strictly enforced as read-only (`:ro bare mirror`).\n- Agents can run `git diff`, `git log`, and code analysis against the mirror, but all write attempts fail at the OS kernel boundary.\n\n![Git Repository Bindings Modal](images/51-workflow-bind-git-repo-modal.png)\n\n---\n\n## Asynchronous Agent Gate Lifecycle on the Board\n\nWhen an issue transition requires complex verification (such as forensic QA certification or automated security audits), the transition operates asynchronously without blocking the user interface.\n\n```mermaid\nstateDiagram-v2\n    [*] --> InProgress\n    InProgress --> PendingGate: Move to Done (Trigger Transition Helper)\n    PendingGate --> Done: Agent Certifies Criteria (\u2705\ud83e\udd16 Approved)\n    PendingGate --> InProgress: Agent Rejects (\ud83d\uded1\ud83e\udd16 240ms Snap-Back)\n    Done --> [*]\n```\n\n![Async Agent Gate Card States and Snap-Back Lifecycle](images/16-async-agent-gate-states.png)\n\n![Board Pending Gate State in Active Sprint](images/35-board-pending-gate.png)\n\n### The Board Interaction States\n\n1. **Pending Hold (`\u23f3\ud83e\udd16`):**\n   - The card displays an amber countdown timer and progress indicator.\n   - The ticket enters database status `pending_agent_gate`.\n   - Other users viewing the board see the real-time hold status over WebSockets.\n2. **Gate Veto and 240ms Spring Snap-Back (`\ud83d\uded1\ud83e\udd16`):**\n   - If the agent discovers a defect or missing verification proof, the gate is vetoed.\n   - The board executes a physics-based 240ms spring snap-back animation, returning the card to its original column.\n   - A non-intrusive toast notification alerts the user, and the agent automatically posts an itemized rejection explanation to the ticket's `\ud83e\udd16 Gates` activity feed.\n3. **Gate Approval (`\u2705\ud83e\udd16`):**\n   - When all criteria are certified, the gate resolves to approved.\n   - The card transitions smoothly into the destination column, stamped with an immutable cryptographic verification badge.\n\n---\n\n## The Easiest 3-Step Recipe to Implement an Automated QA Gate on `Done`\n\nYou can enforce automated Definition-of-Done verification on any project board in three steps without writing custom glue code:\n\n### Step 1: Register and Probe Your AI Provider (`/admin/ai`)\n1. Open **AI Providers & Token Caps Studio** at `/admin/ai` and click **`+ Register Provider`**.\n2. Place your API secret key in the **API Secret Key** field at the top of the drawer (optional for local Ollama), configure the **HTTP Base URL** and hard **Cutoff Timeout (ms)** (for example `20000` ms or `35000` ms), and click **`\ud83d\udd0d Probe Models`** to replace defaults exclusively with live discovered models.\n\n![Gemini Provider Editor with Top API Key and Probed Models](images/62-ai-provider-gemini-top-key-probe.png)\n\n![Ollama Provider Editor with Live Probed Models and Cutoff Timeout](images/63-ai-provider-ollama-probed-models.png)\n\n### Step 2: Register an Agent Definition (`/admin/agents`)\n1. Open **Autonomous Agent Definitions Studio** at `/admin/agents` and click **`+ Register Agent`**.\n2. Choose **In-App SDK**, pick your provider (`ollama`, `openai`, or `gemini`), click one of the **Probed Models** quick-pick chips (such as `gemma3:4b` or `gpt-4o-mini`), set the timeout cutoff, and enter your QA rubric in **System Instructions**.\n\n![QA Done Gate Agent Definition with Probed Model Quick-Picks](images/64-agent-qa-done-definition.png)\n\n### Step 3: Attach the Hook to `In Progress -> Done` via `+ Workflow`\n1. On the Kanban board, click **`+ Workflow`** on the **`Done`** column header (or open `/projects/KAN/settings/workflows`).\n2. Select `From State: In Progress`, `To State: Done`, `Hook Kind: Agent Transition Helper`, your `@qa-done-gate` agent, and `Failure Policy: Fail-Closed`, then click **Attach Hook**.\n\n![Attach Workflow Helper Hook Dialog for In Progress to Done](images/65-workflow-attach-qa-done-gate.png)\n\n---\n\n## In-Transition Gate Ideas Gallery\n\n### Idea 1: Fast 2B/4B Gemma Triage & Auto-Labeler (`Backlog -> Todo`)\nAttach a fast local edge model (`gemma4:e2b` or `granite3.3:2b`, `timeout_ms: 15000`) with `allowed_mutable_fields: [\"labels\", \"priority\"]` to automatically classify incoming backlog tickets, apply `needs-triage` or component labels, and reject empty one-line placeholders before sprint planning.\n\n### Idea 2: Security & Secret Scan Gate (`Todo -> In Progress`)\nAttach an `agent_interceptor` or Tier A Wasm `sync_validator` on `Todo -> In Progress` to verify that work items touching authentication, RBAC, or database migrations include a threat model checklist and zero pasted credentials before engineering begins.\n\n### Idea 3: Automated Definition-of-Done QA Gate (`In Progress -> Done`)\nRequire completed acceptance criteria and documented unit/QA verification evidence before any card can land in `Done`:\n- **Positive Transition (`KAN-1` Approved):** A ticket with checked Acceptance Criteria and documented Verification Proof passes the gate, lands in `Done`, and receives a persisted `## \u2705\ud83e\udd16 Workflow Transition Gate Approved` rationale comment.\n\n![Positive Gate Approval Landing Ticket in Done](images/66-qa-gate-positive-approved-done.png)\n\n- **Negative Transition (`KAN-2` Vetoed):** An unverified or impossible ticket (such as `\"Build a rocket ship and serve ice cream on Saturn\"` with no design doc, no tests, and no proof) is **vetoed** and kept safely in `In Progress` with an itemized `\ud83d\uded1\ud83e\udd16 Gate` rejection comment.\n\n![Negative Gate Veto Blocking Saturn Ice Cream Ticket in In Progress](images/67-qa-gate-negative-saturn-ice-cream-vetoed.png)\n\n"
+   },
+   {
+     "slug": "studio-configuration-reference",
+diff --git a/kanban/web/src/features/drawer-rail/PropertiesRail.css b/kanban/web/src/features/drawer-rail/PropertiesRail.css
+index 6449a1dd..c9248c48 100644
+--- a/kanban/web/src/features/drawer-rail/PropertiesRail.css
++++ b/kanban/web/src/features/drawer-rail/PropertiesRail.css
+@@ -53,6 +53,15 @@
+   font-size: var(--text-sm, 13px);
+ }
+ 
++.prop-row[data-prop="state"] .prop-row__value {
++  flex-wrap: nowrap;
++}
++
++.prop-row[data-prop="state"] .prop-row__select {
++  min-width: 132px;
++  flex: 1;
++}
++
+ .prop-row__select:focus {
+   outline: 2px solid var(--accent-primary);
+   outline-offset: 1px;
+diff --git a/kanban/web/src/features/drawer/IssueSurface.css b/kanban/web/src/features/drawer/IssueSurface.css
+index dd4fa01f..7f675cf8 100644
+--- a/kanban/web/src/features/drawer/IssueSurface.css
++++ b/kanban/web/src/features/drawer/IssueSurface.css
+@@ -371,6 +371,25 @@
+   flex-shrink: 0;
+ }
+ 
++.split-surface-close-btn {
++  width: auto;
++  min-width: max-content;
++  padding: 0 10px;
++  gap: 6px;
++  white-space: nowrap;
++  flex-shrink: 0;
++}
++
++.split-back-text {
++  white-space: nowrap;
++  font-size: 12px;
++}
++
++.surface__rail .prop-row[data-prop="state"] .prop-row__select {
++  min-width: 132px;
++  flex: 1;
++}
++
+ .issue-header__new-tab-link {
+   display: inline-flex;
+   align-items: center;
+diff --git a/kanban/web/src/features/gates/useGateRealtimeSync.ts b/kanban/web/src/features/gates/useGateRealtimeSync.ts
+index f21cfdc7..d02fbe0d 100644
+--- a/kanban/web/src/features/gates/useGateRealtimeSync.ts
++++ b/kanban/web/src/features/gates/useGateRealtimeSync.ts
+@@ -44,7 +44,9 @@ function updateBoardIssueWithGate(
+       execution_id: p.execution_id,
+       hook_name: p.hook_name,
+       agent_slug: p.agent_slug ?? 'agent',
+-      harness_label: p.harness_label ?? p.harness_kind ?? 'cli: agy -p',
++      harness_label:
++        p.harness_label ??
++        (p.harness_kind === 'in_app_sdk' ? 'in_app_sdk' : (p.harness_kind ?? 'cli: agy -p')),
+       started_at: p.started_at ?? new Date().toISOString(),
+       repo_mount_ro: p.repo_mount_ro !== false,
+       from_state: p.from_state,
+@@ -158,7 +160,9 @@ export function handleGateEvent(
+         execution_id: payload.execution_id,
+         hook_name: payload.hook_name,
+         agent_slug: payload.agent_slug ?? 'agent',
+-        harness_label: payload.harness_label ?? payload.harness_kind ?? 'cli: agy -p',
++        harness_label:
++          payload.harness_label ??
++          (payload.harness_kind === 'in_app_sdk' ? 'in_app_sdk' : (payload.harness_kind ?? 'cli: agy -p')),
+         started_at: payload.started_at ?? new Date().toISOString(),
+         repo_mount_ro: payload.repo_mount_ro !== false,
+         from_state: payload.from_state,
+@@ -305,6 +309,18 @@ export function handleGateEvent(
+   }
+ 
+   // 4. Notifications & Callbacks
++  if (
++    eventType === 'workflow.gate.approved' ||
++    eventType === 'workflow.gate.rejected' ||
++    eventType === 'workflow.gate.timed_out' ||
++    eventType === 'workflow.gate.cancelled'
++  ) {
++    void queryClient.invalidateQueries({ queryKey: ['comments', issue_key] });
++    void queryClient.invalidateQueries({
++      predicate: (q) => q.queryKey[0] === 'activity' && q.queryKey[1] === issue_key,
++    });
++  }
++
+   if (eventType === 'workflow.gate.pending') {
+     options.onGatePending?.(payload);
+   } else if (eventType === 'workflow.gate.approved') {
+diff --git a/kanban/web/src/features/workflows/AttachHookDialog.css b/kanban/web/src/features/workflows/AttachHookDialog.css
+new file mode 100644
+index 00000000..5c5e8d44
+--- /dev/null
++++ b/kanban/web/src/features/workflows/AttachHookDialog.css
+@@ -0,0 +1,6 @@
++/* Copyright 2026 Kanban Platform Contributors */
++/* Apache-2.0 License. See LICENSE for details. */
++
++.workflow-dialog-body {
++  padding-bottom: 16px;
++}
+diff --git a/kanban/web/src/features/workflows/AttachHookDialog.tsx b/kanban/web/src/features/workflows/AttachHookDialog.tsx
+index b4fe5575..55a2b1a0 100644
+--- a/kanban/web/src/features/workflows/AttachHookDialog.tsx
++++ b/kanban/web/src/features/workflows/AttachHookDialog.tsx
+@@ -3,6 +3,7 @@
+ 
+ import React, { useState, type JSX } from 'react';
+ import { Link } from 'react-router';
++import './AttachHookDialog.css';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import {
+   MUTABLE_FIELD_UNIVERSE,
+diff --git a/kanban/web/src/features/workflows/workflows.css b/kanban/web/src/features/workflows/workflows.css
+index 59df5d1c..ed355d69 100644
+--- a/kanban/web/src/features/workflows/workflows.css
++++ b/kanban/web/src/features/workflows/workflows.css
+@@ -569,7 +569,7 @@
+   flex: 1 1 auto;
+   min-height: 0;
+   overflow-y: auto;
+-  padding: 16px 24px;
++  padding: 16px 24px 16px 24px;
+   display: flex;
+   flex-direction: column;
+   gap: 16px;
+diff --git a/kanban/workflows/async_gate.py b/kanban/workflows/async_gate.py
+index 13686fa0..b37fea17 100644
+--- a/kanban/workflows/async_gate.py
++++ b/kanban/workflows/async_gate.py
+@@ -50,16 +50,23 @@ def compute_harness_label(agent_def: AgentDefinition | None) -> str:
+     """Compute human-facing harness label for display and event payloads."""
+     if agent_def is None:
+         return "in_app_sdk"
+-    if agent_def.harness_kind == "cli_pipe":
++    kind = agent_def.harness_kind
++    if kind == "cli_pipe":
+         bin_id = agent_def.cli_binary_allowlist_id or "cli"
+-        if bin_id in ("agy", "codex"):
+-            return f"cli: {bin_id} -p"
+-        return f"cli: {bin_id}"
+-    if agent_def.harness_kind == "in_app_sdk":
+-        return agent_def.provider_kind or "sdk"
+-    if agent_def.harness_kind == "remote_runner":
++        return f"cli: {bin_id} -p" if bin_id in ("agy", "codex") else f"cli: {bin_id}"
++    if kind == "in_app_sdk":
++        provider = agent_def.provider_kind or "sdk"
++        model = getattr(agent_def, "model_id", None) or getattr(agent_def, "default_model", None)
++        if model:
++            suffix = f" ({provider}/{model})"
++        elif provider != "sdk":
++            suffix = f" ({provider})"
++        else:
++            suffix = ""
++        return f"in_app_sdk{suffix}"
++    if kind == "remote_runner":
+         return f"remote: {agent_def.remote_runner_pool_slug or 'runner'}"
+-    return agent_def.harness_kind
++    return kind
+ 
+ 
+ def format_reason_preview(reason_markdown: str) -> str:
+@@ -81,7 +88,8 @@ def format_veto_comment(
+     header = (
+         f"🛑🤖 Gate `{hook_name}` ({harness_label}) vetoed {from_state_name} -> {to_state_name}"
+     )
+-    normalized = normalize_to_markdown(reason_markdown)
++    sanitized_reason = reason_markdown.replace("\u2014", "-").replace("\u2013", "-")
++    normalized = normalize_to_markdown(sanitized_reason)
+     scrubbed = scrub_text(normalized)
+     capped = scrubbed[:MAX_VETO_COMMENT_BYTES]
+     return f"{header}\n\n{capped}"
+@@ -102,7 +110,8 @@ def format_approve_comment(
+         f"- **Transition:** `{from_state_name}` -> `{to_state_name}`\n\n"
+         f"### Reality Check / Gate Rationale"
+     )
+-    normalized = normalize_to_markdown(reason_markdown)
++    sanitized_reason = reason_markdown.replace("\u2014", "-").replace("\u2013", "-")
++    normalized = normalize_to_markdown(sanitized_reason)
+     scrubbed = scrub_text(normalized)
+     capped = scrubbed[:MAX_APPROVE_COMMENT_BYTES]
+     return f"{header}\n\n{capped}"

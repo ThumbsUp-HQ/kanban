@@ -13,7 +13,7 @@ from __future__ import annotations
 import asyncio
 import datetime as dt
 import uuid
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -249,7 +249,7 @@ async def test_gate_worker_runner_load_entities_no_session_factory() -> None:
 
 
 @pytest.mark.asyncio
-async def test_gate_worker_runner_load_entities() -> None:
+async def test_gate_worker_runner_load_entities() -> None:  # noqa: PLR0915
     """_load_entities loads entities from DB when session_factory is present."""
     exec_id = uuid.uuid4()
     hook_id = uuid.uuid4()
@@ -305,6 +305,9 @@ async def test_gate_worker_runner_load_entities() -> None:
     async def fake_get(model_cls: type, _key: uuid.UUID) -> object:
         return entity_map.get(model_cls)
 
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = mock_res
     mock_session.get.side_effect = fake_get
     session_factory = MockSessionFactory(mock_session)
     runner = GateWorkerRunner(session_factory=session_factory)  # type: ignore[arg-type]
@@ -360,6 +363,9 @@ async def test_gate_worker_runner_poll_once_inferred_deadline_and_exceptions() -
     async def fake_get(model_cls: type, _key: uuid.UUID) -> object:
         return hook_map.get(model_cls)
 
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = mock_res
     mock_session.get.side_effect = fake_get
     session_factory = MockSessionFactory(mock_session)
     runner = GateWorkerRunner(session_factory=session_factory)  # type: ignore[arg-type]
@@ -466,6 +472,9 @@ async def test_gate_worker_runner_load_entities_wires_live_provider_and_timeout(
             return mock_hook
         return None
 
+    mock_res = MagicMock()
+    mock_res.scalar_one_or_none.return_value = None
+    mock_session.execute.return_value = mock_res
     mock_session.get.side_effect = fake_get
 
     mock_exec_result = MagicMock()
@@ -654,3 +663,252 @@ async def test_gate_worker_fail_closed_on_provider_timeout() -> None:
         "0196ed40-7b2a-7000-8000-223344556677",
         "GATE_TIMEOUT",
     )
+
+
+@pytest.mark.asyncio
+async def test_gate_worker_runner_resolve_workspace_and_admin_branches() -> None:
+    """_resolve_workspace_and_admin handles preset, no-session-factory, and engine queries."""
+    # 1. Preset ws and admin
+    ws_preset = uuid.uuid4()
+    admin_preset = uuid.uuid4()
+    r1 = GateWorkerRunner(workspace_id=ws_preset, admin_principal_id=admin_preset)
+    assert await r1._resolve_workspace_and_admin() == (ws_preset, admin_preset)  # noqa: SLF001
+
+    # 2. No session factory
+    r2 = GateWorkerRunner(session_factory=None)
+    assert await r2._resolve_workspace_and_admin() == (None, None)  # noqa: SLF001
+
+    # 3. Engine query execution
+    mock_conn = AsyncMock()
+    mock_res_ws = MagicMock()
+    mock_res_ws.scalar.return_value = ws_preset
+    mock_res_admin = MagicMock()
+    mock_res_admin.first.return_value = (admin_preset,)
+
+    mock_conn.execute.side_effect = [mock_res_ws, mock_res_admin]
+
+    mock_engine = MagicMock()
+
+    class FakeConnContext:
+        async def __aenter__(self) -> AsyncMock:
+            return mock_conn
+
+        async def __aexit__(self, *args: object) -> None:
+            pass
+
+    mock_engine.connect.return_value = FakeConnContext()
+
+    mock_sf = MagicMock()
+    mock_sf.engine = mock_engine
+    r3 = GateWorkerRunner(session_factory=mock_sf)
+    resolved_ws, resolved_admin = await r3._resolve_workspace_and_admin()  # noqa: SLF001
+    assert resolved_ws == ws_preset
+    assert resolved_admin == admin_preset
+
+    # 4. Engine exception handled cleanly
+    mock_conn_err = AsyncMock()
+    mock_conn_err.execute.side_effect = RuntimeError("DB connection error")
+    mock_engine_err = MagicMock()
+
+    class FakeConnContextErr:
+        async def __aenter__(self) -> AsyncMock:
+            return mock_conn_err
+
+        async def __aexit__(self, *args: object) -> None:
+            pass
+
+    mock_engine_err.connect.return_value = FakeConnContextErr()
+    mock_sf_err = MagicMock()
+    mock_sf_err.engine = mock_engine_err
+    r4 = GateWorkerRunner(session_factory=mock_sf_err)
+    assert await r4._resolve_workspace_and_admin() == (None, None)  # noqa: SLF001
+
+
+@pytest.mark.asyncio
+async def test_gate_worker_runner_record_decision_no_sf() -> None:
+    """record_decision returns early when session_factory is None."""
+    r = GateWorkerRunner(session_factory=None)
+    await r.record_decision("exec", "hook", "decision")
+
+
+@pytest.mark.asyncio
+async def test_gate_worker_runner_poll_once_no_sf_and_active_skip() -> None:
+    """poll_once returns 0 with no session factory and skips active invocations."""
+    r_no_sf = GateWorkerRunner(session_factory=None)
+    assert await r_no_sf.poll_once() == 0
+
+    inv_id = uuid.uuid4()
+    exec_id = uuid.uuid4()
+    hook_id = uuid.uuid4()
+
+    mock_inv = MagicMock()
+    mock_inv.id = inv_id
+    mock_inv.execution_id = exec_id
+    mock_inv.hook_id = hook_id
+    mock_inv.status = "running"
+    mock_inv.hook_kind = "agent_interceptor"
+    mock_inv.started_at = dt.datetime.now(dt.UTC) - dt.timedelta(seconds=120)
+    past_iso = (dt.datetime.now(dt.UTC) - dt.timedelta(seconds=10)).isoformat()
+    mock_inv.output_json = {"deadline_at": past_iso}
+    mock_inv.deadline_at = None
+
+    mock_session = AsyncMock()
+    mock_execute_res = MagicMock()
+    mock_execute_res.scalars.return_value.all.return_value = [mock_inv]
+    mock_session.execute.return_value = mock_execute_res
+
+    sf = MockSessionFactory(mock_session)
+    runner = GateWorkerRunner(session_factory=sf)  # type: ignore[arg-type]
+    runner._active_invocations.add(inv_id)  # noqa: SLF001
+
+    handled = await runner.poll_once()
+    assert handled == 0
+
+
+@pytest.mark.asyncio
+async def test_gate_worker_runner_additional_branches() -> None:  # noqa: PLR0915
+    """Cover remaining runner branches: dummy fixture, unknown p_kind, and sweep."""
+    # 1. _load_entities with dummy fixture
+    exec_id = uuid.uuid4()
+    hook_id = uuid.uuid4()
+    agent_id = uuid.uuid4()
+    mock_exec = MagicMock()
+    mock_exec.id = exec_id
+    mock_exec.issue_id = uuid.uuid4()
+    mock_exec.project_id = uuid.uuid4()
+    mock_exec.from_state_id = uuid.uuid4()
+    mock_exec.to_state_id = uuid.uuid4()
+    mock_exec.invoking_principal_id = uuid.uuid4()
+
+    mock_hook = MagicMock()
+    mock_hook.agent_definition_id = agent_id
+    mock_hook.allowed_mutable_fields = ()
+
+    mock_agent = MagicMock()
+    mock_agent.slug = "fixture-agent"
+    mock_agent.harness_kind = "fixture"
+    mock_agent.timeout_ms = 10000
+    mock_agent.repo_access_mode = "read-only"
+    mock_agent.provider_kind = "ollama"
+
+    mock_prov = MagicMock()
+    mock_prov.base_url = "http://fixture-llm"
+    mock_prov.provider_kind = "ollama"
+
+    entity_map: dict[type, Any] = {
+        WorkflowTransitionExecution: mock_exec,
+        WorkflowTransitionHook: mock_hook,
+        AgentDefinition: mock_agent,
+        Issue: MagicMock(
+            id=mock_exec.issue_id, sequence_id=1, summary="S", description_markdown="D"
+        ),
+        Project: MagicMock(identifier="PRJ"),
+        WorkflowState: MagicMock(name="Done"),
+    }
+
+    mock_session = AsyncMock()
+    mock_res_prov = MagicMock()
+    mock_res_prov.scalar_one_or_none.return_value = mock_prov
+    mock_session.execute.return_value = mock_res_prov
+
+    async def fake_get(model_cls: type, _key: uuid.UUID) -> object:
+        return entity_map.get(model_cls)
+
+    mock_session.get.side_effect = fake_get
+    sf = MockSessionFactory(mock_session)
+    runner = GateWorkerRunner(session_factory=sf)  # type: ignore[arg-type]
+
+    evt = {
+        "execution_id": str(exec_id),
+        "hook_id": str(hook_id),
+        "agent_definition_id": str(agent_id),
+    }
+    _e_dict, _i_dict, a_dict, _, _ = await runner._load_entities(evt)  # noqa: SLF001
+    assert isinstance(a_dict, dict)
+    assert a_dict["slug"] == "fixture-agent"
+    assert a_dict.get("provider") is None  # Skipped because is_dummy_fixture
+
+    # 2. _load_entities with unknown provider kind (hits exception logger branch)
+    mock_agent.harness_kind = "in_app_sdk"
+    mock_prov.base_url = "http://custom-url"
+    mock_prov.provider_kind = "unsupported_unknown_kind"
+    mock_prov.dek_kid = None
+    mock_prov.__dict__["wrapped_api_key"] = None
+    mock_prov.settings_json = {"timeout_ms": 15000}
+
+    _e2, _i2, a_dict2, _, _ = await runner._load_entities(evt)  # noqa: SLF001
+    assert isinstance(a_dict2, dict)
+    assert a_dict2.get("provider") is None  # Unknown kind caught and live_provider is None
+
+    # 3. poll_once with invalid deadline string and sweep
+    inv_id = uuid.uuid4()
+    mock_inv = MagicMock()
+    mock_inv.id = inv_id
+    mock_inv.execution_id = exec_id
+    mock_inv.hook_id = hook_id
+    mock_inv.status = "running"
+    mock_inv.hook_kind = "agent_interceptor"
+    mock_inv.started_at = dt.datetime.now(dt.UTC) - dt.timedelta(seconds=120)
+    mock_inv.output_json = {"deadline_at": "not-a-valid-iso-date"}
+    mock_inv.deadline_at = None
+
+    mock_agent_def = MagicMock()
+    mock_agent_def.principal_id = uuid.uuid4()
+    mock_agent_def.timeout_ms = 50000
+    mock_agent_def.provider_kind = "ollama"
+
+    mock_hook_rec = MagicMock()
+    mock_hook_rec.agent_definition_id = agent_id
+
+    async def fake_get_poll(model_cls: type, _key: uuid.UUID) -> object:
+        if model_cls == WorkflowTransitionHook:
+            return mock_hook_rec
+        if model_cls == AgentDefinition:
+            return mock_agent_def
+        return None
+
+    mock_session_poll = AsyncMock()
+    mock_session_poll.get.side_effect = fake_get_poll
+
+    mock_sweep_res = MagicMock()
+    mock_sweep_res.scalars.return_value.all.return_value = [mock_inv]
+
+    mock_prov_config = MagicMock()
+    mock_prov_config.settings_json = {"timeout_ms": 10000}
+    mock_prov_res = MagicMock()
+    mock_prov_res.scalar_one_or_none.return_value = mock_prov_config
+
+    mock_session_poll.execute.side_effect = [mock_sweep_res, mock_prov_res]
+
+    sf_poll = MockSessionFactory(mock_session_poll)
+    runner_poll = GateWorkerRunner(session_factory=sf_poll)  # type: ignore[arg-type]
+    runner_poll.record_failure = AsyncMock()  # type: ignore[method-assign]
+
+    handled = await runner_poll.poll_once()
+    assert handled == 1
+
+    # 4. poll_once with record_failure exception and dispatch exception
+    runner_err = GateWorkerRunner(session_factory=sf_poll)  # type: ignore[arg-type]
+    runner_err.record_failure = AsyncMock(side_effect=RuntimeError("timeout write failure"))  # type: ignore[method-assign]
+    mock_session_poll.execute.side_effect = [mock_sweep_res, mock_prov_res]
+    assert await runner_err.poll_once() == 0  # Exception caught and logged
+
+    # Active candidate dispatch error
+    mock_inv_active = MagicMock()
+    mock_inv_active.id = uuid.uuid4()
+    mock_inv_active.execution_id = exec_id
+    mock_inv_active.hook_id = hook_id
+    mock_inv_active.status = "running"
+    mock_inv_active.hook_kind = "agent_interceptor"
+    mock_inv_active.started_at = dt.datetime.now(dt.UTC)
+    mock_inv_active.deadline_at = dt.datetime.now(dt.UTC) + dt.timedelta(seconds=60)
+    mock_inv_active.output_json = None
+
+    mock_sweep_active = MagicMock()
+    mock_sweep_active.scalars.return_value.all.return_value = [mock_inv_active]
+    mock_session_active = AsyncMock()
+    mock_session_active.execute.return_value = mock_sweep_active
+    sf_active = MockSessionFactory(mock_session_active)
+    runner_active = GateWorkerRunner(session_factory=sf_active)  # type: ignore[arg-type]
+    runner_active.worker.handle_dispatch = AsyncMock(side_effect=RuntimeError("dispatch boom"))  # type: ignore[method-assign]
+    assert await runner_active.poll_once() == 0

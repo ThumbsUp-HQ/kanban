@@ -22,6 +22,11 @@ export interface ActorSummary {
 export interface GatePayload {
   readonly hook_name?: string;
   readonly harness?: string;
+  readonly harness_label?: string;
+  readonly harness_kind?: string;
+  readonly provider_kind?: string;
+  readonly model_id?: string;
+  readonly agent_slug?: string;
   readonly repo_mount_ro?: boolean;
   readonly from_state?: string;
   readonly to_state?: string;
