@@ -1,0 +1,57 @@
+Zero-Mock Live Full-Stack QA Proof - KAN-58 ([KB-MOBILE-SHELL-NAV])
+====================================================================
+Target Container: kanban-liveqa-1 (http://localhost:18961)
+Image / Build Commit: thumbs-up-kanban:local-qa (KB_GIT_COMMIT=9d5577ad9b50)
+Database: Embedded PostgreSQL 16 + FORCE ROW LEVEL SECURITY
+Execution Timestamp: 2026-11-21T06:26:22.311Z
+Mocks / Route Interception: ZERO (zero page.route, zero context.route, zero source edits)
+Page Runtime Errors: 0
+
+1. Live Project & Issue Seeding
+-------------------------------
+- Seeded project KAN ("Kanban Mobile QA") via POST /api/v1/projects -> HTTP 201
+- Seeded 3 issues via POST /api/v1/projects/KAN/issues -> HTTP 201: KAN-1, KAN-2, KAN-3
+
+2. Verification Results Across Viewports
+----------------------------------------
+(a) Topbar (hamburger menu) permanently visible above open ticket (single surface mounted):
+  - Mobile Portrait (390x844):
+    * /w/kanban/p/KAN/issues/KAN-1 (mode="full"): topbarTop=0, topbarBottom=52, topbarZ=300, hamburgerVisible=true, hamburgerHitInsideTopbar=true, surfaceTop=52, surfaceZ=100, surfaceClasses="surface--full", mountedSurfaceCount=1.
+    * /w/kanban/p/KAN/issues?peek=KAN-1 (mode="split"): topbarTop=0, topbarBottom=52, topbarZ=300, hamburgerVisible=true, hamburgerHitInsideTopbar=true, surfaceTop=52, surfaceZ=100, surfaceClasses="surface--split", mountedSurfaceCount=1.
+    * Captured: docs/qa/KAN-58/screenshots/live-mobile-ticket-topbar-visible-portrait.png
+  - Mobile Landscape (844x390):
+    * /w/kanban/p/KAN/issues/KAN-1 (mode="full"): topbarTop=0, topbarBottom=52, topbarZ=300, hamburgerVisible=true, hamburgerHitInsideTopbar=true, surfaceTop=52, surfaceZ=100, surfaceClasses="surface--full", mountedSurfaceCount=1.
+    * /w/kanban/p/KAN/issues?peek=KAN-1 (mode="split"): topbarTop=0, topbarBottom=52, topbarZ=300, hamburgerVisible=true, hamburgerHitInsideTopbar=true, surfaceTop=52, surfaceZ=100, surfaceClasses="surface--split", mountedSurfaceCount=1.
+    * Captured: docs/qa/KAN-58/screenshots/live-mobile-ticket-topbar-visible-landscape.png
+
+(b) Mobile Sidebar opens over ticket & closes via close button or nav click:
+  - On 390x844 mobile with KAN-1 open:
+    * Tapped .kb-topbar-hamburger -> .kb-sidebar.kb-sidebar-overlay opened over ticket at z-index=1001.
+    * Captured: docs/qa/KAN-58/screenshots/live-mobile-sidebar-over-ticket.png
+    * Tapped .kb-sidebar-nav-close-btn -> sidebar overlay dismissed cleanly.
+    * Reopened sidebar via .kb-topbar-hamburger and clicked "Issues" link -> sidebar auto-closed and navigated cleanly.
+
+(c) "Back to list" dismisses ticket without bounce-back trap:
+  - Verified on 390x844 Mobile Portrait (both mode="full" and mode="split") and 844x390 Mobile Landscape (both mode="full" and mode="split"):
+    * Clicked [data-testid="issue-back-to-list-btn"], waited 600ms, asserted mountedSurfaceCount=0 and KAN-1, KAN-2, KAN-3 visible in list (zero auto-select bounce-back).
+    * Captured: docs/qa/KAN-58/screenshots/live-mobile-back-to-list-no-bounce.png
+
+(d) Portrait & Landscape mode switching (Issues, Board, Table):
+  - Mobile Portrait (390x844):
+    * Board -> /projects/KAN/issues?layout=board
+    * Table -> /projects/KAN/issues?layout=table
+    * Issues -> /projects/KAN/issues?layout=list
+  - Mobile Landscape (844x390):
+    * Board -> /projects/KAN/issues?layout=board
+    * Table -> /projects/KAN/issues?layout=table
+    * Issues -> /projects/KAN/issues?layout=list
+
+(e) Foldable & Desktop Split View:
+  - Foldable (673x841): /w/kanban/p/KAN/issues renders scrollable list (0 unintended surfaces mounted).
+    * Captured: docs/qa/KAN-58/screenshots/live-foldable-list-view.png
+  - Desktop (1440x900) Light & Dark: /w/kanban/p/KAN/issues?peek=KAN-1 renders single split surface alongside list rail.
+    * Captured:
+      - docs/qa/KAN-58/screenshots/live-desktop-split-view-light.png
+      - docs/qa/KAN-58/screenshots/live-desktop-split-view-dark.png
+
+VERDICT: PASS (100% Zero-Mock Live Full-Stack Verified)

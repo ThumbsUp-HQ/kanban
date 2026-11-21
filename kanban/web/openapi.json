@@ -11977,6 +11977,19 @@
             "description": "Keys of open sub-issues preventing archive",
             "title": "Open Subissue Keys"
           },
+          "preferred_method": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "default": null,
+            "description": "Preferred MFA method for step-up elevation",
+            "title": "Preferred Method"
+          },
           "request_id": {
             "description": "Correlating request identifier",
             "title": "Request Id",
@@ -13688,6 +13701,19 @@
             ],
             "description": "Optional override API key (uses saved key if omitted)",
             "title": "Api Key"
+          },
+          "settings_json": {
+            "anyOf": [
+              {
+                "additionalProperties": true,
+                "type": "object"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Optional override settings (uses saved settings if omitted)",
+            "title": "Settings Json"
           }
         },
         "title": "SavedProviderProbeRequest",
@@ -18220,8 +18246,8 @@
   "info": {
     "title": "\ud83d\udc4dkanban API",
     "version": "2.0.0",
-    "x-build-commit": "3663ef46b481",
-    "x-openapi-bundle-hash": "77d879dbcc0ffd9d850a8494f590380ff46d23a6ccba768a49b4d3b159900f23"
+    "x-build-commit": "9d5577ad9b50",
+    "x-openapi-bundle-hash": "98656c3ca40eae675f7d5cb5f7363fcddef82f3f756aef316febe37606bfaf19"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -18305,16 +18331,6 @@
             },
             "description": "Successful Response"
           },
-          "401": {
-            "content": {
-              "application/problem+json": {
-                "schema": {
-                  "$ref": "#/components/schemas/ProblemDetails"
-                }
-              }
-            },
-            "description": "Unauthorized - authentication required"
-          },
           "422": {
             "content": {
               "application/json": {
@@ -18326,14 +18342,7 @@
             "description": "Validation Error"
           }
         },
-        "security": [
-          {
-            "SessionCookieAuth": []
-          },
-          {
-            "BearerTokenAuth": []
-          }
-        ],
+        "security": [],
         "summary": "OpenID Connect Discovery Metadata",
         "tags": [
           "oauth-server"

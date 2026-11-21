@@ -10633,6 +10633,12 @@ export interface components {
              */
             open_subissue_keys: string[] | null;
             /**
+             * Preferred Method
+             * @description Preferred MFA method for step-up elevation
+             * @default null
+             */
+            preferred_method: string | null;
+            /**
              * Request Id
              * @description Correlating request identifier
              */
@@ -11597,6 +11603,13 @@ export interface components {
              * @description Optional override API key (uses saved key if omitted)
              */
             api_key?: string | null;
+            /**
+             * Settings Json
+             * @description Optional override settings (uses saved settings if omitted)
+             */
+            settings_json?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * SavedViewSummary
@@ -13667,15 +13680,6 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
-                };
-            };
-            /** @description Unauthorized - authentication required */
-            401: {
-                headers: {
-                    [name: string]: unknown;
-                };
-                content: {
-                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */

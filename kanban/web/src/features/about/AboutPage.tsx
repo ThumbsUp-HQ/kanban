@@ -128,6 +128,11 @@ export function AboutPage(): JSX.Element {
             <div className="kb-about-badges">
               <span className="kb-about-badge kb-about-badge-version">v{version}</span>
               <span className="kb-about-badge kb-about-badge-license">{license_spdx}</span>
+              {data.git_commit && (
+                <span className="kb-about-badge kb-about-badge-commit" data-testid="about-build-commit">
+                  commit: {data.git_commit.slice(0, 12)}
+                </span>
+              )}
             </div>
           </div>
           <div className="kb-about-hero-actions">
@@ -146,6 +151,40 @@ export function AboutPage(): JSX.Element {
         <p className="kb-about-tagline" data-testid="about-tagline">
           "{tagline}"
         </p>
+      </section>
+
+      {/* System & Build Metadata Section */}
+      <section className="kb-about-section" data-testid="about-metadata-section">
+        <div className="kb-about-section-header">
+          <h2 className="kb-about-section-title">
+            <span aria-hidden="true">⚙️</span>
+            System &amp; Build Metadata
+          </h2>
+        </div>
+        <div className="kb-about-metadata-grid">
+          <div className="kb-about-meta-item">
+            <span className="kb-about-meta-label">Build / Git Commit:</span>
+            <code className="kb-about-meta-value" data-testid="about-git-commit">{data.git_commit ?? 'unknown'}</code>
+          </div>
+          {data.build_timestamp && (
+            <div className="kb-about-meta-item">
+              <span className="kb-about-meta-label">Build Timestamp:</span>
+              <span className="kb-about-meta-value">{data.build_timestamp}</span>
+            </div>
+          )}
+          {data.openapi_bundle_hash && (
+            <div className="kb-about-meta-item">
+              <span className="kb-about-meta-label">OpenAPI Bundle Hash:</span>
+              <code className="kb-about-meta-value">{data.openapi_bundle_hash}</code>
+            </div>
+          )}
+          {data.frontend_bundle_hash && (
+            <div className="kb-about-meta-item">
+              <span className="kb-about-meta-label">Frontend Bundle Hash:</span>
+              <code className="kb-about-meta-value">{data.frontend_bundle_hash}</code>
+            </div>
+          )}
+        </div>
       </section>
 
       {/* REST API & OpenAPI Documentation Section */}

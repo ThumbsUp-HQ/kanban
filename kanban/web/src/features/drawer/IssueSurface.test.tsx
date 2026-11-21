@@ -1422,6 +1422,7 @@ describe('IssueSurface', () => {
         </QueryClientProvider>,
       );
 
+      expect(screen.getByTestId('issue-back-to-list-btn')).toBeDefined();
       const closeLoadingBtn = screen.getByTestId('split-surface-close-btn');
       fireEvent.click(closeLoadingBtn);
       expect(onCloseLoading).toHaveBeenCalledTimes(1);
@@ -1450,6 +1451,7 @@ describe('IssueSurface', () => {
         expect(screen.getByText('Could not load KAN-ERR.')).toBeDefined();
       });
 
+      expect(screen.getByTestId('issue-back-to-list-btn')).toBeDefined();
       const closeErrorBtn = screen.getByTestId('split-surface-close-btn');
       fireEvent.click(closeErrorBtn);
       expect(onCloseError).toHaveBeenCalledTimes(1);

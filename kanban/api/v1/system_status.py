@@ -155,17 +155,12 @@ admin_standalone_router = APIRouter(
 )
 
 
-@system_router.get(
-    "/status",
-    response_model=SystemStatusResponse,
-    summary="Get system deployment and persistence status",
-)
-async def get_system_status_endpoint(
-    caller: Annotated[PrincipalContext, Depends(get_principal)],
-    session: Annotated[AsyncSession, Depends(get_rls_session)],
+async def _assemble_system_status_response(
+    caller: PrincipalContext,
+    session: AsyncSession,
     request: Request,
 ) -> SystemStatusResponse:
-    """Retrieve system status with anti-enumeration redaction for non-administrators."""
+    """Build standardized SystemStatusResponse with topological metadata and build info."""
     stmt = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
     is_server_admin = bool((await session.execute(stmt)).scalar_one())
 
@@ -227,6 +222,20 @@ async def get_system_status_endpoint(
         openapi_bundle_hash=b_info.openapi_bundle_hash,
         frontend_bundle_hash=b_info.frontend_bundle_hash,
     )
+
+
+@system_router.get(
+    "/status",
+    response_model=SystemStatusResponse,
+    summary="Get system deployment and persistence status",
+)
+async def get_system_status_endpoint(
+    caller: Annotated[PrincipalContext, Depends(get_principal)],
+    session: Annotated[AsyncSession, Depends(get_rls_session)],
+    request: Request,
+) -> SystemStatusResponse:
+    """Retrieve system status with anti-enumeration redaction for non-administrators."""
+    return await _assemble_system_status_response(caller, session, request)
 
 
 @admin_standalone_router.get(
@@ -240,67 +249,7 @@ async def get_admin_standalone_status_endpoint(
     request: Request,
 ) -> SystemStatusResponse:
     """Retrieve standalone deployment status for administrators with full topology."""
-    stmt = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
-    is_server_admin = bool((await session.execute(stmt)).scalar_one())
-
-    settings = getattr(request.app.state, "settings", None)
-    status_data = get_standalone_status(settings=settings)
-
-    mount_point = status_data["data_mount_point"] if is_server_admin else None
-    mount_fstype = status_data["data_mount_fstype"] if is_server_admin else None
-    local_llm_host = status_data["local_llm_endpoint_host"] if is_server_admin else None
-    disable_unlimited = (
-        bool(getattr(settings, "disable_unlimited_mcp_keys", False)) if settings else False
-    )
-
-    ws_air_gap = False
-    if caller.workspace_id != uuid.UUID(int=0):
-        try:
-            ws_stmt = select(WorkspaceSettings.air_gap_mode).where(
-                WorkspaceSettings.workspace_id == caller.workspace_id
-            )
-            ws_res = (await session.execute(ws_stmt)).scalar_one_or_none()
-            ws_air_gap = bool(ws_res)
-        except (SQLAlchemyError, ValueError, KeyError):
-            ws_air_gap = False
-    effective_air_gap = ws_air_gap or bool(status_data["air_gap_mode"])
-
-    tier_b_avail = bool(status_data["tier_b_sandbox_available"])
-    supported_tiers = (
-        ["scalar", "formula", "wasm", "nsjail"] if tier_b_avail else ["scalar", "formula", "wasm"]
-    )
-    sandbox_reason = (
-        None
-        if tier_b_avail
-        else (
-            "Isolated nsjail sandbox execution is unavailable in standalone mode. "
-            "Multi-container compose deployment is required."
-        )
-    )
-
-    openapi_doc = None
-    if hasattr(request, "app") and hasattr(request.app, "openapi"):
-        openapi_doc = request.app.openapi()
-    b_info = get_build_info(openapi_doc)
-
-    return SystemStatusResponse(
-        deployment_mode=status_data["deployment_mode"],
-        persistent_volume=status_data["persistent_volume"],
-        data_mount_point=mount_point,
-        data_mount_fstype=mount_fstype,
-        tier_b_sandbox_available=tier_b_avail,
-        air_gap_mode=effective_air_gap,
-        local_llm_endpoint_host=local_llm_host,
-        is_server_admin=is_server_admin,
-        allow_unlimited_mcp_keys=not disable_unlimited,
-        supported_custom_field_tiers=supported_tiers,
-        sandbox_unavailable_reason=sandbox_reason,
-        git_commit=b_info.git_commit,
-        build_timestamp=b_info.build_timestamp,
-        openapi_version=b_info.openapi_version,
-        openapi_bundle_hash=b_info.openapi_bundle_hash,
-        frontend_bundle_hash=b_info.frontend_bundle_hash,
-    )
+    return await _assemble_system_status_response(caller, session, request)
 
 
 @admin_standalone_router.post(

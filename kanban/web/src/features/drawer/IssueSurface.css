@@ -274,7 +274,10 @@
     width: 100vw;
     max-width: 100%;
     height: calc(100dvh - var(--topbar-h, 52px));
+    min-height: calc(100dvh - var(--topbar-h, 52px));
     z-index: 100;
+    border-left: none;
+    border-top: none;
     box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.2);
   }
   .surface__body,
@@ -343,23 +346,6 @@
   }
 }
 
-@media (max-width: 767px), (max-height: 540px) {
-  .surface--split {
-    position: fixed;
-    top: var(--topbar-h, 52px);
-    left: 0;
-    right: 0;
-    bottom: 0;
-    width: 100vw;
-    max-width: 100%;
-    height: calc(100dvh - var(--topbar-h, 52px));
-    min-height: calc(100dvh - var(--topbar-h, 52px));
-    z-index: 100;
-    border-left: none;
-    border-top: none;
-  }
-}
-
 .surface__header--split {
   display: flex;
   align-items: center;
@@ -369,6 +355,36 @@
   border-bottom: 1px solid var(--border-subtle, #333842);
   box-sizing: border-box;
   flex-shrink: 0;
+}
+
+.split-surface-close-btn {
+  width: auto;
+  min-width: max-content;
+  min-height: 36px;
+  height: auto;
+  padding: 4px 10px;
+  gap: 6px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+  color: var(--fg-muted);
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+}
+
+.split-surface-close-btn:hover {
+  color: var(--fg-primary);
+  background: var(--bg-hover);
+}
+
+.split-back-text {
+  white-space: nowrap;
+  font-size: 12px;
 }
 
 .issue-header__new-tab-link {
@@ -480,28 +496,6 @@
 
 .surface__hidden-file-input {
   display: none;
-}
-
-.split-surface-close-btn {
-  width: 44px;
-  height: 44px;
-  min-width: 44px;
-  min-height: 44px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.25rem;
-  color: var(--fg-muted);
-  background: transparent;
-  border: none;
-  border-radius: var(--radius-sm, 4px);
-  cursor: pointer;
-  flex: 0 0 auto;
-}
-
-.split-surface-close-btn:hover {
-  color: var(--fg-primary);
-  background: var(--bg-hover);
 }
 
 .surface__quick-props {

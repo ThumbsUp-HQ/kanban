@@ -325,6 +325,11 @@ async def test_case_1_system_status_admin_full_fields_and_member_redaction(
         assert "nsjail" in data_admin["sandbox_unavailable_reason"]
         assert data_admin["local_llm_endpoint_host"] == "http://host.docker.internal:11434"
         assert data_admin["is_server_admin"] is True
+        assert data_admin["git_commit"] is not None
+        assert "build_timestamp" in data_admin
+        assert data_admin["openapi_version"] == "2.0.0"
+        assert "openapi_bundle_hash" in data_admin
+        assert "frontend_bundle_hash" in data_admin
 
         # Test admin standalone status endpoint
         resp_admin_sa = await client.get("/api/v1/admin/standalone/status")
@@ -333,6 +338,9 @@ async def test_case_1_system_status_admin_full_fields_and_member_redaction(
         assert data_admin_sa["tier_b_sandbox_available"] is False
         assert data_admin_sa["supported_custom_field_tiers"] == ["scalar", "formula", "wasm"]
         assert data_admin_sa["sandbox_unavailable_reason"] is not None
+        assert data_admin_sa["git_commit"] is not None
+        assert "build_timestamp" in data_admin
+        assert data_admin_sa["openapi_version"] == "2.0.0"
 
         # 2. As regular MEMBER: sensitive host topology redacted to null
         client.cookies.clear()

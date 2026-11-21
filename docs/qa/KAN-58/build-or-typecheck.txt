@@ -1,18 +1,13 @@
-=== STATIC GATES & BUILD VERIFICATION (KAN-58) ===
-$ npm --prefix kanban/web run typecheck
+=== 1. Check Database Migrations ===
+OK: All 63 migrations valid. Single head: p4_24_agent_safe_sequences
 
-> @kanban/web@0.1.0 typecheck
-> tsc -b --noEmit
+=== 2. Ruff Linter Check ===
+All checks passed!
 
-Exit code: 0
+=== 3. Ruff Format Check ===
+5 files already formatted
 
-$ npm --prefix kanban/web run lint
+=== 4. Web Typecheck and Lint ===
 
-> @kanban/web@0.1.0 lint
-> eslint . --max-warnings 0
-
-Exit code: 0
-
-$ python3 -m scripts.check_no_dashes --all
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan58-mobile-157c0014/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
-Exit code: 0
+=== 5. Zero Em/En-Dashes Check ===
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan57-58-rc1-d26313f9/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)

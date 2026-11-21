@@ -575,4 +575,9 @@ describe('ListView (KAN-52 Left Master Rail)', () => {
     unmount();
     localStorage.clear();
   });
+
+  it('renders list-view-loading skeleton when issues is empty and isLoading is true', () => {
+    render(<ListView issues={[]} isLoading={true} />);
+    expect(screen.getByTestId('list-view-loading')).toBeDefined();
+  });
 });
