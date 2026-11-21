@@ -78,7 +78,7 @@ import { fetchProjectModules } from '../features/drawer-rail/railApi';
 export { IssuesWorkspaceRoute, type IssuesWorkspaceRouteProps };
 
 export const PROJECT_KEY_REGEX = /^[A-Z][A-Z0-9]{1,9}$/;
-export const ISSUE_KEY_REGEX = /^[A-Z][A-Z0-9]{1,9}-[0-9]{1,9}$/;
+export const ISSUE_KEY_REGEX = /^[A-Z][A-Z0-9_-]{1,24}-[0-9]{1,18}$/;
 
 export const VALID_LAYOUTS = new Set([
   'list',
@@ -1652,6 +1652,52 @@ export function ProjectViewsRedirect(): JSX.Element {
   return <Navigate to={`/projects/${key}/issues`} replace />;
 }
 
+export function IssueKeyRedirectRoute(): JSX.Element {
+  const { issueKey } = useParams<{ issueKey: string }>();
+  const navigate = useNavigate();
+
+  const resolveQuery = useQuery({
+    queryKey: ['resolve', 'issue', issueKey ?? ''],
+    queryFn: async ({ signal }) => {
+      const res = await fetch(
+        `/api/v1/resolve?kind=issue&ref=${encodeURIComponent(issueKey ?? '')}`,
+        {
+          headers: { Accept: 'application/json' },
+          credentials: 'same-origin',
+          signal,
+        },
+      );
+      if (!res.ok) {
+        return { isNotFound: true };
+      }
+      return (await res.json()) as { canonical_key?: string; key?: string; isNotFound?: boolean };
+    },
+    enabled: Boolean(issueKey),
+  });
+
+  useEffect(() => {
+    if (resolveQuery.data && !resolveQuery.data.isNotFound) {
+      const canonicalKey = resolveQuery.data.canonical_key ?? resolveQuery.data.key;
+      if (canonicalKey) {
+        const projKey = canonicalKey.includes('-')
+          ? canonicalKey.slice(0, canonicalKey.lastIndexOf('-'))
+          : canonicalKey;
+        void navigate(`/projects/${projKey}/issues/${canonicalKey}`, { replace: true });
+      }
+    }
+  }, [resolveQuery.data, navigate]);
+
+  if (!issueKey || resolveQuery.isError || resolveQuery.data?.isNotFound) {
+    return <NotFoundView />;
+  }
+
+  return (
+    <div data-testid="issue-key-resolving" style={{ padding: '2rem', textAlign: 'center' }}>
+      Resolving issue {issueKey}...
+    </div>
+  );
+}
+
 export { ProjectSavedViewsView };
 
 export function StandaloneStatusRoute(): JSX.Element {
@@ -1973,6 +2019,10 @@ export const appRoutes: RouteObject[] = [
         path: 'w/:workspaceSlug/p/:projectKey',
         element: <ProjectRouteContainer />,
         children: projectRouteChildren,
+      },
+      {
+        path: 'issues/:issueKey',
+        element: <IssueKeyRedirectRoute />,
       },
       {
         path: 'activate',

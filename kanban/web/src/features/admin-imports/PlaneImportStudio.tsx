@@ -6,6 +6,7 @@ import { Link } from 'react-router';
 import {
   submitPlaneImport,
   submitImport,
+  downloadPortableExport,
   type ImportDiffReport,
   type ImportSource,
 } from './planeImportApi';
@@ -22,17 +23,53 @@ export interface EntityCounts {
   members: number;
 }
 
-export function extractEntityCounts(bundle: Record<string, unknown> | null): EntityCounts | null {
+export function extractEntityCounts(bundle: unknown): EntityCounts | null {
   if (!bundle) return null;
-  return {
-    projects: Array.isArray(bundle.projects) ? bundle.projects.length : 0,
-    states: Array.isArray(bundle.states) ? bundle.states.length : 0,
-    issues: Array.isArray(bundle.issues) ? bundle.issues.length : 0,
-    cycles: Array.isArray(bundle.cycles) ? bundle.cycles.length : 0,
-    modules: Array.isArray(bundle.modules) ? bundle.modules.length : 0,
-    comments: Array.isArray(bundle.issue_comments) ? bundle.issue_comments.length : 0,
-    members: Array.isArray(bundle.members) ? bundle.members.length : 0,
-  };
+  if (typeof bundle === 'string') {
+    const lines = bundle.trim().split(/\r?\n/).filter((l) => l.trim().length > 0);
+    const count = Math.max(0, lines.length - 1);
+    return {
+      projects: 0,
+      states: 0,
+      issues: count,
+      cycles: 0,
+      modules: 0,
+      comments: 0,
+      members: 0,
+    };
+  }
+  if (Array.isArray(bundle)) {
+    return {
+      projects: 0,
+      states: 0,
+      issues: bundle.length,
+      cycles: 0,
+      modules: 0,
+      comments: 0,
+      members: 0,
+    };
+  }
+  if (typeof bundle === 'object') {
+    const b = bundle as Record<string, unknown>;
+    return {
+      projects: Array.isArray(b.projects) ? b.projects.length : 0,
+      states: Array.isArray(b.states) ? b.states.length : 0,
+      issues: Array.isArray(b.issues) ? b.issues.length : 0,
+      cycles: Array.isArray(b.cycles) ? b.cycles.length : 0,
+      modules: Array.isArray(b.modules) ? b.modules.length : 0,
+      comments: Array.isArray(b.issue_comments)
+        ? b.issue_comments.length
+        : Array.isArray(b.comments)
+          ? b.comments.length
+          : 0,
+      members: Array.isArray(b.members)
+        ? b.members.length
+        : Array.isArray(b.users)
+          ? b.users.length
+          : 0,
+    };
+  }
+  return null;
 }
 
 export function PlaneImportStudio(): JSX.Element {
@@ -40,7 +77,7 @@ export function PlaneImportStudio(): JSX.Element {
   const [projectKey, setProjectKey] = useState<string>('');
   const [inputMode, setInputMode] = useState<'upload' | 'paste'>('upload');
   const [rawJson, setRawJson] = useState<string>('');
-  const [bundleData, setBundleData] = useState<Record<string, unknown> | null>(null);
+  const [bundleData, setBundleData] = useState<unknown>(null);
   const [fileName, setFileName] = useState<string | null>(null);
   const [workspaceSlug, setWorkspaceSlug] = useState<string>('');
 
@@ -50,27 +87,59 @@ export function PlaneImportStudio(): JSX.Element {
   const [error, setError] = useState<string | null>(null);
   const [isDragOver, setIsDragOver] = useState<boolean>(false);
 
+  // Portable Export panel states
+  const [exportWorkspaceSlug, setExportWorkspaceSlug] = useState<string>('');
+  const [exportScrub, setExportScrub] = useState<boolean>(false);
+  const [exportLoading, setExportLoading] = useState<boolean>(false);
+  const [exportError, setExportError] = useState<string | null>(null);
+  const [exportSuccess, setExportSuccess] = useState<string | null>(null);
+
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const parseAndSetBundle = (jsonStr: string, name?: string): boolean => {
+  const getSourceName = (s: ImportSource): string => {
+    switch (s) {
+      case 'plane':
+        return 'Plane';
+      case 'jira':
+        return 'Jira';
+      case 'github':
+        return 'GitHub';
+      case 'linear':
+        return 'Linear';
+    }
+  };
+
+  const parseAndSetBundle = (contentStr: string, name?: string): boolean => {
     setError(null);
     try {
-      const parsed = JSON.parse(jsonStr) as unknown;
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(contentStr);
+      } catch (jsonErr) {
+        if (source === 'linear' && (contentStr.includes(',') || contentStr.includes('\n'))) {
+          parsed = contentStr;
+        } else {
+          throw jsonErr;
+        }
+      }
+
       if (source === 'plane') {
         if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
           throw new Error('Plane export bundle must be a JSON object with entity arrays.');
         }
       }
-      setBundleData(parsed as Record<string, unknown>);
+      setBundleData(parsed);
       if (name) {
         setFileName(name);
       }
       return true;
     } catch (err: unknown) {
       if (err instanceof Error) {
-        setError(`Invalid JSON: ${err.message}`);
+        setError(`Invalid ${source === 'linear' ? 'JSON or CSV' : 'JSON'}: ${err.message}`);
       } else {
-        setError('Failed to parse JSON export bundle.');
+        setError(
+          `Failed to parse ${source === 'linear' ? 'JSON or CSV' : 'JSON'} export bundle.`,
+        );
       }
       setBundleData(null);
       return false;
@@ -120,23 +189,12 @@ export function PlaneImportStudio(): JSX.Element {
     parseAndSetBundle(val);
   };
 
-  const getSourceName = (s: ImportSource): string => {
-    switch (s) {
-      case 'plane':
-        return 'Plane';
-      case 'jira':
-        return 'Jira';
-      case 'github':
-        return 'GitHub';
-      case 'linear':
-        return 'Linear';
-    }
-  };
-
   const handleRunDryRun = async (): Promise<void> => {
     const sourceName = getSourceName(source);
     if (!bundleData) {
-      setError(`Please upload or paste a valid ${sourceName} JSON export bundle.`);
+      setError(
+        `Please upload or paste a valid ${sourceName} ${source === 'linear' ? 'JSON or CSV' : 'JSON'} export bundle.`,
+      );
       return;
     }
     setLoading(true);
@@ -196,6 +254,36 @@ export function PlaneImportStudio(): JSX.Element {
     }
   };
 
+  const handleTriggerExport = async (): Promise<void> => {
+    setExportLoading(true);
+    setExportError(null);
+    setExportSuccess(null);
+    try {
+      const blob = await downloadPortableExport({
+        workspace_slug: exportWorkspaceSlug.trim() || undefined,
+        scrub_text: exportScrub,
+      });
+      const url = window.URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      const targetSlug = exportWorkspaceSlug.trim() || 'workspace';
+      a.download = `${targetSlug}-export.tar.gz`;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      window.URL.revokeObjectURL(url);
+      setExportSuccess(`Successfully downloaded ${targetSlug}-export.tar.gz`);
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setExportError(err.message);
+      } else {
+        setExportError('Failed to generate and download portable workspace export.');
+      }
+    } finally {
+      setExportLoading(false);
+    }
+  };
+
   const handleReset = (): void => {
     setStage('input');
     setDiffReport(null);
@@ -203,17 +291,26 @@ export function PlaneImportStudio(): JSX.Element {
   };
 
   const entityCounts = extractEntityCounts(bundleData);
+  const sourceName = getSourceName(source);
 
   return (
     <div className="kb-plane-import-container" data-testid="plane-import-studio">
       <header className="kb-plane-import-header">
         <div>
           <h1 className="kb-plane-import-title" data-testid="studio-title">
-            {source === 'plane' ? 'Plane' : source === 'jira' ? 'Jira' : source === 'github' ? 'GitHub' : 'Linear'} Migration Import Studio
+            {source === 'plane'
+              ? 'Plane'
+              : source === 'jira'
+                ? 'Jira'
+                : source === 'github'
+                  ? 'GitHub'
+                  : 'Linear'}{' '}
+            Migration Import Studio
           </h1>
           <p className="kb-plane-import-subtitle">
-            Upload or paste {source === 'plane' ? 'Plane' : source.toUpperCase()} export bundles, inspect entity counts, simulate state
-            mappings and idempotency diffs in dry-run, and execute live workspace migrations.
+            Upload or paste {source === 'plane' ? 'Plane' : sourceName} export bundles, inspect
+            entity counts, simulate state mappings and idempotency diffs in dry-run, and execute live
+            workspace migrations.
           </p>
         </div>
       </header>
@@ -234,7 +331,11 @@ export function PlaneImportStudio(): JSX.Element {
         </Link>
       </nav>
 
-      <div className="kb-plane-mode-row" style={{ margin: '1rem 0' }} data-testid="source-selector-bar">
+      <div
+        className="kb-plane-mode-row"
+        style={{ margin: '1rem 0' }}
+        data-testid="source-selector-bar"
+      >
         <button
           type="button"
           className={`kb-plane-mode-btn ${source === 'plane' ? 'kb-plane-mode-active' : ''}`}
@@ -269,7 +370,7 @@ export function PlaneImportStudio(): JSX.Element {
             setError(null);
           }}
         >
-          GitHub
+          GitHub Issues
         </button>
         <button
           type="button"
@@ -286,7 +387,11 @@ export function PlaneImportStudio(): JSX.Element {
       </div>
 
       {error !== null && (
-        <div className="kb-plane-alert kb-plane-alert-error" role="alert" data-testid="error-alert">
+        <div
+          className="kb-plane-alert kb-plane-alert-error"
+          role="alert"
+          data-testid="error-alert"
+        >
           {error}
         </div>
       )}
@@ -295,7 +400,7 @@ export function PlaneImportStudio(): JSX.Element {
       {stage === 'input' && (
         <section className="kb-plane-section" data-testid="import-input-section">
           <h2 className="kb-plane-section-title">
-            <EmojiHint kind="rawMarkdown" /> Step 1: Select {source === 'plane' ? 'Plane' : source === 'jira' ? 'Jira' : source === 'github' ? 'GitHub' : 'Linear'} Export Bundle
+            <EmojiHint kind="rawMarkdown" /> Step 1: Select {sourceName} Export Bundle
           </h2>
 
           <div className="kb-plane-mode-row">
@@ -307,7 +412,7 @@ export function PlaneImportStudio(): JSX.Element {
                 setInputMode('upload');
               }}
             >
-              Upload Export JSON File
+              Upload Export {source === 'linear' ? 'JSON/CSV' : 'JSON'} File
             </button>
             <button
               type="button"
@@ -317,7 +422,7 @@ export function PlaneImportStudio(): JSX.Element {
                 setInputMode('paste');
               }}
             >
-              Paste Raw JSON
+              Paste Raw {source === 'linear' ? 'JSON/CSV' : 'JSON'}
             </button>
           </div>
 
@@ -340,7 +445,11 @@ export function PlaneImportStudio(): JSX.Element {
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".json,application/json"
+                accept={
+                  source === 'linear'
+                    ? '.csv,text/csv,.json,application/json'
+                    : '.json,application/json'
+                }
                 className="kb-plane-file-input"
                 data-testid="file-input"
                 onChange={handleFileChange}
@@ -349,12 +458,18 @@ export function PlaneImportStudio(): JSX.Element {
                 {fileName ? (
                   <strong>Loaded: {fileName}</strong>
                 ) : (
-                  'Drag and drop Plane export JSON file here, or click to browse'
+                  `Drag and drop ${sourceName} export ${source === 'linear' ? 'JSON or CSV' : 'JSON'} file here, or click to browse`
                 )}
               </div>
               <div className="kb-plane-dropzone-hint">
-                Supports single-file Plane JSON export bundles containing projects, states, issues,
-                and cycles.
+                {source === 'plane' &&
+                  'Supports single-file Plane JSON export bundles containing projects, states, issues, and cycles.'}
+                {source === 'jira' &&
+                  'Supports Jira Cloud and Server/DC JSON export bundles with issue history, comments, and attachments.'}
+                {source === 'github' &&
+                  'Supports GitHub Issues JSON export bundles with labels, milestones, and issue relationships.'}
+                {source === 'linear' &&
+                  'Supports Linear JSON and CSV issue export files with comments and relations.'}
               </div>
             </div>
           ) : (
@@ -362,7 +477,11 @@ export function PlaneImportStudio(): JSX.Element {
               <textarea
                 className="kb-plane-textarea"
                 data-testid="paste-textarea"
-                placeholder='Paste raw Plane export JSON here... e.g. { "projects": [...], "issues": [...] }'
+                placeholder={
+                  source === 'linear'
+                    ? 'Paste raw Linear export JSON or CSV here... e.g. ID,Title,Status or {"issues": [...]}'
+                    : `Paste raw ${sourceName} export JSON here... e.g. { "issues": [...] }`
+                }
                 value={rawJson}
                 onChange={handlePasteChange}
               />
@@ -447,7 +566,8 @@ export function PlaneImportStudio(): JSX.Element {
                   color: 'var(--kb-color-text-secondary)',
                 }}
               >
-                Target Project Key (Optional, default {source === 'jira' ? 'JIRA' : source === 'github' ? 'GH' : 'LIN'}):
+                Target Project Key (Optional, default{' '}
+                {source === 'jira' ? 'JIRA' : source === 'github' ? 'GH' : 'LIN'}):
               </label>
               <input
                 id="target-proj-key"
@@ -492,11 +612,17 @@ export function PlaneImportStudio(): JSX.Element {
           </p>
 
           <div className="kb-plane-diff-grid">
-            <div className="kb-plane-diff-card kb-plane-diff-card-create" data-testid="diff-to-create">
+            <div
+              className="kb-plane-diff-card kb-plane-diff-card-create"
+              data-testid="diff-to-create"
+            >
               <div className="kb-plane-diff-val">{diffReport.to_create}</div>
               <div className="kb-plane-diff-label">Issues To Create</div>
             </div>
-            <div className="kb-plane-diff-card kb-plane-diff-card-update" data-testid="diff-to-update">
+            <div
+              className="kb-plane-diff-card kb-plane-diff-card-update"
+              data-testid="diff-to-update"
+            >
               <div className="kb-plane-diff-val">{diffReport.to_update}</div>
               <div className="kb-plane-diff-label">Issues To Update</div>
             </div>
@@ -573,8 +699,8 @@ export function PlaneImportStudio(): JSX.Element {
             <EmojiHint kind="sparkle" /> Executing Live Migration...
           </h2>
           <p className="kb-plane-import-subtitle">
-            Applying Plane entities, mapping states, creating object links, and updating sequence
-            counters inside an isolated transaction. Please wait.
+            Applying entities, mapping states, creating object links, and updating sequence counters
+            inside an isolated transaction. Please wait.
           </p>
           <div className="kb-plane-progress-wrap" data-testid="progress-bar">
             <div className="kb-plane-progress-bar" />
@@ -585,8 +711,12 @@ export function PlaneImportStudio(): JSX.Element {
       {/* Stage 3: Done Summary */}
       {stage === 'done' && diffReport !== null && (
         <section className="kb-plane-section" data-testid="import-done-section">
-          <div className="kb-plane-alert kb-plane-alert-success" role="status" data-testid="success-banner">
-            Plane export migration completed successfully!
+          <div
+            className="kb-plane-alert kb-plane-alert-success"
+            role="status"
+            data-testid="success-banner"
+          >
+            {sourceName} export migration completed successfully!
           </div>
 
           <h2 className="kb-plane-section-title">
@@ -631,6 +761,112 @@ export function PlaneImportStudio(): JSX.Element {
           </div>
         </section>
       )}
+
+      {/* Portable Workspace Export Panel */}
+      <section
+        className="kb-plane-section"
+        data-testid="portable-export-panel"
+        style={{ marginTop: '2rem' }}
+      >
+        <h2 className="kb-plane-section-title">
+          <EmojiHint kind="sparkle" /> Portable Workspace Export
+        </h2>
+        <p className="kb-plane-import-subtitle">
+          Generate and download a deterministic, cryptographically hashed portable workspace bundle
+          (.tar.gz) containing canonical entities, markdown docs, pages, stickies, and verified
+          SHA-256 manifests.
+        </p>
+
+        {exportError && (
+          <div
+            className="kb-plane-alert kb-plane-alert-error"
+            role="alert"
+            data-testid="export-error-alert"
+          >
+            {exportError}
+          </div>
+        )}
+        {exportSuccess && (
+          <div
+            className="kb-plane-alert kb-plane-alert-success"
+            role="status"
+            data-testid="export-success-alert"
+          >
+            {exportSuccess}
+          </div>
+        )}
+
+        <div
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '1rem',
+            maxWidth: 450,
+            marginTop: '1rem',
+          }}
+        >
+          <div>
+            <label
+              htmlFor="export-workspace-slug"
+              style={{
+                display: 'block',
+                fontSize: '0.825rem',
+                fontWeight: 600,
+                marginBottom: 6,
+                color: 'var(--kb-color-text-secondary)',
+              }}
+            >
+              Export Workspace Slug (Optional, defaults to active workspace):
+            </label>
+            <input
+              id="export-workspace-slug"
+              type="text"
+              className="kb-plane-textarea"
+              style={{ minHeight: 40, height: 40, width: '100%' }}
+              data-testid="export-workspace-slug-input"
+              placeholder="e.g. current-workspace"
+              value={exportWorkspaceSlug}
+              onChange={(e) => {
+                setExportWorkspaceSlug(e.target.value);
+              }}
+            />
+          </div>
+
+          <label
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              cursor: 'pointer',
+              fontSize: '0.875rem',
+            }}
+          >
+            <input
+              type="checkbox"
+              data-testid="export-scrub-checkbox"
+              checked={exportScrub}
+              onChange={(e) => {
+                setExportScrub(e.target.checked);
+              }}
+            />
+            <span>Scrub secrets and sensitive tokens from markdown</span>
+          </label>
+
+          <div className="kb-plane-btn-row" style={{ marginTop: '0.5rem' }}>
+            <button
+              type="button"
+              className="kb-plane-btn kb-plane-btn-primary"
+              data-testid="export-download-btn"
+              disabled={exportLoading}
+              onClick={() => void handleTriggerExport()}
+            >
+              {exportLoading
+                ? 'Generating Export Bundle...'
+                : 'Download Portable Bundle (.tar.gz)'}
+            </button>
+          </div>
+        </div>
+      </section>
     </div>
   );
 }

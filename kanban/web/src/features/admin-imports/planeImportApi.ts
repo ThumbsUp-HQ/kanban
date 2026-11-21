@@ -27,6 +27,11 @@ export interface ImportDiffReport {
   warnings: string[];
 }
 
+export interface PortableExportRequest {
+  workspace_slug?: string | null | undefined;
+  scrub_text?: boolean | undefined;
+}
+
 export async function submitImport(
   source: ImportSource,
   payload: GenericImportRequest,
@@ -60,4 +65,32 @@ export async function submitLinearImport(
   payload: GenericImportRequest,
 ): Promise<ImportDiffReport> {
   return submitImport('linear', payload);
+}
+
+export async function downloadPortableExport(
+  req: PortableExportRequest,
+): Promise<Blob> {
+  const response = await fetch('/api/v1/admin/exports/portable', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      Accept: 'application/gzip, application/octet-stream, application/json',
+    },
+    credentials: 'same-origin',
+    body: JSON.stringify({
+      workspace_slug: req.workspace_slug ?? undefined,
+      scrub: Boolean(req.scrub_text),
+    }),
+  });
+  if (!response.ok) {
+    let errMsg = `Export failed with HTTP ${String(response.status)}`;
+    try {
+      const errJson = (await response.json()) as { detail?: string };
+      if (errJson.detail) errMsg = errJson.detail;
+    } catch {
+      // fallback
+    }
+    throw new Error(errMsg);
+  }
+  return await response.blob();
 }
