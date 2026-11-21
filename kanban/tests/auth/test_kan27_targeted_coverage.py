@@ -215,9 +215,7 @@ async def test_compute_link_aal2_requirement_all_methods() -> None:
     )
     is_required, methods = await _check_mfa_and_admin(mock_factory, principal)
     assert is_required is True
-    assert "totp" in methods
-    assert "webauthn" in methods
-    assert "recovery" in methods
+    assert methods == ["webauthn", "totp", "recovery"]
 
 
 @pytest.mark.asyncio

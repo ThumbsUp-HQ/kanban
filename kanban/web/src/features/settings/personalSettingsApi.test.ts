@@ -95,7 +95,12 @@ describe('personalSettingsApi', () => {
   });
 
   it('fetchMfaStatus invokes GET /api/v1/auth/mfa/status', async () => {
-    const mockStatus = { totp_enabled: true, passkeys_count: 2, recovery_codes_remaining: 8 };
+    const mockStatus = {
+      totp_enabled: true,
+      passkeys_count: 2,
+      recovery_codes_remaining: 8,
+      preferred_method: 'webauthn' as const,
+    };
     const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockStatus);
 
     const res = await fetchMfaStatus();

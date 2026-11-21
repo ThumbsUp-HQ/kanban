@@ -63,6 +63,7 @@ export interface MfaStatusResponse {
   totp_enabled: boolean;
   passkeys_count: number;
   recovery_codes_remaining: number;
+  preferred_method?: 'webauthn' | 'totp';
 }
 
 export interface TotpEnrollResponse {

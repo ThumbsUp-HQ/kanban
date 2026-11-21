@@ -983,15 +983,21 @@ export function PersonalSettingsPage(): JSX.Element {
           Two-Factor Authentication (2FA)
         </h2>
         <p className="kb-personal-settings-section-desc">
-          Add an extra layer of protection to your account using TOTP and emergency recovery codes.
+          Protect your account with Passkeys as your primary 2FA method, backed by authenticator apps (TOTP) and emergency recovery codes.
         </p>
 
         <div className="kb-personal-settings-status-box">
           <div className="kb-personal-settings-stat-card">
+            <div className="kb-personal-settings-stat-num" data-testid="mfa-status-passkeys">
+              {passkeys && passkeys.length > 0 ? `${String(passkeys.length)} Enrolled` : 'Default 2FA'}
+            </div>
+            <div className="kb-personal-settings-stat-label">Passkeys (Primary 2FA)</div>
+          </div>
+          <div className="kb-personal-settings-stat-card">
             <div className="kb-personal-settings-stat-num" data-testid="mfa-status-totp">
               {mfaStatus?.totp_enabled ? 'Active' : 'Disabled'}
             </div>
-            <div className="kb-personal-settings-stat-label">Authenticator App (TOTP)</div>
+            <div className="kb-personal-settings-stat-label">Authenticator App (Backup TOTP)</div>
           </div>
           <div className="kb-personal-settings-stat-card">
             <div className="kb-personal-settings-stat-num" data-testid="mfa-status-recovery-count">

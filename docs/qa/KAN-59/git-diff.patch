@@ -1,0 +1,1282 @@
+diff --git a/kanban/api/problems.py b/kanban/api/problems.py
+index 8d297a37..d9eeb295 100644
+--- a/kanban/api/problems.py
++++ b/kanban/api/problems.py
+@@ -107,6 +107,10 @@ class Problem(BaseModel):
+         default=None,
+         description="Available MFA methods for step-up elevation",
+     )
++    preferred_method: str | None = Field(
++        default=None,
++        description="Preferred MFA method for step-up elevation",
++    )
+ 
+ 
+ class ProblemException(Exception):  # noqa: N818
+@@ -133,6 +137,7 @@ class ProblemException(Exception):  # noqa: N818
+         retry_after_seconds: int | None = None,
+         current_preview: dict[str, Any] | None = None,
+         methods: list[str] | None = None,
++        preferred_method: str | None = None,
+     ) -> None:
+         """Initialize problem exception with error code, status, and optional details."""
+         if not _CODE_REGEX.match(code):
+@@ -157,6 +162,7 @@ class ProblemException(Exception):  # noqa: N818
+         self.retry_after_seconds = retry_after_seconds
+         self.current_preview = current_preview
+         self.methods = methods
++        self.preferred_method = preferred_method
+ 
+ 
+ def not_found() -> NoReturn:
+@@ -275,6 +281,7 @@ async def problem_exception_handler(
+         retry_after_seconds=exc.retry_after_seconds,
+         current_preview=exc.current_preview,
+         methods=exc.methods or extra_fields.pop("methods", None),
++        preferred_method=exc.preferred_method or extra_fields.pop("preferred_method", None),
+         **extra_fields,
+     )
+     response_headers = {"x-request-id": req_id}
+diff --git a/kanban/api/v1/auth_identities.py b/kanban/api/v1/auth_identities.py
+index 88c3f4d4..76cf6742 100644
+--- a/kanban/api/v1/auth_identities.py
++++ b/kanban/api/v1/auth_identities.py
+@@ -69,10 +69,10 @@ async def _check_mfa_and_admin(
+     is_required = has_enrolled_mfa or is_admin
+ 
+     methods: list[str] = []
+-    if has_active_totp:
+-        methods.append("totp")
+     if has_webauthn:
+         methods.append("webauthn")
++    if has_active_totp:
++        methods.append("totp")
+     if unused_recovery > 0:
+         methods.append("recovery")
+ 
+@@ -101,6 +101,8 @@ async def require_link_aal2(
+     if not is_required:
+         return principal
+ 
++    preferred = "webauthn" if "webauthn" in methods else "totp"
++
+     if principal.aal_level < AAL2_LEVEL:
+         raise ProblemException(
+             code="AAL2_REQUIRED",
+@@ -108,6 +110,7 @@ async def require_link_aal2(
+             title="AAL2 Authentication Required",
+             detail="This operation requires multi-factor authentication (AAL2).",
+             methods=methods,
++            preferred_method=preferred,
+         )
+ 
+     verified_at = principal.aal2_verified_at
+@@ -118,6 +121,7 @@ async def require_link_aal2(
+             title="AAL2 Session Stale",
+             detail="AAL2 verification timestamp is missing or stale.",
+             methods=methods,
++            preferred_method=preferred,
+         )
+ 
+     now = datetime.now(UTC)
+@@ -131,6 +135,7 @@ async def require_link_aal2(
+             title="AAL2 Session Stale",
+             detail=f"AAL2 verification is stale ({int(age)}s > {MAX_AAL2_AGE_SECONDS}s).",
+             methods=methods,
++            preferred_method=preferred,
+         )
+ 
+     return principal
+diff --git a/kanban/api/v1/auth_local.py b/kanban/api/v1/auth_local.py
+index 350fcc82..9db37a3a 100644
+--- a/kanban/api/v1/auth_local.py
++++ b/kanban/api/v1/auth_local.py
+@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
+ 
+ from fastapi import APIRouter
+ from pydantic import BaseModel, Field
++from sqlalchemy import text
+ from starlette.requests import Request  # noqa: TC002  # Required at runtime for FastAPI dependency analysis
+ from starlette.responses import JSONResponse
+ 
+@@ -91,6 +92,9 @@ async def local_login(request: Request, body: LocalLoginRequest) -> JSONResponse
+         aal_level=1,
+     )
+ 
++    methods: list[str] = ["webauthn", "totp", "recovery"]
++    preferred_method: str = "webauthn"
++
+     async with session_factory.session(anon_ctx) as async_session:
+         issued = await login_service.login(
+             async_session,
+@@ -101,12 +105,34 @@ async def local_login(request: Request, body: LocalLoginRequest) -> JSONResponse
+             remember_me=body.remember_me,
+         )
+ 
++        if issued.principal_id is not None:
++            status_res = await async_session.execute(
++                text("SELECT * FROM kb_auth.mfa_status(:p_id)"),
++                {"p_id": issued.principal_id},
++            )
++            status_row = status_res.mappings().first()
++            if status_row:
++                has_webauthn = int(status_row.get("webauthn_credential_count", 0)) > 0
++                has_totp = bool(status_row.get("has_active_totp"))
++                unused_codes = int(status_row.get("unused_recovery_codes", 0))
++                enrolled: list[str] = []
++                if has_webauthn:
++                    enrolled.append("webauthn")
++                if has_totp:
++                    enrolled.append("totp")
++                if unused_codes > 0:
++                    enrolled.append("recovery")
++                if enrolled:
++                    methods = enrolled
++                preferred_method = "webauthn" if has_webauthn else "totp"
++
+     response = JSONResponse(
+         content={
+             "authenticated": True,
+             "status": "mfa_required" if issued.mfa_pending else "authenticated",
+             "challenge_id": str(issued.session_id),
+-            "methods": ["totp", "webauthn", "recovery"],
++            "methods": methods,
++            "preferred_method": preferred_method,
+             "session_id": str(issued.session_id),
+             "aal_level": issued.aal_level,
+             "mfa_pending": issued.mfa_pending,
+diff --git a/kanban/api/v1/auth_mfa.py b/kanban/api/v1/auth_mfa.py
+index 6f142aa1..457a0561 100644
+--- a/kanban/api/v1/auth_mfa.py
++++ b/kanban/api/v1/auth_mfa.py
+@@ -304,11 +304,13 @@ async def get_mfa_status(
+         )
+         row = res.mappings().first()
+ 
++    passkeys_count = int(row["webauthn_credential_count"]) if row else 0
+     return JSONResponse(
+         content={
+             "totp_enabled": bool(row["has_active_totp"]) if row else False,
+-            "passkeys_count": int(row["webauthn_credential_count"]) if row else 0,
++            "passkeys_count": passkeys_count,
+             "recovery_codes_remaining": int(row["unused_recovery_codes"]) if row else 0,
++            "preferred_method": "webauthn" if passkeys_count > 0 else "totp",
+         }
+     )
+ 
+diff --git a/kanban/api/v1/auth_webauthn.py b/kanban/api/v1/auth_webauthn.py
+index 3378ef63..de9d43c2 100644
+--- a/kanban/api/v1/auth_webauthn.py
++++ b/kanban/api/v1/auth_webauthn.py
+@@ -19,7 +19,9 @@ from webauthn.helpers import bytes_to_base64url
+ from database.session import RLSContext
+ from kanban.api.deps import PrincipalContext, get_principal  # Required at runtime
+ from kanban.api.problems import ProblemException
++from kanban.api.v1.auth_mfa import _get_auth_pepper
+ from kanban.auth.mfa.policy import require_aal2
++from kanban.auth.mfa.recovery import RecoveryCodeService
+ from kanban.auth.mfa.webauthn import WebauthnCloneDetectedError, WebauthnService
+ from kanban.auth.sessions.cookies import (
+     attach_session_and_csrf_cookies,
+@@ -148,13 +150,15 @@ async def _assert_can_register(session: AsyncSession, principal: PrincipalContex
+     unused_recovery = int(status_row["unused_recovery_codes"]) if status_row else 0
+ 
+     methods: list[str] = []
+-    if has_totp:
+-        methods.append("totp")
+     if webauthn_count > 0:
+         methods.append("webauthn")
++    if has_totp:
++        methods.append("totp")
+     if unused_recovery > 0:
+         methods.append("recovery")
+ 
++    preferred = "webauthn" if webauthn_count > 0 else "totp"
++
+     if not has_totp and webauthn_count == 0:
+         return True
+ 
+@@ -165,6 +169,7 @@ async def _assert_can_register(session: AsyncSession, principal: PrincipalContex
+             title="AAL2 Required",
+             detail="Registering additional factors requires an active AAL2 session.",
+             methods=methods,
++            preferred_method=preferred,
+         )
+ 
+     verified_at = principal.aal2_verified_at
+@@ -175,6 +180,7 @@ async def _assert_can_register(session: AsyncSession, principal: PrincipalContex
+             title="AAL2 Session Stale",
+             detail="AAL2 verification timestamp is missing or stale.",
+             methods=methods,
++            preferred_method=preferred,
+         )
+ 
+     now = datetime.now(UTC)
+@@ -189,6 +195,7 @@ async def _assert_can_register(session: AsyncSession, principal: PrincipalContex
+             title="AAL2 Session Stale",
+             detail=detail_msg,
+             methods=methods,
++            preferred_method=preferred,
+         )
+ 
+     return False
+@@ -380,18 +387,35 @@ async def register_verify(
+         )
+ 
+         if is_first_enrollment:
++            status_res = await session.execute(
++                text("SELECT * FROM kb_auth.mfa_status(:p_id)"),
++                {"p_id": principal.principal_id},
++            )
++            status_row = status_res.mappings().first()
++            unused_recovery = int(status_row["unused_recovery_codes"]) if status_row else 0
++            recovery_codes: list[str] | None = None
++            if unused_recovery == 0:
++                pepper = _get_auth_pepper(request)
++                recovery_service = RecoveryCodeService(pepper)
++                recovery_codes = await recovery_service.regenerate_codes(
++                    session, principal.principal_id
++                )
++
+             elevated = await session_service.elevate_aal(
+                 session,
+                 old_session_id=principal.session_id,
+                 new_aal=AAL2_ELEVATED_LEVEL,
+             )
++            extra_data: dict[str, Any] = {
++                "credential_id": str(cred_record.id),
++                "nickname": cred_record.nickname,
++            }
++            if recovery_codes is not None:
++                extra_data["recovery_codes"] = recovery_codes
+             return _build_elevated_response(
+                 elevated,
+                 principal.session_id,
+-                extra_data={
+-                    "credential_id": str(cred_record.id),
+-                    "nickname": cred_record.nickname,
+-                },
++                extra_data=extra_data,
+                 request=request,
+             )
+ 
+diff --git a/kanban/auth/mfa/policy.py b/kanban/auth/mfa/policy.py
+index e609695f..dd818e35 100644
+--- a/kanban/auth/mfa/policy.py
++++ b/kanban/auth/mfa/policy.py
+@@ -49,10 +49,10 @@ async def _get_enrolled_methods(
+         if not status_row:
+             return []
+         methods: list[str] = []
+-        if bool(status_row.get("has_active_totp")):
+-            methods.append("totp")
+         if int(status_row.get("webauthn_credential_count", 0)) > 0:
+             methods.append("webauthn")
++        if bool(status_row.get("has_active_totp")):
++            methods.append("totp")
+         if int(status_row.get("unused_recovery_codes", 0)) > 0:
+             methods.append("recovery")
+         return methods
+@@ -73,24 +73,28 @@ class _RequireAal2:
+         """Verify principal has AAL2 credentials and verification is fresh."""
+         if principal.aal_level < AAL2_LEVEL:
+             methods = await _get_enrolled_methods(request, principal)
++            preferred = "webauthn" if "webauthn" in methods else "totp"
+             raise ProblemException(
+                 code="AAL2_REQUIRED",
+                 status=403,
+                 title="AAL2 Authentication Required",
+                 detail="This operation requires multi-factor authentication (AAL2).",
+                 methods=methods,
++                preferred_method=preferred,
+             )
+ 
+         if self.max_age_seconds is not None:
+             verified_at = principal.aal2_verified_at
+             if verified_at is None:
+                 methods = await _get_enrolled_methods(request, principal)
++                preferred = "webauthn" if "webauthn" in methods else "totp"
+                 raise ProblemException(
+                     code="AAL2_STALE",
+                     status=403,
+                     title="AAL2 Session Stale",
+                     detail="AAL2 verification timestamp is missing or stale.",
+                     methods=methods,
++                    preferred_method=preferred,
+                 )
+ 
+             now = datetime.now(UTC)
+@@ -99,6 +103,7 @@ class _RequireAal2:
+             age = (now - verified_at).total_seconds()
+             if age > self.max_age_seconds:
+                 methods = await _get_enrolled_methods(request, principal)
++                preferred = "webauthn" if "webauthn" in methods else "totp"
+                 detail_msg = f"AAL2 verification is stale ({int(age)}s > {self.max_age_seconds}s)."
+                 raise ProblemException(
+                     code="AAL2_STALE",
+@@ -106,6 +111,7 @@ class _RequireAal2:
+                     title="AAL2 Session Stale",
+                     detail=detail_msg,
+                     methods=methods,
++                    preferred_method=preferred,
+                 )
+ 
+         return principal
+@@ -190,13 +196,15 @@ async def require_admin_aal2(  # noqa: C901
+             )
+ 
+     admin_methods: list[str] = []
+-    if has_active_totp:
+-        admin_methods.append("totp")
+     if has_webauthn:
+         admin_methods.append("webauthn")
++    if has_active_totp:
++        admin_methods.append("totp")
+     if unused_codes > 0:
+         admin_methods.append("recovery")
+ 
++    preferred = "webauthn" if has_webauthn else "totp"
++
+     if principal.aal_level < AAL2_LEVEL:
+         raise ProblemException(
+             code="AAL2_REQUIRED",
+@@ -204,6 +212,7 @@ async def require_admin_aal2(  # noqa: C901
+             title="AAL2 Authentication Required",
+             detail="Administrative routes require multi-factor authentication (AAL2).",
+             methods=admin_methods,
++            preferred_method=preferred,
+         )
+ 
+     if principal.session_id is not None:
+@@ -215,6 +224,7 @@ async def require_admin_aal2(  # noqa: C901
+                 title="AAL2 Session Stale",
+                 detail="AAL2 verification timestamp is missing or stale.",
+                 methods=admin_methods,
++                preferred_method=preferred,
+             )
+         now = datetime.now(UTC)
+         if verified_at.tzinfo is None:
+@@ -230,6 +240,7 @@ async def require_admin_aal2(  # noqa: C901
+                 title="AAL2 Session Stale",
+                 detail=detail_msg,
+                 methods=admin_methods,
++                preferred_method=preferred,
+             )
+ 
+     return principal
+diff --git a/kanban/auth/sessions/service.py b/kanban/auth/sessions/service.py
+index 1972e859..e4668412 100644
+--- a/kanban/auth/sessions/service.py
++++ b/kanban/auth/sessions/service.py
+@@ -116,6 +116,7 @@ class IssuedSession:
+     idle_expires_at: datetime
+     absolute_expires_at: datetime
+     is_persistent: bool = True
++    principal_id: uuid.UUID | None = None
+ 
+ 
+ class SessionService:
+@@ -217,6 +218,7 @@ class SessionService:
+             idle_expires_at=idle_expires_at,
+             absolute_expires_at=absolute_expires_at,
+             is_persistent=remember_me,
++            principal_id=principal_id,
+         )
+ 
+     async def elevate_aal(
+@@ -260,6 +262,7 @@ class SessionService:
+             idle_expires_at=resolved.idle_expires_at,
+             absolute_expires_at=resolved.absolute_expires_at,
+             is_persistent=resolved.is_persistent,
++            principal_id=resolved.principal_id,
+         )
+ 
+     async def logout(self, session: AsyncSession, session_id: uuid.UUID) -> bool:
+@@ -375,6 +378,7 @@ class SessionService:
+             idle_expires_at=idle_expires_at,
+             absolute_expires_at=absolute_expires_at,
+             is_persistent=is_persistent,
++            principal_id=target_principal_id,
+         )
+ 
+     async def resolve_session(
+diff --git a/kanban/tests/api/test_user_personal_settings.py b/kanban/tests/api/test_user_personal_settings.py
+index d3296784..d147d960 100644
+--- a/kanban/tests/api/test_user_personal_settings.py
++++ b/kanban/tests/api/test_user_personal_settings.py
+@@ -282,6 +282,7 @@ async def test_passkey_rename_and_mfa_status(
+     assert st["totp_enabled"] is False
+     assert st["passkeys_count"] == 1
+     assert st["recovery_codes_remaining"] == 0
++    assert st["preferred_method"] == "webauthn"
+ 
+     # Rename passkey
+     rename_res = await client.patch(
+diff --git a/kanban/tests/auth/test_kan24_fido2_enrollment_and_guards.py b/kanban/tests/auth/test_kan24_fido2_enrollment_and_guards.py
+index 69971ab1..b6fad2f5 100644
+--- a/kanban/tests/auth/test_kan24_fido2_enrollment_and_guards.py
++++ b/kanban/tests/auth/test_kan24_fido2_enrollment_and_guards.py
+@@ -322,7 +322,7 @@ async def test_kan24_hardware_fido2_key_up_only_compatibility(
+ 
+ 
+ @pytest.mark.asyncio
+-async def test_kan24_first_factor_deadlock_and_second_factor_staleness(
++async def test_kan24_first_factor_deadlock_and_second_factor_staleness(  # noqa: PLR0915
+     pg_worker_db: AsyncEngine,
+     key_material: KeyMaterial,
+     webauthn_settings: Settings,
+@@ -386,7 +386,8 @@ async def test_kan24_first_factor_deadlock_and_second_factor_staleness(
+         assert second_opts_res.status_code == 403
+         prob = second_opts_res.json()
+         assert prob["code"] == "AAL2_REQUIRED"
+-        assert prob["methods"] == ["webauthn"]
++        assert prob["methods"] == ["webauthn", "recovery"]
++        assert prob["preferred_method"] == "webauthn"
+ 
+         # Switch to the AAL2 session: register options succeeds
+         client.cookies.clear()
+@@ -416,7 +417,8 @@ async def test_kan24_first_factor_deadlock_and_second_factor_staleness(
+         assert stale_res.status_code == 403
+         stale_prob = stale_res.json()
+         assert stale_prob["code"] == "AAL2_STALE"
+-        assert stale_prob["methods"] == ["webauthn"]
++        assert stale_prob["methods"] == ["webauthn", "recovery"]
++        assert stale_prob["preferred_method"] == "webauthn"
+ 
+         # Also test with missing aal2_verified_at (None)
+         async with factory.session(
+@@ -432,7 +434,8 @@ async def test_kan24_first_factor_deadlock_and_second_factor_staleness(
+         )
+         assert none_verified_res.status_code == 403
+         assert none_verified_res.json()["code"] == "AAL2_STALE"
+-        assert none_verified_res.json()["methods"] == ["webauthn"]
++        assert none_verified_res.json()["methods"] == ["webauthn", "recovery"]
++        assert none_verified_res.json()["preferred_method"] == "webauthn"
+ 
+ 
+ @pytest.mark.asyncio
+@@ -736,14 +739,16 @@ async def test_kan24_step_up_methods_discovery(
+         assert res_sens.status_code == 403
+         prob_sens = res_sens.json()
+         assert prob_sens["code"] == "AAL2_REQUIRED"
+-        assert set(prob_sens["methods"]) == {"totp", "webauthn", "recovery"}
++        assert prob_sens["methods"] == ["webauthn", "totp", "recovery"]
++        assert prob_sens["preferred_method"] == "webauthn"
+ 
+         # 2. require_admin_aal2 route with AAL1 session -> 403 AAL2_REQUIRED with enrolled methods
+         res_adm = await client.get("/api/v1/admin/test/route")
+         assert res_adm.status_code == 403
+         prob_adm = res_adm.json()
+         assert prob_adm["code"] == "AAL2_REQUIRED"
+-        assert set(prob_adm["methods"]) == {"totp", "webauthn", "recovery"}
++        assert prob_adm["methods"] == ["webauthn", "totp", "recovery"]
++        assert prob_adm["preferred_method"] == "webauthn"
+ 
+         # 3. require_aal2 route with stale AAL2 session -> 403 AAL2_STALE with methods
+         async with factory.session(
+@@ -765,7 +770,8 @@ async def test_kan24_step_up_methods_discovery(
+         assert res_stale.status_code == 403
+         prob_stale = res_stale.json()
+         assert prob_stale["code"] == "AAL2_STALE"
+-        assert set(prob_stale["methods"]) == {"totp", "webauthn", "recovery"}
++        assert prob_stale["methods"] == ["webauthn", "totp", "recovery"]
++        assert prob_stale["preferred_method"] == "webauthn"
+ 
+ 
+ @pytest.mark.asyncio
+@@ -1146,23 +1152,29 @@ async def test_kan24_problems_methods_serialization() -> None:
+         detail="AAL2 required.",
+         code="AAL2_REQUIRED",
+         request_id="req-123",
+-        methods=["totp", "webauthn"],
++        methods=["webauthn", "totp"],
++        preferred_method="webauthn",
+     )
+-    assert prob.methods == ["totp", "webauthn"]
++    assert prob.methods == ["webauthn", "totp"]
++    assert prob.preferred_method == "webauthn"
+     dumped = prob.model_dump(exclude_none=True)
+-    assert dumped["methods"] == ["totp", "webauthn"]
++    assert dumped["methods"] == ["webauthn", "totp"]
++    assert dumped["preferred_method"] == "webauthn"
+ 
+     exc = ProblemException(
+         status=403,
+         title="AAL2 Required",
+         detail="AAL2 required.",
+         code="AAL2_REQUIRED",
+-        methods=["totp", "webauthn"],
++        methods=["webauthn", "totp"],
++        preferred_method="webauthn",
+     )
+-    assert exc.methods == ["totp", "webauthn"]
++    assert exc.methods == ["webauthn", "totp"]
++    assert exc.preferred_method == "webauthn"
+ 
+     req = Request({"type": "http", "method": "GET", "path": "/test", "headers": []})
+     resp = await problem_exception_handler(req, exc)
+     data = json.loads(bytes(resp.body).decode("utf-8"))
+     assert data["code"] == "AAL2_REQUIRED"
+-    assert data["methods"] == ["totp", "webauthn"]
++    assert data["methods"] == ["webauthn", "totp"]
++    assert data["preferred_method"] == "webauthn"
+diff --git a/kanban/tests/auth/test_kan27_targeted_coverage.py b/kanban/tests/auth/test_kan27_targeted_coverage.py
+index 3ead1885..ab583a8a 100644
+--- a/kanban/tests/auth/test_kan27_targeted_coverage.py
++++ b/kanban/tests/auth/test_kan27_targeted_coverage.py
+@@ -215,9 +215,7 @@ async def test_compute_link_aal2_requirement_all_methods() -> None:
+     )
+     is_required, methods = await _check_mfa_and_admin(mock_factory, principal)
+     assert is_required is True
+-    assert "totp" in methods
+-    assert "webauthn" in methods
+-    assert "recovery" in methods
++    assert methods == ["webauthn", "totp", "recovery"]
+ 
+ 
+ @pytest.mark.asyncio
+diff --git a/kanban/tests/auth/test_local_login.py b/kanban/tests/auth/test_local_login.py
+index 3cb58f65..f1f61d3b 100644
+--- a/kanban/tests/auth/test_local_login.py
++++ b/kanban/tests/auth/test_local_login.py
+@@ -241,6 +241,8 @@ async def test_case_1_positive_login(
+         assert data["authenticated"] is True
+         assert data["aal_level"] == 1
+         assert data["mfa_pending"] is True
++        assert data["methods"] == ["webauthn", "totp", "recovery"]
++        assert data["preferred_method"] == "totp"
+         assert "session_id" in data
+         assert "csrf_token" in data
+ 
+@@ -269,6 +271,54 @@ async def test_case_1_positive_login(
+         assert deny_res.json()["code"] == "MFA_REQUIRED"
+ 
+ 
++@pytest.mark.asyncio
++async def test_case_1b_login_with_enrolled_passkey_prefers_webauthn(
++    pg_worker_db: AsyncEngine,
++    key_material: KeyMaterial,
++) -> None:
++    """Verify local login returns preferred_method='webauthn' when user has enrolled passkeys."""
++    factory = RLSSessionFactory(pg_worker_db)
++    service = SessionService(key_material.session_hmac_key)
++    limiter = PgRateLimiter(pg_worker_db)
++
++    ws_id, p_id, _ = await _create_test_admin_and_card(
++        factory, key_material, username="passkey_user"
++    )
++
++    # Enroll a mock webauthn credential
++    ctx = RLSContext(principal_id=p_id, workspace_id=ws_id, aal_level=2)
++    async with factory.session(ctx) as session:
++        await session.execute(
++            text(
++                "SELECT kb_auth.webauthn_credential_create("
++                "  :p_id, :cred_id, :pub_key, 0, NULL, ARRAY['internal']::TEXT[], 'Test Key'"
++                ")"
++            ),
++            {
++                "p_id": p_id,
++                "cred_id": b"cred-123456789012",
++                "pub_key": b"pub-12345678901234567890",
++            },
++        )
++
++    app = _build_test_app(service, factory, key_material, limiter)
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
++        csrf_token, csrf_cookie = await _get_pre_session_csrf(client)
++
++        res = await client.post(
++            "/api/v1/auth/local/login",
++            json={"username": "passkey_user", "password": "CorrectPassword123"},
++            headers={CSRF_HEADER_NAME: csrf_token},
++            cookies={CSRF_COOKIE_NAME: csrf_cookie},
++        )
++        assert res.status_code == 200
++        data = res.json()
++        assert data["mfa_pending"] is True
++        assert data["methods"] == ["webauthn"]
++        assert data["preferred_method"] == "webauthn"
++
++
+ @pytest.mark.asyncio
+ async def test_case_4_and_5_enumeration_body_and_work_equality(
+     pg_worker_db: AsyncEngine,
+diff --git a/kanban/tests/auth/test_setup_claim.py b/kanban/tests/auth/test_setup_claim.py
+index 84767f45..cac63887 100644
+--- a/kanban/tests/auth/test_setup_claim.py
++++ b/kanban/tests/auth/test_setup_claim.py
+@@ -321,7 +321,10 @@ async def test_case_2_positive_passkey_branch(
+             headers={CSRF_HEADER_NAME: csrf_token},
+         )
+         assert verify_res.status_code == 200
+-        assert verify_res.json()["aal_level"] == 2
++        verify_data = verify_res.json()
++        assert verify_data["aal_level"] == 2
++        assert "recovery_codes" in verify_data
++        assert len(verify_data["recovery_codes"]) == 10
+         _sync_cookies(client, verify_res)
+ 
+         # Admin route is unlocked
+diff --git a/kanban/tests/auth/test_webauthn.py b/kanban/tests/auth/test_webauthn.py
+index da93b8c4..20d60024 100644
+--- a/kanban/tests/auth/test_webauthn.py
++++ b/kanban/tests/auth/test_webauthn.py
+@@ -255,6 +255,8 @@ async def test_case_1_positive_lifecycle(
+         assert reg_verify_data["verified"] is True
+         assert reg_verify_data["aal_level"] == 2
+         assert reg_verify_data["session_id"] != old_session_id
++        assert "recovery_codes" in reg_verify_data
++        assert len(reg_verify_data["recovery_codes"]) == 10
+         new_sess_token = reg_verify_data["csrf_token"]
+ 
+         # 5. List credentials -> should return our newly enrolled credential
+@@ -277,6 +279,8 @@ async def test_case_1_positive_lifecycle(
+         _sync_cookies(client, login_res_2)
+         login_data_2 = login_res_2.json()
+         assert login_data_2["mfa_pending"] is True
++        assert login_data_2["methods"] == ["webauthn", "recovery"]
++        assert login_data_2["preferred_method"] == "webauthn"
+         sess_token_2 = login_data_2["csrf_token"]
+         sess_id_2 = login_data_2["session_id"]
+ 
+@@ -1398,7 +1402,8 @@ async def test_auth_webauthn_authorization_and_validation_branches(
+         )
+         assert res_opts_2.status_code == 403
+         assert res_opts_2.json()["code"] == "AAL2_REQUIRED"
+-        assert res_opts_2.json().get("methods") == ["webauthn"]
++        assert res_opts_2.json().get("methods") == ["webauthn", "recovery"]
++        assert res_opts_2.json().get("preferred_method") == "webauthn"
+ 
+         # Attempt register_verify with AAL1 session -> 403 AAL2_REQUIRED
+         res_ver_2 = await client.post(
+@@ -1408,7 +1413,8 @@ async def test_auth_webauthn_authorization_and_validation_branches(
+         )
+         assert res_ver_2.status_code == 403
+         assert res_ver_2.json()["code"] == "AAL2_REQUIRED"
+-        assert res_ver_2.json().get("methods") == ["webauthn"]
++        assert res_ver_2.json().get("methods") == ["webauthn", "recovery"]
++        assert res_ver_2.json().get("preferred_method") == "webauthn"
+ 
+         # Now Bob creates another mfa_pending session (e.g. logging in again)
+         async with factory.session(
+diff --git a/kanban/web/src/features/auth/LoginPage.tsx b/kanban/web/src/features/auth/LoginPage.tsx
+index 9b401d69..638209f8 100644
+--- a/kanban/web/src/features/auth/LoginPage.tsx
++++ b/kanban/web/src/features/auth/LoginPage.tsx
+@@ -73,7 +73,7 @@ export function LoginPage({
+         if (isMounted.current && sessionInfo.authenticated && sessionInfo.mfa_pending) {
+           setMfaChallenge({
+             challengeId: sessionInfo.session_id ?? 'session-mfa',
+-            methods: ['totp', 'webauthn', 'recovery'],
++            methods: ['webauthn', 'totp', 'recovery'],
+           });
+         }
+       } catch {
+diff --git a/kanban/web/src/features/auth/SecondFactorStep.test.tsx b/kanban/web/src/features/auth/SecondFactorStep.test.tsx
+index 3670a95f..6d404c46 100644
+--- a/kanban/web/src/features/auth/SecondFactorStep.test.tsx
++++ b/kanban/web/src/features/auth/SecondFactorStep.test.tsx
+@@ -1,5 +1,5 @@
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+ import React from 'react';
+ import { SecondFactorStep } from './SecondFactorStep';
+ import * as authApi from './authApi';
+@@ -58,7 +58,7 @@ describe('SecondFactorStep (KB-P3-35)', () => {
+     render(
+       <SecondFactorStep
+         challengeId="chall-test"
+-        methods={['webauthn', 'totp']}
++        methods={['webauthn']}
+         onSuccess={onSuccess}
+         onError={onError}
+         onSessionExpired={onExpired}
+@@ -74,6 +74,31 @@ describe('SecondFactorStep (KB-P3-35)', () => {
+     (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = originalPKC;
+   });
+ 
++  it('automatically falls back selectedMethod to totp when PublicKeyCredential is undefined and totp is enrolled', () => {
++    const originalPKC = (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential;
++    (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = undefined;
++
++    render(
++      <SecondFactorStep
++        challengeId="chall-fallback-test"
++        methods={['webauthn', 'totp']}
++        onSuccess={vi.fn()}
++        onError={vi.fn()}
++        onSessionExpired={vi.fn()}
++      />,
++    );
++
++    const passkeyTab = screen.getByRole('tab', { name: /Passkey/i });
++    expect(passkeyTab.getAttribute('aria-disabled')).toBe('true');
++    expect(passkeyTab.getAttribute('aria-selected')).toBe('false');
++
++    const totpTab = screen.getByRole('tab', { name: /Authenticator code/i });
++    expect(totpTab.getAttribute('aria-selected')).toBe('true');
++    expect(screen.getByLabelText(/6-digit Authenticator Code/i)).toBeDefined();
++
++    (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = originalPKC;
++  });
++
+   it('TOTP boundary: accepts 6 digits and auto-submits; 5 digits does not; normalizes spaces (Mandatory Test Case 6)', async () => {
+     const verifyTotpSpy = vi.spyOn(authApi, 'verifyTotp').mockResolvedValue({
+       status: 'authenticated',
+@@ -416,6 +441,7 @@ describe('SecondFactorStep (KB-P3-35)', () => {
+       />,
+     );
+ 
++    expect(screen.getByRole('tab', { name: /Passkey/i })).toBeDefined();
+     expect(screen.getByRole('tab', { name: /Authenticator code/i })).toBeDefined();
+     unmountEmpty();
+ 
+@@ -596,8 +622,10 @@ describe('SecondFactorStep (KB-P3-35)', () => {
+     fireEvent.click(btn);
+ 
+     expect(authApi.getWebauthnAssertionOptions).toHaveBeenCalledTimes(1);
+-    resolveAssertion?.({
+-      options: { challenge: 'Y2hhbA', rpId: 'localhost' },
++    act(() => {
++      resolveAssertion?.({
++        options: { challenge: 'Y2hhbA', rpId: 'localhost' },
++      });
+     });
+   });
+ 
+@@ -654,7 +682,9 @@ describe('SecondFactorStep (KB-P3-35)', () => {
+     }
+ 
+     expect(verifySpy).toHaveBeenCalledTimes(1);
+-    resolveRecovery?.({ status: 'authenticated' });
++    act(() => {
++      resolveRecovery?.({ status: 'authenticated' });
++    });
+   });
+ 
+   it('supports keyboard navigation (ArrowRight, ArrowLeft, Home, End) across method tabs', () => {
+@@ -755,7 +785,9 @@ describe('SecondFactorStep (KB-P3-35)', () => {
+     fireEvent.click(passkeyBtn);
+ 
+     expect(authApi.getWebauthnAssertionOptions).toHaveBeenCalledTimes(1);
+-    resolveOptions?.({ options: { challenge: 'Y2hhbA', rpId: 'localhost' } });
++    act(() => {
++      resolveOptions?.({ options: { challenge: 'Y2hhbA', rpId: 'localhost' } });
++    });
+   });
+ 
+   describe('3-method SecondFactorStep renders cleanly & mobile responsive layout (KAN-7)', () => {
+@@ -785,11 +817,11 @@ describe('SecondFactorStep (KB-P3-35)', () => {
+       const tabs = screen.getAllByRole('tab');
+       expect(tabs).toHaveLength(3);
+ 
+-      const tabTotp = tabs[0];
+-      const tabPasskey = tabs[1];
++      const tabPasskey = tabs[0];
++      const tabTotp = tabs[1];
+       const tabRecovery = tabs[2];
+-      expect(tabTotp?.textContent).toBe('Authenticator code');
+       expect(tabPasskey?.textContent).toBe('Passkey');
++      expect(tabTotp?.textContent).toBe('Authenticator code');
+       expect(tabRecovery?.textContent).toBe('Recovery code');
+ 
+       // Verify 0 inline styles on tab elements (Mandate: 0 inline style={{...}} props)
+@@ -798,19 +830,22 @@ describe('SecondFactorStep (KB-P3-35)', () => {
+       }
+       expect(tablist.getAttribute('style')).toBeNull();
+ 
+-      // Initial active tab is Authenticator code
++      // Initial active tab is Passkey (default 2FA!)
++      expect(tabPasskey?.getAttribute('aria-selected')).toBe('true');
++      expect(tabTotp?.getAttribute('aria-selected')).toBe('false');
++      expect(tabRecovery?.getAttribute('aria-selected')).toBe('false');
++      expect(screen.getByRole('button', { name: /Use passkey/i })).toBeDefined();
++
++      // 1-click fallback button to switch to TOTP
++      const fallbackBtn = screen.getByTestId('use-totp-fallback-btn');
++      expect(fallbackBtn.textContent).toBe('Use 6-digit authenticator code instead');
++      fireEvent.click(fallbackBtn);
++
++      // Now Authenticator code is selected!
+       expect(tabTotp?.getAttribute('aria-selected')).toBe('true');
+       expect(tabPasskey?.getAttribute('aria-selected')).toBe('false');
+-      expect(tabRecovery?.getAttribute('aria-selected')).toBe('false');
+       expect(screen.getByLabelText(/6-digit Authenticator Code/i)).toBeDefined();
+ 
+-      // Switch to Passkey tab
+-      if (tabPasskey) {
+-        fireEvent.click(tabPasskey);
+-      }
+-      expect(tabPasskey?.getAttribute('aria-selected')).toBe('true');
+-      expect(screen.getByRole('button', { name: /Use passkey/i })).toBeDefined();
+-
+       // Switch to Recovery code tab
+       if (tabRecovery) {
+         fireEvent.click(tabRecovery);
+@@ -823,10 +858,10 @@ describe('SecondFactorStep (KB-P3-35)', () => {
+         tabRecovery.focus();
+         fireEvent.keyDown(tabRecovery, { key: 'ArrowRight' });
+       }
+-      expect(tabTotp?.getAttribute('aria-selected')).toBe('true');
++      expect(tabPasskey?.getAttribute('aria-selected')).toBe('true');
+ 
+-      if (tabTotp) {
+-        fireEvent.keyDown(tabTotp, { key: 'ArrowLeft' });
++      if (tabPasskey) {
++        fireEvent.keyDown(tabPasskey, { key: 'ArrowLeft' });
+       }
+       expect(tabRecovery?.getAttribute('aria-selected')).toBe('true');
+     });
+diff --git a/kanban/web/src/features/auth/SecondFactorStep.tsx b/kanban/web/src/features/auth/SecondFactorStep.tsx
+index bacfbb8c..5bd1d22a 100644
+--- a/kanban/web/src/features/auth/SecondFactorStep.tsx
++++ b/kanban/web/src/features/auth/SecondFactorStep.tsx
+@@ -31,17 +31,38 @@ export function SecondFactorStep({
+   onSessionExpired,
+   onCancel,
+ }: SecondFactorStepProps): JSX.Element {
+-  // Ordered by methods provided by server
+-  const activeMethods: MfaMethod[] = methods.length > 0 ? methods : ['totp'];
+-  const initialMethod: MfaMethod = activeMethods[0] ?? 'totp';
+-  const [selectedMethod, setSelectedMethod] = useState<MfaMethod>(initialMethod);
++  const supportsWebAuthn = isWebAuthnSupported();
++
++  // Normalize activeMethods so 'webauthn' comes before 'totp' and 'recovery'
++  const rawMethods: MfaMethod[] = methods.length > 0 ? methods : ['webauthn', 'totp', 'recovery'];
++  const activeMethods: MfaMethod[] = [];
++  if (rawMethods.includes('webauthn')) {
++    activeMethods.push('webauthn');
++  }
++  if (rawMethods.includes('totp')) {
++    activeMethods.push('totp');
++  }
++  if (rawMethods.includes('recovery')) {
++    activeMethods.push('recovery');
++  }
++  for (const m of rawMethods) {
++    if (!activeMethods.includes(m)) {
++      activeMethods.push(m);
++    }
++  }
++
++  const defaultMethod: MfaMethod =
++    activeMethods.includes('webauthn') && supportsWebAuthn
++      ? 'webauthn'
++      : activeMethods.includes('totp')
++        ? 'totp'
++        : activeMethods[0] ?? 'totp';
++  const [selectedMethod, setSelectedMethod] = useState<MfaMethod>(defaultMethod);
+ 
+   const [totpCode, setTotpCode] = useState('');
+   const [recoveryCode, setRecoveryCode] = useState('');
+   const [isVerifying, setIsVerifying] = useState(false);
+ 
+-  const supportsWebAuthn = isWebAuthnSupported();
+-
+   const handleAssertion = async () => {
+     if (isVerifying) return;
+     setIsVerifying(true);
+@@ -238,6 +259,21 @@ export function SecondFactorStep({
+               >
+                 {isVerifying ? 'Awaiting Passkey...' : 'Use passkey'}
+               </button>
++              {activeMethods.includes('totp') && (
++                <div className="auth-fallback-action">
++                  <button
++                    type="button"
++                    className="auth-fallback-btn"
++                    data-testid="use-totp-fallback-btn"
++                    onClick={() => {
++                      setSelectedMethod('totp');
++                    }}
++                    disabled={isVerifying}
++                  >
++                    Use 6-digit authenticator code instead
++                  </button>
++                </div>
++              )}
+             </div>
+           )}
+         </div>
+diff --git a/kanban/web/src/features/auth/SetupClaimPage.test.tsx b/kanban/web/src/features/auth/SetupClaimPage.test.tsx
+index 63568e18..6bacb7bc 100644
+--- a/kanban/web/src/features/auth/SetupClaimPage.test.tsx
++++ b/kanban/web/src/features/auth/SetupClaimPage.test.tsx
+@@ -149,7 +149,6 @@ describe('SetupClaimPage (KB-P3-35)', () => {
+     });
+ 
+     fireEvent.click(screen.getByTestId('copy-secret-btn'));
+-    fireEvent.click(screen.getByRole('button', { name: /Copy setup key/i }));
+ 
+     // Enter 6-digit TOTP verify code
+     const verifyInput = screen.getByLabelText(/Verify 6-digit Code from Authenticator/i);
+@@ -432,7 +431,7 @@ describe('SetupClaimPage (KB-P3-35)', () => {
+     });
+ 
+     // Test Copy Setup Key button
+-    const copyKeyBtn = screen.getByRole('button', { name: /Copy setup key/i });
++    const copyKeyBtn = screen.getByTestId('copy-secret-btn');
+     fireEvent.click(copyKeyBtn);
+ 
+     // Switch back to Passkey tab
+@@ -773,7 +772,6 @@ describe('SetupClaimPage (KB-P3-35)', () => {
+     });
+ 
+     fireEvent.click(screen.getByTestId('copy-secret-btn'));
+-    fireEvent.click(screen.getByRole('button', { name: /Copy setup key/i }));
+ 
+     // Verify TOTP to go to Step 3
+     fireEvent.change(screen.getByLabelText(/Verify 6-digit Code/i), {
+@@ -801,19 +799,19 @@ describe('SetupClaimPage (KB-P3-35)', () => {
+     expect(onNavigateMock).toHaveBeenCalledWith('/');
+   });
+ 
+-  it('covers platform authenticator unavailable and isPlainHttp branches', async () => {
+-    // 1. isUserVerifyingPlatformAuthenticatorAvailable returns false
+-    (window as unknown as { PublicKeyCredential: { isUserVerifyingPlatformAuthenticatorAvailable: () => Promise<boolean> } }).PublicKeyCredential = {
+-      isUserVerifyingPlatformAuthenticatorAvailable: vi.fn().mockResolvedValue(false),
+-    };
++  it('covers unsupported webauthn and isPlainHttp branches for totp auto-fallback', async () => {
++    // 1. PublicKeyCredential undefined (!supportsWebAuthn) -> switches to totp
++    const origPKC = (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential;
++    (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = undefined;
+ 
+     const { unmount } = render(<SetupClaimPage initialToken={validToken43} />);
+     await waitFor(() => {
+       expect(screen.getByText('Step 1 of 3')).toBeDefined();
+     });
+     unmount();
++    (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = origPKC;
+ 
+-    // 2. isPlainHttp branch (http: and non-localhost)
++    // 2. isPlainHttp branch (http: and non-localhost) -> switches to totp
+     const originalLocation = window.location;
+     Object.defineProperty(window, 'location', {
+       writable: true,
+diff --git a/kanban/web/src/features/auth/SetupClaimPage.tsx b/kanban/web/src/features/auth/SetupClaimPage.tsx
+index b48c331b..bf2b6c45 100644
+--- a/kanban/web/src/features/auth/SetupClaimPage.tsx
++++ b/kanban/web/src/features/auth/SetupClaimPage.tsx
+@@ -64,9 +64,18 @@ export function SetupClaimPage({
+   const [projectKey, setProjectKey] = useState('KANBA');
+   const [isSubmitting, setIsSubmitting] = useState(false);
+ 
++  const supportsWebAuthn = isWebAuthnSupported();
++  const isPlainHttp =
++    typeof window !== 'undefined' &&
++    window.location.protocol === 'http:' &&
++    window.location.hostname !== 'localhost' &&
++    window.location.hostname !== '127.0.0.1';
++
+   // Step 2: MFA Enrollment
+   const [enrollmentId, setEnrollmentId] = useState<string | null>(null);
+-  const [enrollMethod, setEnrollMethod] = useState<'webauthn' | 'totp'>('webauthn');
++  const [enrollMethod, setEnrollMethod] = useState<'webauthn' | 'totp'>(() =>
++    !supportsWebAuthn || isPlainHttp ? 'totp' : 'webauthn'
++  );
+   const [totpEnrollData, setTotpEnrollData] = useState<{
+     secret_base32: string;
+     otpauth_uri: string;
+@@ -82,13 +91,6 @@ export function SetupClaimPage({
+   const [error, setError] = useState<FormattedError | null>(null);
+   const alertRef = useRef<HTMLDivElement | null>(null);
+ 
+-  const supportsWebAuthn = isWebAuthnSupported();
+-  const isPlainHttp =
+-    typeof window !== 'undefined' &&
+-    window.location.protocol === 'http:' &&
+-    window.location.hostname !== 'localhost' &&
+-    window.location.hostname !== '127.0.0.1';
+-
+   const slugify = (text: string): string => {
+     return text.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
+   };
+@@ -131,36 +133,6 @@ export function SetupClaimPage({
+     };
+   }, []);
+ 
+-  useEffect(() => {
+-    let active = true;
+-    async function checkPlatformAuth() {
+-      if (typeof window === 'undefined') return;
+-      if (isPlainHttp) {
+-        if (active) {
+-          setEnrollMethod('totp');
+-        }
+-        return;
+-      }
+-      if (
+-        'PublicKeyCredential' in window &&
+-        Boolean(window.PublicKeyCredential) &&
+-        typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function'
+-      ) {
+-        try {
+-          const available = await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
+-          if (active && !available) {
+-            setEnrollMethod('totp');
+-          }
+-        } catch {
+-          // Keep current selection
+-        }
+-      }
+-    }
+-    void checkPlatformAuth();
+-    return () => {
+-      active = false;
+-    };
+-  }, [isPlainHttp]);
+ 
+   const handleStartTotpEnroll = useCallback(async () => {
+     if (isSubmitting || !enrollmentId) return;
+@@ -176,7 +148,7 @@ export function SetupClaimPage({
+     } finally {
+       setIsSubmitting(false);
+     }
+-  }, [enrollmentId, isSubmitting]);
++  }, [enrollmentId, isSubmitting, setError, setTotpEnrollData, setEnrollMethod]);
+ 
+   useEffect(() => {
+     if (currentStep === 2 && enrollMethod === 'totp' && !totpEnrollData && enrollmentId && !isSubmitting) {
+@@ -704,21 +676,6 @@ export function SetupClaimPage({
+                       <code className="auth-code auth-mono auth-code-lg">
+                         {formatBase32(totpEnrollData.secret_base32)}
+                       </code>
+-                      <button
+-                        type="button"
+-                        className="auth-copy-btn"
+-                        onClick={() => {
+-                          void (async () => {
+-                            const ok = await copyToClipboard(totpEnrollData.secret_base32);
+-                            if (ok) {
+-                              setCopiedKey(true);
+-                              setTimeout(() => { setCopiedKey(false); }, 2000);
+-                            }
+-                          })();
+-                        }}
+-                      >
+-                        {copiedKey ? 'Copied!' : 'Copy setup key'}
+-                      </button>
+                       <button
+                         type="button"
+                         className="auth-copy-btn"
+diff --git a/kanban/web/src/features/auth/auth.css b/kanban/web/src/features/auth/auth.css
+index 695efe8a..30d6b9fb 100644
+--- a/kanban/web/src/features/auth/auth.css
++++ b/kanban/web/src/features/auth/auth.css
+@@ -564,3 +564,23 @@
+   margin-top: 16px;
+   text-align: center;
+ }
++
++.auth-fallback-action {
++  margin-top: 12px;
++  text-align: center;
++}
++
++.auth-fallback-btn {
++  background: none;
++  border: none;
++  color: var(--primary-color, #2563eb);
++  font-size: 0.875rem;
++  font-weight: 500;
++  cursor: pointer;
++  padding: 4px 8px;
++  text-decoration: underline;
++}
++
++.auth-fallback-btn:hover {
++  color: var(--primary-hover, #1d4ed8);
++}
+diff --git a/kanban/web/src/features/auth/authApi.test.ts b/kanban/web/src/features/auth/authApi.test.ts
+index a1e6eb02..655fbe99 100644
+--- a/kanban/web/src/features/auth/authApi.test.ts
++++ b/kanban/web/src/features/auth/authApi.test.ts
+@@ -163,6 +163,38 @@ describe('authApi wrappers and formatters (KB-P3-35)', () => {
+     expect(verifyRes.recovery_codes).toEqual(['c2']);
+   });
+ 
++  it('covers fallback recovery code generation branches when verify returns no codes', async () => {
++    const fetchSpy = vi.spyOn(client, 'apiFetch');
++
++    // 1. verifyWebauthnRegistration fallback
++    fetchSpy
++      .mockResolvedValueOnce({ status: 'enrolled' }) // no recovery_codes
++      .mockResolvedValueOnce({ recovery_codes: ['rc-gen-1', 'rc-gen-2'] });
++    const passkeyRes = await verifyWebauthnRegistration({
++      enrollment_id: 'enr-1',
++      credential: {},
++    });
++    expect(passkeyRes.recovery_codes).toEqual(['rc-gen-1', 'rc-gen-2']);
++    expect(fetchSpy).toHaveBeenCalledWith('POST', '/api/v1/auth/mfa/recovery-codes/generate', { body: {} });
++
++    // 2. enrollTotp with secret fallback
++    fetchSpy.mockResolvedValueOnce({ secret: 'XYZ', otpauth_uri: 'otpauth://xyz' });
++    const totpRes = await enrollTotp({ enrollment_id: 'enr-2' });
++    expect(totpRes.secret_base32).toBe('XYZ');
++
++    // 3. enrollTotp with empty fallback
++    fetchSpy.mockResolvedValueOnce({ otpauth_uri: 'otpauth://empty' });
++    const totpEmptyRes = await enrollTotp({ enrollment_id: 'enr-empty' });
++    expect(totpEmptyRes.secret_base32).toBe('');
++
++    // 4. verifyTotpEnrollment fallback
++    fetchSpy
++      .mockResolvedValueOnce({ status: 'enrolled' }) // no recovery_codes
++      .mockResolvedValueOnce({ recovery_codes: ['rc-totp-1'] });
++    const totpVerifyRes = await verifyTotpEnrollment({ enrollment_id: 'enr-3', code: '123456' });
++    expect(totpVerifyRes.recovery_codes).toEqual(['rc-totp-1']);
++  });
++
+   it('covers formatAuthError for WEBAUTHN_FAILED, CHALLENGE_EXPIRED, SETUP_TOKEN_INVALID, and unknown codes', () => {
+     expect(
+       formatAuthError(new ApiProblem(400, { code: 'WEBAUTHN_FAILED' })).message,
+@@ -236,6 +268,16 @@ describe('authApi wrappers and formatters (KB-P3-35)', () => {
+   });
+ 
+   it('covers submitLocalAdminLogin MFA fallback branches', async () => {
++    vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({
++      status: 'authenticated',
++    });
++    const resAuth = await submitLocalAdminLogin({ username: 'admin', password: 'pwd' });
++    expect(resAuth.status).toBe('authenticated');
++
++    vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({});
++    const resFallback = await submitLocalAdminLogin({ username: 'admin', password: 'pwd' });
++    expect(resFallback.status).toBe('authenticated');
++
+     vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({
+       status: 'mfa_required',
+       session_id: 'sess-ch-1',
+@@ -244,7 +286,7 @@ describe('authApi wrappers and formatters (KB-P3-35)', () => {
+     expect(resMfa.status).toBe('mfa_required');
+     if (resMfa.status === 'mfa_required') {
+       expect(resMfa.challenge_id).toBe('sess-ch-1');
+-      expect(resMfa.methods).toEqual(['totp', 'webauthn', 'recovery']);
++      expect(resMfa.methods).toEqual(['webauthn', 'totp', 'recovery']);
+     }
+ 
+     // when result.mfa_pending is true
+@@ -256,7 +298,16 @@ describe('authApi wrappers and formatters (KB-P3-35)', () => {
+     expect(resPending.status).toBe('mfa_required');
+     if (resPending.status === 'mfa_required') {
+       expect(resPending.challenge_id).toBe('sess-ch-2');
+-      expect(resPending.methods).toEqual(['totp', 'webauthn', 'recovery']);
++      expect(resPending.methods).toEqual(['webauthn', 'totp', 'recovery']);
+     }
++
++    // raw options without { options: ... } wrapper
++    vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({ challenge: 'raw-ch' });
++    const rawOpts = await getWebauthnAssertionOptions({ challenge_id: 'ch-raw' });
++    expect(rawOpts.options.challenge).toBe('raw-ch');
++
++    vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({ challenge: 'raw-reg-ch' });
++    const rawRegOpts = await getWebauthnRegistrationOptions({ enrollment_id: 'enr-raw' });
++    expect(rawRegOpts.options.challenge).toBe('raw-reg-ch');
+   });
+ });
+diff --git a/kanban/web/src/features/auth/authApi.ts b/kanban/web/src/features/auth/authApi.ts
+index 5047f898..ad7452c1 100644
+--- a/kanban/web/src/features/auth/authApi.ts
++++ b/kanban/web/src/features/auth/authApi.ts
+@@ -206,7 +206,7 @@ export async function submitLocalAdminLogin(credentials: {
+     return {
+       status: 'mfa_required',
+       challenge_id: result.challenge_id ?? result.session_id ?? '',
+-      methods: result.methods ?? ['totp', 'webauthn', 'recovery'],
++      methods: result.methods ?? ['webauthn', 'totp', 'recovery'],
+     };
+   }
+   if (result.status === 'authenticated') {
+@@ -216,7 +216,7 @@ export async function submitLocalAdminLogin(credentials: {
+     return {
+       status: 'mfa_required',
+       challenge_id: result.challenge_id ?? result.session_id ?? '',
+-      methods: result.methods ?? ['totp', 'webauthn', 'recovery'],
++      methods: result.methods ?? ['webauthn', 'totp', 'recovery'],
+     };
+   }
+   return { status: 'authenticated' };
+diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.tsx b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
+index 2ee11e19..a8cf6a34 100644
+--- a/kanban/web/src/features/settings/PersonalSettingsPage.tsx
++++ b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
+@@ -983,15 +983,21 @@ export function PersonalSettingsPage(): JSX.Element {
+           Two-Factor Authentication (2FA)
+         </h2>
+         <p className="kb-personal-settings-section-desc">
+-          Add an extra layer of protection to your account using TOTP and emergency recovery codes.
++          Protect your account with Passkeys as your primary 2FA method, backed by authenticator apps (TOTP) and emergency recovery codes.
+         </p>
+ 
+         <div className="kb-personal-settings-status-box">
++          <div className="kb-personal-settings-stat-card">
++            <div className="kb-personal-settings-stat-num" data-testid="mfa-status-passkeys">
++              {passkeys && passkeys.length > 0 ? `${String(passkeys.length)} Enrolled` : 'Default 2FA'}
++            </div>
++            <div className="kb-personal-settings-stat-label">Passkeys (Primary 2FA)</div>
++          </div>
+           <div className="kb-personal-settings-stat-card">
+             <div className="kb-personal-settings-stat-num" data-testid="mfa-status-totp">
+               {mfaStatus?.totp_enabled ? 'Active' : 'Disabled'}
+             </div>
+-            <div className="kb-personal-settings-stat-label">Authenticator App (TOTP)</div>
++            <div className="kb-personal-settings-stat-label">Authenticator App (Backup TOTP)</div>
+           </div>
+           <div className="kb-personal-settings-stat-card">
+             <div className="kb-personal-settings-stat-num" data-testid="mfa-status-recovery-count">
+diff --git a/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
+index bb06ac80..a10ec2a5 100644
+--- a/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
+@@ -111,7 +111,10 @@ describe('PersonalSettingsPage', () => {
+     expect(tzSelect.value).toBe('America/New_York');
+ 
+     expect(screen.getByText('MacBook TouchID')).toBeDefined();
++    expect(screen.getByTestId('mfa-status-passkeys').textContent).toBe('1 Enrolled');
++    expect(screen.getByText('Passkeys (Primary 2FA)')).toBeDefined();
+     expect(screen.getByTestId('mfa-status-totp').textContent).toBe('Active');
++    expect(screen.getByText('Authenticator App (Backup TOTP)')).toBeDefined();
+     expect(screen.getByTestId('mfa-status-recovery-count').textContent).toBe('10');
+   });
+ 
+@@ -1503,6 +1506,7 @@ describe('PersonalSettingsPage', () => {
+     vi.mocked(api.fetchPasskeys).mockResolvedValue([]);
+     renderComponent();
+     await waitFor(() => {
++      expect(screen.getByTestId('mfa-status-passkeys').textContent).toBe('Default 2FA');
+       expect(screen.getByTestId('regenerate-hint')).toBeDefined();
+     });
+     const regenBtn = screen.getByTestId('regenerate-recovery-codes-btn');
+diff --git a/kanban/web/src/features/settings/personalSettingsApi.test.ts b/kanban/web/src/features/settings/personalSettingsApi.test.ts
+index 8daef26d..f764c268 100644
+--- a/kanban/web/src/features/settings/personalSettingsApi.test.ts
++++ b/kanban/web/src/features/settings/personalSettingsApi.test.ts
+@@ -95,7 +95,12 @@ describe('personalSettingsApi', () => {
+   });
+ 
+   it('fetchMfaStatus invokes GET /api/v1/auth/mfa/status', async () => {
+-    const mockStatus = { totp_enabled: true, passkeys_count: 2, recovery_codes_remaining: 8 };
++    const mockStatus = {
++      totp_enabled: true,
++      passkeys_count: 2,
++      recovery_codes_remaining: 8,
++      preferred_method: 'webauthn' as const,
++    };
+     const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue(mockStatus);
+ 
+     const res = await fetchMfaStatus();
+diff --git a/kanban/web/src/features/settings/personalSettingsApi.ts b/kanban/web/src/features/settings/personalSettingsApi.ts
+index 633ad469..33079ff5 100644
+--- a/kanban/web/src/features/settings/personalSettingsApi.ts
++++ b/kanban/web/src/features/settings/personalSettingsApi.ts
+@@ -63,6 +63,7 @@ export interface MfaStatusResponse {
+   totp_enabled: boolean;
+   passkeys_count: number;
+   recovery_codes_remaining: number;
++  preferred_method?: 'webauthn' | 'totp';
+ }
+ 
+ export interface TotpEnrollResponse {

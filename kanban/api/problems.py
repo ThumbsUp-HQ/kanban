@@ -107,6 +107,10 @@ class Problem(BaseModel):
         default=None,
         description="Available MFA methods for step-up elevation",
     )
+    preferred_method: str | None = Field(
+        default=None,
+        description="Preferred MFA method for step-up elevation",
+    )
 
 
 class ProblemException(Exception):  # noqa: N818
@@ -133,6 +137,7 @@ class ProblemException(Exception):  # noqa: N818
         retry_after_seconds: int | None = None,
         current_preview: dict[str, Any] | None = None,
         methods: list[str] | None = None,
+        preferred_method: str | None = None,
     ) -> None:
         """Initialize problem exception with error code, status, and optional details."""
         if not _CODE_REGEX.match(code):
@@ -157,6 +162,7 @@ class ProblemException(Exception):  # noqa: N818
         self.retry_after_seconds = retry_after_seconds
         self.current_preview = current_preview
         self.methods = methods
+        self.preferred_method = preferred_method
 
 
 def not_found() -> NoReturn:
@@ -275,6 +281,7 @@ async def problem_exception_handler(
         retry_after_seconds=exc.retry_after_seconds,
         current_preview=exc.current_preview,
         methods=exc.methods or extra_fields.pop("methods", None),
+        preferred_method=exc.preferred_method or extra_fields.pop("preferred_method", None),
         **extra_fields,
     )
     response_headers = {"x-request-id": req_id}

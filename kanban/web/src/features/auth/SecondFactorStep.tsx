@@ -31,16 +31,37 @@ export function SecondFactorStep({
   onSessionExpired,
   onCancel,
 }: SecondFactorStepProps): JSX.Element {
-  // Ordered by methods provided by server
-  const activeMethods: MfaMethod[] = methods.length > 0 ? methods : ['totp'];
-  const initialMethod: MfaMethod = activeMethods[0] ?? 'totp';
-  const [selectedMethod, setSelectedMethod] = useState<MfaMethod>(initialMethod);
+  const supportsWebAuthn = isWebAuthnSupported();
+
+  // Normalize activeMethods so 'webauthn' comes before 'totp' and 'recovery'
+  const rawMethods: MfaMethod[] = methods.length > 0 ? methods : ['webauthn', 'totp', 'recovery'];
+  const activeMethods: MfaMethod[] = [];
+  if (rawMethods.includes('webauthn')) {
+    activeMethods.push('webauthn');
+  }
+  if (rawMethods.includes('totp')) {
+    activeMethods.push('totp');
+  }
+  if (rawMethods.includes('recovery')) {
+    activeMethods.push('recovery');
+  }
+  for (const m of rawMethods) {
+    if (!activeMethods.includes(m)) {
+      activeMethods.push(m);
+    }
+  }
+
+  const defaultMethod: MfaMethod =
+    activeMethods.includes('webauthn') && supportsWebAuthn
+      ? 'webauthn'
+      : activeMethods.includes('totp')
+        ? 'totp'
+        : activeMethods[0] ?? 'totp';
+  const [selectedMethod, setSelectedMethod] = useState<MfaMethod>(defaultMethod);
 
   const [totpCode, setTotpCode] = useState('');
   const [recoveryCode, setRecoveryCode] = useState('');
   const [isVerifying, setIsVerifying] = useState(false);
-
-  const supportsWebAuthn = isWebAuthnSupported();
 
   const handleAssertion = async () => {
     if (isVerifying) return;
@@ -238,6 +259,21 @@ export function SecondFactorStep({
               >
                 {isVerifying ? 'Awaiting Passkey...' : 'Use passkey'}
               </button>
+              {activeMethods.includes('totp') && (
+                <div className="auth-fallback-action">
+                  <button
+                    type="button"
+                    className="auth-fallback-btn"
+                    data-testid="use-totp-fallback-btn"
+                    onClick={() => {
+                      setSelectedMethod('totp');
+                    }}
+                    disabled={isVerifying}
+                  >
+                    Use 6-digit authenticator code instead
+                  </button>
+                </div>
+              )}
             </div>
           )}
         </div>

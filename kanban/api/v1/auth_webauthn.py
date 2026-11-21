@@ -19,7 +19,9 @@ from webauthn.helpers import bytes_to_base64url
 from database.session import RLSContext
 from kanban.api.deps import PrincipalContext, get_principal  # Required at runtime
 from kanban.api.problems import ProblemException
+from kanban.api.v1.auth_mfa import _get_auth_pepper
 from kanban.auth.mfa.policy import require_aal2
+from kanban.auth.mfa.recovery import RecoveryCodeService
 from kanban.auth.mfa.webauthn import WebauthnCloneDetectedError, WebauthnService
 from kanban.auth.sessions.cookies import (
     attach_session_and_csrf_cookies,
@@ -148,12 +150,14 @@ async def _assert_can_register(session: AsyncSession, principal: PrincipalContex
     unused_recovery = int(status_row["unused_recovery_codes"]) if status_row else 0
 
     methods: list[str] = []
-    if has_totp:
-        methods.append("totp")
     if webauthn_count > 0:
         methods.append("webauthn")
+    if has_totp:
+        methods.append("totp")
     if unused_recovery > 0:
         methods.append("recovery")
+
+    preferred = "webauthn" if webauthn_count > 0 else "totp"
 
     if not has_totp and webauthn_count == 0:
         return True
@@ -165,6 +169,7 @@ async def _assert_can_register(session: AsyncSession, principal: PrincipalContex
             title="AAL2 Required",
             detail="Registering additional factors requires an active AAL2 session.",
             methods=methods,
+            preferred_method=preferred,
         )
 
     verified_at = principal.aal2_verified_at
@@ -175,6 +180,7 @@ async def _assert_can_register(session: AsyncSession, principal: PrincipalContex
             title="AAL2 Session Stale",
             detail="AAL2 verification timestamp is missing or stale.",
             methods=methods,
+            preferred_method=preferred,
         )
 
     now = datetime.now(UTC)
@@ -189,6 +195,7 @@ async def _assert_can_register(session: AsyncSession, principal: PrincipalContex
             title="AAL2 Session Stale",
             detail=detail_msg,
             methods=methods,
+            preferred_method=preferred,
         )
 
     return False
@@ -380,18 +387,35 @@ async def register_verify(
         )
 
         if is_first_enrollment:
+            status_res = await session.execute(
+                text("SELECT * FROM kb_auth.mfa_status(:p_id)"),
+                {"p_id": principal.principal_id},
+            )
+            status_row = status_res.mappings().first()
+            unused_recovery = int(status_row["unused_recovery_codes"]) if status_row else 0
+            recovery_codes: list[str] | None = None
+            if unused_recovery == 0:
+                pepper = _get_auth_pepper(request)
+                recovery_service = RecoveryCodeService(pepper)
+                recovery_codes = await recovery_service.regenerate_codes(
+                    session, principal.principal_id
+                )
+
             elevated = await session_service.elevate_aal(
                 session,
                 old_session_id=principal.session_id,
                 new_aal=AAL2_ELEVATED_LEVEL,
             )
+            extra_data: dict[str, Any] = {
+                "credential_id": str(cred_record.id),
+                "nickname": cred_record.nickname,
+            }
+            if recovery_codes is not None:
+                extra_data["recovery_codes"] = recovery_codes
             return _build_elevated_response(
                 elevated,
                 principal.session_id,
-                extra_data={
-                    "credential_id": str(cred_record.id),
-                    "nickname": cred_record.nickname,
-                },
+                extra_data=extra_data,
                 request=request,
             )
 

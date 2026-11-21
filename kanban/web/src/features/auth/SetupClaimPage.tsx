@@ -64,9 +64,18 @@ export function SetupClaimPage({
   const [projectKey, setProjectKey] = useState('KANBA');
   const [isSubmitting, setIsSubmitting] = useState(false);
 
+  const supportsWebAuthn = isWebAuthnSupported();
+  const isPlainHttp =
+    typeof window !== 'undefined' &&
+    window.location.protocol === 'http:' &&
+    window.location.hostname !== 'localhost' &&
+    window.location.hostname !== '127.0.0.1';
+
   // Step 2: MFA Enrollment
   const [enrollmentId, setEnrollmentId] = useState<string | null>(null);
-  const [enrollMethod, setEnrollMethod] = useState<'webauthn' | 'totp'>('webauthn');
+  const [enrollMethod, setEnrollMethod] = useState<'webauthn' | 'totp'>(() =>
+    !supportsWebAuthn || isPlainHttp ? 'totp' : 'webauthn'
+  );
   const [totpEnrollData, setTotpEnrollData] = useState<{
     secret_base32: string;
     otpauth_uri: string;
@@ -81,13 +90,6 @@ export function SetupClaimPage({
 
   const [error, setError] = useState<FormattedError | null>(null);
   const alertRef = useRef<HTMLDivElement | null>(null);
-
-  const supportsWebAuthn = isWebAuthnSupported();
-  const isPlainHttp =
-    typeof window !== 'undefined' &&
-    window.location.protocol === 'http:' &&
-    window.location.hostname !== 'localhost' &&
-    window.location.hostname !== '127.0.0.1';
 
   const slugify = (text: string): string => {
     return text.toLowerCase().replace(/[^a-z0-9_-]+/g, '-').replace(/^-+|-+$/g, '');
@@ -131,36 +133,6 @@ export function SetupClaimPage({
     };
   }, []);
 
-  useEffect(() => {
-    let active = true;
-    async function checkPlatformAuth() {
-      if (typeof window === 'undefined') return;
-      if (isPlainHttp) {
-        if (active) {
-          setEnrollMethod('totp');
-        }
-        return;
-      }
-      if (
-        'PublicKeyCredential' in window &&
-        Boolean(window.PublicKeyCredential) &&
-        typeof window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable === 'function'
-      ) {
-        try {
-          const available = await window.PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable();
-          if (active && !available) {
-            setEnrollMethod('totp');
-          }
-        } catch {
-          // Keep current selection
-        }
-      }
-    }
-    void checkPlatformAuth();
-    return () => {
-      active = false;
-    };
-  }, [isPlainHttp]);
 
   const handleStartTotpEnroll = useCallback(async () => {
     if (isSubmitting || !enrollmentId) return;
@@ -176,7 +148,7 @@ export function SetupClaimPage({
     } finally {
       setIsSubmitting(false);
     }
-  }, [enrollmentId, isSubmitting]);
+  }, [enrollmentId, isSubmitting, setError, setTotpEnrollData, setEnrollMethod]);
 
   useEffect(() => {
     if (currentStep === 2 && enrollMethod === 'totp' && !totpEnrollData && enrollmentId && !isSubmitting) {
@@ -704,21 +676,6 @@ export function SetupClaimPage({
                       <code className="auth-code auth-mono auth-code-lg">
                         {formatBase32(totpEnrollData.secret_base32)}
                       </code>
-                      <button
-                        type="button"
-                        className="auth-copy-btn"
-                        onClick={() => {
-                          void (async () => {
-                            const ok = await copyToClipboard(totpEnrollData.secret_base32);
-                            if (ok) {
-                              setCopiedKey(true);
-                              setTimeout(() => { setCopiedKey(false); }, 2000);
-                            }
-                          })();
-                        }}
-                      >
-                        {copiedKey ? 'Copied!' : 'Copy setup key'}
-                      </button>
                       <button
                         type="button"
                         className="auth-copy-btn"

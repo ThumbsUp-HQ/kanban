@@ -322,7 +322,7 @@ async def test_kan24_hardware_fido2_key_up_only_compatibility(
 
 
 @pytest.mark.asyncio
-async def test_kan24_first_factor_deadlock_and_second_factor_staleness(
+async def test_kan24_first_factor_deadlock_and_second_factor_staleness(  # noqa: PLR0915
     pg_worker_db: AsyncEngine,
     key_material: KeyMaterial,
     webauthn_settings: Settings,
@@ -386,7 +386,8 @@ async def test_kan24_first_factor_deadlock_and_second_factor_staleness(
         assert second_opts_res.status_code == 403
         prob = second_opts_res.json()
         assert prob["code"] == "AAL2_REQUIRED"
-        assert prob["methods"] == ["webauthn"]
+        assert prob["methods"] == ["webauthn", "recovery"]
+        assert prob["preferred_method"] == "webauthn"
 
         # Switch to the AAL2 session: register options succeeds
         client.cookies.clear()
@@ -416,7 +417,8 @@ async def test_kan24_first_factor_deadlock_and_second_factor_staleness(
         assert stale_res.status_code == 403
         stale_prob = stale_res.json()
         assert stale_prob["code"] == "AAL2_STALE"
-        assert stale_prob["methods"] == ["webauthn"]
+        assert stale_prob["methods"] == ["webauthn", "recovery"]
+        assert stale_prob["preferred_method"] == "webauthn"
 
         # Also test with missing aal2_verified_at (None)
         async with factory.session(
@@ -432,7 +434,8 @@ async def test_kan24_first_factor_deadlock_and_second_factor_staleness(
         )
         assert none_verified_res.status_code == 403
         assert none_verified_res.json()["code"] == "AAL2_STALE"
-        assert none_verified_res.json()["methods"] == ["webauthn"]
+        assert none_verified_res.json()["methods"] == ["webauthn", "recovery"]
+        assert none_verified_res.json()["preferred_method"] == "webauthn"
 
 
 @pytest.mark.asyncio
@@ -736,14 +739,16 @@ async def test_kan24_step_up_methods_discovery(
         assert res_sens.status_code == 403
         prob_sens = res_sens.json()
         assert prob_sens["code"] == "AAL2_REQUIRED"
-        assert set(prob_sens["methods"]) == {"totp", "webauthn", "recovery"}
+        assert prob_sens["methods"] == ["webauthn", "totp", "recovery"]
+        assert prob_sens["preferred_method"] == "webauthn"
 
         # 2. require_admin_aal2 route with AAL1 session -> 403 AAL2_REQUIRED with enrolled methods
         res_adm = await client.get("/api/v1/admin/test/route")
         assert res_adm.status_code == 403
         prob_adm = res_adm.json()
         assert prob_adm["code"] == "AAL2_REQUIRED"
-        assert set(prob_adm["methods"]) == {"totp", "webauthn", "recovery"}
+        assert prob_adm["methods"] == ["webauthn", "totp", "recovery"]
+        assert prob_adm["preferred_method"] == "webauthn"
 
         # 3. require_aal2 route with stale AAL2 session -> 403 AAL2_STALE with methods
         async with factory.session(
@@ -765,7 +770,8 @@ async def test_kan24_step_up_methods_discovery(
         assert res_stale.status_code == 403
         prob_stale = res_stale.json()
         assert prob_stale["code"] == "AAL2_STALE"
-        assert set(prob_stale["methods"]) == {"totp", "webauthn", "recovery"}
+        assert prob_stale["methods"] == ["webauthn", "totp", "recovery"]
+        assert prob_stale["preferred_method"] == "webauthn"
 
 
 @pytest.mark.asyncio
@@ -1146,23 +1152,29 @@ async def test_kan24_problems_methods_serialization() -> None:
         detail="AAL2 required.",
         code="AAL2_REQUIRED",
         request_id="req-123",
-        methods=["totp", "webauthn"],
+        methods=["webauthn", "totp"],
+        preferred_method="webauthn",
     )
-    assert prob.methods == ["totp", "webauthn"]
+    assert prob.methods == ["webauthn", "totp"]
+    assert prob.preferred_method == "webauthn"
     dumped = prob.model_dump(exclude_none=True)
-    assert dumped["methods"] == ["totp", "webauthn"]
+    assert dumped["methods"] == ["webauthn", "totp"]
+    assert dumped["preferred_method"] == "webauthn"
 
     exc = ProblemException(
         status=403,
         title="AAL2 Required",
         detail="AAL2 required.",
         code="AAL2_REQUIRED",
-        methods=["totp", "webauthn"],
+        methods=["webauthn", "totp"],
+        preferred_method="webauthn",
     )
-    assert exc.methods == ["totp", "webauthn"]
+    assert exc.methods == ["webauthn", "totp"]
+    assert exc.preferred_method == "webauthn"
 
     req = Request({"type": "http", "method": "GET", "path": "/test", "headers": []})
     resp = await problem_exception_handler(req, exc)
     data = json.loads(bytes(resp.body).decode("utf-8"))
     assert data["code"] == "AAL2_REQUIRED"
-    assert data["methods"] == ["totp", "webauthn"]
+    assert data["methods"] == ["webauthn", "totp"]
+    assert data["preferred_method"] == "webauthn"

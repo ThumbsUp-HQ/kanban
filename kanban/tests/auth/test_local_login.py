@@ -241,6 +241,8 @@ async def test_case_1_positive_login(
         assert data["authenticated"] is True
         assert data["aal_level"] == 1
         assert data["mfa_pending"] is True
+        assert data["methods"] == ["webauthn", "totp", "recovery"]
+        assert data["preferred_method"] == "totp"
         assert "session_id" in data
         assert "csrf_token" in data
 
@@ -267,6 +269,54 @@ async def test_case_1_positive_login(
         )
         assert deny_res.status_code in (401, 403)
         assert deny_res.json()["code"] == "MFA_REQUIRED"
+
+
+@pytest.mark.asyncio
+async def test_case_1b_login_with_enrolled_passkey_prefers_webauthn(
+    pg_worker_db: AsyncEngine,
+    key_material: KeyMaterial,
+) -> None:
+    """Verify local login returns preferred_method='webauthn' when user has enrolled passkeys."""
+    factory = RLSSessionFactory(pg_worker_db)
+    service = SessionService(key_material.session_hmac_key)
+    limiter = PgRateLimiter(pg_worker_db)
+
+    ws_id, p_id, _ = await _create_test_admin_and_card(
+        factory, key_material, username="passkey_user"
+    )
+
+    # Enroll a mock webauthn credential
+    ctx = RLSContext(principal_id=p_id, workspace_id=ws_id, aal_level=2)
+    async with factory.session(ctx) as session:
+        await session.execute(
+            text(
+                "SELECT kb_auth.webauthn_credential_create("
+                "  :p_id, :cred_id, :pub_key, 0, NULL, ARRAY['internal']::TEXT[], 'Test Key'"
+                ")"
+            ),
+            {
+                "p_id": p_id,
+                "cred_id": b"cred-123456789012",
+                "pub_key": b"pub-12345678901234567890",
+            },
+        )
+
+    app = _build_test_app(service, factory, key_material, limiter)
+    transport = httpx.ASGITransport(app=app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
+        csrf_token, csrf_cookie = await _get_pre_session_csrf(client)
+
+        res = await client.post(
+            "/api/v1/auth/local/login",
+            json={"username": "passkey_user", "password": "CorrectPassword123"},
+            headers={CSRF_HEADER_NAME: csrf_token},
+            cookies={CSRF_COOKIE_NAME: csrf_cookie},
+        )
+        assert res.status_code == 200
+        data = res.json()
+        assert data["mfa_pending"] is True
+        assert data["methods"] == ["webauthn"]
+        assert data["preferred_method"] == "webauthn"
 
 
 @pytest.mark.asyncio

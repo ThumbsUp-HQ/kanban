@@ -163,6 +163,38 @@ describe('authApi wrappers and formatters (KB-P3-35)', () => {
     expect(verifyRes.recovery_codes).toEqual(['c2']);
   });
 
+  it('covers fallback recovery code generation branches when verify returns no codes', async () => {
+    const fetchSpy = vi.spyOn(client, 'apiFetch');
+
+    // 1. verifyWebauthnRegistration fallback
+    fetchSpy
+      .mockResolvedValueOnce({ status: 'enrolled' }) // no recovery_codes
+      .mockResolvedValueOnce({ recovery_codes: ['rc-gen-1', 'rc-gen-2'] });
+    const passkeyRes = await verifyWebauthnRegistration({
+      enrollment_id: 'enr-1',
+      credential: {},
+    });
+    expect(passkeyRes.recovery_codes).toEqual(['rc-gen-1', 'rc-gen-2']);
+    expect(fetchSpy).toHaveBeenCalledWith('POST', '/api/v1/auth/mfa/recovery-codes/generate', { body: {} });
+
+    // 2. enrollTotp with secret fallback
+    fetchSpy.mockResolvedValueOnce({ secret: 'XYZ', otpauth_uri: 'otpauth://xyz' });
+    const totpRes = await enrollTotp({ enrollment_id: 'enr-2' });
+    expect(totpRes.secret_base32).toBe('XYZ');
+
+    // 3. enrollTotp with empty fallback
+    fetchSpy.mockResolvedValueOnce({ otpauth_uri: 'otpauth://empty' });
+    const totpEmptyRes = await enrollTotp({ enrollment_id: 'enr-empty' });
+    expect(totpEmptyRes.secret_base32).toBe('');
+
+    // 4. verifyTotpEnrollment fallback
+    fetchSpy
+      .mockResolvedValueOnce({ status: 'enrolled' }) // no recovery_codes
+      .mockResolvedValueOnce({ recovery_codes: ['rc-totp-1'] });
+    const totpVerifyRes = await verifyTotpEnrollment({ enrollment_id: 'enr-3', code: '123456' });
+    expect(totpVerifyRes.recovery_codes).toEqual(['rc-totp-1']);
+  });
+
   it('covers formatAuthError for WEBAUTHN_FAILED, CHALLENGE_EXPIRED, SETUP_TOKEN_INVALID, and unknown codes', () => {
     expect(
       formatAuthError(new ApiProblem(400, { code: 'WEBAUTHN_FAILED' })).message,
@@ -237,6 +269,16 @@ describe('authApi wrappers and formatters (KB-P3-35)', () => {
 
   it('covers submitLocalAdminLogin MFA fallback branches', async () => {
     vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({
+      status: 'authenticated',
+    });
+    const resAuth = await submitLocalAdminLogin({ username: 'admin', password: 'pwd' });
+    expect(resAuth.status).toBe('authenticated');
+
+    vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({});
+    const resFallback = await submitLocalAdminLogin({ username: 'admin', password: 'pwd' });
+    expect(resFallback.status).toBe('authenticated');
+
+    vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({
       status: 'mfa_required',
       session_id: 'sess-ch-1',
     });
@@ -244,7 +286,7 @@ describe('authApi wrappers and formatters (KB-P3-35)', () => {
     expect(resMfa.status).toBe('mfa_required');
     if (resMfa.status === 'mfa_required') {
       expect(resMfa.challenge_id).toBe('sess-ch-1');
-      expect(resMfa.methods).toEqual(['totp', 'webauthn', 'recovery']);
+      expect(resMfa.methods).toEqual(['webauthn', 'totp', 'recovery']);
     }
 
     // when result.mfa_pending is true
@@ -256,7 +298,16 @@ describe('authApi wrappers and formatters (KB-P3-35)', () => {
     expect(resPending.status).toBe('mfa_required');
     if (resPending.status === 'mfa_required') {
       expect(resPending.challenge_id).toBe('sess-ch-2');
-      expect(resPending.methods).toEqual(['totp', 'webauthn', 'recovery']);
+      expect(resPending.methods).toEqual(['webauthn', 'totp', 'recovery']);
     }
+
+    // raw options without { options: ... } wrapper
+    vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({ challenge: 'raw-ch' });
+    const rawOpts = await getWebauthnAssertionOptions({ challenge_id: 'ch-raw' });
+    expect(rawOpts.options.challenge).toBe('raw-ch');
+
+    vi.spyOn(client, 'apiFetch').mockResolvedValueOnce({ challenge: 'raw-reg-ch' });
+    const rawRegOpts = await getWebauthnRegistrationOptions({ enrollment_id: 'enr-raw' });
+    expect(rawRegOpts.options.challenge).toBe('raw-reg-ch');
   });
 });

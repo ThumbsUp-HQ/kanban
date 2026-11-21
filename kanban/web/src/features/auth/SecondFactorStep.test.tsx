@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import React from 'react';
 import { SecondFactorStep } from './SecondFactorStep';
 import * as authApi from './authApi';
@@ -58,7 +58,7 @@ describe('SecondFactorStep (KB-P3-35)', () => {
     render(
       <SecondFactorStep
         challengeId="chall-test"
-        methods={['webauthn', 'totp']}
+        methods={['webauthn']}
         onSuccess={onSuccess}
         onError={onError}
         onSessionExpired={onExpired}
@@ -70,6 +70,31 @@ describe('SecondFactorStep (KB-P3-35)', () => {
     expect(
       screen.getByText('This browser does not support passkeys. Use an authenticator code.'),
     ).toBeDefined();
+
+    (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = originalPKC;
+  });
+
+  it('automatically falls back selectedMethod to totp when PublicKeyCredential is undefined and totp is enrolled', () => {
+    const originalPKC = (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential;
+    (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = undefined;
+
+    render(
+      <SecondFactorStep
+        challengeId="chall-fallback-test"
+        methods={['webauthn', 'totp']}
+        onSuccess={vi.fn()}
+        onError={vi.fn()}
+        onSessionExpired={vi.fn()}
+      />,
+    );
+
+    const passkeyTab = screen.getByRole('tab', { name: /Passkey/i });
+    expect(passkeyTab.getAttribute('aria-disabled')).toBe('true');
+    expect(passkeyTab.getAttribute('aria-selected')).toBe('false');
+
+    const totpTab = screen.getByRole('tab', { name: /Authenticator code/i });
+    expect(totpTab.getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByLabelText(/6-digit Authenticator Code/i)).toBeDefined();
 
     (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = originalPKC;
   });
@@ -416,6 +441,7 @@ describe('SecondFactorStep (KB-P3-35)', () => {
       />,
     );
 
+    expect(screen.getByRole('tab', { name: /Passkey/i })).toBeDefined();
     expect(screen.getByRole('tab', { name: /Authenticator code/i })).toBeDefined();
     unmountEmpty();
 
@@ -596,8 +622,10 @@ describe('SecondFactorStep (KB-P3-35)', () => {
     fireEvent.click(btn);
 
     expect(authApi.getWebauthnAssertionOptions).toHaveBeenCalledTimes(1);
-    resolveAssertion?.({
-      options: { challenge: 'Y2hhbA', rpId: 'localhost' },
+    act(() => {
+      resolveAssertion?.({
+        options: { challenge: 'Y2hhbA', rpId: 'localhost' },
+      });
     });
   });
 
@@ -654,7 +682,9 @@ describe('SecondFactorStep (KB-P3-35)', () => {
     }
 
     expect(verifySpy).toHaveBeenCalledTimes(1);
-    resolveRecovery?.({ status: 'authenticated' });
+    act(() => {
+      resolveRecovery?.({ status: 'authenticated' });
+    });
   });
 
   it('supports keyboard navigation (ArrowRight, ArrowLeft, Home, End) across method tabs', () => {
@@ -755,7 +785,9 @@ describe('SecondFactorStep (KB-P3-35)', () => {
     fireEvent.click(passkeyBtn);
 
     expect(authApi.getWebauthnAssertionOptions).toHaveBeenCalledTimes(1);
-    resolveOptions?.({ options: { challenge: 'Y2hhbA', rpId: 'localhost' } });
+    act(() => {
+      resolveOptions?.({ options: { challenge: 'Y2hhbA', rpId: 'localhost' } });
+    });
   });
 
   describe('3-method SecondFactorStep renders cleanly & mobile responsive layout (KAN-7)', () => {
@@ -785,11 +817,11 @@ describe('SecondFactorStep (KB-P3-35)', () => {
       const tabs = screen.getAllByRole('tab');
       expect(tabs).toHaveLength(3);
 
-      const tabTotp = tabs[0];
-      const tabPasskey = tabs[1];
+      const tabPasskey = tabs[0];
+      const tabTotp = tabs[1];
       const tabRecovery = tabs[2];
-      expect(tabTotp?.textContent).toBe('Authenticator code');
       expect(tabPasskey?.textContent).toBe('Passkey');
+      expect(tabTotp?.textContent).toBe('Authenticator code');
       expect(tabRecovery?.textContent).toBe('Recovery code');
 
       // Verify 0 inline styles on tab elements (Mandate: 0 inline style={{...}} props)
@@ -798,18 +830,21 @@ describe('SecondFactorStep (KB-P3-35)', () => {
       }
       expect(tablist.getAttribute('style')).toBeNull();
 
-      // Initial active tab is Authenticator code
+      // Initial active tab is Passkey (default 2FA!)
+      expect(tabPasskey?.getAttribute('aria-selected')).toBe('true');
+      expect(tabTotp?.getAttribute('aria-selected')).toBe('false');
+      expect(tabRecovery?.getAttribute('aria-selected')).toBe('false');
+      expect(screen.getByRole('button', { name: /Use passkey/i })).toBeDefined();
+
+      // 1-click fallback button to switch to TOTP
+      const fallbackBtn = screen.getByTestId('use-totp-fallback-btn');
+      expect(fallbackBtn.textContent).toBe('Use 6-digit authenticator code instead');
+      fireEvent.click(fallbackBtn);
+
+      // Now Authenticator code is selected!
       expect(tabTotp?.getAttribute('aria-selected')).toBe('true');
       expect(tabPasskey?.getAttribute('aria-selected')).toBe('false');
-      expect(tabRecovery?.getAttribute('aria-selected')).toBe('false');
       expect(screen.getByLabelText(/6-digit Authenticator Code/i)).toBeDefined();
-
-      // Switch to Passkey tab
-      if (tabPasskey) {
-        fireEvent.click(tabPasskey);
-      }
-      expect(tabPasskey?.getAttribute('aria-selected')).toBe('true');
-      expect(screen.getByRole('button', { name: /Use passkey/i })).toBeDefined();
 
       // Switch to Recovery code tab
       if (tabRecovery) {
@@ -823,10 +858,10 @@ describe('SecondFactorStep (KB-P3-35)', () => {
         tabRecovery.focus();
         fireEvent.keyDown(tabRecovery, { key: 'ArrowRight' });
       }
-      expect(tabTotp?.getAttribute('aria-selected')).toBe('true');
+      expect(tabPasskey?.getAttribute('aria-selected')).toBe('true');
 
-      if (tabTotp) {
-        fireEvent.keyDown(tabTotp, { key: 'ArrowLeft' });
+      if (tabPasskey) {
+        fireEvent.keyDown(tabPasskey, { key: 'ArrowLeft' });
       }
       expect(tabRecovery?.getAttribute('aria-selected')).toBe('true');
     });

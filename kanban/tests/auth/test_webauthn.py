@@ -255,6 +255,8 @@ async def test_case_1_positive_lifecycle(
         assert reg_verify_data["verified"] is True
         assert reg_verify_data["aal_level"] == 2
         assert reg_verify_data["session_id"] != old_session_id
+        assert "recovery_codes" in reg_verify_data
+        assert len(reg_verify_data["recovery_codes"]) == 10
         new_sess_token = reg_verify_data["csrf_token"]
 
         # 5. List credentials -> should return our newly enrolled credential
@@ -277,6 +279,8 @@ async def test_case_1_positive_lifecycle(
         _sync_cookies(client, login_res_2)
         login_data_2 = login_res_2.json()
         assert login_data_2["mfa_pending"] is True
+        assert login_data_2["methods"] == ["webauthn", "recovery"]
+        assert login_data_2["preferred_method"] == "webauthn"
         sess_token_2 = login_data_2["csrf_token"]
         sess_id_2 = login_data_2["session_id"]
 
@@ -1398,7 +1402,8 @@ async def test_auth_webauthn_authorization_and_validation_branches(
         )
         assert res_opts_2.status_code == 403
         assert res_opts_2.json()["code"] == "AAL2_REQUIRED"
-        assert res_opts_2.json().get("methods") == ["webauthn"]
+        assert res_opts_2.json().get("methods") == ["webauthn", "recovery"]
+        assert res_opts_2.json().get("preferred_method") == "webauthn"
 
         # Attempt register_verify with AAL1 session -> 403 AAL2_REQUIRED
         res_ver_2 = await client.post(
@@ -1408,7 +1413,8 @@ async def test_auth_webauthn_authorization_and_validation_branches(
         )
         assert res_ver_2.status_code == 403
         assert res_ver_2.json()["code"] == "AAL2_REQUIRED"
-        assert res_ver_2.json().get("methods") == ["webauthn"]
+        assert res_ver_2.json().get("methods") == ["webauthn", "recovery"]
+        assert res_ver_2.json().get("preferred_method") == "webauthn"
 
         # Now Bob creates another mfa_pending session (e.g. logging in again)
         async with factory.session(

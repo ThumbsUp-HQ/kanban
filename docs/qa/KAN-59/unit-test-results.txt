@@ -1,0 +1,276 @@
+========================================================================
+=== KAN-59: Backend Auth Unit Tests & Coverage ===
+========================================================================
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan59-passkey-7649e8d7
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 77 items
+
+kanban/tests/auth/test_webauthn.py ...............                       [ 19%]
+kanban/tests/auth/test_setup_claim.py .............                      [ 36%]
+kanban/tests/auth/test_kan24_fido2_enrollment_and_guards.py ........     [ 46%]
+kanban/tests/auth/test_kan27_targeted_coverage.py ...................... [ 75%]
+..                                                                       [ 77%]
+kanban/tests/auth/test_local_login.py .......                            [ 87%]
+kanban/tests/api/test_user_personal_settings.py ........../home/adamoutler/kanban/.venv/lib/python3.12/site-packages/coverage/inorout.py:576: CoverageWarning: Module kanban.api.v1.auth_webauthn was previously imported, but not measured (module-not-measured); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-module-not-measured
+  self.warn(msg, slug="module-not-measured")
+/home/adamoutler/kanban/.venv/lib/python3.12/site-packages/coverage/inorout.py:576: CoverageWarning: Module kanban.api.v1.auth_local was previously imported, but not measured (module-not-measured); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-module-not-measured
+  self.warn(msg, slug="module-not-measured")
+/home/adamoutler/kanban/.venv/lib/python3.12/site-packages/coverage/inorout.py:576: CoverageWarning: Module kanban.api.v1.auth_identities was previously imported, but not measured (module-not-measured); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-module-not-measured
+  self.warn(msg, slug="module-not-measured")
+/home/adamoutler/kanban/.venv/lib/python3.12/site-packages/coverage/inorout.py:576: CoverageWarning: Module kanban.api.v1.auth_mfa was previously imported, but not measured (module-not-measured); see https://coverage.readthedocs.io/en/7.17.2/messages.html#warning-module-not-measured
+  self.warn(msg, slug="module-not-measured")
+               [100%]
+
+=============================== warnings summary ===============================
+kanban/tests/auth/test_local_login.py: 10 warnings
+  /home/adamoutler/kanban/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    return await self.request(
+
+kanban/tests/auth/test_local_login.py::test_case_1_positive_login
+kanban/tests/auth/test_local_login.py::test_case_1_positive_login
+  /home/adamoutler/kanban/.venv/lib/python3.12/site-packages/httpx/_client.py:1768: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    return await self.request(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                               Stmts   Miss Branch BrPart  Cover   Missing
+------------------------------------------------------------------------------
+kanban/auth/__init__.py                2      0      0      0   100%
+kanban/auth/cards/__init__.py          6      0      0      0   100%
+kanban/auth/cards/handshake.py        94     77     28      0    14%   49-190
+kanban/auth/cards/lockout.py         139    114     68      0    12%   50-64, 68, 80-83, 88-117, 125-127, 135-144, 149-151, 156-159, 172-316
+kanban/auth/cards/repository.py       58     21     12      0    56%   137-142, 161-171, 180-201
+kanban/auth/cards/schemas.py         100      4      2      0    94%   100-103
+kanban/auth/cards/service.py         325    288    124      0     8%   47-52, 81-89, 97-110, 120-280, 290-467, 477-527, 537-619, 628-663, 671-721, 736-766
+kanban/auth/identity.py               36      9      6      2    69%   37-38, 41-45, 81-82
+kanban/auth/identity_service.py      339    106    130     23    66%   81->83, 143-148, 164-171, 177-179, 186->188, 190->exit, 198-201, 210-212, 221-288, 301-315, 370->376, 480->486, 493->509, 547->555, 548->550, 552->555, 599->601, 626, 689-762, 788, 799, 812, 823-826, 828-829, 839, 848, 856->866, 874-883, 904-936
+kanban/auth/ldap/__init__.py           8      0      0      0   100%
+kanban/auth/ldap/asn1_ber.py         214    125     34      0    36%   324-332, 337, 342-356, 361-376, 381-397, 402-412, 417-429, 441-469, 474-481, 486-503, 514-541
+kanban/auth/ldap/client.py           229    184     60      0    16%   77-78, 82-83, 100-107, 112, 117, 122, 126-127, 131-137, 141-163, 167-185, 189-241, 245-258, 262-294, 305-358, 362-369, 373-382, 386-387, 396-397
+kanban/auth/ldap/config.py           177    119     68      0    24%   26-27, 57-81, 87-115, 121-137, 143-155, 161-169, 175-191, 197-214, 219-227
+kanban/auth/ldap/escape.py           249    206    130      0    11%   89-111, 120-132, 137-161, 166-193, 198-216, 221-229, 237-261, 269-286, 291-303, 308-329, 334-353, 362-377
+kanban/auth/ldap/group_sync.py         2      2      0      0     0%   5-7
+kanban/auth/ldap/protocol.py           3      3      0      0     0%   5-56
+kanban/auth/ldap/router.py           166    119     42      0    23%   73-79, 84-104, 113, 129-236, 248, 260, 270-367
+kanban/auth/ldap/service.py          135    111     42      0    14%   47, 57-63, 76-78, 95-314
+kanban/auth/ldap/sync.py              51     43     16      0    12%   37-133
+kanban/auth/local/__init__.py          3      0      0      0   100%
+kanban/auth/local/hashing.py          96      9      8      2    89%   84-85, 105-107, 119-120, 139-143
+kanban/auth/local/service.py         100      0     18      0   100%
+kanban/auth/mfa/__init__.py            5      0      0      0   100%
+kanban/auth/mfa/policy.py            119     29     58      8    70%   102, 140-141, 170, 191, 218->246, 221, 231, 234-237, 251-254, 262-278
+kanban/auth/mfa/recovery.py           50      5      6      2    88%   46-47, 68, 110-111
+kanban/auth/mfa/totp.py               91     12     16      6    83%   80, 92, 145, 155-157, 167, 192, 202-204, 214
+kanban/auth/mfa/webauthn.py          194      6     48      0    98%   368-369, 536-537, 561-562
+kanban/auth/oidc/__init__.py           7      0      0      0   100%
+kanban/auth/oidc/config.py           106     36     42     16    59%   20, 25-26, 30-31, 36-37, 47-58, 105, 108, 116, 118, 120, 122, 145-150, 151->162, 153-154, 156-157, 159-160, 163-164
+kanban/auth/oidc/discovery.py        138     92     40      0    26%   44-46, 66-115, 150, 162-185, 194-251
+kanban/auth/oidc/flow.py             368    116    126     26    67%   68, 77, 94, 104, 134-140, 168, 173, 178, 183, 188, 206->209, 223-339, 358, 366, 374, 384-385, 395-396, 425, 495-499, 532->547, 540-544, 562, 571->573, 592-593, 602-643, 650, 657, 681, 687-692, 704-705, 716, 748->770, 750->770, 765-766, 811->818, 813->818, 823->830, 825->830, 841-843, 850-864
+kanban/auth/oidc/google_json.py      114     75     40      0    25%   68-89, 93-118, 122-140, 144-184, 188-217, 226-252
+kanban/auth/oidc/tokens.py           107     91     42      0    11%   35-68, 92-312
+kanban/auth/sessions/__init__.py       5      0      0      0   100%
+kanban/auth/sessions/cookies.py      150     30     64     22    73%   56-57, 77, 81, 91-92, 95, 101, 123, 134, 140->143, 161->179, 170-177, 196->214, 205-212, 220, 222->231, 225, 228, 230, 259-260, 263->266, 271->exit
+kanban/auth/sessions/csrf.py         242     84     98     23    58%   95, 99, 108-109, 112, 155->160, 158-159, 167-173, 180-183, 193-195, 203-215, 220-245, 263-264, 284, 291, 302, 309->316, 311->316, 319, 330, 333, 337-343, 351, 361, 366, 377, 383, 392->396, 406-449
+kanban/auth/sessions/resolver.py      86     45     26      2    42%   54, 64, 110-184, 192-205
+kanban/auth/sessions/service.py      159     44     28      4    68%   70-74, 137, 162->168, 177-178, 249-250, 288-371, 401-403
+kanban/auth/setup.py                 127      9     20      5    90%   137, 139, 153-155, 161-162, 167, 177, 265->303
+------------------------------------------------------------------------------
+TOTAL                               4600   2214   1442    141    46%
+======================= 77 passed, 12 warnings in 42.11s =======================
+
+========================================================================
+=== KAN-59: Frontend Auth Unit Tests & Coverage ===
+========================================================================
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan59-passkey-7649e8d7/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/settings/personalSettingsApi.test.ts (21 tests) 55ms
+ ✓ src/features/auth/webauthn.test.ts (6 tests) 21ms
+ ✓ src/features/auth/authApi.test.ts (10 tests) 43ms
+ ✓ src/features/auth/AuthContext.test.tsx (8 tests) 148ms
+ ✓ src/features/auth/AuthCardButton.test.tsx (6 tests) 332ms
+ ✓ src/features/auth/useSessionGuard.test.tsx (18 tests) 189ms
+stderr | src/features/auth/LdapLoginForm.test.tsx > LdapLoginForm (KB-P3-35) > early returns when submit is triggered while already submitting
+An update to LdapLoginForm inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to LdapLoginForm inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/auth/LocalAdminDisclosure.test.tsx > LocalAdminDisclosure (KB-P3-35) > prevents double submission when already submitting
+An update to LocalAdminDisclosure inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to LocalAdminDisclosure inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/auth/LdapLoginForm.test.tsx (6 tests) 457ms
+ ✓ src/features/auth/LocalAdminDisclosure.test.tsx (7 tests) 672ms
+   ✓ LocalAdminDisclosure (KB-P3-35) (7)
+     ✓ toggles aria-expanded and renders form inputs on click (Mandatory Test Case 9) 310ms
+stderr | src/features/auth/SecondFactorStep.test.tsx > SecondFactorStep (KB-P3-35) > prevents multiple concurrent submissions when isVerifying is active
+An update to SecondFactorStep inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/auth/SecondFactorStep.test.tsx > SecondFactorStep (KB-P3-35) > prevents concurrent recovery code submission when isVerifying is true
+An update to SecondFactorStep inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/auth/SecondFactorStep.test.tsx > SecondFactorStep (KB-P3-35) > prevents concurrent passkey assertions when isVerifying is already true
+An update to SecondFactorStep inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/auth/SecondFactorStep.test.tsx (21 tests) 816ms
+Not implemented: navigation to another Document
+stderr | src/features/auth/LoginPage.test.tsx > LoginPage (KB-P3-35) > copies emergency unlock command to clipboard
+An update to LoginPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/auth/SetupClaimPage.test.tsx > SetupClaimPage (KB-P3-35) > prevents concurrent TOTP enrollment verification in Step 2
+An update to SetupClaimPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SetupClaimPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to SetupClaimPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/auth/SetupClaimPage.test.tsx > SetupClaimPage (KB-P3-35) > covers Step 2 copy secret button and Step 3 copy/download/finish flow
+An update to SetupClaimPage inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+Not implemented: navigation to another Document
+ ✓ src/features/auth/SetupClaimPage.test.tsx (21 tests) 1892ms
+ ✓ src/features/auth/LoginPage.test.tsx (26 tests) 1753ms
+   ✓ LoginPage (KB-P3-35) (26)
+     ✓ renders 3 top buttons in API order, Primary badge only on first, and Local Admin only in disclosure (Mandatory Test Case 1) 369ms
+ ✓ src/features/settings/__tests__/PersonalSettingsPage.test.tsx (68 tests) 6210ms
+   ✓ PersonalSettingsPage (68)
+     ✓ regenerates recovery codes and displays modal 2106ms
+     ✓ cancels passkey rename modal when clicking cancel 318ms
+
+ Test Files  12 passed (12)
+      Tests  218 passed (218)
+   Start at  00:25:44
+   Duration  8.38s (environment 50%, tests 38%, import 8%, worker 3%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   98.68 |    95.69 |   98.23 |   99.72 |                   
+ auth              |   98.74 |    95.84 |   97.43 |   99.55 |                   
+  ...ardButton.tsx |     100 |    96.66 |     100 |     100 | 68                
+  AuthContext.tsx  |     100 |       95 |     100 |     100 | 80                
+  ...LoginForm.tsx |     100 |      100 |     100 |     100 |                   
+  ...isclosure.tsx |     100 |      100 |     100 |     100 |                   
+  LoginPage.tsx    |   98.86 |    95.16 |   96.42 |   98.78 | 141               
+  ...actorStep.tsx |   99.08 |       97 |     100 |     100 | 67,208,229        
+  ...ClaimPage.tsx |   97.02 |    94.02 |   93.61 |   99.48 | 156               
+  authApi.ts       |   98.92 |    95.69 |     100 |   98.85 | 109               
+  ...ssionGuard.ts |     100 |    95.31 |     100 |     100 | 63,158,195        
+  webauthn.ts      |     100 |    97.56 |     100 |     100 | 15                
+ settings          |   98.59 |     95.4 |   99.21 |     100 |                   
+  ...tingsPage.tsx |   98.49 |    95.31 |   99.05 |     100 | ...48,439,466,532 
+  ...ettingsApi.ts |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------

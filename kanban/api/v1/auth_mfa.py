@@ -304,11 +304,13 @@ async def get_mfa_status(
         )
         row = res.mappings().first()
 
+    passkeys_count = int(row["webauthn_credential_count"]) if row else 0
     return JSONResponse(
         content={
             "totp_enabled": bool(row["has_active_totp"]) if row else False,
-            "passkeys_count": int(row["webauthn_credential_count"]) if row else 0,
+            "passkeys_count": passkeys_count,
             "recovery_codes_remaining": int(row["unused_recovery_codes"]) if row else 0,
+            "preferred_method": "webauthn" if passkeys_count > 0 else "totp",
         }
     )
 
