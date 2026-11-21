@@ -168,6 +168,23 @@ index 9165d794..d9f37ad0 100644
    }
  
    .kb-search-trigger-text,
+diff --git a/kanban/web/src/features/activity/activity.css b/kanban/web/src/features/activity/activity.css
+index 45f243bb..ec0b8179 100644
+--- a/kanban/web/src/features/activity/activity.css
++++ b/kanban/web/src/features/activity/activity.css
+@@ -40,6 +40,12 @@
+   padding-bottom: 2px;
+ }
+ 
++@media (max-width: 879px) {
++  .activity-tablist {
++    padding-right: var(--space-3, 12px);
++  }
++}
++
+ .activity-tab {
+   background: transparent;
+   border: none;
 diff --git a/kanban/web/src/features/board/BoardCard.tsx b/kanban/web/src/features/board/BoardCard.tsx
 index 24134551..e23ea6b2 100644
 --- a/kanban/web/src/features/board/BoardCard.tsx
@@ -383,7 +400,7 @@ index 9ea240de..9103cf28 100644
            );
          })}
 diff --git a/kanban/web/src/features/drawer/IssueSurface.css b/kanban/web/src/features/drawer/IssueSurface.css
-index cc7c2001..f6604172 100644
+index cc7c2001..f859a7e5 100644
 --- a/kanban/web/src/features/drawer/IssueSurface.css
 +++ b/kanban/web/src/features/drawer/IssueSurface.css
 @@ -295,9 +295,8 @@
@@ -398,7 +415,48 @@ index cc7c2001..f6604172 100644
    height: 100%;
    background: var(--bg-surface, #1e2025);
    border-left: 1px solid var(--border-subtle, #333842);
-@@ -485,4 +484,458 @@
+@@ -345,7 +344,7 @@
+   }
+ }
+ 
+-@media (max-width: 768px) {
++@media (max-width: 767px) {
+   .surface--split {
+     position: fixed;
+     inset: 0;
+@@ -452,23 +451,23 @@
+ }
+ 
+ .conflict-banner__reload-btn {
+-  background: #2563eb;
+-  color: #ffffff;
+-  border: 1px solid #1d4ed8;
++  background: var(--focus-ring, #2563eb);
++  color: var(--accent-primary-fg, #ffffff);
++  border: 1px solid var(--accent-primary, #1d4ed8);
+ }
+ 
+ .conflict-banner__reload-btn:hover {
+-  background: #1d4ed8;
++  background: var(--brand-primary-hover, #1d4ed8);
+ }
+ 
+ .conflict-banner__overwrite-btn {
+-  background: #eab308;
+-  color: #1e293b;
+-  border: 1px solid #ca8a04;
++  background: var(--warn-bg, #eab308);
++  color: var(--warn-fg, #1e293b);
++  border: 1px solid var(--border-warning, #ca8a04);
+ }
+ 
+ .conflict-banner__overwrite-btn:hover {
+-  background: #ca8a04;
++  background: var(--border-warning, #ca8a04);
+ }
+ 
+ .conflict-banner__discard-btn {
+@@ -485,4 +484,493 @@
    display: none;
  }
  
@@ -430,6 +488,9 @@ index cc7c2001..f6604172 100644
 +
 +.surface--split [data-testid="split-section-details"] .surface__quick-props {
 +  display: flex;
++  align-items: center;
++  flex-wrap: wrap;
++  gap: var(--space-3, 12px);
 +}
 +
 +.surface--split [data-testid="split-section-details"] [data-testid="quick-props-state-select"] {
@@ -437,6 +498,12 @@ index cc7c2001..f6604172 100644
 +}
 +
 +.surface--split [data-testid="split-section-details"] .quick-props__group:has([data-testid="quick-props-state-select"]) {
++  display: none;
++}
++
++/* In split mode, only split-state-select is rendered in toolbar; hide header-state-select */
++.surface--split .header-state-select,
++.surface__header--split .header-state-select {
 +  display: none;
 +}
 +
@@ -450,6 +517,19 @@ index cc7c2001..f6604172 100644
 +    border-bottom: 1px solid var(--border-subtle);
 +    margin-bottom: var(--space-3, 12px);
 +  }
++
++  .surface:not(.surface--split) .quick-props__group:has([data-testid="quick-props-state-select"]),
++  .surface:not(.surface--split) .quick-props__group--state {
++    display: none;
++  }
++
++  .surface:not(.surface--split) .surface__rail .prop-row[data-prop="state"] {
++    display: none;
++  }
++
++  .activity-tablist {
++    padding-right: var(--space-3, 12px);
++  }
 +}
 +
 +@media (max-width: 879px) {
@@ -461,6 +541,19 @@ index cc7c2001..f6604172 100644
 +    padding: var(--space-2, 8px) 0;
 +    border-bottom: 1px solid var(--border-subtle);
 +    margin-bottom: var(--space-3, 12px);
++  }
++
++  .surface:not(.surface--split) .quick-props__group:has([data-testid="quick-props-state-select"]),
++  .surface:not(.surface--split) .quick-props__group--state {
++    display: none;
++  }
++
++  .surface:not(.surface--split) .surface__rail .prop-row[data-prop="state"] {
++    display: none;
++  }
++
++  .activity-tablist {
++    padding-right: var(--space-3, 12px);
 +  }
 +}
 +
@@ -612,8 +705,8 @@ index cc7c2001..f6604172 100644
 +}
 +
 +.split-toolbar-btn--fav-active {
-+  color: #fbbf24;
-+  border-color: #fbbf24;
++  color: var(--text-warning, #fbbf24);
++  border-color: var(--border-warning, #fbbf24);
 +}
 +
 +.split-state-select {
@@ -858,7 +951,7 @@ index cc7c2001..f6604172 100644
 +
  
 diff --git a/kanban/web/src/features/drawer/IssueSurface.tsx b/kanban/web/src/features/drawer/IssueSurface.tsx
-index 14dc4451..ecf01915 100644
+index 14dc4451..8016853f 100644
 --- a/kanban/web/src/features/drawer/IssueSurface.tsx
 +++ b/kanban/web/src/features/drawer/IssueSurface.tsx
 @@ -1,6 +1,7 @@
@@ -948,7 +1041,7 @@ index 14dc4451..ecf01915 100644
  
    const openerRef = useRef<HTMLElement | null>(null);
  
-@@ -193,10 +223,9 @@ function IssueSurfaceContent({
+@@ -193,12 +223,8 @@ function IssueSurfaceContent({
  
    const resolvedProjectForAux =
      issue?.project_key ?? projectKey ?? issueKey.split('-')[0] ?? 'KAN';
@@ -956,11 +1049,12 @@ index 14dc4451..ecf01915 100644
  
    useEffect(() => {
 -    if (!hasRailOrActivity || !resolvedProjectForAux) {
-+    if (!resolvedProjectForAux) {
-       return;
-     }
+-      return;
+-    }
      let active = true;
-@@ -213,9 +242,10 @@ function IssueSurfaceContent({
+     void ensureCsrfToken();
+     void fetchProjectStates(resolvedProjectForAux)
+@@ -213,9 +239,10 @@ function IssueSurfaceContent({
      return () => {
        active = false;
      };
@@ -972,7 +1066,7 @@ index 14dc4451..ecf01915 100644
      void navigate(toPeekPath(location, null));
      const opener =
        getOpenerElement() ??
-@@ -237,7 +267,7 @@ function IssueSurfaceContent({
+@@ -237,7 +264,7 @@ function IssueSurfaceContent({
          main?.focus();
        }
      }
@@ -981,7 +1075,7 @@ index 14dc4451..ecf01915 100644
  
    const handleToggleFullScreen = useCallback((): void => {
      if (mode === 'drawer') {
-@@ -248,6 +278,105 @@ function IssueSurfaceContent({
+@@ -248,6 +275,103 @@ function IssueSurfaceContent({
      }
    }, [mode, projectKey, issueKey, location, navigate]);
  
@@ -1037,7 +1131,6 @@ index 14dc4451..ecf01915 100644
 +  const [favoriteRevision, setFavoriteRevision] = useState<number>(0);
 +
 +  useEffect(() => {
-+    if (typeof window === 'undefined') return;
 +    const handleFavChange = (): void => {
 +      setFavoriteRevision((r) => r + 1);
 +    };
@@ -1049,7 +1142,6 @@ index 14dc4451..ecf01915 100644
 +
 +  const isFavorite = useMemo(() => {
 +    if (favoriteRevision < 0) return false;
-+    if (typeof window === 'undefined') return false;
 +    try {
 +      const raw = localStorage.getItem('kb_favorite_issues');
 +      if (!raw) return false;
@@ -1087,7 +1179,7 @@ index 14dc4451..ecf01915 100644
    useEffect(() => {
      const unregister = registerShortcut(
        'mod+shift+f',
-@@ -303,7 +432,19 @@ function IssueSurfaceContent({
+@@ -303,7 +427,19 @@ function IssueSurfaceContent({
        return (
          <>
            <div className={`surface__header ${mode === 'split' ? 'surface__header--split' : ''}`}>
@@ -1108,7 +1200,7 @@ index 14dc4451..ecf01915 100644
                <button
                  type="button"
                  className="issue-header__btn"
-@@ -332,6 +473,19 @@ function IssueSurfaceContent({
+@@ -332,6 +468,19 @@ function IssueSurfaceContent({
        return (
          <>
            <div className={`surface__header ${mode === 'split' ? 'surface__header--split' : ''}`}>
@@ -1128,7 +1220,7 @@ index 14dc4451..ecf01915 100644
              {mode !== 'split' && (
                <>
                  <button
-@@ -578,6 +732,85 @@ function IssueSurfaceContent({
+@@ -578,6 +727,85 @@ function IssueSurfaceContent({
          }>
        | undefined;
  
@@ -1214,12 +1306,12 @@ index 14dc4451..ecf01915 100644
      const proseBody = (
        <>
          {conflictError && (
-@@ -646,6 +879,53 @@ function IssueSurfaceContent({
+@@ -646,6 +874,53 @@ function IssueSurfaceContent({
            </div>
          )}
          <SummaryField issue={currentIssue} descriptionFocusRef={descRef} />
 +        <div className="surface__quick-props" data-testid="quick-properties-bar">
-+          <div className="quick-props__group">
++          <div className="quick-props__group quick-props__group--state">
 +            <span className="quick-props__label">State:</span>
 +            {canTransition ? (
 +              <select
@@ -1268,7 +1360,7 @@ index 14dc4451..ecf01915 100644
          {DescriptionSlot ? (
            <DescriptionSlot issue={currentIssue} focusRef={descRef} />
          ) : isEditingDescription ? (
-@@ -826,10 +1106,197 @@ function IssueSurfaceContent({
+@@ -826,10 +1101,197 @@ function IssueSurfaceContent({
        </>
      );
  
@@ -1466,30 +1558,10 @@ index 14dc4451..ecf01915 100644
              <a
                href={`/projects/${resolvedProjectForAux}/issues/${currentIssue.key}`}
                target="_blank"
-@@ -843,6 +1310,56 @@ function IssueSurfaceContent({
+@@ -843,6 +1305,36 @@ function IssueSurfaceContent({
              </a>
  
              <span className="mono issue-header__key">#{currentIssue.key}</span>
-+
-+            {canTransition ? (
-+              <select
-+                data-testid="header-state-select"
-+                className="header-state-select"
-+                aria-label="Workflow State"
-+                value={currentIssue.state?.id ?? ''}
-+                onChange={(e) => {
-+                  void handleHeaderStateChange(e.target.value);
-+                }}
-+              >
-+                {headerStates.map((s) => (
-+                  <option key={s.id} value={s.id}>
-+                    {s.name}
-+                  </option>
-+                ))}
-+              </select>
-+            ) : (
-+              <StateBadge state={currentIssue.state ?? undefined} testId="header-state-badge" />
-+            )}
 +
 +            {/* Sequential Pager */}
 +            <div className="split-pager" data-testid="split-pager">
@@ -1523,7 +1595,7 @@ index 14dc4451..ecf01915 100644
              <AccessPill issue={currentIssue} />
            </header>
          ) : (
-@@ -851,27 +1368,467 @@ function IssueSurfaceContent({
+@@ -851,27 +1343,467 @@ function IssueSurfaceContent({
              mode={mode}
              onClose={handleClose}
              toggleFullScreen={handleToggleFullScreen}
@@ -1643,7 +1715,7 @@ index 14dc4451..ecf01915 100644
 +                    <summary className="split-section-summary">Details</summary>
 +                    <div className="split-section-body">
 +                      <div className="surface__quick-props" data-testid="quick-properties-bar">
-+                        <div className="quick-props__group">
++                        <div className="quick-props__group quick-props__group--state">
 +                          <span className="quick-props__label">State:</span>
 +                          {canTransition ? (
 +                            <select
@@ -2000,7 +2072,7 @@ index 14dc4451..ecf01915 100644
        </>
      );
    };
-@@ -968,11 +1925,23 @@ export function IssueSurfaceRoot(props: IssueSurfaceRootProps): JSX.Element {
+@@ -968,11 +1900,23 @@ export function IssueSurfaceRoot(props: IssueSurfaceRootProps): JSX.Element {
  export function IssueSurface(): JSX.Element | null {
    const { mode, issueKey, projectKey } = useIssueSurfaceRoute();
    useRealtimeSubscription(issueKey ? `issue:${issueKey}` : null);
@@ -2139,21 +2211,24 @@ index feb5f69c..3ea04732 100644
    );
  }
 diff --git a/kanban/web/src/features/list/ListView.test.tsx b/kanban/web/src/features/list/ListView.test.tsx
-index a402a296..48a34cd7 100644
+index a402a296..923424bf 100644
 --- a/kanban/web/src/features/list/ListView.test.tsx
 +++ b/kanban/web/src/features/list/ListView.test.tsx
-@@ -1,543 +1,233 @@
+@@ -1,543 +1,534 @@
  import { describe, it, expect, vi } from 'vitest';
 -import { render, screen, fireEvent, act, within } from '@testing-library/react';
-+import { render, screen, fireEvent } from '@testing-library/react';
++import { render, screen, fireEvent, act } from '@testing-library/react';
  import React from 'react';
- import { ListView } from './ListView';
+-import { ListView } from './ListView';
 -import { FIXTURE_12_ISSUES } from '../views/fixtures';
- import type { IssueItem } from '../views/viewsApi';
- 
+-import type { IssueItem } from '../views/viewsApi';
+-
 -describe('ListView', () => {
 -  it('groups 12 fixture issues into state sections in sort_order with exact counts', () => {
 -    const onToggleSelect = vi.fn();
++import { ListView, sortIssuesList, type IssueSortOption } from './ListView';
++import type { IssueItem, StateSummary } from '../views/viewsApi';
++
 +describe('ListView (KAN-52 Left Master Rail)', () => {
 +  const mockIssues: IssueItem[] = [
 +    {
@@ -2231,7 +2306,7 @@ index a402a296..48a34cd7 100644
 +    expect(screen.getByTestId('list-row-state-btn-KAN-101')).toBeDefined();
 +
 +    // Favorite star button
-+    const starBtns = screen.getAllByTestId('favorite-issue-toggle');
++    const starBtns = screen.getAllByTestId(/^rail-favorite-toggle-/);
 +    expect(starBtns.length).toBe(2);
 +    const firstStar = starBtns[0];
 +    if (firstStar) {
@@ -2260,32 +2335,28 @@ index a402a296..48a34cd7 100644
 -    const backlogToggle = Array.from(toggles).find((t) => t.textContent.includes('Backlog')) as HTMLButtonElement;
 -    expect(backlogToggle).toBeDefined();
 -    expect(backlogToggle.getAttribute('aria-expanded')).toBe('true');
-+  it('handles Order by sorting across priority, key, created, and due date', () => {
-+    render(<ListView issues={mockIssues} />);
- 
+-
 -    // Issue KAN-140 is visible
 -    expect(screen.getByText('KAN-140')).toBeDefined();
-+    const sortSelect = screen.getByTestId('issue-sort-select');
-+    const dirBtn = screen.getByTestId('issue-sort-dir-btn');
++  it('handles Order by sorting across priority, key, created, and due date', () => {
++    render(<ListView issues={mockIssues} />);
  
 -    // Click to collapse
 -    fireEvent.click(backlogToggle);
 -    expect(backlogToggle.getAttribute('aria-expanded')).toBe('false');
 -    expect(screen.queryByText('KAN-140')).toBeNull();
-+    // Sort by priority desc: urgent (KAN-102) before high (KAN-101)
-+    fireEvent.change(sortSelect, { target: { value: 'priority' } });
-+    const cardsPriority = screen.getAllByRole('row');
-+    expect(cardsPriority[0]?.getAttribute('data-issue-key')).toBe('KAN-102');
++    const sortSelect = screen.getByTestId('issue-sort-select');
++    const dirBtn = screen.getByTestId('issue-sort-dir-btn');
  
 -    // Click to expand again
 -    fireEvent.click(backlogToggle);
 -    expect(backlogToggle.getAttribute('aria-expanded')).toBe('true');
 -    expect(screen.getByText('KAN-140')).toBeDefined();
 -  });
-+    // Toggle dir to asc: high (KAN-101) before urgent (KAN-102)
-+    fireEvent.click(dirBtn);
-+    const cardsPriorityAsc = screen.getAllByRole('row');
-+    expect(cardsPriorityAsc[0]?.getAttribute('data-issue-key')).toBe('KAN-101');
++    // Sort by priority desc: urgent (KAN-102) before high (KAN-101)
++    fireEvent.change(sortSelect, { target: { value: 'priority' } });
++    const cardsPriority = screen.getAllByRole('row');
++    expect(cardsPriority[0]?.getAttribute('data-issue-key')).toBe('KAN-102');
  
 -  it('renders external assignee with literal hint and links KAN-142 to peek', () => {
 -    render(
@@ -2295,7 +2366,11 @@ index a402a296..48a34cd7 100644
 -        modulesEnabled={true}
 -      />
 -    );
--
++    // Toggle dir to asc: high (KAN-101) before urgent (KAN-102)
++    fireEvent.click(dirBtn);
++    const cardsPriorityAsc = screen.getAllByRole('row');
++    expect(cardsPriorityAsc[0]?.getAttribute('data-issue-key')).toBe('KAN-101');
+ 
 -    // Link for KAN-142
 -    const link = screen.getByRole('link', { name: 'KAN-142' });
 -    expect(link.getAttribute('href')).toBe('?layout=list&peek=KAN-142');
@@ -2378,10 +2453,9 @@ index a402a296..48a34cd7 100644
    });
  
 -  it('renders Load more button and handles click and loading state', () => {
-+  it('renders Load more button when nextCursor is present', () => {
++  it('renders Load more button when nextCursor is present and handles isLoading true', () => {
      const onLoadMore = vi.fn();
--    const { rerender } = render(
-+    render(
+     const { rerender } = render(
        <ListView
 -        issues={FIXTURE_12_ISSUES}
 -        projectKey="KAN"
@@ -2400,41 +2474,45 @@ index a402a296..48a34cd7 100644
 +    const loadMoreBtn = screen.getByRole('button', { name: 'Load more' });
      fireEvent.click(loadMoreBtn);
 -    expect(onLoadMore).toHaveBeenCalledTimes(1);
--
++    expect(onLoadMore).toHaveBeenCalled();
+ 
 -    // Rerender with isLoading true
--    rerender(
--      <ListView
+     rerender(
+       <ListView
 -        issues={FIXTURE_12_ISSUES}
 -        projectKey="KAN"
 -        modulesEnabled={true}
 -        nextCursor="cur_page_2"
--        onLoadMore={onLoadMore}
--        isLoading={true}
++        issues={mockIssues}
++        nextCursor="cur_123"
+         onLoadMore={onLoadMore}
+         isLoading={true}
 -      />
--    );
--    expect(screen.getByText('Loading...')).toBeDefined();
-+    expect(onLoadMore).toHaveBeenCalled();
++      />,
+     );
+     expect(screen.getByText('Loading...')).toBeDefined();
    });
  
 -  it('unmounts Modules pill completely when modulesEnabled is false', () => {
-+  it('handles keyboard Enter on card to open peek', () => {
+-    render(
++  it('handles keyboard navigation and card click with/without onOpenPeek', () => {
 +    const onOpenPeek = vi.fn();
-     render(
++    const { rerender } = render(
        <ListView
 -        issues={FIXTURE_12_ISSUES}
 -        projectKey="KAN"
 -        modulesEnabled={false}
 -      />
 +        issues={mockIssues}
++        focusedKey="KAN-101"
 +        onOpenPeek={onOpenPeek}
 +      />,
      );
  
 -    expect(screen.queryByText('Modules')).toBeNull();
+-  });
 +    const card = screen.getByTestId('issue-list-card-KAN-101');
-+    fireEvent.keyDown(card, { key: 'Enter' });
-+    expect(onOpenPeek).toHaveBeenCalledWith('KAN-101');
-   });
++    expect(card.classList.contains('list-row--active')).toBe(true);
  
 -  it('safely renders hostile issue summary, drops invalid label hex, and handles fallback fields', () => {
 -    const hostileIssue: IssueItem = {
@@ -2445,7 +2523,10 @@ index a402a296..48a34cd7 100644
 -      priority: { slug: 'high', label: 'High' },
 -      labels: [{ id: 'l-1', name: 'Evil', color_hex: 'red;background:url(//evil)' }],
 -    };
--
++    // Non-Enter keydown
++    fireEvent.keyDown(card, { key: 'ArrowDown' });
++    expect(onOpenPeek).not.toHaveBeenCalled();
+ 
 -    const unnamedStateIssue: IssueItem = {
 -      id: '',
 -      key: 'KAN-998',
@@ -2453,20 +2534,24 @@ index a402a296..48a34cd7 100644
 -      state: { id: 's-empty', name: '', group: '' },
 -      priority: { slug: 'low', label: 'Low' },
 -    };
--
-+  it('opens local QuickFieldPopover when onOpenFieldPopover is omitted', () => {
-+    const onStateSelect = vi.fn();
-     render(
++    // Enter keydown
++    fireEvent.keyDown(card, { key: 'Enter' });
++    expect(onOpenPeek).toHaveBeenCalledWith('KAN-101');
+ 
+-    render(
++    // Without onOpenPeek
++    rerender(
        <ListView
 -        issues={[hostileIssue, unnamedStateIssue]}
 -        projectKey="KAN"
 -        modulesEnabled={true}
 -      />
 +        issues={mockIssues}
-+        onStateSelect={onStateSelect}
++        focusedKey="KAN-102"
++        capabilities={['EDIT']}
 +      />,
      );
- 
+-
 -    // Summary is rendered as literal text, not HTML element
 -    const summarySpan = screen.getByText('<img src=x onerror=alert(1)>');
 -    expect(summarySpan).toBeDefined();
@@ -2476,18 +2561,15 @@ index a402a296..48a34cd7 100644
 -    const labelDot = document.querySelector('.label-dot');
 -    expect(labelDot).toBeDefined();
 -    expect(labelDot?.getAttribute('style') ?? '').toBe('');
-+    const stateBtn = screen.getByTestId('list-row-state-btn-KAN-101');
-+    fireEvent.click(stateBtn);
-+    // Popover is open
-+    expect(screen.getByRole('dialog')).toBeDefined();
++    fireEvent.click(screen.getByTestId('issue-list-card-KAN-102'));
++    fireEvent.keyDown(screen.getByTestId('issue-list-card-KAN-102'), { key: 'Enter' });
    });
  
 -  it('renders calm empty state when project has 0 issues', () => {
 -    const onCreate = vi.fn();
--    render(
-+  it('enforces VIEWER RBAC gating with static StateBadge when TRANSITION/EDIT is absent', () => {
-+    // 1. Read-only viewer capabilities
-+    const { rerender } = render(
++  it('opens local QuickFieldPopover when onOpenFieldPopover is omitted and handles selection and close', () => {
++    const onStateSelect = vi.fn();
+     render(
        <ListView
 -        issues={[]}
 -        projectKey="KAN"
@@ -2495,23 +2577,46 @@ index a402a296..48a34cd7 100644
 -        onCreateIssue={onCreate}
 -      />
 +        issues={mockIssues}
-+        capabilities={['VIEW']}
++        onStateSelect={onStateSelect}
 +      />,
      );
  
 -    expect(screen.getByText('No work items found')).toBeDefined();
 -    const createBtn = screen.getByRole('button', { name: /\+ Create first work item/i });
 -    expect(createBtn).toBeDefined();
-+    expect(screen.getByTestId('list-row-state-readonly-KAN-101')).toBeDefined();
-+    expect(screen.queryByTestId('list-row-state-btn-KAN-101')).toBeNull();
- 
+-
 -    fireEvent.click(createBtn);
 -    expect(onCreate).toHaveBeenCalledTimes(1);
--  });
--
++    const stateBtn = screen.getByTestId('list-row-state-btn-KAN-101');
++    fireEvent.click(stateBtn);
++    // Popover is open
++    expect(screen.getByRole('dialog')).toBeDefined();
++
++    // Select state option from popover
++    const inProgOption = screen.getByRole('option', { name: 'In Progress' });
++    fireEvent.click(inProgOption);
++    expect(onStateSelect).toHaveBeenCalledWith('KAN-101', 'state-in-progress');
++
++    // Reopen and test close callback
++    fireEvent.click(screen.getByTestId('list-row-state-btn-KAN-101'));
++    expect(screen.getByRole('dialog')).toBeDefined();
++    // Press Escape or close popover
++    fireEvent.keyDown(screen.getByRole('dialog'), { key: 'Escape' });
+   });
+ 
 -  it('suppresses overdue indicator for completed or cancelled issues', () => {
 -    render(
-+    // 2. Interactive with TRANSITION capability
++  it('supports capabilities as a Set object and handles window refresh dispatch', () => {
++    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
++    const { rerender } = render(
++      <ListView
++        issues={mockIssues}
++        capabilities={new Set(['ADMIN'])}
++      />,
++    );
++    expect(screen.getByTestId('list-row-state-btn-KAN-101')).toBeDefined();
++
++    // Set with lowercase admin
 +    rerender(
        <ListView
 -        issues={FIXTURE_12_ISSUES}
@@ -2519,10 +2624,11 @@ index a402a296..48a34cd7 100644
 -        modulesEnabled={true}
 -      />
 +        issues={mockIssues}
-+        capabilities={['TRANSITION']}
++        capabilities={new Set(['admin'])}
 +      />,
      );
--
++    expect(screen.getByTestId('list-row-state-btn-KAN-101')).toBeDefined();
+ 
 -    // KAN-148 is Done with past due date 2026-01-01 -> overdue pill must NOT be applied
 -    const kan148Row = screen.getByText('KAN-148').closest('li');
 -    expect(kan148Row).toBeDefined();
@@ -2534,27 +2640,45 @@ index a402a296..48a34cd7 100644
 -    expect(kan150Row).toBeDefined();
 -    const cancelledOverdue = kan150Row?.querySelectorAll('.due-pill--overdue');
 -    expect(cancelledOverdue?.length ?? 0).toBe(0);
-+    expect(screen.getByTestId('list-row-state-btn-KAN-101')).toBeDefined();
-+    expect(screen.queryByTestId('list-row-state-readonly-KAN-101')).toBeNull();
++    // Set without transition caps (read-only)
++    rerender(
++      <ListView
++        issues={mockIssues}
++        capabilities={new Set(['VIEWER'])}
++      />,
++    );
++    expect(screen.getByTestId('list-row-state-readonly-KAN-101')).toBeDefined();
++
++    // Default refresh dispatch when onRefresh is omitted
++    rerender(
++      <ListView
++        issues={mockIssues}
++      />,
++    );
++    fireEvent.click(screen.getByTestId('issue-rail-refresh-btn'));
++    expect(dispatchSpy).toHaveBeenCalledWith(expect.any(CustomEvent));
++    dispatchSpy.mockRestore();
    });
  
 -  it('renders Single Filter Card Dropdown and handles search, state, priority, and + New (KANBA-174)', () => {
 -    const onCreate = vi.fn();
--    const onOpenPeek = vi.fn();
++  it('handles row selection toggle and card click ignore on interactive targets', () => {
++    const onToggleSelect = vi.fn();
+     const onOpenPeek = vi.fn();
 -
-+  it('supports controlled sortBy and sortDir props with change callbacks', () => {
-+    const onSortByChange = vi.fn();
-+    const onSortDirChange = vi.fn();
      render(
        <ListView
 -        issues={FIXTURE_12_ISSUES}
 -        projectKey="KAN"
 -        modulesEnabled={true}
 -        onCreateIssue={onCreate}
--        onOpenPeek={onOpenPeek}
++        issues={mockIssues}
++        onToggleSelect={onToggleSelect}
+         onOpenPeek={onOpenPeek}
 -        activeKey="KAN-140"
 -      />
--    );
++      />,
+     );
 -
 -    // Verify compact topbar rendered
 -    expect(screen.getByTestId('list-compact-topbar')).toBeDefined();
@@ -2612,23 +2736,50 @@ index a402a296..48a34cd7 100644
 -      fireEvent.click(kan142Row);
 -      expect(onOpenPeek).toHaveBeenCalledWith('KAN-142');
 -    }
--  });
--
++    const checkbox = screen.getByLabelText('Select KAN-101');
++    fireEvent.click(checkbox);
++    expect(onToggleSelect).toHaveBeenCalledWith('KAN-101', true);
++
++    // Clicking button inside card should not trigger onOpenPeek
++    const stateBtn = screen.getByTestId('list-row-state-btn-KAN-101');
++    fireEvent.click(stateBtn);
++    expect(onOpenPeek).not.toHaveBeenCalled();
+   });
+ 
 -  it('navigates to workflow settings when + Workflow button is clicked', () => {
 -    const assignSpy = vi.fn();
 -    Object.defineProperty(window, 'location', {
 -      writable: true,
 -      value: { assign: assignSpy, pathname: '/projects/KAN/issues' },
 -    });
--
++  it('enforces VIEWER RBAC gating with static StateBadge when TRANSITION/EDIT is absent', () => {
++    // 1. Read-only viewer capabilities
++    const { rerender } = render(
++      <ListView
++        issues={mockIssues}
++        capabilities={['VIEW']}
++      />,
++    );
+ 
 -    render(<ListView issues={FIXTURE_12_ISSUES} projectKey="KAN" />);
 -    const workflowBtn = screen.getByTestId('section-add-workflow-btn-Backlog');
 -    fireEvent.click(workflowBtn);
 -    expect(assignSpy).toHaveBeenCalledWith(
 -      '/projects/KAN/settings/workflows?to_state=Backlog&attach=1',
--    );
--  });
--
++    expect(screen.getByTestId('list-row-state-readonly-KAN-101')).toBeDefined();
++    expect(screen.queryByTestId('list-row-state-btn-KAN-101')).toBeNull();
++
++    // 2. Interactive with TRANSITION capability
++    rerender(
++      <ListView
++        issues={mockIssues}
++        capabilities={['TRANSITION']}
++      />,
+     );
++    expect(screen.getByTestId('list-row-state-btn-KAN-101')).toBeDefined();
++    expect(screen.queryByTestId('list-row-state-readonly-KAN-101')).toBeNull();
+   });
+ 
 -  it('covers state filter, key search, groupBy none, custom priority, and outside click', () => {
 -    const customIssues: IssueItem[] = [
 -      ...FIXTURE_12_ISSUES,
@@ -2653,7 +2804,22 @@ index a402a296..48a34cd7 100644
 -        priority: { slug: 'unlabeled_tier', label: '', emoji: '✨' },
 -      },
 -    ];
--
++  it('supports controlled sortBy and sortDir props with change callbacks', () => {
++    const onSortByChange = vi.fn();
++    const onSortDirChange = vi.fn();
++    render(
++      <ListView
++        issues={mockIssues}
++        sortBy="priority"
++        onSortByChange={onSortByChange}
++        sortDir="asc"
++        onSortDirChange={onSortDirChange}
++      />,
++    );
++
++    const sortSelect = screen.getByTestId<HTMLSelectElement>('issue-sort-select');
++    expect(sortSelect.value).toBe('priority');
+ 
 -    render(<ListView issues={customIssues} projectKey="KAN" />);
 -
 -    const filterBtn = screen.getByRole('button', { name: 'Filter & Group' });
@@ -2729,8 +2895,14 @@ index a402a296..48a34cd7 100644
 -
 -    fireEvent.change(groupSelect2, { target: { value: 'module' } });
 -    expect(screen.getByText('Auth & Permissions')).toBeDefined();
--  });
--
++    fireEvent.change(sortSelect, { target: { value: 'created' } });
++    expect(onSortByChange).toHaveBeenCalledWith('created');
++
++    const dirBtn = screen.getByTestId('issue-sort-dir-btn');
++    fireEvent.click(dirBtn);
++    expect(onSortDirChange).toHaveBeenCalledWith('desc');
+   });
+ 
 -  it('groups by cycle and module with real summaries and fallback labels', () => {
 -    const firstIssue = FIXTURE_12_ISSUES[0];
 -    const secondIssue = FIXTURE_12_ISSUES[1];
@@ -2741,25 +2913,58 @@ index a402a296..48a34cd7 100644
 -    if (!firstIssue || !secondIssue || !thirdIssue) {
 -      throw new Error('Missing fixtures');
 -    }
--
++  it('covers sortIssuesList edge branches and un-favoriting toggle', () => {
++    // 1. Un-favoriting
++    localStorage.setItem('kb_favorite_issues', JSON.stringify(['KAN-101']));
++    const { rerender } = render(<ListView issues={mockIssues} />);
++    const starBtn = screen.getByTestId('rail-favorite-toggle-KAN-101');
++    expect(starBtn.textContent).toBe('⭐');
++    // Click to unfavorite
++    fireEvent.click(starBtn);
++    expect(starBtn.textContent).toBe('☆');
++
++    // 2. localStorage throw in initialization
++    const getSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementationOnce(() => {
++      throw new Error('Access denied');
++    });
++    rerender(<ListView issues={mockIssues} />);
++    getSpy.mockRestore();
+ 
 -    const issuesWithCycleAndMod: IssueItem[] = [
--      {
++    // 3. sortIssuesList directly with various defensive branches
++    const mixedIssues: IssueItem[] = [
+       {
 -        ...firstIssue,
 -        id: 'iss-c1',
 -        key: 'KAN-C1',
 -        cycle_id: 'cycle-123456',
 -        cycle: { id: 'cycle-123456', name: 'Sprint Alpha' },
 -        modules: [{ id: 'mod-1', name: 'Core Engine' }],
--      },
--      {
++        id: '',
++        key: 'KEY-NOTANUMBER',
++        summary: 'Non numeric key',
++        state: { id: 's1', name: 'Beta State', group: 'unstarted', sort_order: 1 },
++        priority: { slug: 'unknown_slug_a', label: '' },
++        due_date: null,
+       },
+       {
 -        ...secondIssue,
 -        id: 'iss-c2',
 -        key: 'KAN-C2',
 -        cycle_id: 'cycle-654321',
 -        cycle: null,
 -        module_ids: ['mod-fallback-123'],
--      },
--      {
++        id: 'm2',
++        key: 'ALPHA-99',
++        summary: 'Alpha',
++        state: { id: 's2', name: 'Alpha State', group: 'unstarted', sort_order: 1 },
++        priority: { slug: 'unknown_slug_b', label: '' },
++        due_date: '2026-11-20',
++        board_rank: '0|a:',
++        created_at: '2026-11-20T00:00:00Z',
++        updated_at: '2026-11-20T00:00:00Z',
+       },
+       {
 -        ...thirdIssue,
 -        id: 'iss-c3',
 -        key: 'KAN-C3',
@@ -2767,13 +2972,66 @@ index a402a296..48a34cd7 100644
 -        cycle: null,
 -        modules: [],
 -        module_ids: [],
--      },
--    ];
--
--    render(
++        id: 'm3',
++        key: 'NOHYPHENKEY',
++        summary: 'No hyphen key',
++        state: { id: 's3', name: 'Gamma State', group: 'unstarted', sort_order: 2 },
++        priority: { slug: 'high', label: '' },
++        due_date: '2026-11-25',
++        board_rank: '0|b:',
++        created_at: '2026-11-25T00:00:00Z',
++        updated_at: '2026-11-25T00:00:00Z',
+       },
+     ];
+ 
++    // default branch
++    const resDefault = sortIssuesList(mixedIssues, 'default_unknown' as unknown as IssueSortOption, 'asc');
++    expect(resDefault.length).toBe(3);
++
++    // key branch
++    const resKey = sortIssuesList(mixedIssues, 'key', 'asc');
++    expect(resKey[0]?.key).toBe('KEY-NOTANUMBER');
++
++    // state branch with identical sort_order
++    const resState = sortIssuesList(mixedIssues, 'state', 'asc');
++    expect(resState[0]?.state.name).toBe('Alpha State');
++
++    // due_date branch with null
++    const resDue = sortIssuesList(mixedIssues, 'due_date', 'asc');
++    expect(resDue.length).toBe(3);
++
++    // rank branch with null
++    const resRank = sortIssuesList(mixedIssues, 'rank', 'asc');
++    expect(resRank.length).toBe(3);
++
++    // updated branch with null
++    const resUpdated = sortIssuesList(mixedIssues, 'updated', 'asc');
++    expect(resUpdated.length).toBe(3);
++
++    // created branch with null
++    const resCreated = sortIssuesList(mixedIssues, 'created', 'asc');
++    expect(resCreated.length).toBe(3);
++  });
++
++  it('covers onCreateIssue button, selected row state, and missing state name fallback', () => {
++    const onCreateIssue = vi.fn();
++    const issueWithoutStateName: IssueItem = {
++      id: 'i-noname',
++      key: 'KAN-NONAME',
++      summary: 'No state name',
++      state: { id: 's-no-name', group: 'unstarted' } as unknown as StateSummary,
++      priority: { slug: 'low', label: 'Low' },
++    };
++
+     render(
 -      <ListView issues={issuesWithCycleAndMod} projectKey="KAN" modulesEnabled={true} />
--    );
--
++      <ListView
++        issues={[issueWithoutStateName]}
++        selectedIds={['KAN-NONAME']}
++        onCreateIssue={onCreateIssue}
++      />,
+     );
+ 
 -    const filterBtn = screen.getByRole('button', { name: 'Filter & Group' });
 -    fireEvent.click(filterBtn);
 -    const popover = screen.getByRole('dialog', { name: 'Filter and Group options' });
@@ -2790,8 +3048,17 @@ index a402a296..48a34cd7 100644
 -    expect(screen.getByText('Core Engine')).toBeDefined();
 -    expect(screen.getByText('Module mod-fa')).toBeDefined();
 -    expect(screen.getByText('No Module')).toBeDefined();
--  });
--
++    const createBtn = screen.getByTestId('issue-rail-new-btn');
++    fireEvent.click(createBtn);
++    expect(onCreateIssue).toHaveBeenCalled();
++
++    const row = screen.getByTestId('issue-list-card-KAN-NONAME');
++    expect(row.classList.contains('list-row--selected')).toBe(true);
++
++    const stateBtn = screen.getByTestId('list-row-state-btn-KAN-NONAME');
++    expect(stateBtn.getAttribute('aria-label')).toBe('Status: ');
+   });
+ 
 -  it('groups by cycle and module with real summaries and fallback labels', () => {
 -    const firstIssue = FIXTURE_12_ISSUES[0];
 -    const secondIssue = FIXTURE_12_ISSUES[1];
@@ -2800,9 +3067,14 @@ index a402a296..48a34cd7 100644
 -    if (!firstIssue || !secondIssue) {
 -      throw new Error('Missing fixtures');
 -    }
--
++  it('covers localStorage pre-hydration, favorites change events, refresh fallback dispatch, and popover non-state selection', () => {
++    // Non-array JSON in localStorage initially
++    localStorage.setItem('kb_favorite_issues', JSON.stringify({ not: 'an_array' }));
++    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+ 
 -    const issuesWithCycleAndMod: IssueItem[] = [
--      {
++    const issuesWithoutIds: IssueItem[] = [
+       {
 -        ...firstIssue,
 -        id: 'iss-c1',
 -        key: 'KAN-C1',
@@ -2817,50 +3089,113 @@ index a402a296..48a34cd7 100644
 -        cycle_id: 'cycle-654321',
 -        cycle: null,
 -        module_ids: ['mod-fallback-123'],
--      },
--    ];
--
++        id: '',
++        key: 'KAN-999',
++        summary: 'Missing id issue',
++        state: { id: 'state-todo', name: 'Todo', group: 'unstarted' },
++        priority: { slug: 'low', label: 'Low' },
+       },
+     ];
+ 
 -    render(
 -      <ListView issues={issuesWithCycleAndMod} projectKey="KAN" modulesEnabled={true} />
-+        issues={mockIssues}
-+        sortBy="priority"
-+        onSortByChange={onSortByChange}
-+        sortDir="asc"
-+        onSortDirChange={onSortDirChange}
++    const { unmount } = render(
++      <ListView
++        issues={issuesWithoutIds}
++      />,
++    );
++
++    // Refresh button without onRefresh prop dispatches kb:refresh-issues
++    const refreshBtn = screen.getByTestId('issue-rail-refresh-btn');
++    fireEvent.click(refreshBtn);
++    expect(dispatchSpy).toHaveBeenCalledWith(expect.objectContaining({ type: 'kb:refresh-issues' }));
++    unmount();
++
++    // Refresh button with onRefresh prop provided
++    const onRefreshMock = vi.fn();
++    const { unmount: unmountRefresh } = render(
++      <ListView
++        issues={issuesWithoutIds}
++        onRefresh={onRefreshMock}
 +      />,
      );
++    fireEvent.click(screen.getByTestId('issue-rail-refresh-btn'));
++    expect(onRefreshMock).toHaveBeenCalledTimes(1);
++    unmountRefresh();
  
 -    const filterBtn = screen.getByRole('button', { name: 'Filter & Group' });
 -    fireEvent.click(filterBtn);
 -    const popover = screen.getByRole('dialog', { name: 'Filter and Group options' });
 -    const groupSelect = within(popover).getByLabelText(/Group By/i);
-+    const sortSelect = screen.getByTestId<HTMLSelectElement>('issue-sort-select');
-+    expect(sortSelect.value).toBe('priority');
++    // Favorites change event with valid, non-array, empty/null, corrupt JSON, and non-string elements in localStorage
++    localStorage.setItem('kb_favorite_issues', JSON.stringify(['KAN-999', 42, null]));
++    act(() => {
++      window.dispatchEvent(new CustomEvent('kb:favorites-changed'));
++    });
  
 -    // Group by Cycle
 -    fireEvent.change(groupSelect, { target: { value: 'cycle' } });
 -    expect(screen.getByText('Sprint Alpha')).toBeDefined();
 -    expect(screen.getByText('Cycle cycle-')).toBeDefined();
-+    fireEvent.change(sortSelect, { target: { value: 'created' } });
-+    expect(onSortByChange).toHaveBeenCalledWith('created');
++    localStorage.removeItem('kb_favorite_issues');
++    act(() => {
++      window.dispatchEvent(new CustomEvent('kb:favorites-changed'));
++    });
  
 -    // Group by Module
 -    fireEvent.change(groupSelect, { target: { value: 'module' } });
 -    expect(screen.getByText('Core Engine')).toBeDefined();
 -    expect(screen.getByText('Module mod-fa')).toBeDefined();
-+    const dirBtn = screen.getByTestId('issue-sort-dir-btn');
-+    fireEvent.click(dirBtn);
-+    expect(onSortDirChange).toHaveBeenCalledWith('desc');
++    localStorage.setItem('kb_favorite_issues', JSON.stringify({ not: 'an_array' }));
++    act(() => {
++      window.dispatchEvent(new CustomEvent('kb:favorites-changed'));
++    });
++
++    localStorage.setItem('kb_favorite_issues', 'invalid-json-string');
++    act(() => {
++      window.dispatchEvent(new CustomEvent('kb:favorites-changed'));
++    });
++
++    // Sorting by rank with defined and undefined board_rank
++    const issueA = mockIssues[0];
++    const issueB = mockIssues[1];
++    if (!issueA || !issueB) {
++      throw new Error('mockIssues missing');
++    }
++    const rankIssues: IssueItem[] = [
++      { ...issueA, key: 'KAN-A', board_rank: '0|hzzzzz:' },
++      { ...issueB, key: 'KAN-B' },
++    ];
++    const { unmount: unmountRank } = render(<ListView issues={rankIssues} sortBy="rank" sortDir="asc" />);
++    expect(screen.getByTestId('issue-list-card-KAN-A')).toBeDefined();
++    unmountRank();
++
++    // Sorting by due_date with defined and undefined due_date
++    const dueDateIssues: IssueItem[] = [
++      { ...issueA, key: 'KAN-D1', due_date: '2026-12-01' },
++      { ...issueB, key: 'KAN-D2', due_date: null },
++    ];
++    const { unmount: unmountDue } = render(<ListView issues={dueDateIssues} sortBy="due_date" sortDir="asc" />);
++    expect(screen.getByTestId('issue-list-card-KAN-D1')).toBeDefined();
++    unmountDue();
++
++    // Local popover selection when onStateSelect is omitted
++    const { unmount: unmountNoStateSelect } = render(<ListView issues={mockIssues} />);
++    fireEvent.click(screen.getByTestId('list-row-state-btn-KAN-101'));
++    const inProgOpt = screen.getByRole('option', { name: 'In Progress' });
++    fireEvent.click(inProgOpt);
++    unmountNoStateSelect();
++
++    localStorage.clear();
    });
  });
 diff --git a/kanban/web/src/features/list/ListView.tsx b/kanban/web/src/features/list/ListView.tsx
-index 3566be94..0d83a2ac 100644
+index 28eddae8..7f760447 100644
 --- a/kanban/web/src/features/list/ListView.tsx
 +++ b/kanban/web/src/features/list/ListView.tsx
-@@ -1,11 +1,20 @@
+@@ -1,5 +1,13 @@
 -import React, { useState, useMemo, useEffect, useRef, type JSX } from 'react';
 -import { ListRow } from './ListRow';
--import type { IssueItem } from '../views/viewsApi';
 +/**
 + * Left Master Rail Issue List View (KAN-52 Problem 2).
 + * Replaces x/y-flipped Kanban status folding sections with compact 2-line cards,
@@ -2871,17 +3206,10 @@ index 3566be94..0d83a2ac 100644
 +import { PriorityIcon } from '../../components/icons/KanbanIcons';
 +import { StateBadge } from '../../components/state/StateBadge';
 +import { QuickFieldPopover } from '../views/QuickFieldPopover';
-+import type { IssueItem, StateSummary } from '../views/viewsApi';
+ import type { IssueItem, StateSummary } from '../views/viewsApi';
  import '../views/listTable.css';
  
- export interface ListViewProps {
-   issues: IssueItem[];
-   projectKey?: string | undefined;
-+  projectStates?: StateSummary[] | undefined;
-   modulesEnabled?: boolean | undefined;
-   selectedIds?: string[] | undefined;
-   onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
-@@ -17,19 +26,101 @@ export interface ListViewProps {
+@@ -18,20 +26,101 @@ export interface ListViewProps {
    onOpenPeek?: ((issueKey: string) => void) | undefined;
    activeKey?: string | null | undefined;
    canManageWorkflows?: boolean | undefined;
@@ -2985,12 +3313,13 @@ index 3566be94..0d83a2ac 100644
  export function ListView({
    issues,
 -  projectKey = 'KAN',
+-  projectStates,
 -  modulesEnabled = true,
 +  projectStates = [],
    selectedIds = [],
    onToggleSelect,
    onCreateIssue,
-@@ -37,247 +128,95 @@ export function ListView({
+@@ -39,269 +128,96 @@ export function ListView({
    onLoadMore,
    isLoading = false,
    focusedKey,
@@ -3009,14 +3338,18 @@ index 3566be94..0d83a2ac 100644
 -  // Collapsed state map: key is section name/id, value is boolean (true if collapsed)
 -  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
 -  const [focusedIndex, setFocusedIndex] = useState<number>(0);
--
++  const [internalSortBy, setInternalSortBy] = useState<IssueSortOption>('updated');
++  const [internalSortDir, setInternalSortDir] = useState<'asc' | 'desc'>('desc');
+ 
 -  // Single-card filter dropdown state (KANBA-174)
 -  const [filterCardOpen, setFilterCardOpen] = useState(false);
 -  const [searchQuery, setSearchQuery] = useState('');
 -  const [selectedState, setSelectedState] = useState('all');
 -  const [selectedPriority, setSelectedPriority] = useState('all');
 -  const [groupByOption, setGroupByOption] = useState<'state' | 'priority' | 'cycle' | 'module' | 'none'>('state');
--
++  const sortBy = sortByProp ?? internalSortBy;
++  const sortDir = sortDirProp ?? internalSortDir;
+ 
 -  const filterCardRef = useRef<HTMLDivElement>(null);
 -
 -  // Close filter popover on outside click or Escape
@@ -3058,7 +3391,14 @@ index 3566be94..0d83a2ac 100644
 -      if (selectedState !== 'all') {
 -        const group = issue.state.group.toLowerCase();
 -        const name = issue.state.name.toLowerCase();
--        if (group !== selectedState && name !== selectedState && !name.includes(selectedState)) {
+-        const stateId = issue.state.id.toLowerCase();
+-        const target = selectedState.toLowerCase();
+-        if (
+-          group !== target &&
+-          name !== target &&
+-          stateId !== target &&
+-          !name.includes(target)
+-        ) {
 -          return false;
 -        }
 -      }
@@ -3068,15 +3408,15 @@ index 3566be94..0d83a2ac 100644
 -        const slug = issue.priority.slug.toLowerCase();
 -        if (slug !== selectedPriority) return false;
 -      }
-+  const [internalSortBy, setInternalSortBy] = useState<IssueSortOption>('updated');
-+  const [internalSortDir, setInternalSortDir] = useState<'asc' | 'desc'>('desc');
++  const handleSortByChange = (val: IssueSortOption): void => {
++    setInternalSortBy(val);
++    onSortByChange?.(val);
++  };
  
 -      return true;
 -    });
 -  }, [issues, searchQuery, selectedState, selectedPriority]);
-+  const sortBy = sortByProp ?? internalSortBy;
-+  const sortDir = sortDirProp ?? internalSortDir;
- 
+-
 -  // Default workflow state sections order
 -  const defaultStates: { name: string; sortOrder: number }[] = useMemo(
 -    () => [
@@ -3089,11 +3429,27 @@ index 3566be94..0d83a2ac 100644
 -    ],
 -    []
 -  );
-+  const handleSortByChange = (val: IssueSortOption): void => {
-+    setInternalSortBy(val);
-+    onSortByChange?.(val);
++  const handleSortDirToggle = (): void => {
++    const next = sortDir === 'asc' ? 'desc' : 'asc';
++    setInternalSortDir(next);
++    onSortDirChange?.(next);
 +  };
  
+-  const resolvedWorkflowStates = useMemo(() => {
+-    if (projectStates && projectStates.length > 0) {
+-      return projectStates.map((st, idx) => ({
+-        id: st.id,
+-        name: st.name,
+-        sortOrder: st.sort_order ?? (idx + 1) * 10,
+-      }));
+-    }
+-    return defaultStates.map((def) => ({
+-      id: def.name.toLowerCase().replace(/\s+/g, '-'),
+-      name: def.name,
+-      sortOrder: def.sortOrder,
+-    }));
+-  }, [projectStates, defaultStates]);
+-
 -  // Group issues by state, priority, or none
 -  const sections = useMemo(() => {
 -    if (groupByOption === 'priority') {
@@ -3112,7 +3468,14 @@ index 3566be94..0d83a2ac 100644
 -          sortOrder: p.sortOrder,
 -          items: [],
 -        });
--      }
++  // Favorites tracking (persisted in localStorage)
++  const [favoriteKeys, setFavoriteKeys] = useState<Set<string>>(() => {
++    try {
++      const stored = localStorage.getItem('kb_favorite_issues');
++      if (stored) {
++        const parsed: unknown = JSON.parse(stored);
++        return new Set(Array.isArray(parsed) ? (parsed as unknown[]).filter((x): x is string => typeof x === 'string') : []);
+       }
 -      for (const issue of filteredIssues) {
 -        const slug = issue.priority.slug.toLowerCase();
 -        const existing = prioMap.get(slug);
@@ -3128,12 +3491,11 @@ index 3566be94..0d83a2ac 100644
 -        }
 -      }
 -      return Array.from(prioMap.values()).filter((s) => s.items.length > 0);
--    }
-+  const handleSortDirToggle = (): void => {
-+    const next = sortDir === 'asc' ? 'desc' : 'asc';
-+    setInternalSortDir(next);
-+    onSortDirChange?.(next);
-+  };
++    } catch {
++      // ignore localStorage errors in hermetic tests
+     }
++    return new Set<string>();
++  });
  
 -    if (groupByOption === 'cycle') {
 -      const cycleMap = new Map<string, GroupSection>();
@@ -3143,29 +3505,28 @@ index 3566be94..0d83a2ac 100644
 -        const existing = cycleMap.get(cId);
 -        if (existing) {
 -          existing.items.push(issue);
--        } else {
++  useEffect(() => {
++    const handleFavChange = (): void => {
++      try {
++        const stored = localStorage.getItem('kb_favorite_issues');
++        if (stored) {
++          const parsed: unknown = JSON.parse(stored);
++          setFavoriteKeys(new Set(Array.isArray(parsed) ? (parsed as unknown[]).filter((x): x is string => typeof x === 'string') : []));
+         } else {
 -          cycleMap.set(cId, {
 -            id: `cycle-${cId}`,
 -            name: cName,
 -            sortOrder: cId === 'no-cycle' ? 9999 : 10,
 -            items: [issue],
 -          });
--        }
-+  // Favorites tracking (persisted in localStorage)
-+  const [favoriteKeys, setFavoriteKeys] = useState<Set<string>>(() => {
-+    try {
-+      const stored = localStorage.getItem('kb_favorite_issues');
-+      if (stored) {
-+        const parsed: unknown = JSON.parse(stored);
-+        return new Set(Array.isArray(parsed) ? (parsed as unknown[]).filter((x): x is string => typeof x === 'string') : []);
++          setFavoriteKeys(new Set());
+         }
++      } catch {
++        // ignore
        }
 -      return Array.from(cycleMap.values()).sort((a, b) => a.sortOrder - b.sortOrder);
-+    } catch {
-+      // ignore localStorage errors in hermetic tests
-     }
-+    return new Set<string>();
-+  });
- 
+-    }
+-
 -    if (groupByOption === 'module') {
 -      const modMap = new Map<string, GroupSection>();
 -      for (const issue of filteredIssues) {
@@ -3187,18 +3548,8 @@ index 3566be94..0d83a2ac 100644
 -              items: [issue],
 -            });
 -          }
-+  useEffect(() => {
-+    if (typeof window === 'undefined') return;
-+    const handleFavChange = (): void => {
-+      try {
-+        const stored = localStorage.getItem('kb_favorite_issues');
-+        if (stored) {
-+          const parsed: unknown = JSON.parse(stored);
-+          setFavoriteKeys(new Set(Array.isArray(parsed) ? (parsed as unknown[]).filter((x): x is string => typeof x === 'string') : []));
-         }
-+      } catch {
-+        // ignore
-       }
+-        }
+-      }
 -      return Array.from(modMap.values()).sort((a, b) => a.sortOrder - b.sortOrder);
 -    }
 -
@@ -3216,10 +3567,10 @@ index 3566be94..0d83a2ac 100644
 -    // Default: Group issues by state, preserving known states with 0 items
 -    const sectionMap = new Map<string, GroupSection>();
 -
--    // Seed default sections
--    for (const def of defaultStates) {
+-    // Seed sections
+-    for (const def of resolvedWorkflowStates) {
 -      sectionMap.set(def.name, {
--        id: def.name.toLowerCase().replace(/\s+/g, '-'),
+-        id: def.id,
 -        name: def.name,
 -        sortOrder: def.sortOrder,
 -        items: [],
@@ -3245,7 +3596,7 @@ index 3566be94..0d83a2ac 100644
 +        next.delete(key);
        } else {
 -        sectionMap.set(stateName, {
--          id: stateName.toLowerCase().replace(/\s+/g, '-'),
+-          id: issue.state.id || stateName.toLowerCase().replace(/\s+/g, '-'),
 -          name: stateName,
 -          sortOrder: issue.state.sort_order ?? 999,
 -          items: [issue],
@@ -3258,7 +3609,7 @@ index 3566be94..0d83a2ac 100644
 -    return Array.from(sectionMap.values()).sort(
 -      (a, b) => a.sortOrder - b.sortOrder
 -    );
--  }, [filteredIssues, defaultStates, groupByOption]);
+-  }, [filteredIssues, resolvedWorkflowStates, groupByOption]);
 +      try {
 +        localStorage.setItem('kb_favorite_issues', JSON.stringify(Array.from(next)));
 +        window.dispatchEvent(new CustomEvent('kb:favorites-changed'));
@@ -3308,7 +3659,7 @@ index 3566be94..0d83a2ac 100644
  
    if (issues.length === 0) {
      return (
-@@ -298,226 +237,216 @@ export function ListView({
+@@ -322,236 +238,219 @@ export function ListView({
    }
  
    return (
@@ -3385,11 +3736,21 @@ index 3566be94..0d83a2ac 100644
 -                  className="list-filter-select"
 -                >
 -                  <option value="all">All States</option>
--                  <option value="backlog">Backlog</option>
--                  <option value="unstarted">Unstarted / Todo</option>
--                  <option value="started">Started / In Progress</option>
--                  <option value="completed">Completed / Done</option>
--                  <option value="cancelled">Cancelled</option>
+-                  {projectStates && projectStates.length > 0 ? (
+-                    projectStates.map((st) => (
+-                      <option key={st.id} value={st.id}>
+-                        {st.name}
+-                      </option>
+-                    ))
+-                  ) : (
+-                    <>
+-                      <option value="backlog">Backlog</option>
+-                      <option value="unstarted">Unstarted / Todo</option>
+-                      <option value="started">Started / In Progress</option>
+-                      <option value="completed">Completed / Done</option>
+-                      <option value="cancelled">Cancelled</option>
+-                    </>
+-                  )}
 -                </select>
 -              </div>
 -
@@ -3476,7 +3837,7 @@ index 3566be94..0d83a2ac 100644
 +          onClick={() => {
 +            if (onRefresh) {
 +              onRefresh();
-+            } else if (typeof window !== 'undefined') {
++            } else {
 +              window.dispatchEvent(new CustomEvent('kb:refresh-issues'));
 +            }
 +          }}
@@ -3565,28 +3926,7 @@ index 3566be94..0d83a2ac 100644
 +                  />
 +                  <span className="mono issue-card-key">{issue.key}</span>
 +                </div>
- 
--        return (
--          <section
--            key={section.id}
--            className="list-section"
--            data-section-name={section.name}
--            aria-labelledby={`heading-${section.id}`}
--          >
--            <div className="list-section-header">
--              <button
--                type="button"
--                id={`heading-${section.id}`}
--                className="list-section-toggle"
--                aria-expanded={!isCollapsed}
--                onClick={() => { toggleSection(section.name); }}
--              >
--                <span className="list-section-toggle-icon" aria-hidden="true">
--                  ▼
--                </span>
--                <span>{section.name}</span>
--                <span className="list-section-count">{section.items.length}</span>
--              </button>
++
 +                <div className="issue-card-meta-right">
 +                  {(() => {
 +                    const rawCaps = issue.capabilities ?? capabilities;
@@ -3609,16 +3949,19 @@ index 3566be94..0d83a2ac 100644
 +                      }
 +                    }
 +
++                    const issueState = (issue as { state?: StateSummary }).state;
++                    const stateName = issueState?.name ?? '';
++
 +                    if (!canTransition) {
 +                      return (
 +                        <span
 +                          className="list-row-state-readonly"
 +                          data-testid={`list-row-state-readonly-${issue.key}`}
-+                          aria-label={`Status: ${issue.state.name}`}
-+                          title={`Status: ${issue.state.name}`}
++                          aria-label={`Status: ${stateName}`}
++                          title={`Status: ${stateName}`}
 +                        >
 +                          <StateBadge
-+                            state={issue.state}
++                            state={issueState ?? { id: '', name: '', group: 'unstarted' }}
 +                            showLabel={false}
 +                            className="list-row-state-icon"
 +                          />
@@ -3631,12 +3974,12 @@ index 3566be94..0d83a2ac 100644
 +                        type="button"
 +                        className="list-row-state-btn"
 +                        data-testid={`list-row-state-btn-${issue.key}`}
-+                        aria-label={`Status: ${issue.state.name}`}
-+                        title={`Status: ${issue.state.name}`}
++                        aria-label={`Status: ${stateName}`}
++                        title={`Status: ${stateName}`}
 +                        onClick={handleStateClick}
 +                      >
 +                        <StateBadge
-+                          state={issue.state}
++                          state={issueState ?? { id: '', name: '', group: 'unstarted' }}
 +                          showLabel={false}
 +                          className="list-row-state-icon"
 +                        />
@@ -3644,6 +3987,28 @@ index 3566be94..0d83a2ac 100644
 +                    );
 +                  })()}
  
+-        return (
+-          <section
+-            key={section.id}
+-            className="list-section"
+-            data-section-name={section.name}
+-            aria-labelledby={`heading-${section.id}`}
+-          >
+-            <div className="list-section-header">
+-              <button
+-                type="button"
+-                id={`heading-${section.id}`}
+-                className="list-section-toggle"
+-                aria-expanded={!isCollapsed}
+-                onClick={() => { toggleSection(section.name); }}
+-              >
+-                <span className="list-section-toggle-icon" aria-hidden="true">
+-                  ▼
+-                </span>
+-                <span>{section.name}</span>
+-                <span className="list-section-count">{section.items.length}</span>
+-              </button>
+-
 -              <div className="list-section-actions">
 -                {canManageWorkflows && (
                    <button
@@ -3652,7 +4017,7 @@ index 3566be94..0d83a2ac 100644
 -                    data-testid={`section-add-workflow-btn-${section.name}`}
 -                    title={`Attach workflow transition to ${section.name}`}
 +                    className={`issue-card-star-btn ${isFav ? 'issue-card-star-btn--active' : ''}`}
-+                    data-testid="favorite-issue-toggle"
++                    data-testid={`rail-favorite-toggle-${issue.key}`}
 +                    aria-label={isFav ? `Unfavorite ${issue.key}` : `Favorite ${issue.key}`}
                      onClick={(e) => {
                        e.stopPropagation();
@@ -3665,7 +4030,8 @@ index 3566be94..0d83a2ac 100644
                      }}
                    >
 -                    + Workflow
--                  </button>
++                    {isFav ? '⭐' : '☆'}
+                   </button>
 -                )}
 -                {onCreateIssue && (
 -                  <button
@@ -3675,8 +4041,7 @@ index 3566be94..0d83a2ac 100644
 -                    aria-label={`New work item in ${section.name}`}
 -                  >
 -                    + New work item
-+                    {isFav ? '⭐' : '☆'}
-                   </button>
+-                  </button>
 -                )}
 +                </div>
                </div>
@@ -3721,7 +4086,7 @@ index 3566be94..0d83a2ac 100644
  
        {nextCursor && (
          <div className="view-load-more">
-@@ -531,6 +460,25 @@ export function ListView({
+@@ -565,6 +464,23 @@ export function ListView({
            </button>
          </div>
        )}
@@ -3736,10 +4101,8 @@ index 3566be94..0d83a2ac 100644
 +          onClose={() => {
 +            setLocalPopoverIssue(null);
 +          }}
-+          onSelect={(field, value) => {
-+            if (field === 'state' && typeof value === 'string') {
-+              onStateSelect?.(localPopoverIssue.key, value);
-+            }
++          onSelect={(_field, value) => {
++            onStateSelect?.(localPopoverIssue.key, String(value));
 +          }}
 +          states={projectStates}
 +        />
@@ -3748,10 +4111,57 @@ index 3566be94..0d83a2ac 100644
    );
  }
 diff --git a/kanban/web/src/features/table/TableView.css b/kanban/web/src/features/table/TableView.css
-index f17434a8..be8f3b38 100644
+index f17434a8..96fafd9b 100644
 --- a/kanban/web/src/features/table/TableView.css
 +++ b/kanban/web/src/features/table/TableView.css
-@@ -122,12 +122,17 @@
+@@ -4,7 +4,9 @@
+  * using 100% canonical CSS tokens and zero inline style attributes.
+  */
+ 
+-.table-summary-cell {
++.table-summary-cell,
++.table-col-header--summary {
++  min-width: 180px;
+   max-width: 280px;
+   overflow: hidden;
+   text-overflow: ellipsis;
+@@ -33,8 +35,10 @@
+     padding: 0 var(--space-3, 12px);
+   }
+ 
+-  .table-summary-cell {
+-    max-width: 200px;
++  .table-summary-cell,
++  .table-col-header--summary {
++    min-width: 180px;
++    max-width: 240px;
+   }
+ }
+ 
+@@ -52,6 +56,7 @@
+ 
+   .issues-table {
+     font-size: 0.75rem;
++    min-width: 580px;
+   }
+ 
+   .issues-table thead tr {
+@@ -105,12 +110,10 @@
+     font-size: 0.75rem;
+   }
+ 
+-  /* Compact Summary column constrained to 105px on 390px screens */
++  /* Summary column preserved at >= 180px on 390px screens */
+   .table-col-header--summary,
+   .table-summary-cell {
+-    width: 105px;
+-    max-width: 105px;
+-    min-width: 75px;
++    min-width: 180px;
+     padding: 0 var(--space-1, 4px);
+   }
+ 
+@@ -122,12 +125,17 @@
      white-space: nowrap;
    }
  
@@ -3772,7 +4182,7 @@ index f17434a8..be8f3b38 100644
      padding: 0 var(--space-1, 4px);
    }
  
-@@ -144,9 +149,9 @@
+@@ -144,9 +152,9 @@
    /* Priority column */
    .table-col-header--priority,
    .table-priority-cell-wrap {
@@ -3785,7 +4195,7 @@ index f17434a8..be8f3b38 100644
      padding: 0 var(--space-1, 4px);
    }
  
-@@ -166,3 +171,25 @@
+@@ -166,3 +174,25 @@
      max-width: 100%;
    }
  }
@@ -3811,41 +4221,393 @@ index f17434a8..be8f3b38 100644
 +    box-sizing: border-box;
 +  }
 +}
+diff --git a/kanban/web/src/features/table/TableView.test.tsx b/kanban/web/src/features/table/TableView.test.tsx
+index 19edbc79..a5141904 100644
+--- a/kanban/web/src/features/table/TableView.test.tsx
++++ b/kanban/web/src/features/table/TableView.test.tsx
+@@ -1,13 +1,24 @@
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { render, screen, fireEvent } from '@testing-library/react';
++import { render, screen, fireEvent, act } from '@testing-library/react';
+ import React from 'react';
+ import { TableView } from './TableView';
+ import { FIXTURE_12_ISSUES } from '../views/fixtures';
+ import type { IssueItem } from '../views/viewsApi';
+ 
++const mockPatchProjectIssue = vi.fn().mockResolvedValue({});
++vi.mock('../views/viewsApi', async (importOriginal) => {
++  const actual = await importOriginal<typeof import('../views/viewsApi')>();
++  return {
++    ...actual,
++    patchProjectIssue: (...args: unknown[]): Promise<unknown> => mockPatchProjectIssue(...args) as Promise<unknown>,
++  };
++});
++
+ describe('TableView', () => {
+   beforeEach(() => {
+     localStorage.clear();
++    mockPatchProjectIssue.mockReset();
++    mockPatchProjectIssue.mockResolvedValue({});
+   });
+ 
+   it('renders default columns and cycles aria-sort ascending -> descending -> none on Priority click', () => {
+@@ -356,7 +367,7 @@ describe('TableView', () => {
+     expect(screen.getByText(/📦 Authentication Engine/)).toBeDefined();
+   });
+ 
+-  it('supports capability-gated inline cell editing for State, Priority, Assignees, Dates, and Cycle', () => {
++  it('supports capability-gated inline cell editing for State, Priority, Assignees, Dates, and Cycle', async () => {
+     const onUpdateIssue = vi.fn();
+     const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
+ 
+@@ -393,7 +404,10 @@ describe('TableView', () => {
+ 
+     // 1. State inline edit
+     const stateSelect = screen.getByRole('combobox', { name: 'Edit state for KAN-99' });
+-    fireEvent.change(stateSelect, { target: { value: 'In Progress' } });
++    await act(async () => {
++      fireEvent.change(stateSelect, { target: { value: 'In Progress' } });
++      await Promise.resolve();
++    });
+     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
+       state: expect.objectContaining({ name: 'In Progress', group: 'started' }) as unknown as Record<string, unknown>,
+     }));
+@@ -401,14 +415,20 @@ describe('TableView', () => {
+ 
+     // 2. Priority inline edit
+     const prioSelect = screen.getByRole('combobox', { name: 'Edit priority for KAN-99' });
+-    fireEvent.change(prioSelect, { target: { value: 'urgent' } });
++    await act(async () => {
++      fireEvent.change(prioSelect, { target: { value: 'urgent' } });
++      await Promise.resolve();
++    });
+     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
+       priority: expect.objectContaining({ slug: 'urgent', label: 'Urgent' }) as unknown as Record<string, unknown>,
+     }));
+ 
+     // 3. Due date inline edit
+     const dueDateInput = screen.getByLabelText('Edit due date for KAN-99');
+-    fireEvent.change(dueDateInput, { target: { value: '2026-12-01' } });
++    await act(async () => {
++      fireEvent.change(dueDateInput, { target: { value: '2026-12-01' } });
++      await Promise.resolve();
++    });
+     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
+       due_date: '2026-12-01',
+     }));
+@@ -425,7 +445,10 @@ describe('TableView', () => {
+       />
+     );
+     const startDateInput = screen.getByLabelText('Edit start date for KAN-99');
+-    fireEvent.change(startDateInput, { target: { value: '2026-11-05' } });
++    await act(async () => {
++      fireEvent.change(startDateInput, { target: { value: '2026-11-05' } });
++      await Promise.resolve();
++    });
+     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
+       start_date: '2026-11-05',
+     }));
+@@ -433,14 +456,20 @@ describe('TableView', () => {
+ 
+     // 5. Cycle inline edit
+     const cycleSelect = screen.getByRole('combobox', { name: 'Edit cycle for KAN-99' });
+-    fireEvent.change(cycleSelect, { target: { value: 'cycle-2' } });
++    await act(async () => {
++      fireEvent.change(cycleSelect, { target: { value: 'cycle-2' } });
++      await Promise.resolve();
++    });
+     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
+       cycle_id: 'cycle-2',
+     }));
+ 
+     // 6. Assignee toggle
+     const assignBtn = screen.getByRole('button', { name: 'Assign issue KAN-99' });
+-    fireEvent.click(assignBtn);
++    await act(async () => {
++      fireEvent.click(assignBtn);
++      await Promise.resolve();
++    });
+     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
+       assignees: expect.arrayContaining([expect.objectContaining({ kind: 'principal' })]) as unknown as Record<string, unknown>[],
+     }));
+@@ -478,7 +507,10 @@ describe('TableView', () => {
+         onUpdateIssue={onUpdateIssue}
+       />,
+     );
+-    fireEvent.click(screen.getByRole('button', { name: 'Assign issue KAN-99' }));
++    await act(async () => {
++      fireEvent.click(screen.getByRole('button', { name: 'Assign issue KAN-99' }));
++      await Promise.resolve();
++    });
+     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
+       assignees: [],
+     }));
+@@ -638,6 +670,7 @@ describe('TableView', () => {
+       />,
+     );
+     const unhandledKeyLink = screen.getByRole('link', { name: 'KAN-PEEK-1' });
++    unhandledKeyLink.addEventListener('click', (e) => { e.preventDefault(); }, { once: true });
+     fireEvent.click(unhandledKeyLink);
+     unmountSecond();
+   });
+@@ -692,7 +725,7 @@ describe('TableView', () => {
+     expect(priorityCell?.classList.contains('table-priority-cell-wrap')).toBe(true);
+   });
+ 
+-  it('covers custom cycle option, empty dates, and terminal state branches in inline editing', () => {
++  it('covers custom cycle option, empty dates, and terminal state branches in inline editing', async () => {
+     const onUpdateIssue = vi.fn();
+     const customCycleIssues: IssueItem[] = [
+       {
+@@ -741,32 +774,50 @@ describe('TableView', () => {
+ 
+     // Inline state change to Done, Cancelled, and In Review
+     const stateSelect = screen.getByRole('combobox', { name: 'Edit state for KAN-CUST-1' });
+-    fireEvent.change(stateSelect, { target: { value: 'Done' } });
++    await act(async () => {
++      fireEvent.change(stateSelect, { target: { value: 'Done' } });
++      await Promise.resolve();
++    });
+     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-CUST-1', expect.objectContaining({
+       state: expect.objectContaining({ name: 'Done', group: 'completed' }) as unknown as Record<string, unknown>,
+     }));
+ 
+-    fireEvent.change(stateSelect, { target: { value: 'Cancelled' } });
++    await act(async () => {
++      fireEvent.change(stateSelect, { target: { value: 'Cancelled' } });
++      await Promise.resolve();
++    });
+     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-CUST-1', expect.objectContaining({
+       state: expect.objectContaining({ name: 'Cancelled', group: 'cancelled' }) as unknown as Record<string, unknown>,
+     }));
+ 
+-    fireEvent.change(stateSelect, { target: { value: 'In Review' } });
++    await act(async () => {
++      fireEvent.change(stateSelect, { target: { value: 'In Review' } });
++      await Promise.resolve();
++    });
+     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-CUST-1', expect.objectContaining({
+       state: expect.objectContaining({ name: 'In Review', group: 'started' }) as unknown as Record<string, unknown>,
+     }));
+ 
+     // Start date and Due date empty clearing
+     const startDateInput = screen.getByLabelText('Edit start date for KAN-CUST-1');
+-    fireEvent.change(startDateInput, { target: { value: '' } });
++    await act(async () => {
++      fireEvent.change(startDateInput, { target: { value: '' } });
++      await Promise.resolve();
++    });
+     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-CUST-1', { start_date: null });
+ 
+     const dueDateInput = screen.getByLabelText('Edit due date for KAN-CUST-1');
+-    fireEvent.change(dueDateInput, { target: { value: '' } });
++    await act(async () => {
++      fireEvent.change(dueDateInput, { target: { value: '' } });
++      await Promise.resolve();
++    });
+     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-CUST-1', { due_date: null });
+ 
+     // Cycle clear to empty
+-    fireEvent.change(cycleSelect, { target: { value: '' } });
++    await act(async () => {
++      fireEvent.change(cycleSelect, { target: { value: '' } });
++      await Promise.resolve();
++    });
+     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-CUST-1', { cycle_id: null, cycle: null });
+ 
+     // Rerender as read-only VIEWER with overdue and null start date
+@@ -823,4 +874,186 @@ describe('TableView', () => {
+ 
+     localStorage.removeItem('kb.tableCols.KAN_CUST');
+   });
++
++  it('allows state transitions with TRANSITION capability and rolls back on failure', async () => {
++    const alertListener = vi.fn();
++    window.addEventListener('kb:alert', alertListener);
++
++    mockPatchProjectIssue.mockRejectedValueOnce(new Error('State transition rejected'));
++
++    // Render with TRANSITION capability only (no EDIT/ADMIN)
++    const { rerender } = render(
++      <TableView
++        issues={FIXTURE_12_ISSUES}
++        projectKey="KAN"
++        capabilities={['TRANSITION']}
++      />,
++    );
++
++    const firstIssueKey = FIXTURE_12_ISSUES[0]?.key ?? 'KAN-1';
++    // State select should be interactive
++    const stateSelect = screen.getByLabelText(`Edit state for ${firstIssueKey}`);
++    expect(stateSelect).toBeDefined();
++
++    // Priority should be read-only since user only has TRANSITION
++    expect(screen.queryByLabelText(`Edit priority for ${firstIssueKey}`)).toBeNull();
++
++    // Trigger state change which will fail and roll back
++    await act(async () => {
++      fireEvent.change(stateSelect, { target: { value: 'Done' } });
++      await Promise.resolve();
++    });
++
++    expect(mockPatchProjectIssue).toHaveBeenCalled();
++    const lastAlertCall = alertListener.mock.calls[0]?.[0] as CustomEvent<{ type: string; message: string }> | undefined;
++    expect(lastAlertCall?.detail.type).toBe('error');
++    expect(lastAlertCall?.detail.message).toBe('State transition rejected');
++
++    // Now test with pure VIEW capability
++    rerender(
++      <TableView
++        issues={FIXTURE_12_ISSUES}
++        projectKey="KAN"
++        capabilities={['VIEW']}
++      />,
++    );
++    expect(screen.queryByLabelText(`Edit state for ${firstIssueKey}`)).toBeNull();
++
++    window.removeEventListener('kb:alert', alertListener);
++  });
++
++  it('supports custom projectStates prop and matches by state.id or normalized name', async () => {
++    const customStates = [
++      { id: 'st-backlog', name: 'Backlog', group: 'unstarted' as const },
++      { id: 'st-todo', name: 'Todo', group: 'unstarted' as const },
++      { id: 'st-prog', name: 'In Progress', group: 'started' as const },
++      { id: 'st-done', name: 'Done', group: 'completed' as const },
++    ];
++
++    const testIssues: IssueItem[] = [
++      {
++        id: 'iss-st-1',
++        key: 'KAN-ST-1',
++        summary: 'Project states issue',
++        state: { id: 'st-todo', name: 'Todo', group: 'unstarted' },
++        priority: { slug: 'medium', label: 'Medium' },
++      },
++      {
++        id: 'iss-st-2',
++        key: 'KAN-ST-2',
++        summary: 'Normalized name match issue',
++        state: { id: 'other-id', name: 'in-progress', group: 'started' },
++        priority: { slug: 'high', label: 'High' },
++      },
++      {
++        id: 'iss-st-3',
++        key: 'KAN-ST-3',
++        summary: 'Fallback state issue',
++        state: { id: 'st-fallback', name: 'Fallback State', group: 'unstarted' },
++        priority: { slug: 'low', label: 'Low' },
++      },
++    ];
++
++    const onUpdateIssue = vi.fn();
++    render(
++      <TableView
++        issues={testIssues}
++        projectKey="KAN_ST"
++        capabilities={['TRANSITION']}
++        projectStates={customStates}
++        onUpdateIssue={onUpdateIssue}
++      />,
++    );
++
++    const stateSelect1 = screen.getByLabelText('Edit state for KAN-ST-1');
++    expect((stateSelect1 as HTMLSelectElement).value).toBe('st-todo');
++    expect(screen.getAllByRole('option', { name: 'In Progress' }).length).toBeGreaterThan(0);
++
++    await act(async () => {
++      fireEvent.change(stateSelect1, { target: { value: 'st-prog' } });
++      await Promise.resolve();
++    });
++    expect(onUpdateIssue).toHaveBeenCalled();
++    const lastUpdateCall = onUpdateIssue.mock.calls[0] as [string, { state?: { id?: string; name?: string } }] | undefined;
++    expect(lastUpdateCall?.[0]).toBe('KAN-ST-1');
++    expect(lastUpdateCall?.[1].state?.id).toBe('st-prog');
++    expect(lastUpdateCall?.[1].state?.name).toBe('In Progress');
++  });
++
++  it('covers projectStates rollback on patchProjectIssue failure and inline error catches', async () => {
++    const alertListener = vi.fn();
++    window.addEventListener('kb:alert', alertListener);
++
++    mockPatchProjectIssue.mockRejectedValueOnce(new Error('Project state error'));
++
++    const customStates = [
++      { id: 'st-backlog', name: 'Backlog', group: 'unstarted' as const },
++      { id: 'st-todo', name: 'Todo', group: 'unstarted' as const },
++      { id: 'st-prog', name: 'In Progress', group: 'started' as const },
++    ];
++
++    const testIssues: IssueItem[] = [
++      {
++        id: 'iss-err-1',
++        key: 'KAN-ERR-1',
++        summary: 'Error test issue',
++        state: { id: 'st-todo', name: 'Todo', group: 'unstarted' },
++        priority: { slug: 'medium', label: 'Medium' },
++        assignees: [],
++      },
++    ];
++
++    const onUpdateIssue = vi.fn();
++    render(
++      <TableView
++        issues={testIssues}
++        projectKey="KAN_ERR"
++        capabilities={['EDIT']}
++        projectStates={customStates}
++        onUpdateIssue={onUpdateIssue}
++      />,
++    );
++
++    const stateSelect = screen.getByLabelText('Edit state for KAN-ERR-1');
++    await act(async () => {
++      fireEvent.change(stateSelect, { target: { value: 'st-prog' } });
++      await Promise.resolve();
++    });
++
++    expect(alertListener).toHaveBeenCalled();
++    const lastErrCall = alertListener.mock.calls[0]?.[0] as CustomEvent<{ type: string; message: string }> | undefined;
++    expect(lastErrCall?.detail.type).toBe('error');
++    expect(lastErrCall?.detail.message).toBe('Project state error');
++
++    // Now test rejecting in priority, date, cycle, assign to cover .catch(() => undefined)
++    mockPatchProjectIssue.mockRejectedValueOnce(new Error('Prio error'));
++    const prioSelect = screen.getByLabelText('Edit priority for KAN-ERR-1');
++    await act(async () => {
++      fireEvent.change(prioSelect, { target: { value: 'low' } });
++      await Promise.resolve();
++    });
++
++    mockPatchProjectIssue.mockRejectedValueOnce(new Error('Date error'));
++    const dueDateInput = screen.getByLabelText('Edit due date for KAN-ERR-1');
++    await act(async () => {
++      fireEvent.change(dueDateInput, { target: { value: '2026-12-25' } });
++      await Promise.resolve();
++    });
++
++    mockPatchProjectIssue.mockRejectedValueOnce(new Error('Cycle error'));
++    const cycleSelect = screen.getByLabelText('Edit cycle for KAN-ERR-1');
++    await act(async () => {
++      fireEvent.change(cycleSelect, { target: { value: 'cycle-1' } });
++      await Promise.resolve();
++    });
++
++    mockPatchProjectIssue.mockRejectedValueOnce(new Error('Assign error'));
++    const assignBtn = screen.getByRole('button', { name: 'Assign issue KAN-ERR-1' });
++    await act(async () => {
++      fireEvent.click(assignBtn);
++      await Promise.resolve();
++    });
++
++    window.removeEventListener('kb:alert', alertListener);
++  });
+ });
 diff --git a/kanban/web/src/features/table/TableView.tsx b/kanban/web/src/features/table/TableView.tsx
-index ecea93de..a032220c 100644
+index 123df9f8..a032220c 100644
 --- a/kanban/web/src/features/table/TableView.tsx
 +++ b/kanban/web/src/features/table/TableView.tsx
-@@ -8,7 +8,13 @@ import {
- } from './tableColumns';
- import { EmojiHint } from '../../components/emoji/EmojiHint';
- import { StateBadge } from '../../components/state/StateBadge';
--import { patchProjectIssue, type IssueItem, type SortDirection } from '../views/viewsApi';
-+import {
-+  patchProjectIssue,
-+  type IssueItem,
-+  type SortDirection,
-+  type StateSummary,
-+  normalizeStateKey,
-+} from '../views/viewsApi';
- import '../views/listTable.css';
- import './TableView.css';
- 
-@@ -26,12 +32,14 @@ export interface TableViewProps {
-   onOpenPeek?: ((issueKey: string) => void) | undefined;
-   capabilities?: string[] | undefined;
-   currentUserCapabilities?: string[] | undefined;
-+  projectStates?: StateSummary[] | undefined;
-   onUpdateIssue?: ((issueKey: string, patch: Partial<IssueItem>) => Promise<void> | void) | undefined;
- }
- 
- export function TableView({
-   issues,
-   projectKey,
-+  projectStates,
-   modulesEnabled = true,
-   selectedIds = [],
-   onToggleSelect,
-@@ -53,40 +61,87 @@ export function TableView({
+@@ -61,26 +61,32 @@ export function TableView({
    }
  
    const effectiveCaps = capabilities ?? currentUserCapabilities;
@@ -3882,34 +4644,16 @@ index ecea93de..a032220c 100644
      return true;
    };
  
--  const handleInlineStateChange = (issue: IssueItem, newStateName: string) => {
--    const isDone = newStateName === 'Done';
--    const isProgress = newStateName === 'In Progress' || newStateName === 'In Review';
-+  const handleInlineStateChange = (issue: IssueItem, newStateIdOrName: string) => {
+   const handleInlineStateChange = (issue: IssueItem, newStateIdOrName: string) => {
 +    const previousState = issue.state;
-+    let resolvedState: StateSummary | undefined;
-+    if (projectStates && projectStates.length > 0) {
-+      resolvedState = projectStates.find(
-+        (s) =>
-+          s.id === newStateIdOrName ||
-+          s.name === newStateIdOrName ||
-+          normalizeStateKey(s.name) === normalizeStateKey(newStateIdOrName)
-+      );
-+    }
-+
-+    if (resolvedState) {
-+      const patch: Partial<IssueItem> = {
-+        state: {
-+          id: resolvedState.id,
-+          name: resolvedState.name,
-+          group: resolvedState.group,
-+          color_hex: resolvedState.color_hex ?? null,
-+        },
-+      };
-+      setLocalIssues((prev) =>
-+        prev.map((i) => (i.key === issue.key ? { ...i, ...patch } : i)),
-+      );
-+      void onUpdateIssue?.(issue.key, patch);
+     let resolvedState: StateSummary | undefined;
+     if (projectStates && projectStates.length > 0) {
+       resolvedState = projectStates.find(
+@@ -104,7 +110,16 @@ export function TableView({
+         prev.map((i) => (i.key === issue.key ? { ...i, ...patch } : i)),
+       );
+       void onUpdateIssue?.(issue.key, patch);
+-      void patchProjectIssue(issue.key, { state_id: resolvedState.id }).catch(() => undefined);
 +      void patchProjectIssue(issue.key, { state_id: resolvedState.id }).catch((err: unknown) => {
 +        setLocalIssues((prev) =>
 +          prev.map((i) => (i.key === issue.key ? { ...i, state: previousState } : i)),
@@ -3920,35 +4664,10 @@ index ecea93de..a032220c 100644
 +          new CustomEvent('kb:alert', { detail: { type: 'error', message: msg } }),
 +        );
 +      });
-+      window.dispatchEvent(
-+        new CustomEvent('kb:issue-updated', {
-+          detail: { issueKey: issue.key, patch },
-+        }),
-+      );
-+      return;
-+    }
-+
-+    const isDone = newStateIdOrName === 'Done';
-+    const isProgress = newStateIdOrName === 'In Progress' || newStateIdOrName === 'In Review';
-     const group = isDone
-       ? 'completed'
--      : newStateName === 'Cancelled'
-+      : newStateIdOrName === 'Cancelled'
-         ? 'cancelled'
-         : isProgress
-           ? 'started'
-           : 'unstarted';
--    const stateId = `state-${newStateName.toLowerCase().replace(/\s+/g, '-')}`;
-+    const stateId = `state-${newStateIdOrName.toLowerCase().replace(/\s+/g, '-')}`;
-     const patch: Partial<IssueItem> = {
-       state: {
-         id: stateId,
--        name: newStateName,
-+        name: newStateIdOrName,
-         group,
-       },
-     };
-@@ -94,7 +149,16 @@ export function TableView({
+       window.dispatchEvent(
+         new CustomEvent('kb:issue-updated', {
+           detail: { issueKey: issue.key, patch },
+@@ -134,7 +149,16 @@ export function TableView({
        prev.map((i) => (i.key === issue.key ? { ...i, ...patch } : i)),
      );
      void onUpdateIssue?.(issue.key, patch);
@@ -3966,7 +4685,7 @@ index ecea93de..a032220c 100644
      window.dispatchEvent(
        new CustomEvent('kb:issue-updated', {
          detail: { issueKey: issue.key, patch },
-@@ -471,13 +535,24 @@ export function TableView({
+@@ -511,7 +535,8 @@ export function TableView({
                          );
                        }
                        if (colId === 'state') {
@@ -3976,59 +4695,8 @@ index ecea93de..a032220c 100644
                            return (
                              <td key={colId} className="table-state-cell" data-col="state">
                                <StateBadge state={issue.state} className="status-pill" />
-                             </td>
-                           );
-                         }
-+                        const activeStateVal =
-+                          projectStates && projectStates.length > 0
-+                            ? (projectStates.find((s) => s.id === issue.state.id)?.id ??
-+                              projectStates.find(
-+                                (s) =>
-+                                  normalizeStateKey(s.name) ===
-+                                  normalizeStateKey(issue.state.name),
-+                              )?.id ??
-+                              issue.state.id)
-+                            : issue.state.name;
-                         return (
-                           <td
-                             key={colId}
-@@ -488,17 +563,27 @@ export function TableView({
-                             <select
-                               className="table-inline-select table-inline-select--state"
-                               aria-label={`Edit state for ${issue.key}`}
--                              value={issue.state.name}
-+                              value={activeStateVal}
-                               onChange={(e) => {
-                                 handleInlineStateChange(issue, e.target.value);
-                               }}
-                             >
--                              <option value="Backlog">Backlog</option>
--                              <option value="Todo">Todo</option>
--                              <option value="In Progress">In Progress</option>
--                              <option value="In Review">In Review</option>
--                              <option value="Done">Done</option>
--                              <option value="Cancelled">Cancelled</option>
-+                              {projectStates && projectStates.length > 0 ? (
-+                                projectStates.map((st) => (
-+                                  <option key={st.id} value={st.id}>
-+                                    {st.name}
-+                                  </option>
-+                                ))
-+                              ) : (
-+                                <>
-+                                  <option value="Backlog">Backlog</option>
-+                                  <option value="Todo">Todo</option>
-+                                  <option value="In Progress">In Progress</option>
-+                                  <option value="In Review">In Review</option>
-+                                  <option value="Done">Done</option>
-+                                  <option value="Cancelled">Cancelled</option>
-+                                </>
-+                              )}
-                             </select>
-                           </td>
-                         );
 diff --git a/kanban/web/src/features/views/QuickFieldPopover.tsx b/kanban/web/src/features/views/QuickFieldPopover.tsx
-index dba8b78f..abfc772b 100644
+index 9df14ed1..abfc772b 100644
 --- a/kanban/web/src/features/views/QuickFieldPopover.tsx
 +++ b/kanban/web/src/features/views/QuickFieldPopover.tsx
 @@ -1,4 +1,5 @@
@@ -4042,7 +4710,7 @@ index dba8b78f..abfc772b 100644
    onClose: () => void;
    onSelect: (field: QuickFieldType, value: unknown) => void;
 -  modulesEnabled?: boolean;
--  states?: { id: string; name: string }[];
+-  states?: { id: string; name: string; group?: string; color_hex?: string | null }[];
 +  modulesEnabled?: boolean | undefined;
 +  states?: { id: string; name: string; group?: string; color_hex?: string | null }[] | undefined;
  }
@@ -4187,31 +4855,18 @@ index dba8b78f..abfc772b 100644
 +  return createPortal(content, document.body);
  }
 diff --git a/kanban/web/src/features/views/SwimlaneBoardGrid.tsx b/kanban/web/src/features/views/SwimlaneBoardGrid.tsx
-index 9dc4f3d8..0fe6cd22 100644
+index 38799596..0fe6cd22 100644
 --- a/kanban/web/src/features/views/SwimlaneBoardGrid.tsx
 +++ b/kanban/web/src/features/views/SwimlaneBoardGrid.tsx
-@@ -1,6 +1,13 @@
+@@ -1,5 +1,7 @@
  import React, { useState, useMemo, type JSX } from 'react';
  import { EmojiHint } from '../../components/emoji/EmojiHint';
--import { normalizeStateKey, type IssueItem, type GroupAxis } from './viewsApi';
 +import { QuickFieldPopover } from './QuickFieldPopover';
 +import * as railApi from '../drawer-rail/railApi';
-+import {
-+  normalizeStateKey,
-+  type IssueItem,
-+  type GroupAxis,
-+  type StateSummary,
-+} from './viewsApi';
- import './filterBulk.css';
- 
- export interface SwimlaneBoardGridProps {
-@@ -11,11 +18,14 @@ export interface SwimlaneBoardGridProps {
-   modulesEnabled?: boolean | undefined;
-   projectCycles?: { id: string; name: string }[] | undefined;
-   projectModules?: { id: string; name: string }[] | undefined;
-+  projectStates?: StateSummary[] | undefined;
-   selectedIds?: string[] | undefined;
-   onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
+ import {
+   normalizeStateKey,
+   type IssueItem,
+@@ -22,6 +24,8 @@ export interface SwimlaneBoardGridProps {
    focusedKey?: string | null | undefined;
    onCardClick?: ((key: string, isShift: boolean) => void) | undefined;
    onCardMove?: ((issueKey: string, targetColId: string, targetLaneId: string) => void) | undefined;
@@ -4220,41 +4875,7 @@ index 9dc4f3d8..0fe6cd22 100644
  }
  
  interface ColumnDef {
-@@ -32,7 +42,11 @@ interface SwimlaneDef {
-   sortOrder: number;
- }
- 
--function getIssueColId(issue: IssueItem, groupBy: GroupAxis): string {
-+function getIssueColId(
-+  issue: IssueItem,
-+  groupBy: GroupAxis,
-+  projectStates?: StateSummary[],
-+): string {
-   if (groupBy === 'priority') {
-     return issue.priority.slug.toLowerCase();
-   }
-@@ -43,6 +57,15 @@ function getIssueColId(issue: IssueItem, groupBy: GroupAxis): string {
-     const firstMod = issue.modules?.[0]?.id ?? issue.module_ids?.[0];
-     return firstMod ?? 'none';
-   }
-+  if (projectStates && projectStates.length > 0) {
-+    const matched =
-+      projectStates.find((s) => s.id === issue.state.id) ??
-+      projectStates.find(
-+        (s) => normalizeStateKey(s.name) === normalizeStateKey(issue.state.name),
-+      ) ??
-+      projectStates.find((s) => s.group === issue.state.group);
-+    if (matched) return matched.id;
-+  }
-   const sName = normalizeStateKey(issue.state.name);
-   if (sName.includes('backlog')) return 'backlog';
-   if (sName.includes('todo')) return 'todo';
-@@ -96,13 +119,26 @@ export function SwimlaneBoardGrid({
-   modulesEnabled = true,
-   projectCycles,
-   projectModules,
-+  projectStates,
-   selectedIds = [],
+@@ -120,9 +124,21 @@ export function SwimlaneBoardGrid({
    onToggleSelect,
    focusedKey = null,
    onCardClick,
@@ -4276,47 +4897,7 @@ index 9dc4f3d8..0fe6cd22 100644
  
    const allCycles = useMemo(() => {
      const map = new Map<string, string>();
-@@ -169,6 +205,13 @@ export function SwimlaneBoardGrid({
-       return modCols;
-     }
-     // Default: State columns
-+    if (projectStates && projectStates.length > 0) {
-+      return projectStates.map((st, idx) => ({
-+        id: st.id,
-+        name: st.name,
-+        sortOrder: st.sort_order ?? (idx + 1) * 10,
-+      }));
-+    }
-     return [
-       { id: 'backlog', name: 'Backlog', sortOrder: 10 },
-       { id: 'todo', name: 'Todo', sortOrder: 20 },
-@@ -177,7 +220,7 @@ export function SwimlaneBoardGrid({
-       { id: 'done', name: 'Done', sortOrder: 50 },
-       { id: 'cancelled', name: 'Cancelled', sortOrder: 60 },
-     ];
--  }, [groupBy, allCycles, allModules, modulesEnabled]);
-+  }, [groupBy, allCycles, allModules, modulesEnabled, projectStates]);
- 
-   // 2. Determine Horizontal Swimlane Definitions based on subGroupBy axis
-   const swimlanes: SwimlaneDef[] = useMemo(() => {
-@@ -248,14 +291,14 @@ export function SwimlaneBoardGrid({
- 
-     for (const issue of issues) {
-       const laneId = getIssueLaneId(issue, subGroupBy, modulesEnabled);
--      const colId = getIssueColId(issue, groupBy);
-+      const colId = getIssueColId(issue, groupBy, projectStates);
-       const laneMap = grid[laneId] ?? grid[defaultLaneId];
-       const colList = laneMap?.[colId] ?? laneMap?.[defaultColId];
-       colList?.push(issue);
-     }
- 
-     return grid;
--  }, [issues, columns, swimlanes, groupBy, subGroupBy, modulesEnabled]);
-+  }, [issues, columns, swimlanes, groupBy, subGroupBy, modulesEnabled, projectStates]);
- 
-   const toggleLane = (laneId: string) => {
-     setCollapsedLanes((prev) => ({
-@@ -338,6 +381,13 @@ export function SwimlaneBoardGrid({
+@@ -365,6 +381,13 @@ export function SwimlaneBoardGrid({
                          else if (slug === 'high') pKind = 'priorityHigh';
                          else if (slug === 'low') pKind = 'priorityLow';
  
@@ -4330,7 +4911,7 @@ index 9dc4f3d8..0fe6cd22 100644
                          return (
                            <div
                              key={issue.key}
-@@ -372,6 +422,27 @@ export function SwimlaneBoardGrid({
+@@ -399,6 +422,27 @@ export function SwimlaneBoardGrid({
                                  {issue.key}
                                </a>
  
@@ -4358,7 +4939,7 @@ index 9dc4f3d8..0fe6cd22 100644
                                <EmojiHint kind={pKind} />
                              </div>
  
-@@ -393,6 +464,30 @@ export function SwimlaneBoardGrid({
+@@ -420,6 +464,30 @@ export function SwimlaneBoardGrid({
            </div>
          );
        })}
@@ -4480,10 +5061,18 @@ index f60aeb98..605ea0b5 100644
     Quick Create Issue Modal (S6.4 item 4, S1.3 item 3)
     ========================================================================== */
 diff --git a/kanban/web/src/features/views/listTable.css b/kanban/web/src/features/views/listTable.css
-index ecea2ce4..2d0cfd62 100644
+index ecea2ce4..a4bc3308 100644
 --- a/kanban/web/src/features/views/listTable.css
 +++ b/kanban/web/src/features/views/listTable.css
-@@ -736,9 +736,9 @@
+@@ -278,6 +278,7 @@
+ 
+ .issues-table {
+   width: 100%;
++  min-width: 580px;
+   border-collapse: collapse;
+   text-align: left;
+   font-family: var(--font-sans);
+@@ -736,9 +737,9 @@
  }
  
  .kb-split-list-pane {
@@ -4496,7 +5085,25 @@ index ecea2ce4..2d0cfd62 100644
    overflow-y: auto;
    overflow-x: hidden;
    box-sizing: border-box;
-@@ -966,3 +966,164 @@
+@@ -747,7 +748,7 @@
+   container-name: split-list;
+ }
+ 
+-@media (max-width: 768px) {
++@media (max-width: 767px) {
+   .kb-split-layout {
+     display: block;
+     width: 100%;
+@@ -810,7 +811,7 @@
+   gap: 6px;
+   padding: 6px 14px;
+   background: var(--accent-primary);
+-  color: #ffffff;
++  color: var(--accent-primary-fg, #ffffff);
+   border: none;
+   border-radius: var(--radius-sm, 4px);
+   font-size: 13px;
+@@ -966,3 +967,164 @@
      display: none;
    }
  }
@@ -4643,7 +5250,7 @@ index ecea2ce4..2d0cfd62 100644
 +}
 +
 +.issue-card-star-btn--active {
-+  color: #fbbf24;
++  color: var(--text-warning, #fbbf24);
 +}
 +
 +.issue-card-line-2 {
@@ -4662,7 +5269,7 @@ index ecea2ce4..2d0cfd62 100644
 +  width: 100%;
 +}
 diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
-index 97a810a9..bdbed1a3 100644
+index 663cef6c..f981c47a 100644
 --- a/kanban/web/src/features/views/viewRegistry.tsx
 +++ b/kanban/web/src/features/views/viewRegistry.tsx
 @@ -3,11 +3,13 @@ import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-quer
@@ -4696,15 +5303,7 @@ index 97a810a9..bdbed1a3 100644
  } from './viewsApi';
  import { IssueSurfaceRoot } from '../drawer/IssueSurface';
  import './filterBulk.css';
-@@ -85,6 +89,7 @@ export const viewRegistry: Record<ViewLayout, ViewRegistryEntry> = {
- export interface ViewComponentProps {
-   issues: IssueItem[];
-   projectKey: string;
-+  projectStates?: StateSummary[] | undefined;
-   modulesEnabled?: boolean | undefined;
-   selectedIds?: string[] | undefined;
-   onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
-@@ -125,7 +130,7 @@ export function ViewHost({
+@@ -126,7 +130,7 @@ export function ViewHost({
    return <Component {...props} />;
  }
  
@@ -4713,35 +5312,32 @@ index 97a810a9..bdbed1a3 100644
    defaultOptions: {
      queries: {
        retry: false,
-@@ -150,7 +155,26 @@ export interface IssuesWorkspaceRouteProps {
+@@ -151,7 +155,23 @@ export interface IssuesWorkspaceRouteProps {
   * Mounts FilterDisplayBar, 2D SwimlaneBoardGrid when layout === 'board' && subGroupBy !== 'none',
   * floating BulkActionBar, QuickCreateIssueModal, and useIssueKeyboardMap.
   */
--function computeStateSummary(sId: string): StateSummary {
-+export function computeStateSummary(
-+  sId: string,
-+  projectStates?: StateSummary[],
-+): StateSummary {
-+  if (projectStates && projectStates.length > 0) {
-+    const matched =
-+      projectStates.find((s) => s.id === sId) ??
-+      projectStates.find(
-+        (s) => normalizeStateKey(s.name) === normalizeStateKey(sId),
-+      ) ??
-+      projectStates.find((s) => s.group === sId);
-+    if (matched) {
-+      return {
-+        id: matched.id,
-+        name: matched.name,
-+        group: matched.group,
-+        color_hex: matched.color_hex ?? null,
-+      };
-+    }
+-function computeStateSummary(
++function resolveIssueStateSummary(
++  issue: IssueItem,
++  projectStates: StateSummary[],
++): { id?: string; name?: string; group?: string; color_hex?: string | null } | undefined {
++  const rawState = (issue as { state?: { id?: string; name?: string; group?: string; color_hex?: string | null } }).state;
++  const explicitStateId = (issue as { state_id?: string }).state_id ?? rawState?.id;
++  if (rawState?.name && rawState.group) {
++    return rawState;
 +  }
-   if (sId.includes('progress')) return { id: sId, name: 'In Progress', group: 'started' };
-   if (sId.includes('todo')) return { id: sId, name: 'Todo', group: 'unstarted' };
-   if (sId.includes('done')) return { id: sId, name: 'Done', group: 'completed' };
-@@ -169,14 +193,14 @@ export function IssuesWorkspaceRoute({
++  if (explicitStateId) {
++    const found = projectStates.find((s) => s.id === explicitStateId);
++    if (found) return found;
++  }
++  return rawState;
++}
++
++export function computeStateSummary(
+   sId: string,
+   projectStates?: StateSummary[],
+ ): StateSummary {
+@@ -189,14 +209,14 @@ export function IssuesWorkspaceRoute({
  }: IssuesWorkspaceRouteProps): JSX.Element {
    const isLiveMode = initialIssues === undefined;
  
@@ -4759,7 +5355,18 @@ index 97a810a9..bdbed1a3 100644
        setProjectMetadata(data ?? null);
      };
      updateFromCache();
-@@ -286,15 +310,24 @@ export function IssuesWorkspaceRoute({
+@@ -273,7 +293,9 @@ export function IssuesWorkspaceRoute({
+     queryClient,
+   );
+ 
+-  const [projectStates, setProjectStates] = useState<StateSummary[]>([]);
++  const [projectStates, setProjectStates] = useState<StateSummary[]>(() => {
++    return queryClient.getQueryData<StateSummary[]>(['states', projectKey]) ?? [];
++  });
+ 
+   const issues = useMemo(
+     () => issuesQuery.data ?? initialIssues ?? [],
+@@ -306,15 +328,24 @@ export function IssuesWorkspaceRoute({
      };
    }, []);
  
@@ -4787,7 +5394,7 @@ index 97a810a9..bdbed1a3 100644
        window.history.pushState({}, '', url.toString());
        window.dispatchEvent(new PopStateEvent('popstate'));
      },
-@@ -350,6 +383,62 @@ export function IssuesWorkspaceRoute({
+@@ -370,6 +401,62 @@ export function IssuesWorkspaceRoute({
      return filters;
    });
  
@@ -4850,7 +5457,23 @@ index 97a810a9..bdbed1a3 100644
    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
    const [isSaveViewModalOpen, setIsSaveViewModalOpen] = useState(false);
    const [isFilterOpen, setIsFilterOpen] = useState(false);
-@@ -482,9 +571,36 @@ export function IssuesWorkspaceRoute({
+@@ -400,13 +487,8 @@ export function IssuesWorkspaceRoute({
+   // Filter issues based on activeFilters
+   const filteredIssues = useMemo(() => {
+     return issues.filter((issue) => {
+-      const rawState = (issue as { state?: { id?: string; name?: string; group?: string; color_hex?: string } }).state;
+-      const explicitStateId = (issue as { state_id?: string }).state_id ?? rawState?.id;
+-      const hasCompleteState = Boolean(rawState?.name) && Boolean(rawState?.group);
+-      const resolvedState =
+-        hasCompleteState
+-          ? rawState
+-          : (explicitStateId ? projectStates.find((s) => s.id === explicitStateId) : undefined) ?? rawState;
++      const explicitStateId = (issue as { state_id?: string }).state_id;
++      const resolvedState = resolveIssueStateSummary(issue, projectStates);
+ 
+       const stateGroup = resolvedState?.group ?? 'unstarted';
+       const stateName = resolvedState?.name ?? '';
+@@ -502,9 +584,36 @@ export function IssuesWorkspaceRoute({
          if (activeFilters.due_date.includes('no_due_date') && issue.due_date) return false;
        }
  
@@ -4888,15 +5511,7 @@ index 97a810a9..bdbed1a3 100644
  
    // Normalize board workflow states and issues so "Todo" and "To Do" match seamlessly (KANBA-164)
    const boardStates: BoardWorkflowState[] = useMemo(() => {
-@@ -505,6 +621,7 @@ export function IssuesWorkspaceRoute({
-             ? s.group
-             : 'unstarted') as BoardWorkflowState['group'],
-           sort_order: s.sort_order ?? idx + 1,
-+          color_hex: s.color_hex ?? null,
-           ...(wipHard != null ? { wip_hard_limit: wipHard } : {}),
-           ...(wipSoft != null ? { wip_soft_limit: wipSoft } : {}),
-         };
-@@ -527,6 +644,7 @@ export function IssuesWorkspaceRoute({
+@@ -548,6 +657,7 @@ export function IssuesWorkspaceRoute({
      selectedIds,
      setSelectedIds,
      modulesEnabled,
@@ -4904,7 +5519,7 @@ index 97a810a9..bdbed1a3 100644
      onOpenCreateModal: canEdit ? () => { setIsCreateModalOpen(true); } : undefined,
      onOpenFilter: () => { setIsFilterOpen(true); },
      onOpenFieldPopover: (field, issue, rect) => {
-@@ -620,10 +738,11 @@ export function IssuesWorkspaceRoute({
+@@ -641,10 +751,11 @@ export function IssuesWorkspaceRoute({
      return item;
    };
  
@@ -4913,13 +5528,48 @@ index 97a810a9..bdbed1a3 100644
 +  const handleFieldSelect = (field: QuickFieldType, value: unknown, targetKeyOverride?: string) => {
 +    const targetKey = targetKeyOverride ?? popoverState.issue?.key;
 +    if (!targetKey) return;
-+    const currentIssue = issues.find((i) => i.key === targetKey) ?? popoverState.issue;
++    const currentIssue = issues.find((i) => i.key === targetKey);
      if (!currentIssue) return;
 -    const targetKey = currentIssue.key;
      let overrideReason: string | undefined;
  
      if (field === 'state') {
-@@ -683,6 +802,10 @@ export function IssuesWorkspaceRoute({
+@@ -657,12 +768,8 @@ export function IssuesWorkspaceRoute({
+           (s) => s.id === sId || normalizeStateKey(s.name) === normalizeStateKey(sId),
+         );
+ 
+-      const curRawState = currentIssue.state as { id?: string; name?: string } | undefined;
+-      const curStateId = (currentIssue as { state_id?: string }).state_id ?? curRawState?.id ?? '';
+-      const curResolvedState =
+-        curRawState?.name
+-          ? curRawState
+-          : (curStateId ? projectStates.find((s) => s.id === curStateId) : undefined) ?? curRawState;
++      const curResolvedState = resolveIssueStateSummary(currentIssue, projectStates);
++      const curStateId = (currentIssue as { state_id?: string }).state_id ?? curResolvedState?.id ?? '';
+       const curStateName = curResolvedState?.name ?? '';
+ 
+       const targetStateName = targetState?.name ?? sId;
+@@ -674,16 +781,12 @@ export function IssuesWorkspaceRoute({
+       if (isCrossState && targetStateAny?.wip_hard_limit != null) {
+         const targetCount = issues.filter((i) => {
+           if (i.key === targetKey) return false;
+-          const iRawState = i.state as { id?: string; name?: string } | undefined;
+-          const iStateId = (i as { state_id?: string }).state_id ?? iRawState?.id ?? '';
+-          const iResolvedState =
+-            iRawState?.name
+-              ? iRawState
+-              : (iStateId ? projectStates.find((s) => s.id === iStateId) : undefined) ?? iRawState;
++          const iResolvedState = resolveIssueStateSummary(i, projectStates);
++          const iStateId = (i as { state_id?: string }).state_id ?? iResolvedState?.id ?? '';
+           const iStateName = iResolvedState?.name ?? '';
+           return (
+             iStateId === targetState?.id ||
+-            (targetStateName ? normalizeStateKey(iStateName) === normalizeStateKey(targetStateName) : false)
++            normalizeStateKey(iStateName) === normalizeStateKey(targetStateName)
+           );
+         }).length;
+ 
+@@ -704,6 +807,10 @@ export function IssuesWorkspaceRoute({
        }
      }
  
@@ -4930,16 +5580,7 @@ index 97a810a9..bdbed1a3 100644
      setIssues((prev) =>
        prev.map((i) => {
          if (i.key !== targetKey) return i;
-@@ -708,7 +831,7 @@ export function IssuesWorkspaceRoute({
-         }
-         if (field === 'state') {
-           const sId = String(value);
--          const nextState = computeStateSummary(sId);
-+          const nextState = computeStateSummary(sId, projectStates);
-           return {
-             ...i,
-             state: nextState,
-@@ -720,10 +843,20 @@ export function IssuesWorkspaceRoute({
+@@ -741,7 +848,17 @@ export function IssuesWorkspaceRoute({
  
      if (isLiveMode) {
        if (field === 'priority') {
@@ -4957,12 +5598,8 @@ index 97a810a9..bdbed1a3 100644
 +        });
        } else if (field === 'state') {
          const sId = String(value);
--        const desired = computeStateSummary(sId);
-+        const desired = computeStateSummary(sId, projectStates);
-         const resolvedUuid = resolveStateUuid(desired, projectStates);
-         if (resolvedUuid) {
-           const patchPayload: Record<string, unknown> = { state_id: resolvedUuid };
-@@ -731,7 +864,17 @@ export function IssuesWorkspaceRoute({
+         const desired = computeStateSummary(sId, projectStates);
+@@ -752,22 +869,27 @@ export function IssuesWorkspaceRoute({
              patchPayload.override_wip = true;
              patchPayload.wip_override_reason = overrideReason;
            }
@@ -4981,12 +5618,43 @@ index 97a810a9..bdbed1a3 100644
          }
        }
      }
-@@ -815,13 +958,55 @@ export function IssuesWorkspaceRoute({
+   };
+ 
+   const boardIssues: BoardIssue[] = useMemo(() => {
+-    const fallbackStateId = boardStates[0]?.id ?? 'state-backlog';
++    const fallbackStateId = boardStates[0]?.id ?? '';
+     return filteredIssues.map((issue, idx) => {
+-      const rawState = (issue as { state?: { id?: string; name?: string; group?: string; color_hex?: string } }).state;
+-      const explicitStateId = (issue as { state_id?: string }).state_id ?? rawState?.id;
+-      const hasCompleteState = Boolean(rawState?.name) && Boolean(rawState?.group);
+-      const resolvedState =
+-        hasCompleteState
+-          ? rawState
+-          : (explicitStateId ? projectStates.find((s) => s.id === explicitStateId) : undefined) ?? rawState;
++      const explicitStateId = (issue as { state_id?: string }).state_id;
++      const resolvedState = resolveIssueStateSummary(issue, projectStates);
+ 
+       const stateId = resolvedState?.id ?? explicitStateId;
+       const stateName = resolvedState?.name ?? '';
+@@ -836,13 +958,68 @@ export function IssuesWorkspaceRoute({
    // 2D Swimlane condition: layout === 'board' and custom grouping or sub-grouping
    const is2DSwimlane = layout === 'board' && (subGroupBy !== 'none' || groupBy !== 'state');
  
 -  // Active peek key for 3-pane split list view (auto-selecting first issue if none specified)
-+  const isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 768;
++  const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() => {
++    return typeof window !== 'undefined' && window.innerWidth <= 767;
++  });
++
++  useEffect(() => {
++    if (typeof window === 'undefined') return;
++    const handleResize = (): void => {
++      setIsMobileViewport(window.innerWidth <= 767);
++    };
++    window.addEventListener('resize', handleResize);
++    return () => {
++      window.removeEventListener('resize', handleResize);
++    };
++  }, []);
 +
 +  const [railSortBy, setRailSortBy] = useState<IssueSortOption>('updated');
 +  const [railSortDir, setRailSortDir] = useState<'asc' | 'desc'>('desc');
@@ -4997,7 +5665,8 @@ index 97a810a9..bdbed1a3 100644
 +
 +  // Active peek key for 3-pane split list view (auto-selecting first issue if none specified, unless mobile <= 768px)
    const activePeekKey = useMemo(() => {
-+    if (sortedRailIssues.length === 0) {
++    const firstRailIssue = sortedRailIssues[0];
++    if (sortedRailIssues.length === 0 || !firstRailIssue) {
 +      return peekParam ?? null;
 +    }
      if (peekParam) {
@@ -5009,39 +5678,38 @@ index 97a810a9..bdbed1a3 100644
 +      if (isMobileViewport) {
 +        return null;
 +      }
-+      return sortedRailIssues[0]?.key ?? null;
++      return firstRailIssue.key;
 +    }
 +    if (isMobileViewport) {
 +      return null;
      }
 -    return filteredIssues[0]?.key ?? null;
 -  }, [peekParam, filteredIssues]);
-+    if (closedSplitKey && closedSplitKey === sortedRailIssues[0]?.key) {
++    if (closedSplitKey && closedSplitKey === firstRailIssue.key) {
 +      return null;
 +    }
-+    return sortedRailIssues[0]?.key ?? null;
++    return firstRailIssue.key;
 +  }, [peekParam, isMobileViewport, closedSplitKey, sortedRailIssues]);
 +
 +  useEffect(() => {
++    const firstRailIssue = sortedRailIssues[0];
 +    if (
 +      layout === 'list' &&
 +      !isMobileViewport &&
 +      peekParam &&
-+      sortedRailIssues.length > 0 &&
++      firstRailIssue &&
 +      !sortedRailIssues.some((i) => i.key === peekParam)
 +    ) {
-+      const firstIssueKey = sortedRailIssues[0]?.key;
-+      if (firstIssueKey) {
-+        queueMicrotask(() => {
-+          handleOpenPeek(firstIssueKey);
-+        });
-+      }
++      const firstIssueKey = firstRailIssue.key;
++      queueMicrotask(() => {
++        handleOpenPeek(firstIssueKey);
++      });
 +    }
 +  }, [layout, isMobileViewport, peekParam, sortedRailIssues, handleOpenPeek]);
  
    return (
      <QueryClientProvider client={queryClient}>
-@@ -831,20 +1016,42 @@ export function IssuesWorkspaceRoute({
+@@ -852,20 +1029,45 @@ export function IssuesWorkspaceRoute({
          data-layout={layout}
        >
          {/* 1. Filter and Display Bar */}
@@ -5069,6 +5737,9 @@ index 97a810a9..bdbed1a3 100644
 +          onFiltersChange={setActiveFilters}
 +          searchQuery={searchQuery}
 +          onSearchQueryChange={setSearchQuery}
++          onSearchSubmit={() => {
++            setActiveFilters((prev) => ({ ...prev }));
++          }}
 +          queryMode={queryMode}
 +          onQueryModeChange={setQueryMode}
 +          favoritesOnly={favoritesOnly}
@@ -5098,12 +5769,7 @@ index 97a810a9..bdbed1a3 100644
  
        {/* 2. Main View: 2D Swimlane Board Grid, 3-pane split list view, or standard ViewHost */}
        {is2DSwimlane ? (
-@@ -854,10 +1061,20 @@ export function IssuesWorkspaceRoute({
-           groupBy={groupBy}
-           subGroupBy={subGroupBy}
-           modulesEnabled={modulesEnabled}
-+          projectStates={projectStates}
-           selectedIds={selectedIds}
+@@ -880,6 +1082,17 @@ export function IssuesWorkspaceRoute({
            onToggleSelect={canEdit ? handleToggleSelect : undefined}
            focusedKey={focusedKey}
            onCardClick={handleRowClick}
@@ -5111,24 +5777,26 @@ index 97a810a9..bdbed1a3 100644
 +          onStateTransition={(issueKey, targetStateId) => {
 +            handleFieldSelect('state', targetStateId, issueKey);
 +          }}
-+          onCardMove={(issueKey, targetColId) => {
-+            if (groupBy === 'state') {
-+              handleFieldSelect('state', targetColId, issueKey);
-+            }
-+          }}
++          onCardMove={
++            groupBy === 'state'
++              ? (issueKey, targetColId) => {
++                  handleFieldSelect('state', targetColId, issueKey);
++                }
++              : undefined
++          }
          />
        ) : layout === 'board' ? (
          <BoardView
-@@ -872,16 +1089,30 @@ export function IssuesWorkspaceRoute({
+@@ -894,7 +1107,7 @@ export function IssuesWorkspaceRoute({
          <div className="kb-split-layout" data-testid="split-list-layout">
            <div className="kb-split-list-pane">
              <ListView
 -              issues={filteredIssues}
 +              issues={sortedRailIssues}
                projectKey={projectKey}
-+              projectStates={projectStates}
+               projectStates={projectStates}
                modulesEnabled={modulesEnabled}
-               selectedIds={selectedIds}
+@@ -902,9 +1115,22 @@ export function IssuesWorkspaceRoute({
                onToggleSelect={canEdit ? handleToggleSelect : undefined}
                onCreateIssue={canEdit ? handleOpenCreateModal : undefined}
                focusedKey={focusedKey}
@@ -5151,7 +5819,7 @@ index 97a810a9..bdbed1a3 100644
              />
            </div>
            {activePeekKey && (
-@@ -889,6 +1120,15 @@ export function IssuesWorkspaceRoute({
+@@ -912,6 +1138,15 @@ export function IssuesWorkspaceRoute({
                mode="split"
                issueKey={activePeekKey}
                projectKey={projectKey}
@@ -5167,15 +5835,7 @@ index 97a810a9..bdbed1a3 100644
              />
            )}
          </div>
-@@ -897,6 +1137,7 @@ export function IssuesWorkspaceRoute({
-           layout={layout}
-           issues={filteredIssues}
-           projectKey={projectKey}
-+          projectStates={projectStates}
-           modulesEnabled={modulesEnabled}
-           selectedIds={selectedIds}
-           onToggleSelect={canEdit ? handleToggleSelect : undefined}
-@@ -916,10 +1157,19 @@ export function IssuesWorkspaceRoute({
+@@ -940,10 +1175,19 @@ export function IssuesWorkspaceRoute({
            onClearSelection={() => { setSelectedIds([]); }}
            modulesEnabled={modulesEnabled}
            onBatchUpdateState={(targetStateSlug) => {

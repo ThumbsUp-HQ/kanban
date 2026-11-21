@@ -6,19 +6,6 @@ search_help:
     id: help
   response:
     tool: search
-    modes:
-    - read_by_id
-    - hybrid_search
-    - list_project_knowledge
-    parameters:
-      id: Entity key, path, UUID, or 'help' to read
-      query: Search query for lexical/semantic hybrid search
-      type: ALL, DOC, or STICKY
-      project: Project key or UUID scope filter
-      lod: 'Level of detail: summary, standard, full'
-      include_tree: Whether to include page hierarchy or heading outline
-      limit: Max items to return (1..50)
-      cursor: Opaque pagination cursor
 search_read_doc_standard:
   tool: search
   arguments:
@@ -41,8 +28,8 @@ search_read_doc_standard:
 
       Authentication overview.'
     etag: 25da1324e14efbc20ccf12ece7314acf98e606e26782edc41da760b76f9d9383
-    access: '{''kind'': ''project'', ''scope_label'': ''project: arch'', ''workspace_id'': ''01a1f75d-9131-7aa2-85c5-5f21b40c2944'',
-      ''workspace_name'': ''engineering docs'', ''project_id'': ''01a1f75d-9187-73e2-84b1-ddb831ef0d5d'', ''project_key'':
+    access: '{''kind'': ''project'', ''scope_label'': ''project: arch'', ''workspace_id'': ''01a1fbe5-d0e1-73e0-9dfb-247b60abc517'',
+      ''workspace_name'': ''engineering docs'', ''project_id'': ''01a1fbe5-d13b-70f1-91a2-592c2b45b03e'', ''project_key'':
       ''arch'', ''project_name'': ''architecture project''}'
 create_doc:
   tool: create
@@ -58,7 +45,7 @@ create_doc:
   response:
     status: created
     kind: doc
-    id: 01a1f75d-942d-7867-82b9-ee059fe5c727
+    id: 01a1fbe5-d30a-7094-bd76-120f67f31c19
     key: docs/architecture
     title: Architecture
     version_seq: 1
@@ -78,7 +65,7 @@ create_sticky:
   response:
     status: created
     kind: sticky
-    id: 933792d7-340b-4a5c-a9b0-99ace6e6608c
+    id: e034a914-1f16-44d4-b88c-12157d7db9f3
     color: sky
     title: Quick Sticky Note
     promotion_recommended: false
@@ -93,7 +80,7 @@ update_diff_patch:
   response:
     status: updated
     kind: page
-    id: 01a1f75d-948d-7b0b-90d8-d2c1ef31b819
+    id: 01a1fbe5-d37b-788b-9ed8-cefa8a57aa61
     key: docs/architecture/auth-studio
     title: Auth Studio
     version_seq: 2
@@ -101,7 +88,7 @@ update_diff_patch:
 update_sticky_auto_promotion:
   tool: update
   arguments:
-    id: 933792d7-340b-4a5c-a9b0-99ace6e6608c
+    id: e034a914-1f16-44d4-b88c-12157d7db9f3
     type: DOC
     title: TLS Verification Guide
     parent: docs/architecture
@@ -111,7 +98,7 @@ update_sticky_auto_promotion:
       Preserved permissions and converted to Doc.'
   response:
     status: promoted
-    id: 933792d7-340b-4a5c-a9b0-99ace6e6608c
+    id: e034a914-1f16-44d4-b88c-12157d7db9f3
     doc: docs/architecture
     link: PROMOTED_TO_DOC
     title: Architecture
@@ -125,7 +112,7 @@ update_inline_links:
   response:
     status: updated
     kind: page
-    id: 01a1f75d-948d-7b0b-90d8-d2c1ef31b819
+    id: 01a1fbe5-d37b-788b-9ed8-cefa8a57aa61
     key: docs/architecture/auth-studio
     title: Auth Studio
     version_seq: 2

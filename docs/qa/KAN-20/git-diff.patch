@@ -395,7 +395,7 @@ index 47ace3f9..d1dd9f20 100644
          pids = {item.project_identifier for item in res.items if item.project_identifier}
          if pids:
 diff --git a/kanban/services/search.py b/kanban/services/search.py
-index 09fda6f4..43564a79 100644
+index 09fda6f4..08234dcd 100644
 --- a/kanban/services/search.py
 +++ b/kanban/services/search.py
 @@ -8,12 +8,15 @@ Implements S11.2, S11.3, S12.2, and KB-P3-17.
@@ -445,7 +445,7 @@ index 09fda6f4..43564a79 100644
  
  
  def _get_signing_key() -> str:
-@@ -431,29 +444,392 @@ def _build_sticky_query(
+@@ -431,29 +444,402 @@ def _build_sticky_query(
      return stmt
  
  
@@ -820,6 +820,16 @@ index 09fda6f4..43564a79 100644
 +            object_ids=new_neighbor_ids,
 +            target_kinds=target_kinds,
 +        )
++        if project_id is not None:
++            proj_obj = await session.get(Project, project_id)
++            proj_ident = proj_obj.identifier.upper() if proj_obj else None
++            if proj_ident is not None:
++                new_hydrated = {
++                    nid: cand
++                    for nid, cand in new_hydrated.items()
++                    if cand.project_identifier is not None
++                    and cand.project_identifier.upper() == proj_ident
++                }
 +        hydrated.update(new_hydrated)
 +
 +    # Apply synaptic activation scores and provenance match_reasons
@@ -842,7 +852,7 @@ index 09fda6f4..43564a79 100644
  def _parse_target_kinds(kinds: list[str] | None) -> list[str]:
      """Validate and normalize requested entity kinds."""
      if not kinds:
-@@ -502,8 +878,9 @@ async def search_unified(  # noqa: PLR0913, PLR0917
+@@ -502,16 +888,19 @@ async def search_unified(  # noqa: PLR0913, PLR0917
      project_ref: str | None = None,
      limit: int = 20,
      cursor: str | None = None,
@@ -853,7 +863,17 @@ index 09fda6f4..43564a79 100644
      clean_query = validate_query(query)
      valid_limit = validate_limit(limit)
      target_kinds = _parse_target_kinds(kinds)
-@@ -527,6 +904,45 @@ async def search_unified(  # noqa: PLR0913, PLR0917
+ 
+     project_id: uuid.UUID | None = None
++    resolved_proj_identifier: str | None = None
+     if project_ref:
+         proj = await get_project_or_404(session, caller, project_ref)
+         project_id = proj.id
++        resolved_proj_identifier = proj.identifier
+ 
+     q_hash = _compute_query_hash(clean_query, target_kinds, project_ref)
+     cursor_score: float | None = None
+@@ -527,6 +916,53 @@ async def search_unified(  # noqa: PLR0913, PLR0917
      queries = _collect_unified_queries(target_kinds, clean_query, project_id, key_match_tuple)
      union_stmt = union_all(*queries).subquery("search_results")
  
@@ -870,7 +890,15 @@ index 09fda6f4..43564a79 100644
 +            lexical_rows=lex_rows,
 +        )
 +        if hybrid_candidates is not None:
-+            filtered_cands = hybrid_candidates
++            filtered_cands = [
++                c
++                for c in hybrid_candidates
++                if resolved_proj_identifier is None
++                or (
++                    c.project_identifier is not None
++                    and c.project_identifier.upper() == resolved_proj_identifier.upper()
++                )
++            ]
 +            if cursor_score is not None and cursor_id is not None:
 +                filtered_cands = [
 +                    c
@@ -899,7 +927,7 @@ index 09fda6f4..43564a79 100644
      count_stmt = select(func.count()).select_from(union_stmt)
      total_count = (await session.execute(count_stmt)).scalar() or 0
  
-@@ -548,12 +964,12 @@ async def search_unified(  # noqa: PLR0913, PLR0917
+@@ -548,12 +984,12 @@ async def search_unified(  # noqa: PLR0913, PLR0917
  
      has_more = len(rows) > valid_limit
      page_rows = rows[:valid_limit] if has_more else rows
@@ -915,7 +943,7 @@ index 09fda6f4..43564a79 100644
  
      return SearchResponse(
          total=total_count,
-@@ -569,7 +985,7 @@ async def _resolve_issue_search_scope(
+@@ -569,7 +1005,7 @@ async def _resolve_issue_search_scope(
      project_ref: str | None,
      filters: FilterSpec | None,
      workspace_ref: str | None = None,
@@ -924,7 +952,7 @@ index 09fda6f4..43564a79 100644
      """Resolve project ID and optional filter DSL predicates for issue search."""
      project_id: uuid.UUID | None = None
      proj: Project | None = None
-@@ -584,7 +1000,7 @@ async def _resolve_issue_search_scope(
+@@ -584,7 +1020,7 @@ async def _resolve_issue_search_scope(
          extra_predicates.extend(
              compile_issue_filter_predicates(session, proj, filters, caller.principal_id)
          )
@@ -933,7 +961,7 @@ index 09fda6f4..43564a79 100644
  
  
  def _extract_key_match_tuple(clean_query: str) -> tuple[str, int] | None:
-@@ -597,7 +1013,7 @@ def _extract_key_match_tuple(clean_query: str) -> tuple[str, int] | None:
+@@ -597,7 +1033,7 @@ def _extract_key_match_tuple(clean_query: str) -> tuple[str, int] | None:
      return None
  
  
@@ -942,7 +970,7 @@ index 09fda6f4..43564a79 100644
      session: AsyncSession,
      caller: PrincipalContext,
      request: IssueSearchRequest,
-@@ -608,7 +1024,7 @@ async def search_issues(
+@@ -608,7 +1044,7 @@ async def search_issues(
          clean_query = validate_query(request.query)
      valid_limit = validate_limit(request.limit)
  
@@ -951,7 +979,7 @@ index 09fda6f4..43564a79 100644
          session, caller, request.project, request.filters, request.workspace
      )
  
-@@ -628,6 +1044,102 @@ async def search_issues(
+@@ -628,6 +1064,122 @@ async def search_issues(
          include_metadata=True,
      ).subquery("issue_search_results")
  
@@ -982,6 +1010,26 @@ index 09fda6f4..43564a79 100644
 +                    )
 +                )
 +            ]
++            if extra_predicates and filtered_cands:
++                cand_ids = [c.id for c in filtered_cands]
++                filter_stmt = (
++                    select(Issue.id)
++                    .join(Project, Issue.project_id == Project.id)
++                    .join(ObjectRecord, Issue.id == ObjectRecord.id)
++                    .outerjoin(WorkflowState, Issue.state_id == WorkflowState.id)
++                    .outerjoin(ProjectPriority, Issue.priority_id == ProjectPriority.id)
++                    .outerjoin(Workspace, Project.workspace_id == Workspace.id)
++                    .where(
++                        ObjectRecord.deleted_at.is_(None),
++                        ObjectRecord.archived_at.is_(None),
++                        Issue.id.in_(cand_ids),
++                        *extra_predicates,
++                    )
++                )
++                if project_id is not None:
++                    filter_stmt = filter_stmt.where(Issue.project_id == project_id)
++                allowed_ids = set((await session.execute(filter_stmt)).scalars().all())
++                filtered_cands = [c for c in filtered_cands if c.id in allowed_ids]
 +            if cursor_score is not None and cursor_id is not None:
 +                filtered_cands = [
 +                    c
@@ -1054,7 +1102,7 @@ index 09fda6f4..43564a79 100644
      count_stmt = select(func.count()).select_from(issue_query)
      total_count = (await session.execute(count_stmt)).scalar() or 0
  
-@@ -651,7 +1163,7 @@ async def search_issues(
+@@ -651,7 +1203,7 @@ async def search_issues(
      page_rows = rows[:valid_limit] if has_more else rows
  
      # Batch fetch assignees for page_rows
@@ -1063,7 +1111,7 @@ index 09fda6f4..43564a79 100644
      if page_rows:
          p_ids = [r.id for r in page_rows]
          a_stmt = (
-@@ -665,7 +1177,7 @@ async def search_issues(
+@@ -665,7 +1217,7 @@ async def search_issues(
              if val:
                  assignees_by_id.setdefault(iss_id, []).append(val)
  
@@ -1072,7 +1120,7 @@ index 09fda6f4..43564a79 100644
      for r in page_rows:
          body = r.body_markdown or ""
          snippet_result = (
-@@ -677,10 +1189,10 @@ async def search_issues(
+@@ -677,10 +1229,10 @@ async def search_issues(
              IssueSearchItem(
                  kind="issue",
                  id=r.id,
@@ -1085,7 +1133,7 @@ index 09fda6f4..43564a79 100644
                  workspace=getattr(r, "workspace_slug", None),
                  anchor=snippet_result.anchor,
                  snippet=snippet_result.snippet,
-@@ -690,13 +1202,14 @@ async def search_issues(
+@@ -690,13 +1242,14 @@ async def search_issues(
                  priority=getattr(r, "priority_slug", None),
                  assignees=assignees_by_id.get(r.id, []),
                  description_markdown=body,
@@ -1102,7 +1150,7 @@ index 09fda6f4..43564a79 100644
  
      return IssueSearchResponse(
          total=total_count,
-@@ -706,7 +1219,7 @@ async def search_issues(
+@@ -706,7 +1259,7 @@ async def search_issues(
      )
  
  
@@ -1111,7 +1159,7 @@ index 09fda6f4..43564a79 100644
      session: AsyncSession,
      caller: PrincipalContext,
      request: KnowledgeSearchRequest,
-@@ -746,6 +1259,63 @@ async def search_knowledge(
+@@ -746,6 +1299,63 @@ async def search_knowledge(
  
      union_stmt = union_all(*queries).subquery("knowledge_results")
  
@@ -1175,7 +1223,7 @@ index 09fda6f4..43564a79 100644
      count_stmt = select(func.count()).select_from(union_stmt)
      total_count = (await session.execute(count_stmt)).scalar() or 0
  
-@@ -768,7 +1338,7 @@ async def search_knowledge(
+@@ -768,7 +1378,7 @@ async def search_knowledge(
      has_more = len(rows) > valid_limit
      page_rows = rows[:valid_limit] if has_more else rows
  
@@ -1184,7 +1232,7 @@ index 09fda6f4..43564a79 100644
      for r in page_rows:
          body = r.body_markdown or ""
          snippet_result = build_anchored_snippet(body, clean_query)
-@@ -783,13 +1353,14 @@ async def search_knowledge(
+@@ -783,13 +1393,14 @@ async def search_knowledge(
                  snippet=snippet_result.snippet,
                  match_spans=snippet_result.match_spans,
                  score=float(r.score),
@@ -1683,10 +1731,10 @@ index 00000000..d74ef1bd
 +    return results
 diff --git a/kanban/tests/services/test_synaptic_search.py b/kanban/tests/services/test_synaptic_search.py
 new file mode 100644
-index 00000000..1800adc9
+index 00000000..6b10f6a7
 --- /dev/null
 +++ b/kanban/tests/services/test_synaptic_search.py
-@@ -0,0 +1,1069 @@
+@@ -0,0 +1,1299 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Integration and unit tests for KAN-20 Synaptic Object-Graph Semantic Search."""
@@ -1711,6 +1759,7 @@ index 00000000..1800adc9
 +    IssueSearchRequest,
 +    KnowledgeSearchRequest,
 +)
++from kanban.api.v1.schemas.views import FilterSpec
 +from kanban.services.search import (
 +    _get_query_embedding,
 +    _parse_target_kinds,
@@ -2756,11 +2805,240 @@ index 00000000..1800adc9
 +        assert res_k.executed_mode == "hybrid"
 +        assert res_k.total >= 1
 +        assert res_k.items[0].title == "Completely Unrelated Pears"
++
++
++@pytest.mark.asyncio
++async def test_hybrid_search_issues_enforces_filters_and_workspace(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++) -> None:
++    """Verify search_issues in hybrid mode filters candidates against FilterSpec and workspace.
++
++    Proves vector/synaptic candidates matching query NEVER bypass filters (e.g. state, workspace).
++    """
++    admin = await make_user("admin_flt", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("FLT", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    ws_id = api_env.workspace_id
++
++    st_rows = (
++        await api_env.seed.execute(
++            text("SELECT id, name FROM workflow_states WHERE project_id = :p ORDER BY sort_order"),
++            {"p": proj_id},
++        )
++    ).all()
++    st_open = st_rows[0][0]
++    st_done = st_rows[-1][0]
++    pri_id = (
++        await api_env.seed.execute(
++            text("SELECT id FROM project_priorities WHERE project_id = :p LIMIT 1"),
++            {"p": proj_id},
++        )
++    ).scalar_one()
++
++    iss1_id = await _seed_issue(
++        api_env.seed,
++        ws_id,
++        proj_id,
++        "FLT",
++        1,
++        "Quantum Neural Kernel Alpha",
++        "Deep synaptic learning component.",
++        admin.id,
++        st_open,
++        pri_id,
++    )
++    iss2_id = await _seed_issue(
++        api_env.seed,
++        ws_id,
++        proj_id,
++        "FLT",
++        2,
++        "Quantum Neural Kernel Beta",
++        "Completed synaptic learning component.",
++        admin.id,
++        st_done,
++        pri_id,
++    )
++
++    other_ws_id = uuid.uuid4()
++    await api_env.seed.execute(
++        text("INSERT INTO workspaces (id, slug, name) VALUES (:id, 'ws-other-filter', 'Other WS')"),
++        {"id": other_ws_id},
++    )
++
++    test_vec = [0.0] * 384
++    test_vec[0] = 1.0
++    for iss_id, key in [(iss1_id, "FLT-1"), (iss2_id, "FLT-2")]:
++        await api_env.seed.execute(
++            text(
++                "INSERT INTO object_embeddings (object_id, object_type, chunk_index, "
++                "workspace_id, project_id, content_sha256, model_id, embedding) "
++                "VALUES (:oid, 'issue', 0, :ws, :proj, :sha, 'fixture-bge-small-en-v1.5', :emb)"
++            ),
++            {
++                "oid": iss_id,
++                "ws": ws_id,
++                "proj": proj_id,
++                "sha": hashlib.sha256(key.encode()).digest(),
++                "emb": str(test_vec),
++            },
++        )
++    await rebuild_era(api_env.seed, ws_id)
++    await api_env.seed.commit()
++
++    caller = PrincipalContext(principal_id=admin.id, workspace_id=ws_id)
++    with patch("kanban.services.search._get_query_embedding", return_value=test_vec):
++        # 1. Unfiltered hybrid search returns both
++        res_all = await search_issues(
++            api_env.seed, caller, IssueSearchRequest(query="Quantum", mode="hybrid")
++        )
++        assert res_all.total == 2
++        keys_all = {item.key for item in res_all.items}
++        assert keys_all == {"FLT-1", "FLT-2"}
++
++        # 2. Filter by state_ids=[st_open] -> FLT-2 (Done) excluded despite vector match
++        res_open = await search_issues(
++            api_env.seed,
++            caller,
++            IssueSearchRequest(
++                query="Quantum",
++                mode="hybrid",
++                filters=FilterSpec(state_ids=[st_open]),
++            ),
++        )
++        assert res_open.total == 1
++        assert res_open.items[0].key == "FLT-1"
++
++        # 3. Filter by workspace="ws-other-filter" -> both excluded
++        res_other_ws = await search_issues(
++            api_env.seed,
++            caller,
++            IssueSearchRequest(
++                query="Quantum",
++                mode="hybrid",
++                workspace="ws-other-filter",
++            ),
++        )
++        assert res_other_ws.total == 0
++        assert len(res_other_ws.items) == 0
++
++
++async def test_search_unified_filters_synaptic_neighbors_to_project(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++) -> None:
++    """search_unified(..., project='KAN') strictly filters synaptic neighbors to project KAN."""
++    admin = await make_user("syn_proj_admin", workspace_role="WORKSPACE_ADMIN")
++    proj_kan = await make_project("KAN", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    proj_priv = await make_project("PRIV", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    ws_id = api_env.workspace_id
++
++    st_kan = (
++        await api_env.seed.execute(
++            text("SELECT id FROM workflow_states WHERE project_id = :p LIMIT 1"), {"p": proj_kan}
++        )
++    ).scalar_one()
++    pri_kan = (
++        await api_env.seed.execute(
++            text("SELECT id FROM project_priorities WHERE project_id = :p LIMIT 1"),
++            {"p": proj_kan},
++        )
++    ).scalar_one()
++
++    st_priv = (
++        await api_env.seed.execute(
++            text("SELECT id FROM workflow_states WHERE project_id = :p LIMIT 1"), {"p": proj_priv}
++        )
++    ).scalar_one()
++    pri_priv = (
++        await api_env.seed.execute(
++            text("SELECT id FROM project_priorities WHERE project_id = :p LIMIT 1"),
++            {"p": proj_priv},
++        )
++    ).scalar_one()
++
++    # Create KAN-1 issue
++    kan_issue_id = await _seed_issue(
++        api_env.seed,
++        ws_id,
++        proj_kan,
++        "KAN",
++        1,
++        "Search Unified Target",
++        "Target issue in project KAN",
++        admin.id,
++        st_kan,
++        pri_kan,
++    )
++
++    # Create PRIV-1 issue
++    priv_issue_id = await _seed_issue(
++        api_env.seed,
++        ws_id,
++        proj_priv,
++        "PRIV",
++        1,
++        "Secret Private Partner",
++        "Partner issue in project PRIV linked via synaptic relation",
++        admin.id,
++        st_priv,
++        pri_priv,
++    )
++
++    # Link KAN-1 -> PRIV-1
++    await _link_objects(
++        api_env.seed,
++        ws_id,
++        kan_issue_id,
++        "issue",
++        priv_issue_id,
++        "issue",
++        "RELATES_TO",
++        admin.id,
++    )
++
++    # Insert vector embedding on KAN-1
++    test_vec = [0.0] * 384
++    test_vec[0] = 1.0
++    await api_env.seed.execute(
++        text(
++            "INSERT INTO object_embeddings (object_id, object_type, chunk_index, "
++            "workspace_id, project_id, content_sha256, model_id, embedding) "
++            "VALUES (:oid, 'issue', 0, :ws, :proj, :sha, 'fixture-bge-small-en-v1.5', :emb)"
++        ),
++        {
++            "oid": kan_issue_id,
++            "ws": ws_id,
++            "proj": proj_kan,
++            "sha": hashlib.sha256(b"KAN-1-EMB").digest(),
++            "emb": str(test_vec),
++        },
++    )
++    await api_env.seed.commit()
++
++    caller = PrincipalContext(principal_id=admin.id, workspace_id=ws_id)
++    with patch("kanban.services.search._get_query_embedding", return_value=test_vec):
++        res = await search_unified(
++            session=api_env.seed,
++            caller=caller,
++            query="Target",
++            mode="hybrid",
++            project_ref="KAN",
++        )
++        assert res.total >= 1
++        # All returned items MUST belong to project KAN
++        for item in res.items:
++            assert item.project_identifier == "KAN"
++            if item.key:
++                assert item.key.startswith("KAN-")
++                assert not item.key.startswith("PRIV-")
 diff --git a/kanban/web/src/app/CommandPalette.css b/kanban/web/src/app/CommandPalette.css
-index 107981cf..b858385e 100644
+index 107981cf..b66d5fca 100644
 --- a/kanban/web/src/app/CommandPalette.css
 +++ b/kanban/web/src/app/CommandPalette.css
-@@ -100,6 +100,31 @@
+@@ -100,6 +100,32 @@
    white-space: nowrap;
  }
  
@@ -2773,8 +3051,9 @@ index 107981cf..b858385e 100644
 +}
 +
 +.kb-palette-badge {
-+  display: inline-flex;
-+  align-items: center;
++  display: inline-block;
++  vertical-align: middle;
++  line-height: 1.4;
 +  font-family: var(--font-mono, monospace);
 +  font-size: var(--text-xs, 12px);
 +  padding: 1px var(--space-2, 8px);
@@ -2792,7 +3071,7 @@ index 107981cf..b858385e 100644
  .kb-palette-option-meta {
    font-size: 12px;
    color: var(--fg-muted, #94a3b8);
-@@ -111,3 +136,14 @@
+@@ -111,3 +137,14 @@
    color: var(--fg-muted, #94a3b8);
    font-size: 14px;
  }
@@ -2911,7 +3190,7 @@ index 111d5e1c..172dfdf8 100644
 +  });
  });
 diff --git a/kanban/web/src/app/CommandPalette.tsx b/kanban/web/src/app/CommandPalette.tsx
-index a791e3c1..9e9780d4 100644
+index a791e3c1..33bf6172 100644
 --- a/kanban/web/src/app/CommandPalette.tsx
 +++ b/kanban/web/src/app/CommandPalette.tsx
 @@ -32,6 +32,7 @@ export interface CommandOption {
@@ -2922,7 +3201,22 @@ index a791e3c1..9e9780d4 100644
  }
  
  export interface CachedIssue {
-@@ -439,7 +440,7 @@ export function CommandPalette({
+@@ -428,18 +429,18 @@ export function CommandPalette({
+ 
+   useEffect(() => {
+     const trimmed = query.trim();
+-    if (!trimmed) {
+-      return;
+-    }
+-
+     let active = true;
+     const timer = setTimeout(() => {
++      if (!trimmed) {
++        if (active) setLiveSearchResults([]);
++        return;
++      }
+       void (async () => {
+         try {
            const res = (await apiFetch(
              'GET',
              '/api/v1/search' as never,

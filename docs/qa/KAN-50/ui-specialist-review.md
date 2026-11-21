@@ -2,8 +2,8 @@
 
 **Ticket ID:** KAN-50  
 **Title:** [KB-AGENT-SEQ-02] Expose skip_loaded_sequence_numbers in Project/Workspace REST API & Settings UI  
-**Branch:** `main` (integrated at commit `78074a1d`)  
-**Commit Under Audit:** `78074a1d65216b6b3546b122445cdb322e0b1651`  
+**Branch:** `main` (integrated at commit `9b163f07`)  
+**Commit Under Audit:** `9b163f07`  
 **Target Container:** `kanban-liveqa-3` (`http://127.0.0.1:18963`, PostgreSQL 16 + FORCE RLS)  
 **Live Stack Verdict:** `LIVE_STACK_VERDICT: PASS`  
 **Reviewer:** `ui-spec-2` (Clean-Room UI/UX Specialist, System Architect)  
@@ -14,7 +14,7 @@
 
 ## 1. Executive Summary
 
-This clean-room audit evaluates the UI, UX, accessibility, and design system implementation for ticket **KAN-50** (`[KB-AGENT-SEQ-02] Expose skip_loaded_sequence_numbers in Project/Workspace REST API & Settings UI`) integrated into `main` at commit `78074a1d`. This audit incorporates verified evidence from zero-mock live container execution (`live-fullstack-proof.txt` on container `kanban-liveqa-3`, `http://127.0.0.1:18963`), unit test results (`unit-test-results.txt`), build verification (`build-or-typecheck.txt`), and direct visual inspection of all 12 captured Playwright screenshots in `docs/qa/KAN-50/screenshots/`.
+This clean-room audit evaluates the UI, UX, accessibility, and design system implementation for ticket **KAN-50** (`[KB-AGENT-SEQ-02] Expose skip_loaded_sequence_numbers in Project/Workspace REST API & Settings UI`) integrated into `main` at commit `9b163f07`. This audit incorporates verified evidence from zero-mock live container execution (`live-fullstack-proof.txt` on container `kanban-liveqa-3`, `http://127.0.0.1:18963`), unit test results (`unit-test-results.txt`), build verification (`build-or-typecheck.txt`), and direct visual inspection of all 12 captured Playwright screenshots in `docs/qa/KAN-50/screenshots/`.
 
 The feature exposes the agent-safe sequence numbering toggle across workspace administration (`WorkspaceSettingsPage.tsx`), project creation (`CreateProjectModal.tsx`), and project configuration (`ProjectSettingsPage.tsx`). When enabled, tickets automatically skip culturally loaded, confusing, or distracting sequence numbers (`13`, `69`, `88`, `404`, `420`, `666`, `1337`, `1488`).
 
@@ -25,7 +25,7 @@ The UI Specialist audit confirms:
 4. **Clean Workspace Inheritance:** `CreateProjectModal.tsx` state machine cleanly omits `skip_loaded_sequence_numbers` when untouched, preserving pure backend inheritance of workspace defaults (`UISAF4` created with `skip_loaded_sequence_numbers=true`).
 5. **Immediate 0ms Workspace Settings Inheritance:** Validated live: PATCH `/api/v1/admin/workspace-settings` with `default_skip_loaded_sequence_numbers: true` immediately propagates to newly created projects omitting the flag (`POST /api/v1/projects`), creating projects with `skip_loaded_sequence_numbers: true` on the very first attempt with zero latency or race conditions.
 6. **Clean Typography & Brand Hygiene:** Exactly zero em-dashes (`\u2014`) or en-dashes (`\u2013`) in code, comments, or UI copy. Zero competitor self-descriptions.
-7. **Comprehensive Test Validation:** 58/58 Vitest tests passed across 4 test suites with exactly 0 `act(...)` warnings. Complete TypeScript build (`tsc -b --noEmit`), ESLint (`--max-warnings 0`), and production Vite bundling passed cleanly.
+7. **Comprehensive Test Validation:** 96/96 Vitest tests passed across 5 test suites with exactly 0 `act(...)` warnings (99.6% statements, 95.1% branch, 100% functions, 99.91% lines, `CreateProjectModal.tsx` at 100% stmts / 98.11% branch). Complete TypeScript build (`tsc -b --noEmit`), ESLint (`--max-warnings 0`), and production Vite bundling passed cleanly.
 
 ---
 
@@ -58,16 +58,17 @@ Direct visual inspection via `read_file` of all 12 captured Playwright screensho
 ## 3. Automated Test Verification & Quality Gates
 
 ### 3.1 Frontend Unit Tests (Vitest)
-Command: `pnpm --dir kanban/web exec vitest run src/components/emoji/emojiRegistry.test.ts src/features/projects/CreateProjectModal.test.tsx src/features/settings/__tests__/ProjectSettingsPage.test.tsx src/styles/__tests__/cssTokensAudit.test.ts`
+Command: `COVERAGE_INCLUDE="src/components/emoji/emojiRegistry.ts,src/features/projects/CreateProjectModal.tsx,src/features/settings/ProjectSettingsPage.tsx,src/features/settings/WorkspaceSettingsPage.tsx" pnpm --dir kanban/web exec vitest run --coverage src/components/emoji/emojiRegistry.test.ts src/features/projects/CreateProjectModal.test.tsx src/features/settings/__tests__/ProjectSettingsPage.test.tsx src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx src/styles/__tests__/cssTokensAudit.test.ts`
 - `src/components/emoji/emojiRegistry.test.ts`: 7/7 passed.
 - `src/styles/__tests__/cssTokensAudit.test.ts`: 4/4 passed.
-- `src/features/projects/CreateProjectModal.test.tsx`: 9/9 passed.
-- `src/features/settings/__tests__/ProjectSettingsPage.test.tsx`: 38/38 passed.
-- Total: 58/58 passed with 0 failures and 0 warnings.
-- Statement coverage across touched frontend modules exceeds 95% (100% on CreateProjectModal, 99.55% on ProjectSettingsPage, 100% on emojiRegistry).
+- `src/features/projects/CreateProjectModal.test.tsx`: 12/12 passed (100% statements, 98.11% branch).
+- `src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx`: 35/35 passed (99.78% statements, 95.11% branch).
+- `src/features/settings/__tests__/ProjectSettingsPage.test.tsx`: 38/38 passed (99.41% statements, 94.78% branch).
+- Total: 96/96 passed across all 5 test files in 4.47s with 0 failures and 0 `act(...)` warnings.
+- Statement coverage across touched frontend modules: 99.6% statements, 95.1% branch, 100% functions, 99.91% lines.
 
 ### 3.2 Live Container Telemetry (`live-fullstack-proof.txt`)
-- Target: `kanban-liveqa-3` (`http://127.0.0.1:18963`, commit `78074a1d`).
+- Target: `kanban-liveqa-3` (`http://127.0.0.1:18963`, commit `9b163f07`).
 - Load times: Workspace Settings 678ms, Project Settings 834ms (< 3000ms threshold).
 - Console errors: 0, page errors: 0, bad responses: 0.
 - `OVERALL LIVE_STACK_VERDICT (KAN-50)`: PASS

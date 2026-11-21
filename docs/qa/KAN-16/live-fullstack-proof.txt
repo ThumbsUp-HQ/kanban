@@ -1,5 +1,5 @@
 ================================================================================
-KAN-16 LIVE UNMOCKED FULL-STACK QA ROUND 3 PROOF (main commit 78074a1d)
+KAN-16 LIVE UNMOCKED FULL-STACK QA ROUND 4 PROOF (main commit 9b163f07)
 Target: http://127.0.0.1:18961 (container: kanban-liveqa-1)
 Database: Embedded PostgreSQL 16 with FORCE ROW LEVEL SECURITY
 Mocks/Stubs: ZERO (0 mockApi, 0 page.route, 0 context.route)
@@ -7,19 +7,25 @@ Mocks/Stubs: ZERO (0 mockApi, 0 page.route, 0 context.route)
 
 1. DOCS CENTER, 2x2 FILTER BAR, STRIPPED PREFIXES & MOBILE DRAWER FOCUS RESTORE
 --------------------------------------------------------------------------------
-Script: round3_docs_pre.mjs (executed pre-bootstrap against http://127.0.0.1:18961/docs)
-- Load latency: 1458 ms (0 redirects, 0 external egress requests)
+Scripts: round4_live_qa.mjs, polish_docs_screenshots.mjs (pre-bootstrap /docs on http://127.0.0.1:18961/docs)
+- Load latency: 1042 ms (0 redirects to /login or /setup, 0 external egress requests)
 - Home (Overview): Chapter 1 of 28, left sidebar displays "[Informational]" badge pill (homeSidebarBadge="[Informational]", allChaptersHaveSidebarBadge=true).
 - 2x2 category filter bar in 256px left sidebar:
   * filterBarScrollWidth=223, filterBarClientWidth=223 (filterBarFitsWithoutClip=true)
   * "Architectural" pill right=231 <= sidebarRight=256 (archInsideSidebar=true, zero clipping)
-  * redundantPrefixCount=0 (no repeated "[Guide] ... [Guide]" titles)
+  * duplicatePrefixCount=0 (no repeated "[Guide] ... [Guide]" titles)
   * literalAnchorTagCount=0 (zero raw "<a id=...>" strings in /docs body)
 - Search listbox ("Mermaid"): 8 results with category badges across 28 chapters.
+- Embedded images (/docs/admin-custom-scripted-fields-and-sandbox):
+  * All 4 /docs-images/*.png loaded HTTP 200 with naturalWidth=1440, naturalHeight=900:
+    - /docs-images/14-custom-fields-studio.png (real Custom Fields Studio UI, non-404)
+    - /docs-images/53-custom-fields-test-execute.png
+    - /docs-images/36-rail-custom-fields.png
+    - /docs-images/52-custom-fields-dual-control.png
 - Responsive Tablet 768x1024 & Mobile 390x844:
   * docs-mobile-chapters-btn height=44px, horizontalOverflow=false, drawer chapters=28
-  * Closing Chapters drawer (via close button or Escape) restores focus to docs-mobile-chapters-btn (restoredToChaptersBtnAfterClick=true, restoredToChaptersBtnAfterEscape=true).
-- Updated screenshots in docs/qa/KAN-16/screenshots/ (3 stale 27-chapter PNGs removed):
+  * Closing Chapters drawer (via close button on tablet or Escape on mobile) restores focus to docs-mobile-chapters-btn (restoredToChaptersBtnAfterClick=true, restoredToChaptersBtnAfterEscape=true).
+- Updated screenshots in docs/qa/KAN-16/screenshots/:
   * live-docs-desktop-light.png
   * live-docs-desktop-dark.png
   * live-docs-tablet-light.png
@@ -27,37 +33,52 @@ Script: round3_docs_pre.mjs (executed pre-bootstrap against http://127.0.0.1:189
   * live-docs-mobile-light.png
   * live-docs-mobile-drawer-light.png
   * live-docs-search-listbox-light.png
-  * live-docs-embedded-images-light.png (all 4 /docs-images/*.png loaded, naturalWidth=1440; note repo files kanban/web/public/docs-images/14-custom-fields-studio.png and thumbs-up-kanban.wiki/images/14-custom-fields-studio.png were updated to a live 1440x900 screenshot of /projects/SEC2/settings/custom-fields)
+  * live-docs-embedded-images-light.png
 
-2. FieldHelpHint (?) -> More info -> HelpDrawer -> Escape FOCUS & POPOVER CHECK
+2. FieldHelpHint (?) -> More info -> HelpDrawer -> Escape FOCUS & POPOVER SUPPRESSION CHECK
 --------------------------------------------------------------------------------
-Script: round3_auth_qa.mjs (authenticated @admin AAL2 session)
+Script: round4_live_qa.mjs (bootstrapped via /setup?token=... with live RFC-6238 TOTP AAL2 session)
 - Studio 1: /projects/KAN/settings
   * Entered "UNSAVED-DRAFT-42" into [data-testid="project-name-input"].
-  * Clicked (?) [data-testid="proj-modules-help"] -> clicked [data-testid="proj-modules-help-doc-link"] ("More info ->") -> HelpDrawer opened -> pressed Escape:
+  * Clicked (?) [data-testid="proj-modules-help"] (aria-expanded="true", popover visible).
+  * Clicked [data-testid="proj-modules-help-doc-link"] ("More info ->") -> HelpDrawer opened (popover count=0, aria-expanded="false").
+  * Pressed Escape inside HelpDrawer:
     - HelpDrawer closed (drawerCount=0), draftVal="UNSAVED-DRAFT-42" preserved.
-    - document.activeElement restored to [data-testid="proj-modules-help"] (restoredToHelpBtn=true).
-    - DEFECT REPRODUCED: popoverOpenAfterEscape=true! The FieldHelpHint tooltip popover popped back open over the form immediately upon Escape.
-  * Screenshot: docs/qa/KAN-16/screenshots/live-project-settings-escape-focus-restored.png
+    - document.activeElement restored to [data-testid="proj-modules-help"] (activeTag="BUTTON", activeTestId="proj-modules-help", restoredToHelpBtn=true).
+    - popoverOpenAfterEscape=false (ariaExpandedAfterEscape="false", popoverCountAfterEscape=0, suppressAttrRemaining=null).
+  * Screenshots:
+    - docs/qa/KAN-16/screenshots/live-project-settings-field-help-popover-light.png
+    - docs/qa/KAN-16/screenshots/live-project-settings-help-drawer-light.png
+    - docs/qa/KAN-16/screenshots/live-project-settings-help-drawer-dark.png
+    - docs/qa/KAN-16/screenshots/live-project-settings-escape-focus-restored.png
 
-- Studio 2: /projects/SEC2/settings/custom-fields
-  * Clicked (?) [data-testid="hint-field-flavor"] -> clicked [data-testid="hint-field-flavor-doc-link"] -> HelpDrawer opened -> pressed Escape:
-    - HelpDrawer closed (drawerCount=0), document.activeElement restored to [data-testid="hint-field-flavor"] (restoredToHelpBtn=true).
-    - DEFECT REPRODUCED: popoverOpenAfterEscape=true! The FieldHelpHint tooltip popover popped back open over the form.
-  * Screenshot: docs/qa/KAN-16/screenshots/live-custom-fields-escape-focus-restored.png
+- Studio 2: /projects/KAN/settings/custom-fields
+  * Clicked (?) [data-testid="hint-field-flavor"] (aria-expanded="true", popover visible).
+  * Clicked [data-testid="hint-field-flavor-doc-link"] ("More info ->") -> HelpDrawer opened (popover count=0).
+  * Pressed Escape inside HelpDrawer:
+    - HelpDrawer closed (drawerCount=0).
+    - document.activeElement restored to [data-testid="hint-field-flavor"] (activeTag="BUTTON", activeTestId="hint-field-flavor", restoredToHelpBtn=true).
+    - popoverOpenAfterEscape=false (ariaExpandedAfterEscape="false", popoverCountAfterEscape=0, suppressAttrRemaining=null).
+  * Screenshot:
+    - docs/qa/KAN-16/screenshots/live-custom-fields-escape-focus-restored.png
 
-- Root cause observed in FieldHelpHint.tsx:68-74 and HelpDrawer.tsx:67-74:
-  * When Escape closes HelpDrawer, HelpDrawer's unmount cleanup runs previousActiveElementRef.current.focus() synchronously during React unmount BEFORE FieldHelpHint's passive useEffect([shellPanels?.activePanel]) executes to set suppressNextFocusRef.current = true. As a result, handleFocus fires while suppressNextFocusRef.current is still false, calling ctrl.focus(popupId) and reopening the tooltip popover.
+3. UNIT TEST & COVERAGE VERIFICATION (main commit 9b163f07)
+--------------------------------------------------------------------------------
+- Command: COVERAGE_INCLUDE="src/features/docs-center/DocsCenterPage.tsx,src/features/docs-center/DocMarkdownViewer.tsx,src/features/docs-center/HelpDrawer.tsx,src/components/help/FieldHelpHint.tsx,src/components/help/StudioDocLink.tsx" pnpm --dir kanban/web exec vitest run --coverage src/features/docs-center/DocsCenter.test.tsx src/components/help/FieldHelpHint.test.tsx
+- Result: 2 test files passed, 69/69 tests passed (0 failures, 0 skipped).
+- V8 Coverage: 99.63% Stmts | 95.56% Branch | 100% Funcs | 100% Lines (all >=95%).
 
-3. TELEMETRY & VERDICT
+4. TELEMETRY & VERDICT
 --------------------------------------------------------------------------------
 - External egress requests: 0
 - Browser console errors: 0
 - Browser page errors: 0
 - HTTP 5xx server errors: 0
+- CSP violations: 0
 
-LIVE_STACK_VERDICT: FAIL
+LIVE_STACK_VERDICT: PASS
 - 2x2 filter bar (0 clipping), 28 chapters, stripped prefixes, Home badge, 0 literal <a id> tags: PASS
+- Non-404 /docs-images/14-custom-fields-studio.png and embedded docs images: PASS
 - Mobile & Tablet Chapters drawer toggle & close focus restore to docs-mobile-chapters-btn: PASS
 - Escape inside HelpDrawer restores focus to (?) <button> trigger: PASS
-- suppressNextFocusRef prevents FieldHelpHint popover from popping back open on Escape: FAIL (popoverOpenAfterEscape=true on both /projects/KAN/settings and /projects/SEC2/settings/custom-fields)
+- data-kb-suppress-focus="true" prevents FieldHelpHint popover from re-opening on Escape: PASS (popoverOpenAfterEscape=false on both /projects/KAN/settings and /projects/KAN/settings/custom-fields)

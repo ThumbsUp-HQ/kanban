@@ -1,36 +1,40 @@
-=== KAN-52 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, kanban-liveqa-2, commit 78074a1d) ===
-Timestamp: 2026-11-20T23:22:59.122Z - 2026-11-20T23:23:21.639Z
+=== KAN-52 ROUND 4 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, kanban-liveqa-2, commit 9b163f07) ===
+Timestamp: 2026-11-21T02:11:46.190Z - 2026-11-21T02:12:09.269Z
 Execution Mode: Zero-mock Playwright against live Docker standalone container (PostgreSQL 16 + FORCE RLS, UID 65532)
-Test Runner Script: live_qa_suite_r3.mjs
+Test Runner Script: live_qa_suite_r4.mjs
 
 --- Page Load Timings (< 3000ms threshold) ---
-- Desktop Navigator (?layout=list&peek=KAN-1): 965 ms
-- Tablet Navigator (?layout=list&peek=KAN-1): 846 ms
-- Mobile List (?layout=list): 876 ms
+- Desktop Navigator (?layout=list&peek=KAN-1): 929 ms
+- Tablet Navigator (?layout=list&peek=KAN-1): 850 ms
+- Mobile List (?layout=list): 874 ms
 
---- Round 3 Verification Checks ---
-1. Desktop Light & Dark (1440x900):
-   - live-navigator-desktop-light.png, live-navigator-desktop-dark.png
-2. Assign to me Single-Line Button & POST /assignees (live-navigator-assign-to-me-desktop.png):
-   - Request: POST /api/v1/issues/KAN-1/assignees -> HTTP 201
-   - Response: {"id":"01a1fb45-7331-7f54-9f21-2b4859d4ce54","kind":"principal","principal":{"id":"01a1fb44-269d-7c85-bea9-5b9ffd8fca79","handle":"admin","display_name":"Server Administrator","type":"USER"}}
-   - Button CSS & geometry: {"btnWhiteSpace":"nowrap","btnFlexShrink":"0","btnHeight":29,"btnWidth":99,"singleLine":true}
-   - DETAILS ("Priority: High Assignee: Server Administrator") and PEOPLE ("Server Administrator") updated immediately.
-3. JQL Query Sync to First Matching Issue (live-navigator-query-jql-desktop.png):
-   - Executed JQL `project = "KAN" AND status = "Purple Review"`
-   - Telemetry: {"railKeys":["KAN-5","KAN-4","KAN-3"],"breadcrumb":"Kanban Core / KAN-5","pos":"1 of 3","nextDisabled":false,"url":"http://127.0.0.1:18962/projects/KAN/issues?layout=list&peek=KAN-5"}
-   - Right detail pane automatically synced activePeekKey to KAN-5 ("Purple Review") with pager "1 of 3" and enabled next button (NOT stuck on KAN-1).
-4. Sort Order & Pager Sync:
-   - Sorted by "Key" ascending: sortedKeys=["KAN-1","KAN-2","KAN-3","KAN-4","KAN-5","KAN-6"]
-   - Clicking issue-next-btn traversed: [{"pos":"1 of 6","peek":"KAN-1"},{"pos":"2 of 6","peek":"KAN-2"},{"pos":"3 of 6","peek":"KAN-3"}] (exactMatch=true).
-5. Collapsed Sidebar Rail (>879px split pane) + Separate Copy Timers (live-navigator-collapsed-rail-desktop.png):
-   - Telemetry: {"splitWidth":1084,"quickPropsDisplay":"flex","quickPropsStateDisplay":"none","detailsBodyHeight":46,"detailsText":"State:...Priority:HighAssignee:Server Administrator"}
-   - Confirmed [data-testid="split-section-details"] .surface__quick-props (display: flex) visibly renders Priority and Assignee inside DETAILS (not an empty box).
-   - Clicked split-git-branch-copy: {"branchBtnText":"✓ Copied!","shareBtnText":"🔗 Share / Export"} (separate timers, Share not stuck active).
-   - Clicked split-share-btn independently: "✓ Copied link!" (0 NotAllowedError).
-6. Tablet (768x1024) & Mobile (390x844) Single State Select in Split Mode:
-   - live-navigator-tablet.png: visible state selects in split mode = ["split-state-select"] (quick-props-state-select hidden inside DETAILS).
-   - live-navigator-mobile-list.png & live-navigator-mobile-detail.png: visible state selects in split mode = ["split-state-select"].
+--- Round 4 Verification Checks ---
+1. Single State <select> on Desktop Split View (1440x900, live-navigator-desktop-light.png & live-navigator-desktop-dark.png):
+   - Light mode telemetry: {"totalStateSelectsInDom":["split-state-select","quick-props-state-select"],"visibleStateSelectCount":1,"visibleStateSelectTestIds":["split-state-select"],"quickPropsGroupDisplay":"none","headerStateSelectInDom":false}
+   - Dark mode telemetry: {"totalStateSelectsInDom":["split-state-select","quick-props-state-select"],"visibleStateSelectCount":1,"visibleStateSelectTestIds":["split-state-select"],"quickPropsGroupDisplay":"none","headerStateSelectInDom":false}
+   - Confirmed ONLY ONE State <select> (split-state-select) is rendered in split mode; duplicate header-state-select is removed from split header DOM.
+   LIVE_STACK_VERDICT [DESKTOP_SINGLE_STATE_SELECT]: PASS
+
+2. Collapsed Sidebar Rail 12px DETAILS Flex Gap + Separate Copy Timers (live-navigator-collapsed-rail-desktop.png):
+   - Telemetry: {"splitWidth":1084,"quickPropsDisplay":"flex","quickPropsGap":"12px","quickPropsAlignItems":"center","quickPropsFlexWrap":"wrap","horizontalGapPx":12,"quickPropsStateDisplay":"none","detailsBodyHeight":46,"detailsText":"State:BacklogTodoIn ProgressPurple ReviewDoneCancelledPriority:HighAssignee:Server Administrator"}
+   - Confirmed Priority: High and Assignee: Server Administrator inside DETAILS render with computedStyle.gap === "12px" and horizontalGapPx === 12 (zero text mashing).
+   - Separate copy timers verified: clicked split-git-branch-copy -> {"branchBtnText":"✓ Copied!","shareBtnText":"🔗 Share / Export"}; clicked split-share-btn -> "✓ Copied link!".
+   LIVE_STACK_VERDICT [COLLAPSED_RAIL_DETAILS_GAP_12PX]: PASS
+
+3. Assign to me & JQL Query & Sort Pager Sync:
+   - Assign to me (live-navigator-assign-to-me-desktop.png): POST /api/v1/issues/KAN-1/assignees -> HTTP 201; single-line button (99x29, whiteSpace="nowrap", flexShrink="0"); DETAILS and PEOPLE updated immediately.
+   - JQL Query Sync (live-navigator-query-jql-desktop.png): `project = "KAN" AND status = "Purple Review"` -> railKeys=["KAN-5","KAN-4","KAN-3"], breadcrumb="Kanban Core / KAN-5", pos="1 of 3", nextDisabled=false.
+   - Sort Order & Pager Sync ("Key" ascending): sortedKeys=["KAN-1","KAN-2","KAN-3","KAN-4","KAN-5","KAN-6"]; steps KAN-1 (1 of 6) -> KAN-2 (2 of 6) -> KAN-3 (3 of 6), exactMatch=true.
+   LIVE_STACK_VERDICT [ASSIGN_JQL_SORT_PAGER]: PASS
+
+4. Tablet (768x1024, live-navigator-tablet.png) Side-by-Side Split vs Mobile (< 768px, live-navigator-mobile-list.png & live-navigator-mobile-detail.png):
+   - Tablet (768x1024, ?layout=list&peek=KAN-1):
+     Telemetry: {"railVisible":true,"railRect":{"left":28,"right":312,"width":284},"splitVisible":true,"splitRect":{"left":0,"right":768,"width":768},"splitCssPosition":"fixed","sideBySide":false,"visibleStateSelects":["split-state-select"],"headerStateSelectInDom":false}
+     Note: While listTable.css line 751 and IssueSurface.css line 347 use `@media (max-width: 767px)`, IssueSurface.css line 265 still retains `@media (max-width: 768px)` with `.surface--split { position: fixed; inset: 0; width: 100vw; z-index: 200; }`, causing 768x1024 Tablet to render the full-screen fixed overlay covering the master rail rather than a side-by-side split layout (sideBySide=false).
+   - Mobile (390x844):
+     * List (live-navigator-mobile-list.png): {"railWidth":358,"splitOpen":false,"scrollWidth":390,"innerWidth":390}
+     * Detail (live-navigator-mobile-detail.png): {"splitCssPosition":"fixed","visibleStateSelects":["split-state-select"],"headerStateSelectInDom":false}
+   LIVE_STACK_VERDICT [TABLET_768_SIDE_BY_SIDE_SPLIT]: FAIL
 
 --- Runtime Error Telemetry ---
 Console JS errors: 0
@@ -48,4 +52,4 @@ Screenshots Verified (docs/qa/KAN-52/screenshots/):
 - live-navigator-mobile-list.png
 - live-navigator-mobile-detail.png
 
-OVERALL LIVE_STACK_VERDICT (KAN-52): PASS
+OVERALL LIVE_STACK_VERDICT (KAN-52): PARTIAL / FAIL (Single split-state-select PASS; 12px DETAILS flex gap PASS; 768x1024 Tablet side-by-side split FAIL due to remaining @media (max-width: 768px) rule at IssueSurface.css:265)

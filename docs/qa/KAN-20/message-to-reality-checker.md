@@ -2,8 +2,10 @@
 
 ## Ticket Summary
 - **Ticket ID:** KAN-20 (`[KB-P3-AUDIT-14] Built-In Zero-Egress "Synaptic Object-Graph" Semantic Search`)
-- **Base Commit:** `b3b0f4ba` (main)
-- **Branch:** `feat/KAN-20`
+- **Base Commit:** `9b163f07` (main)
+- **Branch:** `main` (commit `9b163f07`)
+- **Container Environment:** `http://127.0.0.1:18963` (container: `kanban-liveqa-3`)
+- **Live Stack Status:** `LIVE_STACK_VERDICT: PASS`
 - **Architectural Scope:** Zero runtime network calls, zero external SaaS dependencies (Apache-2.0 native stack only), unidirectional architecture layering (`agent -> mcp -> kanban -> database`), hermetic deterministic testability, strict Row-Level Security (FORCE RLS / ERA), and explainable search provenance.
 
 ---
@@ -35,6 +37,7 @@
   - Reciprocal Rank Fusion (`reciprocal_rank_fusion`): Combines rankings from lexical FTS/trigram searches and vector candidate hits using formula `1.0 / (60 + rank)`.
   - Int8 Rescoring (`int8_dot_product`): Reconstructs integer dot-products in `< 2ms` execution time and adds `0.5 * int8_sim` to the candidate fusion score.
   - Exact Identifier and Heading MaxSim Boosting (`exact_identifier_heading_maxsim`): Grants `+10.0` boost for exact identifier matches (such as `KAN-20`) and up to `+2.0` token-overlap MaxSim boost for section titles.
+  - Project Filter Post-Filtering in `search_unified`: Post-filters synaptic 1-hop neighbors by project ID, completely preventing cross-project node leaks on project-scoped searches (`non_kan_leaks=[]`).
 
 ---
 
@@ -50,58 +53,48 @@
     - `PARENT_OF`: 0.70
     - `PROMOTED_TO_DOC` / `DERIVED_FROM_STICKY`: 0.65
     - `RELATES_TO`: 0.45
-  - Hop Attenuation & Recency Decay: Attenuates activation by factor `0.5` per hop and weights neighbor nodes with exponential recency decay (`math.exp(-lambda * delta_days)` with a 30-day half-life).
-  - Zero Oracle Leakage Invariant: Neighbors are filtered via PostgreSQL `effective_resource_access` (ERA) matching `(allow_mask & 1) = 1` and `(deny_mask & 1) = 0`. Unauthorized objects or objects with an explicit `DENY` contribute `0.0` activation and are pruned immediately.
-  - Explainable Provenance: Nodes record informative provenance strings (e.g. `"Semantic match"`, `"Lexical match"`, `"Linked via VERIFIED_BY_DOC to ..."`).
+  - Hop Attenuation & Recency Decay: Scales activation by `0.5` per hop and applies exponential recency decay (`lambda = 0.023`, 30-day half-life).
+  - Strict Zero Oracle Leakage (FORCE RLS / ERA): Evaluates PostgreSQL effective resource access (ERA) security bitmasks (`(era.allow_mask & 1) = 1` and `(era.deny_mask & 1) = 0`). Entities with explicit DENY or missing read permissions are pruned immediately and contribute `0.0` activation.
+  - Explainable Search Provenance: Emits human-readable match reasons: `"Semantic match"`, `"Lexical match"`, `"Linked via <RELATION> to <SOURCE_KEY>"`.
 
 ---
 
-## 4. Problem 4: Graceful Degradation & Search Explainability UI Pill
-- **Modules Modified:**
+## 4. Problem 4: Explainable Search Discovery & Client-Side Integration
+- **Modules Modified / Introduced:**
   - `kanban/web/src/app/CommandPalette.tsx`
   - `kanban/web/src/app/CommandPalette.css`
-  - `kanban/api/v1/schemas/search.py`
   - `kanban/api/v1/search.py`
+  - `kanban/api/v1/schemas/search.py`
   - `mcp/surfaces/agent/search_tickets.py`
   - `mcp/surfaces/docs/search.py`
 - **Key Implementation Details:**
-  - Provenance Pill Badge: Rendered in `CommandPalette.tsx` via `data-testid="match-reason-{item.id}"` styled with 100% canonical CSS tokens (`var(--surface-container-highest)`, `var(--text-tertiary)`, `var(--border-subtle)`, `var(--font-mono)`, `var(--font-xs)`).
-  - Mode Dispatch: `CommandPalette.tsx` issues live search with `mode: 'hybrid'`.
-  - Graceful Degradation: If vector search hits zero rows or times out, the service falls back cleanly to `executed_mode="lexical"`, labeling matches as `"Lexical match"`.
-  - MCP Surfaces: `/mcp/agent` `search_tickets` and `/mcp/docs` `search` propagate `match_reason` and `executed_mode` in output JSON envelopes.
+  - CommandPalette Ranking: `liveSearchResults` from `/api/v1/search?mode=hybrid` are rendered in exact RRF/synaptic order without being filtered or reordered by client-side string-matching algorithms.
+  - Responsive Mobile Badges: `.kb-palette-option-header` wraps on `<=480px` viewports, and provenance badges truncate gracefully with text ellipsis (`max-width: 48%` desktop, `max-width: 100%` mobile), eliminating title crushing.
+  - MCP Tool Schemas: Both `/mcp/agent search_tickets` and `/mcp/docs search` support `mode` (`"lexical"` or `"hybrid"`, defaulting to `"hybrid"`).
 
 ---
 
-## 5. Verification Results & Quality Gates (RC-1 Remediations Verified)
-- **RC-1 Remediations Implemented:**
-  1. `CommandPalette.tsx`: `filteredOptions` preserves backend `liveSearchResults` from `/api/v1/search?mode=hybrid` without client-side `scoreMatch` dropping or re-sorting, preserving backend RRF and synaptic spreading rank order. Local `baseCommands` and cached `issueCommands` remain scored and deduplicated.
-  2. `CommandPalette.css`: Capped `.kb-palette-badge` with `max-width: 48%; overflow: hidden; text-overflow: ellipsis;` and responsive `@media (max-width: 480px) { .kb-palette-option-header { flex-wrap: wrap; gap: 4px; } .kb-palette-badge { max-width: 100%; } }` to eliminate mobile title crushing on 390px viewports.
-  3. `mcp/surfaces/docs/search.py`: Added `mode` (`"lexical" | "hybrid"`, default `"hybrid"`) to `_INPUT_SCHEMA`, validated in handler, and forwarded `"mode": mode` in `search_payload`.
-  4. `kanban/services/search.py`: Project filter string comparison uses resolved `proj.identifier` (`c.project_identifier.upper() == resolved_proj_identifier.upper()`).
-- **Pytest Suite:**
-  - `agent/tests/embeddings/test_matryoshka_quantizer.py`: 19 passed in 0.65s (100% pass rate)
-  - `agent/tests/embeddings/test_onnx_embedder.py`: 11 passed in 1.15s (100% pass rate)
-  - `kanban/tests/services/test_synaptic_search.py`: 11 passed in 2.15s (100% pass rate)
-  - `kanban/tests/api/test_search.py`: 6 passed in 1.34s (100% pass rate)
-  - `mcp/tests/agent/test_search_tickets.py`: 8 passed in 1.45s (100% pass rate)
-  - `mcp/tests/docs/test_docs_tools.py` + `test_docs_surfaces_unit.py`: 20 passed in 12.80s (100% pass rate)
-  - **Backend & MCP Coverage: >=95% across ALL 7 KAN-20 modules (TOTAL 96%)**:
-    * `agent/embeddings/indexer.py`: 99%
-    * `agent/embeddings/onnx_embedder.py`: 95%
-    * `agent/embeddings/quantizer.py`: 100%
-    * `kanban/services/search.py`: 95%
-    * `kanban/services/synaptic_rescorer.py`: 98%
-    * `mcp/surfaces/agent/search_tickets.py`: 99%
-    * `mcp/surfaces/docs/search.py`: 95%
-- **Vitest Suite:**
-  - `src/app/CommandPalette.test.tsx`: 29 passed in 4.31s (100% pass rate, 0 act warnings, including non-literal synaptic neighbor rendering assertion)
-  - `src/styles/__tests__/cssTokensAudit.test.ts`: 4 passed (100% canonical CSS tokens)
-- **Static Analysis & Builds:**
-  - `check-migrations`: All 63 migrations valid, single head (`p4_24_agent_safe_sequences`)
-  - `ruff check database kanban agent mcp`: Passed (0 errors, 0 warnings)
-  - `mypy database kanban agent mcp`: Passed (0 errors in 989 source files)
-  - `lint-imports`: Contracts: 2 kept, 0 broken (`agent -> mcp -> kanban -> database`)
-  - `tsc -b --noEmit`: Passed (0 type errors)
-  - `eslint . --max-warnings 0`: Passed (0 errors, 0 warnings)
-  - `vite build`: Passed (1.24s, 0 build errors)
-  - `check_no_dashes --all`: Passed (0 forbidden unicode em/en-dashes across repository)
+## 5. Live Container Verification Evidence (`kanban-liveqa-3`, `:18963`, commit `9b163f07`)
+
+- **Hybrid Search & Zero Oracle Leakage Probes:**
+  * `@member GET /api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid`: HTTP 200 (29.76ms), total=6, 0 PRIV leaks.
+  * `@member GET /api/v1/search?q=CLASSIFIED_QUANTUM_CIPHER_KEY_ROTATION&mode=hybrid`: HTTP 200 (31.02ms), `priv_leaks=0`.
+  * `@admin GET /api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid&project=KAN`: HTTP 200 (33.52ms), total=6, `non_kan_leaks=[]`.
+- **MCP Search Probes:**
+  * `/mcp/agent search_tickets (project=KAN, states=['Backlog'])`: total=4 (KAN-1, KAN-3, KAN-4, KAN-2).
+  * `/mcp/agent search_tickets (project=KAN, states=['Done'])`: total=0.
+  * `/mcp/docs search (query="Synaptic Vector Kernel", mode="hybrid")`: total=3 (docs/classified-vault-runbook, docs/verification-architecture-spec, docs/deployment-proof-checklist).
+- **Screenshots Captured on Disk in `docs/qa/KAN-20/screenshots/`:**
+  1. `live-command-palette-desktop-light.png` (1440x900)
+  2. `live-command-palette-desktop-dark.png` (1440x900)
+  3. `live-command-palette-tablet-light.png` (768x1024)
+  4. `live-command-palette-mobile-light.png` (390x844)
+- **Telemetry:** 0 console errors, 0 page errors, 0 HTTP 5xx responses. `LIVE_STACK_VERDICT: PASS`.
+
+---
+
+## 6. Test Suites & Quality Gates Summary
+
+- **Backend & MCP Pytests:** 89 passed in 27.53s. 96% coverage across all 7 KAN-20 modules.
+- **Frontend Vitest:** 33 passed in 4.21s (0 `act(...)` warnings, 100% token usage).
+- **Static Gates:** Database migrations valid (63 migrations), Ruff clean, Mypy clean (997 source files), Import Linter clean (2 kept, 0 broken), check_no_dashes clean (0 em/en-dashes).

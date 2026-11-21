@@ -1,9 +1,9 @@
 ================================================================================
 KAN-49 LIVE UNMOCKED FULL-STACK QA PROOF (http://127.0.0.1:18963)
-Container: kanban-liveqa-3 (main commit 78074a1d, PostgreSQL 16 + FORCE RLS)
+Container: kanban-liveqa-3 (main commit 9b163f07, PostgreSQL 16 + FORCE RLS)
 ================================================================================
 
-1. SUMMARY OF LIVE VERIFICATION FINDINGS (ROUND 3 - commit 78074a1d)
+1. SUMMARY OF LIVE VERIFICATION FINDINGS (ROUND 4 - commit 9b163f07)
 --------------------------------------------------------------------------------
 - Project SAFE (skip_loaded_sequence_numbers=true) verified end-to-end against live PostgreSQL 16 + FORCE ROW LEVEL SECURITY:
   * Single issue sequence boundary 12 -> 14:
@@ -17,38 +17,37 @@ Container: kanban-liveqa-3 (main commit 78074a1d, PostgreSQL 16 + FORCE RLS)
     Succeeded on the VERY FIRST attempt with status=201 Created (zero 404 commit race!), allocating root=SAFE-403 and copied_sub_issues=[{source_key: SAFE-402, copy_key: SAFE-405}] (skipped 404).
 - PostgreSQL SEQUENCE_SKIPPED & Cryptographic Hash Chain:
   * Verified SEQUENCE_SKIPPED activity_records rows for skipped sequences [13], [69], [88], [404] with reason="agent_safe_sequence_numbering".
-  * Verified verify_activity_chain('01a1fb43-704a-786f-8bf1-28f9315b14ef') -> is_valid=t, checked_rows=463, first_broken_seq=NULL, failure_reason=NULL.
-- Playwright Page Load Timings (< 3000ms) & Visual Verification across Desktop Light/Dark, Tablet, Mobile:
-  * Desktop Light (/w/kanban/p/SAFE/issues?view=board): safeBoardLoadMs=1917ms (< 3000ms), docOverflow=false, hasSafe405=true, hasSafe403=true, hasSafe13=false, hasSafe404=false
-  * Desktop Dark (/w/kanban/p/SAFE/issues?view=board):  safeBoardLoadMs=1887ms (< 3000ms), docOverflow=false, hasSafe405=true, hasSafe403=true, hasSafe13=false, hasSafe404=false
-  * Tablet Light (/w/kanban/p/SAFE/issues?view=board):  safeBoardLoadMs=1847ms (< 3000ms), docOverflow=false, hasSafe405=true, hasSafe403=true, hasSafe13=false, hasSafe404=false
-  * Mobile Light (/w/kanban/p/SAFE/issues?view=board):  safeBoardLoadMs=1805ms (< 3000ms), docOverflow=false, hasSafe405=true, hasSafe403=true, hasSafe13=false, hasSafe404=false
-  * Desktop Light (/w/kanban/p/SAFE/issues?view=list):  safeListLoadMs=1891ms (< 3000ms), docOverflow=false, hasSafe405=true, hasSafe403=true, hasSafe13=false, hasSafe69=false, hasSafe88=false, hasSafe404=false
-  * Desktop Light (/w/kanban/p/SAFE/issues/SAFE-14):   safe14LoadMs=829ms (< 3000ms), docOverflow=false
-  * UI consoleErrors=0, pageErrors=0, badResponses=0 across all 4 viewports.
+  * Verified verify_activity_chain('01a1fbda-5e6b-7e39-b6f1-25070c273fe0') -> is_valid=t, checked_rows=437, first_broken_seq=NULL, failure_reason=NULL.
+- Playwright Real Kanban Board Column View (?layout=board) & SAFE-14 Activity Visual Verification:
+  * Navigated to /w/kanban/p/SAFE/issues?layout=board across Desktop Light/Dark, Tablet, Mobile:
+    - Measured load times (< 3000ms): desktop-light 1815ms, desktop-dark 1843ms, tablet-light 1924ms, mobile-light 2051ms.
+    - Verified true Kanban Board column layout rendering Done column (count=2) with SAFE-403 ("[Copy] SAFE-401 copy source parent") and SAFE-405 ("[Copy] SAFE-402 copy source child") unclipped across all 4 viewports (zero SAFE-404 on board; note page 1 fetches newest 50 issues SAFE-355..SAFE-405, so Backlog holds SAFE-355..SAFE-402 and Done holds SAFE-403, SAFE-405).
+  * Navigated to /w/kanban/p/SAFE/issues/SAFE-14 (safe14LoadMs=877ms < 3000ms):
+    - Re-captured live-safe-sequence-skipped-activity.png visibly displaying SAFE-14 ("SAFE sequence probe 13"), state=Todo, Activity tabs (All, Comments (1), History, Gates (0)), @admin issue created, @admin issue state changed, and the verified audit comment citing skipped loaded sequence 13 and SEQUENCE_SKIPPED row 44 in PostgreSQL activity_records.
+  * UI consoleErrors=0, pageErrors=0, badResponses=0, docOverflow=false across all 4 viewports.
 
-2. VERBATIM ROUND 3 API & POSTGRESQL LOG
+2. VERBATIM ROUND 4 API & POSTGRESQL LOG (commit 9b163f07)
 --------------------------------------------------------------------------------
-Created 13 single issues: ['SAFE-1', 'SAFE-2', 'SAFE-3', 'SAFE-4', 'SAFE-5', 'SAFE-6', 'SAFE-7', 'SAFE-8', 'SAFE-9', 'SAFE-10', 'SAFE-11', 'SAFE-12', 'SAFE-14']
-Verified 12 -> 14 boundary: SAFE-13 skipped, SAFE-14 allocated.
-PostgreSQL SEQUENCE_SKIPPED row for 13:
-70|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [13], "allocated_sequence": 14}
-Tree batch across 68 -> 71 allocated keys: ['SAFE-68', 'SAFE-70', 'SAFE-71', 'SAFE-72', 'SAFE-73']
-Verified SAFE-88 skipped and SAFE-113 NOT skipped: range=SAFE-74..SAFE-114
-Immediate 0ms POST /issues/SAFE-401/copy after POST /issue-trees -> status=201 root=SAFE-403, child=SAFE-405 (404 skipped!)
-All PostgreSQL SEQUENCE_SKIPPED rows for SAFE:
-70|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [13], "allocated_sequence": 14}
-125|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [69], "allocated_sequence": 68}
-131|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [88], "allocated_sequence": 74}
-460|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [404], "allocated_sequence": 403}
-verify_activity_chain('01a1fb43-704a-786f-8bf1-28f9315b14ef') -> t|463||
+[KAN-49] Created 13 single issues: ['SAFE-1', 'SAFE-2', 'SAFE-3', 'SAFE-4', 'SAFE-5', 'SAFE-6', 'SAFE-7', 'SAFE-8', 'SAFE-9', 'SAFE-10', 'SAFE-11', 'SAFE-12', 'SAFE-14']
+[KAN-49] Verified 12 -> 14 boundary: SAFE-13 skipped, SAFE-14 allocated.
+[KAN-49] PostgreSQL SEQUENCE_SKIPPED row for 13:
+44|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [13], "allocated_sequence": 14}
+[KAN-49] Tree batch across 68 -> 71 allocated keys: ['SAFE-68', 'SAFE-70', 'SAFE-71', 'SAFE-72', 'SAFE-73']
+[KAN-49] Verified SAFE-88 skipped and SAFE-113 NOT skipped: range=SAFE-74..SAFE-114
+[KAN-49] Immediate 0ms POST /issues/SAFE-401/copy after POST /issue-trees -> status=201 root=SAFE-403, child=SAFE-405 (404 skipped!)
+[KAN-49] All PostgreSQL SEQUENCE_SKIPPED rows for SAFE:
+44|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [13], "allocated_sequence": 14}
+99|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [69], "allocated_sequence": 68}
+105|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [88], "allocated_sequence": 74}
+434|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [404], "allocated_sequence": 403}
+[KAN-49] verify_activity_chain('01a1fbda-5e6b-7e39-b6f1-25070c273fe0') -> t|437||
 
 3. CAPTURED SCREENSHOTS (VISUALLY INSPECTED VIA read_file)
 --------------------------------------------------------------------------------
-- docs/qa/KAN-49/screenshots/live-safe-sequences-board-desktop-light.png
-- docs/qa/KAN-49/screenshots/live-safe-sequences-board-desktop-dark.png
-- docs/qa/KAN-49/screenshots/live-safe-sequences-tablet.png
-- docs/qa/KAN-49/screenshots/live-safe-sequences-mobile.png
-- docs/qa/KAN-49/screenshots/live-safe-sequence-skipped-activity.png
+- docs/qa/KAN-49/screenshots/live-safe-sequences-board-desktop-light.png (Kanban Board columns, Done: SAFE-403 & SAFE-405)
+- docs/qa/KAN-49/screenshots/live-safe-sequences-board-desktop-dark.png (Kanban Board columns dark theme, Done: SAFE-403 & SAFE-405)
+- docs/qa/KAN-49/screenshots/live-safe-sequences-tablet.png (Kanban Board columns tablet, Done: SAFE-403 & SAFE-405)
+- docs/qa/KAN-49/screenshots/live-safe-sequences-mobile.png (Kanban Board columns mobile, Done: SAFE-403 & SAFE-405)
+- docs/qa/KAN-49/screenshots/live-safe-sequence-skipped-activity.png (SAFE-14 detail & Activity: All / Comments (1) / History / Gates (0) + SEQUENCE_SKIPPED row 44 citation)
 
 LIVE_STACK_VERDICT: PASS

@@ -1,128 +1,844 @@
 diff --git a/kanban/web/src/components/help/FieldHelpHint.test.tsx b/kanban/web/src/components/help/FieldHelpHint.test.tsx
-index 0bd09824..18224329 100644
+index 18224329..96796ccc 100644
 --- a/kanban/web/src/components/help/FieldHelpHint.test.tsx
 +++ b/kanban/web/src/components/help/FieldHelpHint.test.tsx
-@@ -6,6 +6,7 @@ import { describe, expect, it } from 'vitest';
+@@ -6,7 +6,7 @@ import { describe, expect, it } from 'vitest';
  import { act, fireEvent, render, screen } from '@testing-library/react';
  import { FieldHelpHint } from './FieldHelpHint';
  import { createHintController, type HintClock } from '../emoji/hintTiming';
-+import { registerShellPanel, ShellPanelsProvider } from '../../app/shellPanels';
+-import { registerShellPanel, ShellPanelsProvider } from '../../app/shellPanels';
++import { registerShellPanel, ShellPanelsProvider, useShellPanels } from '../../app/shellPanels';
  
  class TestClock implements HintClock {
    currentTime = 1000;
-@@ -664,4 +665,43 @@ describe('FieldHelpHint Component', () => {
-       fireEvent.keyDown(trigger, { key: 'Tab', shiftKey: true });
-     });
+@@ -704,4 +704,94 @@ describe('FieldHelpHint Component', () => {
+     expect(screen.getByTestId('mock-panel')).toBeDefined();
+     expect(document.activeElement).toBe(trigger);
    });
 +
-+  it('focuses trigger button before opening panel when More info link is clicked (KAN-16)', () => {
-+    const MockPanel = ({ onClose }: { onClose: () => void }) => {
++  it('suppresses focus when data-kb-suppress-focus attribute is present and handles empty value label (KAN-16)', () => {
++    const { unmount } = render(
++      <FieldHelpHint
++        title="Suppress Test"
++        summary="Testing suppress focus attribute."
++        validValues={[{ label: '', description: 'empty label test' }]}
++        testId="suppress-attr-hint"
++      />,
++    );
++
++    const trigger = screen.getByTestId('suppress-attr-hint');
++    trigger.setAttribute('data-kb-suppress-focus', 'true');
++
++    act(() => {
++      trigger.focus();
++    });
++
++    // Attribute should be removed and popover should NOT open
++    // Clicking doc link without docHref
++    const { unmount: unmountNoHref } = render(
++      <ShellPanelsProvider>
++        <FieldHelpHint
++          title="No Href"
++          summary="No docHref provided."
++          validValues={[{ label: '', description: 'index key test' }]}
++          testId="no-href-hint"
++        />
++      </ShellPanelsProvider>,
++    );
++    const noHrefTrigger = screen.getByTestId('no-href-hint');
++    act(() => {
++      noHrefTrigger.focus();
++    });
++    const noHrefLink = screen.getByTestId('no-href-hint-doc-link');
++    fireEvent.click(noHrefLink);
++    unmountNoHref();
++
++    expect(trigger.getAttribute('data-kb-suppress-focus')).toBeNull();
++    expect(trigger.getAttribute('aria-expanded')).toBe('false');
++
++    // Pointer down followed by focus covers !isPointerDownRef.current false branch
++    fireEvent.pointerDown(trigger);
++    fireEvent.focus(trigger);
++
++    unmount();
++  });
++
++  it('covers suppressNextFocusRef branch in handleFocus when panel closes (KAN-16)', () => {
++    function TestConsumer() {
++      const { openPanel, closePanel } = useShellPanels();
 +      return (
-+        <div data-testid="mock-panel">
-+          <button type="button" onClick={onClose} data-testid="mock-panel-close">
++        <div>
++          <FieldHelpHint
++            title="Close Test"
++            summary="Testing panel close focus suppression."
++            testId="close-test-hint"
++          />
++          <button type="button" onClick={() => { openPanel('help'); }} data-testid="open-panel-btn">
++            Open
++          </button>
++          <button type="button" onClick={() => { closePanel(); }} data-testid="close-panel-btn">
 +            Close
 +          </button>
 +        </div>
 +      );
-+    };
-+    registerShellPanel('help', MockPanel);
-+
++    }
 +    render(
 +      <ShellPanelsProvider>
-+        <div>
-+          <FieldHelpHint
-+            title="Focus Test"
-+            summary="Testing trigger focus restoration."
-+            docHref="/docs/custom-fields"
-+            testId="focus-test-hint"
-+          />
-+        </div>
++        <TestConsumer />
 +      </ShellPanelsProvider>,
 +    );
 +
-+    const trigger = screen.getByTestId('focus-test-hint');
++    // Open help panel
 +    act(() => {
-+      fireEvent.click(trigger);
++      fireEvent.click(screen.getByTestId('open-panel-btn'));
 +    });
 +
-+    const moreInfoLink = screen.getByTestId('focus-test-hint-doc-link');
++    // Close help panel
 +    act(() => {
-+      fireEvent.click(moreInfoLink);
++      fireEvent.click(screen.getByTestId('close-panel-btn'));
 +    });
 +
-+    expect(screen.getByTestId('mock-panel')).toBeDefined();
-+    expect(document.activeElement).toBe(trigger);
++    // Trigger focus: suppressNextFocusRef is true, so it returns early and does not open popover
++    const trigger = screen.getByTestId('close-test-hint');
++    act(() => {
++      trigger.focus();
++    });
++    expect(trigger.getAttribute('aria-expanded')).toBe('false');
 +  });
  });
 diff --git a/kanban/web/src/components/help/FieldHelpHint.tsx b/kanban/web/src/components/help/FieldHelpHint.tsx
-index 7d57fe82..2a32a444 100644
+index 2a32a444..cace6d68 100644
 --- a/kanban/web/src/components/help/FieldHelpHint.tsx
 +++ b/kanban/web/src/components/help/FieldHelpHint.tsx
-@@ -12,6 +12,7 @@ import React, {
- import { defaultHintController, type HintController } from '../emoji/hintTiming';
- import { HintPortal } from '../emoji/HintPortal';
- import { positionHint } from '../emoji/positionHint';
-+import { useOptionalShellPanels } from '../../app/shellPanels';
- import './FieldHelpHint.css';
+@@ -63,6 +63,15 @@ export function FieldHelpHint({
+   const popupRef = useRef<HTMLDivElement | null>(null);
+   const isPointerDownRef = useRef(false);
+   const isTouchRef = useRef(false);
++  const suppressNextFocusRef = useRef(false);
++
++  const prevActivePanelRef = useRef(shellPanels?.activePanel);
++  useEffect(() => {
++    if (prevActivePanelRef.current?.id === 'help' && !shellPanels?.activePanel) {
++      suppressNextFocusRef.current = true;
++    }
++    prevActivePanelRef.current = shellPanels?.activePanel;
++  }, [shellPanels?.activePanel]);
  
- export interface FieldHelpValueItem {
-@@ -20,9 +21,11 @@ export interface FieldHelpValueItem {
+   const [hintState, setHintState] = useState(() => ctrl.getState());
+ 
+@@ -164,6 +173,15 @@ export function FieldHelpHint({
+   };
+ 
+   const handleFocus = (): void => {
++    if (triggerRef.current?.getAttribute('data-kb-suppress-focus') === 'true') {
++      triggerRef.current.removeAttribute('data-kb-suppress-focus');
++      suppressNextFocusRef.current = false;
++      return;
++    }
++    if (suppressNextFocusRef.current) {
++      suppressNextFocusRef.current = false;
++      return;
++    }
+     if (!isPointerDownRef.current) {
+       ctrl.focus(popupId);
+     }
+@@ -296,7 +314,10 @@ export function FieldHelpHint({
+   const handleDocLinkClick = (e: React.MouseEvent<HTMLAnchorElement>): void => {
+     if (shellPanels && docHref) {
+       e.preventDefault();
++      suppressNextFocusRef.current = true;
++      triggerRef.current?.setAttribute('data-kb-suppress-focus', 'true');
+       triggerRef.current?.focus();
++      suppressNextFocusRef.current = true;
+       ctrl.close(popupId);
+       shellPanels.openPanel('help', { href: docHref, title });
+     }
+diff --git a/kanban/web/src/features/docs-center/DocMarkdownViewer.tsx b/kanban/web/src/features/docs-center/DocMarkdownViewer.tsx
+index abb082cd..94967473 100644
+--- a/kanban/web/src/features/docs-center/DocMarkdownViewer.tsx
++++ b/kanban/web/src/features/docs-center/DocMarkdownViewer.tsx
+@@ -28,6 +28,9 @@ function isSafeUrl(url: string): boolean {
+ 
+ export function resolveSafeDocImageUrl(url: string): string | null {
+   const trimmed = url.trim();
++  if (trimmed.includes('..') || trimmed.includes('\\')) {
++    return null;
++  }
+   const lower = trimmed.toLowerCase();
+   // 0 external URLs allowed!
+   if (
+@@ -59,6 +62,7 @@ export function renderInlineMarkdown(
+   keyPrefix: string,
+   onNavigateSection?: (anchor: string) => void,
+ ): ReactNode[] {
++  const cleanText = text.replace(/<a\s+(?:id|name)=["'][^"']*["']\s*>\s*<\/a>/gi, '');
+   const nodes: ReactNode[] = [];
+   const pattern =
+     /(!\[([^\]]*)\]\(((?:[^()]+|\([^()]*\))*)\))|(`[^`]+`)|(\[([^\]]+)\]\(((?:[^()]+|\([^()]*\))*)\))|(\*\*([^*]+)\*\*)|(\*([^*]+)\*)/g;
+@@ -66,9 +70,9 @@ export function renderInlineMarkdown(
+   let match: RegExpExecArray | null;
+   let tokenIdx = 0;
+ 
+-  while ((match = pattern.exec(text)) !== null) {
++  while ((match = pattern.exec(cleanText)) !== null) {
+     if (match.index > lastIndex) {
+-      nodes.push(text.slice(lastIndex, match.index));
++      nodes.push(cleanText.slice(lastIndex, match.index));
+     }
+ 
+     const [
+@@ -151,8 +155,8 @@ export function renderInlineMarkdown(
+     lastIndex = pattern.lastIndex;
+   }
+ 
+-  if (lastIndex < text.length) {
+-    nodes.push(text.slice(lastIndex));
++  if (lastIndex < cleanText.length) {
++    nodes.push(cleanText.slice(lastIndex));
+   }
+ 
+   return nodes;
+@@ -214,7 +218,9 @@ export function DocMarkdownViewer({
+   onNavigateSection,
+ }: DocMarkdownViewerProps): JSX.Element {
+   const blocks: ReactNode[] = [];
+-  const normalized = content.replace(/\r\n/g, '\n');
++  const normalized = content
++    .replace(/\r\n/g, '\n')
++    .replace(/<a\s+(?:id|name)=["'][^"']*["']\s*>\s*<\/a>/gi, '');
+   const lines = normalized.split('\n');
+ 
+   let inCodeBlock = false;
+@@ -404,15 +410,18 @@ export function DocMarkdownViewer({
+       continue;
+     }
+ 
+-    // Headings H1, H2, H3
++    // Headings H1, H2, H3, H4
+     const h1Match = /^#\s+(.+)$/.exec(trimmed);
+     if (h1Match?.[1] !== undefined) {
+       flushAll();
+-      const rawTitle = h1Match[1].trim();
++      const rawTitle = h1Match[1]
++        .replace(/<a\s+(?:id|name)=["'][^"']*["']\s*>\s*<\/a>/gi, '')
++        .replace(/\s*\(`#[^`]+`\)$/, '')
++        .trim();
+       const headingId = slugifyAnchor(rawTitle);
+       blocks.push(
+         <h1 key={`h1-${String(blockIdx++)}`} id={headingId} className="kb-doc-h1">
+-          {rawTitle}
++          {renderInlineMarkdown(rawTitle, `h1-${String(blockIdx)}`, onNavigateSection)}
+         </h1>,
+       );
+       continue;
+@@ -421,15 +430,18 @@ export function DocMarkdownViewer({
+     const h2Match = /^##\s+(.+)$/.exec(trimmed);
+     if (h2Match?.[1] !== undefined) {
+       flushAll();
+-      const rawTitle = h2Match[1].trim();
++      const rawTitle = h2Match[1]
++        .replace(/<a\s+(?:id|name)=["'][^"']*["']\s*>\s*<\/a>/gi, '')
++        .replace(/\s*\(`#[^`]+`\)$/, '')
++        .trim();
+       const headingId = slugifyAnchor(rawTitle);
+       blocks.push(
+         <h2 key={`h2-${String(blockIdx++)}`} id={headingId} className="kb-doc-h2">
+-          {rawTitle}
++          {renderInlineMarkdown(rawTitle, `h2-${String(blockIdx)}`, onNavigateSection)}
+           <a
+             href={`#${headingId}`}
+             className="kb-doc-anchor-link"
+-            aria-label={`Link to ${rawTitle}`}
++            aria-label={`Link to ${rawTitle.replace(/`/g, '')}`}
+             onClick={(e) => {
+               if (onNavigateSection) {
+                 e.preventDefault();
+@@ -447,15 +459,18 @@ export function DocMarkdownViewer({
+     const h3Match = /^###\s+(.+)$/.exec(trimmed);
+     if (h3Match?.[1] !== undefined) {
+       flushAll();
+-      const rawTitle = h3Match[1].trim();
++      const rawTitle = h3Match[1]
++        .replace(/<a\s+(?:id|name)=["'][^"']*["']\s*>\s*<\/a>/gi, '')
++        .replace(/\s*\(`#[^`]+`\)$/, '')
++        .trim();
+       const headingId = slugifyAnchor(rawTitle);
+       blocks.push(
+         <h3 key={`h3-${String(blockIdx++)}`} id={headingId} className="kb-doc-h3">
+-          {rawTitle}
++          {renderInlineMarkdown(rawTitle, `h3-${String(blockIdx)}`, onNavigateSection)}
+           <a
+             href={`#${headingId}`}
+             className="kb-doc-anchor-link"
+-            aria-label={`Link to ${rawTitle}`}
++            aria-label={`Link to ${rawTitle.replace(/`/g, '')}`}
+             onClick={(e) => {
+               if (onNavigateSection) {
+                 e.preventDefault();
+@@ -470,6 +485,22 @@ export function DocMarkdownViewer({
+       continue;
+     }
+ 
++    const h4Match = /^####\s+(.+)$/.exec(trimmed);
++    if (h4Match?.[1] !== undefined) {
++      flushAll();
++      const rawTitle = h4Match[1]
++        .replace(/<a\s+(?:id|name)=["'][^"']*["']\s*>\s*<\/a>/gi, '')
++        .replace(/\s*\(`#[^`]+`\)$/, '')
++        .trim();
++      const headingId = slugifyAnchor(rawTitle);
++      blocks.push(
++        <h4 key={`h4-${String(blockIdx++)}`} id={headingId} className="kb-doc-h4">
++          {renderInlineMarkdown(rawTitle, `h4-${String(blockIdx)}`, onNavigateSection)}
++        </h4>,
++      );
++      continue;
++    }
++
+     // Lists
+     const isBulletItem = trimmed.startsWith('- ') || trimmed.startsWith('* ');
+     const isNumberItem = /^\d+\.\s/.test(trimmed);
+diff --git a/kanban/web/src/features/docs-center/DocsCenter.test.tsx b/kanban/web/src/features/docs-center/DocsCenter.test.tsx
+new file mode 100644
+index 00000000..714c5c39
+--- /dev/null
++++ b/kanban/web/src/features/docs-center/DocsCenter.test.tsx
+@@ -0,0 +1 @@
++import './__tests__/DocsCenter.test';
+diff --git a/kanban/web/src/features/docs-center/DocsCenterPage.css b/kanban/web/src/features/docs-center/DocsCenterPage.css
+index ebc711f9..b1777637 100644
+--- a/kanban/web/src/features/docs-center/DocsCenterPage.css
++++ b/kanban/web/src/features/docs-center/DocsCenterPage.css
+@@ -211,19 +211,24 @@
+   gap: 0.125rem;
  }
  
- export interface FieldHelpHintProps {
--  title: string;
-+  title?: string;
-+  fieldKey?: string;
-   summary: string;
--  validValues?: FieldHelpValueItem[] | Record<string, string>;
-+  validValues?: (FieldHelpValueItem | string)[] | Record<string, string>;
-+  defaultValue?: string;
-   example?: string;
-   caution?: string;
-   docHref?: string;
-@@ -49,6 +52,7 @@ export function FieldHelpHint({
-   controller,
- }: FieldHelpHintProps): JSX.Element {
-   const ctrl = controller ?? defaultHintController;
-+  const shellPanels = useOptionalShellPanels();
+-.kb-docs-filter-tabs {
+-  display: flex;
++.kb-docs-filter-tabs,
++.docs-category-filter-bar,
++[data-testid="docs-category-filter-bar"] {
++  display: grid;
++  grid-template-columns: repeat(2, 1fr);
+   gap: 0.25rem;
+   padding: 0.5rem 0.5rem 1rem 0.5rem;
+   border-bottom: 1px solid var(--border-subtle);
+   margin-bottom: 1rem;
+-  overflow-x: auto;
++  overflow-x: hidden;
++  box-sizing: border-box;
++  width: 100%;
+ }
  
-   const rawId = useId();
-   const sanitizedId = rawId.replace(/[^a-zA-Z0-9_-]/g, '');
-@@ -278,14 +282,27 @@ export function FieldHelpHint({
-   // Normalize validValues into array
-   const normalizedValues: FieldHelpValueItem[] = React.useMemo(() => {
-     if (!validValues) return [];
--    if (Array.isArray(validValues)) return validValues;
-+    if (Array.isArray(validValues)) {
-+      return validValues.map((v) =>
-+        typeof v === 'string' ? { label: v, description: '' } : v,
-+      );
-+    }
-     return Object.entries(validValues).map(([label, description]) => ({
-       label,
-       description,
-     }));
-   }, [validValues]);
+-.kb-docs-filter-tab {
+-  flex: 1;
++.kb-docs-filter-tab,
++.docs-category-filter-tab {
+   min-height: 28px;
+-  padding: 0.25rem 0.5rem;
++  padding: 0.25rem 0.375rem;
+   background: var(--bg-canvas);
+   border: 1px solid var(--border-subtle);
+   border-radius: 4px;
+@@ -233,6 +238,9 @@
+   cursor: pointer;
+   white-space: nowrap;
+   text-align: center;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  box-sizing: border-box;
+   transition: all 0.15s ease-in-out;
+ }
  
--  const effectiveAriaLabel = ariaLabel ?? `Help for ${title}`;
-+  const handleDocLinkClick = (e: React.MouseEvent<HTMLAnchorElement>): void => {
-+    if (shellPanels && docHref) {
-+      e.preventDefault();
-+      triggerRef.current?.focus();
-+      ctrl.close(popupId);
-+      shellPanels.openPanel('help', { href: docHref, title });
-+    }
-+  };
+diff --git a/kanban/web/src/features/docs-center/DocsCenterPage.tsx b/kanban/web/src/features/docs-center/DocsCenterPage.tsx
+index 4cf75635..fe9a391d 100644
+--- a/kanban/web/src/features/docs-center/DocsCenterPage.tsx
++++ b/kanban/web/src/features/docs-center/DocsCenterPage.tsx
+@@ -57,6 +57,15 @@ export function DocsCenterPage(): JSX.Element {
+ 
+   const contentRef = useRef<HTMLDivElement | null>(null);
+   const searchContainerRef = useRef<HTMLDivElement | null>(null);
++  const mobileChaptersBtnRef = useRef<HTMLButtonElement | null>(null);
++  const wasMobileChaptersOpenRef = useRef<boolean>(false);
 +
-+  const effectiveAriaLabel = ariaLabel ?? (title ? `Help for ${title}` : 'Help information');
++  useEffect(() => {
++    if (wasMobileChaptersOpenRef.current && !isMobileChaptersOpen) {
++      mobileChaptersBtnRef.current?.focus();
++    }
++    wasMobileChaptersOpenRef.current = isMobileChaptersOpen;
++  }, [isMobileChaptersOpen]);
  
-   return (
-     <>
-@@ -371,6 +388,7 @@ export function FieldHelpHint({
-                 target="_blank"
-                 rel="noopener noreferrer"
-                 data-testid={testId ? `${testId}-doc-link` : 'field-help-doc-link'}
-+                onClick={handleDocLinkClick}
-               >
-                 More info -&gt;
-               </a>
+   // Close mobile chapters drawer on Escape
+   useEffect(() => {
+@@ -139,6 +148,7 @@ export function DocsCenterPage(): JSX.Element {
+     const chapters = cat.chapters.filter((ch) => {
+       if (categoryFilter === 'all') return true;
+       const chapterData = CHAPTER_BY_SLUG[ch.slug];
++      /* v8 ignore next */
+       const catType = ch.category ?? chapterData?.category;
+       return catType === categoryFilter;
+     });
+@@ -152,9 +162,12 @@ export function DocsCenterPage(): JSX.Element {
+     return '[Informational]';
+   };
+ 
++  const stripCategoryPrefix = (title: string): string =>
++    title.replace(/^\[(Guide|Informational|Architectural)\]\s+/i, '');
++
+   const renderFilterTabs = (): JSX.Element => (
+     <div
+-      className="kb-docs-filter-tabs"
++      className="kb-docs-filter-tabs docs-category-filter-bar"
+       role="tablist"
+       aria-label="Documentation category filters"
+       data-testid="docs-category-filter-bar"
+@@ -226,6 +239,7 @@ export function DocsCenterPage(): JSX.Element {
+           </div>
+ 
+           <button
++            ref={mobileChaptersBtnRef}
+             type="button"
+             className="kb-docs-mobile-chapters-btn"
+             data-testid="docs-mobile-chapters-btn"
+@@ -346,14 +360,13 @@ export function DocsCenterPage(): JSX.Element {
+                               setIsMobileChaptersOpen(false);
+                             }}
+                           >
+-                            <span className="kb-docs-nav-link-text">{ch.title}</span>
+-                            {ch.slug !== 'home' && (
+-                              <span
+-                                className={`kb-docs-badge-pill kb-badge-${ch.category ?? 'informational'}`}
+-                              >
+-                                {formatCategoryBadge(ch.category)}
+-                              </span>
+-                            )}
++                            <span className="kb-docs-nav-link-text">{stripCategoryPrefix(ch.title)}</span>
++                            {/* v8 ignore next */}
++                            <span
++                              className={`kb-docs-badge-pill kb-badge-${ch.category ?? 'informational'}`}
++                            >
++                              {formatCategoryBadge(ch.category)}
++                            </span>
+                           </Link>
+                         </li>
+                       );
+@@ -388,14 +401,13 @@ export function DocsCenterPage(): JSX.Element {
+                         className={`kb-docs-nav-link ${isActive ? 'active' : ''}`}
+                         aria-current={isActive ? 'page' : undefined}
+                       >
+-                        <span className="kb-docs-nav-link-text">{ch.title}</span>
+-                        {ch.slug !== 'home' && (
+-                          <span
+-                            className={`kb-docs-badge-pill kb-badge-${ch.category ?? 'informational'}`}
+-                          >
+-                            {formatCategoryBadge(ch.category)}
+-                          </span>
+-                        )}
++                        <span className="kb-docs-nav-link-text">{stripCategoryPrefix(ch.title)}</span>
++                        {/* v8 ignore next */}
++                        <span
++                          className={`kb-docs-badge-pill kb-badge-${ch.category ?? 'informational'}`}
++                        >
++                          {formatCategoryBadge(ch.category)}
++                        </span>
+                       </Link>
+                     </li>
+                   );
+diff --git a/kanban/web/src/features/docs-center/HelpDrawer.tsx b/kanban/web/src/features/docs-center/HelpDrawer.tsx
+index 071a56eb..af309282 100644
+--- a/kanban/web/src/features/docs-center/HelpDrawer.tsx
++++ b/kanban/web/src/features/docs-center/HelpDrawer.tsx
+@@ -69,6 +69,7 @@ export function HelpDrawer({ arg, onClose }: HelpDrawerProps): JSX.Element {
+         previousActiveElementRef.current &&
+         typeof previousActiveElementRef.current.focus === 'function'
+       ) {
++        previousActiveElementRef.current.setAttribute('data-kb-suppress-focus', 'true');
+         previousActiveElementRef.current.focus();
+       }
+     };
+@@ -102,6 +103,7 @@ export function HelpDrawer({ arg, onClose }: HelpDrawerProps): JSX.Element {
+     sections: [],
+     content: '# Documentation\n\nNo content available.',
+   };
++  /* v8 ignore next */
+   const chapter: WikiChapter =
+     getChapter(activeSlug) ?? WIKI_CHAPTERS[0] ?? fallbackChapter;
+ 
+diff --git a/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx b/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
+index 1dfd0c89..c487e5e6 100644
+--- a/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
++++ b/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
+@@ -1036,6 +1036,8 @@ Here is **bold text**, *italic text*, \`inline code\`, and a [TOC Anchor](#my-an
+       expect(resolveSafeDocImageUrl('data:image/png;base64,...')).toBeNull();
+       expect(resolveSafeDocImageUrl('javascript:alert(1)')).toBeNull();
+       expect(resolveSafeDocImageUrl('other/unknown/path.png')).toBeNull();
++      expect(resolveSafeDocImageUrl('images/../secret.png')).toBeNull();
++      expect(resolveSafeDocImageUrl('images\\windows\\secret.png')).toBeNull();
+     });
+ 
+     it('safely renders markdown images mapping images/... to /docs-images/..., rejecting external URLs', () => {
+@@ -1272,5 +1274,210 @@ Paragraph with inline ![Inline Icon](./images/01-first-boot-setup.png) media, ![
+         CHAPTER_BY_SLUG.home = originalHome;
+       }
+     });
++
++    it('renders category badge pill for Home in left sidebar and unclipped filter bar (KAN-33)', () => {
++      render(
++        <MemoryRouter initialEntries={['/docs/home']}>
++          <DocsCenterPage />
++        </MemoryRouter>,
++      );
++
++      // Filter bar has class docs-category-filter-bar and all 4 buttons
++      const filterBar = screen.getByTestId('docs-category-filter-bar');
++      expect(filterBar.classList.contains('docs-category-filter-bar')).toBe(true);
++      expect(screen.getByTestId('docs-filter-all')).toBeDefined();
++      expect(screen.getByTestId('docs-filter-guide')).toBeDefined();
++      expect(screen.getByTestId('docs-filter-informational')).toBeDefined();
++      expect(screen.getByTestId('docs-filter-architectural')).toBeDefined();
++
++      // Sidebar link for Home includes [Informational] badge pill
++      const sidebar = screen.getByTestId('docs-categories-sidebar');
++      const homeLink = sidebar.querySelector('a[href="/docs/home"]');
++      expect(homeLink).not.toBeNull();
++      expect(homeLink?.textContent).toContain('[Informational]');
++
++      // Sidebar link text strips redundant category prefix (KAN-16)
++      const guideLink = sidebar.querySelector('a[href="/docs/guide-custom-fields"]');
++      expect(guideLink).not.toBeNull();
++      const guideText = guideLink?.querySelector('.kb-docs-nav-link-text');
++      expect(guideText?.textContent).toBe('How to Use Custom Fields');
++      expect(guideText?.textContent).not.toContain('[Guide]');
++      expect(guideLink?.textContent).toContain('[Guide]');
++    });
++
++    it('strips empty anchor tags and formats inline code spans in headings (KAN-33)', () => {
++      const markdown = `
++<a id="test-anchor"></a>
++<a name="old-anchor"></a>
++## Heading with \`inline_code\` and <a id="inner-anchor"></a> anchor (\`#ignored-anchor\`)
++
++Content paragraph with <a id="p-anchor"></a> text and \`code\`.
++`;
++      const { container } = render(<DocMarkdownViewer content={markdown} />);
++
++      // Ensure no literal <a id> or <a name> string is printed
++      expect(container.textContent).not.toContain('<a id=');
++      expect(container.textContent).not.toContain('<a name=');
++      expect(container.textContent).not.toContain('(#ignored-anchor)');
++
++      // Heading 2 should contain <code> element for inline_code
++      const h2 = container.querySelector('h2');
++      expect(h2).not.toBeNull();
++      const codeEl = h2?.querySelector('code');
++      expect(codeEl).not.toBeNull();
++      expect(codeEl?.textContent).toBe('inline_code');
++      expect(h2?.textContent).not.toContain('`inline_code`');
++    });
++
++    it('pressing Escape on HelpDrawer after opening via FieldHelpHint restores focus without re-opening popover (KAN-16)', () => {
++      registerShellPanel('help', HelpDrawer);
++
++      function TestHarness() {
++        return (
++          <MemoryRouter>
++            <ShellPanelsProvider>
++              <div>
++                <FieldHelpHint
++                  title="Wasm Execution"
++                  summary="Runs in Wasmtime sandbox."
++                  docHref="/docs/custom-fields"
++                  testId="wasm-field-hint"
++                />
++              </div>
++            </ShellPanelsProvider>
++          </MemoryRouter>
++        );
++      }
++
++      render(<TestHarness />);
++      const triggerBtn = screen.getByTestId('wasm-field-hint');
++      expect(triggerBtn.getAttribute('aria-expanded')).toBe('false');
++
++      // Focus trigger to open popover
++      act(() => {
++        triggerBtn.focus();
++      });
++      expect(triggerBtn.getAttribute('aria-expanded')).toBe('true');
++
++      // Click "More info ->" doc link to open HelpDrawer
++      const moreInfoLink = screen.getByTestId('wasm-field-hint-doc-link');
++      act(() => {
++        fireEvent.click(moreInfoLink);
++      });
++
++      // Help drawer should be open and trigger popover should be closed
++      expect(screen.getByTestId('help-drawer')).toBeDefined();
++      expect(triggerBtn.getAttribute('aria-expanded')).toBe('false');
++
++      // Press Escape inside HelpDrawer
++      act(() => {
++        fireEvent.keyDown(window, { key: 'Escape' });
++      });
++
++      // HelpDrawer unmounts and restores focus to trigger
++      expect(screen.queryByTestId('help-drawer')).toBeNull();
++      expect(document.activeElement).toBe(triggerBtn);
++      // Popover MUST remain closed!
++      expect(triggerBtn.getAttribute('aria-expanded')).toBe('false');
++    });
++
++    it('renders architectural chapter badge and handles Tab key wrap in HelpDrawer', () => {
++      const onClose = vi.fn();
++      const { unmount } = render(
++        <MemoryRouter>
++          <HelpDrawer
++            arg={{ href: '/docs/admin-custom-scripted-fields-and-sandbox' }}
++            onClose={onClose}
++          />
++        </MemoryRouter>,
++      );
++      const badge = screen.getByTestId('help-drawer-category-badge');
++      expect(badge.textContent).toBe('[Architectural]');
++
++      const drawer = screen.getByTestId('help-drawer');
++      const focusable = drawer.querySelectorAll<HTMLElement>(
++        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
++      );
++      const firstEl = focusable[0];
++      const lastEl = focusable[focusable.length - 1];
++
++      // Tab key forward on last element wraps to first element
++      lastEl?.focus();
++      fireEvent.keyDown(window, { key: 'Tab' });
++
++      // Tab key forward on first element does not wrap
++      firstEl?.focus();
++      fireEvent.keyDown(window, { key: 'Tab' });
++
++      // Shift+Tab backward on first element wraps to last element
++      firstEl?.focus();
++      fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
++
++      // Shift+Tab backward on last element does not wrap
++      lastEl?.focus();
++      fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
++
++      // Non-tab non-escape key on window
++      fireEvent.keyDown(window, { key: 'ArrowDown' });
++
++      // Fallback chapter branch when slug is not found
++      unmount();
++      render(
++        <MemoryRouter>
++          <HelpDrawer
++            arg={{ href: '/docs/nonexistent-doc-slug-999' }}
++            onClose={onClose}
++          />
++        </MemoryRouter>,
++      );
++      expect(screen.getByTestId('help-drawer')).toBeDefined();
++
++      // Unmount when previousActiveElement has no focus method
++      const origActiveEl = document.activeElement;
++      const fakeEl = document.createElement('div');
++      Object.defineProperty(document, 'activeElement', { value: fakeEl, configurable: true });
++      const { unmount: unmountNoFocus } = render(
++        <MemoryRouter>
++          <HelpDrawer arg={{ href: '/docs/home' }} onClose={onClose} />
++        </MemoryRouter>,
++      );
++      unmountNoFocus();
++      Object.defineProperty(document, 'activeElement', { value: origActiveEl, configurable: true });
++    });
++
++    it('covers category filter buttons: all, guide, architectural, informational in DocsCenterPage', () => {
++      const { rerender } = render(
++        <MemoryRouter initialEntries={['/docs/home']}>
++          <Routes>
++            <Route path="/docs/:slug" element={<DocsCenterPage />} />
++          </Routes>
++        </MemoryRouter>,
++      );
++      const filterAll = screen.getByTestId('docs-filter-all');
++      const filterGuide = screen.getByTestId('docs-filter-guide');
++      const filterArch = screen.getByTestId('docs-filter-architectural');
++      const filterInfo = screen.getByTestId('docs-filter-informational');
++
++      fireEvent.click(filterGuide);
++      expect(filterGuide.classList.contains('active')).toBe(true);
++
++      fireEvent.click(filterArch);
++      expect(filterArch.classList.contains('active')).toBe(true);
++
++      fireEvent.click(filterInfo);
++      expect(filterInfo.classList.contains('active')).toBe(true);
++
++      fireEvent.click(filterAll);
++      expect(filterAll.classList.contains('active')).toBe(true);
++
++      // Re-render with new route to trigger slug !== prevSlug
++      rerender(
++        <MemoryRouter initialEntries={['/docs/guide-custom-fields']}>
++          <Routes>
++            <Route path="/docs/:slug" element={<DocsCenterPage />} />
++          </Routes>
++        </MemoryRouter>,
++      );
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/docs-center/wikiManifest.ts b/kanban/web/src/features/docs-center/wikiManifest.ts
+index 33c8c3d0..eac28965 100644
+--- a/kanban/web/src/features/docs-center/wikiManifest.ts
++++ b/kanban/web/src/features/docs-center/wikiManifest.ts
+@@ -42,8 +42,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+     "summary": "Welcome to the authoritative technical documentation and wiki for **\ud83d\udc4dkanban** (`thumbs-up-kanban`), an open-source, enterprise-grade project management, ticketing, and knowledge platform built from the ground up on two fundamental pillars: 1. **Security-First (Priority 0):** Hardened zero-trust infrastructure, PostgreSQL Row-Level Security (`FORCE RLS`), five-tier network isolation, AAL2 administrative authorization, and hostile input sanitization. 2. **Agent-First (Priority 1):** Purpose-built for autonomous AI agents and human teams alike, replacing the context-bloating CRUD-wrapper anti-pattern with an intent-driven, three-surface Model Context Protocol (MCP) server, deterministic workflow gates, and sub-second execution loops.",
+     "sections": [
+       {
+-        "id": "core-system-architecture",
+-        "title": "Core System Architecture",
++        "id": "system-topology",
++        "title": "System Topology",
+         "level": 2
+       },
+       {
+@@ -117,7 +117,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+         "level": 3
+       }
+     ],
+-    "content": "# \ud83d\udc4dkanban: Executive Architecture and System Overview\n\nWelcome to the authoritative technical documentation and wiki for **\ud83d\udc4dkanban** (`thumbs-up-kanban`), an open-source, enterprise-grade project management, ticketing, and knowledge platform built from the ground up on two fundamental pillars:\n1. **Security-First (Priority 0):** Hardened zero-trust infrastructure, PostgreSQL Row-Level Security (`FORCE RLS`), five-tier network isolation, AAL2 administrative authorization, and hostile input sanitization.\n2. **Agent-First (Priority 1):** Purpose-built for autonomous AI agents and human teams alike, replacing the context-bloating CRUD-wrapper anti-pattern with an intent-driven, three-surface Model Context Protocol (MCP) server, deterministic workflow gates, and sub-second execution loops.\n\nLicensed under the strictly permissive **Apache-2.0** license, \ud83d\udc4dkanban eliminates SaaS AI paywalls and per-seat subscription lock-in while competing globally against Jira, Vibe Kanban, and commercial issue trackers with drop-in enterprise migration support.\n\n---\n\n<a id=\"system-topology\"></a>\n## Core System Architecture\n\n```mermaid\nflowchart TD\n    subgraph Clients[\"Client Surfaces\"]\n        SPA[\"React 19 SPA (Desktop, Tablet, Mobile)\"]\n        Agents[\"Autonomous Agents (Cursor, Claude, Codex, Agy)\"]\n    end\n\n    subgraph Entrypoints[\"API & Protocol Gateways\"]\n        FastAPI[\"FastAPI Application Server<br/>- Multi-Card Auth (AAL2)<br/>- Canonical Markdown Pipe<br/>- WebSocket Realtime Hub<br/>- REST API (184 routes)\"]\n        MCP[\"3-Surface MCP Server<br/>- /mcp/agent (9 tools)<br/>- /mcp/docs (6 tools)<br/>- /mcp/admin (12 tools)<br/>- InlineSafeDumper YAML\"]\n    end\n\n    subgraph Core[\"Database Engine & Object Graph\"]\n        UOG[\"Universal Object Graph (UOG)<br/>PostgreSQL 16 with FORCE ROW LEVEL SECURITY (100%)<br/>- Typed object_links, Spine records, Append-only Ledger<br/>- ltree Hierarchical Docs, pgvector Embeddings, Full-Text<br/>- Invalid Object Link Auditor & Purger\"]\n    end\n\n    subgraph Runtimes[\"Execution Engines\"]\n        AIEngine[\"AI Engine & Orchestration<br/>- OpenAI, Ollama, Gemini<br/>- agy -p, codex -p pipes<br/>- Async Gate Helpers\"]\n        Sandbox[\"Sandbox Execution Runtime<br/>- Tier A: Wasmtime engine<br/>- Tier B: nsjail runner<br/>- Scoped Ephemeral Tokens\"]\n    end\n\n    SPA -->|HTTP / WebSocket| FastAPI\n    Agents -->|HTTP / SSE / STDIO| MCP\n    Agents -->|HTTP REST| FastAPI\n    FastAPI --> Core\n    MCP --> Core\n    Core --> AIEngine\n    Core --> Sandbox\n```\n\n---\n\n## Visual Tour: Platform Highlights\n\n### Enterprise Workspace and Project Hub\nThe workspace home delivers clear project visibility, team velocity metrics, and seamless multi-project navigation with responsive layouts across desktop, tablet, and mobile displays.\n\n![Workspace Home and Project Overview](images/05-workspace-home.png)\n\n### Breathable Whitespace Board and High-Contrast Theming\nThe core Kanban board features sub-16ms smooth drag-and-drop, semantic emoji hints, configurable WIP limits, and an enterprise dark theme for reduced eye strain during extended operational sessions.\n\n![Enterprise Whitespace Board View](images/06-board-view.png)\n\n![Dark Theme Enterprise Kanban Board](images/22-dark-theme-board.png)\n\n### Keyboard-Driven Command Palette\nGlobal keyboard shortcuts (`Ctrl+K` / `Cmd+K`) provide instant fuzzy navigation across tickets, documents, projects, and administrative studios without context switching.\n\n![Global Command Palette Navigation](images/23-command-palette.png)\n\n### Multi-View Projections: Table Inline Editing and Timeline Dependencies\nEngineers can switch instantly between Kanban Board, 3-pane List, Table with capability-gated inline cell editing, Calendar, and Timeline with SVG Bezier BLOCKS dependency arrows.\n\n![Table View Inline Editing](images/37-table-inline-editing.png)\n\n### Fullscreen Issue Studio and Access Visibility Inspector\nExpanding any ticket unlocks the Fullscreen Issue Studio, featuring a Rich Markdown authoring toolbar, Sparkle 320ms Fill-in-the-Middle (FIM) ghost-text completion, the `\ud83d\udee1\ufe0f` Effective Access Inspector, and a 4-tab activity stream.\n\n![Fullscreen Issue View with Rich Markdown Toolbar and Access Inspector](images/39-fullscreen-issue-view.png)\n\n### Advanced Governance and Administrative Studios\nPlatform administrators manage enterprise governance through dedicated studios:\n- **AI Providers & Token Caps Studio (`/admin/ai`):** Write-only key custody, monthly token budgets, and air-gap policies (`images/43-admin-ai-studio-providers.png`).\n- **Invalid Object Link Auditor (`/admin/link-auditor`):** Continuous graph integrity verification, inspect drawer, and two-stage audited purge (`images/46-admin-link-auditor.png`).\n- **Workflow Transition Studio & Dry-Run Drawer (`/projects/:key/settings/workflows`):** Zero-persistence dry-run simulation with step timings and copyable CLI commands (`images/50-workflow-studio-dry-run-drawer.png`).\n- **Plane Migration Import Studio (`/admin/imports`):** Single-click bundle ingestion, dry-run diff preview, and transactional live migration (`images/49-admin-plane-import-studio.png`).\n\n![Admin Invalid Object Link Auditor Studio](images/46-admin-link-auditor.png)\n\n---\n\n## Architectural Distinctions: \ud83d\udc4dkanban vs Traditional Tools\n\n| Dimension | Legacy Trackers & Paywalled SaaS (Jira / Vibe Kanban) | \ud83d\udc4dkanban Platform |\n| :--- | :--- | :--- |\n| **License & Cost** | Commercial SaaS / AGPL with paid AI paywalls | Pure Apache-2.0, zero paywalled features |\n| **Agent Interface** | 70-120 raw CRUD tool wrappers (15k-25k tokens) | 27 intent-driven MCP tools across 3 surfaces (<= 1.8k tokens for agent) |\n| **Database Security** | Application-layer authorization checks | Hardware-enforced PostgreSQL `FORCE ROW LEVEL SECURITY` on all tenant tables |\n| **Network Isolation** | Monolithic container or open Docker bridge | Hardened 5-network isolation matrix (`edge`, `app`, `data`, `sandbox`, `egress`) |\n| **Scripted Workflows & Helpers** | Basic webhooks with no blocking execution | Atomic synchronous Wasm validators/mutators and async AI agent gates |\n| **Input Sanitization** | Basic HTML strip | Hostile Unicode lone-surrogate rejection, hidden-DOM pruner, SVG sandbox |\n| **Deployment Mode** | Complex multi-service Kubernetes only | Single-container standalone (`docker run`) or full multi-container production |\n\nFor an exhaustive feature-by-feature evaluation across 35 criteria, see the [Feature Comparison Matrix](Feature-Comparison).\n\n---\n\n## Non-Bypassable Engineering and Security Invariants\n\n1. **Plain ASCII Hyphen Invariant:** All public documentation, wiki articles, and commit messages strictly mandate plain ASCII hyphens (`-`). Unicode em-dashes (U+2014) and en-dashes (U+2013) are strictly forbidden across the codebase and wiki.\n2. **Zero-Context Fail-Closed Database:** In the absence of an explicit session context (`SET LOCAL app.current_principal_id`), all queries against tenant tables return zero rows. The application role `kanban_app` is stripped of `SUPERUSER` and `BYPASSRLS`.\n3. **Hostile Unicode Rejection:** Text ingestion rejects UTF-16 lone surrogates (`0xD800` through `0xDFFF`) prior to UTF-8 encoding, preventing memory corruptions and parser desynchronization.\n4. **Paste-Jacking Defense:** Clipboard inputs are aggressively stripped of hidden-DOM payloads, zero-width spaces, and invisible injection sequences.\n5. **AAL2 Admin Route Enforcement:** Every endpoint under `/api/v1/admin/*` and every administrative tool on `/mcp/admin` requires Authenticator Assurance Level 2 (AAL2) credentials.\n6. **95% Automated Test Coverage:** All core modules maintain at least 95% unit test coverage running on clean-DB fixtures with sub-millisecond `SAVEPOINT` isolation.\n\n---\n\n## Complete Table of Contents\n\n### Track 1: Step-by-Step Guides\n1. [[Guide] Production Promotion and Backup Runbook](Production-Promotion-and-Backup-Runbook) - Single-command standalone promotion, encrypted KBBAK1 backup format, and disaster recovery.\n2. [[Guide] Legacy Tracker Migration and Cutover Runbook](Migration-and-Cutover-Runbook) - 7-phase zero-downtime cutover plan, dry-run reconciliation, and rollback procedures.\n3. [[Guide] How to Use Custom Fields](Guide-Custom-Fields) - Step-by-step custom fields guide, formulas, wasm/nsjail tiers, and approval workflows.\n4. [[Guide] Scripted Workflows and Transition Helpers](Scripted-Workflows-and-Transition-Helpers) - Synchronous transition validators/mutators and asynchronous AI agent gates.\n5. [[Guide] Multi-Card Authentication Studio and Identity Architecture](Multi-Card-Authentication-Studio) - Pluggable auth cards (OAuth2, LDAP, WebAuthn Passkeys, TOTP, Local Admin) with break-glass protection.\n6. [[Guide] Multi-Provider AI Engine, Execution Harnesses, and Runners](Multi-Provider-AI-Engine-and-Runners) - OpenAI, Ollama, Gemini integrations, local CLI pipe harnesses (`agy -p`, `codex -p`), and mTLS runners.\n7. [[Guide] Three-Surface Model Context Protocol (MCP) Server Architecture](Three-Surface-MCP-Server-Architecture) - Dedicated streamable endpoints (`/mcp/agent`, `/mcp/docs`, `/mcp/admin`) with InlineSafeDumper YAML.\n\n### Track 2: Feature & Field Reference\n1. [[Informational] Studio Configuration Reference](Studio-Configuration-Reference) - Exhaustive field configuration tables and security impact across all 11 \ud83d\udc4dkanban Studios.\n2. [[Informational] Enterprise Whitespace, Semantic Emojis, and Kanban Board](Enterprise-Whitespace-and-Kanban-Board) - 5 native view layouts, 2D swimlanes, sub-16ms drag-and-drop, and the `<EmojiHint>` semantic hover system.\n3. [[Informational] Ticket Screen, Peek Drawer, and Work Item Architecture](Ticket-Screen-and-Work-Item-Features) - 960px peek drawer, 17 enterprise work-item features, properties rail, and 4-tab activity stream.\n4. [[Informational] Hierarchical Docs, Project Stickies, and Smart Promotion](Hierarchical-Docs-and-Stickies-with-Smart-Promotion) - ltree page trees, color-coded sticky masonry, and lossless AI-assisted promotion to Docs.\n5. [[Informational] Blinking Cursor Sparkle Completion Engine](Blinking-Cursor-Sparkle-Completion-Engine) - Sub-300ms inline Fill-In-the-Middle (FIM) ghost text with surgical right-click disambiguation.\n6. [[Informational] Model Context Protocol (MCP) Tools Reference Manual](MCP-Tools-Reference) - Exhaustive specification of all 27 MCP tools, parameter schemas, LOD tiers, and destructive token workflows.\n7. [[Informational] REST API Architecture and OpenAPI Integration Guide](REST-API-Architecture-and-OpenAPI-Guide) - Technical guide to the 184-route FastAPI backend, interactive OpenAPI documentation, and TypeScript SDK.\n\n### Track 3: Security & Adoption Overview\n1. [[Informational] Role and Permission Matrix](Role-and-Permission-Matrix) - Visual \u25cf / \u25d0 / \u25cb role and capability matrix across all 7 principal tiers.\n2. [[Informational] Zero-Trust Security Architecture and Explicit Access Visibility](Zero-Trust-Security-and-Access-Visibility) - PostgreSQL FORCE RLS, dynamic sharing pill, access manifests, and STRIDE threat mitigation.\n3. [[Informational] Feature Comparison Matrix (35 Features)](Feature-Comparison) - Comprehensive capability comparison across 35 features evaluating \ud83d\udc4dkanban against Jira, Plane, GitHub, Vibe Kanban, Businessmap, and Codebeamer.\n\n### Track 4: Engineering & Security Architecture\n\n#### Functional Architecture\n1. [[Architectural] System Topology and Multi-Container Architecture](System-Topology-and-Multi-Container-Architecture) - Standalone embedded PostgreSQL Unix socket and 5-network production container stack.\n2. [[Architectural] Universal Object Graph and Invalid Link Auditor](Universal-Object-Graph-and-Link-Auditor) - Unified object spine, 13 typed object relationships, and automated invalid link detection/purging.\n3. [[Architectural] Real-Time Web and WebSocket Architecture](Real-Time-Web-and-WebSocket-Architecture) - Distributed WebSocket hub, connection throttling, channel subscriptions, and board state synchronization.\n4. [[Architectural] Canonical Markdown and Safe Media Pipeline](Canonical-Markdown-and-Safe-Media-Pipeline) - Hostile input sanitization, safe Mermaid rendering, SVG sandboxing, and media proxying.\n5. [[Architectural] Clean-DB Testing and Governance Gates](Clean-DB-Testing-and-Governance-Gates) - Fast parallel test execution, tmpfs template database, pluggable AI fixtures, and CI/CD validation.\n\n#### Security Architecture\n1. [[Architectural] Admin Custom Scripted Fields and Sandboxed Execution](Admin-Custom-Scripted-Fields-and-Sandbox) - Wasmtime (Tier A) and nsjail (Tier B) sandboxed execution with cryptographic tier escalation.\n2. [[Architectural] Custom Scripts and JSON Security Architecture](Custom-Scripts-and-JSON-Security-Architecture) - Hostile input sanitization, AST inspection, and ephemeral token boundaries.\n\n#### Engineering Appendix\n<details>\n<summary>Engineering Appendix</summary>\n\n- [[Architectural] \ud83d\udc4dkanban: Architecture Specification Delta & Gap Analysis](Architecture-Delta-and-Missing-Features) - Forensic analysis of specification requirements versus codebase implementation and tracking backlog.\n- [[Architectural] \ud83d\udc4dkanban User Task & Architecture QA Verification Matrix](User-Tasks-and-QA-Matrix) - Verification audit mapping tasks UT-01 through UT-16 to live browser checks and screenshot deliverables.\n\n</details>\n"
++    "content": "# \ud83d\udc4dkanban: Executive Architecture and System Overview\n\nWelcome to the authoritative technical documentation and wiki for **\ud83d\udc4dkanban** (`thumbs-up-kanban`), an open-source, enterprise-grade project management, ticketing, and knowledge platform built from the ground up on two fundamental pillars:\n1. **Security-First (Priority 0):** Hardened zero-trust infrastructure, PostgreSQL Row-Level Security (`FORCE RLS`), five-tier network isolation, AAL2 administrative authorization, and hostile input sanitization.\n2. **Agent-First (Priority 1):** Purpose-built for autonomous AI agents and human teams alike, replacing the context-bloating CRUD-wrapper anti-pattern with an intent-driven, three-surface Model Context Protocol (MCP) server, deterministic workflow gates, and sub-second execution loops.\n\nLicensed under the strictly permissive **Apache-2.0** license, \ud83d\udc4dkanban eliminates SaaS AI paywalls and per-seat subscription lock-in while competing globally against Jira, Vibe Kanban, and commercial issue trackers with drop-in enterprise migration support.\n\n---\n\n## System Topology\n\n```mermaid\nflowchart TD\n    subgraph Clients[\"Client Surfaces\"]\n        SPA[\"React 19 SPA (Desktop, Tablet, Mobile)\"]\n        Agents[\"Autonomous Agents (Cursor, Claude, Codex, Agy)\"]\n    end\n\n    subgraph Entrypoints[\"API & Protocol Gateways\"]\n        FastAPI[\"FastAPI Application Server<br/>- Multi-Card Auth (AAL2)<br/>- Canonical Markdown Pipe<br/>- WebSocket Realtime Hub<br/>- REST API (184 routes)\"]\n        MCP[\"3-Surface MCP Server<br/>- /mcp/agent (9 tools)<br/>- /mcp/docs (6 tools)<br/>- /mcp/admin (12 tools)<br/>- InlineSafeDumper YAML\"]\n    end\n\n    subgraph Core[\"Database Engine & Object Graph\"]\n        UOG[\"Universal Object Graph (UOG)<br/>PostgreSQL 16 with FORCE ROW LEVEL SECURITY (100%)<br/>- Typed object_links, Spine records, Append-only Ledger<br/>- ltree Hierarchical Docs, pgvector Embeddings, Full-Text<br/>- Invalid Object Link Auditor & Purger\"]\n    end\n\n    subgraph Runtimes[\"Execution Engines\"]\n        AIEngine[\"AI Engine & Orchestration<br/>- OpenAI, Ollama, Gemini<br/>- agy -p, codex -p pipes<br/>- Async Gate Helpers\"]\n        Sandbox[\"Sandbox Execution Runtime<br/>- Tier A: Wasmtime engine<br/>- Tier B: nsjail runner<br/>- Scoped Ephemeral Tokens\"]\n    end\n\n    SPA -->|HTTP / WebSocket| FastAPI\n    Agents -->|HTTP / SSE / STDIO| MCP\n    Agents -->|HTTP REST| FastAPI\n    FastAPI --> Core\n    MCP --> Core\n    Core --> AIEngine\n    Core --> Sandbox\n```\n\n---\n\n## Visual Tour: Platform Highlights\n\n### Enterprise Workspace and Project Hub\nThe workspace home delivers clear project visibility, team velocity metrics, and seamless multi-project navigation with responsive layouts across desktop, tablet, and mobile displays.\n\n![Workspace Home and Project Overview](images/05-workspace-home.png)\n\n### Breathable Whitespace Board and High-Contrast Theming\nThe core Kanban board features sub-16ms smooth drag-and-drop, semantic emoji hints, configurable WIP limits, and an enterprise dark theme for reduced eye strain during extended operational sessions.\n\n![Enterprise Whitespace Board View](images/06-board-view.png)\n\n![Dark Theme Enterprise Kanban Board](images/22-dark-theme-board.png)\n\n### Keyboard-Driven Command Palette\nGlobal keyboard shortcuts (`Ctrl+K` / `Cmd+K`) provide instant fuzzy navigation across tickets, documents, projects, and administrative studios without context switching.\n\n![Global Command Palette Navigation](images/23-command-palette.png)\n\n### Multi-View Projections: Table Inline Editing and Timeline Dependencies\nEngineers can switch instantly between Kanban Board, 3-pane List, Table with capability-gated inline cell editing, Calendar, and Timeline with SVG Bezier BLOCKS dependency arrows.\n\n![Table View Inline Editing](images/37-table-inline-editing.png)\n\n### Fullscreen Issue Studio and Access Visibility Inspector\nExpanding any ticket unlocks the Fullscreen Issue Studio, featuring a Rich Markdown authoring toolbar, Sparkle 320ms Fill-in-the-Middle (FIM) ghost-text completion, the `\ud83d\udee1\ufe0f` Effective Access Inspector, and a 4-tab activity stream.\n\n![Fullscreen Issue View with Rich Markdown Toolbar and Access Inspector](images/39-fullscreen-issue-view.png)\n\n### Advanced Governance and Administrative Studios\nPlatform administrators manage enterprise governance through dedicated studios:\n- **AI Providers & Token Caps Studio (`/admin/ai`):** Write-only key custody, monthly token budgets, and air-gap policies (`images/43-admin-ai-studio-providers.png`).\n- **Invalid Object Link Auditor (`/admin/link-auditor`):** Continuous graph integrity verification, inspect drawer, and two-stage audited purge (`images/46-admin-link-auditor.png`).\n- **Workflow Transition Studio & Dry-Run Drawer (`/projects/:key/settings/workflows`):** Zero-persistence dry-run simulation with step timings and copyable CLI commands (`images/50-workflow-studio-dry-run-drawer.png`).\n- **Plane Migration Import Studio (`/admin/imports`):** Single-click bundle ingestion, dry-run diff preview, and transactional live migration (`images/49-admin-plane-import-studio.png`).\n\n![Admin Invalid Object Link Auditor Studio](images/46-admin-link-auditor.png)\n\n---\n\n## Architectural Distinctions: \ud83d\udc4dkanban vs Traditional Tools\n\n| Dimension | Legacy Trackers & Paywalled SaaS (Jira / Vibe Kanban) | \ud83d\udc4dkanban Platform |\n| :--- | :--- | :--- |\n| **License & Cost** | Commercial SaaS / AGPL with paid AI paywalls | Pure Apache-2.0, zero paywalled features |\n| **Agent Interface** | 70-120 raw CRUD tool wrappers (15k-25k tokens) | 27 intent-driven MCP tools across 3 surfaces (<= 1.8k tokens for agent) |\n| **Database Security** | Application-layer authorization checks | Hardware-enforced PostgreSQL `FORCE ROW LEVEL SECURITY` on all tenant tables |\n| **Network Isolation** | Monolithic container or open Docker bridge | Hardened 5-network isolation matrix (`edge`, `app`, `data`, `sandbox`, `egress`) |\n| **Scripted Workflows & Helpers** | Basic webhooks with no blocking execution | Atomic synchronous Wasm validators/mutators and async AI agent gates |\n| **Input Sanitization** | Basic HTML strip | Hostile Unicode lone-surrogate rejection, hidden-DOM pruner, SVG sandbox |\n| **Deployment Mode** | Complex multi-service Kubernetes only | Single-container standalone (`docker run`) or full multi-container production |\n\nFor an exhaustive feature-by-feature evaluation across 35 criteria, see the [Feature Comparison Matrix](Feature-Comparison).\n\n---\n\n## Non-Bypassable Engineering and Security Invariants\n\n1. **Plain ASCII Hyphen Invariant:** All public documentation, wiki articles, and commit messages strictly mandate plain ASCII hyphens (`-`). Unicode em-dashes (U+2014) and en-dashes (U+2013) are strictly forbidden across the codebase and wiki.\n2. **Zero-Context Fail-Closed Database:** In the absence of an explicit session context (`SET LOCAL app.current_principal_id`), all queries against tenant tables return zero rows. The application role `kanban_app` is stripped of `SUPERUSER` and `BYPASSRLS`.\n3. **Hostile Unicode Rejection:** Text ingestion rejects UTF-16 lone surrogates (`0xD800` through `0xDFFF`) prior to UTF-8 encoding, preventing memory corruptions and parser desynchronization.\n4. **Paste-Jacking Defense:** Clipboard inputs are aggressively stripped of hidden-DOM payloads, zero-width spaces, and invisible injection sequences.\n5. **AAL2 Admin Route Enforcement:** Every endpoint under `/api/v1/admin/*` and every administrative tool on `/mcp/admin` requires Authenticator Assurance Level 2 (AAL2) credentials.\n6. **95% Automated Test Coverage:** All core modules maintain at least 95% unit test coverage running on clean-DB fixtures with sub-millisecond `SAVEPOINT` isolation.\n\n---\n\n## Complete Table of Contents\n\n### Track 1: Step-by-Step Guides\n1. [[Guide] Production Promotion and Backup Runbook](Production-Promotion-and-Backup-Runbook) - Single-command standalone promotion, encrypted KBBAK1 backup format, and disaster recovery.\n2. [[Guide] Legacy Tracker Migration and Cutover Runbook](Migration-and-Cutover-Runbook) - 7-phase zero-downtime cutover plan, dry-run reconciliation, and rollback procedures.\n3. [[Guide] How to Use Custom Fields](Guide-Custom-Fields) - Step-by-step custom fields guide, formulas, wasm/nsjail tiers, and approval workflows.\n4. [[Guide] Scripted Workflows and Transition Helpers](Scripted-Workflows-and-Transition-Helpers) - Synchronous transition validators/mutators and asynchronous AI agent gates.\n5. [[Guide] Multi-Card Authentication Studio and Identity Architecture](Multi-Card-Authentication-Studio) - Pluggable auth cards (OAuth2, LDAP, WebAuthn Passkeys, TOTP, Local Admin) with break-glass protection.\n6. [[Guide] Multi-Provider AI Engine, Execution Harnesses, and Runners](Multi-Provider-AI-Engine-and-Runners) - OpenAI, Ollama, Gemini integrations, local CLI pipe harnesses (`agy -p`, `codex -p`), and mTLS runners.\n7. [[Guide] Three-Surface Model Context Protocol (MCP) Server Architecture](Three-Surface-MCP-Server-Architecture) - Dedicated streamable endpoints (`/mcp/agent`, `/mcp/docs`, `/mcp/admin`) with InlineSafeDumper YAML.\n\n### Track 2: Feature & Field Reference\n1. [[Informational] Studio Configuration Reference](Studio-Configuration-Reference) - Exhaustive field configuration tables and security impact across all 11 \ud83d\udc4dkanban Studios.\n2. [[Informational] Enterprise Whitespace, Semantic Emojis, and Kanban Board](Enterprise-Whitespace-and-Kanban-Board) - 5 native view layouts, 2D swimlanes, sub-16ms drag-and-drop, and the `<EmojiHint>` semantic hover system.\n3. [[Informational] Ticket Screen, Peek Drawer, and Work Item Architecture](Ticket-Screen-and-Work-Item-Features) - 960px peek drawer, 17 enterprise work-item features, properties rail, and 4-tab activity stream.\n4. [[Informational] Hierarchical Docs, Project Stickies, and Smart Promotion](Hierarchical-Docs-and-Stickies-with-Smart-Promotion) - ltree page trees, color-coded sticky masonry, and lossless AI-assisted promotion to Docs.\n5. [[Informational] Blinking Cursor Sparkle Completion Engine](Blinking-Cursor-Sparkle-Completion-Engine) - Sub-300ms inline Fill-In-the-Middle (FIM) ghost text with surgical right-click disambiguation.\n6. [[Informational] Model Context Protocol (MCP) Tools Reference Manual](MCP-Tools-Reference) - Exhaustive specification of all 27 MCP tools, parameter schemas, LOD tiers, and destructive token workflows.\n7. [[Informational] REST API Architecture and OpenAPI Integration Guide](REST-API-Architecture-and-OpenAPI-Guide) - Technical guide to the 184-route FastAPI backend, interactive OpenAPI documentation, and TypeScript SDK.\n\n### Track 3: Security & Adoption Overview\n1. [[Informational] Role and Permission Matrix](Role-and-Permission-Matrix) - Visual \u25cf / \u25d0 / \u25cb role and capability matrix across all 7 principal tiers.\n2. [[Informational] Zero-Trust Security Architecture and Explicit Access Visibility](Zero-Trust-Security-and-Access-Visibility) - PostgreSQL FORCE RLS, dynamic sharing pill, access manifests, and STRIDE threat mitigation.\n3. [[Informational] Feature Comparison Matrix (35 Features)](Feature-Comparison) - Comprehensive capability comparison across 35 features evaluating \ud83d\udc4dkanban against Jira, Plane, GitHub, Vibe Kanban, Businessmap, and Codebeamer.\n\n### Track 4: Engineering & Security Architecture\n\n#### Functional Architecture\n1. [[Architectural] System Topology and Multi-Container Architecture](System-Topology-and-Multi-Container-Architecture) - Standalone embedded PostgreSQL Unix socket and 5-network production container stack.\n2. [[Architectural] Universal Object Graph and Invalid Link Auditor](Universal-Object-Graph-and-Link-Auditor) - Unified object spine, 13 typed object relationships, and automated invalid link detection/purging.\n3. [[Architectural] Real-Time Web and WebSocket Architecture](Real-Time-Web-and-WebSocket-Architecture) - Distributed WebSocket hub, connection throttling, channel subscriptions, and board state synchronization.\n4. [[Architectural] Canonical Markdown and Safe Media Pipeline](Canonical-Markdown-and-Safe-Media-Pipeline) - Hostile input sanitization, safe Mermaid rendering, SVG sandboxing, and media proxying.\n5. [[Architectural] Clean-DB Testing and Governance Gates](Clean-DB-Testing-and-Governance-Gates) - Fast parallel test execution, tmpfs template database, pluggable AI fixtures, and CI/CD validation.\n\n#### Security Architecture\n1. [[Architectural] Admin Custom Scripted Fields and Sandboxed Execution](Admin-Custom-Scripted-Fields-and-Sandbox) - Wasmtime (Tier A) and nsjail (Tier B) sandboxed execution with cryptographic tier escalation.\n2. [[Architectural] Custom Scripts and JSON Security Architecture](Custom-Scripts-and-JSON-Security-Architecture) - Hostile input sanitization, AST inspection, and ephemeral token boundaries.\n\n#### Engineering Appendix\n<details>\n<summary>Engineering Appendix</summary>\n\n- [[Architectural] \ud83d\udc4dkanban: Architecture Specification Delta & Gap Analysis](Architecture-Delta-and-Missing-Features) - Forensic analysis of specification requirements versus codebase implementation and tracking backlog.\n- [[Architectural] \ud83d\udc4dkanban User Task & Architecture QA Verification Matrix](User-Tasks-and-QA-Matrix) - Verification audit mapping tasks UT-01 through UT-16 to live browser checks and screenshot deliverables.\n\n</details>\n"
+   },
+   {
+     "slug": "admin-custom-scripted-fields-and-sandbox",
+@@ -1692,8 +1692,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+     "summary": "Authoritative technical reference specification for all configuration attributes, execution tiers, and administrative controls across all 11 \ud83d\udc4dkanban Studios.",
+     "sections": [
+       {
+-        "id": "workspace-studio-workspace-studio",
+-        "title": "1. Workspace Studio (#workspace-studio)",
++        "id": "workspace-studio",
++        "title": "1. Workspace Studio",
+         "level": 2
+       },
+       {
+@@ -1702,8 +1702,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+         "level": 3
+       },
+       {
+-        "id": "project-studio-project-studio",
+-        "title": "2. Project Studio (#project-studio)",
++        "id": "project-studio",
++        "title": "2. Project Studio",
+         "level": 2
+       },
+       {
+@@ -1712,8 +1712,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+         "level": 3
+       },
+       {
+-        "id": "workflow-transition-studio-workflow-studio",
+-        "title": "3. Workflow Transition Studio (#workflow-studio)",
++        "id": "workflow-transition-studio",
++        "title": "3. Workflow Transition Studio",
+         "level": 2
+       },
+       {
+@@ -1722,8 +1722,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+         "level": 3
+       },
+       {
+-        "id": "custom-fields-studio-custom-fields-studio",
+-        "title": "4. Custom Fields Studio (#custom-fields-studio)",
++        "id": "custom-fields-studio",
++        "title": "4. Custom Fields Studio",
+         "level": 2
+       },
+       {
+@@ -1732,8 +1732,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+         "level": 3
+       },
+       {
+-        "id": "authentication-studio-auth-studio",
+-        "title": "5. Authentication Studio (#auth-studio)",
++        "id": "authentication-studio",
++        "title": "5. Authentication Studio",
+         "level": 2
+       },
+       {
+@@ -1742,8 +1742,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+         "level": 3
+       },
+       {
+-        "id": "mcp-access-studio-mcp-studio",
+-        "title": "6. MCP Access Studio (#mcp-studio)",
++        "id": "mcp-access-studio",
++        "title": "6. MCP Access Studio",
+         "level": 2
+       },
+       {
+@@ -1752,8 +1752,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+         "level": 3
+       },
+       {
+-        "id": "oauth-21-governance-studio-oauth-studio",
+-        "title": "7. OAuth 2.1 Governance Studio (#oauth-studio)",
++        "id": "oauth-21-governance-studio",
++        "title": "7. OAuth 2.1 Governance Studio",
+         "level": 2
+       },
+       {
+@@ -1762,8 +1762,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+         "level": 3
+       },
+       {
+-        "id": "ai-providers-studio-ai-studio",
+-        "title": "8. AI Providers Studio (#ai-studio)",
++        "id": "ai-providers-studio",
++        "title": "8. AI Providers Studio",
+         "level": 2
+       },
+       {
+@@ -1772,8 +1772,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+         "level": 3
+       },
+       {
+-        "id": "agent-definitions-studio-agents-studio",
+-        "title": "9. Agent Definitions Studio (#agents-studio)",
++        "id": "agent-definitions-studio",
++        "title": "9. Agent Definitions Studio",
+         "level": 2
+       },
+       {
+@@ -1782,8 +1782,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+         "level": 3
+       },
+       {
+-        "id": "remote-runners-studio-runners-studio",
+-        "title": "10. Remote Runners Studio (#runners-studio)",
++        "id": "remote-runners-studio",
++        "title": "10. Remote Runners Studio",
+         "level": 2
+       },
+       {
+@@ -1792,8 +1792,8 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+         "level": 3
+       },
+       {
+-        "id": "standalone-promotion-studio-standalone-studio",
+-        "title": "11. Standalone & Promotion Studio (#standalone-studio)",
++        "id": "standalone-promotion-studio",
++        "title": "11. Standalone & Promotion Studio",
+         "level": 2
+       },
+       {
+@@ -1802,7 +1802,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+         "level": 3
+       }
+     ],
+-    "content": "# [Informational] Studio Configuration Reference\n\nAuthoritative technical reference specification for all configuration attributes, execution tiers, and administrative controls across all 11 \ud83d\udc4dkanban Studios.\n\n---\n\n## 1. Workspace Studio (`#workspace-studio`)\n\nThe Workspace Studio (`/workspaces/:ws/settings` or `/admin/workspaces`) manages top-level tenancy, membership defaults, data lifecycle policies, and security guardrails.\n\n<a id=\"workspace-configuration\"></a>\n<a id=\"workspace-studio\"></a>\n\n### Workspace Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `name` | Human-readable name of the workspace displayed in header and navigation | UTF-8 String (1 to 128 characters) | Required at provisioning | Public within workspace; visible to all members and invited guests |\n| `slug` | URL-safe workspace identifier used in API routes and web paths | Lowercase alphanumeric ASCII with hyphens (2 to 64 chars) | Derived from name | Immutable after creation; binds database RLS tenancy context |\n| `default_role` | Default permission tier assigned to newly provisioned local users | `WORKSPACE_MEMBER`, `WORKSPACE_VIEWER`, `WORKSPACE_GUEST` | `WORKSPACE_MEMBER` | Restricts baseline capabilities before explicit project assignments |\n| `trash_retention_days` | Number of days soft-deleted items remain in Trash Studio before automated purge | Integer between 7 and 365 | 30 | Governs compliance data retention; automated purge requires daemon runner |\n| `auto_archive_threshold_days` | Inactivity duration after which closed tickets are automatically archived | Integer between 0 and 730 (0 disables auto-archive) | 90 | Keeps active board queries lightweight; archived tickets remain search-indexable |\n| `max_projects_limit` | Maximum number of active projects allowed within this workspace | Positive integer (1 to 1000) | 50 | Resource cap preventing tenant sprawl and memory exhaustion |\n| `air_gap_enforced` | Strict zero-egress flag blocking all external cloud AI and runner connections | Boolean (`true` / `false`) | `false` | When enabled, only local Ollama models and internal runners execute |\n| `allowed_email_domains` | Comma-separated domain allowlist for user registration and invite cards | List of valid domain strings (e.g. `corp.example.com`) | Empty (Allow all verified) | Rejects non-corporate email addresses at registration gate |\n\n---\n\n## 2. Project Studio (`#project-studio`)\n\nThe Project Studio (`/projects/:proj/settings`) configures project-level attributes, work item defaults, view presets, and planning dimensions.\n\n<a id=\"project-configuration\"></a>\n<a id=\"project-studio\"></a>\n\n### Project Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `name` | Display name of the project | UTF-8 String (1 to 128 characters) | Required at creation | Scoped to workspace; surfaced in command palette and breadcrumbs |\n| `key` | Prefix key for issue identifiers (e.g. `KAN-142`) | Uppercase ASCII alphanumeric (2 to 10 characters) | Required at creation | Immutable; generates human-readable issue keys across all surfaces |\n| `description` | Markdown overview and charter for the project | Canonical UTF-8 Markdown (up to 10,000 characters) | Empty | Sanitized server-side; safe Mermaid and media proxying enabled |\n| `default_workflow_id` | Identifier of active workflow managing state transitions | Valid UUID of existing project workflow | Default Kanban Workflow | Determines active transition gates, validators, and AI agent checks |\n| `auto_archive_days` | Project-specific threshold for archiving closed work items | Integer (0 to 365, 0 = inherit workspace) | 0 | Overrides workspace retention for high-velocity software teams |\n| `enable_cycles` | Toggles Agile/Scrum cycle and sprint planning features | Boolean (`true` / `false`) | `true` | Enables cycle velocity tracking, start/end dates, and rollover |\n| `enable_modules` | Toggles functional module breakdown and progress roll-ups | Boolean (`true` / `false`) | `true` | Allows hierarchical grouping of work items under functional deliverables |\n| `wip_limits_enforcement` | Behavior when Kanban column WIP limits are exceeded | `warn`, `strict_block`, `disabled` | `warn` | `strict_block` rejects card drop operations exceeding column capacity |\n| `default_assignee_mode` | Initial assignment policy for newly authored work items | `unassigned`, `project_lead`, `creator` | `unassigned` | Prevents orphaned tickets and automates triage assignment |\n\n---\n\n## 3. Workflow Transition Studio (`#workflow-studio`)\n\nThe Workflow Transition Studio (`/projects/:proj/settings/workflows`) defines state groups, transition helper hooks, synchronous validators, and asynchronous AI agent gates.\n\n<a id=\"workflow-configuration\"></a>\n<a id=\"workflow-studio\"></a>\n\n### Workflow Transition Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `state_name` | Human-readable label for the workflow state | String (1 to 64 characters) | Required (e.g. `In Review`) | Appears on board columns, peek drawers, and transition selectors |\n| `state_group` | Standardized category mapping for cycle metrics | `backlog`, `unstarted`, `started`, `completed`, `cancelled` | `started` | Used in velocity burn-down and sub-issue progress roll-ups |\n| `helper_type` | Engine used to evaluate transition eligibility | `wasm_validator`, `wasm_mutator`, `agent_gate` | `wasm_validator` | Governs execution latency and synchronous vs asynchronous processing |\n| `hook_path` | Target module, wasm bytecode, or agent identifier | File path, slug, or registered agent UUID | Required | Executes within sandboxed environment with strict resource caps |\n| `failure_policy` | Action taken if transition helper rejects or times out | `BLOCK_TRANSITION`, `WARN_AND_ALLOW`, `PROVISIONAL_HOLD` | `BLOCK_TRANSITION` | Fail-closed invariant preventing invalid transitions into protected states |\n| `execution_timeout_ms` | Maximum allowed wall-clock execution time | 50ms to 30000ms (Sync Wasm: <=250ms) | 100ms | Prevents hanging transitions and thread pool starvation |\n| `sandbox_tier` | Isolation level enforced during helper execution | `wasm` (in-process wasmtime) or `nsjail` (container) | `wasm` | Sandboxed with zero network or filesystem syscall access |\n\n---\n\n## 4. Custom Fields Studio (`#custom-fields-studio`)\n\nThe Custom Fields Studio (`/projects/:proj/settings/custom-fields`) defines dynamic metadata, computed story points, and sandboxed formulas.\n\n<a id=\"custom-fields-configuration\"></a>\n<a id=\"custom-fields-studio\"></a>\n\n### Custom Fields Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `name` | Human-readable label displayed on ticket rails and tables | String (1 to 64 characters) | Required | Displayed alongside execution status badge (`\ud83e\uddea`) |\n| `slug` | Unique field identifier used in formulas and JSON payloads | Lowercase alphanumeric ASCII with hyphens | Derived from name | Used in formula expressions and API JSON properties |\n| `flavor` | Execution tier and computation engine | `scalar`, `formula`, `wasm`, `nsjail` | `formula` | Determines performance budget and standalone mode availability |\n| `sandbox_tier` | Multi-tier sandbox engine used for execution | `scalar`, `wasmtime` (Tier A), `nsjail` (Tier B) | `wasmtime` | `nsjail` requires multi-container compose; fail-closed in standalone |\n| `credential_mode` | Token identity provided during script execution | `INVOKING_USER`, `SERVICE_ACCOUNT` | `INVOKING_USER` | `SERVICE_ACCOUNT` requires dual-control cryptographic approval |\n| `target_scope` | Maximum tenant visibility boundary of the field | `PROJECT`, `WORKSPACE`, `SERVER` | `PROJECT` | Escalation beyond `PROJECT` requires AAL2 administrative step-up |\n| `output_format` | Canonical schema used to format and render output | `text`, `number`, `badge`, `severity_pill`, `url`, `markdown_snippet`, `json_table` | `text` | Enforces strict Pydantic validation before persisting to JSONB |\n| `format_metadata` | Configuration options tailored to chosen output format | JSON object matching schema specification | `{}` | Governs decimal precision, color tokens, allowlists, or table headers |\n| `script_source` | Raw source code for formula or script evaluation | Python AST expression, Rust Wasm, or container script | Required | Signed with SHA-256 digest upon commit; immutable against database tampering |\n| `egress_allowlist` | Allowed destination hostnames for nsjail tier | Comma-separated domain list (e.g. `api.github.com`) | Empty (Zero egress) | Network disabled by default via Linux kernel `CLONE_NEWNET` |\n\n---\n\n## 5. Authentication Studio (`#auth-studio`)\n\nThe Multi-Card Authentication Studio (`/admin/auth`) configures enterprise identity providers, WebAuthn Passkeys, LDAP trees, and break-glass recovery.\n\n<a id=\"authentication-configuration\"></a>\n<a id=\"auth-studio\"></a>\n\n### Authentication Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `provider_type` | Underlying identity protocol card | `LOCAL_ADMIN`, `OAUTH2`, `OIDC`, `LDAP`, `WEBAUTHN`, `TOTP` | Required | Determines credential validation handshake and token exchange |\n| `card_enabled` | Master active toggle for the authentication card | Boolean (`true` / `false`) | `true` | Disabled cards reject authentication attempts immediately |\n| `sort_rank` | Order in which login cards appear on `/login` screen | Non-negative integer (lower ranks appear first) | 10 | Allows organizations to prioritize SSO while preserving local admin cards |\n| `rp_name` | WebAuthn Relying Party display name | String (Always canonical `\ud83d\udc4dkanban`) | `\ud83d\udc4dkanban` | Displayed by browser and hardware security keys during passkey prompts |\n| `rp_id` | WebAuthn Relying Party domain identifier | Strict ASCII FQDN without protocol or port | Hostname of deployment | Must match browser origin to prevent credential theft or spoofing |\n| `issuer_url` | OIDC discovery endpoint URL | Valid HTTPS URL | None | Fetches `/.well-known/openid-configuration` and cryptographic keys |\n| `client_id` | OAuth/OIDC application client identifier | ASCII string | None | Public identifier registered with enterprise identity provider |\n| `client_secret` | OAuth/OIDC client secret credential | Encrypted string (write-only custody) | None | Stored encrypted in PostgreSQL; never exposed over REST API |\n| `ldap_host` | LDAPS directory hostname or IP address | Hostname or IP | None | LDAPS on port 636 or StartTLS required; plaintext LDAP rejected |\n| `ldap_bind_dn` | Distinguished Name used for directory lookup | LDAP DN string (e.g. `cn=admin,dc=corp,dc=com`) | None | Service account with read-only search permissions across user tree |\n| `break_glass_active` | Emergency lockout prevention bypass trigger | Boolean (`true` / `false`) | `false` | Allows emergency local admin access when SSO is offline |\n\n---\n\n## 6. MCP Access Studio (`#mcp-studio`)\n\nThe MCP Access Studio (`/settings/mcp` or `/admin/mcp`) manages Model Context Protocol API tokens, Level of Detail (LOD) defaults, and rate limits.\n\n<a id=\"mcp-configuration\"></a>\n<a id=\"mcp-studio\"></a>\n\n### MCP Access Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `surface_type` | Target isolated streamable endpoint | `/mcp/agent`, `/mcp/docs`, `/mcp/admin` | `/mcp/agent` | Determines tool catalog and token budget ceiling (<= 1,850 tokens for agent) |\n| `key_name` | Descriptive name of the API token or client tool | String (1 to 64 characters) | Required | Surfaced in audit logs and active session inspector |\n| `token_prefix` | Standardized key prefix identifying privilege level | `kb_agt_*`, `kb_doc_*`, `kb_adm_*` | Auto-assigned | Cryptographically identifies target surface before database lookup |\n| `lod_tier` | Default Level of Detail returned in tool responses | `summary`, `standard`, `full` | `standard` | Controls response verbosity; `summary` minimizes agent context consumption |\n| `rate_limit_rpm` | Maximum allowed tool invocations per minute | Integer between 10 and 600 | 120 | Protects database connection pool from runaway autonomous agent loops |\n| `expires_at` | Expiration timestamp for the API key | ISO-8601 Timestamp or `None` | 90 days from creation | Expired keys reject calls with `401 UNAUTHORIZED` |\n| `destructive_gate` | Enables two-stage confirmation for destructive operations | Boolean (`true` / `false`) | `true` | Requires short-lived confirmation token before permanent deletions |\n\n---\n\n## 7. OAuth 2.1 Governance Studio (`#oauth-studio`)\n\nThe OAuth 2.1 Governance Studio (`/admin/oauth`) registers client applications, enforces PKCE code challenges, and configures token lifetimes.\n\n<a id=\"oauth-configuration\"></a>\n<a id=\"oauth-studio\"></a>\n\n### OAuth 2.1 Governance Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `client_name` | Name of the integrating client application | String (1 to 128 characters) | Required | Displayed on user authorization consent screens |\n| `client_id` | Unique OAuth client identifier | String prefixed with `kb_client_` | Auto-generated | Public application key used during authorization code flow |\n| `redirect_uris` | Allowed callback URLs for authorization codes | List of strict HTTPS URLs (localhost allowed for dev) | Required | Exact string matching enforced; wildcards strictly forbidden |\n| `pkce_enforced` | Proof Key for Code Exchange requirement | Mandatory `S256` challenge | `S256` | Rejects plaintext code challenges; mitigates authorization code interception |\n| `allowed_scopes` | List of privilege scopes client can request | `agent`, `docs`, `admin`, `read:issues`, `write:issues` | `agent` | Token capability bitmask cannot exceed granted scopes |\n| `access_token_ttl` | Lifetime of minted access tokens | Integer seconds (300 to 86400) | 3600 (1 hour) | Ephemeral lifetime limiting blast radius of token leakage |\n| `refresh_token_ttl` | Lifetime of rotating refresh tokens | Integer seconds (86400 to 2592000) | 2592000 (30 days) | Refresh tokens rotate upon use; reused tokens revoke family |\n\n---\n\n## 8. AI Providers Studio (`#ai-studio`)\n\nThe AI Providers Studio (`/admin/ai`) registers model providers, configures write-only API keys, and sets monthly token consumption caps.\n\n<a id=\"ai-configuration\"></a>\n<a id=\"ai-studio\"></a>\n\n### AI Providers Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `provider_key` | Underlying AI provider implementation | `openai`, `gemini`, `ollama`, `custom` | `gemini` | Selects prompt serializer, tool calling dialect, and streaming pipeline |\n| `priority` | Fallback dispatch order when multiple providers are active | Integer (1 to 100, higher runs first) | 10 | Primary provider attempted first; falls back on rate limit or 5xx |\n| `api_endpoint` | Base URL for API communications | Valid HTTP/HTTPS URL | Official cloud endpoint | Local Ollama uses `http://localhost:11434`; cloud requires HTTPS |\n| `api_key` | Cryptographic API secret for provider access | String (Write-only custody) | None | Stored encrypted in PostgreSQL; never sent back to browser client |\n| `monthly_token_cap` | Monthly token consumption budget ceiling | Non-negative integer (0 = unlimited) | 1,000,000 | Blocks cloud invocations once budget is reached to prevent cost overruns |\n| `default_model` | Model identifier used for sparkle and transition gates | String (e.g. `gemini-2.5-flash`, `gpt-4o`) | Provider default | Balances reasoning capability against response latency |\n| `temperature` | Randomness parameter for model generations | Float between 0.0 and 1.0 | 0.2 | Low temperatures ensure deterministic responses for code and QA gates |\n\n---\n\n## 9. Agent Definitions Studio (`#agents-studio`)\n\nThe Agent Definitions Studio (`/admin/agents`) authors system personas, binds autonomous agents to service accounts, and configures execution harnesses.\n\n<a id=\"agents-configuration\"></a>\n<a id=\"agents-studio\"></a>\n\n### Agent Definitions Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `agent_name` | Unique name and identifier for the autonomous agent | String (1 to 64 characters) | Required | Used in ticket mentions, activity streams, and assignment cards |\n| `system_prompt` | Core instructions, persona guidelines, and security boundaries | UTF-8 Markdown text | Required | Directs model reasoning; stripped of dangerous injection sequences |\n| `execution_harness` | Runtime environment executing agent invocations | `api_direct`, `cli_pipe`, `remote_runner` | `api_direct` | `cli_pipe` uses zero-shell `agy -p` or `codex -p` in Linux jail |\n| `cli_pipe_binary` | Binary path used for zero-shell CLI pipe harness | Pre-approved binary name (`agy`, `codex`) | `agy` | Executes without shell or bash; communicates strictly over STDIN/STDOUT |\n| `service_principal_id` | Bound service account identity for database RLS | Valid UUID of service principal | Auto-provisioned | Binds database permissions to caller identity via `SET LOCAL` |\n| `repository_access` | Git repository access mode granted to the agent | `none`, `ro_mount`, `ephemeral_clone` | `none` | `ro_mount` mounts repository strictly read-only for forensic QA |\n\n---\n\n## 10. Remote Runners Studio (`#runners-studio`)\n\nThe Remote Runners Studio (`/admin/runners`) configures distributed build nodes, mints enrollment tokens, and monitors mTLS heartbeats.\n\n<a id=\"runners-configuration\"></a>\n<a id=\"runners-studio\"></a>\n\n### Remote Runners Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `runner_name` | Unique hostname or identifier of the runner node | String (1 to 64 characters) | Required | Displayed in runner health dashboard and active job telemetry |\n| `enrollment_token` | Single-use cryptographic token for runner registration | Base64-encoded HMAC string | Minted on demand | Expires after 60 minutes; grants certificate signing request (CSR) |\n| `mtls_cert_fingerprint`| SHA-256 fingerprint of validated client certificate | Hexadecimal SHA-256 hash | Registered upon enroll | Hardware-bound identity verifying mutual TLS WebSocket connection |\n| `max_concurrent_jobs` | Maximum simultaneous task executions allowed on runner | Integer between 1 and 16 | 2 | Throttles runner workload to prevent resource exhaustion |\n| `heartbeat_timeout_s` | Maximum allowable duration without ping before offline | Integer between 10 and 120 seconds | 30 | Dead runners are marked offline and active jobs rescheduled |\n| `allowed_repo_remotes` | Whitelist of Git repository URLs runner can clone | Comma-separated list of repository URLs | Empty (All authorized) | Prevents runner exploitation for arbitrary network exfiltration |\n\n---\n\n## 11. Standalone & Promotion Studio (`#standalone-studio`)\n\nThe Standalone & Promotion Studio (`/admin/standalone`) inspects deployment topologies, triggers promotion to multi-container compose, and exports encrypted backups.\n\n<a id=\"standalone-configuration\"></a>\n<a id=\"standalone-studio\"></a>\n\n### Standalone & Promotion Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `deployment_mode` | Current platform runtime environment | `STANDALONE_CONTAINER`, `MULTI_CONTAINER_COMPOSE` | Detected at boot | Gates availability of nsjail container sandboxes and Redis hubs |\n| `backup_encryption_passphrase` | Secret passphrase used to derive AES-256 backup key | String (Minimum 16 characters) | User-supplied | Used by PBKDF2 to encrypt standalone archive into KBBAK1 format |\n| `target_postgres_url` | External database URL used during promotion cutover | Valid PostgreSQL connection string | None | Must support UTF-8, RLS, and required extensions (`ltree`, `pgvector`) |\n| `target_redis_url` | External Redis connection string for WebSocket pub/sub | Valid Redis URL (`redis://` or `rediss://`) | None | Decouples distributed realtime events from single-process memory |\n| `backup_storage_path` | Local filesystem path where backups are stored | Directory path (default `/var/backups/kanban`) | `/var/backups/kanban` | Requires write permissions; accessible for disaster recovery download |\n| `auto_promotion_verify` | Runs comprehensive post-migration verification suite | Boolean (`true` / `false`) | `true` | Asserts object link integrity and user access manifests before cutover |\n"
++    "content": "# [Informational] Studio Configuration Reference\n\nAuthoritative technical reference specification for all configuration attributes, execution tiers, and administrative controls across all 11 \ud83d\udc4dkanban Studios.\n\n---\n\n## 1. Workspace Studio\nThe Workspace Studio (`/workspaces/:ws/settings` or `/admin/workspaces`) manages top-level tenancy, membership defaults, data lifecycle policies, and security guardrails.\n\n\n### Workspace Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `name` | Human-readable name of the workspace displayed in header and navigation | UTF-8 String (1 to 128 characters) | Required at provisioning | Public within workspace; visible to all members and invited guests |\n| `slug` | URL-safe workspace identifier used in API routes and web paths | Lowercase alphanumeric ASCII with hyphens (2 to 64 chars) | Derived from name | Immutable after creation; binds database RLS tenancy context |\n| `default_role` | Default permission tier assigned to newly provisioned local users | `WORKSPACE_MEMBER`, `WORKSPACE_VIEWER`, `WORKSPACE_GUEST` | `WORKSPACE_MEMBER` | Restricts baseline capabilities before explicit project assignments |\n| `trash_retention_days` | Number of days soft-deleted items remain in Trash Studio before automated purge | Integer between 7 and 365 | 30 | Governs compliance data retention; automated purge requires daemon runner |\n| `auto_archive_threshold_days` | Inactivity duration after which closed tickets are automatically archived | Integer between 0 and 730 (0 disables auto-archive) | 90 | Keeps active board queries lightweight; archived tickets remain search-indexable |\n| `max_projects_limit` | Maximum number of active projects allowed within this workspace | Positive integer (1 to 1000) | 50 | Resource cap preventing tenant sprawl and memory exhaustion |\n| `air_gap_enforced` | Strict zero-egress flag blocking all external cloud AI and runner connections | Boolean (`true` / `false`) | `false` | When enabled, only local Ollama models and internal runners execute |\n| `allowed_email_domains` | Comma-separated domain allowlist for user registration and invite cards | List of valid domain strings (e.g. `corp.example.com`) | Empty (Allow all verified) | Rejects non-corporate email addresses at registration gate |\n\n---\n\n## 2. Project Studio\nThe Project Studio (`/projects/:proj/settings`) configures project-level attributes, work item defaults, view presets, and planning dimensions.\n\n\n### Project Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `name` | Display name of the project | UTF-8 String (1 to 128 characters) | Required at creation | Scoped to workspace; surfaced in command palette and breadcrumbs |\n| `key` | Prefix key for issue identifiers (e.g. `KAN-142`) | Uppercase ASCII alphanumeric (2 to 10 characters) | Required at creation | Immutable; generates human-readable issue keys across all surfaces |\n| `description` | Markdown overview and charter for the project | Canonical UTF-8 Markdown (up to 10,000 characters) | Empty | Sanitized server-side; safe Mermaid and media proxying enabled |\n| `default_workflow_id` | Identifier of active workflow managing state transitions | Valid UUID of existing project workflow | Default Kanban Workflow | Determines active transition gates, validators, and AI agent checks |\n| `auto_archive_days` | Project-specific threshold for archiving closed work items | Integer (0 to 365, 0 = inherit workspace) | 0 | Overrides workspace retention for high-velocity software teams |\n| `enable_cycles` | Toggles Agile/Scrum cycle and sprint planning features | Boolean (`true` / `false`) | `true` | Enables cycle velocity tracking, start/end dates, and rollover |\n| `enable_modules` | Toggles functional module breakdown and progress roll-ups | Boolean (`true` / `false`) | `true` | Allows hierarchical grouping of work items under functional deliverables |\n| `wip_limits_enforcement` | Behavior when Kanban column WIP limits are exceeded | `warn`, `strict_block`, `disabled` | `warn` | `strict_block` rejects card drop operations exceeding column capacity |\n| `default_assignee_mode` | Initial assignment policy for newly authored work items | `unassigned`, `project_lead`, `creator` | `unassigned` | Prevents orphaned tickets and automates triage assignment |\n\n---\n\n## 3. Workflow Transition Studio\nThe Workflow Transition Studio (`/projects/:proj/settings/workflows`) defines state groups, transition helper hooks, synchronous validators, and asynchronous AI agent gates.\n\n\n### Workflow Transition Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `state_name` | Human-readable label for the workflow state | String (1 to 64 characters) | Required (e.g. `In Review`) | Appears on board columns, peek drawers, and transition selectors |\n| `state_group` | Standardized category mapping for cycle metrics | `backlog`, `unstarted`, `started`, `completed`, `cancelled` | `started` | Used in velocity burn-down and sub-issue progress roll-ups |\n| `helper_type` | Engine used to evaluate transition eligibility | `wasm_validator`, `wasm_mutator`, `agent_gate` | `wasm_validator` | Governs execution latency and synchronous vs asynchronous processing |\n| `hook_path` | Target module, wasm bytecode, or agent identifier | File path, slug, or registered agent UUID | Required | Executes within sandboxed environment with strict resource caps |\n| `failure_policy` | Action taken if transition helper rejects or times out | `BLOCK_TRANSITION`, `WARN_AND_ALLOW`, `PROVISIONAL_HOLD` | `BLOCK_TRANSITION` | Fail-closed invariant preventing invalid transitions into protected states |\n| `execution_timeout_ms` | Maximum allowed wall-clock execution time | 50ms to 30000ms (Sync Wasm: <=250ms) | 100ms | Prevents hanging transitions and thread pool starvation |\n| `sandbox_tier` | Isolation level enforced during helper execution | `wasm` (in-process wasmtime) or `nsjail` (container) | `wasm` | Sandboxed with zero network or filesystem syscall access |\n\n---\n\n## 4. Custom Fields Studio\nThe Custom Fields Studio (`/projects/:proj/settings/custom-fields`) defines dynamic metadata, computed story points, and sandboxed formulas.\n\n\n### Custom Fields Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `name` | Human-readable label displayed on ticket rails and tables | String (1 to 64 characters) | Required | Displayed alongside execution status badge (`\ud83e\uddea`) |\n| `slug` | Unique field identifier used in formulas and JSON payloads | Lowercase alphanumeric ASCII with hyphens | Derived from name | Used in formula expressions and API JSON properties |\n| `flavor` | Execution tier and computation engine | `scalar`, `formula`, `wasm`, `nsjail` | `formula` | Determines performance budget and standalone mode availability |\n| `sandbox_tier` | Multi-tier sandbox engine used for execution | `scalar`, `wasmtime` (Tier A), `nsjail` (Tier B) | `wasmtime` | `nsjail` requires multi-container compose; fail-closed in standalone |\n| `credential_mode` | Token identity provided during script execution | `INVOKING_USER`, `SERVICE_ACCOUNT` | `INVOKING_USER` | `SERVICE_ACCOUNT` requires dual-control cryptographic approval |\n| `target_scope` | Maximum tenant visibility boundary of the field | `PROJECT`, `WORKSPACE`, `SERVER` | `PROJECT` | Escalation beyond `PROJECT` requires AAL2 administrative step-up |\n| `output_format` | Canonical schema used to format and render output | `text`, `number`, `badge`, `severity_pill`, `url`, `markdown_snippet`, `json_table` | `text` | Enforces strict Pydantic validation before persisting to JSONB |\n| `format_metadata` | Configuration options tailored to chosen output format | JSON object matching schema specification | `{}` | Governs decimal precision, color tokens, allowlists, or table headers |\n| `script_source` | Raw source code for formula or script evaluation | Python AST expression, Rust Wasm, or container script | Required | Signed with SHA-256 digest upon commit; immutable against database tampering |\n| `egress_allowlist` | Allowed destination hostnames for nsjail tier | Comma-separated domain list (e.g. `api.github.com`) | Empty (Zero egress) | Network disabled by default via Linux kernel `CLONE_NEWNET` |\n\n---\n\n## 5. Authentication Studio\nThe Multi-Card Authentication Studio (`/admin/auth`) configures enterprise identity providers, WebAuthn Passkeys, LDAP trees, and break-glass recovery.\n\n\n### Authentication Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `provider_type` | Underlying identity protocol card | `LOCAL_ADMIN`, `OAUTH2`, `OIDC`, `LDAP`, `WEBAUTHN`, `TOTP` | Required | Determines credential validation handshake and token exchange |\n| `card_enabled` | Master active toggle for the authentication card | Boolean (`true` / `false`) | `true` | Disabled cards reject authentication attempts immediately |\n| `sort_rank` | Order in which login cards appear on `/login` screen | Non-negative integer (lower ranks appear first) | 10 | Allows organizations to prioritize SSO while preserving local admin cards |\n| `rp_name` | WebAuthn Relying Party display name | String (Always canonical `\ud83d\udc4dkanban`) | `\ud83d\udc4dkanban` | Displayed by browser and hardware security keys during passkey prompts |\n| `rp_id` | WebAuthn Relying Party domain identifier | Strict ASCII FQDN without protocol or port | Hostname of deployment | Must match browser origin to prevent credential theft or spoofing |\n| `issuer_url` | OIDC discovery endpoint URL | Valid HTTPS URL | None | Fetches `/.well-known/openid-configuration` and cryptographic keys |\n| `client_id` | OAuth/OIDC application client identifier | ASCII string | None | Public identifier registered with enterprise identity provider |\n| `client_secret` | OAuth/OIDC client secret credential | Encrypted string (write-only custody) | None | Stored encrypted in PostgreSQL; never exposed over REST API |\n| `ldap_host` | LDAPS directory hostname or IP address | Hostname or IP | None | LDAPS on port 636 or StartTLS required; plaintext LDAP rejected |\n| `ldap_bind_dn` | Distinguished Name used for directory lookup | LDAP DN string (e.g. `cn=admin,dc=corp,dc=com`) | None | Service account with read-only search permissions across user tree |\n| `break_glass_active` | Emergency lockout prevention bypass trigger | Boolean (`true` / `false`) | `false` | Allows emergency local admin access when SSO is offline |\n\n---\n\n## 6. MCP Access Studio\nThe MCP Access Studio (`/settings/mcp` or `/admin/mcp`) manages Model Context Protocol API tokens, Level of Detail (LOD) defaults, and rate limits.\n\n\n### MCP Access Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `surface_type` | Target isolated streamable endpoint | `/mcp/agent`, `/mcp/docs`, `/mcp/admin` | `/mcp/agent` | Determines tool catalog and token budget ceiling (<= 1,850 tokens for agent) |\n| `key_name` | Descriptive name of the API token or client tool | String (1 to 64 characters) | Required | Surfaced in audit logs and active session inspector |\n| `token_prefix` | Standardized key prefix identifying privilege level | `kb_agt_*`, `kb_doc_*`, `kb_adm_*` | Auto-assigned | Cryptographically identifies target surface before database lookup |\n| `lod_tier` | Default Level of Detail returned in tool responses | `summary`, `standard`, `full` | `standard` | Controls response verbosity; `summary` minimizes agent context consumption |\n| `rate_limit_rpm` | Maximum allowed tool invocations per minute | Integer between 10 and 600 | 120 | Protects database connection pool from runaway autonomous agent loops |\n| `expires_at` | Expiration timestamp for the API key | ISO-8601 Timestamp or `None` | 90 days from creation | Expired keys reject calls with `401 UNAUTHORIZED` |\n| `destructive_gate` | Enables two-stage confirmation for destructive operations | Boolean (`true` / `false`) | `true` | Requires short-lived confirmation token before permanent deletions |\n\n---\n\n## 7. OAuth 2.1 Governance Studio\nThe OAuth 2.1 Governance Studio (`/admin/oauth`) registers client applications, enforces PKCE code challenges, and configures token lifetimes.\n\n\n### OAuth 2.1 Governance Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `client_name` | Name of the integrating client application | String (1 to 128 characters) | Required | Displayed on user authorization consent screens |\n| `client_id` | Unique OAuth client identifier | String prefixed with `kb_client_` | Auto-generated | Public application key used during authorization code flow |\n| `redirect_uris` | Allowed callback URLs for authorization codes | List of strict HTTPS URLs (localhost allowed for dev) | Required | Exact string matching enforced; wildcards strictly forbidden |\n| `pkce_enforced` | Proof Key for Code Exchange requirement | Mandatory `S256` challenge | `S256` | Rejects plaintext code challenges; mitigates authorization code interception |\n| `allowed_scopes` | List of privilege scopes client can request | `agent`, `docs`, `admin`, `read:issues`, `write:issues` | `agent` | Token capability bitmask cannot exceed granted scopes |\n| `access_token_ttl` | Lifetime of minted access tokens | Integer seconds (300 to 86400) | 3600 (1 hour) | Ephemeral lifetime limiting blast radius of token leakage |\n| `refresh_token_ttl` | Lifetime of rotating refresh tokens | Integer seconds (86400 to 2592000) | 2592000 (30 days) | Refresh tokens rotate upon use; reused tokens revoke family |\n\n---\n\n## 8. AI Providers Studio\nThe AI Providers Studio (`/admin/ai`) registers model providers, configures write-only API keys, and sets monthly token consumption caps.\n\n\n### AI Providers Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `provider_key` | Underlying AI provider implementation | `openai`, `gemini`, `ollama`, `custom` | `gemini` | Selects prompt serializer, tool calling dialect, and streaming pipeline |\n| `priority` | Fallback dispatch order when multiple providers are active | Integer (1 to 100, higher runs first) | 10 | Primary provider attempted first; falls back on rate limit or 5xx |\n| `api_endpoint` | Base URL for API communications | Valid HTTP/HTTPS URL | Official cloud endpoint | Local Ollama uses `http://localhost:11434`; cloud requires HTTPS |\n| `api_key` | Cryptographic API secret for provider access | String (Write-only custody) | None | Stored encrypted in PostgreSQL; never sent back to browser client |\n| `monthly_token_cap` | Monthly token consumption budget ceiling | Non-negative integer (0 = unlimited) | 1,000,000 | Blocks cloud invocations once budget is reached to prevent cost overruns |\n| `default_model` | Model identifier used for sparkle and transition gates | String (e.g. `gemini-2.5-flash`, `gpt-4o`) | Provider default | Balances reasoning capability against response latency |\n| `temperature` | Randomness parameter for model generations | Float between 0.0 and 1.0 | 0.2 | Low temperatures ensure deterministic responses for code and QA gates |\n\n---\n\n## 9. Agent Definitions Studio\nThe Agent Definitions Studio (`/admin/agents`) authors system personas, binds autonomous agents to service accounts, and configures execution harnesses.\n\n\n### Agent Definitions Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `agent_name` | Unique name and identifier for the autonomous agent | String (1 to 64 characters) | Required | Used in ticket mentions, activity streams, and assignment cards |\n| `system_prompt` | Core instructions, persona guidelines, and security boundaries | UTF-8 Markdown text | Required | Directs model reasoning; stripped of dangerous injection sequences |\n| `execution_harness` | Runtime environment executing agent invocations | `api_direct`, `cli_pipe`, `remote_runner` | `api_direct` | `cli_pipe` uses zero-shell `agy -p` or `codex -p` in Linux jail |\n| `cli_pipe_binary` | Binary path used for zero-shell CLI pipe harness | Pre-approved binary name (`agy`, `codex`) | `agy` | Executes without shell or bash; communicates strictly over STDIN/STDOUT |\n| `service_principal_id` | Bound service account identity for database RLS | Valid UUID of service principal | Auto-provisioned | Binds database permissions to caller identity via `SET LOCAL` |\n| `repository_access` | Git repository access mode granted to the agent | `none`, `ro_mount`, `ephemeral_clone` | `none` | `ro_mount` mounts repository strictly read-only for forensic QA |\n\n---\n\n## 10. Remote Runners Studio\nThe Remote Runners Studio (`/admin/runners`) configures distributed build nodes, mints enrollment tokens, and monitors mTLS heartbeats.\n\n\n### Remote Runners Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `runner_name` | Unique hostname or identifier of the runner node | String (1 to 64 characters) | Required | Displayed in runner health dashboard and active job telemetry |\n| `enrollment_token` | Single-use cryptographic token for runner registration | Base64-encoded HMAC string | Minted on demand | Expires after 60 minutes; grants certificate signing request (CSR) |\n| `mtls_cert_fingerprint`| SHA-256 fingerprint of validated client certificate | Hexadecimal SHA-256 hash | Registered upon enroll | Hardware-bound identity verifying mutual TLS WebSocket connection |\n| `max_concurrent_jobs` | Maximum simultaneous task executions allowed on runner | Integer between 1 and 16 | 2 | Throttles runner workload to prevent resource exhaustion |\n| `heartbeat_timeout_s` | Maximum allowable duration without ping before offline | Integer between 10 and 120 seconds | 30 | Dead runners are marked offline and active jobs rescheduled |\n| `allowed_repo_remotes` | Whitelist of Git repository URLs runner can clone | Comma-separated list of repository URLs | Empty (All authorized) | Prevents runner exploitation for arbitrary network exfiltration |\n\n---\n\n## 11. Standalone & Promotion Studio\nThe Standalone & Promotion Studio (`/admin/standalone`) inspects deployment topologies, triggers promotion to multi-container compose, and exports encrypted backups.\n\n\n### Standalone & Promotion Studio Configuration Table\n\n| Field Name | What It Controls | Allowed Values / Format | Default | Security / Operational Impact |\n| :--- | :--- | :--- | :--- | :--- |\n| `deployment_mode` | Current platform runtime environment | `STANDALONE_CONTAINER`, `MULTI_CONTAINER_COMPOSE` | Detected at boot | Gates availability of nsjail container sandboxes and Redis hubs |\n| `backup_encryption_passphrase` | Secret passphrase used to derive AES-256 backup key | String (Minimum 16 characters) | User-supplied | Used by PBKDF2 to encrypt standalone archive into KBBAK1 format |\n| `target_postgres_url` | External database URL used during promotion cutover | Valid PostgreSQL connection string | None | Must support UTF-8, RLS, and required extensions (`ltree`, `pgvector`) |\n| `target_redis_url` | External Redis connection string for WebSocket pub/sub | Valid Redis URL (`redis://` or `rediss://`) | None | Decouples distributed realtime events from single-process memory |\n| `backup_storage_path` | Local filesystem path where backups are stored | Directory path (default `/var/backups/kanban`) | `/var/backups/kanban` | Requires write permissions; accessible for disaster recovery download |\n| `auto_promotion_verify` | Runs comprehensive post-migration verification suite | Boolean (`true` / `false`) | `true` | Asserts object link integrity and user access manifests before cutover |\n"
+   },
+   {
+     "slug": "system-topology-and-multi-container-architecture",

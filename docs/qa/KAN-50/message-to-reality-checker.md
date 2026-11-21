@@ -3,7 +3,7 @@
 ## Ticket Details
 - **Key:** KAN-50
 - **Summary:** [KB-AGENT-SEQ-02] Expose skip_loaded_sequence_numbers in Project/Workspace REST API and Settings UI
-- **Branch:** `main` (commit `78074a1d`)
+- **Branch:** `main` (commit `9b163f07`)
 - **Container Environment:** `http://127.0.0.1:18963` (container: `kanban-liveqa-3`)
 - **Live Stack Status:** `OVERALL LIVE_STACK_VERDICT: PASS`
 
@@ -43,7 +43,7 @@ Ticket KAN-50 exposes the `skip_loaded_sequence_numbers` setting across the Proj
 
 ---
 
-## 2. Live Full-Stack Proof Highlights (`kanban-liveqa-3`, `:18963`)
+## 2. Live Full-Stack Proof Highlights (`kanban-liveqa-3`, `:18963`, commit `9b163f07`)
 
 - **0ms Workspace Settings Inheritance via REST:**
   * `PATCH /api/v1/admin/workspace-settings` (`{"default_skip_loaded_sequence_numbers": true}`) -> 200 OK.
@@ -52,7 +52,7 @@ Ticket KAN-50 exposes the `skip_loaded_sequence_numbers` setting across the Proj
   * Toggled false -> true: `PROJECT_UPDATED` activity records emitted in PostgreSQL.
 - **WorkspaceSettingsPage:**
   * Checkbox toggled ON -> saved -> reloaded -> persisted true.
-  * EmojiHint renders outside `<label>` across Desktop Light/Dark, Tablet, Mobile (load times: 678ms, 706ms, 681ms, 697ms).
+  * EmojiHint renders outside `<label>` across Desktop Light/Dark, Tablet, Mobile.
 - **CreateProjectModal:**
   * Pre-hydrated checked (true), EmojiHint popup at `z-index: 10050` renders on top of scrim (`z-index: 9999`).
   * Created project UISAF4 -> 201 Created with `skip_loaded_sequence_numbers=true`.
@@ -64,32 +64,35 @@ Ticket KAN-50 exposes the `skip_loaded_sequence_numbers` setting across the Proj
 
 ## 3. Unit Test Coverage & Verification
 
-- **Backend Pytest Suite (`28 passed in 19.79s`):**
+- **Backend Pytest Suite (`28 passed in 18.97s`):**
   * `kanban/services/projects.py`: 99% statement coverage (194/195 statements).
   * `kanban/api/v1/schemas/projects.py`: 100% statement coverage (67/67 statements).
-  * `kanban/api/v1/admin/workspace_settings.py`: 95% statement coverage (161/163 statements).
-  * Verified inheritance when omitted, explicit override, toggle diffs, and REST sequence skipping.
-- **Frontend Vitest Suite (`58 passed in 4.45s`, 0 `act(...)` warnings):**
-  * `CreateProjectModal.test.tsx`: 9 tests passed, 100% statements, 91.83% branch.
-  * `ProjectSettingsPage.test.tsx`: 38 tests passed, 99.55% statements, 95.45% branch.
+  * `kanban/api/v1/projects.py`: 100% statement coverage (54/54 statements).
+  * `kanban/api/v1/admin/workspace_settings.py`: 95% statement coverage (162/163 statements).
+  * Overall backend statement coverage: **98%** (477 statements).
+- **Frontend Vitest Suite (`96 passed in 4.47s`, 0 `act(...)` warnings):**
+  * `CreateProjectModal.test.tsx`: 12 tests passed, 100% statements, 98.11% branch.
+  * `WorkspaceSettingsPage.test.tsx`: 35 tests passed, 99.78% statements, 95.11% branch.
+  * `ProjectSettingsPage.test.tsx`: 38 tests passed, 99.41% statements, 94.78% branch.
   * `emojiRegistry.test.ts`: 7 tests passed, 100% statements and branches.
   * `cssTokensAudit.test.ts`: 4/4 passed (0 inline JSX style attributes, 100% CSS token coverage).
-- **Static Analysis Quality Gates (Commit `78074a1d`):**
+  * Overall frontend coverage: **99.6% statements, 95.1% branch, 100% functions, 99.91% lines**.
+- **Static Analysis Quality Gates (Commit `9b163f07`):**
   * `kanban-ctl db check-migrations`: OK (63 migrations valid, single head: `p4_24_agent_safe_sequences`).
-  * `ruff check .` & `ruff format --check .`: Clean across 2023 files.
-  * `mypy database kanban mcp agent`: Clean (Success: 995 source files).
+  * `ruff check .` & `ruff format --check .`: Clean across 2027 files.
+  * `mypy database kanban mcp agent`: Clean (Success: 997 source files).
   * `lint-imports`: Clean (Contracts: 2 kept, 0 broken).
   * `tsc -b --noEmit`: Clean (0 type errors).
   * `eslint . --max-warnings 0`: Clean (0 warnings).
-  * `vite build`: Clean production build in 1.15s.
+  * `vite build`: Clean production build in 1.09s.
   * `scripts.check_no_dashes`: Clean (0 em/en-dashes across codebase and wiki).
 
 ---
 
 ## 4. Artifact Index in `docs/qa/KAN-50/`
 
-- `live-fullstack-proof.txt`: Round 3 live execution telemetry against `kanban-liveqa-3` (`:18963`, commit `78074a1d`)
-- `unit-test-results.txt`: Verbatim execution outputs for Vitest (58 passed) and Pytest (28 passed)
+- `live-fullstack-proof.txt`: Round 4 live execution telemetry against `kanban-liveqa-3` (`:18963`, commit `9b163f07`)
+- `unit-test-results.txt`: Verbatim execution outputs for Vitest (96 passed) and Pytest (28 passed)
 - `build-or-typecheck.txt`: Static analysis and verification proof
 - `changed-files-manifest.txt`: List of modified source files
 - `git-diff.patch`: Git diff patch

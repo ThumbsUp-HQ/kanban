@@ -1,31 +1,62 @@
+================================================================================
+KAN-50 UNIT & INTEGRATION TEST + COVERAGE RESULTS (main commit 9b163f07)
+================================================================================
+
 === FRONTEND UNIT TESTS & COVERAGE ===
+Command: COVERAGE_INCLUDE="src/components/emoji/emojiRegistry.ts,src/features/projects/CreateProjectModal.tsx,src/features/settings/ProjectSettingsPage.tsx,src/features/settings/WorkspaceSettingsPage.tsx" pnpm --dir kanban/web exec vitest run --coverage src/components/emoji/emojiRegistry.test.ts src/features/projects/CreateProjectModal.test.tsx src/features/settings/__tests__/ProjectSettingsPage.test.tsx src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx src/styles/__tests__/cssTokensAudit.test.ts
 
  RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
       Coverage enabled with v8
 
- ✓ src/components/emoji/emojiRegistry.test.ts (7 tests) 13ms
- ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 23ms
- ✓ src/features/projects/CreateProjectModal.test.tsx (10 tests) 309ms
- ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (35 tests) 2219ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 15ms
+ ✓ src/components/emoji/emojiRegistry.test.ts (7 tests) 12ms
+ ✓ src/features/projects/CreateProjectModal.test.tsx (12 tests) 454ms
+ ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (35 tests) 2168ms
    ✓ WorkspaceSettingsPage (KANBA-202) (35)
-     ✓ renders workspace settings page and updates workspace name and slug 338ms
- ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (38 tests) 3141ms
+     ✓ renders workspace settings page and updates workspace name and slug 317ms
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (38 tests) 3028ms
 
  Test Files  5 passed (5)
-      Tests  94 passed (94)
-   Start at  18:47:56
-   Duration  4.57s (tests 56%, environment 35%, import 6%, worker 3%, transform 1%)
+      Tests  96 passed (96)
+   Duration  4.47s (tests 55%, environment 34%, import 6%, worker 3%, transform 2%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   99.61 |    94.71 |     100 |   99.91 |                   
+All files          |    99.6 |     95.1 |     100 |   99.91 |                   
  components/emoji  |     100 |      100 |     100 |     100 |                   
   emojiRegistry.ts |     100 |      100 |     100 |     100 |                   
- features/projects |     100 |    91.22 |     100 |     100 |                   
-  ...jectModal.tsx |     100 |    91.22 |     100 |     100 | ...26,202,238-248 
+ features/projects |     100 |    98.11 |     100 |     100 |                   
+  ...jectModal.tsx |     100 |    98.11 |     100 |     100 | 127               
  features/settings |   99.56 |    94.92 |     100 |    99.9 |                   
   ...tingsPage.tsx |   99.41 |    94.78 |     100 |   99.84 | 184               
   ...tingsPage.tsx |   99.78 |    95.11 |     100 |     100 | ...59,477,654,681 
 -------------------|---------|----------|---------|---------|-------------------
+
+=== BACKEND API & SERVICE TESTS + COVERAGE ===
+Command: python3 -c "import numpy, sys, pytest; sys.exit(pytest.main(['kanban/tests/api/test_projects.py', 'kanban/tests/api/test_workspace_settings.py', '--cov=kanban.api.v1.admin.workspace_settings', '--cov=kanban.api.v1.projects', '--cov=kanban.api.v1.schemas.projects', '--cov=kanban.services.projects', '--cov-report=term-missing']))"
+
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 28 items
+
+kanban/tests/api/test_projects.py ...............                        [ 53%]
+kanban/tests/api/test_workspace_settings.py .............                [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                        Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------------
+kanban/api/v1/admin/workspace_settings.py     162      2     58      8    95%   212, 218->243, 229, 260->267, 263->267, 276->293, 325->328, 345->404
+kanban/api/v1/projects.py                      54      0      0      0   100%
+kanban/api/v1/schemas/projects.py              67      0      2      0   100%
+kanban/services/projects.py                   194      1     56      1    99%   262
+---------------------------------------------------------------------------------------
+TOTAL                                         477      3    116      9    98%
+============================= 28 passed in 18.97s ==============================

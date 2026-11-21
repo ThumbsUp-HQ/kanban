@@ -1,48 +1,46 @@
-=== KAN-44 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, kanban-liveqa-2, commit 78074a1d) ===
-Timestamp: 2026-11-20T23:22:59.122Z - 2026-11-20T23:23:21.639Z
+=== KAN-44 ROUND 4 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, kanban-liveqa-2, commit 9b163f07) ===
+Timestamp: 2026-11-21T02:11:46.190Z - 2026-11-21T02:12:09.269Z
 Execution Mode: Zero-mock Playwright against live Docker standalone container (PostgreSQL 16 + FORCE RLS, UID 65532)
-Test Runner Script: live_qa_suite_r3.mjs
+Test Runner Script: live_qa_suite_r4.mjs
 
 --- Page Load Timings (< 3000ms threshold) ---
-- Board load: 860 ms
-- Swimlane load: 872 ms
-- Table load: 814 ms
-- Mobile Board load: 920 ms
-- Mobile List load: 862 ms
-- Single Issue load: 758 ms
+- Board load: 871 ms
+- Swimlane load: 850 ms
+- Table load: 884 ms
+- Mobile Board load: 873 ms
+- Mobile List load: 840 ms
+- Single Issue load: 743 ms
 
---- Problem 1: Full-Page Issue View, Quick Properties Bar, Tab Bar Overflow & Topbar z-index ---
-- Desktop Light & Dark (/projects/KAN/issues/KAN-1): live-issue-desktop-light.png, live-issue-desktop-dark.png
-- Tablet (768x1024): live-issue-tablet.png
-- Mobile (390x844, live-issue-mobile.png):
-  * Telemetry: {"scrollWidth":390,"innerWidth":390,"noHorizontalOverflow":true,"tabBarWidth":310,"tabBarRight":350}
-  * Confirmed All | Comments | History | Gates tab bar fits cleanly inside 390px viewport with zero horizontal overflow.
-- Topbar Avatar Menu Above .surface--full: live-topbar-menu-above-surface.png
-LIVE_STACK_VERDICT [P1_HEADER_QUICKPROPS_MOBILE_TABBAR]: PASS
+--- Round 4 Verification Checks ---
+1. Mobile Table Summary Column Width (390x844, live-table-mobile.png & live-viewer-table-mobile.png):
+   - Admin Table Telemetry:
+     {"issuesTableMinWidth":"580px","issuesTableWidth":1003,"scrollWrapOverflowX":"auto","scrollWrapClientWidth":356,"scrollWrapScrollWidth":1003,"summaryHeaderMinWidth":"180px","summaryHeaderWidth":235,"summaryHeaderText":"Summary","summaryCellMinWidth":"180px","summaryCellWidth":235,"summaryTextSample":"Validate WIP soft warning thresholds","stateCellMinWidth":"124px","stateCellWidth":143,"prioWrapMinWidth":"96px","prioWrapWidth":110,"pageScrollWidth":390,"innerWidth":390,"transitionStatus":200}
+   - Interactive state <select> widths/heights: all 6 rows measure width=127px, height=44px (>=44px touch target), rendering full state labels ("Todo", "Purple Review", "Backlog", "In Progress") inside .table-scroll-wrap while Summary header and issue titles render at 235px (>= 180px, 100% readable, zero ".." crushing).
+   - Viewer Table Telemetry (viewer2: WORKSPACE_GUEST + project VIEWER on KAN):
+     {"issuesTableMinWidth":"580px","summaryHeaderMinWidth":"180px","summaryHeaderWidth":235,"summaryCellMinWidth":"180px","summaryCellWidth":235,"interactiveStateSelectCount":0,"readOnlyStateBadgeCount":6,"scrollWidth":390,"innerWidth":390}
+   - All 6 read-only <StateBadge> pills render untruncated labels (notTruncated=true).
+   LIVE_STACK_VERDICT [MOBILE_TABLE_SUMMARY_WIDTH]: PASS
 
---- Problem 2: QuickFieldPopover Portal & Mobile Table View Full Legible State Names ---
-- Desktop Board & Swimlane Popovers: live-board-popover-desktop.png (transitionStatus=200), live-swimlane-popover-desktop.png
-- Mobile Board Bottom Sheet: live-board-bottom-sheet-mobile.png
-- Desktop Table (?layout=table): live-table-desktop.png (transitionStatus=200)
-- Mobile (390x844) Table View (?layout=table, live-table-mobile.png):
-  * Telemetry: {"scrollWrapOverflowX":"auto","stateCellMinWidth":"124px","stateCellMaxWidth":"150px","stateCellWidth":143,"prioWrapMinWidth":"96px","prioWrapWidth":110,"pageScrollWidth":390,"innerWidth":390,"transitionStatus":200}
-  * Interactive state <select> widths/heights: all 6 rows measure width=127px, height=44px (>=44px touch target), rendering full legible state names ("Todo", "Purple Review", "Backlog", "In Progress") with zero 1-letter truncation.
-LIVE_STACK_VERDICT [P2_POPOVER_AND_MOBILE_TABLE_WIDTHS]: PASS
+2. Deduplicated State <select> on <= 879px Full-Page Issue View (live-issue-tablet.png 768x1024, live-issue-mobile.png 390x844):
+   - Tablet (768x1024, /projects/KAN/issues/KAN-1):
+     Telemetry: {"totalStateSelectsInDom":["header-state-select","quick-props-state-select"],"visibleStateSelectCount":2,"visibleStateSelectTestIds":["header-state-select","quick-props-state-select"],"quickPropsGroupDisplay":"flex","railStateRowDisplay":"grid","headerStateSelectInDom":true}
+     Note: Three State <select> controls remain visibly rendered in live-issue-tablet.png (header-state-select, quick-props-state-select, and PropertiesRail State <select> inside .prop-row[data-prop="state"]).
+     Root cause observed in on-disk code (not modified during QA): IssueSurface.tsx renders <section className="surface--full"> without the `.surface` class, so the IssueSurface.css selectors `.surface:not(.surface--split) .quick-props__group--state` and `.surface:not(.surface--split) .surface__rail .prop-row[data-prop="state"]` do not match `.surface--full`.
+   - Mobile (390x844, /projects/KAN/issues/KAN-1):
+     Telemetry: {"totalStateSelectsInDom":["header-state-select","quick-props-state-select"],"visibleStateSelectCount":2,"visibleStateSelectTestIds":["header-state-select","quick-props-state-select"],"quickPropsGroupDisplay":"flex","railStateRowDisplay":"grid","headerStateSelectInDom":true,"scrollWidth":390,"innerWidth":390,"noHorizontalOverflow":true,"tabBarWidth":310,"tabBarRight":350,"tabBarPaddingRight":"12px","gatesBtnRight":397}
+     .activity-tablist has paddingRight="12px" and scrollWidth===innerWidth===390, though Gates (0) button right edge measures 397px in live-issue-mobile.png and quick-props-state-select + PropertiesRail State <select> remain visible due to the same `.surface:not(.surface--split)` selector mismatch on `.surface--full`.
+   LIVE_STACK_VERDICT [FULL_PAGE_ISSUE_DEDUPLICATED_STATE_LEQ_879]: FAIL
 
---- Problem 3 & 4: Mobile List Cards & Single-Select Split Detail ---
-- Mobile List (?layout=list): live-list-mobile.png, live-list-bottom-sheet-mobile.png
-- Mobile (390x844) Split Detail (?layout=list&peek=KAN-1, live-list-split-mobile.png):
-  * Telemetry: {"quickPropsStatePresentInDom":true,"quickPropsStateDisplay":"none","quickPropsStateHidden":true,"visibleStateSelectCount":1,"visibleStateSelectTestIds":["split-state-select"],"splitStateSelectRect":{"w":130,"h":44},"detailsText":"State:...Priority:HighAssignee:Unassigned","descText":"Auth gateway with TOTP and AAL2.Edit description","peopleText":"AssigneeUnassignedAssign to me","scrollWidth":390,"innerWidth":390}
-  * Confirmed quick-props-state-select inside split-section-details is hidden (display: none) in split mode so ONLY ONE state selector (split-state-select in action toolbar, height=44px) is visible, while DETAILS (Priority, Assignee), DESCRIPTION, and PEOPLE render full content.
-LIVE_STACK_VERDICT [P3_P4_MOBILE_LIST_AND_SINGLE_SELECT_SPLIT]: PASS
-
---- VIEWER RBAC Verification (viewer2: WORKSPACE_GUEST + project VIEWER on KAN) ---
-- Mobile List (?layout=list): live-viewer-list-mobile.png
-- Mobile Table (?layout=table, live-viewer-table-mobile.png):
-  * Telemetry: {"interactiveStateSelectCount":0,"readOnlyStateBadgeCount":6,"scrollWidth":390,"innerWidth":390}
-  * All 6 read-only <StateBadge> pills render full, untruncated labels ("In Progress" 109px, "Purple Review" 123px, "Backlog" 91px; labelScrollWidth === labelClientWidth, notTruncated=true) with zero interactive <select> controls.
-- Mobile Single Issue (/projects/KAN/issues/KAN-1): live-viewer-readonly-mobile.png
-LIVE_STACK_VERDICT [VIEWER_MULTI_VIEW_RBAC]: PASS
+3. Board, Swimlane, List, Split Detail & VIEWER RBAC Flows:
+   - Desktop Board & Swimlane Popovers: live-board-popover-desktop.png (transitionStatus=200, post-transition card button label="In Progress"), live-swimlane-popover-desktop.png.
+   - Desktop Table: live-table-desktop.png (transitionStatus=200).
+   - Mobile Board Bottom Sheet: live-board-bottom-sheet-mobile.png.
+   - Mobile List & Bottom Sheet: live-list-mobile.png, live-list-bottom-sheet-mobile.png.
+   - Mobile Split Detail (?layout=list&peek=KAN-1, live-list-split-mobile.png):
+     Telemetry: {"quickPropsStatePresentInDom":true,"quickPropsStateDisplay":"none","quickPropsStateParentDisplay":"none","quickPropsStateHidden":true,"visibleStateSelectCount":1,"visibleStateSelectTestIds":["split-state-select"],"splitStateSelectRect":{"w":130,"h":44},"scrollWidth":390,"innerWidth":390}
+   - Desktop Single Issue (Light & Dark) & Topbar Menu z-index: live-issue-desktop-light.png, live-issue-desktop-dark.png, live-topbar-menu-above-surface.png.
+   - Viewer RBAC Mobile List & Single Issue: live-viewer-list-mobile.png, live-viewer-readonly-mobile.png (0 interactive selects).
+   LIVE_STACK_VERDICT [BOARD_LIST_SPLIT_RBAC]: PASS
 
 --- Runtime Error Telemetry ---
 Console JS errors: 0
@@ -68,4 +66,4 @@ Screenshots Verified (docs/qa/KAN-44/screenshots/):
 - live-viewer-table-mobile.png
 - live-viewer-readonly-mobile.png
 
-OVERALL LIVE_STACK_VERDICT (KAN-44): PASS
+OVERALL LIVE_STACK_VERDICT (KAN-44): PARTIAL / FAIL (Mobile Table Summary >= 180px PASS; Full-Page Issue <= 879px State <select> deduplication FAIL due to .surface:not(.surface--split) mismatch on .surface--full)

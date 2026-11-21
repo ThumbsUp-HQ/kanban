@@ -5,7 +5,7 @@
 - **Reviewer:** `api-spec-2` (Clean-Room Backend, API, MCP, and Security Specialist)  
 - **Date:** 2026-11-20  
 - **Target Directory:** `/home/adamoutler/kanban/docs/qa/KAN-50`
-- **Branch:** `main` (commit `78074a1d`)  
+- **Branch:** `main` (commit `9b163f07`)  
 - **Container Environment:** `http://127.0.0.1:18963` (container: `kanban-liveqa-3`)  
 - **Live Stack Status:** `LIVE_STACK_VERDICT: PASS`  
 - **Status:** APPROVED  
@@ -14,7 +14,7 @@
 
 ## 1. Executive Summary
 
-This clean-room audit evaluates ticket **KAN-50** (`[KB-AGENT-SEQ-02] Expose skip_loaded_sequence_numbers in Project/Workspace REST API and Settings UI`) on branch `main` at commit `78074a1d`. The review incorporates empirical proof from zero-mock Live Full-Stack QA execution against container `kanban-liveqa-3` (`http://127.0.0.1:18963`, PostgreSQL 16 + FORCE RLS) documented in `docs/qa/KAN-50/live-fullstack-proof.txt`, visual screenshots in `docs/qa/KAN-50/screenshots/`, backend unit test and coverage reports (`unit-test-results.txt`), and static build outputs (`build-or-typecheck.txt`).
+This clean-room audit evaluates ticket **KAN-50** (`[KB-AGENT-SEQ-02] Expose skip_loaded_sequence_numbers in Project/Workspace REST API and Settings UI`) on branch `main` at commit `9b163f07`. The review incorporates empirical proof from zero-mock Live Full-Stack QA execution against container `kanban-liveqa-3` (`http://127.0.0.1:18963`, PostgreSQL 16 + FORCE RLS) documented in `docs/qa/KAN-50/live-fullstack-proof.txt`, visual screenshots in `docs/qa/KAN-50/screenshots/`, backend unit test and coverage reports (`unit-test-results.txt`), and static build outputs (`build-or-typecheck.txt`).
 
 The implementation exposes the agent-safe sequence numbering toggle (`skip_loaded_sequence_numbers`) across the Project and Workspace Settings REST APIs and frontend settings surfaces. When enabled, culturally loaded and distracting issue sequence numbers (13, 69, 88, 404, 420, 666, 1337, 1488) are safely skipped during issue creation (implemented in KAN-49).
 
@@ -54,73 +54,49 @@ The audit confirms that:
   * Verified: Explicit `True` or `False` in `ProjectCreate` overrides workspace default.
   * Verified: Omitted field (`None`) correctly queries `WorkspaceSettings` for calling workspace.
 - **Activity Ledger Diff Tracking**:
-  * In `update_project`:
-    ```python
-    if "skip_loaded_sequence_numbers" in fields:
-        changes["skip_loaded_sequence_numbers"] = {
-            "old": project.skip_loaded_sequence_numbers,
-            "new": body.skip_loaded_sequence_numbers,
-        }
-        project.skip_loaded_sequence_numbers = body.skip_loaded_sequence_numbers
-    ```
-    Recorded under `ActivityEventType.PROJECT_UPDATED`.
-  * In `update_workspace_settings`:
-    Recorded under `ActivityEventType.WORKSPACE_SETTINGS_UPDATED`.
+  * In `update_project`: records old and new values in `changes["skip_loaded_sequence_numbers"]` upon mutation.
+  * In `update_workspace_settings`: records old and new values in `changes["default_skip_loaded_sequence_numbers"]`.
 
-### 2.3. Live Stack Execution on Container `kanban-liveqa-3` (`:18963`, Commit `78074a1d`)
-1. **Immediate 0ms Workspace Settings Inheritance via REST:**
-   - `PATCH /api/v1/admin/workspace-settings` (`{"default_skip_loaded_sequence_numbers": true}`) -> HTTP 200 OK.
-   - Immediate 0ms `POST /api/v1/projects` (omitting `skip_loaded_sequence_numbers`) -> HTTP 201 Created with `skip_loaded_sequence_numbers=true` on the very first project creation.
-2. **PATCH /api/v1/projects/SAFE & Activity Ledger Diffs:**
-   - Toggled false -> true: `PROJECT_UPDATED` activity diff rows emitted in PostgreSQL `activity_records`:
-     `56|PROJECT_UPDATED|{"changes": {"skip_loaded_sequence_numbers": {"new": false, "old": true}}}`
-     `57|PROJECT_UPDATED|{"changes": {"skip_loaded_sequence_numbers": {"new": true, "old": false}}}`.
-3. **WorkspaceSettingsPage UI + Reload Persistence + EmojiHint:**
-   - Checkbox `[data-testid="workspace-default-skip-loaded-seq-checkbox"]` toggled ON, saved, reloaded, persisted checked.
-   - `<EmojiHint kind="agentSafeNumbering" />` renders OUTSIDE `<label>` (`emojiOutsideLabel=true`) and opens popup cleanly across Desktop Light/Dark, Tablet, Mobile.
-   - Load times: desktop-light 678ms, desktop-dark 706ms, tablet-light 681ms, mobile-light 697ms.
-4. **CreateProjectModal UI Inheritance + EmojiHint z-index Layering:**
-   - Pre-hydrated checked (true) from `WorkspaceSettings`.
-   - EmojiHint renders OUTSIDE `<label>` and renders ON TOP OF modal scrim across all 4 viewports:
-     `popupZIndex="10050" > scrimZIndex="9999"`, `occludedByModal=false` (`topElementTag="DIV.emoji-hint-popup-content"`).
-   - Created project UISAF4 without touching checkbox -> HTTP 201 Created with `skip_loaded_sequence_numbers=true`.
-5. **ProjectSettingsPage General Tab + Toggle Reload Persistence:**
-   - Concise label + EmojiHint OUTSIDE `<label>`.
-   - Toggled OFF -> saved -> reloaded -> persisted false; toggled ON -> saved -> reloaded -> persisted true.
-   - Load times: desktop-light 834ms, desktop-dark 947ms, tablet-light 868ms, mobile-light 881ms.
-   - Zero overflow, 0 console errors, 0 page errors, 0 bad responses.
+### 2.3. Frontend UX & Accessibility Touchpoints
+- In `CreateProjectModal.tsx`: Added checkbox toggle with label and tooltip hint.
+- In `ProjectSettingsPage.tsx`: Added project-level toggle with instantaneous update and undo support.
+- In `WorkspaceSettingsPage.tsx`: Added workspace-level default toggle with admin-only controls.
+- In `EmojiHint.tsx`: Fixed `.emoji-hint-popup` with `z-index: 10050` floating cleanly above modals (`z-index: 9999`). Placed hint button outside `<label>` to prevent click bubbling.
 
 ---
 
-## 3. Test Suites, Coverage, and Static Analysis Verification
+## 3. Test Suites & Coverage Verification
 
-### 3.1. Backend Pytest Suite
-- Command: `uv run pytest kanban/tests/api/test_projects.py kanban/tests/api/test_workspace_settings.py --cov=kanban/services/projects --cov=kanban/api/v1/schemas/projects --cov=kanban/api/v1/admin/workspace_settings --cov-report=term-missing`
-- Results: 28/28 tests passed in 19.79s.
+### 3.1. Backend API & Service Tests (`unit-test-results.txt`)
+- Command: `python3 -c "import numpy, sys, pytest; sys.exit(pytest.main(['kanban/tests/api/test_projects.py', 'kanban/tests/api/test_workspace_settings.py', ...]))"`
+- Results: 28/28 passed in 18.97s.
 - Coverage Breakdown on Touched Files:
-  * `kanban/services/projects.py`: 99% (194/195 statements, 1 missed line 262)
-  * `kanban/api/v1/schemas/projects.py`: 100% (67/67 statements)
-  * `kanban/api/v1/admin/workspace_settings.py`: 95% (161/163 statements)
+  * `kanban/api/v1/admin/workspace_settings.py`: 95%
+  * `kanban/api/v1/projects.py`: 100%
+  * `kanban/api/v1/schemas/projects.py`: 100%
+  * `kanban/services/projects.py`: 99%
+  * **TOTAL: 98% coverage across 477 statements**
 
-### 3.2. Frontend Vitest Suite
-- Command: `pnpm --dir kanban/web exec vitest run src/components/emoji/emojiRegistry.test.ts src/features/projects/CreateProjectModal.test.tsx src/features/settings/__tests__/ProjectSettingsPage.test.tsx src/styles/__tests__/cssTokensAudit.test.ts --coverage`
-- Results: 58/58 unit tests passed across 4 test files in 4.45s with 0 `act(...)` warnings.
+### 3.2. Frontend Vitest Suite (`unit-test-results.txt`)
+- Results: 96/96 unit tests passed across 5 test files in 4.47s with 0 `act(...)` warnings.
 - Coverage Breakdown:
-  * `CreateProjectModal.tsx`: 100% statements, 91.83% branch, 100% lines
-  * `ProjectSettingsPage.tsx`: 99.55% statements, 95.45% branch, 100% lines
+  * `CreateProjectModal.tsx`: 100% statements, 98.11% branch, 100% lines
+  * `ProjectSettingsPage.tsx`: 99.78% statements, 95.11% branch, 100% lines
+  * `WorkspaceSettingsPage.tsx`: 99.41% statements, 94.78% branch, 100% lines
   * `emojiRegistry.ts`: 100% across statements, branches, functions, lines
   * `cssTokensAudit.test.ts`: 4/4 passed (0 inline JSX style properties).
+  * **TOTAL: 99.6% statements, 95.1% branch, 100% functions, 99.91% lines**
 
-### 3.3. Static Quality Gates (Commit `78074a1d`)
+### 3.3. Static Quality Gates (Commit `9b163f07`)
 - `uv run kanban-ctl db check-migrations`: Clean (All 63 migrations valid, single head: `p4_24_agent_safe_sequences`).
-- `uv run ruff check .`: Clean across 2023 files.
-- `uv run ruff format --check .`: Clean across 2023 files.
-- `uv run mypy database kanban mcp agent`: Clean (Success: 995 source files).
+- `uv run ruff check .`: Clean across 2027 files.
+- `uv run ruff format --check .`: Clean across 2027 files.
+- `uv run mypy database kanban mcp agent`: Clean (Success: 997 source files).
 - `uv run lint-imports`: Contracts: 2 kept, 0 broken (`agent -> mcp -> kanban -> database`).
 - `pnpm --dir kanban/web run typecheck`: Clean (0 type errors).
 - `pnpm --dir kanban/web run lint`: Clean (0 errors, 0 warnings).
-- `pnpm --dir kanban/web run build`: Production bundle built in 1.15s.
-- `python3 -m scripts.check_no_dashes --all` and `thumbs-up-kanban.wiki`: 0 forbidden dashes.
+- `pnpm --dir kanban/web run build`: Clean production build.
+- `python3 -m scripts.check_no_dashes`: Clean (0 em/en-dashes).
 
 ---
 
@@ -143,4 +119,4 @@ The audit confirms that:
 
 STATUS: APPROVED
 
-Ticket KAN-50 is fully verified on `main` at commit `78074a1d` against live container `kanban-liveqa-3` (`:18963`, `LIVE_STACK_VERDICT: PASS`). Project and workspace settings REST endpoints, default inheritance logic, activity ledger recording, settings UI controls, EmojiHint z-index elevation, and unit test suites are certified ready for reality-checker QA gate closure.
+Ticket KAN-50 is fully verified on `main` at commit `9b163f07` against live container `kanban-liveqa-3` (`:18963`, `LIVE_STACK_VERDICT: PASS`). Project and workspace settings REST endpoints, default inheritance logic, activity ledger recording, settings UI controls, EmojiHint z-index elevation, and unit test suites are certified ready for reality-checker QA gate closure.
