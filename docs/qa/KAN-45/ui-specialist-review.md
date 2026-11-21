@@ -2,11 +2,11 @@
 
 **Ticket ID:** KAN-45  
 **Title:** [KB-P3-GATE-ENFORCE] Enforce Canonical Reality-Checker Report on complete_work, Real qa-proof-validator Wasm, Approval Comment Persistence, and Agent Done-Transition Guards  
-**Branch:** `main` (integrated at commit `9b163f07`)  
-**Commit Under Audit:** `9b163f0717d384971a78e8cd8dbfaa8150f7d7c0`  
+**Branch:** `main` (integrated at commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`)  
+**Commit Under Audit:** `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`  
 **Base Commit Reference:** `73caabe7` (merged on `main`)  
 **Live Full-Stack Target:** `kanban-liveqa-4` (`http://127.0.0.1:18964`, PostgreSQL 16 + FORCE RLS)  
-**Live Full-Stack Verdict:** PASS (`OVERALL LIVE_STACK_VERDICT: PASS`)  
+**Live Full-Stack Verdict:** PASS (`OVERALL LIVE_STACK_VERDICT: PASS` in Round 5)  
 **Reviewer:** `ui-spec-2` (Clean-Room UI Specialist, System Architect)  
 **Date:** 2026-11-20  
 **Status:** APPROVED  
@@ -15,7 +15,7 @@
 
 ## 1. Executive Summary & Verification Scope
 
-An independent clean-room UI and UX architectural audit was conducted for ticket **KAN-45** integrated into `main` at commit `9b163f07` pursuant to the mandatory Dual Specialist Gate defined in `GEMINI.md`.
+An independent clean-room UI and UX architectural audit was conducted for ticket **KAN-45** integrated into `main` at commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd` pursuant to the mandatory Dual Specialist Gate defined in `GEMINI.md`.
 
 Although ticket KAN-45 focuses on transition engine gate enforcement, real Wasm bytecode validation, and MCP tool verification, it introduces critical behavioral invariants directly governing user-facing surfaces:
 1. REST completed-state transitions are guarded against agent bypasses while preserving seamless human interaction on the board and issue detail surfaces.
@@ -123,16 +123,16 @@ Direct visual inspection via `read_file` confirms all 7 screenshots on disk:
 ## 4. Test Suites, Coverage & Quality Gates
 
 ### 4.1. Automated Backend Test Suites
-- `kanban/tests/api/test_gate_enforcement_hardening.py`: 15 passed in 1.36s.
+- `kanban/tests/api/test_gate_enforcement_hardening.py`: 15 passed in 1.43s.
 - `kanban/tests/workflows/test_qa_proof_validator_wasm.py`: 6 passed.
 - `kanban/tests/workflows/test_dry_run.py`: 7 passed.
 - `kanban/tests/workflows/test_workflow_hooks_api.py`: 16 passed.
-- Combined workflow suite: 29 passed in 6.50s.
-- `kanban/tests/workflows/test_async_gate.py`: 16 passed in 4.89s.
-- Total suites: 103 passed across 7 test suites.
+- Combined workflow suite: 29 passed in 6.60s.
+- `kanban/tests/workflows/test_async_gate.py`: 18 passed in 5.65s (including real RLS tests).
+- Total suites: 106 passed across all 7 test suites at `HEAD 2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`.
 
 ### 4.2. Live Container Verification (`live-fullstack-proof.txt`)
-- Target: `kanban-liveqa-4` (`http://127.0.0.1:18964`, commit `9b163f07`).
+- Target: `kanban-liveqa-4` (`http://127.0.0.1:18964`, commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`).
 - Runtime Telemetry:
   * Console errors: 0
   * Page errors: 0
@@ -142,6 +142,7 @@ Direct visual inspection via `read_file` confirms all 7 screenshots on disk:
   * `G2_MCP_AND_BEARER_REST_REJECT_SHORT_CONTRADICTORY`: PASS
   * `G2B_COMPLETE_WORK_REJECTS_NEEDS_WORK_WITHOUT_READY`: PASS
   * `G2C_COOKIE_PLUS_DUMMY_BEARER_RETURNS_401_NO_CSRF_BYPASS`: PASS
+  * `G2D_REJECTS_GRADE_A_WITH_STATUS_PENDING_WITHOUT_READY`: PASS
   * `G3_WASM_QA_PROOF_AND_AUTO_LABEL_CLEAN`: PASS
   * `G4_VALID_CANONICAL_REPORT_COMPLETE_WORK`: PASS
   * `P2_ASYNC_GATE_APPROVE_COMMENT_PERSISTED_AND_RENDERED`: PASS

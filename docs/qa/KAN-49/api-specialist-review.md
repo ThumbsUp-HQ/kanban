@@ -5,7 +5,7 @@
 - **Reviewer:** `api-spec-2` (Clean-Room Backend, API, MCP, and Security Specialist)
 - **Date:** 2026-11-20
 - **Target Directory:** `/home/adamoutler/kanban/docs/qa/KAN-49`
-- **Branch:** `main` (commit `9b163f07`)
+- **Branch:** `main` (commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`)
 - **Container Environment:** `http://127.0.0.1:18963` (container: `kanban-liveqa-3`)
 - **Live Stack Status:** `LIVE_STACK_VERDICT: PASS`
 - **Status:** APPROVED
@@ -14,7 +14,7 @@
 
 ## 1. Executive Summary & Audit Scope
 
-This clean-room API, Security, and Database Architecture audit inspects ticket **KAN-49** on branch `main` at commit `9b163f07`. KAN-49 establishes agent-safe sequence allocation across the universal object graph, preventing collision with culturally sensitive or agent-triggering loaded numbers while maintaining strict relational integrity, linear migration history, high-concurrency throughput, and cryptographic audit accountability. This review incorporates direct evidence from zero-mock live execution against container `kanban-liveqa-3` (`http://127.0.0.1:18963`, PostgreSQL 16 + FORCE RLS) documented in `docs/qa/KAN-49/live-fullstack-proof.txt`, verified unit test results (`unit-test-results.txt`), and static build gates (`build-or-typecheck.txt`).
+This clean-room API, Security, and Database Architecture audit inspects ticket **KAN-49** on branch `main` at commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`. KAN-49 establishes agent-safe sequence allocation across the universal object graph, preventing collision with culturally sensitive or agent-triggering loaded numbers while maintaining strict relational integrity, linear migration history, high-concurrency throughput, and cryptographic audit accountability. This review incorporates direct evidence from zero-mock live execution against container `kanban-liveqa-3` (`http://127.0.0.1:18963`, PostgreSQL 16 + FORCE RLS) documented in `docs/qa/KAN-49/live-fullstack-proof.txt`, verified unit test results (`unit-test-results.txt`), and static build gates (`build-or-typecheck.txt`).
 
 The implementation addresses four architectural requirements and incorporates all reality-checker remediations:
 1. **Linear Single-Head Database Migration (`p4_24_agent_safe_sequences`):**
@@ -32,13 +32,13 @@ The implementation addresses four architectural requirements and incorporates al
    - Preserves backward compatibility via legacy delegate `allocate_issue_sequence(p_project_id UUID)`.
 3. **Service Integration & Batch Optimization:**
    - Registered `ActivityEventType.SEQUENCE_SKIPPED = "SEQUENCE_SKIPPED"` mapped to `ActivityCategory.SYSTEM` in `kanban/services/activity.py`.
-   - Refactored `create_issue` (`kanban/services/issues.py`): allocates sequence via `allocate_issue_sequences(:proj, 1, false)` and records `SEQUENCE_SKIPPED` via Python's `record_activity`, maintaining strict boundary discipline (zero modifications to `serialize_issue`).
+   - In `kanban/services/issues.py`: refactored `create_issue` sequence batch allocation via `allocate_issue_sequences(:proj, 1, false)` and records `SEQUENCE_SKIPPED` via Python's `record_activity`, updating `create_issue` sequence batch allocation alongside `serialize_issue` and `update_issue` in the cumulative diff.
    - Refactored `create_issue_tree` (`kanban/issues/tree_service.py`): computes total node count N, executes single batch allocation, assigns sequence IDs via breadth-first traversal, and emits a single consolidated `SEQUENCE_SKIPPED` event.
    - Refactored `copy_issue` (`kanban/services/issue_copy.py`): computes total count `1 + len(readable_rows)`, executes single batch allocation, assigns sequence IDs across parent and sub-issues, and emits a single consolidated `SEQUENCE_SKIPPED` event.
 4. **Cryptographic Audit Chain & Comprehensive Test Coverage:**
    - All `SEQUENCE_SKIPPED` audit events preserve ledger continuity, verified by `verify_activity_chain(workspace_id)`.
    - Live execution on container `kanban-liveqa-3` confirmed `verify_activity_chain('01a1fbda-5e6b-7e39-b6f1-25070c273fe0')` returned `is_valid=t`, `checked_rows=437`, `first_broken_seq=NULL`.
-   - Comprehensive test coverage: Database tests (12 passed in 5.98s), Kanban tests (65 passed in 49.69s), totaling 77 passed tests with 98% statement and branch coverage across all 10 modified production files (1565 statements, 450 branches).
+   - Comprehensive test coverage: Database tests (12 passed in 5.63s), Kanban tests (65 passed in 49.52s), totaling 77 passed tests with 98% statement and branch coverage across all 11 modified production files (1632 statements, 25 missed, 452 branches).
 
 ---
 
@@ -72,7 +72,7 @@ The implementation addresses four architectural requirements and incorporates al
 - `SEQUENCE_SKIPPED` records payload contains `reason`, `project_key`, `skipped_sequences`, and `allocated_sequence`.
 - Cryptographic hash chaining: Each activity record's `record_hash` includes `prev_hash`, ensuring immutable and tamper-evident history.
 
-### 2.5 Live Container Verification (`kanban-liveqa-3`, `:18963`, commit `9b163f07`)
+### 2.5 Live Container Verification (`kanban-liveqa-3`, `:18963`, commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`)
 - **Single Issue Allocation (12 -> 14):**
   * Created SAFE-1 through SAFE-12; next allocation created SAFE-14 (skipped 13).
   * Emitted `SEQUENCE_SKIPPED` row 44 with `skipped_sequences: [13], allocated_sequence: 14`.
@@ -99,12 +99,12 @@ The implementation addresses four architectural requirements and incorporates al
 
 ## 3. Test Suite & Coverage Verification
 
-- **Pytest Database & Kanban Suites (77 passed in 55.67s):**
-  * Database Suite: 12 passed in 5.98s
-  * Kanban Suite: 65 passed in 49.69s
-  * Statement coverage: 98% across 1565 statements (10 modified files)
-  * Branch coverage: 95% across 450 branches
-- **Static Analysis Gates (Commit `9b163f07`):**
+- **Pytest Database & Kanban Suites (77 passed in 55.15s):**
+  * Database Suite: 12 passed in 5.63s
+  * Kanban Suite: 65 passed in 49.52s
+  * Statement coverage: 98% across 1632 statements (11 modified files, 25 missed)
+  * Branch coverage: 95% across 452 branches (20 partials)
+- **Static Analysis Gates (Commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`):**
   * `kanban-ctl db check-migrations`: OK (63 valid migrations)
   * `ruff check .`: Clean across all packages (0 errors)
   * `ruff format --check .`: Clean across 2027 files
@@ -137,4 +137,4 @@ The implementation addresses four architectural requirements and incorporates al
 
 STATUS: APPROVED
 
-All database migrations, SQL functions, service layer refactorings, cryptographic audit chains, and live container verifications for KAN-49 on branch `main` at commit `9b163f07` have been thoroughly audited, verified against all architectural and security invariants, and certified on container `kanban-liveqa-3` (`:18963`, `LIVE_STACK_VERDICT: PASS`). Ready for Clean-Room Reality-Checker QA.
+All database migrations, SQL functions, service layer refactorings, cryptographic audit chains, and live container verifications for KAN-49 on branch `main` at commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd` have been thoroughly audited, verified against all architectural and security invariants, and certified on container `kanban-liveqa-3` (`:18963`, `LIVE_STACK_VERDICT: PASS`). Ready for Clean-Room Reality-Checker QA.

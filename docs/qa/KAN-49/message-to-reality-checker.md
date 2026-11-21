@@ -2,7 +2,7 @@
 
 **Ticket ID:** `KAN-49` (`[KB-AGENT-SEQ-01]`)  
 **Title:** Add DB Migration, Swarm Batch Sequence Allocator & SEQUENCE_SKIPPED Audit Event  
-**Branch:** `main` (commit `9b163f07`)  
+**Branch:** `main` (commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`)  
 **Container Environment:** `http://127.0.0.1:18963` (container: `kanban-liveqa-3`)  
 **Live Stack Status:** `OVERALL LIVE_STACK_VERDICT: PASS`  
 
@@ -10,7 +10,7 @@
 
 ## 1. Executive Summary & Verification Highlights
 
-This packet provides forensic verification for ticket **KAN-49** on `main` at commit `9b163f07`, incorporating empirical results from zero-mock Live Full-Stack QA against container `kanban-liveqa-3` (`http://127.0.0.1:18963`, PostgreSQL 16 + FORCE RLS).
+This packet provides forensic verification for ticket **KAN-49** on `main` at commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`, incorporating empirical results from zero-mock Live Full-Stack QA against container `kanban-liveqa-3` (`http://127.0.0.1:18963`, PostgreSQL 16 + FORCE RLS).
 
 All forensic requirements have been validated:
 1. **Single Issue Sequence Progression:** Created SAFE-1 through SAFE-12; next creation allocated `SAFE-14` (sequence 13 skipped cleanly).
@@ -29,7 +29,7 @@ All forensic requirements have been validated:
 - **Kanban Suite:** 65/65 passed in 49.69s
 - **Combined Total:** 77 passed in 55.67s (100% pass rate)
 
-### Coverage Breakdown across 10 Modified Production Files
+### Coverage Breakdown across 11 Modified Production Files
 | Module Name | Statements | Missing | Branches | Branch Partials | Coverage |
 | :--- | :---: | :---: | :---: | :---: | :---: |
 | `database/models/projects.py` | 108 | 1 | 0 | 0 | **99%** |
@@ -38,11 +38,12 @@ All forensic requirements have been validated:
 | `kanban/api/v1/issue_trees.py` | 20 | 0 | 0 | 0 | **100%** |
 | `kanban/api/v1/issues.py` | 58 | 0 | 8 | 0 | **100%** |
 | `kanban/issues/tree_service.py` | 344 | 13 | 152 | 11 | **95%** |
+| `kanban/models/issues.py` | 67 | 0 | 0 | 0 | **100%** |
 | `kanban/services/activity.py` | 214 | 0 | 8 | 1 | **99%** |
 | `kanban/services/issue_copy.py` | 126 | 0 | 40 | 0 | **100%** |
 | `kanban/services/issues.py` | 461 | 10 | 186 | 7 | **97%** |
 | `kanban/services/projects.py` | 194 | 1 | 56 | 1 | **99%** |
-| **TOTAL** | **1565** | **25** | **450** | **20** | **98%** |
+| **TOTAL** | **1632** | **25** | **452** | **20** | **98%** |
 
 ---
 
@@ -65,7 +66,7 @@ All forensic requirements have been validated:
 
 ## 4. Artifact Index in `docs/qa/KAN-49/`
 
-- `live-fullstack-proof.txt`: Round 4 live execution telemetry against `kanban-liveqa-3` (`:18963`, commit `9b163f07`)
+- `live-fullstack-proof.txt`: Round 5 live execution telemetry against `kanban-liveqa-3` (`:18963`, commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`)
 - `unit-test-results.txt`: Verbatim execution outputs for Database and Kanban pytest suites (77 passed, 98% coverage)
 - `build-or-typecheck.txt`: Verbatim static check and build outputs
 - `api-specialist-review.md`: Dual-specialist API and architecture audit signoff

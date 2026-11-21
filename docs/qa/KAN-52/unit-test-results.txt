@@ -1,39 +1,39 @@
+=== UNIT TESTS & COVERAGE (HEAD 2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd) ===
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan44-52-microfix-6660983a/kanban/web
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/views/predicateParser.test.ts (4 tests) 14ms
- ✓ src/features/views/viewsApi.test.ts (12 tests) 50ms
- ✓ src/features/views/IssueNavigatorBar.test.tsx (6 tests) 158ms
- ✓ src/app/LayoutSwitcher.test.tsx (8 tests) 395ms
- ✓ src/features/list/ListView.test.tsx (16 tests) 629ms
- ✓ src/features/drawer/IssueSurfaceSplitMasterDetail.test.tsx (9 tests) 959ms
+ ✓ src/features/views/predicateParser.test.ts (4 tests) 13ms
+ ✓ src/features/views/viewsApi.test.ts (12 tests) 39ms
+ ✓ src/features/views/IssueNavigatorBar.test.tsx (6 tests) 162ms
+ ✓ src/app/LayoutSwitcher.test.tsx (8 tests) 387ms
+ ✓ src/features/list/ListView.test.tsx (16 tests) 706ms
+ ✓ src/features/drawer/IssueSurfaceSplitMasterDetail.test.tsx (9 tests) 1076ms
    ✓ IssueSurface split mode (KAN-52 Problem 3) (9)
-     ✓ split mode description editor formatting tools and quick-props state select work cleanly 387ms
- ✓ src/features/drawer/IssueSurface.test.tsx (45 tests) 3225ms
+     ✓ split mode description editor formatting tools and quick-props state select work cleanly 431ms
+ ✓ src/features/drawer/IssueSurface.test.tsx (45 tests) 3100ms
    ✓ IssueSurface (45)
      ✓ Live Persistence & Backend Normalization (KANBA-165) (20)
-       ✓ connects toolbar buttons, media upload, preview toggle, and sanitized paste pill in description editor 343ms
-       ✓ covers conflict banner actions: reload, overwrite, overwrite failure, and discard 345ms
- ✓ src/features/views/viewRegistry.test.tsx (56 tests) 13221ms
+       ✓ connects toolbar buttons, media upload, preview toggle, and sanitized paste pill in description editor 335ms
+ ✓ src/features/views/viewRegistry.test.tsx (56 tests) 13147ms
    ✓ viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) (56)
-     ✓ IssuesWorkspaceRoute: creates a new issue via QuickCreateIssueModal and updates state/priority via field popover 762ms
-     ✓ IssuesWorkspaceRoute: handles multi-select, batch archive, and batch delete in BulkActionBar 627ms
-     ✓ IssuesWorkspaceRoute: filters by Priority, Assignee (unassigned and alice), Cycle, Module, Due Date 2238ms
-     ✓ IssuesWorkspaceRoute: tests state filter Active preset, alice assignee, and select-all 786ms
-     ✓ IssuesWorkspaceRoute: tests field popovers for high/low priority and in-progress/backlog state, and / shortcut 336ms
-     ✓ IssuesWorkspaceRoute: covers handleToggleSelect 100 cap and unassigned I shortcut 2506ms
+     ✓ IssuesWorkspaceRoute: creates a new issue via QuickCreateIssueModal and updates state/priority via field popover 784ms
+     ✓ IssuesWorkspaceRoute: handles multi-select, batch archive, and batch delete in BulkActionBar 638ms
+     ✓ IssuesWorkspaceRoute: filters by Priority, Assignee (unassigned and alice), Cycle, Module, Due Date 2206ms
+     ✓ IssuesWorkspaceRoute: tests state filter Active preset, alice assignee, and select-all 742ms
+     ✓ IssuesWorkspaceRoute: tests field popovers for high/low priority and in-progress/backlog state, and / shortcut 301ms
+     ✓ IssuesWorkspaceRoute: covers handleToggleSelect 100 cap and unassigned I shortcut 2493ms
      ✓ Live Mode API Wiring & Board State Normalization (KANBA-164) (21)
-       ✓ creates, updates, and bulk-operates on issues in live mode via REST endpoints 474ms
-       ✓ covers opening, cancelling, and saving custom view via SaveViewModal in IssuesWorkspaceRoute 662ms
-       ✓ covers BulkActionBar batch delete and archive in table layout 533ms
+       ✓ creates, updates, and bulk-operates on issues in live mode via REST endpoints 466ms
+       ✓ covers opening, cancelling, and saving custom view via SaveViewModal in IssuesWorkspaceRoute 673ms
+       ✓ covers BulkActionBar batch delete and archive in table layout 535ms
      ✓ KAN-44 Mobile & Touch View Routing Tests (15)
-       ✓ exercises Swimlane with groupBy=priority, live mode transitions, WIP override, and batch update 352ms
+       ✓ exercises Swimlane with groupBy=priority, live mode transitions, WIP override, and batch update 364ms
 
  Test Files  8 passed (8)
       Tests  156 passed (156)
-   Start at  22:02:31
-   Duration  15.26s (tests 67%, environment 23%, import 8%, worker 2%, transform 1%)
+   Start at  22:32:24
+   Duration  15.24s (tests 64%, environment 24%, import 8%, worker 3%, transform 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
@@ -52,4 +52,3 @@ All files          |   99.44 |    96.04 |   99.71 |     100 |
   viewRegistry.tsx |   99.02 |     95.3 |   99.28 |     100 | ...85,851,861,872 
   viewsApi.ts      |     100 |    98.52 |     100 |     100 | 190,209           
 -------------------|---------|----------|---------|---------|-------------------
-

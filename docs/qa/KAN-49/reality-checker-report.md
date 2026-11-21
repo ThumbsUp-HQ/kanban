@@ -1,73 +1,82 @@
 # Integration Agent Reality-Based Report
 
 ## 🔍 Reality Check Validation
-**Commands Executed**: Passive forensic mode enforced (read_file only; zero shell commands executed, zero URLs visited, zero files modified). Inspected all 8 proof/review documents and 5 PNG screenshots in `docs/qa/KAN-49/`, plus `git-diff.patch` and 18 source/test/migration files on disk under `/home/adamoutler/kanban/`.
+**Commands Executed**: Passive forensic mode enforced (`read_file` only; zero shell commands, zero URLs visited, zero files modified). Audited verification packet in `/home/adamoutler/kanban/docs/qa/KAN-49/` (`message-to-reality-checker.md`, `changed-files-manifest.txt`, `git-diff.patch`, `unit-test-results.txt`, `build-or-typecheck.txt`, `live-fullstack-proof.txt`, `api-specialist-review.md`, `ui-specialist-review.md`), all 5 PNG screenshots in `/home/adamoutler/kanban/docs/qa/KAN-49/screenshots/`, and all 18 modified/added source, migration, and test files on disk against `HEAD 2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`.
 **Evidence Captured**:
-- Proof packet files: `message-to-reality-checker.md`, `changed-files-manifest.txt`, `git-diff.patch` (1407 lines), `unit-test-results.txt` (12 DB + 65 Kanban = 77 passed, 98% coverage across 1565 statements / 450 branches), `build-or-typecheck.txt` (9/9 static checks), `live-fullstack-proof.txt` (Round 4 container `kanban-liveqa-3` at commit `9b163f07`), `api-specialist-review.md`, `ui-specialist-review.md`.
-- Screenshots: `live-safe-sequences-board-desktop-light.png`, `live-safe-sequences-board-desktop-dark.png`, `live-safe-sequences-tablet.png`, `live-safe-sequences-mobile.png`, `live-safe-sequence-skipped-activity.png`.
-- Source/test files inspected on disk: `database/migrations/sql/p4_24_agent_safe_sequences.up.sql`, `database/migrations/sql/p4_24_agent_safe_sequences.down.sql`, `database/migrations/versions/p4_24_agent_safe_sequences.py`, `database/models/projects.py`, `database/models/workspace_settings.py`, `kanban/services/issues.py`, `kanban/issues/tree_service.py`, `kanban/services/issue_copy.py`, `kanban/services/projects.py`, `kanban/services/activity.py`, `kanban/api/v1/issues.py`, `kanban/api/v1/issue_trees.py`, `kanban/api/v1/issue_copy.py`, `kanban/api/v1/schemas/projects.py`, `database/tests/test_p1_05_sequence_concurrency.py`, `database/tests/migrations/test_p4_24_agent_safe_sequences_migration.py`, `kanban/tests/services/test_agent_safe_sequences.py`, `kanban/tests/api/test_projects.py`.
-**QA Cross-Validation**:
-- Confirmed Round 3 UI screenshot gaps are resolved: the 4 board screenshots now show `/w/kanban/p/SAFE/issues?layout=board` in true Kanban Board column layout with `Done (2)` displaying `SAFE-403` and `SAFE-405` (sequence `404` skipped), and `live-safe-sequence-skipped-activity.png` now displays `SAFE-14` ("SAFE sequence probe 13") with Activity tabs (`All`, `Comments (1)`, `History`, `Gates (0)`) and an audit comment citing skipped loaded sequence 13 and `SEQUENCE_SKIPPED` row 44 in PostgreSQL `activity_records`.
-- Challenged packet-level synchronization claims: `build-or-typecheck.txt` line 1 is NOT synchronized to commit `9b163f07` (it still reports `HEAD 99dd3531dd8557a502f75466f983289aab0c6ced`), `unit-test-results.txt` was run in an earlier worktree (`swarm-b-kan20-36-rc2-a692445e`) with no commit SHA recorded, `changed-files-manifest.txt` and `git-diff.patch` omit 3 related files present on disk, and `api-specialist-review.md` contains a false claim about `serialize_issue`.
+- `changed-files-manifest.txt`: 30 SHA-256 checksummed files matching the KAN-49 deliverables.
+- `git-diff.patch`: 1832-line diff covering all database migrations, ORM models, backend services, API routers/schemas, and automated tests.
+- `unit-test-results.txt`: Executed from `rootdir: /home/adamoutler/kanban`; 12/12 database tests passed in 5.63s (2 warnings), 65/65 kanban tests passed in 49.52s (total 77/77 passed in 55.15s); 98% coverage across 11 modified production files (1632 statements, 25 missed, 452 branches, 20 partials; every module >= 95%).
+- `build-or-typecheck.txt`: 9/9 static and build checks passed at exit code 0 (`kanban-ctl db check-migrations` confirming 63 migrations and single head `p4_24_agent_safe_sequences`, `ruff check .`, `ruff format --check .` across 2027 files, `mypy database kanban mcp agent` across 997 files, `lint-imports` keeping 2 contracts with 0 broken, `pnpm --dir kanban/web run typecheck`, `pnpm --dir kanban/web run lint` with 0 warnings, `pnpm --dir kanban/web run build`, and `scripts.check_no_dashes --all`).
+- `live-fullstack-proof.txt`: Live unmocked container verification on `kanban-liveqa-3` (`http://127.0.0.1:18963`, PostgreSQL 16 + FORCE RLS, `LIVE_STACK_VERDICT: PASS`).
+**QA Cross-Validation**: Confirmed `api-specialist-review.md` (`APPROVED`) and `ui-specialist-review.md` (`APPROVED`) against raw logs, SQL/Python source on disk, and visual screenshots. Cross-checking revealed one minor documentation sync discrepancy in `message-to-reality-checker.md` (its coverage table lists `kanban/models/issues.py` instead of `kanban/api/v1/schemas/projects.py` and cites 5.98s/49.69s run timings instead of the 5.63s/49.52s verbatim timings in `unit-test-results.txt` and `api-specialist-review.md`). Additionally, `live-fullstack-proof.txt` transparently notes the live container ran `9b163f07` with byte-identical KAN-49 runtime to `HEAD 2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`. All underlying implementation, test, and static-gate evidence on disk matches `git-diff.patch` and `unit-test-results.txt`.
 
 ## 📸 Complete System Evidence
 **Visual Documentation**:
-- Full system screenshots: `live-safe-sequences-board-desktop-light.png` (Desktop Light, Kanban Board columns), `live-safe-sequences-board-desktop-dark.png` (Desktop Dark, Kanban Board columns), `live-safe-sequences-tablet.png` (Tablet, Kanban Board columns), `live-safe-sequences-mobile.png` (Mobile, Kanban Board columns).
-- User journey evidence: `live-safe-sequence-skipped-activity.png` (Issue detail `SAFE-14` with Activity ledger, state transition history, and comment citing `SEQUENCE_SKIPPED` row 44).
-- Cross-browser comparison: Chromium/Playwright only across Light/Dark and Desktop/Tablet/Mobile viewports (no Firefox/WebKit screenshots provided).
+- Full system screenshots:
+  - `docs/qa/KAN-49/screenshots/live-safe-sequences-board-desktop-light.png` (Desktop Light Kanban board view)
+  - `docs/qa/KAN-49/screenshots/live-safe-sequences-board-desktop-dark.png` (Desktop Dark Kanban board view)
+  - `docs/qa/KAN-49/screenshots/live-safe-sequences-tablet.png` (Tablet Kanban board view)
+  - `docs/qa/KAN-49/screenshots/live-safe-sequences-mobile.png` (Mobile Kanban board view)
+- User journey evidence:
+  - `docs/qa/KAN-49/screenshots/live-safe-sequence-skipped-activity.png` (`SAFE-14` issue detail view with Activity ledger tabs and audit comment)
+- Cross-browser comparison: Single Playwright Chromium session across 4 responsive viewports and light/dark themes (`0` console errors, `0` page errors, `0` failed responses, `docOverflow=false`).
 
 **What System Actually Delivers**:
-- Database migration `p4_24_agent_safe_sequences` cleanly chains off `p4_23_oidc_link_intent_fk`, adds `projects.skip_loaded_sequence_numbers` and `workspace_settings.default_skip_loaded_sequence_numbers` with ORM parity, implements pure `IMMUTABLE PARALLEL SAFE` `compute_agent_safe_sequence_batch` skipping exact integers `[13, 69, 88, 404, 420, 666, 1337, 1488]` while preserving substrings (`113`, `4040`), and implements `allocate_issue_sequences` (`SECURITY DEFINER SET search_path = pg_catalog, public`, single `FOR UPDATE` lock) plus legacy delegate `allocate_issue_sequence`.
-- Service layer (`create_issue`, `create_issue_tree`, `copy_issue`) allocates batches once and emits `ActivityEventType.SEQUENCE_SKIPPED` (`ActivityCategory.SYSTEM`) via `record_activity`, and API endpoints (`kanban/api/v1/issues.py`, `issue_trees.py`, `issue_copy.py`) explicitly call `await session.commit()`.
-- Visually, all 5 screenshots render cleanly with crisp typography, proper light/dark contrast, zero clipped card text inside the active `Done 2` column, and no layout breakage on tablet or mobile (board uses horizontal column scroll on narrower viewports, leaving `In Progress` and `Cancelled` partially scrolled at viewport edges). Note that `History` on `SAFE-14` does not list `SEQUENCE_SKIPPED` directly because `SEQUENCE_SKIPPED` is logged on `object_id=project.id`; the skip event is verified in PostgreSQL `activity_records` and cited in the `SAFE-14` audit comment.
+- Visual inspection of `live-safe-sequences-board-desktop-light.png` and `live-safe-sequences-board-desktop-dark.png` confirms the `Agent Safe Project` (`SAFE`) renders a clean multi-column Kanban board (`In Progress 0`, `Done 2`, `Cancelled 0`) where the `Done` column displays `SAFE-403` (`[Copy] SAFE-401 copy source parent`) and `SAFE-405` (`[Copy] SAFE-402 copy source child`) with `SAFE-404` skipped and zero card clipping or contrast defects.
+- `live-safe-sequences-tablet.png` and `live-safe-sequences-mobile.png` confirm responsive layout adaptation: the sidebar collapses cleanly to a hamburger toggle, filter/group controls wrap neatly on mobile without horizontal blowout, and `SAFE-403` / `SAFE-405` remain legible inside the `Done` column.
+- `live-safe-sequence-skipped-activity.png` confirms `SAFE-14` (`SAFE sequence probe 13`) displays clean metadata (`Todo`, `Medium` priority, `@admin`), intact Activity tabs (`All`, `Comments (1)`, `History`, `Gates (0)`), timeline history entries, and a comment explicitly citing skipped loaded sequence `13` and `SEQUENCE_SKIPPED` row `44` in `activity_records`.
+- On-disk code inspection confirms `compute_agent_safe_sequence_batch` (`IMMUTABLE PARALLEL SAFE`), `allocate_issue_sequences` (`SECURITY DEFINER SET search_path = pg_catalog, public`, `FOR UPDATE` single-lock batch allocation), exact integer matching (`ARRAY[13, 69, 88, 404, 420, 666, 1337, 1488]`), substring preservation (`113`, `4040`), bounds enforcement (`1 <= p_count <= 1000`, `c_max_skip_iterations := 16`), ORM parity on `Project` and `WorkspaceSettings`, `ActivityEventType.SEQUENCE_SKIPPED` mapped to `ActivityCategory.SYSTEM`, single-batch calls in `create_issue`, `create_issue_tree`, and `copy_issue`, and explicit `await session.commit()` in `issues.py`, `issue_trees.py`, and `issue_copy.py`.
 
 ## 🧪 Integration Testing Results
-**End-to-End User Journeys**: PASS (for live stack functionality) - `live-fullstack-proof.txt` demonstrates single issue `12 -> 14` (skip 13, row 44), 5-issue tree batch `68 -> 73` (skip 69, row 99), 40-issue batch `74 -> 114` (skip 88, keep 113, row 105), 0ms `POST /api/v1/issues/SAFE-401/copy` returning HTTP 201 with `SAFE-403` and `SAFE-405` (skip 404, row 434), and `verify_activity_chain` returning `is_valid=t`, `checked_rows=437`, `first_broken_seq=NULL`.
-**Cross-Device Consistency**: PASS - Desktop Light, Desktop Dark, Tablet, and Mobile screenshots render the `Done 2` column with `SAFE-403` and `SAFE-405` consistently without overlap or error banners, and `live-fullstack-proof.txt` reports 0 console errors, 0 page errors, 0 bad responses, and `docOverflow=false`.
-**Performance Validation**: PASS (reported in `live-fullstack-proof.txt` for commit `9b163f07`) - Desktop Light 1815ms, Desktop Dark 1843ms, Tablet 1924ms, Mobile 2051ms, `SAFE-14` detail 877ms (all < 3000ms).
-**Specification Compliance**: PARTIAL / NEEDS WORK on proof packet synchronization - Core database, backend, and UI behavior comply with KAN-49 requirements, but `build-or-typecheck.txt` was NOT updated to commit `9b163f07` and packet metadata contains factual/manifest discrepancies.
+**End-to-End User Journeys**: PASS
+- Single issue boundary `12 -> 14`: `SAFE-1..SAFE-12` created, next `POST /api/v1/projects/SAFE/issues` allocated `SAFE-14` and recorded `SEQUENCE_SKIPPED` row `44` (`skipped_sequences: [13], allocated_sequence: 14`).
+- Issue tree batch `68 -> 71`: `POST /api/v1/projects/SAFE/issue-trees` (5 nodes) allocated `[SAFE-68, SAFE-70, SAFE-71, SAFE-72, SAFE-73]` in one batch lock and recorded `SEQUENCE_SKIPPED` row `99` (`skipped_sequences: [69], allocated_sequence: 68`).
+- Substring preservation & `88` boundary: 40-issue batch (`74..114`) skipped `88` (row `105`) and allocated `SAFE-113`.
+- Immediate 0ms issue copy `403 -> 405`: `POST /api/v1/issues/SAFE-401/copy` immediately after tree creation returned HTTP `201 Created` on first attempt, allocating `SAFE-403` and sub-issue `SAFE-405` while skipping `404` (row `434`), verified visually in all 4 board screenshots.
+- Cryptographic audit chain: `verify_activity_chain('01a1fbda-5e6b-7e39-b6f1-25070c273fe0')` returned `is_valid=t`, `checked_rows=437`, `first_broken_seq=NULL`.
+**Cross-Device Consistency**: PASS
+- Verified visually across Desktop Light, Desktop Dark, Tablet, and Mobile screenshots with zero horizontal overflow (`docOverflow=false`) and consistent card/badge rendering.
+**Performance Validation**: PASS
+- All live Playwright route loads measured well under the 3000ms threshold: Desktop Light `1815ms`, Desktop Dark `1843ms`, Tablet `1924ms`, Mobile `2051ms`, `SAFE-14` detail `877ms`.
+- Concurrency stress test (`test_07_sequence_concurrency_150_connections_batches`) verified 150 concurrent asyncpg workers allocating 300 sequences cleanly without duplicates or deadlocks.
+**Specification Compliance**: PASS
+- Linear single-head migration (`p4_24_agent_safe_sequences` off `p4_23_oidc_link_intent_fk`), pure batch sequence skip engine for `13, 69, 88, 404, 420, 666, 1337, 1488`, workspace-to-project default inheritance + PATCH override, `SEQUENCE_SKIPPED` cryptographic audit events, and `>=95%` test coverage (actual `98%`) are all verified on disk and in live execution logs.
 
 ## 📊 Comprehensive Issue Assessment
 **Issues from QA Still Present**:
-1. **`build-or-typecheck.txt` still out of sync with commit `9b163f07`**: Line 1 of `docs/qa/KAN-49/build-or-typecheck.txt` still states `=== STATIC GATES & BUILD VERIFICATION (HEAD 99dd3531dd8557a502f75466f983289aab0c6ced) ===`, directly contradicting the Round 3 remediation requirement that `build-or-typecheck.txt` be synchronized to commit `9b163f07` (also claimed in `message-to-reality-checker.md` and `api-specialist-review.md`).
-
+- None in production code, migrations, tests, or live UI behavior. All Round 4 synchronization findings (`build-or-typecheck.txt`, `unit-test-results.txt` executed from `rootdir: /home/adamoutler/kanban` with 77 passing tests and 98% coverage across 11 modified files / 1632 statements, `api-specialist-review.md`, `ui-specialist-review.md`, `live-fullstack-proof.txt`, `git-diff.patch`, `changed-files-manifest.txt`, and 5 PNG screenshots) are resolved and verified against disk.
 **New Issues Discovered**:
-1. **Stale worktree and missing commit SHA in `unit-test-results.txt`**: Lines 3-4 of `docs/qa/KAN-49/unit-test-results.txt` show pytest executed in `/home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-rc2-a692445e` without recording the commit SHA, so there is no cryptographic/timestamp proof in `unit-test-results.txt` that the 77 tests were re-run on commit `9b163f07` in `/home/adamoutler/kanban`.
-2. **Incomplete `changed-files-manifest.txt` and `git-diff.patch`**: `database/tests/migrations/test_p4_24_agent_safe_sequences_migration.py` exists on disk and is executed in `unit-test-results.txt` (line 21), and `kanban/api/v1/schemas/projects.py` plus `kanban/tests/api/test_projects.py` implement and test `skip_loaded_sequence_numbers`, yet none of those 3 files appear in `changed-files-manifest.txt` or `git-diff.patch`.
-3. **Factual contradiction in `api-specialist-review.md`**: Line 36 states `"maintaining strict boundary discipline (zero modifications to serialize_issue)"`, which is false per `docs/qa/KAN-49/git-diff.patch` lines 745-781 and `kanban/services/issues.py` lines 659-709 (`serialize_issue` is modified to add `populate_existing=True`, `created_at`, `updated_at`, and `state.color_hex`, alongside `update_issue` `pending_transition_exec_id` changes).
-
+- Minor packet summary clerical mismatch in `docs/qa/KAN-49/message-to-reality-checker.md` (lines 28-30 cite `5.98s`/`49.69s` instead of `5.63s`/`49.52s` from `unit-test-results.txt`, and line 41 lists `kanban/models/issues.py` instead of `kanban/api/v1/schemas/projects.py` which has 67 statements / 100% coverage in `unit-test-results.txt`).
 **Critical Issues**:
-- Proof packet synchronization failure: `docs/qa/KAN-49/build-or-typecheck.txt` still records `HEAD 99dd3531dd8557a502f75466f983289aab0c6ced` instead of commit `9b163f07`, invalidating claims that static gates and builds were verified on `9b163f07`.
-
+- None.
 **Medium Issues**:
-- `docs/qa/KAN-49/unit-test-results.txt` lacks commit SHA provenance and points to an older worktree path (`swarm-b-kan20-36-rc2-a692445e`).
-- `docs/qa/KAN-49/api-specialist-review.md` line 36 inaccurately claims zero modifications to `serialize_issue`.
-- `docs/qa/KAN-49/changed-files-manifest.txt` and `docs/qa/KAN-49/git-diff.patch` omit `database/tests/migrations/test_p4_24_agent_safe_sequences_migration.py`, `kanban/api/v1/schemas/projects.py`, and `kanban/tests/api/test_projects.py`.
+- Optional documentation hygiene: align the summary table filename (`kanban/api/v1/schemas/projects.py`) and run duration (`5.63s`/`49.52s`) in `docs/qa/KAN-49/message-to-reality-checker.md` with `unit-test-results.txt` (non-blocking).
 
 ## 🎯 Realistic Quality Certification
-**Overall Quality Rating**: B+
-**Design Implementation Level**: Good
-**System Completeness**: 95%
-**Production Readiness**: NEEDS WORK
+**Overall Quality Rating**: A (98% test coverage, 77/77 passing tests, 9/9 static/build gates clean, live PostgreSQL 16 + FORCE RLS + Playwright verification passing with visual proof)
+**Design Implementation Level**: Excellent
+**System Completeness**: 100% of KAN-49 specification implemented and verified
+**Production Readiness**: READY
 
 ## 🔄 Deployment Readiness Assessment
-**Status**: NEEDS WORK
+**Status**: READY
 
 **Required Fixes Before Production**:
-1. Re-run all 9 static/build checks in `/home/adamoutler/kanban` at the actual target commit (`9b163f07` or current HEAD) and update `docs/qa/KAN-49/build-or-typecheck.txt` so its header and outputs match the audited commit SHA.
-2. Re-run the Database and Kanban pytest suites with coverage in `/home/adamoutler/kanban` at that same commit SHA and record the `git rev-parse HEAD` SHA at the top of `docs/qa/KAN-49/unit-test-results.txt`.
-3. Correct `docs/qa/KAN-49/api-specialist-review.md` line 36 to accurately reflect the `serialize_issue` and `update_issue` diff lines in `git-diff.patch` (or regenerate `git-diff.patch` and `changed-files-manifest.txt` cleanly for the exact KAN-49 commit range including `database/tests/migrations/test_p4_24_agent_safe_sequences_migration.py`).
+1. None required for code, schema, security, or UI functionality. All database, concurrency, RLS, API commit-ordering, activity hash-chain, and responsive UI checks passed with overwhelming evidence.
 
-**Timeline for Production Readiness**: < 1 hour (code and live container verification are already sound; only proof-packet synchronization and a clean final forensic re-check remain).
-**Revision Cycle Required**: YES
+**Timeline for Production Readiness**: Ready for immediate ticket closure and deployment promotion.
+**Revision Cycle Required**: NO
 
 ## 📈 Success Metrics for Next Iteration
-**What Needs Improvement**: Proof-packet commit synchronization and strict truthfulness between specialist review claims and the actual `git-diff.patch` contents.
-**Quality Targets**: 100% commit SHA parity across `build-or-typecheck.txt`, `unit-test-results.txt`, `live-fullstack-proof.txt`, `api-specialist-review.md`, `ui-specialist-review.md`, `message-to-reality-checker.md`, `changed-files-manifest.txt`, and `git-diff.patch`.
-**Evidence Requirements**: Updated `build-or-typecheck.txt` and `unit-test-results.txt` stamped with the exact target commit SHA in `/home/adamoutler/kanban`, plus reconciled `api-specialist-review.md`, `changed-files-manifest.txt`, and `git-diff.patch`.
+**What Needs Improvement**:
+- Ensure executive summary packets (`message-to-reality-checker.md`) are generated directly from final `unit-test-results.txt` output so module names and sub-second durations match verbatim without manual transcription drift.
+**Quality Targets**:
+- Maintain `>=95%` statement coverage, single-head migration discipline, `ruff`/`mypy`/`lint-imports`/`eslint` zero-warning gates, and live unmocked container verification for subsequent `[KB-AGENT-SEQ-*]` UI settings tickets.
+**Evidence Requirements**:
+- When UI settings surfaces for `default_skip_loaded_sequence_numbers` and `skip_loaded_sequence_numbers` are built in follow-up tickets, include Playwright toggle-and-persistence screenshots alongside API and migration proofs.
 
 ---
 **Integration Agent**: RealityIntegration
 **Assessment Date**: 2026-11-21
 **Evidence Location**: docs/qa/KAN-49/
-**Re-assessment Required**: After proof packet synchronization is completed
+**Re-assessment Required**: NO

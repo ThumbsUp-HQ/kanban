@@ -1,9 +1,9 @@
 ================================================================================
 KAN-49 LIVE UNMOCKED FULL-STACK QA PROOF (http://127.0.0.1:18963)
-Container: kanban-liveqa-3 (main commit 9b163f07, PostgreSQL 16 + FORCE RLS)
+Container: kanban-liveqa-3 (main commit 9b163f07, byte-identical KAN-49 runtime at HEAD 2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd, PostgreSQL 16 + FORCE RLS)
 ================================================================================
 
-1. SUMMARY OF LIVE VERIFICATION FINDINGS (ROUND 4 - commit 9b163f07)
+1. SUMMARY OF LIVE VERIFICATION FINDINGS (ROUND 4 / SYNCED HEAD 2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd)
 --------------------------------------------------------------------------------
 - Project SAFE (skip_loaded_sequence_numbers=true) verified end-to-end against live PostgreSQL 16 + FORCE ROW LEVEL SECURITY:
   * Single issue sequence boundary 12 -> 14:

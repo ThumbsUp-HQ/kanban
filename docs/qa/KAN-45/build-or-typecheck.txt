@@ -1,4 +1,4 @@
-=== STATIC GATES & BUILD VERIFICATION (HEAD 99dd3531dd8557a502f75466f983289aab0c6ced) ===
+=== STATIC GATES & BUILD VERIFICATION (HEAD 2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd) ===
 $ uv run kanban-ctl db check-migrations
 OK: All 63 migrations valid. Single head: p4_24_agent_safe_sequences
 Exit code: 0
@@ -31,10 +31,10 @@ $ uv run lint-imports
 Contracts
 ---------
 
-Analyzed 997 files, 3561 dependencies.
+Analyzed 997 files, 3563 dependencies.
 --------------------------------------
 
-Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT (7 ignored imports)
 mcp forbidden from importing database KEPT (48 ignored imports)
 
 Contracts: 2 kept, 0 broken.
@@ -64,17 +64,17 @@ transforming...
 ✓ 723 modules transformed.
 rendering chunks...
 computing gzip size...
-dist/index.html                             0.51 kB │ gzip:   0.31 kB
+dist/index.html                             0.51 kB │ gzip:   0.32 kB
 dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-dist/assets/index-DmWtfEFx.css            484.46 kB │ gzip:  67.97 kB
-dist/assets/index-hsukqSsz.js           2,450.59 kB │ gzip: 679.25 kB
+dist/assets/index-38BHrqqV.css            484.91 kB │ gzip:  68.00 kB
+dist/assets/index-CqEGXOwT.js           2,450.50 kB │ gzip: 679.24 kB
 
 [plugin builtin:vite-reporter] 
 (!) Some chunks are larger than 500 kB after minification. Consider:
 - Using dynamic import() to code-split the application
 - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 1.09s
+✓ built in 1.13s
 Exit code: 0
 
 $ python3 -m scripts.check_no_dashes --all

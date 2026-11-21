@@ -1,61 +1,70 @@
+=== UNIT TESTS & COVERAGE (HEAD 2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd) ===
 
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan44-52-microfix-6660983a/kanban/web
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/list/ListRow.test.tsx (6 tests) 483ms
- ✓ src/features/board/BoardColumn.test.tsx (10 tests) 418ms
- ✓ src/features/board/BoardCard.test.tsx (14 tests) 643ms
- ✓ src/features/views/QuickFieldPopover.test.tsx (13 tests) 623ms
+ ✓ src/features/board/BoardColumn.test.tsx (10 tests) 474ms
+ ✓ src/features/views/QuickFieldPopover.test.tsx (13 tests) 680ms
    ✓ QuickFieldPopover (KB-P3-40, S6.4 item 4, S1.3 item 3, S7.2 8f) (13)
-     ✓ renders Priority picker and allows selecting with click and keyboard (P shortcut) 307ms
- ✓ src/features/drawer/IssueHeader.test.tsx (12 tests) 789ms
+     ✓ renders Priority picker and allows selecting with click and keyboard (P shortcut) 333ms
+ ✓ src/features/list/ListRow.test.tsx (6 tests) 559ms
+   ✓ ListRow (6)
+     ✓ covers all priority, gate, and assignee variations 395ms
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/features/drawer/IssueHeader.test.tsx (12 tests) 799ms
    ✓ IssueHeader (12)
-     ✓ renders collapse, full-screen toggle, priority, key, access pill and slots 426ms
- ✓ src/features/list/ListView.test.tsx (16 tests) 1034ms
+     ✓ renders collapse, full-screen toggle, priority, key, access pill and slots 321ms
+ ✓ src/features/board/BoardCard.test.tsx (14 tests) 732ms
+   ✓ BoardCard Component (14)
+     ✓ Touch & Mobile State Transition Button (KAN-44) (2)
+       ✓ renders state move button, opens QuickFieldPopover on click with stopPropagation, and triggers onStateTransition 328ms
+ ✓ src/features/list/ListView.test.tsx (16 tests) 1167ms
    ✓ ListView (KAN-52 Left Master Rail) (16)
-     ✓ handles Order by sorting across priority, key, created, and due date 314ms
- ✓ src/features/views/SwimlaneBoardGrid.test.tsx (17 tests) 1412ms
+     ✓ handles Order by sorting across priority, key, created, and due date 371ms
+ ✓ src/features/views/SwimlaneBoardGrid.test.tsx (17 tests) 1526ms
    ✓ SwimlaneBoardGrid (KB-P3-40, S6.4 item 2) (17)
-     ✓ partitions board into 2D grid with Priority swimlanes across State columns (Test Case 1) 495ms
-     ✓ collapses and expands a swimlane band when toggle is clicked 327ms
- ✓ src/features/drawer/IssueSurfaceSplitMasterDetail.test.tsx (9 tests) 1199ms
+     ✓ partitions board into 2D grid with Priority swimlanes across State columns (Test Case 1) 500ms
+     ✓ collapses and expands a swimlane band when toggle is clicked 425ms
+ ✓ src/features/board/BoardView.test.tsx (22 tests) 1779ms
+ ✓ src/features/drawer/IssueSurfaceSplitMasterDetail.test.tsx (9 tests) 1313ms
    ✓ IssueSurface split mode (KAN-52 Problem 3) (9)
-     ✓ split mode description editor formatting tools and quick-props state select work cleanly 486ms
- ✓ src/features/board/BoardView.test.tsx (22 tests) 1777ms
- ✓ src/app/AppShell.test.tsx (7 tests) 1405ms
+     ✓ split mode description editor formatting tools and quick-props state select work cleanly 468ms
+ ✓ src/app/AppShell.test.tsx (7 tests) 1422ms
    ✓ AppShell (7)
-     ✓ renders app shell with skip link, sidebar rail, topbar header, main canvas, and anchors 509ms
-     ✓ toggles mobile sidebar via hamburger button and closes it 345ms
- ✓ src/features/table/TableView.test.tsx (20 tests) 3408ms
+     ✓ renders app shell with skip link, sidebar rail, topbar header, main canvas, and anchors 500ms
+     ✓ toggles mobile sidebar via hamburger button and closes it 365ms
+ ✓ src/features/table/TableView.test.tsx (20 tests) 3558ms
    ✓ TableView (20)
-     ✓ renders default columns and cycles aria-sort ascending -> descending -> none on Priority click 677ms
-     ✓ sorts by other sortable columns (Key, Summary, State, Due date) 918ms
-     ✓ toggles Start date on, Cycle off, reorders Due date before Assignees, and persists to localStorage 579ms
- ✓ src/features/drawer/IssueSurface.test.tsx (45 tests) 3580ms
+     ✓ renders default columns and cycles aria-sort ascending -> descending -> none on Priority click 777ms
+     ✓ sorts by other sortable columns (Key, Summary, State, Due date) 951ms
+     ✓ toggles Start date on, Cycle off, reorders Due date before Assignees, and persists to localStorage 646ms
+ ✓ src/features/drawer/IssueSurface.test.tsx (45 tests) 3558ms
    ✓ IssueSurface (45)
      ✓ Live Persistence & Backend Normalization (KANBA-165) (20)
-       ✓ connects toolbar buttons, media upload, preview toggle, and sanitized paste pill in description editor 372ms
-       ✓ covers conflict banner actions: reload, overwrite, overwrite failure, and discard 330ms
- ✓ src/features/views/viewRegistry.test.tsx (56 tests) 13151ms
+       ✓ handles Reload Latest and Overwrite actions on conflict banner 325ms
+       ✓ connects toolbar buttons, media upload, preview toggle, and sanitized paste pill in description editor 363ms
+       ✓ covers conflict banner actions: reload, overwrite, overwrite failure, and discard 331ms
+ ✓ src/features/views/viewRegistry.test.tsx (56 tests) 13743ms
    ✓ viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) (56)
-     ✓ renders TableView when layout is table 349ms
-     ✓ IssuesWorkspaceRoute: creates a new issue via QuickCreateIssueModal and updates state/priority via field popover 863ms
-     ✓ IssuesWorkspaceRoute: handles multi-select, batch archive, and batch delete in BulkActionBar 610ms
-     ✓ IssuesWorkspaceRoute: filters by Priority, Assignee (unassigned and alice), Cycle, Module, Due Date 2194ms
-     ✓ IssuesWorkspaceRoute: tests state filter Active preset, alice assignee, and select-all 745ms
-     ✓ IssuesWorkspaceRoute: tests field popovers for high/low priority and in-progress/backlog state, and / shortcut 302ms
-     ✓ IssuesWorkspaceRoute: covers handleToggleSelect 100 cap and unassigned I shortcut 2430ms
+     ✓ renders TableView when layout is table 346ms
+     ✓ IssuesWorkspaceRoute: creates a new issue via QuickCreateIssueModal and updates state/priority via field popover 917ms
+     ✓ IssuesWorkspaceRoute: handles multi-select, batch archive, and batch delete in BulkActionBar 648ms
+     ✓ IssuesWorkspaceRoute: filters by Priority, Assignee (unassigned and alice), Cycle, Module, Due Date 2258ms
+     ✓ IssuesWorkspaceRoute: tests state filter Active preset, alice assignee, and select-all 778ms
+     ✓ IssuesWorkspaceRoute: tests field popovers for high/low priority and in-progress/backlog state, and / shortcut 388ms
+     ✓ IssuesWorkspaceRoute: covers handleToggleSelect 100 cap and unassigned I shortcut 2542ms
      ✓ Live Mode API Wiring & Board State Normalization (KANBA-164) (21)
-       ✓ creates, updates, and bulk-operates on issues in live mode via REST endpoints 466ms
-       ✓ covers opening, cancelling, and saving custom view via SaveViewModal in IssuesWorkspaceRoute 631ms
-       ✓ covers BulkActionBar batch delete and archive in table layout 500ms
+       ✓ creates, updates, and bulk-operates on issues in live mode via REST endpoints 503ms
+       ✓ covers opening, cancelling, and saving custom view via SaveViewModal in IssuesWorkspaceRoute 660ms
+       ✓ covers BulkActionBar batch delete and archive in table layout 520ms
      ✓ KAN-44 Mobile & Touch View Routing Tests (15)
-       ✓ exercises Swimlane with groupBy=priority, live mode transitions, WIP override, and batch update 333ms
+       ✓ exercises Swimlane with groupBy=priority, live mode transitions, WIP override, and batch update 357ms
 
  Test Files  13 passed (13)
       Tests  247 passed (247)
-   Start at  22:02:03
-   Duration  15.91s (tests 57%, environment 28%, import 10%, transform 2%, worker 2%)
+   Start at  22:32:06
+   Duration  16.92s (tests 55%, environment 26%, import 11%, transform 7%, worker 2%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
@@ -81,6 +90,3 @@ All files          |    99.5 |    95.68 |    99.8 |   99.95 |
   ...BoardGrid.tsx |     100 |     95.1 |     100 |     100 | ...95,313,363,477 
   viewRegistry.tsx |   99.02 |     95.3 |   99.28 |     100 | ...85,851,861,872 
 -------------------|---------|----------|---------|---------|-------------------
-
-Not implemented: navigation to another Document
-Not implemented: navigation to another Document

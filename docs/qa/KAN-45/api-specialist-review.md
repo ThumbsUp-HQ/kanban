@@ -5,7 +5,7 @@
 - **Reviewer:** `api-spec-2` (Clean-Room Backend / API / Security Specialist)
 - **Date:** 2026-11-20
 - **Target Directory:** `/home/adamoutler/kanban/docs/qa/KAN-45`
-- **Branch:** `main` (commit `9b163f07`)
+- **Branch:** `main` (commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`)
 - **Container Environment:** `http://127.0.0.1:18964` (container: `kanban-liveqa-4`)
 - **Live Stack Status:** `OVERALL LIVE_STACK_VERDICT: PASS`
 - **Status:** APPROVED
@@ -14,7 +14,7 @@
 
 ## 1. Executive Summary & Audit Scope
 
-A clean-room API, Security, and Architecture audit was conducted for ticket **KAN-45** on branch `main` at commit `9b163f07`. The review integrates empirical evidence from zero-mock Live Full-Stack QA execution against container `kanban-liveqa-4` (`http://127.0.0.1:18964`, PostgreSQL 16 + FORCE RLS) documented in `docs/qa/KAN-45/live-fullstack-proof.txt`, visual screenshots in `docs/qa/KAN-45/screenshots/`, unit test logs (`unit-test-results.txt`), contract samples (`contract-sample.json`), and static build outputs (`build-or-typecheck.txt`).
+A clean-room API, Security, and Architecture audit was conducted for ticket **KAN-45** on branch `main` at commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`. The review integrates empirical evidence from zero-mock Live Full-Stack QA execution against container `kanban-liveqa-4` (`http://127.0.0.1:18964`, PostgreSQL 16 + FORCE RLS) documented in `docs/qa/KAN-45/live-fullstack-proof.txt` (Round 5), visual screenshots in `docs/qa/KAN-45/screenshots/`, unit test logs (`unit-test-results.txt`), contract samples (`contract-sample.json`), and static build outputs (`build-or-typecheck.txt`).
 
 KAN-45 hardens the workflow transition engine, closes completed-state bypasses, enforces canonical reality-checker report validation, replaces dummy Wasm placeholders with compilable WebAssembly bytecode, aligns CSRF middleware for stateless agent tokens, and establishes asynchronous gate runner infrastructure across the platform.
 
@@ -22,6 +22,7 @@ The audit inspects and certifies all four problems and live container proofs:
 1. **Canonical Reality-Checker Report Validation & Strict VerificationProof:**
    - Enforces anchored regexes (`\A...\Z`), strict directory traversal checks, `min_length=1` artifact bounds, and `urllib.parse.urlsplit` URL sanitization on `VerificationProof` and `RealityCheckerProof`.
    - Implements deterministic linear O(N) `validate_reality_checker_report` rejecting UTF-16 lone surrogates (0xD800..0xDFFF), normalizing NFKC text, ignoring code blocks/comments, enforcing H1 and all 6 canonical H2 sections with non-empty body lines, and rejecting contradiction markers (`NEEDS WORK`, `NEEDS_WORK`, `FAILED`) when claiming `READY` or `A` grade.
+   - Enforces `require_ready=True` logic ensuring `claims_ready = has_ready_keyword and has_grade_a`, rejecting `Grade: A` + `Status: PENDING` reports.
    - Integrates validation into `complete_work`, routes state transitions through `TransitionEngine`, and fixes blocker resolution to inspect active issues and outgoing `BLOCKED_BY` links.
 2. **Approval Comment Persistence & Fail-Closed Terminal Gates:**
    - Implements `format_approve_comment` with 64 KiB ceiling and normalized markdown formatting.
@@ -37,7 +38,7 @@ The audit inspects and certifies all four problems and live container proofs:
    - Implements `is_agent_or_mcp_caller` on `PrincipalContext` discriminating agents/MCP callers from human browser sessions.
    - Enforces HTTP 422 `USE_COMPLETE_WORK` in `TransitionEngine.execute_transition` when agents attempt to bypass `complete_work` via `PATCH /issues/{key}`, `POST /issues/{key}/move`, or `POST /issues/{key}/transitions`. Verified with stateless Bearer tokens in `test_agent_bearer_token_bypasses_csrf_and_enforces_gates`.
    - Protects board rank on `202 pending_agent_gate` in `issue_move.py` and raises HTTP 409 `TRANSITION_HELD` in `update_issue` during active gate execution.
-   - Delivers `GateWorkerRunner`, CLI subcommand `kanban-agent run-gate-worker`, and lazy lifespan initialization in `kanban/app.py` preserving strict `agent -> mcp -> kanban -> database` layering.
+   - Delivers `GateWorkerRunner` in `agent/gates/runner.py` with `_resolve_workspace_and_admin` RLS context resolution, deadlock-free transaction execution, agent ACL validation and temporary principal switching during comment insertion, CLI subcommand `kanban-agent run-gate-worker`, and lazy lifespan initialization in `kanban/app.py` preserving strict `agent -> mcp -> kanban -> database` layering.
 
 ---
 
@@ -88,26 +89,27 @@ The audit inspects and certifies all four problems and live container proofs:
   * `auto_label_mutator`: 244 bytes, valid Wasm header `\x00asm\x01\x00\x00\x00`, exports `memory`, `kb_alloc`, `kb_run`, and `kb_on_transition`. Output: `{"allowed": true, "decision": "allow"}`.
 - Both bytecodes are fully registered in `BUILTIN_WASM_BY_SHA` and `_LEGACY_PRESETS`.
 
-### 2.4 Live Container Verification (`kanban-liveqa-4`, `:18964`, commit `9b163f07`)
+### 2.4 Live Container Verification (`kanban-liveqa-4`, `:18964`, commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`)
 - **Guard 1 (Stateless Bearer Bypass Blocked, Human Allowed):**
-  * `Guard 1a`: Stateless Bearer `PATCH /api/v1/issues/KAN-1` -> HTTP 422 (80ms) `code=USE_COMPLETE_WORK`
-  * `Guard 1b`: Stateless Bearer `POST /api/v1/issues/KAN-1/move` -> HTTP 422 (41ms) `code=USE_COMPLETE_WORK`
-  * `Guard 1c`: Stateless Bearer `POST /api/v1/issues/KAN-1/transition` -> HTTP 422 (32ms) `code=USE_COMPLETE_WORK`
-  * `Guard 1d`: Human cookie `POST /api/v1/issues/KAN-1/move` -> HTTP 200 (75ms, `state_id=01a1fbe5-f5fa-7e94-8c6a-429503f023f5`)
-- **Guard 2 (Short & Contradictory Report Rejection):**
+  * `Guard 1a`: Stateless Bearer `PATCH /api/v1/issues/KAN-1` -> HTTP 422 (66ms) `code=USE_COMPLETE_WORK`
+  * `Guard 1b`: Stateless Bearer `POST /api/v1/issues/KAN-1/move` -> HTTP 422 (38ms) `code=USE_COMPLETE_WORK`
+  * `Guard 1c`: Stateless Bearer `POST /api/v1/issues/KAN-1/transition` -> HTTP 422 (34ms) `code=USE_COMPLETE_WORK`
+  * `Guard 1d`: Human cookie `POST /api/v1/issues/KAN-1/move` -> HTTP 200 (73ms, `state_id=01a1fc2c-14e3-7356-ac5e-befc20c1e105`)
+- **Guard 2 (Short & Contradictory Report Rejection, Strict READY Guard):**
   * `Guard 2a`: Short summary -> MCP `isError=true` | Bearer REST HTTP 422 `code=INVALID_REALITY_CHECKER_REPORT`
   * `Guard 2`: Contradictory report -> MCP `isError=true` | Bearer REST HTTP 422 `code=INVALID_REALITY_CHECKER_REPORT`
   * `Guard 2b`: `NEEDS WORK` (omitting READY) with proof claim `READY/A` -> MCP `isError=true` | Bearer REST HTTP 422 `code=INVALID_REALITY_CHECKER_REPORT` detail: `Contradiction marker 'NEEDS WORK' found in certification or deployment readiness assessment`
-  * `Guard 2c`: Cookie + dummy Bearer precedence -> `GET` HTTP 401 (8ms) | `POST` (no CSRF) HTTP 401 (8ms) | Cookie-only (no CSRF) HTTP 403
+  * `Guard 2d`: `Grade: A` + `Status: PENDING` (omitting READY) -> MCP `isError=true` | Bearer REST HTTP 422 `code=INVALID_REALITY_CHECKER_REPORT`
+  * `Guard 2c`: Cookie + dummy Bearer precedence -> `GET` HTTP 401 (7ms) | `POST` (no CSRF) HTTP 401 (7ms) | Cookie-only (no CSRF) HTTP 403
 - **Guard 3 (Real Wasm Execution & Dry-Run API):**
-  * `Guard 3a`: Dry-Run API (missing proof) -> HTTP 200 (43ms) `steps=[{"order":1,"name":"require-qa-proof-link","hook_kind":"sync_validator","result":"rejected","duration_us":644}]`
-  * `Guard 3b`: Dry-Run API (valid proof) -> HTTP 200 (32ms) `steps=[{"order":1,"name":"require-qa-proof-link","result":"allowed","duration_us":361},{"order":2,"name":"auto-label-verified","result":"allowed","duration_us":155}]`
+  * `Guard 3a`: Dry-Run API (missing proof) -> HTTP 200 (39ms) `steps=[{"order":1,"name":"require-qa-proof-link","hook_kind":"sync_validator","result":"rejected","duration_us":447}]`
+  * `Guard 3b`: Dry-Run API (valid proof) -> HTTP 200 (32ms) `steps=[{"order":1,"name":"require-qa-proof-link","result":"allowed","duration_us":237},{"order":2,"name":"auto-label-verified","result":"allowed","duration_us":145}]`
 - **Guard 4 (Valid Complete Work via MCP):**
-  * `Guard 4`: Valid `/mcp/agent complete_work` -> HTTP 200 (146ms) `isError=false`, body: `status: completed, key: KAN-2, state: Done, proof: {qa_dir: docs/qa/KAN-2, artifacts: 1, verdict: READY}, comment: KAN-2#c-01a1fbe5`
-- **Problem 2 (Async Gate Dispatch, Comment Persistence & RLS Enforcement):**
-  * `Problem 2 Gate Dispatch`: `POST /api/v1/issues/KAN-3/transitions` -> HTTP 202 `status=pending_agent_gate execution_id=ab9fadb7-8b6f-4cc8-a1e0-67b76bb8d4a7` | Held PATCH -> HTTP 409 `code=TRANSITION_HELD`
-  * `Problem 2 Decision Record`: `GateCoordinator.record_decision(approve)` -> `execution_status=approved`, KAN-3 transitioned to `In Progress`, `comment_id=69155cd3-3ef8-4d6c-8b45-c2bdfba6d26a`, author: `@qagatereviewer`
-  * `Problem 2 RLS Execution Observation`: Zero-UUID RLSContext -> `EXECUTION_NOT_FOUND`; Invoking-admin RLSContext -> `InsufficientPrivilegeError`; Gate-agent RLSContext (principal_id=agent_def.principal_id with VIEW/COMMENT/EDIT/TRANSITION ACL on KAN-3, workspace_id=kanban) -> PASS
+  * `Guard 4`: Valid `/mcp/agent complete_work` -> HTTP 200 (138ms) `isError=false`, body: `status: completed, key: KAN-2, sequence_number: 2, state: Done, proof: {qa_dir: docs/qa/KAN-2, artifacts: 1, verdict: READY}, comment: KAN-2#c-01a1fc2c`
+- **Problem 2/4 (GateWorkerRunner Real RLS Execution & Timeout Sweeping):**
+  * `Gate Dispatch (KAN-3)`: `POST /api/v1/issues/KAN-3/transitions` -> HTTP 202 `status=pending_agent_gate execution_id=88488bcb-dffa-4f08-814f-57d7565c87cc` | Held PATCH -> HTTP 409 `code=TRANSITION_HELD`
+  * `GateWorkerRunner.poll_once() (approve)`: Executed directly against live container PostgreSQL under FORCE RLS: `handled=1`, `execution_id=88488bcb-dffa-4f08-814f-57d7565c87cc`, `KAN-3 state=In Progress`, `pending_gate=null`, persisted approval comment `88b2a456-62df-441c-b056-dfb7832813c7`, author: `@qagatereviewer`
+  * `GateWorkerRunner.poll_once() (timeout sweep)`: Executed against expired gate invocation on KAN-4: `handled=1`, `execution_status=timed_out`, `KAN-4 state=In Progress` (fail-closed on completed target), `pending_gate=null`, persisted timeout veto comment `0a5d0acc-961b-4843-8221-7e8721ddcfee`
 - **Visual UI Verification:**
   * UI DryRunDrawer (missing proof): Displays rejection banner `🛑 Transition Blocked: Changes would not commit` and rejection reason `Missing required QA report or READY verdict in verification proof` (<1ms).
   * UI DryRunDrawer (valid proof): Displays allow banner `✅ Transition Allowed: Changes would commit`, step 1 `require-qa-proof-link` Allowed (<1ms), step 2 `auto-label-verified` Allowed (<1ms).
@@ -122,20 +124,22 @@ The audit inspects and certifies all four problems and live container proofs:
 
 ## 3. Test Suite & Coverage Verification
 
-- Pytest Suites (103 passed across 7 suites in 17.26s):
-  * `kanban/tests/api/test_gate_enforcement_hardening.py`: 15 passed in 1.36s
-  * `kanban/tests/workflows/test_qa_proof_validator_wasm.py`, `test_dry_run.py`, `test_workflow_hooks_api.py`: 29 passed in 6.50s
-  * `kanban/tests/workflows/test_async_gate.py`: 16 passed in 4.89s
-  * `kanban/tests/issues/test_proof_validation.py`, `kanban/tests/mcp/test_complete_work_enforcement.py`: 9 passed in 1.47s
-  * `agent/tests/gates/test_gate_runner.py`: 10 passed in 0.72s (97% module coverage)
-  * `kanban/tests/auth/test_sessions.py`: 11 passed in 0.83s
-  * `kanban/tests/services/test_synaptic_search.py`: 13 passed in 1.49s
-- Static Analysis Gates (commit `9b163f07`):
+- Pytest Suites (106 passed across 7 suites in 17.65s):
+  * `kanban/tests/api/test_gate_enforcement_hardening.py`: 15 passed in 1.48s
+  * `kanban/tests/workflows/test_qa_proof_validator_wasm.py`, `test_dry_run.py`, `test_workflow_hooks_api.py`: 29 passed in 6.65s
+  * `kanban/tests/workflows/test_async_gate.py`: 18 passed in 5.82s (including `test_gate_worker_runner_real_rls_approval_and_comment` and `test_gate_worker_runner_real_rls_timeout_sweep`)
+  * `kanban/tests/issues/test_proof_validation.py`, `kanban/tests/mcp/test_complete_work_enforcement.py`: 10 passed in 1.40s (including `test_validate_reality_checker_report_require_ready_rejects_grade_a_without_ready`)
+  * `agent/tests/gates/test_gate_runner.py`: 10 passed in 0.78s (97% module coverage)
+  * `kanban/tests/auth/test_sessions.py`: 11 passed in 0.80s
+  * `kanban/tests/services/test_synaptic_search.py`: 13 passed in 1.56s
+- Static Analysis Gates (commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`):
   * Database Migrations (`check-migrations`): OK: All 63 migrations valid. Single head: `p4_24_agent_safe_sequences`
   * Ruff Linter (`ruff check .`): All checks passed (0 errors).
   * Ruff Format Check (`ruff format --check .`): Clean across 2027 files.
   * Mypy Strict Typecheck (`mypy database kanban mcp agent`): Success: no issues found in 997 source files.
   * Import Linter (`lint-imports`): Contracts: 2 kept, 0 broken (`agent -> mcp -> kanban -> database` KEPT).
+  * Web Typecheck (`tsc -b --noEmit`): Success (0 errors).
+  * Web Lint (`eslint`): Clean (0 warnings).
   * Typography Audit (`check_no_dashes`): Clean (0 em/en-dashes across all files).
 
 ---
@@ -166,4 +170,4 @@ The audit inspects and certifies all four problems and live container proofs:
 
 STATUS: APPROVED
 
-All transition engine gates, reality-checker report validators, Wasm bytecode contracts, approval comment persistence mechanics, agent completed-state guards, stateless Bearer token CSRF bypass, and live container verifications for KAN-45 on branch `main` at commit `9b163f07` have been thoroughly audited, verified against all architectural and security invariants, and certified on container `kanban-liveqa-4` (`:18964`, `OVERALL LIVE_STACK_VERDICT: PASS`). Ready for Clean-Room Reality-Checker QA.
+All transition engine gates, reality-checker report validators, Wasm bytecode contracts, approval comment persistence mechanics, agent completed-state guards, stateless Bearer token CSRF bypass, GateWorkerRunner RLS context resolution, and zero-mock live container verifications for KAN-45 on branch `main` at commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd` have been thoroughly audited, verified against all architectural and security invariants, and certified on container `kanban-liveqa-4` (`:18964`, `OVERALL LIVE_STACK_VERDICT: PASS`). Ready for Clean-Room Reality-Checker QA.

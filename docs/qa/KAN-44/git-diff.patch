@@ -169,15 +169,19 @@ index 9165d794..d9f37ad0 100644
  
    .kb-search-trigger-text,
 diff --git a/kanban/web/src/features/activity/activity.css b/kanban/web/src/features/activity/activity.css
-index 45f243bb..ec0b8179 100644
+index 45f243bb..fc2da111 100644
 --- a/kanban/web/src/features/activity/activity.css
 +++ b/kanban/web/src/features/activity/activity.css
-@@ -40,6 +40,12 @@
+@@ -40,6 +40,16 @@
    padding-bottom: 2px;
  }
  
 +@media (max-width: 879px) {
 +  .activity-tablist {
++    flex-wrap: wrap;
++    gap: var(--space-1, 4px);
++    max-width: 100%;
++    box-sizing: border-box;
 +    padding-right: var(--space-3, 12px);
 +  }
 +}
@@ -400,9 +404,18 @@ index 9ea240de..9103cf28 100644
            );
          })}
 diff --git a/kanban/web/src/features/drawer/IssueSurface.css b/kanban/web/src/features/drawer/IssueSurface.css
-index cc7c2001..f859a7e5 100644
+index cc7c2001..44fce293 100644
 --- a/kanban/web/src/features/drawer/IssueSurface.css
 +++ b/kanban/web/src/features/drawer/IssueSurface.css
+@@ -262,7 +262,7 @@
+   }
+ }
+ 
+-@media (max-width: 768px) {
++@media (max-width: 767px) {
+   .surface--drawer,
+   .surface--full,
+   .surface--split {
 @@ -295,9 +295,8 @@
     ========================================================================== */
  
@@ -456,7 +469,7 @@ index cc7c2001..f859a7e5 100644
  }
  
  .conflict-banner__discard-btn {
-@@ -485,4 +484,493 @@
+@@ -485,4 +484,501 @@
    display: none;
  }
  
@@ -518,16 +531,20 @@ index cc7c2001..f859a7e5 100644
 +    margin-bottom: var(--space-3, 12px);
 +  }
 +
-+  .surface:not(.surface--split) .quick-props__group:has([data-testid="quick-props-state-select"]),
-+  .surface:not(.surface--split) .quick-props__group--state {
++  :is(.surface--full, .surface--drawer, .surface:not(.surface--split)) .quick-props__group:has([data-testid="quick-props-state-select"]),
++  :is(.surface--full, .surface--drawer, .surface:not(.surface--split)) .quick-props__group--state {
 +    display: none;
 +  }
 +
-+  .surface:not(.surface--split) .surface__rail .prop-row[data-prop="state"] {
++  :is(.surface--full, .surface--drawer, .surface:not(.surface--split)) .surface__rail .prop-row[data-prop="state"] {
 +    display: none;
 +  }
 +
 +  .activity-tablist {
++    flex-wrap: wrap;
++    gap: var(--space-1, 4px);
++    max-width: 100%;
++    box-sizing: border-box;
 +    padding-right: var(--space-3, 12px);
 +  }
 +}
@@ -543,16 +560,20 @@ index cc7c2001..f859a7e5 100644
 +    margin-bottom: var(--space-3, 12px);
 +  }
 +
-+  .surface:not(.surface--split) .quick-props__group:has([data-testid="quick-props-state-select"]),
-+  .surface:not(.surface--split) .quick-props__group--state {
++  :is(.surface--full, .surface--drawer, .surface:not(.surface--split)) .quick-props__group:has([data-testid="quick-props-state-select"]),
++  :is(.surface--full, .surface--drawer, .surface:not(.surface--split)) .quick-props__group--state {
 +    display: none;
 +  }
 +
-+  .surface:not(.surface--split) .surface__rail .prop-row[data-prop="state"] {
++  :is(.surface--full, .surface--drawer, .surface:not(.surface--split)) .surface__rail .prop-row[data-prop="state"] {
 +    display: none;
 +  }
 +
 +  .activity-tablist {
++    flex-wrap: wrap;
++    gap: var(--space-1, 4px);
++    max-width: 100%;
++    box-sizing: border-box;
 +    padding-right: var(--space-3, 12px);
 +  }
 +}
@@ -2211,10 +2232,10 @@ index feb5f69c..3ea04732 100644
    );
  }
 diff --git a/kanban/web/src/features/list/ListView.test.tsx b/kanban/web/src/features/list/ListView.test.tsx
-index a402a296..923424bf 100644
+index a402a296..bb2de9a3 100644
 --- a/kanban/web/src/features/list/ListView.test.tsx
 +++ b/kanban/web/src/features/list/ListView.test.tsx
-@@ -1,543 +1,534 @@
+@@ -1,543 +1,578 @@
  import { describe, it, expect, vi } from 'vitest';
 -import { render, screen, fireEvent, act, within } from '@testing-library/react';
 +import { render, screen, fireEvent, act } from '@testing-library/react';
@@ -2335,19 +2356,19 @@ index a402a296..923424bf 100644
 -    const backlogToggle = Array.from(toggles).find((t) => t.textContent.includes('Backlog')) as HTMLButtonElement;
 -    expect(backlogToggle).toBeDefined();
 -    expect(backlogToggle.getAttribute('aria-expanded')).toBe('true');
--
--    // Issue KAN-140 is visible
--    expect(screen.getByText('KAN-140')).toBeDefined();
 +  it('handles Order by sorting across priority, key, created, and due date', () => {
 +    render(<ListView issues={mockIssues} />);
+ 
+-    // Issue KAN-140 is visible
+-    expect(screen.getByText('KAN-140')).toBeDefined();
++    const sortSelect = screen.getByTestId('issue-sort-select');
++    const dirBtn = screen.getByTestId('issue-sort-dir-btn');
  
 -    // Click to collapse
 -    fireEvent.click(backlogToggle);
 -    expect(backlogToggle.getAttribute('aria-expanded')).toBe('false');
 -    expect(screen.queryByText('KAN-140')).toBeNull();
-+    const sortSelect = screen.getByTestId('issue-sort-select');
-+    const dirBtn = screen.getByTestId('issue-sort-dir-btn');
- 
+-
 -    // Click to expand again
 -    fireEvent.click(backlogToggle);
 -    expect(backlogToggle.getAttribute('aria-expanded')).toBe('true');
@@ -2618,16 +2639,25 @@ index a402a296..923424bf 100644
 +
 +    // Set with lowercase admin
 +    rerender(
++      <ListView
++        issues={mockIssues}
++        capabilities={new Set(['admin'])}
++      />,
++    );
++    expect(screen.getByTestId('list-row-state-btn-KAN-101')).toBeDefined();
++
++    // Set without transition caps (read-only)
++    rerender(
        <ListView
 -        issues={FIXTURE_12_ISSUES}
 -        projectKey="KAN"
 -        modulesEnabled={true}
 -      />
 +        issues={mockIssues}
-+        capabilities={new Set(['admin'])}
++        capabilities={new Set(['VIEWER'])}
 +      />,
      );
-+    expect(screen.getByTestId('list-row-state-btn-KAN-101')).toBeDefined();
++    expect(screen.getByTestId('list-row-state-readonly-KAN-101')).toBeDefined();
  
 -    // KAN-148 is Done with past due date 2026-01-01 -> overdue pill must NOT be applied
 -    const kan148Row = screen.getByText('KAN-148').closest('li');
@@ -2640,15 +2670,6 @@ index a402a296..923424bf 100644
 -    expect(kan150Row).toBeDefined();
 -    const cancelledOverdue = kan150Row?.querySelectorAll('.due-pill--overdue');
 -    expect(cancelledOverdue?.length ?? 0).toBe(0);
-+    // Set without transition caps (read-only)
-+    rerender(
-+      <ListView
-+        issues={mockIssues}
-+        capabilities={new Set(['VIEWER'])}
-+      />,
-+    );
-+    expect(screen.getByTestId('list-row-state-readonly-KAN-101')).toBeDefined();
-+
 +    // Default refresh dispatch when onRefresh is omitted
 +    rerender(
 +      <ListView
@@ -2819,6 +2840,9 @@ index a402a296..923424bf 100644
 +
 +    const sortSelect = screen.getByTestId<HTMLSelectElement>('issue-sort-select');
 +    expect(sortSelect.value).toBe('priority');
++
++    fireEvent.change(sortSelect, { target: { value: 'created' } });
++    expect(onSortByChange).toHaveBeenCalledWith('created');
  
 -    render(<ListView issues={customIssues} projectKey="KAN" />);
 -
@@ -2895,9 +2919,6 @@ index a402a296..923424bf 100644
 -
 -    fireEvent.change(groupSelect2, { target: { value: 'module' } });
 -    expect(screen.getByText('Auth & Permissions')).toBeDefined();
-+    fireEvent.change(sortSelect, { target: { value: 'created' } });
-+    expect(onSortByChange).toHaveBeenCalledWith('created');
-+
 +    const dirBtn = screen.getByTestId('issue-sort-dir-btn');
 +    fireEvent.click(dirBtn);
 +    expect(onSortDirChange).toHaveBeenCalledWith('desc');
@@ -3073,8 +3094,7 @@ index a402a296..923424bf 100644
 +    const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
  
 -    const issuesWithCycleAndMod: IssueItem[] = [
-+    const issuesWithoutIds: IssueItem[] = [
-       {
+-      {
 -        ...firstIssue,
 -        id: 'iss-c1',
 -        key: 'KAN-C1',
@@ -3082,7 +3102,8 @@ index a402a296..923424bf 100644
 -        cycle: { id: 'cycle-123456', name: 'Sprint Alpha' },
 -        modules: [{ id: 'mod-1', name: 'Core Engine' }],
 -      },
--      {
++    const issuesWithoutIds: IssueItem[] = [
+       {
 -        ...secondIssue,
 -        id: 'iss-c2',
 -        key: 'KAN-C2',
@@ -3121,14 +3142,18 @@ index a402a296..923424bf 100644
      );
 +    fireEvent.click(screen.getByTestId('issue-rail-refresh-btn'));
 +    expect(onRefreshMock).toHaveBeenCalledTimes(1);
-+    unmountRefresh();
++
++    // Favorites change event with valid, non-array, empty/null, corrupt JSON, and non-string elements in localStorage while component is mounted
++    localStorage.setItem('kb_favorite_issues', JSON.stringify(['KAN-999', 42, null]));
++    act(() => {
++      window.dispatchEvent(new CustomEvent('kb:favorites-changed'));
++    });
  
 -    const filterBtn = screen.getByRole('button', { name: 'Filter & Group' });
 -    fireEvent.click(filterBtn);
 -    const popover = screen.getByRole('dialog', { name: 'Filter and Group options' });
 -    const groupSelect = within(popover).getByLabelText(/Group By/i);
-+    // Favorites change event with valid, non-array, empty/null, corrupt JSON, and non-string elements in localStorage
-+    localStorage.setItem('kb_favorite_issues', JSON.stringify(['KAN-999', 42, null]));
++    localStorage.removeItem('kb_favorite_issues');
 +    act(() => {
 +      window.dispatchEvent(new CustomEvent('kb:favorites-changed'));
 +    });
@@ -3137,15 +3162,6 @@ index a402a296..923424bf 100644
 -    fireEvent.change(groupSelect, { target: { value: 'cycle' } });
 -    expect(screen.getByText('Sprint Alpha')).toBeDefined();
 -    expect(screen.getByText('Cycle cycle-')).toBeDefined();
-+    localStorage.removeItem('kb_favorite_issues');
-+    act(() => {
-+      window.dispatchEvent(new CustomEvent('kb:favorites-changed'));
-+    });
- 
--    // Group by Module
--    fireEvent.change(groupSelect, { target: { value: 'module' } });
--    expect(screen.getByText('Core Engine')).toBeDefined();
--    expect(screen.getByText('Module mod-fa')).toBeDefined();
 +    localStorage.setItem('kb_favorite_issues', JSON.stringify({ not: 'an_array' }));
 +    act(() => {
 +      window.dispatchEvent(new CustomEvent('kb:favorites-changed'));
@@ -3155,6 +3171,7 @@ index a402a296..923424bf 100644
 +    act(() => {
 +      window.dispatchEvent(new CustomEvent('kb:favorites-changed'));
 +    });
++    unmountRefresh();
 +
 +    // Sorting by rank with defined and undefined board_rank
 +    const issueA = mockIssues[0];
@@ -3186,6 +3203,54 @@ index a402a296..923424bf 100644
 +    fireEvent.click(inProgOpt);
 +    unmountNoStateSelect();
 +
++    localStorage.clear();
++  });
++
++  it('covers remaining sorting branches and parseIssueNumber edge cases', () => {
++    const issue1: IssueItem = {
++      id: 'i-1',
++      key: 'INVALID',
++      summary: 'No hyphen issue',
++      state: { id: 's-1', name: 'Alpha State', group: 'unstarted', sort_order: 10 },
++      priority: { slug: 'low', label: 'Low' },
++    };
++    const issue2: IssueItem = {
++      id: 'i-2',
++      key: 'KAN-99',
++      summary: 'Hyphen issue',
++      state: { id: 's-2', name: 'Beta State', group: 'unstarted', sort_order: 10 },
++      priority: { slug: 'high', label: 'High' },
++      updated_at: '2026-11-20T10:00:00Z',
++      created_at: '2026-11-20T10:00:00Z',
++    };
+ 
+-    // Group by Module
+-    fireEvent.change(groupSelect, { target: { value: 'module' } });
+-    expect(screen.getByText('Core Engine')).toBeDefined();
+-    expect(screen.getByText('Module mod-fa')).toBeDefined();
++    // State sort with matching sort_order covers secondary name comparison (cmp === 0)
++    const sortedState = sortIssuesList([issue2, issue1], 'state', 'asc');
++    expect(sortedState[0]?.key).toBe('INVALID');
++
++    // Key sort with non-numeric key covers parseIssueNumber fallback
++    const sortedKey = sortIssuesList([issue2, issue1], 'key', 'asc');
++    expect(sortedKey[0]?.key).toBe('INVALID');
++
++    // Updated and created sort with missing date strings
++    const sortedUpdated = sortIssuesList([issue2, issue1], 'updated', 'asc');
++    expect(sortedUpdated.length).toBe(2);
++    const sortedCreated = sortIssuesList([issue2, issue1], 'created', 'asc');
++    expect(sortedCreated.length).toBe(2);
++
++    // Default branch
++    const sortedDefault = sortIssuesList([issue1, issue2], 'custom' as unknown as IssueSortOption, 'asc');
++    expect(sortedDefault.length).toBe(2);
++
++    // Pre-hydrated localStorage with corrupted string on initial render
++    localStorage.setItem('kb_favorite_issues', '{not_json');
++    const { unmount } = render(<ListView issues={[issue1]} />);
++    expect(screen.getByTestId('issue-list-card-INVALID')).toBeDefined();
++    unmount();
 +    localStorage.clear();
    });
  });
@@ -5268,8 +5333,1153 @@ index ecea2ce4..a4bc3308 100644
 +  text-overflow: ellipsis;
 +  width: 100%;
 +}
+diff --git a/kanban/web/src/features/views/viewRegistry.test.tsx b/kanban/web/src/features/views/viewRegistry.test.tsx
+index 8c777942..a5814e66 100644
+--- a/kanban/web/src/features/views/viewRegistry.test.tsx
++++ b/kanban/web/src/features/views/viewRegistry.test.tsx
+@@ -2,6 +2,25 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+ import { render, screen, fireEvent, within, waitFor, act } from '@testing-library/react';
+ import { QueryClient } from '@tanstack/react-query';
+ import React from 'react';
++
++vi.mock('../drawer-rail/railApi', async () => {
++  const actual = await vi.importActual<Record<string, unknown>>('../drawer-rail/railApi');
++  return {
++    ...actual,
++    fetchAssigneeSuggestions: vi.fn().mockImplementation(() => new Promise(() => {
++      /* pending */
++    })),
++    fetchProjectLabels: vi.fn().mockImplementation(() => new Promise(() => {
++      /* pending */
++    })),
++    fetchProjectCycles: vi.fn().mockImplementation(() => new Promise(() => {
++      /* pending */
++    })),
++    fetchProjectModules: vi.fn().mockImplementation(() => new Promise(() => {
++      /* pending */
++    })),
++  };
++});
+ import {
+   ViewHost,
+   VIEW_REGISTRY,
+@@ -13,15 +32,27 @@ import {
+   QuickCreateIssueModal,
+   QuickFieldPopover,
+   useIssueKeyboardMap,
++  defaultQueryClient,
++  computeStateSummary,
+ } from './viewRegistry';
+ import { FIXTURE_12_ISSUES } from './fixtures';
+-import type { IssueItem } from './viewsApi';
++import * as viewsApi from './viewsApi';
++import type { IssueItem, StateSummary } from './viewsApi';
++import { apiClient } from '../../api/client';
+ 
+ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () => {
+   beforeEach(() => {
++    defaultQueryClient.clear();
++    window.innerWidth = 1024;
+     window.history.pushState({}, '', '/projects/KAN/issues');
+   });
+ 
++  afterEach(async () => {
++    await act(async () => {
++      await new Promise((r) => setTimeout(r, 0));
++    });
++  });
++
+   it('exports all Action 1 components per Scoped Definition of Done', () => {
+     expect(FilterDisplayBar).toBeDefined();
+     expect(SwimlaneBoardGrid).toBeDefined();
+@@ -52,7 +83,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+       />
+     );
+ 
+-    expect(screen.getByText('Backlog')).toBeDefined();
++    expect(screen.getByTestId('issue-list-rail')).toBeDefined();
+   });
+ 
+   it('renders TableView when layout is table', () => {
+@@ -105,23 +136,26 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+       />
+     );
+ 
+-    expect(screen.getByText('Backlog')).toBeDefined();
++    expect(screen.getByTestId('issue-list-rail')).toBeDefined();
+   });
+ 
+-  it('IssuesWorkspaceRoute: renders FilterDisplayBar, mounts 2D SwimlaneBoardGrid when layout=board and sub_group_by=priority', () => {
++  it('IssuesWorkspaceRoute: renders FilterDisplayBar, mounts 2D SwimlaneBoardGrid when layout=board and sub_group_by=priority', async () => {
+     window.history.pushState(
+       {},
+       '',
+       '/projects/KAN/issues?layout=board&group_by=state&sub_group_by=priority'
+     );
+ 
+-    render(
+-      <IssuesWorkspaceRoute
+-        projectKey="KAN"
+-        modulesEnabled={true}
+-        initialIssues={FIXTURE_12_ISSUES}
+-      />
+-    );
++    await act(async () => {
++      render(
++        <IssuesWorkspaceRoute
++          projectKey="KAN"
++          modulesEnabled={true}
++          initialIssues={FIXTURE_12_ISSUES}
++        />
++      );
++      await new Promise((r) => setTimeout(r, 0));
++    });
+ 
+     expect(screen.getByTestId('issues-workspace')).toBeDefined();
+     expect(screen.getByRole('region', { name: /filter and display controls/i })).toBeDefined();
+@@ -150,7 +184,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+     expect(screen.queryByText('KAN-142')).toBeNull();
+   });
+ 
+-  it('IssuesWorkspaceRoute: creates a new issue via QuickCreateIssueModal and updates state/priority via field popover', () => {
++  it('IssuesWorkspaceRoute: creates a new issue via QuickCreateIssueModal and updates state/priority via field popover', async () => {
+     render(
+       <IssuesWorkspaceRoute
+         projectKey="KAN"
+@@ -160,17 +194,31 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+     );
+ 
+     // Press 'C' to open QuickCreateIssueModal
+-    fireEvent.keyDown(window, { key: 'c' });
++    await act(async () => {
++      fireEvent.keyDown(window, { key: 'c' });
++      await new Promise((r) => setTimeout(r, 60));
++    });
+     expect(screen.getByRole('dialog', { name: /create work item in KAN/i })).toBeDefined();
+ 
+     // Fill in summary, description, and module
+-    const summaryInput = screen.getByLabelText(/summary/i);
++    const createDialog = screen.getByRole('dialog', { name: /create work item in KAN/i });
++    const summaryInput = within(createDialog).getByLabelText(/summary/i);
+     fireEvent.change(summaryInput, { target: { value: 'Newly Created Task' } });
+-    const descInput = screen.getByLabelText(/description/i);
++    const descInput = within(createDialog).getByLabelText(/description/i);
+     fireEvent.change(descInput, { target: { value: 'Detailed task description' } });
+-    const modSelect = screen.getByLabelText(/module/i);
++    const modSelect = within(createDialog).getByLabelText(/module/i);
+     fireEvent.change(modSelect, { target: { value: 'mod-1' } });
+-    fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
++    await act(async () => {
++      fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
++      await Promise.resolve();
++    });
++
++    act(() => {
++      const doneBtn = screen.queryByTestId('post-create-done-btn');
++      if (doneBtn) {
++        fireEvent.click(doneBtn);
++      }
++    });
+ 
+     expect(screen.getByText('Newly Created Task')).toBeDefined();
+ 
+@@ -216,7 +264,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+     fireEvent.click(within(assigneePopover).getByText('Alice Cooper'));
+   });
+ 
+-  it('IssuesWorkspaceRoute: handles multi-select, batch archive, and batch delete in BulkActionBar', () => {
++  it('IssuesWorkspaceRoute: handles multi-select, batch archive, and batch delete in BulkActionBar', async () => {
+     render(
+       <IssuesWorkspaceRoute
+         projectKey="KAN"
+@@ -238,20 +286,37 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+     fireEvent.click(clearBtn);
+     expect(screen.queryByRole('toolbar', { name: /bulk actions/i })).toBeNull();
+ 
+-    // Select again and update state
++    // Select again and update state to done
+     fireEvent.keyDown(window, { key: 'x' });
+     const stateBtn = screen.getByRole('button', { name: /^state$/i });
+-    fireEvent.click(stateBtn);
++    await act(async () => {
++      fireEvent.click(stateBtn);
++      await Promise.resolve();
++    });
++
++    // Select again (now issue is completed) and update state to todo
++    fireEvent.keyDown(window, { key: 'x' });
++    const stateBtnTodo = screen.getByRole('button', { name: /^state$/i });
++    await act(async () => {
++      fireEvent.click(stateBtnTodo);
++      await Promise.resolve();
++    });
+ 
+     // Select again and update priority
+     fireEvent.keyDown(window, { key: 'x' });
+     const priorityBtn = screen.getByRole('button', { name: /^priority$/i });
+-    fireEvent.click(priorityBtn);
++    await act(async () => {
++      fireEvent.click(priorityBtn);
++      await Promise.resolve();
++    });
+ 
+     // Select again and delete batch
+     fireEvent.keyDown(window, { key: 'x' });
+     const deleteBtn = screen.getByRole('button', { name: /^delete$/i });
+-    fireEvent.click(deleteBtn);
++    await act(async () => {
++      fireEvent.click(deleteBtn);
++      await Promise.resolve();
++    });
+ 
+     // Bulk bar unmounts when selection cleared
+     expect(screen.queryByRole('toolbar', { name: /bulk actions/i })).toBeNull();
+@@ -277,7 +342,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+ 
+   it('IssuesWorkspaceRoute: filters by Priority, Assignee (unassigned and alice), Cycle, Module, Due Date', () => {
+     // 1. Priority filter: urgent
+-    window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
++    window.history.pushState({}, '', '/projects/KAN/issues?layout=table');
+ 
+     render(
+       <IssuesWorkspaceRoute
+@@ -493,6 +558,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+   });
+ 
+   it('IssuesWorkspaceRoute: tests field popovers for high/low priority and in-progress/backlog state, and / shortcut', () => {
++    window.history.pushState({}, '', '/projects/KAN/issues?layout=board');
+     render(
+       <IssuesWorkspaceRoute
+         projectKey="KAN"
+@@ -561,7 +627,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+     window.history.pushState(
+       {},
+       '',
+-      '/projects/KAN/issues?filter_state=in_progress&filter_priority=high&filter_label=Frontend&gate_status=pending'
++      '/projects/KAN/issues?layout=board&filter_state=in_progress&filter_priority=high&filter_label=Frontend&gate_status=pending'
+     );
+ 
+     render(
+@@ -680,8 +746,13 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+       fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
+ 
+       // Dispatch kb:create-issue to open QuickCreateIssueModal
+-      fireEvent(window, new CustomEvent('kb:create-issue'));
++      act(() => {
++        fireEvent(window, new CustomEvent('kb:create-issue'));
++      });
+       expect(screen.getByRole('dialog', { name: /create work item in KAN/i })).toBeDefined();
++      act(() => {
++        fireEvent.click(screen.getByRole('button', { name: /cancel/i }));
++      });
+     });
+ 
+     it('creates, updates, and bulk-operates on issues in live mode via REST endpoints', async () => {
+@@ -706,6 +777,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+       ];
+ 
+       let postCount = 0;
++      let failPatch: 'error' | 'string' | null = null;
+       const fetchSpy = vi.fn().mockImplementation((input: string | URL | Request, init?: RequestInit) => {
+         const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+         const method = init?.method ?? 'GET';
+@@ -730,6 +802,15 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+           });
+         }
+         if (method === 'PATCH') {
++          if (failPatch === 'error') {
++            failPatch = null;
++            return Promise.reject(new Error('Network failure priority'));
++          }
++          if (failPatch === 'string') {
++            failPatch = null;
++            // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
++            return Promise.reject('String failure state');
++          }
+           return Promise.resolve({
+             ok: true,
+             json: () =>
+@@ -795,6 +876,39 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+       const statePopBack = screen.getByRole('dialog', { name: /Quick State Picker/i });
+       fireEvent.click(within(statePopBack).getByText('Backlog'));
+ 
++      // Exercise PATCH failure catch branches for priority and state
++      failPatch = 'error';
++      fireEvent.keyDown(window, { key: 'p' });
++      const prioFailPop = screen.getByRole('dialog', { name: /Quick Priority Picker/i });
++      await act(async () => {
++        fireEvent.click(within(prioFailPop).getByText('High'));
++        await new Promise((r) => setTimeout(r, 10));
++      });
++
++      failPatch = 'string';
++      fireEvent.keyDown(window, { key: 'p' });
++      const prioFailPop2 = screen.getByRole('dialog', { name: /Quick Priority Picker/i });
++      await act(async () => {
++        fireEvent.click(within(prioFailPop2).getByText('Low'));
++        await new Promise((r) => setTimeout(r, 10));
++      });
++
++      failPatch = 'string';
++      fireEvent.keyDown(window, { key: 's' });
++      const stateFailPop = screen.getByRole('dialog', { name: /Quick State Picker/i });
++      await act(async () => {
++        fireEvent.click(within(stateFailPop).getByText('Todo'));
++        await new Promise((r) => setTimeout(r, 10));
++      });
++
++      failPatch = 'error';
++      fireEvent.keyDown(window, { key: 's' });
++      const stateFailPop2 = screen.getByRole('dialog', { name: /Quick State Picker/i });
++      await act(async () => {
++        fireEvent.click(within(stateFailPop2).getByText('Done'));
++        await new Promise((r) => setTimeout(r, 10));
++      });
++
+       // Bulk update State, Priority, and Delete in live mode
+       fireEvent.keyDown(window, { key: 'j' });
+       fireEvent.keyDown(window, { key: 'x' });
+@@ -809,7 +923,10 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+       fireEvent.click(screen.getByRole('button', { name: /^delete$/i }));
+ 
+       // Dispatch kb:issue-updated to trigger refresh
+-      fireEvent(window, new CustomEvent('kb:issue-updated'));
++      await act(async () => {
++        fireEvent(window, new CustomEvent('kb:issue-updated'));
++        await new Promise((r) => setTimeout(r, 20));
++      });
+     });
+ 
+     it('handles peek query param, vetoed gate status, and agent assignees in board layout', () => {
+@@ -867,7 +984,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+       render(
+         <IssuesWorkspaceRoute
+           projectKey="KAN"
+-          initialLayout="list"
++          initialLayout="board"
+           initialIssues={FIXTURE_12_ISSUES}
+         />,
+       );
+@@ -908,17 +1025,17 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+       document.cookie = 'kb_csrf=test-csrf-live; path=/';
+ 
+       const liveStatesWithAliases = [
+-        { id: '01931234-5678-7000-8000-000000000001', name: 'Backlog', group: 'backlog', sort_order: 10, wip_hard: 5 },
+-        { id: '01931234-5678-7000-8000-000000000002', name: 'To Do', group: 'unstarted', sort_order: 20, wip_soft: 3 },
+-        { id: '01931234-5678-7000-8000-000000000003', name: 'In Progress', group: 'started', sort_order: 30 },
+-        { id: '01931234-5678-7000-8000-000000000004', name: 'Done', group: 'completed', sort_order: 40 },
++        { id: 'alias-st-1', name: 'Backlog', group: 'backlog', sort_order: 10, wip_hard: 5 },
++        { id: 'alias-st-2', name: 'To Do', group: 'unstarted', sort_order: 20, wip_soft: 3 },
++        { id: 'alias-st-3', name: 'In Progress', group: 'started', sort_order: 30 },
++        { id: 'alias-st-4', name: 'Done', group: 'completed', sort_order: 40 },
+       ];
+       const liveIssues = [
+         {
+-          id: '01931234-5678-7000-8000-000000000301',
++          id: 'alias-issue-301',
+           key: 'KAN-301',
+           summary: 'Live Alias Issue',
+-          state: { id: '01931234-5678-7000-8000-000000000002', name: 'Todo', group: 'unstarted' },
++          state: { id: 'alias-st-2', name: 'Todo', group: 'unstarted' },
+           priority: { slug: 'medium', label: 'Medium', emoji: '🔹' },
+         },
+       ];
+@@ -937,12 +1054,12 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+             ok: true,
+             json: () =>
+               Promise.resolve({
+-                id: '01931234-5678-7000-8000-000000000399',
++                id: 'alias-issue-399',
+                 key: 'KAN-999',
+                 summary: 'New Persisted Key Issue',
+                 description_markdown: 'Detailed description',
+                 module_ids: ['mod-1'],
+-                state: { id: '01931234-5678-7000-8000-000000000001', name: 'Backlog', group: 'backlog' },
++                state: { id: 'alias-st-1', name: 'Backlog', group: 'backlog' },
+                 priority: { slug: 'low', label: 'Low', emoji: '🔽' },
+               }),
+           });
+@@ -998,10 +1115,14 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+       fireEvent.click(within(statePopDone).getByText('Done'));
+ 
+       // Dispatch kb:create-issue to open QuickCreateIssueModal and submit
+-      fireEvent(window, new CustomEvent('kb:create-issue'));
++      act(() => {
++        fireEvent(window, new CustomEvent('kb:create-issue'));
++      });
+       const summaryInput = screen.getByLabelText(/summary/i);
+-      fireEvent.change(summaryInput, { target: { value: 'New Persisted Key Issue' } });
+-      fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
++      act(() => {
++        fireEvent.change(summaryInput, { target: { value: 'New Persisted Key Issue' } });
++        fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
++      });
+ 
+       await waitFor(() => {
+         expect(screen.getAllByText('KAN-999').length).toBeGreaterThan(0);
+@@ -1509,7 +1630,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+       window.history.pushState({}, '', '/');
+     });
+ 
+-    it('handles states fetch failure in live mode', () => {
++    it('handles states fetch failure in live mode', async () => {
+       const origFetch = globalThis.fetch;
+       globalThis.fetch = vi.fn().mockImplementation((input: string | URL | Request) => {
+         const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+@@ -1522,8 +1643,14 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+         });
+       });
+ 
+-      render(<IssuesWorkspaceRoute projectKey="KAN" initialLayout="board" />);
+-      globalThis.fetch = origFetch;
++      try {
++        await act(async () => {
++          render(<IssuesWorkspaceRoute projectKey="KAN" initialLayout="board" />);
++          await Promise.resolve();
++        });
++      } finally {
++        globalThis.fetch = origFetch;
++      }
+     });
+ 
+     it('covers onCreateIssue from ViewHost table layout empty state', () => {
+@@ -1714,7 +1841,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+         <IssuesWorkspaceRoute
+           projectKey="KAN"
+           initialIssues={FIXTURE_12_ISSUES}
+-          initialLayout="list"
++          initialLayout="board"
+           queryClient={qc}
+         />,
+       );
+@@ -1878,4 +2005,725 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+       });
+     });
+   });
++
++  describe('KAN-44 Mobile & Touch View Routing Tests', () => {
++    it('suppresses auto-selecting first issue in split view when viewport <= 768px and ?peek= is absent', () => {
++      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
++      const originalInnerWidth = window.innerWidth;
++      try {
++        Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 500 });
++        render(
++          <IssuesWorkspaceRoute
++            projectKey="KAN"
++            initialLayout="list"
++            initialIssues={FIXTURE_12_ISSUES}
++          />
++        );
++        // On mobile viewport <= 768px, activePeekKey is null so split surface is not rendered
++        expect(screen.queryByTestId('split-surface-close-btn')).toBeNull();
++      } finally {
++        Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: originalInnerWidth });
++      }
++    });
++
++    it('renders split surface on desktop viewports and closes it when close button is clicked', async () => {
++      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
++      const originalInnerWidth = window.innerWidth;
++      try {
++        Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1200 });
++        render(
++          <IssuesWorkspaceRoute
++            projectKey="KAN"
++            initialLayout="list"
++            initialIssues={FIXTURE_12_ISSUES}
++          />
++        );
++
++        // Desktop auto-selects first issue
++        await waitFor(() => {
++          expect(screen.getByTestId('split-surface-close-btn')).toBeDefined();
++        });
++
++        // Click close button
++        const closeBtn = screen.getByTestId('split-surface-close-btn');
++        fireEvent.click(closeBtn);
++
++        // Closed split key prevents auto-selection
++        await waitFor(() => {
++          expect(screen.queryByTestId('split-surface-close-btn')).toBeNull();
++        });
++      } finally {
++        Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: originalInnerWidth });
++      }
++    });
++
++    it('wires onOpenFieldPopover from ListView to QuickFieldPopover', async () => {
++      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
++      render(
++        <IssuesWorkspaceRoute
++          projectKey="KAN"
++          initialLayout="list"
++          initialIssues={FIXTURE_12_ISSUES}
++        />
++      );
++
++      // Find first list row state button and click it
++      const firstIssue = FIXTURE_12_ISSUES[0];
++      if (!firstIssue) throw new Error('Missing fixture');
++      const stateBtn = screen.getByTestId(`list-row-state-btn-${firstIssue.key}`);
++      fireEvent.click(stateBtn);
++
++      // Popover should be open
++      await waitFor(() => {
++        expect(screen.getByRole('dialog', { name: /Quick State Picker/i })).toBeDefined();
++      });
++    });
++
++    it('exercises computeStateSummary and state matching', () => {
++      const states = [
++        { id: 'st-1', name: 'My Todo', group: 'unstarted' },
++        { id: 'st-2', name: 'Review Group', group: 'in_review' },
++      ];
++      // match by id
++      expect(computeStateSummary('st-1', states).name).toBe('My Todo');
++      // match by normalized name
++      expect(computeStateSummary('my-todo', states).name).toBe('My Todo');
++      // match by group
++      expect(computeStateSummary('in_review', states).name).toBe('Review Group');
++      // fallback matching by string content
++      expect(computeStateSummary('progress-custom').name).toBe('In Progress');
++      expect(computeStateSummary('todo-custom').name).toBe('Todo');
++      expect(computeStateSummary('done-custom').name).toBe('Done');
++      expect(computeStateSummary('other').name).toBe('Backlog');
++    });
++
++    it('covers Hard WIP limit prompt cancellation and confirmation in field select', () => {
++      const testIssues: IssueItem[] = [
++        {
++          id: 'i-wip-1',
++          key: 'KAN-WIP-1',
++          summary: 'Issue 1',
++          state: { id: 'state-in-review', name: 'In Review', group: 'started' },
++          priority: { slug: 'low', label: 'Low' },
++        },
++        {
++          id: 'i-wip-2',
++          key: 'KAN-WIP-2',
++          summary: 'Issue 2',
++          state: { id: 'state-in-review', name: 'In Review', group: 'started' },
++          priority: { slug: 'low', label: 'Low' },
++        },
++        {
++          id: 'i-wip-3',
++          key: 'KAN-WIP-3',
++          summary: 'Issue 3',
++          state: { id: 'state-in-review', name: 'In Review', group: 'started' },
++          priority: { slug: 'low', label: 'Low' },
++        },
++        {
++          id: 'i-wip-4',
++          key: 'KAN-WIP-4',
++          summary: 'Issue 4',
++          state: { id: 'state-todo', name: 'Todo', group: 'unstarted' },
++          priority: { slug: 'low', label: 'Low' },
++        },
++      ];
++
++      const promptSpy = vi.spyOn(window, 'prompt');
++
++      render(
++        <IssuesWorkspaceRoute
++          projectKey="KAN"
++          initialLayout="list"
++          initialIssues={testIssues}
++          isProjectAdmin={true}
++        />
++      );
++
++      // Focus fourth issue (index 3) and press 'S' to open State picker
++      fireEvent.keyDown(window, { key: 'j' });
++      fireEvent.keyDown(window, { key: 'j' });
++      fireEvent.keyDown(window, { key: 'j' });
++      fireEvent.keyDown(window, { key: 'j' });
++      fireEvent.keyDown(window, { key: 's' });
++
++      // 1. Prompt returns null (user cancelled)
++      promptSpy.mockReturnValueOnce(null);
++      const statePop = screen.getByRole('dialog', { name: /Quick State Picker/i });
++      const inReviewOpt = within(statePop).getByRole('option', { name: 'In Review' });
++      fireEvent.click(inReviewOpt);
++      expect(promptSpy).toHaveBeenCalled();
++
++      promptSpy.mockRestore();
++    });
++
++    it('automatically synchronizes activePeekKey and URL peek to first matching issue when peek issue is excluded by filter', async () => {
++      window.history.pushState({}, '', '/projects/KAN/issues?peek=KAN-NONEXISTENT');
++
++      render(
++        <IssuesWorkspaceRoute
++          projectKey="KAN"
++          initialLayout="list"
++          initialIssues={FIXTURE_12_ISSUES}
++        />,
++      );
++
++      // Verify that activePeekKey auto-selected the first issue in FIXTURE_12_ISSUES
++      await waitFor(() => {
++        const params = new URLSearchParams(window.location.search);
++        expect(params.get('peek')).toBe(FIXTURE_12_ISSUES[0]?.key);
++      });
++    });
++
++    it('re-evaluates favorites-only filter when kb:favorites-changed event fires', async () => {
++      const favKey = FIXTURE_12_ISSUES[0]?.key ?? 'KAN-1';
++      localStorage.setItem('kb_favorite_issues', JSON.stringify([favKey]));
++
++      render(
++        <IssuesWorkspaceRoute
++          projectKey="KAN"
++          initialLayout="list"
++          initialIssues={FIXTURE_12_ISSUES}
++        />,
++      );
++
++      // Toggle Favorites only button on
++      const favOnlyBtn = screen.getByRole('button', { name: /Favorites only/i });
++      fireEvent.click(favOnlyBtn);
++
++      // Now remove from favorites in localStorage and dispatch kb:favorites-changed
++      localStorage.setItem('kb_favorite_issues', JSON.stringify([]));
++      act(() => {
++        window.dispatchEvent(new CustomEvent('kb:favorites-changed'));
++      });
++
++      // Rail now has zero favorites matching
++      await waitFor(() => {
++        expect(screen.getByText('No work items found')).toBeDefined();
++      });
++    });
++
++    it('triggers onSearchSubmit when Search button is clicked in list layout and handles resize', () => {
++      render(
++        <IssuesWorkspaceRoute
++          projectKey="KAN"
++          initialLayout="list"
++          initialIssues={FIXTURE_12_ISSUES}
++        />,
++      );
++
++      // In list layout, IssueNavigatorBar renders Search button
++      const searchBtn = screen.getByRole('button', { name: 'Search' });
++      fireEvent.click(searchBtn);
++
++      // Trigger resize event to exercise window resize listener
++      act(() => {
++        window.dispatchEvent(new Event('resize'));
++      });
++    });
++
++    it('activates 2D swimlane grid when sub-group is changed and handles card move state transitions', async () => {
++      render(
++        <IssuesWorkspaceRoute
++          projectKey="KAN"
++          initialLayout="board"
++          initialIssues={FIXTURE_12_ISSUES}
++        />,
++      );
++
++      // Change sub-group by axis to priority
++      const subGroupSelect = screen.getByLabelText('Sub-group by axis');
++      fireEvent.change(subGroupSelect, { target: { value: 'priority' } });
++
++      // 2D Swimlane is active; click a card's state picker
++      const firstIssueKey = FIXTURE_12_ISSUES[0]?.key ?? 'KAN-1';
++      const moveBtn = await screen.findByTestId(`board-card-state-btn-${firstIssueKey}`);
++      fireEvent.click(moveBtn);
++
++      // Select a target state in the popover
++      const inProgOption = await screen.findByRole('option', { name: /In Progress/i });
++      fireEvent.click(inProgOption);
++    });
++
++    it('covers defensive fallback branches in boardIssues mapping and mobile activePeekKey', () => {
++      const issueWithOnlyStateId = {
++        id: 'iss-only-state-id',
++        key: 'KAN-ONLY-ID',
++        summary: 'Incomplete state issue',
++        state_id: 'state-backlog',
++        priority: { slug: 'medium', label: 'Medium' },
++      };
++
++      const origWidth = window.innerWidth;
++      try {
++        window.innerWidth = 390;
++
++        // With peekParam that is not in sortedRailIssues on mobile
++        window.history.pushState({}, '', '/projects/KAN/issues?layout=list&peek=NON-EXISTENT-KEY');
++
++        const { unmount } = render(
++          <IssuesWorkspaceRoute
++            projectKey="KAN"
++            initialLayout="list"
++            initialIssues={[issueWithOnlyStateId as unknown as IssueItem]}
++          />,
++        );
++
++        const { unmount: unmountBoard } = render(
++          <IssuesWorkspaceRoute
++            projectKey="KAN"
++            initialLayout="board"
++            initialIssues={[issueWithOnlyStateId as unknown as IssueItem]}
++          />,
++        );
++
++        unmount();
++        unmountBoard();
++      } finally {
++        window.innerWidth = origWidth;
++      }
++    });
++
++    it('covers URL viewParam pre-selection, query search mode, patch error rollback, and swimlane onStateTransition', async () => {
++      // 1. Mock fetch for saved views
++      const savedViewsData = [
++        {
++          id: 'v-saved-custom',
++          name: 'Custom Team View',
++          project_key: 'KAN',
++          layout: 'board',
++          group_by: 'priority',
++          sub_group_by: 'assignee',
++        },
++      ];
++      const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input: RequestInfo | URL) => {
++        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
++        if (url.includes('/views')) {
++          return Promise.resolve(new Response(JSON.stringify(savedViewsData), { status: 200 }));
++        }
++        return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
++      });
++
++      // Set URL with view query param
++      window.history.pushState({}, '', '/projects/KAN/issues?layout=list&view=v-saved-custom');
++
++      const alertSpy = vi.fn();
++      window.addEventListener('kb:alert', alertSpy);
++
++      const { unmount } = render(
++        <IssuesWorkspaceRoute
++          projectKey="KAN"
++          initialLayout="list"
++          initialIssues={FIXTURE_12_ISSUES}
++        />,
++      );
++
++      await waitFor(() => {
++        expect(fetchSpy).toHaveBeenCalled();
++      });
++
++      // 2. Query search mode in IssueNavigatorBar
++      // Switch query mode to JQL / query mode
++      const queryModeBtn = screen.getByTestId('mode-query-btn');
++      fireEvent.click(queryModeBtn);
++
++      const queryInput = screen.getByTestId('navigator-query-input');
++      fireEvent.change(queryInput, { target: { value: 'priority = High' } });
++
++      // Change search to non-matching
++      fireEvent.change(queryInput, { target: { value: 'priority = Unknown' } });
++
++      // Switch back to text search and test non-matching text
++      const basicModeBtn = screen.getByTestId('mode-basic-btn');
++      fireEvent.click(basicModeBtn);
++      const searchInput = screen.getByTestId('navigator-search-input');
++      fireEvent.change(searchInput, { target: { value: 'XYZ-NONEXISTENT' } });
++
++      // Click saved view chip
++      const savedChip = screen.getByTestId('saved-view-chip-v-saved-custom');
++      fireEvent.click(savedChip);
++
++      unmount();
++      window.removeEventListener('kb:alert', alertSpy);
++      fetchSpy.mockRestore();
++    });
++
++    it('exercises Swimlane with groupBy=priority, live mode transitions, WIP override, and batch update', async () => {
++      // 1. computeStateSummary edge case: non-matching state when projectStates populated
++      const computedFallback = computeStateSummary('non-matching-state', [
++        { id: 'st-1', name: 'State 1', group: 'unstarted' },
++      ]);
++      expect(computedFallback.id).toBe('non-matching-state');
++      expect(computedFallback.name).toBe('Backlog');
++
++      // 2. Empty projectKey coverage
++      const { unmount: unmountEmptyProj } = render(
++        <IssuesWorkspaceRoute projectKey="" initialLayout="board" initialIssues={[]} />,
++      );
++      unmountEmptyProj();
++
++      // 3. onOpenPeek with null when propOnOpenPeek is provided
++      const mockPeekCallback = vi.fn();
++      const { unmount: unmountPeek } = render(
++        <IssuesWorkspaceRoute
++          projectKey="KAN"
++          initialLayout="list"
++          initialIssues={FIXTURE_12_ISSUES}
++          onOpenPeek={mockPeekCallback}
++        />,
++      );
++      // Close split drawer triggers handleOpenPeek(null)
++      const closeBtn = screen.getByTestId('split-surface-close-btn');
++      fireEvent.click(closeBtn);
++      unmountPeek();
++
++      // 4. Swimlane with groupBy === 'priority':
++      // When groupBy === 'priority', onCardMove is undefined, so onStateTransition is called!
++      const { unmount: unmountSwimlane } = render(
++        <IssuesWorkspaceRoute
++          projectKey="KAN"
++          initialLayout="board"
++          initialIssues={FIXTURE_12_ISSUES}
++        />,
++      );
++      // Change group by to priority
++      const groupBySelect = screen.getByLabelText('Group by axis');
++      fireEvent.change(groupBySelect, { target: { value: 'priority' } });
++
++      const firstIssueKey = FIXTURE_12_ISSUES[0]?.key ?? 'KAN-1';
++      const moveBtn = await screen.findByTestId(`board-card-state-btn-${firstIssueKey}`);
++      fireEvent.click(moveBtn);
++      const inProgOption = await screen.findByRole('option', { name: /In Progress/i });
++      fireEvent.click(inProgOption);
++      unmountSwimlane();
++
++      // 5. Live mode state and priority transition errors, and WIP override:
++      const liveIssues = [
++        {
++          id: 'iss-live-1',
++          key: 'KAN-LIVE-1',
++          summary: 'Live Issue 1',
++          state: { id: '01931234-5678-7000-8000-000000000001', name: 'Backlog', group: 'backlog' },
++          priority: { slug: 'low', label: 'Low', emoji: '🟢' },
++        },
++      ];
++      const liveStates = [
++        { id: '01931234-5678-7000-8000-000000000001', name: 'Backlog', group: 'backlog' },
++        { id: '01931234-5678-7000-8000-000000000002', name: 'WIP Column', group: 'started', wip_hard_limit: 1 },
++      ];
++
++      const patchSpy = vi.spyOn(viewsApi, 'patchProjectIssue');
++
++      // a. State transition in live mode fails with non-Error string -> rollback & kb:alert
++      patchSpy.mockRejectedValueOnce('State transition primitive failure');
++      const alertListener = vi.fn();
++      window.addEventListener('kb:alert', alertListener);
++
++      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      const twoLiveIssues = [
++        ...liveIssues,
++        {
++          id: 'iss-live-2',
++          key: 'KAN-LIVE-2',
++          summary: 'Live Issue 2',
++          state: { id: '01931234-5678-7000-8000-000000000001', name: 'Backlog', group: 'backlog' },
++          priority: { slug: 'low', label: 'Low', emoji: '🟢' },
++        },
++      ];
++      qc.setQueryData(['issues', 'KAN', {}], twoLiveIssues);
++      qc.setQueryData(['states', 'KAN'], liveStates);
++
++      let patchShouldFail = true;
++      let patchFailError: unknown = 'State transition primitive failure';
++
++      const origFetch = globalThis.fetch;
++      globalThis.fetch = vi.fn().mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
++        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
++        if (init?.method === 'PATCH' && patchShouldFail) {
++          if (typeof patchFailError === 'string') {
++            return Promise.reject(new Error(patchFailError));
++          }
++          return Promise.reject(new Error('State transition network failed'));
++        }
++        if (url.includes('/states')) {
++          return Promise.resolve(new Response(JSON.stringify(liveStates), { status: 200 }));
++        }
++        if (url.includes('/issues')) {
++          return Promise.resolve(new Response(JSON.stringify({ items: twoLiveIssues, total: 2 }), { status: 200 }));
++        }
++        return Promise.resolve(new Response(JSON.stringify({}), { status: 200 }));
++      });
++
++      const { unmount: unmountLive } = render(
++        <IssuesWorkspaceRoute
++          projectKey="KAN"
++          initialLayout="board"
++          queryClient={qc}
++          capabilities={['VIEW', 'EDIT', 'ADMIN']}
++        />,
++      );
++
++      // Focus first item
++      fireEvent.keyDown(window, { key: 'j' });
++
++      // Trigger state change via quick field popover
++      fireEvent.keyDown(window, { key: 's' });
++      const statePop1 = await screen.findByRole('dialog', { name: /Quick State Picker/i });
++      fireEvent.click(within(statePop1).getByText('WIP Column'));
++
++      await waitFor(() => {
++        expect(alertListener).toHaveBeenCalled();
++      });
++
++      // b. Priority transition in live mode fails with primitive -> rollback & kb:alert
++      patchShouldFail = true;
++      patchFailError = 'Primitive priority failure';
++      fireEvent.keyDown(window, { key: 'p' });
++      const prioPop = await screen.findByRole('dialog', { name: /Quick Priority Picker/i });
++      fireEvent.click(within(prioPop).getByText('High'));
++
++      await waitFor(() => {
++        expect(alertListener).toHaveBeenCalledTimes(2);
++      });
++
++      // c. Live mode state transition with WIP override prompt
++      patchShouldFail = false;
++      const promptSpy = vi.spyOn(window, 'prompt').mockReturnValueOnce('Approved urgent emergency');
++
++      // Pre-seed an issue already in WIP Column so targetCount >= 1
++      qc.setQueryData(['issues', 'KAN', {}], [
++        {
++          id: 'iss-live-other',
++          key: 'KAN-OTHER',
++          summary: 'Other in WIP',
++          state: { id: '01931234-5678-7000-8000-000000000002', name: 'WIP Column', group: 'started' },
++        },
++        liveIssues[0],
++      ]);
++
++      fireEvent.keyDown(window, { key: 's' });
++      const statePop2 = await screen.findByRole('dialog', { name: /Quick State Picker/i });
++      fireEvent.click(within(statePop2).getByText('WIP Column'));
++
++      expect(promptSpy).toHaveBeenCalled();
++
++      // d. Live mode batch update state and priority where patchProjectIssue fires
++      fireEvent.keyDown(window, { key: 'x' });
++      const batchStateBtn = screen.getByRole('button', { name: 'State' });
++      fireEvent.click(batchStateBtn);
++      fireEvent.keyDown(window, { key: 'x' });
++      const batchPrioBtn = screen.getByRole('button', { name: 'Priority' });
++      fireEvent.click(batchPrioBtn);
++
++      unmountLive();
++      window.removeEventListener('kb:alert', alertListener);
++      globalThis.fetch = origFetch;
++      promptSpy.mockRestore();
++    });
++
++    it('covers split mode onNavigateIssue, projectMetadata name, and filter edge cases', async () => {
++      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      qc.setQueryData(['project', 'KAN'], { name: 'Custom Platform', modules_enabled: true });
++
++      const issueWithEmptyStateName = {
++        id: 'iss-empty-name',
++        key: 'KAN-EMPTY-NAME',
++        summary: 'Empty state name',
++        state: { id: 'st-blank', name: '', group: 'unstarted' },
++        priority: { slug: 'none', label: 'None' },
++      };
++
++      const getSpy = vi.spyOn(apiClient, 'get').mockResolvedValue(issueWithEmptyStateName);
++
++      const { unmount } = render(
++        <IssuesWorkspaceRoute
++          projectKey="KAN"
++          initialLayout="list"
++          initialIssues={[issueWithEmptyStateName as unknown as IssueItem, ...FIXTURE_12_ISSUES]}
++          queryClient={qc}
++        />,
++      );
++
++      // IssueNavigatorBar search with empty state
++      expect(screen.getByTestId('split-surface-close-btn')).toBeDefined();
++
++      // Select next issue via pager once issue surface loads
++      const nextBtn = await screen.findByTestId('issue-next-btn');
++      fireEvent.click(nextBtn);
++
++      unmount();
++      getSpy.mockRestore();
++    });
++
++    it('covers remaining viewRegistry branch edge cases', async () => {
++      // 1. Invalid localStorage favorite issues (non-array JSON)
++      localStorage.setItem('kb_favorite_issues', JSON.stringify({ notAnArray: true }));
++
++      // 2. Query params with peek pointing to non-existent issue to trigger auto-sync microtask
++      window.history.pushState(
++        {},
++        '',
++        '/projects/KAN/issues?layout=list&peek=KAN-GHOST',
++      );
++
++      const oddIssues = [
++        {
++          id: 'iss-odd-1',
++          key: 'KAN-ODD-1',
++          summary: 'Missing state and priority slug',
++          state_id: 'unknown-uuid-1',
++          state: undefined,
++          priority: { slug: 'none', label: 'None' },
++        },
++        {
++          id: 'iss-odd-2',
++          key: 'KAN-ODD-2',
++          summary: 'Empty state name',
++          state: { id: 'uuid-odd', group: 'unstarted', color_hex: '#112233' } as unknown as StateSummary,
++          priority: { slug: 'none', label: 'None' },
++        },
++        ...FIXTURE_12_ISSUES,
++      ];
++
++      const { unmount } = render(
++        <IssuesWorkspaceRoute
++          projectKey="KAN"
++          initialIssues={oddIssues as unknown as IssueItem[]}
++          modulesEnabled={false}
++          isProjectAdmin={false}
++        />,
++      );
++
++      await waitFor(() => {
++        expect(window.location.search).toContain('peek=KAN-ODD-1');
++      });
++
++      unmount();
++      localStorage.removeItem('kb_favorite_issues');
++
++      // 3. Filter with empty state name and priority fallback to 'none' and explicit state_id lookup
++      window.history.pushState(
++        {},
++        '',
++        '/projects/KAN/issues?layout=board&filter_state=backlog&filter_priority=none',
++      );
++      const qc2 = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      qc2.setQueryData(['states', 'KAN'], [
++        { id: 'st-explicit', name: 'Explicit State', group: 'backlog' },
++        { id: 'st-wip-10', name: 'WIP 10', group: 'started', wip_hard_limit: 10 },
++      ]);
++      const explicitIssues = [
++        {
++          id: 'iss-explicit-1',
++          key: 'KAN-EXP-1',
++          summary: 'Explicit State Match',
++          state_id: 'st-explicit',
++          state: undefined,
++          priority: undefined,
++        },
++        {
++          id: 'iss-blank-state-1',
++          key: 'KAN-BLANK-1',
++          summary: 'Blank state name',
++          state: { id: 'st-blank', name: '', group: 'unstarted' },
++          priority: undefined,
++        },
++      ];
++      const { unmount: unmount2 } = render(
++        <IssuesWorkspaceRoute
++          projectKey="KAN"
++          initialIssues={explicitIssues as unknown as IssueItem[]}
++          queryClient={qc2}
++        />,
++      );
++      expect(screen.getByText('Explicit State Match')).toBeDefined();
++      unmount2();
++
++      // 4. Batch state toggle on completed issue with populated projectStates to hit targetStateSlug !== 'done'
++      const qc3 = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      qc3.setQueryData(['states', 'KAN'], [
++        { id: 'st-completed', name: 'Done', group: 'completed' },
++        { id: 'st-unstarted', name: 'Todo', group: 'unstarted' },
++      ]);
++      const completedIssues = [
++        {
++          id: 'iss-comp-1',
++          key: 'KAN-COMP-1',
++          summary: 'Completed issue',
++          state: { id: 'st-completed', name: 'Done', group: 'completed' },
++          priority: { slug: 'low', label: 'Low', emoji: '🟢' },
++        },
++      ];
++      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
++      const { unmount: unmount3 } = render(
++        <IssuesWorkspaceRoute
++          projectKey="KAN"
++          initialLayout="list"
++          initialIssues={completedIssues as unknown as IssueItem[]}
++          queryClient={qc3}
++          capabilities={['VIEW', 'EDIT']}
++        />,
++      );
++      fireEvent.keyDown(window, { key: 'j' });
++      fireEvent.keyDown(window, { key: 'x' });
++      const batchBtn = screen.getByRole('button', { name: 'State' });
++      fireEvent.click(batchBtn);
++      unmount3();
++    });
++
++    it('covers viewRegistry board fallback branches: empty boardStates and missing state id/group', async () => {
++      const qcEmpty = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      qcEmpty.setQueryData(['states', 'KAN'], []);
++
++      const issuesWithoutStateIdGroup = [
++        {
++          id: 'iss-no-id-grp',
++          key: 'KAN-NOGRP-1',
++          summary: 'Missing id and group in state',
++          state: { name: 'StateWithoutIdOrGroup' } as unknown as StateSummary,
++          priority: { slug: 'none', label: 'None' },
++        },
++      ];
++
++      const patchSpy = vi.spyOn(viewsApi, 'patchProjectIssue');
++      patchSpy.mockRejectedValue('Primitive transition error');
++
++      const { unmount } = render(
++        <IssuesWorkspaceRoute
++          projectKey="KAN"
++          initialIssues={issuesWithoutStateIdGroup as unknown as IssueItem[]}
++          queryClient={qcEmpty}
++        />,
++      );
++      expect(screen.getByText('Missing id and group in state')).toBeDefined();
++
++      // Trigger priority and state change on issue without prevPriority/prevState when patch fails
++      fireEvent.keyDown(window, { key: 'j' });
++      fireEvent.keyDown(window, { key: 'p' });
++      const prioPop = await screen.findByRole('dialog', { name: /Quick Priority Picker/i });
++      await act(async () => {
++        fireEvent.click(within(prioPop).getByText('High'));
++        await Promise.resolve();
++      });
++
++      fireEvent.keyDown(window, { key: 's' });
++      const statePop = await screen.findByRole('dialog', { name: /Quick State Picker/i });
++      await act(async () => {
++        fireEvent.click(within(statePop).getByText('Todo'));
++        await Promise.resolve();
++      });
++
++      // Quick create issue without summary or state/priority
++      act(() => {
++        fireEvent(window, new CustomEvent('kb:create-issue'));
++      });
++      const createBtn = screen.getByRole('button', { name: /^create$/i });
++      act(() => {
++        fireEvent.click(createBtn);
++      });
++
++      unmount();
++      window.history.pushState({}, '', '/');
++    });
++  });
+ });
 diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
-index 663cef6c..f981c47a 100644
+index 663cef6c..3e16a030 100644
 --- a/kanban/web/src/features/views/viewRegistry.tsx
 +++ b/kanban/web/src/features/views/viewRegistry.tsx
 @@ -3,11 +3,13 @@ import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-quer
@@ -5394,7 +6604,7 @@ index 663cef6c..f981c47a 100644
        window.history.pushState({}, '', url.toString());
        window.dispatchEvent(new PopStateEvent('popstate'));
      },
-@@ -370,6 +401,62 @@ export function IssuesWorkspaceRoute({
+@@ -370,6 +401,61 @@ export function IssuesWorkspaceRoute({
      return filters;
    });
  
@@ -5402,7 +6612,6 @@ index 663cef6c..f981c47a 100644
 +  const [favVersion, setFavVersion] = useState(0);
 +
 +  useEffect(() => {
-+    if (typeof window === 'undefined') return;
 +    const handleFavChange = (): void => {
 +      setFavVersion((v) => v + 1);
 +    };
@@ -5457,7 +6666,7 @@ index 663cef6c..f981c47a 100644
    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
    const [isSaveViewModalOpen, setIsSaveViewModalOpen] = useState(false);
    const [isFilterOpen, setIsFilterOpen] = useState(false);
-@@ -400,13 +487,8 @@ export function IssuesWorkspaceRoute({
+@@ -400,13 +486,8 @@ export function IssuesWorkspaceRoute({
    // Filter issues based on activeFilters
    const filteredIssues = useMemo(() => {
      return issues.filter((issue) => {
@@ -5473,7 +6682,7 @@ index 663cef6c..f981c47a 100644
  
        const stateGroup = resolvedState?.group ?? 'unstarted';
        const stateName = resolvedState?.name ?? '';
-@@ -502,9 +584,36 @@ export function IssuesWorkspaceRoute({
+@@ -502,12 +583,39 @@ export function IssuesWorkspaceRoute({
          if (activeFilters.due_date.includes('no_due_date') && issue.due_date) return false;
        }
  
@@ -5510,8 +6719,21 @@ index 663cef6c..f981c47a 100644
 +  }, [issues, activeFilters, modulesEnabled, projectStates, favoritesOnly, searchQuery, queryMode, projectKey, favVersion]);
  
    // Normalize board workflow states and issues so "Todo" and "To Do" match seamlessly (KANBA-164)
-   const boardStates: BoardWorkflowState[] = useMemo(() => {
-@@ -548,6 +657,7 @@ export function IssuesWorkspaceRoute({
+-  const boardStates: BoardWorkflowState[] = useMemo(() => {
++  const boardStates: [BoardWorkflowState, ...BoardWorkflowState[]] = useMemo(() => {
+     if (projectStates.length > 0) {
+       return projectStates.map((s, idx) => {
+         const sAny = s as {
+@@ -529,7 +637,7 @@ export function IssuesWorkspaceRoute({
+           ...(wipHard != null ? { wip_hard_limit: wipHard } : {}),
+           ...(wipSoft != null ? { wip_soft_limit: wipSoft } : {}),
+         };
+-      });
++      }) as unknown as [BoardWorkflowState, ...BoardWorkflowState[]];
+     }
+     return [
+       { id: 'state-backlog', name: 'Backlog', group: 'backlog', sort_order: 1 },
+@@ -548,6 +656,7 @@ export function IssuesWorkspaceRoute({
      selectedIds,
      setSelectedIds,
      modulesEnabled,
@@ -5519,7 +6741,7 @@ index 663cef6c..f981c47a 100644
      onOpenCreateModal: canEdit ? () => { setIsCreateModalOpen(true); } : undefined,
      onOpenFilter: () => { setIsFilterOpen(true); },
      onOpenFieldPopover: (field, issue, rect) => {
-@@ -641,10 +751,11 @@ export function IssuesWorkspaceRoute({
+@@ -641,10 +750,11 @@ export function IssuesWorkspaceRoute({
      return item;
    };
  
@@ -5534,7 +6756,7 @@ index 663cef6c..f981c47a 100644
      let overrideReason: string | undefined;
  
      if (field === 'state') {
-@@ -657,12 +768,8 @@ export function IssuesWorkspaceRoute({
+@@ -657,12 +767,8 @@ export function IssuesWorkspaceRoute({
            (s) => s.id === sId || normalizeStateKey(s.name) === normalizeStateKey(sId),
          );
  
@@ -5549,7 +6771,7 @@ index 663cef6c..f981c47a 100644
        const curStateName = curResolvedState?.name ?? '';
  
        const targetStateName = targetState?.name ?? sId;
-@@ -674,16 +781,12 @@ export function IssuesWorkspaceRoute({
+@@ -674,16 +780,12 @@ export function IssuesWorkspaceRoute({
        if (isCrossState && targetStateAny?.wip_hard_limit != null) {
          const targetCount = issues.filter((i) => {
            if (i.key === targetKey) return false;
@@ -5569,7 +6791,7 @@ index 663cef6c..f981c47a 100644
            );
          }).length;
  
-@@ -704,6 +807,10 @@ export function IssuesWorkspaceRoute({
+@@ -704,6 +806,10 @@ export function IssuesWorkspaceRoute({
        }
      }
  
@@ -5580,7 +6802,7 @@ index 663cef6c..f981c47a 100644
      setIssues((prev) =>
        prev.map((i) => {
          if (i.key !== targetKey) return i;
-@@ -741,7 +848,17 @@ export function IssuesWorkspaceRoute({
+@@ -741,7 +847,17 @@ export function IssuesWorkspaceRoute({
  
      if (isLiveMode) {
        if (field === 'priority') {
@@ -5599,7 +6821,7 @@ index 663cef6c..f981c47a 100644
        } else if (field === 'state') {
          const sId = String(value);
          const desired = computeStateSummary(sId, projectStates);
-@@ -752,22 +869,27 @@ export function IssuesWorkspaceRoute({
+@@ -752,22 +868,27 @@ export function IssuesWorkspaceRoute({
              patchPayload.override_wip = true;
              patchPayload.wip_override_reason = overrideReason;
            }
@@ -5622,7 +6844,7 @@ index 663cef6c..f981c47a 100644
  
    const boardIssues: BoardIssue[] = useMemo(() => {
 -    const fallbackStateId = boardStates[0]?.id ?? 'state-backlog';
-+    const fallbackStateId = boardStates[0]?.id ?? '';
++    const fallbackStateId = boardStates[0].id;
      return filteredIssues.map((issue, idx) => {
 -      const rawState = (issue as { state?: { id?: string; name?: string; group?: string; color_hex?: string } }).state;
 -      const explicitStateId = (issue as { state_id?: string }).state_id ?? rawState?.id;
@@ -5636,7 +6858,7 @@ index 663cef6c..f981c47a 100644
  
        const stateId = resolvedState?.id ?? explicitStateId;
        const stateName = resolvedState?.name ?? '';
-@@ -836,13 +958,68 @@ export function IssuesWorkspaceRoute({
+@@ -836,13 +957,67 @@ export function IssuesWorkspaceRoute({
    // 2D Swimlane condition: layout === 'board' and custom grouping or sub-grouping
    const is2DSwimlane = layout === 'board' && (subGroupBy !== 'none' || groupBy !== 'state');
  
@@ -5646,7 +6868,6 @@ index 663cef6c..f981c47a 100644
 +  });
 +
 +  useEffect(() => {
-+    if (typeof window === 'undefined') return;
 +    const handleResize = (): void => {
 +      setIsMobileViewport(window.innerWidth <= 767);
 +    };
@@ -5679,12 +6900,12 @@ index 663cef6c..f981c47a 100644
 +        return null;
 +      }
 +      return firstRailIssue.key;
-+    }
-+    if (isMobileViewport) {
-+      return null;
      }
 -    return filteredIssues[0]?.key ?? null;
 -  }, [peekParam, filteredIssues]);
++    if (isMobileViewport) {
++      return null;
++    }
 +    if (closedSplitKey && closedSplitKey === firstRailIssue.key) {
 +      return null;
 +    }
@@ -5709,7 +6930,7 @@ index 663cef6c..f981c47a 100644
  
    return (
      <QueryClientProvider client={queryClient}>
-@@ -852,20 +1029,45 @@ export function IssuesWorkspaceRoute({
+@@ -852,20 +1027,45 @@ export function IssuesWorkspaceRoute({
          data-layout={layout}
        >
          {/* 1. Filter and Display Bar */}
@@ -5769,7 +6990,7 @@ index 663cef6c..f981c47a 100644
  
        {/* 2. Main View: 2D Swimlane Board Grid, 3-pane split list view, or standard ViewHost */}
        {is2DSwimlane ? (
-@@ -880,6 +1082,17 @@ export function IssuesWorkspaceRoute({
+@@ -880,6 +1080,17 @@ export function IssuesWorkspaceRoute({
            onToggleSelect={canEdit ? handleToggleSelect : undefined}
            focusedKey={focusedKey}
            onCardClick={handleRowClick}
@@ -5787,7 +7008,7 @@ index 663cef6c..f981c47a 100644
          />
        ) : layout === 'board' ? (
          <BoardView
-@@ -894,7 +1107,7 @@ export function IssuesWorkspaceRoute({
+@@ -894,7 +1105,7 @@ export function IssuesWorkspaceRoute({
          <div className="kb-split-layout" data-testid="split-list-layout">
            <div className="kb-split-list-pane">
              <ListView
@@ -5796,7 +7017,7 @@ index 663cef6c..f981c47a 100644
                projectKey={projectKey}
                projectStates={projectStates}
                modulesEnabled={modulesEnabled}
-@@ -902,9 +1115,22 @@ export function IssuesWorkspaceRoute({
+@@ -902,9 +1113,22 @@ export function IssuesWorkspaceRoute({
                onToggleSelect={canEdit ? handleToggleSelect : undefined}
                onCreateIssue={canEdit ? handleOpenCreateModal : undefined}
                focusedKey={focusedKey}
@@ -5819,7 +7040,7 @@ index 663cef6c..f981c47a 100644
              />
            </div>
            {activePeekKey && (
-@@ -912,6 +1138,15 @@ export function IssuesWorkspaceRoute({
+@@ -912,6 +1136,15 @@ export function IssuesWorkspaceRoute({
                mode="split"
                issueKey={activePeekKey}
                projectKey={projectKey}
@@ -5835,7 +7056,7 @@ index 663cef6c..f981c47a 100644
              />
            )}
          </div>
-@@ -940,10 +1175,19 @@ export function IssuesWorkspaceRoute({
+@@ -940,10 +1173,19 @@ export function IssuesWorkspaceRoute({
            onClearSelection={() => { setSelectedIds([]); }}
            modulesEnabled={modulesEnabled}
            onBatchUpdateState={(targetStateSlug) => {

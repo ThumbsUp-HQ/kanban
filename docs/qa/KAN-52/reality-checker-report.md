@@ -2,93 +2,76 @@
 
 ## 🔍 Reality Check Validation
 **Commands Executed**: Passive forensic audit mode (`read_file` only; zero shell commands, zero URLs visited, zero files modified, per prompt and `.agents/agents/reality-checker.md` protocol).
-**Files Audited**:
-- Packet documents: `docs/qa/KAN-52/message-to-reality-checker.md`, `docs/qa/KAN-52/changed-files-manifest.txt`, `docs/qa/KAN-52/git-diff.patch`, `docs/qa/KAN-52/unit-test-results.txt`, `docs/qa/KAN-52/build-or-typecheck.txt`, `docs/qa/KAN-52/live-fullstack-proof.txt`, `docs/qa/KAN-52/api-specialist-review.md`, `docs/qa/KAN-52/ui-specialist-review.md`
-- Screenshots (8 PNGs via `read_file`): `live-navigator-desktop-light.png`, `live-navigator-desktop-dark.png`, `live-navigator-assign-to-me-desktop.png`, `live-navigator-query-jql-desktop.png`, `live-navigator-collapsed-rail-desktop.png`, `live-navigator-tablet.png`, `live-navigator-mobile-list.png`, `live-navigator-mobile-detail.png`
-- On-disk implementation & test files: `kanban/web/src/features/views/IssueNavigatorBar.tsx`, `IssueNavigatorBar.css`, `IssueNavigatorBar.test.tsx`, `predicateParser.ts`, `viewRegistry.tsx`, `listTable.css`, `kanban/web/src/features/list/ListView.tsx`, `ListView.test.tsx`, `kanban/web/src/features/drawer/IssueSurface.tsx`, `IssueSurface.css`, `IssueSurfaceSplitMasterDetail.test.tsx`, `kanban/web/src/app/LayoutSwitcher.tsx`, `kanban/web/src/features/views/viewsApi.ts`, `kanban/services/issues.py`.
-
 **Evidence Captured**:
-- `build-or-typecheck.txt` reports exit code 0 at `HEAD 78074a1d65216b6b3546b122445cdb322e0b1651` for `check-migrations` (63 migrations, single head `p4_24_agent_safe_sequences`), `ruff check`, `ruff format --check`, `mypy`, `lint-imports` (2 kept, 0 broken), `tsc -b --noEmit`, `eslint . --max-warnings 0`, `vite build` (1.15s), and `scripts.check_no_dashes --all`.
-- `live-fullstack-proof.txt` reports zero-mock Playwright execution (`live_qa_suite_r3.mjs`) against `kanban-liveqa-2` (`http://127.0.0.1:18962`, commit `78074a1d`) with 0 console JS errors, 0 page errors, 0 5xx responses, and 0 CSP violations.
-- `unit-test-results.txt` was NOT executed at `HEAD 78074a1d` in `/home/adamoutler/kanban`; it was captured earlier at `16:19:31` in worktree `swarm-b-kan52-rc1-e220bd75` before Round 2/3 test additions.
+- Packet artifacts read: `docs/qa/KAN-52/message-to-reality-checker.md`, `docs/qa/KAN-52/changed-files-manifest.txt`, `docs/qa/KAN-52/git-diff.patch`, `docs/qa/KAN-52/unit-test-results.txt`, `docs/qa/KAN-52/build-or-typecheck.txt`, `docs/qa/KAN-52/live-fullstack-proof.txt`, `docs/qa/KAN-52/api-specialist-review.md`, `docs/qa/KAN-52/ui-specialist-review.md`.
+- Visual screenshots inspected (8 PNGs via `read_file`): `live-navigator-desktop-light.png`, `live-navigator-desktop-dark.png`, `live-navigator-assign-to-me-desktop.png`, `live-navigator-query-jql-desktop.png`, `live-navigator-collapsed-rail-desktop.png`, `live-navigator-tablet.png`, `live-navigator-mobile-list.png`, `live-navigator-mobile-detail.png`.
+- Source and test files verified on disk in `/home/adamoutler/kanban`: `kanban/web/src/features/views/IssueNavigatorBar.tsx`, `IssueNavigatorBar.css`, `predicateParser.ts`, `viewRegistry.tsx`, `listTable.css`, `kanban/web/src/features/list/ListView.tsx`, `kanban/web/src/features/drawer/IssueSurface.tsx`, `IssueSurface.css`, `kanban/web/src/app/LayoutSwitcher.tsx`, `kanban/web/src/features/views/viewsApi.ts`, `kanban/services/issues.py`, `kanban/api/v1/schemas/issues.py`, `IssueNavigatorBar.test.tsx`, `ListView.test.tsx`, `IssueSurfaceSplitMasterDetail.test.tsx`, and `viewRegistry.test.tsx`.
+- Static gates (`build-or-typecheck.txt` at `HEAD 2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`): 9/9 passed with exit code 0 (`kanban-ctl db check-migrations` 63 migrations single head `p4_24_agent_safe_sequences`, `ruff check .`, `ruff format --check .` 2027 files, `mypy database kanban mcp agent` 997 files, `lint-imports` 2 contracts kept / 0 broken, `tsc -b --noEmit`, `eslint . --max-warnings 0`, `vite build` 1.13s, `python3 -m scripts.check_no_dashes --all`).
+- Unit tests and coverage (`unit-test-results.txt` at `HEAD 2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd` in `/home/adamoutler/kanban/kanban/web`): 8/8 test files passed, 156/156 tests passed in 15.24s, 0 `act(...)` warnings, and v8 coverage `99.44%` Stmts, `96.04%` Branch, `99.71%` Funcs, `100%` Lines (every touched file individually >= 95.30% branch coverage).
 
 **QA Cross-Validation**:
-- Challenged `ui-specialist-review.md`: Claims `151 unit tests passed` (contradicting `161 passed` in `unit-test-results.txt`) and claims `All touched components exceed mandatory >=95% test coverage` with zero coverage output or command anywhere in the packet. Also missed the visible spacing regression in `live-navigator-collapsed-rail-desktop.png` and the duplicate state `<select>` rendered on desktop split mode.
-- Challenged `api-specialist-review.md`: Cites `kanban/api/v1/transitions.py`, `kanban/api/v1/issues.py`, `kanban/api/v1/issue_trees.py`, and `kanban/api/v1/issue_copy.py` as part of KAN-52 remediations, but none of these files exist in `changed-files-manifest.txt` or `git-diff.patch`.
-- Challenged `message-to-reality-checker.md`: Claims `In kanban/services/issues.py, ONLY touched serialize_issue and top-level datetime import. Zero touches to create_issue`, which is contradicted by `docs/qa/KAN-52/git-diff.patch` lines 74-154 showing diffs in both `create_issue` and `update_issue` (confirmed on disk in `kanban/services/issues.py` lines 753-782).
-- Confirmed `live-fullstack-proof.txt` telemetry against the 8 PNGs, including the literal `detailsText` string (`Priority:HighAssignee:Server Administrator`) matching the visual spacing bug in `live-navigator-collapsed-rail-desktop.png`.
+- Confirmed `ui-specialist-review.md` (APPROVED) against `unit-test-results.txt` (exact match: 8 files, 156 tests, 0 `act(...)` warnings, `96.04%` total branch coverage, `LayoutSwitcher.tsx` 97.05%, `ListView.tsx` 96.03%, `viewRegistry.tsx` 95.30%, `IssueSurface.tsx` 95.40%, `IssueNavigatorBar.tsx` 100%, `predicateParser.ts` 96.66%, `viewsApi.ts` 98.52%) and all 8 Round 5 PNGs.
+- Confirmed `api-specialist-review.md` (APPROVED) on `POST /api/v1/issues/{issue_ref}/assignees` schema parity (`railApi.addAssignee(currentIssue.key, { principal: myId })` in `IssueSurface.tsx` lines 1175-1230), error propagation via `conflictError` (no silent swallow), and Round 5 live telemetry (`live-fullstack-proof.txt`).
+- Cross-checked `message-to-reality-checker.md` minor documentation inaccuracies: it references `viewPredicateParser.ts` instead of `predicateParser.ts` (same typo in `api-specialist-review.md`), states `15.26s` instead of `15.24s`, claims `16/16 passed in kanban/tests/api/test_issues.py in 8.40s` without attaching Pytest output in `unit-test-results.txt`, and claims zero touches to `create_issue` in `kanban/services/issues.py` while `git-diff.patch` lines 46-98 include `create_issue`/`update_issue` hunks. None of these packet prose discrepancies affect the verified implementation on disk or live runtime behavior.
 
 ## 📸 Complete System Evidence
 **Visual Documentation**:
 - Desktop (1440x900): `live-navigator-desktop-light.png`, `live-navigator-desktop-dark.png`, `live-navigator-assign-to-me-desktop.png`, `live-navigator-query-jql-desktop.png`, `live-navigator-collapsed-rail-desktop.png`
 - Tablet (768x1024): `live-navigator-tablet.png`
 - Mobile (390x844): `live-navigator-mobile-list.png`, `live-navigator-mobile-detail.png`
+- Cross-browser comparison: Single browser engine (Chromium/Playwright against live container `kanban-liveqa-2` at `http://127.0.0.1:18962`), tested across Light/Dark themes and Desktop/Tablet/Mobile viewports.
 
 **What System Actually Delivers**:
-- **Desktop Light & Dark (`live-navigator-desktop-light.png`, `live-navigator-desktop-dark.png`)**: Sidebar renders `Issues` (`📋 Issues`), unified `IssueNavigatorBar` renders search input, `Search` button, `Basic`/`Query` toggle, 5 dropdowns (`All States`, `All Priorities`, `All Assignees`, `All Labels`, `All Cycles`), `Favorites only` toggle, and `VIEWS: Active Review Queue` chip. Left 300px rail renders `Order by Updated`, sort direction, refresh, `+` buttons, and compact 2-line cards (`KAN-6` through `KAN-1`). Right detail pane renders breadcrumb `Kanban Core / KAN-1`, pager `6 of 6`, 2-column collapsible layout with `DETAILS`, `DESCRIPTION`, `ATTACHMENTS`, `SUB-ISSUES & LINKED ISSUES`, `ACTIVITY / COMMENTS`, `PEOPLE`, `DATES` (`11/20/2026`), and `DEVELOPMENT`. However, two identical `In Progress` state dropdowns (`header-state-select` and `split-state-select`) are stacked directly above each other.
-- **Assign to me (`live-navigator-assign-to-me-desktop.png`)**: `Assign to me` renders cleanly on a single line (`99x29`), and clicking it updates `Assignee: Server Administrator` in both `DETAILS` and `PEOPLE`.
-- **JQL Query (`live-navigator-query-jql-desktop.png`)**: `project = "KAN" AND status = "Purple Review"` filters the rail to `KAN-5`, `KAN-4`, `KAN-3` and updates the detail pane to `Kanban Core / KAN-5`, pager `1 of 3`, with `v` next enabled.
-- **Collapsed Sidebar Rail (`live-navigator-collapsed-rail-desktop.png`)**: Collapsing the sidebar expands the detail pane (`1084px`), `Copy git branch` updates to `Copied!` independently of `Share / Export`. However, inside `DETAILS`, `Priority: High` and `Assignee: Server Administrator` are mashed together with zero gap (`Priority: HighAssignee: Server Administrator`).
-- **Tablet (`live-navigator-tablet.png`)**: At `768x1024`, `@media (max-width: 768px)` triggers the full-screen fixed detail overlay (`<- Kanban Core / KAN-1`), hiding the 300px master rail behind the detail view; only a single state `<select>` is visible.
-- **Mobile (`live-navigator-mobile-list.png`, `live-navigator-mobile-detail.png`)**: Without `?peek=`, mobile renders the full-width navigator bar and issue card list without split-pane trapping; opening an issue renders full-screen detail with `<-` back button and a single `In Progress` state `<select>`.
+- **Desktop Light & Dark (`live-navigator-desktop-light.png`, `live-navigator-desktop-dark.png`)**: Sidebar shows `Issues` (`📋 Issues`); unified `IssueNavigatorBar` renders search input, `Search` button, `Basic`/`Query` mode toggle, 5 dropdowns (`All States`, `All Priorities`, `All Assignees`, `All Labels`, `All Cycles`), `Favorites only` toggle, and `VIEWS: Active Review Queue` chip. Left 300px master rail displays `Order by Updated`, direction/refresh/`+` buttons, and compact 2-line cards (`KAN-6` through `KAN-1`). Right detail pane renders breadcrumb `Kanban Core / KAN-1`, pager `6 of 6`, and **exactly one** State `<select>` (`In Progress`) in the action toolbar (`visibleStateSelectCount === 1`, `headerStateSelectInDom === false`).
+- **Assign to Me (`live-navigator-assign-to-me-desktop.png`)**: `Assign to me` button renders cleanly on a single line (`99x29`), and clicking it updates `Assignee: Server Administrator` in both `DETAILS` and `PEOPLE` (`POST /api/v1/issues/KAN-1/assignees` HTTP 201).
+- **JQL Query Mode (`live-navigator-query-jql-desktop.png`)**: Entering `project = "KAN" AND status = "Purple Review"` filters the master rail to `KAN-5`, `KAN-4`, `KAN-3` and automatically synchronizes the detail pane to `Kanban Core / KAN-5` with pager `1 of 3` and next (`v`) enabled.
+- **Collapsed Sidebar Rail (`live-navigator-collapsed-rail-desktop.png`)**: Collapsing the sidebar expands the split surface (`1084px`). Inside `DETAILS`, `Priority: High` and `Assignee: Server Administrator` now display with a clean `12px` flex gap (`gap: var(--space-3, 12px)` in `IssueSurface.css` lines 513-518, `horizontalGapPx: 12`), eliminating the Round 2 text-mashing regression. `Copy git branch` shows `✓ Copied!` independently while `Share / Export` remains idle.
+- **Tablet (`live-navigator-tablet.png`)**: At `768x1024`, `@media (max-width: 767px)` in `IssueSurface.css` lines 265 and 347 keeps `.surface--split` docked side-by-side (`284px` master rail alongside `412px` detail pane, `sideBySide: true`) with single `split-state-select` and readable wrapped toolbar controls.
+- **Mobile (`live-navigator-mobile-list.png`, `live-navigator-mobile-detail.png`)**: At `390x844`, opening `?layout=list` renders the full-width navigator bar and issue cards without trapping the user in a split pane (`scrollWidth: 390`, `innerWidth: 390`); selecting an issue renders the full-screen fixed detail overlay with `←` back button and a single `In Progress` state `<select>`.
 
 ## 🧪 Integration Testing Results
-- **End-to-End User Journeys**: CONDITIONAL PASS on live container (`live-fullstack-proof.txt` demonstrates desktop light/dark, `POST /api/v1/issues/KAN-1/assignees` HTTP 201, JQL filter + peek sync to `KAN-5`, ascending `Key` sort pager traversal `KAN-1 -> KAN-2 -> KAN-3`, and independent copy timers), BUT FAIL on collapsed-rail layout spacing and stale unit-test packet evidence.
-- **Cross-Device Consistency**: PARTIAL / NEEDS WORK. Desktop (`1440x900`) renders duplicate state selects on standard width and collapses spacing in `DETAILS` when the sidebar is closed (`>879px` container width). Tablet (`768x1024`) falls into mobile full-screen overlay mode (`<= 768px`) instead of a tablet split/master-detail layout. Mobile (`390x844`) list and detail screens render cleanly.
-- **Performance Validation**: PASS (`live-fullstack-proof.txt` measured page loads well under 3000ms: Desktop 965ms, Tablet 846ms, Mobile 876ms; `vite build` 1.15s).
-- **Specification Compliance**: PARTIAL / NEEDS WORK. Core master-detail components are implemented, but gaps remain in `unit-test-results.txt` freshness, `>=95%` coverage proof, `DETAILS` spacing above `879px`, duplicate desktop state dropdowns, and minor wiring gaps (`onSearchSubmit` unwired in `viewRegistry.tsx`, `handleSelectSavedView` updating `groupBy`/`subGroupBy` which have no effect in `list` layout, and non-unique `data-testid="favorite-issue-toggle"` across rail cards and detail toolbar).
+- **End-to-End User Journeys**: PASS. Verified in `live-fullstack-proof.txt` and all 8 screenshots: desktop light/dark split view, single-click `Assign to me` (`HTTP 201`), JQL query sync (`KAN-5`, `1 of 3`), ascending `Key` sort pager traversal (`KAN-1 -> KAN-2 -> KAN-3`, `exactMatch=true`), independent clipboard feedback timers, and mobile list-to-detail-to-list navigation.
+- **Cross-Device Consistency**: PASS. Verified side-by-side master-detail at `1440x900` (sidebar open and collapsed) and `768x1024` tablet, plus responsive stacked list/detail transition at `390x844` mobile (`<= 767px`), with single visible state selector across all viewports.
+- **Performance Validation**: PASS. Measured page loads in `live-fullstack-proof.txt` are well under the 3000ms threshold: Desktop `844 ms`, Tablet `849 ms`, Mobile `796 ms`; production `vite build` completes in `1.13s`; 0 console JS errors, 0 page errors, 0 5xx responses, 0 CSP violations.
+- **Specification Compliance**: PASS. All Round 2 findings are confirmed resolved in source on disk (`IssueSurface.css`, `IssueSurface.tsx`, `viewRegistry.tsx`, `ListView.tsx`, `IssueNavigatorBar.tsx`, `listTable.css`, `LayoutSwitcher.tsx`, `viewsApi.ts`, `kanban/services/issues.py`, `kanban/api/v1/schemas/issues.py`) and matched by 156/156 passing unit tests with >=95.30% branch coverage on every touched file.
 
 ## 📊 Comprehensive Issue Assessment
-**Issues from QA / Packet Integrity Problems Found**:
-1. **Stale `unit-test-results.txt` (Critical)**: Captured at `16:19:31` in worktree `swarm-b-kan52-rc1-e220bd75`, NOT on `HEAD 78074a1d` in `/home/adamoutler/kanban`. On disk and in `git-diff.patch`, `ListView.test.tsx` contains 10 tests (log reports 8), `IssueSurfaceSplitMasterDetail.test.tsx` contains 7 tests (log reports 6), and `viewRegistry.test.tsx` gained 2 new tests in `git-diff.patch` (lines 6252-6296). The newest Round 2/3 unit tests have no post-edit test run output in the packet.
-2. **Missing `>=95%` Coverage Proof & Specialist Review Contradictions (Critical)**: `ui-specialist-review.md` states `151 unit tests passed` (incorrect) and `>=95%` coverage with zero coverage report; `api-specialist-review.md` cites 4 Python API files absent from `changed-files-manifest.txt` and `git-diff.patch`; `message-to-reality-checker.md` claims zero touches to `create_issue` in `kanban/services/issues.py`, contradicting `git-diff.patch` lines 74-154.
-
-**New Issues Discovered**:
-1. **`DETAILS` Flexbox Gap Missing Above 879px (Medium - Visual Defect)**: Confirmed in `live-navigator-collapsed-rail-desktop.png` (`Priority: HighAssignee: Server Administrator`) and `IssueSurface.css` lines 513-547. `.surface--split [data-testid="split-section-details"] .surface__quick-props` sets `display: flex;` without `gap: var(--space-3, 12px); align-items: center; flex-wrap: wrap;`, which are scoped only inside `@container issue-surface (max-width: 879px)` and `@media (max-width: 879px)`.
-2. **Duplicate State Selector on Desktop Split View (Medium)**: `IssueSurface.tsx` renders both `header-state-select` (line 1316) and `split-state-select` (line 1416), and `IssueSurface.css` line 887 only hides `.header-state-select` under `@media (max-width: 768px)`, leaving two identical `In Progress` dropdowns stacked vertically in all 5 desktop screenshots.
-3. **Tablet `768x1024` Overlay Behavior & Non-Reactive Viewport Check (Medium)**: At `768px`, `listTable.css` line 750 and `IssueSurface.css` line 347 trigger the mobile full-screen overlay (`live-navigator-tablet.png` hides the master rail), and `viewRegistry.tsx` line 961 (`window.innerWidth <= 768`) does not listen for `resize` events.
-4. **Navigator Bar & Test ID Rough Edges (Low/Medium)**:
-   - `viewRegistry.tsx` lines 1020-1038 do not pass `onSearchSubmit` to `IssueNavigatorBar` (clicking the `Search` button is a no-op since filtering runs on `onChange`).
-   - `handleSelectSavedView` in `viewRegistry.tsx` lines 430-440 sets `groupBy`/`subGroupBy`, which do not affect `list` layout.
-   - `data-testid="favorite-issue-toggle"` is duplicated across every `ListView` card (`ListView.tsx` line 429) and the `IssueSurface` toolbar (`IssueSurface.tsx` line 1436).
-   - `IssueNavigatorBar.css`, `listTable.css`, and `IssueSurface.css` retain some hardcoded hex colors without `var(--...)` tokens (`#ffffff`, `#fbbf24`, `#2563eb`, `#1d4ed8`, `#eab308`, `#1e293b`, `#ca8a04`).
+- **Issues from QA Still Present**: None of the Round 2 functional, visual, or coverage issues remain. (`DETAILS` 12px flex gap fixed, single State `<select>` in desktop split view fixed, tablet `768x1024` side-by-side layout fixed, `onSearchSubmit` wired in `viewRegistry.tsx` lines 1040-1042, `resize` listener wired for `isMobileViewport` at lines 964-972, `rail-favorite-toggle-*` disambiguated in `ListView.tsx` line 433, and fresh post-edit Vitest + coverage captured at `HEAD 2b542d7f`.)
+- **New Issues Discovered**:
+  1. Minor packet prose inconsistencies in `docs/qa/KAN-52/message-to-reality-checker.md` and `api-specialist-review.md` (`viewPredicateParser.ts` vs actual `predicateParser.ts`, `15.26s` vs `15.24s`, `kanban/services/issues.py` `create_issue` note vs `git-diff.patch`, and `test_issues.py` Pytest claim omitted from `unit-test-results.txt`).
+  2. `IssueSurface.css` lines 619 and 909 still use `@media (max-width: 768px)` for 44px touch sizing on `.quick-props__select` and `.split-toolbar-btn`/`.split-state-select`, though visually this produces clean touch-friendly buttons inside the side-by-side `768x1024` tablet view (`live-navigator-tablet.png`) without layout breakage.
+- **Critical Issues**: None.
+- **Medium Issues**: None blocking deployment (only the minor packet documentation notes above; zero code/UI/API defects).
 
 ## 🎯 Realistic Quality Certification
-**Overall Quality Rating**: B-
-**Design Implementation Level**: Good
-**System Completeness**: ~85% (functional live stack on core flows, incomplete evidence hygiene and CSS/layout polish)
-**Production Readiness**: NEEDS WORK
+**Overall Quality Rating**: A (96/100)
+**Design Implementation Level**: Excellent
+**System Completeness**: 98% (all specified features, responsive breakpoints, API contracts, and test coverage targets verified on disk and on live container)
+**Production Readiness**: READY
 
 ## 🔄 Deployment Readiness Assessment
-**Status**: NEEDS WORK
+**Status**: READY
 
 **Required Fixes Before Production**:
-1. **Fix `DETAILS` spacing when sidebar is collapsed (`>879px`)**: Add `align-items: center; flex-wrap: wrap; gap: var(--space-3, 12px);` directly on `.surface--split [data-testid="split-section-details"] .surface__quick-props` in `kanban/web/src/features/drawer/IssueSurface.css` (evidenced by `Priority: HighAssignee: Server Administrator` in `live-navigator-collapsed-rail-desktop.png`).
-2. **Eliminate duplicate state dropdown on desktop split view**: Hide `.surface__header--split .header-state-select` across all split-view widths (or remove the duplicate `header-state-select` in `mode === 'split'` in `IssueSurface.tsx`) so desktop does not stack two `In Progress` selects (evidenced by `live-navigator-desktop-light.png`).
-3. **Regenerate fresh post-edit test & coverage evidence at `HEAD`**: Run full Vitest (with `--coverage` proving `>=95%` on touched files, capturing all 10 tests in `ListView.test.tsx`, 7 tests in `IssueSurfaceSplitMasterDetail.test.tsx`, and all `viewRegistry.test.tsx` tests) and Pytest in `/home/adamoutler/kanban`, replacing stale worktree output in `docs/qa/KAN-52/unit-test-results.txt`.
-4. **Reconcile packet manifest & specialist reviews**: Align `changed-files-manifest.txt`, `git-diff.patch`, `message-to-reality-checker.md` (regarding `kanban/services/issues.py`), `api-specialist-review.md`, and `ui-specialist-review.md` (correcting test count and citing actual coverage metrics) to match the exact commit under audit, and re-capture `live-navigator-collapsed-rail-desktop.png` and desktop screenshots after the CSS fixes.
+- None blocking closure or deployment. (Optional housekeeping: attach raw `pytest kanban/tests/api/test_issues.py` log and correct the `predicateParser.ts` filename typo in `message-to-reality-checker.md`.)
 
-**Timeline for Production Readiness**: 1 short remediation cycle (CSS fixes + fresh test/coverage run + updated Playwright screenshot capture and packet reconciliation).
-**Revision Cycle Required**: YES
+**Timeline for Production Readiness**: Ready now.
+**Revision Cycle Required**: NO
 
 ## 📈 Success Metrics for Next Iteration
 **What Needs Improvement**:
-- Visual polish in `IssueSurface.css` for collapsed-rail desktop (`>879px`) and single state dropdown in split mode.
-- Strict evidence hygiene: all logs in `docs/qa/KAN-52/` must originate from the exact `HEAD` commit in the main workspace, with real coverage percentages and accurate file manifests.
-- Optional UX hardening: clarify `768px` tablet split vs overlay breakpoint, wire `resize` listener for `isMobileViewport`, and disambiguate `favorite-issue-toggle` test IDs.
+- Ensure future verification packets include raw Pytest output alongside Vitest output whenever backend tests are cited in `message-to-reality-checker.md`.
+- Align `IssueSurface.css` lines 619 and 909 (`max-width: 768px` -> `767px`) only if smaller 28px toolbar buttons are desired on 768px tablets.
 
 **Quality Targets**:
-- Zero overlapping/unspaced text in `live-navigator-collapsed-rail-desktop.png`.
-- Single state selector in split header/toolbar across desktop, tablet, and mobile.
-- Fresh `unit-test-results.txt` from `HEAD` showing 100% pass across all updated test files and `>=95%` coverage.
+- Maintain >=95% branch coverage and zero `act(...)` warnings across all frontend view/drawer modules.
+- Maintain zero console/5xx/CSP errors and <1s initial page load across desktop, tablet, and mobile.
 
 **Evidence Requirements**:
-- Re-captured `live-navigator-collapsed-rail-desktop.png` and `live-navigator-desktop-light.png` showing `Priority: High   Assignee: Server Administrator` with proper gap and single state selector.
-- Fresh `unit-test-results.txt` + coverage table from the audited `HEAD` commit.
-- Updated `ui-specialist-review.md`, `api-specialist-review.md`, and `message-to-reality-checker.md` matching `git-diff.patch` and `changed-files-manifest.txt`.
+- Satisfied for KAN-52 by `docs/qa/KAN-52/unit-test-results.txt`, `docs/qa/KAN-52/build-or-typecheck.txt`, `docs/qa/KAN-52/live-fullstack-proof.txt`, `docs/qa/KAN-52/api-specialist-review.md`, `docs/qa/KAN-52/ui-specialist-review.md`, and the 8 Playwright PNGs in `docs/qa/KAN-52/screenshots/`.
 
 ---
 **Integration Agent**: RealityIntegration
-**Assessment Date**: 2026-11-20
+**Assessment Date**: 2026-11-21
 **Evidence Location**: docs/qa/KAN-52/
-**Re-assessment Required**: After fixes implemented
+**Re-assessment Required**: No (READY for ticket closure)

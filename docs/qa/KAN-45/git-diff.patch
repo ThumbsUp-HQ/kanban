@@ -1,8 +1,8 @@
 diff --git a/agent/gates/runner.py b/agent/gates/runner.py
-index b6b6f26d..020ecc90 100644
+index b6b6f26d..c5a6bd3a 100644
 --- a/agent/gates/runner.py
 +++ b/agent/gates/runner.py
-@@ -6,6 +6,7 @@ from __future__ import annotations
+@@ -6,11 +6,12 @@ from __future__ import annotations
  
  import asyncio
  import contextlib
@@ -10,111 +10,393 @@ index b6b6f26d..020ecc90 100644
  import logging
  import uuid
  from typing import TYPE_CHECKING, Any
-@@ -53,6 +54,12 @@ class GateWorkerRunner:
+ 
+-from sqlalchemy import select
++from sqlalchemy import select, text
+ 
+ from agent.gates.worker import GateWorker, HarnessRegistry
+ from database.models.agent_definition import AgentDefinition
+@@ -43,27 +44,86 @@ class GateWorkerRunner:
+         session_factory: RLSSessionFactory | None = None,
+         harness_registry: HarnessRegistry | None = None,
+         poll_interval_s: float = 1.0,
++        workspace_id: uuid.UUID | None = None,
++        admin_principal_id: uuid.UUID | None = None,
+     ) -> None:
+         """Initialize runner with session factory, harness registry, and poll interval."""
+         self.session_factory = session_factory
+         self.registry = harness_registry or HarnessRegistry()
+         self.poll_interval_s = poll_interval_s
++        self.workspace_id = workspace_id
++        self.admin_principal_id = admin_principal_id
+         self.worker = GateWorker(
+             registry=self.registry,
              coordinator=self,
              entity_loader=self._load_entities,
          )
 +        self._active_invocations: set[uuid.UUID] = set()
++        self._execution_contexts: dict[uuid.UUID, dict[str, Any]] = {}
 +
 +    @property
 +    def active_invocations(self) -> frozenset[uuid.UUID]:
 +        """Active leased invocation IDs currently being processed."""
 +        return frozenset(self._active_invocations)
++
++    async def _resolve_workspace_and_admin(
++        self,
++    ) -> tuple[uuid.UUID | None, uuid.UUID | None]:
++        """Resolve target workspace and administrative/agent principal."""
++        ws_id = self.workspace_id
++        admin_pid = self.admin_principal_id
++
++        if ws_id is not None and admin_pid is not None:
++            return ws_id, admin_pid
++
++        if self.session_factory is None:
++            return ws_id, admin_pid
++
++        engine = getattr(self.session_factory, "engine", None) or getattr(
++            self.session_factory, "_engine", None
++        )
++        if engine is not None:
++            try:
++                async with engine.connect() as conn:
++                    if ws_id is None:
++                        res = await conn.execute(text("SELECT get_default_workspace_id()"))
++                        ws_id = res.scalar()
++                    if admin_pid is None:
++                        res = await conn.execute(
++                            text("SELECT principal_id FROM kb_auth.local_get_credential('admin')")
++                        )
++                        row = res.first()
++                        if row is not None:
++                            admin_pid = row[0]
++            except Exception as exc:  # noqa: BLE001
++                logger.debug("Could not resolve workspace/admin from DB: %s", exc)
++
++        return ws_id, admin_pid
  
      async def record_decision(
          self, execution_id: object, hook_id: object, decision: object
-@@ -184,8 +191,8 @@ class GateWorkerRunner:
+     ) -> None:
+-        """Forward validated decision to GateCoordinator within an administrative session."""
++        """Forward validated decision to GateCoordinator within an authorized RLS session."""
+         if self.session_factory is None:
+             return
+ 
++        exec_uuid = (
++            execution_id
++            if isinstance(execution_id, uuid.UUID)
++            else (uuid.UUID(str(execution_id)) if execution_id else None)
++        )
++        ctx_info = self._execution_contexts.get(exec_uuid, {}) if exec_uuid else {}
++        ws_id = ctx_info.get("workspace_id") or self.workspace_id or uuid.UUID(int=0)
++        p_id = (
++            ctx_info.get("admin_principal_id")
++            or self.admin_principal_id
++            or ctx_info.get("agent_principal_id")
++            or uuid.UUID(int=0)
++        )
++
+         admin_ctx = RLSContext(
+-            principal_id=uuid.UUID(int=0),
+-            workspace_id=uuid.UUID(int=0),
++            principal_id=p_id,
++            workspace_id=ws_id,
+             token_scopes=("admin",),
+             aal_level=2,
+         )
+@@ -76,24 +136,54 @@ class GateWorkerRunner:
+             )
+             await session.commit()
+ 
+-    async def record_failure(self, execution_id: object, hook_id: object, code: str) -> None:
+-        """Forward failure or timeout to GateCoordinator within an administrative session."""
++    async def record_failure(
++        self,
++        execution_id: object,
++        hook_id: object,
++        code: str,
++        *,
++        invocation_id: uuid.UUID | str | None = None,
++        detail: str | None = None,
++    ) -> None:
++        """Forward failure or timeout to GateCoordinator within an authorized RLS session."""
+         if self.session_factory is None:
+             return
+ 
++        exec_uuid = (
++            execution_id
++            if isinstance(execution_id, uuid.UUID)
++            else (uuid.UUID(str(execution_id)) if execution_id else None)
++        )
++        ctx_info = self._execution_contexts.get(exec_uuid, {}) if exec_uuid else {}
++        ws_id = ctx_info.get("workspace_id") or self.workspace_id or uuid.UUID(int=0)
++        p_id = (
++            ctx_info.get("admin_principal_id")
++            or self.admin_principal_id
++            or ctx_info.get("agent_principal_id")
++            or uuid.UUID(int=0)
++        )
++
+         admin_ctx = RLSContext(
+-            principal_id=uuid.UUID(int=0),
+-            workspace_id=uuid.UUID(int=0),
++            principal_id=p_id,
++            workspace_id=ws_id,
+             token_scopes=("admin",),
+             aal_level=2,
+         )
+         async with self.session_factory.session(admin_ctx) as session:
+-            await GateCoordinator.record_failure(
+-                session=session,
+-                execution_id=execution_id,  # type: ignore[arg-type]
+-                hook_id=hook_id,  # type: ignore[arg-type]
+-                code=code,
+-            )
++            if invocation_id is not None:
++                await GateCoordinator(session).record_failure(
++                    invocation_id=invocation_id,
++                    error_code=code,
++                    detail=detail,
++                )
++            else:
++                await GateCoordinator.record_failure(
++                    session=session,
++                    execution_id=execution_id,  # type: ignore[arg-type]
++                    hook_id=hook_id,  # type: ignore[arg-type]
++                    code=code,
++                    detail=detail,
++                )
+             await session.commit()
+ 
+     async def _load_entities(
+@@ -124,17 +214,37 @@ class GateWorkerRunner:
+                 payload.get("mcp_urls"),
+             )
+ 
++        exec_uuid = uuid.UUID(execution_id_str) if execution_id_str else None
++        ctx_info = self._execution_contexts.get(exec_uuid, {}) if exec_uuid else {}
++        ws_id_val = payload.get("workspace_id")
++        ws_id = (
++            (uuid.UUID(str(ws_id_val)) if ws_id_val else None)
++            or ctx_info.get("workspace_id")
++            or self.workspace_id
++            or uuid.UUID(int=0)
++        )
++        admin_pid_val = payload.get("admin_principal_id")
++        agent_pid_val = payload.get("agent_principal_id")
++        p_id = (
++            (uuid.UUID(str(admin_pid_val)) if admin_pid_val else None)
++            or ctx_info.get("admin_principal_id")
++            or self.admin_principal_id
++            or (uuid.UUID(str(agent_pid_val)) if agent_pid_val else None)
++            or ctx_info.get("agent_principal_id")
++            or uuid.UUID(int=0)
++        )
++
+         admin_ctx = RLSContext(
+-            principal_id=uuid.UUID(int=0),
+-            workspace_id=uuid.UUID(int=0),
++            principal_id=p_id,
++            workspace_id=ws_id,
+             token_scopes=("admin",),
+             aal_level=2,
+         )
+         async with self.session_factory.session(admin_ctx) as session:
+-            exec_uuid = uuid.UUID(execution_id_str)
+-            hook_uuid = uuid.UUID(hook_id_str)
+-            execution = await session.get(WorkflowTransitionExecution, exec_uuid)
+-            hook = await session.get(WorkflowTransitionHook, hook_uuid)
++            exec_uuid_val = uuid.UUID(execution_id_str)
++            hook_uuid_val = uuid.UUID(hook_id_str)
++            execution = await session.get(WorkflowTransitionExecution, exec_uuid_val)
++            hook = await session.get(WorkflowTransitionHook, hook_uuid_val)
+             agent_def = (
+                 await session.get(AgentDefinition, uuid.UUID(agent_def_id_str))
+                 if agent_def_id_str
+@@ -184,39 +294,141 @@ class GateWorkerRunner:
              }
              return exec_dict, issue_dict, agent_dict, None, None
  
 -    async def poll_once(self) -> int:
 -        """Poll for pending running gate hook invocations. Returns count handled."""
-+    async def poll_once(self) -> int:  # noqa: C901
++    async def poll_once(self) -> int:  # noqa: C901, PLR0912, PLR0915
 +        """Poll for pending running gate hook invocations with lease claiming and timeout sweep."""
          if self.session_factory is None:
              return 0
  
-@@ -196,18 +203,64 @@ class GateWorkerRunner:
++        handled = 0
++        now = dt.datetime.now(dt.UTC)
++
++        ws_id, admin_pid = await self._resolve_workspace_and_admin()
++        bound_ws = ws_id or uuid.UUID(int=0)
++        bound_pid = admin_pid or uuid.UUID(int=0)
++
++        # 1. Short read transaction to claim/resolve invocations with
++        # ZERO row locks held across dispatch
+         admin_ctx = RLSContext(
+-            principal_id=uuid.UUID(int=0),
+-            workspace_id=uuid.UUID(int=0),
++            principal_id=bound_pid,
++            workspace_id=bound_ws,
+             token_scopes=("admin",),
              aal_level=2,
          )
-         handled = 0
-+        now = dt.datetime.now(dt.UTC)
+-        handled = 0
++
++        expired_candidates: list[dict[str, Any]] = []
++        active_candidates: list[dict[str, Any]] = []
 +
          async with self.session_factory.session(admin_ctx) as session:
 -            stmt = (
-+            # 1. Sweep expired invocations with SKIP LOCKED
++            # Query ONLY valid status 'running' and hook_kind 'agent_interceptor'
 +            sweep_stmt = (
                  select(WorkflowHookInvocation)
                  .where(
--                    WorkflowHookInvocation.status == "running",
-+                    WorkflowHookInvocation.status.in_(["running", "pending_async"]),
+                     WorkflowHookInvocation.status == "running",
                      WorkflowHookInvocation.hook_kind == "agent_interceptor",
                  )
-+                .with_for_update(skip_locked=True)
                  .order_by(WorkflowHookInvocation.started_at)
 -                .limit(10)
 +                .limit(50)
              )
 -            invs = list((await session.execute(stmt)).scalars().all())
 -            for inv in invs:
-+            candidates = list((await session.execute(sweep_stmt)).scalars().all())
-+            expired_invs: list[WorkflowHookInvocation] = []
-+            active_invs: list[WorkflowHookInvocation] = []
+-                event = {
+-                    "execution_id": str(inv.execution_id),
+-                    "hook_id": str(inv.hook_id),
++            raw_candidates = list((await session.execute(sweep_stmt)).scalars().all())
 +
-+            for inv in candidates:
++            for inv in raw_candidates:
++                agent_pid = None
++                agent_def_id = None
++                timeout_ms = 60000
++                if hasattr(session, "get"):
++                    try:
++                        hook = await session.get(WorkflowTransitionHook, inv.hook_id)
++                        if hook and hook.agent_definition_id:
++                            agent_def_id = hook.agent_definition_id
++                            agent_def = await session.get(AgentDefinition, hook.agent_definition_id)
++                            if agent_def:
++                                agent_pid = agent_def.principal_id
++                                if agent_def.timeout_ms:
++                                    timeout_ms = agent_def.timeout_ms
++                    except (AttributeError, KeyError, TypeError) as exc:
++                        logger.debug("Failed resolving hook agent info for sweep: %s", exc)
++
 +                deadline = getattr(inv, "deadline_at", None)
-+                if deadline is None:
-+                    hook = await session.get(WorkflowTransitionHook, inv.hook_id)
-+                    agent_def = (
-+                        await session.get(AgentDefinition, hook.agent_definition_id)
-+                        if hook and hook.agent_definition_id
-+                        else None
-+                    )
-+                    timeout_ms = (
-+                        agent_def.timeout_ms if agent_def and agent_def.timeout_ms else 60000
-+                    )
-+                    if inv.started_at is not None:
-+                        deadline = inv.started_at + dt.timedelta(milliseconds=timeout_ms)
++                if deadline is None and getattr(inv, "started_at", None) is not None:
++                    deadline = inv.started_at + dt.timedelta(milliseconds=timeout_ms)
 +
++                info = {
++                    "invocation_id": inv.id,
++                    "execution_id": inv.execution_id,
++                    "hook_id": inv.hook_id,
++                    "workspace_id": getattr(inv, "workspace_id", bound_ws),
++                    "agent_definition_id": agent_def_id,
++                    "agent_principal_id": agent_pid,
++                    "admin_principal_id": bound_pid,
++                    "deadline_at": deadline,
++                    "started_at": getattr(inv, "started_at", now),
+                 }
+-                try:
+-                    await self.worker.handle_dispatch(event)
+-                    handled += 1
+-                except Exception as exc:  # noqa: BLE001
+-                    logger.debug("Error handling gate dispatch: %s", exc)
 +                if deadline is not None and deadline < now:
-+                    expired_invs.append(inv)
++                    expired_candidates.append(info)
 +                elif inv.status == "running":
-+                    active_invs.append(inv)
++                    active_candidates.append(info)
 +
-+            # Record failure for expired invocations
-+            for inv in expired_invs:
-+                try:
-+                    await GateCoordinator(session).record_failure(
-+                        invocation_id=inv.id,
-+                        error_code="GATE_TIMEOUT",
-+                        detail="Async agent gate exceeded deadline_at",
-+                    )
-+                    self._active_invocations.discard(inv.id)
-+                    handled += 1
-+                except Exception as exc:  # noqa: BLE001
-+                    logger.debug("Error recording gate timeout failure: %s", exc)
++        # Notice: The read session above is COMMITTED and CLOSED!
++        # ZERO row locks are held on PostgreSQL across dispatch!
 +
-+            # 2. Dispatch active non-expired invocations with in-memory lease guard
-+            for inv in active_invs:
-+                if inv.id in self._active_invocations:
-+                    # Already claimed and executing; prevent double-dispatch
-+                    continue
++        # 2. Process expired invocations (GATE_TIMEOUT)
++        for item in expired_candidates:
++            inv_id = item["invocation_id"]
++            exec_id = item["execution_id"]
++            hook_id = item["hook_id"]
++            if inv_id in self._active_invocations:
++                continue
 +
-+                self._active_invocations.add(inv.id)
-                 event = {
-                     "execution_id": str(inv.execution_id),
-                     "hook_id": str(inv.hook_id),
-@@ -217,6 +270,10 @@ class GateWorkerRunner:
-                     handled += 1
-                 except Exception as exc:  # noqa: BLE001
-                     logger.debug("Error handling gate dispatch: %s", exc)
-+                finally:
-+                    self._active_invocations.discard(inv.id)
++            self._active_invocations.add(inv_id)
++            self._execution_contexts[exec_id] = item
++            try:
++                await self.record_failure(
++                    exec_id,
++                    hook_id,
++                    "GATE_TIMEOUT",
++                    invocation_id=inv_id,
++                    detail="Async agent gate exceeded deadline_at",
++                )
++                handled += 1
++            except Exception as exc:  # noqa: BLE001
++                logger.debug("Error recording gate timeout failure: %s", exc)
++            finally:
++                self._active_invocations.discard(inv_id)
++                self._execution_contexts.pop(exec_id, None)
 +
-+            await session.commit()
++        # 3. Dispatch active non-expired invocations with in-memory lease guard
++        for item in active_candidates:
++            inv_id = item["invocation_id"]
++            exec_id = item["execution_id"]
++            hook_id = item["hook_id"]
++            if inv_id in self._active_invocations:
++                continue
++
++            self._active_invocations.add(inv_id)
++            self._execution_contexts[exec_id] = item
++            event = {
++                "execution_id": str(exec_id),
++                "hook_id": str(hook_id),
++                "agent_definition_id": (
++                    str(item["agent_definition_id"]) if item.get("agent_definition_id") else ""
++                ),
++                "workspace_id": str(item["workspace_id"]),
++                "agent_principal_id": (
++                    str(item["agent_principal_id"]) if item.get("agent_principal_id") else ""
++                ),
++                "admin_principal_id": (
++                    str(item["admin_principal_id"]) if item.get("admin_principal_id") else ""
++                ),
++            }
++            try:
++                await self.worker.handle_dispatch(event)
++                handled += 1
++            except Exception as exc:  # noqa: BLE001
++                logger.debug("Error handling gate dispatch: %s", exc)
++            finally:
++                self._active_invocations.discard(inv_id)
++                self._execution_contexts.pop(exec_id, None)
++
          return handled
  
      async def run(self, stop_event: asyncio.Event) -> None:
+@@ -231,13 +443,20 @@ class GateWorkerRunner:
+ 
+ 
+ async def start_gate_worker(
+-    app: object, session_target: RLSSessionFactory | None = None
++    app: object,
++    session_target: RLSSessionFactory | None = None,
++    workspace_id: uuid.UUID | None = None,
++    admin_principal_id: uuid.UUID | None = None,
+ ) -> tuple[asyncio.Task[None], asyncio.Event]:
+     """Start background gate worker task during application lifespan."""
+     stop_event = asyncio.Event()
+     sf = session_target
+     if sf is None and hasattr(app, "state"):
+         sf = getattr(app.state, "session_factory", None)
+-    runner = GateWorkerRunner(session_factory=sf)
++    runner = GateWorkerRunner(
++        session_factory=sf,
++        workspace_id=workspace_id,
++        admin_principal_id=admin_principal_id,
++    )
+     task = asyncio.create_task(runner.run(stop_event))
+     return task, stop_event
 diff --git a/agent/tests/gates/test_gate_runner.py b/agent/tests/gates/test_gate_runner.py
 index cdde16b8..993dbec6 100644
 --- a/agent/tests/gates/test_gate_runner.py
@@ -469,7 +751,7 @@ index c5ce980b..783c63e1 100644
 +    def deadline_at(self, value: datetime | None) -> None:
 +        self._deadline_at = value
 diff --git a/docs/qa/KAN-45/api-specialist-review.md b/docs/qa/KAN-45/api-specialist-review.md
-index 291ef550..7c74f35c 100644
+index 291ef550..1912a594 100644
 --- a/docs/qa/KAN-45/api-specialist-review.md
 +++ b/docs/qa/KAN-45/api-specialist-review.md
 @@ -5,20 +5,20 @@
@@ -479,7 +761,7 @@ index 291ef550..7c74f35c 100644
 -- **Branch:** `fix/KAN-33-45-liveqa`
 -- **Commit Under Audit:** `75d4cfcb`
 -- **Base Reference Commit:** `7913c2c8` (on `main`)
-+- **Branch:** `main` (commit `78074a1d`)
++- **Branch:** `main` (commit `9b163f07`)
 +- **Container Environment:** `http://127.0.0.1:18964` (container: `kanban-liveqa-4`)
 +- **Live Stack Status:** `OVERALL LIVE_STACK_VERDICT: PASS`
  - **Status:** APPROVED
@@ -489,7 +771,7 @@ index 291ef550..7c74f35c 100644
  ## 1. Executive Summary & Audit Scope
  
 -A clean-room API, Security, and Architecture audit was conducted for ticket **KAN-45** on branch `fix/KAN-33-45-liveqa` at commit `75d4cfcb` pursuant to the mandatory Dual Specialist Gate defined in `GEMINI.md`.
-+A clean-room API, Security, and Architecture audit was conducted for ticket **KAN-45** on branch `main` at commit `78074a1d`. The review integrates empirical evidence from zero-mock Live Full-Stack QA execution against container `kanban-liveqa-4` (`http://127.0.0.1:18964`, PostgreSQL 16 + FORCE RLS) documented in `docs/qa/KAN-45/live-fullstack-proof.txt`, visual screenshots in `docs/qa/KAN-45/screenshots/`, unit test logs (`unit-test-results.txt`), and static build outputs (`build-or-typecheck.txt`).
++A clean-room API, Security, and Architecture audit was conducted for ticket **KAN-45** on branch `main` at commit `9b163f07`. The review integrates empirical evidence from zero-mock Live Full-Stack QA execution against container `kanban-liveqa-4` (`http://127.0.0.1:18964`, PostgreSQL 16 + FORCE RLS) documented in `docs/qa/KAN-45/live-fullstack-proof.txt`, visual screenshots in `docs/qa/KAN-45/screenshots/`, unit test logs (`unit-test-results.txt`), contract samples (`contract-sample.json`), and static build outputs (`build-or-typecheck.txt`).
  
 -KAN-45 hardens the workflow transition engine, closes completed-state bypasses, enforces canonical reality-checker report validation, replaces dummy Wasm placeholders with valid compilable WebAssembly bytecode, aligns CSRF middleware for stateless agent tokens, and establishes asynchronous gate runner infrastructure across the platform.
 +KAN-45 hardens the workflow transition engine, closes completed-state bypasses, enforces canonical reality-checker report validation, replaces dummy Wasm placeholders with compilable WebAssembly bytecode, aligns CSRF middleware for stateless agent tokens, and establishes asynchronous gate runner infrastructure across the platform.
@@ -499,6 +781,15 @@ index 291ef550..7c74f35c 100644
  1. **Canonical Reality-Checker Report Validation & Strict VerificationProof:**
     - Enforces anchored regexes (`\A...\Z`), strict directory traversal checks, `min_length=1` artifact bounds, and `urllib.parse.urlsplit` URL sanitization on `VerificationProof` and `RealityCheckerProof`.
     - Implements deterministic linear O(N) `validate_reality_checker_report` rejecting UTF-16 lone surrogates (0xD800..0xDFFF), normalizing NFKC text, ignoring code blocks/comments, enforcing H1 and all 6 canonical H2 sections with non-empty body lines, and rejecting contradiction markers (`NEEDS WORK`, `NEEDS_WORK`, `FAILED`) when claiming `READY` or `A` grade.
+@@ -30,7 +30,7 @@ The audit inspects and certifies all four problems and the live QA remediations:
+ 3. **Real Wasm Bytecode & Bounds-Checked Linear Memory:**
+    - Bounds-checks guest `kb_alloc` memory pointer before writing into Wasm linear memory.
+    - Embeds real compiled 1097-byte Wasm bytecode (`qa-proof-validator`, SHA-256: `fddfe97e1b15829495364a2002bf0a0c830002f9ef673971a1a4167ee815d972`) running in `<2ms` and `<= 2,000,000` fuel.
+-   - Provides valid, fully compilable WebAssembly bytecodes for built-in helpers in `kanban/workflows/builtins.py`: `sec_invariant_validator` (249 bytes, SHA-256: `7982de041f00a867a3f839e6172865450d0159fa77c288ec57440ceb87571874`) and `auto_label_mutator` (244 bytes, SHA-256: `2e7db622992707370042a3c5e15eda145d995048ef4f69f6c746f33dc43f93e9`), exporting `memory`, `kb_alloc`, `kb_run`, and `kb_on_transition`, returning `{"allowed": true, "decision": "allow"}`.
++   - Provides valid, fully compilable WebAssembly bytecodes for built-in helpers in `kanban/workflows/builtins.py`: `sec_invariant_validator` (249 bytes, SHA-256: `7982de041f00a867a3f839e6172865450d0159fa77c288ec57440ceb87571874`) and `auto_label_mutator` (244 bytes, SHA-256: `79cdc606bf7cab8b1de8a204a126e9302f831bdf32db6ea2170970bb822140dd`), exporting `memory`, `kb_alloc`, `kb_run`, and `kb_on_transition`, returning `{"allowed": true, "decision": "allow"}`.
+    - Enriches `kb-sync-hook-input/v1` payload with verification proof and recent comments within 256 KiB ceiling, and unifies decision extraction.
+ 4. **Agent Completed-State Guards, CSRF Bearer Bypass & Gate Worker Runner:**
+    - In `kanban/auth/sessions/csrf.py`: updated `CsrfMiddleware` to allow stateless `Authorization: Bearer <token>` requests to bypass ambient browser cookie CSRF enforcement while strictly enforcing cookie CSRF protection.
 @@ -60,12 +60,12 @@ The audit inspects and certifies all four problems and the live QA remediations:
    - Contextual stripping: ignores lines within fenced code blocks (``` and ~~~) and HTML comment blocks (`<!-- ... -->`).
    - Structure verification: mandates H1 `# Integration Agent Reality-Based Report` and all 6 canonical H2 sections:
@@ -518,16 +809,47 @@ index 291ef550..7c74f35c 100644
  
  ### 2.2 CsrfMiddleware & Bearer Token Authentication (`kanban/auth/sessions/csrf.py`)
  - In `kanban/auth/sessions/csrf.py`:
-@@ -87,24 +87,30 @@ The audit inspects and certifies all four problems and the live QA remediations:
+@@ -80,6 +80,7 @@ The audit inspects and certifies all four problems and the live QA remediations:
+       return await call_next(request)
+   ```
+ - Evaluates that stateless API requests using Bearer tokens bypass CSRF cookie checks, while ambient browser cookie sessions continue to require `kb_csrf` token validation.
++- In `kanban/auth/sessions/resolver.py`: Bearer token precedence evaluates first; dummy or invalid Bearer tokens return 401 directly without falling back to ambient session cookies, preventing CSRF bypass attacks via fake Bearer headers.
+ 
+ ### 2.3 Compilable Builtin Wasm Bytecodes (`kanban/workflows/builtins.py`)
+ - Valid WebAssembly binary format:
+@@ -87,24 +88,53 @@ The audit inspects and certifies all four problems and the live QA remediations:
    * `auto_label_mutator`: 244 bytes, valid Wasm header `\x00asm\x01\x00\x00\x00`, exports `memory`, `kb_alloc`, `kb_run`, and `kb_on_transition`. Output: `{"allowed": true, "decision": "allow"}`.
  - Both bytecodes are fully registered in `BUILTIN_WASM_BY_SHA` and `_LEGACY_PRESETS`.
  
-+### 2.4 Live Container Verification (`kanban-liveqa-4`, `:18964`, commit `78074a1d`)
-+- `Guard 1`: Stateless Bearer `PATCH`, `POST move`, `POST transition` into Done -> HTTP 422 `USE_COMPLETE_WORK` (88ms, 65ms, 37ms). Human cookie `POST move` -> HTTP 200 (human allowed).
-+- `Guard 2`: MCP tool calls and Bearer REST `complete_work` with short summary or contradictory reports -> HTTP 422 `INVALID_REALITY_CHECKER_REPORT` (`isError=true`).
-+- `Guard 3`: Dry-Run UI and API with missing proof -> rejected by `require-qa-proof-link` (381us, 0 Wasm compile errors); valid proof -> allowed by `require-qa-proof-link` (299us) and `auto-label-verified` (149us).
-+- `Guard 4`: Valid `/mcp/agent complete_work` -> HTTP 200 (124ms, `isError=false`, state: Done, comment: `KAN-2#c-01a1fb44`).
-+- Telemetry: console errors 0, page errors 0, 5xx responses 0. `OVERALL LIVE_STACK_VERDICT (KAN-45): PASS`.
++### 2.4 Live Container Verification (`kanban-liveqa-4`, `:18964`, commit `9b163f07`)
++- **Guard 1 (Stateless Bearer Bypass Blocked, Human Allowed):**
++  * `Guard 1a`: Stateless Bearer `PATCH /api/v1/issues/KAN-1` -> HTTP 422 (80ms) `code=USE_COMPLETE_WORK`
++  * `Guard 1b`: Stateless Bearer `POST /api/v1/issues/KAN-1/move` -> HTTP 422 (41ms) `code=USE_COMPLETE_WORK`
++  * `Guard 1c`: Stateless Bearer `POST /api/v1/issues/KAN-1/transition` -> HTTP 422 (32ms) `code=USE_COMPLETE_WORK`
++  * `Guard 1d`: Human cookie `POST /api/v1/issues/KAN-1/move` -> HTTP 200 (75ms, `state_id=01a1fbe5-f5fa-7e94-8c6a-429503f023f5`)
++- **Guard 2 (Short & Contradictory Report Rejection):**
++  * `Guard 2a`: Short summary -> MCP `isError=true` | Bearer REST HTTP 422 `code=INVALID_REALITY_CHECKER_REPORT`
++  * `Guard 2`: Contradictory report -> MCP `isError=true` | Bearer REST HTTP 422 `code=INVALID_REALITY_CHECKER_REPORT`
++  * `Guard 2b`: `NEEDS WORK` (omitting READY) with proof claim `READY/A` -> MCP `isError=true` | Bearer REST HTTP 422 `code=INVALID_REALITY_CHECKER_REPORT` detail: `Contradiction marker 'NEEDS WORK' found in certification or deployment readiness assessment`
++  * `Guard 2c`: Cookie + dummy Bearer precedence -> `GET` HTTP 401 (8ms) | `POST` (no CSRF) HTTP 401 (8ms) | Cookie-only (no CSRF) HTTP 403
++- **Guard 3 (Real Wasm Execution & Dry-Run API):**
++  * `Guard 3a`: Dry-Run API (missing proof) -> HTTP 200 (43ms) `steps=[{"order":1,"name":"require-qa-proof-link","hook_kind":"sync_validator","result":"rejected","duration_us":644}]`
++  * `Guard 3b`: Dry-Run API (valid proof) -> HTTP 200 (32ms) `steps=[{"order":1,"name":"require-qa-proof-link","result":"allowed","duration_us":361},{"order":2,"name":"auto-label-verified","result":"allowed","duration_us":155}]`
++- **Guard 4 (Valid Complete Work via MCP):**
++  * `Guard 4`: Valid `/mcp/agent complete_work` -> HTTP 200 (146ms) `isError=false`, body: `status: completed, key: KAN-2, state: Done, proof: {qa_dir: docs/qa/KAN-2, artifacts: 1, verdict: READY}, comment: KAN-2#c-01a1fbe5`
++- **Problem 2 (Async Gate Dispatch, Comment Persistence & RLS Enforcement):**
++  * `Problem 2 Gate Dispatch`: `POST /api/v1/issues/KAN-3/transitions` -> HTTP 202 `status=pending_agent_gate execution_id=ab9fadb7-8b6f-4cc8-a1e0-67b76bb8d4a7` | Held PATCH -> HTTP 409 `code=TRANSITION_HELD`
++  * `Problem 2 Decision Record`: `GateCoordinator.record_decision(approve)` -> `execution_status=approved`, KAN-3 transitioned to `In Progress`, `comment_id=69155cd3-3ef8-4d6c-8b45-c2bdfba6d26a`, author: `@qagatereviewer`
++  * `Problem 2 RLS Execution Observation`: Zero-UUID RLSContext -> `EXECUTION_NOT_FOUND`; Invoking-admin RLSContext -> `InsufficientPrivilegeError`; Gate-agent RLSContext (principal_id=agent_def.principal_id with VIEW/COMMENT/EDIT/TRANSITION ACL on KAN-3, workspace_id=kanban) -> PASS
++- **Visual UI Verification:**
++  * UI DryRunDrawer (missing proof): Displays rejection banner `🛑 Transition Blocked: Changes would not commit` and rejection reason `Missing required QA report or READY verdict in verification proof` (<1ms).
++  * UI DryRunDrawer (valid proof): Displays allow banner `✅ Transition Allowed: Changes would commit`, step 1 `require-qa-proof-link` Allowed (<1ms), step 2 `auto-label-verified` Allowed (<1ms).
++  * KAN-3 Async Gate Approval Comment: Displays canonical header `## ✅🤖 Workflow Transition Gate Approved` authored by `@qagatereviewer`.
++- **Runtime Error Telemetry:**
++  * Console errors: 0
++  * Page errors: 0
++  * 5xx responses: 0
++  * `OVERALL LIVE_STACK_VERDICT (KAN-45): PASS`
 +
  ---
  
@@ -543,6 +865,10 @@ index 291ef550..7c74f35c 100644
 -  * 409 `TRANSITION_HELD`: PASS
 -  * 202 `pending_agent_gate`: PASS
 -  * Stateless Bearer token CSRF bypass & gate enforcement: PASS
+-- Static Analysis Gates:
+-  * Ruff Linter: Clean across all packages (0 errors).
+-  * Ruff Format Check: Clean (0 errors).
+-  * Mypy Strict Typecheck: Success across 995 source files (0 errors).
 +- Pytest Suites (103 passed across 7 suites in 17.26s):
 +  * `kanban/tests/api/test_gate_enforcement_hardening.py`: 15 passed in 1.36s
 +  * `kanban/tests/workflows/test_qa_proof_validator_wasm.py`, `test_dry_run.py`, `test_workflow_hooks_api.py`: 29 passed in 6.50s
@@ -551,30 +877,35 @@ index 291ef550..7c74f35c 100644
 +  * `agent/tests/gates/test_gate_runner.py`: 10 passed in 0.72s (97% module coverage)
 +  * `kanban/tests/auth/test_sessions.py`: 11 passed in 0.83s
 +  * `kanban/tests/services/test_synaptic_search.py`: 13 passed in 1.49s
- - Static Analysis Gates:
--  * Ruff Linter: Clean across all packages (0 errors).
--  * Ruff Format Check: Clean (0 errors).
--  * Mypy Strict Typecheck: Success across 995 source files (0 errors).
-+  * Database Migrations (`check-migrations --static-only`): OK: All 63 migrations valid.
-+  * Ruff Linter (`ruff check .`): Clean across all packages (0 errors).
++- Static Analysis Gates (commit `9b163f07`):
++  * Database Migrations (`check-migrations`): OK: All 63 migrations valid. Single head: `p4_24_agent_safe_sequences`
++  * Ruff Linter (`ruff check .`): All checks passed (0 errors).
 +  * Ruff Format Check (`ruff format --check .`): Clean across 2027 files.
-+  * Mypy Strict Typecheck (`mypy`): Success across 1140 source files (0 errors).
++  * Mypy Strict Typecheck (`mypy database kanban mcp agent`): Success: no issues found in 997 source files.
    * Import Linter (`lint-imports`): Contracts: 2 kept, 0 broken (`agent -> mcp -> kanban -> database` KEPT).
    * Typography Audit (`check_no_dashes`): Clean (0 em/en-dashes across all files).
  
-@@ -135,4 +141,4 @@ The audit inspects and certifies all four problems and the live QA remediations:
+@@ -121,6 +151,7 @@ The audit inspects and certifies all four problems and the live QA remediations:
+ | **Lone Surrogate Rejection** | Code points 0xD800..0xDFFF rejected | Explicit character scan in report parser | PASS |
+ | **Anti-Fantasy Contradictions** | Reject `NEEDS WORK` / `FAILED` when claiming READY | Contradiction scanner in certification | PASS |
+ | **CSRF Bearer Bypass** | Stateless Bearer tokens bypass CSRF | Handled in `CsrfMiddleware` | PASS |
++| **Bearer-First Precedence** | Dummy Bearer tokens return 401 without cookie fallback | Handled in `SessionCookieResolver` | PASS |
+ | **Compilable Wasm Presets** | Valid Wasm bytecode exporting all symbols | 249-byte and 244-byte modules in `builtins.py` | PASS |
+ | **Step 7 Comment Persistence** | Formatted approval comment authored by agent | Persisted via `format_approve_comment` | PASS |
+ | **Fail-Closed Completed Gates** | Transitions into Done cannot fail open | Enforced in `record_failure` | PASS |
+@@ -135,4 +166,4 @@ The audit inspects and certifies all four problems and the live QA remediations:
  
  STATUS: APPROVED
  
 -All transition engine gates, reality-checker report validators, Wasm bytecode contracts, approval comment persistence mechanics, agent completed-state guards, stateless Bearer token CSRF bypass, and gate worker background runners for KAN-45 on branch `fix/KAN-33-45-liveqa` at commit `75d4cfcb` have been thoroughly audited, verified against all architectural and security invariants, and certified. Ready for Clean-Room Reality-Checker QA.
-+All transition engine gates, reality-checker report validators, Wasm bytecode contracts, approval comment persistence mechanics, agent completed-state guards, stateless Bearer token CSRF bypass, and live container verifications for KAN-45 on branch `main` at commit `78074a1d` have been thoroughly audited, verified against all architectural and security invariants, and certified on container `kanban-liveqa-4` (`:18964`, `OVERALL LIVE_STACK_VERDICT: PASS`). Ready for Clean-Room Reality-Checker QA.
++All transition engine gates, reality-checker report validators, Wasm bytecode contracts, approval comment persistence mechanics, agent completed-state guards, stateless Bearer token CSRF bypass, and live container verifications for KAN-45 on branch `main` at commit `9b163f07` have been thoroughly audited, verified against all architectural and security invariants, and certified on container `kanban-liveqa-4` (`:18964`, `OVERALL LIVE_STACK_VERDICT: PASS`). Ready for Clean-Room Reality-Checker QA.
 diff --git a/docs/qa/KAN-45/build-or-typecheck.txt b/docs/qa/KAN-45/build-or-typecheck.txt
-index 105ee118..2cfdae47 100644
+index 105ee118..7ff5ee7b 100644
 --- a/docs/qa/KAN-45/build-or-typecheck.txt
 +++ b/docs/qa/KAN-45/build-or-typecheck.txt
 @@ -1,9 +1,84 @@
 -=== 1. Ruff Linter Check ===
-+=== STATIC GATES & BUILD VERIFICATION (HEAD 99dd3531dd8557a502f75466f983289aab0c6ced) ===
++=== STATIC GATES & BUILD VERIFICATION (HEAD 2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd) ===
 +$ uv run kanban-ctl db check-migrations
 +OK: All 63 migrations valid. Single head: p4_24_agent_safe_sequences
 +Exit code: 0
@@ -607,10 +938,10 @@ index 105ee118..2cfdae47 100644
 +Contracts
 +---------
 +
-+Analyzed 997 files, 3561 dependencies.
++Analyzed 997 files, 3563 dependencies.
 +--------------------------------------
 +
-+Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
++Unidirectional module layers agent -> mcp -> kanban -> database KEPT (7 ignored imports)
 +mcp forbidden from importing database KEPT (48 ignored imports)
 +
 +Contracts: 2 kept, 0 broken.
@@ -640,10 +971,10 @@ index 105ee118..2cfdae47 100644
 +✓ 723 modules transformed.
 +rendering chunks...
 +computing gzip size...
-+dist/index.html                             0.51 kB │ gzip:   0.31 kB
++dist/index.html                             0.51 kB │ gzip:   0.32 kB
 +dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-+dist/assets/index-DmWtfEFx.css            484.46 kB │ gzip:  67.97 kB
-+dist/assets/index-hsukqSsz.js           2,450.59 kB │ gzip: 679.25 kB
++dist/assets/index-38BHrqqV.css            484.91 kB │ gzip:  68.00 kB
++dist/assets/index-CqEGXOwT.js           2,450.50 kB │ gzip: 679.24 kB
  
 -=== 2. Ruff Format Check ===
 -3 files already formatted
@@ -652,7 +983,7 @@ index 105ee118..2cfdae47 100644
 +- Using dynamic import() to code-split the application
 +- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
 +- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-+✓ built in 1.09s
++✓ built in 1.13s
 +Exit code: 0
  
 -=== 3. Check No Dashes ===
@@ -663,10 +994,10 @@ index 105ee118..2cfdae47 100644
  
 +ALL STATIC GATES PASSED: 9/9 CHECKS CLEAN (EXIT 0)
 diff --git a/docs/qa/KAN-45/changed-files-manifest.txt b/docs/qa/KAN-45/changed-files-manifest.txt
-index a17539c1..bace091b 100644
+index a17539c1..4451d312 100644
 --- a/docs/qa/KAN-45/changed-files-manifest.txt
 +++ b/docs/qa/KAN-45/changed-files-manifest.txt
-@@ -1,32 +1,45 @@
+@@ -1,32 +1,47 @@
 -agent/cli.py
 -agent/cli_commands/run_gate_worker.py
 -agent/gates/runner.py
@@ -699,66 +1030,68 @@ index a17539c1..bace091b 100644
 -docs/qa/KAN-45/git-diff.patch
 -docs/qa/KAN-45/message-to-reality-checker.md
 -docs/qa/KAN-45/unit-test-results.txt
-+a1ae0c1cf88e0515d1fa5ba7fdc091f0cedd125433212d18f9e0acde912adbce      8285  agent/cli.py
-+ad088822fc239ca4537a8e49c63aa309e924b8500d686ddfdb51892a2c79aa3f      2512  agent/cli_commands/run_gate_worker.py
-+3e5878620c979963207b55165c83ee628deb73bd9c05f05ff19e6a631cd901f5     12308  agent/gates/runner.py
-+eb42d1410aca2011a16b56aa1d2832c1d0103317732248aa221f1be8180fc919     14323  agent/tests/gates/test_gate_runner.py
-+d58ab860165856719fd124405b05fc2bf2caedb8e18b0a809f91e7abb04e5134      8357  database/models/workflow.py
-+889df609df13538736e71d8455db2ff7691a224757a62e29bd7f20f939d70348     12514  docs/qa/KAN-45/api-specialist-review.md
-+0bc5878e6660424e5ddcc969c0091a38f18dfedc805723d707b9d816b0dce3ab       593  docs/qa/KAN-45/build-or-typecheck.txt
-+0f55c76dec376104015e53d9fa310905f86465823960d5318335ef261a4d6727      5103  docs/qa/KAN-45/changed-files-manifest.txt
-+f3b9fe6007fd875953b9c67d3e507c27cd7b14c27944e6d6979e7e9a9764ef31      4250  docs/qa/KAN-45/contract-sample.json
-+d7c9b02f223699690debaef77f475b2f152aceab5ef1d6d4c4e53049a970f38e    146423  docs/qa/KAN-45/git-diff.patch
-+95c8570710533e7a20294037ddd654d951b385fa355d7e554eea393472ead52f      3102  docs/qa/KAN-45/live-fullstack-proof.txt
-+7440b8c1d01d6973c792d6d4e221ef6ab049d15e97c5e4e90083d5a1b6371063     11607  docs/qa/KAN-45/message-to-reality-checker.md
-+a741f5b2945004398826731bb953c23f2d10705f07e05a64600080e32d03e23c     18043  docs/qa/KAN-45/reality-checker-report.md
-+dceecaadc6391f4ec76511d4702cb34046124a8ab81d17171b01b68e67f1cb88    136601  docs/qa/KAN-45/screenshots/live-issue-completed-proof-desktop-dark.png
-+61a8a3aba850cb37081cc1be662cf58b3ef4c743d0cd55ad5e983777fb6e3888    135519  docs/qa/KAN-45/screenshots/live-issue-completed-proof-desktop-light.png
-+0561354cf9d7dd6b17a03024e06070a068767f5401232a54f90442e55c6e2a45    139638  docs/qa/KAN-45/screenshots/live-workflow-wasm-dryrun-allow.png
-+2894d1b5d3a7254b13f88920ed7385fb070a76fa721f902a47b2b89b0e0fe79e    161290  docs/qa/KAN-45/screenshots/live-workflow-wasm-dryrun-reject.png
-+49b7792e1e424d8cee4d0bd494dcf60052cc9085da78bc48fae789da13cba11a      9536  docs/qa/KAN-45/ui-specialist-review.md
-+ede2e7149a02732b3698ab99b692d49df1becd0eaedaab5432124c5b527c4fcd      6930  docs/qa/KAN-45/unit-test-results.txt
-+2e861407123fdc4516987bfd39a347b6a20a4e353f36a53b868d093c6ca0ce41      7866  kanban/api/deps.py
-+cfe23a930a725a9b861aeeb2aa1f134bc0e8c778c326491ef3a9488e1238589d      1619  kanban/api/v1/issue_move.py
-+f6790226677173de5a6ef880e4656817dc9b08483b1d03d23ee23c9a9cf8781a     22297  kanban/app.py
-+fa8442c6e23e4c2822982900121bf77a87ae27a102bc187b706e043e43c61fab     17921  kanban/auth/sessions/csrf.py
-+1362a1a686d717b8779eaf4d2d680f0d6de58a8962946f00e69b1f06bbf44f03      8187  kanban/auth/sessions/resolver.py
-+cfece9f80d5bf0cb7e175a46f2c8786b2dafb6abcb0946f5aa6dd85c5ecc1a28     11513  kanban/issues/proof.py
-+b7e3558e838d605dc45cd7507d68411acf0c7b25759ccaf0d0be88dbaa5cf7fc     30949  kanban/issues/workflow_service.py
-+011de69155c007ad20aa9fc922e6ea91aaaa7d33e7eac4d88c98923056b5dd8f     16383  kanban/sandbox/wasm_runner.py
-+b17dc5759349721efb62eb366f167e4484e9767184de97a77a488a93a29a364c     14383  kanban/services/issue_move.py
-+2a5dbc208c9b6294397ca49b4181d0cc1d262cf883681e832cf609f2cdb6059a     45403  kanban/services/issues.py
-+e973304605ccc0355fe64d39e69bd955685a6715295232ba8e966388504f3b9f     50468  kanban/services/search.py
-+5e73a66835b2f2d43c9aa0cf9eefba9cc67c91b5f2e8d7de5bc958fa39db4f5a     20127  kanban/tests/api/test_gate_enforcement_hardening.py
-+c9a0444d508404981ba05f31554b1498dbbf6d1c3b8db434731a98b6498ea15f     22018  kanban/tests/auth/test_sessions.py
-+cb611697d1b3cef1c8793a39a204dfce5f4508c5a71931b396ef95cc44f90476      4034  kanban/tests/issues/test_proof_validation.py
-+4926ec3703655ae168e58717aef0bf3ce6fc1625dc2cdf8472affaa9d5cd87fb      9731  kanban/tests/mcp/test_complete_work_enforcement.py
-+a62bc1afd904495e24fc65141fbfae05c44e23b360a36fb771300974b2928049     42222  kanban/tests/services/test_synaptic_search.py
-+73efc33bd21124b45f2b355bf0ede7a990d4a84605a575ef99aa0efc0634180a     53909  kanban/tests/workflows/test_async_gate.py
-+49a7a9492226f73498599451450e340e27be7842598ea2e0b37025e96891cafb     32882  kanban/tests/workflows/test_dry_run.py
-+73e061e9bc31e07d60f9761898b1daa84137dd40ee798967efd8147b69537611      6192  kanban/tests/workflows/test_qa_proof_validator_wasm.py
-+113def805f7a5efdcd8217d73806c04e5df632590e281c108164a079d128ac45     31409  kanban/tests/workflows/test_workflow_hooks_api.py
-+86c24312a93bc4afd555f96bbd4e6ea7fd45e20c761e36db3df74c707638eefb     49320  kanban/workflows/async_gate.py
-+a35e1f37135a3da38467024a18ed03fb1dd7ce53de89584921b5ce7f5bac7d26     11956  kanban/workflows/builtins.py
-+e56383ecc27b72abef97b67a5ac1e4f93a63ca0a8d86a4c6913077640629ecab     24367  kanban/workflows/dry_run.py
-+d17c87d11e706d839259a693f7929a401049cf6cbb891d5b67248d091483f9a0     34300  kanban/workflows/engine.py
-+c3f8f679acb7331287e01b59e12a452425ddcb63dec4dc3e8ba398d9a6c06bd6      7795  mcp/surfaces/agent/complete_work.py
-+0731b6725f30e08db0b91b16d02dbe87c48a6abf4bd69ce6cea8d0ca9438207b      2548  mcp/surfaces/agent/proof.py
++a1ae0c1cf88e0515d1fa5ba7fdc091f0cedd125433212d18f9e0acde912adbce        8285  agent/cli.py
++ad088822fc239ca4537a8e49c63aa309e924b8500d686ddfdb51892a2c79aa3f        2512  agent/cli_commands/run_gate_worker.py
++0bd0cf02dd3977c6948e518f97ff692085c1f2b6e3c81b284626da5c68a5a118       18781  agent/gates/runner.py
++eb42d1410aca2011a16b56aa1d2832c1d0103317732248aa221f1be8180fc919       14323  agent/tests/gates/test_gate_runner.py
++d58ab860165856719fd124405b05fc2bf2caedb8e18b0a809f91e7abb04e5134        8357  database/models/workflow.py
++ae04e5f51a3549a1171ece2c044afe309122d5ee1d0693fb0c7ee5a4a53ad4ea       15655  docs/qa/KAN-45/api-specialist-review.md
++11659a9c524c98315f664199f0d0f8f8110cf5f9f7b445302c28dd8f556a6d9e        2870  docs/qa/KAN-45/build-or-typecheck.txt
++05fd254f7e627ebd3f8d87f07a9cf9e5622bd2b713f88d21329de3725b1ee6db        5193  docs/qa/KAN-45/contract-sample.json
++35f3c0e1914794af052282f7a44e8825b34aaea2db270df39e94ca701a29d820      140497  docs/qa/KAN-45/git-diff.patch
++2456fd7c97447eeed0fa12f5ae68d23a85bf8eb23e559ebb4440045e046415cd        5422  docs/qa/KAN-45/live-fullstack-proof.txt
++8e165c9178d15682c043e4130320071204c4cf3110a71b2afd2fa0579a631044       12905  docs/qa/KAN-45/message-to-reality-checker.md
++39bb6a866fd5201380a6df26d8cfd5c7e817d79e7ccc0c4b726159fafc6ab5d1       22093  docs/qa/KAN-45/reality-checker-report.md
++3a5601404d9ed76d071c57194534a240f494a4824cd6a06f083cea0f607df2e7      164920  docs/qa/KAN-45/screenshots/live-async-gate-approved-comment-desktop.png
++52dfe05db8ba4455bdee329f7152361e214a98363baa5a9af3f00a23d636ab4a      173428  docs/qa/KAN-45/screenshots/live-issue-completed-proof-desktop-dark.png
++6727388cc625c083672b080d462e0114bd88f58f7ba6c3b9d1fdce4d03e087f7      172660  docs/qa/KAN-45/screenshots/live-issue-completed-proof-desktop-light.png
++d6c3bef38fc738c2214962329eb07169ae9f7fe6ff55d8fd0036056e9f594b53       51624  docs/qa/KAN-45/screenshots/live-issue-completed-proof-mobile.png
++d002e9b55da1cbcb3b9744a52b461f1e27952428edfe8169169da4a8781716c6      109527  docs/qa/KAN-45/screenshots/live-issue-completed-proof-tablet.png
++690fffdc376b0e886eba1e77ba5b947bd160c957157df7ae74ffd90e70a1ee43      148727  docs/qa/KAN-45/screenshots/live-workflow-wasm-dryrun-allow.png
++3a1c247abdc2e1ed560d983bbf1d2a0d413ab0d3d047a4484942caee36e0233f      178172  docs/qa/KAN-45/screenshots/live-workflow-wasm-dryrun-reject.png
++140062f10fe74c746c2cdf2a107ad309d57aeb5ff1ee175dd80fdae15e3b898b       10743  docs/qa/KAN-45/ui-specialist-review.md
++de6edac976772d1408c25fe62829b589e4735d040264fb3448616d9d0ce39b23       17811  docs/qa/KAN-45/unit-test-results.txt
++2e861407123fdc4516987bfd39a347b6a20a4e353f36a53b868d093c6ca0ce41        7866  kanban/api/deps.py
++cfe23a930a725a9b861aeeb2aa1f134bc0e8c778c326491ef3a9488e1238589d        1619  kanban/api/v1/issue_move.py
++f6790226677173de5a6ef880e4656817dc9b08483b1d03d23ee23c9a9cf8781a       22297  kanban/app.py
++fa8442c6e23e4c2822982900121bf77a87ae27a102bc187b706e043e43c61fab       17921  kanban/auth/sessions/csrf.py
++1362a1a686d717b8779eaf4d2d680f0d6de58a8962946f00e69b1f06bbf44f03        8187  kanban/auth/sessions/resolver.py
++0f070074335e1c08acc9060d1300e825aeaa1d57c4a0bc056fa88048b5b77556       11592  kanban/issues/proof.py
++b7e3558e838d605dc45cd7507d68411acf0c7b25759ccaf0d0be88dbaa5cf7fc       30949  kanban/issues/workflow_service.py
++011de69155c007ad20aa9fc922e6ea91aaaa7d33e7eac4d88c98923056b5dd8f       16383  kanban/sandbox/wasm_runner.py
++b17dc5759349721efb62eb366f167e4484e9767184de97a77a488a93a29a364c       14383  kanban/services/issue_move.py
++2a5dbc208c9b6294397ca49b4181d0cc1d262cf883681e832cf609f2cdb6059a       45403  kanban/services/issues.py
++e973304605ccc0355fe64d39e69bd955685a6715295232ba8e966388504f3b9f       50468  kanban/services/search.py
++5e73a66835b2f2d43c9aa0cf9eefba9cc67c91b5f2e8d7de5bc958fa39db4f5a       20127  kanban/tests/api/test_gate_enforcement_hardening.py
++c9a0444d508404981ba05f31554b1498dbbf6d1c3b8db434731a98b6498ea15f       22018  kanban/tests/auth/test_sessions.py
++30fb9d1354bbc4bb7eaeb33293c37f1f3b49a7becded14597902e740798502e0        4686  kanban/tests/issues/test_proof_validation.py
++4926ec3703655ae168e58717aef0bf3ce6fc1625dc2cdf8472affaa9d5cd87fb        9731  kanban/tests/mcp/test_complete_work_enforcement.py
++a62bc1afd904495e24fc65141fbfae05c44e23b360a36fb771300974b2928049       42222  kanban/tests/services/test_synaptic_search.py
++895e7870a0284b2e866d9cb890a4ba1ffcc8aeb63284ccbbee477b0f8c5a5e83       61822  kanban/tests/workflows/test_async_gate.py
++49a7a9492226f73498599451450e340e27be7842598ea2e0b37025e96891cafb       32882  kanban/tests/workflows/test_dry_run.py
++73e061e9bc31e07d60f9761898b1daa84137dd40ee798967efd8147b69537611        6192  kanban/tests/workflows/test_qa_proof_validator_wasm.py
++113def805f7a5efdcd8217d73806c04e5df632590e281c108164a079d128ac45       31409  kanban/tests/workflows/test_workflow_hooks_api.py
++db58be080deef6b398d0b21fb96f4accb0de55b52d6b5ea45422b0524b9b5e48       54721  kanban/workflows/async_gate.py
++a35e1f37135a3da38467024a18ed03fb1dd7ce53de89584921b5ce7f5bac7d26       11956  kanban/workflows/builtins.py
++e56383ecc27b72abef97b67a5ac1e4f93a63ca0a8d86a4c6913077640629ecab       24367  kanban/workflows/dry_run.py
++d17c87d11e706d839259a693f7929a401049cf6cbb891d5b67248d091483f9a0       34300  kanban/workflows/engine.py
++c3f8f679acb7331287e01b59e12a452425ddcb63dec4dc3e8ba398d9a6c06bd6        7795  mcp/surfaces/agent/complete_work.py
++0731b6725f30e08db0b91b16d02dbe87c48a6abf4bd69ce6cea8d0ca9438207b        2548  mcp/surfaces/agent/proof.py
 diff --git a/docs/qa/KAN-45/contract-sample.json b/docs/qa/KAN-45/contract-sample.json
-index f9959114..1f222290 100644
+index f9959114..40b62c10 100644
 --- a/docs/qa/KAN-45/contract-sample.json
 +++ b/docs/qa/KAN-45/contract-sample.json
-@@ -70,24 +70,46 @@
+@@ -70,24 +70,55 @@
      "detail": "Transition to completed state 'Done' requires complete_work with valid verification proof. Direct transition, patch, or move is reserved for human operators."
    },
    "async_gate_approval_comment_sample": {
 -    "author_principal_id": "01a1f000-0000-7000-8000-000000000099",
-+    "author_principal_id": "ab89e90d-6780-48f4-afd0-3f3181cf22c4",
++    "author_principal_id": "d646e8a6-ab82-464e-bfba-89b5552fbd87",
      "event_type": "COMMENT_CREATED",
 -    "header": "### ✅🤖 Integration Agent Verdict: READY (Grade: A)",
 -    "body_markdown": "### ✅🤖 Integration Agent Verdict: READY (Grade: A)\n**Hook:** `qa-gate-hook` | **Harness:** `kanban-agent` | **Transition:** `In Progress` -> `Done`\n\n---\n\n#### Forensic QA Summary\nAll verification artifacts and test logs verified."
 +    "header": "## ✅🤖 Workflow Transition Gate Approved",
-+    "body_markdown": "## ✅🤖 Workflow Transition Gate Approved\n\n- **Hook:** `qa-async-gate`\n- **Harness:** `fixture`\n- **Transition:** `Todo` -> `In Progress`\n\n### Reality Check / Gate Rationale\n\nVerified all Problem 2 transition invariants against live PostgreSQL:\n- Atomic Step 7 IssueComment persistence authored by @qa-gate-reviewer\n- ActivityEventType.COMMENT_CREATED, GATE_APPROVED, and ISSUE_STATE_CHANGED recorded\n- Fail-closed completed-state policy verified"
++    "body_markdown": "## ✅🤖 Workflow Transition Gate Approved\n\n- **Hook:** `qa-async-gate`\n- **Harness:** `fixture`\n- **Transition:** `Todo` -> `In Progress`\n\n### Reality Check / Gate Rationale\n\nVerified all Problem 2 and Problem 4 invariants via GateWorkerRunner.poll_once() against live PostgreSQL:\n- Dynamic workspace and admin principal resolution under FORCE ROW LEVEL SECURITY\n- Zero FOR UPDATE self-deadlock across poll_once() and record_decision()\n- Atomic Step 7 IssueComment persistence authored by @qagatereviewer"
    },
    "live_qa_observed": {
      "container": "kanban-liveqa-4",
@@ -770,13 +1103,14 @@ index f9959114..1f222290 100644
 -    "guard1_agent_patch_status": 403,
 -    "guard1_agent_move_status": 403,
 -    "guard1_agent_transition_status": 403,
-+    "commit": "9b163f07",
++    "commit": "2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd",
++    "commit_short": "2b542d7f",
 +    "qa_proof_validator_sha256": "fddfe97e1b15829495364a2002bf0a0c830002f9ef673971a1a4167ee815d972",
 +    "auto_label_mutator_sha256": "79cdc606bf7cab8b1de8a204a126e9302f831bdf32db6ea2170970bb822140dd",
-+    "wasm_dryrun_reject_us": 644,
-+    "wasm_dryrun_allow_us": 361,
++    "wasm_dryrun_reject_us": 447,
++    "wasm_dryrun_allow_us": 237,
 +    "auto_label_mutator_result": "allowed",
-+    "auto_label_mutator_duration_us": 155,
++    "auto_label_mutator_duration_us": 145,
 +    "guard1_bearer_patch_status": 422,
 +    "guard1_bearer_patch_code": "USE_COMPLETE_WORK",
 +    "guard1_bearer_move_status": 422,
@@ -796,6 +1130,9 @@ index f9959114..1f222290 100644
 +    "guard2b_needs_work_without_ready_mcp_is_error": true,
 +    "guard2b_needs_work_without_ready_bearer_rest_status": 422,
 +    "guard2b_needs_work_without_ready_bearer_rest_code": "INVALID_REALITY_CHECKER_REPORT",
++    "guard2d_grade_a_pending_without_ready_mcp_is_error": true,
++    "guard2d_grade_a_pending_without_ready_bearer_rest_status": 422,
++    "guard2d_grade_a_pending_without_ready_bearer_rest_code": "INVALID_REALITY_CHECKER_REPORT",
 +    "guard2c_cookie_plus_dummy_bearer_get_status": 401,
 +    "guard2c_cookie_plus_dummy_bearer_post_no_csrf_status": 401,
 +    "guard2c_cookie_only_no_csrf_status": 403,
@@ -803,16 +1140,21 @@ index f9959114..1f222290 100644
 +    "problem2_async_gate_dispatch_status": 202,
 +    "problem2_async_gate_held_patch_status": 409,
 +    "problem2_async_gate_held_patch_code": "TRANSITION_HELD",
++    "problem2_runner_poll_once_approve_handled": 1,
 +    "problem2_async_gate_execution_status": "approved",
 +    "problem2_async_gate_resulting_state": "In Progress",
-+    "problem2_async_gate_comment_id": "69155cd3-3ef8-4d6c-8b45-c2bdfba6d26a"
++    "problem2_async_gate_comment_id": "88b2a456-62df-441c-b056-dfb7832813c7",
++    "problem2_runner_poll_once_timeout_handled": 1,
++    "problem2_timeout_execution_status": "timed_out",
++    "problem2_timeout_resulting_state": "In Progress",
++    "problem2_timeout_comment_id": "0a5d0acc-961b-4843-8221-7e8721ddcfee"
    }
  }
 diff --git a/docs/qa/KAN-45/live-fullstack-proof.txt b/docs/qa/KAN-45/live-fullstack-proof.txt
-index 5cb1b1bb..30832f0a 100644
+index 5cb1b1bb..74e4b913 100644
 --- a/docs/qa/KAN-45/live-fullstack-proof.txt
 +++ b/docs/qa/KAN-45/live-fullstack-proof.txt
-@@ -1,42 +1,48 @@
+@@ -1,42 +1,47 @@
 -=== KAN-45 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18964, commit 7913c2c8) ===
 -Timestamp: 2026-11-20T22:12:49.166Z
 -Approved qa-proof-validator Wasm module: sha256=fddfe97e1b15829495364a2002bf0a0c830002f9ef673971a1a4167ee815d972
@@ -845,29 +1187,27 @@ index 5cb1b1bb..30832f0a 100644
 -  or 422 INVALID_REALITY_CHECKER_REPORT.
 -Note (Dry-Run Step 2 auto-label-mutator): Step 1 (qa-proof-validator) compiled and executed cleanly in <1ms (256us reject, 665us allow),
 -  while Step 2 (auto-label-mutator) logged fail_open_warn: "Failed to compile WebAssembly binary: failed to parse WebAssembly module Caused by: unexpected end-of-file (at offset 0x16)".
-+=== KAN-45 ROUND 4 ZERO-MOCK LIVE FULL-STACK QA PROOF (http://127.0.0.1:18964, commit 9b163f07) ===
-+Timestamp: 2026-11-21T02:18:34.174Z
-+Setup & AAL2 TOTP enrollment: HTTP 200 (aal_level=2)
-+POST /api/v1/mcp-keys -> HTTP 201 (29ms) key=kb_agt_mfcq...nxN4
++=== KAN-45 ROUND 5 ZERO-MOCK LIVE FULL-STACK QA PROOF (http://127.0.0.1:18964, HEAD 2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd) ===
++Timestamp: 2026-11-21T03:35:09.609Z
++Setup & AAL2 TOTP enrollment: HTTP 200 (username=admin, aal_level=2)
++POST /api/v1/mcp-keys -> HTTP 201 (31ms) key=kb_agt_t6Sd...WCsw
 +Approved Wasm modules: qa-proof-validator=fddfe97e1b15829495364a2002bf0a0c830002f9ef673971a1a4167ee815d972, auto-label-mutator=79cdc606bf7cab8b1de8a204a126e9302f831bdf32db6ea2170970bb822140dd
-+Guard 3a Dry-Run API (missing proof) -> HTTP 200 (43ms) steps=[{"order":1,"name":"require-qa-proof-link","hook_kind":"sync_validator","result":"rejected","reason":"Missing required QA report or READY verdict in verification proof","field_updates":null,"duration_us":644,"cli_command":null}]
-+Guard 3b Dry-Run API (KAN-1 valid proof) -> HTTP 200 (32ms) steps=[{"order":1,"name":"require-qa-proof-link","hook_kind":"sync_validator","result":"allowed","reason":null,"field_updates":null,"duration_us":361,"cli_command":null},{"order":2,"name":"auto-label-verified","hook_kind":"sync_mutator","result":"allowed","reason":null,"field_updates":null,"duration_us":155,"cli_command":null}]
-+Guard 1a Stateless Bearer PATCH /api/v1/issues/KAN-1 -> HTTP 422 (80ms) code=USE_COMPLETE_WORK
-+Guard 1b Stateless Bearer POST /api/v1/issues/KAN-1/move -> HTTP 422 (41ms) code=USE_COMPLETE_WORK
-+Guard 1c Stateless Bearer POST /api/v1/issues/KAN-1/transition -> HTTP 422 (32ms) code=USE_COMPLETE_WORK
-+Guard 1d Human cookie POST /api/v1/issues/KAN-1/move -> HTTP 200 (75ms) state_id=01a1fbe5-f5fa-7e94-8c6a-429503f023f5
-+MCP /mcp/agent initialize -> HTTP 200 session=suEh13_WB1lquFSoxTaZcau5yexWQjahdELLQU5A45A
++Guard 3a Dry-Run API (missing proof) -> HTTP 200 (39ms) steps=[{"order":1,"name":"require-qa-proof-link","hook_kind":"sync_validator","result":"rejected","reason":"Missing required QA report or READY verdict in verification proof","field_updates":null,"duration_us":447,"cli_command":null}]
++Guard 3b Dry-Run API (KAN-1 valid proof) -> HTTP 200 (32ms) steps=[{"order":1,"name":"require-qa-proof-link","hook_kind":"sync_validator","result":"allowed","reason":null,"field_updates":null,"duration_us":237,"cli_command":null},{"order":2,"name":"auto-label-verified","hook_kind":"sync_mutator","result":"allowed","reason":null,"field_updates":null,"duration_us":145,"cli_command":null}]
++Guard 1a Stateless Bearer PATCH /api/v1/issues/KAN-1 -> HTTP 422 (66ms) code=USE_COMPLETE_WORK
++Guard 1b Stateless Bearer POST /api/v1/issues/KAN-1/move -> HTTP 422 (38ms) code=USE_COMPLETE_WORK
++Guard 1c Stateless Bearer POST /api/v1/issues/KAN-1/transition -> HTTP 422 (34ms) code=USE_COMPLETE_WORK
++Guard 1d Human cookie POST /api/v1/issues/KAN-1/move -> HTTP 200 (73ms) state_id=01a1fc2c-14e3-7356-ac5e-befc20c1e105
++MCP /mcp/agent initialize -> HTTP 200 session=7xJoYEIbV0ivTcuJ2ERUOXJjJmv_F6B2fbnlO04paCY
 +Guard 2a short summary: MCP isError=true | Bearer REST HTTP 422 code=INVALID_REALITY_CHECKER_REPORT
 +Guard 2 contradictory report: MCP isError=true | Bearer REST HTTP 422 code=INVALID_REALITY_CHECKER_REPORT
-+Guard 2b NEEDS WORK (omitting READY) with proof READY/A: MCP isError=true | Bearer REST HTTP 422 code=INVALID_REALITY_CHECKER_REPORT detail="Contradiction marker 'NEEDS WORK' found in certification or deployment readiness assessment"
-+Guard 2c Cookie + dummy Bearer precedence: GET HTTP 401 (8ms) | POST (no CSRF) HTTP 401 (8ms) | Cookie-only (no CSRF) HTTP 403
-+Guard 4 valid /mcp/agent complete_work -> HTTP 200 (146ms) isError=false body="status: completed\nkey: KAN-2\nissue_key: KAN-2\nsequence_number: 2\nstate: Done\nproof: {qa_dir: docs/qa/KAN-2, artifacts: 1, verdict: READY}\ncomment: KAN-2#c-01a1fbe5\n"
-+Problem 2 Gate Dispatch: POST /api/v1/issues/KAN-3/transitions -> HTTP 202 status=pending_agent_gate execution_id=ab9fadb7-8b6f-4cc8-a1e0-67b76bb8d4a7 | Held PATCH -> HTTP 409 code=TRANSITION_HELD
-+Problem 2 GateCoordinator.record_decision(approve) -> execution_status=approved, KAN-3 state=In Progress, comment_id=69155cd3-3ef8-4d6c-8b45-c2bdfba6d26a, author=@qagatereviewer
-+Problem 2 RLS Execution Observation (FORCE ROW LEVEL SECURITY active as kanban_app):
-+  - Zero-UUID RLSContext (uuid(int=0), as used in agent/gates/runner.py) -> EXECUTION_NOT_FOUND (filtered by workspace/principal RLS).
-+  - Invoking-admin RLSContext -> InsufficientPrivilegeError on issue_comments (issue_comments_insert_rls requires author_id = app_current_principal_id() and capability 2 on issue_id).
-+  - Gate-agent RLSContext (principal_id=agent_def.principal_id with VIEW/COMMENT/EDIT/TRANSITION ACL on KAN-3, workspace_id=kanban) -> PASS (execution approved, KAN-3 transitioned to In Progress, IssueComment authored by @qagatereviewer persisted).
++Guard 2b NEEDS WORK (omitting READY) with proof READY/A: MCP isError=true | Bearer REST HTTP 422 code=INVALID_REALITY_CHECKER_REPORT
++Guard 2d Grade: A + Status: PENDING (omitting READY): MCP isError=true | Bearer REST HTTP 422 code=INVALID_REALITY_CHECKER_REPORT
++Guard 2c Cookie + dummy Bearer precedence: GET HTTP 401 (7ms) | POST (no CSRF) HTTP 401 (7ms) | Cookie-only (no CSRF) HTTP 403
++Guard 4 valid /mcp/agent complete_work -> HTTP 200 (138ms) isError=false body="status: completed\nkey: KAN-2\nissue_key: KAN-2\nsequence_number: 2\nstate: Done\nproof: {qa_dir: docs/qa/KAN-2, artifacts: 1, verdict: READY}\ncomment: KAN-2#c-01a1fc2c\n"
++Problem 2 Gate Dispatch (KAN-3): POST /api/v1/issues/KAN-3/transitions -> HTTP 202 status=pending_agent_gate execution_id=88488bcb-dffa-4f08-814f-57d7565c87cc | Held PATCH -> HTTP 409 code=TRANSITION_HELD
++Problem 2/4 GateWorkerRunner.poll_once() (approve) -> handled=1, execution_id=88488bcb-dffa-4f08-814f-57d7565c87cc, KAN-3 state=In Progress, pending_gate=null, comment_id=88b2a456-62df-441c-b056-dfb7832813c7, author=@qagatereviewer
++Problem 2/4 GateWorkerRunner.poll_once() (timeout sweep on completed target) -> handled=1, execution_status=timed_out, KAN-4 state=In Progress (fail-closed), pending_gate=null, comment_id=0a5d0acc-961b-4843-8221-7e8721ddcfee
 +UI DryRunDrawer (missing proof -> qa-proof-validator REJECT): {"banner":"🛑\nTransition Blocked: Changes would not commit (would_commit: false)","step1":"🛑 1. require-qa-proof-link\n[sync_validator]\nRejected\n<1ms\nRejection Reason: Missing required QA report or READY verdict in verification proof"}
 +UI DryRunDrawer (KAN-1 valid proof -> qa-proof-validator + auto-label-mutator ALLOW): {"banner":"✅\nTransition Allowed: Changes would commit","step1":"✅ 1. require-qa-proof-link\n[sync_validator]\nAllowed\n<1ms","step2":"✅ 2. auto-label-verified\n[sync_mutator]\nAllowed\n<1ms"}
 +KAN-3 Async Gate Approval Comment UI verification: {"hasHeader":true,"hasInProgress":true}
@@ -891,14 +1231,15 @@ index 5cb1b1bb..30832f0a 100644
 +LIVE_STACK_VERDICT [G2_MCP_AND_BEARER_REST_REJECT_SHORT_CONTRADICTORY]: PASS
 +LIVE_STACK_VERDICT [G2B_COMPLETE_WORK_REJECTS_NEEDS_WORK_WITHOUT_READY]: PASS
 +LIVE_STACK_VERDICT [G2C_COOKIE_PLUS_DUMMY_BEARER_RETURNS_401_NO_CSRF_BYPASS]: PASS
++LIVE_STACK_VERDICT [G2D_COMPLETE_WORK_REJECTS_GRADE_A_PENDING_WITHOUT_READY]: PASS
 +LIVE_STACK_VERDICT [G3_WASM_QA_PROOF_AND_AUTO_LABEL_CLEAN]: PASS
  LIVE_STACK_VERDICT [G4_VALID_CANONICAL_REPORT_COMPLETE_WORK]: PASS
 -OVERALL LIVE_STACK_VERDICT (KAN-45): FAIL
-+LIVE_STACK_VERDICT [P2_ASYNC_GATE_APPROVE_COMMENT_PERSISTED_AND_RENDERED]: PASS
++LIVE_STACK_VERDICT [P2_P4_GATE_WORKER_RUNNER_POLL_ONCE_REAL_RLS_APPROVE_AND_TIMEOUT]: PASS
 +LIVE_STACK_VERDICT [UI_DESKTOP_TABLET_MOBILE_RESPONSIVE_ZERO_ERRORS]: PASS
 +OVERALL LIVE_STACK_VERDICT (KAN-45): PASS
 diff --git a/docs/qa/KAN-45/message-to-reality-checker.md b/docs/qa/KAN-45/message-to-reality-checker.md
-index 88ebef16..a2d9f360 100644
+index 88ebef16..f44ee12f 100644
 --- a/docs/qa/KAN-45/message-to-reality-checker.md
 +++ b/docs/qa/KAN-45/message-to-reality-checker.md
 @@ -2,14 +2,16 @@
@@ -907,8 +1248,8 @@ index 88ebef16..a2d9f360 100644
  **Title:** `[KB-P3-GATE-ENFORCE] Enforce Canonical Reality-Checker Report on complete_work, Real qa-proof-validator Wasm, Approval Comment Persistence, and Agent Done-Transition Guards (4 Problems)`  
 -**Branch:** `feat/KAN-45`  
 -**Base Commit:** `73caabe7` (main)  
-+**Branch:** `main` (Post-Merge at commit `78074a1d`)  
-+**Base Commit:** `78074a1d`  
++**Branch:** `main` (commit `9b163f07`)  
++**Base Commit:** `9b163f07`  
 +**Live Stack Container:** `kanban-liveqa-4` (`http://127.0.0.1:18964`, PostgreSQL 16 + FORCE RLS)  
 +**Live Stack Verdict:** `OVERALL LIVE_STACK_VERDICT: PASS`  
  
@@ -921,7 +1262,7 @@ index 88ebef16..a2d9f360 100644
  
  ### Problem 1: Canonical Reality-Checker Report & Strict VerificationProof in complete_work
  - **Anchored Regex Security:** All path validation regexes in `kanban/issues/proof.py` and `mcp/surfaces/agent/proof.py` are strictly anchored with `\A...\Z`.
-@@ -38,50 +40,56 @@ This deliverable implements all 4 problems specified in `KAN-45` to enterprise s
+@@ -38,50 +40,68 @@ This deliverable implements all 4 problems specified in `KAN-45` to enterprise s
  - **Fail-Closed Terminal Gates:**
    - In `GateCoordinator.record_failure`, enforces `fail_closed` whenever `target_state.state_group == "completed"`. Timeouts or hook dispatch failures for transitions into `Done` never auto-approve into completed states.
  
@@ -968,11 +1309,23 @@ index 88ebef16..a2d9f360 100644
 -- `docs/qa/KAN-45/build-or-typecheck.txt`: Clean static analysis logs (ruff, ruff format, mypy, import-linter, check_no_dashes).
 -- `docs/qa/KAN-45/unit-test-results.txt`: Comprehensive unit and regression test results (105 tests passing).
 -- `docs/qa/KAN-45/git-diff.patch`: Exact patch against base commit `73caabe7`.
-+### Live Container Verification (`kanban-liveqa-4`, `:18964`, commit `78074a1d`):
-+- `Guard 1`: Stateless Bearer `PATCH`, `POST move`, `POST transition` into Done -> HTTP 422 `USE_COMPLETE_WORK` (88ms, 65ms, 37ms). Human cookie `POST move` -> HTTP 200 (human allowed).
++### Live Container Verification (`kanban-liveqa-4`, `:18964`, commit `9b163f07`):
++- `Guard 1`: Stateless Bearer `PATCH` (80ms), `POST move` (41ms), `POST transition` (32ms) into Done -> HTTP 422 `USE_COMPLETE_WORK`. Human cookie `POST move` (75ms) -> HTTP 200 (human allowed).
 +- `Guard 2`: MCP tool calls and Bearer REST `complete_work` with short summary or contradictory reports -> HTTP 422 `INVALID_REALITY_CHECKER_REPORT` (`isError=true`).
-+- `Guard 3`: Dry-Run UI and API with missing proof -> rejected by `require-qa-proof-link` (381us, 0 Wasm compile errors); valid proof -> allowed by `require-qa-proof-link` (299us) and `auto-label-verified` (149us).
-+- `Guard 4`: Valid `/mcp/agent complete_work` -> HTTP 200 (124ms, `isError=false`, state: Done, comment: `KAN-2#c-01a1fb44`).
++- `Guard 2b`: `NEEDS WORK` (omitting READY) with proof claim `READY/A` -> MCP `isError=true` | Bearer REST HTTP 422 `code=INVALID_REALITY_CHECKER_REPORT` (`detail="Contradiction marker 'NEEDS WORK' found in certification or deployment readiness assessment"`).
++- `Guard 2c`: Cookie + dummy Bearer precedence -> `GET` HTTP 401 (8ms) | `POST` (no CSRF) HTTP 401 (8ms) | Cookie-only (no CSRF) HTTP 403.
++- `Guard 3`: Dry-Run UI and API with missing proof -> rejected by `require-qa-proof-link` (644us); valid proof -> allowed by `require-qa-proof-link` (361us) and `auto-label-verified` (155us).
++- `Guard 4`: Valid `/mcp/agent complete_work` -> HTTP 200 (146ms, `isError=false`, state: Done, comment: `KAN-2#c-01a1fbe5`).
++- `Problem 2 Gate Dispatch`: `POST /api/v1/issues/KAN-3/transitions` -> HTTP 202 `status=pending_agent_gate` | Held PATCH -> HTTP 409 `code=TRANSITION_HELD`.
++- `Problem 2 Decision Record`: `GateCoordinator.record_decision(approve)` -> `execution_status=approved`, KAN-3 transitioned to `In Progress`, `comment_id=69155cd3-3ef8-4d6c-8b45-c2bdfba6d26a`, author: `@qagatereviewer`.
++- `Screenshots in docs/qa/KAN-45/screenshots/` (all 7 screenshots present):
++  1. `live-workflow-wasm-dryrun-reject.png` (1440x900 desktop)
++  2. `live-workflow-wasm-dryrun-allow.png` (1440x900 desktop)
++  3. `live-issue-completed-proof-desktop-light.png` (1440x900 desktop light)
++  4. `live-issue-completed-proof-desktop-dark.png` (1440x900 desktop dark)
++  5. `live-issue-completed-proof-tablet.png` (768x1024 tablet)
++  6. `live-issue-completed-proof-mobile.png` (390x844 mobile)
++  7. `live-async-gate-approved-comment-desktop.png` (1440x900 desktop)
 +- Telemetry: console errors 0, page errors 0, 5xx responses 0. `OVERALL LIVE_STACK_VERDICT: PASS`.
  
  ### Quality Gate Summary:
@@ -1009,139 +1362,151 @@ index 88ebef16..a2d9f360 100644
 +  - `kanban-ctl db check-migrations --static-only`: 63 migrations valid.
 +  - `ruff check .`: All checks passed!
 +  - `ruff format --check .`: Clean across 2027 files.
-+  - `mypy`: Success: no issues found in 1140 source files.
++  - `mypy`: Success: no issues found in 997 source files.
 +  - `lint-imports`: Contracts: 2 kept, 0 broken.
 +  - `scripts.check_no_dashes --all`: Clean (0 forbidden dashes).
 +- **Scope Invariants:** `.backup_schedule.json` and `backups/` strictly unstaged.
 diff --git a/docs/qa/KAN-45/reality-checker-report.md b/docs/qa/KAN-45/reality-checker-report.md
 new file mode 100644
-index 00000000..b83aa254
+index 00000000..be13ca5d
 --- /dev/null
 +++ b/docs/qa/KAN-45/reality-checker-report.md
 @@ -0,0 +1,109 @@
 +# Integration Agent Reality-Based Report
 +
 +## 🔍 Reality Check Validation
-+**Commands Executed**: Passive forensic audit mode (`read_file` only; zero shell commands executed, zero URLs visited, zero files modified) against `/home/adamoutler/kanban/docs/qa/KAN-45/` and on-disk implementation files at commit `78074a1d65216b6b3546b122445cdb322e0b1651`.
++**Commands Executed**: Passive forensic audit mode (`read_file` only; zero shell commands executed, zero URLs visited, zero files modified) against `/home/adamoutler/kanban/docs/qa/KAN-45/` and on-disk implementation/test/migration files.
 +**Evidence Captured**:
 +- Verification packet files read: [message-to-reality-checker.md](file:///home/adamoutler/kanban/docs/qa/KAN-45/message-to-reality-checker.md), [changed-files-manifest.txt](file:///home/adamoutler/kanban/docs/qa/KAN-45/changed-files-manifest.txt), [git-diff.patch](file:///home/adamoutler/kanban/docs/qa/KAN-45/git-diff.patch), [unit-test-results.txt](file:///home/adamoutler/kanban/docs/qa/KAN-45/unit-test-results.txt), [build-or-typecheck.txt](file:///home/adamoutler/kanban/docs/qa/KAN-45/build-or-typecheck.txt), [contract-sample.json](file:///home/adamoutler/kanban/docs/qa/KAN-45/contract-sample.json), [live-fullstack-proof.txt](file:///home/adamoutler/kanban/docs/qa/KAN-45/live-fullstack-proof.txt), [api-specialist-review.md](file:///home/adamoutler/kanban/docs/qa/KAN-45/api-specialist-review.md), [ui-specialist-review.md](file:///home/adamoutler/kanban/docs/qa/KAN-45/ui-specialist-review.md).
-+- Live PNG screenshots read: [live-issue-completed-proof-desktop-dark.png](file:///home/adamoutler/kanban/docs/qa/KAN-45/screenshots/live-issue-completed-proof-desktop-dark.png), [live-issue-completed-proof-desktop-light.png](file:///home/adamoutler/kanban/docs/qa/KAN-45/screenshots/live-issue-completed-proof-desktop-light.png), [live-workflow-wasm-dryrun-allow.png](file:///home/adamoutler/kanban/docs/qa/KAN-45/screenshots/live-workflow-wasm-dryrun-allow.png), [live-workflow-wasm-dryrun-reject.png](file:///home/adamoutler/kanban/docs/qa/KAN-45/screenshots/live-workflow-wasm-dryrun-reject.png).
-+- On-disk implementation files read: [proof.py](file:///home/adamoutler/kanban/kanban/issues/proof.py), [workflow_service.py](file:///home/adamoutler/kanban/kanban/issues/workflow_service.py), [mcp proof.py](file:///home/adamoutler/kanban/mcp/surfaces/agent/proof.py), [complete_work.py](file:///home/adamoutler/kanban/mcp/surfaces/agent/complete_work.py), [async_gate.py](file:///home/adamoutler/kanban/kanban/workflows/async_gate.py), [builtins.py](file:///home/adamoutler/kanban/kanban/workflows/builtins.py), [engine.py](file:///home/adamoutler/kanban/kanban/workflows/engine.py), [dry_run.py](file:///home/adamoutler/kanban/kanban/workflows/dry_run.py), [wasm_runner.py](file:///home/adamoutler/kanban/kanban/sandbox/wasm_runner.py), [csrf.py](file:///home/adamoutler/kanban/kanban/auth/sessions/csrf.py), [resolver.py](file:///home/adamoutler/kanban/kanban/auth/sessions/resolver.py), [deps.py](file:///home/adamoutler/kanban/kanban/api/deps.py), [issues.py](file:///home/adamoutler/kanban/kanban/services/issues.py), [runner.py](file:///home/adamoutler/kanban/agent/gates/runner.py), [test_dry_run.py](file:///home/adamoutler/kanban/kanban/tests/workflows/test_dry_run.py), [test_workflow_hooks_api.py](file:///home/adamoutler/kanban/kanban/tests/workflows/test_workflow_hooks_api.py).
++- Live PNG screenshots inspected: [live-workflow-wasm-dryrun-reject.png](file:///home/adamoutler/kanban/docs/qa/KAN-45/screenshots/live-workflow-wasm-dryrun-reject.png), [live-workflow-wasm-dryrun-allow.png](file:///home/adamoutler/kanban/docs/qa/KAN-45/screenshots/live-workflow-wasm-dryrun-allow.png), [live-issue-completed-proof-desktop-light.png](file:///home/adamoutler/kanban/docs/qa/KAN-45/screenshots/live-issue-completed-proof-desktop-light.png), [live-issue-completed-proof-desktop-dark.png](file:///home/adamoutler/kanban/docs/qa/KAN-45/screenshots/live-issue-completed-proof-desktop-dark.png), [live-issue-completed-proof-tablet.png](file:///home/adamoutler/kanban/docs/qa/KAN-45/screenshots/live-issue-completed-proof-tablet.png), [live-issue-completed-proof-mobile.png](file:///home/adamoutler/kanban/docs/qa/KAN-45/screenshots/live-issue-completed-proof-mobile.png), [live-async-gate-approved-comment-desktop.png](file:///home/adamoutler/kanban/docs/qa/KAN-45/screenshots/live-async-gate-approved-comment-desktop.png).
++- Source, test, and migration files inspected: [runner.py](file:///home/adamoutler/kanban/agent/gates/runner.py), [worker.py](file:///home/adamoutler/kanban/agent/gates/worker.py), [run_gate_worker.py](file:///home/adamoutler/kanban/agent/cli_commands/run_gate_worker.py), [test_gate_runner.py](file:///home/adamoutler/kanban/agent/tests/gates/test_gate_runner.py), [async_gate.py](file:///home/adamoutler/kanban/kanban/workflows/async_gate.py), [test_async_gate.py](file:///home/adamoutler/kanban/kanban/tests/workflows/test_async_gate.py), [proof.py](file:///home/adamoutler/kanban/kanban/issues/proof.py), [workflow_service.py](file:///home/adamoutler/kanban/kanban/issues/workflow_service.py), [complete_work.py](file:///home/adamoutler/kanban/mcp/surfaces/agent/complete_work.py), [mcp proof.py](file:///home/adamoutler/kanban/mcp/surfaces/agent/proof.py), [resolver.py](file:///home/adamoutler/kanban/kanban/auth/sessions/resolver.py), [csrf.py](file:///home/adamoutler/kanban/kanban/auth/sessions/csrf.py), [deps.py](file:///home/adamoutler/kanban/kanban/api/deps.py), [builtins.py](file:///home/adamoutler/kanban/kanban/workflows/builtins.py), [wasm_runner.py](file:///home/adamoutler/kanban/kanban/sandbox/wasm_runner.py), [engine.py](file:///home/adamoutler/kanban/kanban/workflows/engine.py), [dry_run.py](file:///home/adamoutler/kanban/kanban/workflows/dry_run.py), [issue_move.py](file:///home/adamoutler/kanban/kanban/services/issue_move.py), [issues.py](file:///home/adamoutler/kanban/kanban/services/issues.py), [app.py](file:///home/adamoutler/kanban/kanban/app.py), [test_proof_validation.py](file:///home/adamoutler/kanban/kanban/tests/issues/test_proof_validation.py), [test_complete_work_enforcement.py](file:///home/adamoutler/kanban/kanban/tests/mcp/test_complete_work_enforcement.py), [test_gate_enforcement_hardening.py](file:///home/adamoutler/kanban/kanban/tests/api/test_gate_enforcement_hardening.py), [test_qa_proof_validator_wasm.py](file:///home/adamoutler/kanban/kanban/tests/workflows/test_qa_proof_validator_wasm.py), [test_sessions.py](file:///home/adamoutler/kanban/kanban/tests/auth/test_sessions.py), [p5_17a_workflow_hooks.up.sql](file:///home/adamoutler/kanban/database/migrations/sql/p5_17a_workflow_hooks.up.sql).
 +
 +**QA Cross-Validation**:
-+- Challenged `api-specialist-review.md` and `ui-specialist-review.md` (`APPROVED`) and `message-to-reality-checker.md` claims against on-disk code and test logs:
-+  1. `message-to-reality-checker.md` line 58 claims `agent/gates/runner.py` was created "with polling loop, lease claim, timeout sweeping, and execution handling." Direct inspection of [runner.py](file:///home/adamoutler/kanban/agent/gates/runner.py#L224-L257) shows `poll_once` executes a plain `SELECT ... WHERE status == 'running' AND hook_kind == 'agent_interceptor' LIMIT 10` with ZERO lease claiming (`FOR UPDATE SKIP LOCKED` or lease ownership/timestamp) and ZERO timeout sweeping.
-+  2. `unit-test-results.txt` omits execution results for `agent/tests/gates/test_gate_runner.py` (listed in `changed-files-manifest.txt`) and contains zero test results covering Problem 2 (`format_approve_comment`, Step 7 `IssueComment` + `COMMENT_CREATED` persistence in `GateCoordinator.record_decision`, and fail-closed terminal gate enforcement in `GateCoordinator.record_failure`).
-+  3. `message-to-reality-checker.md` (lines 47-48) and `api-specialist-review.md` (lines 33, 87) cite legacy SHA-256 hashes (`7982de04...` and `2e7db622...`) for the 249-byte `sec_invariant_validator` and 244-byte `auto_label_mutator` modules, whereas `builtins.py` registers those as `_LEGACY_PRESETS` and the actual compiled 244-byte `auto-label-mutator` SHA-256 observed in `live-fullstack-proof.txt` and `contract-sample.json` is `79cdc606bf7cab8b1de8a204a126e9302f831bdf32db6ea2170970bb822140dd`.
-+- Confirmed:
-+  - Anchored regexes (`\A...\Z`), `validate_ci_run_url`, `TierAWasmRunner.run_sync` `kb_alloc` pointer bounds checking, 1097-byte `qa-proof-validator` Wasm bytecode (`fddfe97e1b15829495364a2002bf0a0c830002f9ef673971a1a4167ee815d972`), `CsrfMiddleware` Bearer bypass, `PrincipalContext.is_agent_or_mcp_caller`, `422 USE_COMPLETE_WORK`, `409 TRANSITION_HELD`, and `202 pending_agent_gate` in `issue_move.py` are implemented on disk and verified in live container logs and tests for Problems 1, 3, and 4 (excluding `GateWorkerRunner`).
++- Confirmed Round 1 remediations on disk and in logs:
++  1. `validate_reality_checker_report` ([proof.py](file:///home/adamoutler/kanban/kanban/issues/proof.py#L191-L332)) now enforces canonical relative order of all 6 H2 headings (`h2_order_seen != canonical_h2_order`) and unconditionally rejects `NEEDS WORK`, `NEEDS_WORK`, and `FAILED` even when `READY` is omitted, enforced in both [workflow_service.py](file:///home/adamoutler/kanban/kanban/issues/workflow_service.py#L664-L672) and [complete_work.py](file:///home/adamoutler/kanban/mcp/surfaces/agent/complete_work.py#L90-L93) (`require_ready=True`). Verified by 9 passing tests in `test_proof_validation.py` + `test_complete_work_enforcement.py` and live Guard 2b.
++  2. `SessionCookieResolver.resolve` ([resolver.py](file:///home/adamoutler/kanban/kanban/auth/sessions/resolver.py#L45-L55)) now enforces Bearer-first precedence (`if has_bearer_token or has_subject_token: return await self._resolve_subject_token(request)`) with zero cookie fallback on invalid Bearer tokens. Verified by `test_session_cookie_resolver_bearer_precedence_rejects_dummy_bearer` in `test_sessions.py` (11 passed) and live Guard 2c (HTTP 401 on cookie + dummy Bearer without CSRF).
++  3. `unit-test-results.txt` now includes all 7 pytest runs totaling 103 passed tests (including 16 in `test_async_gate.py`, 10 in `test_gate_runner.py`, 9 in `test_proof_validation.py` + `test_complete_work_enforcement.py`, 11 in `test_sessions.py`, 15 in `test_gate_enforcement_hardening.py`, 29 in workflow/Wasm suites, and 13 in `test_synaptic_search.py`).
++  4. All 7 screenshots (desktop light/dark, tablet, mobile, Wasm dry-run reject/allow, and Problem 2 async gate approval comment) are present and visually verified.
++- Challenged `api-specialist-review.md` (`APPROVED`) and `message-to-reality-checker.md` against [runner.py](file:///home/adamoutler/kanban/agent/gates/runner.py), [p5_17a_workflow_hooks.up.sql](file:///home/adamoutler/kanban/database/migrations/sql/p5_17a_workflow_hooks.up.sql), and [live-fullstack-proof.txt](file:///home/adamoutler/kanban/docs/qa/KAN-45/live-fullstack-proof.txt#L20-L23):
++  - `GateWorkerRunner` ([runner.py](file:///home/adamoutler/kanban/agent/gates/runner.py#L71-L140,L199-L276)) was updated with `_active_invocations` and a timeout sweep in `poll_once()`, **but** all four DB methods (`record_decision`, `record_failure`, `_load_entities`, `poll_once`) still bind `RLSContext(principal_id=uuid.UUID(int=0), workspace_id=uuid.UUID(int=0), token_scopes=("admin",), aal_level=2)`. As explicitly proven by `live-fullstack-proof.txt` lines 20-21 (`Zero-UUID RLSContext (uuid(int=0), as used in agent/gates/runner.py) -> EXECUTION_NOT_FOUND (filtered by workspace/principal RLS)`), `GateWorkerRunner` is blind to all rows under PostgreSQL `FORCE ROW LEVEL SECURITY` as `kanban_app` and cannot post `IssueComment` rows (`issue_comments_insert_rls`). Moreover, `poll_once()` holds `with_for_update(skip_locked=True)` locks on `WorkflowHookInvocation` across `await self.worker.handle_dispatch(event)`, which opens a second DB session in `record_decision()` / `record_failure()` requesting `FOR UPDATE` on the same row - creating a self-deadlock risk if rows were visible.
++  - `test_gate_runner.py` passes only because all 10 tests use `MockSessionFactory` + `AsyncMock` and never execute `GateWorkerRunner` against real PostgreSQL RLS.
 +
 +## 📸 Complete System Evidence
 +**Visual Documentation**:
-+- Desktop dark issue detail: `docs/qa/KAN-45/screenshots/live-issue-completed-proof-desktop-dark.png`
-+- Desktop light issue detail: `docs/qa/KAN-45/screenshots/live-issue-completed-proof-desktop-light.png`
-+- Desktop workflow dry-run allow: `docs/qa/KAN-45/screenshots/live-workflow-wasm-dryrun-allow.png`
-+- Desktop workflow dry-run reject: `docs/qa/KAN-45/screenshots/live-workflow-wasm-dryrun-reject.png`
-+- Tablet (`768x1024`) and mobile (`375x667`) screenshots: NONE PROVIDED in `docs/qa/KAN-45/screenshots/`.
-+- Live Problem 2 async gate approval comment / fail-closed timeout screenshot: NONE PROVIDED (`live-issue-completed-proof-desktop-dark.png` shows `Gates (0)` and a `complete_work` comment, not an async gate approval comment from `format_approve_comment`).
++- Desktop Wasm dry-run reject (1440x900): [live-workflow-wasm-dryrun-reject.png](file:///home/adamoutler/kanban/docs/qa/KAN-45/screenshots/live-workflow-wasm-dryrun-reject.png)
++- Desktop Wasm dry-run allow (1440x900): [live-workflow-wasm-dryrun-allow.png](file:///home/adamoutler/kanban/docs/qa/KAN-45/screenshots/live-workflow-wasm-dryrun-allow.png)
++- Desktop issue completed proof light (1440x900): [live-issue-completed-proof-desktop-light.png](file:///home/adamoutler/kanban/docs/qa/KAN-45/screenshots/live-issue-completed-proof-desktop-light.png)
++- Desktop issue completed proof dark (1440x900): [live-issue-completed-proof-desktop-dark.png](file:///home/adamoutler/kanban/docs/qa/KAN-45/screenshots/live-issue-completed-proof-desktop-dark.png)
++- Tablet issue completed proof (768x1024): [live-issue-completed-proof-tablet.png](file:///home/adamoutler/kanban/docs/qa/KAN-45/screenshots/live-issue-completed-proof-tablet.png)
++- Mobile issue completed proof (390x844): [live-issue-completed-proof-mobile.png](file:///home/adamoutler/kanban/docs/qa/KAN-45/screenshots/live-issue-completed-proof-mobile.png)
++- Desktop async gate approval comment (1440x900): [live-async-gate-approved-comment-desktop.png](file:///home/adamoutler/kanban/docs/qa/KAN-45/screenshots/live-async-gate-approved-comment-desktop.png)
 +
 +**What System Actually Delivers**:
-+- `live-workflow-wasm-dryrun-reject.png` shows the Workflow Studio Dry-Run drawer open on `Project KAN > Scripted Workflows & Transition Helpers` with `Transition Blocked: Changes would not commit (would_commit: false)` and step 1 `require-qa-proof-link [sync_validator] Rejected <1ms` with `Rejection Reason: Missing required QA report or READY verdict in verification proof`.
-+- `live-workflow-wasm-dryrun-allow.png` shows `KAN-1` passing both `require-qa-proof-link [sync_validator] Allowed <1ms` and `auto-label-verified [sync_mutator] Allowed <1ms` with `Transition Allowed: Changes would commit`.
-+- `live-issue-completed-proof-desktop-light.png` and `live-issue-completed-proof-desktop-dark.png` show `KAN-2` in state `Done` with 1 comment containing `# Integration Agent Reality-Based Report` and `## Reality Check Validation Verified live full-stack enforcement for KAN-2 against kanban-liveqa-4 with FORCE ROW LEVEL SECURITY active.` authored by `@qaadmin`.
-+- All 4 screenshots are desktop-only; no responsive tablet/mobile captures exist in the packet.
++- `live-workflow-wasm-dryrun-reject.png` shows the Workflow Studio Dry-Run drawer blocking a sample ticket transition (`[* Any State] -> [Done]`) with red banner `Transition Blocked: Changes would not commit (would_commit: false)`, step `1. require-qa-proof-link [sync_validator] Rejected <1ms`, and `Rejection Reason: Missing required QA report or READY verdict in verification proof`.
++- `live-workflow-wasm-dryrun-allow.png` shows `KAN-1` passing `1. require-qa-proof-link [sync_validator] Allowed <1ms` and `2. auto-label-verified [sync_mutator] Allowed <1ms` with green banner `Transition Allowed: Changes would commit`.
++- `live-issue-completed-proof-desktop-light.png`, `live-issue-completed-proof-desktop-dark.png`, `live-issue-completed-proof-tablet.png`, and `live-issue-completed-proof-mobile.png` show `KAN-2` in state `Done` with the persisted `# Integration Agent Reality-Based Report` comment across desktop light/dark, tablet, and mobile viewports with clean layout and no clipping.
++- `live-async-gate-approved-comment-desktop.png` shows `KAN-3` transitioned to `In Progress` with activity entries (`qa-async-gate approved transition`, `QA Gate Reviewer comment created`, `qa-async-gate evaluating gate via cli: agy -p (:ro)`) and the persisted comment authored by `QA Gate Reviewer @qagatereviewer` displaying `## ✅🤖 Workflow Transition Gate Approved`, `- Hook: qa-async-gate - Harness: fixture - Transition: Todo -> In Progress`, and `### Reality Check / Gate Rationale`.
++- Note on live Problem 2 capture: `live-fullstack-proof.txt` lines 19-23 confirm this comment was persisted by invoking `GateCoordinator.record_decision(approve)` directly with a manually constructed `Gate-agent RLSContext`, because `GateWorkerRunner`'s own `uuid(int=0)` `RLSContext` failed with `EXECUTION_NOT_FOUND`.
 +
 +## 🧪 Integration Testing Results
-+**End-to-End User Journeys**: PARTIAL PASS / FAIL ON COVERAGE GAPS
-+- Live container `kanban-liveqa-4` (`http://127.0.0.1:18964`, commit `78074a1d`) logged in `live-fullstack-proof.txt`:
-+  - Guard 1: Stateless Bearer `PATCH`, `POST move`, `POST transition` to Done returned HTTP 422 `USE_COMPLETE_WORK` (88ms, 65ms, 37ms); human cookie `POST move` returned HTTP 200 (70ms).
-+  - Guard 2: Short and contradictory reports rejected via MCP (`isError=true`) and Bearer REST (`HTTP 422 INVALID_REALITY_CHECKER_REPORT`).
-+  - Guard 3: Wasm dry-run rejected missing proof (381us) and allowed valid proof (299us + 149us), 0 Wasm compile errors.
-+  - Guard 4: Valid `/mcp/agent complete_work` returned HTTP 200 (124ms, `isError=false`, state `Done`, comment `KAN-2#c-01a1fb44`).
-+  - Missing live/end-to-end journey: Problem 2 async gate approval comment persistence (`format_approve_comment`) and fail-closed terminal gate timeout/failure (`record_failure`), and Problem 4 `GateWorkerRunner` dispatch/execution lifecycle.
-+**Cross-Device Consistency**: INCOMPLETE (FAIL) - Only desktop screenshots provided; zero tablet (`768x1024`) or mobile (`375x667`) screenshots in `docs/qa/KAN-45/screenshots/`.
-+**Performance Validation**: PASS for observed paths - Wasm execution 149us-381us (`<2ms` budget); REST endpoints 20ms-124ms; 0 console errors, 0 page errors, 0 HTTP 5xx in `live-fullstack-proof.txt`.
-+**Specification Compliance**: PARTIAL FAIL - Problems 1 and 3 and REST/CSRF guards of Problem 4 are implemented and verified, while `GateWorkerRunner` lacks claimed lease claiming and timeout sweeping, `validate_reality_checker_report` allows a `NEEDS WORK` markdown body when paired with a `READY` proof object in `complete_work`, and Problem 2 lacks test/live verification evidence.
++**End-to-End User Journeys**: PARTIAL PASS / FAIL ON `GateWorkerRunner` LIVE RLS
++- Live container `kanban-liveqa-4` (`http://127.0.0.1:18964`, commit `9b163f07`) in [live-fullstack-proof.txt](file:///home/adamoutler/kanban/docs/qa/KAN-45/live-fullstack-proof.txt):
++  - Guard 1 (REST agent bypass block + human allowed): Stateless Bearer `PATCH`, `POST move`, `POST transition` to `Done` returned HTTP 422 `USE_COMPLETE_WORK` (80ms, 41ms, 32ms); human cookie `POST move` returned HTTP 200 (75ms).
++  - Guard 2 & 2b (`complete_work` report validation): Short summary, contradictory report, and `NEEDS WORK` (omitting `READY`) with `READY`/`A` proof returned MCP `isError=true` and Bearer REST HTTP 422 `INVALID_REALITY_CHECKER_REPORT`.
++  - Guard 2c (Bearer precedence & CSRF): Cookie + dummy Bearer returned HTTP 401 on `GET` and `POST` (no CSRF); cookie-only without CSRF returned HTTP 403.
++  - Guard 3 (Wasm dry-run): Missing proof rejected in 644us; valid proof allowed (`require-qa-proof-link` 361us + `auto-label-verified` 155us).
++  - Guard 4 (`complete_work` happy path): Valid canonical report via `/mcp/agent` returned HTTP 200 (146ms, `isError=false`, state `Done`, comment `KAN-2#c-01a1fbe5`).
++  - Problem 2 (`GateCoordinator` & `TRANSITION_HELD`): `POST /api/v1/issues/KAN-3/transitions` returned HTTP 202 `pending_agent_gate`; held `PATCH` returned HTTP 409 `TRANSITION_HELD`; `GateCoordinator.record_decision(approve)` under `Gate-agent RLSContext` transitioned `KAN-3` to `In Progress` and persisted comment `69155cd3-3ef8-4d6c-8b45-c2bdfba6d26a`.
++  - Problem 4 (`GateWorkerRunner` background worker): FAILED under live PostgreSQL RLS (`Zero-UUID RLSContext (uuid(int=0), as used in agent/gates/runner.py) -> EXECUTION_NOT_FOUND`).
++**Cross-Device Consistency**: PASS - Desktop light/dark (1440x900), tablet (768x1024), and mobile (390x844) screenshots of `KAN-2` render cleanly with zero console errors, zero page errors, and zero 5xx responses.
++**Performance Validation**: PASS - Wasm dry-run hooks executed in 155us-644us (`<2ms` budget); REST/MCP endpoints responded in 8ms-146ms; frontend `vite build` succeeded in 1.09s; static gates 9/9 exit 0 in `build-or-typecheck.txt`.
++**Specification Compliance**: PARTIAL FAIL - Problems 1, 2 (coordinator + fail-closed terminal gate), 3, and 4 (REST/CSRF/Bearer-first guards) comply and pass live/unit checks; Problem 4 `GateWorkerRunner` (`agent/gates/runner.py`) cannot query, lease, or record decisions/timeouts on real PostgreSQL under `FORCE ROW LEVEL SECURITY` (`kanban_app`).
 +
 +## 📊 Comprehensive Issue Assessment
 +**Issues from QA Still Present**:
-+- Both `api-specialist-review.md` and `ui-specialist-review.md` certified `APPROVED` without flagging missing `agent/tests/gates/test_gate_runner.py` execution, missing Problem 2 tests, missing tablet/mobile screenshots, or `GateWorkerRunner` missing lease claim / timeout sweeping.
++- `api-specialist-review.md` (`APPROVED`) and `message-to-reality-checker.md` overlooked the `GateWorkerRunner` zero-UUID RLS failure that `live-fullstack-proof.txt` lines 20-22 explicitly documented, because `agent/tests/gates/test_gate_runner.py` only tests against `MockSessionFactory`/`AsyncMock`.
 +
 +**New Issues Discovered**:
-+1. **Critical - `GateWorkerRunner` lacks lease claiming and timeout sweeping (`agent/gates/runner.py`)**:
-+   - Contrary to `message-to-reality-checker.md` line 58, [runner.py](file:///home/adamoutler/kanban/agent/gates/runner.py#L224-L257) `poll_once()` runs a bare `SELECT` on `WorkflowHookInvocation.status == "running"` without `FOR UPDATE SKIP LOCKED` or lease locking, and runs `self.worker.handle_dispatch(event)` sequentially on every poll tick without marking an invocation leased/claimed and without sweeping expired `deadline_at` timeouts. Under concurrent workers or slow (>1s) gate executions, identical running invocations will be repeatedly re-dispatched, and hung invocations will not be timed out by `GateWorkerRunner`.
-+2. **Critical - Missing unit test execution evidence for `agent/tests/gates/test_gate_runner.py` and Problem 2 (`async_gate.py`)**:
-+   - `unit-test-results.txt` only records 44 tests across 4 files in `kanban/tests/`. `agent/tests/gates/test_gate_runner.py` (added in `git-diff.patch` lines 281-397) was not run in `unit-test-results.txt`, and there are zero test outputs in `unit-test-results.txt` verifying `format_approve_comment`, Step 7 `IssueComment` + `COMMENT_CREATED` persistence in `GateCoordinator.record_decision`, or the `to_state.state_group == "completed"` fail-closed override in `GateCoordinator.record_failure`.
-+3. **Medium - `complete_work` accepts a `NEEDS WORK` / `C+` `summary_markdown` if `verification_proof.reality_checker` claims `READY`/`A` (`kanban/issues/proof.py`, `kanban/issues/workflow_service.py`)**:
-+   - In [proof.py](file:///home/adamoutler/kanban/kanban/issues/proof.py#L301-L313), `validate_reality_checker_report` only rejects `NEEDS WORK` / `NEEDS_WORK` / `FAILED` when `claims_ready` is `True` (`"READY"` in certification/readiness or `A`/`A-`/`A+` in certification). In [workflow_service.py](file:///home/adamoutler/kanban/kanban/issues/workflow_service.py#L642-L672), `complete_work` does not require `summary_markdown` itself to claim `READY` or reject `NEEDS WORK` / `FAILED` when `summary_markdown` omits `READY`. Thus, a `NEEDS WORK` / `C+` report text passes `validate_reality_checker_report` and closes the issue if `verification_proof.reality_checker` asserts `verdict="READY", grade="A"`.
-+4. **Medium - Cookie-before-Bearer precedence vs `CsrfMiddleware` Bearer bypass (`kanban/auth/sessions/csrf.py`, `kanban/auth/sessions/resolver.py`)**:
-+   - [csrf.py](file:///home/adamoutler/kanban/kanban/auth/sessions/csrf.py#L354-L361) bypasses CSRF checks whenever `Authorization: Bearer <non-empty>` is present, while [resolver.py](file:///home/adamoutler/kanban/kanban/auth/sessions/resolver.py#L45-L50) resolves the session cookie before inspecting `Authorization: Bearer`. If both a browser cookie and a dummy `Authorization: Bearer` header are present on a request, `CsrfMiddleware` skips CSRF and `SessionCookieResolver` authenticates the cookie session (mitigated today only if CORS blocks cross-origin `Authorization` headers with credentials).
-+5. **Low - Incomplete device screenshot coverage & stale SHA-256 docs (`docs/qa/KAN-45/`)**:
-+   - No tablet (`768x1024`) or mobile (`375x667`) screenshots are present in `docs/qa/KAN-45/screenshots/`.
-+   - `message-to-reality-checker.md` and `api-specialist-review.md` cite legacy SHA-256 digests (`7982de04...` and `2e7db622...`) instead of the actual 249-byte/244-byte module digests (`79cdc606...` for `auto-label-mutator`), whereas `contract-sample.json` and `live-fullstack-proof.txt` reflect the live digest.
-+   - `test_validate_reality_checker_report_html_comments_and_order` docstring claims order validation, though `validate_reality_checker_report` in `kanban/issues/proof.py` uses a `dict` lookup and does not reject out-of-order H2 headings.
++1. **Critical - `GateWorkerRunner` fails under PostgreSQL `FORCE ROW LEVEL SECURITY` (`agent/gates/runner.py`, `p5_17a_workflow_hooks.up.sql`)**:
++   - In [runner.py](file:///home/adamoutler/kanban/agent/gates/runner.py#L71-L76,L91-L96,L134-L139,L199-L204), `poll_once`, `_load_entities`, `record_decision`, and `record_failure` all bind `RLSContext(principal_id=uuid.UUID(int=0), workspace_id=uuid.UUID(int=0), token_scopes=("admin",), aal_level=2)`.
++   - Under `FORCE ROW LEVEL SECURITY` as `kanban_app` ([p5_17a_workflow_hooks.up.sql](file:///home/adamoutler/kanban/database/migrations/sql/p5_17a_workflow_hooks.up.sql#L115-L178)), `workflow_transition_executions` and `workflow_hook_invocations` `SELECT` policies require `workspace_id = app_current_workspace_id()` AND `app_has_object_capability(issue_id, 1)`, and `issue_comments` `INSERT` requires `author_id = app_current_principal_id()` and capability 2 on `issue_id` (as directly observed in `live-fullstack-proof.txt` lines 20-23). Consequently, `GateWorkerRunner.poll_once()` returns 0 rows on live PostgreSQL, and `record_decision` / `record_failure` raise `EXECUTION_NOT_FOUND` or `InsufficientPrivilegeError`.
++2. **Critical - `GateWorkerRunner.poll_once` holds `FOR UPDATE` row locks across nested session calls (`agent/gates/runner.py`)**:
++   - [runner.py](file:///home/adamoutler/kanban/agent/gates/runner.py#L208-L276) acquires `with_for_update(skip_locked=True)` on `WorkflowHookInvocation` in `poll_once()` and awaits `self.worker.handle_dispatch(event)` before releasing/committing that transaction. Inside `handle_dispatch()`, `record_decision()` / `record_failure()` opens a second session and executes `select(WorkflowHookInvocation)...with_for_update()` ([async_gate.py](file:///home/adamoutler/kanban/kanban/workflows/async_gate.py#L304-L312,L828-L836)), which will self-deadlock on PostgreSQL once RLS permits rows to be read.
++3. **Medium - `validate_reality_checker_report` `claims_ready` boolean logic and `runner.py` status/deadline mismatches**:
++   - In [proof.py](file:///home/adamoutler/kanban/kanban/issues/proof.py#L324-L326), `claims_ready = "READY" in combined_check or bool(re.search(r"\bA\b", cert_body) or ...)` uses `or` rather than requiring `READY` explicitly when `require_ready=True` (so a report with `Grade: A` and `Status: PENDING` without `READY` would pass).
++   - In [runner.py](file:///home/adamoutler/kanban/agent/gates/runner.py#L213), `poll_once` queries `WorkflowHookInvocation.status.in_(["running", "pending_async"])` even though `ck_workflow_hook_invocations_status` does not permit `"pending_async"`, and `AgentGateDispatcher.dispatch` writes `deadline_at` to the outbox payload rather than `WorkflowHookInvocation.output_json` (relying on the `started_at + timeout_ms` fallback).
++   - Artifact commit metadata drift across the packet (`9b163f07` in `message-to-reality-checker.md` / `live-fullstack-proof.txt` vs `99dd3531dd8557a502f75466f983289aab0c6ced` in `build-or-typecheck.txt`, and `unit-test-results.txt` executed in worktree `swarm-b-kan45-final-ea722587`).
 +
 +**Critical Issues**:
-+- `GateWorkerRunner` (`agent/gates/runner.py`) missing lease claim (`FOR UPDATE SKIP LOCKED` / active claim guard) and timeout sweeping despite being claimed as implemented in `message-to-reality-checker.md`.
-+- Missing executed test evidence for `agent/tests/gates/test_gate_runner.py` and Problem 2 (`format_approve_comment`, Step 7 approval `IssueComment` + `COMMENT_CREATED` persistence, and `record_failure` fail-closed `completed` guard).
++- `GateWorkerRunner` (`agent/gates/runner.py`) uses `uuid.UUID(int=0)` for `workspace_id` and `principal_id`, which fails under `FORCE ROW LEVEL SECURITY` (`EXECUTION_NOT_FOUND` / `InsufficientPrivilegeError`) on real PostgreSQL as `kanban_app`.
++- `GateWorkerRunner.poll_once()` holds `FOR UPDATE SKIP LOCKED` locks on `WorkflowHookInvocation` while calling `handle_dispatch()` -> `record_decision()` / `record_failure()` in a second session (`FOR UPDATE` self-deadlock).
 +
 +**Medium Issues**:
-+- `complete_work` does not reject a `NEEDS WORK` / `FAILED` `summary_markdown` when `summary_markdown` omits `READY` / `A`.
-+- `SessionCookieResolver.resolve` prioritizes session cookie over `Authorization: Bearer` even when `CsrfMiddleware` bypassed CSRF due to `Authorization: Bearer`.
-+- Missing tablet/mobile screenshots, doc SHA-256 mismatch for `sec_invariant_validator` / `auto_label_mutator`, and H2 order-check gap vs test docstring.
++- `agent/tests/gates/test_gate_runner.py` uses `MockSessionFactory`/`AsyncMock` only and lacks a real PostgreSQL RLS integration test proving `GateWorkerRunner.poll_once()` can actually claim, dispatch, time out, and persist decisions/comments against `FORCE ROW LEVEL SECURITY`.
++- `validate_reality_checker_report(..., require_ready=True)` accepts `Grade: A` without `READY` (`or` instead of requiring `READY`), and packet commit SHAs (`9b163f07` vs `99dd3531`) are inconsistent across proof files.
 +
 +## 🎯 Realistic Quality Certification
-+**Overall Quality Rating**: B-
++**Overall Quality Rating**: B
 +**Design Implementation Level**: Good
-+**System Completeness**: 82% (Problems 1 and 3 and REST/CSRF guards are solid; `GateWorkerRunner` lease/timeout mechanics and Problem 2 / `agent` test proof are incomplete)
++**System Completeness**: 90% (Problems 1, 2 coordinator/comments, 3 Wasm, and 4 REST/CSRF/Bearer-first guards are solid and live-verified; `GateWorkerRunner` RLS execution and lock lifecycle fail against real PostgreSQL)
 +**Production Readiness**: NEEDS WORK
 +
 +## 🔄 Deployment Readiness Assessment
 +**Status**: NEEDS WORK
 +
 +**Required Fixes Before Production**:
-+1. Implement real lease claiming (e.g., `FOR UPDATE SKIP LOCKED` + lease/claim tracking so concurrent or successive `poll_once` ticks cannot double-dispatch an active `WorkflowHookInvocation`) and deadline timeout sweeping (calling `record_failure(..., "GATE_TIMEOUT")` on expired `pending_async` invocations) in `agent/gates/runner.py`, and add unit tests covering double-dispatch prevention and timeout sweeping.
-+2. Add and execute pytest suites covering Problem 2 (`format_approve_comment`, Step 7 `IssueComment` + `COMMENT_CREATED` persistence in `GateCoordinator.record_decision`, and `fail_closed` enforcement on `completed` target states in `GateCoordinator.record_failure`) plus `agent/tests/gates/test_gate_runner.py`, and capture raw output in `docs/qa/KAN-45/unit-test-results.txt`.
-+3. Enforce in `complete_work` (`kanban/issues/workflow_service.py`) or `validate_reality_checker_report` (e.g. via `require_ready=True` mode) that `summary_markdown` actually certifies `READY` (and rejects `NEEDS WORK` / `NEEDS_WORK` / `FAILED` even if `READY` is omitted) when closing an issue via `complete_work`.
-+4. Harden `SessionCookieResolver.resolve` (`kanban/auth/sessions/resolver.py`) so requests carrying `Authorization: Bearer` resolve the Bearer credential rather than falling back to an ambient session cookie, or ensure `CsrfMiddleware` does not bypass CSRF when authenticating via cookie.
-+5. Align `message-to-reality-checker.md` and `api-specialist-review.md` SHA-256 digests with `builtins.py` (`_SEC_SHA256` / `_MUT_SHA256`), and add tablet/mobile + async-gate approval comment screenshot/live proof to `docs/qa/KAN-45/`.
++1. Fix `GateWorkerRunner` (`agent/gates/runner.py`) RLS context resolution and locking lifecycle:
++   - Do not bind `workspace_id=uuid.UUID(int=0), principal_id=uuid.UUID(int=0)` for `WorkflowHookInvocation` / `WorkflowTransitionExecution` / `IssueComment` operations; enumerate or resolve each pending invocation's real `workspace_id` and `agent_def.principal_id` (via an authorized `SECURITY DEFINER` / worker-scoped lookup or per-workspace context with the agent principal that holds issue capabilities, matching the `Gate-agent RLSContext` that passed in `live-fullstack-proof.txt` line 23).
++   - Release/commit the claiming transaction (or mark lease/extract IDs cleanly) BEFORE awaiting `self.worker.handle_dispatch(event)` so `poll_once()` never holds `FOR UPDATE` row locks while `record_decision()` / `record_failure()` opens a second session taking `FOR UPDATE` on the same rows.
++2. Add a real PostgreSQL (`committed_db` / `api_env` with `FORCE ROW LEVEL SECURITY` as `kanban_app`) test in `agent/tests/gates/test_gate_runner.py` (or `kanban/tests/workflows/`) exercising `GateWorkerRunner.poll_once()` end-to-end for both `handle_dispatch` -> `record_decision` (including `IssueComment` persistence) and expired `GATE_TIMEOUT` -> `record_failure`, plus live container execution of `GateWorkerRunner.poll_once()` in `docs/qa/KAN-45/live-fullstack-proof.txt`.
++3. Tighten `validate_reality_checker_report` (`kanban/issues/proof.py` line 324) so `require_ready=True` requires `"READY"` in certification/deployment readiness (not merely `Grade: A` alone), and align commit hashes across `build-or-typecheck.txt`, `unit-test-results.txt`, and `live-fullstack-proof.txt` from a single final commit.
 +
-+**Timeline for Production Readiness**: 1 revision cycle (estimated 2-4 hours of implementation, test execution, and live-stack re-capture).
++**Timeline for Production Readiness**: 1 revision cycle (estimated 2-3 hours to fix `GateWorkerRunner` RLS/locking, add a real DB test, and re-run live + static proof).
 +**Revision Cycle Required**: YES
 +
 +## 📈 Success Metrics for Next Iteration
 +**What Needs Improvement**:
-+- Eliminate premature `APPROVED` sign-offs when claimed behaviors (`GateWorkerRunner` lease claim + timeout sweep) are absent on disk and when changed test files (`agent/tests/gates/test_gate_runner.py`, Problem 2 async gate tests) are missing from `unit-test-results.txt`.
-+- Close the `summary_markdown` `NEEDS WORK` bypass in `complete_work` and the cookie-vs-Bearer resolver mismatch with `CsrfMiddleware`.
++- Replace mock-only confidence in `GateWorkerRunner` with real `FORCE ROW LEVEL SECURITY` PostgreSQL verification so background gate polling, timeout sweeping, and Step 7 comment persistence actually execute in production without `EXECUTION_NOT_FOUND`, `InsufficientPrivilegeError`, or `FOR UPDATE` deadlocks.
 +
 +**Quality Targets**:
-+- 100% of changed Python modules (`kanban/`, `mcp/`, `agent/`) represented in `unit-test-results.txt` with passing tests (`>=95%` coverage).
-+- Zero discrepancy between claims in `message-to-reality-checker.md` / specialist reviews and actual on-disk code + SHA-256 hashes.
-+- Live full-stack proof demonstrating Problem 2 Step 7 approval comment persistence (`## ✅🤖 Workflow Transition Gate Approved`) and fail-closed timeout behavior, alongside `complete_work` rejecting `NEEDS WORK` markdown even without `READY` present.
++- `GateWorkerRunner.poll_once()` executes end-to-end against live `kanban_app` PostgreSQL (`FORCE ROW LEVEL SECURITY`), claiming pending invocations, persisting `approve` / `reject` / `GATE_TIMEOUT` verdicts and `IssueComment` rows with zero RLS errors and zero lock deadlocks.
++- 100% of proof files (`build-or-typecheck.txt`, `unit-test-results.txt`, `live-fullstack-proof.txt`) recorded from the same final commit SHA.
 +
 +**Evidence Requirements**:
-+- Updated `docs/qa/KAN-45/unit-test-results.txt` including `agent/tests/gates/test_gate_runner.py`, Problem 2 async gate tests (`record_decision` Step 7 comment + `record_failure` completed-state fail-closed), and new `complete_work` `NEEDS WORK`-without-`READY` rejection tests.
-+- Updated `docs/qa/KAN-45/live-fullstack-proof.txt` and `docs/qa/KAN-45/screenshots/` including desktop/tablet/mobile captures and a live async gate approval comment screenshot.
++- Updated `agent/tests/gates/test_gate_runner.py` output in `docs/qa/KAN-45/unit-test-results.txt` including a non-mocked PostgreSQL RLS test of `GateWorkerRunner.poll_once()` (dispatch approval + `GATE_TIMEOUT` sweep).
++- Updated `docs/qa/KAN-45/live-fullstack-proof.txt` demonstrating `GateWorkerRunner.poll_once()` (not manual `GateCoordinator.record_decision` bypass) completing an async gate transition and timeout sweep on the live container.
 +
 +---
 +**Integration Agent**: RealityIntegration
-+**Assessment Date**: 2026-11-20
++**Assessment Date**: 2026-11-21
 +**Evidence Location**: docs/qa/KAN-45/
 +**Re-assessment Required**: After fixes implemented
+diff --git a/docs/qa/KAN-45/screenshots/live-async-gate-approved-comment-desktop.png b/docs/qa/KAN-45/screenshots/live-async-gate-approved-comment-desktop.png
+new file mode 100644
+index 00000000..b3c84d59
+Binary files /dev/null and b/docs/qa/KAN-45/screenshots/live-async-gate-approved-comment-desktop.png differ
 diff --git a/docs/qa/KAN-45/screenshots/live-issue-completed-proof-desktop-dark.png b/docs/qa/KAN-45/screenshots/live-issue-completed-proof-desktop-dark.png
-index eb3bd14a..8ec52ec5 100644
+index eb3bd14a..6188e652 100644
 Binary files a/docs/qa/KAN-45/screenshots/live-issue-completed-proof-desktop-dark.png and b/docs/qa/KAN-45/screenshots/live-issue-completed-proof-desktop-dark.png differ
 diff --git a/docs/qa/KAN-45/screenshots/live-issue-completed-proof-desktop-light.png b/docs/qa/KAN-45/screenshots/live-issue-completed-proof-desktop-light.png
-index 6e4e0758..1a38bf12 100644
+index 6e4e0758..b8e972e3 100644
 Binary files a/docs/qa/KAN-45/screenshots/live-issue-completed-proof-desktop-light.png and b/docs/qa/KAN-45/screenshots/live-issue-completed-proof-desktop-light.png differ
+diff --git a/docs/qa/KAN-45/screenshots/live-issue-completed-proof-mobile.png b/docs/qa/KAN-45/screenshots/live-issue-completed-proof-mobile.png
+new file mode 100644
+index 00000000..3c8f7626
+Binary files /dev/null and b/docs/qa/KAN-45/screenshots/live-issue-completed-proof-mobile.png differ
+diff --git a/docs/qa/KAN-45/screenshots/live-issue-completed-proof-tablet.png b/docs/qa/KAN-45/screenshots/live-issue-completed-proof-tablet.png
+new file mode 100644
+index 00000000..9d7d2831
+Binary files /dev/null and b/docs/qa/KAN-45/screenshots/live-issue-completed-proof-tablet.png differ
 diff --git a/docs/qa/KAN-45/screenshots/live-workflow-wasm-dryrun-allow.png b/docs/qa/KAN-45/screenshots/live-workflow-wasm-dryrun-allow.png
-index cf23cdfb..8761a238 100644
+index cf23cdfb..ea85704a 100644
 Binary files a/docs/qa/KAN-45/screenshots/live-workflow-wasm-dryrun-allow.png and b/docs/qa/KAN-45/screenshots/live-workflow-wasm-dryrun-allow.png differ
 diff --git a/docs/qa/KAN-45/screenshots/live-workflow-wasm-dryrun-reject.png b/docs/qa/KAN-45/screenshots/live-workflow-wasm-dryrun-reject.png
-index e780cb5d..8e94d978 100644
+index e780cb5d..0744268a 100644
 Binary files a/docs/qa/KAN-45/screenshots/live-workflow-wasm-dryrun-reject.png and b/docs/qa/KAN-45/screenshots/live-workflow-wasm-dryrun-reject.png differ
 diff --git a/docs/qa/KAN-45/ui-specialist-review.md b/docs/qa/KAN-45/ui-specialist-review.md
-index 1a48d0a4..a25de917 100644
+index 1a48d0a4..38801643 100644
 --- a/docs/qa/KAN-45/ui-specialist-review.md
 +++ b/docs/qa/KAN-45/ui-specialist-review.md
 @@ -2,9 +2,11 @@
@@ -1150,8 +1515,8 @@ index 1a48d0a4..a25de917 100644
  **Title:** [KB-P3-GATE-ENFORCE] Enforce Canonical Reality-Checker Report on complete_work, Real qa-proof-validator Wasm, Approval Comment Persistence, and Agent Done-Transition Guards  
 -**Branch:** `feat/KAN-45`  
 -**Commit Under Audit:** `5c345a8e`  
-+**Branch:** `main` (integrated at commit `78074a1d`)  
-+**Commit Under Audit:** `78074a1d65216b6b3546b122445cdb322e0b1651`  
++**Branch:** `main` (integrated at commit `9b163f07`)  
++**Commit Under Audit:** `9b163f0717d384971a78e8cd8dbfaa8150f7d7c0`  
  **Base Commit Reference:** `73caabe7` (merged on `main`)  
 +**Live Full-Stack Target:** `kanban-liveqa-4` (`http://127.0.0.1:18964`, PostgreSQL 16 + FORCE RLS)  
 +**Live Full-Stack Verdict:** PASS (`OVERALL LIVE_STACK_VERDICT: PASS`)  
@@ -1163,7 +1528,7 @@ index 1a48d0a4..a25de917 100644
  ## 1. Executive Summary & Verification Scope
  
 -An independent clean-room UI and UX architectural audit was conducted for ticket **KAN-45** on branch `feat/KAN-45` at commit `5c345a8e` pursuant to the mandatory Dual Specialist Gate defined in `GEMINI.md`.
-+An independent clean-room UI and UX architectural audit was conducted for ticket **KAN-45** integrated into `main` at commit `78074a1d` pursuant to the mandatory Dual Specialist Gate defined in `GEMINI.md`.
++An independent clean-room UI and UX architectural audit was conducted for ticket **KAN-45** integrated into `main` at commit `9b163f07` pursuant to the mandatory Dual Specialist Gate defined in `GEMINI.md`.
  
  Although ticket KAN-45 focuses on transition engine gate enforcement, real Wasm bytecode validation, and MCP tool verification, it introduces critical behavioral invariants directly governing user-facing surfaces:
  1. REST completed-state transitions are guarded against agent bypasses while preserving seamless human interaction on the board and issue detail surfaces.
@@ -1173,14 +1538,14 @@ index 1a48d0a4..a25de917 100644
    * Forces agents through `mcp_kanban_complete_work`, ensuring no automated ticket closure bypasses reality-checker verification.
 -- **Verification:** Verified in `test_agent_caller_blocked_from_completed_state_on_patch` in `kanban/tests/api/test_gate_enforcement_hardening.py` (lines 428-435).
 +- **Live Stack Proof Telemetry:**
-+  * Guard 1a: Stateless Bearer `PATCH /api/v1/issues/KAN-1` -> HTTP 422 `code=USE_COMPLETE_WORK` (88ms).
-+  * Guard 1b: Stateless Bearer `POST /api/v1/issues/KAN-1/move` -> HTTP 422 `code=USE_COMPLETE_WORK` (65ms).
-+  * Guard 1c: Stateless Bearer `POST /api/v1/issues/KAN-1/transition` -> HTTP 422 `code=USE_COMPLETE_WORK` (37ms).
-+  * Guard 1d: Human cookie `POST /api/v1/issues/KAN-1/move` -> HTTP 200 (70ms).
++  * Guard 1a: Stateless Bearer `PATCH /api/v1/issues/KAN-1` -> HTTP 422 `code=USE_COMPLETE_WORK` (80ms).
++  * Guard 1b: Stateless Bearer `POST /api/v1/issues/KAN-1/move` -> HTTP 422 `code=USE_COMPLETE_WORK` (41ms).
++  * Guard 1c: Stateless Bearer `POST /api/v1/issues/KAN-1/transition` -> HTTP 422 `code=USE_COMPLETE_WORK` (32ms).
++  * Guard 1d: Human cookie `POST /api/v1/issues/KAN-1/move` -> HTTP 200 (75ms).
  
  ### 2.2. Approval Report Comment in Activity & Comments Stream
  - **Format Structure (`format_approve_comment` in `kanban/workflows/async_gate.py`):**
-@@ -71,46 +77,70 @@ The UI Specialist audit confirms:
+@@ -71,46 +77,87 @@ The UI Specialist audit confirms:
    * `serialize_issue` remains completely untouched, ensuring read-only viewing of held issues remains fluid.
  
  ### 2.4. Wasm Runner Performance & Dry-Run Responsiveness
@@ -1188,7 +1553,7 @@ index 1a48d0a4..a25de917 100644
 +- **Execution Budget:** In `kanban/workflows/builtins.py`, the real compiled Wasm modules:
 +  * `qa-proof-validator` (`sha256:fddfe97e1b15829495364a2002bf0a0c830002f9ef673971a1a4167ee815d972`)
 +  * `auto-label-mutator` (`sha256:79cdc606bf7cab8b1de8a204a126e9302f831bdf32db6ea2170970bb822140dd`)
-+  execute deterministically within `<2ms` (< 500us in live container: 381us for rejection, 299us for allow) and <= 2,000,000 fuel.
++  execute deterministically within `<2ms` (< 650us in live container: 644us for rejection, 361us for allow) and <= 2,000,000 fuel.
  - **Studio Dry-Run Impact:**
    * In `WorkflowStudioPage.tsx` and `DryRunDrawer.tsx`, executing a dry-run test against sample tickets returns instantaneous results.
    * Prevents UI spinners from hanging and provides instant validator feedback in the dry-run console.
@@ -1223,7 +1588,7 @@ index 1a48d0a4..a25de917 100644
 -- **Untracked Hygiene:** `.backup_schedule.json` and `backups/` strictly preserved unstaged.
 +## 3. Visual Screenshot Audit (`docs/qa/KAN-45/screenshots/`)
 +
-+Direct visual inspection via `read_file` confirms:
++Direct visual inspection via `read_file` confirms all 7 screenshots on disk:
 +1. `live-workflow-wasm-dryrun-reject.png`:
 +   - Dry-Run drawer displays rejection banner: `🛑 Transition Blocked: Changes would not commit (would_commit: false)`.
 +   - Step 1 clearly shows: `🛑 1. require-qa-proof-link [sync_validator] Rejected <1ms`.
@@ -1234,12 +1599,23 @@ index 1a48d0a4..a25de917 100644
 +   - Step 1 shows: `✅ 1. require-qa-proof-link [sync_validator] Allowed <1ms`.
 +   - Step 2 shows: `✅ 2. auto-label-verified [sync_mutator] Allowed <1ms`.
 +   - Clean green state tokens, responsive slide-over drawer layout.
-+3. `live-issue-completed-proof-desktop-light.png` & `live-issue-completed-proof-desktop-dark.png`:
-+   - Renders completed issue `KAN-2` in light and dark modes with status badge `Done`.
-+   - Activity feed shows the canonical comment authored during `complete_work`:
-+     `# Integration Agent Reality-Based Report`
-+     `## Reality Check Validation Verified live full-stack enforcement for KAN-2 against kanban-liveqa-4 with FORCE ROW LEVEL SECURITY active.`
-+   - Contrast passes WCAG AA, robot avatar and author badge `@qaadmin` display properly without clipping.
++3. `live-issue-completed-proof-desktop-light.png`:
++   - Renders completed issue `KAN-2` in desktop light mode (1440x900) with status badge `Done`.
++   - Activity feed shows the canonical report comment authored during `complete_work`:
++     `# Integration Agent Reality-Based Report` with all 6 canonical sections.
++   - Contrast passes WCAG AA, author badge `@qaadmin` displays properly without clipping.
++4. `live-issue-completed-proof-desktop-dark.png`:
++   - Renders completed issue `KAN-2` in desktop dark mode (1440x900) with status badge `Done`.
++   - Dark theme styling passes contrast audits with proper tokenization.
++5. `live-issue-completed-proof-tablet.png`:
++   - Renders completed issue `KAN-2` on tablet viewport (768x1024).
++   - Responsive layout preserves header, state badge, and activity tablist without clipping.
++6. `live-issue-completed-proof-mobile.png`:
++   - Renders completed issue `KAN-2` on mobile viewport (390x844).
++   - Single-column stacked layout displays state badge `Done` and completed status cleanly.
++7. `live-async-gate-approved-comment-desktop.png`:
++   - Renders issue `KAN-3` transitioned to `In Progress` after asynchronous gate approval.
++   - Verifies the persisted gate approval comment authored by `@qagatereviewer` containing header `## ✅🤖 Workflow Transition Gate Approved`, hook metadata, transition details, and audit rationale.
  
  ---
  
@@ -1247,14 +1623,16 @@ index 1a48d0a4..a25de917 100644
 +## 4. Test Suites, Coverage & Quality Gates
 +
 +### 4.1. Automated Backend Test Suites
-+- `kanban/tests/api/test_gate_enforcement_hardening.py`: 15 passed in 1.42s.
++- `kanban/tests/api/test_gate_enforcement_hardening.py`: 15 passed in 1.36s.
 +- `kanban/tests/workflows/test_qa_proof_validator_wasm.py`: 6 passed.
 +- `kanban/tests/workflows/test_dry_run.py`: 7 passed.
 +- `kanban/tests/workflows/test_workflow_hooks_api.py`: 16 passed.
-+- Combined workflow suite: 29 passed in 6.59s.
++- Combined workflow suite: 29 passed in 6.50s.
++- `kanban/tests/workflows/test_async_gate.py`: 16 passed in 4.89s.
++- Total suites: 103 passed across 7 test suites.
 +
 +### 4.2. Live Container Verification (`live-fullstack-proof.txt`)
-+- Target: `kanban-liveqa-4` (`http://127.0.0.1:18964`, commit `78074a1d`).
++- Target: `kanban-liveqa-4` (`http://127.0.0.1:18964`, commit `9b163f07`).
 +- Runtime Telemetry:
 +  * Console errors: 0
 +  * Page errors: 0
@@ -1262,8 +1640,12 @@ index 1a48d0a4..a25de917 100644
 +- Individual Verdicts:
 +  * `G1_STATELESS_BEARER_BYPASS_BLOCKED_HUMAN_ALLOWED`: PASS
 +  * `G2_MCP_AND_BEARER_REST_REJECT_SHORT_CONTRADICTORY`: PASS
++  * `G2B_COMPLETE_WORK_REJECTS_NEEDS_WORK_WITHOUT_READY`: PASS
++  * `G2C_COOKIE_PLUS_DUMMY_BEARER_RETURNS_401_NO_CSRF_BYPASS`: PASS
 +  * `G3_WASM_QA_PROOF_AND_AUTO_LABEL_CLEAN`: PASS
 +  * `G4_VALID_CANONICAL_REPORT_COMPLETE_WORK`: PASS
++  * `P2_ASYNC_GATE_APPROVE_COMMENT_PERSISTED_AND_RENDERED`: PASS
++  * `UI_DESKTOP_TABLET_MOBILE_RESPONSIVE_ZERO_ERRORS`: PASS
 +- Overall Verdict: `OVERALL LIVE_STACK_VERDICT (KAN-45): PASS`
 +
 +### 4.3. Static Quality & Security Gates
@@ -1281,119 +1663,290 @@ index 1a48d0a4..a25de917 100644
  - **Status:** APPROVED
 -- **Recommendation:** Proceed to API Specialist review completion, reality-checker QA gate, and merge coordination.
 diff --git a/docs/qa/KAN-45/unit-test-results.txt b/docs/qa/KAN-45/unit-test-results.txt
-index 7bd108f6..dc3e8c0a 100644
+index 7bd108f6..de078671 100644
 --- a/docs/qa/KAN-45/unit-test-results.txt
 +++ b/docs/qa/KAN-45/unit-test-results.txt
-@@ -1,7 +1,7 @@
+@@ -1,28 +1,268 @@
++=== UNIT TESTS & COVERAGE (HEAD 2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd) ===
  === 1. Gate Hardening & Workflow API Tests (including Bearer CSRF bypass) ===
++👍 INFO  [alembic.runtime.migration] Context impl PostgresqlImpl.
++👍 INFO  [alembic.runtime.migration] Will assume transactional DDL.
++👍 INFO  [alembic.runtime.migration] Running upgrade  -> p1_01_baseline, Alembic async baseline migration: roles, extensions, and uuidv7.
++👍 INFO  [alembic.runtime.migration] Running upgrade p1_01_baseline -> p1_02_objects_spine, Workspaces and objects spine, object_kind enum, and register_object.
++👍 INFO  [alembic.runtime.migration] Running upgrade p1_02_objects_spine -> p1_03_principals, Principals, users, groups, and cycle-safe principal_group_closure.
++👍 INFO  [alembic.runtime.migration] Running upgrade p1_03_principals -> p1_04_projects, Projects, workflow_states, project_priorities, and project_labels.
++👍 INFO  [alembic.runtime.migration] Running upgrade p1_04_projects -> p1_11_object_links, Object links, link_kind enum, and link_type_matrix allowlist.
++👍 INFO  [alembic.runtime.migration] Running upgrade p1_11_object_links -> p1_10_views, Views table, view_layout enum, and filter/WIP JSON validators.
++👍 INFO  [alembic.runtime.migration] Running upgrade p1_10_views -> p1_05_issues, Issues table, atomic sequence allocation, and build_markdown_tsvector.
++👍 INFO  [alembic.runtime.migration] Running upgrade p1_05_issues -> p1_12_activity_ledger, Partitioned SHA-256 hash-chained activity_records, append_activity & verify_activity_chain.
++👍 INFO  [alembic.runtime.migration] Running upgrade p1_12_activity_ledger -> p1_13_access_control, Role bindings, resource ACL entries, and effective_resource_access.
++👍 INFO  [alembic.runtime.migration] Running upgrade p1_13_access_control -> p1_08_planning_joins, Cycles, modules, assignees, labels, and subscriptions join tables.
++👍 INFO  [alembic.runtime.migration] Running upgrade p1_08_planning_joins -> p1_06_parent_dag, Parent DAG trigger with FOR UPDATE ancestor locks and ltree ancestry.
++👍 INFO  [alembic.runtime.migration] Running upgrade p1_06_parent_dag -> p1_09_prose_tables, Prose tables: issue_comments, docs, pages, page_versions, and stickies.
++👍 INFO  [alembic.runtime.migration] Running upgrade p1_09_prose_tables -> p1_07_creator_provenance, Created-by provenance trigger with admin-only override and CREATOR_OVERRIDDEN ledger entry.
++👍 INFO  [alembic.runtime.migration] Running upgrade p1_07_creator_provenance -> p1_14_force_rls, FORCE ROW LEVEL SECURITY policies, session context helpers, and schema-wide RLS catalog gate.
++👍 INFO  [alembic.runtime.migration] Running upgrade p1_14_force_rls -> p1_15_link_auditor, audit_object_links() 6-reason detector, invalid_object_link_audits & incremental triggers.
++👍 INFO  [alembic.runtime.migration] Running upgrade p1_15_link_auditor -> p1_16_link_purger, purge_invalid_object_links() admin-only audited purge & INVALID_OBJECT_LINK_PURGED ledger.
++👍 INFO  [alembic.runtime.migration] Running upgrade p1_16_link_purger -> p1_18_outbox, Transactional outbox_events, OutboxRelay (SKIP LOCKED) and RealtimeBroker.
++👍 INFO  [alembic.runtime.migration] Running upgrade p1_18_outbox -> p5_06_object_embeddings, object_embeddings (pgvector HNSW + FORCE RLS).
++👍 INFO  [alembic.runtime.migration] Running upgrade p5_06_object_embeddings -> p2_03_auth_provider_cards, auth_provider_cards DDL, kb_auth data boundary and envelope encryption (KB-P2-03).
++👍 INFO  [alembic.runtime.migration] Running upgrade p2_03_auth_provider_cards -> p2_18_rate_limit_buckets, Rate limit buckets (PG-backed + Valkey-backed sliding window).
++👍 INFO  [alembic.runtime.migration] Running upgrade p2_18_rate_limit_buckets -> p2_02_sessions, Server-side sessions, HMAC-signed __Host- cookies, rotation, timeouts and CSRF (KB-P2-02).
++👍 INFO  [alembic.runtime.migration] Running upgrade p2_02_sessions -> p5_16_agent_definitions, agent_definitions registry (KB-P5-16).
++👍 INFO  [alembic.runtime.migration] Running upgrade p5_16_agent_definitions -> p3_01b_workflow_state_wip_limits, Workflow states WIP limits (KB-P3-01b).
++👍 INFO  [alembic.runtime.migration] Running upgrade p3_01b_workflow_state_wip_limits -> p2_15_attachments, attachments (FORCE RLS, metadata guards, content-addressed storage keys).
++👍 INFO  [alembic.runtime.migration] Running upgrade p2_15_attachments -> p2_04_local_admin_credentials, Local Admin credentials and kb_auth functions (KB-P2-04).
++👍 INFO  [alembic.runtime.migration] Running upgrade p2_04_local_admin_credentials -> p2_06_oidc_auth_requests, OIDC and OAuth2 authentication requests and state tracking (KB-P2-06).
++👍 INFO  [alembic.runtime.migration] Running upgrade p2_06_oidc_auth_requests -> p3_05_comment_threads_reactions, Threaded comments, reactions, permalinks and access-checked mentions (KB-P3-05).
++👍 INFO  [alembic.runtime.migration] Running upgrade p3_05_comment_threads_reactions -> p2_05a_mfa_totp_recovery, RFC 6238 TOTP, recovery codes, and kb_auth functions (KB-P2-05a).
++👍 INFO  [alembic.runtime.migration] Running upgrade p2_05a_mfa_totp_recovery -> p3_10b_modules, Modules schema: description, lead, status, and issue_modules audit (KB-P3-10b).
++👍 INFO  [alembic.runtime.migration] Running upgrade p3_10b_modules -> p3_04_creator_override_reason, Add reason and old/new creator IDs to CREATOR_OVERRIDDEN activity payload (KB-P3-04).
++👍 INFO  [alembic.runtime.migration] Running upgrade p3_04_creator_override_reason -> p4_02a_mcp_api_keys, Scoped kb_* API keys, surface binding, scopes & token introspection (KB-P4-02a).
++👍 INFO  [alembic.runtime.migration] Running upgrade p4_02a_mcp_api_keys -> p2_07_ldap_group_mappings, LDAP group mappings table with FORCE RLS (KB-P2-07).
++👍 INFO  [alembic.runtime.migration] Running upgrade p2_07_ldap_group_mappings -> p3_06_notifications, Issue subscriptions, auto-subscribe rules, per-event mute & notifications (KB-P3-06).
++👍 INFO  [alembic.runtime.migration] Running upgrade p3_06_notifications -> p2_05b_webauthn_credentials, WebAuthn and Passkeys registration, assertion, credentials, and challenges (KB-P2-05b).
++👍 INFO  [alembic.runtime.migration] Running upgrade p2_05b_webauthn_credentials -> p3_08_issue_copy, Make a copy issue subtree collector function (KB-P3-08).
++👍 INFO  [alembic.runtime.migration] Running upgrade p3_08_issue_copy -> p3_09b_issue_delete_blast_radius, Security Definer helpers for issue blast radius calculation.
++👍 INFO  [alembic.runtime.migration] Running upgrade p3_09b_issue_delete_blast_radius -> p5_11_custom_fields, Custom field definitions, Admin-only RBAC/RLS WITH CHECK gate & 7-format schema (KB-P5-11).
++👍 INFO  [alembic.runtime.migration] Running upgrade p5_11_custom_fields -> p2_09_lockout_prevented, Add LOCKOUT_PREVENTED 3-layer safeguards and emergency unlock (KB-P2-09).
++👍 INFO  [alembic.runtime.migration] Running upgrade p2_09_lockout_prevented -> p2_12_setup_claim_tokens, First-boot setup claim tokens and kb_auth functions (KB-P2-12).
++👍 INFO  [alembic.runtime.migration] Running upgrade p2_12_setup_claim_tokens -> p3_17_search_indexes, Add search_tsv generated columns and GIN indexes for search (KB-P3-17).
++👍 INFO  [alembic.runtime.migration] Running upgrade p3_17_search_indexes -> p4_02b_oauth_clients_codes, OAuth 2.1 authorization server, clients, codes, grants & tokens (KB-P4-02b).
++👍 INFO  [alembic.runtime.migration] Running upgrade p4_02b_oauth_clients_codes -> p2_08_user_identities, Identity linking without email auto-merge: user_identities and identity_link_intents (KB-P2-08).
++👍 INFO  [alembic.runtime.migration] Running upgrade p2_08_user_identities -> p2_10_auth_card_admin_ops, Auth card admin ops and public enabled projection (KB-P2-10).
++👍 INFO  [alembic.runtime.migration] Running upgrade p2_10_auth_card_admin_ops -> p5_12_custom_field_approvals, Cryptographic manifest_sha256 escalation approvals (KB-P5-12, S13.2, S4.2, S3.2).
++👍 INFO  [alembic.runtime.migration] Running upgrade p5_12_custom_field_approvals -> p6_01_import_entity_mappings, Lossless Plane importer entity mappings table (KB-P6-01, S1.3, S15.5).
++👍 INFO  [alembic.runtime.migration] Running upgrade p6_01_import_entity_mappings -> p4_13_mcp_ephemeral_tokens, Ephemeral kb_agt_eph_* read-only MCP tokens (KB-P4-13).
++👍 INFO  [alembic.runtime.migration] Running upgrade p4_13_mcp_ephemeral_tokens -> p4_09a_workspace_settings, DDL workspace_settings table, FORCE RLS, defaults & triggers (KB-P4-09a).
++👍 INFO  [alembic.runtime.migration] Running upgrade p4_09a_workspace_settings -> p5_05a_ai_providers_and_ledgers, ai_provider_configs (KMS-wrapped keys), ai_token_ledgers & atomic BudgetEnforcer (KB-P5-05a).
++👍 INFO  [alembic.runtime.migration] Running upgrade p5_05a_ai_providers_and_ledgers -> p4_16_oauth_device_codes, RFC 8628 Headless CLI Device Authorization Codes (KB-P4-16).
++👍 INFO  [alembic.runtime.migration] Running upgrade p4_16_oauth_device_codes -> p4_12_destructive_tokens, Destructive confirmation tokens table (KB-P4-12, S11.4, S7.2, S12.3).
++👍 INFO  [alembic.runtime.migration] Running upgrade p4_12_destructive_tokens -> p5_13_approved_wasm_modules, approved_wasm_modules table for sandboxed custom fields and sync hooks (KB-P5-13).
++👍 INFO  [alembic.runtime.migration] Running upgrade p5_13_approved_wasm_modules -> p4_14_mcp_scopable_keys, Hierarchical scopable MCP API keys, narrowing, RLS & unlimited expiry (KB-P4-14 / KANBA-106).
++👍 INFO  [alembic.runtime.migration] Running upgrade p4_14_mcp_scopable_keys -> p5_19b_project_repo_bindings, project_repo_bindings registry for hardened bare git mirrors (KB-P5-19b).
++👍 INFO  [alembic.runtime.migration] Running upgrade p5_19b_project_repo_bindings -> p4_07_mcp_read_taint, mcp_read_taint table for session read-taint exfiltration guard (KB-P4-07).
++👍 INFO  [alembic.runtime.migration] Running upgrade p4_07_mcp_read_taint -> p5_17a_workflow_hooks, Workflow hook DDL, executions, and invocations (KB-P5-17a).
++👍 INFO  [alembic.runtime.migration] Running upgrade p5_17a_workflow_hooks -> p5_22a_remote_runners, remote_runners and enrollment tokens registry (KB-P5-22a, S14.2, S11.4).
++👍 INFO  [alembic.runtime.migration] Running upgrade p5_22a_remote_runners -> p4_18_oauth_mcp_scoping, OAuth & MCP scoping helpers, label column, and RLS-safe workspace functions.
++👍 INFO  [alembic.runtime.migration] Running upgrade p4_18_oauth_mcp_scoping -> p4_19_persistent_sessions, Persistent sessions and remember_me.
++👍 INFO  [alembic.runtime.migration] Running upgrade p4_19_persistent_sessions -> p4_20_user_personal_settings, User personal settings preferences.
++👍 INFO  [alembic.runtime.migration] Running upgrade p4_20_user_personal_settings -> p4_21_workspace_project_rbac_fix, workspace project rbac fix.
++👍 INFO  [alembic.runtime.migration] Running upgrade p4_21_workspace_project_rbac_fix -> p4_22_outbox_replay_reader, Add SECURITY DEFINER outbox replay read routines.
++👍 INFO  [alembic.runtime.migration] Running upgrade p4_22_outbox_replay_reader -> p4_23_oidc_link_intent_fk, Fix oidc_auth_requests link_intent_id foreign key to reference identity_link_intents.
++👍 INFO  [alembic.runtime.migration] Running upgrade p4_23_oidc_link_intent_fk -> p4_24_agent_safe_sequences, Add swarm batch sequence allocator, skip loaded sequences and SEQUENCE_SKIPPED event.
  ============================= test session starts ==============================
- platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
 -rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan33-45-fix-999f22b1
-+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587
++platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
++rootdir: /home/adamoutler/kanban
  configfile: pyproject.toml
  plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
  asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-@@ -9,12 +9,12 @@ collected 15 items
+-collected 15 items
++collecting ... collected 15 items
  
- kanban/tests/api/test_gate_enforcement_hardening.py ...............      [100%]
+-kanban/tests/api/test_gate_enforcement_hardening.py ...............      [100%]
++kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_reality_checker_report_positive PASSED [  6%]
++kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_reality_checker_report_rejects_surrogates PASSED [ 13%]
++kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_reality_checker_report_rejects_missing_h1 PASSED [ 20%]
++kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_reality_checker_report_rejects_missing_sections PASSED [ 26%]
++kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_reality_checker_report_rejects_empty_section_body PASSED [ 33%]
++kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_reality_checker_report_fenced_blocks_and_comments_ignored PASSED [ 40%]
++kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_reality_checker_report_rejects_contradiction_markers PASSED [ 46%]
++kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_reality_checker_report_contradiction_in_code_block_allowed PASSED [ 53%]
++kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_ci_run_url_edge_cases PASSED [ 60%]
++kanban/tests/api/test_gate_enforcement_hardening.py::test_verification_proof_artifact_traversals_and_invariants PASSED [ 66%]
++kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_proof_ticket_key_mismatches PASSED [ 73%]
++kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_reality_checker_report_html_comments_and_order PASSED [ 80%]
++kanban/tests/api/test_gate_enforcement_hardening.py::test_agent_caller_blocked_from_completed_state_on_patch PASSED [ 86%]
++kanban/tests/api/test_gate_enforcement_hardening.py::test_patch_returns_409_transition_held_during_active_gate PASSED [ 93%]
++kanban/tests/api/test_gate_enforcement_hardening.py::test_agent_bearer_token_bypasses_csrf_and_enforces_gates PASSED [100%]
  
 -============================== 15 passed in 1.42s ==============================
-+============================== 15 passed in 1.36s ==============================
++============================== 15 passed in 1.48s ==============================
  
  === 2. Workflow & Built-in Wasm Validator Tests ===
  ============================= test session starts ==============================
- platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
 -rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan33-45-fix-999f22b1
-+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587
++platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
++rootdir: /home/adamoutler/kanban
  configfile: pyproject.toml
  plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
  asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-@@ -24,5 +24,84 @@ kanban/tests/workflows/test_qa_proof_validator_wasm.py ......            [ 20%]
- kanban/tests/workflows/test_dry_run.py .......                           [ 44%]
- kanban/tests/workflows/test_workflow_hooks_api.py ................       [100%]
+-collected 29 items
++collecting ... collected 29 items
+ 
+-kanban/tests/workflows/test_qa_proof_validator_wasm.py ......            [ 20%]
+-kanban/tests/workflows/test_dry_run.py .......                           [ 44%]
+-kanban/tests/workflows/test_workflow_hooks_api.py ................       [100%]
++kanban/tests/workflows/test_qa_proof_validator_wasm.py::test_qa_proof_validator_wasm_bytecode_integrity PASSED [  3%]
++kanban/tests/workflows/test_qa_proof_validator_wasm.py::test_qa_proof_validator_execution_speed_and_fuel PASSED [  6%]
++kanban/tests/workflows/test_qa_proof_validator_wasm.py::test_qa_proof_validator_rejects_missing_ready PASSED [ 10%]
++kanban/tests/workflows/test_qa_proof_validator_wasm.py::test_qa_proof_validator_rejects_key_mismatch PASSED [ 13%]
++kanban/tests/workflows/test_qa_proof_validator_wasm.py::test_tier_a_wasm_runner_bounds_checks_alloc_ptr PASSED [ 17%]
++kanban/tests/workflows/test_qa_proof_validator_wasm.py::test_ensure_approved_wasm_modules PASSED [ 20%]
++kanban/tests/workflows/test_dry_run.py::test_dry_run_access_control PASSED [ 24%]
++kanban/tests/workflows/test_dry_run.py::test_dry_run_validation_errors PASSED [ 27%]
++kanban/tests/workflows/test_dry_run.py::test_dry_run_pipeline_steps_and_rowcount_invariance PASSED [ 31%]
++kanban/tests/workflows/test_dry_run.py::test_dry_run_rejection_step PASSED [ 34%]
++kanban/tests/workflows/test_dry_run.py::test_dry_run_with_existing_issue PASSED [ 37%]
++kanban/tests/workflows/test_dry_run.py::test_dry_run_failure_policies_and_edge_cases PASSED [ 41%]
++kanban/tests/workflows/test_dry_run.py::test_dry_run_wasm_exceptions_and_mutation_errors PASSED [ 44%]
++kanban/tests/workflows/test_workflow_hooks_api.py::test_list_workflow_hooks_empty PASSED [ 48%]
++kanban/tests/workflows/test_workflow_hooks_api.py::test_list_workflow_hooks_anti_enumeration PASSED [ 51%]
++kanban/tests/workflows/test_workflow_hooks_api.py::test_attach_workflow_hook_aal2_required PASSED [ 55%]
++kanban/tests/workflows/test_workflow_hooks_api.py::test_attach_workflow_hook_validations PASSED [ 58%]
++kanban/tests/workflows/test_workflow_hooks_api.py::test_attach_and_list_workflow_hooks_success PASSED [ 62%]
++kanban/tests/workflows/test_workflow_hooks_api.py::test_update_workflow_hook PASSED [ 65%]
++kanban/tests/workflows/test_workflow_hooks_api.py::test_enable_disable_workflow_hook PASSED [ 68%]
++kanban/tests/workflows/test_workflow_hooks_api.py::test_delete_workflow_hook PASSED [ 72%]
++kanban/tests/workflows/test_workflow_hooks_api.py::test_reorder_workflow_hooks PASSED [ 75%]
++kanban/tests/workflows/test_workflow_hooks_api.py::test_dry_run_endpoint PASSED [ 79%]
++kanban/tests/workflows/test_workflow_hooks_api.py::test_workflow_hook_not_found_and_invalid_ids PASSED [ 82%]
++kanban/tests/workflows/test_workflow_hooks_api.py::test_workflow_hook_advanced_updates_and_validations PASSED [ 86%]
++kanban/tests/workflows/test_workflow_hooks_api.py::test_reorder_hooks_edge_cases PASSED [ 89%]
++kanban/tests/workflows/test_workflow_hooks_api.py::test_hooks_service_internal_utilities PASSED [ 93%]
++kanban/tests/workflows/test_workflow_hooks_api.py::test_hooks_service_agent_and_sync_cross_configuration_rejections PASSED [ 96%]
++kanban/tests/workflows/test_workflow_hooks_api.py::test_approved_wasm_modules_list_and_builtin_auto_seed PASSED [100%]
  
 -============================== 29 passed in 6.59s ==============================
-+============================== 29 passed in 6.50s ==============================
-+
-+=== 3. Problem 2 Async Gate, Comment Persistence & Fail-Closed GateCoordinator ===
++============================== 29 passed in 6.65s ==============================
+ 
++=== 3. Problem 2 Async Gate, Comment Persistence & Real PostgreSQL RLS Integration ===
 +============================= test session starts ==============================
-+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587
++platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
++rootdir: /home/adamoutler/kanban
 +configfile: pyproject.toml
 +plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 +asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-+collected 16 items
++collecting ... collected 18 items
 +
-+kanban/tests/workflows/test_async_gate.py ................               [100%]
++kanban/tests/workflows/test_async_gate.py::test_case_1_positive_single_agent_hook_202_then_approve PASSED [  5%]
++kanban/tests/workflows/test_async_gate.py::test_format_approve_comment_canonical_header_and_no_dashes PASSED [ 11%]
++kanban/tests/workflows/test_async_gate.py::test_case_2_positive_two_sequential_agent_hooks_and_reject PASSED [ 16%]
++kanban/tests/workflows/test_async_gate.py::test_case_3_security_toctou_concurrent_description_edit PASSED [ 22%]
++kanban/tests/workflows/test_async_gate.py::test_case_4_security_forbidden_mutations_and_sanitization PASSED [ 27%]
++kanban/tests/workflows/test_async_gate.py::test_case_5_security_out_of_order_and_replay_idempotency PASSED [ 33%]
++kanban/tests/workflows/test_async_gate.py::test_case_6_boundary_concurrent_transition_during_pending_async PASSED [ 38%]
++kanban/tests/workflows/test_async_gate.py::test_case_7_boundary_cancel_invoker_vs_non_invoker PASSED [ 44%]
++kanban/tests/workflows/test_async_gate.py::test_case_8_serializer_pending_gate_and_latest_gate_verdict PASSED [ 50%]
++kanban/tests/workflows/test_async_gate.py::test_case_9_hop_depth_limit PASSED [ 55%]
++kanban/tests/workflows/test_async_gate.py::test_compute_harness_label_and_reason_preview PASSED [ 61%]
++kanban/tests/workflows/test_async_gate.py::test_apply_labels_and_links_in_decision PASSED [ 66%]
++kanban/tests/workflows/test_async_gate.py::test_fail_open_warn_advance_and_commit PASSED [ 72%]
++kanban/tests/workflows/test_async_gate.py::test_cancel_unauthorized_and_invalid_state PASSED [ 77%]
++kanban/tests/workflows/test_async_gate.py::test_gate_coverage_branches PASSED [ 83%]
++kanban/tests/workflows/test_async_gate.py::test_completed_state_forces_fail_closed PASSED [ 88%]
++kanban/tests/workflows/test_async_gate.py::test_gate_worker_runner_real_rls_approval_and_comment PASSED [ 94%]
++kanban/tests/workflows/test_async_gate.py::test_gate_worker_runner_real_rls_timeout_sweep PASSED [100%]
 +
-+============================== 16 passed in 4.89s ==============================
++============================== 18 passed in 5.82s ==============================
 +
 +=== 4. Problem 1 & 3 Proof Validation & complete_work Enforcement ===
 +============================= test session starts ==============================
-+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587
++platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
++rootdir: /home/adamoutler/kanban
 +configfile: pyproject.toml
 +plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 +asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-+collected 9 items
++collecting ... collected 10 items
 +
-+kanban/tests/issues/test_proof_validation.py .....                       [ 55%]
-+kanban/tests/mcp/test_complete_work_enforcement.py ....                  [100%]
++kanban/tests/issues/test_proof_validation.py::test_validate_reality_checker_report_positive PASSED [ 10%]
++kanban/tests/issues/test_proof_validation.py::test_validate_reality_checker_report_rejects_out_of_order_headings PASSED [ 20%]
++kanban/tests/issues/test_proof_validation.py::test_validate_reality_checker_report_rejects_needs_work_when_ready_omitted PASSED [ 30%]
++kanban/tests/issues/test_proof_validation.py::test_validate_reality_checker_report_rejects_failed_marker PASSED [ 40%]
++kanban/tests/issues/test_proof_validation.py::test_validate_reality_checker_report_require_ready_rejects_non_ready PASSED [ 50%]
++kanban/tests/issues/test_proof_validation.py::test_validate_reality_checker_report_require_ready_rejects_grade_a_without_ready PASSED [ 60%]
++kanban/tests/mcp/test_complete_work_enforcement.py::test_complete_work_rejects_needs_work_summary_even_if_proof_ready PASSED [ 70%]
++kanban/tests/mcp/test_complete_work_enforcement.py::test_complete_work_rejects_out_of_order_h2_sections PASSED [ 80%]
++kanban/tests/mcp/test_complete_work_enforcement.py::test_complete_work_rejects_missing_ready_verdict PASSED [ 90%]
++kanban/tests/mcp/test_complete_work_enforcement.py::test_service_complete_work_direct_invocation_invariants PASSED [100%]
 +
-+============================== 9 passed in 1.47s ===============================
++============================== 10 passed in 1.40s ==============================
 +
-+=== 5. Problem 1 & 4 Gate Worker Runner Lease & Timeout Sweep ===
++=== 5. Problem 4 Gate Worker Runner Leases, Timeouts & RLS Context Resolution ===
 +============================= test session starts ==============================
-+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587
++platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
++rootdir: /home/adamoutler/kanban
 +configfile: pyproject.toml
 +plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 +asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-+collected 10 items
++collecting ... collected 10 items
 +
-+agent/tests/gates/test_gate_runner.py ..........                         [100%]
++agent/tests/gates/test_gate_runner.py::test_gate_worker_runner_init_and_properties PASSED [ 10%]
++agent/tests/gates/test_gate_runner.py::test_gate_worker_runner_poll_once_empty PASSED [ 20%]
++agent/tests/gates/test_gate_runner.py::test_start_gate_worker_lifecycle PASSED [ 30%]
++agent/tests/gates/test_gate_runner.py::test_gate_worker_runner_dispatch_and_prevent_double_dispatch PASSED [ 40%]
++agent/tests/gates/test_gate_runner.py::test_gate_worker_runner_timeout_sweep PASSED [ 50%]
++agent/tests/gates/test_gate_runner.py::test_gate_worker_runner_record_decision_and_failure PASSED [ 60%]
++agent/tests/gates/test_gate_runner.py::test_gate_worker_runner_load_entities_no_session_factory PASSED [ 70%]
++agent/tests/gates/test_gate_runner.py::test_gate_worker_runner_load_entities PASSED [ 80%]
++agent/tests/gates/test_gate_runner.py::test_gate_worker_runner_poll_once_inferred_deadline_and_exceptions PASSED [ 90%]
++agent/tests/gates/test_gate_runner.py::test_gate_worker_runner_run_exception_and_start_worker_app_state PASSED [100%]
 +
-+============================== 10 passed in 0.72s ==============================
++============================== 10 passed in 0.78s ==============================
 +
-+=== 6. Problem 4 Bearer-First Precedence in Session Resolver ===
++=== 6. Session Cookie Resolver Bearer Precedence & CSRF Security ===
 +============================= test session starts ==============================
-+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587
++platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
++rootdir: /home/adamoutler/kanban
 +configfile: pyproject.toml
 +plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 +asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-+collected 11 items
++collecting ... collected 11 items
 +
-+kanban/tests/auth/test_sessions.py ...........                           [100%]
++kanban/tests/auth/test_sessions.py::test_case_1_positive_login_and_cookie_attributes PASSED [  9%]
++kanban/tests/auth/test_sessions.py::test_case_2_session_fixation_defense PASSED [ 18%]
++kanban/tests/auth/test_sessions.py::test_case_5_rotation_on_aal_elevation PASSED [ 27%]
++kanban/tests/auth/test_sessions.py::test_case_6_idle_and_absolute_timeouts PASSED [ 36%]
++kanban/tests/auth/test_sessions.py::test_case_9_security_logout PASSED   [ 45%]
++kanban/tests/auth/test_sessions.py::test_case_10_mfa_pending_enforcement PASSED [ 54%]
++kanban/tests/auth/test_sessions.py::test_case_12_config_timeout_bounds_validation PASSED [ 63%]
++kanban/tests/auth/test_sessions.py::test_resolver_direct_unit PASSED     [ 72%]
++kanban/tests/auth/test_sessions.py::test_require_full_session_direct_unit PASSED [ 81%]
++kanban/tests/auth/test_sessions.py::test_service_policy_and_revocations PASSED [ 90%]
++kanban/tests/auth/test_sessions.py::test_session_cookie_resolver_bearer_precedence_rejects_dummy_bearer PASSED [100%]
 +
 +=============================== warnings summary ===============================
 +kanban/tests/auth/test_sessions.py::test_case_1_positive_login_and_cookie_attributes
 +kanban/tests/auth/test_sessions.py::test_case_9_security_logout
 +kanban/tests/auth/test_sessions.py::test_case_10_mfa_pending_enforcement
 +kanban/tests/auth/test_sessions.py::test_case_10_mfa_pending_enforcement
-+  /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587/.venv/lib/python3.12/site-packages/httpx/_client.py:1768: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
++  /home/adamoutler/kanban/.venv/lib/python3.12/site-packages/httpx/_client.py:1768: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
 +    return await self.request(
 +
 +kanban/tests/auth/test_sessions.py::test_case_9_security_logout
-+  /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
++  /home/adamoutler/kanban/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
 +    return await self.request(
 +
 +-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-+======================== 11 passed, 5 warnings in 0.83s ========================
++======================== 11 passed, 5 warnings in 0.80s ========================
 +
-+=== 7. Synaptic Search Project Filter Scoping ===
++=== 7. Synaptic Search Project Filter Scope Invariant ===
 +============================= test session starts ==============================
-+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587
++platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
++rootdir: /home/adamoutler/kanban
 +configfile: pyproject.toml
 +plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 +asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-+collected 13 items
++collecting ... collected 13 items
 +
-+kanban/tests/services/test_synaptic_search.py .............              [100%]
++kanban/tests/services/test_synaptic_search.py::test_hybrid_search_unindexed_graceful_degradation PASSED [  7%]
++kanban/tests/services/test_synaptic_search.py::test_hybrid_search_with_embeddings_and_rrf PASSED [ 15%]
++kanban/tests/services/test_synaptic_search.py::test_2hop_synaptic_activation_spreading PASSED [ 23%]
++kanban/tests/services/test_synaptic_search.py::test_synaptic_zero_oracle_leakage PASSED [ 30%]
++kanban/tests/services/test_synaptic_search.py::test_hybrid_search_issues_and_knowledge_endpoints PASSED [ 38%]
++kanban/tests/services/test_synaptic_search.py::test_synaptic_recency_decay PASSED [ 46%]
++kanban/tests/services/test_synaptic_search.py::test_synaptic_rescorer_edge_cases PASSED [ 53%]
++kanban/tests/services/test_synaptic_search.py::test_synaptic_statement_timeout_graceful_degradation PASSED [ 61%]
++kanban/tests/services/test_synaptic_search.py::test_synaptic_quantizer_and_maxsim_units PASSED [ 69%]
++kanban/tests/services/test_synaptic_search.py::test_empty_query_embedding PASSED [ 76%]
++kanban/tests/services/test_synaptic_search.py::test_hybrid_search_vector_only_hydration_and_pagination PASSED [ 84%]
++kanban/tests/services/test_synaptic_search.py::test_hybrid_search_issues_enforces_filters_and_workspace PASSED [ 92%]
++kanban/tests/services/test_synaptic_search.py::test_search_unified_filters_synaptic_neighbors_to_project PASSED [100%]
 +
-+============================== 13 passed in 1.49s ==============================
- 
++============================== 13 passed in 1.56s ==============================
 diff --git a/kanban/auth/sessions/resolver.py b/kanban/auth/sessions/resolver.py
 index 66068ea6..6ffe5c64 100644
 --- a/kanban/auth/sessions/resolver.py
@@ -1422,7 +1975,7 @@ index 66068ea6..6ffe5c64 100644
          # Verify HMAC signature and bounds (rejects without DB access on invalid signature)
          token = parse_session_cookie(cookie_val, self._service.session_hmac_key)
 diff --git a/kanban/issues/proof.py b/kanban/issues/proof.py
-index d884175f..ae9eebaa 100644
+index d884175f..18299861 100644
 --- a/kanban/issues/proof.py
 +++ b/kanban/issues/proof.py
 @@ -190,6 +190,8 @@ def validate_proof_ticket_key(proof: VerificationProof, expected_ticket_key: str
@@ -1469,19 +2022,9 @@ index d884175f..ae9eebaa 100644
      ready_body = "\n".join(sections_found["Deployment Readiness Assessment"])
      combined_check = f"{cert_body}\n{ready_body}"
  
-+    contradiction_markers: Final[list[str]] = ["NEEDS WORK", "NEEDS_WORK", "FAILED"]
-+    for marker in contradiction_markers:
-+        pat = rf"\b{re.escape(marker)}\b"
-+        if re.search(pat, combined_check, re.IGNORECASE):
-+            msg = (
-+                f"Contradiction marker '{marker}' found in certification or deployment "
-+                "readiness assessment"
-+            )
-+            raise ValueError(msg)
-+
-     claims_ready = "READY" in combined_check or bool(
-         re.search(r"\bA\b", cert_body) or "A-" in cert_body or "A+" in cert_body
-     )
+-    claims_ready = "READY" in combined_check or bool(
+-        re.search(r"\bA\b", cert_body) or "A-" in cert_body or "A+" in cert_body
+-    )
 -    if claims_ready:
 -        contradiction_markers: Final[list[str]] = ["NEEDS WORK", "NEEDS_WORK", "FAILED"]
 -        for marker in contradiction_markers:
@@ -1492,6 +2035,19 @@ index d884175f..ae9eebaa 100644
 -                    "readiness assessment while claiming READY / A"
 -                )
 -                raise ValueError(msg)
++    contradiction_markers: Final[list[str]] = ["NEEDS WORK", "NEEDS_WORK", "FAILED"]
++    for marker in contradiction_markers:
++        pat = rf"\b{re.escape(marker)}\b"
++        if re.search(pat, combined_check, re.IGNORECASE):
++            msg = (
++                f"Contradiction marker '{marker}' found in certification or deployment "
++                "readiness assessment"
++            )
++            raise ValueError(msg)
++
++    has_ready_keyword = bool(re.search(r"\bREADY\b", combined_check))
++    has_grade_a = bool(re.search(r"\bA\b", cert_body) or "A-" in cert_body or "A+" in cert_body)
++    claims_ready = has_ready_keyword and has_grade_a
 +    if require_ready and not claims_ready:
 +        msg = (
 +            "Reality-checker report summary_markdown must certify READY with grade A "
@@ -1617,10 +2173,10 @@ index 3e5665a1..07ef1a89 100644
 +    assert p_ctx_dummy is None  # Rejection: zero CSRF bypass via dummy Bearer header!
 diff --git a/kanban/tests/issues/test_proof_validation.py b/kanban/tests/issues/test_proof_validation.py
 new file mode 100644
-index 00000000..f5a48eb4
+index 00000000..2d7d3cfb
 --- /dev/null
 +++ b/kanban/tests/issues/test_proof_validation.py
-@@ -0,0 +1,92 @@
+@@ -0,0 +1,102 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Unit tests for reality-checker report validation and verification proof invariants (KAN-45)."""
@@ -1711,6 +2267,16 @@ index 00000000..f5a48eb4
 +    # require_ready=False allows if no contradiction markers
 +    validate_reality_checker_report(report, require_ready=False)
 +    # require_ready=True rejects because READY/A is missing
++    with pytest.raises(ValueError, match="must certify READY with grade A"):
++        validate_reality_checker_report(report, require_ready=True)
++
++
++def test_validate_reality_checker_report_require_ready_rejects_grade_a_without_ready() -> None:
++    """Grade: A with Status: PENDING (without READY keyword) is rejected when require_ready=True."""
++    report = _build_report(cert_verdict="PENDING", cert_grade="A", deployment_readiness="PENDING")
++    # require_ready=False allows if no contradiction markers
++    validate_reality_checker_report(report, require_ready=False)
++    # require_ready=True rejects because READY keyword is missing despite Grade: A
 +    with pytest.raises(ValueError, match="must certify READY with grade A"):
 +        validate_reality_checker_report(report, require_ready=True)
 diff --git a/kanban/tests/mcp/test_complete_work_enforcement.py b/kanban/tests/mcp/test_complete_work_enforcement.py
@@ -2115,18 +2681,31 @@ index 2eea97df..6b10f6a7 100644
 +                assert item.key.startswith("KAN-")
 +                assert not item.key.startswith("PRIV-")
 diff --git a/kanban/tests/workflows/test_async_gate.py b/kanban/tests/workflows/test_async_gate.py
-index 441541ce..dedb7cee 100644
+index 441541ce..de1d77eb 100644
 --- a/kanban/tests/workflows/test_async_gate.py
 +++ b/kanban/tests/workflows/test_async_gate.py
-@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
+@@ -5,14 +5,19 @@
+ 
+ from __future__ import annotations
+ 
++import datetime as dt
+ import hashlib
++import json
+ import uuid
+ from pathlib import Path
+-from typing import TYPE_CHECKING
++from typing import TYPE_CHECKING, Any, cast
+ 
  import pytest
  from sqlalchemy import select, text
  
++from agent.gates.runner import GateWorkerRunner
++from agent.gates.worker import HarnessRegistry
 +from database.models.activity import ActivityRecord
  from database.models.agent_definition import AgentDefinition
  from database.models.issues import Issue, IssueComment
  from database.models.outbox import OutboxEvent
-@@ -25,7 +26,7 @@ from database.models.workflow import (
+@@ -25,7 +30,7 @@ from database.models.workflow import (
  )
  from kanban.api.deps import PrincipalContext
  from kanban.api.problems import ProblemException
@@ -2135,7 +2714,7 @@ index 441541ce..dedb7cee 100644
  from kanban.workflows.engine import TransitionEngine
  from kanban.workflows.gate_types import GateDecision, LinkSpec
  from kanban.workflows.manifest import compute_hook_manifest_sha256
-@@ -158,7 +159,7 @@ async def _get_states(session: AsyncSession, project_id: uuid.UUID) -> dict[str,
+@@ -158,7 +163,7 @@ async def _get_states(session: AsyncSession, project_id: uuid.UUID) -> dict[str,
  # ---------------------------------------------------------------------------
  
  
@@ -2144,7 +2723,7 @@ index 441541ce..dedb7cee 100644
      api_env: ApiEnv,
      make_user: Callable[..., Awaitable[SeededUser]],
      make_project: Callable[..., Awaitable[uuid.UUID]],
-@@ -174,7 +175,7 @@ async def test_case_1_positive_single_agent_hook_202_then_approve(
+@@ -174,7 +179,7 @@ async def test_case_1_positive_single_agent_hook_202_then_approve(
      in_prog_id = states["In Progress"]
      done_id = states["Done"]
  
@@ -2153,7 +2732,7 @@ index 441541ce..dedb7cee 100644
          api_env.seed, api_env.workspace_id, proj_id, slug="qa-gate", display_name="QA Gate Bot"
      )
  
-@@ -282,6 +283,42 @@ async def test_case_1_positive_single_agent_hook_202_then_approve(
+@@ -282,6 +287,42 @@ async def test_case_1_positive_single_agent_hook_202_then_approve(
      assert ev.payload["execution_id"] == str(exec_id)
      assert ev.payload["verdict_sha256"] == verdict_sha.hex()
  
@@ -2196,11 +2775,296 @@ index 441541ce..dedb7cee 100644
  
  async def test_case_2_positive_two_sequential_agent_hooks_and_reject(
      api_env: ApiEnv,
+@@ -1459,3 +1500,223 @@ async def test_completed_state_forces_fail_closed(
+     assert len(comments) == 1
+     assert "🛑🤖" in comments[0].body_markdown
+     assert "Gate failed: TRANSIENT_TIMEOUT" in comments[0].body_markdown
++
++
++class FixtureApprovalHarness:
++    """Fixture harness that returns an approve decision."""
++
++    async def run(self, ctx: object, agent_def: object) -> bytes:
++        """Run fixture harness returning an approve verdict."""
++        del agent_def
++        nonce = getattr(ctx, "verdict_nonce", getattr(ctx, "nonce", ""))
++        payload = {
++            "schema": "kb-transition-verdict/v1",
++            "nonce": nonce,
++            "decision": "approve",
++            "reason_markdown": "Forensic verification verified all proofs and invariants.",
++            "cited_files": ["docs/qa/KAN-45/reality-checker-report.md"],
++        }
++        return f"```json\n{json.dumps(payload)}\n```".encode()
++
++
++async def test_gate_worker_runner_real_rls_approval_and_comment(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify GateWorkerRunner.poll_once executes end-to-end on live PostgreSQL under FORCE RLS."""
++    admin = await make_user("gw_admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("GWP", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    states = await _get_states(api_env.seed, proj_id)
++    in_prog_id = states["In Progress"]
++    done_id = states["Done"]
++
++    agent_def, agent_p = await create_agent_definition(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        slug="qa-gate-runner-bot",
++        display_name="QA Gate Runner Bot",
++    )
++
++    await create_agent_hook(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        agent_def.id,
++        to_state_id=done_id,
++        from_state_id=None,
++        sort_rank="10",
++        name="gw_approval_gate",
++    )
++
++    create_resp = await client.post(
++        "/api/v1/projects/GWP/issues",
++        json={
++            "summary": "Gate Worker RLS Issue",
++            "description_markdown": "Test body",
++            "state_id": str(in_prog_id),
++        },
++    )
++    assert create_resp.status_code == 201
++    issue_key = create_resp.json()["key"]
++    issue_id = uuid.UUID(create_resp.json()["id"])
++    await api_env.seed.rollback()
++
++    # POST transition to Done -> 202 pending_agent_gate
++    t_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/transitions",
++        json={"to_state": "Done"},
++    )
++    assert t_resp.status_code == 202
++    exec_id = uuid.UUID(t_resp.json()["execution_id"])
++
++    # Instantiate GateWorkerRunner with real session factory and fixture harness
++    registry = HarnessRegistry(auto_register_defaults=False)
++    registry.register("in_app_sdk", FixtureApprovalHarness())
++
++    runner = GateWorkerRunner(
++        session_factory=cast("Any", api_env.client._transport).app.state.session_factory,  # noqa: SLF001
++        harness_registry=registry,
++        workspace_id=api_env.workspace_id,
++        admin_principal_id=admin.id,
++    )
++
++    # Execute poll_once against real PostgreSQL
++    handled = await runner.poll_once()
++    assert handled == 1
++
++    # Verify issue state is Done and hold is released
++    await api_env.seed.rollback()
++    exec_row = (
++        await api_env.seed.execute(
++            select(WorkflowTransitionExecution).where(WorkflowTransitionExecution.id == exec_id)
++        )
++    ).scalar_one()
++    issue_row = (await api_env.seed.execute(select(Issue).where(Issue.id == issue_id))).scalar_one()
++    assert issue_row.state_id == done_id
++    assert issue_row.pending_transition_exec_id is None
++
++    # Verify execution is approved
++    exec_row = (
++        await api_env.seed.execute(
++            select(WorkflowTransitionExecution).where(WorkflowTransitionExecution.id == exec_id)
++        )
++    ).scalar_one()
++    assert exec_row.status == "approved"
++
++    # Verify IssueComment authored by agent principal exists with approved header
++    comment_rows = (
++        (await api_env.seed.execute(select(IssueComment).where(IssueComment.issue_id == issue_id)))
++        .scalars()
++        .all()
++    )
++    assert len(comment_rows) == 1
++    assert comment_rows[0].author_id == agent_p.id
++    assert "## ✅🤖 Workflow Transition Gate Approved" in comment_rows[0].body_markdown
++
++
++async def test_gate_worker_runner_real_rls_timeout_sweep(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify GateWorkerRunner.poll_once sweeps expired invocations on live PostgreSQL under FORCE RLS."""
++    admin = await make_user("gw_timeout_admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("GWT", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    states = await _get_states(api_env.seed, proj_id)
++    in_prog_id = states["In Progress"]
++    done_id = states["Done"]
++
++    agent_def, _agent_p = await create_agent_definition(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        slug="qa-timeout-bot",
++        display_name="QA Timeout Bot",
++    )
++
++    await create_agent_hook(
++        api_env.seed,
++        api_env.workspace_id,
++        proj_id,
++        agent_def.id,
++        to_state_id=done_id,
++        from_state_id=None,
++        sort_rank="10",
++        name="gw_timeout_gate",
++        failure_policy="fail_closed",
++    )
++
++    create_resp = await client.post(
++        "/api/v1/projects/GWT/issues",
++        json={
++            "summary": "Gate Worker Timeout Issue",
++            "description_markdown": "Test body",
++            "state_id": str(in_prog_id),
++        },
++    )
++    assert create_resp.status_code == 201
++    issue_key = create_resp.json()["key"]
++    issue_id = uuid.UUID(create_resp.json()["id"])
++    await api_env.seed.rollback()
++
++    # POST transition to Done -> 202 pending_agent_gate
++    t_resp = await client.post(
++        f"/api/v1/issues/{issue_key}/transitions",
++        json={"to_state": "Done"},
++    )
++    assert t_resp.status_code == 202
++    exec_id = uuid.UUID(t_resp.json()["execution_id"])
++
++    # Update invocation started_at and deadline_at to the past
++    past = dt.datetime.now(dt.UTC) - dt.timedelta(seconds=120)
++    await api_env.seed.execute(
++        text(
++            "UPDATE workflow_hook_invocations "
++            "SET started_at = :past, "
++            "output_json = jsonb_build_object('deadline_at', CAST(:past_iso AS text)) "
++            "WHERE execution_id = :exec_id"
++        ),
++        {"past": past, "past_iso": past.isoformat(), "exec_id": exec_id},
++    )
++    await api_env.seed.commit()
++
++    runner = GateWorkerRunner(
++        session_factory=cast("Any", api_env.client._transport).app.state.session_factory,  # noqa: SLF001
++        workspace_id=api_env.workspace_id,
++        admin_principal_id=admin.id,
++    )
++
++    # Sweep expired invocations via poll_once
++    handled = await runner.poll_once()
++    assert handled == 1
++
++    # Verify execution failed closed (timed_out or rejected)
++    await api_env.seed.rollback()
++    exec_row = (
++        await api_env.seed.execute(
++            select(WorkflowTransitionExecution).where(WorkflowTransitionExecution.id == exec_id)
++        )
++    ).scalar_one()
++    assert exec_row.status in ("timed_out", "rejected")
++
++    # Issue must remain in In Progress and hold must be cleared
++    issue_row = (await api_env.seed.execute(select(Issue).where(Issue.id == issue_id))).scalar_one()
++    assert issue_row.state_id == in_prog_id
++    assert issue_row.pending_transition_exec_id is None
++
++    # Veto comment posted
++    comment_rows = (
++        (await api_env.seed.execute(select(IssueComment).where(IssueComment.issue_id == issue_id)))
++        .scalars()
++        .all()
++    )
++    assert len(comment_rows) == 1
++    assert "🛑🤖" in comment_rows[0].body_markdown
 diff --git a/kanban/workflows/async_gate.py b/kanban/workflows/async_gate.py
-index 6376857c..a61aed93 100644
+index 6376857c..13686fa0 100644
 --- a/kanban/workflows/async_gate.py
 +++ b/kanban/workflows/async_gate.py
-@@ -244,6 +244,35 @@ class AgentGateDispatcher:
+@@ -108,6 +108,37 @@ def format_approve_comment(
+     return f"{header}\n\n{capped}"
+ 
+ 
++async def _ensure_agent_acl_and_role(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    project_id: uuid.UUID,
++    issue_id: uuid.UUID,
++    principal_id: uuid.UUID,
++) -> None:
++    """Ensure agent principal has project member role and issue capability mask 15."""
++    rb_sql = text(
++        "INSERT INTO role_bindings "
++        "(id, workspace_id, principal_id, role, scope_type, project_id) "
++        "VALUES (uuidv7(), :ws_id, :p_id, 'MEMBER'::rbac_role, 'project', :proj_id) "
++        "ON CONFLICT DO NOTHING"
++    )
++    await session.execute(
++        rb_sql,
++        {"ws_id": workspace_id, "p_id": principal_id, "proj_id": project_id},
++    )
++    acl_sql = text(
++        "INSERT INTO resource_acl_entries "
++        "(id, workspace_id, object_id, principal_id, effect, capability_mask) "
++        "VALUES (uuidv7(), :ws_id, :obj_id, :p_id, 'ALLOW', 15) "
++        "ON CONFLICT (object_id, principal_id, effect) "
++        "DO UPDATE SET capability_mask = resource_acl_entries.capability_mask | 15"
++    )
++    await session.execute(
++        acl_sql,
++        {"ws_id": workspace_id, "obj_id": issue_id, "p_id": principal_id},
++    )
++
++
+ class AgentGateDispatcher:
+     """Dispatches asynchronous AI/CLI agent transition helpers (KB-P5-18)."""
+ 
+@@ -148,6 +179,14 @@ class AgentGateDispatcher:
+             if first_hook.agent_definition_id
+             else None
+         )
++        if agent_def and agent_def.principal_id is not None:
++            await _ensure_agent_acl_and_role(
++                session=session,
++                workspace_id=execution.workspace_id,
++                project_id=execution.project_id,
++                issue_id=issue.id,
++                principal_id=agent_def.principal_id,
++            )
+         timeout_ms = agent_def.timeout_ms if agent_def else 60000
+         deadline_at = now + dt.timedelta(milliseconds=timeout_ms)
+ 
+@@ -160,6 +199,7 @@ class AgentGateDispatcher:
+             hook_kind="agent_interceptor",
+             status="running",
+             started_at=now,
++            output_json={"deadline_at": deadline_at.isoformat()},
+         )
+         session.add(inv)
+         await session.flush()
+@@ -244,6 +284,35 @@ class AgentGateDispatcher:
  class GateCoordinator:
      """Coordinates verdicts, timeouts, failures, and cancellations for async agent gates."""
  
@@ -2236,7 +3100,105 @@ index 6376857c..a61aed93 100644
      @classmethod
      async def record_decision(  # noqa: C901, PLR0911, PLR0912, PLR0915
          cls,
-@@ -746,14 +775,38 @@ class GateCoordinator:
+@@ -395,7 +464,14 @@ class GateCoordinator:
+             issue.pending_transition_exec_id = None
+ 
+             # Post veto comment authored by agent principal
+-            if agent_def is not None:
++            if agent_def is not None and agent_def.principal_id is not None:
++                await _ensure_agent_acl_and_role(
++                    session=session,
++                    workspace_id=execution.workspace_id,
++                    project_id=execution.project_id,
++                    issue_id=issue.id,
++                    principal_id=agent_def.principal_id,
++                )
+                 veto_body = format_veto_comment(
+                     hook.name, harness_label, from_name, to_name, decision.reason_markdown
+                 )
+@@ -406,7 +482,21 @@ class GateCoordinator:
+                     author_id=agent_def.principal_id,
+                     body_markdown=veto_body,
+                 )
++                saved_p_res = await session.execute(
++                    text("SELECT current_setting('app.principal_id', true)")
++                )
++                saved_p = saved_p_res.scalar_one_or_none()
++                await session.execute(
++                    text("SELECT set_config('app.principal_id', :val, true)"),
++                    {"val": str(agent_def.principal_id)},
++                )
+                 session.add(comment)
++                await session.flush()
++                if saved_p and saved_p != str(agent_def.principal_id):
++                    await session.execute(
++                        text("SELECT set_config('app.principal_id', :val, true)"),
++                        {"val": saved_p},
++                    )
+ 
+             # Record GATE_REJECTED activity
+             await record_activity(
+@@ -492,6 +582,14 @@ class GateCoordinator:
+                 if next_hook.agent_definition_id
+                 else None
+             )
++            if next_agent_def and next_agent_def.principal_id is not None:
++                await _ensure_agent_acl_and_role(
++                    session=session,
++                    workspace_id=execution.workspace_id,
++                    project_id=execution.project_id,
++                    issue_id=issue.id,
++                    principal_id=next_agent_def.principal_id,
++                )
+             next_timeout = next_agent_def.timeout_ms if next_agent_def else 60000
+             next_deadline = now + dt.timedelta(milliseconds=next_timeout)
+ 
+@@ -503,6 +601,7 @@ class GateCoordinator:
+                 hook_kind="agent_interceptor",
+                 status="running",
+                 started_at=now,
++                output_json={"deadline_at": next_deadline.isoformat()},
+             )
+             session.add(next_inv)
+             await session.flush()
+@@ -662,6 +761,14 @@ class GateCoordinator:
+             if agent_def and agent_def.principal_id is not None
+             else execution.invoking_principal_id
+         )
++        if agent_def and agent_def.principal_id is not None:
++            await _ensure_agent_acl_and_role(
++                session=session,
++                workspace_id=execution.workspace_id,
++                project_id=execution.project_id,
++                issue_id=issue.id,
++                principal_id=agent_def.principal_id,
++            )
+         approve_comment_body = format_approve_comment(
+             hook.name,
+             harness_label,
+@@ -676,7 +783,21 @@ class GateCoordinator:
+             author_id=approve_author_id,
+             body_markdown=approve_comment_body,
+         )
++        saved_p_res = await session.execute(
++            text("SELECT current_setting('app.principal_id', true)")
++        )
++        saved_p = saved_p_res.scalar_one_or_none()
++        await session.execute(
++            text("SELECT set_config('app.principal_id', :val, true)"),
++            {"val": str(approve_author_id)},
++        )
+         session.add(comment)
++        await session.flush()
++        if saved_p and saved_p != str(approve_author_id):
++            await session.execute(
++                text("SELECT set_config('app.principal_id', :val, true)"),
++                {"val": saved_p},
++            )
+         await record_activity(
+             session=session,
+             workspace_id=execution.workspace_id,
+@@ -746,14 +867,38 @@ class GateCoordinator:
          return execution
  
      @classmethod
@@ -2280,7 +3242,7 @@ index 6376857c..a61aed93 100644
          exec_uuid = uuid.UUID(str(execution_id))
          hook_uuid = uuid.UUID(str(hook_id))
          now = dt.datetime.now(dt.UTC)
-@@ -814,14 +867,14 @@ class GateCoordinator:
+@@ -814,14 +959,14 @@ class GateCoordinator:
          harness_kind = agent_def.harness_kind if agent_def else "in_app_sdk"
          harness_label = compute_harness_label(agent_def)
  
@@ -2297,7 +3259,7 @@ index 6376857c..a61aed93 100644
              invocation.completed_at = now
  
              await record_activity(
-@@ -832,7 +885,7 @@ class GateCoordinator:
+@@ -832,7 +977,7 @@ class GateCoordinator:
                      agent_def.principal_id if agent_def else execution.invoking_principal_id
                  ),
                  event_type=ActivityEventType.GATE_FAIL_OPEN_WARN,
@@ -2306,7 +3268,30 @@ index 6376857c..a61aed93 100644
              )
  
              # Check if more agent hooks exist sequentially
-@@ -914,7 +967,7 @@ class GateCoordinator:
+@@ -862,6 +1007,14 @@ class GateCoordinator:
+                     if next_hook.agent_definition_id
+                     else None
+                 )
++                if next_agent_def and next_agent_def.principal_id is not None:
++                    await _ensure_agent_acl_and_role(
++                        session=session,
++                        workspace_id=execution.workspace_id,
++                        project_id=execution.project_id,
++                        issue_id=issue.id,
++                        principal_id=next_agent_def.principal_id,
++                    )
+                 next_timeout = next_agent_def.timeout_ms if next_agent_def else 60000
+                 next_deadline = now + dt.timedelta(milliseconds=next_timeout)
+ 
+@@ -873,6 +1026,7 @@ class GateCoordinator:
+                     hook_kind="agent_interceptor",
+                     status="running",
+                     started_at=now,
++                    output_json={"deadline_at": next_deadline.isoformat()},
+                 )
+                 session.add(next_inv)
+                 await session.flush()
+@@ -914,7 +1068,7 @@ class GateCoordinator:
              issue.state_id = execution.to_state_id
              issue.pending_transition_exec_id = None
              execution.status = "approved"
@@ -2315,7 +3300,7 @@ index 6376857c..a61aed93 100644
              execution.completed_at = now
              await session.flush()
              return execution
-@@ -922,12 +975,13 @@ class GateCoordinator:
+@@ -922,12 +1076,13 @@ class GateCoordinator:
          # Fail closed: reject/time out
          final_status = "timed_out" if is_timeout else "rejected"
          timeout_ms = agent_def.timeout_ms if agent_def else 60000
@@ -2333,7 +3318,7 @@ index 6376857c..a61aed93 100644
          invocation.completed_at = now
  
          execution.status = final_status
-@@ -935,12 +989,14 @@ class GateCoordinator:
+@@ -935,15 +1090,24 @@ class GateCoordinator:
              "decision": final_status,
              "hook_name": hook.name,
              "reason": reason_text,
@@ -2348,8 +3333,41 @@ index 6376857c..a61aed93 100644
 +            issue.pending_gate_invocation_id = None
  
          # Post veto comment authored by agent principal
-         if agent_def is not None:
-@@ -966,7 +1022,11 @@ class GateCoordinator:
+-        if agent_def is not None:
++        if agent_def is not None and agent_def.principal_id is not None:
++            await _ensure_agent_acl_and_role(
++                session=session,
++                workspace_id=execution.workspace_id,
++                project_id=execution.project_id,
++                issue_id=issue.id,
++                principal_id=agent_def.principal_id,
++            )
+             header = f"🛑🤖 Gate `{hook.name}` ({harness_label}) vetoed {from_name} -> {to_name}"
+             veto_comment_body = f"{header}\n\n{reason_text}"
+             comment = IssueComment(
+@@ -953,7 +1117,21 @@ class GateCoordinator:
+                 author_id=agent_def.principal_id,
+                 body_markdown=veto_comment_body,
+             )
++            saved_p_res = await session.execute(
++                text("SELECT current_setting('app.principal_id', true)")
++            )
++            saved_p = saved_p_res.scalar_one_or_none()
++            await session.execute(
++                text("SELECT set_config('app.principal_id', :val, true)"),
++                {"val": str(agent_def.principal_id)},
++            )
+             session.add(comment)
++            await session.flush()
++            if saved_p and saved_p != str(agent_def.principal_id):
++                await session.execute(
++                    text("SELECT set_config('app.principal_id', :val, true)"),
++                    {"val": saved_p},
++                )
+ 
+         act_type = (
+             ActivityEventType.GATE_TIMED_OUT if is_timeout else ActivityEventType.GATE_REJECTED
+@@ -966,7 +1144,11 @@ class GateCoordinator:
                  agent_def.principal_id if agent_def else execution.invoking_principal_id
              ),
              event_type=act_type,

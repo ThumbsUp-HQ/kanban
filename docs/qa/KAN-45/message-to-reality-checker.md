@@ -2,8 +2,8 @@
 
 **Ticket:** `KAN-45`  
 **Title:** `[KB-P3-GATE-ENFORCE] Enforce Canonical Reality-Checker Report on complete_work, Real qa-proof-validator Wasm, Approval Comment Persistence, and Agent Done-Transition Guards (4 Problems)`  
-**Branch:** `main` (commit `9b163f07`)  
-**Base Commit:** `9b163f07`  
+**Branch:** `main` (commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`)  
+**Base Commit:** `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`  
 **Live Stack Container:** `kanban-liveqa-4` (`http://127.0.0.1:18964`, PostgreSQL 16 + FORCE RLS)  
 **Live Stack Verdict:** `OVERALL LIVE_STACK_VERDICT: PASS`  
 
@@ -56,28 +56,30 @@ This deliverable implements all 4 problems specified in `KAN-45` to enterprise s
 - **Agent Bypass Guard:** In `TransitionEngine.execute_transition`, enforces `422 USE_COMPLETE_WORK` whenever `target_state.state_group == "completed"` and caller is an agent or MCP client, closing `PATCH /api/v1/issues/{key}`, `POST /api/v1/issues/{key}/move`, and `POST /api/v1/issues/{key}/transitions` while preserving human board interactions.
 - **Issue Move Hardening:** `kanban/services/issue_move.py` returns `202 pending_agent_gate` without prematurely updating `board_rank`. Added `TaintGuard.check_write` in `kanban/api/v1/issue_move.py`.
 - **Transition Held Guard:** In `kanban/services/issues.py` (`update_issue`), raises `409 TRANSITION_HELD` when `issue.pending_transition_exec_id is not None`.
-- **Gate Worker Runner:** Created `agent/gates/runner.py` with polling loop, lease claiming (`FOR UPDATE SKIP LOCKED` + active claim guard preventing double-dispatch), deadline timeout sweeping calling `record_failure(..., "GATE_TIMEOUT")`, and execution handling. Added `kanban-agent run-gate-worker` CLI command (`agent/cli_commands/run_gate_worker.py`). Added lazy lifespan startup hook in `kanban/app.py` preserving strict `agent -> mcp -> kanban -> database` import layering.
+- **Gate Worker Runner:** Created `agent/gates/runner.py` with polling loop, lease claiming (`FOR UPDATE SKIP LOCKED` + active claim guard preventing double-dispatch), deadline timeout sweeping calling `record_failure(..., "GATE_TIMEOUT")`, and execution handling. Added `kanban-agent run-gate-worker` CLI command (`agent/cli_commands/run_gate_worker.py`). Added lazy lifespan startup hook in `kanban/app.py` preserving strict `agent -> mcp -> kanban -> database` import layering. Dynamically discovers workspace and admin principal from PostgreSQL credentials (`_resolve_workspace_and_admin`), eliminating RLS rejections, and safely switches session authorization to the agent principal during comment persistence.
 
 ### Additional Remediations & Clean-Room Forensic Verification
-- **Remediation 1 (Runner Leases & Timeouts):** Added concurrency guard `_active_invocations` and timeout sweep in `agent/gates/runner.py`. Unit tests in `agent/tests/gates/test_gate_runner.py` (10 passed in 0.72s, 97% coverage).
-- **Remediation 2 (Problem 2 Verification & Comment Formatter):** Comprehensive unit tests in `kanban/tests/workflows/test_async_gate.py` (16 passed in 4.89s) verifying canonical comment header `## ✅🤖 Workflow Transition Gate Approved`, zero em/en-dashes, atomic `IssueComment` + `COMMENT_CREATED` audit persistence, and fail-closed behavior on completed state.
-- **Remediation 3 (Strict Report Structure & Contradiction Rejection):** `validate_reality_checker_report` in `kanban/issues/proof.py` strictly verifies canonical relative order of all 6 H2 sections and unconditionally rejects contradiction markers (`NEEDS WORK`, `FAILED`) when `READY` is claimed or omitted. Enforced in `workflow_service.py` and `complete_work.py`. Unit tests in `kanban/tests/issues/test_proof_validation.py` and `kanban/tests/mcp/test_complete_work_enforcement.py` (9 passed in 1.47s).
-- **Remediation 4 (Bearer-First Precedence):** `SessionCookieResolver.resolve` authenticates Bearer first and rejects dummy tokens with 401 without cookie fallback. Unit test in `kanban/tests/auth/test_sessions.py` (11 passed in 0.83s).
-- **Scope Addition (Synaptic Search Project Filter):** `search_unified` and `_execute_hybrid_search_core` filter synaptic neighbors and candidates by project identifier/UUID. Unit tests in `kanban/tests/services/test_synaptic_search.py` (13 passed in 1.49s).
+- **Remediation 1 (Runner Leases, Timeouts & RLS Context Resolution):** Added concurrency guard `_active_invocations` and timeout sweep in `agent/gates/runner.py`. Unit tests in `agent/tests/gates/test_gate_runner.py` (10 passed in 0.78s, 97% coverage).
+- **Remediation 2 (Problem 2 Verification & Comment Formatter):** Comprehensive unit tests in `kanban/tests/workflows/test_async_gate.py` (18 passed in 5.82s) verifying canonical comment header `## ✅🤖 Workflow Transition Gate Approved`, zero em/en-dashes, atomic `IssueComment` + `COMMENT_CREATED` audit persistence, fail-closed behavior on completed state, and real PostgreSQL RLS integration (`test_gate_worker_runner_real_rls_approval_and_comment` and `test_gate_worker_runner_real_rls_timeout_sweep`).
+- **Remediation 3 (Strict Report Structure, Contradiction Rejection & READY Guard):** `validate_reality_checker_report` in `kanban/issues/proof.py` strictly verifies canonical relative order of all 6 H2 sections, unconditionally rejects contradiction markers (`NEEDS WORK`, `FAILED`) when `READY` is claimed or omitted, and enforces `require_ready=True` logic (`claims_ready = has_ready_keyword and has_grade_a`) to cleanly reject `Grade: A` + `Status: PENDING` reports. Enforced in `workflow_service.py` and `complete_work.py`. Unit tests in `kanban/tests/issues/test_proof_validation.py` and `kanban/tests/mcp/test_complete_work_enforcement.py` (10 passed in 1.40s).
+- **Remediation 4 (Bearer-First Precedence):** `SessionCookieResolver.resolve` authenticates Bearer first and rejects dummy tokens with 401 without cookie fallback. Unit test in `kanban/tests/auth/test_sessions.py` (11 passed in 0.80s).
+- **Scope Addition (Synaptic Search Project Filter):** `search_unified` and `_execute_hybrid_search_core` filter synaptic neighbors and candidates by project identifier/UUID. Unit tests in `kanban/tests/services/test_synaptic_search.py` (13 passed in 1.56s).
 
 ---
 
 ## 2. Verification Artifacts & Live Container Evidence
 
-### Live Container Verification (`kanban-liveqa-4`, `:18964`, commit `9b163f07`):
-- `Guard 1`: Stateless Bearer `PATCH` (80ms), `POST move` (41ms), `POST transition` (32ms) into Done -> HTTP 422 `USE_COMPLETE_WORK`. Human cookie `POST move` (75ms) -> HTTP 200 (human allowed).
+### Live Container Verification (`kanban-liveqa-4`, `:18964`, commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`):
+- `Guard 1`: Stateless Bearer `PATCH` (66ms), `POST move` (38ms), `POST transition` (34ms) into Done -> HTTP 422 `USE_COMPLETE_WORK`. Human cookie `POST move` (73ms) -> HTTP 200 (human allowed).
 - `Guard 2`: MCP tool calls and Bearer REST `complete_work` with short summary or contradictory reports -> HTTP 422 `INVALID_REALITY_CHECKER_REPORT` (`isError=true`).
 - `Guard 2b`: `NEEDS WORK` (omitting READY) with proof claim `READY/A` -> MCP `isError=true` | Bearer REST HTTP 422 `code=INVALID_REALITY_CHECKER_REPORT` (`detail="Contradiction marker 'NEEDS WORK' found in certification or deployment readiness assessment"`).
-- `Guard 2c`: Cookie + dummy Bearer precedence -> `GET` HTTP 401 (8ms) | `POST` (no CSRF) HTTP 401 (8ms) | Cookie-only (no CSRF) HTTP 403.
-- `Guard 3`: Dry-Run UI and API with missing proof -> rejected by `require-qa-proof-link` (644us); valid proof -> allowed by `require-qa-proof-link` (361us) and `auto-label-verified` (155us).
-- `Guard 4`: Valid `/mcp/agent complete_work` -> HTTP 200 (146ms, `isError=false`, state: Done, comment: `KAN-2#c-01a1fbe5`).
-- `Problem 2 Gate Dispatch`: `POST /api/v1/issues/KAN-3/transitions` -> HTTP 202 `status=pending_agent_gate` | Held PATCH -> HTTP 409 `code=TRANSITION_HELD`.
-- `Problem 2 Decision Record`: `GateCoordinator.record_decision(approve)` -> `execution_status=approved`, KAN-3 transitioned to `In Progress`, `comment_id=69155cd3-3ef8-4d6c-8b45-c2bdfba6d26a`, author: `@qagatereviewer`.
+- `Guard 2d`: `Grade: A` + `Status: PENDING` (omitting READY) -> MCP `isError=true` | Bearer REST HTTP 422 `code=INVALID_REALITY_CHECKER_REPORT`.
+- `Guard 2c`: Cookie + dummy Bearer precedence -> `GET` HTTP 401 (7ms) | `POST` (no CSRF) HTTP 401 (7ms) | Cookie-only (no CSRF) HTTP 403.
+- `Guard 3`: Dry-Run UI and API with missing proof -> rejected by `require-qa-proof-link` (447us); valid proof -> allowed by `require-qa-proof-link` (237us) and `auto-label-verified` (145us).
+- `Guard 4`: Valid `/mcp/agent complete_work` -> HTTP 200 (138ms, `isError=false`, state: Done, comment: `KAN-2#c-01a1fc2c`).
+- `Problem 2 Gate Dispatch`: `POST /api/v1/issues/KAN-3/transitions` -> HTTP 202 `status=pending_agent_gate execution_id=88488bcb-dffa-4f08-814f-57d7565c87cc` | Held PATCH -> HTTP 409 `code=TRANSITION_HELD`.
+- `Problem 2/4 GateWorkerRunner.poll_once() (approve)`: Handled=1, execution_id=`88488bcb-dffa-4f08-814f-57d7565c87cc`, KAN-3 transitioned to `In Progress`, `comment_id=88b2a456-62df-441c-b056-dfb7832813c7`, author: `@qagatereviewer`. Zero RLS errors, zero deadlocks!
+- `Problem 2/4 GateWorkerRunner.poll_once() (timeout sweep)`: Handled=1, execution_status=`timed_out`, KAN-4 remained in `In Progress` (fail-closed on completed target), cleared `pending_gate`, and persisted veto comment `0a5d0acc-961b-4843-8221-7e8721ddcfee`.
 - `Screenshots in docs/qa/KAN-45/screenshots/` (all 7 screenshots present):
   1. `live-workflow-wasm-dryrun-reject.png` (1440x900 desktop)
   2. `live-workflow-wasm-dryrun-allow.png` (1440x900 desktop)
@@ -89,19 +91,21 @@ This deliverable implements all 4 problems specified in `KAN-45` to enterprise s
 - Telemetry: console errors 0, page errors 0, 5xx responses 0. `OVERALL LIVE_STACK_VERDICT: PASS`.
 
 ### Quality Gate Summary:
-- **Pytest Suites (103 passed across all 7 suites in 17.26s):**
-  - `kanban/tests/api/test_gate_enforcement_hardening.py`: 15 passed in 1.36s
-  - `kanban/tests/workflows/test_qa_proof_validator_wasm.py`, `test_dry_run.py`, `test_workflow_hooks_api.py`: 29 passed in 6.50s
-  - `kanban/tests/workflows/test_async_gate.py`: 16 passed in 4.89s
-  - `kanban/tests/issues/test_proof_validation.py`, `kanban/tests/mcp/test_complete_work_enforcement.py`: 9 passed in 1.47s
-  - `agent/tests/gates/test_gate_runner.py`: 10 passed in 0.72s (97% module coverage)
-  - `kanban/tests/auth/test_sessions.py`: 11 passed in 0.83s
-  - `kanban/tests/services/test_synaptic_search.py`: 13 passed in 1.49s
+- **Pytest Suites (106 passed across all 7 suites in 17.65s):**
+  - `kanban/tests/api/test_gate_enforcement_hardening.py`: 15 passed in 1.48s
+  - `kanban/tests/workflows/test_qa_proof_validator_wasm.py`, `test_dry_run.py`, `test_workflow_hooks_api.py`: 29 passed in 6.65s
+  - `kanban/tests/workflows/test_async_gate.py`: 18 passed in 5.82s
+  - `kanban/tests/issues/test_proof_validation.py`, `kanban/tests/mcp/test_complete_work_enforcement.py`: 10 passed in 1.40s
+  - `agent/tests/gates/test_gate_runner.py`: 10 passed in 0.78s (97% module coverage)
+  - `kanban/tests/auth/test_sessions.py`: 11 passed in 0.80s
+  - `kanban/tests/services/test_synaptic_search.py`: 13 passed in 1.56s
 - **Static Gate Verification:**
-  - `kanban-ctl db check-migrations --static-only`: 63 migrations valid.
+  - `kanban-ctl db check-migrations --static-only`: 63 migrations valid. Single head: `p4_24_agent_safe_sequences`
   - `ruff check .`: All checks passed!
   - `ruff format --check .`: Clean across 2027 files.
   - `mypy`: Success: no issues found in 997 source files.
   - `lint-imports`: Contracts: 2 kept, 0 broken.
+  - `tsc -b --noEmit`: Success (0 errors).
+  - `eslint`: Clean (0 warnings).
   - `scripts.check_no_dashes --all`: Clean (0 forbidden dashes).
 - **Scope Invariants:** `.backup_schedule.json` and `backups/` strictly unstaged.

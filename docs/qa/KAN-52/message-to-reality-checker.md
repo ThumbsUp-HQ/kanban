@@ -3,7 +3,7 @@
 ## Ticket Details
 - **Ticket ID:** `KAN-52`
 - **Title:** `[KB-ISSUE-NAVIGATOR] Replace X/Y-Flipped List View with Master-Detail Issue Navigator View`
-- **Branch:** `main` (commit `78074a1d`)
+- **Branch:** `main` (commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`)
 - **Container Environment:** `http://127.0.0.1:18962` (container: `kanban-liveqa-2`)
 - **Live Stack Status:** `OVERALL LIVE_STACK_VERDICT: PASS`
 
@@ -34,12 +34,14 @@
 - Single-Line Assign-to-Me & Assignee API Contract:
   * Button styling enforces `white-space: nowrap` and `flex-shrink: 0` (`btnHeight=29`, `btnWidth=99`, `singleLine=true`).
   * `handleAssignToMe` hits `railApi.addAssignee(currentIssue.key, { principal: myId })` via `POST /api/v1/issues/{issue_ref}/assignees` with `{ principal: myId }`, returning HTTP 201 Created and updating DETAILS ("Priority: High Assignee: Server Administrator") and PEOPLE immediately.
-- Collapsed Sidebar Rail (>879px):
-  * `splitWidth=1084px`, `quickPropsDisplay="flex"`, `detailsBodyHeight=46px`. Priority and Assignee visible inside DETAILS.
+- Collapsed Sidebar Rail (>879px) & 12px DETAILS Flex Gap:
+  * `splitWidth=1084px`, `quickPropsDisplay="flex"`, `detailsBodyHeight=46px`, `horizontalGapPx=12`. Priority and Assignee render cleanly with 12px gap inside DETAILS.
 - Independent Copy Feedback Timers:
-  * Separated `copyBranchTimeoutRef` and `copyShareTimeoutRef`. Branch copy displays `✓ Copied!` while Share button displays `🔗 Share / Export` without timer collision or getting stuck.
+  * Separated `copyBranchTimeoutRef` and `copyShareTimeoutRef`. Branch copy displays `✓ Copied!` while Share button displays `🔗 Share / Export` without timer collision or button freeze.
 - Single State Select in Split Mode:
   * Tablet and mobile viewports render only single `split-state-select` (quick props state select hidden).
+- Tablet 768x1024 Side-by-Side Split View:
+  * In `IssueSurface.css:265`: changed `@media (max-width: 768px)` to `@media (max-width: 767px)`. At 768x1024 tablet, `.surface--split` renders side-by-side next to the 300px master rail (`sideBySide: true`, 284px left rail + 412px right detail pane).
 
 ### Problem 4: `created_at` & `updated_at` Serialization & View Label Parity
 - Added `created_at: datetime` and `updated_at: datetime` to `IssueResponse` (`kanban/api/v1/schemas/issues.py`).
@@ -62,29 +64,29 @@
 
 ## 3. Test Suites & Verification Metrics
 
-- Frontend Unit Tests: 10/10 test files passed, 161/161 unit tests passed with 0 `act(...)` warnings in 10.17s:
-  * `predicateParser.test.ts`: 4/4 passed
-  * `IssueNavigatorBar.test.tsx`: 5/5 passed
-  * `ListView.test.tsx`: 8/8 passed
-  * `IssueSurface.test.tsx`: 40/40 passed
-  * `IssueSurfaceSplitMasterDetail.test.tsx`: 6/6 passed
-  * `useIssueKeyboardMap.test.tsx`: 11/11 passed
-  * `LayoutSwitcher.test.tsx`: 7/7 passed
-  * `Sidebar.test.tsx`: 30/30 passed
-  * `cssTokensAudit.test.ts`: 4/4 passed
-  * `viewRegistry.test.tsx`: 46/46 passed
+- Frontend Unit Tests (`docs/qa/KAN-52/unit-test-results.txt`):
+  * 8/8 test files passed, 156/156 unit tests passed with 0 `act(...)` warnings in 15.26s.
+  * Every single touched file individually exceeds >=95.0% branch coverage:
+    - `LayoutSwitcher.tsx`: 100% stmts, **97.05%** branch
+    - `IssueSurface.tsx`: 99.37% stmts, **95.40%** branch
+    - `ListView.tsx`: 100% stmts, **96.03%** branch
+    - `IssueNavigatorBar.tsx`: 100% stmts, **100%** branch
+    - `viewPredicateParser.ts`: 100% stmts, **96.66%** branch
+    - `viewRegistry.tsx`: 99.02% stmts, **95.30%** branch
+    - `viewsApi.ts`: 100% stmts, **98.52%** branch
+    - **TOTAL: 99.44% statements, 96.04% branch, 99.71% functions, 100% lines**
 - Backend Pytest Suite: 16/16 passed in `kanban/tests/api/test_issues.py` in 8.40s.
 - TypeScript Typecheck: `tsc -b --noEmit` exited with code 0 (0 errors).
 - ESLint: `eslint . --max-warnings 0` exited with code 0 (0 errors, 0 warnings).
-- Production Build: `vite build` succeeded with exit code 0 in 1.15s.
+- Production Build: `vite build` succeeded with exit code 0 in 1.13s.
 - Database Migrations & Architecture Contracts: `kanban-ctl db check-migrations` confirmed all 63 migrations valid with single head (`p4_24_agent_safe_sequences`). `lint-imports` confirmed 2 contracts kept, 0 broken.
 
 ---
 
 ## 4. Verification Evidence Files
 
-- `docs/qa/KAN-52/live-fullstack-proof.txt`: Round 3 live black-box execution telemetry against `kanban-liveqa-2` (`:18962`, commit `78074a1d`)
-- `docs/qa/KAN-52/unit-test-results.txt`: Verbatim execution outputs for Vitest (161 passed) and Pytest (16 passed)
+- `docs/qa/KAN-52/live-fullstack-proof.txt`: Round 5 live black-box execution telemetry against `kanban-liveqa-2` (`:18962`, commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`)
+- `docs/qa/KAN-52/unit-test-results.txt`: Verbatim execution outputs for Vitest (156 passed) and Pytest (16 passed)
 - `docs/qa/KAN-52/build-or-typecheck.txt`: Verbatim static check and build outputs
 - `docs/qa/KAN-52/api-specialist-review.md`: Dual-specialist API and security audit signoff
 - `docs/qa/KAN-52/ui-specialist-review.md`: Dual-specialist UI and layout audit signoff
@@ -92,7 +94,7 @@
 - `docs/qa/KAN-52/screenshots/live-navigator-desktop-dark.png`: Desktop Dark mode master-detail layout
 - `docs/qa/KAN-52/screenshots/live-navigator-assign-to-me-desktop.png`: Single-line Assign to me button and updated Details
 - `docs/qa/KAN-52/screenshots/live-navigator-query-jql-desktop.png`: JQL query sync to first matching issue (KAN-5)
-- `docs/qa/KAN-52/screenshots/live-navigator-collapsed-rail-desktop.png`: Collapsed rail with Priority/Assignee in Details and independent copy timers
-- `docs/qa/KAN-52/screenshots/live-navigator-tablet.png`: Tablet viewport with single split state select
+- `docs/qa/KAN-52/screenshots/live-navigator-collapsed-rail-desktop.png`: Collapsed rail with Priority/Assignee in Details (12px gap) and independent copy timers
+- `docs/qa/KAN-52/screenshots/live-navigator-tablet.png`: Tablet viewport with side-by-side split master-detail
 - `docs/qa/KAN-52/screenshots/live-navigator-mobile-list.png`: Mobile full-width list view
 - `docs/qa/KAN-52/screenshots/live-navigator-mobile-detail.png`: Mobile detail view with back button

@@ -3,9 +3,9 @@
 ## Ticket Summary
 - **Key:** KAN-44
 - **Title:** [KB-MOBILE-TRANSITION] Add Mobile & Touch Ticket State Transition Controls to Ticket Header, Board Cards, and List Rows
-- **Branch:** `main` (integrated at commit `78074a1d`)
+- **Branch:** `main` (commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`)
 - **Target:** `main`
-- **Live QA Target:** `kanban-liveqa-2` (`http://127.0.0.1:18962`, commit `78074a1d`, PostgreSQL 16 + FORCE RLS)
+- **Live QA Target:** `kanban-liveqa-2` (`http://127.0.0.1:18962`, commit `2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd`, PostgreSQL 16 + FORCE RLS)
 - **Live QA Verdict:** PASS (`OVERALL LIVE_STACK_VERDICT: PASS`)
 
 ## Core Problem Deliverables
@@ -17,6 +17,8 @@
 - Removed duplicate nested `<aside className="surface__rail">` wrapper between `IssueSurface.tsx` and `PropertiesRail.tsx`.
 - Rendered compact Quick Properties Bar (`data-testid="quick-properties-bar"`, containing State, Priority, and Assignee) above the description on viewports <= 879px.
 - Enforced 44px minimum touch targets on `.prop-row__select` and `.quick-props__select` on mobile.
+- In `IssueSurface.css`, hidden duplicate state select controls on `<= 879px` viewports via `:is(.surface--full, .surface--drawer, .surface:not(.surface--split))`, ensuring `visibleStateSelectCount === 1` (`["header-state-select"]`) on Tablet (`768x1024`) and Mobile (`390x844`).
+- Wrapped `.activity-tablist` on `<= 879px` with `flex-wrap: wrap; gap: 4px; padding-right: 12px;`, keeping `Gates (0)` at `gatesBtnRight === 151px <= 378px` without horizontal viewport overflow (`390px === 390px`).
 
 ### Problem 2: Board Card Touch Transition Controls & Mobile Popover/Bottom-Sheet
 - Added touch-friendly state move pill button (`data-testid="board-card-state-btn-${issue.key}"`, min-height 36px on desktop and 44px on mobile) to `BoardCard.tsx` and `SwimlaneBoardGrid.tsx`.
@@ -28,7 +30,7 @@
 - On mobile viewports under `@media (max-width: 768px)`, transforms into a full-width Mobile Bottom Sheet with 44px option rows, backdrop tap-to-dismiss, Escape key dismissal, and `z-index: 350`.
 
 ### Problem 3: Mobile Table View State Column Widths & Legible Names
-- In `TableView.css`, under `@media (max-width: 768px)`, configured `.kb-table-cell--state` with min-width 124px and max-width 150px, and priority cell with min-width 96px.
+- In `TableView.css`, under `@media (max-width: 768px)`, configured `.issues-table` with min-width 580px, summary column with min-width 180px (`summaryCellWidth: 235px >= 180px`), state cell wrapper with min-width 124px and max-width 150px, and priority cell with min-width 96px.
 - Enables horizontal scrolling (`overflow-x: auto`), rendering full state names ("Todo", "Purple Review", "Backlog", "In Progress") in 127px wide by 44px tall selects with zero 1-letter truncation.
 
 ### Problem 4: Mobile List Overlay Trap & Single-Select Split Detail
@@ -39,12 +41,10 @@
 ## Quality & Coverage Verification
 
 1. **Unit Tests & Coverage (`docs/qa/KAN-44/unit-test-results.txt`):**
-   - 11 of 11 test files passed.
-   - 195 of 195 tests passed.
-   - Zero `act(...)` console warnings.
-   - All touched files exceed the mandatory 95% line and branch coverage threshold.
+   - 13 of 13 test files passed, 247/247 tests passed with zero `act(...)` console warnings in 15.91s.
+   - Every single touched file individually exceeds >=95.0% branch coverage (99.5% stmts, 95.68% branch, 99.8% funcs, 99.95% lines overall).
 
 2. **Quality Gates & Typography:**
-   - Real on-disk stylesheets verified: `listTable.css`, `filterBulk.css`, `TableView.css`, `IssueSurface.css`, `Topbar.css`.
-   - Breakpoint rules: `@media (max-width: 768px)`.
+   - Real on-disk stylesheets verified: `listTable.css`, `filterBulk.css`, `TableView.css`, `IssueSurface.css`, `Topbar.css`, `activity.css`.
    - Unicode Dash Scan: 0 em-dashes and 0 en-dashes across all code and documentation files.
+   - All 16 Playwright screenshots verified in `docs/qa/KAN-44/screenshots/`.

@@ -1,35 +1,34 @@
-=== KAN-44 ROUND 4 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, kanban-liveqa-2, commit 9b163f07) ===
-Timestamp: 2026-11-21T02:11:46.190Z - 2026-11-21T02:12:09.269Z
-Execution Mode: Zero-mock Playwright against live Docker standalone container (PostgreSQL 16 + FORCE RLS, UID 65532)
-Test Runner Script: live_qa_suite_r4.mjs
+=== KAN-44 ROUND 5 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, kanban-liveqa-2, HEAD 2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd) ===
+Timestamp: 2026-11-21T03:32:53.025Z - 2026-11-21T03:33:16.134Z
+Execution Mode: Zero-mock Playwright against freshly rebuilt live Docker standalone container (PostgreSQL 16 + FORCE RLS, UID 65532)
+Test Runner Script: live_qa_suite_r5.mjs
 
 --- Page Load Timings (< 3000ms threshold) ---
-- Board load: 871 ms
-- Swimlane load: 850 ms
-- Table load: 884 ms
-- Mobile Board load: 873 ms
-- Mobile List load: 840 ms
-- Single Issue load: 743 ms
+- Board load: 880 ms
+- Swimlane load: 882 ms
+- Table load: 807 ms
+- Mobile Board load: 881 ms
+- Mobile List load: 842 ms
+- Single Issue load: 732 ms
 
---- Round 4 Verification Checks ---
+--- Round 5 Verification Checks ---
 1. Mobile Table Summary Column Width (390x844, live-table-mobile.png & live-viewer-table-mobile.png):
    - Admin Table Telemetry:
-     {"issuesTableMinWidth":"580px","issuesTableWidth":1003,"scrollWrapOverflowX":"auto","scrollWrapClientWidth":356,"scrollWrapScrollWidth":1003,"summaryHeaderMinWidth":"180px","summaryHeaderWidth":235,"summaryHeaderText":"Summary","summaryCellMinWidth":"180px","summaryCellWidth":235,"summaryTextSample":"Validate WIP soft warning thresholds","stateCellMinWidth":"124px","stateCellWidth":143,"prioWrapMinWidth":"96px","prioWrapWidth":110,"pageScrollWidth":390,"innerWidth":390,"transitionStatus":200}
+     {"issuesTableMinWidth":"580px","issuesTableWidth":943,"scrollWrapOverflowX":"auto","scrollWrapClientWidth":356,"scrollWrapScrollWidth":943,"summaryHeaderMinWidth":"180px","summaryHeaderWidth":235,"summaryHeaderText":"Summary","summaryCellMinWidth":"180px","summaryCellWidth":235,"summaryTextSample":"Validate WIP soft warning thresholds","stateCellMinWidth":"124px","stateCellWidth":143,"prioWrapMinWidth":"96px","prioWrapWidth":110,"pageScrollWidth":390,"innerWidth":390,"transitionStatus":200}
    - Interactive state <select> widths/heights: all 6 rows measure width=127px, height=44px (>=44px touch target), rendering full state labels ("Todo", "Purple Review", "Backlog", "In Progress") inside .table-scroll-wrap while Summary header and issue titles render at 235px (>= 180px, 100% readable, zero ".." crushing).
    - Viewer Table Telemetry (viewer2: WORKSPACE_GUEST + project VIEWER on KAN):
      {"issuesTableMinWidth":"580px","summaryHeaderMinWidth":"180px","summaryHeaderWidth":235,"summaryCellMinWidth":"180px","summaryCellWidth":235,"interactiveStateSelectCount":0,"readOnlyStateBadgeCount":6,"scrollWidth":390,"innerWidth":390}
    - All 6 read-only <StateBadge> pills render untruncated labels (notTruncated=true).
    LIVE_STACK_VERDICT [MOBILE_TABLE_SUMMARY_WIDTH]: PASS
 
-2. Deduplicated State <select> on <= 879px Full-Page Issue View (live-issue-tablet.png 768x1024, live-issue-mobile.png 390x844):
+2. Deduplicated State <select> on <= 879px Full-Page Issue View & Activity Tab Wrap (live-issue-tablet.png 768x1024, live-issue-mobile.png 390x844):
    - Tablet (768x1024, /projects/KAN/issues/KAN-1):
-     Telemetry: {"totalStateSelectsInDom":["header-state-select","quick-props-state-select"],"visibleStateSelectCount":2,"visibleStateSelectTestIds":["header-state-select","quick-props-state-select"],"quickPropsGroupDisplay":"flex","railStateRowDisplay":"grid","headerStateSelectInDom":true}
-     Note: Three State <select> controls remain visibly rendered in live-issue-tablet.png (header-state-select, quick-props-state-select, and PropertiesRail State <select> inside .prop-row[data-prop="state"]).
-     Root cause observed in on-disk code (not modified during QA): IssueSurface.tsx renders <section className="surface--full"> without the `.surface` class, so the IssueSurface.css selectors `.surface:not(.surface--split) .quick-props__group--state` and `.surface:not(.surface--split) .surface__rail .prop-row[data-prop="state"]` do not match `.surface--full`.
+     Telemetry: {"totalStateSelectsInDom":["header-state-select","quick-props-state-select"],"visibleStateSelectCount":1,"visibleStateSelectTestIds":["header-state-select"],"quickPropsGroupDisplay":"none","railStateRowDisplay":"none","headerStateSelectInDom":true}
+     Confirmed ONLY ONE visible State <select> (header-state-select) is rendered; quick-props state group and stacked PropertiesRail state row (.prop-row[data-prop="state"]) are hidden (display: none) via :is(.surface--full, .surface--drawer, .surface:not(.surface--split)).
    - Mobile (390x844, /projects/KAN/issues/KAN-1):
-     Telemetry: {"totalStateSelectsInDom":["header-state-select","quick-props-state-select"],"visibleStateSelectCount":2,"visibleStateSelectTestIds":["header-state-select","quick-props-state-select"],"quickPropsGroupDisplay":"flex","railStateRowDisplay":"grid","headerStateSelectInDom":true,"scrollWidth":390,"innerWidth":390,"noHorizontalOverflow":true,"tabBarWidth":310,"tabBarRight":350,"tabBarPaddingRight":"12px","gatesBtnRight":397}
-     .activity-tablist has paddingRight="12px" and scrollWidth===innerWidth===390, though Gates (0) button right edge measures 397px in live-issue-mobile.png and quick-props-state-select + PropertiesRail State <select> remain visible due to the same `.surface:not(.surface--split)` selector mismatch on `.surface--full`.
-   LIVE_STACK_VERDICT [FULL_PAGE_ISSUE_DEDUPLICATED_STATE_LEQ_879]: FAIL
+     Telemetry: {"totalStateSelectsInDom":["header-state-select","quick-props-state-select"],"visibleStateSelectCount":1,"visibleStateSelectTestIds":["header-state-select"],"quickPropsGroupDisplay":"none","railStateRowDisplay":"none","headerStateSelectInDom":true,"scrollWidth":390,"innerWidth":390,"noHorizontalOverflow":true,"tabBarWidth":310,"tabBarRight":350,"tabBarPaddingRight":"12px","gatesBtnRight":151}
+     Confirmed ONLY ONE visible State <select> (header-state-select), zero horizontal overflow (390===390), and flex-wrap on .activity-tablist wraps Gates (0) cleanly onto row 2 at gatesBtnRight=151px (<= 378px).
+   LIVE_STACK_VERDICT [FULL_PAGE_ISSUE_DEDUPLICATED_STATE_LEQ_879]: PASS
 
 3. Board, Swimlane, List, Split Detail & VIEWER RBAC Flows:
    - Desktop Board & Swimlane Popovers: live-board-popover-desktop.png (transitionStatus=200, post-transition card button label="In Progress"), live-swimlane-popover-desktop.png.
@@ -66,4 +65,4 @@ Screenshots Verified (docs/qa/KAN-44/screenshots/):
 - live-viewer-table-mobile.png
 - live-viewer-readonly-mobile.png
 
-OVERALL LIVE_STACK_VERDICT (KAN-44): PARTIAL / FAIL (Mobile Table Summary >= 180px PASS; Full-Page Issue <= 879px State <select> deduplication FAIL due to .surface:not(.surface--split) mismatch on .surface--full)
+OVERALL LIVE_STACK_VERDICT (KAN-44): PASS

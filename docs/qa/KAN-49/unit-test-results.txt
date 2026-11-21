@@ -1,11 +1,13 @@
+=== KAN-49 UNIT TESTS & COVERAGE (HEAD 2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd) ===
+
 === Running Database Tests ===
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-rc2-a692445e/.venv/bin/python3
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-rc2-a692445e
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/kanban
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collecting 5 items                                                             collected 12 items                                                             
+collecting ... collected 12 items
 
 database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [  8%]
 database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [ 16%]
@@ -20,16 +22,16 @@ database/tests/test_p1_05_sequence_concurrency.py::test_09_invalid_sequence_coun
 database/tests/test_p1_05_sequence_concurrency.py::test_10_allocate_issue_sequences_and_verify_activity_chain PASSED [ 91%]
 database/tests/migrations/test_p4_24_agent_safe_sequences_migration.py::test_p4_24_agent_safe_sequences_migration_lifecycle PASSED [100%]
 
-============================== 12 passed in 5.98s ==============================
+======================== 12 passed, 2 warnings in 5.63s ========================
 
 === Running Kanban Tests ===
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-rc2-a692445e/.venv/bin/python3
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan20-36-rc2-a692445e
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/kanban
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collecting 65 items                                                            collected 65 items                                                             
+collecting ... collected 65 items
 
 kanban/tests/services/test_agent_safe_sequences.py::test_activity_event_type_registration PASSED [  1%]
 kanban/tests/services/test_agent_safe_sequences.py::test_create_issue_skips_loaded_and_records_activity PASSED [  3%]
@@ -84,9 +86,9 @@ kanban/tests/api/test_projects.py::test_case_5_module_rules PASSED       [ 76%]
 kanban/tests/api/test_projects.py::test_patch_semantics_and_activity PASSED [ 78%]
 kanban/tests/api/test_projects.py::test_description_too_large PASSED     [ 80%]
 kanban/tests/api/test_projects.py::test_create_authorization PASSED      [ 81%]
-kanban/tests/api/test_list_pagination_and_cursor PASSED                  [ 83%]
-kanban/tests/api/test_cursor_round_trip_and_rejection PASSED             [ 84%]
-kanban/tests/api/test_patch_unchanged_description_and_module_toggle PASSED [ 86%]
+kanban/tests/api/test_projects.py::test_list_pagination_and_cursor PASSED [ 83%]
+kanban/tests/api/test_projects.py::test_cursor_round_trip_and_rejection PASSED [ 84%]
+kanban/tests/api/test_projects.py::test_patch_unchanged_description_and_module_toggle PASSED [ 86%]
 kanban/tests/api/test_projects.py::test_project_members_endpoints PASSED [ 87%]
 kanban/tests/api/test_projects.py::test_serialize_project_capability_fallbacks PASSED [ 89%]
 kanban/tests/api/test_projects.py::test_skip_loaded_sequences_inheritance_and_explicit_override PASSED [ 90%]
@@ -97,8 +99,6 @@ kanban/tests/api/test_issue_archive.py::test_case_1_positive_archive_unarchive_a
 kanban/tests/api/test_issue_archive.py::test_case_2_rule_archive_in_progress_and_open_subissues PASSED [ 98%]
 kanban/tests/api/test_issue_archive.py::test_case_3_security_permissions_patch_guard_and_query_conflict PASSED [100%]
 
-============================= 65 passed in 49.69s ==============================
-
 === COVERAGE REPORT ===
 Name                                    Stmts   Miss Branch BrPart  Cover   Missing
 -----------------------------------------------------------------------------------
@@ -107,10 +107,12 @@ database/models/workspace_settings.py      22      0      0      0   100%
 kanban/api/v1/issue_copy.py                18      0      0      0   100%
 kanban/api/v1/issue_trees.py               20      0      0      0   100%
 kanban/api/v1/issues.py                    58      0      8      0   100%
+kanban/api/v1/schemas/projects.py          67      0      2      0   100%
 kanban/issues/tree_service.py             344     13    152     11    95%   163->exit, 355, 378, 430, 492, 529, 606->612, 648-652, 700, 732, 948-950, 953
 kanban/services/activity.py               214      0      8      1    99%   446->457
 kanban/services/issue_copy.py             126      0     40      0   100%
 kanban/services/issues.py                 461     10    186      7    97%   320-324, 427, 649->652, 839, 891, 992, 1039->1042, 1132, 1176->1178
 kanban/services/projects.py               194      1     56      1    99%   262
 -----------------------------------------------------------------------------------
-TOTAL                                    1565     25    450     20    98%
+TOTAL                                    1632     25    452     20    98%
+============================= 65 passed in 49.52s ==============================

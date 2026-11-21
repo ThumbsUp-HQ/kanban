@@ -70,21 +70,22 @@
     "detail": "Transition to completed state 'Done' requires complete_work with valid verification proof. Direct transition, patch, or move is reserved for human operators."
   },
   "async_gate_approval_comment_sample": {
-    "author_principal_id": "ab89e90d-6780-48f4-afd0-3f3181cf22c4",
+    "author_principal_id": "d646e8a6-ab82-464e-bfba-89b5552fbd87",
     "event_type": "COMMENT_CREATED",
     "header": "## ✅🤖 Workflow Transition Gate Approved",
-    "body_markdown": "## ✅🤖 Workflow Transition Gate Approved\n\n- **Hook:** `qa-async-gate`\n- **Harness:** `fixture`\n- **Transition:** `Todo` -> `In Progress`\n\n### Reality Check / Gate Rationale\n\nVerified all Problem 2 transition invariants against live PostgreSQL:\n- Atomic Step 7 IssueComment persistence authored by @qa-gate-reviewer\n- ActivityEventType.COMMENT_CREATED, GATE_APPROVED, and ISSUE_STATE_CHANGED recorded\n- Fail-closed completed-state policy verified"
+    "body_markdown": "## ✅🤖 Workflow Transition Gate Approved\n\n- **Hook:** `qa-async-gate`\n- **Harness:** `fixture`\n- **Transition:** `Todo` -> `In Progress`\n\n### Reality Check / Gate Rationale\n\nVerified all Problem 2 and Problem 4 invariants via GateWorkerRunner.poll_once() against live PostgreSQL:\n- Dynamic workspace and admin principal resolution under FORCE ROW LEVEL SECURITY\n- Zero FOR UPDATE self-deadlock across poll_once() and record_decision()\n- Atomic Step 7 IssueComment persistence authored by @qagatereviewer"
   },
   "live_qa_observed": {
     "container": "kanban-liveqa-4",
     "base_url": "http://127.0.0.1:18964",
-    "commit": "9b163f07",
+    "commit": "2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd",
+    "commit_short": "2b542d7f",
     "qa_proof_validator_sha256": "fddfe97e1b15829495364a2002bf0a0c830002f9ef673971a1a4167ee815d972",
     "auto_label_mutator_sha256": "79cdc606bf7cab8b1de8a204a126e9302f831bdf32db6ea2170970bb822140dd",
-    "wasm_dryrun_reject_us": 644,
-    "wasm_dryrun_allow_us": 361,
+    "wasm_dryrun_reject_us": 447,
+    "wasm_dryrun_allow_us": 237,
     "auto_label_mutator_result": "allowed",
-    "auto_label_mutator_duration_us": 155,
+    "auto_label_mutator_duration_us": 145,
     "guard1_bearer_patch_status": 422,
     "guard1_bearer_patch_code": "USE_COMPLETE_WORK",
     "guard1_bearer_move_status": 422,
@@ -101,6 +102,9 @@
     "guard2b_needs_work_without_ready_mcp_is_error": true,
     "guard2b_needs_work_without_ready_bearer_rest_status": 422,
     "guard2b_needs_work_without_ready_bearer_rest_code": "INVALID_REALITY_CHECKER_REPORT",
+    "guard2d_grade_a_pending_without_ready_mcp_is_error": true,
+    "guard2d_grade_a_pending_without_ready_bearer_rest_status": 422,
+    "guard2d_grade_a_pending_without_ready_bearer_rest_code": "INVALID_REALITY_CHECKER_REPORT",
     "guard2c_cookie_plus_dummy_bearer_get_status": 401,
     "guard2c_cookie_plus_dummy_bearer_post_no_csrf_status": 401,
     "guard2c_cookie_only_no_csrf_status": 403,
@@ -108,8 +112,13 @@
     "problem2_async_gate_dispatch_status": 202,
     "problem2_async_gate_held_patch_status": 409,
     "problem2_async_gate_held_patch_code": "TRANSITION_HELD",
+    "problem2_runner_poll_once_approve_handled": 1,
     "problem2_async_gate_execution_status": "approved",
     "problem2_async_gate_resulting_state": "In Progress",
-    "problem2_async_gate_comment_id": "69155cd3-3ef8-4d6c-8b45-c2bdfba6d26a"
+    "problem2_async_gate_comment_id": "88b2a456-62df-441c-b056-dfb7832813c7",
+    "problem2_runner_poll_once_timeout_handled": 1,
+    "problem2_timeout_execution_status": "timed_out",
+    "problem2_timeout_resulting_state": "In Progress",
+    "problem2_timeout_comment_id": "0a5d0acc-961b-4843-8221-7e8721ddcfee"
   }
 }

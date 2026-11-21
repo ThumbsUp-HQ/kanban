@@ -1,14 +1,14 @@
-=== KAN-52 ROUND 4 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, kanban-liveqa-2, commit 9b163f07) ===
-Timestamp: 2026-11-21T02:11:46.190Z - 2026-11-21T02:12:09.269Z
-Execution Mode: Zero-mock Playwright against live Docker standalone container (PostgreSQL 16 + FORCE RLS, UID 65532)
-Test Runner Script: live_qa_suite_r4.mjs
+=== KAN-52 ROUND 5 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, kanban-liveqa-2, HEAD 2b542d7f0dc7dfe4a36c99d78ae0c0d88c37a5fd) ===
+Timestamp: 2026-11-21T03:32:53.025Z - 2026-11-21T03:33:16.134Z
+Execution Mode: Zero-mock Playwright against freshly rebuilt live Docker standalone container (PostgreSQL 16 + FORCE RLS, UID 65532)
+Test Runner Script: live_qa_suite_r5.mjs
 
 --- Page Load Timings (< 3000ms threshold) ---
-- Desktop Navigator (?layout=list&peek=KAN-1): 929 ms
-- Tablet Navigator (?layout=list&peek=KAN-1): 850 ms
-- Mobile List (?layout=list): 874 ms
+- Desktop Navigator (?layout=list&peek=KAN-1): 844 ms
+- Tablet Navigator (?layout=list&peek=KAN-1): 849 ms
+- Mobile List (?layout=list): 796 ms
 
---- Round 4 Verification Checks ---
+--- Round 5 Verification Checks ---
 1. Single State <select> on Desktop Split View (1440x900, live-navigator-desktop-light.png & live-navigator-desktop-dark.png):
    - Light mode telemetry: {"totalStateSelectsInDom":["split-state-select","quick-props-state-select"],"visibleStateSelectCount":1,"visibleStateSelectTestIds":["split-state-select"],"quickPropsGroupDisplay":"none","headerStateSelectInDom":false}
    - Dark mode telemetry: {"totalStateSelectsInDom":["split-state-select","quick-props-state-select"],"visibleStateSelectCount":1,"visibleStateSelectTestIds":["split-state-select"],"quickPropsGroupDisplay":"none","headerStateSelectInDom":false}
@@ -29,12 +29,12 @@ Test Runner Script: live_qa_suite_r4.mjs
 
 4. Tablet (768x1024, live-navigator-tablet.png) Side-by-Side Split vs Mobile (< 768px, live-navigator-mobile-list.png & live-navigator-mobile-detail.png):
    - Tablet (768x1024, ?layout=list&peek=KAN-1):
-     Telemetry: {"railVisible":true,"railRect":{"left":28,"right":312,"width":284},"splitVisible":true,"splitRect":{"left":0,"right":768,"width":768},"splitCssPosition":"fixed","sideBySide":false,"visibleStateSelects":["split-state-select"],"headerStateSelectInDom":false}
-     Note: While listTable.css line 751 and IssueSurface.css line 347 use `@media (max-width: 767px)`, IssueSurface.css line 265 still retains `@media (max-width: 768px)` with `.surface--split { position: fixed; inset: 0; width: 100vw; z-index: 200; }`, causing 768x1024 Tablet to render the full-screen fixed overlay covering the master rail rather than a side-by-side split layout (sideBySide=false).
+     Telemetry: {"railVisible":true,"railRect":{"left":28,"right":312,"width":284},"splitVisible":true,"splitRect":{"left":328,"right":740,"width":412},"splitCssPosition":"static","sideBySide":true,"visibleStateSelects":["split-state-select"],"headerStateSelectInDom":false}
+     Confirmed changing IssueSurface.css:265 to `@media (max-width: 767px)` renders the side-by-side master-detail split layout at 768x1024 (284px left rail at 28..312 alongside 412px right detail pane at 328..740, splitCssPosition="static", sideBySide=true) with only split-state-select visible.
    - Mobile (390x844):
      * List (live-navigator-mobile-list.png): {"railWidth":358,"splitOpen":false,"scrollWidth":390,"innerWidth":390}
      * Detail (live-navigator-mobile-detail.png): {"splitCssPosition":"fixed","visibleStateSelects":["split-state-select"],"headerStateSelectInDom":false}
-   LIVE_STACK_VERDICT [TABLET_768_SIDE_BY_SIDE_SPLIT]: FAIL
+   LIVE_STACK_VERDICT [TABLET_768_SIDE_BY_SIDE_SPLIT]: PASS
 
 --- Runtime Error Telemetry ---
 Console JS errors: 0
@@ -52,4 +52,4 @@ Screenshots Verified (docs/qa/KAN-52/screenshots/):
 - live-navigator-mobile-list.png
 - live-navigator-mobile-detail.png
 
-OVERALL LIVE_STACK_VERDICT (KAN-52): PARTIAL / FAIL (Single split-state-select PASS; 12px DETAILS flex gap PASS; 768x1024 Tablet side-by-side split FAIL due to remaining @media (max-width: 768px) rule at IssueSurface.css:265)
+OVERALL LIVE_STACK_VERDICT (KAN-52): PASS
