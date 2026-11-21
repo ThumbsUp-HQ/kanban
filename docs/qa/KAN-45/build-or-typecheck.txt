@@ -1,5 +1,5 @@
-=== STATIC GATES & BUILD VERIFICATION (KAN-45 Remediation fix/KAN-45-final) ===
-$ uv run kanban-ctl db check-migrations --static-only
+=== STATIC GATES & BUILD VERIFICATION (HEAD 99dd3531dd8557a502f75466f983289aab0c6ced) ===
+$ uv run kanban-ctl db check-migrations
 OK: All 63 migrations valid. Single head: p4_24_agent_safe_sequences
 Exit code: 0
 
@@ -11,14 +11,74 @@ $ uv run ruff format --check .
 2027 files already formatted
 Exit code: 0
 
-$ uv run mypy
-Success: no issues found in 1140 source files
+$ uv run mypy database kanban mcp agent
+Success: no issues found in 997 source files
 Exit code: 0
 
 $ uv run lint-imports
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 997 files, 3561 dependencies.
+--------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT (5 ignored imports)
+mcp forbidden from importing database KEPT (48 ignored imports)
+
 Contracts: 2 kept, 0 broken.
 Exit code: 0
 
-$ python3 -m scripts.check_no_dashes --all
-0 forbidden unicode dashes found across repository.
+$ pnpm --dir kanban/web run typecheck
+
+> @kanban/web@0.1.0 typecheck /home/adamoutler/kanban/kanban/web
+> tsc -b --noEmit
+
 Exit code: 0
+
+$ pnpm --dir kanban/web run lint
+
+> @kanban/web@0.1.0 lint /home/adamoutler/kanban/kanban/web
+> eslint . --max-warnings 0
+
+Exit code: 0
+
+$ pnpm --dir kanban/web run build
+
+> @kanban/web@0.1.0 build /home/adamoutler/kanban/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 723 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.51 kB │ gzip:   0.31 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-DmWtfEFx.css            484.46 kB │ gzip:  67.97 kB
+dist/assets/index-hsukqSsz.js           2,450.59 kB │ gzip: 679.25 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.09s
+Exit code: 0
+
+$ python3 -m scripts.check_no_dashes --all
+Notice: skipping /home/adamoutler/kanban/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+Exit code: 0
+
+ALL STATIC GATES PASSED: 9/9 CHECKS CLEAN (EXIT 0)
