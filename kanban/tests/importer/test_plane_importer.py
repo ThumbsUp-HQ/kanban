@@ -512,3 +512,16 @@ async def test_import_entity_updates_and_invalid_links_gate(
             ImportIntegrityError, match="audit_object_links discovered 2 invalid links"
         ):
             await importer.run_import(bundle, dry_run=False)
+
+
+def test_parse_iso_date_helpers() -> None:
+    """Verify _parse_iso_date handles various formats, spaces, and invalid inputs."""
+    from datetime import date
+    from kanban.importer.plane_importer import _parse_iso_date
+
+    assert _parse_iso_date("2026-11-21") == date(2026, 11, 21)
+    assert _parse_iso_date("2026-11-21T12:00:00+00:00") == date(2026, 11, 21)
+    assert _parse_iso_date("2026-11-21 12:00:00.123456+00:00") == date(2026, 11, 21)
+    assert _parse_iso_date(None) is None
+    assert _parse_iso_date("invalid-date") is None
+    assert _parse_iso_date("") is None

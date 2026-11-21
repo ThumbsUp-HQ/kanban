@@ -750,3 +750,50 @@ def test_cli_runner_exception_handling(tmp_path: Path) -> None:
         summary={"passed_checks": 0, "total_checks": 1},
     )
     _print_console_report(rep)
+
+
+def test_scan_markdown_for_html_residue_inline_code_spans() -> None:
+    """Verify inline code spans with suspicious HTML are ignored as valid markdown."""
+    from kanban.importer.cutover_verifier import scan_markdown_for_html_residue
+
+    md = "Testing `<img src=x onerror=alert(1)>` and `<script>console.log()</script>` in text."
+    findings = scan_markdown_for_html_residue(md)
+    assert findings == []
+
+    raw_html_md = "Unsafe text with <script>alert(1)</script> here."
+    findings_raw = scan_markdown_for_html_residue(raw_html_md)
+    assert len(findings_raw) > 0
+
+
+def test_resolve_and_verify_bundle_with_build_or_typecheck(tmp_path: Path) -> None:
+    """Verify proof bundle passes with build-or-typecheck.txt."""
+    from kanban.importer.cutover_verifier import _resolve_and_verify_bundle
+
+    bundle = tmp_path / "KAN-99"
+    bundle.mkdir()
+    (bundle / "git-diff.patch").write_text("diff content", encoding="utf-8")
+    (bundle / "unit-test-results.txt").write_text("tests passed", encoding="utf-8")
+    (bundle / "build-or-typecheck.txt").write_text("build passed", encoding="utf-8")
+
+    matched, errs = _resolve_and_verify_bundle(["KAN-99"], tmp_path)
+    assert matched == "KAN-99"
+    assert errs == []
+
+
+@pytest.mark.asyncio
+async def test_check_qa_proofs_external_project() -> None:
+    """Verify external Plane project is exempt from local repository QA directory."""
+    from unittest.mock import AsyncMock
+    from kanban.importer.cutover_verifier import _check_qa_proofs
+    import uuid
+
+    mock_session = AsyncMock()
+    result = await _check_qa_proofs(
+        session=mock_session,
+        proj_id=uuid.uuid4(),
+        project_identifier="EXTERNAL",
+        qa_root=Path("/tmp"),
+        exempt_keys=set(),
+    )
+    assert result.passed is True
+    assert result.metadata.get("external_project") is True
