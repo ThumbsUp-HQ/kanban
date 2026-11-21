@@ -14,6 +14,7 @@ from agent.context.transition_context import (
     build_transition_context,
 )
 from agent.context.verdict import VerdictParseError, parse_verdict_output
+from agent.providers.errors import ProviderTimeout
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -228,7 +229,7 @@ class GateWorker:
             try:
                 async with asyncio.timeout(float(timeout_ms) / 1000.0):
                     raw_output = await harness.run(ctx, agent_def)
-            except TimeoutError:
+            except (TimeoutError, ProviderTimeout):
                 await self._invoke_coordinator(
                     "record_failure", execution_id, hook_id, "GATE_TIMEOUT"
                 )

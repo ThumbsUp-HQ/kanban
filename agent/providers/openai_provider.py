@@ -33,6 +33,7 @@ from agent.providers.errors import (
     ProviderTimeout,
     ProviderUnavailable,
 )
+from agent.providers.schema_utils import make_strict_json_schema, strip_think_tags
 from kanban.ai_config.net_guard import (
     is_hard_denied,
     is_local_or_private_ip,
@@ -118,34 +119,11 @@ class OpenAISettings(BaseModel):
         return self
 
 
-def _enforce_strict_dict(node: dict[str, Any]) -> None:
-    """Enforce strict structured output rules on dictionary schema node."""
-    if node.get("type") == "object" or "properties" in node:
-        node["additionalProperties"] = False
-        props = node.get("properties")
-        if isinstance(props, dict):
-            req_list = node.setdefault("required", [])
-            for prop in props:
-                if prop not in req_list:
-                    req_list.append(prop)
-    for v in node.values():
-        _enforce_strict(v)
-
-
-def _enforce_strict(node: object) -> None:
-    """Recursively enforce additionalProperties=False and required fields."""
-    if isinstance(node, dict):
-        _enforce_strict_dict(node)
-    elif isinstance(node, list):
-        for item in node:
-            _enforce_strict(item)
-
-
-def _make_strict_json_schema(model: type[BaseModel]) -> dict[str, Any]:
+def _make_strict_json_schema(
+    model: type[BaseModel], *, dereference: bool = False
+) -> dict[str, Any]:
     """Generate OpenAI-compliant strict JSON schema with additionalProperties=False."""
-    schema = model.model_json_schema()
-    _enforce_strict(schema)
-    return schema
+    return make_strict_json_schema(model, dereference=dereference)
 
 
 def _raise_ttft_timeout(ttft_ms: float, deadline: int) -> NoReturn:
@@ -311,7 +289,7 @@ class OpenAIProvider(LLMProvider):
     ) -> StructuredResponse[TModel]:
         """Generate typed structured output parsed and validated into req.response_model."""
         t0 = time.perf_counter()
-        strict_schema = _make_strict_json_schema(req.response_model)
+        strict_schema = _make_strict_json_schema(req.response_model, dereference=True)
         response_format = {
             "type": "json_schema",
             "json_schema": {
@@ -337,8 +315,9 @@ class OpenAIProvider(LLMProvider):
             raise ProviderRefusal(refusal_text, code="REFUSAL")
 
         content = choice.message.content or ""
+        cleaned_content = strip_think_tags(content)
         try:
-            raw_data = json.loads(content)
+            raw_data = json.loads(cleaned_content)
             parsed = req.response_model.model_validate(raw_data)
         except Exception as exc:
             msg = f"Output validation failed against schema {req.response_model.__name__}: {exc}"
@@ -349,7 +328,7 @@ class OpenAIProvider(LLMProvider):
 
         return StructuredResponse(
             parsed=parsed,
-            raw_json=content,
+            raw_json=cleaned_content,
             tool_trace=(),
             ttft_ms=total_latency_ms,
             total_latency_ms=total_latency_ms,

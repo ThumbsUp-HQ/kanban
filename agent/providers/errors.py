@@ -27,6 +27,9 @@ _KB_PATTERN: re.Pattern[str] = re.compile(
 _AIZA_PATTERN: re.Pattern[str] = re.compile(
     r"\bAIza[0-9A-Za-z_-]{20,}\b",
 )
+_AQ_PATTERN: re.Pattern[str] = re.compile(
+    r"\bAQ\.[A-Za-z0-9_-]{20,}\b",
+)
 _JWT_PATTERN: re.Pattern[str] = re.compile(
     r"\beyJ[a-zA-Z0-9_-]+\.eyJ[a-zA-Z0-9_-]+\.[a-zA-Z0-9_-]+\b",
 )
@@ -43,6 +46,7 @@ def redact_secrets(text: str) -> str:
     redacted = _AKIA_PATTERN.sub("AKIA[REDACTED]", redacted)
     redacted = _KB_PATTERN.sub("kb_[REDACTED]", redacted)
     redacted = _AIZA_PATTERN.sub("AIza[REDACTED]", redacted)
+    redacted = _AQ_PATTERN.sub("AQ.[REDACTED]", redacted)
     redacted = _JWT_PATTERN.sub("[REDACTED_JWT]", redacted)
     return _PARAM_PATTERN.sub(r"\1\2[REDACTED]", redacted)
 

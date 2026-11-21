@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import datetime as dt
+import inspect
 import logging
 import uuid
 from typing import TYPE_CHECKING, Any
@@ -15,6 +16,7 @@ from sqlalchemy import select, text
 
 from agent.gates.worker import GateWorker, HarnessRegistry
 from database.models.agent_definition import AgentDefinition
+from database.models.ai import AIProviderConfig
 from database.models.issues import Issue
 from database.models.projects import Project, WorkflowState
 from database.models.workflow import (
@@ -186,7 +188,7 @@ class GateWorkerRunner:
                 )
             await session.commit()
 
-    async def _load_entities(
+    async def _load_entities(  # noqa: C901, PLR0915
         self, event: object
     ) -> tuple[object, object, object, RepoContext | None, object]:
         """Load execution, issue, agent_def, and metadata from database."""
@@ -241,10 +243,18 @@ class GateWorkerRunner:
             aal_level=2,
         )
         async with self.session_factory.session(admin_ctx) as session:
-            exec_uuid_val = uuid.UUID(execution_id_str)
-            hook_uuid_val = uuid.UUID(hook_id_str)
-            execution = await session.get(WorkflowTransitionExecution, exec_uuid_val)
-            hook = await session.get(WorkflowTransitionHook, hook_uuid_val)
+            exec_uuid_val = uuid.UUID(execution_id_str) if execution_id_str else None
+            hook_uuid_val = uuid.UUID(hook_id_str) if hook_id_str else None
+            execution = (
+                await session.get(WorkflowTransitionExecution, exec_uuid_val)
+                if exec_uuid_val
+                else None
+            )
+            hook = (
+                await session.get(WorkflowTransitionHook, hook_uuid_val)
+                if hook_uuid_val
+                else None
+            )
             agent_def = (
                 await session.get(AgentDefinition, uuid.UUID(agent_def_id_str))
                 if agent_def_id_str
@@ -282,7 +292,7 @@ class GateWorkerRunner:
                 "summary": issue.summary if issue else "",
                 "description_markdown": issue.description_markdown if issue else "",
             }
-            agent_dict = {
+            agent_dict: dict[str, Any] = {
                 "slug": agent_def.slug if agent_def else "agent",
                 "harness_kind": agent_def.harness_kind if agent_def else "in_app_sdk",
                 "timeout_ms": agent_def.timeout_ms if agent_def else 60000,
@@ -290,8 +300,141 @@ class GateWorkerRunner:
                 "cli_binary_allowlist_id": (
                     agent_def.cli_binary_allowlist_id if agent_def else None
                 ),
+                "model": agent_def.model_id if agent_def else None,
                 "model_identifier": agent_def.model_id if agent_def else None,
+                "provider_kind": agent_def.provider_kind if agent_def else None,
+                "system_instructions_md": (
+                    agent_def.system_instructions_md if agent_def else ""
+                ),
+                "mcp_allowed_tools": (
+                    list(agent_def.mcp_allowed_tools or []) if agent_def else []
+                ),
             }
+
+            live_provider = None
+            if (
+                agent_def
+                and agent_def.provider_kind
+                and agent_def.provider_kind != "fixture"
+                and getattr(agent_def, "harness_kind", "in_app_sdk") != "fixture"
+            ):
+                provider_stmt = (
+                    select(AIProviderConfig)
+                    .where(
+                        AIProviderConfig.workspace_id == ws_id,
+                        AIProviderConfig.provider_kind == agent_def.provider_kind,
+                        AIProviderConfig.is_enabled.is_(True),
+                    )
+                    .order_by(AIProviderConfig.priority.asc())
+                    .limit(1)
+                )
+                prov_res = await session.execute(provider_stmt)
+                provider_row = prov_res.scalar_one_or_none()
+                if inspect.isawaitable(provider_row):
+                    provider_row = await provider_row
+
+                if isinstance(provider_row, AIProviderConfig):
+                    base_url_val = (provider_row.base_url or "").lower()
+                    is_dummy_fixture = (
+                        "fixture" in base_url_val
+                        or getattr(agent_def, "harness_kind", "") == "fixture"
+                    )
+                    if not is_dummy_fixture:
+                        prov_settings = dict(provider_row.settings_json or {})
+                        agent_timeout = agent_def.timeout_ms or 30000
+                        prov_timeout = prov_settings.get("timeout_ms", agent_timeout)
+                        cutoff_ms = min(int(prov_timeout), int(agent_timeout))
+                        cutoff_s = float(cutoff_ms) / 1000.0
+                        agent_dict["timeout_ms"] = cutoff_ms
+
+                        api_key_str: str | None = None
+                        if provider_row.wrapped_api_key is not None:
+                            from kanban.ai_config.service import AIProviderConfigService  # noqa: PLC0415
+
+                            cfg_svc = AIProviderConfigService(session)
+                            try:
+                                key_bytes = await cfg_svc.unwrap_api_key(provider_row.id)
+                                api_key_str = key_bytes.decode("utf-8")
+                            except Exception as unwrap_err:  # noqa: BLE001
+                                logger.warning(
+                                    "Could not unwrap API key for provider config %s: %s",
+                                    provider_row.id,
+                                    unwrap_err,
+                                )
+
+                        from pydantic import HttpUrl, SecretStr  # noqa: PLC0415
+
+                        from agent.providers.registry import build_provider  # noqa: PLC0415
+
+                        p_kind = provider_row.provider_kind.lower()
+                        model_list = tuple(
+                            provider_row.model_allowlist
+                            or ([agent_def.model_id] if agent_def.model_id else ["default"])
+                        )
+
+                        try:
+                            if p_kind == "ollama":
+                                from agent.providers.ollama import OllamaSettings  # noqa: PLC0415
+
+                                ollama_settings = OllamaSettings(
+                                    base_url=HttpUrl(
+                                        provider_row.base_url or "http://127.0.0.1:11434"
+                                    ),
+                                    model_allowlist=model_list,
+                                    read_timeout_s=cutoff_s,
+                                    connect_timeout_s=min(2.0, cutoff_s),
+                                )
+                                live_provider = build_provider("ollama", ollama_settings)
+                            elif p_kind == "gemini":
+                                from agent.providers.gemini import GeminiSettings  # noqa: PLC0415
+
+                                gemini_mode = (
+                                    "vertex_express"
+                                    if (api_key_str and api_key_str.startswith("AQ."))
+                                    else "ai_studio_paid"
+                                )
+                                gemini_settings = GeminiSettings(
+                                    mode=gemini_mode,
+                                    api_key=SecretStr(api_key_str) if api_key_str else None,
+                                    base_url=(
+                                        HttpUrl(provider_row.base_url)
+                                        if provider_row.base_url
+                                        else None
+                                    ),
+                                    model_allowlist=model_list,
+                                    timeout_s=cutoff_s,
+                                )
+                                live_provider = build_provider("gemini", gemini_settings)
+                            elif p_kind == "openai":
+                                from agent.providers.openai_provider import OpenAISettings  # noqa: PLC0415
+
+                                openai_settings = OpenAISettings(
+                                    api_key=SecretStr(api_key_str) if api_key_str else None,
+                                    base_url=(
+                                        HttpUrl(provider_row.base_url)
+                                        if provider_row.base_url
+                                        else None
+                                    ),
+                                    model_allowlist=model_list,
+                                    timeout_s=cutoff_s,
+                                    residency_tier=provider_row.residency_tier or "openai-zdr-us",
+                                )
+                                live_provider = build_provider("openai", openai_settings)
+                        except Exception as prov_err:  # noqa: BLE001
+                            logger.warning(
+                                "Could not instantiate live provider %s for gate execution: %s",
+                                p_kind,
+                                prov_err,
+                            )
+                            live_provider = None
+
+                        if live_provider is not None:
+                            from agent.harnesses.in_app_sdk import InAppSdkHarness  # noqa: PLC0415
+
+                            live_harness = InAppSdkHarness(provider=live_provider, session=session)
+                            self.registry.register("in_app_sdk", live_harness)
+                            agent_dict["provider"] = live_provider
+
             return exec_dict, issue_dict, agent_dict, None, None
 
     async def poll_once(self) -> int:  # noqa: C901, PLR0912, PLR0915

@@ -949,3 +949,107 @@ def test_gemini_custom_base_url_validation() -> None:
                 "model_allowlist": ("gemini-2.5-flash",),
             }
         )
+
+
+@pytest.mark.asyncio
+async def test_gemini_vertex_express_aq_key() -> None:
+    """Verify AQ.* keys configure Vertex AI Express and target aiplatform.googleapis.com."""
+    captured_url: str = ""
+    captured_headers: dict[str, str] = {}
+
+    class MockExpressTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            nonlocal captured_url, captured_headers
+            captured_url = str(request.url)
+            captured_headers = dict(request.headers)
+            body = {
+                "candidates": [
+                    {
+                        "content": {
+                            "parts": [{"text": '{"status": "APPROVED", "confidence": 0.99}'}]
+                        },
+                        "finishReason": "STOP",
+                    }
+                ],
+                "usageMetadata": {"promptTokenCount": 10, "candidatesTokenCount": 5},
+            }
+            return httpx.Response(200, json=body)
+
+    settings = GeminiSettings(
+        mode="vertex_express",
+        api_key=SecretStr("AQ.mockvertexkey1234567890123456"),
+        model_allowlist=("gemini-2.5-flash-lite",),
+    )
+    assert settings.mode == "vertex_express"
+    provider = GeminiProvider(settings, transport=MockExpressTransport())
+    assert provider.residency_tier == "gemini-vertex-express:us-central1"
+
+    req = StructuredRequest(
+        model="gemini-2.5-flash-lite",
+        prompt="Audit transition",
+        response_model=ApprovalResult,
+    )
+    res = await provider.generate_structured(req)
+    assert res.parsed.status == "APPROVED"
+    assert "aiplatform.googleapis.com" in captured_url
+    assert captured_headers.get("x-goog-api-key") == "AQ.mockvertexkey1234567890123456"
+
+
+@pytest.mark.asyncio
+async def test_gemini_generate_structured_strips_think_tags() -> None:
+    """Verify thinking traces <think>...</think> are stripped before parsing Gemini output."""
+    class MockThinkingTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, _request: httpx.Request) -> httpx.Response:
+            raw_text = (
+                "<think>\n"
+                "Reviewing issue details and verifying requirements.\n"
+                "</think>\n"
+                '{"status": "APPROVED", "confidence": 0.98}'
+            )
+            body = {
+                "candidates": [
+                    {
+                        "content": {"parts": [{"text": raw_text}]},
+                        "finishReason": "STOP",
+                    }
+                ],
+                "usageMetadata": {"promptTokenCount": 15, "candidatesTokenCount": 8},
+            }
+            return httpx.Response(200, json=body)
+
+    settings = _make_ai_studio_settings()
+    provider = GeminiProvider(settings, transport=MockThinkingTransport())
+
+    req = StructuredRequest(
+        model="gemini-2.5-flash",
+        prompt="Validate issue",
+        response_model=ApprovalResult,
+    )
+    res = await provider.generate_structured(req)
+    assert res.parsed.status == "APPROVED"
+    assert res.parsed.confidence == 0.98
+    assert "<think>" not in res.raw_json
+    assert res.raw_json == '{"status": "APPROVED", "confidence": 0.98}'
+
+
+def test_gemini_aq_secret_redaction() -> None:
+    """Verify AQ.* keys are redacted in errors.redact_secrets and scrubber."""
+    from agent.providers.errors import redact_secrets  # noqa: PLC0415
+    from kanban.security.scrubber import outbound_secret_scrubber  # noqa: PLC0415
+
+    raw_err = (
+        "Auth failed with key AQ.AbCdEf1234567890_xyz1234567890 "
+        "and sk-proj-12345678901234567890"
+    )
+    redacted = redact_secrets(raw_err)
+    assert "AQ.AbCdEf" not in redacted
+    assert "AQ.[REDACTED]" in redacted
+    assert "sk-[REDACTED]" in redacted
+
+    scrub_res = outbound_secret_scrubber(
+        "Sensitive token: AQ.AbCdEf1234567890_xyz1234567890 in log"
+    )
+    assert scrub_res.redacted is True
+    assert "AQ.AbCdEf" not in scrub_res.text
+    assert "[REDACTED:API_KEY]" in scrub_res.text
+

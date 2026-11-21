@@ -29,6 +29,7 @@ from agent.providers.errors import (
     ProviderSchemaError,
     ProviderTimeout,
 )
+from agent.providers.schema_utils import clean_gemini_schema, strip_think_tags
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -82,13 +83,14 @@ class GeminiSettings(BaseModel):
 
     model_config = ConfigDict(frozen=True, extra="forbid")
 
-    mode: Literal["vertex", "ai_studio_paid"]
+    mode: Literal["vertex", "ai_studio_paid", "vertex_express"]
     base_url: HttpUrl | None = None
     api_key: SecretStr | None = None
     vertex_project: str | None = None
     vertex_location: str | None = None
     allowed_vertex_regions: tuple[str, ...] = ("europe-west4", "us-central1")
     model_allowlist: tuple[str, ...] = (
+        "gemini-2.5-flash-lite",
         "gemini-2.5-flash",
         "gemini-2.5-pro",
         "text-embedding-004",
@@ -131,7 +133,7 @@ class GeminiSettings(BaseModel):
             raise ValueError(msg)
 
     @model_validator(mode="after")
-    def validate_gemini_settings(self) -> GeminiSettings:
+    def validate_gemini_settings(self) -> GeminiSettings:  # noqa: C901
         """Enforce strict isolation between Vertex and AI Studio and validate regions."""
         if not self.model_allowlist:
             msg = "model_allowlist must contain at least one model"
@@ -150,6 +152,22 @@ class GeminiSettings(BaseModel):
 
         if self.mode == "ai_studio_paid":
             self._validate_ai_studio()
+        elif self.mode == "vertex_express":
+            if not self.api_key or not self.api_key.get_secret_value().strip():
+                msg = "api_key is required when mode is 'vertex_express'"
+                raise ValueError(msg)
+            if self.vertex_project is not None:
+                msg = "vertex_project is forbidden when mode is 'vertex_express'"
+                raise ValueError(msg)
+            if (
+                self.vertex_location is not None
+                and self.vertex_location not in self.allowed_vertex_regions
+            ):
+                msg = (
+                    f"vertex_location '{self.vertex_location}' is not permitted; "
+                    f"must be one of {self.allowed_vertex_regions}"
+                )
+                raise ValueError(msg)
         else:
             self._validate_vertex()
 
@@ -181,6 +199,12 @@ class GeminiProvider(LLMProvider):
             async_client_args=async_client_args,
         )
 
+        api_key_val = settings.api_key.get_secret_value() if settings.api_key else None
+        is_vertex_express = (
+            settings.mode == "vertex_express"
+            or (api_key_val is not None and api_key_val.startswith("AQ."))
+        )
+
         if settings.mode == "vertex":
             self._client = genai.Client(
                 vertexai=True,
@@ -189,8 +213,14 @@ class GeminiProvider(LLMProvider):
                 credentials=credentials,
                 http_options=http_options,
             )
+        elif is_vertex_express:
+            self._client = genai.Client(
+                vertexai=True,
+                api_key=api_key_val,
+                location=settings.vertex_location or "us-central1",
+                http_options=http_options,
+            )
         else:
-            api_key_val = settings.api_key.get_secret_value() if settings.api_key else None
             self._client = genai.Client(
                 api_key=api_key_val,
                 http_options=http_options,
@@ -201,6 +231,12 @@ class GeminiProvider(LLMProvider):
         """Return data residency tier identifier."""
         if self._settings.mode == "vertex":
             return f"gemini-vertex:{self._settings.vertex_location}"
+        api_val = self._settings.api_key.get_secret_value() if self._settings.api_key else None
+        if self._settings.mode == "vertex_express" or (
+            api_val is not None and api_val.startswith("AQ.")
+        ):
+            loc = self._settings.vertex_location or "us-central1"
+            return f"gemini-vertex-express:{loc}"
         return "gemini-ai-studio-paid"
 
     def __repr__(self) -> str:
@@ -341,11 +377,12 @@ class GeminiProvider(LLMProvider):
             msg = f"Model '{req.model}' is not in allowed models: {self._settings.model_allowlist}"
             raise ProviderPolicyError(msg, code="MODEL_NOT_ALLOWED")
 
+        clean_schema = clean_gemini_schema(req.response_model)
         config = types.GenerateContentConfig(
             temperature=req.temperature,
             max_output_tokens=req.max_output_tokens,
             response_mime_type="application/json",
-            response_schema=req.response_model,
+            response_schema=clean_schema,
             safety_settings=self._build_safety_settings(),
             system_instruction=req.system_prompt or None,
         )
@@ -373,6 +410,8 @@ class GeminiProvider(LLMProvider):
                     raw_json += part.text
         elif getattr(resp, "text", None):
             raw_json = resp.text or ""
+
+        raw_json = strip_think_tags(raw_json)
 
         try:
             parsed_model = req.response_model.model_validate_json(raw_json)

@@ -899,3 +899,68 @@ async def test_probe_provider_zero_rebinding_and_ssrf_rejection(
         assert res_public_http["ok"] is False
         assert res_public_http["error_code"] == "SSRF_BLOCKED"
         mock_get.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_probe_provider_gemini_aq_key_fallback(
+    db_session: AsyncSession,
+    kek_provider: StaticKekProvider,
+) -> None:
+    """Verify AQ.* Gemini keys fall back to Vertex Express on 400/401/403."""
+    await bootstrap_workspace_admin(db_session)
+    service = AIProviderConfigService(db_session, kek_provider)
+
+    mock_get_resp = mock.MagicMock(spec=httpx.Response)
+    mock_get_resp.status_code = 400
+    mock_get_resp.text = "API key not valid for generativelanguage"
+
+    mock_post_resp = mock.MagicMock(spec=httpx.Response)
+    mock_post_resp.status_code = 200
+    mock_post_resp.json.return_value = {"totalTokens": 1}
+
+    with (
+        mock.patch("kanban.ai_config.service.resolve_and_pin", new_callable=mock.AsyncMock),
+        mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get,
+        mock.patch.object(httpx.AsyncClient, "post", new_callable=mock.AsyncMock) as mock_post,
+    ):
+        mock_get.return_value = mock_get_resp
+        mock_post.return_value = mock_post_resp
+
+        res = await service.probe_provider(
+            provider_kind="gemini",
+            api_key="AQ.mockgeminikey1234567890",
+        )
+
+        assert res["ok"] is True
+        assert res["models"] == ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro"]
+        assert "Vertex Express" in res["message"]
+        mock_post.assert_called_once()
+        post_url = mock_post.call_args[0][0]
+        assert "aiplatform.googleapis.com" in post_url
+        headers = mock_post.call_args[1].get("headers", {})
+        assert headers.get("x-goog-api-key") == "AQ.mockgeminikey1234567890"
+
+
+@pytest.mark.asyncio
+async def test_probe_provider_strict_timeout_cutoff(
+    db_session: AsyncSession,
+    kek_provider: StaticKekProvider,
+) -> None:
+    """Verify probe_provider enforces timeout_ms cutoff via httpx and asyncio.timeout."""
+    await bootstrap_workspace_admin(db_session)
+    service = AIProviderConfigService(db_session, kek_provider)
+
+    with (
+        mock.patch("kanban.ai_config.service.resolve_and_pin", new_callable=mock.AsyncMock),
+        mock.patch.object(httpx.AsyncClient, "get", new_callable=mock.AsyncMock) as mock_get,
+    ):
+        mock_get.side_effect = httpx.TimeoutException("Read timed out")
+        res = await service.probe_provider(
+            provider_kind="ollama",
+            base_url="http://127.0.0.1:11434",
+            timeout_ms=100,
+        )
+        assert res["ok"] is False
+        assert res["error_code"] == "UPSTREAM_TIMEOUT"
+        assert res["latency_ms"] == 100.0
+

@@ -11,7 +11,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from agent.providers.base import LLMProvider, StructuredRequest, StructuredResponse
+from agent.providers.base import LLMProvider, StructuredRequest
 from agent.testing.fixtures import FixtureLLMProvider
 from agent.tools.mcp_read_tools import (
     ALLOWED_MCP_READ_TOOLS,
@@ -34,7 +34,9 @@ __all__ = [
     "MAX_TURNS_LIMIT",
     "HarnessRunReport",
     "InAppSdkHarness",
+    "StrictVerdictSchema",
     "ToolCallTrace",
+    "TransitionVerdictPayload",
 ]
 
 MAX_TURNS_LIMIT: Final[int] = 8
@@ -69,6 +71,17 @@ class ToolCallTrace(BaseModel):
     duration_ms: float = Field(ge=0.0)
     status: Literal["ok", "error"]
     output_bytes: int = Field(ge=0)
+
+
+class StrictVerdictSchema(BaseModel):
+    """Strict, flat, $defs-free response model for LLM transition gate verdicts."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    decision: Literal["approve", "reject"]
+    reason_markdown: str = Field(min_length=1)
+    add_labels: list[str] = Field(default_factory=list)
+    cited_files: list[str] = Field(default_factory=list)
 
 
 class TransitionVerdictPayload(BaseModel):
@@ -237,7 +250,17 @@ class InAppSdkHarness:
                 session=self.session,
             )
 
-        provider = self.provider or FixtureLLMProvider([])
+        provider = (
+            getattr(agent_def, "provider", None)
+            or agent_dict.get("provider")
+            or self.provider
+            or FixtureLLMProvider([])
+        )
+        cutoff_ms = int(
+            getattr(agent_def, "timeout_ms", None)
+            or agent_dict.get("timeout_ms")
+            or 30000
+        )
         t_start = time.perf_counter()
 
         try:
@@ -311,20 +334,32 @@ class InAppSdkHarness:
                 model=model_name,
                 prompt=user_message,
                 system_prompt=system_prompt,
-                response_model=TransitionVerdictPayload,
+                response_model=StrictVerdictSchema,
                 metadata={"agent_slug": agent_slug, "transition_to": "Done"},
+                ttft_deadline_ms=min(cutoff_ms, 60000),
             )
-            resp: StructuredResponse[TransitionVerdictPayload] = await provider.generate_structured(
-                req
-            )
+            resp = await provider.generate_structured(req)
 
             actual_tokens = resp.prompt_tokens + resp.completion_tokens
             if reservation is not None and self.budget_enforcer is not None:
                 await self.budget_enforcer.settle(reservation, actual_tokens, session=self.session)
                 reservation = None  # Settled cleanly
 
-            # Ensure final verdict contains ctx.verdict_nonce
-            raw_dict = json.loads(resp.raw_json)
+            # Ensure final verdict conforms to canonical kb-transition-verdict/v1 with nonce
+            raw_dict = json.loads(resp.raw_json) if resp.raw_json else {}
+            raw_dict.setdefault("schema", "kb-transition-verdict/v1")
+            if hasattr(resp.parsed, "decision"):
+                raw_dict["decision"] = resp.parsed.decision
+            if hasattr(resp.parsed, "reason_markdown"):
+                raw_dict["reason_markdown"] = resp.parsed.reason_markdown
+            if hasattr(resp.parsed, "add_labels") and "add_labels" not in raw_dict:
+                raw_dict["add_labels"] = resp.parsed.add_labels
+            if hasattr(resp.parsed, "cited_files") and "cited_files" not in raw_dict:
+                raw_dict["cited_files"] = resp.parsed.cited_files
+            raw_dict.setdefault("field_updates", {})
+            raw_dict.setdefault("add_labels", [])
+            raw_dict.setdefault("cited_files", [])
+            raw_dict.setdefault("add_links", [])
             raw_dict["nonce"] = ctx.verdict_nonce
             verdict_bytes = json.dumps(raw_dict).encode("utf-8")
 

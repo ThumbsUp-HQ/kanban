@@ -32,6 +32,9 @@ _RE_AWS_ACCESS_KEY: Final[re.Pattern[str]] = re.compile(r"\b(?:AKIA|ASIA)[A-Z2-7
 _RE_API_KEY: Final[re.Pattern[str]] = re.compile(
     r"(?<![A-Za-z0-9_-])sk-(?:proj-|ant-api\d{2}-|live-|test-)?([A-Za-z0-9_-]{20,256})(?![A-Za-z0-9_-])"
 )
+_RE_AQ_KEY: Final[re.Pattern[str]] = re.compile(
+    r"\bAQ\.[A-Za-z0-9_-]{20,}\b"
+)
 _RE_BEARER_TOKEN: Final[re.Pattern[str]] = re.compile(
     r"(?i)\b(Bearer)(\s+)[A-Za-z0-9._~+/=-]{20,2048}(?![A-Za-z0-9._~+/=-])"
 )
@@ -214,6 +217,13 @@ def outbound_secret_scrubber(text: str) -> ScrubResult:  # noqa: C901, PLR0912  
                         5,
                     )
                 )
+
+    # Rule 5b: Google Gemini / Vertex AQ.* Keys
+    if "AQ." in text:
+        candidates.extend(
+            (match.start(), match.end(), SecretKind.API_KEY, "[REDACTED:API_KEY]", 5)
+            for match in _RE_AQ_KEY.finditer(text)
+        )
 
     # Rule 6: HTTP Bearer Authorization Tokens
     if "bearer" in text.lower():
