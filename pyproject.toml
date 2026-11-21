@@ -109,6 +109,7 @@ layers = [
 ignore_imports = [
     "kanban.app -> mcp.settings",
     "kanban.tests.mcp.** -> mcp.**",
+    "kanban.tests.workflows.test_async_gate -> agent.**",
 ]
 
 [[tool.importlinter.contracts]]
