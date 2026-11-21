@@ -619,6 +619,22 @@ async def _find_qa_proof_target_keys(
     return target_keys
 
 
+def _resolve_and_verify_bundle(
+    candidates: list[str],
+    qa_root: Path,
+) -> tuple[str | None, list[str]]:
+    """Inspect candidates in qa_root and return matching candidate if clean."""
+    best_errs: list[str] = []
+    for cand in candidates:
+        cand_path = qa_root / cand
+        if cand_path.is_dir():
+            cand_errs = _verify_single_proof_bundle(cand_path)
+            if not cand_errs:
+                return cand, []
+            best_errs = cand_errs
+    return None, best_errs
+
+
 async def _check_qa_proofs(
     session: AsyncSession,
     proj_id: uuid.UUID | None,
@@ -655,19 +671,10 @@ async def _check_qa_proofs(
                 continue
 
             candidates = [key, *aliases]
-            found = False
-            best_errs: list[str] = []
-            for cand in candidates:
-                cand_path = qa_root / cand
-                if cand_path.is_dir():
-                    cand_errs = _verify_single_proof_bundle(cand_path)
-                    if not cand_errs:
-                        verified_bundles.append(f"{key} (via {cand})" if cand != key else key)
-                        found = True
-                        break
-                    best_errs = cand_errs
-
-            if not found:
+            matched, best_errs = _resolve_and_verify_bundle(candidates, qa_root)
+            if matched:
+                verified_bundles.append(f"{key} (via {matched})" if matched != key else key)
+            else:
                 err_detail = (
                     ", ".join(best_errs) if best_errs else f"directory missing in {candidates}"
                 )
