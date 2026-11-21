@@ -90,8 +90,33 @@ def decode_pdf_name(name_bytes: bytes) -> bytes:
     return re.sub(b"#([0-9a-fA-F]{2})", _replace_hex, name_bytes)
 
 
+def _unescape_pdf_literal_string(s: bytes) -> bytes:
+    """Unescape PDF literal string escape sequences (octal \\ddd, \\n, \\r, \\t, etc.)."""
+    def repl(m: re.Match[bytes]) -> bytes:
+        seq = m.group(0)
+        tail = seq[1:]
+        if tail.isdigit():
+            try:
+                return bytes([int(tail, 8)])
+            except Exception:
+                return seq
+        escape_map = {
+            b"n": b"\n",
+            b"r": b"\r",
+            b"t": b"\t",
+            b"b": b"\b",
+            b"f": b"\f",
+            b"(": b"(",
+            b")": b")",
+            b"\\": b"\\",
+        }
+        return escape_map.get(tail, tail)
+
+    return re.sub(rb"\\([0-7]{1,3}|[nrtbf()\\\/])", repl, s)
+
+
 def check_uri_destination(uri_payload: bytes) -> None:
-    """Enforce strict https-only URI destinations, rejecting UNC, http, and protocol exploits."""
+    """Enforce safe URI destinations (https, mailto), rejecting UNC, http, and protocol exploits."""
     trimmed = uri_payload.strip()
     if trimmed.startswith(b"<") and trimmed.endswith(b">"):
         hex_str = trimmed[1:-1].strip()
@@ -105,15 +130,15 @@ def check_uri_destination(uri_payload: bytes) -> None:
                 detail="Malformed hex-encoded /URI target",
             ) from exc
     elif trimmed.startswith(b"(") and trimmed.endswith(b")"):
-        url_bytes = trimmed[1:-1]
+        url_bytes = _unescape_pdf_literal_string(trimmed[1:-1])
     else:
-        url_bytes = trimmed
+        url_bytes = _unescape_pdf_literal_string(trimmed)
 
     url_str = url_bytes.decode("latin-1", errors="replace").strip()
     lower_url = url_str.lower()
 
-    # Reject dangerous protocols and non-https schemes
-    if not lower_url.startswith("https://"):
+    # Reject dangerous protocols and non-https/mailto schemes
+    if not (lower_url.startswith("https://") or lower_url.startswith("mailto:")):
         raise ProblemException(
             code="UNSAFE_PDF_CONTENT",
             status=422,

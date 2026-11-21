@@ -205,7 +205,7 @@ async def test_reject_unsafe_uri_schemes() -> None:
 
 @pytest.mark.asyncio
 async def test_accept_safe_https_uri() -> None:
-    """Verify https /URI destinations pass validation."""
+    """Verify https and mailto /URI destinations pass validation."""
     doc_https = _make_pdf_with_content(b"/URI (https://example.com/docs)")
     res = await sanitize_and_validate_pdf(doc_https)
     assert res.page_count == 3
@@ -215,6 +215,11 @@ async def test_accept_safe_https_uri() -> None:
     doc_hex = _make_pdf_with_content(hex_https)
     res_hex = await sanitize_and_validate_pdf(doc_hex)
     assert res_hex.page_count == 3
+
+    # Safe mailto with octal escapes
+    doc_mailto = _make_pdf_with_content(b"/URI (mailto\\072candidate\\100example\\056com)")
+    res_mailto = await sanitize_and_validate_pdf(doc_mailto)
+    assert res_mailto.page_count == 3
 
 
 @pytest.mark.asyncio
