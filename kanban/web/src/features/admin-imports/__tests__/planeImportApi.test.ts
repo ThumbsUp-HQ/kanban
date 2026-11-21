@@ -9,6 +9,7 @@ import {
   submitGitHubImport,
   submitLinearImport,
   submitImport,
+  downloadPortableExport,
 } from '../planeImportApi';
 
 describe('planeImportApi', () => {
@@ -106,5 +107,49 @@ describe('planeImportApi', () => {
       body: JSON.stringify({ dry_run: true }),
       headers: { 'Content-Type': 'application/json' },
     });
+  });
+
+  it('downloadPortableExport sends request to /api/v1/admin/exports/portable and returns blob', async () => {
+    const mockBlob = new Blob(['tar.gz payload'], { type: 'application/gzip' });
+    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      blob: async () => {
+        await Promise.resolve();
+        return mockBlob;
+      },
+    } as unknown as Response);
+
+    const blob = await downloadPortableExport({
+      workspace_slug: 'test-ws',
+      scrub_text: true,
+    });
+
+    expect(fetchSpy).toHaveBeenCalledWith('/api/v1/admin/exports/portable', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/gzip, application/octet-stream, application/json',
+      },
+      credentials: 'same-origin',
+      body: JSON.stringify({
+        workspace_slug: 'test-ws',
+        scrub: true,
+      }),
+    });
+    expect(blob).toBe(mockBlob);
+  });
+
+  it('downloadPortableExport throws error on non-ok status', async () => {
+    vi.spyOn(global, 'fetch').mockResolvedValueOnce({
+      ok: false,
+      status: 500,
+      json: async () => {
+        await Promise.resolve();
+        return { detail: 'Disk full' };
+      },
+    } as unknown as Response);
+
+    await expect(downloadPortableExport({})).rejects.toThrow('Disk full');
   });
 });

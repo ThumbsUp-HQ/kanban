@@ -39,6 +39,8 @@ from database.models import (
     IssueKeyAlias,
     Module,
     ObjectLink,
+    ObjectRecord,
+    Page,
     Project,
     ProjectLabel,
     ProjectPriority,
@@ -203,6 +205,23 @@ class PortableWorkspaceExporter:
         )
         docs = list(doc_res.scalars().all())
 
+        # 8b. Fetch pages
+        pg_res = await self.session.execute(
+            select(Page).where(Page.workspace_id == self.workspace_id).order_by(Page.id)
+        )
+        pages = list(pg_res.scalars().all())
+
+        # 8c. Fetch objects spine metadata for front matter timestamps and keys
+        obj_res = await self.session.execute(
+            select(
+                ObjectRecord.id,
+                ObjectRecord.created_at,
+                ObjectRecord.updated_at,
+                ObjectRecord.canonical_key,
+            ).where(ObjectRecord.workspace_id == self.workspace_id)
+        )
+        obj_meta = {row[0]: (row[1], row[2], row[3]) for row in obj_res.all()}
+
         # 9. Fetch stickies
         stk_res = await self.session.execute(
             select(Sticky).where(Sticky.workspace_id == self.workspace_id).order_by(Sticky.id)
@@ -354,6 +373,19 @@ class PortableWorkspaceExporter:
                 "version_seq": d.version_seq,
             }
 
+        def page_dict(p: Page) -> dict[str, Any]:
+            return {
+                "id": str(p.id),
+                "object_kind": "page",
+                "workspace_id": str(p.workspace_id),
+                "doc_id": str(p.doc_id),
+                "parent_page_id": str(p.parent_page_id) if p.parent_page_id else None,
+                "title": scrub_text(p.title) if scrub else p.title,
+                "body_markdown": scrub_text(p.body_markdown) if scrub else p.body_markdown,
+                "hierarchy_path": str(p.hierarchy_path),
+                "version_seq": p.version_seq,
+            }
+
         def sticky_dict(s: Sticky) -> dict[str, Any]:
             return {
                 "id": str(s.id),
@@ -420,13 +452,18 @@ class PortableWorkspaceExporter:
                 [alias_dict(al) for al in aliases], key=lambda x: (x["legacy_key"], x["issue_id"])
             )
         )
-        archive_files["entities/object_links.jsonl"] = _to_jsonl_bytes(
+        links_jsonl_bytes = _to_jsonl_bytes(
             sorted(
                 [link_dict(ol) for ol in object_links], key=lambda x: (x["object_kind"], x["id"])
             )
         )
+        archive_files["entities/links.jsonl"] = links_jsonl_bytes
+        archive_files["entities/object_links.jsonl"] = links_jsonl_bytes
         archive_files["entities/docs.jsonl"] = _to_jsonl_bytes(
             sorted([doc_dict(d) for d in docs], key=lambda x: (x["object_kind"], x["id"]))
+        )
+        archive_files["entities/pages.jsonl"] = _to_jsonl_bytes(
+            sorted([page_dict(p) for p in pages], key=lambda x: (x["object_kind"], x["id"]))
         )
         archive_files["entities/stickies.jsonl"] = _to_jsonl_bytes(
             sorted([sticky_dict(s) for s in stickies], key=lambda x: (x["object_kind"], x["id"]))
@@ -438,18 +475,67 @@ class PortableWorkspaceExporter:
         )
 
         # Build markdown files: markdown/issues/<KEY>.md and markdown/docs/<PATH>.md
+        # with deterministic YAML front matter
+        state_map = {s.id: s for s in states}
+        prio_map = {pr.id: pr for pr in priorities}
+
         for issue in issues:
             proj = project_map.get(issue.project_id)
             issue_key = (
                 f"{proj.identifier}-{issue.sequence_id}" if proj else f"ISSUE-{issue.sequence_id}"
             )
             desc = scrub_text(issue.description_markdown) if scrub else issue.description_markdown
-            archive_files[f"markdown/issues/{issue_key}.md"] = desc.encode("utf-8")
+            summary_val = scrub_text(issue.summary) if scrub else issue.summary
+            c_at, u_at, _ = obj_meta.get(issue.id, (None, None, None))
+            st_obj = state_map.get(issue.state_id)
+            pr_obj = prio_map.get(issue.priority_id)
+            st_val = st_obj.name if st_obj else "unstarted"
+            pr_val = pr_obj.slug if pr_obj else "medium"
+            c_iso = (
+                c_at.isoformat()
+                if isinstance(c_at, (datetime, date))
+                else "2026-01-01T00:00:00+00:00"
+            )
+            u_iso = u_at.isoformat() if isinstance(u_at, (datetime, date)) else c_iso
+
+            front_matter = (
+                f"---\n"
+                f"key: {issue_key}\n"
+                f"title: {json.dumps(summary_val)}\n"
+                f"state: {st_val}\n"
+                f"priority: {pr_val}\n"
+                f"created_at: {c_iso}\n"
+                f"updated_at: {u_iso}\n"
+                f"---\n\n"
+            )
+            archive_files[f"markdown/issues/{issue_key}.md"] = (front_matter + desc).encode("utf-8")
 
         for doc in docs:
             doc_body = scrub_text(doc.body_markdown) if scrub else doc.body_markdown
             doc_path = str(doc.hierarchy_path).replace(".", "/")
-            archive_files[f"markdown/docs/{doc_path}.md"] = doc_body.encode("utf-8")
+            title_val = scrub_text(doc.title) if scrub else doc.title
+            c_at, u_at, ckey = obj_meta.get(doc.id, (None, None, None))
+            c_iso = (
+                c_at.isoformat()
+                if isinstance(c_at, (datetime, date))
+                else "2026-01-01T00:00:00+00:00"
+            )
+            u_iso = u_at.isoformat() if isinstance(u_at, (datetime, date)) else c_iso
+            doc_key = ckey or f"doc-{str(doc.id)[:8]}"
+
+            front_matter = (
+                f"---\n"
+                f"key: {doc_key}\n"
+                f"title: {json.dumps(title_val)}\n"
+                f"state: null\n"
+                f"priority: null\n"
+                f"created_at: {c_iso}\n"
+                f"updated_at: {u_iso}\n"
+                f"---\n\n"
+            )
+            archive_files[f"markdown/docs/{doc_path}.md"] = (front_matter + doc_body).encode(
+                "utf-8"
+            )
 
         # Build attachments: attachments/sha256/<digest>
         blob_store = None
@@ -486,7 +572,9 @@ class PortableWorkspaceExporter:
             "comments": len(comments),
             "issue_key_aliases": len(aliases),
             "object_links": len(object_links),
+            "links": len(object_links),
             "docs": len(docs),
+            "pages": len(pages),
             "stickies": len(stickies),
             "attachments": len(attachments),
         }

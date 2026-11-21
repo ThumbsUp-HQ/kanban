@@ -203,6 +203,23 @@ async def setup_bundle_env(
         {"id": sticky_id, "ws": ws_id, "proj": proj_id},
     )
 
+    # 10. Page
+    page_id = (
+        await db_session.execute(
+            text(
+                "SELECT register_object('page'::object_kind, :ws, :proj, 'PAGE-1', 'Knowledge Page', :admin)"
+            ),
+            {"ws": ws_id, "proj": proj_id, "admin": admin_id},
+        )
+    ).scalar_one()
+    await db_session.execute(
+        text(
+            "INSERT INTO pages (id, workspace_id, doc_id, title, body_markdown, hierarchy_path) "
+            "VALUES (:id, :ws, :doc, 'Knowledge Page', 'Page content in markdown', 'root.page1')"
+        ),
+        {"id": page_id, "ws": ws_id, "doc": doc_id},
+    )
+
     # 11. Comment
     comment_id = uuid.uuid4()
     await db_session.execute(
@@ -305,9 +322,37 @@ async def test_portable_bundle_determinism(
                 actual_sha = hashlib.sha256(member_file.read()).hexdigest()
                 assert actual_sha == expected_sha
 
-            # Verify markdown files
+            # Verify markdown files and entities
+            assert "entities/pages.jsonl" in member_names
+            assert "entities/links.jsonl" in member_names
+            assert "entities/object_links.jsonl" in member_names
+            assert "pages" in manifest_data["entity_counts"]
+            assert "links" in manifest_data["entity_counts"]
+            assert manifest_data["entity_counts"]["pages"] == 1
+            assert manifest_data["entity_counts"]["links"] >= 1
+
             assert "markdown/issues/DEMO-1.md" in member_names
             assert any(m.startswith("markdown/docs/d") and m.endswith(".md") for m in member_names)
+
+            # Verify deterministic YAML front matter
+            issue_md = tar.extractfile("markdown/issues/DEMO-1.md")
+            assert issue_md is not None
+            issue_content = issue_md.read().decode("utf-8")
+            assert issue_content.startswith("---\nkey: DEMO-1\n")
+            assert (
+                'title: "Secret Issue"\n' in issue_content
+                or "title: Secret Issue\n" in issue_content
+            )
+            assert "\n---\n\n" in issue_content
+
+            doc_file = next(
+                m for m in member_names if m.startswith("markdown/docs/") and m.endswith(".md")
+            )
+            doc_md = tar.extractfile(doc_file)
+            assert doc_md is not None
+            doc_content = doc_md.read().decode("utf-8")
+            assert doc_content.startswith("---\nkey: DOC-arch\n")
+            assert "\n---\n\n" in doc_content
 
 
 @pytest.mark.asyncio

@@ -324,4 +324,71 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
     expect(screen.getByTestId('studio-title').textContent).toContain('Plane Migration Import Studio');
     expect(screen.queryByTestId('target-project-key-input')).toBeNull();
   });
+
+  it('configures accept and placeholder dynamically for Linear CSV and JSON', () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/imports']}>
+        <PlaneImportStudio />
+      </MemoryRouter>,
+    );
+
+    const fileInput = screen.getByTestId('file-input');
+    expect(fileInput.getAttribute('accept')).toBe('.json,application/json');
+
+    // Select Linear
+    fireEvent.click(screen.getByTestId('source-linear-btn'));
+    expect(fileInput.getAttribute('accept')).toBe('.csv,text/csv,.json,application/json');
+
+    // Switch to paste mode
+    fireEvent.click(screen.getByTestId('mode-paste-btn'));
+    const textarea = screen.getByTestId('paste-textarea');
+    expect(textarea.getAttribute('placeholder')).toContain('Linear');
+
+    // Paste CSV
+    const sampleCsv = 'id,title,state\nENG-1,First Task,Todo\nENG-2,Second Task,Done';
+    fireEvent.change(textarea, { target: { value: sampleCsv } });
+    expect(screen.queryByTestId('error-alert')).toBeNull();
+    expect(screen.getByTestId('stat-issues').textContent).toContain('2');
+  });
+
+  it('triggers Portable Workspace Export download with workspace slug and scrub checkbox', async () => {
+    const mockBlob = new Blob(['tar.gz bytes'], { type: 'application/gzip' });
+    const exportSpy = vi
+      .spyOn(planeImportApi, 'downloadPortableExport')
+      .mockResolvedValue(mockBlob);
+
+    // Mock createObjectURL and revokeObjectURL
+    window.URL.createObjectURL = vi.fn().mockReturnValue('blob:http://test/123');
+    window.URL.revokeObjectURL = vi.fn();
+
+    render(
+      <MemoryRouter initialEntries={['/admin/imports']}>
+        <PlaneImportStudio />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId('portable-export-panel')).toBeDefined();
+
+    // Input workspace slug
+    fireEvent.change(screen.getByTestId('export-workspace-slug-input'), {
+      target: { value: 'acme-corp' },
+    });
+
+    // Toggle scrub checkbox
+    const scrubCheckbox = screen.getByTestId('export-scrub-checkbox');
+    fireEvent.click(scrubCheckbox);
+
+    // Click download export button
+    fireEvent.click(screen.getByTestId('export-download-btn'));
+
+    await waitFor(() => {
+      expect(exportSpy).toHaveBeenCalledWith({
+        workspace_slug: 'acme-corp',
+        scrub_text: true,
+      });
+      expect(screen.getByTestId('export-success-alert').textContent).toContain(
+        'Successfully downloaded acme-corp-export.tar.gz',
+      );
+    });
+  });
 });
