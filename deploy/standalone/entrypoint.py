@@ -410,6 +410,7 @@ _PASSTHROUGH_ENV_VARS: tuple[str, ...] = (
     "KB_GIT_COMMIT",
     "GIT_SHA",
     "KB_BUILD_TIMESTAMP",
+    "KANBAN_ATTACHMENT_DIR",
 )
 
 
@@ -436,6 +437,9 @@ def build_child_env(
         "DATABASE_URL": effective_url,
         "LANG": "C.UTF-8",
         "KB_STANDALONE_STATUS_PATH": str(resolve_status_path()),
+        "KANBAN_ATTACHMENT_DIR": os.environ.get(
+            "KANBAN_ATTACHMENT_DIR", "/var/lib/kanban/data/attachments"
+        ),
     }
 
     for var_name in _PASSTHROUGH_ENV_VARS:
@@ -551,11 +555,13 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR
     run_dir = os.environ.get("KB_RUN_DIR", DEFAULT_RUN_DIR)
     alembic_ini = Path(os.environ.get("KB_ALEMBIC_INI", str(DEFAULT_ALEMBIC_INI)))
 
-    # Ensure data and backups directories exist with kanban ownership
+    # Ensure data, backups, and attachments directories exist with kanban ownership
     data_dir = pgdata.parent
     data_dir.mkdir(parents=True, exist_ok=True)
     backups_dir = data_dir / "backups"
     backups_dir.mkdir(parents=True, exist_ok=True)
+    attachments_dir = Path(os.environ.get("KANBAN_ATTACHMENT_DIR", str(data_dir / "attachments")))
+    attachments_dir.mkdir(parents=True, exist_ok=True)
     run_kanban_dir = Path("/run/kanban")
     try:
         run_kanban_dir.mkdir(parents=True, exist_ok=True)
@@ -566,8 +572,10 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR
         try:
             shutil.chown(str(data_dir), user=65532, group=65532)
             shutil.chown(str(backups_dir), user=65532, group=65532)
+            shutil.chown(str(attachments_dir), user=65532, group=65532)
             data_dir.chmod(0o775)
             backups_dir.chmod(0o775)
+            attachments_dir.chmod(0o750)
             if run_kanban_dir.is_dir():
                 shutil.chown(str(run_kanban_dir), user=65532, group=65532)
                 run_kanban_dir.chmod(0o775)

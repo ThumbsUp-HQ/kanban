@@ -16,11 +16,12 @@ describe('useIssueSurfaceRoute', () => {
   });
 
   describe('isValidIssueKey', () => {
-    it('validates keys against regex and projectKey prefix strictly', () => {
+    it('validates keys against regex and allows cross-prefix alias keys', () => {
       expect(isValidIssueKey('KAN-142', 'KAN')).toBe(true);
       expect(isValidIssueKey('PROJ-1', 'PROJ')).toBe(true);
+      expect(isValidIssueKey('KANBA-119', 'KAN')).toBe(true); // cross-prefix alias admitted
+      expect(isValidIssueKey('KAN-142', 'OTHER')).toBe(true); // cross-prefix alias admitted
       expect(isValidIssueKey('KAN-0', 'KAN')).toBe(false); // cannot be 0
-      expect(isValidIssueKey('KAN-142', 'OTHER')).toBe(false); // prefix mismatch
       expect(isValidIssueKey('javascript:alert(1)', 'KAN')).toBe(false);
       expect(isValidIssueKey('<img src=x>', 'KAN')).toBe(false);
       expect(isValidIssueKey('../../admin', 'KAN')).toBe(false);
@@ -68,7 +69,7 @@ describe('useIssueSurfaceRoute', () => {
       'javascript:alert(1)',
       '<img src=x>',
       '../../admin',
-      'OTHER-1',
+      'KAN-0',
       'A'.repeat(10000),
     ];
 
@@ -132,6 +133,36 @@ describe('useIssueSurfaceRoute', () => {
 
       expect(result.current.mode).toBe('drawer');
       expect(result.current.issueKey).toBe('KAN-142');
+      expect(result.current.projectKey).toBe('KAN');
+    });
+
+    it('returns mode: "drawer" when cross-prefix alias peek is present on project path', () => {
+      const wrapper = ({ children }: { children?: React.ReactNode }) =>
+        React.createElement(
+          MemoryRouter,
+          { initialEntries: ['/projects/KAN/issues?peek=KANBA-119'] },
+          children,
+        );
+
+      const { result } = renderHook(() => useIssueSurfaceRoute(), { wrapper });
+
+      expect(result.current.mode).toBe('drawer');
+      expect(result.current.issueKey).toBe('KANBA-119');
+      expect(result.current.projectKey).toBe('KAN');
+    });
+
+    it('returns mode: "full" when cross-prefix alias issue is in full-screen path', () => {
+      const wrapper = ({ children }: { children?: React.ReactNode }) =>
+        React.createElement(
+          MemoryRouter,
+          { initialEntries: ['/projects/KAN/issues/KANBA-119'] },
+          children,
+        );
+
+      const { result } = renderHook(() => useIssueSurfaceRoute(), { wrapper });
+
+      expect(result.current.mode).toBe('full');
+      expect(result.current.issueKey).toBe('KANBA-119');
       expect(result.current.projectKey).toBe('KAN');
     });
 
@@ -205,7 +236,7 @@ describe('useIssueSurfaceRoute', () => {
       expect(isValidIssueKey(null, 'KAN')).toBe(false);
       expect(isValidIssueKey('KAN-1', null)).toBe(false);
       expect(isValidIssueKey('invalid', 'KAN')).toBe(false);
-      expect(isValidIssueKey('KAN-1', 'OTHER')).toBe(false);
+      expect(isValidIssueKey('KAN-1', 'OTHER')).toBe(true);
     });
   });
 });

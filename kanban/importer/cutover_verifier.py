@@ -1,6 +1,7 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
 """Cutover verification engine and parity auditor (KB-P6-02, S1.3, S15.5, S12.3)."""
+# ruff: noqa: E501, C901, PLR0911, PLR0912, PLR0915
 
 from __future__ import annotations
 
@@ -96,8 +97,9 @@ async def _check_key_parity(
     bundle_dir: Path,
     workspace_slug: str,
     project_identifier: str,
+    source_project_identifier: str | None = None,
 ) -> tuple[CheckResult, uuid.UUID | None, uuid.UUID | None]:
-    """Check 1: entity_count_and_key_parity."""
+    """Check 1: entity_count_and_key_parity with merge-mode support."""
     c1_name = "entity_count_and_key_parity"
     try:
         client = PlaneClient()
@@ -155,9 +157,21 @@ async def _check_key_parity(
     issue_seq_counter = proj_row["issue_seq_counter"]
 
     target_plane_proj = next(
-        (p for p in bundle.projects if p.identifier == project_identifier),
+        (
+            p
+            for p in bundle.projects
+            if p.identifier == (source_project_identifier or project_identifier)
+        ),
         None,
     )
+    if not target_plane_proj and len(bundle.projects) == 1:
+        target_plane_proj = bundle.projects[0]
+
+    is_merge_mode = bool(
+        source_project_identifier
+        or (target_plane_proj and target_plane_proj.identifier != project_identifier)
+    )
+
     target_plane_proj_id = target_plane_proj.id if target_plane_proj else None
 
     proj_bundle_issues = [
@@ -171,12 +185,6 @@ async def _check_key_parity(
         {"pid": proj_id},
     )
     db_issues = iss_res.mappings().all()
-    db_seqs = {r["sequence_id"] for r in db_issues}
-    bundle_seqs = {iss.sequence_id for iss in proj_bundle_issues}
-
-    missing_keys = bundle_seqs - db_seqs
-    extra_keys = db_seqs - bundle_seqs
-    max_imported_seq = max(bundle_seqs) if bundle_seqs else 0
 
     st_count_res = await session.execute(
         text("SELECT count(*) FROM workflow_states WHERE project_id = :pid"),
@@ -205,6 +213,76 @@ async def _check_key_parity(
         {"pid": proj_id},
     )
     db_comments_count = comm_count_res.scalar_one()
+
+    if is_merge_mode:
+        # Merge mode: Verify entity mappings from snapshot issues to target project
+        mappings_res = await session.execute(
+            text(
+                "SELECT m.source_id, m.target_id, i.sequence_id "
+                "FROM import_entity_mappings m "
+                "JOIN issues i ON m.target_id = i.id "
+                "WHERE m.workspace_id = :ws AND m.source_system = 'plane' AND m.source_kind = 'issue' "
+                "AND i.project_id = :pid"
+            ),
+            {"ws": ws_id, "pid": proj_id},
+        )
+        mapped_rows = mappings_res.mappings().all()
+        mapped_source_ids = {r["source_id"] for r in mapped_rows}
+        bundle_issue_ids = {iss.id for iss in proj_bundle_issues}
+
+        missing_mapped = bundle_issue_ids - mapped_source_ids
+        max_db_seq = max((r["sequence_id"] for r in db_issues), default=0)
+
+        if missing_mapped:
+            c1_passed = False
+            c1_err = "KEY_PARITY_MISMATCH"
+            c1_detail = (
+                f"Missing {len(missing_mapped)} issues from snapshot in target project mappings."
+            )
+        elif issue_seq_counter < max_db_seq:
+            c1_passed = False
+            c1_err = "KEY_PARITY_MISMATCH"
+            c1_detail = (
+                f"Project issue sequence counter ({issue_seq_counter}) is less than max "
+                f"database sequence ID ({max_db_seq}). Key continuity compromised."
+            )
+        else:
+            c1_passed = True
+            c1_err = None
+            c1_detail = (
+                f"Verified merge-mode entity parity across {len(bundle_issue_ids)} snapshot issues "
+                f"mapped to target project {project_identifier} (total {len(db_issues)} issues in project). "
+                f"Sequence counter at {issue_seq_counter} >= max sequence {max_db_seq}."
+            )
+
+        result = CheckResult(
+            name=c1_name,
+            passed=c1_passed,
+            error_code=c1_err,
+            detail=c1_detail,
+            metadata={
+                "plane_issues": len(bundle.issues),
+                "db_issues": len(db_issues),
+                "mapped_issues": len(mapped_source_ids),
+                "missing_mapped_count": len(missing_mapped),
+                "issue_seq_counter": issue_seq_counter,
+                "max_db_seq": max_db_seq,
+                "states_count": db_states_count,
+                "cycles_count": db_cycles_count,
+                "modules_count": db_modules_count,
+                "comments_count": db_comments_count,
+                "merge_mode": True,
+            },
+        )
+        return result, ws_id, proj_id
+
+    # Non-merge mode: Exact sequence continuity check
+    db_seqs = {r["sequence_id"] for r in db_issues}
+    bundle_seqs = {iss.sequence_id for iss in proj_bundle_issues}
+
+    missing_keys = bundle_seqs - db_seqs
+    extra_keys = db_seqs - bundle_seqs
+    max_imported_seq = max(bundle_seqs) if bundle_seqs else 0
 
     c1_passed = True
     c1_err = None
@@ -244,6 +322,7 @@ async def _check_key_parity(
             "cycles_count": db_cycles_count,
             "modules_count": db_modules_count,
             "comments_count": db_comments_count,
+            "merge_mode": False,
         },
     )
     return result, ws_id, proj_id
@@ -476,8 +555,8 @@ async def _find_qa_proof_target_keys(
     session: AsyncSession,
     proj_id: uuid.UUID,
     project_identifier: str,
-) -> set[str]:
-    """Identify issues requiring proof bundles (completed or referencing docs/qa/)."""
+) -> dict[str, list[str]]:
+    """Identify issues requiring proof bundles (completed or referencing docs/qa/), along with source aliases."""
     completed_res = await session.execute(
         text(
             "SELECT i.sequence_id, ws.state_group, i.description_markdown "
@@ -489,13 +568,22 @@ async def _find_qa_proof_target_keys(
     )
     completed_rows = completed_res.mappings().all()
 
-    target_keys: set[str] = set()
+    target_keys: dict[str, list[str]] = {}
+    qa_path_pattern = re.compile(r"docs/qa/([A-Z][A-Z0-9]{1,9}-\d+)")
+    prov_pattern = re.compile(r"> Imported from `([A-Z][A-Z0-9]{1,9}-\d+)`")
+
     for cr in completed_rows:
         key = f"{project_identifier}-{cr['sequence_id']}"
+        desc = cr["description_markdown"] or ""
         is_completed = cr["state_group"] == "completed"
-        has_proof_ref = "docs/qa/" in (cr["description_markdown"] or "")
+        has_proof_ref = "docs/qa/" in desc
         if is_completed or has_proof_ref:
-            target_keys.add(key)
+            aliases: list[str] = []
+            for m in prov_pattern.finditer(desc):
+                aliases.append(m.group(1))
+            for m in qa_path_pattern.finditer(desc):
+                aliases.append(m.group(1))
+            target_keys[key] = aliases
 
     comm_qa_res = await session.execute(
         text(
@@ -505,8 +593,12 @@ async def _find_qa_proof_target_keys(
         {"pid": proj_id},
     )
     for ccr in comm_qa_res.mappings().all():
-        if "docs/qa/" in (ccr["body_markdown"] or ""):
-            target_keys.add(f"{project_identifier}-{ccr['sequence_id']}")
+        b_md = ccr["body_markdown"] or ""
+        if "docs/qa/" in b_md:
+            key = f"{project_identifier}-{ccr['sequence_id']}"
+            aliases = target_keys.setdefault(key, [])
+            for m in qa_path_pattern.finditer(b_md):
+                aliases.append(m.group(1))
 
     return target_keys
 
@@ -518,7 +610,7 @@ async def _check_qa_proofs(
     qa_root: Path,
     exempt_keys: set[str],
 ) -> CheckResult:
-    """Check 5: qa_proof_bundle_continuity."""
+    """Check 5: qa_proof_bundle_continuity with merge-mode alias resolution."""
     c5_name = "qa_proof_bundle_continuity"
     if not proj_id:
         return CheckResult(
@@ -534,16 +626,29 @@ async def _check_qa_proofs(
         verified_bundles: list[str] = []
         exempted_in_audit: list[str] = []
 
-        for key in sorted(target_keys):
-            if key in exempt_keys:
+        for key, aliases in sorted(target_keys.items()):
+            if key in exempt_keys or any(a in exempt_keys for a in aliases):
                 exempted_in_audit.append(key)
                 continue
 
-            bundle_errs = _verify_single_proof_bundle(qa_root / key)
-            if bundle_errs:
-                missing_bundle_files.append(f"{key}: {', '.join(bundle_errs)}")
-            else:
-                verified_bundles.append(key)
+            candidates = [key, *aliases]
+            found = False
+            best_errs: list[str] = []
+            for cand in candidates:
+                cand_path = qa_root / cand
+                if cand_path.is_dir():
+                    cand_errs = _verify_single_proof_bundle(cand_path)
+                    if not cand_errs:
+                        verified_bundles.append(f"{key} (via {cand})" if cand != key else key)
+                        found = True
+                        break
+                    best_errs = cand_errs
+
+            if not found:
+                err_detail = (
+                    ", ".join(best_errs) if best_errs else f"directory missing in {candidates}"
+                )
+                missing_bundle_files.append(f"{key}: {err_detail}")
 
         c5_passed = len(missing_bundle_files) == 0
         c5_err = None if c5_passed else "MISSING_QA_PROOF_BUNDLE"
@@ -666,6 +771,7 @@ async def verify_cutover(  # noqa: PLR0913
     project_identifier: str,
     qa_root: Path,
     pre_cutover_exempt_keys: list[str] | set[str] | None = None,
+    source_project_identifier: str | None = None,
 ) -> CutoverAuditReport:
     """Execute all 6 non-bypassable cutover checks and return a structured report."""
     checks: list[CheckResult] = []
@@ -673,7 +779,11 @@ async def verify_cutover(  # noqa: PLR0913
 
     # Check 1: entity_count_and_key_parity
     c1_res, ws_id, proj_id = await _check_key_parity(
-        session, bundle_dir, workspace_slug, project_identifier
+        session,
+        bundle_dir,
+        workspace_slug,
+        project_identifier,
+        source_project_identifier=source_project_identifier,
     )
     checks.append(c1_res)
     if (not ws_id or not proj_id or not c1_res.passed) and c1_res.error_code in (

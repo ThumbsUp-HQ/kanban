@@ -2224,4 +2224,46 @@ describe('IssueSurface', () => {
       unmount();
     });
   });
+
+  describe('Cross-prefix issue alias normalization', () => {
+    it('normalizes drawer URL from cross-prefix alias KANBA-119 to canonical KAN-42', async () => {
+      const canonicalIssue: IssueDetail = {
+        ...validIssue,
+        key: 'KAN-42',
+        project_key: 'KAN',
+      };
+      vi.spyOn(apiClient, 'get').mockResolvedValue(canonicalIssue);
+      const { Harness, getNavigate } = createTestHarness([
+        '/projects/KAN/issues?peek=KANBA-119',
+      ]);
+      const { unmount } = render(<Harness />);
+      await waitFor(() => {
+        expect(getNavigate()).toBeDefined();
+      });
+      await waitFor(() => {
+        expect(screen.getByText('KAN-42')).toBeDefined();
+      });
+      unmount();
+    });
+
+    it('normalizes full screen URL from cross-prefix alias KANBA-119 to canonical KAN-42', async () => {
+      const canonicalIssue: IssueDetail = {
+        ...validIssue,
+        key: 'KAN-42',
+        project_key: 'KAN',
+      };
+      vi.spyOn(apiClient, 'get').mockResolvedValue(canonicalIssue);
+      const { Harness, getNavigate } = createTestHarness([
+        '/projects/KAN/issues/KANBA-119',
+      ]);
+      const { unmount } = render(<Harness />);
+      await waitFor(() => {
+        expect(getNavigate()).toBeDefined();
+      });
+      await waitFor(() => {
+        expect(screen.getByText('KAN-42')).toBeDefined();
+      });
+      unmount();
+    });
+  });
 });

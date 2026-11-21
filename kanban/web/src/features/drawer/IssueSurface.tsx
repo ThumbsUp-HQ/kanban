@@ -298,6 +298,20 @@ function IssueSurfaceContent({
   const resolvedProjectForAux =
     issue?.project_key ?? projectKey ?? issueKey.split('-')[0] ?? 'KAN';
 
+  // Normalize URL when issue key differs from loaded canonical key (e.g., cross-prefix alias KANBA-119 -> KAN-42)
+  useEffect(() => {
+    if (!issue?.key || issue.key === issueKey) {
+      return;
+    }
+    const canonicalKey = issue.key;
+    const targetProject = issue.project_key;
+    if (mode === 'drawer' || mode === 'split') {
+      void navigate(toPeekPath(location, canonicalKey), { replace: true });
+    } else {
+      void navigate(toFullScreenPath(targetProject, canonicalKey, location.search), { replace: true });
+    }
+  }, [issue?.key, issue?.project_key, issueKey, mode, projectKey, location, navigate]);
+
   useEffect(() => {
     let active = true;
     void ensureCsrfToken();

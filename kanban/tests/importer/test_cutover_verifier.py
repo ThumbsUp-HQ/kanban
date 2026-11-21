@@ -2,7 +2,7 @@
 # Apache-2.0 License. See LICENSE for details.
 """Integration and unit tests for cutover verification engine (KB-P6-02)."""
 
-# ruff: noqa: E501, PLC0415, TC002, ANN401
+# ruff: noqa: E501, PLC0415, TC002, ANN401, S101, S108, PLR0915, BLE001, ARG001
 
 from __future__ import annotations
 
@@ -633,6 +633,30 @@ def test_cli_subparsers_registration(tmp_path: Path, monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("KANBAN_DATABASE_URL", "postgresql+asyncpg://db@localhost/test")
     assert _get_admin_dsn() == "postgresql+asyncpg://db@localhost/test"
 
+    monkeypatch.delenv("KANBAN_DATABASE_URL", raising=False)
+    monkeypatch.delenv("DATABASE_URL", raising=False)
+    default_dsn = _get_admin_dsn()
+    assert "/kanban" in default_dsn
+    assert "postgresql+asyncpg://" in default_dsn
+
+    # Test socket path branches
+    monkeypatch.setenv("KB_TEST_PGHOST", "/var/custom/socket")
+    assert "host=/var/custom/socket" in _get_admin_dsn()
+    monkeypatch.delenv("KB_TEST_PGHOST", raising=False)
+
+    with patch.object(
+        Path, "is_dir", autospec=True, side_effect=lambda self: str(self) == "/run/postgresql"
+    ):
+        assert "host=/run/postgresql" in _get_admin_dsn()
+
+    with patch.object(
+        Path, "is_dir", autospec=True, side_effect=lambda self: str(self) == "/tmp/kb-pgsock"
+    ):
+        assert "host=/tmp/kb-pgsock" in _get_admin_dsn()
+
+    with patch.object(Path, "is_dir", autospec=True, return_value=False):
+        assert "host=/run/postgresql" in _get_admin_dsn()
+
 
 def test_cli_runner_success(tmp_path: Path) -> None:
     """Test _run_cutover_verify success path delegating to _execute_verify."""
@@ -668,6 +692,20 @@ def test_cli_runner_success(tmp_path: Path) -> None:
         mock_exec.return_value = 0
         assert _run_cutover_verify(args_no_exempt) == 0
 
+    # 3. With source_project argument in merge mode
+    args_source = argparse.Namespace(
+        bundle_dir=str(bundle_dir),
+        workspace="kanban",
+        project="KAN",
+        source_project="KANBA",
+        qa_root=str(tmp_path / "qa"),
+        pre_cutover_exempt_keys="",
+        json_out=None,
+    )
+    with patch("kanban.cli.verify_cutover._execute_verify", new_callable=AsyncMock) as mock_exec:
+        mock_exec.return_value = 0
+        assert _run_cutover_verify(args_source) == 0
+
 
 def test_cli_runner_exception_handling(tmp_path: Path) -> None:
     """Test _run_cutover_verify returns 1 on unexpected runtime error."""
@@ -684,7 +722,31 @@ def test_cli_runner_exception_handling(tmp_path: Path) -> None:
     )
 
     with patch(
-        "kanban.cli.verify_cutover.asyncio.run", side_effect=RuntimeError("Connection refused")
+        "kanban.cli.verify_cutover._execute_verify", side_effect=RuntimeError("Connection refused")
     ):
         code = _run_cutover_verify(args)
         assert code == 1
+
+    # Non-existent bundle directory
+    args_bad_bundle = argparse.Namespace(
+        bundle_dir=str(tmp_path / "nonexistent_bundle"),
+        workspace="kanban",
+        project="KANBA",
+        qa_root="./docs/qa",
+        pre_cutover_exempt_keys="",
+        json_out=None,
+    )
+    assert _run_cutover_verify(args_bad_bundle) == 2
+
+    # Console report without detail but with error code
+    from kanban.cli.verify_cutover import _print_console_report
+    from kanban.importer.cutover_verifier import CheckResult, CutoverAuditReport
+
+    rep = CutoverAuditReport(
+        overall_passed=False,
+        workspace_slug="kanban",
+        project_identifier="KANBA",
+        checks=[CheckResult(name="chk", passed=False, error_code="ERR_CODE", detail=None)],
+        summary={"passed_checks": 0, "total_checks": 1},
+    )
+    _print_console_report(rep)

@@ -94,6 +94,7 @@ class PlaneModule(BaseModel):
     lead: str | None = None
     start_date: str | None = None
     target_date: str | None = None
+    archived_at: str | None = None
     project: str | None = None
 
 
@@ -123,6 +124,7 @@ class PlaneIssue(BaseModel):
     updated_at: str | None = None
     start_date: str | None = None
     target_date: str | None = None
+    archived_at: str | None = None
     project: str | None = None
 
 

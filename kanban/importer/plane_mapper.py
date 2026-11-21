@@ -144,26 +144,99 @@ class PlaneMapper:
         self,
         raw_html_or_md: str | None,
         attachment_url_map: dict[str, uuid.UUID],
+        md_attachments: dict[str, str] | None = None,
     ) -> tuple[str, int]:
-        """Convert Plane HTML to canonical Markdown and rewrite inline asset links."""
+        """Convert Plane HTML to canonical Markdown and rewrite inline asset links.
+
+        Rewrites Plane/MinIO inline asset URLs before nh3 strips http:// URLs,
+        and appends any associated .md attachments as collapsible blocks.
+        """
         if not raw_html_or_md:
             return "", 0
 
-        # 1. Normalize to markdown stripping hostile HTML
-        markdown = normalize_to_markdown(raw_html_or_md, mode="auto")
-
-        # 2. Rewrite inline asset URLs to /api/v1/attachments/{attachment_id}
         rewritten_count = 0
+        preprocessed = raw_html_or_md
 
+        # 1. Pre-rewrite Plane/MinIO inline asset URLs BEFORE nh3 sanitization
+        # to ensure relative /api/v1/attachments/ endpoints are preserved
         for original_ref, att_id in attachment_url_map.items():
             canonical_path = f"/api/v1/attachments/{att_id}"
-            # Pattern matching markdown image or link references containing the original ref
+            pattern = re.compile(re.escape(original_ref))
+            if pattern.search(preprocessed):
+                preprocessed, count = pattern.subn(canonical_path, preprocessed)
+                rewritten_count += count
+
+        # 2. Normalize to markdown stripping hostile HTML
+        markdown = normalize_to_markdown(preprocessed, mode="auto")
+
+        # 3. Post-normalization pass for any markdown references that were not caught
+        for original_ref, att_id in attachment_url_map.items():
+            canonical_path = f"/api/v1/attachments/{att_id}"
             pattern = re.compile(re.escape(original_ref))
             if pattern.search(markdown):
                 markdown, count = pattern.subn(canonical_path, markdown)
                 rewritten_count += count
 
+        # 4. Ingest .md attachments as collapsible Markdown blocks
+        if md_attachments:
+            for md_fn, md_content in md_attachments.items():
+                if md_fn in raw_html_or_md or md_fn in markdown:
+                    collapsible_block = (
+                        f"\n\n<details>\n<summary>Attachment: {md_fn}</summary>\n\n"
+                        f"{md_content}\n\n</details>"
+                    )
+                    if collapsible_block not in markdown:
+                        markdown += collapsible_block
+
         return markdown, rewritten_count
+
+    def rewrite_issue_references(
+        self,
+        markdown: str,
+        key_remap_manifest: dict[str, str],
+    ) -> str:
+        """Context-aware rewrite of issue key references.
+
+        Skips fenced code blocks (``` or ~~~), inline code spans (`...`),
+        and docs/qa/ paths (e.g. docs/qa/KANBA-12/).
+        """
+        if not markdown or not key_remap_manifest:
+            return markdown
+
+        lines = markdown.splitlines(keepends=True)
+        out_lines: list[str] = []
+        in_code_fence = False
+
+        pattern = re.compile(
+            r"(docs/qa/[A-Z][A-Z0-9]{1,9}-\d+)|"
+            r"(`+[^`\n]+`+)|"
+            r"\b([A-Z][A-Z0-9]{1,9}-\d+)\b"
+        )
+
+        for line in lines:
+            stripped = line.strip()
+            if stripped.startswith(("```", "~~~")):
+                in_code_fence = not in_code_fence
+                out_lines.append(line)
+                continue
+
+            if in_code_fence:
+                out_lines.append(line)
+                continue
+
+            def _sub(match: re.Match[str]) -> str:
+                if match.group(1):
+                    # docs/qa/KEY path - preserve verbatim
+                    return match.group(1)
+                if match.group(2):
+                    # inline code span - preserve verbatim
+                    return match.group(2)
+                key = match.group(3)
+                return key_remap_manifest.get(key, key)
+
+            out_lines.append(pattern.sub(_sub, line))
+
+        return "".join(out_lines)
 
     def resolve_user_handle(
         self,

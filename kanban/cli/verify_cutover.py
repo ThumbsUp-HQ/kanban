@@ -1,6 +1,7 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""CLI commands for cutover verification and parity auditing (KB-P6-02, S15.5)."""
+"""CLI commands for cutover verification and parity auditing (KB-P6-02, KB-MIGRATION-PLANE-DB-01, S15.5)."""
+# ruff: noqa: E501, S108, C901, PLR0912, PLR0915, BLE001, TRY300
 
 from __future__ import annotations
 
@@ -33,9 +34,17 @@ def _get_admin_dsn() -> str:
     if dsn:
         return dsn
 
-    socket_dir = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")  # noqa: S108
+    if "KB_TEST_PGHOST" in os.environ:
+        socket_dir = os.environ["KB_TEST_PGHOST"]
+    elif Path("/run/postgresql").is_dir():
+        socket_dir = "/run/postgresql"
+    elif Path("/tmp/kb-pgsock").is_dir():
+        socket_dir = "/tmp/kb-pgsock"
+    else:
+        socket_dir = "/run/postgresql"
+
     user = os.environ.get("KB_ADMIN_PGUSER", "kanban_migrator")
-    dbname = os.environ.get("KB_DATABASE_NAME", "kanban_test_master")
+    dbname = os.environ.get("PGDATABASE") or os.environ.get("KB_DATABASE_NAME", "kanban")
     return f"postgresql+asyncpg://{user}@/{dbname}?host={socket_dir}"
 
 
@@ -66,7 +75,11 @@ def register_cutover_subparsers(
     verify_parser.add_argument(
         "--project",
         required=True,
-        help="Project identifier key (e.g. KANBA)",
+        help="Project identifier key in target database (e.g. KAN or KANBA)",
+    )
+    verify_parser.add_argument(
+        "--source-project",
+        help="Source project identifier from snapshot bundle when verifying a merged project (e.g. KANBA)",
     )
     verify_parser.add_argument(
         "--qa-root",
@@ -98,12 +111,15 @@ def _run_cutover_verify(args: argparse.Namespace) -> int:
     if args.pre_cutover_exempt_keys:
         exempt_keys = [k.strip() for k in args.pre_cutover_exempt_keys.split(",") if k.strip()]
 
+    source_proj = getattr(args, "source_project", None)
+
     try:
         return asyncio.run(
             _execute_verify(
                 bundle_path=bundle_path,
                 workspace_slug=args.workspace,
                 project_identifier=args.project,
+                source_project_identifier=source_proj,
                 qa_root=qa_root_path,
                 exempt_keys=exempt_keys,
                 json_out=args.json_out,
@@ -121,6 +137,7 @@ async def _execute_verify(  # noqa: PLR0913, PLR0917
     qa_root: Path,
     exempt_keys: list[str],
     json_out: str | None,
+    source_project_identifier: str | None = None,
 ) -> int:
     """Run verification checks inside administrative async session."""
     dsn = _get_admin_dsn()
@@ -129,7 +146,6 @@ async def _execute_verify(  # noqa: PLR0913, PLR0917
 
     try:
         async with session_factory() as session:
-            # Set migration/admin role authorization
             await session.execute(text("SET SESSION AUTHORIZATION kanban_migrator"))
 
             report: CutoverAuditReport = await verify_cutover(
@@ -139,9 +155,9 @@ async def _execute_verify(  # noqa: PLR0913, PLR0917
                 project_identifier=project_identifier,
                 qa_root=qa_root,
                 pre_cutover_exempt_keys=exempt_keys,
+                source_project_identifier=source_project_identifier,
             )
 
-            # Output formatted report
             _print_console_report(report)
 
             if json_out:
@@ -154,28 +170,29 @@ async def _execute_verify(  # noqa: PLR0913, PLR0917
 
 
 def _print_console_report(report: CutoverAuditReport) -> None:
-    """Print readable table summary of cutover verification report."""
-    status_str = "PASSED" if report.overall_passed else "FAILED"
-    passed = report.summary.get("passed_checks", 0)
-    total = report.summary.get("total_checks", 0)
-    sys.stdout.write("\n=== Cutover Verification Audit Report ===\n")
-    sys.stdout.write(f"Workspace: {report.workspace_slug} | Project: {report.project_identifier}\n")
-    sys.stdout.write(f"Overall Status: {status_str} ({passed}/{total} checks passed)\n")
-    sys.stdout.write("-" * 88 + "\n")
-    sys.stdout.write(f"{'Check Name':<34} {'Status':<8} {'Details / Error'}\n")
-    sys.stdout.write("-" * 88 + "\n")
+    """Format and print cutover audit report to stdout."""
+    status_label = "PASSED" if report.overall_passed else "FAILED"
+    sys.stdout.write(f"\n=== Cutover Verification Audit: {status_label} ===\n")
+    sys.stdout.write(f"Workspace: {report.workspace_slug}\n")
+    sys.stdout.write(f"Project: {report.project_identifier}\n")
+    sys.stdout.write(
+        f"Checks: {report.summary.get('passed_checks', 0)} / {report.summary.get('total_checks', 0)} passed\n"
+    )
+    sys.stdout.write("-" * 50 + "\n")
 
     for chk in report.checks:
-        chk_status = "PASS" if chk.passed else "FAIL"
-        err_prefix = f"[{chk.error_code}] " if chk.error_code else ""
-        detail_msg = chk.detail or ""
-        sys.stdout.write(f"{chk.name:<34} {chk_status:<8} {err_prefix}{detail_msg}\n")
+        icon = "PASS" if chk.passed else "FAIL"
+        sys.stdout.write(f"[{icon}] {chk.name}\n")
+        if chk.detail:
+            sys.stdout.write(f"       Detail: {chk.detail}\n")
+        if chk.error_code:
+            sys.stdout.write(f"       Error Code: {chk.error_code}\n")
 
-    sys.stdout.write("-" * 88 + "\n\n")
+    sys.stdout.write("-" * 50 + "\n\n")
 
 
 def _write_json_report(path_str: str, report: CutoverAuditReport) -> None:
-    """Write audit report in JSON format to filesystem."""
+    """Write raw JSON format audit report to disk synchronously."""
     out_path = Path(path_str).resolve()
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(report.model_dump(), indent=2), encoding="utf-8")

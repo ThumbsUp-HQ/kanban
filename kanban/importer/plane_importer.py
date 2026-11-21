@@ -1,14 +1,17 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""Lossless transactional Plane importer implementation (KB-P6-01, S1.3, S15.5)."""
+"""Lossless transactional Plane importer implementation (KB-P6-01, KB-MIGRATION-PLANE-DB-01, S1.3, S15.5)."""
+# ruff: noqa: E501, C901, PLR0911, PLR0912, PLR0915, BLE001
 
 from __future__ import annotations
 
+import datetime
+import hashlib
 import logging
 import uuid
 from datetime import date
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import select, text
 
@@ -19,6 +22,7 @@ from database.models import (
     Issue,
     IssueAssignee,
     IssueComment,
+    IssueKeyAlias,
     IssueLabel,
     IssueModule,
     LinkKind,
@@ -35,6 +39,7 @@ from kanban.attachments.pdf import sanitize_and_validate_pdf
 from kanban.attachments.raster import sanitize_and_reencode_raster
 from kanban.attachments.sniff import sniff_media_type
 from kanban.attachments.storage import LocalFilesystemBlobStore
+from kanban.content.normalize import normalize_to_markdown
 from kanban.content.svg_sanitizer import sanitize_svg
 from kanban.importer.plane_mapper import (
     PRIORITY_MAP,
@@ -62,8 +67,21 @@ class ImportIntegrityError(Exception):
     """Raised when post-import integrity audit or foreign key verification fails."""
 
 
+def _parse_iso_datetime(val: str | None) -> datetime.datetime | None:
+    """Parse ISO datetime string into UTC datetime."""
+    if not val:
+        return None
+    try:
+        dt = datetime.datetime.fromisoformat(val)
+        if dt.tzinfo is None:
+            dt = dt.replace(tzinfo=datetime.timezone.utc)
+        return dt
+    except Exception:  # noqa: BLE001
+        return None
+
+
 class PlaneImporter:
-    """Transactional engine importing Plane snapshots with exact sequence continuity."""
+    """Transactional engine importing Plane snapshots with exact sequence continuity and merge mode."""
 
     def __init__(
         self,
@@ -73,6 +91,8 @@ class PlaneImporter:
         blob_store_root: Path | str | None = None,
         user_map: dict[str, str] | None = None,
         unmapped_assignees_as_free_text: bool = True,
+        target_project_identifier: str | None = None,
+        exclude_project_identifiers: list[str] | set[str] | str | None = None,
     ) -> None:
         """Initialize PlaneImporter with database session, caller context, and storage roots."""
         self.session = session
@@ -84,6 +104,20 @@ class PlaneImporter:
         default_blob = "/tmp/kanban-attachments"  # noqa: S108
         self.blob_store_root = Path(blob_store_root or default_blob).resolve()
         self.blob_store = LocalFilesystemBlobStore(self.blob_store_root)
+        self.target_project_identifier = (
+            target_project_identifier.strip().upper() if target_project_identifier else None
+        )
+
+        if isinstance(exclude_project_identifiers, str):
+            self.exclude_project_identifiers = {
+                x.strip().upper() for x in exclude_project_identifiers.split(",") if x.strip()
+            }
+        elif isinstance(exclude_project_identifiers, (list, set)):
+            self.exclude_project_identifiers = {
+                str(x).strip().upper() for x in exclude_project_identifiers if str(x).strip()
+            }
+        else:
+            self.exclude_project_identifiers = set()
 
     async def run_import(
         self,
@@ -95,7 +129,6 @@ class PlaneImporter:
         report = ImportDiffReport()
 
         if dry_run:
-            # Run inside an isolated transaction that always rolls back
             async with self.session.begin_nested():
                 await self._execute_import(bundle, report)
                 await self.session.rollback()
@@ -121,93 +154,167 @@ class PlaneImporter:
             (m.source_kind, m.source_id): m for m in existing_mappings_rows
         }
 
-        # 1. Projects
+        # Resolve workspace users/principals for user mapping
+        p_users_res = await self.session.execute(
+            text(
+                "SELECT p.id, u.email, p.display_name, o.canonical_key "
+                "FROM principals p "
+                "JOIN users u ON p.id = u.id "
+                "JOIN objects o ON p.id = o.id "
+                "WHERE p.workspace_id = :ws AND p.status = 'ACTIVE'"
+            ),
+            {"ws": workspace_id},
+        )
+        user_lookup: dict[str, uuid.UUID] = {}
+        for r in p_users_res.mappings().all():
+            user_lookup[r["canonical_key"].lower()] = r["id"]
+            user_lookup[r["email"].lower()] = r["id"]
+            user_lookup[r["display_name"].lower()] = r["id"]
+
+        def _resolve_principal(plane_uid: str | None) -> uuid.UUID | None:
+            if not plane_uid or not self.mapper.user_map:
+                return None
+            target_str = self.mapper.user_map.get(plane_uid)
+            if not target_str:
+                return None
+            clean_str = target_str.lstrip("@").lower()
+            return user_lookup.get(clean_str)
+
+        # 1. Projects resolution
         project_map: dict[str, uuid.UUID] = {}
+        project_ident_map: dict[str, str] = {}
         target_project_id: uuid.UUID | None = None
+        target_project_ident: str | None = self.target_project_identifier
 
-        for p in bundle.projects:
-            source_key = ("project", p.id)
-            sha = compute_source_sha256(p)
+        # Filter out excluded projects
+        active_bundle_projects = [
+            p
+            for p in bundle.projects
+            if p.identifier.upper() not in self.exclude_project_identifiers
+        ]
 
-            if source_key in mapping_cache:
-                m = mapping_cache[source_key]
-                project_map[p.id] = m.target_id
-                target_project_id = m.target_id
-                if m.source_sha256 == sha:
-                    report.unchanged += 1
-                else:
-                    report.to_update += 1
-            else:
-                # Check if project with same identifier exists in workspace
-                existing_proj = (
-                    await self.session.execute(
-                        select(Project).where(
-                            Project.workspace_id == workspace_id,
-                            Project.identifier == p.identifier,
-                        )
+        if self.target_project_identifier:
+            # Merge mode: all bundle projects are mapped to the specified target project
+            target_proj_row = (
+                await self.session.execute(
+                    select(Project).where(
+                        Project.workspace_id == workspace_id,
+                        Project.identifier == self.target_project_identifier,
                     )
-                ).scalar_one_or_none()
-
-                if existing_proj:
-                    p_id = existing_proj.id
-                    report.unchanged += 1
-                else:
-                    # Register project object
-                    p_id = (
-                        await self.session.execute(
-                            text(
-                                "SELECT register_object("
-                                "  CAST('project' AS object_kind), :ws, NULL, "
-                                "  :ident, :name, :creator"
-                                ")"
-                            ),
-                            {
-                                "ws": workspace_id,
-                                "ident": p.identifier,
-                                "name": p.name,
-                                "creator": self.caller.principal_id,
-                            },
-                        )
-                    ).scalar_one()
-
-                    new_proj = Project(
-                        id=p_id,
-                        workspace_id=workspace_id,
-                        identifier=p.identifier,
-                        name=p.name,
-                        description_markdown=p.description or "",
-                        modules_enabled=len(bundle.modules) > 0,
-                    )
-                    self.session.add(new_proj)
-                    await self.session.flush()
-
-                    # Add caller as PROJECT_ADMIN
-                    self.session.add(
-                        RoleBinding(
-                            workspace_id=workspace_id,
-                            principal_id=self.caller.principal_id,
-                            role="PROJECT_ADMIN",
-                            scope_type="project",
-                            project_id=p_id,
-                        )
-                    )
-                    report.to_create += 1
-
-                new_mapping = ImportEntityMapping(
-                    workspace_id=workspace_id,
-                    source_system="plane",
-                    source_kind="project",
-                    source_id=p.id,
-                    target_id=p_id,
-                    source_sha256=sha,
                 )
-                self.session.add(new_mapping)
-                mapping_cache[source_key] = new_mapping
-                project_map[p.id] = p_id
-                target_project_id = p_id
+            ).scalar_one_or_none()
+
+            if not target_proj_row:
+                msg = f"Target project '{self.target_project_identifier}' not found in workspace."
+                raise ImportIntegrityError(msg)
+
+            target_project_id = target_proj_row.id
+            target_project_ident = target_proj_row.identifier
+
+            for p in active_bundle_projects:
+                source_key = ("project", p.id)
+                sha = compute_source_sha256(p)
+                project_map[p.id] = target_project_id
+                project_ident_map[p.id] = p.identifier
+
+                if source_key in mapping_cache:
+                    report.unchanged += 1
+                else:
+                    new_mapping = ImportEntityMapping(
+                        workspace_id=workspace_id,
+                        source_system="plane",
+                        source_kind="project",
+                        source_id=p.id,
+                        target_id=target_project_id,
+                        source_sha256=sha,
+                    )
+                    self.session.add(new_mapping)
+                    mapping_cache[source_key] = new_mapping
+                    report.to_create += 1
+        else:
+            for p in active_bundle_projects:
+                source_key = ("project", p.id)
+                sha = compute_source_sha256(p)
+
+                if source_key in mapping_cache:
+                    m = mapping_cache[source_key]
+                    project_map[p.id] = m.target_id
+                    project_ident_map[p.id] = p.identifier
+                    target_project_id = m.target_id
+                    target_project_ident = p.identifier
+                    if m.source_sha256 == sha:
+                        report.unchanged += 1
+                    else:
+                        report.to_update += 1
+                else:
+                    existing_proj = (
+                        await self.session.execute(
+                            select(Project).where(
+                                Project.workspace_id == workspace_id,
+                                Project.identifier == p.identifier,
+                            )
+                        )
+                    ).scalar_one_or_none()
+
+                    if existing_proj:
+                        p_id = existing_proj.id
+                        report.unchanged += 1
+                    else:
+                        p_id = (
+                            await self.session.execute(
+                                text(
+                                    "SELECT register_object("
+                                    "  CAST('project' AS object_kind), :ws, NULL, "
+                                    "  :ident, :name, :creator"
+                                    ")"
+                                ),
+                                {
+                                    "ws": workspace_id,
+                                    "ident": p.identifier,
+                                    "name": p.name,
+                                    "creator": self.caller.principal_id,
+                                },
+                            )
+                        ).scalar_one()
+
+                        new_proj = Project(
+                            id=p_id,
+                            workspace_id=workspace_id,
+                            identifier=p.identifier,
+                            name=p.name,
+                            description_markdown=p.description or "",
+                            modules_enabled=len(bundle.modules) > 0,
+                        )
+                        self.session.add(new_proj)
+                        await self.session.flush()
+
+                        self.session.add(
+                            RoleBinding(
+                                workspace_id=workspace_id,
+                                principal_id=self.caller.principal_id,
+                                role="PROJECT_ADMIN",
+                                scope_type="project",
+                                project_id=p_id,
+                            )
+                        )
+                        report.to_create += 1
+
+                    new_mapping = ImportEntityMapping(
+                        workspace_id=workspace_id,
+                        source_system="plane",
+                        source_kind="project",
+                        source_id=p.id,
+                        target_id=p_id,
+                        source_sha256=sha,
+                    )
+                    self.session.add(new_mapping)
+                    mapping_cache[source_key] = new_mapping
+                    project_map[p.id] = p_id
+                    project_ident_map[p.id] = p.identifier
+                    target_project_id = p_id
+                    target_project_ident = p.identifier
 
         if not target_project_id:
-            # Fallback to existing project in workspace if bundle lacked projects
             first_proj = (
                 (
                     await self.session.execute(
@@ -219,11 +326,12 @@ class PlaneImporter:
             )
             if first_proj:
                 target_project_id = first_proj.id
+                target_project_ident = first_proj.identifier
             else:
                 msg = "No projects found in bundle or workspace."
                 raise ImportIntegrityError(msg)
 
-        # 2. Workflow States
+        # 2. Workflow States (deduplicated per target project)
         state_map: dict[str, uuid.UUID] = {}
         existing_states = (
             (
@@ -266,7 +374,6 @@ class PlaneImporter:
                     st_id = states_by_group[mapped_group].id
                     report.unchanged += 1
                 else:
-                    # Insert custom state
                     new_state = WorkflowState(
                         workspace_id=workspace_id,
                         project_id=state_proj,
@@ -306,7 +413,7 @@ class PlaneImporter:
         priorities_by_slug = {p.slug.lower(): p.id for p in priorities}
         priorities_by_slug.get("none") or (priorities[0].id if priorities else uuid.uuid4())
 
-        # 4. Project Labels
+        # 4. Project Labels (deduplicated per target project)
         label_map: dict[str, uuid.UUID] = {}
         existing_labels = (
             (
@@ -396,12 +503,10 @@ class PlaneImporter:
                 s_date = date.fromisoformat(c.start_date) if c.start_date else None
                 e_date = date.fromisoformat(c.end_date) if c.end_date else None
                 raw_status = (c.status or "upcoming").lower()
-                if raw_status in ("current", "active"):
-                    c_status = "active"
-                elif raw_status in ("upcoming", "completed"):
-                    c_status = raw_status
-                else:
-                    c_status = "upcoming"
+                c_status = (
+                    raw_status if raw_status in ("active", "upcoming", "completed") else "upcoming"
+                )
+
                 new_cycle = Cycle(
                     id=cycle_id,
                     workspace_id=workspace_id,
@@ -427,13 +532,26 @@ class PlaneImporter:
                 cycle_map[c.id] = cycle_id
                 report.to_create += 1
 
-        # 6. Modules
+        # 6. Modules (deduplicated per target project to avoid modules_project_id_name_key collision)
         module_map: dict[str, uuid.UUID] = {}
         if bundle.modules:
             await self.session.execute(
                 text("UPDATE projects SET modules_enabled = TRUE WHERE id = :pid"),
                 {"pid": target_project_id},
             )
+
+        existing_modules_rows = (
+            (
+                await self.session.execute(
+                    select(Module).where(Module.project_id == target_project_id)
+                )
+            )
+            .scalars()
+            .all()
+        )
+        modules_by_proj_and_name = {
+            (m.project_id, m.name.lower()): m for m in existing_modules_rows
+        }
 
         for mod in bundle.modules:
             source_key = ("module", mod.id)
@@ -447,6 +565,21 @@ class PlaneImporter:
                     report.unchanged += 1
                 else:
                     report.to_update += 1
+            elif (mod_proj, mod.name.lower()) in modules_by_proj_and_name:
+                existing_mod = modules_by_proj_and_name[(mod_proj, mod.name.lower())]
+                module_map[mod.id] = existing_mod.id
+                report.unchanged += 1
+
+                new_mapping = ImportEntityMapping(
+                    workspace_id=workspace_id,
+                    source_system="plane",
+                    source_kind="module",
+                    source_id=mod.id,
+                    target_id=existing_mod.id,
+                    source_sha256=sha,
+                )
+                self.session.add(new_mapping)
+                mapping_cache[source_key] = new_mapping
             else:
                 mod_id = uuid.uuid4()
                 canonical_key = f"mod-{str(mod_id)[:8]}"
@@ -475,6 +608,7 @@ class PlaneImporter:
                 )
                 self.session.add(new_mod)
                 await self.session.flush()
+                modules_by_proj_and_name[(mod_proj, mod.name.lower())] = new_mod
 
                 new_mapping = ImportEntityMapping(
                     workspace_id=workspace_id,
@@ -491,81 +625,144 @@ class PlaneImporter:
 
         # 7. Attachments Ingestion & URL Map
         attachment_url_map: dict[str, uuid.UUID] = {}
+        md_attachments: dict[str, str] = {}
+
         for att_filename, raw_bytes in bundle.attachments.items():
             source_key = ("attachment", att_filename)
-            sha = compute_source_sha256({"name": att_filename, "size": len(raw_bytes)})
+            raw_sha = hashlib.sha256(raw_bytes).digest()  # Actual 32-byte sha256
+            safe_source_id = att_filename[:128]
 
             if source_key in mapping_cache:
                 m = mapping_cache[source_key]
                 att_id = m.target_id
                 report.unchanged += 1
             else:
-                is_svg = att_filename.lower().endswith(".svg") or raw_bytes.strip().startswith(
-                    b"<svg"
+                is_md = att_filename.lower().endswith((".md", ".markdown"))
+                is_svg = not is_md and (
+                    att_filename.lower().endswith(".svg") or raw_bytes.strip().startswith(b"<svg")
                 )
-                is_pdf = att_filename.lower().endswith(".pdf") or raw_bytes.startswith(
-                    (b"%PDF-1.", b"%PDF-2.")
+                is_pdf = not is_md and (
+                    att_filename.lower().endswith(".pdf")
+                    or raw_bytes.startswith((b"%PDF-1.", b"%PDF-2."))
                 )
-                if is_svg:
-                    clean_svg_val = sanitize_svg(raw_bytes)
-                    clean_bytes = clean_svg_val.encode("utf-8")
-                    detected_type = "image/svg+xml"
-                    p_w, p_h, page_cnt = None, None, None
-                elif is_pdf:
-                    pdf_res = await sanitize_and_validate_pdf(raw_bytes)
-                    clean_bytes = pdf_res.clean_bytes
-                    detected_type = "application/pdf"
-                    p_w, p_h, page_cnt = None, None, pdf_res.page_count
+
+                if is_md:
+                    # Pure markdown attachment: normalize content without calling raster sniffer
+                    text_content = raw_bytes.decode("utf-8", errors="replace")
+                    clean_md = normalize_to_markdown(text_content, mode="auto")
+                    md_attachments[att_filename] = clean_md
+                    att_id = uuid.uuid4()
+                    new_mapping = ImportEntityMapping(
+                        workspace_id=workspace_id,
+                        source_system="plane",
+                        source_kind="attachment",
+                        source_id=safe_source_id,
+                        target_id=att_id,
+                        source_sha256=raw_sha,
+                    )
+                    self.session.add(new_mapping)
+                    mapping_cache[source_key] = new_mapping
+                    report.to_create += 1
                 else:
-                    detected_type = sniff_media_type(raw_bytes[:4096], None, att_filename)
-                    processed = await sanitize_and_reencode_raster(raw_bytes, detected_type)
-                    clean_bytes = processed.clean_bytes
-                    p_w, p_h, page_cnt = processed.pixel_width, processed.pixel_height, None
+                    if is_svg:
+                        clean_svg_val = sanitize_svg(raw_bytes)
+                        clean_bytes = clean_svg_val.encode("utf-8")
+                        detected_type = "image/svg+xml"
+                        p_w, p_h, page_cnt = None, None, None
+                    elif is_pdf:
+                        pdf_res = await sanitize_and_validate_pdf(raw_bytes)
+                        clean_bytes = pdf_res.clean_bytes
+                        detected_type = "application/pdf"
+                        p_w, p_h, page_cnt = None, None, pdf_res.page_count
+                    else:
+                        detected_type = sniff_media_type(raw_bytes[:4096], None, att_filename)
+                        processed = await sanitize_and_reencode_raster(raw_bytes, detected_type)
+                        clean_bytes = processed.clean_bytes
+                        p_w, p_h, page_cnt = processed.pixel_width, processed.pixel_height, None
 
-                storage_key, raw_sha = self.blob_store.store(clean_bytes)
-                att_id = uuid.uuid4()
-                att = Attachment(
-                    id=att_id,
-                    workspace_id=workspace_id,
-                    project_id=target_project_id,
-                    uploaded_by_id=self.caller.principal_id,
-                    original_filename=att_filename,
-                    content_type=detected_type,
-                    byte_size=len(clean_bytes),
-                    pixel_width=p_w,
-                    pixel_height=p_h,
-                    page_count=page_cnt,
-                    blob_sha256=raw_sha,
-                    storage_key=storage_key,
-                )
-                self.session.add(att)
-                await self.session.flush()
+                    storage_key, raw_sha = self.blob_store.store(clean_bytes)
+                    att_id = uuid.uuid4()
+                    att = Attachment(
+                        id=att_id,
+                        workspace_id=workspace_id,
+                        project_id=target_project_id,
+                        uploaded_by_id=self.caller.principal_id,
+                        original_filename=att_filename,
+                        content_type=detected_type,
+                        byte_size=len(clean_bytes),
+                        pixel_width=p_w,
+                        pixel_height=p_h,
+                        page_count=page_cnt,
+                        blob_sha256=raw_sha,
+                        storage_key=storage_key,
+                    )
+                    self.session.add(att)
+                    await self.session.flush()
 
-                new_mapping = ImportEntityMapping(
-                    workspace_id=workspace_id,
-                    source_system="plane",
-                    source_kind="attachment",
-                    source_id=att_filename,
-                    target_id=att_id,
-                    source_sha256=sha,
-                )
-                self.session.add(new_mapping)
-                mapping_cache[source_key] = new_mapping
-                report.to_create += 1
+                    new_mapping = ImportEntityMapping(
+                        workspace_id=workspace_id,
+                        source_system="plane",
+                        source_kind="attachment",
+                        source_id=safe_source_id,
+                        target_id=att_id,
+                        source_sha256=raw_sha,
+                    )
+                    self.session.add(new_mapping)
+                    mapping_cache[source_key] = new_mapping
+                    report.to_create += 1
 
             attachment_url_map[att_filename] = att_id
             attachment_url_map[f"/api/assets/v1/workspace/{att_filename}"] = att_id
 
-        # 8. Issues & Sequence High Water Mark
-        issue_map: dict[str, uuid.UUID] = {}
-        sorted_issues, depth_warnings = self.mapper.sort_issues_topologically(bundle.issues)
+        # 8. Filter and Partition Issues
+        active_issues = [
+            iss
+            for iss in bundle.issues
+            if project_ident_map.get(iss.project or "", target_project_ident or "").upper()
+            not in self.exclude_project_identifiers
+        ]
+
+        unmapped_issues = [iss for iss in active_issues if ("issue", iss.id) not in mapping_cache]
+
+        key_remap_manifest: dict[str, str] = {}
+        issue_seq_map: dict[str, int] = {}
+        issue_key_map: dict[str, str] = {}
+
+        if self.target_project_identifier and unmapped_issues:
+            # Sort unmapped issues ascending by sequence_id (KANBA-1..233)
+            unmapped_issues_sorted = sorted(unmapped_issues, key=lambda x: x.sequence_id)
+
+            # Allocate fresh sequences in chunks <= 1000 via allocate_issue_sequences
+            allocated_seqs: list[int] = []
+            chunk_size = 1000
+            for idx in range(0, len(unmapped_issues_sorted), chunk_size):
+                batch = unmapped_issues_sorted[idx : idx + chunk_size]
+                seq_alloc_res = await self.session.execute(
+                    text(
+                        "SELECT allocated_sequences, skipped_sequences "
+                        "FROM allocate_issue_sequences(:proj_id, :count, true)"
+                    ),
+                    {"proj_id": target_project_id, "count": len(batch)},
+                )
+                alloc_row = seq_alloc_res.mappings().one()
+                allocated_seqs.extend(alloc_row["allocated_sequences"])
+
+            for iss, new_seq in zip(unmapped_issues_sorted, allocated_seqs, strict=False):
+                src_ident = project_ident_map.get(iss.project or "", "KANBA")
+                old_key = f"{src_ident}-{iss.sequence_id}"
+                new_key = f"{self.target_project_identifier}-{new_seq}"
+                key_remap_manifest[old_key] = new_key
+                issue_seq_map[iss.id] = new_seq
+                issue_key_map[iss.id] = new_key
+
+        # Sort all issues topologically (parents first)
+        sorted_issues, depth_warnings = self.mapper.sort_issues_topologically(active_issues)
         report.warnings.extend(depth_warnings)
 
-        if sorted_issues:
+        if sorted_issues and not self.target_project_identifier:
             max_seq = max(i.sequence_id for i in sorted_issues)
             report.sequence_high_water_mark = max_seq
 
-            # Group issues by project to advance each project's sequence counter
             issues_by_proj: dict[uuid.UUID, list[PlaneIssue]] = {}
             for issue in sorted_issues:
                 proj_id = project_map.get(issue.project or "", target_project_id)
@@ -582,8 +779,10 @@ class PlaneImporter:
                     {"max_seq": p_max_seq, "pid": p_id},
                 )
             await self.session.flush()
+        elif allocated_seqs := list(issue_seq_map.values()):
+            report.sequence_high_water_mark = max(allocated_seqs)
 
-        # Cache project states and priorities for accurate per-project resolution
+        # Cache project states and priorities
         all_states = (
             (
                 await self.session.execute(
@@ -618,11 +817,17 @@ class PlaneImporter:
             if is_unmapped and mbr.id not in report.unmapped_members:
                 report.unmapped_members.append(mbr.id)
 
+        issue_map: dict[str, uuid.UUID] = {}
+        issue_canonical_key_map: dict[uuid.UUID, str] = {}
+        parent_child_links: list[tuple[uuid.UUID, uuid.UUID, str, str]] = []
+
         # Ingest issues in topological order (parents first)
         for issue in sorted_issues:
             source_key = ("issue", issue.id)
             sha = compute_source_sha256(issue)
             issue_proj = project_map.get(issue.project or "", target_project_id)
+            src_proj_ident = project_ident_map.get(issue.project or "", "KANBA")
+            original_issue_key = f"{src_proj_ident}-{issue.sequence_id}"
 
             if source_key in mapping_cache:
                 m = mapping_cache[source_key]
@@ -632,13 +837,16 @@ class PlaneImporter:
                 else:
                     report.to_update += 1
             else:
-                # Canonical key: <IDENTIFIER>-<sequence_id>
+                effective_seq = issue_seq_map.get(issue.id, issue.sequence_id)
                 proj_ident = (
                     await self.session.execute(
                         select(Project.identifier).where(Project.id == issue_proj)
                     )
                 ).scalar_one()
-                canonical_key = f"{proj_ident}-{issue.sequence_id}"
+                canonical_key = issue_key_map.get(issue.id, f"{proj_ident}-{effective_seq}")
+
+                # Resolve mapped creator if available
+                mapped_creator_id = _resolve_principal(issue.created_by) or self.caller.principal_id
 
                 # Register object in spine
                 issue_id = (
@@ -653,17 +861,51 @@ class PlaneImporter:
                             "proj": issue_proj,
                             "key": canonical_key,
                             "title": issue.name,
-                            "creator": self.caller.principal_id,
+                            "creator": mapped_creator_id,
                         },
                     )
                 ).scalar_one()
 
+                # Preserve objects created_at, updated_at, archived_at timestamps
+                iss_created_at = _parse_iso_datetime(getattr(issue, "created_at", None))
+                iss_updated_at = _parse_iso_datetime(getattr(issue, "updated_at", None))
+                iss_archived_at = _parse_iso_datetime(getattr(issue, "archived_at", None))
+
+                if iss_created_at or iss_updated_at or iss_archived_at:
+                    await self.session.execute(
+                        text(
+                            "UPDATE objects SET "
+                            "created_at = COALESCE(:created_at, created_at), "
+                            "updated_at = COALESCE(:updated_at, updated_at), "
+                            "archived_at = :archived_at "
+                            "WHERE id = :id"
+                        ),
+                        {
+                            "id": issue_id,
+                            "created_at": iss_created_at,
+                            "updated_at": iss_updated_at,
+                            "archived_at": iss_archived_at,
+                        },
+                    )
+
                 # Normalize description and rewrite attachment URLs
                 raw_desc = issue.description_html or issue.description_stripped or ""
                 clean_desc, rewritten_cnt = self.mapper.normalize_content_and_rewrite_attachments(
-                    raw_desc, attachment_url_map
+                    raw_desc, attachment_url_map, md_attachments
                 )
                 report.rewritten_attachments += rewritten_cnt
+
+                # Context-aware rewriting of issue key references
+                if key_remap_manifest:
+                    clean_desc = self.mapper.rewrite_issue_references(
+                        clean_desc, key_remap_manifest
+                    )
+
+                # Provenance header when remapping key
+                if original_issue_key != canonical_key:
+                    provenance_line = f"> Imported from `{original_issue_key}`\n\n"
+                    if provenance_line not in clean_desc:
+                        clean_desc = provenance_line + clean_desc
 
                 # Resolve state strictly within issue_proj
                 target_state_id = None
@@ -703,13 +945,24 @@ class PlaneImporter:
                 s_date = date.fromisoformat(issue.start_date) if issue.start_date else None
                 t_date = date.fromisoformat(issue.target_date) if issue.target_date else None
 
-                rank = allocate_initial_board_rank(issue.sequence_id)
+                rank = allocate_initial_board_rank(effective_seq)
+
+                # Compute ancestry path
+                ancestry = issue_id.hex
+                if target_parent_id:
+                    parent_ancestry_res = await self.session.execute(
+                        text("SELECT ancestry_path FROM issues WHERE id = :pid"),
+                        {"pid": target_parent_id},
+                    )
+                    parent_ancestry = parent_ancestry_res.scalar_one_or_none()
+                    if parent_ancestry:
+                        ancestry = f"{parent_ancestry}.{issue_id.hex}"
 
                 new_issue = Issue(
                     id=issue_id,
                     workspace_id=workspace_id,
                     project_id=issue_proj,
-                    sequence_id=issue.sequence_id,
+                    sequence_id=effective_seq,
                     summary=issue.name,
                     description_markdown=clean_desc,
                     state_id=target_state_id,
@@ -717,14 +970,21 @@ class PlaneImporter:
                     parent_issue_id=target_parent_id,
                     cycle_id=target_cycle_id,
                     board_rank=rank,
-                    created_by_id=self.caller.principal_id,
-                    original_created_by_id=self.caller.principal_id,
+                    created_by_id=mapped_creator_id,
+                    original_created_by_id=mapped_creator_id,
                     start_date=s_date,
                     due_date=t_date,
-                    ancestry_path=issue_id.hex,
+                    ancestry_path=ancestry,
                 )
                 self.session.add(new_issue)
                 await self.session.flush()
+
+                # Queue PARENT_OF ObjectLink
+                if target_parent_id:
+                    parent_key = issue_canonical_key_map.get(target_parent_id, "PARENT")
+                    parent_child_links.append(
+                        (target_parent_id, issue_id, parent_key, canonical_key)
+                    )
 
                 # Join labels
                 for lbl_ref in issue.labels:
@@ -749,17 +1009,29 @@ class PlaneImporter:
                         )
                     )
 
-                # Join assignees
+                # Join assignees (principal_id if mapped, free_text_assignee fallback)
                 for assignee_ref in issue.assignees:
                     handle, _ = self.mapper.resolve_user_handle(assignee_ref, bundle)
-                    if self.mapper.unmapped_assignees_as_free_text:
-                        self.session.add(
-                            IssueAssignee(
-                                issue_id=issue_id,
-                                workspace_id=workspace_id,
-                                free_text_assignee=handle,
-                            )
+                    p_id_mapped = _resolve_principal(assignee_ref)
+                    self.session.add(
+                        IssueAssignee(
+                            issue_id=issue_id,
+                            workspace_id=workspace_id,
+                            principal_id=p_id_mapped,
+                            free_text_assignee=handle if not p_id_mapped else None,
                         )
+                    )
+
+                # Write issue_key_aliases if remapped (rebased onto KAN-77)
+                if original_issue_key != canonical_key:
+                    self.session.add(
+                        IssueKeyAlias(
+                            workspace_id=workspace_id,
+                            legacy_key=original_issue_key,
+                            issue_id=issue_id,
+                            source_system="plane",
+                        )
+                    )
 
                 new_mapping = ImportEntityMapping(
                     workspace_id=workspace_id,
@@ -772,9 +1044,27 @@ class PlaneImporter:
                 self.session.add(new_mapping)
                 mapping_cache[source_key] = new_mapping
                 issue_map[issue.id] = issue_id
+                issue_canonical_key_map[issue_id] = canonical_key
                 report.to_create += 1
 
+        # Insert ObjectLink(LinkKind.PARENT_OF) edges
+        for p_parent_id, p_child_id, p_parent_key, p_child_key in parent_child_links:
+            new_parent_link = ObjectLink(
+                workspace_id=workspace_id,
+                source_id=p_parent_id,
+                source_type=ObjectKind.ISSUE,
+                target_id=p_child_id,
+                target_type=ObjectKind.ISSUE,
+                link_type=LinkKind.PARENT_OF,
+                link_state="ACTIVE",
+                source_key_snapshot=p_parent_key,
+                target_key_snapshot=p_child_key,
+                created_by_id=self.caller.principal_id,
+            )
+            self.session.add(new_parent_link)
+
         # 9. Comments
+        comment_map: dict[str, uuid.UUID] = {}
         for comm in bundle.comments:
             source_key = ("comment", comm.id)
             sha = compute_source_sha256(comm)
@@ -785,21 +1075,33 @@ class PlaneImporter:
 
             if source_key in mapping_cache:
                 m = mapping_cache[source_key]
+                comment_map[comm.id] = m.target_id
                 if m.source_sha256 == sha:
                     report.unchanged += 1
                 else:
                     report.to_update += 1
             else:
                 clean_comment, rew_cnt = self.mapper.normalize_content_and_rewrite_attachments(
-                    comm.comment_html or "", attachment_url_map
+                    comm.comment_html or "", attachment_url_map, md_attachments
                 )
                 report.rewritten_attachments += rew_cnt
+
+                if key_remap_manifest:
+                    clean_comment = self.mapper.rewrite_issue_references(
+                        clean_comment, key_remap_manifest
+                    )
+
+                mapped_author_id = (
+                    _resolve_principal(comm.actor or comm.created_by) or self.caller.principal_id
+                )
+                target_parent_comm = comment_map.get(comm.parent_comment or "")
 
                 new_comment = IssueComment(
                     workspace_id=workspace_id,
                     issue_id=target_issue_id,
-                    author_id=self.caller.principal_id,
+                    author_id=mapped_author_id,
                     body_markdown=clean_comment,
+                    parent_comment_id=target_parent_comm,
                 )
                 self.session.add(new_comment)
                 await self.session.flush()
@@ -814,6 +1116,7 @@ class PlaneImporter:
                 )
                 self.session.add(new_mapping)
                 mapping_cache[source_key] = new_mapping
+                comment_map[comm.id] = new_comment.id
                 report.to_create += 1
 
         # 10. Relations / Links
@@ -828,7 +1131,6 @@ class PlaneImporter:
 
             link_kind = RELATION_KIND_MAP.get(rel.relation_type.lower(), LinkKind.RELATES_TO)
 
-            # Check existing link
             existing_link = (
                 await self.session.execute(
                     select(ObjectLink).where(
@@ -843,7 +1145,6 @@ class PlaneImporter:
             if existing_link:
                 report.unchanged += 1
             else:
-                # Fetch canonical keys
                 src_key = (
                     await self.session.execute(
                         text("SELECT canonical_key FROM objects WHERE id = :id"),

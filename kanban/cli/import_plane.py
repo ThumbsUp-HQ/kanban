@@ -1,7 +1,7 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""CLI commands for Plane export import and snapshot fetching (KB-P6-01, S1.3)."""
-# ruff: noqa: C901, PLR0911, PLR0912, PLR0915, E501
+"""CLI commands for Plane export import, snapshot fetching, and database dumping (KB-P6-01, KB-MIGRATION-PLANE-DB-01, S1.3)."""
+# ruff: noqa: C901, PLR0911, PLR0912, PLR0915, E501, S108, TRY300
 
 from __future__ import annotations
 
@@ -31,6 +31,14 @@ from kanban.importer.plane_client import (
     PlaneClientError,
     PlaneSecurityError,
 )
+from kanban.importer.plane_db_exporter import (
+    SECRET_IN_ARGV_FORBIDDEN_MSG,
+    PlaneDbExporter,
+    PlaneExportError,
+    PlaneExportSecurityError,
+    check_forbidden_exporter_args,
+    resolve_exporter_config,
+)
 from kanban.importer.plane_importer import (
     ImportDiffReport,
     ImportIntegrityError,
@@ -50,9 +58,17 @@ def _get_admin_dsn() -> str:
     if dsn:
         return dsn
 
-    socket_dir = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")  # noqa: S108
+    if "KB_TEST_PGHOST" in os.environ:
+        socket_dir = os.environ["KB_TEST_PGHOST"]
+    elif Path("/run/postgresql").is_dir():
+        socket_dir = "/run/postgresql"
+    elif Path("/tmp/kb-pgsock").is_dir():
+        socket_dir = "/tmp/kb-pgsock"
+    else:
+        socket_dir = "/run/postgresql"
+
     user = os.environ.get("KB_ADMIN_PGUSER", "kanban_migrator")
-    dbname = os.environ.get("PGDATABASE", "kanban")
+    dbname = os.environ.get("PGDATABASE") or os.environ.get("KB_DATABASE_NAME", "kanban")
     return f"postgresql+asyncpg://{user}@/{dbname}?host={socket_dir}"
 
 
@@ -75,6 +91,27 @@ def register_import_subparsers(
     )
 
     plane_subparsers = plane_parser.add_subparsers(dest="plane_action")
+
+    # kanban-ctl import plane dump-db ...
+    dump_parser = plane_subparsers.add_parser(
+        "dump-db",
+        help="Export Plane database directly and stream MinIO attachments (KB-MIGRATION-PLANE-DB-01)",
+    )
+    dump_parser.add_argument(
+        "--out-dir",
+        required=True,
+        help="Directory to write exported snapshot JSON files and attachments",
+    )
+    dump_parser.add_argument(
+        "--workspace-slug",
+        help="Optional Plane workspace slug to export",
+    )
+    dump_parser.add_argument(
+        "--exclude-project-identifiers",
+        default="TEST",
+        help="Comma-separated project identifiers to exclude (default: TEST)",
+    )
+    dump_parser.set_defaults(func=_run_dump_db)
 
     # kanban-ctl import plane fetch-snapshot ...
     fetch_parser = plane_subparsers.add_parser(
@@ -121,6 +158,15 @@ def register_import_subparsers(
     plane_parser.add_argument(
         "--workspace",
         help="Target Kanban workspace slug",
+    )
+    plane_parser.add_argument(
+        "--target-project",
+        help="Target project identifier to merge into (e.g. KAN)",
+    )
+    plane_parser.add_argument(
+        "--exclude-project-identifiers",
+        default="TEST",
+        help="Comma-separated project identifiers to exclude (default: TEST)",
     )
     plane_parser.add_argument(
         "--user-map",
@@ -203,6 +249,40 @@ def register_import_subparsers(
         "--report-out", help="Optional path to write JSON format diff report"
     )
     linear_parser.set_defaults(func=lambda a: _run_generic_import(a, "linear"))
+
+
+def _run_dump_db(args: argparse.Namespace) -> int:
+    """Execute direct Plane database and MinIO dump."""
+    if check_forbidden_exporter_args(sys.argv):
+        sys.stderr.write(SECRET_IN_ARGV_FORBIDDEN_MSG + "\n")
+        return 2
+
+    try:
+        config = resolve_exporter_config(
+            out_dir=args.out_dir,
+            workspace_slug=args.workspace_slug,
+            exclude_project_identifiers=args.exclude_project_identifiers,
+        )
+        exporter = PlaneDbExporter(config)
+        summary = asyncio.run(exporter.export())
+        sys.stdout.write(
+            f"=== Plane Database Dump Complete ===\n"
+            f"Projects Exported: {summary['projects_exported']}\n"
+            f"Issues Exported: {summary['issues_exported']}\n"
+            f"Comments Exported: {summary['comments_exported']}\n"
+            f"Attachments Exported: {summary['attachments_exported']}\n"
+            f"Output Directory: {summary['out_dir']}\n"
+        )
+        return 0
+    except PlaneExportSecurityError as exc:
+        sys.stderr.write(f"Security Error: {exc}\n")
+        return 2
+    except PlaneExportError as exc:
+        sys.stderr.write(f"Export Error: {exc}\n")
+        return 2
+    except Exception as exc:  # noqa: BLE001
+        sys.stderr.write(f"Unexpected error: {exc}\n")
+        return 1
 
 
 def _run_fetch_snapshot(args: argparse.Namespace) -> int:
@@ -302,7 +382,6 @@ async def _execute_import_db(
             )
             principal_id = principal_res.scalar_one_or_none()
             if not principal_id:
-                # Fallback to any user principal
                 p_fallback = await session.execute(
                     text(
                         "SELECT id FROM principals "
@@ -331,10 +410,19 @@ async def _execute_import_db(
                 aal_level=2,
             )
 
+            blob_root = os.environ.get("KANBAN_ATTACHMENT_DIR") or os.environ.get(
+                "KB_ATTACHMENT_DIR"
+            )
+            target_proj = getattr(args, "target_project", None)
+            exclude_proj = getattr(args, "exclude_project_identifiers", "TEST")
+
             importer = PlaneImporter(
                 session=session,
                 caller=caller,
+                blob_store_root=blob_root,
                 user_map=user_map,
+                target_project_identifier=target_proj,
+                exclude_project_identifiers=exclude_proj,
             )
 
             try:

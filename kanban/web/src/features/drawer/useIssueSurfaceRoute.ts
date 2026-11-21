@@ -18,11 +18,7 @@ export function isValidIssueKey(
   if (!key || !projectKey) {
     return false;
   }
-  if (!ISSUE_KEY_REGEX.test(key)) {
-    return false;
-  }
-  const prefix = key.split('-')[0];
-  return prefix === projectKey;
+  return ISSUE_KEY_REGEX.test(key);
 }
 
 export function toFullScreenPath(
