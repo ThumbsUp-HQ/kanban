@@ -783,9 +783,10 @@ def test_resolve_and_verify_bundle_with_build_or_typecheck(tmp_path: Path) -> No
 @pytest.mark.asyncio
 async def test_check_qa_proofs_external_project() -> None:
     """Verify external Plane project is exempt from local repository QA directory."""
-    from unittest.mock import AsyncMock
-    from kanban.importer.cutover_verifier import _check_qa_proofs
     import uuid
+    from unittest.mock import AsyncMock
+
+    from kanban.importer.cutover_verifier import _check_qa_proofs
 
     mock_session = AsyncMock()
     result = await _check_qa_proofs(
