@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { SwimlaneBoardGrid } from './SwimlaneBoardGrid';
@@ -7,6 +7,19 @@ import type { IssueItem } from './viewsApi';
 import * as railApi from '../drawer-rail/railApi';
 
 describe('SwimlaneBoardGrid (KB-P3-40, S6.4 item 2)', () => {
+  let cleanupNav: (() => void) | undefined;
+  beforeEach(() => {
+    const navHandler = (e: Event): void => {
+      e.preventDefault();
+    };
+    window.addEventListener('click', navHandler, true);
+    cleanupNav = () => {
+      window.removeEventListener('click', navHandler, true);
+    };
+  });
+  afterEach(() => {
+    cleanupNav?.();
+  });
   it('partitions board into 2D grid with Priority swimlanes across State columns (Test Case 1)', () => {
     const handleToggleSelect = vi.fn();
 

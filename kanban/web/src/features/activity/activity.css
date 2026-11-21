@@ -42,6 +42,10 @@
 
 @media (max-width: 879px) {
   .activity-tablist {
+    flex-wrap: wrap;
+    gap: var(--space-1, 4px);
+    max-width: 100%;
+    box-sizing: border-box;
     padding-right: var(--space-3, 12px);
   }
 }

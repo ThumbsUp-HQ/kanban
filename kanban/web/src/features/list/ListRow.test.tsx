@@ -1,10 +1,23 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { ListRow } from './ListRow';
 import type { IssueItem } from '../views/viewsApi';
 
 describe('ListRow', () => {
+  let cleanupNav: (() => void) | undefined;
+  beforeEach(() => {
+    const navHandler = (e: Event): void => {
+      e.preventDefault();
+    };
+    window.addEventListener('click', navHandler, true);
+    cleanupNav = () => {
+      window.removeEventListener('click', navHandler, true);
+    };
+  });
+  afterEach(() => {
+    cleanupNav?.();
+  });
   it('covers all priority, gate, and assignee variations', () => {
     const onToggleSelect = vi.fn();
 
@@ -132,7 +145,11 @@ describe('ListRow', () => {
       />
     );
     fireEvent.click(keyLink);
+    const stubLoc = { href: '', search: '', pathname: '/' };
+    vi.stubGlobal('location', stubLoc);
     fireEvent.keyDown(row, { key: 'Enter' });
+    expect(stubLoc.href).toContain('peek=KAN-203');
+    vi.unstubAllGlobals();
   });
 
   describe('Touch & Mobile State Button (KAN-44)', () => {

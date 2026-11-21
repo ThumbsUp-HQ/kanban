@@ -264,7 +264,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
     fireEvent.click(within(assigneePopover).getByText('Alice Cooper'));
   });
 
-  it('IssuesWorkspaceRoute: handles multi-select, batch archive, and batch delete in BulkActionBar', () => {
+  it('IssuesWorkspaceRoute: handles multi-select, batch archive, and batch delete in BulkActionBar', async () => {
     render(
       <IssuesWorkspaceRoute
         projectKey="KAN"
@@ -289,22 +289,34 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
     // Select again and update state to done
     fireEvent.keyDown(window, { key: 'x' });
     const stateBtn = screen.getByRole('button', { name: /^state$/i });
-    fireEvent.click(stateBtn);
+    await act(async () => {
+      fireEvent.click(stateBtn);
+      await Promise.resolve();
+    });
 
     // Select again (now issue is completed) and update state to todo
     fireEvent.keyDown(window, { key: 'x' });
     const stateBtnTodo = screen.getByRole('button', { name: /^state$/i });
-    fireEvent.click(stateBtnTodo);
+    await act(async () => {
+      fireEvent.click(stateBtnTodo);
+      await Promise.resolve();
+    });
 
     // Select again and update priority
     fireEvent.keyDown(window, { key: 'x' });
     const priorityBtn = screen.getByRole('button', { name: /^priority$/i });
-    fireEvent.click(priorityBtn);
+    await act(async () => {
+      fireEvent.click(priorityBtn);
+      await Promise.resolve();
+    });
 
     // Select again and delete batch
     fireEvent.keyDown(window, { key: 'x' });
     const deleteBtn = screen.getByRole('button', { name: /^delete$/i });
-    fireEvent.click(deleteBtn);
+    await act(async () => {
+      fireEvent.click(deleteBtn);
+      await Promise.resolve();
+    });
 
     // Bulk bar unmounts when selection cleared
     expect(screen.queryByRole('toolbar', { name: /bulk actions/i })).toBeNull();
@@ -765,6 +777,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       ];
 
       let postCount = 0;
+      let failPatch: 'error' | 'string' | null = null;
       const fetchSpy = vi.fn().mockImplementation((input: string | URL | Request, init?: RequestInit) => {
         const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
         const method = init?.method ?? 'GET';
@@ -789,6 +802,15 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
           });
         }
         if (method === 'PATCH') {
+          if (failPatch === 'error') {
+            failPatch = null;
+            return Promise.reject(new Error('Network failure priority'));
+          }
+          if (failPatch === 'string') {
+            failPatch = null;
+            // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+            return Promise.reject('String failure state');
+          }
           return Promise.resolve({
             ok: true,
             json: () =>
@@ -853,6 +875,39 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       fireEvent.keyDown(window, { key: 's' });
       const statePopBack = screen.getByRole('dialog', { name: /Quick State Picker/i });
       fireEvent.click(within(statePopBack).getByText('Backlog'));
+
+      // Exercise PATCH failure catch branches for priority and state
+      failPatch = 'error';
+      fireEvent.keyDown(window, { key: 'p' });
+      const prioFailPop = screen.getByRole('dialog', { name: /Quick Priority Picker/i });
+      await act(async () => {
+        fireEvent.click(within(prioFailPop).getByText('High'));
+        await new Promise((r) => setTimeout(r, 10));
+      });
+
+      failPatch = 'string';
+      fireEvent.keyDown(window, { key: 'p' });
+      const prioFailPop2 = screen.getByRole('dialog', { name: /Quick Priority Picker/i });
+      await act(async () => {
+        fireEvent.click(within(prioFailPop2).getByText('Low'));
+        await new Promise((r) => setTimeout(r, 10));
+      });
+
+      failPatch = 'string';
+      fireEvent.keyDown(window, { key: 's' });
+      const stateFailPop = screen.getByRole('dialog', { name: /Quick State Picker/i });
+      await act(async () => {
+        fireEvent.click(within(stateFailPop).getByText('Todo'));
+        await new Promise((r) => setTimeout(r, 10));
+      });
+
+      failPatch = 'error';
+      fireEvent.keyDown(window, { key: 's' });
+      const stateFailPop2 = screen.getByRole('dialog', { name: /Quick State Picker/i });
+      await act(async () => {
+        fireEvent.click(within(stateFailPop2).getByText('Done'));
+        await new Promise((r) => setTimeout(r, 10));
+      });
 
       // Bulk update State, Priority, and Delete in live mode
       fireEvent.keyDown(window, { key: 'j' });
@@ -2614,6 +2669,61 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       const batchBtn = screen.getByRole('button', { name: 'State' });
       fireEvent.click(batchBtn);
       unmount3();
+    });
+
+    it('covers viewRegistry board fallback branches: empty boardStates and missing state id/group', async () => {
+      const qcEmpty = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      qcEmpty.setQueryData(['states', 'KAN'], []);
+
+      const issuesWithoutStateIdGroup = [
+        {
+          id: 'iss-no-id-grp',
+          key: 'KAN-NOGRP-1',
+          summary: 'Missing id and group in state',
+          state: { name: 'StateWithoutIdOrGroup' } as unknown as StateSummary,
+          priority: { slug: 'none', label: 'None' },
+        },
+      ];
+
+      const patchSpy = vi.spyOn(viewsApi, 'patchProjectIssue');
+      patchSpy.mockRejectedValue('Primitive transition error');
+
+      const { unmount } = render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialIssues={issuesWithoutStateIdGroup as unknown as IssueItem[]}
+          queryClient={qcEmpty}
+        />,
+      );
+      expect(screen.getByText('Missing id and group in state')).toBeDefined();
+
+      // Trigger priority and state change on issue without prevPriority/prevState when patch fails
+      fireEvent.keyDown(window, { key: 'j' });
+      fireEvent.keyDown(window, { key: 'p' });
+      const prioPop = await screen.findByRole('dialog', { name: /Quick Priority Picker/i });
+      await act(async () => {
+        fireEvent.click(within(prioPop).getByText('High'));
+        await Promise.resolve();
+      });
+
+      fireEvent.keyDown(window, { key: 's' });
+      const statePop = await screen.findByRole('dialog', { name: /Quick State Picker/i });
+      await act(async () => {
+        fireEvent.click(within(statePop).getByText('Todo'));
+        await Promise.resolve();
+      });
+
+      // Quick create issue without summary or state/priority
+      act(() => {
+        fireEvent(window, new CustomEvent('kb:create-issue'));
+      });
+      const createBtn = screen.getByRole('button', { name: /^create$/i });
+      act(() => {
+        fireEvent.click(createBtn);
+      });
+
+      unmount();
+      window.history.pushState({}, '', '/');
     });
   });
 });

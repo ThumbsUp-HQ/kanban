@@ -20,7 +20,7 @@ export interface LayoutConfig {
   readonly label: string;
 }
 
-export const LAYOUT_OPTIONS: readonly LayoutConfig[] = [
+export const LAYOUT_OPTIONS: readonly [LayoutConfig, ...LayoutConfig[]] = [
   { id: 'list', label: 'Issues' },
   { id: 'board', label: 'Board' },
   { id: 'table', label: 'Table' },
@@ -102,7 +102,7 @@ export function LayoutSwitcher({
   };
 
   const activeConfig =
-    LAYOUT_OPTIONS.find((o) => o.id === activeLayout) ?? LAYOUT_OPTIONS[0] ?? { id: 'list' as LayoutOption, label: 'Issues' };
+    LAYOUT_OPTIONS.find((o) => o.id === activeLayout) ?? LAYOUT_OPTIONS[0];
 
   return (
     <div

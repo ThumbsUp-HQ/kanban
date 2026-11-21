@@ -476,9 +476,8 @@ describe('ListView (KAN-52 Left Master Rail)', () => {
     );
     fireEvent.click(screen.getByTestId('issue-rail-refresh-btn'));
     expect(onRefreshMock).toHaveBeenCalledTimes(1);
-    unmountRefresh();
 
-    // Favorites change event with valid, non-array, empty/null, corrupt JSON, and non-string elements in localStorage
+    // Favorites change event with valid, non-array, empty/null, corrupt JSON, and non-string elements in localStorage while component is mounted
     localStorage.setItem('kb_favorite_issues', JSON.stringify(['KAN-999', 42, null]));
     act(() => {
       window.dispatchEvent(new CustomEvent('kb:favorites-changed'));
@@ -498,6 +497,7 @@ describe('ListView (KAN-52 Left Master Rail)', () => {
     act(() => {
       window.dispatchEvent(new CustomEvent('kb:favorites-changed'));
     });
+    unmountRefresh();
 
     // Sorting by rank with defined and undefined board_rank
     const issueA = mockIssues[0];
@@ -529,6 +529,50 @@ describe('ListView (KAN-52 Left Master Rail)', () => {
     fireEvent.click(inProgOpt);
     unmountNoStateSelect();
 
+    localStorage.clear();
+  });
+
+  it('covers remaining sorting branches and parseIssueNumber edge cases', () => {
+    const issue1: IssueItem = {
+      id: 'i-1',
+      key: 'INVALID',
+      summary: 'No hyphen issue',
+      state: { id: 's-1', name: 'Alpha State', group: 'unstarted', sort_order: 10 },
+      priority: { slug: 'low', label: 'Low' },
+    };
+    const issue2: IssueItem = {
+      id: 'i-2',
+      key: 'KAN-99',
+      summary: 'Hyphen issue',
+      state: { id: 's-2', name: 'Beta State', group: 'unstarted', sort_order: 10 },
+      priority: { slug: 'high', label: 'High' },
+      updated_at: '2026-11-20T10:00:00Z',
+      created_at: '2026-11-20T10:00:00Z',
+    };
+
+    // State sort with matching sort_order covers secondary name comparison (cmp === 0)
+    const sortedState = sortIssuesList([issue2, issue1], 'state', 'asc');
+    expect(sortedState[0]?.key).toBe('INVALID');
+
+    // Key sort with non-numeric key covers parseIssueNumber fallback
+    const sortedKey = sortIssuesList([issue2, issue1], 'key', 'asc');
+    expect(sortedKey[0]?.key).toBe('INVALID');
+
+    // Updated and created sort with missing date strings
+    const sortedUpdated = sortIssuesList([issue2, issue1], 'updated', 'asc');
+    expect(sortedUpdated.length).toBe(2);
+    const sortedCreated = sortIssuesList([issue2, issue1], 'created', 'asc');
+    expect(sortedCreated.length).toBe(2);
+
+    // Default branch
+    const sortedDefault = sortIssuesList([issue1, issue2], 'custom' as unknown as IssueSortOption, 'asc');
+    expect(sortedDefault.length).toBe(2);
+
+    // Pre-hydrated localStorage with corrupted string on initial render
+    localStorage.setItem('kb_favorite_issues', '{not_json');
+    const { unmount } = render(<ListView issues={[issue1]} />);
+    expect(screen.getByTestId('issue-list-card-INVALID')).toBeDefined();
+    unmount();
     localStorage.clear();
   });
 });

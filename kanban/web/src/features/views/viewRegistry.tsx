@@ -405,7 +405,6 @@ export function IssuesWorkspaceRoute({
   const [favVersion, setFavVersion] = useState(0);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
     const handleFavChange = (): void => {
       setFavVersion((v) => v + 1);
     };
@@ -616,7 +615,7 @@ export function IssuesWorkspaceRoute({
   }, [issues, activeFilters, modulesEnabled, projectStates, favoritesOnly, searchQuery, queryMode, projectKey, favVersion]);
 
   // Normalize board workflow states and issues so "Todo" and "To Do" match seamlessly (KANBA-164)
-  const boardStates: BoardWorkflowState[] = useMemo(() => {
+  const boardStates: [BoardWorkflowState, ...BoardWorkflowState[]] = useMemo(() => {
     if (projectStates.length > 0) {
       return projectStates.map((s, idx) => {
         const sAny = s as {
@@ -638,7 +637,7 @@ export function IssuesWorkspaceRoute({
           ...(wipHard != null ? { wip_hard_limit: wipHard } : {}),
           ...(wipSoft != null ? { wip_soft_limit: wipSoft } : {}),
         };
-      });
+      }) as unknown as [BoardWorkflowState, ...BoardWorkflowState[]];
     }
     return [
       { id: 'state-backlog', name: 'Backlog', group: 'backlog', sort_order: 1 },
@@ -886,7 +885,7 @@ export function IssuesWorkspaceRoute({
   };
 
   const boardIssues: BoardIssue[] = useMemo(() => {
-    const fallbackStateId = boardStates[0]?.id ?? '';
+    const fallbackStateId = boardStates[0].id;
     return filteredIssues.map((issue, idx) => {
       const explicitStateId = (issue as { state_id?: string }).state_id;
       const resolvedState = resolveIssueStateSummary(issue, projectStates);
@@ -963,7 +962,6 @@ export function IssuesWorkspaceRoute({
   });
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
     const handleResize = (): void => {
       setIsMobileViewport(window.innerWidth <= 767);
     };
