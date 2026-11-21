@@ -1,0 +1,35 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan60-ai-studio-ff152eb2/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/admin-ai/__tests__/aiAdminApi.test.ts (7 tests) 24ms
+ ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (4 tests) 223ms
+ ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (5 tests) 266ms
+ ✓ src/features/admin-agents/__tests__/AgentStudioPage.test.tsx (25 tests) 662ms
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx (7 tests) 915ms
+   ✓ AttachHookDialog (KB-P5-24) (7)
+     ✓ switches hook_kind between sync_validator, sync_mutator, and agent_interceptor showing/hiding selectors (Mandatory Test Case 3) 418ms
+ ✓ src/features/admin-ai/__tests__/AiStudioPage.test.tsx (39 tests) 1368ms
+
+ Test Files  6 passed (6)
+      Tests  87 passed (87)
+   Start at  23:58:54
+   Duration  2.86s (environment 49%, tests 35%, import 11%, worker 4%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.16 |    96.52 |     100 |     100 |                   
+ admin-agents      |   99.48 |    97.17 |     100 |     100 |                   
+  ...torDrawer.tsx |     100 |    97.24 |     100 |     100 | 60,132,164        
+  ...tudioPage.tsx |   97.91 |    96.15 |     100 |     100 | 58                
+  ...tionModal.tsx |     100 |    95.45 |     100 |     100 | 38                
+  ...nitionsApi.ts |     100 |      100 |     100 |     100 |                   
+  cliPolicy.ts     |     100 |      100 |     100 |     100 |                   
+ admin-ai          |      99 |    96.23 |     100 |     100 |                   
+  ...dgetModal.tsx |     100 |    96.15 |     100 |     100 | 47,97             
+  ...torDrawer.tsx |   99.39 |    95.75 |     100 |     100 | ...08,215,291,521 
+  AiStudioPage.tsx |   98.49 |    96.25 |     100 |     100 | 95,120-123        
+  aiAdminApi.ts    |   97.91 |    98.14 |     100 |     100 | 135               
+-------------------|---------|----------|---------|---------|-------------------

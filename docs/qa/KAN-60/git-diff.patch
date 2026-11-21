@@ -1,0 +1,1416 @@
+diff --git a/docs/qa/KAN-60/build-or-typecheck.txt b/docs/qa/KAN-60/build-or-typecheck.txt
+new file mode 100644
+index 00000000..83013ef2
+--- /dev/null
++++ b/docs/qa/KAN-60/build-or-typecheck.txt
+@@ -0,0 +1,8 @@
++
++> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan60-ai-studio-ff152eb2/kanban/web
++> tsc -b --noEmit
++
++
++> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan60-ai-studio-ff152eb2/kanban/web
++> eslint . --max-warnings 0
++
+diff --git a/docs/qa/KAN-60/unit-test-results.txt b/docs/qa/KAN-60/unit-test-results.txt
+new file mode 100644
+index 00000000..4da37bd8
+--- /dev/null
++++ b/docs/qa/KAN-60/unit-test-results.txt
+@@ -0,0 +1,35 @@
++
++ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan60-ai-studio-ff152eb2/kanban/web
++      Coverage enabled with v8
++
++ ✓ src/features/admin-ai/__tests__/aiAdminApi.test.ts (7 tests) 24ms
++ ✓ src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx (4 tests) 223ms
++ ✓ src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx (5 tests) 266ms
++ ✓ src/features/admin-agents/__tests__/AgentStudioPage.test.tsx (25 tests) 662ms
++ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx (7 tests) 915ms
++   ✓ AttachHookDialog (KB-P5-24) (7)
++     ✓ switches hook_kind between sync_validator, sync_mutator, and agent_interceptor showing/hiding selectors (Mandatory Test Case 3) 418ms
++ ✓ src/features/admin-ai/__tests__/AiStudioPage.test.tsx (39 tests) 1368ms
++
++ Test Files  6 passed (6)
++      Tests  87 passed (87)
++   Start at  23:58:54
++   Duration  2.86s (environment 49%, tests 35%, import 11%, worker 4%, transform 1%)
++
++ % Coverage report from v8
++-------------------|---------|----------|---------|---------|-------------------
++File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
++-------------------|---------|----------|---------|---------|-------------------
++All files          |   99.16 |    96.52 |     100 |     100 |                   
++ admin-agents      |   99.48 |    97.17 |     100 |     100 |                   
++  ...torDrawer.tsx |     100 |    97.24 |     100 |     100 | 60,132,164        
++  ...tudioPage.tsx |   97.91 |    96.15 |     100 |     100 | 58                
++  ...tionModal.tsx |     100 |    95.45 |     100 |     100 | 38                
++  ...nitionsApi.ts |     100 |      100 |     100 |     100 |                   
++  cliPolicy.ts     |     100 |      100 |     100 |     100 |                   
++ admin-ai          |      99 |    96.23 |     100 |     100 |                   
++  ...dgetModal.tsx |     100 |    96.15 |     100 |     100 | 47,97             
++  ...torDrawer.tsx |   99.39 |    95.75 |     100 |     100 | ...08,215,291,521 
++  AiStudioPage.tsx |   98.49 |    96.25 |     100 |     100 | 95,120-123        
++  aiAdminApi.ts    |   97.91 |    98.14 |     100 |     100 | 135               
++-------------------|---------|----------|---------|---------|-------------------
+diff --git a/kanban/api/v1/admin/ai_schemas.py b/kanban/api/v1/admin/ai_schemas.py
+index 08af2786..a049adb3 100644
+--- a/kanban/api/v1/admin/ai_schemas.py
++++ b/kanban/api/v1/admin/ai_schemas.py
+@@ -194,6 +194,9 @@ class SavedProviderProbeRequest(BaseModel):
+     api_key: SecretStr | None = Field(
+         default=None, description="Optional override API key (uses saved key if omitted)"
+     )
++    settings_json: dict[str, Any] | None = Field(
++        default=None, description="Optional override settings (uses saved settings if omitted)"
++    )
+ 
+     @field_validator("api_key")
+     @classmethod
+diff --git a/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx b/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
+index 47593044..8da22d8f 100644
+--- a/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
++++ b/kanban/web/src/features/admin-agents/AgentDefinitionEditorDrawer.tsx
+@@ -1,7 +1,7 @@
+ // Copyright 2026 Kanban Platform Contributors
+ // Apache-2.0 License. See LICENSE for details.
+ 
+-import React, { useState, type JSX } from 'react';
++import React, { useState, useEffect, type JSX } from 'react';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import {
+   createAgentDefinition,
+@@ -18,12 +18,14 @@ import {
+   ALLOWED_CLI_BINARIES,
+   CODEX_PINNED_PREFIX,
+ } from './cliPolicy';
++import { fetchAiProviders, type ProviderConfigPublic } from '../admin-ai/aiAdminApi';
+ 
+ interface AgentDefinitionEditorDrawerProps {
+   isOpen: boolean;
+   onClose: () => void;
+   agent: AgentDefinitionResponse | null;
+   onSaved: () => void;
++  aiProviders?: ProviderConfigPublic[] | undefined;
+ }
+ 
+ const ALL_MCP_TOOLS = ['search_tickets', 'read_ticket', 'search_knowledge', 'read_doc'] as const;
+@@ -32,10 +34,12 @@ function AgentDefinitionEditorContent({
+   onClose,
+   agent,
+   onSaved,
++  aiProviders,
+ }: {
+   onClose: () => void;
+   agent: AgentDefinitionResponse | null;
+   onSaved: () => void;
++  aiProviders?: ProviderConfigPublic[] | undefined;
+ }): JSX.Element {
+   const isEditing = agent !== null;
+ 
+@@ -44,6 +48,34 @@ function AgentDefinitionEditorContent({
+   const [harnessKind, setHarnessKind] = useState<HarnessKind>(agent?.harness_kind ?? 'in_app_sdk');
+   const [providerKind, setProviderKind] = useState<ProviderKind>(agent?.provider_kind ?? 'gemini');
+   const [modelId, setModelId] = useState<string>(agent?.model_id ?? 'gemini-2.5-flash');
++  const [fetchedProviders, setFetchedProviders] = useState<ProviderConfigPublic[]>([]);
++
++  useEffect(() => {
++    if (aiProviders !== undefined) {
++      return;
++    }
++    let isMounted = true;
++    fetchAiProviders()
++      .then((data) => {
++        if (isMounted) {
++          setFetchedProviders(data);
++        }
++      })
++      .catch(() => {
++        // Fallback gracefully on network error
++      });
++    return () => {
++      isMounted = false;
++    };
++  }, [aiProviders]);
++
++  const providers = aiProviders ?? fetchedProviders;
++  const matchingProviders = providers.filter(
++    (p) => p.provider_kind === providerKind && p.is_enabled,
++  );
++  const quickPickModels = Array.from(
++    new Set(matchingProviders.flatMap((p) => p.model_allowlist)),
++  ).filter((m) => m.trim().length > 0);
+   const [cliBinary, setCliBinary] = useState<string>(agent?.cli_binary_allowlist_id ?? 'agy');
+   const [cliArgsString, setCliArgsString] = useState<string>(agent ? agent.cli_args.join(' ') : '-p');
+   const [runnerPool, setRunnerPool] = useState<string>(agent?.remote_runner_pool_slug ?? 'default');
+@@ -259,6 +291,7 @@ function AgentDefinitionEditorContent({
+               <input
+                 id="agent-model-input"
+                 type="text"
++                list="agent-model-datalist"
+                 className="kb-form-input"
+                 value={modelId}
+                 onChange={(e) => { setModelId(e.target.value); }}
+@@ -266,6 +299,30 @@ function AgentDefinitionEditorContent({
+                 required
+                 data-testid="agent-model-input"
+               />
++              <datalist id="agent-model-datalist" data-testid="agent-model-datalist">
++                {quickPickModels.map((m) => (
++                  <option key={m} value={m} />
++                ))}
++              </datalist>
++
++              {quickPickModels.length > 0 && (
++                <div className="kb-model-quickpicks" data-testid="agent-model-quickpicks">
++                  <span className="kb-form-hint">Probed Models:</span>
++                  <div className="kb-quickpick-chips">
++                    {quickPickModels.map((m) => (
++                      <button
++                        key={m}
++                        type="button"
++                        className={`kb-quickpick-chip ${modelId === m ? 'kb-quickpick-chip--selected' : ''}`}
++                        onClick={() => { setModelId(m); }}
++                        data-testid={`quickpick-model-${m}`}
++                      >
++                        {m}
++                      </button>
++                    ))}
++                  </div>
++                </div>
++              )}
+             </div>
+           </>
+         )}
+@@ -448,6 +505,7 @@ export function AgentDefinitionEditorDrawer({
+   onClose,
+   agent,
+   onSaved,
++  aiProviders,
+ }: AgentDefinitionEditorDrawerProps): JSX.Element | null {
+   if (!isOpen) return null;
+ 
+@@ -464,6 +522,7 @@ export function AgentDefinitionEditorDrawer({
+         onClose={onClose}
+         agent={agent}
+         onSaved={onSaved}
++        aiProviders={aiProviders}
+       />
+     </div>
+   );
+diff --git a/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx b/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx
+new file mode 100644
+index 00000000..6cbed2a9
+--- /dev/null
++++ b/kanban/web/src/features/admin-agents/__tests__/AgentDefinitionEditorDrawer.test.tsx
+@@ -0,0 +1,184 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import React from 'react';
++import { AgentDefinitionEditorDrawer } from '../AgentDefinitionEditorDrawer';
++import * as aiApi from '../../admin-ai/aiAdminApi';
++import type { ProviderConfigPublic } from '../../admin-ai/aiAdminApi';
++import * as agentApi from '../agentDefinitionsApi';
++
++describe('AgentDefinitionEditorDrawer Model Quick-Picker (KAN-60 / KB-AI-STUDIO-01)', () => {
++  const mockAiProviders: ProviderConfigPublic[] = [
++    {
++      id: 'prov-gemini',
++      provider_kind: 'gemini',
++      display_name: 'Google Gemini',
++      base_url: 'https://generativelanguage.googleapis.com',
++      model_allowlist: ['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-pro'],
++      residency_tier: 'cloud_standard',
++      priority: 10,
++      settings: {},
++      api_key_set: true,
++      is_enabled: true,
++      project_id: null,
++    },
++    {
++      id: 'prov-ollama',
++      provider_kind: 'ollama',
++      display_name: 'Local Ollama',
++      base_url: 'http://127.0.0.1:11434',
++      model_allowlist: ['gemma3:4b', 'nemotron-3-super:latest', 'granite3.3:2b'],
++      residency_tier: 'local_only',
++      priority: 20,
++      settings: {},
++      api_key_set: false,
++      is_enabled: true,
++      project_id: null,
++    },
++  ];
++
++  beforeEach(() => {
++    vi.restoreAllMocks();
++  });
++
++  it('renders quick-pick model chips and datalist from configured AI providers for selected providerKind', () => {
++    render(
++      <AgentDefinitionEditorDrawer
++        isOpen={true}
++        onClose={vi.fn()}
++        agent={null}
++        onSaved={vi.fn()}
++        aiProviders={mockAiProviders}
++      />,
++    );
++
++    // Initial providerKind is gemini
++    const modelInput = screen.getByTestId<HTMLInputElement>('agent-model-input');
++    expect(modelInput.getAttribute('list')).toBe('agent-model-datalist');
++
++    const datalist = screen.getByTestId('agent-model-datalist');
++    const options = Array.from(datalist.querySelectorAll('option')).map((o) => o.value);
++    expect(options).toEqual(['gemini-2.5-flash-lite', 'gemini-2.5-flash', 'gemini-2.5-pro']);
++
++    // Check quick-pick chips are rendered
++    expect(screen.getByTestId('agent-model-quickpicks')).toBeDefined();
++    expect(screen.getByTestId('quickpick-model-gemini-2.5-flash-lite')).toBeDefined();
++    expect(screen.getByTestId('quickpick-model-gemini-2.5-flash')).toBeDefined();
++    expect(screen.getByTestId('quickpick-model-gemini-2.5-pro')).toBeDefined();
++
++    // 1-click selection: click gemini-2.5-flash-lite
++    fireEvent.click(screen.getByTestId('quickpick-model-gemini-2.5-flash-lite'));
++    expect(modelInput.value).toBe('gemini-2.5-flash-lite');
++    expect(screen.getByTestId('quickpick-model-gemini-2.5-flash-lite').className).toContain(
++      'kb-quickpick-chip--selected',
++    );
++  });
++
++  it('updates quick-pick model chips dynamically when switching providerKind', () => {
++    render(
++      <AgentDefinitionEditorDrawer
++        isOpen={true}
++        onClose={vi.fn()}
++        agent={null}
++        onSaved={vi.fn()}
++        aiProviders={mockAiProviders}
++      />,
++    );
++
++    const providerSelect = screen.getByTestId('agent-provider-select');
++    const modelInput = screen.getByTestId<HTMLInputElement>('agent-model-input');
++
++    // Switch providerKind to ollama
++    fireEvent.change(providerSelect, { target: { value: 'ollama' } });
++
++    // Chips for ollama models should now be displayed
++    expect(screen.getByTestId('quickpick-model-gemma3:4b')).toBeDefined();
++    expect(screen.getByTestId('quickpick-model-nemotron-3-super:latest')).toBeDefined();
++    expect(screen.getByTestId('quickpick-model-granite3.3:2b')).toBeDefined();
++    expect(screen.queryByTestId('quickpick-model-gemini-2.5-flash-lite')).toBeNull();
++
++    // 1-click select nemotron-3-super:latest
++    fireEvent.click(screen.getByTestId('quickpick-model-nemotron-3-super:latest'));
++    expect(modelInput.value).toBe('nemotron-3-super:latest');
++    expect(screen.getByTestId('quickpick-model-nemotron-3-super:latest').className).toContain(
++      'kb-quickpick-chip--selected',
++    );
++  });
++
++  it('fetches providers automatically when aiProviders prop is omitted', async () => {
++    const fetchSpy = vi.spyOn(aiApi, 'fetchAiProviders').mockResolvedValue(mockAiProviders);
++
++    render(
++      <AgentDefinitionEditorDrawer
++        isOpen={true}
++        onClose={vi.fn()}
++        agent={null}
++        onSaved={vi.fn()}
++      />,
++    );
++
++    await waitFor(() => {
++      expect(fetchSpy).toHaveBeenCalled();
++      expect(screen.getByTestId('quickpick-model-gemini-2.5-flash-lite')).toBeDefined();
++    });
++  });
++
++  it('saves agent with selected quick-pick model successfully', async () => {
++    const createSpy = vi.spyOn(agentApi, 'createAgentDefinition').mockResolvedValue({
++      id: 'agent-created-1',
++      workspace_id: 'ws-1',
++      principal_id: 'prin-1',
++      slug: 'test-qa-agent',
++      display_name: 'Test QA Agent',
++      harness_kind: 'in_app_sdk',
++      provider_kind: 'gemini',
++      model_id: 'gemini-2.5-flash-lite',
++      cli_binary_allowlist_id: null,
++      cli_args: [],
++      remote_runner_pool_slug: null,
++      repo_access_mode: 'none',
++      mcp_allowed_tools: [],
++      system_instructions_md: 'Audit verification packets.',
++      timeout_ms: 60000,
++    });
++    const onSaved = vi.fn();
++    const onClose = vi.fn();
++
++    render(
++      <AgentDefinitionEditorDrawer
++        isOpen={true}
++        onClose={onClose}
++        agent={null}
++        onSaved={onSaved}
++        aiProviders={mockAiProviders}
++      />,
++    );
++
++    fireEvent.change(screen.getByTestId('agent-slug-input'), {
++      target: { value: 'test-qa-agent' },
++    });
++    fireEvent.change(screen.getByTestId('agent-name-input'), {
++      target: { value: 'Test QA Agent' },
++    });
++
++    // 1-click pick model
++    fireEvent.click(screen.getByTestId('quickpick-model-gemini-2.5-flash-lite'));
++
++    fireEvent.click(screen.getByTestId('save-agent-btn'));
++
++    await waitFor(() => {
++      expect(createSpy).toHaveBeenCalledWith(
++        expect.objectContaining({
++          slug: 'test-qa-agent',
++          display_name: 'Test QA Agent',
++          model_id: 'gemini-2.5-flash-lite',
++          provider_kind: 'gemini',
++        }),
++      );
++      expect(onSaved).toHaveBeenCalled();
++      expect(onClose).toHaveBeenCalled();
++    });
++  });
++});
+diff --git a/kanban/web/src/features/admin-agents/agentStudio.css b/kanban/web/src/features/admin-agents/agentStudio.css
+index f54274e0..496b210a 100644
+--- a/kanban/web/src/features/admin-agents/agentStudio.css
++++ b/kanban/web/src/features/admin-agents/agentStudio.css
+@@ -280,6 +280,57 @@
+   border-color: #991b1b;
+ }
+ 
++/* Model Quickpicks */
++.kb-model-quickpicks {
++  margin-top: var(--space-2, 8px);
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-1, 4px);
++}
++
++.kb-quickpick-chips {
++  display: flex;
++  flex-wrap: wrap;
++  gap: var(--space-1, 4px);
++}
++
++.kb-quickpick-chip {
++  padding: 3px 8px;
++  border-radius: var(--radius-sm, 4px);
++  border: 1px solid var(--kb-color-border-subtle, #d1d5db);
++  background-color: var(--kb-color-bg-surface, #ffffff);
++  color: var(--kb-color-text-primary, #111827);
++  font-size: 11px;
++  cursor: pointer;
++  display: inline-flex;
++  align-items: center;
++  user-select: none;
++  transition: all 0.15s ease;
++}
++
++[data-theme='dark'] .kb-quickpick-chip {
++  background-color: #374151;
++  border-color: #4b5563;
++  color: #f9fafb;
++}
++
++.kb-quickpick-chip:hover {
++  border-color: var(--brand-primary, #1d4ed8);
++}
++
++.kb-quickpick-chip--selected {
++  background-color: var(--brand-primary, #1d4ed8);
++  color: var(--accent-primary-fg, #ffffff);
++  border-color: var(--brand-primary, #1d4ed8);
++  font-weight: 600;
++}
++
++[data-theme='dark'] .kb-quickpick-chip--selected {
++  background-color: #2563eb;
++  border-color: #3b82f6;
++  color: #ffffff;
++}
++
+ /* Responsive adjustments */
+ @media (max-width: 768px) {
+   .kb-agent-studio {
+diff --git a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
+index f89f9ee1..1e6d2e65 100644
+--- a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
++++ b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
+@@ -13,6 +13,7 @@ import {
+   type ProviderConfigPublic,
+   type ProviderConfigCreate,
+   type ProviderConfigUpdate,
++  type ProviderProbeRequest,
+ } from './aiAdminApi';
+ 
+ interface AiProviderEditorDrawerProps {
+@@ -57,10 +58,15 @@ function AiProviderEditorContent({
+       (airGapMode ? 'http://127.0.0.1:11434' : 'https://api.openai.com/v1'),
+   );
+   const [modelAllowlist, setModelAllowlist] = useState<string>(
+-    provider?.model_allowlist.join(', ') ??
+-      (airGapMode ? 'qwen2.5-coder:7b, llama3.2:3b' : 'gpt-4o, gpt-4o-mini'),
++    provider?.model_allowlist ? provider.model_allowlist.join(', ') : '',
+   );
+ 
++  const initialTimeoutMs =
++    typeof provider?.settings.timeout_ms === 'number'
++      ? provider.settings.timeout_ms
++      : 30000;
++  const [timeoutMs, setTimeoutMs] = useState<number>(initialTimeoutMs);
++
+   const normalizeResidencyTier = (rawTier: string | null | undefined): string => {
+     if (!rawTier) return airGapMode ? 'local_only' : 'cloud_standard';
+     if (rawTier === 'cloud') return 'cloud_standard';
+@@ -100,16 +106,16 @@ function AiProviderEditorContent({
+     }
+ 
+     if (!isEditing) {
++      setModelAllowlist('');
++      setProbedModels(null);
+       if (newKind === 'openai') {
+         setDisplayName('OpenAI / OpenAI-Compatible');
+-        setModelAllowlist('gpt-4o, gpt-4o-mini');
+         setBaseUrl('https://api.openai.com/v1');
+         if (!residencyTierManual) {
+           setResidencyTier('cloud_standard');
+         }
+       } else if (newKind === 'gemini') {
+         setDisplayName('Google Gemini Workspace');
+-        setModelAllowlist('gemini-2.5-flash, gemini-2.5-pro');
+         setBaseUrl('https://generativelanguage.googleapis.com');
+         if (!residencyTierManual) {
+           setResidencyTier('cloud_standard');
+@@ -117,7 +123,6 @@ function AiProviderEditorContent({
+       } else if (newKind === 'ollama') {
+         setDisplayName('Local Ollama Runtime');
+         setBaseUrl('http://127.0.0.1:11434');
+-        setModelAllowlist('qwen2.5-coder:7b, llama3.2:3b');
+         if (!residencyTierManual) {
+           setResidencyTier('local_only');
+         }
+@@ -147,11 +152,7 @@ function AiProviderEditorContent({
+ 
+   const handleSelectAllProbed = (): void => {
+     if (!probedModels) return;
+-    const current = new Set(getSelectedModelsList());
+-    for (const m of probedModels) {
+-      current.add(m);
+-    }
+-    setModelAllowlist(Array.from(current).join(', '));
++    setModelAllowlist(probedModels.join(', '));
+   };
+ 
+   const handleClearModels = (): void => {
+@@ -168,19 +169,25 @@ function AiProviderEditorContent({
+       const hasKeyOrNotNeeded = isLocal || apiKey.trim().length > 0;
+       const useDraftEndpoint = !provider || (isEndpointModified && hasKeyOrNotNeeded);
+ 
+-      const payload = useDraftEndpoint
++      const payload: ProviderProbeRequest = useDraftEndpoint
+         ? {
+             provider_kind: providerKind,
+             base_url: baseUrl.trim() || null,
+             api_key: apiKey.trim() || null,
++            settings_json: { timeout_ms: timeoutMs },
+           }
+-        : (apiKey.trim() ? { api_key: apiKey.trim() } : {});
++        : {
++            ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
++            settings_json: { timeout_ms: timeoutMs },
++          };
+       const targetProviderId = useDraftEndpoint ? undefined : provider.id;
+       const res = await probeAiModels(payload, targetProviderId);
+       if (res.ok) {
+         setProbedModels(res.models);
+         if (res.models.length === 0) {
+           setProbeError('Connected successfully, but 0 models were discovered.');
++        } else {
++          setModelAllowlist(res.models.join(', '));
+         }
+       } else {
+         setProbeError(res.message ?? res.error_code ?? 'Model probing failed');
+@@ -202,13 +209,17 @@ function AiProviderEditorContent({
+       const hasKeyOrNotNeeded = isLocal || apiKey.trim().length > 0;
+       const useDraftEndpoint = !provider || (isEndpointModified && hasKeyOrNotNeeded);
+ 
+-      const payload = useDraftEndpoint
++      const payload: ProviderProbeRequest = useDraftEndpoint
+         ? {
+             provider_kind: providerKind,
+             base_url: baseUrl.trim() || null,
+             api_key: apiKey.trim() || null,
++            settings_json: { timeout_ms: timeoutMs },
+           }
+-        : (apiKey.trim() ? { api_key: apiKey.trim() } : {});
++        : {
++            ...(apiKey.trim() ? { api_key: apiKey.trim() } : {}),
++            settings_json: { timeout_ms: timeoutMs },
++          };
+       const targetProviderId = useDraftEndpoint ? undefined : provider.id;
+       const res = await testAiConnection(payload, targetProviderId);
+       if (res.ok) {
+@@ -257,6 +268,10 @@ function AiProviderEditorContent({
+           residency_tier: residencyTier,
+           base_url: baseUrl.trim() || null,
+           priority: provider.priority,
++          settings: {
++            ...provider.settings,
++            timeout_ms: timeoutMs,
++          },
+         };
+ 
+         if (clearExistingKey) {
+@@ -277,6 +292,9 @@ function AiProviderEditorContent({
+           priority: nextPriority,
+           api_key: apiKey.trim() ? apiKey.trim() : null,
+           is_enabled: true,
++          settings: {
++            timeout_ms: timeoutMs,
++          },
+         };
+ 
+         await createAiProvider(payload);
+@@ -332,6 +350,7 @@ function AiProviderEditorContent({
+       )}
+ 
+       <form noValidate onSubmit={(e) => { void handleSubmit(e); }}>
++        {/* 1. Protocol & Provider Engine */}
+         <div className="kb-form-group">
+           <label htmlFor="provider-kind-select" className="kb-form-label">
+             Protocol & Provider Engine
+@@ -369,6 +388,7 @@ function AiProviderEditorContent({
+           </span>
+         </div>
+ 
++        {/* 2. Display Name */}
+         <div className="kb-form-group">
+           <label htmlFor="provider-name-input" className="kb-form-label">
+             Display Name
+@@ -385,6 +405,69 @@ function AiProviderEditorContent({
+           />
+         </div>
+ 
++        {/* 3. API Secret Key (Moved to TOP of connection fields, ABOVE Base URL & Probe Models) */}
++        <div className="kb-form-group">
++          <label htmlFor="provider-key-input" className="kb-form-label">
++            {isLocal ? 'API Secret Key (Optional for Local Endpoints)' : 'API Secret Key'}
++          </label>
++          <div className="kb-api-key-row">
++            <input
++              id="provider-key-input"
++              type={showApiKey ? 'text' : 'password'}
++              className="kb-form-input"
++              value={apiKey}
++              onChange={(e) => {
++                setApiKey(e.target.value);
++                setClearExistingKey(false);
++              }}
++              placeholder={
++                isEditing && provider.api_key_set
++                  ? '********'
++                  : isLocal
++                    ? 'Optional for local runtime (leave blank if unauthenticated)'
++                    : 'Enter API secret key'
++              }
++              disabled={clearExistingKey}
++              data-testid="provider-key-input"
++            />
++            <button
++              type="button"
++              className="kb-btn kb-btn-secondary kb-api-key-toggle-btn"
++              onClick={() => { setShowApiKey(!showApiKey); }}
++              aria-label={showApiKey ? 'Hide secret key' : 'Show secret key'}
++              data-testid="toggle-show-key-btn"
++            >
++              {showApiKey ? '🔒' : '👁️'}
++            </button>
++          </div>
++
++          <span className="kb-form-hint">
++            {isLocal
++              ? '🔓 No Key Required (Local). If your local proxy (vLLM, Ollama, llama.cpp) requires Bearer auth, you may supply one.'
++              : isEditing && provider.api_key_set
++                ? 'API key is securely stored in write-only custody. Leave blank to preserve the existing key.'
++                : 'API keys are envelope-encrypted using master KEK and never returned in plaintext.'}
++          </span>
++
++          {isEditing && provider.api_key_set && (
++            <div className="kb-clear-key-group">
++              <label className="kb-clear-key-label">
++                <input
++                  type="checkbox"
++                  checked={clearExistingKey}
++                  onChange={(e) => {
++                    setClearExistingKey(e.target.checked);
++                    if (e.target.checked) setApiKey('');
++                  }}
++                  data-testid="clear-key-checkbox"
++                />
++                Clear existing API secret key
++              </label>
++            </div>
++          )}
++        </div>
++
++        {/* 4. HTTP Base URL */}
+         <div className="kb-form-group">
+           <label htmlFor="provider-base-url-input" className="kb-form-label">
+             HTTP Base URL {providerKind === 'ollama' && '(Default: http://127.0.0.1:11434)'}
+@@ -413,6 +496,39 @@ function AiProviderEditorContent({
+           </span>
+         </div>
+ 
++        {/* 5. Configurable Cutoff Timeout (ms) */}
++        <div className="kb-form-group">
++          <label htmlFor="provider-timeout-ms-input" className="kb-form-label">
++            Cutoff Timeout (ms)
++            <FieldHelpHint
++              title="Cutoff Timeout (ms)"
++              summary="Hard cutoff time in milliseconds before aborting slow model inference or failing over."
++              validValues={['1000 to 300000 (Default: 30000)']}
++              docHref="/docs/multi-provider-ai-engine-and-runners#timeout-policy"
++              testId="provider-timeout-help"
++            />
++          </label>
++          <input
++            id="provider-timeout-ms-input"
++            type="number"
++            min="1000"
++            max="300000"
++            step="1000"
++            className="kb-form-input"
++            value={timeoutMs}
++            onChange={(e) => {
++              const val = parseInt(e.target.value, 10);
++              setTimeoutMs(isNaN(val) ? 30000 : val);
++            }}
++            placeholder="30000"
++            data-testid="provider-timeout-ms-input"
++          />
++          <span className="kb-form-hint">
++            Hard cutoff time (ms) before aborting slow model inference or failing over.
++          </span>
++        </div>
++
++        {/* 6. Model Allowlist & Probing */}
+         <div className="kb-form-group">
+           <div className="kb-model-allowlist-header">
+             <label htmlFor="provider-models-input" className="kb-form-label">
+@@ -459,7 +575,7 @@ function AiProviderEditorContent({
+                     onClick={handleSelectAllProbed}
+                     data-testid="probe-select-all-btn"
+                   >
+-                    Select All
++                    Select All Probed
+                   </button>
+                   <button
+                     type="button"
+@@ -479,15 +595,25 @@ function AiProviderEditorContent({
+                   filteredProbedModels.map((m) => {
+                     const isSelected = selectedModels.includes(m);
+                     return (
+-                      <button
+-                        key={m}
+-                        type="button"
+-                        className={`kb-probed-chip ${isSelected ? 'kb-probed-chip--selected' : ''}`}
+-                        onClick={() => { toggleModel(m); }}
+-                        data-testid={`probe-chip-${m}`}
+-                      >
+-                        {m} {isSelected ? '✓' : '+'}
+-                      </button>
++                      <div key={m} className="kb-probed-chip-item">
++                        <button
++                          type="button"
++                          className={`kb-probed-chip ${isSelected ? 'kb-probed-chip--selected' : ''}`}
++                          onClick={() => { toggleModel(m); }}
++                          data-testid={`probe-chip-${m}`}
++                        >
++                          {m} {isSelected ? '✓' : '+'}
++                        </button>
++                        <button
++                          type="button"
++                          className="kb-probed-only-btn"
++                          onClick={() => { setModelAllowlist(m); }}
++                          title={`Select only ${m}`}
++                          data-testid={`probe-only-${m}`}
++                        >
++                          Only This
++                        </button>
++                      </div>
+                     );
+                   })
+                 )}
+@@ -501,7 +627,7 @@ function AiProviderEditorContent({
+             className="kb-form-input"
+             value={modelAllowlist}
+             onChange={(e) => { setModelAllowlist(e.target.value); }}
+-            placeholder="gpt-4o, gpt-4o-mini"
++            placeholder="Click Probe Models above to populate from server, or enter model IDs"
+             data-testid="provider-models-input"
+           />
+           <span className="kb-form-hint">
+@@ -509,7 +635,7 @@ function AiProviderEditorContent({
+           </span>
+         </div>
+ 
+-        {/* Collapsible Advanced Settings */}
++        {/* 7. Collapsible Advanced Settings */}
+         <details className="kb-advanced-settings" data-testid="advanced-settings-details">
+           <summary className="kb-advanced-settings-summary">
+             Advanced Settings
+@@ -544,67 +670,6 @@ function AiProviderEditorContent({
+           </div>
+         </details>
+ 
+-        <div className="kb-form-group">
+-          <label htmlFor="provider-key-input" className="kb-form-label">
+-            {isLocal ? 'API Secret Key (Optional for Local Endpoints)' : 'API Secret Key (Write-Only Custody)'}
+-          </label>
+-          <div className="kb-api-key-row">
+-            <input
+-              id="provider-key-input"
+-              type={showApiKey ? 'text' : 'password'}
+-              className="kb-form-input"
+-              value={apiKey}
+-              onChange={(e) => {
+-                setApiKey(e.target.value);
+-                setClearExistingKey(false);
+-              }}
+-              placeholder={
+-                isEditing && provider.api_key_set
+-                  ? '********'
+-                  : isLocal
+-                    ? 'Optional for local runtime (leave blank if unauthenticated)'
+-                    : 'Enter API secret key'
+-              }
+-              disabled={clearExistingKey}
+-              data-testid="provider-key-input"
+-            />
+-            <button
+-              type="button"
+-              className="kb-btn kb-btn-secondary kb-api-key-toggle-btn"
+-              onClick={() => { setShowApiKey(!showApiKey); }}
+-              aria-label={showApiKey ? 'Hide secret key' : 'Show secret key'}
+-              data-testid="toggle-show-key-btn"
+-            >
+-              {showApiKey ? '🔒' : '👁️'}
+-            </button>
+-          </div>
+-
+-          <span className="kb-form-hint">
+-            {isLocal
+-              ? '🔓 No Key Required (Local). If your local proxy (vLLM, Ollama, llama.cpp) requires Bearer auth, you may supply one.'
+-              : isEditing && provider.api_key_set
+-                ? 'API key is securely stored in write-only custody. Leave blank to preserve the existing key.'
+-                : 'API keys are envelope-encrypted using master KEK and never returned in plaintext.'}
+-          </span>
+-
+-          {isEditing && provider.api_key_set && (
+-            <div className="kb-clear-key-group">
+-              <label className="kb-clear-key-label">
+-                <input
+-                  type="checkbox"
+-                  checked={clearExistingKey}
+-                  onChange={(e) => {
+-                    setClearExistingKey(e.target.checked);
+-                    if (e.target.checked) setApiKey('');
+-                  }}
+-                  data-testid="clear-key-checkbox"
+-                />
+-                Clear existing API secret key
+-              </label>
+-            </div>
+-          )}
+-        </div>
+-
+         {testStatus.kind !== 'idle' && testStatus.message && (
+           <div
+             className={`kb-drawer-test-status kb-drawer-test-status--${testStatus.kind}`}
+@@ -618,27 +683,27 @@ function AiProviderEditorContent({
+           <button
+             type="button"
+             className="kb-btn kb-btn-secondary"
+-            onClick={() => { void handleTestConnection(); }}
+-            disabled={isTestingConnection}
+-            data-testid="drawer-test-connection-btn"
++            onClick={onClose}
++            data-testid="cancel-provider-drawer-btn"
+           >
+-            {isTestingConnection ? 'Testing...' : 'Test Connection'}
++            Cancel
+           </button>
+           <button
+             type="button"
+             className="kb-btn kb-btn-secondary"
+-            onClick={onClose}
+-            data-testid="cancel-provider-drawer-btn"
++            onClick={() => { void handleTestConnection(); }}
++            disabled={isTestingConnection}
++            data-testid="drawer-test-connection-btn"
+           >
+-            Cancel
++            {isTestingConnection ? 'Testing...' : 'Test Connection'}
+           </button>
+           <button
+             type="submit"
+             className="kb-btn kb-btn-primary"
+-            disabled={isSaving || (airGapMode && isCloudKind)}
++            disabled={isSaving}
+             data-testid="save-provider-btn"
+           >
+-            {isSaving ? 'Saving...' : isEditing ? 'Save Changes' : 'Register Provider'}
++            {isSaving ? 'Saving...' : isEditing ? 'Save Provider' : 'Register Provider'}
+           </button>
+         </div>
+       </form>
+diff --git a/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx b/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
+new file mode 100644
+index 00000000..e7c47678
+--- /dev/null
++++ b/kanban/web/src/features/admin-ai/__tests__/AiProviderEditorDrawer.test.tsx
+@@ -0,0 +1,261 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import React from 'react';
++import { AiProviderEditorDrawer } from '../AiProviderEditorDrawer';
++import * as aiApi from '../aiAdminApi';
++import type { ProviderConfigPublic } from '../aiAdminApi';
++
++describe('AiProviderEditorDrawer (KAN-60 / KB-AI-STUDIO-01)', () => {
++  const mockExistingProvider: ProviderConfigPublic = {
++    id: 'prov-existing-1',
++    provider_kind: 'gemini',
++    display_name: 'Google Gemini Workspace',
++    base_url: 'https://generativelanguage.googleapis.com',
++    model_allowlist: ['qwen2.5-coder:7b', 'llama3.2:3b'], // stale defaults to be stripped
++    residency_tier: 'cloud_standard',
++    priority: 10,
++    settings: {
++      timeout_ms: 45000,
++    },
++    api_key_set: true,
++    is_enabled: true,
++    project_id: null,
++  };
++
++  beforeEach(() => {
++    vi.restoreAllMocks();
++  });
++
++  it('enforces DOM order: provider-key-input appears BEFORE probe-models-btn and provider-models-input', () => {
++    render(
++      <AiProviderEditorDrawer
++        isOpen={true}
++        onClose={vi.fn()}
++        provider={null}
++        airGapMode={false}
++        onSaved={vi.fn()}
++      />,
++    );
++
++    const keyInput = screen.getByTestId('provider-key-input');
++    const probeBtn = screen.getByTestId('probe-models-btn');
++    const modelsInput = screen.getByTestId('provider-models-input');
++    const baseUrlInput = screen.getByTestId('provider-base-url-input');
++
++    // Key input must appear before baseUrlInput, probeBtn, and modelsInput
++    expect(keyInput.compareDocumentPosition(baseUrlInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
++    expect(keyInput.compareDocumentPosition(probeBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
++    expect(keyInput.compareDocumentPosition(modelsInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
++  });
++
++  it('initializes new provider with empty modelAllowlist and prominent API Secret Key label', () => {
++    render(
++      <AiProviderEditorDrawer
++        isOpen={true}
++        onClose={vi.fn()}
++        provider={null}
++        airGapMode={false}
++        onSaved={vi.fn()}
++      />,
++    );
++
++    // Initial provider is openai (airGapMode=false) -> Prominent "API Secret Key" label
++    expect(screen.getByLabelText('API Secret Key')).toBeDefined();
++
++    // Initial modelAllowlist must be empty string (no hardcoded qwen2.5 or gpt-4o defaults)
++    const modelsInput = screen.getByTestId<HTMLInputElement>('provider-models-input');
++    expect(modelsInput.value).toBe('');
++    expect(modelsInput.placeholder).toBe(
++      'Click Probe Models above to populate from server, or enter model IDs',
++    );
++
++    // Switching providerKind to gemini keeps modelAllowlist empty
++    const kindSelect = screen.getByTestId('provider-kind-select');
++    fireEvent.change(kindSelect, { target: { value: 'gemini' } });
++    expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('');
++    expect(screen.getByLabelText('API Secret Key')).toBeDefined();
++
++    // Switching providerKind to ollama displays optional hint
++    fireEvent.change(kindSelect, { target: { value: 'ollama' } });
++    expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('');
++    expect(screen.getByLabelText('API Secret Key (Optional for Local Endpoints)')).toBeDefined();
++  });
++
++  it('hydrates Cutoff Timeout (ms) from existing provider and saves updated timeout', async () => {
++    const updateSpy = vi.spyOn(aiApi, 'updateAiProvider').mockResolvedValue(mockExistingProvider);
++    const onSaved = vi.fn();
++    const onClose = vi.fn();
++
++    render(
++      <AiProviderEditorDrawer
++        isOpen={true}
++        onClose={onClose}
++        provider={mockExistingProvider}
++        airGapMode={false}
++        onSaved={onSaved}
++      />,
++    );
++
++    const timeoutInput = screen.getByTestId<HTMLInputElement>('provider-timeout-ms-input');
++    expect(timeoutInput.value).toBe('45000');
++    expect(timeoutInput.min).toBe('1000');
++    expect(timeoutInput.max).toBe('300000');
++    expect(timeoutInput.step).toBe('1000');
++
++    // Change timeout to 15000
++    fireEvent.change(timeoutInput, { target: { value: '15000' } });
++    expect(timeoutInput.value).toBe('15000');
++
++    // Submit form
++    fireEvent.click(screen.getByTestId('save-provider-btn'));
++
++    await waitFor(() => {
++      expect(updateSpy).toHaveBeenCalledWith(
++        'prov-existing-1',
++        expect.objectContaining({
++          settings: {
++            timeout_ms: 15000,
++          },
++        }),
++      );
++      expect(onSaved).toHaveBeenCalled();
++      expect(onClose).toHaveBeenCalled();
++    });
++  });
++
++  it('replaces modelAllowlist exclusively with probed models and strips stale defaults', async () => {
++    const probedModelsList = [
++      'gemini-2.5-flash-lite',
++      'gemini-2.5-flash',
++      'gemini-2.5-pro',
++    ];
++    const probeSpy = vi.spyOn(aiApi, 'probeAiModels').mockResolvedValue({
++      ok: true,
++      latency_ms: 112,
++      models: probedModelsList,
++      model_count: 3,
++    });
++    const updateSpy = vi.spyOn(aiApi, 'updateAiProvider').mockResolvedValue(mockExistingProvider);
++
++    render(
++      <AiProviderEditorDrawer
++        isOpen={true}
++        onClose={vi.fn()}
++        provider={mockExistingProvider} // has stale defaults: ['qwen2.5-coder:7b', 'llama3.2:3b']
++        airGapMode={false}
++        onSaved={vi.fn()}
++      />,
++    );
++
++    // Stale models initially present in input
++    const modelsInput = screen.getByTestId<HTMLInputElement>('provider-models-input');
++    expect(modelsInput.value).toBe('qwen2.5-coder:7b, llama3.2:3b');
++
++    // Probe models
++    fireEvent.click(screen.getByTestId('probe-models-btn'));
++
++    await waitFor(() => {
++      expect(probeSpy).toHaveBeenCalledWith(
++        {
++          settings_json: { timeout_ms: 45000 },
++        },
++        'prov-existing-1',
++      );
++    });
++
++    // Stale defaults must be stripped and replaced exclusively with probed models
++    await waitFor(() => {
++      expect(modelsInput.value).toBe(
++        'gemini-2.5-flash-lite, gemini-2.5-flash, gemini-2.5-pro',
++      );
++    });
++    expect(modelsInput.value).not.toContain('qwen2.5-coder:7b');
++    expect(modelsInput.value).not.toContain('llama3.2:3b');
++
++    // Test "Only This" button for gemini-2.5-flash-lite
++    expect(screen.getByTestId('probe-only-gemini-2.5-flash-lite')).toBeDefined();
++    fireEvent.click(screen.getByTestId('probe-only-gemini-2.5-flash-lite'));
++    expect(modelsInput.value).toBe('gemini-2.5-flash-lite');
++
++    // Click "Select All Probed" restores all probed models without any fake defaults
++    fireEvent.click(screen.getByTestId('probe-select-all-btn'));
++    expect(modelsInput.value).toBe(
++      'gemini-2.5-flash-lite, gemini-2.5-flash, gemini-2.5-pro',
++    );
++    expect(modelsInput.value).not.toContain('qwen2.5-coder:7b');
++
++    // Toggle chip off (e.g. gemini-2.5-pro)
++    fireEvent.click(screen.getByTestId('probe-chip-gemini-2.5-pro'));
++    expect(modelsInput.value).toBe('gemini-2.5-flash-lite, gemini-2.5-flash');
++
++    // Save and verify payload
++    fireEvent.click(screen.getByTestId('save-provider-btn'));
++
++    await waitFor(() => {
++      expect(updateSpy).toHaveBeenCalledWith(
++        'prov-existing-1',
++        expect.objectContaining({
++          model_allowlist: ['gemini-2.5-flash-lite', 'gemini-2.5-flash'],
++          settings: { timeout_ms: 45000 },
++        }),
++      );
++    });
++  });
++
++  it('passes configured timeout_ms during draft probe and connection test', async () => {
++    const probeSpy = vi.spyOn(aiApi, 'probeAiModels').mockResolvedValue({
++      ok: true,
++      latency_ms: 40,
++      models: ['nemotron-3-super:latest', 'gemma3:4b'],
++      model_count: 2,
++    });
++    const testSpy = vi.spyOn(aiApi, 'testAiConnection').mockResolvedValue({
++      ok: true,
++      latency_ms: 38,
++      models: ['nemotron-3-super:latest', 'gemma3:4b'],
++      model_count: 2,
++    });
++
++    render(
++      <AiProviderEditorDrawer
++        isOpen={true}
++        onClose={vi.fn()}
++        provider={null}
++        airGapMode={false}
++        onSaved={vi.fn()}
++      />,
++    );
++
++    // Set custom cutoff timeout 25000
++    fireEvent.change(screen.getByTestId('provider-timeout-ms-input'), {
++      target: { value: '25000' },
++    });
++
++    // Probe models
++    fireEvent.click(screen.getByTestId('probe-models-btn'));
++
++    await waitFor(() => {
++      expect(probeSpy).toHaveBeenCalledWith(
++        expect.objectContaining({
++          settings_json: { timeout_ms: 25000 },
++        }),
++        undefined,
++      );
++    });
++
++    // Test connection
++    fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
++
++    await waitFor(() => {
++      expect(testSpy).toHaveBeenCalledWith(
++        expect.objectContaining({
++          settings_json: { timeout_ms: 25000 },
++        }),
++        undefined,
++      );
++    });
++  });
++});
+diff --git a/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx b/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx
+index ae93f742..900d8b6c 100644
+--- a/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx
++++ b/kanban/web/src/features/admin-ai/__tests__/AiStudioPage.test.tsx
+@@ -1018,6 +1018,16 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
+       });
+       expect(screen.getByText(/No Key Required \(Local\)/)).toBeDefined();
+ 
++      // Verify DOM order: API key input appears BEFORE probe-models-btn and provider-models-input
++      const keyInput = screen.getByTestId('provider-key-input');
++      const probeBtn = screen.getByTestId('probe-models-btn');
++      const modelsInput = screen.getByTestId('provider-models-input');
++      expect(keyInput.compareDocumentPosition(probeBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
++      expect(keyInput.compareDocumentPosition(modelsInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
++
++      // Verify new provider starts with empty modelAllowlist (no fake defaults)
++      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('');
++
+       // Test Probe Models Button
+       fireEvent.click(screen.getByTestId('probe-models-btn'));
+ 
+@@ -1027,19 +1037,29 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
+             provider_kind: 'openai',
+             base_url: 'http://localhost:8000/v1',
+             api_key: null,
++            settings_json: { timeout_ms: 30000 },
+           },
+           undefined,
+         );
+         expect(screen.getByTestId('probed-models-picker')).toBeDefined();
+       });
+ 
++      // Probing replaced modelAllowlist directly with probed models
++      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe(
++        'llama3.2:3b, qwen2.5-coder:7b, deepseek-r1:14b',
++      );
++
+       // Check probed model chips rendered
+       expect(screen.getByTestId('probe-chip-llama3.2:3b')).toBeDefined();
+       expect(screen.getByTestId('probe-chip-qwen2.5-coder:7b')).toBeDefined();
+ 
+-      // Click a chip to toggle it
++      // Click a chip to toggle it off
+       fireEvent.click(screen.getByTestId('probe-chip-deepseek-r1:14b'));
+-      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toContain('deepseek-r1:14b');
++      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).not.toContain('deepseek-r1:14b');
++
++      // Test Only This action
++      fireEvent.click(screen.getByTestId('probe-only-qwen2.5-coder:7b'));
++      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('qwen2.5-coder:7b');
+ 
+       // Filter probed models
+       fireEvent.change(screen.getByTestId('probe-model-search-input'), {
+@@ -1071,7 +1091,15 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
+       fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+ 
+       await waitFor(() => {
+-        expect(testSpy).toHaveBeenCalled();
++        expect(testSpy).toHaveBeenCalledWith(
++          {
++            provider_kind: 'openai',
++            base_url: 'http://localhost:8000/v1',
++            api_key: null,
++            settings_json: { timeout_ms: 30000 },
++          },
++          undefined,
++        );
+         expect(screen.getByTestId('drawer-test-status').textContent).toContain(
+           'Connected in 62ms - 1 models available',
+         );
+@@ -1105,6 +1133,7 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
+           priority: 40,
+           api_key: 'test-secret',
+           is_enabled: true,
++          settings: { timeout_ms: 30000 },
+         });
+         expect(onSaved).toHaveBeenCalled();
+         expect(onClose).toHaveBeenCalled();
+@@ -1255,29 +1284,35 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
+         />,
+       );
+ 
+-      // Probe without key input (calls with {})
++      // Probe without key input (calls with { settings_json: { timeout_ms: 30000 } })
+       fireEvent.click(screen.getByTestId('probe-models-btn'));
+       await waitFor(() => {
+-        expect(probeSpy).toHaveBeenCalledWith({}, 'prov-openai-1');
++        expect(probeSpy).toHaveBeenCalledWith({ settings_json: { timeout_ms: 30000 } }, 'prov-openai-1');
+       });
+ 
+-      // Test connection without key input (calls with {})
++      // Test connection without key input (calls with { settings_json: { timeout_ms: 30000 } })
+       fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+       await waitFor(() => {
+-        expect(testSpy).toHaveBeenCalledWith({}, 'prov-openai-1');
++        expect(testSpy).toHaveBeenCalledWith({ settings_json: { timeout_ms: 30000 } }, 'prov-openai-1');
+       });
+ 
+-      // Type key and probe again (calls with { api_key: ... })
++      // Type key and probe again (calls with { api_key: ..., settings_json: { timeout_ms: 30000 } })
+       fireEvent.change(screen.getByTestId('provider-key-input'), { target: { value: 'temp-override-key' } });
+       fireEvent.click(screen.getByTestId('probe-models-btn'));
+       await waitFor(() => {
+-        expect(probeSpy).toHaveBeenCalledWith({ api_key: 'temp-override-key' }, 'prov-openai-1');
++        expect(probeSpy).toHaveBeenCalledWith(
++          { api_key: 'temp-override-key', settings_json: { timeout_ms: 30000 } },
++          'prov-openai-1',
++        );
+       });
+ 
+       // Test connection with override key
+       fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
+       await waitFor(() => {
+-        expect(testSpy).toHaveBeenCalledWith({ api_key: 'temp-override-key' }, 'prov-openai-1');
++        expect(testSpy).toHaveBeenCalledWith(
++          { api_key: 'temp-override-key', settings_json: { timeout_ms: 30000 } },
++          'prov-openai-1',
++        );
+       });
+     });
+ 
+@@ -1363,6 +1398,7 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
+           base_url: 'https://api.openai.com/v1',
+           priority: 10,
+           api_key: null,
++          settings: { timeout_ms: 30000 },
+         });
+         expect(onSaved).toHaveBeenCalled();
+         expect(onClose).toHaveBeenCalled();
+@@ -1399,6 +1435,7 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
+           base_url: 'https://api.openai.com/v1',
+           priority: 10,
+           api_key: 'new-secret-key-999',
++          settings: { timeout_ms: 30000 },
+         });
+         expect(onSaved).toHaveBeenCalled();
+         expect(onClose).toHaveBeenCalled();
+@@ -1629,6 +1666,7 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
+             provider_kind: 'openai',
+             base_url: 'https://custom-gateway.corp.com/v1',
+             api_key: 'sk-new-key-123',
++            settings_json: { timeout_ms: 30000 },
+           },
+           undefined,
+         );
+@@ -1642,6 +1680,7 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
+             provider_kind: 'openai',
+             base_url: 'https://custom-gateway.corp.com/v1',
+             api_key: 'sk-new-key-123',
++            settings_json: { timeout_ms: 30000 },
+           },
+           undefined,
+         );
+@@ -1684,6 +1723,7 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
+             provider_kind: 'ollama',
+             base_url: 'http://192.168.1.99:11434',
+             api_key: null,
++            settings_json: { timeout_ms: 30000 },
+           },
+           undefined,
+         );
+@@ -1696,6 +1736,7 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
+             provider_kind: 'ollama',
+             base_url: 'http://192.168.1.99:11434',
+             api_key: null,
++            settings_json: { timeout_ms: 30000 },
+           },
+           undefined,
+         );
+diff --git a/kanban/web/src/features/admin-ai/aiStudio.css b/kanban/web/src/features/admin-ai/aiStudio.css
+index 4377b911..6facb1c0 100644
+--- a/kanban/web/src/features/admin-ai/aiStudio.css
++++ b/kanban/web/src/features/admin-ai/aiStudio.css
+@@ -586,6 +586,39 @@
+   padding: var(--space-1, 4px);
+ }
+ 
++.kb-probed-chip-item {
++  display: inline-flex;
++  align-items: center;
++  gap: 2px;
++}
++
++.kb-probed-only-btn {
++  padding: 2px 4px;
++  border-radius: var(--radius-sm, 4px);
++  border: 1px solid var(--kb-color-border-subtle, #d1d5db);
++  background-color: transparent;
++  color: var(--kb-color-text-secondary, #6b7280);
++  font-size: 10px;
++  cursor: pointer;
++  line-height: 1;
++}
++
++.kb-probed-only-btn:hover {
++  background-color: var(--kb-color-bg-hover, #f3f4f6);
++  color: var(--kb-color-text-primary, #111827);
++  border-color: var(--kb-color-border, #9ca3af);
++}
++
++[data-theme='dark'] .kb-probed-only-btn {
++  border-color: #4b5563;
++  color: #9ca3af;
++}
++
++[data-theme='dark'] .kb-probed-only-btn:hover {
++  background-color: #374151;
++  color: #f9fafb;
++}
++
+ .kb-probed-chip {
+   padding: 3px 8px;
+   border-radius: var(--radius-sm, 4px);
+diff --git a/kanban/web/src/features/workflows/AttachHookDialog.tsx b/kanban/web/src/features/workflows/AttachHookDialog.tsx
+index 0c1e7ddc..b4fe5575 100644
+--- a/kanban/web/src/features/workflows/AttachHookDialog.tsx
++++ b/kanban/web/src/features/workflows/AttachHookDialog.tsx
+@@ -295,7 +295,7 @@ function AttachHookDialogInner({
+                     There are no active Agent Definitions registered in this workspace. Configure an Agent Definition before attaching an Agent Transition Helper hook.
+                   </p>
+                   <Link
+-                    to="/workspaces/settings"
++                    to="/admin/agents"
+                     className="workflow-btn workflow-btn-secondary workflow-btn-sm no-agents-configure-link"
+                     data-testid="configure-agents-link"
+                   >
+diff --git a/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx b/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
+index 1a47cf4e..e985da0d 100644
+--- a/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
++++ b/kanban/web/src/features/workflows/__tests__/AttachHookDialog.test.tsx
+@@ -4,6 +4,7 @@
+ import React from 'react';
+ import { describe, expect, it, vi } from 'vitest';
+ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { MemoryRouter } from 'react-router';
+ import { AttachHookDialog } from '../AttachHookDialog';
+ import {
+   DEFAULT_PROJECT_STATES,
+@@ -241,4 +242,26 @@ describe('AttachHookDialog (KB-P5-24)', () => {
+       expect(screen.getByRole('alert').textContent).toContain('unapproved Wasm');
+     });
+   });
++
++  it('renders Configure Agent Definitions link pointing to /admin/agents when no agents exist (KAN-60)', () => {
++    render(
++      <MemoryRouter>
++        <AttachHookDialog
++          isOpen={true}
++          projectKey="KAN"
++          states={DEFAULT_PROJECT_STATES}
++          agentDefinitions={[]}
++          onSave={vi.fn()}
++          onClose={vi.fn()}
++        />
++      </MemoryRouter>,
++    );
++
++    // Switch to agent_interceptor
++    fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
++
++    expect(screen.getByTestId('no-agents-warning')).toBeDefined();
++    const configLink = screen.getByTestId<HTMLAnchorElement>('configure-agents-link');
++    expect(configLink.getAttribute('href')).toBe('/admin/agents');
++  });
+ });

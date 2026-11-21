@@ -1,7 +1,7 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import React, { useState, type JSX } from 'react';
+import React, { useState, useEffect, type JSX } from 'react';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import {
   createAgentDefinition,
@@ -18,12 +18,14 @@ import {
   ALLOWED_CLI_BINARIES,
   CODEX_PINNED_PREFIX,
 } from './cliPolicy';
+import { fetchAiProviders, type ProviderConfigPublic } from '../admin-ai/aiAdminApi';
 
 interface AgentDefinitionEditorDrawerProps {
   isOpen: boolean;
   onClose: () => void;
   agent: AgentDefinitionResponse | null;
   onSaved: () => void;
+  aiProviders?: ProviderConfigPublic[] | undefined;
 }
 
 const ALL_MCP_TOOLS = ['search_tickets', 'read_ticket', 'search_knowledge', 'read_doc'] as const;
@@ -32,10 +34,12 @@ function AgentDefinitionEditorContent({
   onClose,
   agent,
   onSaved,
+  aiProviders,
 }: {
   onClose: () => void;
   agent: AgentDefinitionResponse | null;
   onSaved: () => void;
+  aiProviders?: ProviderConfigPublic[] | undefined;
 }): JSX.Element {
   const isEditing = agent !== null;
 
@@ -44,6 +48,34 @@ function AgentDefinitionEditorContent({
   const [harnessKind, setHarnessKind] = useState<HarnessKind>(agent?.harness_kind ?? 'in_app_sdk');
   const [providerKind, setProviderKind] = useState<ProviderKind>(agent?.provider_kind ?? 'gemini');
   const [modelId, setModelId] = useState<string>(agent?.model_id ?? 'gemini-2.5-flash');
+  const [fetchedProviders, setFetchedProviders] = useState<ProviderConfigPublic[]>([]);
+
+  useEffect(() => {
+    if (aiProviders !== undefined) {
+      return;
+    }
+    let isMounted = true;
+    fetchAiProviders()
+      .then((data) => {
+        if (isMounted) {
+          setFetchedProviders(data);
+        }
+      })
+      .catch(() => {
+        // Fallback gracefully on network error
+      });
+    return () => {
+      isMounted = false;
+    };
+  }, [aiProviders]);
+
+  const providers = aiProviders ?? fetchedProviders;
+  const matchingProviders = providers.filter(
+    (p) => p.provider_kind === providerKind && p.is_enabled,
+  );
+  const quickPickModels = Array.from(
+    new Set(matchingProviders.flatMap((p) => p.model_allowlist)),
+  ).filter((m) => m.trim().length > 0);
   const [cliBinary, setCliBinary] = useState<string>(agent?.cli_binary_allowlist_id ?? 'agy');
   const [cliArgsString, setCliArgsString] = useState<string>(agent ? agent.cli_args.join(' ') : '-p');
   const [runnerPool, setRunnerPool] = useState<string>(agent?.remote_runner_pool_slug ?? 'default');
@@ -259,6 +291,7 @@ function AgentDefinitionEditorContent({
               <input
                 id="agent-model-input"
                 type="text"
+                list="agent-model-datalist"
                 className="kb-form-input"
                 value={modelId}
                 onChange={(e) => { setModelId(e.target.value); }}
@@ -266,6 +299,30 @@ function AgentDefinitionEditorContent({
                 required
                 data-testid="agent-model-input"
               />
+              <datalist id="agent-model-datalist" data-testid="agent-model-datalist">
+                {quickPickModels.map((m) => (
+                  <option key={m} value={m} />
+                ))}
+              </datalist>
+
+              {quickPickModels.length > 0 && (
+                <div className="kb-model-quickpicks" data-testid="agent-model-quickpicks">
+                  <span className="kb-form-hint">Probed Models:</span>
+                  <div className="kb-quickpick-chips">
+                    {quickPickModels.map((m) => (
+                      <button
+                        key={m}
+                        type="button"
+                        className={`kb-quickpick-chip ${modelId === m ? 'kb-quickpick-chip--selected' : ''}`}
+                        onClick={() => { setModelId(m); }}
+                        data-testid={`quickpick-model-${m}`}
+                      >
+                        {m}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
             </div>
           </>
         )}
@@ -448,6 +505,7 @@ export function AgentDefinitionEditorDrawer({
   onClose,
   agent,
   onSaved,
+  aiProviders,
 }: AgentDefinitionEditorDrawerProps): JSX.Element | null {
   if (!isOpen) return null;
 
@@ -464,6 +522,7 @@ export function AgentDefinitionEditorDrawer({
         onClose={onClose}
         agent={agent}
         onSaved={onSaved}
+        aiProviders={aiProviders}
       />
     </div>
   );

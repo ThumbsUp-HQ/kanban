@@ -194,6 +194,9 @@ class SavedProviderProbeRequest(BaseModel):
     api_key: SecretStr | None = Field(
         default=None, description="Optional override API key (uses saved key if omitted)"
     )
+    settings_json: dict[str, Any] | None = Field(
+        default=None, description="Optional override settings (uses saved settings if omitted)"
+    )
 
     @field_validator("api_key")
     @classmethod

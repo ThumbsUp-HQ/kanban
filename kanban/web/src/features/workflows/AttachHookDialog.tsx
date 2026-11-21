@@ -295,7 +295,7 @@ function AttachHookDialogInner({
                     There are no active Agent Definitions registered in this workspace. Configure an Agent Definition before attaching an Agent Transition Helper hook.
                   </p>
                   <Link
-                    to="/workspaces/settings"
+                    to="/admin/agents"
                     className="workflow-btn workflow-btn-secondary workflow-btn-sm no-agents-configure-link"
                     data-testid="configure-agents-link"
                   >

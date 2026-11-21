@@ -586,6 +586,39 @@
   padding: var(--space-1, 4px);
 }
 
+.kb-probed-chip-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.kb-probed-only-btn {
+  padding: 2px 4px;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--kb-color-border-subtle, #d1d5db);
+  background-color: transparent;
+  color: var(--kb-color-text-secondary, #6b7280);
+  font-size: 10px;
+  cursor: pointer;
+  line-height: 1;
+}
+
+.kb-probed-only-btn:hover {
+  background-color: var(--kb-color-bg-hover, #f3f4f6);
+  color: var(--kb-color-text-primary, #111827);
+  border-color: var(--kb-color-border, #9ca3af);
+}
+
+[data-theme='dark'] .kb-probed-only-btn {
+  border-color: #4b5563;
+  color: #9ca3af;
+}
+
+[data-theme='dark'] .kb-probed-only-btn:hover {
+  background-color: #374151;
+  color: #f9fafb;
+}
+
 .kb-probed-chip {
   padding: 3px 8px;
   border-radius: var(--radius-sm, 4px);

@@ -1018,6 +1018,16 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
       });
       expect(screen.getByText(/No Key Required \(Local\)/)).toBeDefined();
 
+      // Verify DOM order: API key input appears BEFORE probe-models-btn and provider-models-input
+      const keyInput = screen.getByTestId('provider-key-input');
+      const probeBtn = screen.getByTestId('probe-models-btn');
+      const modelsInput = screen.getByTestId('provider-models-input');
+      expect(keyInput.compareDocumentPosition(probeBtn) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(keyInput.compareDocumentPosition(modelsInput) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+      // Verify new provider starts with empty modelAllowlist (no fake defaults)
+      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('');
+
       // Test Probe Models Button
       fireEvent.click(screen.getByTestId('probe-models-btn'));
 
@@ -1027,19 +1037,29 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
             provider_kind: 'openai',
             base_url: 'http://localhost:8000/v1',
             api_key: null,
+            settings_json: { timeout_ms: 30000 },
           },
           undefined,
         );
         expect(screen.getByTestId('probed-models-picker')).toBeDefined();
       });
 
+      // Probing replaced modelAllowlist directly with probed models
+      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe(
+        'llama3.2:3b, qwen2.5-coder:7b, deepseek-r1:14b',
+      );
+
       // Check probed model chips rendered
       expect(screen.getByTestId('probe-chip-llama3.2:3b')).toBeDefined();
       expect(screen.getByTestId('probe-chip-qwen2.5-coder:7b')).toBeDefined();
 
-      // Click a chip to toggle it
+      // Click a chip to toggle it off
       fireEvent.click(screen.getByTestId('probe-chip-deepseek-r1:14b'));
-      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toContain('deepseek-r1:14b');
+      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).not.toContain('deepseek-r1:14b');
+
+      // Test Only This action
+      fireEvent.click(screen.getByTestId('probe-only-qwen2.5-coder:7b'));
+      expect(screen.getByTestId<HTMLInputElement>('provider-models-input').value).toBe('qwen2.5-coder:7b');
 
       // Filter probed models
       fireEvent.change(screen.getByTestId('probe-model-search-input'), {
@@ -1071,7 +1091,15 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
       fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
 
       await waitFor(() => {
-        expect(testSpy).toHaveBeenCalled();
+        expect(testSpy).toHaveBeenCalledWith(
+          {
+            provider_kind: 'openai',
+            base_url: 'http://localhost:8000/v1',
+            api_key: null,
+            settings_json: { timeout_ms: 30000 },
+          },
+          undefined,
+        );
         expect(screen.getByTestId('drawer-test-status').textContent).toContain(
           'Connected in 62ms - 1 models available',
         );
@@ -1105,6 +1133,7 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
           priority: 40,
           api_key: 'test-secret',
           is_enabled: true,
+          settings: { timeout_ms: 30000 },
         });
         expect(onSaved).toHaveBeenCalled();
         expect(onClose).toHaveBeenCalled();
@@ -1255,29 +1284,35 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
         />,
       );
 
-      // Probe without key input (calls with {})
+      // Probe without key input (calls with { settings_json: { timeout_ms: 30000 } })
       fireEvent.click(screen.getByTestId('probe-models-btn'));
       await waitFor(() => {
-        expect(probeSpy).toHaveBeenCalledWith({}, 'prov-openai-1');
+        expect(probeSpy).toHaveBeenCalledWith({ settings_json: { timeout_ms: 30000 } }, 'prov-openai-1');
       });
 
-      // Test connection without key input (calls with {})
+      // Test connection without key input (calls with { settings_json: { timeout_ms: 30000 } })
       fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
       await waitFor(() => {
-        expect(testSpy).toHaveBeenCalledWith({}, 'prov-openai-1');
+        expect(testSpy).toHaveBeenCalledWith({ settings_json: { timeout_ms: 30000 } }, 'prov-openai-1');
       });
 
-      // Type key and probe again (calls with { api_key: ... })
+      // Type key and probe again (calls with { api_key: ..., settings_json: { timeout_ms: 30000 } })
       fireEvent.change(screen.getByTestId('provider-key-input'), { target: { value: 'temp-override-key' } });
       fireEvent.click(screen.getByTestId('probe-models-btn'));
       await waitFor(() => {
-        expect(probeSpy).toHaveBeenCalledWith({ api_key: 'temp-override-key' }, 'prov-openai-1');
+        expect(probeSpy).toHaveBeenCalledWith(
+          { api_key: 'temp-override-key', settings_json: { timeout_ms: 30000 } },
+          'prov-openai-1',
+        );
       });
 
       // Test connection with override key
       fireEvent.click(screen.getByTestId('drawer-test-connection-btn'));
       await waitFor(() => {
-        expect(testSpy).toHaveBeenCalledWith({ api_key: 'temp-override-key' }, 'prov-openai-1');
+        expect(testSpy).toHaveBeenCalledWith(
+          { api_key: 'temp-override-key', settings_json: { timeout_ms: 30000 } },
+          'prov-openai-1',
+        );
       });
     });
 
@@ -1363,6 +1398,7 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
           base_url: 'https://api.openai.com/v1',
           priority: 10,
           api_key: null,
+          settings: { timeout_ms: 30000 },
         });
         expect(onSaved).toHaveBeenCalled();
         expect(onClose).toHaveBeenCalled();
@@ -1399,6 +1435,7 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
           base_url: 'https://api.openai.com/v1',
           priority: 10,
           api_key: 'new-secret-key-999',
+          settings: { timeout_ms: 30000 },
         });
         expect(onSaved).toHaveBeenCalled();
         expect(onClose).toHaveBeenCalled();
@@ -1629,6 +1666,7 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
             provider_kind: 'openai',
             base_url: 'https://custom-gateway.corp.com/v1',
             api_key: 'sk-new-key-123',
+            settings_json: { timeout_ms: 30000 },
           },
           undefined,
         );
@@ -1642,6 +1680,7 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
             provider_kind: 'openai',
             base_url: 'https://custom-gateway.corp.com/v1',
             api_key: 'sk-new-key-123',
+            settings_json: { timeout_ms: 30000 },
           },
           undefined,
         );
@@ -1684,6 +1723,7 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
             provider_kind: 'ollama',
             base_url: 'http://192.168.1.99:11434',
             api_key: null,
+            settings_json: { timeout_ms: 30000 },
           },
           undefined,
         );
@@ -1696,6 +1736,7 @@ describe('AiStudioPage & Components (KAN-22 / KANBA-219)', () => {
             provider_kind: 'ollama',
             base_url: 'http://192.168.1.99:11434',
             api_key: null,
+            settings_json: { timeout_ms: 30000 },
           },
           undefined,
         );

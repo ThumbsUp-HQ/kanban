@@ -4,6 +4,7 @@
 import React from 'react';
 import { describe, expect, it, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { MemoryRouter } from 'react-router';
 import { AttachHookDialog } from '../AttachHookDialog';
 import {
   DEFAULT_PROJECT_STATES,
@@ -240,5 +241,27 @@ describe('AttachHookDialog (KB-P5-24)', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toContain('unapproved Wasm');
     });
+  });
+
+  it('renders Configure Agent Definitions link pointing to /admin/agents when no agents exist (KAN-60)', () => {
+    render(
+      <MemoryRouter>
+        <AttachHookDialog
+          isOpen={true}
+          projectKey="KAN"
+          states={DEFAULT_PROJECT_STATES}
+          agentDefinitions={[]}
+          onSave={vi.fn()}
+          onClose={vi.fn()}
+        />
+      </MemoryRouter>,
+    );
+
+    // Switch to agent_interceptor
+    fireEvent.click(screen.getByLabelText('Agent Transition Helper'));
+
+    expect(screen.getByTestId('no-agents-warning')).toBeDefined();
+    const configLink = screen.getByTestId<HTMLAnchorElement>('configure-agents-link');
+    expect(configLink.getAttribute('href')).toBe('/admin/agents');
   });
 });
