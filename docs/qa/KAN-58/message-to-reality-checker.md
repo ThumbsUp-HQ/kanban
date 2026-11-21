@@ -73,10 +73,11 @@
   - `Sidebar.test.tsx` (32 tests passed, including KAN-58 Mobile Sidebar dismiss and nav auto-close)
   - `viewRegistry.test.tsx` (57 tests passed, including KAN-58 Negative / Bounce-Back regression case on 844x390 landscape)
 - **Code Coverage:**
-  - Statements: 99.11%
+  - Statements: 99.12%
   - Branches: 95.17%
   - Functions: 99.08%
   - Lines: 99.68%
-- **Typecheck:** Clean (`tsc -b --noEmit` exited with code 0).
+- **Typecheck & Linter:** Clean (`tsc -b --noEmit` and `eslint . --max-warnings 0` both exited with code 0 in `docs/qa/KAN-58/build-or-typecheck.txt`).
+- **Specialist Reviews:** Both API Specialist (`docs/qa/KAN-58/api-specialist-review.md`) and UI Specialist (`docs/qa/KAN-58/ui-specialist-review.md`) have independently audited and certified the changes with grade APPROVED.
 - **Typography Check:** Zero unicode em-dashes or en-dashes (`python3 -m scripts.check_no_dashes --all` exited with code 0).
 - **Style Rules:** Zero inline JSX `style={{...}}` props.

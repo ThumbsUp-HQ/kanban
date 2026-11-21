@@ -2057,7 +2057,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       }
     });
 
-    it('KAN-58: Negative / Bounce-Back Regression Case - phone landscape (844x390) and suppressAutoPeek prevent bounce-back into issues[0]', async () => {
+    it('KAN-58: Negative / Bounce-Back Regression Case - phone landscape (844x390) and suppressAutoPeek prevent bounce-back into issues[0]', () => {
       window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
       const originalInnerWidth = window.innerWidth;
       const originalInnerHeight = window.innerHeight;

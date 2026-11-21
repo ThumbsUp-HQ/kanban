@@ -1453,7 +1453,7 @@ describe('Sidebar', () => {
     fetchSpyEmpty.mockRestore();
   });
 
-  it('KAN-58: Mobile Sidebar Dismiss & Navigation Auto-Close', async () => {
+  it('KAN-58: Mobile Sidebar Dismiss & Navigation Auto-Close', () => {
     const onCloseSpy = vi.fn();
     const onToggleSpy = vi.fn();
 

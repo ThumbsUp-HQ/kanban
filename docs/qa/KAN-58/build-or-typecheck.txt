@@ -1,0 +1,18 @@
+=== STATIC GATES & BUILD VERIFICATION (KAN-58) ===
+$ npm --prefix kanban/web run typecheck
+
+> @kanban/web@0.1.0 typecheck
+> tsc -b --noEmit
+
+Exit code: 0
+
+$ npm --prefix kanban/web run lint
+
+> @kanban/web@0.1.0 lint
+> eslint . --max-warnings 0
+
+Exit code: 0
+
+$ python3 -m scripts.check_no_dashes --all
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan58-mobile-157c0014/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+Exit code: 0

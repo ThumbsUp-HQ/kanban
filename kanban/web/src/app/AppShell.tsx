@@ -169,7 +169,9 @@ export function AppShell({
 
   // Auto-close mobile sidebar on navigation
   useEffect(() => {
-    setMobileSidebarOpen(false);
+    queueMicrotask(() => {
+      setMobileSidebarOpen(false);
+    });
   }, [location.pathname, location.search]);
 
   // Auto-close mobile sidebar when viewport expands past 1280px

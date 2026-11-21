@@ -55,7 +55,7 @@ index 7a9891c1..4229a91f 100644
 +  });
  });
 diff --git a/kanban/web/src/app/AppShell.tsx b/kanban/web/src/app/AppShell.tsx
-index fc09b264..0f2fb581 100644
+index fc09b264..afed606e 100644
 --- a/kanban/web/src/app/AppShell.tsx
 +++ b/kanban/web/src/app/AppShell.tsx
 @@ -126,7 +126,8 @@ export function AppShell({
@@ -68,14 +68,16 @@ index fc09b264..0f2fb581 100644
  
    const isPublicRoute =
      location.pathname.startsWith('/login') ||
-@@ -165,6 +166,24 @@ export function AppShell({
+@@ -165,6 +166,26 @@ export function AppShell({
    }, [activeProjectKey, navigate]);
  
    const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 +
 +  // Auto-close mobile sidebar on navigation
 +  useEffect(() => {
-+    setMobileSidebarOpen(false);
++    queueMicrotask(() => {
++      setMobileSidebarOpen(false);
++    });
 +  }, [location.pathname, location.search]);
 +
 +  // Auto-close mobile sidebar when viewport expands past 1280px
@@ -144,7 +146,7 @@ index a140728a..13bd0576 100644
      box-shadow: var(--shadow-xl, 0 20px 25px -5px rgba(0, 0, 0, 0.6));
      width: var(--sidebar-w, 256px) !important;
 diff --git a/kanban/web/src/app/Sidebar.test.tsx b/kanban/web/src/app/Sidebar.test.tsx
-index 7668131f..2fa28003 100644
+index 7668131f..4e964300 100644
 --- a/kanban/web/src/app/Sidebar.test.tsx
 +++ b/kanban/web/src/app/Sidebar.test.tsx
 @@ -1452,4 +1452,36 @@ describe('Sidebar', () => {
@@ -152,7 +154,7 @@ index 7668131f..2fa28003 100644
      fetchSpyEmpty.mockRestore();
    });
 +
-+  it('KAN-58: Mobile Sidebar Dismiss & Navigation Auto-Close', async () => {
++  it('KAN-58: Mobile Sidebar Dismiss & Navigation Auto-Close', () => {
 +    const onCloseSpy = vi.fn();
 +    const onToggleSpy = vi.fn();
 +
@@ -563,14 +565,14 @@ index a4bc3308..5383c233 100644
    display: flex;
    flex-direction: column;
 diff --git a/kanban/web/src/features/views/viewRegistry.test.tsx b/kanban/web/src/features/views/viewRegistry.test.tsx
-index a5814e66..d388448f 100644
+index a5814e66..a762b310 100644
 --- a/kanban/web/src/features/views/viewRegistry.test.tsx
 +++ b/kanban/web/src/features/views/viewRegistry.test.tsx
 @@ -2057,6 +2057,49 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
        }
      });
  
-+    it('KAN-58: Negative / Bounce-Back Regression Case - phone landscape (844x390) and suppressAutoPeek prevent bounce-back into issues[0]', async () => {
++    it('KAN-58: Negative / Bounce-Back Regression Case - phone landscape (844x390) and suppressAutoPeek prevent bounce-back into issues[0]', () => {
 +      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
 +      const originalInnerWidth = window.innerWidth;
 +      const originalInnerHeight = window.innerHeight;
@@ -617,7 +619,7 @@ index a5814e66..d388448f 100644
        window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
        render(
 diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
-index 3e16a030..1d1f29be 100644
+index 3e16a030..1d78db7f 100644
 --- a/kanban/web/src/features/views/viewRegistry.tsx
 +++ b/kanban/web/src/features/views/viewRegistry.tsx
 @@ -958,12 +958,12 @@ export function IssuesWorkspaceRoute({
@@ -652,7 +654,7 @@ index 3e16a030..1d1f29be 100644
 +      closedSplitKey === '__ALL__' ||
 +      searchParams?.get('closed') === '1' ||
 +      searchParams?.get('peek') === 'none' ||
-+      (typeof window !== 'undefined' && (window.history.state as { suppressAutoPeek?: boolean })?.suppressAutoPeek);
++      (typeof window !== 'undefined' && Boolean((window.history.state as { suppressAutoPeek?: boolean } | null)?.suppressAutoPeek));
 +
      if (peekParam) {
 +      if (peekParam === 'none') {
@@ -689,7 +691,7 @@ index 3e16a030..1d1f29be 100644
            <div className="kb-split-list-pane">
              <ListView
                issues={sortedRailIssues}
-+              isLoading={Boolean(issuesQuery.isLoading)}
++              isLoading={issuesQuery.isLoading}
                projectKey={projectKey}
                projectStates={projectStates}
                modulesEnabled={modulesEnabled}

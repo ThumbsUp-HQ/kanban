@@ -989,7 +989,7 @@ export function IssuesWorkspaceRoute({
       closedSplitKey === '__ALL__' ||
       searchParams?.get('closed') === '1' ||
       searchParams?.get('peek') === 'none' ||
-      (typeof window !== 'undefined' && (window.history.state as { suppressAutoPeek?: boolean })?.suppressAutoPeek);
+      (typeof window !== 'undefined' && Boolean((window.history.state as { suppressAutoPeek?: boolean } | null)?.suppressAutoPeek));
 
     if (peekParam) {
       if (peekParam === 'none') {
@@ -1117,7 +1117,7 @@ export function IssuesWorkspaceRoute({
           <div className="kb-split-list-pane">
             <ListView
               issues={sortedRailIssues}
-              isLoading={Boolean(issuesQuery.isLoading)}
+              isLoading={issuesQuery.isLoading}
               projectKey={projectKey}
               projectStates={projectStates}
               modulesEnabled={modulesEnabled}
