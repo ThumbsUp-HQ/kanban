@@ -2,7 +2,7 @@
 # Apache-2.0 License. See LICENSE for details.
 """Integration and unit tests for cutover verification engine (KB-P6-02)."""
 
-# ruff: noqa: E501, PLC0415, TC002, ANN401, S101, S108, PLR0915, BLE001, ARG001
+# ruff: noqa: E501, PLC0415, TC002, ANN401
 
 from __future__ import annotations
 

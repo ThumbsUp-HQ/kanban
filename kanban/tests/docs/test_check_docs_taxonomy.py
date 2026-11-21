@@ -356,6 +356,7 @@ class TestAuditIntegrationAndCLI:
         assert len(data_lines) == 45
         planned_core_rows = [row for row in data_lines if "| 🎯✅ |" in row]
         assert len(planned_core_rows) == 10
+        assert any("When 👍kanban Is Not the Right Fit" in line for line in spec_lines)
         for row in table_lines:
             cells = [cell.strip() for cell in row.strip("|").split("|")]
             assert len(cells) == 9, f"Expected 9 GFM columns, got {len(cells)} in row: {row}"

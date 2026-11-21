@@ -1,7 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
 """Comprehensive unit tests for PlaneMapper (KB-MIGRATION-PLANE-DB-01)."""
-# ruff: noqa: E501, PLC0415, ANN401, TC002, S101
 
 from __future__ import annotations
 

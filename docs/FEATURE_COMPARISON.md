@@ -101,3 +101,33 @@ Jira splits Docs and Stickies into separate paid Confluence and Whiteboard licen
 | Native CFD, Lead & Aging WIP | 🎯✅ | 🔐 | 💰 | 🔐 | ❌ | ❌ | ✅ | 🔐 |
 
 OpenAI Symphony tracks single-daemon claims in volatile memory (`🔐`) and relies on external `WORKFLOW.md` comment scraping (`🆓🔌`) with no Unix board CLI (`❌`), while GitHub gates private-repo secret push-protection (`🔐`), Businessmap leads on native Lean flow analytics (`✅`), and Codebeamer enforces ALM commit/release traceability (`✅`). **`👍kanban`** already ships foundational substrates - cross-project `mcp_read_taint` exfiltration guards, outbound secret scrubbing on LLM/FIM prompts, DNS-pinned `:ro` Git mirrors, transactional `PlaneImporter` + `KBBAK1` encrypted backups, `kanban-ctl` / `kanban-agent` CLIs, and immutable `activity_records` transition timestamps - and actively tracks all ten Day-2 enterprise & fleet-scale expansions in its free `Apache-2.0` core (`🎯✅`): PostgreSQL-enforced `issue_leases` + monotonic `fencing_token` CAS (`KAN-69`), per-block provenance tainting with dynamic MCP capability stripping (`KAN-70`), silent per-issue `issue_workpads` + rework loop circuit breakers (`KAN-71`), synchronous pre-persistence Shannon-entropy secret push-protection (`KAN-72`), envelope-encrypted `activity_record_keys` crypto-shredding (`KAN-73`), RFC 8693 headless workload OIDC token exchange (`KAN-74`), SSRF-hardened SCM webhooks + `SSH`/`GPG`/`Sigstore` & SLSA attestation gates (`KAN-75`, `KAN-76`), Jira/GitHub/Linear importers with legacy key alias redirects and deterministic `JSONL` + `.md` exports (`KAN-77`), schema-driven `kanban-cli --filter ... --json` backed by `hnsw.iterative_scan` RLS vector recall (`KAN-48`, `KAN-78`), and native CFD, Aging WIP, Cycle/Lead Time `p50`/`p85`/`p95` scatterplots, and Monte Carlo forecasting (`KAN-79`).
+
+---
+
+## 6. When 👍kanban Is Not the Right Fit (Intentional Non-Goals)
+
+Because `👍kanban` makes deliberate, opinionated trade-offs around **zero-trust security (Priority #0)**, **agent-first MCP ergonomics (Priority #1)**, and **100% canonical Markdown persistence** (`docs/ARCHITECTURE_AND_PRODUCT_SPEC.md`), there are specific use cases it is **not** designed to fit:
+
+### 1. Arbitrary Binary / DAM / Non-Document File Hosting
+* **Why it does not fit:** The attachment pipeline (`kanban/attachments/sniff.py`, `database/models/attachments.py`) enforces a strict `25 MiB` cap (`26,214,400` bytes), magic-byte validation, Pillow pixel re-encoding (stripping EXIF/metadata), SVG AST scrubbing, and bounded-subprocess active-content-stripped PDFs (`KAN-81`).
+* **Bad fit for:** Digital Asset Management (DAM), CAD/3D design workflows, raw video/audio review boards, or attaching large binaries (`.zip`, `.apk`, `.iso`, raw crash dumps, or executable build artifacts).
+
+### 2. Pixel-Precise WYSIWYG Publishing & Freeform Visual Whiteboarding
+* **Why it does not fit:** Every issue, comment, sticky, and doc is converted at ingestion into **100% canonical UTF-8 Markdown** (stripping custom HTML/CSS, inline styles, fonts, and arbitrary DOM widgets via `nh3` and hidden-DOM pruning). Project Stickies are structured text cards that promote into `ltree` Docs (`💡📄`), not an infinite 2D spatial canvas.
+* **Bad fit for:** Marketing/design teams needing custom-styled HTML pages, Notion-style embedded database blocks/iframes, or Miro/FigJam-style freeform drawing and wireframing.
+
+### 3. Heavy ERP / Financial Project Accounting & Resource Management
+* **Why it does not fit:** `👍kanban` covers engineering delivery views (`List`, `Board`, `Table`, `Calendar`, `Timeline/Gantt`, 2D swimlanes, cycles, modules, and statistical flow metrics in `KAN-79`), but intentionally omits financial and HR machinery.
+* **Bad fit for:** Billable time-tracking and timesheet approvals, CapEx/OpEx budget accounting, resource utilization heatmaps across hourly billing rates, or client invoicing.
+
+### 4. Regulated Hardware / Safety-Critical ALM (DO-178C, ISO 26262, FDA 21 CFR Part 11)
+* **Why it does not fit:** While `👍kanban` has an immutable SHA-256 hash-chained audit ledger (`activity_records`) and scripted transition gates (compared against Codebeamer in [Section 1](#security-identity-audit-deployment) and [Section 5](#orchestration-provenance-day-2-operations)), it is not a certified medical/automotive/avionics Application Lifecycle Management (ALM) suite.
+* **Bad fit for:** Hardware/embedded compliance requiring formal ReqIF interchange, parameterized test-case execution matrices, FMEA/hazard analysis tables, or legally certified e-signature compliance packs out of the box.
+
+### 5. Customer-Facing Helpdesk / Omnichannel ITSM (Zendesk / Jira Service Management)
+* **Why it does not fit:** Access is built around authenticated workspace principals, explicit `🛡️` RBAC/ACL visibility, and PostgreSQL `FORCE ROW LEVEL SECURITY`.
+* **Bad fit for:** Public anonymous email-to-ticket intake queues, live customer chat widgets, multi-tiered customer SLA/contract entitlement portals, or telephony/IVR call-center ticketing.
+
+### 6. Low-Trust "Run Arbitrary Unreviewed Host Plugins" Automation
+* **Why it does not fit:** Custom fields and workflow scripts are locked behind `SERVER_ADMIN` AAL2 cryptographic approvals (`manifest_sha256`), Wasmtime (`<25ms`) or `nsjail` (`128 MiB` RAM, `3s` timeout, isolated netns, GET-only token-injecting egress proxy), and strict `Content-Security-Policy` (`object-src 'none'`, `frame-ancestors 'none'`).
+* **Bad fit for:** Teams that want non-admin users to install arbitrary third-party UI plugins, embed external SaaS iframes inside tickets, or trigger unrestricted outbound shell/network scripts from card transitions.

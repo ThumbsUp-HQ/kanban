@@ -1,7 +1,7 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
 """Cutover verification engine and parity auditor (KB-P6-02, S1.3, S15.5, S12.3)."""
-# ruff: noqa: E501, C901, PLR0911, PLR0912, PLR0915
+# ruff: noqa: E501, PLR0915
 
 from __future__ import annotations
 
@@ -578,11 +578,8 @@ async def _find_qa_proof_target_keys(
         is_completed = cr["state_group"] == "completed"
         has_proof_ref = "docs/qa/" in desc
         if is_completed or has_proof_ref:
-            aliases: list[str] = []
-            for m in prov_pattern.finditer(desc):
-                aliases.append(m.group(1))
-            for m in qa_path_pattern.finditer(desc):
-                aliases.append(m.group(1))
+            aliases: list[str] = [m.group(1) for m in prov_pattern.finditer(desc)]
+            aliases.extend(m.group(1) for m in qa_path_pattern.finditer(desc))
             target_keys[key] = aliases
 
     comm_qa_res = await session.execute(

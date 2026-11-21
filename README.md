@@ -11,7 +11,7 @@
 > On the surface, every tracker presents identical columns, draggable cards, and basic workflow states. The real architectural divergence begins the moment you inspect paywalled enterprise controls, database-level security invariants, canonical Markdown integrity, and native agent/MCP execution gates. While commercial SaaS and copyleft alternatives lock custom properties, audit logs, Single Sign-On, and AI integrations behind steep per-seat subscription tiers or bloated CRUD APIs, `👍kanban` ships an uncompromising, security-first, agent-first platform under a pure Apache-2.0 license.
 
 See the complete 45-feature technical evaluation matrix comparing `👍kanban` against Jira, Plane, GitHub, Vibe Kanban, OpenAI Symphony, Businessmap, and Codebeamer across Security/Identity/Audit, Agentic MCP/AI Workflows, Issue Tracking, Docs/Stickies/Markdown, and Orchestration/Provenance/Day-2 Operations:
-- **Repository Specification:** [`docs/FEATURE_COMPARISON.md`](./docs/FEATURE_COMPARISON.md)
+- **Repository Specification (45-Feature Matrix & Intentional Non-Goals):** [`docs/FEATURE_COMPARISON.md`](./docs/FEATURE_COMPARISON.md)
 - **Project Wiki:** [Feature Comparison Matrix](https://git.adamoutler.com/AI/thumbs-up-kanban/wiki/Feature-Comparison)
 
 ---

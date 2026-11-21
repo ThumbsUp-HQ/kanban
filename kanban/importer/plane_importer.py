@@ -1,7 +1,7 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
 """Lossless transactional Plane importer implementation (KB-P6-01, KB-MIGRATION-PLANE-DB-01, S1.3, S15.5)."""
-# ruff: noqa: E501, C901, PLR0911, PLR0912, PLR0915, BLE001
+# ruff: noqa: E501, C901, PLR0912, PLR0913, PLR0915, BLE001, ICN001, TRY300
 
 from __future__ import annotations
 
@@ -11,7 +11,7 @@ import logging
 import uuid
 from datetime import date
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING
 
 from sqlalchemy import select, text
 
@@ -74,9 +74,9 @@ def _parse_iso_datetime(val: str | None) -> datetime.datetime | None:
     try:
         dt = datetime.datetime.fromisoformat(val)
         if dt.tzinfo is None:
-            dt = dt.replace(tzinfo=datetime.timezone.utc)
+            dt = dt.replace(tzinfo=datetime.UTC)
         return dt
-    except Exception:  # noqa: BLE001
+    except Exception:
         return None
 
 
@@ -137,7 +137,7 @@ class PlaneImporter:
 
         return report
 
-    async def _execute_import(  # noqa: C901, PLR0912, PLR0915
+    async def _execute_import(
         self,
         bundle: PlaneBundle,
         report: ImportDiffReport,

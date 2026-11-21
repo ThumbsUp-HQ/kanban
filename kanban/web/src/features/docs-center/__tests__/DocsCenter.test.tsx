@@ -1500,6 +1500,18 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
       expect(symphonyHeaders).toHaveLength(5);
       expect(screen.getAllByRole('table')).toHaveLength(5);
       expect(screen.getAllByRole('cell', { name: '🎯✅' })).toHaveLength(10);
+      const nonGoalsHeading = screen.getByRole('heading', {
+        level: 2,
+        name: /When 👍kanban Is Not the Right Fit/i,
+      });
+      expect(nonGoalsHeading.id).toBe(
+        'when-kanban-is-not-the-right-fit-intentional-non-goals',
+      );
+      expect(
+        comparisonChapter?.sections.some(
+          (s) => s.id === 'when-kanban-is-not-the-right-fit-intentional-non-goals',
+        ),
+      ).toBe(true);
     });
   });
 });

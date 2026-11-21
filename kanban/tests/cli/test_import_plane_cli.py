@@ -574,7 +574,7 @@ def test_run_generic_import_dispatch_and_execution(tmp_path: Path) -> None:
     user_map_file = tmp_path / "user_map.yaml"
     user_map_file.write_text("old_id: new_handle\n", encoding="utf-8")
 
-    async def _dummy_exec(*args: Any, **kwargs: Any) -> int:
+    async def _dummy_exec(*_args: object, **_kwargs: object) -> int:
         return 0
 
     # 1. Successful file-based dispatch into _execute_generic_import_db

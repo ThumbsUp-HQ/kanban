@@ -1,7 +1,7 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
 """CLI commands for cutover verification and parity auditing (KB-P6-02, KB-MIGRATION-PLANE-DB-01, S15.5)."""
-# ruff: noqa: E501, S108, C901, PLR0912, PLR0915, BLE001, TRY300
+# ruff: noqa: E501, S108, BLE001
 
 from __future__ import annotations
 
@@ -125,7 +125,7 @@ def _run_cutover_verify(args: argparse.Namespace) -> int:
                 json_out=args.json_out,
             )
         )
-    except Exception as exc:  # noqa: BLE001 - CLI top-level error boundary
+    except Exception as exc:
         sys.stderr.write(f"Runtime Error: {exc}\n")
         return 1
 

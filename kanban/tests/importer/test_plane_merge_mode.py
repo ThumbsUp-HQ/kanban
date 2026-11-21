@@ -2,12 +2,11 @@
 # Apache-2.0 License. See LICENSE for details.
 """Comprehensive unit and integration tests for Plane import merge mode (KB-MIGRATION-PLANE-DB-01)."""
 
-# ruff: noqa: E501, PLC0415, ANN401, TC002, S101, ICN001
+# ruff: noqa: E501, PLC0415, ANN401, TC002, ICN001
 
 from __future__ import annotations
 
 import datetime
-import uuid
 from pathlib import Path
 from typing import Any
 

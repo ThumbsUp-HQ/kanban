@@ -2,23 +2,19 @@
 # Apache-2.0 License. See LICENSE for details.
 """Comprehensive unit and security tests for Plane direct database exporter (KB-MIGRATION-PLANE-DB-01)."""
 
-# ruff: noqa: E501, PLC0415, ANN401, TC002, S101, S105, S106, S108, ARG001, TRY003, EM101, BLE001
+# ruff: noqa: E501, ANN401, S106, ARG001, ARG002, TRY003, EM101, C901, PLR0911, RUF043, TC003, PYI034
 
 from __future__ import annotations
 
 import json
-import os
-import stat
 from pathlib import Path
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import httpx
 import pytest
 
 from kanban.importer.plane_db_exporter import (
     MAX_ATTACHMENT_BYTES,
-    SECRET_IN_ARGV_FORBIDDEN_MSG,
     MinioSigV4Downloader,
     PlaneDbExporter,
     PlaneExportConfig,
@@ -149,7 +145,7 @@ async def test_minio_sigv4_download_payload_cap(tmp_path: Path) -> None:
         async def __aenter__(self) -> MockAsyncClient:
             return self
 
-        async def __aexit__(self, *args: Any) -> None:
+        async def __aexit__(self, *args: object) -> None:
             pass
 
         def stream(
@@ -163,16 +159,18 @@ async def test_minio_sigv4_download_payload_cap(tmp_path: Path) -> None:
                 async def __aenter__(self) -> MagicMock:
                     return mock_resp
 
-                async def __aexit__(self, *args: Any) -> None:
+                async def __aexit__(self, *args: object) -> None:
                     pass
 
             return StreamCtx()
 
-    with patch(
-        "kanban.importer.plane_db_exporter.httpx.AsyncClient", return_value=MockAsyncClient()
+    with (
+        patch(
+            "kanban.importer.plane_db_exporter.httpx.AsyncClient", return_value=MockAsyncClient()
+        ),
+        pytest.raises(PlaneExportSecurityError, match="exceeds 25 MiB"),
     ):
-        with pytest.raises(PlaneExportSecurityError, match="exceeds 25 MiB"):
-            await downloader.stream_object("huge-asset.bin", dest_file)
+        await downloader.stream_object("huge-asset.bin", dest_file)
 
 
 @pytest.mark.asyncio
@@ -200,7 +198,7 @@ async def test_minio_sigv4_download_success(tmp_path: Path) -> None:
         async def __aenter__(self) -> MockAsyncClient:
             return self
 
-        async def __aexit__(self, *args: Any) -> None:
+        async def __aexit__(self, *args: object) -> None:
             pass
 
         def stream(
@@ -214,7 +212,7 @@ async def test_minio_sigv4_download_success(tmp_path: Path) -> None:
                 async def __aenter__(self) -> MagicMock:
                     return mock_resp
 
-                async def __aexit__(self, *args: Any) -> None:
+                async def __aexit__(self, *args: object) -> None:
                     pass
 
             return StreamCtx()
@@ -431,7 +429,7 @@ async def test_minio_download_object_variations() -> None:
                 async def __aenter__(self) -> MagicMock:
                     return mock_resp_404
 
-                async def __aexit__(self, *a: Any) -> None:
+                async def __aexit__(self, *a: object) -> None:
                     pass
 
             return Ctx()
@@ -454,7 +452,7 @@ async def test_minio_download_object_variations() -> None:
                 async def __aenter__(self) -> MagicMock:
                     return mock_resp_200
 
-                async def __aexit__(self, *a: Any) -> None:
+                async def __aexit__(self, *a: object) -> None:
                     pass
 
             return Ctx()
@@ -476,7 +474,7 @@ async def test_minio_download_object_variations() -> None:
                 async def __aenter__(self) -> MagicMock:
                     return mock_resp_huge
 
-                async def __aexit__(self, *a: Any) -> None:
+                async def __aexit__(self, *a: object) -> None:
                     pass
 
             return Ctx()
@@ -661,7 +659,7 @@ async def test_minio_stream_object_error_status(tmp_path: Path) -> None:
                 async def __aenter__(self) -> MagicMock:
                     return mock_resp
 
-                async def __aexit__(self, *a: Any) -> None:
+                async def __aexit__(self, *a: object) -> None:
                     pass
 
             return Ctx()

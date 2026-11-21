@@ -1,11 +1,10 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
 """Plane database direct exporter and MinIO SigV4 asset streamer (KB-MIGRATION-PLANE-DB-01, S1.3)."""
-# ruff: noqa: E501, C901, PLR0911, PLR0912, PLR0915, S108
+# ruff: noqa: E501, C901, PLR0912, PLR0913, PLR0917, S105, S110, TRY300, D107, ANN401, ICN001, SIM108, SIM401, PLR2004, BLE001
 
 from __future__ import annotations
 
-import asyncio
 import datetime
 import hashlib
 import hmac
@@ -13,8 +12,6 @@ import json
 import logging
 import os
 import re
-import stat
-import sys
 import uuid
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -143,7 +140,7 @@ class MinioSigV4Downloader:
         if not self.access_key or not self.secret_key:
             return {}
 
-        now = datetime.datetime.now(datetime.timezone.utc)
+        now = datetime.datetime.now(datetime.UTC)
         amz_date = now.strftime("%Y%m%dT%H%M%SZ")
         date_stamp = now.strftime("%Y%m%d")
 
@@ -245,7 +242,7 @@ class MinioSigV4Downloader:
                     chunks.append(chunk)
 
                 return b"".join(chunks)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("MinIO stream error downloading %s: %s", object_key, exc)
             return None
 
@@ -508,9 +505,9 @@ class PlaneDbExporter:
         rows = await conn.fetch(query, ws_id)
         result: list[dict[str, Any]] = []
         for r in rows:
-            first = r["first_name"] if "first_name" in r and r["first_name"] else ""
-            last = r["last_name"] if "last_name" in r and r["last_name"] else ""
-            disp = r["display_name"] if "display_name" in r and r["display_name"] else ""
+            first = r["first_name"] if r.get("first_name") else ""
+            last = r["last_name"] if r.get("last_name") else ""
+            disp = r["display_name"] if r.get("display_name") else ""
             if not disp:
                 disp = f"{first} {last}".strip() or r["email"]
             result.append(
@@ -537,14 +534,10 @@ class PlaneDbExporter:
             {
                 "id": str(r["id"]),
                 "name": r["name"],
-                "color": r["color"] if "color" in r and r["color"] else "#A3A3A3",
-                "group": (r["group"] or "unstarted").lower()
-                if "group" in r and r["group"]
-                else "unstarted",
+                "color": r["color"] if r.get("color") else "#A3A3A3",
+                "group": (r["group"] or "unstarted").lower() if r.get("group") else "unstarted",
                 "sequence": r["sequence"] if "sequence" in r and r["sequence"] is not None else 0,
-                "project": str(r["project_id"])
-                if "project_id" in r and r["project_id"]
-                else str(p_id),
+                "project": str(r["project_id"]) if r.get("project_id") else str(p_id),
             }
             for r in rows
         ]
@@ -561,10 +554,8 @@ class PlaneDbExporter:
             {
                 "id": str(r["id"]),
                 "name": r["name"],
-                "color": r["color"] if "color" in r and r["color"] else "#3B82F6",
-                "project": str(r["project_id"])
-                if "project_id" in r and r["project_id"]
-                else str(p_id),
+                "color": r["color"] if r.get("color") else "#3B82F6",
+                "project": str(r["project_id"]) if r.get("project_id") else str(p_id),
             }
             for r in rows
         ]
@@ -581,17 +572,11 @@ class PlaneDbExporter:
             {
                 "id": str(r["id"]),
                 "name": r["name"],
-                "description": r["description"] if "description" in r and r["description"] else "",
-                "start_date": str(r["start_date"])
-                if "start_date" in r and r["start_date"]
-                else None,
-                "end_date": str(r["end_date"]) if "end_date" in r and r["end_date"] else None,
-                "status": (r["status"] or "upcoming").lower()
-                if "status" in r and r["status"]
-                else "upcoming",
-                "project": str(r["project_id"])
-                if "project_id" in r and r["project_id"]
-                else str(p_id),
+                "description": r["description"] if r.get("description") else "",
+                "start_date": str(r["start_date"]) if r.get("start_date") else None,
+                "end_date": str(r["end_date"]) if r.get("end_date") else None,
+                "status": (r["status"] or "upcoming").lower() if r.get("status") else "upcoming",
+                "project": str(r["project_id"]) if r.get("project_id") else str(p_id),
             }
             for r in rows
         ]
@@ -608,18 +593,12 @@ class PlaneDbExporter:
             {
                 "id": str(r["id"]),
                 "name": r["name"],
-                "description": r["description"] if "description" in r and r["description"] else "",
-                "status": r["status"] if "status" in r and r["status"] else "planned",
-                "lead": str(r["lead_id"]) if "lead_id" in r and r["lead_id"] else None,
-                "start_date": str(r["start_date"])
-                if "start_date" in r and r["start_date"]
-                else None,
-                "target_date": str(r["target_date"])
-                if "target_date" in r and r["target_date"]
-                else None,
-                "project": str(r["project_id"])
-                if "project_id" in r and r["project_id"]
-                else str(p_id),
+                "description": r["description"] if r.get("description") else "",
+                "status": r["status"] if r.get("status") else "planned",
+                "lead": str(r["lead_id"]) if r.get("lead_id") else None,
+                "start_date": str(r["start_date"]) if r.get("start_date") else None,
+                "target_date": str(r["target_date"]) if r.get("target_date") else None,
+                "project": str(r["project_id"]) if r.get("project_id") else str(p_id),
             }
             for r in rows
         ]
@@ -650,7 +629,7 @@ class PlaneDbExporter:
             )
             for cr in c_rows:
                 cycle_map[str(cr["issue_id"])] = str(cr["cycle_id"])
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
         module_map: dict[str, str] = {}
@@ -661,7 +640,7 @@ class PlaneDbExporter:
             )
             for mr in m_rows:
                 module_map[str(mr["issue_id"])] = str(mr["module_id"])
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
         label_map: dict[str, list[str]] = {}
@@ -672,7 +651,7 @@ class PlaneDbExporter:
             )
             for lr in lbl_rows:
                 label_map.setdefault(str(lr["issue_id"]), []).append(str(lr["label_id"]))
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
         assignee_map: dict[str, list[str]] = {}
@@ -683,7 +662,7 @@ class PlaneDbExporter:
             )
             for ar in ass_rows:
                 assignee_map.setdefault(str(ar["issue_id"]), []).append(str(ar["assignee_id"]))
-        except Exception:  # noqa: BLE001
+        except Exception:
             pass
 
         issues_data: list[dict[str, Any]] = []
@@ -729,32 +708,20 @@ class PlaneDbExporter:
                     "description_stripped": r["description_stripped"]
                     if "description_stripped" in r
                     else "",
-                    "state_id": str(r["state_id"]) if "state_id" in r and r["state_id"] else None,
-                    "priority": (r["priority"] or "none").lower()
-                    if "priority" in r and r["priority"]
-                    else "none",
-                    "parent_id": str(r["parent_id"])
-                    if "parent_id" in r and r["parent_id"]
-                    else None,
+                    "state_id": str(r["state_id"]) if r.get("state_id") else None,
+                    "priority": (r["priority"] or "none").lower() if r.get("priority") else "none",
+                    "parent_id": str(r["parent_id"]) if r.get("parent_id") else None,
                     "cycle_id": cycle_map.get(i_id_str),
                     "module_id": module_map.get(i_id_str),
                     "labels": label_map.get(i_id_str, []),
                     "assignees": assignee_map.get(i_id_str, []),
-                    "created_by": str(r["created_by_id"])
-                    if "created_by_id" in r and r["created_by_id"]
-                    else None,
+                    "created_by": str(r["created_by_id"]) if r.get("created_by_id") else None,
                     "created_at": c_at_str,
                     "updated_at": u_at_str,
                     "archived_at": a_at_str,
-                    "start_date": str(r["start_date"])
-                    if "start_date" in r and r["start_date"]
-                    else None,
-                    "target_date": str(r["target_date"])
-                    if "target_date" in r and r["target_date"]
-                    else None,
-                    "project": str(r["project_id"])
-                    if "project_id" in r and r["project_id"]
-                    else str(p_id),
+                    "start_date": str(r["start_date"]) if r.get("start_date") else None,
+                    "target_date": str(r["target_date"]) if r.get("target_date") else None,
+                    "project": str(r["project_id"]) if r.get("project_id") else str(p_id),
                 }
             )
 
@@ -789,13 +756,11 @@ class PlaneDbExporter:
                     "id": str(r["id"]),
                     "issue_id": str(r["issue_id"]),
                     "comment_html": r["comment_html"] if "comment_html" in r else "",
-                    "comment_json": r["comment_json"]
-                    if "comment_json" in r and r["comment_json"]
-                    else None,
-                    "actor": str(r["actor_id"]) if "actor_id" in r and r["actor_id"] else None,
-                    "created_by": str(r["actor_id"]) if "actor_id" in r and r["actor_id"] else None,
+                    "comment_json": r["comment_json"] if r.get("comment_json") else None,
+                    "actor": str(r["actor_id"]) if r.get("actor_id") else None,
+                    "created_by": str(r["actor_id"]) if r.get("actor_id") else None,
                     "parent_comment": str(r["parent_comment_id"])
-                    if "parent_comment_id" in r and r["parent_comment_id"]
+                    if r.get("parent_comment_id")
                     else None,
                     "created_at": c_at_str,
                 }
@@ -845,7 +810,7 @@ class PlaneDbExporter:
                 k = ar["key"]
                 fn = ar["name"] or Path(k).name
                 asset_keys[k] = fn
-        except Exception:  # noqa: BLE001
+        except Exception:
             # file_assets table might not exist
             pass
 
