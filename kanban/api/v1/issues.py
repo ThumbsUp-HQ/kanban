@@ -81,9 +81,24 @@ async def get_issue(  # noqa: PLR0913, PLR0917
                 raw_header = raw_header[2:].strip()
             client_hex = raw_header.strip('"')
             if client_hex.lower() == etag_hex.lower() or raw_header == etag:
-                return Response(status_code=304, headers={"ETag": etag})
+                headers = {"ETag": etag}
+                if getattr(issue, "_resolved_via_alias", False) or serialized.key != issue_key:
+                    headers["X-Kanban-Canonical-Key"] = serialized.key
+                return Response(status_code=304, headers=headers)
 
         response.headers["ETag"] = etag
+        is_alias = getattr(issue, "_resolved_via_alias", False) or serialized.key != issue_key
+        if is_alias:
+            response.headers["X-Kanban-Canonical-Key"] = serialized.key
+            accept = request.headers.get("accept", "")
+            if "text/html" in accept and "application/json" not in accept:
+                project_key = serialized.key.rsplit("-", 1)[0]
+                canonical_url = f"/projects/{project_key}/issues/{serialized.key}"
+                return Response(
+                    status_code=308,
+                    headers={"Location": canonical_url, "X-Kanban-Canonical-Key": serialized.key},
+                )
+
         return serialized
 
 

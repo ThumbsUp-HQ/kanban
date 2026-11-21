@@ -6,7 +6,7 @@ from __future__ import annotations
 import uuid  # noqa: TC003
 from typing import Annotated, Final
 
-from fastapi import APIRouter, Depends, Query, Request
+from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
 
@@ -35,6 +35,9 @@ class ResolvedRefResponse(BaseModel):
     workspace: str | None = Field(
         default=None, description="Workspace slug when resolved across or within workspace"
     )
+    canonical_key: str | None = Field(
+        default=None, description="Canonical issue key when resolved via legacy alias"
+    )
 
 
 @router.get(
@@ -50,6 +53,7 @@ async def resolve_entity(  # noqa: PLR0913, PLR0917
     ],
     ref: Annotated[str, Query(description="Human key, handle, or UUID reference")],
     request: Request,
+    response: Response,
     session: Annotated[AsyncSession, Depends(get_rls_session)],
     principal: Annotated[PrincipalContext, Depends(get_principal)],
     project: Annotated[
@@ -77,10 +81,15 @@ async def resolve_entity(  # noqa: PLR0913, PLR0917
             caller_workspace_id=caller_ws_id,
             workspace_ref=ws_ref,
         )
+        if resolved.is_alias or resolved.canonical_key:
+            canonical = resolved.canonical_key or resolved.key
+            response.headers["X-Kanban-Canonical-Key"] = canonical
+
         return ResolvedRefResponse(
             id=resolved.id,
             kind=resolved.kind,
             key=resolved.key,
             title=resolved.title,
             workspace=resolved.workspace,
+            canonical_key=resolved.canonical_key if resolved.is_alias else None,
         )

@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
 
 from kanban.cli.auth import register_auth_subparsers
 from kanban.cli.db import register_db_subparsers
+from kanban.cli.export import register_export_subparsers
 from kanban.cli.import_plane import register_import_subparsers
 from kanban.cli.jobs import register_jobs_subparsers
 from kanban.cli.ops import (
@@ -43,6 +44,7 @@ def main(argv: Sequence[str] | None = None) -> int:
     register_ops_subparsers(subparsers)
     register_jobs_subparsers(subparsers)
     register_auth_subparsers(subparsers)
+    register_export_subparsers(subparsers)
     register_import_subparsers(subparsers)
     register_cutover_subparsers(subparsers)
     register_db_subparsers(subparsers)

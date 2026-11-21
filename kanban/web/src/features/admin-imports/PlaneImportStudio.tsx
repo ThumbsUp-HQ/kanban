@@ -5,7 +5,9 @@ import React, { useState, useRef, type JSX } from 'react';
 import { Link } from 'react-router';
 import {
   submitPlaneImport,
+  submitImport,
   type ImportDiffReport,
+  type ImportSource,
 } from './planeImportApi';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import './PlaneImportStudio.css';
@@ -34,6 +36,8 @@ export function extractEntityCounts(bundle: Record<string, unknown> | null): Ent
 }
 
 export function PlaneImportStudio(): JSX.Element {
+  const [source, setSource] = useState<ImportSource>('plane');
+  const [projectKey, setProjectKey] = useState<string>('');
   const [inputMode, setInputMode] = useState<'upload' | 'paste'>('upload');
   const [rawJson, setRawJson] = useState<string>('');
   const [bundleData, setBundleData] = useState<Record<string, unknown> | null>(null);
@@ -52,8 +56,10 @@ export function PlaneImportStudio(): JSX.Element {
     setError(null);
     try {
       const parsed = JSON.parse(jsonStr) as unknown;
-      if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
-        throw new Error('Plane export bundle must be a JSON object with entity arrays.');
+      if (source === 'plane') {
+        if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) {
+          throw new Error('Plane export bundle must be a JSON object with entity arrays.');
+        }
       }
       setBundleData(parsed as Record<string, unknown>);
       if (name) {
@@ -114,26 +120,45 @@ export function PlaneImportStudio(): JSX.Element {
     parseAndSetBundle(val);
   };
 
+  const getSourceName = (s: ImportSource): string => {
+    switch (s) {
+      case 'plane':
+        return 'Plane';
+      case 'jira':
+        return 'Jira';
+      case 'github':
+        return 'GitHub';
+      case 'linear':
+        return 'Linear';
+    }
+  };
+
   const handleRunDryRun = async (): Promise<void> => {
+    const sourceName = getSourceName(source);
     if (!bundleData) {
-      setError('Please upload or paste a valid Plane JSON export bundle.');
+      setError(`Please upload or paste a valid ${sourceName} JSON export bundle.`);
       return;
     }
     setLoading(true);
     setError(null);
     try {
-      const report = await submitPlaneImport({
+      const payload = {
         bundle_data: bundleData,
+        project_key: projectKey.trim() || undefined,
         dry_run: true,
         workspace_slug: workspaceSlug.trim() || undefined,
-      });
+      };
+      const report =
+        source === 'plane'
+          ? await submitPlaneImport(payload)
+          : await submitImport(source, payload);
       setDiffReport(report);
       setStage('preview');
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Failed to execute Plane dry-run simulation.');
+        setError(`Failed to execute ${sourceName} dry-run simulation.`);
       }
     } finally {
       setLoading(false);
@@ -142,22 +167,28 @@ export function PlaneImportStudio(): JSX.Element {
 
   const handleExecuteImport = async (): Promise<void> => {
     if (!bundleData) return;
+    const sourceName = getSourceName(source);
     setLoading(true);
     setStage('executing');
     setError(null);
     try {
-      const report = await submitPlaneImport({
+      const payload = {
         bundle_data: bundleData,
+        project_key: projectKey.trim() || undefined,
         dry_run: false,
         workspace_slug: workspaceSlug.trim() || undefined,
-      });
+      };
+      const report =
+        source === 'plane'
+          ? await submitPlaneImport(payload)
+          : await submitImport(source, payload);
       setDiffReport(report);
       setStage('done');
     } catch (err: unknown) {
       if (err instanceof Error) {
         setError(err.message);
       } else {
-        setError('Plane live import execution failed.');
+        setError(`${sourceName} live import execution failed.`);
       }
       setStage('preview');
     } finally {
@@ -178,10 +209,10 @@ export function PlaneImportStudio(): JSX.Element {
       <header className="kb-plane-import-header">
         <div>
           <h1 className="kb-plane-import-title" data-testid="studio-title">
-            Plane Migration Import Studio
+            {source === 'plane' ? 'Plane' : source === 'jira' ? 'Jira' : source === 'github' ? 'GitHub' : 'Linear'} Migration Import Studio
           </h1>
           <p className="kb-plane-import-subtitle">
-            Upload or paste Plane export JSON bundles, inspect entity counts, simulate state
+            Upload or paste {source === 'plane' ? 'Plane' : source.toUpperCase()} export bundles, inspect entity counts, simulate state
             mappings and idempotency diffs in dry-run, and execute live workspace migrations.
           </p>
         </div>
@@ -199,9 +230,60 @@ export function PlaneImportStudio(): JSX.Element {
           className="kb-mcp-admin-subnav-link kb-mcp-admin-subnav-active"
           data-testid="tab-admin-imports"
         >
-          Plane Migration Studio
+          Migration Studio
         </Link>
       </nav>
+
+      <div className="kb-plane-mode-row" style={{ margin: '1rem 0' }} data-testid="source-selector-bar">
+        <button
+          type="button"
+          className={`kb-plane-mode-btn ${source === 'plane' ? 'kb-plane-mode-active' : ''}`}
+          data-testid="source-plane-btn"
+          onClick={() => {
+            setSource('plane');
+            setBundleData(null);
+            setError(null);
+          }}
+        >
+          Plane
+        </button>
+        <button
+          type="button"
+          className={`kb-plane-mode-btn ${source === 'jira' ? 'kb-plane-mode-active' : ''}`}
+          data-testid="source-jira-btn"
+          onClick={() => {
+            setSource('jira');
+            setBundleData(null);
+            setError(null);
+          }}
+        >
+          Jira
+        </button>
+        <button
+          type="button"
+          className={`kb-plane-mode-btn ${source === 'github' ? 'kb-plane-mode-active' : ''}`}
+          data-testid="source-github-btn"
+          onClick={() => {
+            setSource('github');
+            setBundleData(null);
+            setError(null);
+          }}
+        >
+          GitHub
+        </button>
+        <button
+          type="button"
+          className={`kb-plane-mode-btn ${source === 'linear' ? 'kb-plane-mode-active' : ''}`}
+          data-testid="source-linear-btn"
+          onClick={() => {
+            setSource('linear');
+            setBundleData(null);
+            setError(null);
+          }}
+        >
+          Linear
+        </button>
+      </div>
 
       {error !== null && (
         <div className="kb-plane-alert kb-plane-alert-error" role="alert" data-testid="error-alert">
@@ -213,7 +295,7 @@ export function PlaneImportStudio(): JSX.Element {
       {stage === 'input' && (
         <section className="kb-plane-section" data-testid="import-input-section">
           <h2 className="kb-plane-section-title">
-            <EmojiHint kind="rawMarkdown" /> Step 1: Select Plane Export Bundle
+            <EmojiHint kind="rawMarkdown" /> Step 1: Select {source === 'plane' ? 'Plane' : source === 'jira' ? 'Jira' : source === 'github' ? 'GitHub' : 'Linear'} Export Bundle
           </h2>
 
           <div className="kb-plane-mode-row">
@@ -352,6 +434,35 @@ export function PlaneImportStudio(): JSX.Element {
               }}
             />
           </div>
+
+          {source !== 'plane' && (
+            <div style={{ marginTop: 14 }}>
+              <label
+                htmlFor="target-proj-key"
+                style={{
+                  display: 'block',
+                  fontSize: '0.825rem',
+                  fontWeight: 600,
+                  marginBottom: 6,
+                  color: 'var(--kb-color-text-secondary)',
+                }}
+              >
+                Target Project Key (Optional, default {source === 'jira' ? 'JIRA' : source === 'github' ? 'GH' : 'LIN'}):
+              </label>
+              <input
+                id="target-proj-key"
+                type="text"
+                className="kb-plane-textarea"
+                style={{ minHeight: 40, height: 40, width: '100%', maxWidth: 360 }}
+                data-testid="target-project-key-input"
+                placeholder={source === 'jira' ? 'JIRA' : source === 'github' ? 'GH' : 'LIN'}
+                value={projectKey}
+                onChange={(e) => {
+                  setProjectKey(e.target.value);
+                }}
+              />
+            </div>
+          )}
 
           <div className="kb-plane-btn-row">
             <button

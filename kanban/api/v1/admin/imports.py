@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -19,6 +20,9 @@ from kanban.api.deps import PrincipalContext, get_rls_session
 from kanban.api.problems import ProblemException
 from kanban.api.v1.admin.auth_cards import require_server_admin
 from kanban.auth.mfa.policy import require_admin_aal2
+from kanban.importer.github_importer import GitHubIssuesImporter
+from kanban.importer.jira_importer import JiraImporter
+from kanban.importer.linear_importer import LinearImporter
 from kanban.importer.plane_client import PlaneClient, PlaneClientError
 from kanban.importer.plane_importer import ImportDiffReport, ImportIntegrityError, PlaneImporter
 
@@ -84,7 +88,7 @@ def _resolve_bundle_path(bundle_name: str) -> Path:
             detail="Resolved path escapes allowed imports directory.",
         )
 
-    if not target_path.is_dir():
+    if not target_path.is_dir() and not target_path.is_file():
         raise ProblemException(
             code="BUNDLE_NOT_FOUND",
             status=status.HTTP_404_NOT_FOUND,
@@ -213,6 +217,205 @@ async def import_plane_bundle(
     except Exception as exc:
         await session.rollback()
         logger.exception("Unexpected error during Plane import")
+        raise ProblemException(
+            code="IMPORT_EXECUTION_ERROR",
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            title="Import Execution Error",
+            detail=str(exc),
+        ) from exc
+    else:
+        return report
+
+
+class AdminGenericImportRequest(BaseModel):
+    """Payload requesting execution or preview of Jira, GitHub, or Linear imports."""
+
+    bundle_name: str | None = Field(
+        default=None,
+        description="Bundle file or folder name in imports storage",
+    )
+    bundle_data: Any | None = Field(
+        default=None,
+        description="Direct JSON or CSV data payload for upload/paste import",
+    )
+    project_key: str | None = Field(
+        default=None,
+        description="Target project key (e.g. JIRA, GH, LIN)",
+    )
+    dry_run: bool = Field(
+        default=False,
+        description="Simulate import and return diff report without persisting database changes",
+    )
+    user_map: dict[str, str] = Field(
+        default_factory=dict,
+        description="Mapping from source user identifiers to Kanban handles",
+    )
+    workspace_slug: str | None = Field(
+        default=None,
+        description="Target workspace slug (defaults to caller active workspace)",
+    )
+
+
+def _load_generic_data(bundle_name: str | None, bundle_data: Any | None) -> Any:  # noqa: ANN401
+    """Extract import data from either in-memory payload or storage path."""
+    if bundle_data is not None:
+        return bundle_data
+    if bundle_name is not None:
+        target = _resolve_bundle_path(bundle_name)
+        if target.is_file():
+            content = target.read_text(encoding="utf-8")
+            try:
+                return json.loads(content)
+            except (json.JSONDecodeError, UnicodeDecodeError):
+                return content
+        elif target.is_dir():
+            for cand in (
+                "issues.json",
+                "export.json",
+                "bundle.json",
+                "jira.json",
+                "github.json",
+                "linear.json",
+            ):
+                cand_path = target / cand
+                if cand_path.is_file():
+                    return json.loads(cand_path.read_text(encoding="utf-8"))
+            raise ProblemException(
+                code="BUNDLE_INVALID",
+                status=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                title="Bundle Invalid",
+                detail=f"No JSON export file found in bundle directory '{bundle_name}'.",
+            )
+    raise ProblemException(
+        code="BUNDLE_REQUIRED",
+        status=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        title="Bundle Required",
+        detail="Either bundle_name or bundle_data must be provided.",
+    )
+
+
+@router.post(
+    "/imports/jira",
+    response_model=ImportDiffReport,
+    summary="Import or preview Jira export bundle (Server Admin + AAL2)",
+)
+async def import_jira_bundle(
+    req: AdminGenericImportRequest,
+    caller: Annotated[PrincipalContext, Depends(require_server_admin)],
+    session: Annotated[AsyncSession, Depends(get_rls_session)],
+) -> ImportDiffReport:
+    """Import a validated Jira JSON export into the workspace."""
+    data = _load_generic_data(req.bundle_name, req.bundle_data)
+    importer_caller = await _resolve_target_context(session, caller, req.workspace_slug)
+    importer = JiraImporter(
+        session=session,
+        caller=importer_caller,
+        user_map=req.user_map,
+    )
+    target_key = req.project_key or "JIRA"
+    try:
+        report = await importer.run_import(data, target_project_key=target_key, dry_run=req.dry_run)
+        if not req.dry_run:
+            await session.commit()
+    except ImportIntegrityError as exc:
+        await session.rollback()
+        raise ProblemException(
+            code="IMPORT_INTEGRITY_FAILED",
+            status=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            title="Import Integrity Failed",
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        await session.rollback()
+        logger.exception("Unexpected error during Jira import")
+        raise ProblemException(
+            code="IMPORT_EXECUTION_ERROR",
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            title="Import Execution Error",
+            detail=str(exc),
+        ) from exc
+    else:
+        return report
+
+
+@router.post(
+    "/imports/github",
+    response_model=ImportDiffReport,
+    summary="Import or preview GitHub issues bundle (Server Admin + AAL2)",
+)
+async def import_github_bundle(
+    req: AdminGenericImportRequest,
+    caller: Annotated[PrincipalContext, Depends(require_server_admin)],
+    session: Annotated[AsyncSession, Depends(get_rls_session)],
+) -> ImportDiffReport:
+    """Import a validated GitHub issues JSON export into the workspace."""
+    data = _load_generic_data(req.bundle_name, req.bundle_data)
+    importer_caller = await _resolve_target_context(session, caller, req.workspace_slug)
+    importer = GitHubIssuesImporter(
+        session=session,
+        caller=importer_caller,
+        user_map=req.user_map,
+    )
+    target_key = req.project_key or "GH"
+    try:
+        report = await importer.run_import(data, target_project_key=target_key, dry_run=req.dry_run)
+        if not req.dry_run:
+            await session.commit()
+    except ImportIntegrityError as exc:
+        await session.rollback()
+        raise ProblemException(
+            code="IMPORT_INTEGRITY_FAILED",
+            status=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            title="Import Integrity Failed",
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        await session.rollback()
+        logger.exception("Unexpected error during GitHub import")
+        raise ProblemException(
+            code="IMPORT_EXECUTION_ERROR",
+            status=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            title="Import Execution Error",
+            detail=str(exc),
+        ) from exc
+    else:
+        return report
+
+
+@router.post(
+    "/imports/linear",
+    response_model=ImportDiffReport,
+    summary="Import or preview Linear JSON/CSV export bundle (Server Admin + AAL2)",
+)
+async def import_linear_bundle(
+    req: AdminGenericImportRequest,
+    caller: Annotated[PrincipalContext, Depends(require_server_admin)],
+    session: Annotated[AsyncSession, Depends(get_rls_session)],
+) -> ImportDiffReport:
+    """Import a validated Linear JSON or CSV export into the workspace."""
+    data = _load_generic_data(req.bundle_name, req.bundle_data)
+    importer_caller = await _resolve_target_context(session, caller, req.workspace_slug)
+    importer = LinearImporter(
+        session=session,
+        caller=importer_caller,
+        user_map=req.user_map,
+    )
+    target_key = req.project_key or "LIN"
+    try:
+        report = await importer.run_import(data, target_project_key=target_key, dry_run=req.dry_run)
+        if not req.dry_run:
+            await session.commit()
+    except ImportIntegrityError as exc:
+        await session.rollback()
+        raise ProblemException(
+            code="IMPORT_INTEGRITY_FAILED",
+            status=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            title="Import Integrity Failed",
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        await session.rollback()
+        logger.exception("Unexpected error during Linear import")
         raise ProblemException(
             code="IMPORT_EXECUTION_ERROR",
             status=status.HTTP_500_INTERNAL_SERVER_ERROR,

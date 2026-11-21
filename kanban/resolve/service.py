@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Final, Protocol
 
 from sqlalchemy import func, select
 
+from database.models.issue_alias import IssueKeyAlias
 from database.models.issues import Issue
 from database.models.principals import Principal, User
 from database.models.projects import Cycle, Module, Project, ProjectLabel, WorkflowState
@@ -34,6 +35,7 @@ _RFC4122_UUID_REGEX: Final[re.Pattern[str]] = re.compile(
 )
 _PROJECT_IDENTIFIER_REGEX: Final[re.Pattern[str]] = re.compile(r"^[A-Z][A-Z0-9]{1,9}$")
 _ISSUE_KEY_REGEX: Final[re.Pattern[str]] = re.compile(r"^([A-Z][A-Z0-9]{1,9})-([0-9]{1,18})$")
+_LEGACY_KEY_REGEX: Final[re.Pattern[str]] = re.compile(r"^([A-Z][A-Z0-9_-]{1,24})-([0-9]{1,18})$")
 
 
 @dataclass(frozen=True, slots=True)
@@ -45,6 +47,8 @@ class ResolvedRef:
     key: str
     title: str
     workspace: str | None = None
+    canonical_key: str | None = None
+    is_alias: bool = False
 
 
 class KindProvider(Protocol):
@@ -356,36 +360,65 @@ class ResolutionService:
                     key=f"{proj_ident}-{issue.sequence_id}",
                     title=issue.summary,
                     workspace=ws_slug,
+                    canonical_key=f"{proj_ident}-{issue.sequence_id}",
                 )
                 for issue, proj_ident, ws_slug in rows
             ]
 
         match = _ISSUE_KEY_REGEX.match(ref)
-        if not match:
-            return []
+        if match:
+            proj_ident = match.group(1)
+            seq_id = int(match.group(2))
 
-        proj_ident = match.group(1)
-        seq_id = int(match.group(2))
-
-        stmt_key = (
-            select(Issue, Project.identifier, Workspace.slug)
-            .join(Project, Issue.project_id == Project.id)
-            .join(Workspace, Project.workspace_id == Workspace.id)
-            .where(Project.identifier == proj_ident, Issue.sequence_id == seq_id)
-        )
-        if workspace_id is not None:
-            stmt_key = stmt_key.where(Project.workspace_id == workspace_id)
-        rows_key = (await session.execute(stmt_key)).all()
-        return [
-            ResolvedRef(
-                id=issue.id,
-                kind="issue",
-                key=f"{p_ident}-{issue.sequence_id}",
-                title=issue.summary,
-                workspace=ws_slug,
+            stmt_key = (
+                select(Issue, Project.identifier, Workspace.slug)
+                .join(Project, Issue.project_id == Project.id)
+                .join(Workspace, Project.workspace_id == Workspace.id)
+                .where(Project.identifier == proj_ident, Issue.sequence_id == seq_id)
             )
-            for issue, p_ident, ws_slug in rows_key
-        ]
+            if workspace_id is not None:
+                stmt_key = stmt_key.where(Project.workspace_id == workspace_id)
+            rows_key = (await session.execute(stmt_key)).all()
+            if rows_key:
+                return [
+                    ResolvedRef(
+                        id=issue.id,
+                        kind="issue",
+                        key=f"{p_ident}-{issue.sequence_id}",
+                        title=issue.summary,
+                        workspace=ws_slug,
+                        canonical_key=f"{p_ident}-{issue.sequence_id}",
+                    )
+                    for issue, p_ident, ws_slug in rows_key
+                ]
+
+        # Check legacy alias
+        if _LEGACY_KEY_REGEX.match(ref):
+            stmt_alias = (
+                select(Issue, Project.identifier, Workspace.slug)
+                .join(IssueKeyAlias, IssueKeyAlias.issue_id == Issue.id)
+                .join(Project, Issue.project_id == Project.id)
+                .join(Workspace, Project.workspace_id == Workspace.id)
+                .where(IssueKeyAlias.legacy_key == ref)
+            )
+            if workspace_id is not None:
+                stmt_alias = stmt_alias.where(IssueKeyAlias.workspace_id == workspace_id)
+            rows_alias = (await session.execute(stmt_alias)).all()
+            if rows_alias:
+                return [
+                    ResolvedRef(
+                        id=issue.id,
+                        kind="issue",
+                        key=f"{p_ident}-{issue.sequence_id}",
+                        title=issue.summary,
+                        workspace=ws_slug,
+                        canonical_key=f"{p_ident}-{issue.sequence_id}",
+                        is_alias=True,
+                    )
+                    for issue, p_ident, ws_slug in rows_alias
+                ]
+
+        return []
 
     async def _resolve_user(  # noqa: PLR0913
         self,

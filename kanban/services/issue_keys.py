@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Final, cast
 
 from sqlalchemy import select
 
-from database.models import Issue, ObjectRecord, Project, Workspace
+from database.models import Issue, IssueKeyAlias, ObjectRecord, Project, Workspace
 from kanban.api.problems import ProblemException, not_found
 
 if TYPE_CHECKING:
@@ -23,9 +23,11 @@ if TYPE_CHECKING:
 
 ISSUE_KEY_PATTERN: Final[str] = r"^[A-Z][A-Z0-9]{1,9}-[1-9][0-9]{0,17}$"
 _ISSUE_KEY_RE: Final[re.Pattern[str]] = re.compile(ISSUE_KEY_PATTERN)
+LEGACY_KEY_PATTERN: Final[str] = r"^[A-Z][A-Z0-9_-]{1,24}-[0-9]{1,18}$"
+_LEGACY_KEY_RE: Final[re.Pattern[str]] = re.compile(LEGACY_KEY_PATTERN)
 
 
-async def resolve_issue_ref(  # noqa: C901, PLR0912
+async def resolve_issue_ref(  # noqa: C901, PLR0912, PLR0915
     session: AsyncSession,
     caller: PrincipalContext,
     issue_ref: str,
@@ -103,7 +105,51 @@ async def resolve_issue_ref(  # noqa: C901, PLR0912
             )
         if len(rows) == 1:
             return cast("Issue", rows[0][0])
-        not_found()
+
+    if _LEGACY_KEY_RE.fullmatch(issue_ref):
+        stmt_alias = (
+            select(Issue, Project.identifier, Workspace.slug)
+            .join(IssueKeyAlias, IssueKeyAlias.issue_id == Issue.id)
+            .join(ObjectRecord, ObjectRecord.id == Issue.id)
+            .join(Project, Project.id == Issue.project_id)
+            .join(Workspace, Workspace.id == Project.workspace_id)
+            .where(IssueKeyAlias.legacy_key == issue_ref)
+        )
+        if not include_deleted:
+            stmt_alias = stmt_alias.where(ObjectRecord.deleted_at.is_(None))
+        if target_ws_id is not None:
+            stmt_alias = stmt_alias.where(IssueKeyAlias.workspace_id == target_ws_id)
+
+        rows_alias = list((await session.execute(stmt_alias)).all())
+        if len(rows_alias) > 1:
+            candidates = [
+                {
+                    "workspace": ws_slug,
+                    "project": p_ident,
+                    "key": f"{p_ident}-{iss.sequence_id}",
+                    "title": iss.summary,
+                }
+                for iss, p_ident, ws_slug in rows_alias
+            ]
+            raise ProblemException(
+                code="AMBIGUOUS_IDENTIFIER",
+                status=409,
+                title="Ambiguous Identifier",
+                detail=f"Issue key '{issue_ref}' exists in multiple authorized workspaces",
+                candidates=candidates,
+                extra={
+                    "hint": (
+                        "Pass workspace='<slug>' (e.g. workspace='prod') "
+                        "or connect via /mcp/agent/w/<slug>"
+                    )
+                },
+            )
+        if len(rows_alias) == 1:
+            iss = cast("Issue", rows_alias[0][0])
+            p_ident = rows_alias[0][1]
+            iss._resolved_canonical_key = f"{p_ident}-{iss.sequence_id}"  # type: ignore[attr-defined] # noqa: SLF001
+            iss._resolved_via_alias = True  # type: ignore[attr-defined] # noqa: SLF001
+            return iss
 
     try:
         issue_id = uuid.UUID(issue_ref)

@@ -296,4 +296,32 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
       expect(screen.getByText(/export\.json/)).toBeDefined();
     });
   });
+
+  it('switches between Plane, Jira, GitHub, and Linear source selectors', () => {
+    render(
+      <MemoryRouter initialEntries={['/admin/imports']}>
+        <PlaneImportStudio />
+      </MemoryRouter>,
+    );
+
+    expect(screen.getByTestId('studio-title').textContent).toContain('Plane Migration Import Studio');
+
+    // Click Jira
+    fireEvent.click(screen.getByTestId('source-jira-btn'));
+    expect(screen.getByTestId('studio-title').textContent).toContain('Jira Migration Import Studio');
+    expect(screen.getByTestId('target-project-key-input')).toBeDefined();
+
+    // Click GitHub
+    fireEvent.click(screen.getByTestId('source-github-btn'));
+    expect(screen.getByTestId('studio-title').textContent).toContain('GitHub Migration Import Studio');
+
+    // Click Linear
+    fireEvent.click(screen.getByTestId('source-linear-btn'));
+    expect(screen.getByTestId('studio-title').textContent).toContain('Linear Migration Import Studio');
+
+    // Click back to Plane
+    fireEvent.click(screen.getByTestId('source-plane-btn'));
+    expect(screen.getByTestId('studio-title').textContent).toContain('Plane Migration Import Studio');
+    expect(screen.queryByTestId('target-project-key-input')).toBeNull();
+  });
 });

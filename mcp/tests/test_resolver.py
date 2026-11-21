@@ -137,3 +137,20 @@ async def test_resolver_handles_non_dict_response() -> None:
     with pytest.raises(KbMcpError) as exc_info:
         await resolver.resolve("project", "KAN")
     assert exc_info.value.code == McpErrorCode.UPSTREAM_ERROR
+
+
+@pytest.mark.asyncio
+async def test_resolver_alias_resolves_canonical_key() -> None:
+    """Verify EntityResolver propagates canonical_key from alias resolution."""
+    mock_client = AsyncMock()
+    mock_client.request.return_value = {
+        "id": "44444444-4444-4444-4444-444444444444",
+        "kind": "issue",
+        "key": "CORE-1",
+        "title": "Canonical Issue",
+        "canonical_key": "CORE-1",
+    }
+    resolver = EntityResolver(mock_client)
+    res = await resolver.resolve("issue", "JIRA-101")
+    assert res.id == "44444444-4444-4444-4444-444444444444"
+    assert res.canonical_key == "CORE-1"

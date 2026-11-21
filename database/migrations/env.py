@@ -54,6 +54,18 @@ def do_run_migrations(connection: Connection) -> None:
     if set_role:
         connection.execute(text(f"SET ROLE {set_role}"))
 
+    connection.execute(
+        text(
+            "CREATE TABLE IF NOT EXISTS alembic_version ("
+            "    version_num VARCHAR(128) NOT NULL,"
+            "    CONSTRAINT alembic_version_pkc PRIMARY KEY (version_num)"
+            ")"
+        )
+    )
+    connection.execute(
+        text("ALTER TABLE alembic_version ALTER COLUMN version_num TYPE VARCHAR(128)")
+    )
+
     context.configure(
         connection=connection,
         target_metadata=target_metadata,

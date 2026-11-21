@@ -27,7 +27,7 @@ class ImportEntityMapping(Base):
     __tablename__ = "import_entity_mappings"
     __table_args__ = (
         CheckConstraint(
-            "source_system = 'plane'",
+            "source_system IN ('plane', 'jira', 'github', 'linear')",
             name="import_entity_mappings_source_system_check",
         ),
         CheckConstraint(

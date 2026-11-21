@@ -32,6 +32,7 @@ from database.models.custom_field_approval import CustomFieldApproval
 from database.models.destructive_token import DestructiveConfirmationToken
 from database.models.embeddings import ObjectEmbedding
 from database.models.import_mapping import ImportEntityMapping
+from database.models.issue_alias import IssueKeyAlias
 from database.models.issues import (
     CommentReaction,
     Issue,
@@ -120,6 +121,7 @@ __all__ = [
     "Issue",
     "IssueAssignee",
     "IssueComment",
+    "IssueKeyAlias",
     "IssueLabel",
     "IssueModule",
     "IssueSubscription",

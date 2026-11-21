@@ -28,6 +28,7 @@ class ResolvedRef:
     kind: str
     key: str
     title: str
+    canonical_key: str | None = None
 
 
 class EntityResolver:
@@ -79,11 +80,13 @@ class EntityResolver:
             msg = f"Unexpected non-object response from /api/v1/resolve: {res!r}"
             raise KbMcpError(McpErrorCode.UPSTREAM_ERROR, msg)
 
+        canonical_key = res.get("canonical_key")
         resolved = ResolvedRef(
             id=str(res["id"]),
             kind=str(res["kind"]),
             key=str(res["key"]),
             title=str(res["title"]),
+            canonical_key=str(canonical_key) if canonical_key is not None else None,
         )
         self._cache[cache_key] = resolved
         return resolved
