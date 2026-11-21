@@ -1,0 +1,26 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 16 items
+
+kanban/tests/importer/test_multi_source_importers.py::test_jira_importer_adf_and_html PASSED [  6%]
+kanban/tests/importer/test_multi_source_importers.py::test_github_issues_importer PASSED [ 12%]
+kanban/tests/importer/test_multi_source_importers.py::test_linear_importer_json_and_csv PASSED [ 18%]
+kanban/tests/importer/test_multi_source_importers.py::test_jira_importer_adf_full_elements_and_repeat_import PASSED [ 25%]
+kanban/tests/importer/test_multi_source_importers.py::test_github_importer_dry_run_and_repeat_and_api PASSED [ 31%]
+kanban/tests/importer/test_multi_source_importers.py::test_linear_importer_dry_run_and_repeat_and_api PASSED [ 37%]
+kanban/tests/importer/test_multi_source_importers.py::test_importer_unit_helpers PASSED [ 43%]
+kanban/tests/importer/test_multi_source_importers.py::test_importers_edge_cases_and_error_handling PASSED [ 50%]
+kanban/tests/importer/test_multi_source_importers.py::test_importers_unseeded_project_auto_bootstraps_states_and_prio PASSED [ 56%]
+kanban/tests/exporter/test_portable_bundle_determinism.py::test_portable_bundle_determinism PASSED [ 62%]
+kanban/tests/exporter/test_portable_bundle_determinism.py::test_portable_bundle_secret_scrubbing PASSED [ 68%]
+kanban/tests/exporter/test_portable_bundle_determinism.py::test_export_to_file PASSED [ 75%]
+kanban/tests/exporter/test_portable_bundle_determinism.py::test_serialize_value_and_format_helpers PASSED [ 81%]
+kanban/tests/exporter/test_portable_bundle_determinism.py::test_export_portable_workspace_api PASSED [ 87%]
+kanban/tests/exporter/test_portable_bundle_determinism.py::test_cli_portable_export PASSED [ 93%]
+kanban/tests/exporter/test_portable_bundle_determinism.py::test_exporter_missing_workspace PASSED [100%]
+
+============================== 16 passed in 0.60s ==============================

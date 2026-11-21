@@ -1,0 +1,53 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 43 items
+
+kanban/tests/importer/test_plane_db_exporter.py::test_check_forbidden_exporter_args PASSED [  2%]
+kanban/tests/importer/test_plane_db_exporter.py::test_read_secret_source_env PASSED [  4%]
+kanban/tests/importer/test_plane_db_exporter.py::test_read_secret_source_file_permissions PASSED [  6%]
+kanban/tests/importer/test_plane_db_exporter.py::test_resolve_exporter_config_validation PASSED [  9%]
+kanban/tests/importer/test_plane_db_exporter.py::test_minio_sigv4_header_generation PASSED [ 11%]
+kanban/tests/importer/test_plane_db_exporter.py::test_minio_sigv4_download_payload_cap PASSED [ 13%]
+kanban/tests/importer/test_plane_db_exporter.py::test_minio_sigv4_download_success PASSED [ 16%]
+kanban/tests/importer/test_plane_db_exporter.py::test_plane_db_exporter_transaction_and_export_flow PASSED [ 18%]
+kanban/tests/importer/test_plane_db_exporter.py::test_read_secret_source_missing_file PASSED [ 20%]
+kanban/tests/importer/test_plane_db_exporter.py::test_read_secret_source_env_file_pointer PASSED [ 23%]
+kanban/tests/importer/test_plane_db_exporter.py::test_minio_download_object_variations PASSED [ 25%]
+kanban/tests/importer/test_plane_db_exporter.py::test_plane_db_exporter_attachments_with_manifest PASSED [ 27%]
+kanban/tests/importer/test_plane_db_exporter.py::test_plane_db_exporter_no_active_workspaces PASSED [ 30%]
+kanban/tests/importer/test_plane_db_exporter.py::test_read_secret_source_direct_string_and_env_file PASSED [ 32%]
+kanban/tests/importer/test_plane_db_exporter.py::test_minio_sigv4_headers_no_keys PASSED [ 34%]
+kanban/tests/importer/test_plane_db_exporter.py::test_minio_stream_object_error_status PASSED [ 37%]
+kanban/tests/importer/test_plane_db_exporter.py::test_plane_db_exporter_rollback_on_error PASSED [ 39%]
+kanban/tests/importer/test_plane_db_exporter.py::test_plane_db_exporter_empty_issues_and_collision PASSED [ 41%]
+kanban/tests/importer/test_plane_merge_mode.py::test_merge_mode_target_project_missing PASSED [ 44%]
+kanban/tests/importer/test_plane_merge_mode.py::test_merge_mode_successful_import_and_remap PASSED [ 46%]
+kanban/tests/importer/test_plane_merge_mode.py::test_merge_mode_pdf_attachment_ingestion PASSED [ 48%]
+kanban/tests/importer/test_plane_merge_mode.py::test_merge_mode_module_deduplication PASSED [ 51%]
+kanban/tests/importer/test_plane_merge_mode.py::test_merge_mode_cutover_verifier PASSED [ 53%]
+kanban/tests/importer/test_plane_merge_mode.py::test_merge_mode_markdown_attachment PASSED [ 55%]
+kanban/tests/importer/test_plane_merge_mode.py::test_parse_iso_datetime_helper PASSED [ 58%]
+kanban/tests/importer/test_plane_merge_mode.py::test_merge_mode_user_mapping_and_updates PASSED [ 60%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_01_positive_cutover_verification PASSED [ 62%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_02_parity_failure_detection PASSED [ 65%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_03_invalid_link_detection PASSED [ 67%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_04_qa_proof_bundle_check PASSED [ 69%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_05_markdown_purity_check PASSED [ 72%]
+kanban/tests/importer/test_cutover_verifier.py::test_edge_cases_workspace_and_project_not_found PASSED [ 74%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_sequence_counter_lower_than_max PASSED [ 76%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_forbidden_html_columns_in_catalog PASSED [ 79%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_corrupted_bundle_dir PASSED [ 81%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_cli_execute_verify PASSED [ 83%]
+kanban/tests/importer/test_cutover_verifier.py::test_verifier_branch_coverage PASSED [ 86%]
+kanban/tests/importer/test_cutover_verifier.py::test_cli_subparsers_registration PASSED [ 88%]
+kanban/tests/importer/test_cutover_verifier.py::test_cli_runner_success PASSED [ 90%]
+kanban/tests/importer/test_cutover_verifier.py::test_cli_runner_exception_handling PASSED [ 93%]
+kanban/tests/importer/test_cutover_verifier.py::test_scan_markdown_for_html_residue_inline_code_spans PASSED [ 95%]
+kanban/tests/importer/test_cutover_verifier.py::test_resolve_and_verify_bundle_with_build_or_typecheck PASSED [ 97%]
+kanban/tests/importer/test_cutover_verifier.py::test_check_qa_proofs_external_project PASSED [100%]
+
+============================== 43 passed in 2.41s ==============================

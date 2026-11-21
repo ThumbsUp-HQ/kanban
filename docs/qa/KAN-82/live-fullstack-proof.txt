@@ -1,0 +1,443 @@
+=== STEP 3: CUTOVER VERIFY ALL PROJECTS ===
+--- Verifying chatgpt / DAYBREAK ---
+
+=== Cutover Verification Audit: PASSED ===
+Workspace: chatgpt
+Project: DAYBREAK
+Checks: 6 / 6 passed
+--------------------------------------------------
+[PASS] entity_count_and_key_parity
+       Detail: Verified 1:1 entity parity across 0 issues, 6 states, 0 cycles, 0 modules, 0 comments. Sequence counter at 0 >= max sequence 0.
+[PASS] zero_invalid_object_links
+       Detail: Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+[PASS] activity_hash_chain_intact
+       Detail: Activity ledger hash chain is intact across 19 rows.
+[PASS] canonical_markdown_purity
+       Detail: Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 0 issues and 0 comments.
+[PASS] qa_proof_bundle_continuity
+       Detail: QA proof bundles verified: external project DAYBREAK exempt from local repository QA directory.
+[PASS] rls_enforcement_active
+       Detail: Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+--------------------------------------------------
+
+--- Verifying chatgpt / CHATG ---
+
+=== Cutover Verification Audit: PASSED ===
+Workspace: chatgpt
+Project: CHATG
+Checks: 6 / 6 passed
+--------------------------------------------------
+[PASS] entity_count_and_key_parity
+       Detail: Verified 1:1 entity parity across 7 issues, 5 states, 2 cycles, 3 modules, 0 comments. Sequence counter at 7 >= max sequence 7.
+[PASS] zero_invalid_object_links
+       Detail: Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+[PASS] activity_hash_chain_intact
+       Detail: Activity ledger hash chain is intact across 19 rows.
+[PASS] canonical_markdown_purity
+       Detail: Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 7 issues and 0 comments.
+[PASS] qa_proof_bundle_continuity
+       Detail: QA proof bundles verified: external project CHATG exempt from local repository QA directory.
+[PASS] rls_enforcement_active
+       Detail: Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+--------------------------------------------------
+
+--- Verifying gemwebui / GEMWEBUI ---
+
+=== Cutover Verification Audit: PASSED ===
+Workspace: gemwebui
+Project: GEMWEBUI
+Checks: 6 / 6 passed
+--------------------------------------------------
+[PASS] entity_count_and_key_parity
+       Detail: Verified 1:1 entity parity across 382 issues, 6 states, 83 cycles, 11 modules, 882 comments. Sequence counter at 419 >= max sequence 419.
+[PASS] zero_invalid_object_links
+       Detail: Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+[PASS] activity_hash_chain_intact
+       Detail: Activity ledger hash chain is intact across 2 rows.
+[PASS] canonical_markdown_purity
+       Detail: Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 382 issues and 882 comments.
+[PASS] qa_proof_bundle_continuity
+       Detail: QA proof bundles verified: external project GEMWEBUI exempt from local repository QA directory.
+[PASS] rls_enforcement_active
+       Detail: Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+--------------------------------------------------
+
+--- Verifying general / TOWERFORGE ---
+
+=== Cutover Verification Audit: PASSED ===
+Workspace: general
+Project: TOWERFORGE
+Checks: 6 / 6 passed
+--------------------------------------------------
+[PASS] entity_count_and_key_parity
+       Detail: Verified 1:1 entity parity across 22 issues, 6 states, 0 cycles, 0 modules, 26 comments. Sequence counter at 22 >= max sequence 22.
+[PASS] zero_invalid_object_links
+       Detail: Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+[PASS] activity_hash_chain_intact
+       Detail: Activity ledger hash chain is intact across 14 rows.
+[PASS] canonical_markdown_purity
+       Detail: Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 22 issues and 26 comments.
+[PASS] qa_proof_bundle_continuity
+       Detail: QA proof bundles verified: external project TOWERFORGE exempt from local repository QA directory.
+[PASS] rls_enforcement_active
+       Detail: Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+--------------------------------------------------
+
+--- Verifying general / NETALERTXN ---
+
+=== Cutover Verification Audit: PASSED ===
+Workspace: general
+Project: NETALERTXN
+Checks: 6 / 6 passed
+--------------------------------------------------
+[PASS] entity_count_and_key_parity
+       Detail: Verified 1:1 entity parity across 22 issues, 6 states, 0 cycles, 0 modules, 44 comments. Sequence counter at 22 >= max sequence 22.
+[PASS] zero_invalid_object_links
+       Detail: Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+[PASS] activity_hash_chain_intact
+       Detail: Activity ledger hash chain is intact across 14 rows.
+[PASS] canonical_markdown_purity
+       Detail: Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 22 issues and 44 comments.
+[PASS] qa_proof_bundle_continuity
+       Detail: QA proof bundles verified: external project NETALERTXN exempt from local repository QA directory.
+[PASS] rls_enforcement_active
+       Detail: Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+--------------------------------------------------
+
+--- Verifying general / GENER ---
+
+=== Cutover Verification Audit: PASSED ===
+Workspace: general
+Project: GENER
+Checks: 6 / 6 passed
+--------------------------------------------------
+[PASS] entity_count_and_key_parity
+       Detail: Verified 1:1 entity parity across 8 issues, 5 states, 3 cycles, 3 modules, 6 comments. Sequence counter at 8 >= max sequence 8.
+[PASS] zero_invalid_object_links
+       Detail: Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+[PASS] activity_hash_chain_intact
+       Detail: Activity ledger hash chain is intact across 14 rows.
+[PASS] canonical_markdown_purity
+       Detail: Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 8 issues and 6 comments.
+[PASS] qa_proof_bundle_continuity
+       Detail: QA proof bundles verified: external project GENER exempt from local repository QA directory.
+[PASS] rls_enforcement_active
+       Detail: Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+--------------------------------------------------
+
+--- Verifying general / EXTENSION ---
+
+=== Cutover Verification Audit: PASSED ===
+Workspace: general
+Project: EXTENSION
+Checks: 6 / 6 passed
+--------------------------------------------------
+[PASS] entity_count_and_key_parity
+       Detail: Verified 1:1 entity parity across 0 issues, 6 states, 0 cycles, 0 modules, 0 comments. Sequence counter at 0 >= max sequence 0.
+[PASS] zero_invalid_object_links
+       Detail: Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+[PASS] activity_hash_chain_intact
+       Detail: Activity ledger hash chain is intact across 14 rows.
+[PASS] canonical_markdown_purity
+       Detail: Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 0 issues and 0 comments.
+[PASS] qa_proof_bundle_continuity
+       Detail: QA proof bundles verified: external project EXTENSION exempt from local repository QA directory.
+[PASS] rls_enforcement_active
+       Detail: Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+--------------------------------------------------
+
+--- Verifying general / DASH ---
+
+=== Cutover Verification Audit: PASSED ===
+Workspace: general
+Project: DASH
+Checks: 6 / 6 passed
+--------------------------------------------------
+[PASS] entity_count_and_key_parity
+       Detail: Verified 1:1 entity parity across 32 issues, 6 states, 4 cycles, 0 modules, 38 comments. Sequence counter at 33 >= max sequence 33.
+[PASS] zero_invalid_object_links
+       Detail: Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+[PASS] activity_hash_chain_intact
+       Detail: Activity ledger hash chain is intact across 14 rows.
+[PASS] canonical_markdown_purity
+       Detail: Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 32 issues and 38 comments.
+[PASS] qa_proof_bundle_continuity
+       Detail: QA proof bundles verified: external project DASH exempt from local repository QA directory.
+[PASS] rls_enforcement_active
+       Detail: Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+--------------------------------------------------
+
+--- Verifying joplin-server-vector-memory / JOPLINMEM ---
+
+=== Cutover Verification Audit: PASSED ===
+Workspace: joplin-server-vector-memory
+Project: JOPLINMEM
+Checks: 6 / 6 passed
+--------------------------------------------------
+[PASS] entity_count_and_key_parity
+       Detail: Verified 1:1 entity parity across 160 issues, 7 states, 22 cycles, 7 modules, 200 comments. Sequence counter at 176 >= max sequence 176.
+[PASS] zero_invalid_object_links
+       Detail: Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+[PASS] activity_hash_chain_intact
+       Detail: Activity ledger hash chain is intact across 1 rows.
+[PASS] canonical_markdown_purity
+       Detail: Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 160 issues and 200 comments.
+[PASS] qa_proof_bundle_continuity
+       Detail: QA proof bundles verified: external project JOPLINMEM exempt from local repository QA directory.
+[PASS] rls_enforcement_active
+       Detail: Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+--------------------------------------------------
+
+--- Verifying netalertx / NETAL ---
+
+=== Cutover Verification Audit: PASSED ===
+Workspace: netalertx
+Project: NETAL
+Checks: 6 / 6 passed
+--------------------------------------------------
+[PASS] entity_count_and_key_parity
+       Detail: Verified 1:1 entity parity across 19 issues, 5 states, 2 cycles, 3 modules, 0 comments. Sequence counter at 19 >= max sequence 19.
+[PASS] zero_invalid_object_links
+       Detail: Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+[PASS] activity_hash_chain_intact
+       Detail: Activity ledger hash chain is intact across 2 rows.
+[PASS] canonical_markdown_purity
+       Detail: Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 19 issues and 0 comments.
+[PASS] qa_proof_bundle_continuity
+       Detail: QA proof bundles verified: external project NETAL exempt from local repository QA directory.
+[PASS] rls_enforcement_active
+       Detail: Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+--------------------------------------------------
+
+--- Verifying netalertx / FEREWRITEE ---
+
+=== Cutover Verification Audit: PASSED ===
+Workspace: netalertx
+Project: FEREWRITEE
+Checks: 6 / 6 passed
+--------------------------------------------------
+[PASS] entity_count_and_key_parity
+       Detail: Verified 1:1 entity parity across 26 issues, 6 states, 2 cycles, 0 modules, 0 comments. Sequence counter at 26 >= max sequence 26.
+[PASS] zero_invalid_object_links
+       Detail: Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+[PASS] activity_hash_chain_intact
+       Detail: Activity ledger hash chain is intact across 2 rows.
+[PASS] canonical_markdown_purity
+       Detail: Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 26 issues and 0 comments.
+[PASS] qa_proof_bundle_continuity
+       Detail: QA proof bundles verified: external project FEREWRITEE exempt from local repository QA directory.
+[PASS] rls_enforcement_active
+       Detail: Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+--------------------------------------------------
+
+--- Verifying pastebin / PASTE ---
+
+=== Cutover Verification Audit: PASSED ===
+Workspace: pastebin
+Project: PASTE
+Checks: 6 / 6 passed
+--------------------------------------------------
+[PASS] entity_count_and_key_parity
+       Detail: Verified 1:1 entity parity across 7 issues, 5 states, 2 cycles, 3 modules, 0 comments. Sequence counter at 7 >= max sequence 7.
+[PASS] zero_invalid_object_links
+       Detail: Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+[PASS] activity_hash_chain_intact
+       Detail: Activity ledger hash chain is intact across 1 rows.
+[PASS] canonical_markdown_purity
+       Detail: Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 7 issues and 0 comments.
+[PASS] qa_proof_bundle_continuity
+       Detail: QA proof bundles verified: external project PASTE exempt from local repository QA directory.
+[PASS] rls_enforcement_active
+       Detail: Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+--------------------------------------------------
+
+--- Verifying pikvm-human-mcp / PIKVM ---
+
+=== Cutover Verification Audit: PASSED ===
+Workspace: pikvm-human-mcp
+Project: PIKVM
+Checks: 6 / 6 passed
+--------------------------------------------------
+[PASS] entity_count_and_key_parity
+       Detail: Verified 1:1 entity parity across 21 issues, 5 states, 2 cycles, 3 modules, 1 comments. Sequence counter at 28 >= max sequence 28.
+[PASS] zero_invalid_object_links
+       Detail: Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+[PASS] activity_hash_chain_intact
+       Detail: Activity ledger hash chain is intact across 1 rows.
+[PASS] canonical_markdown_purity
+       Detail: Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 21 issues and 1 comments.
+[PASS] qa_proof_bundle_continuity
+       Detail: QA proof bundles verified: external project PIKVM exempt from local repository QA directory.
+[PASS] rls_enforcement_active
+       Detail: Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+--------------------------------------------------
+
+--- Verifying plane-mcp / YAML ---
+
+=== Cutover Verification Audit: PASSED ===
+Workspace: plane-mcp
+Project: YAML
+Checks: 6 / 6 passed
+--------------------------------------------------
+[PASS] entity_count_and_key_parity
+       Detail: Verified 1:1 entity parity across 4 issues, 6 states, 0 cycles, 0 modules, 3 comments. Sequence counter at 4 >= max sequence 4.
+[PASS] zero_invalid_object_links
+       Detail: Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+[PASS] activity_hash_chain_intact
+       Detail: Activity ledger hash chain is intact across 4 rows.
+[PASS] canonical_markdown_purity
+       Detail: Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 4 issues and 3 comments.
+[PASS] qa_proof_bundle_continuity
+       Detail: QA proof bundles verified: external project YAML exempt from local repository QA directory.
+[PASS] rls_enforcement_active
+       Detail: Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+--------------------------------------------------
+
+--- Verifying plane-mcp / JSON ---
+
+=== Cutover Verification Audit: PASSED ===
+Workspace: plane-mcp
+Project: JSON
+Checks: 6 / 6 passed
+--------------------------------------------------
+[PASS] entity_count_and_key_parity
+       Detail: Verified 1:1 entity parity across 0 issues, 6 states, 0 cycles, 0 modules, 0 comments. Sequence counter at 0 >= max sequence 0.
+[PASS] zero_invalid_object_links
+       Detail: Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+[PASS] activity_hash_chain_intact
+       Detail: Activity ledger hash chain is intact across 4 rows.
+[PASS] canonical_markdown_purity
+       Detail: Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 0 issues and 0 comments.
+[PASS] qa_proof_bundle_continuity
+       Detail: QA proof bundles verified: external project JSON exempt from local repository QA directory.
+[PASS] rls_enforcement_active
+       Detail: Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+--------------------------------------------------
+
+--- Verifying plane-mcp / EMOJI ---
+
+=== Cutover Verification Audit: PASSED ===
+Workspace: plane-mcp
+Project: EMOJI
+Checks: 6 / 6 passed
+--------------------------------------------------
+[PASS] entity_count_and_key_parity
+       Detail: Verified 1:1 entity parity across 0 issues, 6 states, 0 cycles, 0 modules, 0 comments. Sequence counter at 0 >= max sequence 0.
+[PASS] zero_invalid_object_links
+       Detail: Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+[PASS] activity_hash_chain_intact
+       Detail: Activity ledger hash chain is intact across 4 rows.
+[PASS] canonical_markdown_purity
+       Detail: Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 0 issues and 0 comments.
+[PASS] qa_proof_bundle_continuity
+       Detail: QA proof bundles verified: external project EMOJI exempt from local repository QA directory.
+[PASS] rls_enforcement_active
+       Detail: Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+--------------------------------------------------
+
+--- Verifying plane-mcp / AGENT ---
+
+=== Cutover Verification Audit: PASSED ===
+Workspace: plane-mcp
+Project: AGENT
+Checks: 6 / 6 passed
+--------------------------------------------------
+[PASS] entity_count_and_key_parity
+       Detail: Verified 1:1 entity parity across 64 issues, 5 states, 14 cycles, 3 modules, 43 comments. Sequence counter at 66 >= max sequence 66.
+[PASS] zero_invalid_object_links
+       Detail: Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+[PASS] activity_hash_chain_intact
+       Detail: Activity ledger hash chain is intact across 4 rows.
+[PASS] canonical_markdown_purity
+       Detail: Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 64 issues and 43 comments.
+[PASS] qa_proof_bundle_continuity
+       Detail: QA proof bundles verified: external project AGENT exempt from local repository QA directory.
+[PASS] rls_enforcement_active
+       Detail: Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+--------------------------------------------------
+
+--- Verifying revasri-thermal-camera / REVAS ---
+
+=== Cutover Verification Audit: PASSED ===
+Workspace: revasri-thermal-camera
+Project: REVAS
+Checks: 6 / 6 passed
+--------------------------------------------------
+[PASS] entity_count_and_key_parity
+       Detail: Verified 1:1 entity parity across 4 issues, 5 states, 2 cycles, 3 modules, 4 comments. Sequence counter at 11 >= max sequence 11.
+[PASS] zero_invalid_object_links
+       Detail: Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+[PASS] activity_hash_chain_intact
+       Detail: Activity ledger hash chain is intact across 1 rows.
+[PASS] canonical_markdown_purity
+       Detail: Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 4 issues and 4 comments.
+[PASS] qa_proof_bundle_continuity
+       Detail: QA proof bundles verified: external project REVAS exempt from local repository QA directory.
+[PASS] rls_enforcement_active
+       Detail: Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+--------------------------------------------------
+
+--- Verifying ssh / SSH ---
+
+=== Cutover Verification Audit: PASSED ===
+Workspace: ssh
+Project: SSH
+Checks: 6 / 6 passed
+--------------------------------------------------
+[PASS] entity_count_and_key_parity
+       Detail: Verified 1:1 entity parity across 255 issues, 7 states, 105 cycles, 3 modules, 1030 comments. Sequence counter at 270 >= max sequence 270.
+[PASS] zero_invalid_object_links
+       Detail: Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+[PASS] activity_hash_chain_intact
+       Detail: Activity ledger hash chain is intact across 1 rows.
+[PASS] canonical_markdown_purity
+       Detail: Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 255 issues and 1030 comments.
+[PASS] qa_proof_bundle_continuity
+       Detail: QA proof bundles verified: external project SSH exempt from local repository QA directory.
+[PASS] rls_enforcement_active
+       Detail: Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+--------------------------------------------------
+
+--- Verifying tesla-stuntz / TESLA ---
+
+=== Cutover Verification Audit: PASSED ===
+Workspace: tesla-stuntz
+Project: TESLA
+Checks: 6 / 6 passed
+--------------------------------------------------
+[PASS] entity_count_and_key_parity
+       Detail: Verified 1:1 entity parity across 7 issues, 5 states, 2 cycles, 3 modules, 5 comments. Sequence counter at 11 >= max sequence 11.
+[PASS] zero_invalid_object_links
+       Detail: Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+[PASS] activity_hash_chain_intact
+       Detail: Activity ledger hash chain is intact across 1 rows.
+[PASS] canonical_markdown_purity
+       Detail: Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 7 issues and 5 comments.
+[PASS] qa_proof_bundle_continuity
+       Detail: QA proof bundles verified: external project TESLA exempt from local repository QA directory.
+[PASS] rls_enforcement_active
+       Detail: Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+--------------------------------------------------
+
+--- Verifying kanban / KAN (merged from KANBA) ---
+
+=== Cutover Verification Audit: PASSED ===
+Workspace: kanban
+Project: KAN
+Checks: 6 / 6 passed
+--------------------------------------------------
+[PASS] entity_count_and_key_parity
+       Detail: Verified merge-mode entity parity across 221 snapshot issues mapped to target project KAN (total 304 issues in project). Sequence counter at 304 >= max sequence 304.
+[PASS] zero_invalid_object_links
+       Detail: Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows.
+[PASS] activity_hash_chain_intact
+       Detail: Activity ledger hash chain is intact across 897 rows.
+[PASS] canonical_markdown_purity
+       Detail: Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 304 issues and 518 comments.
+[PASS] qa_proof_bundle_continuity
+       Detail: QA proof bundles verified for 257 issues (10 exempted). All required files present and non-empty.
+[PASS] rls_enforcement_active
+       Detail: Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false).
+--------------------------------------------------
+
+=== ALL CUTOVER VERIFICATIONS PASSED SUCCESSFULLY ===

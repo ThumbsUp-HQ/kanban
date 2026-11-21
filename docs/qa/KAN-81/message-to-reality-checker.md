@@ -21,3 +21,4 @@ This packet provides passive forensic verification evidence for ticket `KAN-81` 
    - `IssueSurface.tsx` populates `split-section-attachments` tab.
 8. [x] **Zero Em/En-Dashes**: Passed `python -m scripts.check_no_dashes --all`.
 9. [x] **Test Coverage**: >=95% branch coverage on touched modules. All 52 backend tests and 121+ web tests pass.
+10. [x] **Live Zero-Mock Container QA**: Verified against `kanban-local-import` (`127.0.0.1:18970:8080`) with forced-download headers in `live-fullstack-proof.txt` and Playwright responsive screenshots in `screenshots/`.

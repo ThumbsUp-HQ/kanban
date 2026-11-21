@@ -1,0 +1,44 @@
+{
+  "audit_version": "1.0",
+  "workspace": "kanban",
+  "project": "KAN",
+  "source_project": "KANBA",
+  "merge_mode": true,
+  "status": "PASSED",
+  "checks_passed": 6,
+  "checks_total": 6,
+  "checks": [
+    {
+      "name": "entity_count_and_key_parity",
+      "status": "PASS",
+      "detail": "Verified merge-mode entity parity across 221 snapshot issues mapped to target project KAN (total 304 issues in project). Sequence counter at 304 >= max sequence 304."
+    },
+    {
+      "name": "zero_invalid_object_links",
+      "status": "PASS",
+      "detail": "Zero invalid object links detected. Link auditor verified 0 findings and 0 FLAGGED_INVALID rows."
+    },
+    {
+      "name": "activity_hash_chain_intact",
+      "status": "PASS",
+      "detail": "Activity ledger hash chain is intact across 897 rows."
+    },
+    {
+      "name": "canonical_markdown_purity",
+      "status": "PASS",
+      "detail": "Verified canonical Markdown purity: 0 *_html/*_ast columns, and 0 unconverted HTML residue across 304 issues and 518 comments."
+    },
+    {
+      "name": "qa_proof_bundle_continuity",
+      "status": "PASS",
+      "detail": "QA proof bundles verified for 257 issues (10 exempted). All required files present and non-empty."
+    },
+    {
+      "name": "rls_enforcement_active",
+      "status": "PASS",
+      "detail": "Row-Level Security active across all 85 public tenant tables and partitions. kanban_app role permissions verified (rolsuper=false, rolbypassrls=false)."
+    }
+  ],
+  "total_imported_projects": 21,
+  "total_issues_in_kan": 304
+}
