@@ -142,7 +142,7 @@ class GateWorkerRunner:
         hook_id: object,
         code: str,
         *,
-        invocation_id: object = None,
+        invocation_id: uuid.UUID | str | None = None,
         detail: str | None = None,
     ) -> None:
         """Forward failure or timeout to GateCoordinator within an authorized RLS session."""

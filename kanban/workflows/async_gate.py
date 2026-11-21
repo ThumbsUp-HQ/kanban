@@ -179,7 +179,7 @@ class AgentGateDispatcher:
             if first_hook.agent_definition_id
             else None
         )
-        if agent_def and agent_def.principal_id:
+        if agent_def and agent_def.principal_id is not None:
             await _ensure_agent_acl_and_role(
                 session=session,
                 workspace_id=execution.workspace_id,
@@ -582,7 +582,7 @@ class GateCoordinator:
                 if next_hook.agent_definition_id
                 else None
             )
-            if next_agent_def and next_agent_def.principal_id:
+            if next_agent_def and next_agent_def.principal_id is not None:
                 await _ensure_agent_acl_and_role(
                     session=session,
                     workspace_id=execution.workspace_id,
@@ -761,7 +761,7 @@ class GateCoordinator:
             if agent_def and agent_def.principal_id is not None
             else execution.invoking_principal_id
         )
-        if agent_def and agent_def.principal_id:
+        if agent_def and agent_def.principal_id is not None:
             await _ensure_agent_acl_and_role(
                 session=session,
                 workspace_id=execution.workspace_id,
@@ -1007,7 +1007,7 @@ class GateCoordinator:
                     if next_hook.agent_definition_id
                     else None
                 )
-                if next_agent_def and next_agent_def.principal_id:
+                if next_agent_def and next_agent_def.principal_id is not None:
                     await _ensure_agent_acl_and_role(
                         session=session,
                         workspace_id=execution.workspace_id,

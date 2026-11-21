@@ -10,7 +10,7 @@ import hashlib
 import json
 import uuid
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 from sqlalchemy import select, text
@@ -1579,7 +1579,7 @@ async def test_gate_worker_runner_real_rls_approval_and_comment(
     registry.register("in_app_sdk", FixtureApprovalHarness())
 
     runner = GateWorkerRunner(
-        session_factory=api_env.client._transport.app.state.session_factory,  # noqa: SLF001
+        session_factory=cast("Any", api_env.client._transport).app.state.session_factory,  # noqa: SLF001
         harness_registry=registry,
         workspace_id=api_env.workspace_id,
         admin_principal_id=admin.id,
@@ -1689,7 +1689,7 @@ async def test_gate_worker_runner_real_rls_timeout_sweep(
     await api_env.seed.commit()
 
     runner = GateWorkerRunner(
-        session_factory=api_env.client._transport.app.state.session_factory,  # noqa: SLF001
+        session_factory=cast("Any", api_env.client._transport).app.state.session_factory,  # noqa: SLF001
         workspace_id=api_env.workspace_id,
         admin_principal_id=admin.id,
     )
