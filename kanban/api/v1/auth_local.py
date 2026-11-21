@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from fastapi import APIRouter
 from pydantic import BaseModel, Field
+from sqlalchemy import text
 from starlette.requests import Request  # noqa: TC002  # Required at runtime for FastAPI dependency analysis
 from starlette.responses import JSONResponse
 
@@ -91,6 +92,9 @@ async def local_login(request: Request, body: LocalLoginRequest) -> JSONResponse
         aal_level=1,
     )
 
+    methods: list[str] = ["webauthn", "totp", "recovery"]
+    preferred_method: str = "webauthn"
+
     async with session_factory.session(anon_ctx) as async_session:
         issued = await login_service.login(
             async_session,
@@ -101,12 +105,34 @@ async def local_login(request: Request, body: LocalLoginRequest) -> JSONResponse
             remember_me=body.remember_me,
         )
 
+        if issued.principal_id is not None:
+            status_res = await async_session.execute(
+                text("SELECT * FROM kb_auth.mfa_status(:p_id)"),
+                {"p_id": issued.principal_id},
+            )
+            status_row = status_res.mappings().first()
+            if status_row:
+                has_webauthn = int(status_row.get("webauthn_credential_count", 0)) > 0
+                has_totp = bool(status_row.get("has_active_totp"))
+                unused_codes = int(status_row.get("unused_recovery_codes", 0))
+                enrolled: list[str] = []
+                if has_webauthn:
+                    enrolled.append("webauthn")
+                if has_totp:
+                    enrolled.append("totp")
+                if unused_codes > 0:
+                    enrolled.append("recovery")
+                if enrolled:
+                    methods = enrolled
+                preferred_method = "webauthn" if has_webauthn else "totp"
+
     response = JSONResponse(
         content={
             "authenticated": True,
             "status": "mfa_required" if issued.mfa_pending else "authenticated",
             "challenge_id": str(issued.session_id),
-            "methods": ["totp", "webauthn", "recovery"],
+            "methods": methods,
+            "preferred_method": preferred_method,
             "session_id": str(issued.session_id),
             "aal_level": issued.aal_level,
             "mfa_pending": issued.mfa_pending,

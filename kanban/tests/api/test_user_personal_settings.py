@@ -282,6 +282,7 @@ async def test_passkey_rename_and_mfa_status(
     assert st["totp_enabled"] is False
     assert st["passkeys_count"] == 1
     assert st["recovery_codes_remaining"] == 0
+    assert st["preferred_method"] == "webauthn"
 
     # Rename passkey
     rename_res = await client.patch(

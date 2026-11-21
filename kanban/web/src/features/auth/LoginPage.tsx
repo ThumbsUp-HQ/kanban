@@ -73,7 +73,7 @@ export function LoginPage({
         if (isMounted.current && sessionInfo.authenticated && sessionInfo.mfa_pending) {
           setMfaChallenge({
             challengeId: sessionInfo.session_id ?? 'session-mfa',
-            methods: ['totp', 'webauthn', 'recovery'],
+            methods: ['webauthn', 'totp', 'recovery'],
           });
         }
       } catch {

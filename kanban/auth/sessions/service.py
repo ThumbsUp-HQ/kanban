@@ -116,6 +116,7 @@ class IssuedSession:
     idle_expires_at: datetime
     absolute_expires_at: datetime
     is_persistent: bool = True
+    principal_id: uuid.UUID | None = None
 
 
 class SessionService:
@@ -217,6 +218,7 @@ class SessionService:
             idle_expires_at=idle_expires_at,
             absolute_expires_at=absolute_expires_at,
             is_persistent=remember_me,
+            principal_id=principal_id,
         )
 
     async def elevate_aal(
@@ -260,6 +262,7 @@ class SessionService:
             idle_expires_at=resolved.idle_expires_at,
             absolute_expires_at=resolved.absolute_expires_at,
             is_persistent=resolved.is_persistent,
+            principal_id=resolved.principal_id,
         )
 
     async def logout(self, session: AsyncSession, session_id: uuid.UUID) -> bool:
@@ -375,6 +378,7 @@ class SessionService:
             idle_expires_at=idle_expires_at,
             absolute_expires_at=absolute_expires_at,
             is_persistent=is_persistent,
+            principal_id=target_principal_id,
         )
 
     async def resolve_session(

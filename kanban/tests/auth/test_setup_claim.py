@@ -321,7 +321,10 @@ async def test_case_2_positive_passkey_branch(
             headers={CSRF_HEADER_NAME: csrf_token},
         )
         assert verify_res.status_code == 200
-        assert verify_res.json()["aal_level"] == 2
+        verify_data = verify_res.json()
+        assert verify_data["aal_level"] == 2
+        assert "recovery_codes" in verify_data
+        assert len(verify_data["recovery_codes"]) == 10
         _sync_cookies(client, verify_res)
 
         # Admin route is unlocked

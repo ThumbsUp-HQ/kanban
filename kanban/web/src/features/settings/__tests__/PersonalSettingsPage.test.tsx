@@ -111,7 +111,10 @@ describe('PersonalSettingsPage', () => {
     expect(tzSelect.value).toBe('America/New_York');
 
     expect(screen.getByText('MacBook TouchID')).toBeDefined();
+    expect(screen.getByTestId('mfa-status-passkeys').textContent).toBe('1 Enrolled');
+    expect(screen.getByText('Passkeys (Primary 2FA)')).toBeDefined();
     expect(screen.getByTestId('mfa-status-totp').textContent).toBe('Active');
+    expect(screen.getByText('Authenticator App (Backup TOTP)')).toBeDefined();
     expect(screen.getByTestId('mfa-status-recovery-count').textContent).toBe('10');
   });
 
@@ -1503,6 +1506,7 @@ describe('PersonalSettingsPage', () => {
     vi.mocked(api.fetchPasskeys).mockResolvedValue([]);
     renderComponent();
     await waitFor(() => {
+      expect(screen.getByTestId('mfa-status-passkeys').textContent).toBe('Default 2FA');
       expect(screen.getByTestId('regenerate-hint')).toBeDefined();
     });
     const regenBtn = screen.getByTestId('regenerate-recovery-codes-btn');

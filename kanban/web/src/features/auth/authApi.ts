@@ -206,7 +206,7 @@ export async function submitLocalAdminLogin(credentials: {
     return {
       status: 'mfa_required',
       challenge_id: result.challenge_id ?? result.session_id ?? '',
-      methods: result.methods ?? ['totp', 'webauthn', 'recovery'],
+      methods: result.methods ?? ['webauthn', 'totp', 'recovery'],
     };
   }
   if (result.status === 'authenticated') {
@@ -216,7 +216,7 @@ export async function submitLocalAdminLogin(credentials: {
     return {
       status: 'mfa_required',
       challenge_id: result.challenge_id ?? result.session_id ?? '',
-      methods: result.methods ?? ['totp', 'webauthn', 'recovery'],
+      methods: result.methods ?? ['webauthn', 'totp', 'recovery'],
     };
   }
   return { status: 'authenticated' };

@@ -49,10 +49,10 @@ async def _get_enrolled_methods(
         if not status_row:
             return []
         methods: list[str] = []
-        if bool(status_row.get("has_active_totp")):
-            methods.append("totp")
         if int(status_row.get("webauthn_credential_count", 0)) > 0:
             methods.append("webauthn")
+        if bool(status_row.get("has_active_totp")):
+            methods.append("totp")
         if int(status_row.get("unused_recovery_codes", 0)) > 0:
             methods.append("recovery")
         return methods
@@ -73,24 +73,28 @@ class _RequireAal2:
         """Verify principal has AAL2 credentials and verification is fresh."""
         if principal.aal_level < AAL2_LEVEL:
             methods = await _get_enrolled_methods(request, principal)
+            preferred = "webauthn" if "webauthn" in methods else "totp"
             raise ProblemException(
                 code="AAL2_REQUIRED",
                 status=403,
                 title="AAL2 Authentication Required",
                 detail="This operation requires multi-factor authentication (AAL2).",
                 methods=methods,
+                preferred_method=preferred,
             )
 
         if self.max_age_seconds is not None:
             verified_at = principal.aal2_verified_at
             if verified_at is None:
                 methods = await _get_enrolled_methods(request, principal)
+                preferred = "webauthn" if "webauthn" in methods else "totp"
                 raise ProblemException(
                     code="AAL2_STALE",
                     status=403,
                     title="AAL2 Session Stale",
                     detail="AAL2 verification timestamp is missing or stale.",
                     methods=methods,
+                    preferred_method=preferred,
                 )
 
             now = datetime.now(UTC)
@@ -99,6 +103,7 @@ class _RequireAal2:
             age = (now - verified_at).total_seconds()
             if age > self.max_age_seconds:
                 methods = await _get_enrolled_methods(request, principal)
+                preferred = "webauthn" if "webauthn" in methods else "totp"
                 detail_msg = f"AAL2 verification is stale ({int(age)}s > {self.max_age_seconds}s)."
                 raise ProblemException(
                     code="AAL2_STALE",
@@ -106,6 +111,7 @@ class _RequireAal2:
                     title="AAL2 Session Stale",
                     detail=detail_msg,
                     methods=methods,
+                    preferred_method=preferred,
                 )
 
         return principal
@@ -190,12 +196,14 @@ async def require_admin_aal2(  # noqa: C901
             )
 
     admin_methods: list[str] = []
-    if has_active_totp:
-        admin_methods.append("totp")
     if has_webauthn:
         admin_methods.append("webauthn")
+    if has_active_totp:
+        admin_methods.append("totp")
     if unused_codes > 0:
         admin_methods.append("recovery")
+
+    preferred = "webauthn" if has_webauthn else "totp"
 
     if principal.aal_level < AAL2_LEVEL:
         raise ProblemException(
@@ -204,6 +212,7 @@ async def require_admin_aal2(  # noqa: C901
             title="AAL2 Authentication Required",
             detail="Administrative routes require multi-factor authentication (AAL2).",
             methods=admin_methods,
+            preferred_method=preferred,
         )
 
     if principal.session_id is not None:
@@ -215,6 +224,7 @@ async def require_admin_aal2(  # noqa: C901
                 title="AAL2 Session Stale",
                 detail="AAL2 verification timestamp is missing or stale.",
                 methods=admin_methods,
+                preferred_method=preferred,
             )
         now = datetime.now(UTC)
         if verified_at.tzinfo is None:
@@ -230,6 +240,7 @@ async def require_admin_aal2(  # noqa: C901
                 title="AAL2 Session Stale",
                 detail=detail_msg,
                 methods=admin_methods,
+                preferred_method=preferred,
             )
 
     return principal

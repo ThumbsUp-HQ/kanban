@@ -149,7 +149,6 @@ describe('SetupClaimPage (KB-P3-35)', () => {
     });
 
     fireEvent.click(screen.getByTestId('copy-secret-btn'));
-    fireEvent.click(screen.getByRole('button', { name: /Copy setup key/i }));
 
     // Enter 6-digit TOTP verify code
     const verifyInput = screen.getByLabelText(/Verify 6-digit Code from Authenticator/i);
@@ -432,7 +431,7 @@ describe('SetupClaimPage (KB-P3-35)', () => {
     });
 
     // Test Copy Setup Key button
-    const copyKeyBtn = screen.getByRole('button', { name: /Copy setup key/i });
+    const copyKeyBtn = screen.getByTestId('copy-secret-btn');
     fireEvent.click(copyKeyBtn);
 
     // Switch back to Passkey tab
@@ -773,7 +772,6 @@ describe('SetupClaimPage (KB-P3-35)', () => {
     });
 
     fireEvent.click(screen.getByTestId('copy-secret-btn'));
-    fireEvent.click(screen.getByRole('button', { name: /Copy setup key/i }));
 
     // Verify TOTP to go to Step 3
     fireEvent.change(screen.getByLabelText(/Verify 6-digit Code/i), {
@@ -801,19 +799,19 @@ describe('SetupClaimPage (KB-P3-35)', () => {
     expect(onNavigateMock).toHaveBeenCalledWith('/');
   });
 
-  it('covers platform authenticator unavailable and isPlainHttp branches', async () => {
-    // 1. isUserVerifyingPlatformAuthenticatorAvailable returns false
-    (window as unknown as { PublicKeyCredential: { isUserVerifyingPlatformAuthenticatorAvailable: () => Promise<boolean> } }).PublicKeyCredential = {
-      isUserVerifyingPlatformAuthenticatorAvailable: vi.fn().mockResolvedValue(false),
-    };
+  it('covers unsupported webauthn and isPlainHttp branches for totp auto-fallback', async () => {
+    // 1. PublicKeyCredential undefined (!supportsWebAuthn) -> switches to totp
+    const origPKC = (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential;
+    (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = undefined;
 
     const { unmount } = render(<SetupClaimPage initialToken={validToken43} />);
     await waitFor(() => {
       expect(screen.getByText('Step 1 of 3')).toBeDefined();
     });
     unmount();
+    (window as unknown as { PublicKeyCredential?: unknown }).PublicKeyCredential = origPKC;
 
-    // 2. isPlainHttp branch (http: and non-localhost)
+    // 2. isPlainHttp branch (http: and non-localhost) -> switches to totp
     const originalLocation = window.location;
     Object.defineProperty(window, 'location', {
       writable: true,

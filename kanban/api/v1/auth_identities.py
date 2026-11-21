@@ -69,10 +69,10 @@ async def _check_mfa_and_admin(
     is_required = has_enrolled_mfa or is_admin
 
     methods: list[str] = []
-    if has_active_totp:
-        methods.append("totp")
     if has_webauthn:
         methods.append("webauthn")
+    if has_active_totp:
+        methods.append("totp")
     if unused_recovery > 0:
         methods.append("recovery")
 
@@ -101,6 +101,8 @@ async def require_link_aal2(
     if not is_required:
         return principal
 
+    preferred = "webauthn" if "webauthn" in methods else "totp"
+
     if principal.aal_level < AAL2_LEVEL:
         raise ProblemException(
             code="AAL2_REQUIRED",
@@ -108,6 +110,7 @@ async def require_link_aal2(
             title="AAL2 Authentication Required",
             detail="This operation requires multi-factor authentication (AAL2).",
             methods=methods,
+            preferred_method=preferred,
         )
 
     verified_at = principal.aal2_verified_at
@@ -118,6 +121,7 @@ async def require_link_aal2(
             title="AAL2 Session Stale",
             detail="AAL2 verification timestamp is missing or stale.",
             methods=methods,
+            preferred_method=preferred,
         )
 
     now = datetime.now(UTC)
@@ -131,6 +135,7 @@ async def require_link_aal2(
             title="AAL2 Session Stale",
             detail=f"AAL2 verification is stale ({int(age)}s > {MAX_AAL2_AGE_SECONDS}s).",
             methods=methods,
+            preferred_method=preferred,
         )
 
     return principal

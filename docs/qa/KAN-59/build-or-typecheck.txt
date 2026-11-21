@@ -1,0 +1,52 @@
+=== 1. Typography & Zero-Dashes Audit (python3 -m scripts.check_no_dashes --all) ===
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan59-passkey-7649e8d7/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+Exit: 0
+
+=== 2. Ruff Linter Check (ruff check .) ===
+All checks passed!
+Exit: 0
+
+=== 3. Ruff Formatter Check (ruff format --check .) ===
+2028 files already formatted
+Exit: 0
+
+=== 4. Python Static Type Analysis (mypy kanban/api kanban/auth) ===
+Success: no issues found in 144 source files
+Exit: 0
+
+=== 5. Frontend TypeScript Compilation (tsc -b --noEmit) ===
+
+> @kanban/web@0.1.0 typecheck
+> tsc -b --noEmit
+
+Exit: 0
+
+=== 6. Frontend ESLint (eslint . --max-warnings 0) ===
+
+> @kanban/web@0.1.0 lint
+> eslint . --max-warnings 0
+
+Exit: 0
+
+=== 7. Frontend Production Vite Build (vite build) ===
+
+> @kanban/web@0.1.0 build
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 723 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.51 kB │ gzip:   0.32 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-C3uCrhPB.css            485.20 kB │ gzip:  68.05 kB
+dist/assets/index-3ZQ9E_2T.js           2,450.86 kB │ gzip: 679.33 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.22s
+Exit: 0
