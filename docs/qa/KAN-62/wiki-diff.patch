@@ -1,0 +1,90 @@
+diff --git a/Multi-Provider-AI-Engine-and-Runners.md b/Multi-Provider-AI-Engine-and-Runners.md
+index 9170ff9..0b2651f 100644
+--- a/Multi-Provider-AI-Engine-and-Runners.md
++++ b/Multi-Provider-AI-Engine-and-Runners.md
+@@ -233,5 +233,30 @@ kanban-agent validate-transition \
+   --dry-run
+ ```
+ 
++---
++
++## Multi-Provider Benchmark & Cutoff Timeout Guide
++
++Every AI provider configuration and agent definition exposes a configurable hard cutoff timeout (`timeout_ms`, `1000` to `300000` ms). At runtime, `GateWorkerRunner` enforces `cutoff_ms = min(provider.timeout_ms, agent.timeout_ms)`. When an upstream model exceeds `cutoff_ms`, the worker raises `GATE_TIMEOUT` and **fails closed**, leaving the ticket in its source state with zero hung workers.
++
++### Live Full-Stack In-Transition Benchmark Matrix (`In Progress -> Done`)
++
++Measured end-to-end against `kanban-liveqa-2` (embedded PostgreSQL 16 + `FORCE ROW LEVEL SECURITY`) using `StrictVerdictSchema` (`kb-transition-verdict/v1`) on a Positive software ticket (`KAN-1`) and a Negative impossible/unverified ticket (`KAN-2: "Build a rocket ship and serve ice cream on Saturn"`):
++
++| Runtime & Model | Cutoff (`timeout_ms`) | Positive (`KAN-1`) | Positive Latency | Negative (`KAN-2`) | Negative Latency | Operational Guidance |
++| :--- | :---: | :--- | :---: | :--- | :---: | :--- |
++| **Google Gemini** (`gemini-2.5-flash-lite`) | `20000` | `approve` (`Done`) | `3,215 ms` | `reject` (`In Progress`) | `1,594 ms` | Fastest overall cloud model with strict schema compliance and `v1beta` AI Studio routing. |
++| **OpenAI Cloud** (`gpt-4o-mini`) | `20000` | `approve` (`Done`) | `3,846 ms` | `reject` (`In Progress`) | `2,224 ms` | Fast cloud fallback with strict JSON schema adherence. |
++| **Local Ollama Supercomputer** (`gemma4:e2b`) | `25000` | `approve` (`Done`) | `19,892 ms` | `reject` (`In Progress`) | `5,213 ms` | Strong air-gapped 2B edge choice; `20000`-`25000 ms` cutoff recommended. |
++| **Local Ollama GPU/CPU** (`gemma3:4b`) | `20000` / `35000` | `timed_out` (20s) / `approve` (35s) | `20,929 ms` / `31,431 ms` | `reject` (`In Progress`) | `16,630 ms` | If VRAM is shared with another pinned model (CPU fallback), set `timeout_ms >= 35000`. |
++| **Local Ollama GPU/CPU** (`granite3.3:2b`) | `20000` | `timed_out` (fail-closed) | `20,321 ms` | `reject` (`In Progress`) | `12,691 ms` | Warm-keep or `25000 ms` cutoff avoids cold-load timeout on long prompts. |
++| **Local Ollama Reasoning** (`nemotron-3-super:latest`) | `5000` (Strict) | N/A | N/A | `GATE_TIMEOUT` (fail-closed) | `6,023 ms` | Validates hard 5s cutoff protection with clean fail-closed veto. |
++| **Local Ollama Reasoning** (`nemotron-3-super:latest`) | `45000` (Extended) | `approve` (`Done`) | `31,940 ms` | `reject` (`In Progress`) | `26,502 ms` | Heavy reasoning models (`<think>` tags stripped) should use `45000`-`60000 ms`. |
++
++### Choosing a Cutoff Timeout
++- **Fast Cloud Models (`gpt-4o-mini`, `gemini-2.5-flash-lite`):** `15000` to `20000` ms.
++- **Local 2B-4B Edge Models (`gemma4:e2b`, `gemma3:4b`, `granite3.3:2b`):** `25000` to `35000` ms (covers occasional model reload or shared VRAM).
++- **Heavy Reasoning Models (`nemotron-3-super:latest`, `deepseek-r1`):** `45000` to `60000` ms, or pair with a strict `5000`-`10000` ms cutoff on latency-sensitive columns so stuck calls fail closed immediately.
++
+ <a id="remote-runners"></a>
+ <a id="repository-access"></a>
+diff --git a/Scripted-Workflows-and-Transition-Helpers.md b/Scripted-Workflows-and-Transition-Helpers.md
+index 2c7803b..46067f4 100644
+--- a/Scripted-Workflows-and-Transition-Helpers.md
++++ b/Scripted-Workflows-and-Transition-Helpers.md
+@@ -123,3 +123,50 @@ stateDiagram-v2
+ 3. **Gate Approval (`✅🤖`):**
+    - When all criteria are certified, the gate resolves to approved.
+    - The card transitions smoothly into the destination column, stamped with an immutable cryptographic verification badge.
++
++---
++
++## The Easiest 3-Step Recipe to Implement an Automated QA Gate on `Done`
++
++You can enforce automated Definition-of-Done verification on any project board in three steps without writing custom glue code:
++
++### Step 1: Register and Probe Your AI Provider (`/admin/ai`)
++1. Open **AI Providers & Token Caps Studio** at `/admin/ai` and click **`+ Register Provider`**.
++2. Place your API secret key in the **API Secret Key** field at the top of the drawer (optional for local Ollama), configure the **HTTP Base URL** and hard **Cutoff Timeout (ms)** (for example `20000` ms or `35000` ms), and click **`🔍 Probe Models`** to replace defaults exclusively with live discovered models.
++
++![Gemini Provider Editor with Top API Key and Probed Models](images/62-ai-provider-gemini-top-key-probe.png)
++
++![Ollama Provider Editor with Live Probed Models and Cutoff Timeout](images/63-ai-provider-ollama-probed-models.png)
++
++### Step 2: Register an Agent Definition (`/admin/agents`)
++1. Open **Autonomous Agent Definitions Studio** at `/admin/agents` and click **`+ Register Agent`**.
++2. Choose **In-App SDK**, pick your provider (`ollama`, `openai`, or `gemini`), click one of the **Probed Models** quick-pick chips (such as `gemma3:4b` or `gpt-4o-mini`), set the timeout cutoff, and enter your QA rubric in **System Instructions**.
++
++![QA Done Gate Agent Definition with Probed Model Quick-Picks](images/64-agent-qa-done-definition.png)
++
++### Step 3: Attach the Hook to `In Progress -> Done` via `+ Workflow`
++1. On the Kanban board, click **`+ Workflow`** on the **`Done`** column header (or open `/projects/KAN/settings/workflows`).
++2. Select `From State: In Progress`, `To State: Done`, `Hook Kind: Agent Transition Helper`, your `@qa-done-gate` agent, and `Failure Policy: Fail-Closed`, then click **Attach Hook**.
++
++![Attach Workflow Helper Hook Dialog for In Progress to Done](images/65-workflow-attach-qa-done-gate.png)
++
++---
++
++## In-Transition Gate Ideas Gallery
++
++### Idea 1: Fast 2B/4B Gemma Triage & Auto-Labeler (`Backlog -> Todo`)
++Attach a fast local edge model (`gemma4:e2b` or `granite3.3:2b`, `timeout_ms: 15000`) with `allowed_mutable_fields: ["labels", "priority"]` to automatically classify incoming backlog tickets, apply `needs-triage` or component labels, and reject empty one-line placeholders before sprint planning.
++
++### Idea 2: Security & Secret Scan Gate (`Todo -> In Progress`)
++Attach an `agent_interceptor` or Tier A Wasm `sync_validator` on `Todo -> In Progress` to verify that work items touching authentication, RBAC, or database migrations include a threat model checklist and zero pasted credentials before engineering begins.
++
++### Idea 3: Automated Definition-of-Done QA Gate (`In Progress -> Done`)
++Require completed acceptance criteria and documented unit/QA verification evidence before any card can land in `Done`:
++- **Positive Transition (`KAN-1` Approved):** A ticket with checked Acceptance Criteria and documented Verification Proof passes the gate, lands in `Done`, and receives a persisted `## ✅🤖 Workflow Transition Gate Approved` rationale comment.
++
++![Positive Gate Approval Landing Ticket in Done](images/66-qa-gate-positive-approved-done.png)
++
++- **Negative Transition (`KAN-2` Vetoed):** An unverified or impossible ticket (such as `"Build a rocket ship and serve ice cream on Saturn"` with no design doc, no tests, and no proof) is **vetoed** and kept safely in `In Progress` with an itemized `🛑🤖 Gate` rejection comment.
++
++![Negative Gate Veto Blocking Saturn Ice Cream Ticket in In Progress](images/67-qa-gate-negative-saturn-ice-cream-vetoed.png)
++

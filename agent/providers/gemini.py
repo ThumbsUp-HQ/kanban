@@ -193,15 +193,41 @@ class GeminiProvider(LLMProvider):
         if transport is not None:
             async_client_args["transport"] = transport
 
-        http_options = types.HttpOptions(
-            base_url=str(settings.base_url) if settings.base_url is not None else None,
-            timeout=int(settings.timeout_s * 1000),
-            async_client_args=async_client_args,
+        api_key_val = settings.api_key.get_secret_value() if settings.api_key else None
+        base_url_str = str(settings.base_url).lower() if settings.base_url is not None else ""
+        is_ai_studio_url = "generativelanguage.googleapis.com" in base_url_str
+        is_vertex_express = (settings.mode == "vertex_express" and not is_ai_studio_url) or (
+            api_key_val is not None
+            and api_key_val.startswith("AQ.")
+            and "aiplatform.googleapis.com" in base_url_str
+        )
+        self._is_vertex_express = is_vertex_express
+
+        api_version = (
+            "v1beta"
+            if (
+                api_key_val
+                and api_key_val.startswith("AQ.")
+                and (is_ai_studio_url or not base_url_str)
+            )
+            else None
         )
 
-        api_key_val = settings.api_key.get_secret_value() if settings.api_key else None
-        is_vertex_express = settings.mode == "vertex_express" or (
-            api_key_val is not None and api_key_val.startswith("AQ.")
+        effective_base_url = (
+            str(settings.base_url)
+            if settings.base_url is not None
+            else (
+                "https://generativelanguage.googleapis.com"
+                if (api_key_val and api_key_val.startswith("AQ.") and not is_vertex_express)
+                else None
+            )
+        )
+
+        http_options = types.HttpOptions(
+            base_url=effective_base_url,
+            api_version=api_version,
+            timeout=int(settings.timeout_s * 1000),
+            async_client_args=async_client_args,
         )
 
         if settings.mode == "vertex":
@@ -230,10 +256,7 @@ class GeminiProvider(LLMProvider):
         """Return data residency tier identifier."""
         if self._settings.mode == "vertex":
             return f"gemini-vertex:{self._settings.vertex_location}"
-        api_val = self._settings.api_key.get_secret_value() if self._settings.api_key else None
-        if self._settings.mode == "vertex_express" or (
-            api_val is not None and api_val.startswith("AQ.")
-        ):
+        if self._is_vertex_express:
             loc = self._settings.vertex_location or "us-central1"
             return f"gemini-vertex-express:{loc}"
         return "gemini-ai-studio-paid"

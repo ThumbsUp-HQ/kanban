@@ -3,6 +3,7 @@
 
 import React, { useState, type JSX } from 'react';
 import { Link } from 'react-router';
+import './AttachHookDialog.css';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import {
   MUTABLE_FIELD_UNIVERSE,

@@ -83,11 +83,14 @@ export function ActivitySection({
     staleTime: 30_000,
   });
 
-  const counts = activityData?.counts ?? {
-    all: 0,
-    comments: commentsData?.items.length ?? 0,
-    history: 0,
-    gates: 0,
+  const counts = {
+    all: activityData?.counts.all ?? 0,
+    comments: Math.max(
+      activityData?.counts.comments ?? 0,
+      commentsData?.items.length ?? 0,
+    ),
+    history: activityData?.counts.history ?? 0,
+    gates: activityData?.counts.gates ?? 0,
   };
 
   // Scroll to targeted comment if #comment-<uuid> is present in hash

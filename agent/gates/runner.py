@@ -383,21 +383,31 @@ class GateWorkerRunner:
                             elif p_kind == "gemini":
                                 from agent.providers.gemini import GeminiSettings  # noqa: PLC0415
 
+                                gemini_base_url = (
+                                    HttpUrl(provider_row.base_url)
+                                    if provider_row.base_url
+                                    else (
+                                        HttpUrl("https://generativelanguage.googleapis.com")
+                                        if (api_key_str and api_key_str.startswith("AQ."))
+                                        else None
+                                    )
+                                )
                                 gemini_mode: Literal[
                                     "vertex", "ai_studio_paid", "vertex_express"
                                 ] = (
                                     "vertex_express"
-                                    if (api_key_str and api_key_str.startswith("AQ."))
+                                    if (
+                                        api_key_str
+                                        and api_key_str.startswith("AQ.")
+                                        and "aiplatform.googleapis.com"
+                                        in str(gemini_base_url or "").lower()
+                                    )
                                     else "ai_studio_paid"
                                 )
                                 gemini_settings = GeminiSettings(
                                     mode=gemini_mode,
                                     api_key=SecretStr(api_key_str) if api_key_str else None,
-                                    base_url=(
-                                        HttpUrl(provider_row.base_url)
-                                        if provider_row.base_url
-                                        else None
-                                    ),
+                                    base_url=gemini_base_url,
                                     model_allowlist=model_list,
                                     timeout_s=cutoff_s,
                                 )
@@ -485,10 +495,38 @@ class GateWorkerRunner:
                                 agent_pid = agent_def.principal_id
                                 if agent_def.timeout_ms:
                                     timeout_ms = agent_def.timeout_ms
+                                if agent_def.provider_kind:
+                                    prov_stmt = (
+                                        select(AIProviderConfig)
+                                        .where(
+                                            AIProviderConfig.workspace_id == bound_ws,
+                                            AIProviderConfig.provider_kind
+                                            == agent_def.provider_kind,
+                                            AIProviderConfig.is_enabled.is_(True),
+                                        )
+                                        .order_by(AIProviderConfig.priority.asc())
+                                        .limit(1)
+                                    )
+                                    prov_res = await session.execute(prov_stmt)
+                                    provider_row = prov_res.scalar_one_or_none()
+                                    if provider_row and provider_row.settings_json:
+                                        prov_settings = dict(provider_row.settings_json or {})
+                                        prov_timeout = prov_settings.get("timeout_ms")
+                                        if prov_timeout:
+                                            timeout_ms = min(int(prov_timeout), int(timeout_ms))
                     except (AttributeError, KeyError, TypeError) as exc:
                         logger.debug("Failed resolving hook agent info for sweep: %s", exc)
 
-                deadline = getattr(inv, "deadline_at", None)
+                out_json = getattr(inv, "output_json", None) or {}
+                raw_deadline = getattr(inv, "deadline_at", None) or out_json.get("deadline_at")
+                if isinstance(raw_deadline, str):
+                    try:
+                        deadline = dt.datetime.fromisoformat(raw_deadline)
+                    except ValueError:
+                        deadline = None
+                else:
+                    deadline = raw_deadline
+
                 if deadline is None and getattr(inv, "started_at", None) is not None:
                     deadline = inv.started_at + dt.timedelta(milliseconds=timeout_ms)
 

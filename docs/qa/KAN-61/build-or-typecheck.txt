@@ -1,9 +1,16 @@
-=== RUFF CHECK (MODIFIED FILES) ===
+=== 1. kanban-ctl db check-migrations ===
+OK: All 63 migrations valid. Single head: p4_24_agent_safe_sequences
+
+=== 2. ruff check ===
 All checks passed!
 
-=== CHECK NO DASHES ===
+=== 3. ruff format --check ===
+2059 files already formatted
 
-=== LINT IMPORTS ===
+=== 4. mypy database kanban mcp agent ===
+Success: no issues found in 1001 source files
+
+=== 5. lint-imports ===
 
 ╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
 ╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
@@ -19,10 +26,47 @@ All checks passed!
 Contracts
 ---------
 
-Analyzed 999 files, 3582 dependencies.
---------------------------------------
+Analyzed 1001 files, 3595 dependencies.
+---------------------------------------
 
 Unidirectional module layers agent -> mcp -> kanban -> database KEPT (7 ignored imports)
 mcp forbidden from importing database KEPT (48 ignored imports)
 
 Contracts: 2 kept, 0 broken.
+
+=== 6. tsc -b --noEmit ===
+
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan61-62-rc1-5dee2cbe/kanban/web
+> tsc -b --noEmit
+
+
+=== 7. eslint . --max-warnings 0 ===
+
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan61-62-rc1-5dee2cbe/kanban/web
+> eslint . --max-warnings 0
+
+
+=== 8. vite build ===
+
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan61-62-rc1-5dee2cbe/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 724 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.51 kB │ gzip:   0.32 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-B1dVGQfx.css            488.90 kB │ gzip:  68.55 kB
+dist/assets/index-Ds3-7kX7.js           2,472.07 kB │ gzip: 685.90 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.18s
+
+=== 9. check_no_dashes --all ===
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan61-62-rc1-5dee2cbe/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)

@@ -143,56 +143,140 @@ export function SafeMarkdownPreview({
 
   const flushTextLines = (): void => {
     if (textLines.length === 0) return;
-    const text = textLines.join('\n').trim();
+    const rawLines = textLines;
     textLines = [];
-    if (!text) return;
 
-    // Check if it's a list
-    const sublines = text.split('\n');
-    const isBulletList = sublines.every((l) => l.trim().startsWith('- ') || l.trim().startsWith('* '));
-    const isNumberedList = sublines.every((l) => /^\d+\.\s/.test(l.trim()));
+    let currentListType: 'ul' | 'ol' | null = null;
+    let listItems: string[] = [];
+    let paraLines: string[] = [];
 
-    if (isBulletList) {
-      blocks.push(
-        <ul key={`ul-${String(blockIdx++)}`} className="safe-md__ul">
-          {sublines.map((l, i) => (
-            <li key={`li-${String(i)}`}>
-              {renderInlineContent(l.trim().replace(/^[-*]\s+/, ''), `ul-${String(blockIdx)}-${String(i)}`)}
-            </li>
-          ))}
-        </ul>,
-      );
-    } else if (isNumberedList) {
-      blocks.push(
-        <ol key={`ol-${String(blockIdx++)}`} className="safe-md__ol">
-          {sublines.map((l, i) => (
-            <li key={`li-${String(i)}`}>
-              {renderInlineContent(l.trim().replace(/^\d+\.\s+/, ''), `ol-${String(blockIdx)}-${String(i)}`)}
-            </li>
-          ))}
-        </ol>,
-      );
-    } else {
-      // Split into paragraphs by blank lines
-      const paragraphs = text.split(/\n\s*\n/).filter((p) => p.trim() !== '');
-      paragraphs.forEach((p, pIdx) => {
-        const content = renderInlineContent(p.trim(), `p-${String(blockIdx)}-${String(pIdx)}`);
-        const hasMedia = p.includes('![');
-        if (hasMedia) {
-          blocks.push(
-            <div key={`p-${String(blockIdx++)}-${String(pIdx)}`} className="safe-md__p safe-md__media-block">
-              {content}
-            </div>,
-          );
-        } else {
-          blocks.push(
-            <p key={`p-${String(blockIdx++)}-${String(pIdx)}`} className="safe-md__p">
-              {content}
-            </p>,
-          );
+    const flushList = (): void => {
+      if (currentListType === null || listItems.length === 0) return;
+      if (currentListType === 'ul') {
+        const uIdx = blockIdx++;
+        blocks.push(
+          <ul key={`ul-${String(uIdx)}`} className="safe-md__ul">
+            {listItems.map((item, idx) => (
+              <li key={`li-${String(idx)}`}>
+                {renderInlineContent(item, `ul-${String(uIdx)}-${String(idx)}`)}
+              </li>
+            ))}
+          </ul>,
+        );
+      } else {
+        const oIdx = blockIdx++;
+        blocks.push(
+          <ol key={`ol-${String(oIdx)}`} className="safe-md__ol">
+            {listItems.map((item, idx) => (
+              <li key={`li-${String(idx)}`}>
+                {renderInlineContent(item, `ol-${String(oIdx)}-${String(idx)}`)}
+              </li>
+            ))}
+          </ol>,
+        );
+      }
+      currentListType = null;
+      listItems = [];
+    };
+
+    const flushParagraph = (): void => {
+      if (paraLines.length === 0) return;
+      const text = paraLines.join('\n').trim();
+      paraLines = [];
+      if (!text) return;
+
+      const pIdx = blockIdx++;
+      const content = renderInlineContent(text, `p-${String(pIdx)}`);
+      const hasMedia = text.includes('![');
+      if (hasMedia) {
+        blocks.push(
+          <div key={`p-${String(pIdx)}`} className="safe-md__p safe-md__media-block">
+            {content}
+          </div>,
+        );
+      } else {
+        blocks.push(
+          <p key={`p-${String(pIdx)}`} className="safe-md__p">
+            {content}
+          </p>,
+        );
+      }
+    };
+
+    for (const rawLine of rawLines) {
+      const trimmed = rawLine.trim();
+      if (!trimmed) {
+        flushList();
+        flushParagraph();
+        continue;
+      }
+
+      // Check Heading: # through ######
+      const headingMatch = /^(#{1,6})\s+(.+)$/.exec(trimmed);
+      if (headingMatch) {
+        flushList();
+        flushParagraph();
+        const level = (headingMatch[1] ?? '').length;
+        const titleText = headingMatch[2] ?? '';
+        const hIdx = blockIdx++;
+        const content = renderInlineContent(titleText, `h-${String(hIdx)}`);
+        const headingClassName = `safe-md__h${String(level)}`;
+        switch (level) {
+          case 1:
+            blocks.push(<h1 key={`h-${String(hIdx)}`} className={headingClassName}>{content}</h1>);
+            break;
+          case 2:
+            blocks.push(<h2 key={`h-${String(hIdx)}`} className={headingClassName}>{content}</h2>);
+            break;
+          case 3:
+            blocks.push(<h3 key={`h-${String(hIdx)}`} className={headingClassName}>{content}</h3>);
+            break;
+          case 4:
+            blocks.push(<h4 key={`h-${String(hIdx)}`} className={headingClassName}>{content}</h4>);
+            break;
+          case 5:
+            blocks.push(<h5 key={`h-${String(hIdx)}`} className={headingClassName}>{content}</h5>);
+            break;
+          default:
+            blocks.push(<h6 key={`h-${String(hIdx)}`} className={headingClassName}>{content}</h6>);
+            break;
         }
-      });
+        continue;
+      }
+
+      // Check Unordered List item: - or *
+      const bulletMatch = /^[-*]\s+(.+)$/.exec(trimmed);
+      if (bulletMatch) {
+        if (currentListType !== 'ul') {
+          flushList();
+          flushParagraph();
+          currentListType = 'ul';
+        }
+        listItems.push(bulletMatch[1] ?? '');
+        continue;
+      }
+
+      // Check Ordered List item: \d+\.
+      const orderedMatch = /^\d+\.\s+(.+)$/.exec(trimmed);
+      if (orderedMatch) {
+        if (currentListType !== 'ol') {
+          flushList();
+          flushParagraph();
+          currentListType = 'ol';
+        }
+        listItems.push(orderedMatch[1] ?? '');
+        continue;
+      }
+
+      // Plain text line: if in list, end list
+      if (currentListType !== null) {
+        flushList();
+      }
+      paraLines.push(trimmed);
     }
+
+    flushList();
+    flushParagraph();
   };
 
   for (const line of lines) {

@@ -53,6 +53,15 @@
   font-size: var(--text-sm, 13px);
 }
 
+.prop-row[data-prop="state"] .prop-row__value {
+  flex-wrap: nowrap;
+}
+
+.prop-row[data-prop="state"] .prop-row__select {
+  min-width: 132px;
+  flex: 1;
+}
+
 .prop-row__select:focus {
   outline: 2px solid var(--accent-primary);
   outline-offset: 1px;

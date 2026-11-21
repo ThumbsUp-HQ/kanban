@@ -28,16 +28,23 @@ def compute_harness_label_for_agent(agent_def: AgentDefinition | None) -> str:
     """Compute human-facing harness label for display and event payloads."""
     if agent_def is None:
         return "in_app_sdk"
-    if agent_def.harness_kind == "cli_pipe":
+    kind = agent_def.harness_kind
+    if kind == "cli_pipe":
         bin_id = agent_def.cli_binary_allowlist_id or "cli"
-        if bin_id in ("agy", "codex"):
-            return f"cli: {bin_id} -p"
-        return f"cli: {bin_id}"
-    if agent_def.harness_kind == "in_app_sdk":
-        return agent_def.provider_kind or "sdk"
-    if agent_def.harness_kind == "remote_runner":
+        return f"cli: {bin_id} -p" if bin_id in ("agy", "codex") else f"cli: {bin_id}"
+    if kind == "in_app_sdk":
+        provider = agent_def.provider_kind or "sdk"
+        model = getattr(agent_def, "model_id", None) or getattr(agent_def, "default_model", None)
+        if model:
+            suffix = f" ({provider}/{model})"
+        elif provider != "sdk":
+            suffix = f" ({provider})"
+        else:
+            suffix = ""
+        return f"in_app_sdk{suffix}"
+    if kind == "remote_runner":
         return f"remote: {agent_def.remote_runner_pool_slug or 'runner'}"
-    return agent_def.harness_kind
+    return kind
 
 
 class PendingGateSummary(BaseModel):

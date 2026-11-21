@@ -87,7 +87,13 @@ def dereference_json_schema(schema: dict[str, Any]) -> dict[str, Any]:  # noqa: 
 
 def clean_gemini_schema(schema: dict[str, Any] | type[BaseModel]) -> dict[str, Any]:
     """Produce Gemini-compatible OpenAPI subset schema without $defs, $ref, title, or default."""
-    raw_schema: dict[str, Any] = schema if isinstance(schema, dict) else schema.model_json_schema()
+    if isinstance(schema, dict):
+        raw_schema: dict[str, Any] = schema
+    elif hasattr(schema, "model_json_schema"):
+        raw_schema = schema.model_json_schema()
+    else:
+        msg = "Expected dict or BaseModel class"
+        raise TypeError(msg)
 
     derefed = dereference_json_schema(raw_schema)
 

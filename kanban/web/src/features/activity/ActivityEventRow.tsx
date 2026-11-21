@@ -112,9 +112,29 @@ export function ActivityEventRow({
   if (item.event_type === 'GATE_PENDING') {
     const gp = payload as GatePayload;
     const hookName = gp.hook_name ?? 'Workflow Gate';
-    const harness = gp.harness ?? 'cli: agy -p';
+    const rawHarness = gp.harness_label ?? gp.harness ?? 'cli: agy -p';
+    const isInAppSdk =
+      rawHarness.startsWith('in_app_sdk') ||
+      gp.harness_kind === 'in_app_sdk' ||
+      ['ollama', 'gemini', 'openai'].includes(gp.provider_kind ?? '') ||
+      rawHarness === 'sdk';
+
+    let displayHarness = rawHarness;
+    if (isInAppSdk) {
+      if (!displayHarness.startsWith('in_app_sdk (')) {
+        const prov =
+          gp.provider_kind ??
+          (rawHarness !== 'in_app_sdk' && rawHarness !== 'sdk' ? rawHarness : 'ollama');
+        const mod = gp.model_id ? `/${gp.model_id}` : '';
+        displayHarness = `in_app_sdk (${prov}${mod})`;
+      }
+    }
+
     const ro = gp.repo_mount_ro !== false ? ':ro' : ':rw';
-    const tooltipText = `Gate: ${hookName} | Harness: ${harness} | Repo mount: ${ro} | Status: Pending`;
+    const summaryText = isInAppSdk
+      ? `evaluating gate via ${displayHarness}`
+      : `evaluating gate via ${rawHarness} (${ro})`;
+    const tooltipText = `Gate: ${hookName} | Harness: ${displayHarness} | Repo mount: ${ro} | Status: Pending`;
 
     return (
       <div className="activity-event-row activity-event-row--gate-pending" data-testid="gate-pending-row">
@@ -127,7 +147,7 @@ export function ActivityEventRow({
         <div className="event-row__content">
           <span className="event-row__actor">{hookName}</span>
           <span className="event-row__summary">
-            evaluating gate via {harness} ({ro})
+            {summaryText}
           </span>
           <time dateTime={item.created_at} className="event-row__time">
             {formattedDate}
