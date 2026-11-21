@@ -1147,6 +1147,9 @@ class PlaneImporter:
                         clean_comment, key_remap_manifest
                     )
 
+                if not clean_comment.strip():
+                    clean_comment = "(empty comment)"
+
                 mapped_author_id = (
                     _resolve_principal(comm.actor or comm.created_by) or self.caller.principal_id
                 )
