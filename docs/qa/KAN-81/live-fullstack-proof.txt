@@ -1,9 +1,15 @@
-HTTP/1.1 404 Not Found
-date: Sat, 21 Nov 2026 21:07:54 GMT
+=== KAN-81 Zero-Mock Live Full-Stack Verification ===
+Container: kanban-local-import (127.0.0.1:18970)
+Commit SHA: 7465d80ed87a
+
+1. POST /api/v1/projects/KAN/attachments (Upload Real Multi-Page PDF: AI_Engineer_MCP-resume.pdf)
+------------------------------------------------------------------------------------------------
+HTTP/1.1 201 Created
+date: Sat, 21 Nov 2026 23:04:50 GMT
 server: uvicorn
-content-length: 55
-content-type: application/problem+json
-x-request-id: 11da4a6c834843c0be4c6c840298c817
+content-length: 420
+content-type: application/json
+x-request-id: dadf5217c38d4330acbc4a75c6164322
 content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
 x-content-type-options: nosniff
 referrer-policy: no-referrer
@@ -12,4 +18,45 @@ cross-origin-opener-policy: same-origin
 cross-origin-resource-policy: same-origin
 permissions-policy: camera=(), microphone=(), geolocation=()
 
-{"type":"about:blank","title":"Not Found","status":404}
+{
+  "id": "01a2005a-fbfc-7007-b69a-d1020415c7d5",
+  "markdown_uri": "attachment://att_01a2005a-fbfc-7007-b69a-d1020415c7d5",
+  "content_type": "application/pdf",
+  "byte_size": 51846,
+  "pixel_width": null,
+  "pixel_height": null,
+  "page_count": 2,
+  "signed_url": "/api/v1/attachments/01a2005a-fbfc-7007-b69a-d1020415c7d5/content?exp=1795302592&p=01a1dd7a-02bd-7cc1-8cab-4048520ed4b5&sig=0dlpjcUBv15AIX7yVbE_HhR3sGyKdJwi8jSG0zcIMPw",
+  "expires_in": 300
+}
+
+2. GET /api/v1/attachments/01a2005a-fbfc-7007-b69a-d1020415c7d5/content (Forced-Download Response Headers)
+---------------------------------------------------------------------------------------------------------
+HTTP/1.1 200 OK
+date: Sat, 21 Nov 2026 23:04:59 GMT
+server: uvicorn
+cache-control: private, max-age=300
+content-disposition: attachment; filename="AI_Engineer_MCP-resume.pdf"
+content-length: 51846
+content-type: application/pdf
+x-request-id: 767307e3f7e24c1fb2cff47323204368
+content-security-policy: default-src 'none'; sandbox
+x-content-type-options: nosniff
+referrer-policy: no-referrer
+x-frame-options: DENY
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+permissions-policy: camera=(), microphone=(), geolocation=()
+
+3. Verified Attachment Ingestion & Linking
+------------------------------------------
+Attachment ID: 01a2005a-fbfc-7007-b69a-d1020415c7d5
+Linked Issue: KAN-81 (01a1ff31-eaea-7d82-9eed-157e78467230)
+Description Link: [architecture-spec.pdf](attachment://att_01a2005a-fbfc-7007-b69a-d1020415c7d5)
+Comment Link: [architecture-spec.pdf](attachment://att_01a2005a-fbfc-7007-b69a-d1020415c7d5)
+Page Count: 2
+Byte Size: 51,846 bytes
+Security Headers:
+- Content-Disposition: attachment; filename="AI_Engineer_MCP-resume.pdf"
+- Content-Security-Policy: default-src 'none'; sandbox
+- X-Content-Type-Options: nosniff

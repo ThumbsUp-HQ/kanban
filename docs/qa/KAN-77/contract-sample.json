@@ -1,20 +1,57 @@
 {
-  "entity": "issue_key_alias",
-  "workspace_id": "01a1dd7a-02ba-7682-b151-001ab2abeb6c",
-  "legacy_key": "KANBA-1",
-  "canonical_key": "KAN-84",
-  "source_system": "plane",
-  "issue_id": "01a1ffd7-e6ad-71cd-a338-c6a194f745e6",
-  "resolution_response": {
-    "id": "01a1ffd7-e6ad-71cd-a338-c6a194f745e6",
-    "kind": "issue",
-    "key": "KAN-84",
-    "title": "Welcome to Plane",
-    "workspace": "kanban",
-    "canonical_key": "KAN-84"
+  "resolve_response": {
+    "endpoint": "GET /api/v1/resolve?kind=issue&ref=KANBA-1",
+    "status_code": 200,
+    "headers": {
+      "x-kanban-canonical-key": "KAN-84",
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": "fc047283-4523-4337-a1cb-9c41988707f9",
+      "kind": "issue",
+      "key": "KAN-84",
+      "title": "Welcome to Plane 👋",
+      "workspace": "kanban",
+      "canonical_key": "KAN-84"
+    }
   },
-  "response_headers": {
-    "x-kanban-canonical-key": "KAN-84",
-    "content-type": "application/json"
+  "issue_alias_response": {
+    "endpoint": "GET /api/v1/issues/KANBA-1",
+    "status_code": 200,
+    "headers": {
+      "x-kanban-canonical-key": "KAN-84",
+      "content-type": "application/json"
+    },
+    "body_snippet": {
+      "id": "fc047283-4523-4337-a1cb-9c41988707f9",
+      "key": "KAN-84",
+      "summary": "Welcome to Plane 👋",
+      "description_markdown": "> Imported from `KANBA-1`\n\nHey there! This demo project is your playground to get hands-on with Plane..."
+    }
+  },
+  "portable_export_manifest": {
+    "endpoint": "POST /api/v1/admin/exports/portable",
+    "status_code": 200,
+    "filename": "kanban-kanban-portable.tar.gz",
+    "content_type": "application/gzip",
+    "byte_size": 2339746,
+    "manifest_entity_counts": {
+      "attachments": 6,
+      "comments": 566,
+      "cycles": 29,
+      "docs": 1,
+      "issue_key_aliases": 221,
+      "issues": 316,
+      "labels": 65,
+      "links": 209,
+      "modules": 4,
+      "object_links": 209,
+      "pages": 1,
+      "priorities": 15,
+      "projects": 3,
+      "states": 17,
+      "stickies": 0,
+      "workspaces": 1
+    }
   }
 }

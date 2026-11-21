@@ -1,34 +1,65 @@
+=== Python Unit Tests (KAN-81) ===
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
 rootdir: /home/adamoutler/kanban
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 24 items
+collecting ... collected 36 items
 
-kanban/tests/attachments/test_pdf_validation.py::test_decode_pdf_name_hex_sequences PASSED [  4%]
-kanban/tests/attachments/test_pdf_validation.py::test_extract_page_count_from_pages_dict_and_fallback PASSED [  8%]
-kanban/tests/attachments/test_pdf_validation.py::test_valid_pdf_roundtrip_metadata PASSED [ 12%]
-kanban/tests/attachments/test_pdf_validation.py::test_multi_page_pdf_page_count PASSED [ 16%]
-kanban/tests/attachments/test_pdf_validation.py::test_reject_javascript_active_content PASSED [ 20%]
-kanban/tests/attachments/test_pdf_validation.py::test_reject_hex_obfuscated_active_content PASSED [ 25%]
-kanban/tests/attachments/test_pdf_validation.py::test_reject_active_triggers_and_launch PASSED [ 29%]
-kanban/tests/attachments/test_pdf_validation.py::test_reject_embedded_files_rich_media_xfa_and_encrypt PASSED [ 33%]
-kanban/tests/attachments/test_pdf_validation.py::test_reject_unsafe_uri_schemes PASSED [ 37%]
-kanban/tests/attachments/test_pdf_validation.py::test_accept_safe_https_uri PASSED [ 41%]
-kanban/tests/attachments/test_pdf_validation.py::test_flate_stream_and_objstm_decompression PASSED [ 45%]
-kanban/tests/attachments/test_pdf_validation.py::test_flate_decompression_bomb_ratio_defense PASSED [ 50%]
-kanban/tests/attachments/test_pdf_validation.py::test_reject_offset_shifted_polyglots_and_invalid_magic PASSED [ 54%]
-kanban/tests/attachments/test_pdf_validation.py::test_reject_payload_exceeding_25_mib PASSED [ 58%]
-kanban/tests/attachments/test_pdf_validation.py::test_scan_and_validate_pdf_in_process_direct PASSED [ 62%]
-kanban/tests/attachments/test_pdf_validation.py::test_subprocess_cli_worker_execution PASSED [ 66%]
-kanban/tests/attachments/test_pdf_validation.py::test_in_process_scan_rejects_active_content_and_polyglots PASSED [ 70%]
-kanban/tests/attachments/test_pdf_validation.py::test_check_uri_destination_edge_cases PASSED [ 75%]
-kanban/tests/attachments/test_pdf_validation.py::test_flate_bounds_checks PASSED [ 79%]
-kanban/tests/attachments/test_pdf_validation.py::test_extract_and_scan_streams_max_objects_cap PASSED [ 83%]
-kanban/tests/attachments/test_pdf_validation.py::test_execute_subprocess_failure_modes PASSED [ 87%]
-kanban/tests/attachments/test_pdf_validation.py::test_run_subprocess_worker_direct PASSED [ 91%]
-kanban/tests/api/test_attachments_pdf.py::test_pdf_upload_roundtrip_and_headers PASSED [ 95%]
-kanban/tests/api/test_attachments_pdf.py::test_pdf_upload_rejects_active_javascript PASSED [100%]
+kanban/tests/attachments/test_pdf_validation.py::test_decode_pdf_name_hex_sequences PASSED [  2%]
+kanban/tests/attachments/test_pdf_validation.py::test_extract_page_count_from_pages_dict_and_fallback PASSED [  5%]
+kanban/tests/attachments/test_pdf_validation.py::test_valid_pdf_roundtrip_metadata PASSED [  8%]
+kanban/tests/attachments/test_pdf_validation.py::test_multi_page_pdf_page_count PASSED [ 11%]
+kanban/tests/attachments/test_pdf_validation.py::test_reject_javascript_active_content PASSED [ 13%]
+kanban/tests/attachments/test_pdf_validation.py::test_reject_hex_obfuscated_active_content PASSED [ 16%]
+kanban/tests/attachments/test_pdf_validation.py::test_reject_active_triggers_and_launch PASSED [ 19%]
+kanban/tests/attachments/test_pdf_validation.py::test_reject_embedded_files_rich_media_xfa_and_encrypt PASSED [ 22%]
+kanban/tests/attachments/test_pdf_validation.py::test_reject_unsafe_uri_schemes PASSED [ 25%]
+kanban/tests/attachments/test_pdf_validation.py::test_accept_safe_https_uri PASSED [ 27%]
+kanban/tests/attachments/test_pdf_validation.py::test_flate_stream_and_objstm_decompression PASSED [ 30%]
+kanban/tests/attachments/test_pdf_validation.py::test_flate_decompression_bomb_ratio_defense PASSED [ 33%]
+kanban/tests/attachments/test_pdf_validation.py::test_reject_offset_shifted_polyglots_and_invalid_magic PASSED [ 36%]
+kanban/tests/attachments/test_pdf_validation.py::test_reject_payload_exceeding_25_mib PASSED [ 38%]
+kanban/tests/attachments/test_pdf_validation.py::test_scan_and_validate_pdf_in_process_direct PASSED [ 41%]
+kanban/tests/attachments/test_pdf_validation.py::test_subprocess_cli_worker_execution PASSED [ 44%]
+kanban/tests/attachments/test_pdf_validation.py::test_in_process_scan_rejects_active_content_and_polyglots PASSED [ 47%]
+kanban/tests/attachments/test_pdf_validation.py::test_check_uri_destination_edge_cases PASSED [ 50%]
+kanban/tests/attachments/test_pdf_validation.py::test_flate_bounds_checks PASSED [ 52%]
+kanban/tests/attachments/test_pdf_validation.py::test_extract_and_scan_streams_max_objects_cap PASSED [ 55%]
+kanban/tests/attachments/test_pdf_validation.py::test_execute_subprocess_failure_modes PASSED [ 58%]
+kanban/tests/attachments/test_pdf_validation.py::test_run_subprocess_worker_direct PASSED [ 61%]
+kanban/tests/attachments/test_pdf_validation.py::test_reject_circular_pages_kids_cycle PASSED [ 63%]
+kanban/tests/attachments/test_pdf_validation.py::test_reject_circular_parent_cycle PASSED [ 66%]
+kanban/tests/attachments/test_pdf_validation.py::test_nested_dictionary_stream_header_and_hex_filter PASSED [ 69%]
+kanban/tests/attachments/test_pdf_validation.py::test_hex_uri_name_resolution PASSED [ 72%]
+kanban/tests/attachments/test_pdf_validation.py::test_indirect_object_cap_with_objstm PASSED [ 75%]
+kanban/tests/attachments/test_pdf_validation.py::test_pdf_string_and_stream_edge_branches PASSED [ 77%]
+kanban/tests/api/test_attachments_pdf.py::test_pdf_upload_roundtrip_and_headers PASSED [ 80%]
+kanban/tests/api/test_attachments_pdf.py::test_pdf_upload_rejects_active_javascript PASSED [ 83%]
+kanban/tests/api/test_attachments_pdf.py::test_pdf_attachment_meta_endpoint PASSED [ 86%]
+kanban/tests/api/test_attachments_pdf.py::test_pdf_upload_rejects_polyglots_and_asserts_zero_blobs PASSED [ 88%]
+kanban/tests/api/test_attachments_pdf.py::test_pdf_upload_rejects_hex_javascript_active_content PASSED [ 91%]
+kanban/tests/api/test_attachments_pdf.py::test_pdf_upload_rejects_objstm_openaction_and_launch PASSED [ 94%]
+kanban/tests/api/test_attachments_pdf.py::test_pdf_upload_rejects_smb_unc_uri_destinations PASSED [ 97%]
+kanban/tests/api/test_attachments_pdf.py::test_pdf_upload_rejects_encrypt_dictionary PASSED [100%]
 
-============================= 24 passed in 23.44s ==============================
+============================= 36 passed in 28.74s ==============================
+
+=== Frontend Vitest Unit Tests (KAN-81) ===
+
+> @kanban/web@0.1.0 test:unit /home/adamoutler/kanban/kanban/web
+> vitest run src/components/attachments/__tests__/PdfAttachmentCard.test.tsx src/features/activity/SafeMarkdownPreview.test.tsx src/features/drawer/IssueSurface.test.tsx
+
+
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
+
+ ✓ src/components/attachments/__tests__/PdfAttachmentCard.test.tsx (7 tests) 222ms
+ ✓ src/features/activity/SafeMarkdownPreview.test.tsx (14 tests) 229ms
+ ✓ src/features/drawer/IssueSurface.test.tsx (53 tests) 2264ms
+
+ Test Files  3 passed (3)
+      Tests  74 passed (74)
+   Start at  18:00:58
+   Duration  3.53s (tests 50%, environment 35%, import 12%, transform 2%, worker 1%)
+

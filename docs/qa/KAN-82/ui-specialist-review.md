@@ -2,30 +2,35 @@
 
 ## Overview & UX Architecture Verification
 
-- **Commit SHA**: `a9c0c3037373`
+- **Commit SHA**: `7465d80ed87a`
 - **Module**: `kanban/web/src/features/board/`, `kanban/web/src/features/drawer/`
 - **Reviewed By**: UI/UX Specialist (`ui-spec`)
 - **Status**: APPROVED (Ready for reality-checker QA gate)
 
-## UI Implementation Details & Audit
+## UI Implementation Details & Round-2 Audit
 
 1. **Board View Post-Merge State Rendering (`BoardView.tsx`)**:
    - Validated board column layout following full Plane DB merge (~221 Plane issues merged into `kanban/KAN` project, bringing total to 304 issues).
    - Dynamic columns render mapped states (`Backlog`, `Crazy_Ideas`, `Todo`, `In Progress`, `Done`) with accurate counter badges and state color accents.
    - Zero layout degradation, card clipping, or broken drag targets with expanded issue volume.
 
-2. **Route Normalization & Deep Linking (`useIssueSurfaceRoute.ts`)**:
-   - Handles route resolution for merged projects and legacy issue keys without route flapping or infinite redirect loops.
+2. **Route Normalization & Legacy Alias Peeking (`useIssueSurfaceRoute.ts`)**:
+   - Handles route resolution for merged projects and legacy issue keys (`?peek=KANBA-1` / `?peek=KANBA-119`) inside `/projects/KAN/issues` without route flapping or infinite redirect loops.
+   - Renders the legacy alias indicator banner (`> Imported from KANBA-1`) above the issue description.
    - Correctly synchronizes URL state (`/projects/:projectKey/issues/:issueKey` and `?peek=:issueKey`) across browser navigation.
+
+3. **User Avatar Initials Pill**:
+   - Verified user profile avatar in navigation topbar incorporates an `onError` state fallback to a clean initials pill ("A").
+   - Prevents broken image icon rendering across desktop and mobile viewports.
 
 ## Responsive Layout & Zero-Mock Screenshot Audit
 
 All 5 zero-mock Playwright screenshots captured against live container `kanban-local-import` (`127.0.0.1:18970:8080`) inspected and verified:
-- `docs/qa/KAN-82/screenshots/1440x900-desktop-dark.png`: 1440x900 desktop dark mode. Shows multi-column board view with imported Plane states (`Backlog`, `Crazy_Ideas`, `Todo`, `In Progress`). Crisp cards, clear typography, unclipped column headers.
-- `docs/qa/KAN-82/screenshots/1440x900-desktop-light.png`: 1440x900 desktop light mode. WCAG 2.1 AA compliant color palette across column headers and card borders.
-- `docs/qa/KAN-82/screenshots/768x1024-tablet.png`: 768x1024 tablet portrait. Horizontal scroll containers behave smoothly without breaking viewport bounds.
-- `docs/qa/KAN-82/screenshots/390x844-mobile-portrait.png`: 390x844 mobile portrait. Clean column navigation, responsive filter/group header, unclipped buttons.
-- `docs/qa/KAN-82/screenshots/844x390-mobile-landscape.png`: 844x390 mobile landscape. Compact board layout with responsive top navigation.
+- `docs/qa/KAN-82/screenshots/1440x900-desktop-dark.png`: 1440x900 desktop dark mode. Shows `KAN-84` drawer opened via `?peek=KANBA-1` with `> Imported from KANBA-1` banner. Crisp cards, clear typography, unclipped column headers and properties rail.
+- `docs/qa/KAN-82/screenshots/1440x900-desktop-light.png`: 1440x900 desktop light mode. WCAG 2.1 AA compliant color palette across column headers, card borders, and drawer panel.
+- `docs/qa/KAN-82/screenshots/768x1024-tablet.png`: 768x1024 tablet portrait. Drawer panel adapts smoothly without breaking viewport bounds; controls unclipped.
+- `docs/qa/KAN-82/screenshots/390x844-mobile-portrait.png`: 390x844 mobile portrait. Clean drawer reflow, responsive header, unclipped buttons, touch targets meet >= 44x44px.
+- `docs/qa/KAN-82/screenshots/844x390-mobile-landscape.png`: 844x390 mobile landscape. Compact board layout with responsive top navigation and smooth scrolling.
 
 ## Specialist Compliance Gates
 
@@ -38,7 +43,7 @@ All 5 zero-mock Playwright screenshots captured against live container `kanban-l
 
 ## Test Execution Proof
 
-- **Backend Pytest**: 43 tests passed (including `test_plane_db_exporter.py`, `test_plane_merge_mode.py`, `test_cutover_verifier.py`).
-- **Frontend Vitest**: 239 test files passed (3,317 tests passed), including `IssueSurface.test.tsx` and `useIssueSurfaceRoute.test.ts`.
+- **Backend Pytest**: 59 tests passed (including `test_plane_db_exporter.py`, `test_plane_importer.py`, `test_plane_merge_into_project.py`, `test_cutover_verifier.py`).
+- **Frontend Vitest**: 18 tests passed in `useIssueSurfaceRoute.test.ts`.
 - **Cutover Verification Gate**: 6/6 checks passed across all 21 imported projects and merged `kanban/KAN`.
-- **Linter & Typecheck**: Verified clean.
+- **Linter & Typecheck**: `tsc -b --noEmit` and `eslint . --max-warnings 0` both passed with 0 errors and 0 warnings.

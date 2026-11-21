@@ -1,10 +1,16 @@
+=== KAN-77 Zero-Mock Live Full-Stack Verification ===
+Container: kanban-local-import (127.0.0.1:18970)
+Commit SHA: 7465d80ed87a
+
+1. GET /api/v1/resolve?kind=issue&ref=KANBA-1 (Legacy Key Alias Resolution)
+---------------------------------------------------------------------------
 HTTP/1.1 200 OK
-date: Sat, 21 Nov 2026 21:07:54 GMT
+date: Sat, 21 Nov 2026 23:06:40 GMT
 server: uvicorn
 content-length: 153
 content-type: application/json
 x-kanban-canonical-key: KAN-84
-x-request-id: f145dc257f454ec6a2b32f1dbf6da8a0
+x-request-id: 8898bc96607e4909b9e5926ecd3aa09e
 content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
 x-content-type-options: nosniff
 referrer-policy: no-referrer
@@ -13,4 +19,65 @@ cross-origin-opener-policy: same-origin
 cross-origin-resource-policy: same-origin
 permissions-policy: camera=(), microphone=(), geolocation=()
 
-{"id":"01a1ffd7-e6ad-71cd-a338-c6a194f745e6","kind":"issue","key":"KAN-84","title":"Welcome to Plane 👋","workspace":"kanban","canonical_key":"KAN-84"}
+{
+  "id": "fc047283-4523-4337-a1cb-9c41988707f9",
+  "kind": "issue",
+  "key": "KAN-84",
+  "title": "Welcome to Plane 👋",
+  "workspace": "kanban",
+  "canonical_key": "KAN-84"
+}
+
+2. GET /api/v1/issues/KANBA-1 (Direct Issue Alias Access with Canonical Key Header)
+----------------------------------------------------------------------------------
+HTTP/1.1 200 OK
+date: Sat, 21 Nov 2026 23:06:40 GMT
+server: uvicorn
+content-length: 3530
+content-type: application/json
+etag: "6af51dfd5909192549cd573f71250de55e203d4f9fa8330505f6d5a4280c2610"
+x-kanban-canonical-key: KAN-84
+x-request-id: 3252903e958d4c77a7313d0372e3fe81
+content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
+x-content-type-options: nosniff
+referrer-policy: no-referrer
+x-frame-options: DENY
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+permissions-policy: camera=(), microphone=(), geolocation=()
+
+3. POST /api/v1/admin/exports/portable (Deterministic Workspace Bundle Export)
+------------------------------------------------------------------------------
+HTTP/1.1 200 OK
+date: Sat, 21 Nov 2026 23:07:08 GMT
+server: uvicorn
+content-disposition: attachment; filename="kanban-kanban-portable.tar.gz"
+content-type: application/gzip
+content-length: 2339746
+x-request-id: e80a434e06d64d2ca57a287fc43e9bd8
+content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
+x-content-type-options: nosniff
+referrer-policy: no-referrer
+x-frame-options: DENY
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+permissions-policy: camera=(), microphone=(), geolocation=()
+
+Verified Archive Entities:
+- entities/attachments.jsonl
+- entities/comments.jsonl
+- entities/cycles.jsonl
+- entities/docs.jsonl
+- entities/issue_key_aliases.jsonl (221 aliases mapped)
+- entities/issues.jsonl (316 issues total)
+- entities/labels.jsonl
+- entities/links.jsonl
+- entities/modules.jsonl
+- entities/object_links.jsonl
+- entities/pages.jsonl
+- entities/priorities.jsonl
+- entities/projects.jsonl
+- entities/states.jsonl
+- entities/workspaces.jsonl
+- manifest.json (SHA-256 digests for all files)
+- markdown/issues/*.md (With YAML front matter and body markdown)

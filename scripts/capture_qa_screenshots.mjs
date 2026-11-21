@@ -4,7 +4,7 @@ import path from "node:path";
 import { chromium } from "/home/adamoutler/kanban/kanban/web/node_modules/@playwright/test/index.mjs";
 
 const BASE_URL = process.env.BASE_URL || "http://127.0.0.1:18970";
-const SESSION_COOKIE = process.env.SESSION_COOKIE || "mQAV_wc8buURW1I9Upkzw6FyK6SuRM-Gu5RWgmsQ7OM.7KSrDAnhxTamyUDDpVJ7fVqqWDSdUaEPnN8nAo7Z8Bc";
+const SESSION_COOKIE = process.env.SESSION_COOKIE || "8he88j3caSZNFWU2ktkmGF7L87BH32rHQJSvGw-_JwY.O0T3UR_uw5OgTWALPTJh88wdvuTd6GoOPE-zkrNenN8";
 
 const VIEWPORTS = [
   { name: "1440x900-desktop-light", width: 1440, height: 900, theme: "light" },
@@ -19,16 +19,34 @@ const TARGETS = [
     ticket: "KAN-81",
     url: `${BASE_URL}/projects/KAN/issues?layout=board&peek=KAN-81`,
     outDir: "/home/adamoutler/kanban/docs/qa/KAN-81/screenshots",
+    action: async (page) => {
+      await page.waitForTimeout(1500);
+      await page.evaluate(() => {
+        const el = document.querySelector('[data-testid="pdf-attachment-card"]') ||
+                   document.querySelector('.split-section-attachments') ||
+                   document.querySelector('[data-testid="issue-surface-drawer"]');
+        if (el) {
+          el.scrollIntoView({ behavior: "instant", block: "center" });
+        }
+      });
+      await page.waitForTimeout(500);
+    },
   },
   {
     ticket: "KAN-77",
-    url: `${BASE_URL}/projects/KAN/issues?layout=board&peek=KANBA-1`,
+    url: `${BASE_URL}/admin/imports`,
     outDir: "/home/adamoutler/kanban/docs/qa/KAN-77/screenshots",
+    action: async (page) => {
+      await page.waitForTimeout(1500);
+    },
   },
   {
     ticket: "KAN-82",
-    url: `${BASE_URL}/projects/KAN/issues?layout=board`,
+    url: `${BASE_URL}/projects/KAN/issues?layout=board&peek=KANBA-1`,
     outDir: "/home/adamoutler/kanban/docs/qa/KAN-82/screenshots",
+    action: async (page) => {
+      await page.waitForTimeout(1500);
+    },
   },
 ];
 
@@ -88,6 +106,14 @@ async function run() {
         await page.waitForTimeout(200);
       }
 
+      if (target.action) {
+        try {
+          await target.action(page);
+        } catch (e) {
+          console.warn(`Action failed for ${target.ticket}:`, e.message);
+        }
+      }
+
       const outPath = path.join(target.outDir, `${vp.name}.png`);
       await page.screenshot({ path: outPath, fullPage: false });
       console.log(`  -> Saved ${outPath}`);
@@ -100,7 +126,7 @@ async function run() {
   console.log("\nAll screenshots successfully captured!");
 }
 
-run().catch(err => {
+run().catch((err) => {
   console.error("Screenshot capture failed:", err);
   process.exit(1);
 });
