@@ -1480,10 +1480,11 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
       );
     });
 
-    it('renders the 45-feature comparison matrix including OpenAI Symphony and 🎯✅ targets in DocsCenterPage', () => {
+    it('renders the 46-feature comparison matrix, non-goal compatibility tables, and 🎯✅ targets in DocsCenterPage', () => {
       const comparisonChapter = getChapter('feature-comparison');
       expect(comparisonChapter).toBeDefined();
       expect(comparisonChapter?.content).toContain('OpenAI Symphony');
+      expect(comparisonChapter?.content).toContain('Workspace/Issue/Field RBAC');
       expect(comparisonChapter?.content).toContain('🎯✅');
 
       render(
@@ -1497,9 +1498,11 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
       const symphonyHeaders = screen.getAllByRole('columnheader', {
         name: 'OpenAI Symphony',
       });
-      expect(symphonyHeaders).toHaveLength(5);
-      expect(screen.getAllByRole('table')).toHaveLength(5);
-      expect(screen.getAllByRole('cell', { name: '🎯✅' })).toHaveLength(10);
+      expect(symphonyHeaders).toHaveLength(6);
+      expect(screen.getAllByRole('table')).toHaveLength(7);
+      expect(screen.getAllByRole('cell', { name: '🎯✅' })).toHaveLength(11);
+      expect(screen.getAllByRole('cell', { name: '🔗 Companion' })).toHaveLength(5);
+      expect(screen.getAllByRole('cell', { name: '🧭 Dedicated' })).toHaveLength(1);
       const nonGoalsHeading = screen.getByRole('heading', {
         level: 2,
         name: /When 👍kanban Is Not the Right Fit/i,

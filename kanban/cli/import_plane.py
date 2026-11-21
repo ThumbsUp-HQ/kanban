@@ -392,7 +392,40 @@ async def _execute_import_db(
                 principal_id = p_fallback.scalar_one_or_none()
 
             if not principal_id:
-                principal_id = uuid.uuid4()
+                new_pid = uuid.uuid4()
+                await session.execute(
+                    text(
+                        "INSERT INTO principals (id, principal_type, workspace_id, status, display_name) "
+                        "VALUES (:id, 'USER', :ws, 'ACTIVE', 'Administrator') "
+                        "ON CONFLICT DO NOTHING"
+                    ),
+                    {"id": str(new_pid), "ws": str(ws_id)},
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO objects (id, object_type, workspace_id, canonical_key, display_title, created_by_id) "
+                        "VALUES (:id, 'user', :ws, 'admin', 'Administrator', :id) "
+                        "ON CONFLICT DO NOTHING"
+                    ),
+                    {"id": str(new_pid), "ws": str(ws_id)},
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO users (id, object_type, principal_type, workspace_id, email) "
+                        "VALUES (:id, 'user', 'USER', :ws, 'admin@kanban.local') "
+                        "ON CONFLICT DO NOTHING"
+                    ),
+                    {"id": str(new_pid), "ws": str(ws_id)},
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type) "
+                        "VALUES (:ws, :id, 'WORKSPACE_ADMIN', 'workspace') "
+                        "ON CONFLICT DO NOTHING"
+                    ),
+                    {"id": str(new_pid), "ws": str(ws_id)},
+                )
+                principal_id = new_pid
 
             # Set session GUCs
             await session.execute(
@@ -576,7 +609,40 @@ async def _execute_generic_import_db(
                 )
                 principal_id = p_fallback.scalar_one_or_none()
             if not principal_id:
-                principal_id = uuid.uuid4()
+                new_pid = uuid.uuid4()
+                await session.execute(
+                    text(
+                        "INSERT INTO principals (id, principal_type, workspace_id, status, display_name) "
+                        "VALUES (:id, 'USER', :ws, 'ACTIVE', 'Administrator') "
+                        "ON CONFLICT DO NOTHING"
+                    ),
+                    {"id": str(new_pid), "ws": str(ws_id)},
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO objects (id, object_type, workspace_id, canonical_key, display_title, created_by_id) "
+                        "VALUES (:id, 'user', :ws, 'admin', 'Administrator', :id) "
+                        "ON CONFLICT DO NOTHING"
+                    ),
+                    {"id": str(new_pid), "ws": str(ws_id)},
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO users (id, object_type, principal_type, workspace_id, email) "
+                        "VALUES (:id, 'user', 'USER', :ws, 'admin@kanban.local') "
+                        "ON CONFLICT DO NOTHING"
+                    ),
+                    {"id": str(new_pid), "ws": str(ws_id)},
+                )
+                await session.execute(
+                    text(
+                        "INSERT INTO role_bindings (workspace_id, principal_id, role, scope_type) "
+                        "VALUES (:ws, :id, 'WORKSPACE_ADMIN', 'workspace') "
+                        "ON CONFLICT DO NOTHING"
+                    ),
+                    {"id": str(new_pid), "ws": str(ws_id)},
+                )
+                principal_id = new_pid
 
             await session.execute(
                 text(

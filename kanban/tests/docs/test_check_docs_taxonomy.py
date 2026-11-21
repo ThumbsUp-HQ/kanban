@@ -344,26 +344,48 @@ class TestAuditIntegrationAndCLI:
         )
         expected_separator = "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"
 
-        table_lines = [line for line in spec_lines if line.startswith("|")]
-        header_lines = [line for line in table_lines if line.startswith("| Feature |")]
-        separator_lines = [line for line in table_lines if line.startswith("| --- |")]
+        sec6_idx = next(
+            i
+            for i, line in enumerate(spec_lines)
+            if line.startswith("## 6. When 👍kanban Is Not the Right Fit")
+        )
+        cap_table_lines = [line for line in spec_lines[:sec6_idx] if line.startswith("|")]
+        header_lines = [line for line in cap_table_lines if line.startswith("| Feature |")]
+        separator_lines = [line for line in cap_table_lines if line.startswith("| --- |")]
         data_lines = [
-            line for line in table_lines if line not in header_lines and line not in separator_lines
+            line
+            for line in cap_table_lines
+            if line not in header_lines and line not in separator_lines
         ]
 
         assert header_lines == [expected_header] * 5
         assert separator_lines == [expected_separator] * 5
-        assert len(data_lines) == 45
+        assert len(data_lines) == 46
         planned_core_rows = [row for row in data_lines if "| 🎯✅ |" in row]
-        assert len(planned_core_rows) == 10
-        assert any("When 👍kanban Is Not the Right Fit" in line for line in spec_lines)
-        for row in table_lines:
+        assert len(planned_core_rows) == 11
+        for row in cap_table_lines:
             cells = [cell.strip() for cell in row.strip("|").split("|")]
             assert len(cells) == 9, f"Expected 9 GFM columns, got {len(cells)} in row: {row}"
+
+        sec6_table_lines = [line for line in spec_lines[sec6_idx:] if line.startswith("|")]
+        sec6_9col = sec6_table_lines[:8]
+        sec6_4col = sec6_table_lines[8:]
+        assert sec6_9col[0].startswith("| Non-Goal Use Case | 👍kanban |")
+        assert sec6_9col[1] == expected_separator
+        for row in sec6_9col:
+            assert len(row.strip("|").split("|")) == 9
+        assert sec6_4col[0] == (
+            "| Use Case | 👍kanban Fit | Recommended Tools (FOSS & Commercial) | "
+            "How to Pair Alongside 👍kanban (or When to Replace) |"
+        )
+        assert sec6_4col[1] == "| --- | --- | --- | --- |"
+        assert len(sec6_4col) == 8
+        for row in sec6_4col:
+            assert len(row.strip("|").split("|")) == 4
 
         wiki_dir = Path(DEFAULT_WIKI_DIR)
         if wiki_dir.is_dir():
             wiki_file = wiki_dir / "Feature-Comparison.md"
             wiki_lines = wiki_file.read_text(encoding="utf-8").splitlines()
-            assert wiki_lines[0] == "# [Informational] Feature Comparison Matrix (45 Features)"
+            assert wiki_lines[0] == "# [Informational] Feature Comparison Matrix (46 Features)"
             assert wiki_lines[1:] == spec_lines[1:]

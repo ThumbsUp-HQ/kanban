@@ -499,7 +499,7 @@ class PlaneDbExporter:
         SELECT u.id, u.email, u.first_name, u.last_name, u.display_name, wm.role
         FROM users u
         JOIN workspace_members wm ON u.id = wm.member_id
-        WHERE wm.workspace_id = $1 AND wm.deleted_at IS NULL AND u.deleted_at IS NULL
+        WHERE wm.workspace_id = $1 AND wm.deleted_at IS NULL
         ORDER BY u.email ASC
         """
         rows = await conn.fetch(query, ws_id)
@@ -562,24 +562,39 @@ class PlaneDbExporter:
 
     async def _export_cycles(self, conn: asyncpg.Connection, p_id: Any) -> list[dict[str, Any]]:
         query = """
-        SELECT id, name, description, start_date, end_date, status, project_id
+        SELECT id, name, description, start_date, end_date, project_id
         FROM cycles
         WHERE project_id = $1 AND deleted_at IS NULL
         ORDER BY start_date ASC NULLS LAST, name ASC
         """
         rows = await conn.fetch(query, p_id)
-        return [
-            {
-                "id": str(r["id"]),
-                "name": r["name"],
-                "description": r["description"] if r.get("description") else "",
-                "start_date": str(r["start_date"]) if r.get("start_date") else None,
-                "end_date": str(r["end_date"]) if r.get("end_date") else None,
-                "status": (r["status"] or "upcoming").lower() if r.get("status") else "upcoming",
-                "project": str(r["project_id"]) if r.get("project_id") else str(p_id),
-            }
-            for r in rows
-        ]
+        now = datetime.datetime.now(datetime.UTC).date()
+        result: list[dict[str, Any]] = []
+        for r in rows:
+            status = "upcoming"
+            sd = r.get("start_date")
+            ed = r.get("end_date")
+            if sd and ed:
+                sd_val = sd.date() if isinstance(sd, datetime.datetime) else sd
+                ed_val = ed.date() if isinstance(ed, datetime.datetime) else ed
+                if sd_val <= now <= ed_val:
+                    status = "active"
+                elif now > ed_val:
+                    status = "completed"
+            if r.get("status"):
+                status = str(r["status"]).lower()
+            result.append(
+                {
+                    "id": str(r["id"]),
+                    "name": r["name"],
+                    "description": r["description"] if r.get("description") else "",
+                    "start_date": str(r["start_date"]) if r.get("start_date") else None,
+                    "end_date": str(r["end_date"]) if r.get("end_date") else None,
+                    "status": status,
+                    "project": str(r["project_id"]) if r.get("project_id") else str(p_id),
+                }
+            )
+        return result
 
     async def _export_modules(self, conn: asyncpg.Connection, p_id: Any) -> list[dict[str, Any]]:
         query = """
@@ -733,7 +748,7 @@ class PlaneDbExporter:
         if not issue_ids:
             return []
         query = """
-        SELECT id, issue_id, comment_html, comment_json, actor_id, parent_comment_id, created_at
+        SELECT id, issue_id, comment_html, comment_json, actor_id, parent_id, created_at
         FROM issue_comments
         WHERE issue_id = ANY($1) AND deleted_at IS NULL
         ORDER BY created_at ASC
@@ -751,6 +766,7 @@ class PlaneDbExporter:
                 if c_at is not None and hasattr(c_at, "isoformat")
                 else (str(c_at) if c_at else None)
             )
+            parent_comment = r.get("parent_id") or r.get("parent_comment_id")
             result.append(
                 {
                     "id": str(r["id"]),
@@ -759,9 +775,7 @@ class PlaneDbExporter:
                     "comment_json": r["comment_json"] if r.get("comment_json") else None,
                     "actor": str(r["actor_id"]) if r.get("actor_id") else None,
                     "created_by": str(r["actor_id"]) if r.get("actor_id") else None,
-                    "parent_comment": str(r["parent_comment_id"])
-                    if r.get("parent_comment_id")
-                    else None,
+                    "parent_comment": str(parent_comment) if parent_comment else None,
                     "created_at": c_at_str,
                 }
             )
@@ -803,12 +817,25 @@ class PlaneDbExporter:
         # 1. Inspect file_assets table if it exists in Plane DB
         try:
             asset_rows = await conn.fetch(
-                "SELECT id, key, name FROM file_assets WHERE project_id = $1 AND deleted_at IS NULL",
+                "SELECT * FROM file_assets WHERE project_id = $1 AND deleted_at IS NULL",
                 p_id,
             )
             for ar in asset_rows:
-                k = ar["key"]
-                fn = ar["name"] or Path(k).name
+                k = ar.get("asset") or ar.get("key")
+                if not k:
+                    continue
+                fn = ""
+                raw_attrs = ar.get("attributes")
+                if isinstance(raw_attrs, str):
+                    try:
+                        attrs = json.loads(raw_attrs)
+                        fn = attrs.get("name") or ""
+                    except Exception:
+                        pass
+                elif isinstance(raw_attrs, dict):
+                    fn = raw_attrs.get("name") or ""
+                if not fn:
+                    fn = ar.get("name") or Path(k).name
                 asset_keys[k] = fn
         except Exception:
             # file_assets table might not exist

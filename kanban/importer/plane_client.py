@@ -317,8 +317,8 @@ class PlaneClient:
         att_dict: dict[str, bytes] = {}
         if not attachments_dir.is_dir():
             return att_dict
-        for att_file in attachments_dir.glob("*"):
-            if att_file.is_file():
+        for att_file in sorted(attachments_dir.glob("*")):
+            if att_file.is_file() and att_file.name != "manifest.json":
                 if att_file.stat().st_size > MAX_PAGE_BYTES:
                     msg = f"Attachment {att_file.name} exceeds maximum allowable size of 25 MiB."
                     raise PlaneClientError(msg)

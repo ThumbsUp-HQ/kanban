@@ -10,8 +10,8 @@
 >
 > On the surface, every tracker presents identical columns, draggable cards, and basic workflow states. The real architectural divergence begins the moment you inspect paywalled enterprise controls, database-level security invariants, canonical Markdown integrity, and native agent/MCP execution gates. While commercial SaaS and copyleft alternatives lock custom properties, audit logs, Single Sign-On, and AI integrations behind steep per-seat subscription tiers or bloated CRUD APIs, `👍kanban` ships an uncompromising, security-first, agent-first platform under a pure Apache-2.0 license.
 
-See the complete 45-feature technical evaluation matrix comparing `👍kanban` against Jira, Plane, GitHub, Vibe Kanban, OpenAI Symphony, Businessmap, and Codebeamer across Security/Identity/Audit, Agentic MCP/AI Workflows, Issue Tracking, Docs/Stickies/Markdown, and Orchestration/Provenance/Day-2 Operations:
-- **Repository Specification (45-Feature Matrix & Intentional Non-Goals):** [`docs/FEATURE_COMPARISON.md`](./docs/FEATURE_COMPARISON.md)
+See the complete 46-feature technical evaluation matrix comparing `👍kanban` against Jira, Plane, GitHub, Vibe Kanban, OpenAI Symphony, Businessmap, and Codebeamer across Security/Identity/Audit, Agentic MCP/AI Workflows, Issue Tracking, Docs/Stickies/Markdown, and Orchestration/Provenance/Day-2 Operations:
+- **Repository Specification (46-Feature Matrix & Intentional Non-Goals):** [`docs/FEATURE_COMPARISON.md`](./docs/FEATURE_COMPARISON.md)
 - **Project Wiki:** [Feature Comparison Matrix](https://git.adamoutler.com/AI/thumbs-up-kanban/wiki/Feature-Comparison)
 
 ---
@@ -94,7 +94,7 @@ uv run kanban-agent validate-qa-packet --help
 
 ## Authoritative Documentation
 
-- **Feature Comparison Matrix (45 Capabilities):** [`docs/FEATURE_COMPARISON.md`](./docs/FEATURE_COMPARISON.md) ([Wiki](https://git.adamoutler.com/AI/thumbs-up-kanban/wiki/Feature-Comparison))
+- **Feature Comparison Matrix (46 Capabilities):** [`docs/FEATURE_COMPARISON.md`](./docs/FEATURE_COMPARISON.md) ([Wiki](https://git.adamoutler.com/AI/thumbs-up-kanban/wiki/Feature-Comparison))
 - **Architecture & Product Specification (v2):** [`docs/ARCHITECTURE_AND_PRODUCT_SPEC.md`](./docs/ARCHITECTURE_AND_PRODUCT_SPEC.md)
 - **Production Promotion & Encrypted Backup Runbook (`KBBAK1`):** [`docs/PROMOTION_AND_BACKUP.md`](./docs/PROMOTION_AND_BACKUP.md)
 - **Topological Ticket Index & Execution Waves:** [`docs/tickets/INDEX.md`](./docs/tickets/INDEX.md)

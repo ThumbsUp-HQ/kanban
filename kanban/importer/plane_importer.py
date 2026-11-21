@@ -80,6 +80,18 @@ def _parse_iso_datetime(val: str | None) -> datetime.datetime | None:
         return None
 
 
+def _parse_iso_date(val: str | None) -> date | None:
+    """Parse ISO date or datetime string into date object."""
+    if not val:
+        return None
+    try:
+        if "T" in val or " " in val:
+            return datetime.datetime.fromisoformat(val).date()
+        return date.fromisoformat(val)
+    except Exception:
+        return None
+
+
 class PlaneImporter:
     """Transactional engine importing Plane snapshots with exact sequence continuity and merge mode."""
 
@@ -500,8 +512,8 @@ class PlaneImporter:
                         "id": cycle_id,
                     },
                 )
-                s_date = date.fromisoformat(c.start_date) if c.start_date else None
-                e_date = date.fromisoformat(c.end_date) if c.end_date else None
+                s_date = _parse_iso_date(c.start_date)
+                e_date = _parse_iso_date(c.end_date)
                 raw_status = (c.status or "upcoming").lower()
                 c_status = (
                     raw_status if raw_status in ("active", "upcoming", "completed") else "upcoming"
@@ -628,6 +640,8 @@ class PlaneImporter:
         md_attachments: dict[str, str] = {}
 
         for att_filename, raw_bytes in bundle.attachments.items():
+            if att_filename == "manifest.json":
+                continue
             source_key = ("attachment", att_filename)
             raw_sha = hashlib.sha256(raw_bytes).digest()  # Actual 32-byte sha256
             safe_source_id = att_filename[:128]
@@ -942,8 +956,8 @@ class PlaneImporter:
                 cycle_source_id = issue.cycle_id or issue.cycle
                 target_cycle_id = cycle_map.get(cycle_source_id) if cycle_source_id else None
 
-                s_date = date.fromisoformat(issue.start_date) if issue.start_date else None
-                t_date = date.fromisoformat(issue.target_date) if issue.target_date else None
+                s_date = _parse_iso_date(issue.start_date)
+                t_date = _parse_iso_date(issue.target_date)
 
                 rank = allocate_initial_board_rank(effective_seq)
 
