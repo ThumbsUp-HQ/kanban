@@ -106,8 +106,16 @@ class RealityCheckerProof(BaseModel):
     grade: Annotated[str, Field(pattern=r"^[A-F]$")]
     report_path: Annotated[
         str,
-        Field(pattern=r"^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/[A-Za-z0-9._/-]{1,200}$"),
+        Field(pattern=_pydantic_pattern(REPORT_PATH_REGEX)),
     ]
+
+    @field_validator("report_path", mode="before")
+    @classmethod
+    def _pre_validate_report_path(cls, v: object) -> object:
+        if isinstance(v, str) and "//" in v:
+            msg = f"Path '{v}' contains forbidden double slash '//'"
+            raise ValueError(msg)
+        return v
 
     @field_validator("report_path")
     @classmethod
