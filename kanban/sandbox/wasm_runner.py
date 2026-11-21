@@ -331,7 +331,7 @@ class TierAWasmRunner:
             alloc_ptr = kb_alloc(store, len(input_bytes))
             if not (
                 isinstance(alloc_ptr, int)
-                and alloc_ptr > 0
+                and alloc_ptr >= 0
                 and alloc_ptr + len(input_bytes) <= memory.data_len(store)
             ):
                 msg = "WebAssembly guest 'kb_alloc' returned invalid or out-of-bounds pointer"

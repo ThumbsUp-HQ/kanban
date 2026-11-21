@@ -106,7 +106,7 @@ class RealityCheckerProof(BaseModel):
     grade: Annotated[str, Field(pattern=r"^[A-F]$")]
     report_path: Annotated[
         str,
-        Field(pattern=_pydantic_pattern(REPORT_PATH_REGEX)),
+        Field(pattern=r"^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/[A-Za-z0-9._/-]{1,200}$"),
     ]
 
     @field_validator("report_path")

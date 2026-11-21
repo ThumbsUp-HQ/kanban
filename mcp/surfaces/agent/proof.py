@@ -38,7 +38,6 @@ VERIFICATION_PROOF_SCHEMA: Final[dict[str, Any]] = {
         "qa_dir": {
             "type": "string",
             "pattern": r"^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/?$",
-            "description": "QA directory path",
         },
         "artifacts": {
             "type": "array",
@@ -48,11 +47,9 @@ VERIFICATION_PROOF_SCHEMA: Final[dict[str, Any]] = {
                 "type": "string",
                 "pattern": r"^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/[A-Za-z0-9._/-]{1,200}$",
             },
-            "description": "QA artifact paths",
         },
         "reality_checker": {
             "type": "object",
-            "description": "Reality-checker audit verdict",
             "properties": {
                 "verdict": {
                     "type": "string",
@@ -67,7 +64,6 @@ VERIFICATION_PROOF_SCHEMA: Final[dict[str, Any]] = {
                     "pattern": (
                         r"^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/reality-checker-report\.md$"
                     ),
-                    "description": "Report path",
                 },
             },
             "required": ["verdict", "grade", "report_path"],
@@ -76,7 +72,6 @@ VERIFICATION_PROOF_SCHEMA: Final[dict[str, Any]] = {
         "ci_run_url": {
             "type": "string",
             "maxLength": 2048,
-            "description": "CI run URL",
         },
     },
     "required": ["qa_dir", "artifacts", "reality_checker", "ci_run_url"],

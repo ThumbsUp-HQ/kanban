@@ -40,51 +40,41 @@ CREATE_TICKET_SCHEMA: Final[dict[str, Any]] = {
                     "type": "string",
                     "minLength": 1,
                     "maxLength": 500,
-                    "description": "Summary",
                 },
                 "description_markdown": {
                     "type": "string",
-                    "description": "Description",
                 },
                 "state": {
                     "type": "string",
-                    "description": "State name or UUID",
                 },
                 "priority": {
                     "type": "string",
-                    "description": "Priority slug",
                 },
                 "assignees": {
                     "type": "array",
                     "items": {"type": "string"},
                     "maxItems": 20,
-                    "description": "Assignees",
                 },
                 "labels": {
                     "type": "array",
                     "items": {"type": "string"},
                     "maxItems": 20,
-                    "description": "Labels",
                 },
                 "cycle": {
                     "type": "string",
-                    "description": "Cycle",
                 },
                 "modules": {
                     "type": "array",
                     "items": {"type": "string"},
                     "maxItems": 20,
-                    "description": "Modules",
                 },
                 "start_date": {
                     "type": "string",
                     "format": "date",
-                    "description": "Start date",
                 },
                 "due_date": {
                     "type": "string",
                     "format": "date",
-                    "description": "Due date",
                 },
                 "children": {
                     "type": "array",
