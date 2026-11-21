@@ -5,6 +5,7 @@
 
 from __future__ import annotations
 
+import contextlib
 import datetime
 import hashlib
 import hmac
@@ -103,6 +104,17 @@ def read_secret_source(
 
     content = path.read_text(encoding="utf-8").strip()
     return content or None
+
+
+def _raise_attachment_cap_exceeded(key: str) -> None:
+    """Raise fail-closed security error when an attachment exceeds MAX_ATTACHMENT_BYTES."""
+    logger.error(
+        "Attachment %s exceeds %d bytes; rejecting fail-closed.",
+        key,
+        MAX_ATTACHMENT_BYTES,
+    )
+    msg = f"Attachment '{key}' exceeds maximum permitted size of {MAX_ATTACHMENT_BYTES} bytes."
+    raise PlaneExportSecurityError(msg)
 
 
 class MinioSigV4Downloader:
@@ -230,18 +242,12 @@ class MinioSigV4Downloader:
                 async for chunk in response.aiter_bytes():
                     total_bytes += len(chunk)
                     if total_bytes > MAX_ATTACHMENT_BYTES:
-                        logger.warning(
-                            "Attachment %s exceeds %d bytes; capped at 25 MiB.",
-                            object_key,
-                            MAX_ATTACHMENT_BYTES,
-                        )
-                        # Cap at MAX_ATTACHMENT_BYTES
-                        overflow = total_bytes - MAX_ATTACHMENT_BYTES
-                        chunks.append(chunk[:-overflow] if overflow < len(chunk) else b"")
-                        break
+                        _raise_attachment_cap_exceeded(object_key)
                     chunks.append(chunk)
 
                 return b"".join(chunks)
+        except PlaneExportSecurityError:
+            raise
         except Exception as exc:
             logger.warning("MinIO stream error downloading %s: %s", object_key, exc)
             return None
@@ -254,11 +260,22 @@ class ExporterConfig:
     database_url: str
     out_dir: Path
     workspace_slug: str | None = None
-    exclude_project_identifiers: set[str] = field(default_factory=lambda: {"TEST"})
+    exclude_project_identifiers: set[str] | list[str] | None = field(
+        default_factory=lambda: {"TEST"}
+    )
     minio_endpoint: str | None = None
     minio_bucket: str = "plane"
     minio_access_key: str | None = None
     minio_secret_key: str | None = None
+
+    def __post_init__(self) -> None:
+        """Initialize ExporterConfig defaults and normalize excluded identifiers."""
+        if self.exclude_project_identifiers is None:
+            self.exclude_project_identifiers = set()
+        else:
+            self.exclude_project_identifiers = {
+                str(x).strip().upper() for x in self.exclude_project_identifiers if str(x).strip()
+            }
 
 
 PlaneExportConfig = ExporterConfig
@@ -385,10 +402,9 @@ class PlaneDbExporter:
                     ws_id,
                 )
 
+                excludes = set(self.config.exclude_project_identifiers or ())
                 filtered_projects = [
-                    p
-                    for p in proj_rows
-                    if p["identifier"].upper() not in self.config.exclude_project_identifiers
+                    p for p in proj_rows if p["identifier"].upper() not in excludes
                 ]
 
                 if not filtered_projects:
@@ -575,12 +591,19 @@ class PlaneDbExporter:
             sd = r.get("start_date")
             ed = r.get("end_date")
             if sd and ed:
+                if isinstance(sd, str):
+                    with contextlib.suppress(ValueError):
+                        sd = datetime.date.fromisoformat(sd)
+                if isinstance(ed, str):
+                    with contextlib.suppress(ValueError):
+                        ed = datetime.date.fromisoformat(ed)
                 sd_val = sd.date() if isinstance(sd, datetime.datetime) else sd
                 ed_val = ed.date() if isinstance(ed, datetime.datetime) else ed
-                if sd_val <= now <= ed_val:
-                    status = "active"
-                elif now > ed_val:
-                    status = "completed"
+                if isinstance(sd_val, datetime.date) and isinstance(ed_val, datetime.date):
+                    if sd_val <= now <= ed_val:
+                        status = "active"
+                    elif now > ed_val:
+                        status = "completed"
             if r.get("status"):
                 status = str(r["status"]).lower()
             result.append(

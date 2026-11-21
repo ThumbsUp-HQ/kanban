@@ -97,6 +97,18 @@ def test_resolve_exporter_config_validation(
     assert cfg.workspace_slug == "my-workspace"
     assert cfg.exclude_project_identifiers == {"TEST", "DEV"}
 
+    cfg_str = resolve_exporter_config(
+        out_dir=tmp_path / "out",
+        exclude_project_identifiers="TEST,DEV,STAGE",
+    )
+    assert cfg_str.exclude_project_identifiers == {"TEST", "DEV", "STAGE"}
+
+    cfg_default = resolve_exporter_config(
+        out_dir=tmp_path / "out",
+        exclude_project_identifiers=None,
+    )
+    assert cfg_default.exclude_project_identifiers == {"TEST"}
+
 
 def test_minio_sigv4_header_generation() -> None:
     """Verify pure-stdlib AWS S3 SigV4 header calculation."""
@@ -171,6 +183,53 @@ async def test_minio_sigv4_download_payload_cap(tmp_path: Path) -> None:
         pytest.raises(PlaneExportSecurityError, match="exceeds 25 MiB"),
     ):
         await downloader.stream_object("huge-asset.bin", dest_file)
+
+
+@pytest.mark.asyncio
+async def test_minio_sigv4_download_object_payload_cap_fail_closed() -> None:
+    """Verify download_object strictly enforces 25 MiB attachment limit and raises PlaneExportSecurityError instead of truncating."""
+    downloader = MinioSigV4Downloader(
+        endpoint="http://127.0.0.1:9000",
+        bucket="plane-uploads",
+        access_key="ACCESSKEY",
+        secret_key="SECRETKEY",
+    )
+
+    chunk_size = 10 * 1024 * 1024  # 10 MiB
+    chunks = [b"A" * chunk_size, b"B" * chunk_size, b"C" * chunk_size]
+
+    mock_resp = MagicMock()
+    mock_resp.status_code = 200
+
+    async def aiter_bytes() -> Any:
+        for c in chunks:
+            yield c
+
+    mock_resp.aiter_bytes = aiter_bytes
+
+    class MockAsyncClient:
+        def stream(
+            self,
+            method: str,
+            url: str,
+            headers: dict[str, str],
+            timeout: float | None = None,
+        ) -> Any:
+            class StreamCtx:
+                async def __aenter__(self) -> MagicMock:
+                    return mock_resp
+
+                async def __aexit__(self, *args: object) -> None:
+                    pass
+
+            return StreamCtx()
+
+    mock_client = MockAsyncClient()
+    with pytest.raises(
+        PlaneExportSecurityError,
+        match="exceeds maximum permitted size of 26214400 bytes",
+    ):
+        await downloader.download_object(mock_client, "huge-asset.bin")  # type: ignore[arg-type]
 
 
 @pytest.mark.asyncio
@@ -460,7 +519,7 @@ async def test_minio_download_object_variations() -> None:
     res_ok = await downloader.download_object(MockClient200(), "file.txt")  # type: ignore[arg-type]
     assert res_ok == b"chunk1chunk2"
 
-    # 3. Payload cap truncation
+    # 3. Payload cap fail-closed error
     mock_resp_huge = MagicMock(status_code=200)
 
     async def aiter_huge() -> Any:
@@ -479,9 +538,8 @@ async def test_minio_download_object_variations() -> None:
 
             return Ctx()
 
-    res_huge = await downloader.download_object(MockClientHuge(), "huge.bin")  # type: ignore[arg-type]
-    assert res_huge is not None
-    assert len(res_huge) == MAX_ATTACHMENT_BYTES
+    with pytest.raises(PlaneExportSecurityError, match="exceeds maximum permitted size"):
+        await downloader.download_object(MockClientHuge(), "huge.bin")  # type: ignore[arg-type]
 
     # 4. Exception handling
     class MockClientErr:
@@ -739,3 +797,138 @@ async def test_plane_db_exporter_empty_issues_and_collision(tmp_path: Path) -> N
 
     assert summary["projects_exported"] == 1
     assert summary["issues_exported"] == 0
+
+
+@pytest.mark.asyncio
+async def test_plane_db_exporter_cycles_and_attachment_collision(tmp_path: Path) -> None:
+    """Verify exporting cycles, file_assets with json attributes, and filename collision handling."""
+    out_dir = tmp_path / "coll_proj"
+    cfg = PlaneExportConfig(
+        database_url="postgresql+asyncpg://user:pass@127.0.0.1:5432/plane",
+        minio_endpoint="http://127.0.0.1:9000",
+        minio_bucket="plane",
+        minio_access_key="AKIA...",
+        minio_secret_key="SECRET...",
+        out_dir=out_dir,
+        workspace_slug="kanban",
+        exclude_project_identifiers=None,
+    )
+    exporter = PlaneDbExporter(cfg)
+    mock_conn = AsyncMock()
+    mock_tr = AsyncMock()
+    mock_conn.transaction = MagicMock(return_value=mock_tr)
+
+    ws_id = "11111111-1111-1111-1111-111111111111"
+    proj_id = "22222222-2222-2222-2222-222222222222"
+
+    # Pre-create a colliding file in out_dir / kanban / KANBA / attachments / diagram.png
+    att_dir = out_dir / "kanban" / "KANBA" / "attachments"
+    att_dir.mkdir(parents=True, exist_ok=True)
+    (att_dir / "diagram.png").write_bytes(b"existing file")
+
+    async def fake_fetch(query: str, *args: Any) -> list[dict[str, Any]]:
+        if "FROM workspaces" in query:
+            return [{"id": ws_id, "slug": "kanban", "name": "Kanban Workspace"}]
+        if "FROM projects" in query:
+            return [
+                {
+                    "id": proj_id,
+                    "identifier": "KANBA",
+                    "name": "Platform Core",
+                    "description": "",
+                    "network": 2,
+                }
+            ]
+        if "FROM cycles" in query:
+            return [
+                {
+                    "id": "c-1",
+                    "name": "Sprint 1",
+                    "description": "Sprint description",
+                    "status": "current",
+                    "start_date": "2026-01-01",
+                    "end_date": "2026-01-14",
+                    "project_id": proj_id,
+                },
+                {
+                    "id": "c-2",
+                    "name": "Active Sprint",
+                    "description": "",
+                    "start_date": "2020-01-01",
+                    "end_date": "2030-01-01",
+                    "project_id": proj_id,
+                },
+            ]
+        if "FROM file_assets" in query:
+            return [
+                {
+                    "id": "fa-1",
+                    "asset": "uploads/diagram.png",
+                    "attributes": json.dumps({"name": "diagram.png"}),
+                },
+                {
+                    "id": "fa-2",
+                    "asset": "uploads/second.png",
+                    "attributes": {"name": "second.png"},
+                },
+                {
+                    "id": "fa-3",
+                    "asset": "",
+                    "attributes": {},
+                },
+                {
+                    "id": "fa-4",
+                    "asset": "uploads/corrupt.png",
+                    "attributes": "not-valid-json",
+                },
+                {
+                    "id": "fa-5",
+                    "asset": "uploads/empty-name",
+                    "attributes": {"name": ""},
+                },
+            ]
+        if "FROM issues" in query:
+            return [
+                {
+                    "id": "i-1",
+                    "sequence_id": 1,
+                    "name": "Issue with attachment",
+                    "description_html": '<p>Look at <a href="/api/assets/v1/workspace/diagram.png">link</a> and <img src="/api/assets/v1/workspace/extra_asset.png"/></p>',
+                    "state_id": None,
+                    "priority": "none",
+                    "project_id": proj_id,
+                }
+            ]
+        if "FROM issue_comments" in query:
+            return [
+                {
+                    "id": "comm-1",
+                    "issue_id": "i-1",
+                    "comment_html": '<p>Comment with <a href="/api/assets/v1/workspace/comment_asset.png">comm</a></p>',
+                    "created_at": "2026-01-01T00:00:00Z",
+                    "updated_at": "2026-01-01T00:00:00Z",
+                    "actor_id": "user-1",
+                }
+            ]
+        return []
+
+    mock_conn.fetch = fake_fetch
+
+    async def fake_dl(http_client: Any, obj_key: str) -> bytes | None:
+        if "extra_asset.png" in obj_key:
+            return None
+        return b"\x89PNG\r\n\x1a\nfake"
+
+    with (
+        patch("kanban.importer.plane_db_exporter.asyncpg.connect", return_value=mock_conn),
+        patch.object(MinioSigV4Downloader, "download_object", side_effect=fake_dl),
+    ):
+        summary = await exporter.export()
+
+    assert summary["projects_exported"] == 1
+    assert summary["issues_exported"] == 1
+    assert (out_dir / "kanban" / "KANBA" / "cycles.json").is_file()
+    assert (
+        out_dir / "kanban" / "KANBA" / "attachments" / "diagram.png"
+    ).read_bytes() == b"existing file"
+    assert (out_dir / "kanban" / "KANBA" / "attachments" / "manifest.json").is_file()

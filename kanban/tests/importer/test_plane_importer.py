@@ -17,6 +17,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from database.models import Attachment, Issue, IssueComment, Project, WorkflowState
 from database.tests.conftest import bootstrap_workspace_admin
 from kanban.api.deps import PrincipalContext
+from kanban.api.problems import ProblemException
 from kanban.importer.plane_client import PlaneBundle, PlaneClient, PlaneIssue
 from kanban.importer.plane_importer import ImportIntegrityError, PlaneImporter
 
@@ -526,3 +527,146 @@ def test_parse_iso_date_helpers() -> None:
     assert _parse_iso_date(None) is None
     assert _parse_iso_date("invalid-date") is None
     assert _parse_iso_date("") is None
+
+
+@pytest.mark.asyncio
+async def test_plane_importer_pdf_attachment_positive(
+    setup_import_env: tuple[AsyncSession, PrincipalContext, Path],
+) -> None:
+    """Positive test: PDF attachment during Plane import is validated and stored with page_count."""
+    session, caller, blob_dir = setup_import_env
+    from kanban.importer.plane_client import PlaneIssue, PlaneProject
+
+    pdf_bytes = (
+        b"%PDF-1.4\n"
+        b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+        b"2 0 obj\n<< /Type /Pages /Count 1 /Kids [3 0 R] >>\nendobj\n"
+        b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n"
+        b"xref\n0 4\n0000000000 65535 f \n"
+        b"0000000010 00000 n \n0000000060 00000 n \n0000000117 00000 n \n"
+        b"trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n187\n%%EOF\n"
+    )
+
+    bundle = PlaneBundle(
+        projects=[PlaneProject(id="p-pdf", identifier="PDFPROJ", name="PDF Project")],
+        issues=[
+            PlaneIssue(
+                id="i-pdf-1",
+                sequence_id=1,
+                name="Issue With Valid PDF",
+                description_html="<p>See attached <a href='/api/assets/spec.pdf'>spec.pdf</a></p>",
+                project="p-pdf",
+            )
+        ],
+        attachments={"spec.pdf": pdf_bytes},
+    )
+
+    importer = PlaneImporter(
+        session=session,
+        caller=caller,
+        blob_store_root=blob_dir,
+    )
+    report = await importer.run_import(bundle, dry_run=False)
+    assert report.to_create > 0
+
+    att = (
+        (
+            await session.execute(
+                select(Attachment).where(
+                    Attachment.workspace_id == caller.workspace_id,
+                    Attachment.original_filename == "spec.pdf",
+                )
+            )
+        )
+        .scalars()
+        .first()
+    )
+    assert att is not None
+    assert att.content_type == "application/pdf"
+    assert att.page_count == 1
+
+
+@pytest.mark.asyncio
+async def test_plane_importer_non_pdf_extension_with_pdf_magic_bytes_rejected(
+    setup_import_env: tuple[AsyncSession, PrincipalContext, Path],
+) -> None:
+    """Negative test: Non-.pdf filename (e.g. payload.html) with %PDF- magic bytes is rejected with 415."""
+    session, caller, blob_dir = setup_import_env
+    from kanban.importer.plane_client import PlaneIssue, PlaneProject
+
+    pdf_bytes = (
+        b"%PDF-1.4\n"
+        b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
+        b"2 0 obj\n<< /Type /Pages /Count 1 /Kids [3 0 R] >>\nendobj\n"
+        b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n"
+        b"xref\n0 4\n0000000000 65535 f \n"
+        b"0000000010 00000 n \n0000000060 00000 n \n0000000117 00000 n \n"
+        b"trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n187\n%%EOF\n"
+    )
+
+    bundle = PlaneBundle(
+        projects=[PlaneProject(id="p-pdf", identifier="PDFPROJ", name="PDF Project")],
+        issues=[
+            PlaneIssue(
+                id="i-pdf-1",
+                sequence_id=1,
+                name="Issue With Bad PDF Name",
+                description_html="<p>See attached <a href='/api/assets/payload.html'>payload.html</a></p>",
+                project="p-pdf",
+            )
+        ],
+        attachments={"payload.html": pdf_bytes},
+    )
+
+    importer = PlaneImporter(
+        session=session,
+        caller=caller,
+        blob_store_root=blob_dir,
+    )
+
+    with pytest.raises(ProblemException) as exc_info:
+        await importer.run_import(bundle, dry_run=False)
+
+    assert exc_info.value.status == 415
+    assert exc_info.value.code == "MIME_MISMATCH_OR_UNSUPPORTED"
+
+
+@pytest.mark.asyncio
+async def test_plane_importer_cycle_date_normalization_and_overlap(
+    setup_import_env: tuple[AsyncSession, PrincipalContext, Path],
+) -> None:
+    """Verify cycle date adjustments: end_date < start_date and overlapping dates resolution."""
+    session, caller, blob_dir = setup_import_env
+    from kanban.importer.plane_client import PlaneCycle, PlaneProject
+
+    bundle = PlaneBundle(
+        projects=[PlaneProject(id="p-cyc", identifier="CYC", name="Cycle Project")],
+        cycles=[
+            # c1: end_date before start_date -> normalized to s_date
+            PlaneCycle(
+                id="c-1",
+                name="Inverted Dates Cycle",
+                project="p-cyc",
+                status="active",
+                start_date="2026-05-10",
+                end_date="2026-05-01",
+            ),
+            # c2: overlapping dates with c1 -> end_date set to None
+            PlaneCycle(
+                id="c-2",
+                name="Overlapping Cycle",
+                project="p-cyc",
+                status="active",
+                start_date="2026-05-10",
+                end_date="2026-05-20",
+            ),
+        ],
+    )
+
+    importer = PlaneImporter(
+        session=session,
+        caller=caller,
+        blob_store_root=blob_dir,
+    )
+    report = await importer.run_import(bundle, dry_run=False)
+    assert report.to_create >= 2
