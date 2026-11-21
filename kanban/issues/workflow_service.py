@@ -662,7 +662,7 @@ async def complete_work(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
         )
 
     try:
-        validate_reality_checker_report(summary_markdown)
+        validate_reality_checker_report(summary_markdown, require_ready=True)
     except ValueError as exc:
         raise ProblemException(
             code="INVALID_REALITY_CHECKER_REPORT",

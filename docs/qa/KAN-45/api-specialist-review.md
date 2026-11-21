@@ -98,15 +98,19 @@ The audit inspects and certifies all four problems and live container proofs:
 
 ## 3. Test Suite & Coverage Verification
 
-- Pytest Suites (44 passed across API and Wasm suites):
-  * `kanban/tests/api/test_gate_enforcement_hardening.py`: 15 passed in 1.42s
-  * `kanban/tests/workflows/test_qa_proof_validator_wasm.py`: 6 passed
-  * `kanban/tests/workflows/test_dry_run.py`: 7 passed
-  * `kanban/tests/workflows/test_workflow_hooks_api.py`: 16 passed
+- Pytest Suites (103 passed across 7 suites in 17.26s):
+  * `kanban/tests/api/test_gate_enforcement_hardening.py`: 15 passed in 1.36s
+  * `kanban/tests/workflows/test_qa_proof_validator_wasm.py`, `test_dry_run.py`, `test_workflow_hooks_api.py`: 29 passed in 6.50s
+  * `kanban/tests/workflows/test_async_gate.py`: 16 passed in 4.89s
+  * `kanban/tests/issues/test_proof_validation.py`, `kanban/tests/mcp/test_complete_work_enforcement.py`: 9 passed in 1.47s
+  * `agent/tests/gates/test_gate_runner.py`: 10 passed in 0.72s (97% module coverage)
+  * `kanban/tests/auth/test_sessions.py`: 11 passed in 0.83s
+  * `kanban/tests/services/test_synaptic_search.py`: 13 passed in 1.49s
 - Static Analysis Gates:
-  * Ruff Linter: Clean across all packages (0 errors).
-  * Ruff Format Check: Clean across 2023 files.
-  * Mypy Strict Typecheck: Success across 995 source files (0 errors).
+  * Database Migrations (`check-migrations --static-only`): OK: All 63 migrations valid.
+  * Ruff Linter (`ruff check .`): Clean across all packages (0 errors).
+  * Ruff Format Check (`ruff format --check .`): Clean across 2027 files.
+  * Mypy Strict Typecheck (`mypy`): Success across 1140 source files (0 errors).
   * Import Linter (`lint-imports`): Contracts: 2 kept, 0 broken (`agent -> mcp -> kanban -> database` KEPT).
   * Typography Audit (`check_no_dashes`): Clean (0 em/en-dashes across all files).
 

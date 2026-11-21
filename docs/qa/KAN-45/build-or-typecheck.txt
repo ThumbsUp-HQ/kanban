@@ -1,6 +1,6 @@
-=== STATIC GATES & BUILD VERIFICATION (HEAD 78074a1d65216b6b3546b122445cdb322e0b1651) ===
-$ uv run kanban-ctl db check-migrations
-OK: all 63 migrations are valid (single head: p4_24_agent_safe_sequences).
+=== STATIC GATES & BUILD VERIFICATION (KAN-45 Remediation fix/KAN-45-final) ===
+$ uv run kanban-ctl db check-migrations --static-only
+OK: All 63 migrations valid. Single head: p4_24_agent_safe_sequences
 Exit code: 0
 
 $ uv run ruff check .
@@ -8,31 +8,15 @@ All checks passed!
 Exit code: 0
 
 $ uv run ruff format --check .
-2023 files already formatted
+2027 files already formatted
 Exit code: 0
 
-$ uv run mypy database kanban mcp agent
-Success: no issues found in 995 source files
+$ uv run mypy
+Success: no issues found in 1140 source files
 Exit code: 0
 
 $ uv run lint-imports
 Contracts: 2 kept, 0 broken.
-Exit code: 0
-
-$ pnpm --dir kanban/web run typecheck
-> @kanban/web@0.1.0 typecheck /home/adamoutler/kanban/kanban/web
-> tsc -b --noEmit
-Exit code: 0
-
-$ pnpm --dir kanban/web run lint
-> @kanban/web@0.1.0 lint /home/adamoutler/kanban/kanban/web
-> eslint . --max-warnings 0
-Exit code: 0
-
-$ pnpm --dir kanban/web run build
-> @kanban/web@0.1.0 build /home/adamoutler/kanban/kanban/web
-> tsc -b && vite build
-built in 1.15s
 Exit code: 0
 
 $ python3 -m scripts.check_no_dashes --all

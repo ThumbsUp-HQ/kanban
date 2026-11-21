@@ -190,6 +190,8 @@ def validate_proof_ticket_key(proof: VerificationProof, expected_ticket_key: str
 
 def validate_reality_checker_report(  # noqa: C901, PLR0912, PLR0915
     markdown: str,
+    *,
+    require_ready: bool = False,
 ) -> None:
     """Validate reality-checker report structure in deterministic O(N) linear time."""
     if not markdown or not markdown.strip():
@@ -218,6 +220,7 @@ def validate_reality_checker_report(  # noqa: C901, PLR0912, PLR0915
         "Deployment Readiness Assessment",
     ]
     sections_found: dict[str, list[str]] = {name: [] for name in canonical_h2_order}
+    h2_order_seen: list[str] = []
     current_section: str | None = None
 
     for raw_line in lines:
@@ -276,6 +279,8 @@ def validate_reality_checker_report(  # noqa: C901, PLR0912, PLR0915
                 if c_name in h2_text:
                     matched_name = c_name
                     break
+            if matched_name is not None:
+                h2_order_seen.append(matched_name)
             current_section = matched_name
             continue
 
@@ -293,21 +298,35 @@ def validate_reality_checker_report(  # noqa: C901, PLR0912, PLR0915
             msg = f"Missing required canonical section '## {c_name}' or section body is empty"
             raise ValueError(msg)
 
-    # 4. Check anti-fantasy contradiction markers inside certification/readiness sections
+    # 4. Verify canonical relative order
+    if h2_order_seen != canonical_h2_order:
+        msg = (
+            f"Canonical H2 sections are out of order or repeated: expected {canonical_h2_order}, "
+            f"got {h2_order_seen}"
+        )
+        raise ValueError(msg)
+
+    # 5. Check anti-fantasy contradiction markers inside certification/readiness sections
     cert_body = "\n".join(sections_found["Realistic Quality Certification"])
     ready_body = "\n".join(sections_found["Deployment Readiness Assessment"])
     combined_check = f"{cert_body}\n{ready_body}"
 
+    contradiction_markers: Final[list[str]] = ["NEEDS WORK", "NEEDS_WORK", "FAILED"]
+    for marker in contradiction_markers:
+        pat = rf"\b{re.escape(marker)}\b"
+        if re.search(pat, combined_check, re.IGNORECASE):
+            msg = (
+                f"Contradiction marker '{marker}' found in certification or deployment "
+                "readiness assessment"
+            )
+            raise ValueError(msg)
+
     claims_ready = "READY" in combined_check or bool(
         re.search(r"\bA\b", cert_body) or "A-" in cert_body or "A+" in cert_body
     )
-    if claims_ready:
-        contradiction_markers: Final[list[str]] = ["NEEDS WORK", "NEEDS_WORK", "FAILED"]
-        for marker in contradiction_markers:
-            pat = rf"\b{re.escape(marker)}\b"
-            if re.search(pat, combined_check, re.IGNORECASE):
-                msg = (
-                    f"Contradiction marker '{marker}' found in certification or deployment "
-                    "readiness assessment while claiming READY / A"
-                )
-                raise ValueError(msg)
+    if require_ready and not claims_ready:
+        msg = (
+            "Reality-checker report summary_markdown must certify READY with grade A "
+            "in realistic quality certification or deployment readiness assessment"
+        )
+        raise ValueError(msg)

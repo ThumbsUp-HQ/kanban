@@ -45,17 +45,25 @@ This deliverable implements all 4 problems specified in `KAN-45` to enterprise s
 - **Compiled Real Bytecodes in `kanban/workflows/builtins.py`:**
   * `qa-proof-validator`: Compiled 1097-byte Wasm module (SHA-256: `fddfe97e1b15829495364a2002bf0a0c830002f9ef673971a1a4167ee815d972`), `<2ms` and `<= 2,000,000` fuel.
   * `sec_invariant_validator`: Valid compilable 249-byte Wasm module (SHA-256: `7982de041f00a867a3f839e6172865450d0159fa77c288ec57440ceb87571874`), exports `memory`, `kb_alloc`, `kb_run`, `kb_on_transition`, returns `{"allowed": true, "decision": "allow"}`.
-  * `auto_label_mutator`: Valid compilable 244-byte Wasm module (SHA-256: `2e7db622992707370042a3c5e15eda145d995048ef4f69f6c746f33dc43f93e9`), exports `memory`, `kb_alloc`, `kb_run`, `kb_on_transition`, returns `{"allowed": true, "decision": "allow"}`.
+  * `auto_label_mutator`: Valid compilable 244-byte Wasm module (SHA-256: `79cdc606bf7cab8b1de8a204a126e9302f831bdf32db6ea2170970bb822140dd`), exports `memory`, `kb_alloc`, `kb_run`, `kb_on_transition`, returns `{"allowed": true, "decision": "allow"}`.
 - **Deterministic Validation Contract:** Parses `kb-sync-hook-input/v1` payload within `<2ms` and `<= 2,000,000` fuel. Verifies that `docs/qa/<ISSUE_KEY>/reality-checker-report.md` and `READY` appear in `verification_proof` or issue body/comments.
 - **Enriched Hook Input Payload:** Enriches `kb-sync-hook-input/v1` in `engine.py` and `dry_run.py` with bounded `verification_proof` and recent issue comments within 256 KiB ceiling.
 
 ### Problem 4: Close REST completed-State Bypasses, Stateless Bearer CSRF Bypass & GateWorker Runner
 - **CsrfMiddleware Stateless Bearer Bypass:** In `kanban/auth/sessions/csrf.py`, requests with `Authorization: Bearer <token>` bypass ambient cookie CSRF checks, allowing stateless agents and MCP clients to execute without CSRF token headers while preserving cookie CSRF protection.
+- **Bearer-First Authentication Precedence:** In `kanban/auth/sessions/resolver.py`, requests carrying an `Authorization: Bearer` header evaluate Bearer credentials first; invalid or dummy tokens return 401 instead of silently falling back to ambient cookies, eliminating CSRF bypass via dummy Bearer tokens.
 - **PrincipalContext Extension:** Added `principal_type` and `is_mcp_credential` to `PrincipalContext` (`kanban/api/deps.py`) and session cookie resolver (`kanban/auth/sessions/resolver.py`). `is_agent_or_mcp_caller` returns `True` for agents, service principals, MCP credentials, and agent token scopes, while returning `False` for human browser cookies.
 - **Agent Bypass Guard:** In `TransitionEngine.execute_transition`, enforces `422 USE_COMPLETE_WORK` whenever `target_state.state_group == "completed"` and caller is an agent or MCP client, closing `PATCH /api/v1/issues/{key}`, `POST /api/v1/issues/{key}/move`, and `POST /api/v1/issues/{key}/transitions` while preserving human board interactions.
 - **Issue Move Hardening:** `kanban/services/issue_move.py` returns `202 pending_agent_gate` without prematurely updating `board_rank`. Added `TaintGuard.check_write` in `kanban/api/v1/issue_move.py`.
 - **Transition Held Guard:** In `kanban/services/issues.py` (`update_issue`), raises `409 TRANSITION_HELD` when `issue.pending_transition_exec_id is not None`.
-- **Gate Worker Runner:** Created `agent/gates/runner.py` with polling loop, lease claim, timeout sweeping, and execution handling. Added `kanban-agent run-gate-worker` CLI command (`agent/cli_commands/run_gate_worker.py`). Added lazy lifespan startup hook in `kanban/app.py` preserving strict `agent -> mcp -> kanban -> database` import layering.
+- **Gate Worker Runner:** Created `agent/gates/runner.py` with polling loop, lease claiming (`FOR UPDATE SKIP LOCKED` + active claim guard preventing double-dispatch), deadline timeout sweeping calling `record_failure(..., "GATE_TIMEOUT")`, and execution handling. Added `kanban-agent run-gate-worker` CLI command (`agent/cli_commands/run_gate_worker.py`). Added lazy lifespan startup hook in `kanban/app.py` preserving strict `agent -> mcp -> kanban -> database` import layering.
+
+### Additional Remediations & Clean-Room Forensic Verification
+- **Remediation 1 (Runner Leases & Timeouts):** Added concurrency guard `_active_invocations` and timeout sweep in `agent/gates/runner.py`. Unit tests in `agent/tests/gates/test_gate_runner.py` (10 passed in 0.72s, 97% coverage).
+- **Remediation 2 (Problem 2 Verification & Comment Formatter):** Comprehensive unit tests in `kanban/tests/workflows/test_async_gate.py` (16 passed in 4.89s) verifying canonical comment header `## ✅🤖 Workflow Transition Gate Approved`, zero em/en-dashes, atomic `IssueComment` + `COMMENT_CREATED` audit persistence, and fail-closed behavior on completed state.
+- **Remediation 3 (Strict Report Structure & Contradiction Rejection):** `validate_reality_checker_report` in `kanban/issues/proof.py` strictly verifies canonical relative order of all 6 H2 sections and unconditionally rejects contradiction markers (`NEEDS WORK`, `FAILED`) when `READY` is claimed or omitted. Enforced in `workflow_service.py` and `complete_work.py`. Unit tests in `kanban/tests/issues/test_proof_validation.py` and `kanban/tests/mcp/test_complete_work_enforcement.py` (9 passed in 1.47s).
+- **Remediation 4 (Bearer-First Precedence):** `SessionCookieResolver.resolve` authenticates Bearer first and rejects dummy tokens with 401 without cookie fallback. Unit test in `kanban/tests/auth/test_sessions.py` (11 passed in 0.83s).
+- **Scope Addition (Synaptic Search Project Filter):** `search_unified` and `_execute_hybrid_search_core` filter synaptic neighbors and candidates by project identifier/UUID. Unit tests in `kanban/tests/services/test_synaptic_search.py` (13 passed in 1.49s).
 
 ---
 
@@ -69,16 +77,19 @@ This deliverable implements all 4 problems specified in `KAN-45` to enterprise s
 - Telemetry: console errors 0, page errors 0, 5xx responses 0. `OVERALL LIVE_STACK_VERDICT: PASS`.
 
 ### Quality Gate Summary:
-- **Pytest Suites (44 passed across API and Wasm suites):**
-  - `kanban/tests/api/test_gate_enforcement_hardening.py`: 15 passed in 1.42s
-  - `kanban/tests/workflows/test_qa_proof_validator_wasm.py`: 6 passed
-  - `kanban/tests/workflows/test_dry_run.py`: 7 passed
-  - `kanban/tests/workflows/test_workflow_hooks_api.py`: 16 passed
+- **Pytest Suites (103 passed across all 7 suites in 17.26s):**
+  - `kanban/tests/api/test_gate_enforcement_hardening.py`: 15 passed in 1.36s
+  - `kanban/tests/workflows/test_qa_proof_validator_wasm.py`, `test_dry_run.py`, `test_workflow_hooks_api.py`: 29 passed in 6.50s
+  - `kanban/tests/workflows/test_async_gate.py`: 16 passed in 4.89s
+  - `kanban/tests/issues/test_proof_validation.py`, `kanban/tests/mcp/test_complete_work_enforcement.py`: 9 passed in 1.47s
+  - `agent/tests/gates/test_gate_runner.py`: 10 passed in 0.72s (97% module coverage)
+  - `kanban/tests/auth/test_sessions.py`: 11 passed in 0.83s
+  - `kanban/tests/services/test_synaptic_search.py`: 13 passed in 1.49s
 - **Static Gate Verification:**
-  - `kanban-ctl db check-migrations`: 63 migrations valid.
-  - `ruff check .`: All checks passed.
-  - `ruff format --check .`: Clean across 2023 files.
-  - `mypy database kanban mcp agent`: Success: 0 issues in 995 source files.
+  - `kanban-ctl db check-migrations --static-only`: 63 migrations valid.
+  - `ruff check .`: All checks passed!
+  - `ruff format --check .`: Clean across 2027 files.
+  - `mypy`: Success: no issues found in 1140 source files.
   - `lint-imports`: Contracts: 2 kept, 0 broken.
   - `scripts.check_no_dashes --all`: Clean (0 forbidden dashes).
 - **Scope Invariants:** `.backup_schedule.json` and `backups/` strictly unstaged.

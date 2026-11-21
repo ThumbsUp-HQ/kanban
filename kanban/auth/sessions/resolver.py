@@ -43,11 +43,20 @@ class SessionCookieResolver:
         self._session_factory = session_factory
 
     async def resolve(self, request: Request) -> PrincipalContext | None:
-        """Extract and verify session cookie, resolving database session state."""
+        """Extract and verify credentials with Bearer-first precedence."""
+        auth_hdr = request.headers.get("authorization") or ""
+        has_bearer_token = auth_hdr.lower().startswith("bearer ") and bool(auth_hdr[7:].strip())
+        has_subject_token = bool(request.headers.get("x-kb-subject-token"))
+
+        # Bearer-first precedence: If explicit token header is present, authenticate token FIRST.
+        # Do NOT fall back to ambient browser session cookie if the token header is invalid!
+        if has_bearer_token or has_subject_token:
+            return await self._resolve_subject_token(request)
+
         cookie_header = request.headers.get("cookie")
         cookie_val = extract_session_cookie(cookie_header)
         if not cookie_val:
-            return await self._resolve_subject_token(request)
+            return None
 
         # Verify HMAC signature and bounds (rejects without DB access on invalid signature)
         token = parse_session_cookie(cookie_val, self._service.session_hmac_key)

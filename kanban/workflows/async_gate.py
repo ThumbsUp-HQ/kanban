@@ -244,6 +244,35 @@ class AgentGateDispatcher:
 class GateCoordinator:
     """Coordinates verdicts, timeouts, failures, and cancellations for async agent gates."""
 
+    def __init__(self, session: AsyncSession | None = None) -> None:
+        """Initialize coordinator optionally bound to an active database session."""
+        self.session = session
+        if session is not None:
+            self.record_failure = self._record_failure_instance  # type: ignore[assignment]
+
+    async def _record_failure_instance(  # noqa: PLR0913
+        self,
+        execution_id: uuid.UUID | str | None = None,
+        hook_id: uuid.UUID | str | None = None,
+        code: str = "GATE_TIMEOUT",
+        *,
+        invocation_id: uuid.UUID | str | None = None,
+        error_code: str | None = None,
+        detail: str | None = None,
+    ) -> WorkflowTransitionExecution:
+        if self.session is None:
+            msg = "session is required on GateCoordinator instance"
+            raise ValueError(msg)
+        return await GateCoordinator.record_failure(
+            self.session,
+            execution_id=execution_id,
+            hook_id=hook_id,
+            code=code,
+            invocation_id=invocation_id,
+            error_code=error_code,
+            detail=detail,
+        )
+
     @classmethod
     async def record_decision(  # noqa: C901, PLR0911, PLR0912, PLR0915
         cls,
@@ -746,14 +775,38 @@ class GateCoordinator:
         return execution
 
     @classmethod
-    async def record_failure(  # noqa: PLR0915
+    async def record_failure(  # noqa: C901, PLR0912, PLR0913, PLR0915
         cls,
-        session: AsyncSession,
-        execution_id: uuid.UUID | str,
-        hook_id: uuid.UUID | str,
-        code: str,
+        session: AsyncSession | None = None,
+        execution_id: uuid.UUID | str | None = None,
+        hook_id: uuid.UUID | str | None = None,
+        code: str = "GATE_TIMEOUT",
+        *,
+        invocation_id: uuid.UUID | str | None = None,
+        error_code: str | None = None,
+        detail: str | None = None,
     ) -> WorkflowTransitionExecution:
         """Record a gate timeout or error execution failure."""
+        if session is None:
+            msg = "session must be provided to record_failure"
+            raise ValueError(msg)
+        if invocation_id is not None and (execution_id is None or hook_id is None):
+            inv_lookup = await session.get(WorkflowHookInvocation, uuid.UUID(str(invocation_id)))
+            if inv_lookup is None:
+                raise ProblemException(
+                    code="INVOCATION_NOT_FOUND",
+                    status=404,
+                    title="Invocation Not Found",
+                    detail="Hook invocation not found",
+                )
+            execution_id = inv_lookup.execution_id
+            hook_id = inv_lookup.hook_id
+
+        if execution_id is None or hook_id is None:
+            msg = "execution_id and hook_id, or invocation_id must be provided"
+            raise ValueError(msg)
+
+        effective_code = error_code or code
         exec_uuid = uuid.UUID(str(execution_id))
         hook_uuid = uuid.UUID(str(hook_id))
         now = dt.datetime.now(dt.UTC)
@@ -814,14 +867,14 @@ class GateCoordinator:
         harness_kind = agent_def.harness_kind if agent_def else "in_app_sdk"
         harness_label = compute_harness_label(agent_def)
 
-        is_timeout = code in {"TIMED_OUT", "GATE_TIMEOUT"}
+        is_timeout = effective_code in {"TIMED_OUT", "GATE_TIMEOUT"}
 
         # Check failure_policy: fail_open_warn vs fail_closed (completed state MUST fail closed)
         is_completed_target = to_state is not None and to_state.state_group == "completed"
         if hook.failure_policy == "fail_open_warn" and not is_completed_target:
             inv_status = "timed_out" if is_timeout else "error"
             invocation.status = inv_status
-            invocation.error_code = code
+            invocation.error_code = effective_code
             invocation.completed_at = now
 
             await record_activity(
@@ -832,7 +885,7 @@ class GateCoordinator:
                     agent_def.principal_id if agent_def else execution.invoking_principal_id
                 ),
                 event_type=ActivityEventType.GATE_FAIL_OPEN_WARN,
-                payload={"hook_name": hook.name, "error": code},
+                payload={"hook_name": hook.name, "error": effective_code},
             )
 
             # Check if more agent hooks exist sequentially
@@ -914,7 +967,7 @@ class GateCoordinator:
             issue.state_id = execution.to_state_id
             issue.pending_transition_exec_id = None
             execution.status = "approved"
-            execution.verdict_json = {"decision": "approve", "fail_open_warn": code}
+            execution.verdict_json = {"decision": "approve", "fail_open_warn": effective_code}
             execution.completed_at = now
             await session.flush()
             return execution
@@ -922,12 +975,13 @@ class GateCoordinator:
         # Fail closed: reject/time out
         final_status = "timed_out" if is_timeout else "rejected"
         timeout_ms = agent_def.timeout_ms if agent_def else 60000
-        reason_text = (
-            f"Gate timed out after {timeout_ms} ms" if is_timeout else f"Gate failed: {code}"
-        )
+        if is_timeout:
+            reason_text = detail or f"Gate timed out after {timeout_ms} ms"
+        else:
+            reason_text = detail or f"Gate failed: {effective_code}"
 
         invocation.status = final_status
-        invocation.error_code = code
+        invocation.error_code = effective_code
         invocation.completed_at = now
 
         execution.status = final_status
@@ -935,12 +989,14 @@ class GateCoordinator:
             "decision": final_status,
             "hook_name": hook.name,
             "reason": reason_text,
-            "code": code,
+            "code": effective_code,
         }
         execution.completed_at = now
 
         # Clear hold
         issue.pending_transition_exec_id = None
+        if hasattr(issue, "pending_gate_invocation_id"):
+            issue.pending_gate_invocation_id = None
 
         # Post veto comment authored by agent principal
         if agent_def is not None:
@@ -966,7 +1022,11 @@ class GateCoordinator:
                 agent_def.principal_id if agent_def else execution.invoking_principal_id
             ),
             event_type=act_type,
-            payload={"hook_name": hook.name, "harness_label": harness_label, "error": code},
+            payload={
+                "hook_name": hook.name,
+                "harness_label": harness_label,
+                "error": effective_code,
+            },
         )
 
         outbox_topic = GateEventType.TIMED_OUT if is_timeout else GateEventType.REJECTED
