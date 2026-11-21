@@ -64,6 +64,16 @@ def github_heading_slug(text: str) -> str:
     return clean.strip("-")
 
 
+def gfm_slugger_slug(text: str) -> str:
+    """Generate an exact github-slugger anchor slug (preserving double hyphens around '&')."""
+    clean = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    clean = re.sub(r"`([^`]+)`", r"\1", clean)
+    clean = re.sub(r"<[^>]+>", "", clean)
+    clean = clean.lower().strip()
+    clean = re.sub(r"[^\w\s-]", "", clean)
+    return clean.replace(" ", "-").strip("-")
+
+
 def extract_heading_slugs(content: str) -> set[str]:
     """Extract all valid heading anchor slugs for a markdown page."""
     slugs: set[str] = set()
@@ -82,6 +92,9 @@ def extract_heading_slugs(content: str) -> set[str]:
                 counts[base] = 0
                 slugs.add(base)
             slugs.add(base)
+            gfm_exact = gfm_slugger_slug(heading)
+            if gfm_exact:
+                slugs.add(gfm_exact)
             no_num = re.sub(r"^[0-9]+-", "", base)
             if no_num:
                 slugs.add(no_num)

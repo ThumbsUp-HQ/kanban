@@ -20,6 +20,7 @@ from scripts.check_docs_taxonomy import (
     main,
     run_taxonomy_audit,
     slugify_anchor,
+    slugify_gfm_anchor,
 )
 
 
@@ -34,6 +35,18 @@ class TestSlugifyAnchor:
         assert slugify_anchor("Special !@#$ Characters") == "special-characters"
         assert slugify_anchor("") == "section"
         assert slugify_anchor("   ") == "section"
+
+    def test_slugify_gfm_anchor(self) -> None:
+        """Assert GitHub Flavored Markdown github-slugger anchor compatibility."""
+        assert (
+            slugify_gfm_anchor("1. Security, Identity, Audit & Deployment")
+            == "1-security-identity-audit--deployment"
+        )
+        assert (
+            slugify_gfm_anchor("5. Orchestration, Provenance & Day-2 Operations")
+            == "5-orchestration-provenance--day-2-operations"
+        )
+        assert slugify_gfm_anchor("") == "section"
 
 
 class TestExtractWikiAnchors:

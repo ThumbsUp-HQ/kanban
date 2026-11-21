@@ -288,6 +288,7 @@ def test_case_3_security_configuration(tmp_path: Path) -> None:
         "DATABASE_URL",
         "LANG",
         "KB_STANDALONE_STATUS_PATH",
+        "KANBAN_ATTACHMENT_DIR",
     }
     assert child_env["KB_DEPLOYMENT_MODE"] == "standalone"
 
@@ -308,6 +309,7 @@ def test_case_3_security_configuration(tmp_path: Path) -> None:
         "DATABASE_URL",
         "LANG",
         "KB_STANDALONE_STATUS_PATH",
+        "KANBAN_ATTACHMENT_DIR",
         "KB_MASTER_KEK_B64",
         "KB_AUTH_PEPPER_B64",
         "KB_SESSION_HMAC_KEY_B64",

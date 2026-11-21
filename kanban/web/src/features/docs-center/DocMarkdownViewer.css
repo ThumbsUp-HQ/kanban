@@ -177,3 +177,27 @@
   color: var(--fg-muted);
   text-align: center;
 }
+
+.kb-doc-details {
+  margin: 1rem 0;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+  padding: 0.625rem 1rem;
+  background: var(--bg-canvas);
+}
+
+.kb-doc-summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--fg-primary);
+}
+
+.kb-doc-summary:focus-visible {
+  outline: 2px solid var(--focus-ring, var(--accent-primary));
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.kb-doc-details[open] .kb-doc-summary {
+  margin-bottom: 0.75rem;
+}

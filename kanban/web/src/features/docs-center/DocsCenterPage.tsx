@@ -14,8 +14,8 @@ import {
   CHAPTER_BY_SLUG,
   getChapter,
   resolveChapterSlug,
+  resolveSectionElement,
   searchDocs,
-  slugifyAnchor,
   WIKI_CATEGORIES,
   WIKI_CHAPTERS,
   type SearchResult,
@@ -82,10 +82,9 @@ export function DocsCenterPage(): JSX.Element {
 
   // Scroll to anchor on hash change or navigation
   const scrollToAnchor = (anchorId: string): void => {
-    const cleanId = slugifyAnchor(anchorId);
     /* v8 ignore next */
     if (!contentRef.current) return;
-    const targetEl = contentRef.current.querySelector(`#${cleanId}`);
+    const targetEl = resolveSectionElement(contentRef.current, anchorId);
     if (targetEl) {
       targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -443,6 +442,9 @@ export function DocsCenterPage(): JSX.Element {
               onNavigateSection={(secId) => {
                 void navigate(`/docs/${chapter.slug}#${secId}`);
                 scrollToAnchor(secId);
+              }}
+              onNavigateDoc={(href) => {
+                void navigate(href);
               }}
             />
 

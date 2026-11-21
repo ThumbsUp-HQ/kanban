@@ -32,15 +32,25 @@ def slugify_anchor(text: str) -> str:
     return clean.strip("-") or "section"
 
 
+def slugify_gfm_anchor(text: str) -> str:
+    """Generate a GitHub Flavored Markdown (github-slugger) anchor slug from heading text."""
+    clean = re.sub(r"\[([^\]]*)\]\([^)]*\)", r"\1", text)
+    clean = clean.replace("`", "").strip().lower()
+    clean = re.sub(r"[^a-z0-9\s_-]", "", clean)
+    clean = clean.replace(" ", "-")
+    return clean.strip("-") or "section"
+
+
 def extract_wiki_anchors(content: str) -> set[str]:
-    """Extract all heading and anchor IDs from markdown content."""
+    """Extract all heading and anchor IDs (both internal and GFM slugs) from markdown content."""
     anchors: set[str] = set()
     for line in content.splitlines():
         heading_match = re.match(r"^(#{1,6})\s+(.+)$", line)
         if heading_match:
-            slug = slugify_anchor(heading_match.group(2))
-            if slug:
-                anchors.add(slug)
+            raw_heading = heading_match.group(2)
+            for slug in (slugify_anchor(raw_heading), slugify_gfm_anchor(raw_heading)):
+                if slug:
+                    anchors.add(slug)
         for anchor_match in re.finditer(r'<a\s+(?:id|name)=["\']([^"\']+)["\']', line):
             anchors.add(anchor_match.group(1).lower().strip("-"))
     return anchors

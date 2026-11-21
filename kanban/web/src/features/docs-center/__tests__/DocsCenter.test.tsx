@@ -3,7 +3,7 @@
 
 import React, { useState, type JSX } from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, act, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, act, waitFor, within } from '@testing-library/react';
 import { MemoryRouter, Routes, Route } from 'react-router';
 
 // Mock MermaidBlockView to avoid background web-worker invocation in unit tests
@@ -33,6 +33,7 @@ import {
   DocMarkdownViewer,
   renderInlineMarkdown,
   resolveSafeDocImageUrl,
+  resolveSafeDocLinkHref,
 } from '../DocMarkdownViewer';
 import { HelpDrawer } from '../HelpDrawer';
 import { DocsCenterPage } from '../DocsCenterPage';
@@ -1515,6 +1516,87 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
           (s) => s.id === 'when-kanban-is-not-the-right-fit-intentional-non-goals',
         ),
       ).toBe(true);
+
+      const gfmSection1Link = screen.getByRole('link', { name: 'Section 1' });
+      expect(gfmSection1Link.getAttribute('href')).toBe('#1-security-identity-audit--deployment');
+      fireEvent.click(gfmSection1Link);
+      // eslint-disable-next-line @typescript-eslint/unbound-method
+      expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalled();
+    });
+
+    it('renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage', () => {
+      expect(resolveSafeDocLinkHref('Architecture-Delta-and-Missing-Features')).toBe(
+        '/docs/architecture-delta-and-missing-features',
+      );
+      expect(resolveSafeDocLinkHref('Architecture-Delta-and-Missing-Features.md')).toBe(
+        '/docs/architecture-delta-and-missing-features',
+      );
+      expect(resolveSafeDocLinkHref('Feature-Comparison#security-identity-audit-deployment')).toBe(
+        '/docs/feature-comparison#security-identity-audit-deployment',
+      );
+      expect(resolveSafeDocLinkHref('Nonexistent-Unknown-Wiki-Page')).toBeNull();
+      expect(resolveSafeDocLinkHref('javascript:alert(1)')).toBeNull();
+      expect(resolveSafeDocLinkHref('//evil.example.com/phish')).toBeNull();
+
+      const { unmount } = render(
+        <DocMarkdownViewer
+          content={
+            '<details><summary>Inline Appendix</summary>\n\n- [[Arch] Delta](Architecture-Delta-and-Missing-Features.md)\n</details>\n\n<details>\n<summary></summary>\n</details>'
+          }
+        />,
+      );
+      const standaloneLink = screen.getByRole('link', { name: '[Arch] Delta' });
+      expect(standaloneLink.getAttribute('href')).toBe(
+        '/docs/architecture-delta-and-missing-features',
+      );
+      unmount();
+
+      render(
+        <MemoryRouter initialEntries={['/docs/home']}>
+          <Routes>
+            <Route path="/docs/:slug" element={<DocsCenterPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      const viewer = screen.getByTestId('docs-markdown-viewer');
+      const appendixLink = within(viewer).getByRole('link', {
+        name: /Architecture Specification Delta & Gap Analysis/i,
+      });
+      expect(appendixLink.getAttribute('href')).toBe(
+        '/docs/architecture-delta-and-missing-features',
+      );
+      expect(appendixLink.closest('details')).not.toBeNull();
+
+      const matrixLink = within(viewer).getByRole('link', {
+        name: /User Task & Architecture QA Verification Matrix/i,
+      });
+      expect(matrixLink.getAttribute('href')).toBe('/docs/user-tasks-and-qa-matrix');
+
+      fireEvent.click(appendixLink);
+      expect(
+        screen.getByRole('heading', {
+          level: 1,
+          name: /Architecture Specification Delta & Gap Analysis/i,
+        }),
+      ).toBeDefined();
+
+      // Also verify HelpDrawer navigates cross-chapter links in-drawer without page reload
+      render(
+        <MemoryRouter>
+          <HelpDrawer arg={{ slug: 'home' }} onClose={vi.fn()} />
+        </MemoryRouter>,
+      );
+      const drawerMarkdown = screen.getByTestId('help-drawer-markdown');
+      const drawerAppendixLink = within(drawerMarkdown).getByRole('link', {
+        name: /User Task & Architecture QA Verification Matrix/i,
+      });
+      fireEvent.click(drawerAppendixLink);
+      expect(
+        screen.getByRole('dialog', {
+          name: /User Task & Architecture QA Verification Matrix/i,
+        }),
+      ).toBeDefined();
     });
   });
 });

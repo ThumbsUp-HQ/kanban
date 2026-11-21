@@ -36,6 +36,18 @@ export function slugifyAnchor(text: string): string {
   return clean.replace(/^-+|-+$/g, '') || 'section';
 }
 
+export function resolveSectionElement(root: ParentNode, rawAnchor: string): Element | null {
+  const cleanId = slugifyAnchor(rawAnchor);
+  const direct = root.querySelector(`[id="${cleanId}"]`);
+  if (direct) {
+    return direct;
+  }
+  const canonicalId = cleanId.replace(/^[0-9]+-/, '').replace(/-{2,}/g, '-');
+  return canonicalId.length > 0 && canonicalId !== cleanId
+    ? root.querySelector(`[id="${canonicalId}"]`)
+    : null;
+}
+
 export function parseDocHref(href: string): { slug: string; anchor?: string } {
   if (!href) {
     return { slug: 'home' };

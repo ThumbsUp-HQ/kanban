@@ -3,27 +3,42 @@
 
 import React, { type JSX, type ReactNode } from 'react';
 import { MermaidBlockView } from '../../editor/mermaid/MermaidBlockView';
-import { slugifyAnchor } from './docsService';
+import {
+  CHAPTER_BY_SLUG,
+  resolveChapterSlug,
+  slugifyAnchor,
+} from './docsService';
 import './DocMarkdownViewer.css';
 
 export interface DocMarkdownViewerProps {
   content: string;
-  className?: string;
-  testId?: string;
-  onNavigateSection?: (anchor: string) => void;
+  className?: string | undefined;
+  testId?: string | undefined;
+  onNavigateSection?: ((anchor: string) => void) | undefined;
+  onNavigateDoc?: ((href: string) => void) | undefined;
 }
 
-function isSafeUrl(url: string): boolean {
-  const lower = url.trim().toLowerCase();
-  return (
+export function resolveSafeDocLinkHref(url: string): string | null {
+  const trimmed = url.trim();
+  const lower = trimmed.toLowerCase();
+  if (
     lower.startsWith('https://') ||
     lower.startsWith('http://') ||
     lower.startsWith('mailto:') ||
     lower.startsWith('#') ||
-    lower.startsWith('/docs') ||
-    lower.startsWith('/help') ||
-    lower.startsWith('/')
-  );
+    (lower.startsWith('/') && !lower.startsWith('//'))
+  ) {
+    return trimmed;
+  }
+  if (/^[A-Za-z0-9][A-Za-z0-9_-]*(?:\.md)?(?:#[A-Za-z0-9_-]+)?$/.test(trimmed)) {
+    const [rawPage, rawHash] = trimmed.split('#');
+    const pageStem = (rawPage ?? '').replace(/\.md$/i, '');
+    const resolved = resolveChapterSlug(pageStem);
+    if (CHAPTER_BY_SLUG[resolved]) {
+      return rawHash ? `/docs/${resolved}#${slugifyAnchor(rawHash)}` : `/docs/${resolved}`;
+    }
+  }
+  return null;
 }
 
 export function resolveSafeDocImageUrl(url: string): string | null {
@@ -61,11 +76,12 @@ export function renderInlineMarkdown(
   text: string,
   keyPrefix: string,
   onNavigateSection?: (anchor: string) => void,
+  onNavigateDoc?: (href: string) => void,
 ): ReactNode[] {
   const cleanText = text.replace(/<a\s+(?:id|name)=["'][^"']*["']\s*>\s*<\/a>/gi, '');
   const nodes: ReactNode[] = [];
   const pattern =
-    /(!\[([^\]]*)\]\(((?:[^()]+|\([^()]*\))*)\))|(`[^`]+`)|(\[([^\]]+)\]\(((?:[^()]+|\([^()]*\))*)\))|(\*\*([^*]+)\*\*)|(\*([^*]+)\*)/g;
+    /(!\[([^\]]*)\]\(((?:[^()]|\([^()]*\))*)\))|(`[^`]+`)|(\[((?:[^[\]]|\[[^[\]]*\])+)\]\(((?:[^()]|\([^()]*\))*)\))|(\*\*([^*]+)\*\*)|(\*([^*]+)\*)/g;
   let lastIndex = 0;
   let match: RegExpExecArray | null;
   let tokenIdx = 0;
@@ -114,16 +130,31 @@ export function renderInlineMarkdown(
         </code>,
       );
     } else if (linkMatch && linkText && linkUrl) {
-      if (isSafeUrl(linkUrl)) {
-        if (linkUrl.startsWith('#') && onNavigateSection) {
+      const safeHref = resolveSafeDocLinkHref(linkUrl);
+      if (safeHref) {
+        if (safeHref.startsWith('#') && onNavigateSection) {
           nodes.push(
             <a
               key={`${keyPrefix}-link-${String(tokenIdx)}`}
-              href={linkUrl}
+              href={safeHref}
               className="kb-doc-link"
               onClick={(e) => {
                 e.preventDefault();
-                onNavigateSection(linkUrl.slice(1));
+                onNavigateSection(safeHref.slice(1));
+              }}
+            >
+              {linkText}
+            </a>,
+          );
+        } else if (safeHref.startsWith('/docs') && onNavigateDoc) {
+          nodes.push(
+            <a
+              key={`${keyPrefix}-link-${String(tokenIdx)}`}
+              href={safeHref}
+              className="kb-doc-link"
+              onClick={(e) => {
+                e.preventDefault();
+                onNavigateDoc(safeHref);
               }}
             >
               {linkText}
@@ -133,10 +164,10 @@ export function renderInlineMarkdown(
           nodes.push(
             <a
               key={`${keyPrefix}-link-${String(tokenIdx)}`}
-              href={linkUrl}
+              href={safeHref}
               className="kb-doc-link"
-              target={linkUrl.startsWith('http') ? '_blank' : undefined}
-              rel={linkUrl.startsWith('http') ? 'noopener noreferrer' : undefined}
+              target={safeHref.startsWith('http') ? '_blank' : undefined}
+              rel={safeHref.startsWith('http') ? 'noopener noreferrer' : undefined}
             >
               {linkText}
             </a>,
@@ -162,7 +193,12 @@ export function renderInlineMarkdown(
   return nodes;
 }
 
-function parseMarkdownTable(lines: string[], keyPrefix: string): JSX.Element | null {
+function parseMarkdownTable(
+  lines: string[],
+  keyPrefix: string,
+  onNavigateSection?: (anchor: string) => void,
+  onNavigateDoc?: (href: string) => void,
+): JSX.Element | null {
   if (lines.length < 2) return null;
   /* v8 ignore next */
   const headerLine = lines[0];
@@ -187,7 +223,12 @@ function parseMarkdownTable(lines: string[], keyPrefix: string): JSX.Element | n
           <tr className="kb-doc-tr">
             {headers.map((h, i) => (
               <th key={`th-${String(i)}`} className="kb-doc-th">
-                {renderInlineMarkdown(h, `${keyPrefix}-th-${String(i)}`)}
+                {renderInlineMarkdown(
+                  h,
+                  `${keyPrefix}-th-${String(i)}`,
+                  onNavigateSection,
+                  onNavigateDoc,
+                )}
               </th>
             ))}
           </tr>
@@ -199,7 +240,12 @@ function parseMarkdownTable(lines: string[], keyPrefix: string): JSX.Element | n
               <tr key={`tr-${String(rowIdx)}`} className="kb-doc-tr">
                 {cells.map((cell, colIdx) => (
                   <td key={`td-${String(rowIdx)}-${String(colIdx)}`} className="kb-doc-td">
-                    {renderInlineMarkdown(cell, `${keyPrefix}-td-${String(rowIdx)}-${String(colIdx)}`)}
+                    {renderInlineMarkdown(
+                      cell,
+                      `${keyPrefix}-td-${String(rowIdx)}-${String(colIdx)}`,
+                      onNavigateSection,
+                      onNavigateDoc,
+                    )}
                   </td>
                 ))}
               </tr>
@@ -216,6 +262,7 @@ export function DocMarkdownViewer({
   className = 'kb-doc-viewer',
   testId = 'kb-doc-viewer',
   onNavigateSection,
+  onNavigateDoc,
 }: DocMarkdownViewerProps): JSX.Element {
   const blocks: ReactNode[] = [];
   const normalized = content
@@ -226,6 +273,9 @@ export function DocMarkdownViewer({
   let inCodeBlock = false;
   let codeLang = '';
   let codeLines: string[] = [];
+  let inDetails = false;
+  let detailsSummary = 'Details';
+  let detailsLines: string[] = [];
   let inTable = false;
   let tableLines: string[] = [];
   let blockquoteLines: string[] = [];
@@ -244,7 +294,12 @@ export function DocMarkdownViewer({
     paragraphs.forEach((p, pIdx) => {
       blocks.push(
         <p key={`p-${String(blockIdx++)}-${String(pIdx)}`} className="kb-doc-p">
-          {renderInlineMarkdown(p.trim(), `p-${String(blockIdx)}-${String(pIdx)}`, onNavigateSection)}
+          {renderInlineMarkdown(
+            p.trim(),
+            `p-${String(blockIdx)}-${String(pIdx)}`,
+            onNavigateSection,
+            onNavigateDoc,
+          )}
         </p>,
       );
     });
@@ -252,7 +307,12 @@ export function DocMarkdownViewer({
 
   const flushTable = (): void => {
     if (tableLines.length === 0) return;
-    const tableEl = parseMarkdownTable(tableLines, `tbl-${String(blockIdx++)}`);
+    const tableEl = parseMarkdownTable(
+      tableLines,
+      `tbl-${String(blockIdx++)}`,
+      onNavigateSection,
+      onNavigateDoc,
+    );
     if (tableEl) {
       blocks.push(tableEl);
     }
@@ -266,7 +326,7 @@ export function DocMarkdownViewer({
     blockquoteLines = [];
     blocks.push(
       <blockquote key={`bq-${String(blockIdx++)}`} className="kb-doc-blockquote">
-        {renderInlineMarkdown(bqText, `bq-${String(blockIdx)}`, onNavigateSection)}
+        {renderInlineMarkdown(bqText, `bq-${String(blockIdx)}`, onNavigateSection, onNavigateDoc)}
       </blockquote>,
     );
   };
@@ -287,6 +347,7 @@ export function DocMarkdownViewer({
                 l.trim().replace(/^\d+\.\s*/, ''),
                 `ol-${String(blockIdx)}-${String(i)}`,
                 onNavigateSection,
+                onNavigateDoc,
               )}
             </li>
           ))}
@@ -301,6 +362,7 @@ export function DocMarkdownViewer({
                 l.trim().replace(/^[-*]\s*/, ''),
                 `ul-${String(blockIdx)}-${String(i)}`,
                 onNavigateSection,
+                onNavigateDoc,
               )}
             </li>
           ))}
@@ -318,6 +380,56 @@ export function DocMarkdownViewer({
 
   for (const line of lines) {
     const trimmed = line.trim();
+
+    if (inDetails) {
+      if (/^<\/details>$/i.test(trimmed)) {
+        const innerContent = detailsLines.join('\n').trim();
+        const summaryLabel = detailsSummary;
+        inDetails = false;
+        detailsSummary = 'Details';
+        detailsLines = [];
+        blocks.push(
+          <details key={`details-${String(blockIdx++)}`} className="kb-doc-details">
+            <summary className="kb-doc-summary">
+              {renderInlineMarkdown(
+                summaryLabel,
+                `details-sum-${String(blockIdx)}`,
+                onNavigateSection,
+                onNavigateDoc,
+              )}
+            </summary>
+            {innerContent && (
+              <DocMarkdownViewer
+                content={innerContent}
+                className="kb-doc-details-body"
+                testId="kb-doc-details-body"
+                onNavigateSection={onNavigateSection}
+                onNavigateDoc={onNavigateDoc}
+              />
+            )}
+          </details>,
+        );
+        continue;
+      }
+      const sumMatch = /^<summary>(.*?)<\/summary>$/i.exec(trimmed);
+      if (sumMatch?.[1] !== undefined) {
+        const text = sumMatch[1].trim();
+        detailsSummary = text.length > 0 ? text : 'Details';
+        continue;
+      }
+      detailsLines.push(line);
+      continue;
+    }
+
+    const openDetailsMatch = /^<details>(?:\s*<summary>(.*?)<\/summary>)?$/i.exec(trimmed);
+    if (!inCodeBlock && openDetailsMatch) {
+      flushAll();
+      inDetails = true;
+      const inlineSummary = (openDetailsMatch[1] ?? '').trim();
+      detailsSummary = inlineSummary.length > 0 ? inlineSummary : 'Details';
+      detailsLines = [];
+      continue;
+    }
 
     // Code block toggle
     if (trimmed.startsWith('```')) {
@@ -386,7 +498,7 @@ export function DocMarkdownViewer({
     }
 
     // Standalone Image Line
-    const standaloneImgMatch = /^!\[([^\]]*)\]\(((?:[^()]+|\([^()]*\))*)\)$/.exec(trimmed);
+    const standaloneImgMatch = /^!\[([^\]]*)\]\(((?:[^()]|\([^()]*\))*)\)$/.exec(trimmed);
     if (standaloneImgMatch?.[1] !== undefined && standaloneImgMatch[2] !== undefined) {
       flushAll();
       const altText = standaloneImgMatch[1].trim();
@@ -421,7 +533,7 @@ export function DocMarkdownViewer({
       const headingId = slugifyAnchor(rawTitle);
       blocks.push(
         <h1 key={`h1-${String(blockIdx++)}`} id={headingId} className="kb-doc-h1">
-          {renderInlineMarkdown(rawTitle, `h1-${String(blockIdx)}`, onNavigateSection)}
+          {renderInlineMarkdown(rawTitle, `h1-${String(blockIdx)}`, onNavigateSection, onNavigateDoc)}
         </h1>,
       );
       continue;
@@ -437,7 +549,7 @@ export function DocMarkdownViewer({
       const headingId = slugifyAnchor(rawTitle);
       blocks.push(
         <h2 key={`h2-${String(blockIdx++)}`} id={headingId} className="kb-doc-h2">
-          {renderInlineMarkdown(rawTitle, `h2-${String(blockIdx)}`, onNavigateSection)}
+          {renderInlineMarkdown(rawTitle, `h2-${String(blockIdx)}`, onNavigateSection, onNavigateDoc)}
           <a
             href={`#${headingId}`}
             className="kb-doc-anchor-link"
@@ -466,7 +578,7 @@ export function DocMarkdownViewer({
       const headingId = slugifyAnchor(rawTitle);
       blocks.push(
         <h3 key={`h3-${String(blockIdx++)}`} id={headingId} className="kb-doc-h3">
-          {renderInlineMarkdown(rawTitle, `h3-${String(blockIdx)}`, onNavigateSection)}
+          {renderInlineMarkdown(rawTitle, `h3-${String(blockIdx)}`, onNavigateSection, onNavigateDoc)}
           <a
             href={`#${headingId}`}
             className="kb-doc-anchor-link"
@@ -495,7 +607,7 @@ export function DocMarkdownViewer({
       const headingId = slugifyAnchor(rawTitle);
       blocks.push(
         <h4 key={`h4-${String(blockIdx++)}`} id={headingId} className="kb-doc-h4">
-          {renderInlineMarkdown(rawTitle, `h4-${String(blockIdx)}`, onNavigateSection)}
+          {renderInlineMarkdown(rawTitle, `h4-${String(blockIdx)}`, onNavigateSection, onNavigateDoc)}
         </h4>,
       );
       continue;

@@ -13,6 +13,7 @@ import { DocMarkdownViewer } from './DocMarkdownViewer';
 import {
   getChapter,
   parseDocHref,
+  resolveSectionElement,
   WIKI_CHAPTERS,
   type WikiChapter,
 } from './docsService';
@@ -112,7 +113,7 @@ export function HelpDrawer({ arg, onClose }: HelpDrawerProps): JSX.Element {
     setActiveAnchor(anchorId);
     /* v8 ignore next */
     if (!bodyRef.current) return;
-    const targetEl = bodyRef.current.querySelector(`#${anchorId}`);
+    const targetEl = resolveSectionElement(bodyRef.current, anchorId);
     if (targetEl) {
       targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
     }
@@ -265,6 +266,11 @@ export function HelpDrawer({ arg, onClose }: HelpDrawerProps): JSX.Element {
             content={chapter.content}
             testId="help-drawer-markdown"
             onNavigateSection={scrollToAnchor}
+            onNavigateDoc={(href) => {
+              const { slug, anchor } = parseDocHref(href);
+              setActiveSlug(slug);
+              setActiveAnchor(anchor);
+            }}
           />
         </div>
 

@@ -6,7 +6,7 @@ A kanban is just a kanban until you start digging deeper. On the surface, every 
 
 * `✅` **Included:** Built into the core product (free in FOSS/free tiers, or included in the entry commercial plan when no free tier exists).
 * `🎯✅` **Planned in Core:** Active roadmap target shipping free in the `Apache-2.0` core (never paywalled).
-* `🔐` **Paywall-Capped:** Basic or seat-capped version is free; full scale, hierarchy, or enforcement requires a paid tier.
+* `🔐` **Partial / Paywall-Capped:** Basic, single-node, or subset capability is included; full enforcement, scale, or hierarchy is missing or locked behind a paid tier.
 * `🆓🔌` **Free Extension:** Free via a separate official plugin, external MCP server package, or external CLI harness.
 * `💰` **Paid Tier:** Locked behind higher per-seat subscription tiers (Pro, Business, Premium, or Enterprise).
 * `💸` **Extra Cost:** Separate paid product, paid Marketplace add-on, or metered credit/runner billing.
@@ -66,7 +66,7 @@ Jira, Plane, and GitHub ship MCP through separate external connectors or package
 | Blast-Radius Soft Delete | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Sandboxed Script Fields | ✅ | 💸 | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
 
-OpenAI Symphony is free `Apache-2.0` software (`✅`), but it is a headless polling orchestrator and Phoenix LiveView run monitor rather than an issue tracker - requiring an external board such as Linear, GitHub Issues, Jira Cloud, Asana, or GitLab (`❌` across all board, view, hierarchy, property, and lifecycle rows). Jira caps free boards at 10 users and gates cross-project Gantt plans, deep hierarchies, and archiving behind Premium (`💰`), while scripted fields require paid Marketplace apps like ScriptRunner (`💸`). Plane gates custom properties behind paid tiers (`💰`), GitHub lacks Calendar views and hard-blocking WIP limits (`🔐`), and Businessmap/Codebeamer have no free tier at all (`❌`). **`👍kanban`** ships all five native views (`List`, `Board`, `Table`, `Calendar`, `Timeline`), 2D swimlanes with hard WIP limits, cycle-checked DAG hierarchies, hybrid principal + free-text `🏷️` assignee tags, audited `🔄` creator overrides, blast-radius soft delete, and Wasmtime/`nsjail` sandboxed script fields in its free `Apache-2.0` core (`✅`).
+OpenAI Symphony is free `Apache-2.0` software (`✅`), but it is a headless polling orchestrator and Phoenix LiveView run monitor rather than an issue tracker - requiring an external board such as Linear, GitHub Issues, Jira Cloud, Asana, or GitLab (`❌` across all board, view, hierarchy, property, and lifecycle rows). Jira caps free boards at 10 users and gates cross-project Gantt plans, deep hierarchies, and archiving behind Premium (`💰`), while scripted fields require paid Marketplace apps like ScriptRunner (`💸`). Plane gates custom properties behind paid tiers (`💰`), GitHub lacks Calendar views and hard-blocking WIP limits (`🔐`), Vibe Kanban sunsetted its hosted issue/org cloud in May 2026 after `v0.1.44` - leaving local git-worktree execution (`npx vibe-kanban`) as its active surface (`🔐`), and Businessmap/Codebeamer have no free tier at all (`❌`). **`👍kanban`** ships all five native views (`List`, `Board`, `Table`, `Calendar`, `Timeline`), 2D swimlanes with hard WIP limits, cycle-checked DAG hierarchies, hybrid principal + free-text `🏷️` assignee tags, audited `🔄` creator overrides, blast-radius soft delete, and Wasmtime/`nsjail` sandboxed script fields in its free `Apache-2.0` core (`✅`).
 
 ---
 
@@ -123,7 +123,7 @@ Because `👍kanban` makes deliberate, opinionated trade-offs around **zero-trus
 
 | Use Case | 👍kanban Fit | Recommended Tools (FOSS & Commercial) | How to Pair Alongside 👍kanban (or When to Replace) |
 | --- | --- | --- | --- |
-| **1. Binary / DAM Hosting** | 🔗 Companion | **FOSS:** SeaweedFS (`Apache-2.0`), MinIO/S3, Forgejo Releases, Immich, Nextcloud. **Commercial:** GitHub Releases/LFS, Artifactory, Bynder | Host large binaries, CAD, or raw video externally; attach immutable URLs in Markdown or `url`/`badge` custom fields, and embed `PNG`/`WebP`/`SVG` previews via `/api/v1/media-proxy`. |
+| **1. Binary / DAM Hosting** | 🔗 Companion | **FOSS:** SeaweedFS (`Apache-2.0`), Garage (`AGPLv3`), RustFS (`Apache-2.0`), Forgejo Releases, Immich, Nextcloud. **Commercial:** AWS S3, GitHub Releases/LFS, Artifactory, Bynder | Host large binaries, CAD, or raw video externally; attach immutable URLs in Markdown or `url`/`badge` custom fields, and embed `PNG`/`WebP`/`SVG` previews via `/api/v1/media-proxy`. |
 | **2. WYSIWYG & Whiteboards** | 🔗 Companion | **FOSS:** Excalidraw (`MIT`), Penpot (`MPL-2.0`), BookStack (`MIT`), AFFiNE. **Commercial:** Businessmap Whiteboards, Miro, FigJam, Notion, Confluence | Sketch in Excalidraw/Penpot/Miro and paste exported `.svg`/`.png` snapshots into `👍kanban` (`nh3`-scrubbed), use Mermaid for architecture diagrams, and push action items via `/mcp/agent`. |
 | **3. Heavy ERP & Billing** | 🔗 Companion | **FOSS:** Kimai (`AGPLv3`), ERPNext (`GPLv3`), Odoo CE. **Commercial:** Jira + Tempo, Harvest, NetSuite OpenAir, SAP S/4HANA | Run engineering delivery and `KAN-79` flow metrics in `👍kanban`, syncing issue keys and `activity_records` timestamps via REST or `KAN-75` webhooks; use an ERP directly if client billing is primary. |
 | **4. Safety-Critical ALM** | 🧭 Dedicated | **FOSS:** StrictDoc (`Apache-2.0`), Doorstop, Tuleap. **Commercial:** PTC Codebeamer, Siemens Polarion ALM, Jama Connect | If auditors mandate single-tool DO-178C, ISO 26262, or FDA 21 CFR Part 11 qualification with ReqIF, FMEA, and e-signatures, choose Codebeamer/Polarion directly (or pair Git-backed `StrictDoc` for hybrid software delivery). |
@@ -143,7 +143,7 @@ Because `👍kanban` makes deliberate, opinionated trade-offs around **zero-trus
 * **Bad fit for:** Billable time-tracking and timesheet approvals, CapEx/OpEx budget accounting, resource utilization heatmaps across hourly billing rates, or client invoicing.
 
 ### 4. Regulated Hardware / Safety-Critical ALM (DO-178C, ISO 26262, FDA 21 CFR Part 11)
-* **Why it does not fit:** While `👍kanban` has an immutable SHA-256 hash-chained audit ledger (`activity_records`) and scripted transition gates (compared against Codebeamer in [Section 1](#security-identity-audit-deployment) and [Section 5](#orchestration-provenance-day-2-operations)), it is not a certified medical/automotive/avionics Application Lifecycle Management (ALM) suite.
+* **Why it does not fit:** While `👍kanban` has an immutable SHA-256 hash-chained audit ledger (`activity_records`) and scripted transition gates (compared against Codebeamer in [Section 1](#1-security-identity-audit--deployment) and [Section 5](#5-orchestration-provenance--day-2-operations)), it is not a certified medical/automotive/avionics Application Lifecycle Management (ALM) suite.
 * **Bad fit for:** Hardware/embedded compliance requiring formal ReqIF interchange, parameterized test-case execution matrices, FMEA/hazard analysis tables, or legally certified e-signature compliance packs out of the box.
 
 ### 5. Customer-Facing Helpdesk / Omnichannel ITSM (Zendesk / Jira Service Management)
