@@ -1,71 +1,67 @@
 
- RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan44-52-microfix-6660983a/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/board/BoardColumn.test.tsx (10 tests) 451ms
- ✓ src/features/list/ListRow.test.tsx (6 tests) 508ms
- ✓ src/features/board/BoardCard.test.tsx (14 tests) 666ms
-   ✓ BoardCard Component (14)
-     ✓ Touch & Mobile State Transition Button (KAN-44) (2)
-       ✓ renders state move button, opens QuickFieldPopover on click with stopPropagation, and triggers onStateTransition 337ms
- ✓ src/features/views/QuickFieldPopover.test.tsx (13 tests) 688ms
- ✓ src/features/drawer/IssueHeader.test.tsx (12 tests) 899ms
+ ✓ src/features/list/ListRow.test.tsx (6 tests) 483ms
+ ✓ src/features/board/BoardColumn.test.tsx (10 tests) 418ms
+ ✓ src/features/board/BoardCard.test.tsx (14 tests) 643ms
+ ✓ src/features/views/QuickFieldPopover.test.tsx (13 tests) 623ms
+   ✓ QuickFieldPopover (KB-P3-40, S6.4 item 4, S1.3 item 3, S7.2 8f) (13)
+     ✓ renders Priority picker and allows selecting with click and keyboard (P shortcut) 307ms
+ ✓ src/features/drawer/IssueHeader.test.tsx (12 tests) 789ms
    ✓ IssueHeader (12)
-     ✓ renders collapse, full-screen toggle, priority, key, access pill and slots 416ms
- ✓ src/features/list/ListView.test.tsx (15 tests) 1156ms
-   ✓ ListView (KAN-52 Left Master Rail) (15)
-     ✓ handles Order by sorting across priority, key, created, and due date 435ms
- ✓ src/features/views/SwimlaneBoardGrid.test.tsx (17 tests) 1350ms
+     ✓ renders collapse, full-screen toggle, priority, key, access pill and slots 426ms
+ ✓ src/features/list/ListView.test.tsx (16 tests) 1034ms
+   ✓ ListView (KAN-52 Left Master Rail) (16)
+     ✓ handles Order by sorting across priority, key, created, and due date 314ms
+ ✓ src/features/views/SwimlaneBoardGrid.test.tsx (17 tests) 1412ms
    ✓ SwimlaneBoardGrid (KB-P3-40, S6.4 item 2) (17)
-     ✓ partitions board into 2D grid with Priority swimlanes across State columns (Test Case 1) 508ms
-     ✓ collapses and expands a swimlane band when toggle is clicked 331ms
- ✓ src/features/drawer/IssueSurfaceSplitMasterDetail.test.tsx (9 tests) 1332ms
+     ✓ partitions board into 2D grid with Priority swimlanes across State columns (Test Case 1) 495ms
+     ✓ collapses and expands a swimlane band when toggle is clicked 327ms
+ ✓ src/features/drawer/IssueSurfaceSplitMasterDetail.test.tsx (9 tests) 1199ms
    ✓ IssueSurface split mode (KAN-52 Problem 3) (9)
-     ✓ split mode description editor formatting tools and quick-props state select work cleanly 537ms
- ✓ src/features/board/BoardView.test.tsx (22 tests) 1962ms
-   ✓ BoardView Component (22)
-     ✓ Requirement 4: Hard WIP cross-column move by non-admin is blocked with 0 network calls (DoD Case 4) 303ms
- ✓ src/app/AppShell.test.tsx (7 tests) 1657ms
+     ✓ split mode description editor formatting tools and quick-props state select work cleanly 486ms
+ ✓ src/features/board/BoardView.test.tsx (22 tests) 1777ms
+ ✓ src/app/AppShell.test.tsx (7 tests) 1405ms
    ✓ AppShell (7)
-     ✓ renders app shell with skip link, sidebar rail, topbar header, main canvas, and anchors 572ms
-     ✓ toggles mobile sidebar via hamburger button and closes it 447ms
- ✓ src/features/table/TableView.test.tsx (20 tests) 3749ms
+     ✓ renders app shell with skip link, sidebar rail, topbar header, main canvas, and anchors 509ms
+     ✓ toggles mobile sidebar via hamburger button and closes it 345ms
+ ✓ src/features/table/TableView.test.tsx (20 tests) 3408ms
    ✓ TableView (20)
-     ✓ renders default columns and cycles aria-sort ascending -> descending -> none on Priority click 841ms
-     ✓ sorts by other sortable columns (Key, Summary, State, Due date) 1026ms
-     ✓ toggles Start date on, Cycle off, reorders Due date before Assignees, and persists to localStorage 624ms
- ✓ src/features/drawer/IssueSurface.test.tsx (45 tests) 3687ms
+     ✓ renders default columns and cycles aria-sort ascending -> descending -> none on Priority click 677ms
+     ✓ sorts by other sortable columns (Key, Summary, State, Due date) 918ms
+     ✓ toggles Start date on, Cycle off, reorders Due date before Assignees, and persists to localStorage 579ms
+ ✓ src/features/drawer/IssueSurface.test.tsx (45 tests) 3580ms
    ✓ IssueSurface (45)
      ✓ Live Persistence & Backend Normalization (KANBA-165) (20)
-       ✓ handles Reload Latest and Overwrite actions on conflict banner 305ms
-       ✓ connects toolbar buttons, media upload, preview toggle, and sanitized paste pill in description editor 399ms
-       ✓ covers conflict banner actions: reload, overwrite, overwrite failure, and discard 307ms
- ✓ src/features/views/viewRegistry.test.tsx (55 tests) 13730ms
-   ✓ viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) (55)
-     ✓ renders TableView when layout is table 381ms
-     ✓ IssuesWorkspaceRoute: creates a new issue via QuickCreateIssueModal and updates state/priority via field popover 1052ms
-     ✓ IssuesWorkspaceRoute: handles multi-select, batch archive, and batch delete in BulkActionBar 650ms
-     ✓ IssuesWorkspaceRoute: filters by Priority, Assignee (unassigned and alice), Cycle, Module, Due Date 2325ms
-     ✓ IssuesWorkspaceRoute: tests state filter Active preset, alice assignee, and select-all 782ms
-     ✓ IssuesWorkspaceRoute: tests field popovers for high/low priority and in-progress/backlog state, and / shortcut 315ms
-     ✓ IssuesWorkspaceRoute: covers handleToggleSelect 100 cap and unassigned I shortcut 2594ms
+       ✓ connects toolbar buttons, media upload, preview toggle, and sanitized paste pill in description editor 372ms
+       ✓ covers conflict banner actions: reload, overwrite, overwrite failure, and discard 330ms
+ ✓ src/features/views/viewRegistry.test.tsx (56 tests) 13151ms
+   ✓ viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) (56)
+     ✓ renders TableView when layout is table 349ms
+     ✓ IssuesWorkspaceRoute: creates a new issue via QuickCreateIssueModal and updates state/priority via field popover 863ms
+     ✓ IssuesWorkspaceRoute: handles multi-select, batch archive, and batch delete in BulkActionBar 610ms
+     ✓ IssuesWorkspaceRoute: filters by Priority, Assignee (unassigned and alice), Cycle, Module, Due Date 2194ms
+     ✓ IssuesWorkspaceRoute: tests state filter Active preset, alice assignee, and select-all 745ms
+     ✓ IssuesWorkspaceRoute: tests field popovers for high/low priority and in-progress/backlog state, and / shortcut 302ms
+     ✓ IssuesWorkspaceRoute: covers handleToggleSelect 100 cap and unassigned I shortcut 2430ms
      ✓ Live Mode API Wiring & Board State Normalization (KANBA-164) (21)
-       ✓ creates, updates, and bulk-operates on issues in live mode via REST endpoints 381ms
-       ✓ covers opening, cancelling, and saving custom view via SaveViewModal in IssuesWorkspaceRoute 651ms
-       ✓ covers BulkActionBar batch delete and archive in table layout 507ms
-     ✓ KAN-44 Mobile & Touch View Routing Tests (14)
-       ✓ exercises Swimlane with groupBy=priority, live mode transitions, WIP override, and batch update 352ms
+       ✓ creates, updates, and bulk-operates on issues in live mode via REST endpoints 466ms
+       ✓ covers opening, cancelling, and saving custom view via SaveViewModal in IssuesWorkspaceRoute 631ms
+       ✓ covers BulkActionBar batch delete and archive in table layout 500ms
+     ✓ KAN-44 Mobile & Touch View Routing Tests (15)
+       ✓ exercises Swimlane with groupBy=priority, live mode transitions, WIP override, and batch update 333ms
 
  Test Files  13 passed (13)
-      Tests  245 passed (245)
-   Start at  21:06:50
-   Duration  16.86s (tests 55%, environment 27%, import 11%, transform 7%, worker 2%)
+      Tests  247 passed (247)
+   Start at  22:02:03
+   Duration  15.91s (tests 57%, environment 28%, import 10%, transform 2%, worker 2%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   99.37 |    95.15 |    99.8 |    99.9 |                   
+All files          |    99.5 |    95.68 |    99.8 |   99.95 |                   
  app               |   99.12 |    95.14 |     100 |   99.09 |                   
   AppShell.tsx     |   99.12 |    95.14 |     100 |   99.09 | 56                
  features/board    |     100 |    97.21 |     100 |     100 |                   
@@ -75,13 +71,16 @@ All files          |   99.37 |    95.15 |    99.8 |    99.9 |
  features/drawer   |   99.44 |    95.34 |     100 |     100 |                   
   IssueHeader.tsx  |     100 |       95 |     100 |     100 | 62,79,137,198     
   IssueSurface.tsx |   99.37 |     95.4 |     100 |     100 | ...1196-1200,1234 
- features/list     |   98.98 |    94.44 |     100 |   99.46 |                   
+ features/list     |   99.49 |    95.83 |     100 |     100 |                   
   ListRow.tsx      |   98.55 |    95.55 |     100 |     100 | 29,93,218,269     
-  ListView.tsx     |   99.22 |    93.65 |     100 |    99.2 | 181               
+  ListView.tsx     |     100 |    96.03 |     100 |     100 | 83-84,108,377,404 
  features/table    |    99.6 |    95.63 |     100 |     100 |                   
   TableView.tsx    |    99.6 |    95.63 |     100 |     100 | ...10,314,320,418 
- features/views    |    99.1 |    94.15 |   99.45 |     100 |                   
+ features/views    |   99.35 |    95.31 |   99.45 |     100 |                   
   ...ldPopover.tsx |     100 |    96.15 |     100 |     100 | 134,168           
   ...BoardGrid.tsx |     100 |     95.1 |     100 |     100 | ...95,313,363,477 
-  viewRegistry.tsx |   98.64 |    93.61 |   99.28 |     100 | ...89,938,940,966 
+  viewRegistry.tsx |   99.02 |     95.3 |   99.28 |     100 | ...85,851,861,872 
 -------------------|---------|----------|---------|---------|-------------------
+
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document

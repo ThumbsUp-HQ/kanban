@@ -1,5 +1,5 @@
 import { fireEvent, render, screen } from '@testing-library/react';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { dropTargetForElements } from '@atlaskit/pragmatic-drag-and-drop/element/adapter';
 import { BoardColumn, getColumnDropData } from './BoardColumn.tsx';
 import type { BoardIssue, BoardWorkflowState } from './boardApi.ts';
@@ -22,7 +22,15 @@ function generateIssues(count: number): BoardIssue[] {
 }
 
 describe('BoardColumn Component', () => {
+  let cleanupNav: (() => void) | undefined;
   beforeEach(() => {
+    const navHandler = (e: Event): void => {
+      e.preventDefault();
+    };
+    window.addEventListener('click', navHandler, true);
+    cleanupNav = () => {
+      window.removeEventListener('click', navHandler, true);
+    };
     Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
       configurable: true,
       value: 900,
@@ -49,6 +57,10 @@ describe('BoardColumn Component', () => {
         };
       },
     });
+  });
+
+  afterEach(() => {
+    cleanupNav?.();
   });
 
   it('renders header with glyph, state name, count, and footer button', () => {
