@@ -39,6 +39,24 @@
   position: relative;
 }
 
+@media (max-width: 767px) {
+  .kb-layout-switcher-desktop {
+    display: none;
+  }
+  .kb-layout-switcher-mobile {
+    display: block;
+  }
+}
+
+@media (min-width: 768px) {
+  .kb-layout-switcher-desktop {
+    display: flex;
+  }
+  .kb-layout-switcher-mobile {
+    display: none;
+  }
+}
+
 .kb-layout-switcher-mobile-btn {
   background: var(--bg-surface-raised, #24272f);
   color: var(--fg-primary, #f8fafc);

@@ -1452,4 +1452,36 @@ describe('Sidebar', () => {
     uEmptyItems();
     fetchSpyEmpty.mockRestore();
   });
+
+  it('KAN-58: Mobile Sidebar Dismiss & Navigation Auto-Close', async () => {
+    const onCloseSpy = vi.fn();
+    const onToggleSpy = vi.fn();
+
+    render(
+      <MemoryRouter initialEntries={['/projects/KAN']}>
+        <Sidebar
+          isOpen={true}
+          onClose={onCloseSpy}
+          onToggleCollapse={onToggleSpy}
+          projectKey="KAN"
+          projectName="kanban"
+        />
+      </MemoryRouter>,
+    );
+
+    // 1. Close button in mobile overlay calls onClose, NOT desktop handleToggleCollapse
+    const closeBtn = screen.getByRole('button', { name: 'Collapse navigation sidebar' });
+    act(() => {
+      closeBtn.click();
+    });
+    expect(onCloseSpy).toHaveBeenCalledTimes(1);
+    expect(onToggleSpy).not.toHaveBeenCalled();
+
+    // 2. Clicking any nav link in mobile overlay automatically closes the sidebar
+    const homeLink = screen.getByRole('link', { name: /Home/i });
+    act(() => {
+      homeLink.click();
+    });
+    expect(onCloseSpy).toHaveBeenCalledTimes(2);
+  });
 });

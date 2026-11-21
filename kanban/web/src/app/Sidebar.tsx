@@ -590,6 +590,12 @@ export function Sidebar({
           isOpen ? 'kb-sidebar-overlay' : ''
         }`}
         onKeyDown={handleMobileKeyDown}
+        onClickCapture={(e) => {
+          const target = e.target as HTMLElement | null;
+          if (target?.closest('a') && isOpen && onClose) {
+            onClose();
+          }
+        }}
       >
         {/* Workspace Brand & Switcher & New Item Button */}
         <div className="kb-sidebar-header">
@@ -673,7 +679,13 @@ export function Sidebar({
               className="kb-sidebar-nav-close-btn"
               aria-label="Collapse navigation sidebar"
               title="Collapse sidebar ([)"
-              onClick={handleToggleCollapse}
+              onClick={() => {
+                if (isOpen && onClose) {
+                  onClose();
+                } else {
+                  handleToggleCollapse();
+                }
+              }}
             >
               <PanelLeftClose size={16} />
             </button>

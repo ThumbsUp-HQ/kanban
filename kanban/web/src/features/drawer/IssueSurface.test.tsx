@@ -1349,6 +1349,55 @@ describe('IssueSurface', () => {
       expect(onClose).toHaveBeenCalledTimes(1);
     });
 
+    it('KAN-58: renders issue-back-to-list-btn in split mode and full mode, navigating back to list cleanly', async () => {
+      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const onClose = vi.fn();
+
+      // Split mode
+      const { unmount } = render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues?layout=list&peek=KAN-142']}>
+            <IssueSurfaceRoot
+              mode="split"
+              issueKey="KAN-142"
+              projectKey="KAN"
+              onClose={onClose}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('issue-back-to-list-btn')).toBeDefined();
+      });
+      fireEvent.click(screen.getByTestId('issue-back-to-list-btn'));
+      expect(onClose).toHaveBeenCalledTimes(1);
+      unmount();
+
+      // Full mode
+      const onCloseFull = vi.fn();
+      render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues/KAN-142']}>
+            <IssueSurfaceRoot
+              mode="full"
+              issueKey="KAN-142"
+              projectKey="KAN"
+              onClose={onCloseFull}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('issue-back-to-list-btn')).toBeDefined();
+      });
+      expect(screen.getByTitle('Return to side panel')).toBeDefined();
+      fireEvent.click(screen.getByTestId('issue-back-to-list-btn'));
+      expect(onCloseFull).toHaveBeenCalledTimes(1);
+    });
+
     it('renders split-surface-close-btn and invokes onClose in loading and error states', async () => {
       let resolvePromise: (val: unknown) => void = () => {
         /* no-op */

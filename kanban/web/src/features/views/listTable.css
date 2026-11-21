@@ -15,6 +15,22 @@
   background: var(--bg-canvas);
 }
 
+.list-view-loading {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3, 12px);
+  padding: var(--space-4, 16px);
+  width: 100%;
+  box-sizing: border-box;
+}
+
+.list-loading-skeleton {
+  height: 48px;
+  background: var(--bg-surface-raised, #24272f);
+  border-radius: var(--radius-md, 6px);
+  animation: pulse 1.5s ease-in-out infinite;
+}
+
 .list-section {
   display: flex;
   flex-direction: column;

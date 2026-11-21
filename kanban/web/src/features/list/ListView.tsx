@@ -220,6 +220,15 @@ export function ListView({
   }, [issues, sortBy, sortDir]);
 
   if (issues.length === 0) {
+    if (isLoading) {
+      return (
+        <div className="list-view-loading" data-testid="list-view-loading">
+          <div className="list-loading-skeleton" />
+          <div className="list-loading-skeleton" />
+          <div className="list-loading-skeleton" />
+        </div>
+      );
+    }
     return (
       <div className="view-empty-state">
         <h2 className="view-empty-title">No work items found</h2>

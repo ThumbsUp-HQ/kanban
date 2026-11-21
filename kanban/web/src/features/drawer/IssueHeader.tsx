@@ -149,22 +149,30 @@ export function IssueHeader({
     <header className="surface__header">
       <button
         type="button"
-        className="issue-header__btn"
-        aria-label="Close issue panel"
+        className="issue-header__btn issue-header__back-btn"
+        data-testid="issue-back-to-list-btn"
+        aria-label={mode === 'full' ? 'Back to issues list' : 'Close issue panel'}
+        title={mode === 'full' ? 'Back to list' : 'Close issue panel'}
         onClick={onClose}
       >
-        <span aria-hidden="true" className="issue-header__glyph">→</span>
+        <span aria-hidden="true" className="issue-header__glyph">
+          {mode === 'full' ? '←' : '→'}
+        </span>
+        {mode === 'full' && <span className="issue-back-to-list-text"> Back to list</span>}
       </button>
 
       <button
         type="button"
-        className="issue-header__btn"
+        className={`issue-header__btn ${mode === 'full' ? 'issue-header__fullscreen-toggle--active' : ''}`}
         aria-label={mode === 'full' ? 'Return to side panel' : 'Open in full screen'}
+        title={mode === 'full' ? 'Return to side panel' : 'Open in full screen'}
         aria-keyshortcuts="Meta+Shift+F Control+Shift+F"
         onMouseDown={(e) => { e.preventDefault(); }}
         onClick={toggleFullScreen}
       >
-        <span aria-hidden="true" className="issue-header__glyph">↗</span>
+        <span aria-hidden="true" className="issue-header__glyph">
+          {mode === 'full' ? '↙' : '↗'}
+        </span>
       </button>
 
       {priorityKey && issue.priority && (

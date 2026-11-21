@@ -120,6 +120,7 @@ export function IssueNavigatorBar({
   const currentLabel = activeFilters.label?.[0] ?? 'all';
   const currentCycle = activeFilters.cycle?.[0] ?? 'all';
   const currentModule = activeFilters.module?.[0] ?? 'all';
+  const [filtersExpanded, setFiltersExpanded] = React.useState<boolean>(false);
 
   return (
     <div
@@ -201,11 +202,30 @@ export function IssueNavigatorBar({
             Query
           </button>
         </div>
+
+        {/* Mobile / Compact Landscape Filters Toggle */}
+        {queryMode === 'basic' && (
+          <button
+            type="button"
+            className={`navigator-filters-toggle ${filtersExpanded ? 'navigator-filters-toggle--active' : ''}`}
+            data-testid="navigator-filters-toggle"
+            aria-expanded={filtersExpanded}
+            onClick={() => {
+              setFiltersExpanded((prev) => !prev);
+            }}
+          >
+            <span>Filters</span>
+            <span aria-hidden="true">{filtersExpanded ? '▲' : '▼'}</span>
+          </button>
+        )}
       </div>
 
       {/* Basic Mode Structured Dropdowns & Chips */}
       {queryMode === 'basic' && (
-        <div className="navigator-filters-row" data-testid="navigator-filters-row">
+        <div
+          className={`navigator-filters-row ${filtersExpanded ? 'navigator-filters-row--expanded' : ''}`}
+          data-testid="navigator-filters-row"
+        >
           {/* State */}
           <select
             className="navigator-filter-select"

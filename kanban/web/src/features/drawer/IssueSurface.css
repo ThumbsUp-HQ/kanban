@@ -262,20 +262,19 @@
   }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 540px) {
   .surface--drawer,
   .surface--full,
   .surface--split {
     position: fixed;
-    inset: 0;
-    top: 0;
+    top: var(--topbar-h, 52px);
     left: 0;
     right: 0;
     bottom: 0;
     width: 100vw;
     max-width: 100%;
-    height: 100dvh;
-    z-index: 200;
+    height: calc(100dvh - var(--topbar-h, 52px));
+    z-index: 100;
     box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.2);
   }
   .surface__body,
@@ -344,19 +343,18 @@
   }
 }
 
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 540px) {
   .surface--split {
     position: fixed;
-    inset: 0;
-    top: 0;
+    top: var(--topbar-h, 52px);
     left: 0;
     right: 0;
     bottom: 0;
     width: 100vw;
     max-width: 100%;
-    height: 100dvh;
-    min-height: 100dvh;
-    z-index: 200;
+    height: calc(100dvh - var(--topbar-h, 52px));
+    min-height: calc(100dvh - var(--topbar-h, 52px));
+    z-index: 100;
     border-left: none;
     border-top: none;
   }

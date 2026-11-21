@@ -958,12 +958,12 @@ export function IssuesWorkspaceRoute({
   const is2DSwimlane = layout === 'board' && (subGroupBy !== 'none' || groupBy !== 'state');
 
   const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() => {
-    return typeof window !== 'undefined' && window.innerWidth <= 767;
+    return typeof window !== 'undefined' && (window.innerWidth <= 767 || window.innerHeight <= 540);
   });
 
   useEffect(() => {
     const handleResize = (): void => {
-      setIsMobileViewport(window.innerWidth <= 767);
+      setIsMobileViewport(window.innerWidth <= 767 || window.innerHeight <= 540);
     };
     window.addEventListener('resize', handleResize);
     return () => {
@@ -978,26 +978,36 @@ export function IssuesWorkspaceRoute({
     return sortIssuesList(filteredIssues, railSortBy, railSortDir);
   }, [filteredIssues, railSortBy, railSortDir]);
 
-  // Active peek key for 3-pane split list view (auto-selecting first issue if none specified, unless mobile <= 768px)
+  // Active peek key for 3-pane split list view (auto-selecting first issue if none specified, unless mobile/landscape or explicitly closed)
   const activePeekKey = useMemo(() => {
     const firstRailIssue = sortedRailIssues[0];
     if (sortedRailIssues.length === 0 || !firstRailIssue) {
-      return peekParam ?? null;
+      return peekParam && peekParam !== 'none' ? peekParam : null;
     }
+    const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const isExplicitlyClosed =
+      closedSplitKey === '__ALL__' ||
+      searchParams?.get('closed') === '1' ||
+      searchParams?.get('peek') === 'none' ||
+      (typeof window !== 'undefined' && (window.history.state as { suppressAutoPeek?: boolean })?.suppressAutoPeek);
+
     if (peekParam) {
+      if (peekParam === 'none') {
+        return null;
+      }
       const existsInList = sortedRailIssues.some((i) => i.key === peekParam);
       if (existsInList) {
         return peekParam;
       }
-      if (isMobileViewport) {
+      if (isMobileViewport || isExplicitlyClosed) {
         return null;
       }
       return firstRailIssue.key;
     }
-    if (isMobileViewport) {
+    if (isMobileViewport || isExplicitlyClosed) {
       return null;
     }
-    if (closedSplitKey && closedSplitKey === firstRailIssue.key) {
+    if (closedSplitKey && (closedSplitKey === firstRailIssue.key || closedSplitKey === '__ALL__')) {
       return null;
     }
     return firstRailIssue.key;
@@ -1009,6 +1019,7 @@ export function IssuesWorkspaceRoute({
       layout === 'list' &&
       !isMobileViewport &&
       peekParam &&
+      peekParam !== 'none' &&
       firstRailIssue &&
       !sortedRailIssues.some((i) => i.key === peekParam)
     ) {
@@ -1106,6 +1117,7 @@ export function IssuesWorkspaceRoute({
           <div className="kb-split-list-pane">
             <ListView
               issues={sortedRailIssues}
+              isLoading={Boolean(issuesQuery.isLoading)}
               projectKey={projectKey}
               projectStates={projectStates}
               modulesEnabled={modulesEnabled}
@@ -1142,7 +1154,7 @@ export function IssuesWorkspaceRoute({
               }}
               projectName={typeof projectMetadata?.name === 'string' ? projectMetadata.name : undefined}
               onClose={() => {
-                setClosedSplitKey(activePeekKey);
+                setClosedSplitKey('__ALL__');
                 handleOpenPeek(null);
               }}
             />

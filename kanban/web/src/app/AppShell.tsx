@@ -126,7 +126,8 @@ export function AppShell({
 
   const isProjectIssuesRoute = /^(?:\/projects|\/w\/[^/]+\/p)\/[^/]+\/issues(?:\/)?$/.test(location.pathname);
   const searchParams = new URLSearchParams(location.search);
-  const isListSplitHandled = isProjectIssuesRoute && searchParams.get('layout') === 'list';
+  const rawLayout = searchParams.get('layout');
+  const isListSplitHandled = isProjectIssuesRoute && (!rawLayout || rawLayout.toLowerCase() === 'list');
 
   const isPublicRoute =
     location.pathname.startsWith('/login') ||
@@ -165,6 +166,24 @@ export function AppShell({
   }, [activeProjectKey, navigate]);
 
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
+
+  // Auto-close mobile sidebar on navigation
+  useEffect(() => {
+    setMobileSidebarOpen(false);
+  }, [location.pathname, location.search]);
+
+  // Auto-close mobile sidebar when viewport expands past 1280px
+  useEffect(() => {
+    function handleResize(): void {
+      if (window.innerWidth > 1279) {
+        setMobileSidebarOpen(false);
+      }
+    }
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
     try {
       const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);

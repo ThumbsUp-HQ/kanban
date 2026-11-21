@@ -243,7 +243,7 @@ function IssueSurfaceContent({
 
   const handleClose = useCallback((): void => {
     onCloseProp?.();
-    void navigate(toPeekPath(location, null));
+    void navigate(toPeekPath(location, null), { state: { suppressAutoPeek: true } });
     const opener =
       getOpenerElement() ??
       openerRef.current ??
@@ -1285,7 +1285,7 @@ function IssueSurfaceContent({
               onClick={handleClose}
             >
               <span aria-hidden="true" className="issue-header__glyph">←</span>
-              <span className="sr-only">Back</span>
+              <span className="split-back-text" data-testid="issue-back-to-list-btn"> Back to list</span>
             </button>
 
             <div className="split-breadcrumb" data-testid="split-breadcrumb">

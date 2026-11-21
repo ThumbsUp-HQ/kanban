@@ -459,4 +459,51 @@ describe('AppShell', () => {
     expect(surfaceHost).toBeDefined();
     expect(surfaceHost?.querySelector('.surface--drawer')).toBeNull();
   });
+
+  it('KAN-58: does not mount duplicate global drawer when layout is omitted on /issues route', () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KAN-1']}>
+            <AppShell projectKey="KAN" projectName="kanban" />
+          </MemoryRouter>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    const surfaceHost = document.getElementById('kb-surface-host');
+    expect(surfaceHost).toBeDefined();
+    expect(surfaceHost?.querySelector('.surface--drawer')).toBeNull();
+  });
+
+  it('KAN-58: Topbar & Hamburger Always Accessible Above Ticket Views and auto-closes mobile sidebar on resize', () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <ThemeProvider>
+          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+            <AppShell projectKey="KAN" projectName="kanban" />
+          </MemoryRouter>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    // Topbar is rendered with sticky positioning and topbar header
+    const topbar = document.querySelector('.kb-topbar');
+    expect(topbar).toBeDefined();
+
+    // Open mobile sidebar via hamburger button
+    const hamburger = screen.getByRole('button', { name: 'Open navigation' });
+    expect(hamburger).toBeDefined();
+    act(() => {
+      hamburger.click();
+    });
+    expect(screen.getByRole('dialog', { name: 'Sidebar navigation' })).toBeDefined();
+
+    // Resize viewport past 1279px auto-closes mobile sidebar
+    act(() => {
+      window.innerWidth = 1440;
+      window.dispatchEvent(new Event('resize'));
+    });
+    expect(screen.queryByRole('dialog', { name: 'Sidebar navigation' })).toBeNull();
+  });
 });

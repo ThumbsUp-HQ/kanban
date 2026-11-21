@@ -2057,6 +2057,49 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       }
     });
 
+    it('KAN-58: Negative / Bounce-Back Regression Case - phone landscape (844x390) and suppressAutoPeek prevent bounce-back into issues[0]', async () => {
+      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
+      const originalInnerWidth = window.innerWidth;
+      const originalInnerHeight = window.innerHeight;
+      try {
+        // Phone landscape: 844px wide, 390px high
+        Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 844 });
+        Object.defineProperty(window, 'innerHeight', { writable: true, configurable: true, value: 390 });
+
+        const { unmount } = render(
+          <IssuesWorkspaceRoute
+            projectKey="KAN"
+            initialLayout="list"
+            initialIssues={FIXTURE_12_ISSUES}
+          />
+        );
+
+        // On phone landscape (innerHeight <= 540), activePeekKey is null when ?peek= is absent
+        expect(screen.queryByTestId('split-surface-close-btn')).toBeNull();
+        unmount();
+
+        // When closed via suppressAutoPeek history state on desktop
+        Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1200 });
+        Object.defineProperty(window, 'innerHeight', { writable: true, configurable: true, value: 900 });
+        window.history.replaceState({ suppressAutoPeek: true }, '', '/projects/KAN/issues?layout=list');
+
+        render(
+          <IssuesWorkspaceRoute
+            projectKey="KAN"
+            initialLayout="list"
+            initialIssues={FIXTURE_12_ISSUES}
+          />
+        );
+
+        // Does NOT bounce back into issues[0]!
+        expect(screen.queryByTestId('split-surface-close-btn')).toBeNull();
+      } finally {
+        window.history.replaceState({}, '', '/projects/KAN/issues?layout=list');
+        Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: originalInnerWidth });
+        Object.defineProperty(window, 'innerHeight', { writable: true, configurable: true, value: originalInnerHeight });
+      }
+    });
+
     it('wires onOpenFieldPopover from ListView to QuickFieldPopover', async () => {
       window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
       render(
