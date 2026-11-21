@@ -280,6 +280,57 @@
   border-color: #991b1b;
 }
 
+/* Model Quickpicks */
+.kb-model-quickpicks {
+  margin-top: var(--space-2, 8px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1, 4px);
+}
+
+.kb-quickpick-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1, 4px);
+}
+
+.kb-quickpick-chip {
+  padding: 3px 8px;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--kb-color-border-subtle, #d1d5db);
+  background-color: var(--kb-color-bg-surface, #ffffff);
+  color: var(--kb-color-text-primary, #111827);
+  font-size: 11px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  user-select: none;
+  transition: all 0.15s ease;
+}
+
+[data-theme='dark'] .kb-quickpick-chip {
+  background-color: #374151;
+  border-color: #4b5563;
+  color: #f9fafb;
+}
+
+.kb-quickpick-chip:hover {
+  border-color: var(--brand-primary, #1d4ed8);
+}
+
+.kb-quickpick-chip--selected {
+  background-color: var(--brand-primary, #1d4ed8);
+  color: var(--accent-primary-fg, #ffffff);
+  border-color: var(--brand-primary, #1d4ed8);
+  font-weight: 600;
+}
+
+[data-theme='dark'] .kb-quickpick-chip--selected {
+  background-color: #2563eb;
+  border-color: #3b82f6;
+  color: #ffffff;
+}
+
 /* Responsive adjustments */
 @media (max-width: 768px) {
   .kb-agent-studio {
