@@ -6,9 +6,10 @@ from __future__ import annotations
 
 import copy
 import re
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-from pydantic import BaseModel
+if TYPE_CHECKING:
+    from pydantic import BaseModel
 
 __all__ = [
     "clean_gemini_schema",

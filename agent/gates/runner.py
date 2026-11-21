@@ -7,7 +7,6 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import datetime as dt
-import inspect
 import logging
 import uuid
 from typing import TYPE_CHECKING, Any, Literal
