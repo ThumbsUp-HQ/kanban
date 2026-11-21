@@ -563,6 +563,128 @@ def _render_opblock(method: str, path: str, op: dict[str, Any]) -> list[str]:
     return lines
 
 
+def _render_security_schemes_section(security_schemes: dict[str, Any]) -> list[str]:
+    """Render Authentication & Security Schemes documentation section."""
+    if not security_schemes:
+        return []
+    lines = [
+        '    <section class="opblock-tag-section" id="authentication-security-schemes">',
+        (
+            '      <h2 class="opblock-tag-header">Authentication &amp; Security Schemes '
+            f'<span class="tag-count">({len(security_schemes)})</span></h2>'
+        ),
+        '      <div class="api-info-card">',
+        (
+            '        <p class="api-desc">Configured authentication security schemes '
+            "protecting API endpoints.</p>"
+        ),
+        '        <table class="param-table">',
+        (
+            "          <thead><tr><th>Scheme Name</th><th>Type</th><th>In / Format</th>"
+            "<th>Description</th></tr></thead>"
+        ),
+        "          <tbody>",
+    ]
+    for name, s_info in sorted(security_schemes.items()):
+        s_type = html.escape(str(s_info.get("type", "")))
+        s_in = html.escape(str(s_info.get("in", s_info.get("scheme", ""))))
+        if s_info.get("name"):
+            s_in += f" (<code>{html.escape(str(s_info['name']))}</code>)"
+        s_desc = html.escape(str(s_info.get("description", "")))
+        lines.append(
+            f"            <tr><td><code>{html.escape(name)}</code></td>"
+            f'<td><span class="status-badge status-2xx">{s_type}</span></td>'
+            f"<td>{s_in}</td><td>{s_desc}</td></tr>"
+        )
+    lines.extend(
+        [
+            "          </tbody>",
+            "        </table>",
+            "      </div>",
+            "    </section>",
+        ]
+    )
+    return lines
+
+
+def _render_problem_schemas_section(schemas: dict[str, Any]) -> list[str]:
+    """Render Canonical Error & Problem Schemas (ProblemDetails / RFC 7807) documentation."""
+    lines = [
+        '    <section class="opblock-tag-section" id="canonical-error-problem-schemas">',
+        (
+            '      <h2 class="opblock-tag-header">Canonical Error &amp; Problem Schemas '
+            "(ProblemDetails / RFC 7807)</h2>"
+        ),
+        '      <div class="api-info-card">',
+        (
+            '        <p class="api-desc">Standardized RFC 7807 problem details '
+            "(<code>application/problem+json</code>) returned across HTTP error responses.</p>"
+        ),
+        '        <table class="resp-table">',
+        (
+            "          <thead><tr><th>Status Code</th><th>Reason</th><th>Schema Model</th>"
+            "<th>Description</th></tr></thead>"
+        ),
+        "          <tbody>",
+        (
+            '            <tr><td><span class="status-badge status-4xx">401</span></td>'
+            "<td>Unauthorized</td><td><code>ProblemDetails</code></td>"
+            "<td>Missing, expired, or invalid session cookie or bearer token.</td></tr>"
+        ),
+        (
+            '            <tr><td><span class="status-badge status-4xx">412</span></td>'
+            "<td>Precondition Failed</td><td><code>ProblemDetails</code></td>"
+            "<td>ETag mismatch (If-Match) or optimistic concurrency conflict.</td></tr>"
+        ),
+        (
+            '            <tr><td><span class="status-badge status-4xx">429</span></td>'
+            "<td>Too Many Requests</td><td><code>ProblemDetails</code></td>"
+            "<td>Rate limit or AI token cap exceeded. Includes retry-after metadata.</td></tr>"
+        ),
+        "          </tbody>",
+        "        </table>",
+    ]
+    problem_schema = schemas.get("ProblemDetails") or schemas.get("Problem")
+    if problem_schema and isinstance(problem_schema, dict):
+        props = problem_schema.get("properties", {})
+        if props:
+            lines.extend(
+                [
+                    (
+                        '        <h4 style="margin-top: 18px; margin-bottom: 8px; '
+                        'font-weight: 600;">'
+                        "ProblemDetails Model Specification</h4>"
+                    ),
+                    '        <table class="param-table">',
+                    (
+                        "          <thead><tr><th>Property</th><th>Type</th>"
+                        "<th>Description</th></tr></thead>"
+                    ),
+                    "          <tbody>",
+                ]
+            )
+            for prop_name, prop_info in sorted(props.items()):
+                p_type = html.escape(str(prop_info.get("type", "string")))
+                p_desc = html.escape(str(prop_info.get("description", prop_info.get("title", ""))))
+                lines.append(
+                    f"            <tr><td><code>{html.escape(prop_name)}</code></td>"
+                    f"<td><code>{p_type}</code></td><td>{p_desc}</td></tr>"
+                )
+            lines.extend(
+                [
+                    "          </tbody>",
+                    "        </table>",
+                ]
+            )
+    lines.extend(
+        [
+            "      </div>",
+            "    </section>",
+        ]
+    )
+    return lines
+
+
 def render_swagger_ui_html(openapi_schema: dict[str, Any]) -> str:
     """Render CSP-safe interactive Swagger UI HTML schema explorer."""
     info = openapi_schema.get("info", {})
@@ -570,7 +692,12 @@ def render_swagger_ui_html(openapi_schema: dict[str, Any]) -> str:
     version = info.get("version", "1.0.0")
     description = info.get("description", "Agent-First, Security-First Kanban Platform API.")
     paths = openapi_schema.get("paths", {})
+    components = openapi_schema.get("components", {})
+    security_schemes = components.get("securitySchemes", {})
+    schemas = components.get("schemas", {})
     tags_map = _group_operations_by_tag(paths)
+
+    display_title = title[1:].lstrip() if title.startswith("👍") else title
 
     out: list[str] = [
         "<!doctype html>",
@@ -588,7 +715,7 @@ def render_swagger_ui_html(openapi_schema: dict[str, Any]) -> str:
         '    <div class="swagger-topbar-wrapper">',
         '      <div class="brand">',
         '        <span class="logo" aria-hidden="true">👍</span>',
-        f'        <span class="title">{html.escape(title)}</span>',
+        f'        <span class="title">{html.escape(display_title)}</span>',
         '        <span class="badge">Swagger UI</span>',
         "      </div>",
         '      <div class="topbar-links">',
@@ -620,6 +747,9 @@ def render_swagger_ui_html(openapi_schema: dict[str, Any]) -> str:
         "      </div>",
         "    </section>",
     ]
+
+    out.extend(_render_security_schemes_section(security_schemes))
+    out.extend(_render_problem_schemas_section(schemas))
 
     for tag, operations in sorted(tags_map.items()):
         out.append('    <section class="opblock-tag-section">')
@@ -680,7 +810,12 @@ def render_redoc_html(openapi_schema: dict[str, Any]) -> str:
     version = info.get("version", "1.0.0")
     description = info.get("description", "Agent-First, Security-First Kanban Platform API.")
     paths = openapi_schema.get("paths", {})
+    components = openapi_schema.get("components", {})
+    security_schemes = components.get("securitySchemes", {})
+    schemas = components.get("schemas", {})
     tags_map = _group_operations_by_tag(paths)
+
+    display_title = title[1:].lstrip() if title.startswith("👍") else title
 
     out: list[str] = [
         "<!doctype html>",
@@ -699,7 +834,7 @@ def render_redoc_html(openapi_schema: dict[str, Any]) -> str:
         '      <div class="redoc-sidebar-header">',
         '        <div class="brand">',
         '          <span class="logo" aria-hidden="true">👍</span>',
-        f'          <span class="title">{html.escape(title)}</span>',
+        f'          <span class="title">{html.escape(display_title)}</span>',
         "        </div>",
         f'        <div class="version-tag">ReDoc v{html.escape(version)}</div>',
         '        <div class="sidebar-links">',
@@ -709,6 +844,14 @@ def render_redoc_html(openapi_schema: dict[str, Any]) -> str:
         "        </div>",
         "      </div>",
         '      <ul class="redoc-tag-list">',
+        (
+            '        <li><a href="#authentication-security-schemes" '
+            'class="redoc-tag-link">Authentication &amp; Security Schemes</a></li>'
+        ),
+        (
+            '        <li><a href="#canonical-error-problem-schemas" '
+            'class="redoc-tag-link">Canonical Error &amp; Problem Schemas</a></li>'
+        ),
     ]
     for tag in sorted(tags_map.keys()):
         slug = html.escape(tag.replace(" ", "-").lower())
@@ -730,6 +873,9 @@ def render_redoc_html(openapi_schema: dict[str, Any]) -> str:
             "      </header>",
         ]
     )
+
+    out.extend(_render_security_schemes_section(security_schemes))
+    out.extend(_render_problem_schemas_section(schemas))
 
     for tag, operations in sorted(tags_map.items()):
         slug = html.escape(tag.replace(" ", "-").lower())

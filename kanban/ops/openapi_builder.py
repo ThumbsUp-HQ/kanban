@@ -17,6 +17,7 @@ if TYPE_CHECKING:
 
 PUBLIC_EXACT_PATHS: frozenset[str] = frozenset(
     {
+        "/.well-known/openid-configuration",
         "/healthz",
         "/readyz",
         "/api/v1/health",

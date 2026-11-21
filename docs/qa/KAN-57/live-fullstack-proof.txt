@@ -1,0 +1,46 @@
+Zero-Mock Live Full-Stack QA Proof - KAN-57 ([KB-WIKI-OPENAPI-SYNC])
+=====================================================================
+Target Container: kanban-liveqa-1 (http://localhost:18961)
+Image / Build Commit: thumbs-up-kanban:local-qa (KB_GIT_COMMIT=9d5577ad9b50)
+Database: Embedded PostgreSQL 16 + FORCE ROW LEVEL SECURITY
+Execution Timestamp: 2026-11-21T06:26:22.311Z
+Mocks / Route Interception: ZERO (zero page.route, zero context.route, zero source edits)
+Page Runtime Errors: 0
+
+1. Live API & OpenAPI Probes
+----------------------------
+- GET http://localhost:18961/openapi.json -> HTTP 200 (via 307 -> /api/openapi.json):
+  * info.version: "2.0.0"
+  * info["x-build-commit"]: "9d5577ad9b50"
+  * info["x-openapi-bundle-hash"]: "8895d7d7f98beaf6ef0e81a65afdc00de1c63bbed01ab885cf161d3db0e0c91f"
+  * Total paths: 242 (>= 242)
+  * Total operations: 316 (>= 316)
+  * components.securitySchemes: ["SessionCookieAuth", "CsrfHeaderAuth", "BearerTokenAuth"]
+  * components.schemas.ProblemDetails: present (true)
+  * Documented 401, 412, and 429 responses: all present (401=true, 412=true, 429=true)
+- GET http://localhost:18961/api/v1/system/about -> HTTP 200:
+  * version: "2.0.0"
+  * git_commit: "9d5577ad9b50"
+  * openapi_bundle_hash: "8895d7d7f98beaf6ef0e81a65afdc00de1c63bbed01ab885cf161d3db0e0c91f"
+  * frontend_bundle_hash: "f9b8d107ba6e63a48b721c76a10ce95924e665fb580d106d4fb84e894596c336"
+- GET http://localhost:18961/api/v1/system/status -> HTTP 200:
+  * Contains git_commit, build_timestamp, openapi_version, openapi_bundle_hash, frontend_bundle_hash, deployment_mode, persistent_volume, tier_b_sandbox_available, air_gap_mode, etc.
+
+2. Live UI & Docs Center Verification + Screenshots
+---------------------------------------------------
+- /about (Light & Dark, 1440x900):
+  * Verified v2.0.0, Apache-2.0, Swagger UI (/api/docs), ReDoc (/api/redoc), OpenAPI 3.1.0 Spec (/api/openapi.json), and CycloneDX 1.5 SBOM (118 runtime dependencies: 78 Python, 40 Web, 0 denied).
+  * Captured:
+    - docs/qa/KAN-57/screenshots/live-about-build-commit-desktop-light.png
+    - docs/qa/KAN-57/screenshots/live-about-build-commit-desktop-dark.png
+- /api/docs (1440x900):
+  * Verified self-contained OAS 3.1.0 v2.0.0 Swagger UI rendering and expanded endpoint responses (200/401/422) + cURL example.
+  * Captured: docs/qa/KAN-57/screenshots/live-openapi-docs-security-schemes-desktop.png
+- /docs/rest-api-architecture-and-openapi-guide (1440x900 Light) & /docs/three-surface-mcp-server-architecture (768x1024 Tablet, 390x844 Mobile):
+  * Verified synced OpenAPI metrics (242+ paths, 316+ operations, 314+ schemas) and 24 MCP tools across 3 surfaces (/mcp/agent=9, /mcp/docs=3, /mcp/admin=12) + Mermaid diagrams.
+  * Captured:
+    - docs/qa/KAN-57/screenshots/live-docs-center-synced-desktop-light.png
+    - docs/qa/KAN-57/screenshots/live-docs-center-synced-tablet.png
+    - docs/qa/KAN-57/screenshots/live-docs-center-synced-mobile.png
+
+VERDICT: PASS (100% Zero-Mock Live Full-Stack Verified)

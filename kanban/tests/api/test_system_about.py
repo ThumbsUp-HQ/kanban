@@ -7,15 +7,18 @@ from __future__ import annotations
 import subprocess
 import uuid
 from pathlib import Path
+from unittest.mock import AsyncMock, MagicMock
 
 import httpx
 import pytest
 from fastapi import FastAPI
+from starlette.requests import Request
 
 from kanban.api.deps import PrincipalContext, get_principal
 from kanban.api.problems import ProblemException, problem_exception_handler
 from kanban.api.v1 import build_v1_router
 from kanban.api.v1.system import get_platform_summary
+from kanban.api.v1.system_status import _assemble_system_status_response
 from kanban.app import create_app
 from kanban.ops.build_info import (
     compute_openapi_bundle_hash,
@@ -369,3 +372,56 @@ def test_build_info_get_build_info(monkeypatch: pytest.MonkeyPatch) -> None:
     # Without openapi_doc
     info_no_doc = get_build_info(openapi_doc=None)
     assert info_no_doc.openapi_bundle_hash is None
+
+
+@pytest.mark.asyncio
+async def test_assemble_system_status_response_server_admin_and_member(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify _assemble_system_status_response populates build info and respects roles."""
+    monkeypatch.setenv("KB_GIT_COMMIT", "test-sha-status")
+    monkeypatch.setenv("KB_BUILD_TIMESTAMP", "2026-11-21T06:00:00Z")
+
+    app = _create_test_app()
+    scope = {"type": "http", "app": app, "headers": []}
+    mock_request = Request(scope)
+
+    # 1. Server admin caller
+    admin_caller = PrincipalContext(
+        principal_id=uuid.uuid4(),
+        workspace_id=uuid.uuid4(),
+        aal_level=1,
+    )
+    admin_result = MagicMock()
+    admin_result.scalar_one.return_value = True
+    admin_result.scalar_one_or_none.return_value = False
+    admin_session = AsyncMock()
+    admin_session.execute = AsyncMock(return_value=admin_result)
+
+    admin_status = await _assemble_system_status_response(
+        caller=admin_caller, session=admin_session, request=mock_request
+    )
+    assert admin_status.is_server_admin is True
+    assert admin_status.git_commit == "test-sha-status"
+    assert admin_status.build_timestamp == "2026-11-21T06:00:00Z"
+    assert admin_status.openapi_version == "2.0.0"
+    assert admin_status.openapi_bundle_hash is not None
+
+    # 2. Regular member caller (anti-enumeration redaction)
+    member_caller = PrincipalContext(
+        principal_id=uuid.uuid4(),
+        workspace_id=uuid.UUID(int=0),
+        aal_level=1,
+    )
+    member_result = MagicMock()
+    member_result.scalar_one.return_value = False
+    member_result.scalar_one_or_none.return_value = False
+    member_session = AsyncMock()
+    member_session.execute = AsyncMock(return_value=member_result)
+
+    member_status = await _assemble_system_status_response(
+        caller=member_caller, session=member_session, request=mock_request
+    )
+    assert member_status.is_server_admin is False
+    assert member_status.data_mount_point is None
+    assert member_status.git_commit == "test-sha-status"

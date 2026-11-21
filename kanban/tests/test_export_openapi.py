@@ -8,6 +8,17 @@ import sys
 import warnings
 from typing import TYPE_CHECKING, Any
 
+from kanban.api_docs import (
+    _group_operations_by_tag,
+    _render_opblock,
+    _render_problem_schemas_section,
+    _render_redoc_endpoint_card,
+    _render_security_schemes_section,
+    get_redoc_html,
+    get_swagger_ui_html,
+    render_redoc_html,
+    render_swagger_ui_html,
+)
 from kanban.ops.openapi_builder import _enrich_paths
 from kanban.tools.export_openapi import export_openapi, main
 
@@ -256,3 +267,102 @@ def test_openapi_builder_enrich_paths_defensive_types() -> None:
     valid_path = mock_schema["paths"]["/valid"]
     assert isinstance(valid_path, dict)
     assert "security" in valid_path["get"]
+
+
+def test_export_openapi_openid_configuration_public() -> None:
+    """Verify /.well-known/openid-configuration is unauthenticated with security: []."""
+    raw = export_openapi()
+    data: dict[str, Any] = json.loads(raw)
+    paths: dict[str, Any] = data["paths"]
+
+    assert "/.well-known/openid-configuration" in paths
+    op = paths["/.well-known/openid-configuration"]["get"]
+    assert op.get("security") == []
+    assert "401" not in op.get("responses", {})
+
+
+def test_api_docs_swagger_and_redoc_security_and_problem_schemas() -> None:
+    """Verify Swagger UI and ReDoc render security schemes, ProblemDetails, and single branding."""
+    raw = export_openapi()
+    data: dict[str, Any] = json.loads(raw)
+
+    swagger_html = render_swagger_ui_html(data)
+    assert "👍 👍" not in swagger_html
+    assert "SessionCookieAuth" in swagger_html
+    assert "CsrfHeaderAuth" in swagger_html
+    assert "BearerTokenAuth" in swagger_html
+    assert "ProblemDetails" in swagger_html
+    assert "401" in swagger_html
+    assert "412" in swagger_html
+    assert "429" in swagger_html
+    assert "Authentication &amp; Security Schemes" in swagger_html
+    assert "Canonical Error &amp; Problem Schemas" in swagger_html
+
+    redoc_html = render_redoc_html(data)
+    assert "👍 👍" not in redoc_html
+    assert "SessionCookieAuth" in redoc_html
+    assert "CsrfHeaderAuth" in redoc_html
+    assert "BearerTokenAuth" in redoc_html
+    assert "ProblemDetails" in redoc_html
+    assert "Authentication &amp; Security Schemes" in redoc_html
+    assert "Canonical Error &amp; Problem Schemas" in redoc_html
+
+    # Test cache retrieval
+    assert get_swagger_ui_html(data) == get_swagger_ui_html(data)
+    assert get_redoc_html(data) == get_redoc_html(data)
+
+    # Test edge cases and helper branches
+    assert _render_security_schemes_section({}) == []
+    empty_problem_section = _render_problem_schemas_section({})
+    assert "Canonical Error &amp; Problem Schemas" in "".join(empty_problem_section)
+
+    mock_problem_section = _render_problem_schemas_section(
+        {
+            "ProblemDetails": {
+                "properties": {
+                    "code": {"type": "string", "description": "Machine-readable error code"},
+                    "detail": {"type": "string", "title": "Human-readable explanation"},
+                }
+            }
+        }
+    )
+    combined_mock = "".join(mock_problem_section)
+    assert "ProblemDetails Model Specification" in combined_mock
+    assert "Machine-readable error code" in combined_mock
+
+    # Test _group_operations_by_tag with non-standard method
+    tags_map = _group_operations_by_tag(
+        {
+            "/test": {
+                "head": {"summary": "ignore head"},
+                "get": {"summary": "get test", "tags": ["test-tag"]},
+            }
+        }
+    )
+    assert "test-tag" in tags_map
+    assert len(tags_map["test-tag"]) == 1
+
+    # Test minimal endpoint card without desc, params, or responses
+    minimal_card = "".join(
+        _render_opblock(
+            "GET",
+            "/minimal",
+            {"summary": "Minimal"},
+        )
+    )
+    assert "curl -X GET" in minimal_card
+
+    # Test redoc endpoint card with desc, params, and responses
+    detailed_redoc = "".join(
+        _render_redoc_endpoint_card(
+            "POST",
+            "/detailed",
+            {
+                "summary": "Detailed",
+                "description": "Endpoint description",
+                "parameters": [{"name": "q", "in": "query", "schema": {"type": "string"}}],
+                "responses": {"200": {"description": "OK"}},
+            },
+        )
+    )
+    assert "Endpoint description" in detailed_redoc

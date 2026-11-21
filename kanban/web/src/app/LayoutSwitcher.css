@@ -39,7 +39,7 @@
   position: relative;
 }
 
-@media (max-width: 767px) {
+@media (max-width: 767px), (max-height: 540px) {
   .kb-layout-switcher-desktop {
     display: none;
   }
@@ -48,7 +48,7 @@
   }
 }
 
-@media (min-width: 768px) {
+@media (min-width: 768px) and (min-height: 541px) {
   .kb-layout-switcher-desktop {
     display: flex;
   }

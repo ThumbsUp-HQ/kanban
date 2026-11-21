@@ -168,11 +168,12 @@ export function AppShell({
   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 
   // Auto-close mobile sidebar on navigation
-  useEffect(() => {
-    queueMicrotask(() => {
-      setMobileSidebarOpen(false);
-    });
-  }, [location.pathname, location.search]);
+  const currentLoc = location.pathname + location.search;
+  const [prevLocation, setPrevLocation] = useState(currentLoc);
+  if (prevLocation !== currentLoc) {
+    setPrevLocation(currentLoc);
+    setMobileSidebarOpen(false);
+  }
 
   // Auto-close mobile sidebar when viewport expands past 1280px
   useEffect(() => {

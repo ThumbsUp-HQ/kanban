@@ -261,4 +261,21 @@ describe('IssueNavigatorBar (KAN-52 Problem 1)', () => {
     const stateSelect = screen.getByTestId('navigator-filter-state');
     fireEvent.change(stateSelect, { target: { value: 'todo' } });
   });
+
+  it('toggles filters expansion via mobile filters toggle button', () => {
+    render(
+      <IssueNavigatorBar
+        projectKey="KAN"
+        issues={mockIssues}
+        queryMode="basic"
+      />,
+    );
+
+    const toggleBtn = screen.getByTestId('navigator-filters-toggle');
+    expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
+    fireEvent.click(toggleBtn);
+    expect(toggleBtn.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.click(toggleBtn);
+    expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
+  });
 });

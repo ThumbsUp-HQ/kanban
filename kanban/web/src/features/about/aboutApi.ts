@@ -42,6 +42,11 @@ export interface SystemAboutData {
   readonly notice: string;
   readonly sbom_summary: SbomSummary;
   readonly components: readonly SbomComponent[];
+  readonly git_commit?: string;
+  readonly build_timestamp?: string | null;
+  readonly openapi_version?: string;
+  readonly openapi_bundle_hash?: string;
+  readonly frontend_bundle_hash?: string | null;
 }
 
 export async function fetchSystemAbout(): Promise<SystemAboutData> {

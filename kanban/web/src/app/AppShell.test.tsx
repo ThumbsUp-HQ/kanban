@@ -172,6 +172,7 @@ describe('AppShell', () => {
   });
 
   it('covers computeCurrentSection branches and kb:open-manage-access events', () => {
+    expect(computeCurrentSection('/about')).toBe('About');
     expect(computeCurrentSection('/projects/KAN/settings/workflows')).toBe('Workflows');
     expect(computeCurrentSection('/workflows')).toBe('Workflows');
     expect(computeCurrentSection('/projects/KAN/settings/custom-fields')).toBe('Custom Fields');

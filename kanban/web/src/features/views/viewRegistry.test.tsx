@@ -2083,7 +2083,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
         Object.defineProperty(window, 'innerHeight', { writable: true, configurable: true, value: 900 });
         window.history.replaceState({ suppressAutoPeek: true }, '', '/projects/KAN/issues?layout=list');
 
-        render(
+        const { unmount: unmountTop } = render(
           <IssuesWorkspaceRoute
             projectKey="KAN"
             initialLayout="list"
@@ -2093,6 +2093,44 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
 
         // Does NOT bounce back into issues[0]!
         expect(screen.queryByTestId('split-surface-close-btn')).toBeNull();
+        unmountTop();
+
+        // React Router usr.suppressAutoPeek nested state
+        window.history.replaceState({ usr: { suppressAutoPeek: true } }, '', '/projects/KAN/issues?layout=list');
+        const { unmount: unmountUsr } = render(
+          <IssuesWorkspaceRoute
+            projectKey="KAN"
+            initialLayout="list"
+            initialIssues={FIXTURE_12_ISSUES}
+          />
+        );
+        expect(screen.queryByTestId('split-surface-close-btn')).toBeNull();
+        unmountUsr();
+
+        // Explicit peek=none param (covers line 996)
+        window.history.replaceState({}, '', '/projects/KAN/issues?layout=list&peek=none');
+        const { unmount: unmountNone } = render(
+          <IssuesWorkspaceRoute
+            projectKey="KAN"
+            initialLayout="list"
+            initialIssues={FIXTURE_12_ISSUES}
+          />
+        );
+        expect(screen.queryByTestId('split-surface-close-btn')).toBeNull();
+        unmountNone();
+
+        // Closing split view for firstRailIssue.key (covers line 1011)
+        window.history.replaceState({}, '', '/projects/KAN/issues?layout=list');
+        const { unmount: unmountClose } = render(
+          <IssuesWorkspaceRoute
+            projectKey="KAN"
+            initialLayout="list"
+            initialIssues={FIXTURE_12_ISSUES}
+          />
+        );
+        const splitCloseBtn = screen.getByTestId('split-surface-close-btn');
+        fireEvent.click(splitCloseBtn);
+        unmountClose();
       } finally {
         window.history.replaceState({}, '', '/projects/KAN/issues?layout=list');
         Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: originalInnerWidth });

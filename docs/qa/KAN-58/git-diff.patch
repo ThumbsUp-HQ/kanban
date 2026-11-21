@@ -1,8 +1,16 @@
 diff --git a/kanban/web/src/app/AppShell.test.tsx b/kanban/web/src/app/AppShell.test.tsx
-index 7a9891c1..4229a91f 100644
+index 7a9891c1..fb050b2b 100644
 --- a/kanban/web/src/app/AppShell.test.tsx
 +++ b/kanban/web/src/app/AppShell.test.tsx
-@@ -459,4 +459,51 @@ describe('AppShell', () => {
+@@ -172,6 +172,7 @@ describe('AppShell', () => {
+   });
+ 
+   it('covers computeCurrentSection branches and kb:open-manage-access events', () => {
++    expect(computeCurrentSection('/about')).toBe('About');
+     expect(computeCurrentSection('/projects/KAN/settings/workflows')).toBe('Workflows');
+     expect(computeCurrentSection('/workflows')).toBe('Workflows');
+     expect(computeCurrentSection('/projects/KAN/settings/custom-fields')).toBe('Custom Fields');
+@@ -459,4 +460,51 @@ describe('AppShell', () => {
      expect(surfaceHost).toBeDefined();
      expect(surfaceHost?.querySelector('.surface--drawer')).toBeNull();
    });
@@ -55,7 +63,7 @@ index 7a9891c1..4229a91f 100644
 +  });
  });
 diff --git a/kanban/web/src/app/AppShell.tsx b/kanban/web/src/app/AppShell.tsx
-index fc09b264..afed606e 100644
+index fc09b264..1aef2b26 100644
 --- a/kanban/web/src/app/AppShell.tsx
 +++ b/kanban/web/src/app/AppShell.tsx
 @@ -126,7 +126,8 @@ export function AppShell({
@@ -68,17 +76,18 @@ index fc09b264..afed606e 100644
  
    const isPublicRoute =
      location.pathname.startsWith('/login') ||
-@@ -165,6 +166,26 @@ export function AppShell({
+@@ -165,6 +166,27 @@ export function AppShell({
    }, [activeProjectKey, navigate]);
  
    const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
 +
 +  // Auto-close mobile sidebar on navigation
-+  useEffect(() => {
-+    queueMicrotask(() => {
-+      setMobileSidebarOpen(false);
-+    });
-+  }, [location.pathname, location.search]);
++  const currentLoc = location.pathname + location.search;
++  const [prevLocation, setPrevLocation] = useState(currentLoc);
++  if (prevLocation !== currentLoc) {
++    setPrevLocation(currentLoc);
++    setMobileSidebarOpen(false);
++  }
 +
 +  // Auto-close mobile sidebar when viewport expands past 1280px
 +  useEffect(() => {
@@ -96,14 +105,14 @@ index fc09b264..afed606e 100644
      try {
        const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);
 diff --git a/kanban/web/src/app/LayoutSwitcher.css b/kanban/web/src/app/LayoutSwitcher.css
-index 29cc5032..1e07c1af 100644
+index 29cc5032..fe440bc2 100644
 --- a/kanban/web/src/app/LayoutSwitcher.css
 +++ b/kanban/web/src/app/LayoutSwitcher.css
 @@ -39,6 +39,24 @@
    position: relative;
  }
  
-+@media (max-width: 767px) {
++@media (max-width: 767px), (max-height: 540px) {
 +  .kb-layout-switcher-desktop {
 +    display: none;
 +  }
@@ -112,7 +121,7 @@ index 29cc5032..1e07c1af 100644
 +  }
 +}
 +
-+@media (min-width: 768px) {
++@media (min-width: 768px) and (min-height: 541px) {
 +  .kb-layout-switcher-desktop {
 +    display: flex;
 +  }
@@ -243,7 +252,7 @@ index d9f37ad0..fcc7f5b5 100644
  
  .kb-topbar-hamburger:hover {
 diff --git a/kanban/web/src/features/board/board.css b/kanban/web/src/features/board/board.css
-index 5f3b5a3a..e6d1df01 100644
+index 5f3b5a3a..60989b59 100644
 --- a/kanban/web/src/features/board/board.css
 +++ b/kanban/web/src/features/board/board.css
 @@ -9,7 +9,7 @@
@@ -255,6 +264,15 @@ index 5f3b5a3a..e6d1df01 100644
    height: 100%;
    max-height: 100%;
    min-height: 0;
+@@ -51,7 +51,7 @@
+ }
+ 
+ @media (max-width: 768px) {
+-  .kb-main-canvas {
++  .kb-main-canvas:has(.board-canvas) {
+     padding: 12px;
+     max-width: 100%;
+     overflow-x: hidden;
 diff --git a/kanban/web/src/features/drawer/IssueHeader.tsx b/kanban/web/src/features/drawer/IssueHeader.tsx
 index f72cede0..76f0358b 100644
 --- a/kanban/web/src/features/drawer/IssueHeader.tsx
@@ -296,10 +314,10 @@ index f72cede0..76f0358b 100644
  
        {priorityKey && issue.priority && (
 diff --git a/kanban/web/src/features/drawer/IssueSurface.css b/kanban/web/src/features/drawer/IssueSurface.css
-index 44fce293..dd4fa01f 100644
+index 44fce293..f9c569c5 100644
 --- a/kanban/web/src/features/drawer/IssueSurface.css
 +++ b/kanban/web/src/features/drawer/IssueSurface.css
-@@ -262,20 +262,19 @@
+@@ -262,20 +262,22 @@
    }
  }
  
@@ -320,37 +338,106 @@ index 44fce293..dd4fa01f 100644
 -    height: 100dvh;
 -    z-index: 200;
 +    height: calc(100dvh - var(--topbar-h, 52px));
++    min-height: calc(100dvh - var(--topbar-h, 52px));
 +    z-index: 100;
++    border-left: none;
++    border-top: none;
      box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.2);
    }
    .surface__body,
-@@ -344,19 +343,18 @@
+@@ -344,24 +346,6 @@
    }
  }
  
 -@media (max-width: 767px) {
-+@media (max-width: 767px), (max-height: 540px) {
-   .surface--split {
-     position: fixed;
+-  .surface--split {
+-    position: fixed;
 -    inset: 0;
 -    top: 0;
-+    top: var(--topbar-h, 52px);
-     left: 0;
-     right: 0;
-     bottom: 0;
-     width: 100vw;
-     max-width: 100%;
+-    left: 0;
+-    right: 0;
+-    bottom: 0;
+-    width: 100vw;
+-    max-width: 100%;
 -    height: 100dvh;
 -    min-height: 100dvh;
 -    z-index: 200;
-+    height: calc(100dvh - var(--topbar-h, 52px));
-+    min-height: calc(100dvh - var(--topbar-h, 52px));
-+    z-index: 100;
-     border-left: none;
-     border-top: none;
-   }
+-    border-left: none;
+-    border-top: none;
+-  }
+-}
+-
+ .surface__header--split {
+   display: flex;
+   align-items: center;
+@@ -373,6 +357,36 @@
+   flex-shrink: 0;
+ }
+ 
++.split-surface-close-btn {
++  width: auto;
++  min-width: max-content;
++  min-height: 36px;
++  height: auto;
++  padding: 4px 10px;
++  gap: 6px;
++  white-space: nowrap;
++  flex-shrink: 0;
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  font-size: 0.875rem;
++  color: var(--fg-muted);
++  background: transparent;
++  border: none;
++  border-radius: var(--radius-sm, 4px);
++  cursor: pointer;
++}
++
++.split-surface-close-btn:hover {
++  color: var(--fg-primary);
++  background: var(--bg-hover);
++}
++
++.split-back-text {
++  white-space: nowrap;
++  font-size: 12px;
++}
++
+ .issue-header__new-tab-link {
+   display: inline-flex;
+   align-items: center;
+@@ -484,28 +498,6 @@
+   display: none;
+ }
+ 
+-.split-surface-close-btn {
+-  width: 44px;
+-  height: 44px;
+-  min-width: 44px;
+-  min-height: 44px;
+-  display: inline-flex;
+-  align-items: center;
+-  justify-content: center;
+-  font-size: 1.25rem;
+-  color: var(--fg-muted);
+-  background: transparent;
+-  border: none;
+-  border-radius: var(--radius-sm, 4px);
+-  cursor: pointer;
+-  flex: 0 0 auto;
+-}
+-
+-.split-surface-close-btn:hover {
+-  color: var(--fg-primary);
+-  background: var(--bg-hover);
+-}
+-
+ .surface__quick-props {
+   display: none;
+ }
 diff --git a/kanban/web/src/features/drawer/IssueSurface.test.tsx b/kanban/web/src/features/drawer/IssueSurface.test.tsx
-index 709af4a5..5c34e2c3 100644
+index 709af4a5..ffa13bb7 100644
 --- a/kanban/web/src/features/drawer/IssueSurface.test.tsx
 +++ b/kanban/web/src/features/drawer/IssueSurface.test.tsx
 @@ -1349,6 +1349,55 @@ describe('IssueSurface', () => {
@@ -409,8 +496,24 @@ index 709af4a5..5c34e2c3 100644
      it('renders split-surface-close-btn and invokes onClose in loading and error states', async () => {
        let resolvePromise: (val: unknown) => void = () => {
          /* no-op */
+@@ -1373,6 +1422,7 @@ describe('IssueSurface', () => {
+         </QueryClientProvider>,
+       );
+ 
++      expect(screen.getByTestId('issue-back-to-list-btn')).toBeDefined();
+       const closeLoadingBtn = screen.getByTestId('split-surface-close-btn');
+       fireEvent.click(closeLoadingBtn);
+       expect(onCloseLoading).toHaveBeenCalledTimes(1);
+@@ -1401,6 +1451,7 @@ describe('IssueSurface', () => {
+         expect(screen.getByText('Could not load KAN-ERR.')).toBeDefined();
+       });
+ 
++      expect(screen.getByTestId('issue-back-to-list-btn')).toBeDefined();
+       const closeErrorBtn = screen.getByTestId('split-surface-close-btn');
+       fireEvent.click(closeErrorBtn);
+       expect(onCloseError).toHaveBeenCalledTimes(1);
 diff --git a/kanban/web/src/features/drawer/IssueSurface.tsx b/kanban/web/src/features/drawer/IssueSurface.tsx
-index 8016853f..17c8de6e 100644
+index 8016853f..9ad9d963 100644
 --- a/kanban/web/src/features/drawer/IssueSurface.tsx
 +++ b/kanban/web/src/features/drawer/IssueSurface.tsx
 @@ -243,7 +243,7 @@ function IssueSurfaceContent({
@@ -422,7 +525,83 @@ index 8016853f..17c8de6e 100644
      const opener =
        getOpenerElement() ??
        openerRef.current ??
-@@ -1285,7 +1285,7 @@ function IssueSurfaceContent({
+@@ -427,7 +427,7 @@ function IssueSurfaceContent({
+       return (
+         <>
+           <div className={`surface__header ${mode === 'split' ? 'surface__header--split' : ''}`}>
+-            {mode === 'split' ? (
++            {mode === 'split' || mode === 'full' ? (
+               <button
+                 type="button"
+                 className="issue-header__btn split-surface-close-btn"
+@@ -437,7 +437,7 @@ function IssueSurfaceContent({
+                 onClick={handleClose}
+               >
+                 <span aria-hidden="true" className="issue-header__glyph">←</span>
+-                <span className="sr-only">Back</span>
++                <span className="split-back-text" data-testid="issue-back-to-list-btn"> Back to list</span>
+               </button>
+             ) : (
+               <button
+@@ -468,40 +468,28 @@ function IssueSurfaceContent({
+       return (
+         <>
+           <div className={`surface__header ${mode === 'split' ? 'surface__header--split' : ''}`}>
+-            {mode === 'split' && (
++            <button
++              type="button"
++              className="issue-header__btn split-surface-close-btn"
++              data-testid="split-surface-close-btn"
++              aria-label="Back to issues list"
++              title="Back to list"
++              onClick={handleClose}
++            >
++              <span aria-hidden="true" className="issue-header__glyph">←</span>
++              <span className="split-back-text" data-testid="issue-back-to-list-btn"> Back to list</span>
++            </button>
++            {mode !== 'split' && (
+               <button
+                 type="button"
+-                className="issue-header__btn split-surface-close-btn"
+-                data-testid="split-surface-close-btn"
+-                aria-label="Back to issues list"
+-                title="Back to list"
+-                onClick={handleClose}
++                className="issue-header__btn"
++                aria-label={mode === 'full' ? 'Return to side panel' : 'Open in full screen'}
++                aria-keyshortcuts="Meta+Shift+F Control+Shift+F"
++                onClick={handleToggleFullScreen}
+               >
+-                <span aria-hidden="true" className="issue-header__glyph">←</span>
+-                <span className="sr-only">Back</span>
++                <span aria-hidden="true" className="issue-header__glyph">↗</span>
+               </button>
+             )}
+-            {mode !== 'split' && (
+-              <>
+-                <button
+-                  type="button"
+-                  className="issue-header__btn"
+-                  aria-label="Close issue panel"
+-                  onClick={handleClose}
+-                >
+-                  <span aria-hidden="true" className="issue-header__glyph">→</span>
+-                </button>
+-                <button
+-                  type="button"
+-                  className="issue-header__btn"
+-                  aria-label={mode === 'full' ? 'Return to side panel' : 'Open in full screen'}
+-                  aria-keyshortcuts="Meta+Shift+F Control+Shift+F"
+-                  onClick={handleToggleFullScreen}
+-                >
+-                  <span aria-hidden="true" className="issue-header__glyph">↗</span>
+-                </button>
+-              </>
+-            )}
+             <span className="mono issue-header__key">{mode === 'split' ? `#${issueKey}` : issueKey}</span>
+           </div>
+           <div className="surface__body">
+@@ -1285,7 +1273,7 @@ function IssueSurfaceContent({
                onClick={handleClose}
              >
                <span aria-hidden="true" className="issue-header__glyph">←</span>
@@ -431,6 +610,20 @@ index 8016853f..17c8de6e 100644
              </button>
  
              <div className="split-breadcrumb" data-testid="split-breadcrumb">
+diff --git a/kanban/web/src/features/list/ListView.test.tsx b/kanban/web/src/features/list/ListView.test.tsx
+index bb2de9a3..0fbc3127 100644
+--- a/kanban/web/src/features/list/ListView.test.tsx
++++ b/kanban/web/src/features/list/ListView.test.tsx
+@@ -575,4 +575,9 @@ describe('ListView (KAN-52 Left Master Rail)', () => {
+     unmount();
+     localStorage.clear();
+   });
++
++  it('renders list-view-loading skeleton when issues is empty and isLoading is true', () => {
++    render(<ListView issues={[]} isLoading={true} />);
++    expect(screen.getByTestId('list-view-loading')).toBeDefined();
++  });
+ });
 diff --git a/kanban/web/src/features/list/ListView.tsx b/kanban/web/src/features/list/ListView.tsx
 index 7f760447..44f0d643 100644
 --- a/kanban/web/src/features/list/ListView.tsx
@@ -493,6 +686,32 @@ index 84834151..7c51bc42 100644
  .navigator-mode-btn--active {
    background: var(--bg-hover, #2c313a);
    color: var(--fg-primary, #f8fafc);
+diff --git a/kanban/web/src/features/views/IssueNavigatorBar.test.tsx b/kanban/web/src/features/views/IssueNavigatorBar.test.tsx
+index e3582bf1..5c59ebe9 100644
+--- a/kanban/web/src/features/views/IssueNavigatorBar.test.tsx
++++ b/kanban/web/src/features/views/IssueNavigatorBar.test.tsx
+@@ -261,4 +261,21 @@ describe('IssueNavigatorBar (KAN-52 Problem 1)', () => {
+     const stateSelect = screen.getByTestId('navigator-filter-state');
+     fireEvent.change(stateSelect, { target: { value: 'todo' } });
+   });
++
++  it('toggles filters expansion via mobile filters toggle button', () => {
++    render(
++      <IssueNavigatorBar
++        projectKey="KAN"
++        issues={mockIssues}
++        queryMode="basic"
++      />,
++    );
++
++    const toggleBtn = screen.getByTestId('navigator-filters-toggle');
++    expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
++    fireEvent.click(toggleBtn);
++    expect(toggleBtn.getAttribute('aria-expanded')).toBe('true');
++    fireEvent.click(toggleBtn);
++    expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
++  });
+ });
 diff --git a/kanban/web/src/features/views/IssueNavigatorBar.tsx b/kanban/web/src/features/views/IssueNavigatorBar.tsx
 index 3d5cbc4a..fe034379 100644
 --- a/kanban/web/src/features/views/IssueNavigatorBar.tsx
@@ -565,10 +784,10 @@ index a4bc3308..5383c233 100644
    display: flex;
    flex-direction: column;
 diff --git a/kanban/web/src/features/views/viewRegistry.test.tsx b/kanban/web/src/features/views/viewRegistry.test.tsx
-index a5814e66..a762b310 100644
+index a5814e66..d7159e83 100644
 --- a/kanban/web/src/features/views/viewRegistry.test.tsx
 +++ b/kanban/web/src/features/views/viewRegistry.test.tsx
-@@ -2057,6 +2057,49 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+@@ -2057,6 +2057,87 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
        }
      });
  
@@ -598,7 +817,7 @@ index a5814e66..a762b310 100644
 +        Object.defineProperty(window, 'innerHeight', { writable: true, configurable: true, value: 900 });
 +        window.history.replaceState({ suppressAutoPeek: true }, '', '/projects/KAN/issues?layout=list');
 +
-+        render(
++        const { unmount: unmountTop } = render(
 +          <IssuesWorkspaceRoute
 +            projectKey="KAN"
 +            initialLayout="list"
@@ -608,6 +827,44 @@ index a5814e66..a762b310 100644
 +
 +        // Does NOT bounce back into issues[0]!
 +        expect(screen.queryByTestId('split-surface-close-btn')).toBeNull();
++        unmountTop();
++
++        // React Router usr.suppressAutoPeek nested state
++        window.history.replaceState({ usr: { suppressAutoPeek: true } }, '', '/projects/KAN/issues?layout=list');
++        const { unmount: unmountUsr } = render(
++          <IssuesWorkspaceRoute
++            projectKey="KAN"
++            initialLayout="list"
++            initialIssues={FIXTURE_12_ISSUES}
++          />
++        );
++        expect(screen.queryByTestId('split-surface-close-btn')).toBeNull();
++        unmountUsr();
++
++        // Explicit peek=none param (covers line 996)
++        window.history.replaceState({}, '', '/projects/KAN/issues?layout=list&peek=none');
++        const { unmount: unmountNone } = render(
++          <IssuesWorkspaceRoute
++            projectKey="KAN"
++            initialLayout="list"
++            initialIssues={FIXTURE_12_ISSUES}
++          />
++        );
++        expect(screen.queryByTestId('split-surface-close-btn')).toBeNull();
++        unmountNone();
++
++        // Closing split view for firstRailIssue.key (covers line 1011)
++        window.history.replaceState({}, '', '/projects/KAN/issues?layout=list');
++        const { unmount: unmountClose } = render(
++          <IssuesWorkspaceRoute
++            projectKey="KAN"
++            initialLayout="list"
++            initialIssues={FIXTURE_12_ISSUES}
++          />
++        );
++        const splitCloseBtn = screen.getByTestId('split-surface-close-btn');
++        fireEvent.click(splitCloseBtn);
++        unmountClose();
 +      } finally {
 +        window.history.replaceState({}, '', '/projects/KAN/issues?layout=list');
 +        Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: originalInnerWidth });
@@ -619,7 +876,7 @@ index a5814e66..a762b310 100644
        window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
        render(
 diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
-index 3e16a030..1d78db7f 100644
+index 3e16a030..4e0cdeac 100644
 --- a/kanban/web/src/features/views/viewRegistry.tsx
 +++ b/kanban/web/src/features/views/viewRegistry.tsx
 @@ -958,12 +958,12 @@ export function IssuesWorkspaceRoute({
@@ -637,7 +894,7 @@ index 3e16a030..1d78db7f 100644
      };
      window.addEventListener('resize', handleResize);
      return () => {
-@@ -978,26 +978,36 @@ export function IssuesWorkspaceRoute({
+@@ -978,26 +978,37 @@ export function IssuesWorkspaceRoute({
      return sortIssuesList(filteredIssues, railSortBy, railSortDir);
    }, [filteredIssues, railSortBy, railSortDir]);
  
@@ -650,11 +907,15 @@ index 3e16a030..1d78db7f 100644
 +      return peekParam && peekParam !== 'none' ? peekParam : null;
      }
 +    const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
++    const historyState =
++      typeof window !== 'undefined'
++        ? (window.history.state as { suppressAutoPeek?: boolean; usr?: { suppressAutoPeek?: boolean } } | null)
++        : null;
 +    const isExplicitlyClosed =
-+      closedSplitKey === '__ALL__' ||
++      Boolean(closedSplitKey) ||
 +      searchParams?.get('closed') === '1' ||
 +      searchParams?.get('peek') === 'none' ||
-+      (typeof window !== 'undefined' && Boolean((window.history.state as { suppressAutoPeek?: boolean } | null)?.suppressAutoPeek));
++      Boolean(historyState?.suppressAutoPeek ?? historyState?.usr?.suppressAutoPeek);
 +
      if (peekParam) {
 +      if (peekParam === 'none') {
@@ -671,15 +932,14 @@ index 3e16a030..1d78db7f 100644
        return firstRailIssue.key;
      }
 -    if (isMobileViewport) {
+-      return null;
+-    }
+-    if (closedSplitKey && closedSplitKey === firstRailIssue.key) {
 +    if (isMobileViewport || isExplicitlyClosed) {
        return null;
      }
--    if (closedSplitKey && closedSplitKey === firstRailIssue.key) {
-+    if (closedSplitKey && (closedSplitKey === firstRailIssue.key || closedSplitKey === '__ALL__')) {
-       return null;
-     }
      return firstRailIssue.key;
-@@ -1009,6 +1019,7 @@ export function IssuesWorkspaceRoute({
+@@ -1009,6 +1020,7 @@ export function IssuesWorkspaceRoute({
        layout === 'list' &&
        !isMobileViewport &&
        peekParam &&
@@ -687,7 +947,7 @@ index 3e16a030..1d78db7f 100644
        firstRailIssue &&
        !sortedRailIssues.some((i) => i.key === peekParam)
      ) {
-@@ -1106,6 +1117,7 @@ export function IssuesWorkspaceRoute({
+@@ -1106,6 +1118,7 @@ export function IssuesWorkspaceRoute({
            <div className="kb-split-list-pane">
              <ListView
                issues={sortedRailIssues}
@@ -695,7 +955,7 @@ index 3e16a030..1d78db7f 100644
                projectKey={projectKey}
                projectStates={projectStates}
                modulesEnabled={modulesEnabled}
-@@ -1142,7 +1154,7 @@ export function IssuesWorkspaceRoute({
+@@ -1142,7 +1155,7 @@ export function IssuesWorkspaceRoute({
                }}
                projectName={typeof projectMetadata?.name === 'string' ? projectMetadata.name : undefined}
                onClose={() => {

@@ -985,11 +985,15 @@ export function IssuesWorkspaceRoute({
       return peekParam && peekParam !== 'none' ? peekParam : null;
     }
     const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+    const historyState =
+      typeof window !== 'undefined'
+        ? (window.history.state as { suppressAutoPeek?: boolean; usr?: { suppressAutoPeek?: boolean } } | null)
+        : null;
     const isExplicitlyClosed =
-      closedSplitKey === '__ALL__' ||
+      Boolean(closedSplitKey) ||
       searchParams?.get('closed') === '1' ||
       searchParams?.get('peek') === 'none' ||
-      (typeof window !== 'undefined' && Boolean((window.history.state as { suppressAutoPeek?: boolean } | null)?.suppressAutoPeek));
+      Boolean(historyState?.suppressAutoPeek ?? historyState?.usr?.suppressAutoPeek);
 
     if (peekParam) {
       if (peekParam === 'none') {
@@ -1005,9 +1009,6 @@ export function IssuesWorkspaceRoute({
       return firstRailIssue.key;
     }
     if (isMobileViewport || isExplicitlyClosed) {
-      return null;
-    }
-    if (closedSplitKey && (closedSplitKey === firstRailIssue.key || closedSplitKey === '__ALL__')) {
       return null;
     }
     return firstRailIssue.key;
