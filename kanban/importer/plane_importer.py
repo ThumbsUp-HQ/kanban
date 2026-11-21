@@ -742,89 +742,89 @@ class PlaneImporter:
             ).digest()  # Actual 32-byte sha256 of source payload
             safe_source_id = att_filename[:128]
 
+            is_md = att_filename.lower().endswith((".md", ".markdown"))
+            if is_md:
+                # Pure markdown attachment: normalize content without calling raster sniffer
+                text_content = raw_bytes.decode("utf-8", errors="surrogatepass")
+                clean_md = normalize_to_markdown(text_content, mode="auto")
+                md_attachments[att_filename] = clean_md
+
             if source_key in mapping_cache:
                 m = mapping_cache[source_key]
                 att_id = m.target_id
                 report.unchanged += 1
+            elif is_md:
+                att_id = uuid.uuid4()
+                new_mapping = ImportEntityMapping(
+                    workspace_id=workspace_id,
+                    source_system="plane",
+                    source_kind="attachment",
+                    source_id=safe_source_id,
+                    target_id=att_id,
+                    source_sha256=source_raw_sha,
+                )
+                self.session.add(new_mapping)
+                mapping_cache[source_key] = new_mapping
+                report.to_create += 1
             else:
-                is_md = att_filename.lower().endswith((".md", ".markdown"))
-                is_svg = not is_md and (
-                    att_filename.lower().endswith(".svg") or raw_bytes.strip().startswith(b"<svg")
+                is_svg = att_filename.lower().endswith(".svg") or raw_bytes.strip().startswith(
+                    b"<svg"
                 )
-                is_pdf = not is_md and (
-                    att_filename.lower().endswith(".pdf")
-                    or raw_bytes.startswith((b"%PDF-1.", b"%PDF-2."))
+                is_pdf = att_filename.lower().endswith(".pdf") or raw_bytes.startswith(
+                    (b"%PDF-1.", b"%PDF-2.")
                 )
-
-                if is_md:
-                    # Pure markdown attachment: normalize content without calling raster sniffer
-                    text_content = raw_bytes.decode("utf-8", errors="replace")
-                    clean_md = normalize_to_markdown(text_content, mode="auto")
-                    md_attachments[att_filename] = clean_md
-                    att_id = uuid.uuid4()
-                    new_mapping = ImportEntityMapping(
-                        workspace_id=workspace_id,
-                        source_system="plane",
-                        source_kind="attachment",
-                        source_id=safe_source_id,
-                        target_id=att_id,
-                        source_sha256=source_raw_sha,
+                if is_svg:
+                    clean_svg_val = sanitize_svg(raw_bytes)
+                    clean_bytes = clean_svg_val.encode("utf-8")
+                    detected_type = "image/svg+xml"
+                    p_w, p_h, page_cnt = None, None, None
+                elif is_pdf:
+                    detected_type = sniff_media_type(
+                        raw_bytes[:4096], "application/pdf", att_filename
                     )
-                    self.session.add(new_mapping)
-                    mapping_cache[source_key] = new_mapping
-                    report.to_create += 1
+                    pdf_res = await sanitize_and_validate_pdf(raw_bytes)
+                    clean_bytes = pdf_res.clean_bytes
+                    p_w, p_h, page_cnt = None, None, pdf_res.page_count
                 else:
-                    if is_svg:
-                        clean_svg_val = sanitize_svg(raw_bytes)
-                        clean_bytes = clean_svg_val.encode("utf-8")
-                        detected_type = "image/svg+xml"
-                        p_w, p_h, page_cnt = None, None, None
-                    elif is_pdf:
-                        detected_type = sniff_media_type(
-                            raw_bytes[:4096], "application/pdf", att_filename
-                        )
-                        pdf_res = await sanitize_and_validate_pdf(raw_bytes)
-                        clean_bytes = pdf_res.clean_bytes
-                        p_w, p_h, page_cnt = None, None, pdf_res.page_count
-                    else:
-                        detected_type = sniff_media_type(raw_bytes[:4096], None, att_filename)
-                        processed = await sanitize_and_reencode_raster(raw_bytes, detected_type)
-                        clean_bytes = processed.clean_bytes
-                        p_w, p_h, page_cnt = processed.pixel_width, processed.pixel_height, None
+                    detected_type = sniff_media_type(raw_bytes[:4096], None, att_filename)
+                    processed = await sanitize_and_reencode_raster(raw_bytes, detected_type)
+                    clean_bytes = processed.clean_bytes
+                    p_w, p_h, page_cnt = processed.pixel_width, processed.pixel_height, None
 
-                    storage_key, clean_sha = self.blob_store.store(clean_bytes)
-                    att_id = uuid.uuid4()
-                    att = Attachment(
-                        id=att_id,
-                        workspace_id=workspace_id,
-                        project_id=target_project_id,
-                        uploaded_by_id=self.caller.principal_id,
-                        original_filename=att_filename,
-                        content_type=detected_type,
-                        byte_size=len(clean_bytes),
-                        pixel_width=p_w,
-                        pixel_height=p_h,
-                        page_count=page_cnt,
-                        blob_sha256=clean_sha,
-                        storage_key=storage_key,
-                    )
-                    self.session.add(att)
-                    await self.session.flush()
+                storage_key, clean_sha = self.blob_store.store(clean_bytes)
+                att_id = uuid.uuid4()
+                att = Attachment(
+                    id=att_id,
+                    workspace_id=workspace_id,
+                    project_id=target_project_id,
+                    uploaded_by_id=self.caller.principal_id,
+                    original_filename=att_filename,
+                    content_type=detected_type,
+                    byte_size=len(clean_bytes),
+                    pixel_width=p_w,
+                    pixel_height=p_h,
+                    page_count=page_cnt,
+                    blob_sha256=clean_sha,
+                    storage_key=storage_key,
+                )
+                self.session.add(att)
+                await self.session.flush()
 
-                    new_mapping = ImportEntityMapping(
-                        workspace_id=workspace_id,
-                        source_system="plane",
-                        source_kind="attachment",
-                        source_id=safe_source_id,
-                        target_id=att_id,
-                        source_sha256=source_raw_sha,
-                    )
-                    self.session.add(new_mapping)
-                    mapping_cache[source_key] = new_mapping
-                    report.to_create += 1
+                new_mapping = ImportEntityMapping(
+                    workspace_id=workspace_id,
+                    source_system="plane",
+                    source_kind="attachment",
+                    source_id=safe_source_id,
+                    target_id=att_id,
+                    source_sha256=source_raw_sha,
+                )
+                self.session.add(new_mapping)
+                mapping_cache[source_key] = new_mapping
+                report.to_create += 1
 
-            attachment_url_map[att_filename] = att_id
-            attachment_url_map[f"/api/assets/v1/workspace/{att_filename}"] = att_id
+            if not is_md:
+                attachment_url_map[att_filename] = att_id
+                attachment_url_map[f"/api/assets/v1/workspace/{att_filename}"] = att_id
 
         # 8. Filter and Partition Issues
         active_issues = [

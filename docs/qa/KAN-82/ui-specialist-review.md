@@ -1,13 +1,13 @@
-# UI Specialist Review (KAN-82 / KB-IMPORT-PLANE-02)
+# UI Specialist Review (KAN-82 / KB-MIGRATION-PLANE-DB-01)
 
 ## Overview & UX Architecture Verification
 
-- **Commit SHA**: `7465d80ed87a`
+- **Commit SHA**: `fe37fd7a`
 - **Module**: `kanban/web/src/features/board/`, `kanban/web/src/features/drawer/`
 - **Reviewed By**: UI/UX Specialist (`ui-spec`)
 - **Status**: APPROVED (Ready for reality-checker QA gate)
 
-## UI Implementation Details & Round-2 Audit
+## UI Implementation Details & Audit
 
 1. **Board View Post-Merge State Rendering (`BoardView.tsx`)**:
    - Validated board column layout following full Plane DB merge (~221 Plane issues merged into `kanban/KAN` project, bringing total to 304 issues).
@@ -43,7 +43,7 @@ All 5 zero-mock Playwright screenshots captured against live container `kanban-l
 
 ## Test Execution Proof
 
-- **Backend Pytest**: 59 tests passed (including `test_plane_db_exporter.py`, `test_plane_importer.py`, `test_plane_merge_into_project.py`, `test_cutover_verifier.py`).
+- **Backend Pytest**: 59 tests passed (including `test_plane_db_exporter.py`, `test_plane_importer.py`, `test_plane_merge_into_project.py`, `test_cutover_verifier.py`, `test_import_plane_cli.py`).
 - **Frontend Vitest**: 18 tests passed in `useIssueSurfaceRoute.test.ts`.
 - **Cutover Verification Gate**: 6/6 checks passed across all 21 imported projects and merged `kanban/KAN`.
 - **Linter & Typecheck**: `tsc -b --noEmit` and `eslint . --max-warnings 0` both passed with 0 errors and 0 warnings.

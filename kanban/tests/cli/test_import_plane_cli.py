@@ -25,7 +25,7 @@ from kanban.cli.import_plane import (
     _run_plane_import,
     register_import_subparsers,
 )
-from kanban.importer.plane_client import PlaneSecurityError
+from kanban.importer.plane_client import PlaneBundle, PlaneSecurityError
 from kanban.importer.plane_importer import ImportIntegrityError
 
 FIXTURE_DIR = Path("tests/fixtures/plane_export_kanba").resolve()
@@ -167,6 +167,90 @@ def test_run_plane_import_delegates_to_asyncio(tmp_path: Path) -> None:
     )
     with patch("kanban.cli.import_plane.asyncio.run", side_effect=fake_run):
         assert _run_plane_import(args_no_map) == 0
+
+
+@pytest.mark.asyncio
+async def test_execute_import_db_target_project_and_attachment_dir_passthrough(
+    pg_worker_db: AsyncEngine,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Verify _execute_import_db reads KANBAN_ATTACHMENT_DIR and passes target_project to PlaneImporter."""
+    att_dir = str(tmp_path / "custom_blobs")
+    monkeypatch.setenv("KANBAN_ATTACHMENT_DIR", att_dir)
+    monkeypatch.setenv("KANBAN_DATABASE_URL", str(pg_worker_db.url))
+
+    factory = RLSSessionFactory(pg_worker_db)
+    ws_id = uuid.uuid4()
+    ws_slug = f"cli-ws-{ws_id.hex[:8]}"
+    anon_ctx = RLSContext(principal_id=uuid.UUID(int=0), workspace_id=uuid.UUID(int=0), aal_level=1)
+
+    async with factory.session(anon_ctx) as session:
+        await session.execute(
+            text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, 'CLI WS')"),
+            {"id": ws_id, "slug": ws_slug},
+        )
+        u_id = uuid.uuid4()
+        await session.execute(
+            text(
+                "SELECT register_object('user'::object_kind, :ws_id, NULL, :ckey, 'CLI Admin', :u_id, :u_id)"
+            ),
+            {"ws_id": ws_id, "ckey": f"usr-{u_id.hex}", "u_id": u_id},
+        )
+        await session.execute(
+            text(
+                "INSERT INTO principals (id, principal_type, workspace_id, display_name, status) VALUES (:id, 'USER', :ws_id, 'CLI Admin', 'ACTIVE')"
+            ),
+            {"id": u_id, "ws_id": ws_id},
+        )
+        await session.execute(
+            text(
+                "INSERT INTO role_bindings (id, workspace_id, principal_id, role, scope_type, project_id) "
+                "VALUES (:id, :ws_id, :pid, 'WORKSPACE_ADMIN', 'workspace', NULL)"
+            ),
+            {"id": uuid.uuid4(), "ws_id": ws_id, "pid": u_id},
+        )
+        await session.commit()
+
+    args = argparse.Namespace(
+        bundle_dir=str(FIXTURE_DIR),
+        workspace=ws_slug,
+        target_project="KAN",
+        exclude_project_identifiers="TEST",
+        user_map=None,
+        dry_run=True,
+        report_out=None,
+    )
+
+    mock_bundle = PlaneBundle(projects=[], issues=[])
+    mock_report = AsyncMock()
+    mock_report.unchanged = 5
+    mock_report.to_create = 0
+    mock_report.to_update = 0
+    mock_report.orphans = 0
+    mock_report.rewritten_attachments = 0
+    mock_report.key_remap_manifest = {}
+    mock_report.source_audit_records = {}
+
+    with (
+        patch(
+            "kanban.importer.plane_client.PlaneClient.load_bundle_from_dir",
+            return_value=mock_bundle,
+        ),
+        patch("kanban.cli.import_plane.PlaneImporter") as mock_importer_cls,
+    ):
+        mock_importer = AsyncMock()
+        mock_importer.run_import.return_value = mock_report
+        mock_importer_cls.return_value = mock_importer
+
+        res = await _execute_import_db(args, mock_bundle, {})
+        assert res == 0
+
+        mock_importer_cls.assert_called_once()
+        _, kwargs = mock_importer_cls.call_args
+        assert kwargs["target_project_identifier"] == "KAN"
+        assert kwargs["blob_store_root"] == att_dir
+        assert kwargs["exclude_project_identifiers"] == "TEST"
 
 
 @pytest.mark.asyncio

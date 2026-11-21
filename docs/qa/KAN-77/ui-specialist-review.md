@@ -2,12 +2,12 @@
 
 ## Overview & UX Architecture Verification
 
-- **Commit SHA**: `7465d80ed87a`
+- **Commit SHA**: `fe37fd7a`
 - **Module**: `kanban/web/src/features/admin-imports/`, `kanban/web/src/features/drawer/`
 - **Reviewed By**: UI/UX Specialist (`ui-spec`)
 - **Status**: APPROVED (Ready for reality-checker QA gate)
 
-## UI Implementation Details & Round-2 Audit
+## UI Implementation Details & Audit
 
 1. **`PlaneImportStudio.tsx` Multi-Source Selection & Drag-and-Drop**:
    - Added interactive source selection tabs supporting Plane, Jira, GitHub Issues, and Linear import formats.
@@ -28,9 +28,10 @@
 
 ## Responsive Layout & Zero-Mock Screenshot Audit
 
-All 5 zero-mock Playwright screenshots captured against live container `kanban-local-import` (`127.0.0.1:18970:8080`) on `/admin/imports` inspected and verified:
+All 6 zero-mock Playwright screenshots captured against live container `kanban-local-import` (`127.0.0.1:18970:8080`) on `/admin/imports` inspected and verified:
 - `docs/qa/KAN-77/screenshots/1440x900-desktop-dark.png`: 1440x900 desktop dark mode. Shows Plane Migration Import Studio with `Plane | Jira | GitHub Issues | Linear` selector and `Portable Workspace Export` card. Clean initials pill avatar, fluid layout, unclipped buttons.
 - `docs/qa/KAN-77/screenshots/1440x900-desktop-light.png`: 1440x900 desktop light mode. Clean WCAG AA compliant text contrast and background token parity across all import and export cards.
+- `docs/qa/KAN-77/screenshots/1440x900-portable-export-card.png`: 1440x900 desktop viewport scrolled to show full unclipped controls for Portable Workspace Export (workspace slug input, `scrub_text` checkbox, and `Download Portable Bundle (.tar.gz)` button).
 - `docs/qa/KAN-77/screenshots/768x1024-tablet.png`: 768x1024 tablet portrait. Import tabs and file dropzone scale cleanly to tablet width without horizontal clipping.
 - `docs/qa/KAN-77/screenshots/390x844-mobile-portrait.png`: 390x844 mobile portrait. Single-column reflow, unclipped selector buttons, touch targets meet >= 44x44px.
 - `docs/qa/KAN-77/screenshots/844x390-mobile-landscape.png`: 844x390 mobile landscape. Sticky header and compact controls prevent layout squishing.

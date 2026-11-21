@@ -5,7 +5,7 @@
 - **Ticket**: KAN-81 (`[KB-ATTACH-PDF-01]`)
 - **Module**: `kanban.attachments`, `kanban.api.v1.attachments`, `database.models.attachments`
 - **Reviewed By**: Backend & API Specialist (`@api-spec`)
-- **Commit SHA**: `7465d80ed87aacaf4c1be533b36eb9cc4d7765d7` (`7465d80ed87a`)
+- **Commit SHA**: `fe37fd7a604012af520cab1053051ede876a96cb` (`fe37fd7a`)
 - **Status**: STATUS: APPROVED
 
 ---

@@ -2,19 +2,19 @@
 
 ## Overview & UX Architecture Verification
 
-- **Commit SHA**: `7465d80ed87a`
+- **Commit SHA**: `fe37fd7a`
 - **Module**: `kanban/web/src/components/attachments/`, `kanban/web/src/features/activity/`, `kanban/web/src/features/drawer/`
 - **Reviewed By**: UI/UX Specialist (`ui-spec`)
 - **Status**: APPROVED (Ready for reality-checker QA gate)
 
-## UI Implementation Details & Round-2 Audit
+## UI Implementation Details & Audit
 
 1. **`PdfAttachmentCard.tsx` & `PdfAttachmentCard.css` (Ticket-Canonical Placement)**:
    - Canonical component placed at `kanban/web/src/components/attachments/PdfAttachmentCard.tsx` with unit tests at `src/components/attachments/__tests__/PdfAttachmentCard.test.tsx` (re-exported at `features/activity/PdfAttachmentCard.tsx` for backwards compatibility).
    - Inline-flex container styled with `<span>` semantics to prevent React DOM nesting validation errors inside markdown `<p>` blocks.
    - Accessible document icon `📄` with screen reader region labeling.
    - Filename with ellipsis truncation at max-width 280px.
-   - Metadata badges: Formatted human-readable byte size, verified page count badge (`1 page`, `5 pages`), and truncated 8-character `SHA-256` badge.
+   - Metadata badges: Formatted human-readable byte size (`50.6 KB`), verified page count badge (`2 pages`), and truncated 8-character `SHA-256` badge (`sha256:89a0197d`).
    - Download link appends `?download=1` (`&download=1` if query parameters already exist) with `download={filename}` and canonical theme tokens (`--accent-primary`, `--bg-accent-subtle`).
    - 100% compliance with canonical CSS variables (0 undefined tokens).
 
@@ -37,12 +37,12 @@
 
 ## Responsive Layout & Zero-Mock Screenshot Audit
 
-All 5 zero-mock Playwright screenshots captured against live container `kanban-local-import` (`127.0.0.1:18970:8080`) inspected and verified:
-- `docs/qa/KAN-81/screenshots/1440x900-desktop-dark.png`: 1440x900 desktop dark theme. Crisp contrast, unclipped navigation rail, clean user avatar pill ("A"), unclipped issue title.
-- `docs/qa/KAN-81/screenshots/1440x900-desktop-light.png`: 1440x900 desktop light theme. WCAG 2.1 AA contrast verified on dark text against light backgrounds, clean avatar initials pill.
-- `docs/qa/KAN-81/screenshots/768x1024-tablet.png`: 768x1024 portrait tablet. Sidebar collapses smoothly, drawer overlay fits viewport with no horizontal overflow.
-- `docs/qa/KAN-81/screenshots/390x844-mobile-portrait.png`: 390x844 mobile portrait. Controls reflow vertically, action pills unclipped, touch targets meet >= 44x44px.
-- `docs/qa/KAN-81/screenshots/844x390-mobile-landscape.png`: 844x390 mobile landscape. Compact header preserves vertical real estate, drawer scroll is smooth and unobstructed.
+All 5 zero-mock Playwright screenshots captured against live container `kanban-local-import` (`127.0.0.1:18970:8080`) inspected and verified with `PdfAttachmentCard` visibly in-frame:
+- `docs/qa/KAN-81/screenshots/1440x900-desktop-dark.png`: 1440x900 desktop dark theme. Drawer scrolled to comments visibly showing `PdfAttachmentCard` (`architecture-spec.pdf`, `50.6 KB`, `2 pages`, `sha256:89a0197d`, `⬇ Download`). Clean contrast, unclipped navigation rail, clean user avatar pill ("A").
+- `docs/qa/KAN-81/screenshots/1440x900-desktop-light.png`: 1440x900 desktop light theme. WCAG 2.1 AA contrast verified on dark text against light backgrounds, clean avatar initials pill, card in-frame.
+- `docs/qa/KAN-81/screenshots/768x1024-tablet.png`: 768x1024 portrait tablet. Sidebar collapses smoothly, drawer overlay fits viewport with `PdfAttachmentCard` visibly rendered and unclipped.
+- `docs/qa/KAN-81/screenshots/390x844-mobile-portrait.png`: 390x844 mobile portrait. Controls reflow vertically, action pills unclipped, touch targets meet >= 44x44px, `PdfAttachmentCard` centered.
+- `docs/qa/KAN-81/screenshots/844x390-mobile-landscape.png`: 844x390 mobile landscape. Compact header preserves vertical real estate, `PdfAttachmentCard` fully visible.
 
 ## Specialist Compliance Gates
 

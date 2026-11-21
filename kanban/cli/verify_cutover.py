@@ -9,6 +9,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import sys
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -109,7 +110,22 @@ def _run_cutover_verify(args: argparse.Namespace) -> int:
 
     exempt_keys: list[str] = []
     if args.pre_cutover_exempt_keys:
-        exempt_keys = [k.strip() for k in args.pre_cutover_exempt_keys.split(",") if k.strip()]
+        for k in args.pre_cutover_exempt_keys.split(","):
+            item = k.strip()
+            if not item:
+                continue
+            range_match = re.match(
+                r"^([A-Z][A-Z0-9]{1,9})-(\d+)\.\.(?:([A-Z][A-Z0-9]{1,9})-)?(\d+)$", item
+            )
+            if range_match:
+                pfx = range_match.group(1)
+                start_n = int(range_match.group(2))
+                end_n = int(range_match.group(4))
+                exempt_keys.extend(
+                    f"{pfx}-{n}" for n in range(min(start_n, end_n), max(start_n, end_n) + 1)
+                )
+            else:
+                exempt_keys.append(item)
 
     source_proj = getattr(args, "source_project", None)
 

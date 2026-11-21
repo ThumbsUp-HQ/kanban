@@ -1,7 +1,7 @@
 # Message to Reality-Checker: Forensic QA Gate Verification (KAN-82)
 
 ## Executive Summary
-This packet provides passive forensic verification evidence for ticket `KAN-82` (`[KB-IMPORT-PLANE-02]`): Plane DB Export/Import Pipeline, Merge Mode into Existing Projects (`--target-project`), and Cutover Verification Gate (`kanban-ctl cutover verify`).
+This packet provides passive forensic verification evidence for ticket `KAN-82` (`[KB-MIGRATION-PLANE-DB-01]`): Plane DB Export/Import Pipeline, Merge Mode into Existing Projects (`--target-project`), and Cutover Verification Gate (`kanban-ctl cutover verify`).
 
 - **Target Commit SHA**: `7465d80ed87a`
 - **Branch**: `main`

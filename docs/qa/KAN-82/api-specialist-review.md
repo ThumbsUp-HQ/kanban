@@ -1,18 +1,18 @@
-# API Specialist Review (KAN-82 / KB-MIGRATION-VERIFY-01)
+# API Specialist Review (KAN-82 / KB-MIGRATION-PLANE-DB-01)
 
 ## Overview & Architecture Verification
 
-- **Ticket**: KAN-82 (`[KB-MIGRATION-VERIFY-01]`)
+- **Ticket**: KAN-82 (`[KB-MIGRATION-PLANE-DB-01]`)
 - **Module**: `kanban.importer.plane_db_exporter`, `kanban.importer.plane_importer`, `kanban.importer.cutover_verifier`, `kanban.cli.import_plane`, `kanban.cli.verify_cutover`
 - **Reviewed By**: Backend & API Specialist (`@api-spec`)
-- **Commit SHA**: `7465d80ed87aacaf4c1be533b36eb9cc4d7765d7` (`7465d80ed87a`)
+- **Commit SHA**: `fe37fd7a604012af520cab1053051ede876a96cb` (`fe37fd7a`)
 - **Status**: STATUS: APPROVED
 
 ---
 
 ## Verbatim Specialist Audit Evaluation
 
-The Round-2 remediation resolves all clean-room reality-checker findings across the Plane database exporter, target project merge mode, and cutover verification gates.
+The Round-2 remediation resolves all clean-room reality-checker findings across the Plane database exporter, target project merge mode, attachment URL remapping, and cutover verification gates.
 
 ### 1. Plane DB Exporter Architecture (Zero-New-Dependency SigV4)
 - **Snapshot Isolation**: Implemented `PlaneDbExporter` using `asyncpg` with `ISOLATION LEVEL REPEATABLE READ; READ ONLY` across all 21 projects.
@@ -25,6 +25,9 @@ The Round-2 remediation resolves all clean-room reality-checker findings across 
 - **Sequence Safety**: `allocate_issue_sequences` atomically reserves sequential key ranges in the target project, advancing the project sequence counter.
 - **Text Normalization**: Calls `normalize_plain_text` on project, module, cycle, state, label, and issue names (rejecting UTF-16 lone surrogates and stripping script tags).
 - **Timestamp Fidelity**: Preserves historical `issue.created_at` and `issue.updated_at` on objects table without triggering `objects_guard_bu`, and preserves `comment.created_at`.
+- **Attachment URL Mapping & Prefix Stripping**:
+  - `plane_importer.py` strictly restricts `attachment_url_map` to binary `Attachment` rows (excluding `.md` and `.markdown` files).
+  - `plane_mapper.py` strips full URL prefixes (`(?:https?://[^\s"'<>()]+|/api/assets/[^\s"'<>()]+)?` ending in `original_ref`) prior to `nh3` HTML sanitization, cleanly rewriting `<img src="http://minio:9000/uploads/diagram.png">` to `/api/v1/attachments/<att_id>`.
 - **Attachment Hash Separation**: Stores original uncompressed `source_raw_sha` on `ImportEntityMapping` while storing post-sanitization `clean_sha` on `Attachment`.
 - **Extension & Magic Sniffing**: Enforces `sniff_media_type` rejecting non-`.pdf` extensions with PDF magic bytes with HTTP 415.
 - **Project Exclusion Filter**: Excludes `TEST` projects preventing leakage of issues, comments, cycles, modules, states, or labels into the target project.

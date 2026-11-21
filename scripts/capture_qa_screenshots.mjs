@@ -22,9 +22,10 @@ const TARGETS = [
     action: async (page) => {
       await page.waitForTimeout(1500);
       await page.evaluate(() => {
-        const el = document.querySelector('[data-testid="pdf-attachment-card"]') ||
-                   document.querySelector('.split-section-attachments') ||
-                   document.querySelector('[data-testid="issue-surface-drawer"]');
+        const el = document.querySelector(".kb-pdf-card") ||
+                   document.querySelector('[aria-label^="PDF Attachment:"]') ||
+                   document.querySelector('[data-testid="pdf-attachment-card"]') ||
+                   document.querySelector('.split-section-attachments');
         if (el) {
           el.scrollIntoView({ behavior: "instant", block: "center" });
         }
@@ -38,6 +39,25 @@ const TARGETS = [
     outDir: "/home/adamoutler/kanban/docs/qa/KAN-77/screenshots",
     action: async (page) => {
       await page.waitForTimeout(1500);
+      await page.evaluate(() => {
+        const main = document.querySelector("main.kb-main-canvas");
+        if (main) {
+          main.scrollTop = 310;
+        }
+      });
+      await page.waitForTimeout(500);
+    },
+    extra: async (page) => {
+      await page.evaluate(() => {
+        const panel = document.querySelector('[data-testid="portable-export-panel"]');
+        if (panel) {
+          panel.scrollIntoView({ behavior: "instant", block: "center" });
+        }
+      });
+      await page.waitForTimeout(500);
+      const outPath = path.join("/home/adamoutler/kanban/docs/qa/KAN-77/screenshots", "1440x900-portable-export-card.png");
+      await page.screenshot({ path: outPath, fullPage: false });
+      console.log(`  -> Saved ${outPath}`);
     },
   },
   {
@@ -117,6 +137,14 @@ async function run() {
       const outPath = path.join(target.outDir, `${vp.name}.png`);
       await page.screenshot({ path: outPath, fullPage: false });
       console.log(`  -> Saved ${outPath}`);
+
+      if (target.extra && vp.name === "1440x900-desktop-light") {
+        try {
+          await target.extra(page);
+        } catch (e) {
+          console.warn(`Extra screenshot failed for ${target.ticket}:`, e.message);
+        }
+      }
 
       await context.close();
     }

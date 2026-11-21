@@ -2,7 +2,7 @@
 # Apache-2.0 License. See LICENSE for details.
 """Comprehensive unit and integration tests for merging Plane into existing project (KAN-82)."""
 
-# ruff: noqa: E501, PLC0415, TC002, TC003, ICN001
+# ruff: noqa: E501, PLC0415, TC002, ICN001, PLR0915
 
 from __future__ import annotations
 
@@ -15,19 +15,34 @@ from sqlalchemy import select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import (
+    Attachment,
     ImportEntityMapping,
     Issue,
     IssueComment,
     IssueKeyAlias,
+    IssueLabel,
+    IssueModule,
+    Module,
     ObjectLink,
     ObjectRecord,
     Project,
+    ProjectLabel,
 )
 from database.tests.conftest import bootstrap_workspace_admin
 from kanban.api.deps import PrincipalContext
 from kanban.content.normalize import ContentNormalizeError
-from kanban.importer.plane_client import PlaneBundle, PlaneComment, PlaneIssue, PlaneProject
+from kanban.importer.plane_client import (
+    PlaneBundle,
+    PlaneComment,
+    PlaneIssue,
+    PlaneLabel,
+    PlaneModule,
+    PlaneProject,
+    PlaneState,
+)
 from kanban.importer.plane_importer import PlaneImporter
+
+FIXTURE_DIR = Path("tests/fixtures/plane_export_kanba").resolve()
 
 
 @pytest.fixture
@@ -126,6 +141,40 @@ async def setup_merge_into_project_env(
         default_prio_id = new_prio.id
 
     # 2. Pre-populate issues KAN-1..KAN-10
+    core_lbl = ProjectLabel(
+        workspace_id=ws_id,
+        project_id=kan_id,
+        name="Core",
+        color_hex="#EF4444",
+    )
+    db_session.add(core_lbl)
+
+    core_mod_id = (
+        await db_session.execute(
+            text(
+                "SELECT register_object("
+                "  CAST('module' AS object_kind), :ws, :proj, :ckey, :title, :creator"
+                ")"
+            ),
+            {
+                "ws": ws_id,
+                "proj": kan_id,
+                "ckey": "mod-core-01",
+                "title": "Core Module",
+                "creator": admin_id,
+            },
+        )
+    ).scalar_one()
+
+    core_mod = Module(
+        id=core_mod_id,
+        workspace_id=ws_id,
+        project_id=kan_id,
+        name="Core Module",
+        status="in_progress",
+    )
+    db_session.add(core_mod)
+
     for seq in range(1, 11):
         iss_id = (
             await db_session.execute(
@@ -177,6 +226,15 @@ async def test_plane_merge_into_project_full_lifecycle(
             PlaneProject(id="p-kanba", identifier="KANBA", name="Kanba Source Project"),
             PlaneProject(id="p-test", identifier="TEST", name="Test Excluded Project"),
         ],
+        states=[
+            PlaneState(id="s-todo", name="Todo", group="unstarted", project="p-kanba"),
+        ],
+        labels=[
+            PlaneLabel(id="l-core", name="Core", color="#FF0000", project="p-kanba"),
+        ],
+        modules=[
+            PlaneModule(id="m-core", name="Core Module", project="p-kanba"),
+        ],
         issues=[
             PlaneIssue(
                 id="i-kanba-1",
@@ -187,6 +245,8 @@ async def test_plane_merge_into_project_full_lifecycle(
                     "docs/qa/KANBA-1/unit-test-results.txt path directly</p>"
                 ),
                 project="p-kanba",
+                labels=["l-core"],
+                module_id="m-core",
                 created_at="2026-01-01T10:00:00Z",
                 updated_at="2026-01-01T10:05:00Z",
             ),
@@ -436,7 +496,70 @@ async def test_plane_merge_into_project_full_lifecycle(
     expected_data_sha = hashlib.sha256(bundle.attachments["data.png"]).digest()
     assert data_png_mapping.source_sha256 == expected_data_sha
 
-    # 11. Idempotent re-run allocates 0 extra sequences
+    # 11. Deduplication of states, labels, and modules
+    lbls = (
+        (
+            await session.execute(
+                select(ProjectLabel).where(ProjectLabel.project_id == target_proj.id)
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(lbls) == 1
+    assert lbls[0].name == "Core"
+
+    mods = (
+        (await session.execute(select(Module).where(Module.project_id == target_proj.id)))
+        .scalars()
+        .all()
+    )
+    assert len(mods) == 1
+    assert mods[0].name == "Core Module"
+
+    kan_11_lbl = (
+        await session.execute(select(IssueLabel).where(IssueLabel.issue_id == kan_11.id))
+    ).scalar_one()
+    assert kan_11_lbl.label_id == lbls[0].id
+
+    kan_11_mod = (
+        await session.execute(select(IssueModule).where(IssueModule.issue_id == kan_11.id))
+    ).scalar_one()
+    assert kan_11_mod.module_id == mods[0].id
+
+    # 12. Markdown details block and binary attachment separation
+    kan_14 = (
+        await session.execute(
+            select(Issue).where(
+                Issue.project_id == target_proj.id,
+                Issue.sequence_id == 14,
+            )
+        )
+    ).scalar_one()
+    assert "<details>" in kan_14.description_markdown
+    assert "<summary>Attachment: spec.md</summary>" in kan_14.description_markdown
+    assert "Feature specification document in Markdown." in kan_14.description_markdown
+
+    spec_att = (
+        await session.execute(
+            select(Attachment).where(
+                Attachment.project_id == target_proj.id,
+                Attachment.original_filename == "spec.md",
+            )
+        )
+    ).scalar_one_or_none()
+    assert spec_att is None
+
+    # 13. Verify activity ledger chain and cutover verification
+    chain_res = (
+        await session.execute(
+            text("SELECT is_valid, checked_rows FROM verify_activity_chain(:ws)"),
+            {"ws": caller.workspace_id},
+        )
+    ).one()
+    assert chain_res.is_valid is True
+
+    # 14. Idempotent re-run allocates 0 extra sequences
     report2 = await importer.run_import(bundle, dry_run=False)
     assert report2.to_create == 0
     assert report2.unchanged > 0
@@ -472,3 +595,75 @@ async def test_plane_merge_rejects_utf16_surrogate_in_issue_name(
 
     with pytest.raises(ContentNormalizeError, match="INVALID_UTF8_SURROGATE"):
         await importer.run_import(bundle, dry_run=False)
+
+
+@pytest.mark.asyncio
+async def test_plane_merge_md_attachment_script_stripping_and_surrogate_rejection(
+    setup_merge_into_project_env: tuple[AsyncSession, PrincipalContext, Path, Project],
+) -> None:
+    """Verify .md attachments strip <script> tags and reject UTF-16 lone surrogates fail-closed."""
+    session, caller, blob_dir, target_proj = setup_merge_into_project_env
+
+    bundle_script = PlaneBundle(
+        projects=[PlaneProject(id="p-k", identifier="KANBA", name="Kanba")],
+        issues=[
+            PlaneIssue(
+                id="i-script-att",
+                sequence_id=1,
+                name="Issue with script md attachment",
+                description_html="<p>Check <a href='/api/assets/evil.md'>evil.md</a></p>",
+                project="p-k",
+            )
+        ],
+        attachments={
+            "evil.md": b"# Title\n\n<script>alert('xss')</script>\nSafe text.",
+        },
+    )
+
+    importer = PlaneImporter(
+        session=session,
+        caller=caller,
+        blob_store_root=blob_dir,
+        target_project_identifier="KAN",
+    )
+    report = await importer.run_import(bundle_script, dry_run=False)
+    assert report.to_create > 0
+
+    iss = (
+        await session.execute(
+            select(Issue).where(
+                Issue.project_id == target_proj.id,
+                Issue.summary == "Issue with script md attachment",
+            )
+        )
+    ).scalar_one()
+    assert "<script>" not in iss.description_markdown
+    assert "</script>" not in iss.description_markdown
+    assert "<details>" in iss.description_markdown
+    assert "<summary>Attachment: evil.md</summary>" in iss.description_markdown
+    assert "Safe text." in iss.description_markdown
+
+    # UTF-16 lone surrogate in .md attachment must raise ContentNormalizeError("INVALID_UTF8_SURROGATE")
+    bundle_surrogate = PlaneBundle(
+        projects=[PlaneProject(id="p-k2", identifier="KANBA2", name="Kanba 2")],
+        issues=[
+            PlaneIssue(
+                id="i-surr-att",
+                sequence_id=1,
+                name="Issue with surrogate md attachment",
+                description_html="<p>Check <a href='/api/assets/bad.md'>bad.md</a></p>",
+                project="p-k2",
+            )
+        ],
+        attachments={
+            "bad.md": "Corrupt \ud800 surrogate".encode("utf-8", errors="surrogatepass"),
+        },
+    )
+    importer2 = PlaneImporter(
+        session=session,
+        caller=caller,
+        blob_store_root=blob_dir,
+        target_project_identifier="KAN",
+    )
+    with pytest.raises(ContentNormalizeError, match="INVALID_UTF8_SURROGATE"):
+        await importer2.run_import(bundle_surrogate, dry_run=False)

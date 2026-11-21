@@ -84,3 +84,38 @@ kanban/tests/standalone/test_entrypoint_env.py::test_attachments_directory_permi
    Start at  18:01:17
    Duration  998ms (environment 74%, import 13%, tests 7%, transform 5%, worker 1%)
 
+
+
+=== ADDITIONAL RAW UNIT TESTS FOR KAN-82 ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 22 items
+
+kanban/tests/importer/test_plane_merge_into_project.py::test_plane_merge_into_project_full_lifecycle PASSED [  4%]
+kanban/tests/importer/test_plane_merge_into_project.py::test_plane_merge_rejects_utf16_surrogate_in_issue_name PASSED [  9%]
+kanban/tests/importer/test_plane_merge_into_project.py::test_plane_merge_md_attachment_script_stripping_and_surrogate_rejection PASSED [ 13%]
+kanban/tests/cli/test_import_plane_cli.py::test_ctl_help_and_subparsers PASSED [ 18%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_fetch_snapshot_success PASSED [ 22%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_fetch_snapshot_security_error PASSED [ 27%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_fetch_snapshot_unexpected_error PASSED [ 31%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_plane_import_validation_errors PASSED [ 36%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_plane_import_delegates_to_asyncio PASSED [ 40%]
+kanban/tests/cli/test_import_plane_cli.py::test_execute_import_db_target_project_and_attachment_dir_passthrough PASSED [ 45%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_plane_import_db_execution PASSED [ 50%]
+kanban/tests/cli/test_import_plane_cli.py::test_get_admin_dsn_fallback PASSED [ 54%]
+kanban/tests/cli/test_import_plane_cli.py::test_cli_fallback_principal_resolution PASSED [ 59%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_plane_import_user_map_loading PASSED [ 63%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_dump_db_forbidden_args PASSED [ 68%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_dump_db_missing_config PASSED [ 72%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_dump_db_success PASSED [ 77%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_dump_db_exception_branches PASSED [ 81%]
+kanban/tests/cli/test_import_plane_cli.py::test_get_admin_dsn_socket_paths PASSED [ 86%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_generic_import_input_validation PASSED [ 90%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_generic_import_dispatch_and_execution PASSED [ 95%]
+kanban/tests/cli/test_import_plane_cli.py::test_execute_generic_import_db_branches PASSED [100%]
+
+============================== 22 passed in 1.29s ==============================

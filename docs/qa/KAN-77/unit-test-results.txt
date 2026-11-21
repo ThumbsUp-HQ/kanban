@@ -55,3 +55,29 @@ Not implemented: navigation to another Document
    Start at  18:01:10
    Duration  1.45s (environment 65%, tests 21%, import 7%, transform 6%, worker 1%)
 
+
+
+=== ADDITIONAL RAW UNIT TESTS FOR KAN-77 ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 13 items
+
+database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [  7%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [ 15%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_stickies_views_and_links PASSED [ 23%]
+database/tests/test_p1_17_models.py::test_ltree_type_validation PASSED   [ 30%]
+database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [ 38%]
+database/tests/migrations/test_p6_03_multi_source_imports_and_aliases_migration.py::test_p6_03_multi_source_imports_and_aliases_migration_lifecycle PASSED [ 46%]
+kanban/tests/security/test_admin_routes_protected.py::test_assert_admin_routes_protected_compliance PASSED [ 53%]
+kanban/tests/security/test_admin_routes_protected.py::test_multi_source_and_export_routes_registered PASSED [ 61%]
+mcp/tests/test_resolver.py::test_resolver_memoization_caches_repeated_calls PASSED [ 69%]
+mcp/tests/test_resolver.py::test_resolver_batch_resolve_many_deduplicates PASSED [ 76%]
+mcp/tests/test_resolver.py::test_resolver_propagates_kb_mcp_error PASSED [ 84%]
+mcp/tests/test_resolver.py::test_resolver_handles_non_dict_response PASSED [ 92%]
+mcp/tests/test_resolver.py::test_resolver_alias_resolves_canonical_key PASSED [100%]
+
+============================== 13 passed in 1.58s ==============================

@@ -159,10 +159,13 @@ class PlaneMapper:
         preprocessed = raw_html_or_md
 
         # 1. Pre-rewrite Plane/MinIO inline asset URLs BEFORE nh3 sanitization
-        # to ensure relative /api/v1/attachments/ endpoints are preserved
+        # to ensure relative /api/v1/attachments/ endpoints are preserved and strip full
+        # URL prefixes.
         for original_ref, att_id in attachment_url_map.items():
             canonical_path = f"/api/v1/attachments/{att_id}"
-            pattern = re.compile(re.escape(original_ref))
+            pattern = re.compile(
+                r'(?:https?://[^\s"\'<>()]+|/api/assets/[^\s"\'<>()]+)?' + re.escape(original_ref)
+            )
             if pattern.search(preprocessed):
                 preprocessed, count = pattern.subn(canonical_path, preprocessed)
                 rewritten_count += count
@@ -173,7 +176,9 @@ class PlaneMapper:
         # 3. Post-normalization pass for any markdown references that were not caught
         for original_ref, att_id in attachment_url_map.items():
             canonical_path = f"/api/v1/attachments/{att_id}"
-            pattern = re.compile(re.escape(original_ref))
+            pattern = re.compile(
+                r'(?:https?://[^\s"\'<>()]+|/api/assets/[^\s"\'<>()]+)?' + re.escape(original_ref)
+            )
             if pattern.search(markdown):
                 markdown, count = pattern.subn(canonical_path, markdown)
                 rewritten_count += count
