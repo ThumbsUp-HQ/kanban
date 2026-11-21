@@ -300,10 +300,15 @@ export function CommentComposer({
       setErrorText('Attachment exceeds 25 MB limit');
       return;
     }
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
     try {
       const result = await defaultUploadAttachment(file, projectKey);
       const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
-      insertTextAtCursor(`![${file.name}](${targetUri})`, '', '');
+      if (isPdf) {
+        insertTextAtCursor(`[${file.name}](${targetUri})`, '', '');
+      } else {
+        insertTextAtCursor(`![${file.name}](${targetUri})`, '', '');
+      }
     } catch {
       setErrorText('Attachment upload failed');
     } finally {
@@ -316,17 +321,26 @@ export function CommentComposer({
     const files = Array.from(e.dataTransfer.files);
     if (files.length === 0) return;
     const file = files.find(
-      (f) => ALLOWED_IMAGE_MIME_TYPES.has(f.type) || f.name.toLowerCase().endsWith('.svg'),
+      (f) =>
+        ALLOWED_IMAGE_MIME_TYPES.has(f.type) ||
+        f.name.toLowerCase().endsWith('.svg') ||
+        f.type === 'application/pdf' ||
+        f.name.toLowerCase().endsWith('.pdf'),
     );
     if (!file) return;
     if (file.size > MAX_ATTACHMENT_BYTES) {
       setErrorText('Attachment exceeds 25 MB limit');
       return;
     }
+    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
     void defaultUploadAttachment(file, projectKey)
       .then((result) => {
         const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
-        insertTextAtCursor(`![${file.name}](${targetUri})`, '', '');
+        if (isPdf) {
+          insertTextAtCursor(`[${file.name}](${targetUri})`, '', '');
+        } else {
+          insertTextAtCursor(`![${file.name}](${targetUri})`, '', '');
+        }
       })
       .catch(() => {
         setErrorText('Attachment upload failed');
@@ -340,7 +354,11 @@ export function CommentComposer({
     const files = Array.from(clipboardData.files);
     if (files.length > 0) {
       const file = files.find(
-        (f) => ALLOWED_IMAGE_MIME_TYPES.has(f.type) || f.name.toLowerCase().endsWith('.svg'),
+        (f) =>
+          ALLOWED_IMAGE_MIME_TYPES.has(f.type) ||
+          f.name.toLowerCase().endsWith('.svg') ||
+          f.type === 'application/pdf' ||
+          f.name.toLowerCase().endsWith('.pdf'),
       );
       if (file) {
         e.preventDefault();
@@ -348,10 +366,15 @@ export function CommentComposer({
           setErrorText('Attachment exceeds 25 MB limit');
           return;
         }
+        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
         void defaultUploadAttachment(file, projectKey)
           .then((result) => {
             const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
-            insertTextAtCursor(`![${file.name}](${targetUri})`, '', '');
+            if (isPdf) {
+              insertTextAtCursor(`[${file.name}](${targetUri})`, '', '');
+            } else {
+              insertTextAtCursor(`![${file.name}](${targetUri})`, '', '');
+            }
           })
           .catch(() => {
             setErrorText('Attachment upload failed');
@@ -471,9 +494,8 @@ export function CommentComposer({
         <button
           type="button"
           className="composer-tool-btn"
-          aria-label="Attach media or SVG"
+          aria-label="Attach media, SVG, or PDF"
           onClick={() => {
-            insertTextAtCursor('![', '](https://example.com/media.png)', 'alt text');
             fileInputRef.current?.click();
           }}
         >
@@ -482,7 +504,7 @@ export function CommentComposer({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*,.svg"
+          accept="image/*,.svg,.pdf,application/pdf"
           tabIndex={-1}
           aria-hidden="true"
           className="comment-composer__file-input"

@@ -330,3 +330,39 @@ class TestAuditIntegrationAndCLI:
             ]
         )
         assert code == 1
+
+    def test_feature_comparison_matrix_sync_and_gfm_columns(self) -> None:
+        """Assert Feature Comparison has 9 columns (with OpenAI Symphony) and stays in sync."""
+        repo_root = Path(__file__).resolve().parents[3]
+        spec_file = repo_root / "docs" / "FEATURE_COMPARISON.md"
+        assert spec_file.is_file()
+        spec_lines = spec_file.read_text(encoding="utf-8").splitlines()
+
+        expected_header = (
+            "| Feature | 👍kanban | Jira | Plane | GitHub | "
+            "Vibe Kanban | OpenAI Symphony | Businessmap | Codebeamer |"
+        )
+        expected_separator = "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"
+
+        table_lines = [line for line in spec_lines if line.startswith("|")]
+        header_lines = [line for line in table_lines if line.startswith("| Feature |")]
+        separator_lines = [line for line in table_lines if line.startswith("| --- |")]
+        data_lines = [
+            line for line in table_lines if line not in header_lines and line not in separator_lines
+        ]
+
+        assert header_lines == [expected_header] * 5
+        assert separator_lines == [expected_separator] * 5
+        assert len(data_lines) == 45
+        planned_core_rows = [row for row in data_lines if "| 🎯✅ |" in row]
+        assert len(planned_core_rows) == 10
+        for row in table_lines:
+            cells = [cell.strip() for cell in row.strip("|").split("|")]
+            assert len(cells) == 9, f"Expected 9 GFM columns, got {len(cells)} in row: {row}"
+
+        wiki_dir = Path(DEFAULT_WIKI_DIR)
+        if wiki_dir.is_dir():
+            wiki_file = wiki_dir / "Feature-Comparison.md"
+            wiki_lines = wiki_file.read_text(encoding="utf-8").splitlines()
+            assert wiki_lines[0] == "# [Informational] Feature Comparison Matrix (45 Features)"
+            assert wiki_lines[1:] == spec_lines[1:]

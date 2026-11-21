@@ -7,6 +7,8 @@
 import React, { type JSX, type ReactNode } from 'react';
 import { MediaViewport } from '../../editor/media/MediaViewport';
 import { MermaidBlockView } from '../../editor/mermaid/MermaidBlockView';
+import { resolveMediaUrl } from '../../editor/media/mediaUrlResolver';
+import { PdfAttachmentCard } from './PdfAttachmentCard';
 
 export type CommentBodyRenderer = (markdown: string) => ReactNode;
 
@@ -88,17 +90,35 @@ export function renderInlineContent(text: string, keyPrefix: string): ReactNode[
       );
     } else if (linkMatch && linkText && linkUrl) {
       if (isSafeUrl(linkUrl)) {
-        nodes.push(
-          <a
-            key={`${keyPrefix}-link-${String(tokenIdx)}`}
-            href={linkUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="safe-md__link"
-          >
-            {linkText}
-          </a>,
-        );
+        const lowerUrl = linkUrl.toLowerCase();
+        const lowerText = linkText.toLowerCase();
+        const isPdfAttachment =
+          (lowerUrl.startsWith('attachment://') || lowerUrl.includes('/attachments/')) &&
+          (lowerText.endsWith('.pdf') || lowerUrl.endsWith('.pdf'));
+
+        if (isPdfAttachment) {
+          const resolved = resolveMediaUrl(linkUrl);
+          nodes.push(
+            <PdfAttachmentCard
+              key={`${keyPrefix}-pdf-${String(tokenIdx)}`}
+              filename={linkText}
+              downloadUrl={resolved.url}
+              testId={`${keyPrefix}-pdf-${String(tokenIdx)}`}
+            />,
+          );
+        } else {
+          nodes.push(
+            <a
+              key={`${keyPrefix}-link-${String(tokenIdx)}`}
+              href={linkUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="safe-md__link"
+            >
+              {linkText}
+            </a>,
+          );
+        }
       } else {
         // Strip unsafe schemes like javascript: to plain text
         nodes.push(linkText);

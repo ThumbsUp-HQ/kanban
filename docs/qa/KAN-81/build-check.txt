@@ -1,0 +1,44 @@
+=== make check ===
+uv run ruff check .
+All checks passed!
+uv run ruff format --check .
+2030 files already formatted
+uv run mypy
+Success: no issues found in 1149 source files
+uv run lint-imports
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 1006 files, 3611 dependencies.
+---------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT (7 ignored imports)
+mcp forbidden from importing database KEPT (48 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+uv run python -m scripts.check_no_dashes --all
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/ff6d4b77-3b05-4874-8107-3bce17b9f8d4/swarm-b-kan81-0a4e87d7/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+uv run python -m database.migrations.cli check-migrations --static-only
+OK: All 64 migrations valid. Single head: p6_02_pdf_attachments
+=== pnpm --dir kanban/web typecheck ===
+
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/ff6d4b77-3b05-4874-8107-3bce17b9f8d4/swarm-b-kan81-0a4e87d7/kanban/web
+> tsc -b --noEmit
+
+=== pnpm --dir kanban/web lint ===
+
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/ff6d4b77-3b05-4874-8107-3bce17b9f8d4/swarm-b-kan81-0a4e87d7/kanban/web
+> eslint . --max-warnings 0
+

@@ -29,7 +29,7 @@ class Attachment(Base):
         ),
         CheckConstraint(
             "content_type IN ("
-            "'image/png','image/jpeg','image/webp','image/avif','image/gif','image/svg+xml'"
+            "'image/png','image/jpeg','image/webp','image/avif','image/gif','image/svg+xml','application/pdf'"
             ")",
             name="attachments_content_type_check",
         ),
@@ -44,6 +44,10 @@ class Attachment(Base):
         CheckConstraint(
             "pixel_height IS NULL OR pixel_height > 0",
             name="attachments_pixel_height_check",
+        ),
+        CheckConstraint(
+            "page_count IS NULL OR page_count > 0",
+            name="attachments_page_count_check",
         ),
         CheckConstraint(
             "octet_length(blob_sha256) = 32",
@@ -97,6 +101,10 @@ class Attachment(Base):
         nullable=True,
     )
     pixel_height: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True,
+    )
+    page_count: Mapped[int | None] = mapped_column(
         Integer,
         nullable=True,
     )

@@ -218,21 +218,28 @@ export function handleClipboardPaste(
     return false;
   }
 
-  // Branch 1: Binary Image / .svg paste
+  // Branch 1: Binary Image / .svg / .pdf paste
   const files = Array.from(clipboardData.files);
   if (files.length > 0) {
-    const imageFile = files.find(
-      (f) => ALLOWED_IMAGE_MIME_TYPES.has(f.type) || f.name.toLowerCase().endsWith('.svg'),
+    const targetFile = files.find(
+      (f) =>
+        ALLOWED_IMAGE_MIME_TYPES.has(f.type) ||
+        f.name.toLowerCase().endsWith('.svg') ||
+        f.type === 'application/pdf' ||
+        f.name.toLowerCase().endsWith('.pdf'),
     );
 
-    if (imageFile) {
+    if (targetFile) {
       // Guard: Reject files exceeding 25 MB client-side without network upload
-      if (imageFile.size > MAX_ATTACHMENT_BYTES) {
+      if (targetFile.size > MAX_ATTACHMENT_BYTES) {
         options?.onAnnounce?.('Attachment exceeds 25 MB limit');
         return true;
       }
 
-      const rawName = imageFile.name !== '' ? imageFile.name : 'image.png';
+      const isPdf =
+        targetFile.type === 'application/pdf' || targetFile.name.toLowerCase().endsWith('.pdf');
+      const rawName =
+        targetFile.name !== '' ? targetFile.name : isPdf ? 'document.pdf' : 'image.png';
       const sanitizedName = rawName.replace(/[^\w.-]/g, '_');
       const placeholder = `[Uploading ${sanitizedName}...]`;
 
@@ -243,7 +250,7 @@ export function handleClipboardPaste(
 
       // Execute upload asynchronously
       const doUpload = options?.uploadAttachment ?? defaultUploadAttachment;
-      void doUpload(imageFile, projectId)
+      void doUpload(targetFile, projectId)
         .then((result) => {
           const foundPos = findTextPosition(view.state.doc, placeholder);
           /* v8 ignore start */
@@ -251,10 +258,13 @@ export function handleClipboardPaste(
             return;
           }
           /* v8 ignore stop */
-          const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
-          const imageMarkdown = `![${sanitizedName}](${targetUri})`;
+          const targetUri =
+            result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
+          const insertMarkdown = isPdf
+            ? `[${sanitizedName}](${targetUri})`
+            : `![${sanitizedName}](${targetUri})`;
           const replaceTr = view.state.tr.insertText(
-            imageMarkdown,
+            insertMarkdown,
             foundPos,
             foundPos + placeholder.length,
           );

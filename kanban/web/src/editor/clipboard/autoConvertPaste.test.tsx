@@ -488,8 +488,8 @@ describe('autoConvertPaste', () => {
     const domContainer = document.createElement('div');
     const view = new EditorView(domContainer, { state });
 
-    const pdfFile = new File(['pdf-bytes'], 'report.pdf', { type: 'application/pdf' });
-    const dt = createMockDataTransfer({ files: [pdfFile] });
+    const zipFile = new File(['zip-bytes'], 'archive.zip', { type: 'application/zip' });
+    const dt = createMockDataTransfer({ files: [zipFile] });
 
     let handled = false;
     const event = new SafeClipboardEvent('paste', {
@@ -503,6 +503,41 @@ describe('autoConvertPaste', () => {
     });
 
     expect(handled).toBe(false);
+  });
+
+  it('Case 2: Branch 1 (PDF Attachment Upload) uploads PDF and inserts markdown link without ! prefix', async () => {
+    const { doc } = parseMarkdown('Initial doc');
+    const state = EditorState.create({
+      doc,
+      schema: editorSchema,
+      plugins: [
+        autoConvertPastePlugin({
+          uploadAttachment: () =>
+            Promise.resolve({ markdownUri: 'attachment://att_pdf_123', id: 'pdf_123' }),
+        }),
+      ],
+    });
+
+    const domContainer = document.createElement('div');
+    const view = new EditorView(domContainer, { state });
+
+    const pdfFile = new File(['%PDF-1.4 sample'], 'spec.pdf', { type: 'application/pdf' });
+    const dt = createMockDataTransfer({ files: [pdfFile] });
+
+    const event = new SafeClipboardEvent('paste', {
+      clipboardData: dt,
+      bubbles: true,
+      cancelable: true,
+    });
+    view.someProp('handlePaste', (fn) => {
+      fn(view, event, view.state.doc.slice(0, 0));
+      return true;
+    });
+
+    // Wait for async upload promise
+    await new Promise((r) => setTimeout(r, 20));
+    expect(view.state.doc.textContent).toContain('[spec.pdf](attachment://att_pdf_123)');
+    expect(view.state.doc.textContent).not.toContain('![spec.pdf]');
   });
 
   it('retrieves CSRF token from meta tag or cookie', async () => {

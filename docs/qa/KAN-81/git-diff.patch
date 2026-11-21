@@ -1,0 +1,1256 @@
+diff --git a/.gitignore b/.gitignore
+index cb4d89eb..49dc3453 100644
+--- a/.gitignore
++++ b/.gitignore
+@@ -34,3 +34,11 @@ reports/
+ # Cloned Wiki repository
+ thumbs-up-kanban.wiki/
+ 
++# Temporary local security-assessment evidence (contains vulnerability details)
++security/
++
++# Local backup and test runner runtime artifacts
++.backup_schedule.json
++.codex-attachments/
++backups/
++
+diff --git a/README.md b/README.md
+index 504272df..1e18c5ac 100644
+--- a/README.md
++++ b/README.md
+@@ -10,7 +10,7 @@
+ >
+ > On the surface, every tracker presents identical columns, draggable cards, and basic workflow states. The real architectural divergence begins the moment you inspect paywalled enterprise controls, database-level security invariants, canonical Markdown integrity, and native agent/MCP execution gates. While commercial SaaS and copyleft alternatives lock custom properties, audit logs, Single Sign-On, and AI integrations behind steep per-seat subscription tiers or bloated CRUD APIs, `👍kanban` ships an uncompromising, security-first, agent-first platform under a pure Apache-2.0 license.
+ 
+-See the complete 35-feature technical evaluation matrix across Security/Identity/Audit, Agentic MCP/AI Workflows, Issue Tracking, and Docs/Stickies/Markdown:
++See the complete 45-feature technical evaluation matrix comparing `👍kanban` against Jira, Plane, GitHub, Vibe Kanban, OpenAI Symphony, Businessmap, and Codebeamer across Security/Identity/Audit, Agentic MCP/AI Workflows, Issue Tracking, Docs/Stickies/Markdown, and Orchestration/Provenance/Day-2 Operations:
+ - **Repository Specification:** [`docs/FEATURE_COMPARISON.md`](./docs/FEATURE_COMPARISON.md)
+ - **Project Wiki:** [Feature Comparison Matrix](https://git.adamoutler.com/AI/thumbs-up-kanban/wiki/Feature-Comparison)
+ 
+@@ -94,7 +94,7 @@ uv run kanban-agent validate-qa-packet --help
+ 
+ ## Authoritative Documentation
+ 
+-- **Feature Comparison Matrix (35 Capabilities):** [`docs/FEATURE_COMPARISON.md`](./docs/FEATURE_COMPARISON.md) ([Wiki](https://git.adamoutler.com/AI/thumbs-up-kanban/wiki/Feature-Comparison))
++- **Feature Comparison Matrix (45 Capabilities):** [`docs/FEATURE_COMPARISON.md`](./docs/FEATURE_COMPARISON.md) ([Wiki](https://git.adamoutler.com/AI/thumbs-up-kanban/wiki/Feature-Comparison))
+ - **Architecture & Product Specification (v2):** [`docs/ARCHITECTURE_AND_PRODUCT_SPEC.md`](./docs/ARCHITECTURE_AND_PRODUCT_SPEC.md)
+ - **Production Promotion & Encrypted Backup Runbook (`KBBAK1`):** [`docs/PROMOTION_AND_BACKUP.md`](./docs/PROMOTION_AND_BACKUP.md)
+ - **Topological Ticket Index & Execution Waves:** [`docs/tickets/INDEX.md`](./docs/tickets/INDEX.md)
+diff --git a/database/models/attachments.py b/database/models/attachments.py
+index 7564091f..c4eed47e 100644
+--- a/database/models/attachments.py
++++ b/database/models/attachments.py
+@@ -29,7 +29,7 @@ class Attachment(Base):
+         ),
+         CheckConstraint(
+             "content_type IN ("
+-            "'image/png','image/jpeg','image/webp','image/avif','image/gif','image/svg+xml'"
++            "'image/png','image/jpeg','image/webp','image/avif','image/gif','image/svg+xml','application/pdf'"
+             ")",
+             name="attachments_content_type_check",
+         ),
+@@ -45,6 +45,10 @@ class Attachment(Base):
+             "pixel_height IS NULL OR pixel_height > 0",
+             name="attachments_pixel_height_check",
+         ),
++        CheckConstraint(
++            "page_count IS NULL OR page_count > 0",
++            name="attachments_page_count_check",
++        ),
+         CheckConstraint(
+             "octet_length(blob_sha256) = 32",
+             name="attachments_blob_sha256_check",
+@@ -100,6 +104,10 @@ class Attachment(Base):
+         Integer,
+         nullable=True,
+     )
++    page_count: Mapped[int | None] = mapped_column(
++        Integer,
++        nullable=True,
++    )
+     blob_sha256: Mapped[bytes] = mapped_column(
+         LargeBinary,
+         nullable=False,
+diff --git a/docs/FEATURE_COMPARISON.md b/docs/FEATURE_COMPARISON.md
+index 40d979b0..a1975da7 100644
+--- a/docs/FEATURE_COMPARISON.md
++++ b/docs/FEATURE_COMPARISON.md
+@@ -1,10 +1,11 @@
+ # Feature Comparison
+ 
+-A kanban is just a kanban until you start digging deeper. On the surface, every issue tracker presents identical columns, draggable cards, and basic workflow states. The real architectural divergence begins the moment you inspect paywalled enterprise controls, database-level security invariants, canonical Markdown integrity, and native agent/MCP execution gates. While commercial SaaS and copyleft alternatives lock custom properties, audit logs, Single Sign-On, and AI integrations behind steep per-seat subscription tiers or bloated CRUD APIs, `👍kanban` ships an uncompromising, security-first, agent-first platform under a pure Apache-2.0 license. Below is the full 35-feature technical capability matrix comparing `👍kanban` directly against legacy and modern project management systems.
++A kanban is just a kanban until you start digging deeper. On the surface, every issue tracker presents identical columns, draggable cards, and basic workflow states. The real architectural divergence begins the moment you inspect paywalled enterprise controls, database-level security invariants, canonical Markdown integrity, multi-agent concurrency primitives, and native agent/MCP execution gates. While commercial SaaS, copyleft boards, and external agent runners lock custom properties, audit logs, Single Sign-On, and AI integrations behind per-seat subscription tiers, 1:1 REST-wrapper MCP schemas, or headless external-tracker daemons, `👍kanban` ships a unified, security-first, agent-first platform under a pure Apache-2.0 license. Below is the full 45-feature technical capability matrix comparing `👍kanban` directly against legacy trackers, modern boards, and autonomous agent orchestrators.
+ 
+ **Legend**
+ 
+ * `✅` **Included:** Built into the core product (free in FOSS/free tiers, or included in the entry commercial plan when no free tier exists).
++* `🎯✅` **Planned in Core:** Active roadmap target shipping free in the `Apache-2.0` core (never paywalled).
+ * `🔐` **Paywall-Capped:** Basic or seat-capped version is free; full scale, hierarchy, or enforcement requires a paid tier.
+ * `🆓🔌` **Free Extension:** Free via a separate official plugin, external MCP server package, or external CLI harness.
+ * `💰` **Paid Tier:** Locked behind higher per-seat subscription tiers (Pro, Business, Premium, or Enterprise).
+@@ -15,69 +16,88 @@ A kanban is just a kanban until you start digging deeper. On the surface, every
+ 
+ ## 1. Security, Identity, Audit & Deployment
+ 
+-| Feature | 👍kanban | Jira | Plane | GitHub | Vibe Kanban | Businessmap | Codebeamer |
+-| --- | --- | --- | --- | --- | --- | --- | --- |
+-| Permissive FOSS License | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
+-| On-Prem Multi-Container | ✅ | ❌ | ✅ | 💰 | ❌ | ❌ | 💰 |
+-| Single-Container Run | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ |
+-| Multi-Card OIDC & LDAPS | ✅ | 💸 | 💰 | 💰 | ❌ | 💸 | ✅ |
+-| Passkeys & Break-Glass | ✅ | 💸 | 💰 | 🔐 | ❌ | 💰 | 💰 |
+-| Granular RBAC & DENY | ✅ | 💰 | 💰 | 💰 | ❌ | ✅ | ✅ |
+-| Shared-With Pill & DB RLS | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+-| Workspace Audit Logs | ✅ | 💸 | 💰 | 💰 | ❌ | 💰 | ✅ |
++| Feature | 👍kanban | Jira | Plane | GitHub | Vibe Kanban | OpenAI Symphony | Businessmap | Codebeamer |
++| --- | --- | --- | --- | --- | --- | --- | --- | --- |
++| Permissive FOSS License | ✅ | ❌ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
++| On-Prem Multi-Container | ✅ | ❌ | ✅ | 💰 | ❌ | ❌ | ❌ | 💰 |
++| Single-Container Run | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ |
++| Multi-Card OIDC & LDAPS | ✅ | 💸 | 💰 | 💰 | ❌ | ❌ | 💸 | ✅ |
++| Passkeys & Break-Glass | ✅ | 💸 | 💰 | 🔐 | ❌ | ❌ | 💰 | 💰 |
++| Granular RBAC & DENY | ✅ | 💰 | 💰 | 💰 | ❌ | ❌ | ✅ | ✅ |
++| Shared-With Pill & DB RLS | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
++| Workspace Audit Logs | ✅ | 💸 | 💰 | 💰 | ❌ | ❌ | 💰 | ✅ |
+ 
+-Vibe Kanban is permissive `Apache-2.0` (`✅`) as a single-user local CLI, whereas Plane uses copyleft `AGPLv3` and charges per seat for OIDC, LDAP, RBAC, and audit logs (`💰`). Jira charges extra for SSO and security audit policies via Atlassian Guard (`💸`), and none of the other six enforces PostgreSQL Row-Level Security with a ubiquitous per-object `shared_with` pill (`❌`). **`👍kanban`** is 100% permissive `Apache-2.0` (`✅`), supporting both a zero-config single-container runtime (`docker run -p 8080:8080 thumbs-up-kanban:latest`) and a hardened 5-network multi-container production stack, complete with Multi-Card OIDC/OAuth2/LDAPS, WebAuthn Passkeys + break-glass lockout triggers, explicit `DENY` ACLs, PostgreSQL 16 `FORCE ROW LEVEL SECURITY` surfaced via the `🛡️` Shared-With Header Pill, and an immutable SHA-256 hash-chained audit ledger (`✅`).
++Vibe Kanban and OpenAI Symphony are permissive `Apache-2.0` (`✅`): Vibe Kanban runs as a single-user local CLI/container (`✅`), whereas OpenAI Symphony is documented as an engineering preview for trusted environments that runs as a host Elixir/OTP daemon or Burrito binary rather than OCI containers (`❌`), executes repo-local `WORKFLOW.md` hooks via `bash -lc`, omits multi-tenant auth/OIDC/Passkeys/RBAC (`❌`), and keeps no persistent database or immutable audit ledger (`❌`). Plane uses copyleft `AGPLv3` and charges per seat for OIDC, LDAP, RBAC, and audit logs (`💰`), Jira charges extra for SSO and security audit policies via Atlassian Guard (`💸`), and none of the other seven enforces PostgreSQL Row-Level Security with a ubiquitous per-object `shared_with` pill (`❌`). **`👍kanban`** is 100% permissive `Apache-2.0` (`✅`), supporting both a zero-config single-container runtime (`docker run -p 8080:8080 thumbs-up-kanban:latest`) and a hardened 5-network multi-container production stack, complete with Multi-Card OIDC/OAuth2/LDAPS, WebAuthn Passkeys + break-glass lockout triggers, explicit `DENY` ACLs, PostgreSQL 16 `FORCE ROW LEVEL SECURITY` surfaced via the `🛡️` Shared-With Header Pill, and an immutable SHA-256 hash-chained audit ledger (`✅`).
+ 
+ ---
+ 
+ ## 2. Agentic Tasks, MCP, AI & Workflow Gates
+ 
+-| Feature | 👍kanban | Jira | Plane | GitHub | Vibe Kanban | Businessmap | Codebeamer |
+-| --- | --- | --- | --- | --- | --- | --- | --- |
+-| MCP Server | ✅ | 🆓🔌 | 🆓🔌 | 🆓🔌 | ✅ | ❌ | ❌ |
+-| Low-Token Scoped MCP | ✅ | ❌ | ❌ | ❌ | 🔐 | ❌ | ❌ |
+-| 2-Stage MCP Delete Gate | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+-| Cloud AI Integration | ✅ | 💰 | 💸 | 💸 | 💸 | ✅ | 💸 |
+-| Air-Gap Local Ollama | ✅ | ❌ | ❌ | ❌ | 🆓🔌 | ❌ | ❌ |
+-| Cursor Sparkle FIM | ✅ | ❌ | ❌ | 💸 | ❌ | ❌ | ❌ |
+-| Sync Transition Gates | ✅ | 💸 | 💰 | ❌ | ❌ | ✅ | ✅ |
+-| Async `:ro` Repo Gate | ✅ | ❌ | ❌ | 💸 | ❌ | ❌ | ❌ |
++| Feature | 👍kanban | Jira | Plane | GitHub | Vibe Kanban | OpenAI Symphony | Businessmap | Codebeamer |
++| --- | --- | --- | --- | --- | --- | --- | --- | --- |
++| MCP Server | ✅ | 🆓🔌 | 🆓🔌 | 🆓🔌 | ✅ | ❌ | ❌ | ❌ |
++| Low-Token Scoped MCP | ✅ | ❌ | ❌ | ❌ | 🔐 | ❌ | ❌ | ❌ |
++| 2-Stage MCP Delete Gate | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
++| Cloud AI Integration | ✅ | 💰 | 💸 | 💸 | 💸 | 💸 | ✅ | 💸 |
++| Air-Gap Local Ollama | ✅ | ❌ | ❌ | ❌ | 🆓🔌 | 🆓🔌 | ❌ | ❌ |
++| Cursor Sparkle FIM | ✅ | ❌ | ❌ | 💸 | ❌ | ❌ | ❌ | ❌ |
++| Sync Transition Gates | ✅ | 💸 | 💰 | ❌ | ❌ | ❌ | ✅ | ✅ |
++| Async `:ro` Repo Gate | ✅ | ❌ | ❌ | 💸 | ❌ | ❌ | ❌ | ❌ |
+ 
+-Jira, Plane, and GitHub ship MCP through separate external connectors or packages (`🆓🔌`) that expose broad JSON schemas rather than low-token YAML intent surfaces, while Vibe Kanban bundles `--mcp` directly (`✅`) with partial `--mode orchestrator` scoping (`🔐`). None of the other six holds Kanban transitions in a non-blocking provisional gate while an agent forensically audits a read-only repository mount (`❌`) - GitHub only runs metered post-event Actions or Copilot checks (`💸`). **`👍kanban`** ships three built-in intent-scoped MCP surfaces (`/mcp/agent`, `/mcp/docs`, `/mcp/admin` under `<= 1,800` schema tokens with LOD YAML output and 2-stage `request_delete` -> `execute_delete` confirmation), vendor-neutral Cloud AI (`openai`, `gemini`) and air-gapped `ollama`, `<150ms` RLS-filtered Cursor Sparkle (`✨`) FIM completion with right-click accept, `<25ms` synchronous Wasm transition validators, and two-phase non-blocking async agent transition gates (`⏳🤖` -> `✅🤖`/`🛑🤖`) over `:ro` repository mounts (`✅`).
++Jira, Plane, and GitHub ship MCP through separate external connectors or packages (`🆓🔌`) that expose broad JSON schemas rather than low-token YAML intent surfaces, while Vibe Kanban bundles `--mcp` directly (`✅`) with partial `--mode orchestrator` scoping (`🔐`). OpenAI Symphony does not expose an MCP server (`❌`): it drives a `codex app-server` subprocess over stdio JSON-RPC (relying on metered OpenAI/Codex billing `💸` or external `codex --oss` Ollama configuration `🆓🔌`), passes through raw host-authenticated tracker tools (`linear_graphql`, `github_api`, `asana_api`) without project-boundary scoping or 2-stage delete gates (`❌`), and runs read-write workspace clones (`approval_policy: never`, `networkAccess: true`). None of the other seven holds Kanban transitions in a non-blocking provisional gate while an agent forensically audits a read-only repository mount (`❌`) - GitHub only runs metered post-event Actions or Copilot checks (`💸`). **`👍kanban`** ships three built-in intent-scoped MCP surfaces (`/mcp/agent`, `/mcp/docs`, `/mcp/admin` under `<= 1,800` schema tokens with LOD YAML output and 2-stage `request_delete` -> `execute_delete` confirmation), vendor-neutral BYOK Cloud AI (`openai`, `gemini`) and native air-gapped `ollama`, `<150ms` RLS-filtered Cursor Sparkle (`✨`) FIM completion with right-click accept, `<25ms` synchronous Wasm transition validators, and two-phase non-blocking async agent transition gates (`⏳🤖` -> `✅🤖`/`🛑🤖`) over `:ro` repository mounts (`✅`).
+ 
+ ---
+ 
+ ## 3. Issue Tracker & Kanban Board
+ 
+-| Feature | 👍kanban | Jira | Plane | GitHub | Vibe Kanban | Businessmap | Codebeamer |
+-| --- | --- | --- | --- | --- | --- | --- | --- |
+-| Free Forever Tier | ✅ | 🔐 | ✅ | ✅ | ✅ | ❌ | ❌ |
+-| Core Kanban & Issues | ✅ | 🔐 | ✅ | ✅ | 🔐 | ✅ | ✅ |
+-| Five Native Views | ✅ | 🔐 | 🔐 | 🔐 | ❌ | ✅ | ✅ |
+-| 2D Swimlanes & Hard WIP | ✅ | 🔐 | 🔐 | 🔐 | ❌ | ✅ | ✅ |
+-| Cycles & Hidden Modules | ✅ | 🔐 | ✅ | 🔐 | ❌ | ❌ | ✅ |
+-| Sub-Issue DAG & Links | ✅ | 🔐 | 🔐 | ✅ | 🔐 | ✅ | ✅ |
+-| Custom Properties | ✅ | ✅ | 💰 | ✅ | ❌ | ✅ | ✅ |
+-| Free-Text Assignee Tag | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+-| Audited Creator Override | ✅ | 💰 | ❌ | ❌ | ❌ | ❌ | ❌ |
+-| Rule-Gated Archive | ✅ | 💰 | ✅ | ✅ | ❌ | ✅ | ✅ |
+-| Blast-Radius Soft Delete | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+-| Sandboxed Script Fields | ✅ | 💸 | ❌ | ❌ | ❌ | ❌ | ✅ |
+-
+-Jira caps free boards at 10 users and gates cross-project Gantt plans, deep hierarchies, and archiving behind Premium (`💰`), while scripted fields require paid Marketplace apps like ScriptRunner (`💸`). Plane gates custom properties behind paid tiers (`💰`), GitHub lacks Calendar views and hard-blocking WIP limits (`🔐`), and Businessmap/Codebeamer have no free tier at all (`❌`). **`👍kanban`** ships all five native views (`List`, `Board`, `Table`, `Calendar`, `Timeline`), 2D swimlanes with hard WIP limits, cycle-checked DAG hierarchies, hybrid principal + free-text `🏷️` assignee tags, audited `🔄` creator overrides, blast-radius soft delete, and Wasmtime/`nsjail` sandboxed script fields in its free `Apache-2.0` core (`✅`).
++| Feature | 👍kanban | Jira | Plane | GitHub | Vibe Kanban | OpenAI Symphony | Businessmap | Codebeamer |
++| --- | --- | --- | --- | --- | --- | --- | --- | --- |
++| Free Forever Tier | ✅ | 🔐 | ✅ | ✅ | ✅ | ✅ | ❌ | ❌ |
++| Core Kanban & Issues | ✅ | 🔐 | ✅ | ✅ | 🔐 | ❌ | ✅ | ✅ |
++| Five Native Views | ✅ | 🔐 | 🔐 | 🔐 | ❌ | ❌ | ✅ | ✅ |
++| 2D Swimlanes & Hard WIP | ✅ | 🔐 | 🔐 | 🔐 | ❌ | ❌ | ✅ | ✅ |
++| Cycles & Hidden Modules | ✅ | 🔐 | ✅ | 🔐 | ❌ | ❌ | ❌ | ✅ |
++| Sub-Issue DAG & Links | ✅ | 🔐 | 🔐 | ✅ | 🔐 | ❌ | ✅ | ✅ |
++| Custom Properties | ✅ | ✅ | 💰 | ✅ | ❌ | ❌ | ✅ | ✅ |
++| Free-Text Assignee Tag | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
++| Audited Creator Override | ✅ | 💰 | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
++| Rule-Gated Archive | ✅ | 💰 | ✅ | ✅ | ❌ | ❌ | ✅ | ✅ |
++| Blast-Radius Soft Delete | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
++| Sandboxed Script Fields | ✅ | 💸 | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ |
++
++OpenAI Symphony is free `Apache-2.0` software (`✅`), but it is a headless polling orchestrator and Phoenix LiveView run monitor rather than an issue tracker - requiring an external board such as Linear, GitHub Issues, Jira Cloud, Asana, or GitLab (`❌` across all board, view, hierarchy, property, and lifecycle rows). Jira caps free boards at 10 users and gates cross-project Gantt plans, deep hierarchies, and archiving behind Premium (`💰`), while scripted fields require paid Marketplace apps like ScriptRunner (`💸`). Plane gates custom properties behind paid tiers (`💰`), GitHub lacks Calendar views and hard-blocking WIP limits (`🔐`), and Businessmap/Codebeamer have no free tier at all (`❌`). **`👍kanban`** ships all five native views (`List`, `Board`, `Table`, `Calendar`, `Timeline`), 2D swimlanes with hard WIP limits, cycle-checked DAG hierarchies, hybrid principal + free-text `🏷️` assignee tags, audited `🔄` creator overrides, blast-radius soft delete, and Wasmtime/`nsjail` sandboxed script fields in its free `Apache-2.0` core (`✅`).
+ 
+ ---
+ 
+ ## 4. Docs, Stickies, Markdown & Object Graph
+ 
+-| Feature | 👍kanban | Jira | Plane | GitHub | Vibe Kanban | Businessmap | Codebeamer |
+-| --- | --- | --- | --- | --- | --- | --- | --- |
+-| Project Docs / Wiki | ✅ | 💸 | 🔐 | 🔐 | ❌ | ❌ | ✅ |
+-| Project Stickies | ✅ | 💸 | ✅ | ❌ | ❌ | ✅ | ❌ |
+-| Smart Sticky -> Doc Promo | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+-| Canonical Markdown DB | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ |
+-| Paste-Injection Pruner | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+-| Mermaid, Safe SVG & Proxy | ✅ | 💸 | ❌ | ✅ | ❌ | ❌ | ❌ |
+-| Broken/ACL Link Auditor | ✅ | 💸 | ❌ | ❌ | ❌ | ❌ | 🔐 |
+-
+-Jira splits Docs and Stickies into separate paid Confluence and Whiteboard licenses (`💸`), while GitHub restricts private-repo Wikis to paid plans (`🔐`) and Plane gates full team Wiki spaces (`🔐`). Only **`👍kanban`**, GitHub, and Vibe Kanban store pure Markdown natively (`✅`), and only Codebeamer flags "suspected" upstream links manually without automated graph purging (`🔐`). **`👍kanban`** unifies `ltree` hierarchical Docs and Project Overview Stickies with 1-click ACL-preserving Sticky-to-Doc promotion (`💡📄`), auto-converts pasted HTML/Rich Text into 100% canonical UTF-8 Markdown while pruning hidden-DOM paste-injection and UTF-16 lone surrogates, renders Web Worker Mermaid diagrams and `nh3`-scrubbed SVGs through an SSRF-guarded media proxy, and runs an automated 6-reason Object Link Auditor & Purger (`✅`).
++| Feature | 👍kanban | Jira | Plane | GitHub | Vibe Kanban | OpenAI Symphony | Businessmap | Codebeamer |
++| --- | --- | --- | --- | --- | --- | --- | --- | --- |
++| Project Docs / Wiki | ✅ | 💸 | 🔐 | 🔐 | ❌ | ❌ | ❌ | ✅ |
++| Project Stickies | ✅ | 💸 | ✅ | ❌ | ❌ | ❌ | ✅ | ❌ |
++| Smart Sticky -> Doc Promo | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
++| Canonical Markdown DB | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ |
++| Paste-Injection Pruner | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
++| Mermaid, Safe SVG & Proxy | ✅ | 💸 | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
++| Broken/ACL Link Auditor | ✅ | 💸 | ❌ | ❌ | ❌ | ❌ | ❌ | 🔐 |
++
++Jira splits Docs and Stickies into separate paid Confluence and Whiteboard licenses (`💸`), while GitHub restricts private-repo Wikis to paid plans (`🔐`), Plane gates full team Wiki spaces (`🔐`), and OpenAI Symphony is database-less - reading only a repo-local `WORKFLOW.md` YAML + Liquid prompt template with no Docs, Stickies, Markdown persistence DB, diagram pipeline, or link auditor (`❌`). Only **`👍kanban`**, GitHub, and Vibe Kanban store pure Markdown records natively (`✅`), and only Codebeamer flags "suspected" upstream links manually without automated graph purging (`🔐`). **`👍kanban`** unifies `ltree` hierarchical Docs and Project Overview Stickies with 1-click ACL-preserving Sticky-to-Doc promotion (`💡📄`), auto-converts pasted HTML/Rich Text into 100% canonical UTF-8 Markdown while pruning hidden-DOM paste-injection and UTF-16 lone surrogates, renders Web Worker Mermaid diagrams and `nh3`-scrubbed SVGs through an SSRF-guarded media proxy, and runs an automated 6-reason Object Link Auditor & Purger (`✅`).
++
++---
++
++## 5. Orchestration, Provenance & Day-2 Operations
++
++| Feature | 👍kanban | Jira | Plane | GitHub | Vibe Kanban | OpenAI Symphony | Businessmap | Codebeamer |
++| --- | --- | --- | --- | --- | --- | --- | --- | --- |
++| Atomic Agent Lease & Fencing | 🎯✅ | ❌ | ❌ | ❌ | 🔐 | 🔐 | ❌ | ❌ |
++| Prompt-Injection Taint Gate | 🎯✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
++| Dedicated Agent Workpad Slot | 🎯✅ | ❌ | ❌ | ❌ | 🔐 | 🆓🔌 | ❌ | ❌ |
++| Pre-Write Secret Redaction | 🎯✅ | 💸 | ❌ | 🔐 | ❌ | ❌ | ❌ | ❌ |
++| Crypto-Shredded Audit Chain | 🎯✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
++| Ephemeral OIDC Agent Auth | 🎯✅ | 💰 | ❌ | ✅ | ❌ | ❌ | ❌ | 💰 |
++| Git Worktree / PR & Sig Gate | 🎯✅ | 🆓🔌 | 🆓🔌 | ✅ | ✅ | 🆓🔌 | 🆓🔌 | ✅ |
++| Lossless Import & Full Export | 🎯✅ | 🔐 | 🔐 | ✅ | ❌ | ❌ | 💰 | ✅ |
++| Deterministic JSON/Unix CLI | 🎯✅ | 🆓🔌 | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ |
++| Native CFD, Lead & Aging WIP | 🎯✅ | 🔐 | 💰 | 🔐 | ❌ | ❌ | ✅ | 🔐 |
++
++OpenAI Symphony tracks single-daemon claims in volatile memory (`🔐`) and relies on external `WORKFLOW.md` comment scraping (`🆓🔌`) with no Unix board CLI (`❌`), while GitHub gates private-repo secret push-protection (`🔐`), Businessmap leads on native Lean flow analytics (`✅`), and Codebeamer enforces ALM commit/release traceability (`✅`). **`👍kanban`** already ships foundational substrates - cross-project `mcp_read_taint` exfiltration guards, outbound secret scrubbing on LLM/FIM prompts, DNS-pinned `:ro` Git mirrors, transactional `PlaneImporter` + `KBBAK1` encrypted backups, `kanban-ctl` / `kanban-agent` CLIs, and immutable `activity_records` transition timestamps - and actively tracks all ten Day-2 enterprise & fleet-scale expansions in its free `Apache-2.0` core (`🎯✅`): PostgreSQL-enforced `issue_leases` + monotonic `fencing_token` CAS (`KAN-69`), per-block provenance tainting with dynamic MCP capability stripping (`KAN-70`), silent per-issue `issue_workpads` + rework loop circuit breakers (`KAN-71`), synchronous pre-persistence Shannon-entropy secret push-protection (`KAN-72`), envelope-encrypted `activity_record_keys` crypto-shredding (`KAN-73`), RFC 8693 headless workload OIDC token exchange (`KAN-74`), SSRF-hardened SCM webhooks + `SSH`/`GPG`/`Sigstore` & SLSA attestation gates (`KAN-75`, `KAN-76`), Jira/GitHub/Linear importers with legacy key alias redirects and deterministic `JSONL` + `.md` exports (`KAN-77`), schema-driven `kanban-cli --filter ... --json` backed by `hnsw.iterative_scan` RLS vector recall (`KAN-48`, `KAN-78`), and native CFD, Aging WIP, Cycle/Lead Time `p50`/`p85`/`p95` scatterplots, and Monte Carlo forecasting (`KAN-79`).
+diff --git a/kanban/api/v1/attachments.py b/kanban/api/v1/attachments.py
+index 8768675d..e2439a80 100644
+--- a/kanban/api/v1/attachments.py
++++ b/kanban/api/v1/attachments.py
+@@ -314,6 +314,9 @@ async def get_attachment_direct(
+             headers["Content-Disposition"] = f'inline; filename="{safe_filename}"'
+         else:
+             headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
++    elif attachment.content_type == "application/pdf":
++        headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
++        headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
+     else:
+         headers["Content-Disposition"] = f'inline; filename="{safe_filename}"'
+ 
+@@ -392,6 +395,9 @@ async def get_attachment_content(  # noqa: PLR0913, PLR0917
+             headers["Content-Disposition"] = f'inline; filename="{safe_filename}"'
+         else:
+             headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
++    elif attachment.content_type == "application/pdf":
++        headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
++        headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
+     else:
+         headers["Content-Disposition"] = f'inline; filename="{safe_filename}"'
+ 
+diff --git a/kanban/api/v1/schemas/attachments.py b/kanban/api/v1/schemas/attachments.py
+index d201769f..7bf4fc42 100644
+--- a/kanban/api/v1/schemas/attachments.py
++++ b/kanban/api/v1/schemas/attachments.py
+@@ -22,6 +22,10 @@ class AttachmentResponse(BaseModel):
+     byte_size: Annotated[int, Field(ge=1, le=26_214_400, description="Payload byte size")]
+     pixel_width: Annotated[int | None, Field(default=None, description="Raster width in pixels")]
+     pixel_height: Annotated[int | None, Field(default=None, description="Raster height in pixels")]
++    page_count: Annotated[
++        int | None,
++        Field(default=None, description="Document page count for paginated media"),
++    ]
+     signed_url: Annotated[str, Field(description="HMAC-SHA256 signed content retrieval URL")]
+     expires_in: Annotated[int, Field(default=300, description="TTL in seconds for signed URL")]
+ 
+diff --git a/kanban/attachments/service.py b/kanban/attachments/service.py
+index 7a9e51e3..88fb8e24 100644
+--- a/kanban/attachments/service.py
++++ b/kanban/attachments/service.py
+@@ -8,6 +8,7 @@ from sqlalchemy import select
+ 
+ from database.models import Attachment
+ from kanban.api.problems import not_found
++from kanban.attachments.pdf import sanitize_and_validate_pdf
+ from kanban.attachments.raster import sanitize_and_reencode_raster
+ from kanban.attachments.signing import sign_attachment_url
+ from kanban.attachments.sniff import (
+@@ -56,11 +57,26 @@ class AttachmentService:
+             raw_filename,
+         )
+ 
+-        # 2. Decompression-bomb inspection and raster pixel re-encoding
+-        processed = await sanitize_and_reencode_raster(raw_bytes, detected_type)
++        # 2. Decompression-bomb inspection and content-specific validation/re-encoding
++        page_count: int | None = None
++        if detected_type == "application/pdf":
++            pdf_result = await sanitize_and_validate_pdf(raw_bytes)
++            clean_bytes = pdf_result.clean_bytes
++            blob_sha256 = pdf_result.blob_sha256
++            byte_size = pdf_result.byte_size
++            pixel_width = None
++            pixel_height = None
++            page_count = pdf_result.page_count
++        else:
++            processed = await sanitize_and_reencode_raster(raw_bytes, detected_type)
++            clean_bytes = processed.clean_bytes
++            blob_sha256 = processed.blob_sha256
++            byte_size = processed.byte_size
++            pixel_width = processed.pixel_width
++            pixel_height = processed.pixel_height
+ 
+         # 3. Content-addressed atomic filesystem storage
+-        storage_key, _ = self.blob_store.store(processed.clean_bytes)
++        storage_key, _ = self.blob_store.store(clean_bytes)
+ 
+         # 4. Safe filename handling for metadata row
+         safe_db_filename = sanitize_original_filename(raw_filename)
+@@ -72,11 +88,12 @@ class AttachmentService:
+             issue_id=issue_id,
+             uploaded_by_id=caller.principal_id,
+             original_filename=safe_db_filename,
+-            content_type=processed.content_type,
+-            byte_size=processed.byte_size,
+-            pixel_width=processed.pixel_width,
+-            pixel_height=processed.pixel_height,
+-            blob_sha256=processed.blob_sha256,
++            content_type=detected_type,
++            byte_size=byte_size,
++            pixel_width=pixel_width,
++            pixel_height=pixel_height,
++            page_count=page_count,
++            blob_sha256=blob_sha256,
+             storage_key=storage_key,
+         )
+         session.add(attachment)
+@@ -114,6 +131,7 @@ class AttachmentService:
+             "byte_size": attachment.byte_size,
+             "pixel_width": attachment.pixel_width,
+             "pixel_height": attachment.pixel_height,
++            "page_count": attachment.page_count,
+             "signed_url": signed_url,
+             "expires_in": 300,
+         }
+diff --git a/kanban/attachments/sniff.py b/kanban/attachments/sniff.py
+index 7038580c..c4641492 100644
+--- a/kanban/attachments/sniff.py
++++ b/kanban/attachments/sniff.py
+@@ -11,6 +11,7 @@ from kanban.api.problems import ProblemException
+ MAX_ATTACHMENT_BYTES: Final[int] = 26_214_400  # 25 MiB exact
+ _SVG_LEN: Final[int] = 4
+ _MIN_BOX_HEADER: Final[int] = 12
++_MIN_PDF_HEADER: Final[int] = 8
+ 
+ ALLOWED_MEDIA_TYPES: Final[frozenset[str]] = frozenset(
+     {
+@@ -20,6 +21,7 @@ ALLOWED_MEDIA_TYPES: Final[frozenset[str]] = frozenset(
+         "image/avif",
+         "image/gif",
+         "image/svg+xml",
++        "application/pdf",
+     }
+ )
+ 
+@@ -31,6 +33,7 @@ EXTENSION_TO_MEDIA_TYPE: Final[dict[str, str]] = {
+     ".gif": "image/gif",
+     ".avif": "image/avif",
+     ".svg": "image/svg+xml",
++    ".pdf": "application/pdf",
+ }
+ 
+ MEDIA_TYPE_TO_DEFAULT_EXT: Final[dict[str, str]] = {
+@@ -40,6 +43,7 @@ MEDIA_TYPE_TO_DEFAULT_EXT: Final[dict[str, str]] = {
+     "image/gif": ".gif",
+     "image/avif": ".avif",
+     "image/svg+xml": ".svg",
++    "application/pdf": ".pdf",
+ }
+ 
+ 
+@@ -92,6 +96,39 @@ def _sniff_svg(header: bytes) -> str | None:
+     return None
+ 
+ 
++def _sniff_pdf(header: bytes) -> str | None:
++    """Detect PDF document from magic bytes strictly at offset 0."""
++    if len(header) >= _MIN_PDF_HEADER and header.startswith((b"%PDF-1.", b"%PDF-2.")):
++        return "application/pdf"
++    return None
++
++
++def _check_special_type_hints(
++    detected: str,
++    filename: str,
++    declared_content_type: str | None,
++) -> None:
++    """Verify SVG or PDF has corresponding extension or declared Content-Type."""
++    if detected in ("image/svg+xml", "application/pdf"):
++        expected_ext = ".svg" if detected == "image/svg+xml" else ".pdf"
++        lower_fn = filename.lower()
++        has_ext = lower_fn.endswith(expected_ext)
++        decl_match = (
++            declared_content_type is not None
++            and declared_content_type.strip().lower().split(";")[0] == detected
++        )
++        if not (has_ext or decl_match):
++            label = "SVG" if detected == "image/svg+xml" else "PDF"
++            raise ProblemException(
++                code="MIME_MISMATCH_OR_UNSUPPORTED",
++                status=415,
++                title="Unsupported Media Type",
++                detail=(
++                    f"{label} content must have {expected_ext} extension or {detected} Content-Type"
++                ),
++            )
++
++
+ def sniff_media_type(
+     header_bytes: bytes,
+     declared_content_type: str | None,
+@@ -104,7 +141,7 @@ def sniff_media_type(
+             If magic bytes are unknown, or conflict with declared Content-Type or extension.
+ 
+     """
+-    detected = _sniff_raster(header_bytes) or _sniff_svg(header_bytes)
++    detected = _sniff_raster(header_bytes) or _sniff_svg(header_bytes) or _sniff_pdf(header_bytes)
+     if detected is None or detected not in ALLOWED_MEDIA_TYPES:
+         raise ProblemException(
+             code="MIME_MISMATCH_OR_UNSUPPORTED",
+@@ -113,21 +150,7 @@ def sniff_media_type(
+             detail="File content does not match any supported media type",
+         )
+ 
+-    # For SVG: additionally verify filename extension or declared type
+-    if detected == "image/svg+xml":
+-        lower_fn = filename.lower()
+-        has_svg_ext = lower_fn.endswith(".svg")
+-        decl_is_svg = (
+-            declared_content_type is not None
+-            and declared_content_type.strip().lower().split(";")[0] == "image/svg+xml"
+-        )
+-        if not (has_svg_ext or decl_is_svg):
+-            raise ProblemException(
+-                code="MIME_MISMATCH_OR_UNSUPPORTED",
+-                status=415,
+-                title="Unsupported Media Type",
+-                detail="SVG content must have .svg extension or image/svg+xml Content-Type",
+-            )
++    _check_special_type_hints(detected, filename, declared_content_type)
+ 
+     # Verify declared Content-Type consistency if provided
+     if declared_content_type:
+diff --git a/kanban/importer/plane_importer.py b/kanban/importer/plane_importer.py
+index c1afc273..a6928069 100644
+--- a/kanban/importer/plane_importer.py
++++ b/kanban/importer/plane_importer.py
+@@ -31,6 +31,7 @@ from database.models import (
+     RoleBinding,
+     WorkflowState,
+ )
++from kanban.attachments.pdf import sanitize_and_validate_pdf
+ from kanban.attachments.raster import sanitize_and_reencode_raster
+ from kanban.attachments.sniff import sniff_media_type
+ from kanban.attachments.storage import LocalFilesystemBlobStore
+@@ -502,16 +503,24 @@ class PlaneImporter:
+                 is_svg = att_filename.lower().endswith(".svg") or raw_bytes.strip().startswith(
+                     b"<svg"
+                 )
++                is_pdf = att_filename.lower().endswith(".pdf") or raw_bytes.startswith(
++                    (b"%PDF-1.", b"%PDF-2.")
++                )
+                 if is_svg:
+                     clean_svg_val = sanitize_svg(raw_bytes)
+                     clean_bytes = clean_svg_val.encode("utf-8")
+                     detected_type = "image/svg+xml"
+-                    p_w, p_h = None, None
++                    p_w, p_h, page_cnt = None, None, None
++                elif is_pdf:
++                    pdf_res = await sanitize_and_validate_pdf(raw_bytes)
++                    clean_bytes = pdf_res.clean_bytes
++                    detected_type = "application/pdf"
++                    p_w, p_h, page_cnt = None, None, pdf_res.page_count
+                 else:
+                     detected_type = sniff_media_type(raw_bytes[:4096], None, att_filename)
+                     processed = await sanitize_and_reencode_raster(raw_bytes, detected_type)
+                     clean_bytes = processed.clean_bytes
+-                    p_w, p_h = processed.pixel_width, processed.pixel_height
++                    p_w, p_h, page_cnt = processed.pixel_width, processed.pixel_height, None
+ 
+                 storage_key, raw_sha = self.blob_store.store(clean_bytes)
+                 att_id = uuid.uuid4()
+@@ -525,6 +534,7 @@ class PlaneImporter:
+                     byte_size=len(clean_bytes),
+                     pixel_width=p_w,
+                     pixel_height=p_h,
++                    page_count=page_cnt,
+                     blob_sha256=raw_sha,
+                     storage_key=storage_key,
+                 )
+diff --git a/kanban/tests/docs/test_check_docs_taxonomy.py b/kanban/tests/docs/test_check_docs_taxonomy.py
+index 8033df3f..c804c5a7 100644
+--- a/kanban/tests/docs/test_check_docs_taxonomy.py
++++ b/kanban/tests/docs/test_check_docs_taxonomy.py
+@@ -330,3 +330,39 @@ class TestAuditIntegrationAndCLI:
+             ]
+         )
+         assert code == 1
++
++    def test_feature_comparison_matrix_sync_and_gfm_columns(self) -> None:
++        """Assert Feature Comparison has 9 columns (with OpenAI Symphony) and stays in sync."""
++        repo_root = Path(__file__).resolve().parents[3]
++        spec_file = repo_root / "docs" / "FEATURE_COMPARISON.md"
++        assert spec_file.is_file()
++        spec_lines = spec_file.read_text(encoding="utf-8").splitlines()
++
++        expected_header = (
++            "| Feature | 👍kanban | Jira | Plane | GitHub | "
++            "Vibe Kanban | OpenAI Symphony | Businessmap | Codebeamer |"
++        )
++        expected_separator = "| --- | --- | --- | --- | --- | --- | --- | --- | --- |"
++
++        table_lines = [line for line in spec_lines if line.startswith("|")]
++        header_lines = [line for line in table_lines if line.startswith("| Feature |")]
++        separator_lines = [line for line in table_lines if line.startswith("| --- |")]
++        data_lines = [
++            line for line in table_lines if line not in header_lines and line not in separator_lines
++        ]
++
++        assert header_lines == [expected_header] * 5
++        assert separator_lines == [expected_separator] * 5
++        assert len(data_lines) == 45
++        planned_core_rows = [row for row in data_lines if "| 🎯✅ |" in row]
++        assert len(planned_core_rows) == 10
++        for row in table_lines:
++            cells = [cell.strip() for cell in row.strip("|").split("|")]
++            assert len(cells) == 9, f"Expected 9 GFM columns, got {len(cells)} in row: {row}"
++
++        wiki_dir = Path(DEFAULT_WIKI_DIR)
++        if wiki_dir.is_dir():
++            wiki_file = wiki_dir / "Feature-Comparison.md"
++            wiki_lines = wiki_file.read_text(encoding="utf-8").splitlines()
++            assert wiki_lines[0] == "# [Informational] Feature Comparison Matrix (45 Features)"
++            assert wiki_lines[1:] == spec_lines[1:]
+diff --git a/kanban/web/src/editor/MarkdownEditor.tsx b/kanban/web/src/editor/MarkdownEditor.tsx
+index b9a1e8a6..d540ab7f 100644
+--- a/kanban/web/src/editor/MarkdownEditor.tsx
++++ b/kanban/web/src/editor/MarkdownEditor.tsx
+@@ -423,20 +423,35 @@ export function MarkdownEditor({
+       onAnnounceRef.current?.(msg);
+       return;
+     }
++    const isPdf =
++      file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+     try {
+       const result = await defaultUploadAttachment(file, projectId);
+       const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
+-      if (isRawMode) {
+-        insertTextInRaw(`![${file.name}](${targetUri})`, '', '');
++      if (isPdf) {
++        if (isRawMode) {
++          insertTextInRaw(`[${file.name}](${targetUri})`, '', '');
++        } else {
++          /* v8 ignore next */
++          if (!viewRef.current) return;
++          const linkMark = editorSchema.marks.link.create({ href: targetUri });
++          const textNode = editorSchema.text(file.name, [linkMark]);
++          viewRef.current.dispatch(viewRef.current.state.tr.replaceSelectionWith(textNode));
++          viewRef.current.focus();
++        }
+       } else {
+-        /* v8 ignore next */
+-        if (!viewRef.current) return;
+-        const imgNode = editorSchema.nodes.image.create({
+-          src: targetUri,
+-          alt: file.name,
+-        });
+-        viewRef.current.dispatch(viewRef.current.state.tr.replaceSelectionWith(imgNode));
+-        viewRef.current.focus();
++        if (isRawMode) {
++          insertTextInRaw(`![${file.name}](${targetUri})`, '', '');
++        } else {
++          /* v8 ignore next */
++          if (!viewRef.current) return;
++          const imgNode = editorSchema.nodes.image.create({
++            src: targetUri,
++            alt: file.name,
++          });
++          viewRef.current.dispatch(viewRef.current.state.tr.replaceSelectionWith(imgNode));
++          viewRef.current.focus();
++        }
+       }
+     } catch {
+       const msg = 'Attachment upload failed';
+@@ -605,7 +620,7 @@ export function MarkdownEditor({
+           type="button"
+           className="kb-editor__tool-btn"
+           aria-label="Attach media or SVG"
+-          title="Attach media or SVG (<=25MB)"
++          title="Attach media, SVG, or PDF (<=25MB)"
+           onClick={handleTriggerMediaUpload}
+           data-testid={`${testId}-tool-media`}
+         >
+@@ -614,7 +629,7 @@ export function MarkdownEditor({
+         <input
+           ref={fileInputRef}
+           type="file"
+-          accept="image/*,.svg"
++          accept="image/*,.svg,.pdf,application/pdf"
+           tabIndex={-1}
+           aria-hidden="true"
+           className="kb-editor__file-input"
+diff --git a/kanban/web/src/editor/clipboard/autoConvertPaste.test.tsx b/kanban/web/src/editor/clipboard/autoConvertPaste.test.tsx
+index 36fb9dbf..ca14d45d 100644
+--- a/kanban/web/src/editor/clipboard/autoConvertPaste.test.tsx
++++ b/kanban/web/src/editor/clipboard/autoConvertPaste.test.tsx
+@@ -488,8 +488,8 @@ describe('autoConvertPaste', () => {
+     const domContainer = document.createElement('div');
+     const view = new EditorView(domContainer, { state });
+ 
+-    const pdfFile = new File(['pdf-bytes'], 'report.pdf', { type: 'application/pdf' });
+-    const dt = createMockDataTransfer({ files: [pdfFile] });
++    const zipFile = new File(['zip-bytes'], 'archive.zip', { type: 'application/zip' });
++    const dt = createMockDataTransfer({ files: [zipFile] });
+ 
+     let handled = false;
+     const event = new SafeClipboardEvent('paste', {
+@@ -505,6 +505,41 @@ describe('autoConvertPaste', () => {
+     expect(handled).toBe(false);
+   });
+ 
++  it('Case 2: Branch 1 (PDF Attachment Upload) uploads PDF and inserts markdown link without ! prefix', async () => {
++    const { doc } = parseMarkdown('Initial doc');
++    const state = EditorState.create({
++      doc,
++      schema: editorSchema,
++      plugins: [
++        autoConvertPastePlugin({
++          uploadAttachment: () =>
++            Promise.resolve({ markdownUri: 'attachment://att_pdf_123', id: 'pdf_123' }),
++        }),
++      ],
++    });
++
++    const domContainer = document.createElement('div');
++    const view = new EditorView(domContainer, { state });
++
++    const pdfFile = new File(['%PDF-1.4 sample'], 'spec.pdf', { type: 'application/pdf' });
++    const dt = createMockDataTransfer({ files: [pdfFile] });
++
++    const event = new SafeClipboardEvent('paste', {
++      clipboardData: dt,
++      bubbles: true,
++      cancelable: true,
++    });
++    view.someProp('handlePaste', (fn) => {
++      fn(view, event, view.state.doc.slice(0, 0));
++      return true;
++    });
++
++    // Wait for async upload promise
++    await new Promise((r) => setTimeout(r, 20));
++    expect(view.state.doc.textContent).toContain('[spec.pdf](attachment://att_pdf_123)');
++    expect(view.state.doc.textContent).not.toContain('![spec.pdf]');
++  });
++
+   it('retrieves CSRF token from meta tag or cookie', async () => {
+     const originalFetch = globalThis.fetch;
+     try {
+diff --git a/kanban/web/src/editor/clipboard/autoConvertPaste.ts b/kanban/web/src/editor/clipboard/autoConvertPaste.ts
+index ebb65721..015117a5 100644
+--- a/kanban/web/src/editor/clipboard/autoConvertPaste.ts
++++ b/kanban/web/src/editor/clipboard/autoConvertPaste.ts
+@@ -218,21 +218,28 @@ export function handleClipboardPaste(
+     return false;
+   }
+ 
+-  // Branch 1: Binary Image / .svg paste
++  // Branch 1: Binary Image / .svg / .pdf paste
+   const files = Array.from(clipboardData.files);
+   if (files.length > 0) {
+-    const imageFile = files.find(
+-      (f) => ALLOWED_IMAGE_MIME_TYPES.has(f.type) || f.name.toLowerCase().endsWith('.svg'),
++    const targetFile = files.find(
++      (f) =>
++        ALLOWED_IMAGE_MIME_TYPES.has(f.type) ||
++        f.name.toLowerCase().endsWith('.svg') ||
++        f.type === 'application/pdf' ||
++        f.name.toLowerCase().endsWith('.pdf'),
+     );
+ 
+-    if (imageFile) {
++    if (targetFile) {
+       // Guard: Reject files exceeding 25 MB client-side without network upload
+-      if (imageFile.size > MAX_ATTACHMENT_BYTES) {
++      if (targetFile.size > MAX_ATTACHMENT_BYTES) {
+         options?.onAnnounce?.('Attachment exceeds 25 MB limit');
+         return true;
+       }
+ 
+-      const rawName = imageFile.name !== '' ? imageFile.name : 'image.png';
++      const isPdf =
++        targetFile.type === 'application/pdf' || targetFile.name.toLowerCase().endsWith('.pdf');
++      const rawName =
++        targetFile.name !== '' ? targetFile.name : isPdf ? 'document.pdf' : 'image.png';
+       const sanitizedName = rawName.replace(/[^\w.-]/g, '_');
+       const placeholder = `[Uploading ${sanitizedName}...]`;
+ 
+@@ -243,7 +250,7 @@ export function handleClipboardPaste(
+ 
+       // Execute upload asynchronously
+       const doUpload = options?.uploadAttachment ?? defaultUploadAttachment;
+-      void doUpload(imageFile, projectId)
++      void doUpload(targetFile, projectId)
+         .then((result) => {
+           const foundPos = findTextPosition(view.state.doc, placeholder);
+           /* v8 ignore start */
+@@ -251,10 +258,13 @@ export function handleClipboardPaste(
+             return;
+           }
+           /* v8 ignore stop */
+-          const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
+-          const imageMarkdown = `![${sanitizedName}](${targetUri})`;
++          const targetUri =
++            result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
++          const insertMarkdown = isPdf
++            ? `[${sanitizedName}](${targetUri})`
++            : `![${sanitizedName}](${targetUri})`;
+           const replaceTr = view.state.tr.insertText(
+-            imageMarkdown,
++            insertMarkdown,
+             foundPos,
+             foundPos + placeholder.length,
+           );
+diff --git a/kanban/web/src/editor/media/mediaUrlResolver.ts b/kanban/web/src/editor/media/mediaUrlResolver.ts
+index d713fef0..35859bc2 100644
+--- a/kanban/web/src/editor/media/mediaUrlResolver.ts
++++ b/kanban/web/src/editor/media/mediaUrlResolver.ts
+@@ -71,11 +71,14 @@ export function resolveMediaUrl(
+ 
+   // 2. Handle attachment://<id> protocol
+   if (trimmed.startsWith('attachment://')) {
+-    const attachmentId = trimmed.replace('attachment://', '');
++    const rawId = trimmed.replace('attachment://', '');
++    const cleanId = rawId.replace(/^att_/, '');
+     const mapped =
+-      options.resolveAttachmentUrl?.(attachmentId) ??
+-      options.attachmentMap?.[attachmentId];
+-    const resolvedUrl = mapped ?? `/api/v1/attachments/${attachmentId}`;
++      options.resolveAttachmentUrl?.(cleanId) ??
++      options.resolveAttachmentUrl?.(rawId) ??
++      options.attachmentMap?.[cleanId] ??
++      options.attachmentMap?.[rawId];
++    const resolvedUrl = mapped ?? `/api/v1/attachments/${cleanId}`;
+     return {
+       kind: 'attachment',
+       url: resolvedUrl,
+diff --git a/kanban/web/src/features/activity/CommentComposer.test.tsx b/kanban/web/src/features/activity/CommentComposer.test.tsx
+index f2c9805e..33c8d4da 100644
+--- a/kanban/web/src/features/activity/CommentComposer.test.tsx
++++ b/kanban/web/src/features/activity/CommentComposer.test.tsx
+@@ -371,9 +371,10 @@ describe('CommentComposer', () => {
+       expect(textarea.value).toContain('[link text](https://example.com)');
+ 
+       // Click Media button
+-      const mediaBtn = screen.getByRole('button', { name: 'Attach media or SVG' });
++      const mediaBtn = screen.getByRole('button', { name: 'Attach media, SVG, or PDF' });
+       fireEvent.click(mediaBtn);
+-      expect(textarea.value).toContain('![alt text](https://example.com/media.png)');
++      // Fixed premature placeholder: clicking media button triggers file picker without inserting premature template
++      expect(textarea.value).not.toContain('![alt text](https://example.com/media.png)');
+     });
+ 
+     it('handles generic non-ApiProblem errors on submit', async () => {
+diff --git a/kanban/web/src/features/activity/CommentComposer.tsx b/kanban/web/src/features/activity/CommentComposer.tsx
+index 476fca3a..6dfe8c7f 100644
+--- a/kanban/web/src/features/activity/CommentComposer.tsx
++++ b/kanban/web/src/features/activity/CommentComposer.tsx
+@@ -300,10 +300,15 @@ export function CommentComposer({
+       setErrorText('Attachment exceeds 25 MB limit');
+       return;
+     }
++    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+     try {
+       const result = await defaultUploadAttachment(file, projectKey);
+       const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
+-      insertTextAtCursor(`![${file.name}](${targetUri})`, '', '');
++      if (isPdf) {
++        insertTextAtCursor(`[${file.name}](${targetUri})`, '', '');
++      } else {
++        insertTextAtCursor(`![${file.name}](${targetUri})`, '', '');
++      }
+     } catch {
+       setErrorText('Attachment upload failed');
+     } finally {
+@@ -316,17 +321,26 @@ export function CommentComposer({
+     const files = Array.from(e.dataTransfer.files);
+     if (files.length === 0) return;
+     const file = files.find(
+-      (f) => ALLOWED_IMAGE_MIME_TYPES.has(f.type) || f.name.toLowerCase().endsWith('.svg'),
++      (f) =>
++        ALLOWED_IMAGE_MIME_TYPES.has(f.type) ||
++        f.name.toLowerCase().endsWith('.svg') ||
++        f.type === 'application/pdf' ||
++        f.name.toLowerCase().endsWith('.pdf'),
+     );
+     if (!file) return;
+     if (file.size > MAX_ATTACHMENT_BYTES) {
+       setErrorText('Attachment exceeds 25 MB limit');
+       return;
+     }
++    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+     void defaultUploadAttachment(file, projectKey)
+       .then((result) => {
+         const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
+-        insertTextAtCursor(`![${file.name}](${targetUri})`, '', '');
++        if (isPdf) {
++          insertTextAtCursor(`[${file.name}](${targetUri})`, '', '');
++        } else {
++          insertTextAtCursor(`![${file.name}](${targetUri})`, '', '');
++        }
+       })
+       .catch(() => {
+         setErrorText('Attachment upload failed');
+@@ -340,7 +354,11 @@ export function CommentComposer({
+     const files = Array.from(clipboardData.files);
+     if (files.length > 0) {
+       const file = files.find(
+-        (f) => ALLOWED_IMAGE_MIME_TYPES.has(f.type) || f.name.toLowerCase().endsWith('.svg'),
++        (f) =>
++          ALLOWED_IMAGE_MIME_TYPES.has(f.type) ||
++          f.name.toLowerCase().endsWith('.svg') ||
++          f.type === 'application/pdf' ||
++          f.name.toLowerCase().endsWith('.pdf'),
+       );
+       if (file) {
+         e.preventDefault();
+@@ -348,10 +366,15 @@ export function CommentComposer({
+           setErrorText('Attachment exceeds 25 MB limit');
+           return;
+         }
++        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+         void defaultUploadAttachment(file, projectKey)
+           .then((result) => {
+             const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
+-            insertTextAtCursor(`![${file.name}](${targetUri})`, '', '');
++            if (isPdf) {
++              insertTextAtCursor(`[${file.name}](${targetUri})`, '', '');
++            } else {
++              insertTextAtCursor(`![${file.name}](${targetUri})`, '', '');
++            }
+           })
+           .catch(() => {
+             setErrorText('Attachment upload failed');
+@@ -471,9 +494,8 @@ export function CommentComposer({
+         <button
+           type="button"
+           className="composer-tool-btn"
+-          aria-label="Attach media or SVG"
++          aria-label="Attach media, SVG, or PDF"
+           onClick={() => {
+-            insertTextAtCursor('![', '](https://example.com/media.png)', 'alt text');
+             fileInputRef.current?.click();
+           }}
+         >
+@@ -482,7 +504,7 @@ export function CommentComposer({
+         <input
+           ref={fileInputRef}
+           type="file"
+-          accept="image/*,.svg"
++          accept="image/*,.svg,.pdf,application/pdf"
+           tabIndex={-1}
+           aria-hidden="true"
+           className="comment-composer__file-input"
+diff --git a/kanban/web/src/features/activity/SafeMarkdownPreview.test.tsx b/kanban/web/src/features/activity/SafeMarkdownPreview.test.tsx
+index 6bc5f7a2..7a79e7b1 100644
+--- a/kanban/web/src/features/activity/SafeMarkdownPreview.test.tsx
++++ b/kanban/web/src/features/activity/SafeMarkdownPreview.test.tsx
+@@ -97,6 +97,17 @@ describe('SafeMarkdownPreview', () => {
+       expect(italicEl.tagName.toLowerCase()).toBe('em');
+     });
+ 
++    it('renders PDF attachment links as PdfAttachmentCard', () => {
++      const markdown = 'See attached doc: [specification.pdf](attachment://att_spec_1)';
++      render(<SafeMarkdownPreview markdown={markdown} />);
++
++      expect(screen.getByTestId('p-0-pdf-0')).toBeDefined();
++      expect(screen.getByText('specification.pdf')).toBeDefined();
++      const link = screen.getByRole('link', { name: 'Download specification.pdf' });
++      expect(link.getAttribute('href')).toBe('/api/v1/attachments/spec_1');
++      expect(link.getAttribute('download')).toBe('specification.pdf');
++    });
++
+     it('supports pluggable custom renderer via registerCommentBodyRenderer', () => {
+       registerCommentBodyRenderer((md) => {
+         if (md.startsWith('CUSTOM:')) {
+diff --git a/kanban/web/src/features/activity/SafeMarkdownPreview.tsx b/kanban/web/src/features/activity/SafeMarkdownPreview.tsx
+index 5b9e7e0c..4488905b 100644
+--- a/kanban/web/src/features/activity/SafeMarkdownPreview.tsx
++++ b/kanban/web/src/features/activity/SafeMarkdownPreview.tsx
+@@ -7,6 +7,8 @@
+ import React, { type JSX, type ReactNode } from 'react';
+ import { MediaViewport } from '../../editor/media/MediaViewport';
+ import { MermaidBlockView } from '../../editor/mermaid/MermaidBlockView';
++import { resolveMediaUrl } from '../../editor/media/mediaUrlResolver';
++import { PdfAttachmentCard } from './PdfAttachmentCard';
+ 
+ export type CommentBodyRenderer = (markdown: string) => ReactNode;
+ 
+@@ -88,17 +90,35 @@ export function renderInlineContent(text: string, keyPrefix: string): ReactNode[
+       );
+     } else if (linkMatch && linkText && linkUrl) {
+       if (isSafeUrl(linkUrl)) {
+-        nodes.push(
+-          <a
+-            key={`${keyPrefix}-link-${String(tokenIdx)}`}
+-            href={linkUrl}
+-            target="_blank"
+-            rel="noopener noreferrer"
+-            className="safe-md__link"
+-          >
+-            {linkText}
+-          </a>,
+-        );
++        const lowerUrl = linkUrl.toLowerCase();
++        const lowerText = linkText.toLowerCase();
++        const isPdfAttachment =
++          (lowerUrl.startsWith('attachment://') || lowerUrl.includes('/attachments/')) &&
++          (lowerText.endsWith('.pdf') || lowerUrl.endsWith('.pdf'));
++
++        if (isPdfAttachment) {
++          const resolved = resolveMediaUrl(linkUrl);
++          nodes.push(
++            <PdfAttachmentCard
++              key={`${keyPrefix}-pdf-${String(tokenIdx)}`}
++              filename={linkText}
++              downloadUrl={resolved.url}
++              testId={`${keyPrefix}-pdf-${String(tokenIdx)}`}
++            />,
++          );
++        } else {
++          nodes.push(
++            <a
++              key={`${keyPrefix}-link-${String(tokenIdx)}`}
++              href={linkUrl}
++              target="_blank"
++              rel="noopener noreferrer"
++              className="safe-md__link"
++            >
++              {linkText}
++            </a>,
++          );
++        }
+       } else {
+         // Strip unsafe schemes like javascript: to plain text
+         nodes.push(linkText);
+diff --git a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
+index 1e6d2e65..f26b6731 100644
+--- a/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
++++ b/kanban/web/src/features/admin-ai/AiProviderEditorDrawer.tsx
+@@ -504,7 +504,7 @@ function AiProviderEditorContent({
+               title="Cutoff Timeout (ms)"
+               summary="Hard cutoff time in milliseconds before aborting slow model inference or failing over."
+               validValues={['1000 to 300000 (Default: 30000)']}
+-              docHref="/docs/multi-provider-ai-engine-and-runners#timeout-policy"
++              docHref="/docs/multi-provider-ai-engine-and-runners#multi-provider-benchmark-cutoff-timeout-guide"
+               testId="provider-timeout-help"
+             />
+           </label>
+diff --git a/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx b/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
+index c487e5e6..886dd6e8 100644
+--- a/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
++++ b/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
+@@ -1479,5 +1479,27 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
+         </MemoryRouter>,
+       );
+     });
++
++    it('renders the 45-feature comparison matrix including OpenAI Symphony and 🎯✅ targets in DocsCenterPage', () => {
++      const comparisonChapter = getChapter('feature-comparison');
++      expect(comparisonChapter).toBeDefined();
++      expect(comparisonChapter?.content).toContain('OpenAI Symphony');
++      expect(comparisonChapter?.content).toContain('🎯✅');
++
++      render(
++        <MemoryRouter initialEntries={['/docs/feature-comparison']}>
++          <Routes>
++            <Route path="/docs/:slug" element={<DocsCenterPage />} />
++          </Routes>
++        </MemoryRouter>,
++      );
++
++      const symphonyHeaders = screen.getAllByRole('columnheader', {
++        name: 'OpenAI Symphony',
++      });
++      expect(symphonyHeaders).toHaveLength(5);
++      expect(screen.getAllByRole('table')).toHaveLength(5);
++      expect(screen.getAllByRole('cell', { name: '🎯✅' })).toHaveLength(10);
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/docs-center/wikiManifest.ts b/kanban/web/src/features/docs-center/wikiManifest.ts
+index ab41e95d..dc1cfb3a 100644
+--- a/kanban/web/src/features/docs-center/wikiManifest.ts
++++ b/kanban/web/src/features/docs-center/wikiManifest.ts
+@@ -117,7 +117,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+         "level": 3
+       }
+     ],
+-    "content": "# \ud83d\udc4dkanban: Executive Architecture and System Overview\n\nWelcome to the authoritative technical documentation and wiki for **\ud83d\udc4dkanban** (`thumbs-up-kanban`), an open-source, enterprise-grade project management, ticketing, and knowledge platform built from the ground up on two fundamental pillars:\n1. **Security-First (Priority 0):** Hardened zero-trust infrastructure, PostgreSQL Row-Level Security (`FORCE RLS`), five-tier network isolation, AAL2 administrative authorization, and hostile input sanitization.\n2. **Agent-First (Priority 1):** Purpose-built for autonomous AI agents and human teams alike, replacing the context-bloating CRUD-wrapper anti-pattern with an intent-driven, three-surface Model Context Protocol (MCP) server, deterministic workflow gates, and sub-second execution loops.\n\nLicensed under the strictly permissive **Apache-2.0** license, \ud83d\udc4dkanban eliminates SaaS AI paywalls and per-seat subscription lock-in while competing globally against Jira, Vibe Kanban, and commercial issue trackers with drop-in enterprise migration support.\n\n---\n\n## System Topology\n\n```mermaid\nflowchart TD\n    subgraph Clients[\"Client Surfaces\"]\n        SPA[\"React 19 SPA (Desktop, Tablet, Mobile)\"]\n        Agents[\"Autonomous Agents (Cursor, Claude, Codex, Agy)\"]\n    end\n\n    subgraph Entrypoints[\"API & Protocol Gateways\"]\n        FastAPI[\"FastAPI Application Server<br/>- Multi-Card Auth (AAL2)<br/>- Canonical Markdown Pipe<br/>- WebSocket Realtime Hub<br/>- REST API (242+ routes, 316+ operations)\"]\n        MCP[\"3-Surface MCP Server<br/>- /mcp/agent (9 tools)<br/>- /mcp/docs (3 tools)<br/>- /mcp/admin (12 tools)<br/>- InlineSafeDumper YAML\"]\n    end\n\n    subgraph Core[\"Database Engine & Object Graph\"]\n        UOG[\"Universal Object Graph (UOG)<br/>PostgreSQL 16 with FORCE ROW LEVEL SECURITY (100%)<br/>- Typed object_links, Spine records, Append-only Ledger<br/>- ltree Hierarchical Docs, pgvector Embeddings, Full-Text<br/>- Invalid Object Link Auditor & Purger\"]\n    end\n\n    subgraph Runtimes[\"Execution Engines\"]\n        AIEngine[\"AI Engine & Orchestration<br/>- OpenAI, Ollama, Gemini<br/>- agy -p, codex -p pipes<br/>- Async Gate Helpers\"]\n        Sandbox[\"Sandbox Execution Runtime<br/>- Tier A: Wasmtime engine<br/>- Tier B: nsjail runner<br/>- Scoped Ephemeral Tokens\"]\n    end\n\n    SPA -->|HTTP / WebSocket| FastAPI\n    Agents -->|HTTP / SSE / STDIO| MCP\n    Agents -->|HTTP REST| FastAPI\n    FastAPI --> Core\n    MCP --> Core\n    Core --> AIEngine\n    Core --> Sandbox\n```\n\n---\n\n## Visual Tour: Platform Highlights\n\n### Enterprise Workspace and Project Hub\nThe workspace home delivers clear project visibility, team velocity metrics, and seamless multi-project navigation with responsive layouts across desktop, tablet, and mobile displays.\n\n![Workspace Home and Project Overview](images/05-workspace-home.png)\n\n### Breathable Whitespace Board and High-Contrast Theming\nThe core Kanban board features sub-16ms smooth drag-and-drop, semantic emoji hints, configurable WIP limits, and an enterprise dark theme for reduced eye strain during extended operational sessions.\n\n![Enterprise Whitespace Board View](images/06-board-view.png)\n\n![Dark Theme Enterprise Kanban Board](images/22-dark-theme-board.png)\n\n### Keyboard-Driven Command Palette\nGlobal keyboard shortcuts (`Ctrl+K` / `Cmd+K`) provide instant fuzzy navigation across tickets, documents, projects, and administrative studios without context switching.\n\n![Global Command Palette Navigation](images/23-command-palette.png)\n\n### Multi-View Projections: Table Inline Editing and Timeline Dependencies\nEngineers can switch instantly between Kanban Board, 3-pane List, Table with capability-gated inline cell editing, Calendar, and Timeline with SVG Bezier BLOCKS dependency arrows.\n\n![Table View Inline Editing](images/37-table-inline-editing.png)\n\n### Fullscreen Issue Studio and Access Visibility Inspector\nExpanding any ticket unlocks the Fullscreen Issue Studio, featuring a Rich Markdown authoring toolbar, Sparkle 320ms Fill-in-the-Middle (FIM) ghost-text completion, the `\ud83d\udee1\ufe0f` Effective Access Inspector, and a 4-tab activity stream.\n\n![Fullscreen Issue View with Rich Markdown Toolbar and Access Inspector](images/39-fullscreen-issue-view.png)\n\n### Advanced Governance and Administrative Studios\nPlatform administrators manage enterprise governance through dedicated studios:\n- **AI Providers & Token Caps Studio (`/admin/ai`):** Write-only key custody, monthly token budgets, and air-gap policies (`images/43-admin-ai-studio-providers.png`).\n- **Invalid Object Link Auditor (`/admin/link-auditor`):** Continuous graph integrity verification, inspect drawer, and two-stage audited purge (`images/46-admin-link-auditor.png`).\n- **Workflow Transition Studio & Dry-Run Drawer (`/projects/:key/settings/workflows`):** Zero-persistence dry-run simulation with step timings and copyable CLI commands (`images/50-workflow-studio-dry-run-drawer.png`).\n- **Plane Migration Import Studio (`/admin/imports`):** Single-click bundle ingestion, dry-run diff preview, and transactional live migration (`images/49-admin-plane-import-studio.png`).\n\n![Admin Invalid Object Link Auditor Studio](images/46-admin-link-auditor.png)\n\n---\n\n## Architectural Distinctions: \ud83d\udc4dkanban vs Traditional Tools\n\n| Dimension | Legacy Trackers & Paywalled SaaS (Jira / Vibe Kanban) | \ud83d\udc4dkanban Platform |\n| :--- | :--- | :--- |\n| **License & Cost** | Commercial SaaS / AGPL with paid AI paywalls | Pure Apache-2.0, zero paywalled features |\n| **Agent Interface** | 70-120 raw CRUD tool wrappers (15k-25k tokens) | 24 intent-driven MCP tools across 3 surfaces (<= 1.8k tokens for agent) |\n| **Database Security** | Application-layer authorization checks | Hardware-enforced PostgreSQL `FORCE ROW LEVEL SECURITY` on all tenant tables |\n| **Network Isolation** | Monolithic container or open Docker bridge | Hardened 5-network isolation matrix (`edge`, `app`, `data`, `sandbox`, `egress`) |\n| **Scripted Workflows & Helpers** | Basic webhooks with no blocking execution | Atomic synchronous Wasm validators/mutators and async AI agent gates |\n| **Input Sanitization** | Basic HTML strip | Hostile Unicode lone-surrogate rejection, hidden-DOM pruner, SVG sandbox |\n| **Deployment Mode** | Complex multi-service Kubernetes only | Single-container standalone (`docker run`) or full multi-container production |\n\nFor an exhaustive feature-by-feature evaluation across 35 criteria, see the [Feature Comparison Matrix](Feature-Comparison).\n\n---\n\n## Non-Bypassable Engineering and Security Invariants\n\n1. **Plain ASCII Hyphen Invariant:** All public documentation, wiki articles, and commit messages strictly mandate plain ASCII hyphens (`-`). Unicode em-dashes (U+2014) and en-dashes (U+2013) are strictly forbidden across the codebase and wiki.\n2. **Zero-Context Fail-Closed Database:** In the absence of an explicit session context (`SET LOCAL app.current_principal_id`), all queries against tenant tables return zero rows. The application role `kanban_app` is stripped of `SUPERUSER` and `BYPASSRLS`.\n3. **Hostile Unicode Rejection:** Text ingestion rejects UTF-16 lone surrogates (`0xD800` through `0xDFFF`) prior to UTF-8 encoding, preventing memory corruptions and parser desynchronization.\n4. **Paste-Jacking Defense:** Clipboard inputs are aggressively stripped of hidden-DOM payloads, zero-width spaces, and invisible injection sequences.\n5. **AAL2 Admin Route Enforcement:** Every endpoint under `/api/v1/admin/*` and every administrative tool on `/mcp/admin` requires Authenticator Assurance Level 2 (AAL2) credentials.\n6. **95% Automated Test Coverage:** All core modules maintain at least 95% unit test coverage running on clean-DB fixtures with sub-millisecond `SAVEPOINT` isolation.\n\n---\n\n## Complete Table of Contents\n\n### Track 1: Step-by-Step Guides\n1. [[Guide] Production Promotion and Backup Runbook](Production-Promotion-and-Backup-Runbook) - Single-command standalone promotion, encrypted KBBAK1 backup format, and disaster recovery.\n2. [[Guide] Legacy Tracker Migration and Cutover Runbook](Migration-and-Cutover-Runbook) - 7-phase zero-downtime cutover plan, dry-run reconciliation, and rollback procedures.\n3. [[Guide] How to Use Custom Fields](Guide-Custom-Fields) - Step-by-step custom fields guide, formulas, wasm/nsjail tiers, and approval workflows.\n4. [[Guide] Scripted Workflows and Transition Helpers](Scripted-Workflows-and-Transition-Helpers) - Synchronous transition validators/mutators and asynchronous AI agent gates.\n5. [[Guide] Multi-Card Authentication Studio and Identity Architecture](Multi-Card-Authentication-Studio) - Pluggable auth cards (OAuth2, LDAP, WebAuthn Passkeys, TOTP, Local Admin) with break-glass protection.\n6. [[Guide] Multi-Provider AI Engine, Execution Harnesses, and Runners](Multi-Provider-AI-Engine-and-Runners) - OpenAI, Ollama, Gemini integrations, local CLI pipe harnesses (`agy -p`, `codex -p`), and mTLS runners.\n7. [[Guide] Three-Surface Model Context Protocol (MCP) Server Architecture](Three-Surface-MCP-Server-Architecture) - Dedicated streamable endpoints (`/mcp/agent`, `/mcp/docs`, `/mcp/admin`) with InlineSafeDumper YAML.\n\n### Track 2: Feature & Field Reference\n1. [[Informational] Studio Configuration Reference](Studio-Configuration-Reference) - Exhaustive field configuration tables and security impact across all 11 \ud83d\udc4dkanban Studios.\n2. [[Informational] Enterprise Whitespace, Semantic Emojis, and Kanban Board](Enterprise-Whitespace-and-Kanban-Board) - 5 native view layouts, 2D swimlanes, sub-16ms drag-and-drop, and the `<EmojiHint>` semantic hover system.\n3. [[Informational] Ticket Screen, Peek Drawer, and Work Item Architecture](Ticket-Screen-and-Work-Item-Features) - 960px peek drawer, 17 enterprise work-item features, properties rail, and 4-tab activity stream.\n4. [[Informational] Hierarchical Docs, Project Stickies, and Smart Promotion](Hierarchical-Docs-and-Stickies-with-Smart-Promotion) - ltree page trees, color-coded sticky masonry, and lossless AI-assisted promotion to Docs.\n5. [[Informational] Blinking Cursor Sparkle Completion Engine](Blinking-Cursor-Sparkle-Completion-Engine) - Sub-300ms inline Fill-In-the-Middle (FIM) ghost text with surgical right-click disambiguation.\n6. [[Informational] Model Context Protocol (MCP) Tools Reference Manual](MCP-Tools-Reference) - Exhaustive specification of all 24 MCP tools, parameter schemas, LOD tiers, and destructive token workflows.\n7. [[Informational] REST API Architecture and OpenAPI Integration Guide](REST-API-Architecture-and-OpenAPI-Guide) - Technical guide to the 242+ route FastAPI backend, interactive OpenAPI documentation, and TypeScript SDK.\n\n### Track 3: Security & Adoption Overview\n1. [[Informational] Role and Permission Matrix](Role-and-Permission-Matrix) - Visual \u25cf / \u25d0 / \u25cb role and capability matrix across all 7 principal tiers.\n2. [[Informational] Zero-Trust Security Architecture and Explicit Access Visibility](Zero-Trust-Security-and-Access-Visibility) - PostgreSQL FORCE RLS, dynamic sharing pill, access manifests, and STRIDE threat mitigation.\n3. [[Informational] Feature Comparison Matrix (35 Features)](Feature-Comparison) - Comprehensive capability comparison across 35 features evaluating \ud83d\udc4dkanban against Jira, Plane, GitHub, Vibe Kanban, Businessmap, and Codebeamer.\n\n### Track 4: Engineering & Security Architecture\n\n#### Functional Architecture\n1. [[Architectural] System Topology and Multi-Container Architecture](System-Topology-and-Multi-Container-Architecture) - Standalone embedded PostgreSQL Unix socket and 5-network production container stack.\n2. [[Architectural] Universal Object Graph and Invalid Link Auditor](Universal-Object-Graph-and-Link-Auditor) - Unified object spine, 13 typed object relationships, and automated invalid link detection/purging.\n3. [[Architectural] Real-Time Web and WebSocket Architecture](Real-Time-Web-and-WebSocket-Architecture) - Distributed WebSocket hub, connection throttling, channel subscriptions, and board state synchronization.\n4. [[Architectural] Canonical Markdown and Safe Media Pipeline](Canonical-Markdown-and-Safe-Media-Pipeline) - Hostile input sanitization, safe Mermaid rendering, SVG sandboxing, and media proxying.\n5. [[Architectural] Clean-DB Testing and Governance Gates](Clean-DB-Testing-and-Governance-Gates) - Fast parallel test execution, tmpfs template database, pluggable AI fixtures, and CI/CD validation.\n\n#### Security Architecture\n1. [[Architectural] Admin Custom Scripted Fields and Sandboxed Execution](Admin-Custom-Scripted-Fields-and-Sandbox) - Wasmtime (Tier A) and nsjail (Tier B) sandboxed execution with cryptographic tier escalation.\n2. [[Architectural] Custom Scripts and JSON Security Architecture](Custom-Scripts-and-JSON-Security-Architecture) - Hostile input sanitization, AST inspection, and ephemeral token boundaries.\n\n#### Engineering Appendix\n<details>\n<summary>Engineering Appendix</summary>\n\n- [[Architectural] \ud83d\udc4dkanban: Architecture Specification Delta & Gap Analysis](Architecture-Delta-and-Missing-Features) - Forensic analysis of specification requirements versus codebase implementation and tracking backlog.\n- [[Architectural] \ud83d\udc4dkanban User Task & Architecture QA Verification Matrix](User-Tasks-and-QA-Matrix) - Verification audit mapping tasks UT-01 through UT-16 to live browser checks and screenshot deliverables.\n\n</details>\n"
++    "content": "# \ud83d\udc4dkanban: Executive Architecture and System Overview\n\nWelcome to the authoritative technical documentation and wiki for **\ud83d\udc4dkanban** (`thumbs-up-kanban`), an open-source, enterprise-grade project management, ticketing, and knowledge platform built from the ground up on two fundamental pillars:\n1. **Security-First (Priority 0):** Hardened zero-trust infrastructure, PostgreSQL Row-Level Security (`FORCE RLS`), five-tier network isolation, AAL2 administrative authorization, and hostile input sanitization.\n2. **Agent-First (Priority 1):** Purpose-built for autonomous AI agents and human teams alike, replacing the context-bloating CRUD-wrapper anti-pattern with an intent-driven, three-surface Model Context Protocol (MCP) server, deterministic workflow gates, and sub-second execution loops.\n\nLicensed under the strictly permissive **Apache-2.0** license, \ud83d\udc4dkanban eliminates SaaS AI paywalls and per-seat subscription lock-in while competing globally against Jira, Vibe Kanban, and commercial issue trackers with drop-in enterprise migration support.\n\n---\n\n## System Topology\n\n```mermaid\nflowchart TD\n    subgraph Clients[\"Client Surfaces\"]\n        SPA[\"React 19 SPA (Desktop, Tablet, Mobile)\"]\n        Agents[\"Autonomous Agents (Cursor, Claude, Codex, Agy)\"]\n    end\n\n    subgraph Entrypoints[\"API & Protocol Gateways\"]\n        FastAPI[\"FastAPI Application Server<br/>- Multi-Card Auth (AAL2)<br/>- Canonical Markdown Pipe<br/>- WebSocket Realtime Hub<br/>- REST API (242+ routes, 316+ operations)\"]\n        MCP[\"3-Surface MCP Server<br/>- /mcp/agent (9 tools)<br/>- /mcp/docs (3 tools)<br/>- /mcp/admin (12 tools)<br/>- InlineSafeDumper YAML\"]\n    end\n\n    subgraph Core[\"Database Engine & Object Graph\"]\n        UOG[\"Universal Object Graph (UOG)<br/>PostgreSQL 16 with FORCE ROW LEVEL SECURITY (100%)<br/>- Typed object_links, Spine records, Append-only Ledger<br/>- ltree Hierarchical Docs, pgvector Embeddings, Full-Text<br/>- Invalid Object Link Auditor & Purger\"]\n    end\n\n    subgraph Runtimes[\"Execution Engines\"]\n        AIEngine[\"AI Engine & Orchestration<br/>- OpenAI, Ollama, Gemini<br/>- agy -p, codex -p pipes<br/>- Async Gate Helpers\"]\n        Sandbox[\"Sandbox Execution Runtime<br/>- Tier A: Wasmtime engine<br/>- Tier B: nsjail runner<br/>- Scoped Ephemeral Tokens\"]\n    end\n\n    SPA -->|HTTP / WebSocket| FastAPI\n    Agents -->|HTTP / SSE / STDIO| MCP\n    Agents -->|HTTP REST| FastAPI\n    FastAPI --> Core\n    MCP --> Core\n    Core --> AIEngine\n    Core --> Sandbox\n```\n\n---\n\n## Visual Tour: Platform Highlights\n\n### Enterprise Workspace and Project Hub\nThe workspace home delivers clear project visibility, team velocity metrics, and seamless multi-project navigation with responsive layouts across desktop, tablet, and mobile displays.\n\n![Workspace Home and Project Overview](images/05-workspace-home.png)\n\n### Breathable Whitespace Board and High-Contrast Theming\nThe core Kanban board features sub-16ms smooth drag-and-drop, semantic emoji hints, configurable WIP limits, and an enterprise dark theme for reduced eye strain during extended operational sessions.\n\n![Enterprise Whitespace Board View](images/06-board-view.png)\n\n![Dark Theme Enterprise Kanban Board](images/22-dark-theme-board.png)\n\n### Keyboard-Driven Command Palette\nGlobal keyboard shortcuts (`Ctrl+K` / `Cmd+K`) provide instant fuzzy navigation across tickets, documents, projects, and administrative studios without context switching.\n\n![Global Command Palette Navigation](images/23-command-palette.png)\n\n### Multi-View Projections: Table Inline Editing and Timeline Dependencies\nEngineers can switch instantly between Kanban Board, 3-pane List, Table with capability-gated inline cell editing, Calendar, and Timeline with SVG Bezier BLOCKS dependency arrows.\n\n![Table View Inline Editing](images/37-table-inline-editing.png)\n\n### Fullscreen Issue Studio and Access Visibility Inspector\nExpanding any ticket unlocks the Fullscreen Issue Studio, featuring a Rich Markdown authoring toolbar, Sparkle 320ms Fill-in-the-Middle (FIM) ghost-text completion, the `\ud83d\udee1\ufe0f` Effective Access Inspector, and a 4-tab activity stream.\n\n![Fullscreen Issue View with Rich Markdown Toolbar and Access Inspector](images/39-fullscreen-issue-view.png)\n\n### Advanced Governance and Administrative Studios\nPlatform administrators manage enterprise governance through dedicated studios:\n- **AI Providers & Token Caps Studio (`/admin/ai`):** Write-only key custody, monthly token budgets, and air-gap policies (`images/43-admin-ai-studio-providers.png`).\n- **Invalid Object Link Auditor (`/admin/link-auditor`):** Continuous graph integrity verification, inspect drawer, and two-stage audited purge (`images/46-admin-link-auditor.png`).\n- **Workflow Transition Studio & Dry-Run Drawer (`/projects/:key/settings/workflows`):** Zero-persistence dry-run simulation with step timings and copyable CLI commands (`images/50-workflow-studio-dry-run-drawer.png`).\n- **Plane Migration Import Studio (`/admin/imports`):** Single-click bundle ingestion, dry-run diff preview, and transactional live migration (`images/49-admin-plane-import-studio.png`).\n\n![Admin Invalid Object Link Auditor Studio](images/46-admin-link-auditor.png)\n\n---\n\n## Architectural Distinctions: \ud83d\udc4dkanban vs Traditional Tools\n\n| Dimension | Legacy Trackers & Paywalled SaaS (Jira / Vibe Kanban) | \ud83d\udc4dkanban Platform |\n| :--- | :--- | :--- |\n| **License & Cost** | Commercial SaaS / AGPL with paid AI paywalls | Pure Apache-2.0, zero paywalled features |\n| **Agent Interface** | 70-120 raw CRUD tool wrappers (15k-25k tokens) | 24 intent-driven MCP tools across 3 surfaces (<= 1.8k tokens for agent) |\n| **Database Security** | Application-layer authorization checks | Hardware-enforced PostgreSQL `FORCE ROW LEVEL SECURITY` on all tenant tables |\n| **Network Isolation** | Monolithic container or open Docker bridge | Hardened 5-network isolation matrix (`edge`, `app`, `data`, `sandbox`, `egress`) |\n| **Scripted Workflows & Helpers** | Basic webhooks with no blocking execution | Atomic synchronous Wasm validators/mutators and async AI agent gates |\n| **Input Sanitization** | Basic HTML strip | Hostile Unicode lone-surrogate rejection, hidden-DOM pruner, SVG sandbox |\n| **Deployment Mode** | Complex multi-service Kubernetes only | Single-container standalone (`docker run`) or full multi-container production |\n\nFor an exhaustive feature-by-feature evaluation across 45 criteria, see the [Feature Comparison Matrix](Feature-Comparison).\n\n---\n\n## Non-Bypassable Engineering and Security Invariants\n\n1. **Plain ASCII Hyphen Invariant:** All public documentation, wiki articles, and commit messages strictly mandate plain ASCII hyphens (`-`). Unicode em-dashes (U+2014) and en-dashes (U+2013) are strictly forbidden across the codebase and wiki.\n2. **Zero-Context Fail-Closed Database:** In the absence of an explicit session context (`SET LOCAL app.current_principal_id`), all queries against tenant tables return zero rows. The application role `kanban_app` is stripped of `SUPERUSER` and `BYPASSRLS`.\n3. **Hostile Unicode Rejection:** Text ingestion rejects UTF-16 lone surrogates (`0xD800` through `0xDFFF`) prior to UTF-8 encoding, preventing memory corruptions and parser desynchronization.\n4. **Paste-Jacking Defense:** Clipboard inputs are aggressively stripped of hidden-DOM payloads, zero-width spaces, and invisible injection sequences.\n5. **AAL2 Admin Route Enforcement:** Every endpoint under `/api/v1/admin/*` and every administrative tool on `/mcp/admin` requires Authenticator Assurance Level 2 (AAL2) credentials.\n6. **95% Automated Test Coverage:** All core modules maintain at least 95% unit test coverage running on clean-DB fixtures with sub-millisecond `SAVEPOINT` isolation.\n\n---\n\n## Complete Table of Contents\n\n### Track 1: Step-by-Step Guides\n1. [[Guide] Production Promotion and Backup Runbook](Production-Promotion-and-Backup-Runbook) - Single-command standalone promotion, encrypted KBBAK1 backup format, and disaster recovery.\n2. [[Guide] Legacy Tracker Migration and Cutover Runbook](Migration-and-Cutover-Runbook) - 7-phase zero-downtime cutover plan, dry-run reconciliation, and rollback procedures.\n3. [[Guide] How to Use Custom Fields](Guide-Custom-Fields) - Step-by-step custom fields guide, formulas, wasm/nsjail tiers, and approval workflows.\n4. [[Guide] Scripted Workflows and Transition Helpers](Scripted-Workflows-and-Transition-Helpers) - Synchronous transition validators/mutators and asynchronous AI agent gates.\n5. [[Guide] Multi-Card Authentication Studio and Identity Architecture](Multi-Card-Authentication-Studio) - Pluggable auth cards (OAuth2, LDAP, WebAuthn Passkeys, TOTP, Local Admin) with break-glass protection.\n6. [[Guide] Multi-Provider AI Engine, Execution Harnesses, and Runners](Multi-Provider-AI-Engine-and-Runners) - OpenAI, Ollama, Gemini integrations, local CLI pipe harnesses (`agy -p`, `codex -p`), and mTLS runners.\n7. [[Guide] Three-Surface Model Context Protocol (MCP) Server Architecture](Three-Surface-MCP-Server-Architecture) - Dedicated streamable endpoints (`/mcp/agent`, `/mcp/docs`, `/mcp/admin`) with InlineSafeDumper YAML.\n\n### Track 2: Feature & Field Reference\n1. [[Informational] Studio Configuration Reference](Studio-Configuration-Reference) - Exhaustive field configuration tables and security impact across all 11 \ud83d\udc4dkanban Studios.\n2. [[Informational] Enterprise Whitespace, Semantic Emojis, and Kanban Board](Enterprise-Whitespace-and-Kanban-Board) - 5 native view layouts, 2D swimlanes, sub-16ms drag-and-drop, and the `<EmojiHint>` semantic hover system.\n3. [[Informational] Ticket Screen, Peek Drawer, and Work Item Architecture](Ticket-Screen-and-Work-Item-Features) - 960px peek drawer, 17 enterprise work-item features, properties rail, and 4-tab activity stream.\n4. [[Informational] Hierarchical Docs, Project Stickies, and Smart Promotion](Hierarchical-Docs-and-Stickies-with-Smart-Promotion) - ltree page trees, color-coded sticky masonry, and lossless AI-assisted promotion to Docs.\n5. [[Informational] Blinking Cursor Sparkle Completion Engine](Blinking-Cursor-Sparkle-Completion-Engine) - Sub-300ms inline Fill-In-the-Middle (FIM) ghost text with surgical right-click disambiguation.\n6. [[Informational] Model Context Protocol (MCP) Tools Reference Manual](MCP-Tools-Reference) - Exhaustive specification of all 24 MCP tools, parameter schemas, LOD tiers, and destructive token workflows.\n7. [[Informational] REST API Architecture and OpenAPI Integration Guide](REST-API-Architecture-and-OpenAPI-Guide) - Technical guide to the 242+ route FastAPI backend, interactive OpenAPI documentation, and TypeScript SDK.\n\n### Track 3: Security & Adoption Overview\n1. [[Informational] Role and Permission Matrix](Role-and-Permission-Matrix) - Visual \u25cf / \u25d0 / \u25cb role and capability matrix across all 7 principal tiers.\n2. [[Informational] Zero-Trust Security Architecture and Explicit Access Visibility](Zero-Trust-Security-and-Access-Visibility) - PostgreSQL FORCE RLS, dynamic sharing pill, access manifests, and STRIDE threat mitigation.\n3. [[Informational] Feature Comparison Matrix (45 Features)](Feature-Comparison) - Comprehensive capability comparison across 45 features evaluating \ud83d\udc4dkanban against Jira, Plane, GitHub, Vibe Kanban, OpenAI Symphony, Businessmap, and Codebeamer.\n\n### Track 4: Engineering & Security Architecture\n\n#### Functional Architecture\n1. [[Architectural] System Topology and Multi-Container Architecture](System-Topology-and-Multi-Container-Architecture) - Standalone embedded PostgreSQL Unix socket and 5-network production container stack.\n2. [[Architectural] Universal Object Graph and Invalid Link Auditor](Universal-Object-Graph-and-Link-Auditor) - Unified object spine, 13 typed object relationships, and automated invalid link detection/purging.\n3. [[Architectural] Real-Time Web and WebSocket Architecture](Real-Time-Web-and-WebSocket-Architecture) - Distributed WebSocket hub, connection throttling, channel subscriptions, and board state synchronization.\n4. [[Architectural] Canonical Markdown and Safe Media Pipeline](Canonical-Markdown-and-Safe-Media-Pipeline) - Hostile input sanitization, safe Mermaid rendering, SVG sandboxing, and media proxying.\n5. [[Architectural] Clean-DB Testing and Governance Gates](Clean-DB-Testing-and-Governance-Gates) - Fast parallel test execution, tmpfs template database, pluggable AI fixtures, and CI/CD validation.\n\n#### Security Architecture\n1. [[Architectural] Admin Custom Scripted Fields and Sandboxed Execution](Admin-Custom-Scripted-Fields-and-Sandbox) - Wasmtime (Tier A) and nsjail (Tier B) sandboxed execution with cryptographic tier escalation.\n2. [[Architectural] Custom Scripts and JSON Security Architecture](Custom-Scripts-and-JSON-Security-Architecture) - Hostile input sanitization, AST inspection, and ephemeral token boundaries.\n\n#### Engineering Appendix\n<details>\n<summary>Engineering Appendix</summary>\n\n- [[Architectural] \ud83d\udc4dkanban: Architecture Specification Delta & Gap Analysis](Architecture-Delta-and-Missing-Features) - Forensic analysis of specification requirements versus codebase implementation and tracking backlog.\n- [[Architectural] \ud83d\udc4dkanban User Task & Architecture QA Verification Matrix](User-Tasks-and-QA-Matrix) - Verification audit mapping tasks UT-01 through UT-16 to live browser checks and screenshot deliverables.\n\n</details>\n"
+   },
+   {
+     "slug": "admin-custom-scripted-fields-and-sandbox",
+@@ -722,13 +722,13 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+   },
+   {
+     "slug": "feature-comparison",
+-    "title": "[Informational] Feature Comparison Matrix (35 Features)",
++    "title": "[Informational] Feature Comparison Matrix (45 Features)",
+     "category": "informational",
+     "track": "Security & Adoption Overview",
+     "subtrack": "Market & Capability Analysis",
+     "audience": "Technology Evaluators & Leadership",
+     "order": 9,
+-    "summary": "A kanban is just a kanban until you start digging deeper. On the surface, every issue tracker presents identical columns, draggable cards, and basic workflow states. The real architectural divergence begins the moment you inspect paywalled enterprise controls, database-level security invariants, canonical Markdown integrity, and native agent/MCP execution gates. While commercial SaaS and copyleft alternatives lock custom properties, audit logs, Single Sign-On, and AI integrations behind steep per-seat subscription tiers or bloated CRUD APIs, `\ud83d\udc4dkanban` ships an uncompromising, security-first, agent-first platform under a pure Apache-2.0 license. Below is the full 35-feature technical capability matrix comparing `\ud83d\udc4dkanban` directly against legacy and modern project management systems.",
++    "summary": "A kanban is just a kanban until you start digging deeper. On the surface, every issue tracker presents identical columns, draggable cards, and basic workflow states. The real architectural divergence begins the moment you inspect paywalled enterprise controls, database-level security invariants, canonical Markdown integrity, multi-agent concurrency primitives, and native agent/MCP execution gates. While commercial SaaS, copyleft boards, and external agent runners lock custom properties, audit logs, Single Sign-On, and AI integrations behind per-seat subscription tiers, 1:1 REST-wrapper MCP schemas, or headless external-tracker daemons, `\ud83d\udc4dkanban` ships a unified, security-first, agent-first platform under a pure Apache-2.0 license. Below is the full 45-feature technical capability matrix comparing `\ud83d\udc4dkanban` directly against legacy trackers, modern boards, and autonomous agent orchestrators.",
+     "sections": [
+       {
+         "id": "security-identity-audit-deployment",
+@@ -749,9 +749,14 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
+         "id": "docs-stickies-markdown-object-graph",
+         "title": "4. Docs, Stickies, Markdown & Object Graph",
+         "level": 2
++      },
++      {
++        "id": "orchestration-provenance-day-2-operations",
++        "title": "5. Orchestration, Provenance & Day-2 Operations",
++        "level": 2
+       }
+     ],
+-    "content": "# [Informational] Feature Comparison Matrix (35 Features)\n\nA kanban is just a kanban until you start digging deeper. On the surface, every issue tracker presents identical columns, draggable cards, and basic workflow states. The real architectural divergence begins the moment you inspect paywalled enterprise controls, database-level security invariants, canonical Markdown integrity, and native agent/MCP execution gates. While commercial SaaS and copyleft alternatives lock custom properties, audit logs, Single Sign-On, and AI integrations behind steep per-seat subscription tiers or bloated CRUD APIs, `\ud83d\udc4dkanban` ships an uncompromising, security-first, agent-first platform under a pure Apache-2.0 license. Below is the full 35-feature technical capability matrix comparing `\ud83d\udc4dkanban` directly against legacy and modern project management systems.\n\n**Legend**\n\n* `\u2705` **Included:** Built into the core product (free in FOSS/free tiers, or included in the entry commercial plan when no free tier exists).\n* `\ud83d\udd10` **Paywall-Capped:** Basic or seat-capped version is free; full scale, hierarchy, or enforcement requires a paid tier.\n* `\ud83c\udd93\ud83d\udd0c` **Free Extension:** Free via a separate official plugin, external MCP server package, or external CLI harness.\n* `\ud83d\udcb0` **Paid Tier:** Locked behind higher per-seat subscription tiers (Pro, Business, Premium, or Enterprise).\n* `\ud83d\udcb8` **Extra Cost:** Separate paid product, paid Marketplace add-on, or metered credit/runner billing.\n* `\u274c` **None:** Unsupported.\n\n---\n\n## 1. Security, Identity, Audit & Deployment\n\n| Feature | \ud83d\udc4dkanban | Jira | Plane | GitHub | Vibe Kanban | Businessmap | Codebeamer |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| Permissive FOSS License | \u2705 | \u274c | \u274c | \u274c | \u2705 | \u274c | \u274c |\n| On-Prem Multi-Container | \u2705 | \u274c | \u2705 | \ud83d\udcb0 | \u274c | \u274c | \ud83d\udcb0 |\n| Single-Container Run | \u2705 | \u274c | \u274c | \u274c | \u2705 | \u274c | \u274c |\n| Multi-Card OIDC & LDAPS | \u2705 | \ud83d\udcb8 | \ud83d\udcb0 | \ud83d\udcb0 | \u274c | \ud83d\udcb8 | \u2705 |\n| Passkeys & Break-Glass | \u2705 | \ud83d\udcb8 | \ud83d\udcb0 | \ud83d\udd10 | \u274c | \ud83d\udcb0 | \ud83d\udcb0 |\n| Granular RBAC & DENY | \u2705 | \ud83d\udcb0 | \ud83d\udcb0 | \ud83d\udcb0 | \u274c | \u2705 | \u2705 |\n| Shared-With Pill & DB RLS | \u2705 | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c |\n| Workspace Audit Logs | \u2705 | \ud83d\udcb8 | \ud83d\udcb0 | \ud83d\udcb0 | \u274c | \ud83d\udcb0 | \u2705 |\n\nVibe Kanban is permissive `Apache-2.0` (`\u2705`) as a single-user local CLI, whereas Plane uses copyleft `AGPLv3` and charges per seat for OIDC, LDAP, RBAC, and audit logs (`\ud83d\udcb0`). Jira charges extra for SSO and security audit policies via Atlassian Guard (`\ud83d\udcb8`), and none of the other six enforces PostgreSQL Row-Level Security with a ubiquitous per-object `shared_with` pill (`\u274c`). **`\ud83d\udc4dkanban`** is 100% permissive `Apache-2.0` (`\u2705`), supporting both a zero-config single-container runtime (`docker run -p 8080:8080 thumbs-up-kanban:latest`) and a hardened 5-network multi-container production stack, complete with Multi-Card OIDC/OAuth2/LDAPS, WebAuthn Passkeys + break-glass lockout triggers, explicit `DENY` ACLs, PostgreSQL 16 `FORCE ROW LEVEL SECURITY` surfaced via the `\ud83d\udee1\ufe0f` Shared-With Header Pill, and an immutable SHA-256 hash-chained audit ledger (`\u2705`).\n\n---\n\n## 2. Agentic Tasks, MCP, AI & Workflow Gates\n\n| Feature | \ud83d\udc4dkanban | Jira | Plane | GitHub | Vibe Kanban | Businessmap | Codebeamer |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| MCP Server | \u2705 | \ud83c\udd93\ud83d\udd0c | \ud83c\udd93\ud83d\udd0c | \ud83c\udd93\ud83d\udd0c | \u2705 | \u274c | \u274c |\n| Low-Token Scoped MCP | \u2705 | \u274c | \u274c | \u274c | \ud83d\udd10 | \u274c | \u274c |\n| 2-Stage MCP Delete Gate | \u2705 | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c |\n| Cloud AI Integration | \u2705 | \ud83d\udcb0 | \ud83d\udcb8 | \ud83d\udcb8 | \ud83d\udcb8 | \u2705 | \ud83d\udcb8 |\n| Air-Gap Local Ollama | \u2705 | \u274c | \u274c | \u274c | \ud83c\udd93\ud83d\udd0c | \u274c | \u274c |\n| Cursor Sparkle FIM | \u2705 | \u274c | \u274c | \ud83d\udcb8 | \u274c | \u274c | \u274c |\n| Sync Transition Gates | \u2705 | \ud83d\udcb8 | \ud83d\udcb0 | \u274c | \u274c | \u2705 | \u2705 |\n| Async `:ro` Repo Gate | \u2705 | \u274c | \u274c | \ud83d\udcb8 | \u274c | \u274c | \u274c |\n\nJira, Plane, and GitHub ship MCP through separate external connectors or packages (`\ud83c\udd93\ud83d\udd0c`) that expose broad JSON schemas rather than low-token YAML intent surfaces, while Vibe Kanban bundles `--mcp` directly (`\u2705`) with partial `--mode orchestrator` scoping (`\ud83d\udd10`). None of the other six holds Kanban transitions in a non-blocking provisional gate while an agent forensically audits a read-only repository mount (`\u274c`) - GitHub only runs metered post-event Actions or Copilot checks (`\ud83d\udcb8`). **`\ud83d\udc4dkanban`** ships three built-in intent-scoped MCP surfaces (`/mcp/agent`, `/mcp/docs`, `/mcp/admin` under `<= 1,800` schema tokens with LOD YAML output and 2-stage `request_delete` -> `execute_delete` confirmation), vendor-neutral Cloud AI (`openai`, `gemini`) and air-gapped `ollama`, `<150ms` RLS-filtered Cursor Sparkle (`\u2728`) FIM completion with right-click accept, `<25ms` synchronous Wasm transition validators, and two-phase non-blocking async agent transition gates (`\u23f3\ud83e\udd16` -> `\u2705\ud83e\udd16`/`\ud83d\uded1\ud83e\udd16`) over `:ro` repository mounts (`\u2705`).\n\n---\n\n## 3. Issue Tracker & Kanban Board\n\n| Feature | \ud83d\udc4dkanban | Jira | Plane | GitHub | Vibe Kanban | Businessmap | Codebeamer |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| Free Forever Tier | \u2705 | \ud83d\udd10 | \u2705 | \u2705 | \u2705 | \u274c | \u274c |\n| Core Kanban & Issues | \u2705 | \ud83d\udd10 | \u2705 | \u2705 | \ud83d\udd10 | \u2705 | \u2705 |\n| Five Native Views | \u2705 | \ud83d\udd10 | \ud83d\udd10 | \ud83d\udd10 | \u274c | \u2705 | \u2705 |\n| 2D Swimlanes & Hard WIP | \u2705 | \ud83d\udd10 | \ud83d\udd10 | \ud83d\udd10 | \u274c | \u2705 | \u2705 |\n| Cycles & Hidden Modules | \u2705 | \ud83d\udd10 | \u2705 | \ud83d\udd10 | \u274c | \u274c | \u2705 |\n| Sub-Issue DAG & Links | \u2705 | \ud83d\udd10 | \ud83d\udd10 | \u2705 | \ud83d\udd10 | \u2705 | \u2705 |\n| Custom Properties | \u2705 | \u2705 | \ud83d\udcb0 | \u2705 | \u274c | \u2705 | \u2705 |\n| Free-Text Assignee Tag | \u2705 | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c |\n| Audited Creator Override | \u2705 | \ud83d\udcb0 | \u274c | \u274c | \u274c | \u274c | \u274c |\n| Rule-Gated Archive | \u2705 | \ud83d\udcb0 | \u2705 | \u2705 | \u274c | \u2705 | \u2705 |\n| Blast-Radius Soft Delete | \u2705 | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c |\n| Sandboxed Script Fields | \u2705 | \ud83d\udcb8 | \u274c | \u274c | \u274c | \u274c | \u2705 |\n\nJira caps free boards at 10 users and gates cross-project Gantt plans, deep hierarchies, and archiving behind Premium (`\ud83d\udcb0`), while scripted fields require paid Marketplace apps like ScriptRunner (`\ud83d\udcb8`). Plane gates custom properties behind paid tiers (`\ud83d\udcb0`), GitHub lacks Calendar views and hard-blocking WIP limits (`\ud83d\udd10`), and Businessmap/Codebeamer have no free tier at all (`\u274c`). **`\ud83d\udc4dkanban`** ships all five native views (`List`, `Board`, `Table`, `Calendar`, `Timeline`), 2D swimlanes with hard WIP limits, cycle-checked DAG hierarchies, hybrid principal + free-text `\ud83c\udff7\ufe0f` assignee tags, audited `\ud83d\udd04` creator overrides, blast-radius soft delete, and Wasmtime/`nsjail` sandboxed script fields in its free `Apache-2.0` core (`\u2705`).\n\n---\n\n## 4. Docs, Stickies, Markdown & Object Graph\n\n| Feature | \ud83d\udc4dkanban | Jira | Plane | GitHub | Vibe Kanban | Businessmap | Codebeamer |\n| --- | --- | --- | --- | --- | --- | --- | --- |\n| Project Docs / Wiki | \u2705 | \ud83d\udcb8 | \ud83d\udd10 | \ud83d\udd10 | \u274c | \u274c | \u2705 |\n| Project Stickies | \u2705 | \ud83d\udcb8 | \u2705 | \u274c | \u274c | \u2705 | \u274c |\n| Smart Sticky -> Doc Promo | \u2705 | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c |\n| Canonical Markdown DB | \u2705 | \u274c | \u274c | \u2705 | \u2705 | \u274c | \u274c |\n| Paste-Injection Pruner | \u2705 | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c |\n| Mermaid, Safe SVG & Proxy | \u2705 | \ud83d\udcb8 | \u274c | \u2705 | \u274c | \u274c | \u274c |\n| Broken/ACL Link Auditor | \u2705 | \ud83d\udcb8 | \u274c | \u274c | \u274c | \u274c | \ud83d\udd10 |\n\nJira splits Docs and Stickies into separate paid Confluence and Whiteboard licenses (`\ud83d\udcb8`), while GitHub restricts private-repo Wikis to paid plans (`\ud83d\udd10`) and Plane gates full team Wiki spaces (`\ud83d\udd10`). Only **`\ud83d\udc4dkanban`**, GitHub, and Vibe Kanban store pure Markdown natively (`\u2705`), and only Codebeamer flags \"suspected\" upstream links manually without automated graph purging (`\ud83d\udd10`). **`\ud83d\udc4dkanban`** unifies `ltree` hierarchical Docs and Project Overview Stickies with 1-click ACL-preserving Sticky-to-Doc promotion (`\ud83d\udca1\ud83d\udcc4`), auto-converts pasted HTML/Rich Text into 100% canonical UTF-8 Markdown while pruning hidden-DOM paste-injection and UTF-16 lone surrogates, renders Web Worker Mermaid diagrams and `nh3`-scrubbed SVGs through an SSRF-guarded media proxy, and runs an automated 6-reason Object Link Auditor & Purger (`\u2705`).\n"
++    "content": "# [Informational] Feature Comparison Matrix (45 Features)\n\nA kanban is just a kanban until you start digging deeper. On the surface, every issue tracker presents identical columns, draggable cards, and basic workflow states. The real architectural divergence begins the moment you inspect paywalled enterprise controls, database-level security invariants, canonical Markdown integrity, multi-agent concurrency primitives, and native agent/MCP execution gates. While commercial SaaS, copyleft boards, and external agent runners lock custom properties, audit logs, Single Sign-On, and AI integrations behind per-seat subscription tiers, 1:1 REST-wrapper MCP schemas, or headless external-tracker daemons, `\ud83d\udc4dkanban` ships a unified, security-first, agent-first platform under a pure Apache-2.0 license. Below is the full 45-feature technical capability matrix comparing `\ud83d\udc4dkanban` directly against legacy trackers, modern boards, and autonomous agent orchestrators.\n\n**Legend**\n\n* `\u2705` **Included:** Built into the core product (free in FOSS/free tiers, or included in the entry commercial plan when no free tier exists).\n* `\ud83c\udfaf\u2705` **Planned in Core:** Active roadmap target shipping free in the `Apache-2.0` core (never paywalled).\n* `\ud83d\udd10` **Paywall-Capped:** Basic or seat-capped version is free; full scale, hierarchy, or enforcement requires a paid tier.\n* `\ud83c\udd93\ud83d\udd0c` **Free Extension:** Free via a separate official plugin, external MCP server package, or external CLI harness.\n* `\ud83d\udcb0` **Paid Tier:** Locked behind higher per-seat subscription tiers (Pro, Business, Premium, or Enterprise).\n* `\ud83d\udcb8` **Extra Cost:** Separate paid product, paid Marketplace add-on, or metered credit/runner billing.\n* `\u274c` **None:** Unsupported.\n\n---\n\n## 1. Security, Identity, Audit & Deployment\n\n| Feature | \ud83d\udc4dkanban | Jira | Plane | GitHub | Vibe Kanban | OpenAI Symphony | Businessmap | Codebeamer |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n| Permissive FOSS License | \u2705 | \u274c | \u274c | \u274c | \u2705 | \u2705 | \u274c | \u274c |\n| On-Prem Multi-Container | \u2705 | \u274c | \u2705 | \ud83d\udcb0 | \u274c | \u274c | \u274c | \ud83d\udcb0 |\n| Single-Container Run | \u2705 | \u274c | \u274c | \u274c | \u2705 | \u274c | \u274c | \u274c |\n| Multi-Card OIDC & LDAPS | \u2705 | \ud83d\udcb8 | \ud83d\udcb0 | \ud83d\udcb0 | \u274c | \u274c | \ud83d\udcb8 | \u2705 |\n| Passkeys & Break-Glass | \u2705 | \ud83d\udcb8 | \ud83d\udcb0 | \ud83d\udd10 | \u274c | \u274c | \ud83d\udcb0 | \ud83d\udcb0 |\n| Granular RBAC & DENY | \u2705 | \ud83d\udcb0 | \ud83d\udcb0 | \ud83d\udcb0 | \u274c | \u274c | \u2705 | \u2705 |\n| Shared-With Pill & DB RLS | \u2705 | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c |\n| Workspace Audit Logs | \u2705 | \ud83d\udcb8 | \ud83d\udcb0 | \ud83d\udcb0 | \u274c | \u274c | \ud83d\udcb0 | \u2705 |\n\nVibe Kanban and OpenAI Symphony are permissive `Apache-2.0` (`\u2705`): Vibe Kanban runs as a single-user local CLI/container (`\u2705`), whereas OpenAI Symphony is documented as an engineering preview for trusted environments that runs as a host Elixir/OTP daemon or Burrito binary rather than OCI containers (`\u274c`), executes repo-local `WORKFLOW.md` hooks via `bash -lc`, omits multi-tenant auth/OIDC/Passkeys/RBAC (`\u274c`), and keeps no persistent database or immutable audit ledger (`\u274c`). Plane uses copyleft `AGPLv3` and charges per seat for OIDC, LDAP, RBAC, and audit logs (`\ud83d\udcb0`), Jira charges extra for SSO and security audit policies via Atlassian Guard (`\ud83d\udcb8`), and none of the other seven enforces PostgreSQL Row-Level Security with a ubiquitous per-object `shared_with` pill (`\u274c`). **`\ud83d\udc4dkanban`** is 100% permissive `Apache-2.0` (`\u2705`), supporting both a zero-config single-container runtime (`docker run -p 8080:8080 thumbs-up-kanban:latest`) and a hardened 5-network multi-container production stack, complete with Multi-Card OIDC/OAuth2/LDAPS, WebAuthn Passkeys + break-glass lockout triggers, explicit `DENY` ACLs, PostgreSQL 16 `FORCE ROW LEVEL SECURITY` surfaced via the `\ud83d\udee1\ufe0f` Shared-With Header Pill, and an immutable SHA-256 hash-chained audit ledger (`\u2705`).\n\n---\n\n## 2. Agentic Tasks, MCP, AI & Workflow Gates\n\n| Feature | \ud83d\udc4dkanban | Jira | Plane | GitHub | Vibe Kanban | OpenAI Symphony | Businessmap | Codebeamer |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n| MCP Server | \u2705 | \ud83c\udd93\ud83d\udd0c | \ud83c\udd93\ud83d\udd0c | \ud83c\udd93\ud83d\udd0c | \u2705 | \u274c | \u274c | \u274c |\n| Low-Token Scoped MCP | \u2705 | \u274c | \u274c | \u274c | \ud83d\udd10 | \u274c | \u274c | \u274c |\n| 2-Stage MCP Delete Gate | \u2705 | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c |\n| Cloud AI Integration | \u2705 | \ud83d\udcb0 | \ud83d\udcb8 | \ud83d\udcb8 | \ud83d\udcb8 | \ud83d\udcb8 | \u2705 | \ud83d\udcb8 |\n| Air-Gap Local Ollama | \u2705 | \u274c | \u274c | \u274c | \ud83c\udd93\ud83d\udd0c | \ud83c\udd93\ud83d\udd0c | \u274c | \u274c |\n| Cursor Sparkle FIM | \u2705 | \u274c | \u274c | \ud83d\udcb8 | \u274c | \u274c | \u274c | \u274c |\n| Sync Transition Gates | \u2705 | \ud83d\udcb8 | \ud83d\udcb0 | \u274c | \u274c | \u274c | \u2705 | \u2705 |\n| Async `:ro` Repo Gate | \u2705 | \u274c | \u274c | \ud83d\udcb8 | \u274c | \u274c | \u274c | \u274c |\n\nJira, Plane, and GitHub ship MCP through separate external connectors or packages (`\ud83c\udd93\ud83d\udd0c`) that expose broad JSON schemas rather than low-token YAML intent surfaces, while Vibe Kanban bundles `--mcp` directly (`\u2705`) with partial `--mode orchestrator` scoping (`\ud83d\udd10`). OpenAI Symphony does not expose an MCP server (`\u274c`): it drives a `codex app-server` subprocess over stdio JSON-RPC (relying on metered OpenAI/Codex billing `\ud83d\udcb8` or external `codex --oss` Ollama configuration `\ud83c\udd93\ud83d\udd0c`), passes through raw host-authenticated tracker tools (`linear_graphql`, `github_api`, `asana_api`) without project-boundary scoping or 2-stage delete gates (`\u274c`), and runs read-write workspace clones (`approval_policy: never`, `networkAccess: true`). None of the other seven holds Kanban transitions in a non-blocking provisional gate while an agent forensically audits a read-only repository mount (`\u274c`) - GitHub only runs metered post-event Actions or Copilot checks (`\ud83d\udcb8`). **`\ud83d\udc4dkanban`** ships three built-in intent-scoped MCP surfaces (`/mcp/agent`, `/mcp/docs`, `/mcp/admin` under `<= 1,800` schema tokens with LOD YAML output and 2-stage `request_delete` -> `execute_delete` confirmation), vendor-neutral BYOK Cloud AI (`openai`, `gemini`) and native air-gapped `ollama`, `<150ms` RLS-filtered Cursor Sparkle (`\u2728`) FIM completion with right-click accept, `<25ms` synchronous Wasm transition validators, and two-phase non-blocking async agent transition gates (`\u23f3\ud83e\udd16` -> `\u2705\ud83e\udd16`/`\ud83d\uded1\ud83e\udd16`) over `:ro` repository mounts (`\u2705`).\n\n---\n\n## 3. Issue Tracker & Kanban Board\n\n| Feature | \ud83d\udc4dkanban | Jira | Plane | GitHub | Vibe Kanban | OpenAI Symphony | Businessmap | Codebeamer |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n| Free Forever Tier | \u2705 | \ud83d\udd10 | \u2705 | \u2705 | \u2705 | \u2705 | \u274c | \u274c |\n| Core Kanban & Issues | \u2705 | \ud83d\udd10 | \u2705 | \u2705 | \ud83d\udd10 | \u274c | \u2705 | \u2705 |\n| Five Native Views | \u2705 | \ud83d\udd10 | \ud83d\udd10 | \ud83d\udd10 | \u274c | \u274c | \u2705 | \u2705 |\n| 2D Swimlanes & Hard WIP | \u2705 | \ud83d\udd10 | \ud83d\udd10 | \ud83d\udd10 | \u274c | \u274c | \u2705 | \u2705 |\n| Cycles & Hidden Modules | \u2705 | \ud83d\udd10 | \u2705 | \ud83d\udd10 | \u274c | \u274c | \u274c | \u2705 |\n| Sub-Issue DAG & Links | \u2705 | \ud83d\udd10 | \ud83d\udd10 | \u2705 | \ud83d\udd10 | \u274c | \u2705 | \u2705 |\n| Custom Properties | \u2705 | \u2705 | \ud83d\udcb0 | \u2705 | \u274c | \u274c | \u2705 | \u2705 |\n| Free-Text Assignee Tag | \u2705 | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c |\n| Audited Creator Override | \u2705 | \ud83d\udcb0 | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c |\n| Rule-Gated Archive | \u2705 | \ud83d\udcb0 | \u2705 | \u2705 | \u274c | \u274c | \u2705 | \u2705 |\n| Blast-Radius Soft Delete | \u2705 | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c |\n| Sandboxed Script Fields | \u2705 | \ud83d\udcb8 | \u274c | \u274c | \u274c | \u274c | \u274c | \u2705 |\n\nOpenAI Symphony is free `Apache-2.0` software (`\u2705`), but it is a headless polling orchestrator and Phoenix LiveView run monitor rather than an issue tracker - requiring an external board such as Linear, GitHub Issues, Jira Cloud, Asana, or GitLab (`\u274c` across all board, view, hierarchy, property, and lifecycle rows). Jira caps free boards at 10 users and gates cross-project Gantt plans, deep hierarchies, and archiving behind Premium (`\ud83d\udcb0`), while scripted fields require paid Marketplace apps like ScriptRunner (`\ud83d\udcb8`). Plane gates custom properties behind paid tiers (`\ud83d\udcb0`), GitHub lacks Calendar views and hard-blocking WIP limits (`\ud83d\udd10`), and Businessmap/Codebeamer have no free tier at all (`\u274c`). **`\ud83d\udc4dkanban`** ships all five native views (`List`, `Board`, `Table`, `Calendar`, `Timeline`), 2D swimlanes with hard WIP limits, cycle-checked DAG hierarchies, hybrid principal + free-text `\ud83c\udff7\ufe0f` assignee tags, audited `\ud83d\udd04` creator overrides, blast-radius soft delete, and Wasmtime/`nsjail` sandboxed script fields in its free `Apache-2.0` core (`\u2705`).\n\n---\n\n## 4. Docs, Stickies, Markdown & Object Graph\n\n| Feature | \ud83d\udc4dkanban | Jira | Plane | GitHub | Vibe Kanban | OpenAI Symphony | Businessmap | Codebeamer |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n| Project Docs / Wiki | \u2705 | \ud83d\udcb8 | \ud83d\udd10 | \ud83d\udd10 | \u274c | \u274c | \u274c | \u2705 |\n| Project Stickies | \u2705 | \ud83d\udcb8 | \u2705 | \u274c | \u274c | \u274c | \u2705 | \u274c |\n| Smart Sticky -> Doc Promo | \u2705 | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c |\n| Canonical Markdown DB | \u2705 | \u274c | \u274c | \u2705 | \u2705 | \u274c | \u274c | \u274c |\n| Paste-Injection Pruner | \u2705 | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c |\n| Mermaid, Safe SVG & Proxy | \u2705 | \ud83d\udcb8 | \u274c | \u2705 | \u274c | \u274c | \u274c | \u274c |\n| Broken/ACL Link Auditor | \u2705 | \ud83d\udcb8 | \u274c | \u274c | \u274c | \u274c | \u274c | \ud83d\udd10 |\n\nJira splits Docs and Stickies into separate paid Confluence and Whiteboard licenses (`\ud83d\udcb8`), while GitHub restricts private-repo Wikis to paid plans (`\ud83d\udd10`), Plane gates full team Wiki spaces (`\ud83d\udd10`), and OpenAI Symphony is database-less - reading only a repo-local `WORKFLOW.md` YAML + Liquid prompt template with no Docs, Stickies, Markdown persistence DB, diagram pipeline, or link auditor (`\u274c`). Only **`\ud83d\udc4dkanban`**, GitHub, and Vibe Kanban store pure Markdown records natively (`\u2705`), and only Codebeamer flags \"suspected\" upstream links manually without automated graph purging (`\ud83d\udd10`). **`\ud83d\udc4dkanban`** unifies `ltree` hierarchical Docs and Project Overview Stickies with 1-click ACL-preserving Sticky-to-Doc promotion (`\ud83d\udca1\ud83d\udcc4`), auto-converts pasted HTML/Rich Text into 100% canonical UTF-8 Markdown while pruning hidden-DOM paste-injection and UTF-16 lone surrogates, renders Web Worker Mermaid diagrams and `nh3`-scrubbed SVGs through an SSRF-guarded media proxy, and runs an automated 6-reason Object Link Auditor & Purger (`\u2705`).\n\n---\n\n## 5. Orchestration, Provenance & Day-2 Operations\n\n| Feature | \ud83d\udc4dkanban | Jira | Plane | GitHub | Vibe Kanban | OpenAI Symphony | Businessmap | Codebeamer |\n| --- | --- | --- | --- | --- | --- | --- | --- | --- |\n| Atomic Agent Lease & Fencing | \ud83c\udfaf\u2705 | \u274c | \u274c | \u274c | \ud83d\udd10 | \ud83d\udd10 | \u274c | \u274c |\n| Prompt-Injection Taint Gate | \ud83c\udfaf\u2705 | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c |\n| Dedicated Agent Workpad Slot | \ud83c\udfaf\u2705 | \u274c | \u274c | \u274c | \ud83d\udd10 | \ud83c\udd93\ud83d\udd0c | \u274c | \u274c |\n| Pre-Write Secret Redaction | \ud83c\udfaf\u2705 | \ud83d\udcb8 | \u274c | \ud83d\udd10 | \u274c | \u274c | \u274c | \u274c |\n| Crypto-Shredded Audit Chain | \ud83c\udfaf\u2705 | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c | \u274c |\n| Ephemeral OIDC Agent Auth | \ud83c\udfaf\u2705 | \ud83d\udcb0 | \u274c | \u2705 | \u274c | \u274c | \u274c | \ud83d\udcb0 |\n| Git Worktree / PR & Sig Gate | \ud83c\udfaf\u2705 | \ud83c\udd93\ud83d\udd0c | \ud83c\udd93\ud83d\udd0c | \u2705 | \u2705 | \ud83c\udd93\ud83d\udd0c | \ud83c\udd93\ud83d\udd0c | \u2705 |\n| Lossless Import & Full Export | \ud83c\udfaf\u2705 | \ud83d\udd10 | \ud83d\udd10 | \u2705 | \u274c | \u274c | \ud83d\udcb0 | \u2705 |\n| Deterministic JSON/Unix CLI | \ud83c\udfaf\u2705 | \ud83c\udd93\ud83d\udd0c | \u274c | \u2705 | \u274c | \u274c | \u274c | \u274c |\n| Native CFD, Lead & Aging WIP | \ud83c\udfaf\u2705 | \ud83d\udd10 | \ud83d\udcb0 | \ud83d\udd10 | \u274c | \u274c | \u2705 | \ud83d\udd10 |\n\nOpenAI Symphony tracks single-daemon claims in volatile memory (`\ud83d\udd10`) and relies on external `WORKFLOW.md` comment scraping (`\ud83c\udd93\ud83d\udd0c`) with no Unix board CLI (`\u274c`), while GitHub gates private-repo secret push-protection (`\ud83d\udd10`), Businessmap leads on native Lean flow analytics (`\u2705`), and Codebeamer enforces ALM commit/release traceability (`\u2705`). **`\ud83d\udc4dkanban`** already ships foundational substrates - cross-project `mcp_read_taint` exfiltration guards, outbound secret scrubbing on LLM/FIM prompts, DNS-pinned `:ro` Git mirrors, transactional `PlaneImporter` + `KBBAK1` encrypted backups, `kanban-ctl` / `kanban-agent` CLIs, and immutable `activity_records` transition timestamps - and actively tracks all ten Day-2 enterprise & fleet-scale expansions in its free `Apache-2.0` core (`\ud83c\udfaf\u2705`): PostgreSQL-enforced `issue_leases` + monotonic `fencing_token` CAS (`KAN-69`), per-block provenance tainting with dynamic MCP capability stripping (`KAN-70`), silent per-issue `issue_workpads` + rework loop circuit breakers (`KAN-71`), synchronous pre-persistence Shannon-entropy secret push-protection (`KAN-72`), envelope-encrypted `activity_record_keys` crypto-shredding (`KAN-73`), RFC 8693 headless workload OIDC token exchange (`KAN-74`), SSRF-hardened SCM webhooks + `SSH`/`GPG`/`Sigstore` & SLSA attestation gates (`KAN-75`, `KAN-76`), Jira/GitHub/Linear importers with legacy key alias redirects and deterministic `JSONL` + `.md` exports (`KAN-77`), schema-driven `kanban-cli --filter ... --json` backed by `hnsw.iterative_scan` RLS vector recall (`KAN-48`, `KAN-78`), and native CFD, Aging WIP, Cycle/Lead Time `p50`/`p85`/`p95` scatterplots, and Monte Carlo forecasting (`KAN-79`).\n"
+   },
+   {
+     "slug": "guide-custom-fields",
+@@ -2398,7 +2403,7 @@ export const WIKI_CATEGORIES: WikiCategory[] = [
+       },
+       {
+         "slug": "feature-comparison",
+-        "title": "[Informational] Feature Comparison Matrix (35 Features)",
++        "title": "[Informational] Feature Comparison Matrix (45 Features)",
+         "category": "informational"
+       }
+     ]
+diff --git a/kanban/web/src/features/drawer/IssueSurface.tsx b/kanban/web/src/features/drawer/IssueSurface.tsx
+index a1b681c9..071322a2 100644
+--- a/kanban/web/src/features/drawer/IssueSurface.tsx
++++ b/kanban/web/src/features/drawer/IssueSurface.tsx
+@@ -49,11 +49,85 @@ import {
+ import { pruneHiddenDom } from '../../editor/clipboard/hiddenDomPruner';
+ import { SanitizedPastePill } from '../../editor/clipboard/SanitizedPastePill';
+ import { SafeMarkdownPreview } from '../activity/SafeMarkdownPreview';
++import { PdfAttachmentCard } from '../activity/PdfAttachmentCard';
+ import { copyToClipboard } from '../../utils/clipboard';
+ import './IssueSurface.css';
+ 
+ let moduleMountCounter = 0;
+ 
++interface RawAttachmentItem {
++  readonly id?: string | undefined;
++  readonly original_filename?: string | undefined;
++  readonly filename?: string | undefined;
++  readonly content_type?: string | undefined;
++  readonly byte_size?: number | undefined;
++  readonly page_count?: number | null | undefined;
++  readonly blob_sha256?: string | undefined;
++}
++
++export interface ExtractedAttachment {
++  readonly id: string;
++  readonly filename: string;
++  readonly contentType: string;
++  readonly byteSize?: number | undefined;
++  readonly pageCount?: number | null | undefined;
++  readonly sha256?: string | undefined;
++  readonly url: string;
++}
++
++/**
++ * Extract attachments from issue model or description markdown links.
++ */
++export function getIssueAttachments(issue: IssueDetail | null | undefined): ExtractedAttachment[] {
++  if (!issue) return [];
++  const rawAttachments = issue.attachments;
++  if (Array.isArray(rawAttachments) && rawAttachments.length > 0) {
++    return (rawAttachments as readonly RawAttachmentItem[]).map((att, idx) => {
++      const id = att.id ?? `att_${String(idx)}`;
++      const filename = att.original_filename ?? att.filename ?? 'attachment';
++      const contentType = att.content_type ?? '';
++      const byteSize = att.byte_size;
++      const pageCount = att.page_count;
++      const sha256 = att.blob_sha256;
++      const cleanId = id.replace(/^att_/, '');
++      return {
++        id: cleanId,
++        filename,
++        contentType,
++        byteSize,
++        pageCount,
++        sha256,
++        url: `/api/v1/attachments/${cleanId}`,
++      };
++    });
++  }
++
++  const desc = issue.description_markdown ?? '';
++  const regex =
++    /(?:!\[([^\]]*)\]|\[([^\]]+)\])\(((?:attachment:\/\/|\/api\/v1\/attachments\/)[^)]+)\)/g;
++  const found: ExtractedAttachment[] = [];
++  let m: RegExpExecArray | null;
++  while ((m = regex.exec(desc)) !== null) {
++    const rawAlt = m[1];
++    const rawName = m[2];
++    const altOrName = (rawAlt && rawAlt !== '' ? rawAlt : undefined) ?? (rawName && rawName !== '' ? rawName : undefined) ?? 'attachment';
++    const rawUri = m[3] ?? '';
++    const cleanId = rawUri
++      .replace(/^attachment:\/\//, '')
++      .replace(/^\/api\/v1\/attachments\//, '')
++      .replace(/^att_/, '');
++    const isPdf =
++      altOrName.toLowerCase().endsWith('.pdf') || rawUri.toLowerCase().endsWith('.pdf');
++    found.push({
++      id: cleanId,
++      filename: altOrName,
++      contentType: isPdf ? 'application/pdf' : 'image/png',
++      url: `/api/v1/attachments/${cleanId}`,
++    });
++  }
++  return found;
++}
++
+ /**
+  * Normalize backend IssueResponse payload so all drawer/rail components receive
+  * project_key, object_id, etag, and label_ids while preserving unit-test fixtures verbatim.
+@@ -533,6 +607,7 @@ function IssueSurfaceContent({
+       return <></>;
+     }
+     const currentIssue: IssueDetail = issue;
++    const issueAttachments = getIssueAttachments(currentIssue);
+ 
+     const handleIssueUpdate = (updated: IssueDetail): void => {
+       queryClient.setQueryData<IssueDetail>(
+@@ -611,11 +686,16 @@ function IssueSurfaceContent({
+       if (file.size > MAX_ATTACHMENT_BYTES) {
+         return;
+       }
++      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+       try {
+         const proj = currentIssue.project_key;
+         const result = await defaultUploadAttachment(file, proj);
+         const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
+-        insertTextInDesc(`![${file.name}](${targetUri})`, '', '');
++        if (isPdf) {
++          insertTextInDesc(`[${file.name}](${targetUri})`, '', '');
++        } else {
++          insertTextInDesc(`![${file.name}](${targetUri})`, '', '');
++        }
+       } finally {
+         e.target.value = '';
+       }
+@@ -624,19 +704,28 @@ function IssueSurfaceContent({
+     const handleDescPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>): void => {
+       const clipboardData = e.clipboardData;
+ 
+-      // Check image file
++      // Check image or pdf file
+       const files = Array.from(clipboardData.files);
+       if (files.length > 0) {
+         const file = files.find(
+-          (f) => ALLOWED_IMAGE_MIME_TYPES.has(f.type) || f.name.toLowerCase().endsWith('.svg'),
++          (f) =>
++            ALLOWED_IMAGE_MIME_TYPES.has(f.type) ||
++            f.name.toLowerCase().endsWith('.svg') ||
++            f.type === 'application/pdf' ||
++            f.name.toLowerCase().endsWith('.pdf'),
+         );
+         if (file) {
+           e.preventDefault();
+           if (file.size > MAX_ATTACHMENT_BYTES) return;
+           const proj = currentIssue.project_key;
++          const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+           void defaultUploadAttachment(file, proj).then((result) => {
+             const targetUri = result.markdownUri || `attachment://${result.id}`;
+-            insertTextInDesc(`![${file.name}](${targetUri})`, '', '');
++            if (isPdf) {
++              insertTextInDesc(`[${file.name}](${targetUri})`, '', '');
++            } else {
++              insertTextInDesc(`![${file.name}](${targetUri})`, '', '');
++            }
+           });
+           return;
+         }
+@@ -990,7 +1079,7 @@ function IssueSurfaceContent({
+               <input
+                 ref={descFileInputRef}
+                 type="file"
+-                accept="image/*,.svg"
++                accept="image/*,.svg,.pdf,application/pdf"
+                 tabIndex={-1}
+                 aria-hidden="true"
+                 className="surface__hidden-file-input"
+@@ -1562,7 +1651,7 @@ function IssueSurfaceContent({
+                             <input
+                               ref={descFileInputRef}
+                               type="file"
+-                              accept="image/*,.svg"
++                              accept="image/*,.svg,.pdf,application/pdf"
+                               tabIndex={-1}
+                               aria-hidden="true"
+                               className="surface__hidden-file-input"
+@@ -1672,7 +1761,43 @@ function IssueSurfaceContent({
+                   <details open className="split-section" data-testid="split-section-attachments">
+                     <summary className="split-section-summary">Attachments</summary>
+                     <div className="split-section-body">
+-                      <p className="split-empty-hint">No attachments yet. Drop or paste images into the description to attach.</p>
++                      {issueAttachments.length > 0 ? (
++                        <div className="split-attachments-list" data-testid="split-attachments-list">
++                          {issueAttachments.map((att) =>
++                            att.contentType === 'application/pdf' ||
++                            att.filename.toLowerCase().endsWith('.pdf') ? (
++                              <PdfAttachmentCard
++                                key={att.id}
++                                filename={att.filename}
++                                downloadUrl={att.url}
++                                byteSize={att.byteSize}
++                                pageCount={att.pageCount}
++                                sha256={att.sha256}
++                                testId={`issue-attachment-pdf-${att.id}`}
++                              />
++                            ) : (
++                              <div
++                                key={att.id}
++                                className="split-attachment-image-card"
++                                data-testid={`issue-attachment-img-${att.id}`}
++                              >
++                                <a
++                                  href={att.url}
++                                  target="_blank"
++                                  rel="noopener noreferrer"
++                                  className="split-attachment-link"
++                                >
++                                  🖼 {att.filename}
++                                </a>
++                              </div>
++                            ),
++                          )}
++                        </div>
++                      ) : (
++                        <p className="split-empty-hint">
++                          No attachments yet. Drop or paste images into the description to attach.
++                        </p>
++                      )}
+                     </div>
+                   </details>
+ 

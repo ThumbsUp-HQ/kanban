@@ -371,9 +371,10 @@ describe('CommentComposer', () => {
       expect(textarea.value).toContain('[link text](https://example.com)');
 
       // Click Media button
-      const mediaBtn = screen.getByRole('button', { name: 'Attach media or SVG' });
+      const mediaBtn = screen.getByRole('button', { name: 'Attach media, SVG, or PDF' });
       fireEvent.click(mediaBtn);
-      expect(textarea.value).toContain('![alt text](https://example.com/media.png)');
+      // Fixed premature placeholder: clicking media button triggers file picker without inserting premature template
+      expect(textarea.value).not.toContain('![alt text](https://example.com/media.png)');
     });
 
     it('handles generic non-ApiProblem errors on submit', async () => {

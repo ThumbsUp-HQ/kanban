@@ -97,6 +97,17 @@ describe('SafeMarkdownPreview', () => {
       expect(italicEl.tagName.toLowerCase()).toBe('em');
     });
 
+    it('renders PDF attachment links as PdfAttachmentCard', () => {
+      const markdown = 'See attached doc: [specification.pdf](attachment://att_spec_1)';
+      render(<SafeMarkdownPreview markdown={markdown} />);
+
+      expect(screen.getByTestId('p-0-pdf-0')).toBeDefined();
+      expect(screen.getByText('specification.pdf')).toBeDefined();
+      const link = screen.getByRole('link', { name: 'Download specification.pdf' });
+      expect(link.getAttribute('href')).toBe('/api/v1/attachments/spec_1');
+      expect(link.getAttribute('download')).toBe('specification.pdf');
+    });
+
     it('supports pluggable custom renderer via registerCommentBodyRenderer', () => {
       registerCommentBodyRenderer((md) => {
         if (md.startsWith('CUSTOM:')) {

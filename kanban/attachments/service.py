@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from database.models import Attachment
 from kanban.api.problems import not_found
+from kanban.attachments.pdf import sanitize_and_validate_pdf
 from kanban.attachments.raster import sanitize_and_reencode_raster
 from kanban.attachments.signing import sign_attachment_url
 from kanban.attachments.sniff import (
@@ -56,11 +57,26 @@ class AttachmentService:
             raw_filename,
         )
 
-        # 2. Decompression-bomb inspection and raster pixel re-encoding
-        processed = await sanitize_and_reencode_raster(raw_bytes, detected_type)
+        # 2. Decompression-bomb inspection and content-specific validation/re-encoding
+        page_count: int | None = None
+        if detected_type == "application/pdf":
+            pdf_result = await sanitize_and_validate_pdf(raw_bytes)
+            clean_bytes = pdf_result.clean_bytes
+            blob_sha256 = pdf_result.blob_sha256
+            byte_size = pdf_result.byte_size
+            pixel_width = None
+            pixel_height = None
+            page_count = pdf_result.page_count
+        else:
+            processed = await sanitize_and_reencode_raster(raw_bytes, detected_type)
+            clean_bytes = processed.clean_bytes
+            blob_sha256 = processed.blob_sha256
+            byte_size = processed.byte_size
+            pixel_width = processed.pixel_width
+            pixel_height = processed.pixel_height
 
         # 3. Content-addressed atomic filesystem storage
-        storage_key, _ = self.blob_store.store(processed.clean_bytes)
+        storage_key, _ = self.blob_store.store(clean_bytes)
 
         # 4. Safe filename handling for metadata row
         safe_db_filename = sanitize_original_filename(raw_filename)
@@ -72,11 +88,12 @@ class AttachmentService:
             issue_id=issue_id,
             uploaded_by_id=caller.principal_id,
             original_filename=safe_db_filename,
-            content_type=processed.content_type,
-            byte_size=processed.byte_size,
-            pixel_width=processed.pixel_width,
-            pixel_height=processed.pixel_height,
-            blob_sha256=processed.blob_sha256,
+            content_type=detected_type,
+            byte_size=byte_size,
+            pixel_width=pixel_width,
+            pixel_height=pixel_height,
+            page_count=page_count,
+            blob_sha256=blob_sha256,
             storage_key=storage_key,
         )
         session.add(attachment)
@@ -114,6 +131,7 @@ class AttachmentService:
             "byte_size": attachment.byte_size,
             "pixel_width": attachment.pixel_width,
             "pixel_height": attachment.pixel_height,
+            "page_count": attachment.page_count,
             "signed_url": signed_url,
             "expires_in": 300,
         }

@@ -1,0 +1,397 @@
+=== Migration Lifecycle Test ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ff6d4b77-3b05-4874-8107-3bce17b9f8d4/swarm-b-kan81-0a4e87d7/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ff6d4b77-3b05-4874-8107-3bce17b9f8d4/swarm-b-kan81-0a4e87d7
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 1 item
+
+database/tests/migrations/test_p6_02_pdf_attachments_migration.py::test_p6_02_pdf_attachments_migration_lifecycle PASSED [100%]
+
+============================== 1 passed in 0.55s ===============================
+=== Backend Unit Tests & Parity ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ff6d4b77-3b05-4874-8107-3bce17b9f8d4/swarm-b-kan81-0a4e87d7/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ff6d4b77-3b05-4874-8107-3bce17b9f8d4/swarm-b-kan81-0a4e87d7
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 51 items
+
+database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [  1%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [  3%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_stickies_views_and_links PASSED [  5%]
+database/tests/test_p1_17_models.py::test_ltree_type_validation PASSED   [  7%]
+database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [  9%]
+kanban/tests/attachments/test_pdf_validation.py::test_decode_pdf_name_hex_sequences PASSED [ 11%]
+kanban/tests/attachments/test_pdf_validation.py::test_extract_page_count_from_pages_dict_and_fallback PASSED [ 13%]
+kanban/tests/attachments/test_pdf_validation.py::test_valid_pdf_roundtrip_metadata PASSED [ 15%]
+kanban/tests/attachments/test_pdf_validation.py::test_multi_page_pdf_page_count PASSED [ 17%]
+kanban/tests/attachments/test_pdf_validation.py::test_reject_javascript_active_content PASSED [ 19%]
+kanban/tests/attachments/test_pdf_validation.py::test_reject_hex_obfuscated_active_content PASSED [ 21%]
+kanban/tests/attachments/test_pdf_validation.py::test_reject_active_triggers_and_launch PASSED [ 23%]
+kanban/tests/attachments/test_pdf_validation.py::test_reject_embedded_files_rich_media_xfa_and_encrypt PASSED [ 25%]
+kanban/tests/attachments/test_pdf_validation.py::test_reject_unsafe_uri_schemes PASSED [ 27%]
+kanban/tests/attachments/test_pdf_validation.py::test_accept_safe_https_uri PASSED [ 29%]
+kanban/tests/attachments/test_pdf_validation.py::test_flate_stream_and_objstm_decompression PASSED [ 31%]
+kanban/tests/attachments/test_pdf_validation.py::test_flate_decompression_bomb_ratio_defense PASSED [ 33%]
+kanban/tests/attachments/test_pdf_validation.py::test_reject_offset_shifted_polyglots_and_invalid_magic PASSED [ 35%]
+kanban/tests/attachments/test_pdf_validation.py::test_reject_payload_exceeding_25_mib PASSED [ 37%]
+kanban/tests/attachments/test_pdf_validation.py::test_scan_and_validate_pdf_in_process_direct PASSED [ 39%]
+kanban/tests/attachments/test_pdf_validation.py::test_subprocess_cli_worker_execution PASSED [ 41%]
+kanban/tests/attachments/test_pdf_validation.py::test_in_process_scan_rejects_active_content_and_polyglots PASSED [ 43%]
+kanban/tests/attachments/test_pdf_validation.py::test_check_uri_destination_edge_cases PASSED [ 45%]
+kanban/tests/attachments/test_pdf_validation.py::test_flate_bounds_checks PASSED [ 47%]
+kanban/tests/attachments/test_pdf_validation.py::test_extract_and_scan_streams_max_objects_cap PASSED [ 49%]
+kanban/tests/attachments/test_pdf_validation.py::test_execute_subprocess_failure_modes PASSED [ 50%]
+kanban/tests/attachments/test_pdf_validation.py::test_run_subprocess_worker_direct PASSED [ 52%]
+kanban/tests/api/test_attachments_pdf.py::test_pdf_upload_roundtrip_and_headers PASSED [ 54%]
+kanban/tests/api/test_attachments_pdf.py::test_pdf_upload_rejects_active_javascript PASSED [ 56%]
+kanban/tests/ops/test_sbom.py::test_platform_metadata_constants PASSED   [ 58%]
+kanban/tests/ops/test_sbom.py::test_is_workspace_package PASSED          [ 60%]
+kanban/tests/ops/test_sbom.py::test_normalize_license_atom PASSED        [ 62%]
+kanban/tests/ops/test_sbom.py::test_classify_license_atomic_and_compounds PASSED [ 64%]
+kanban/tests/ops/test_sbom.py::test_resolve_file_path PASSED             [ 66%]
+kanban/tests/ops/test_sbom.py::test_load_allowlist PASSED                [ 68%]
+kanban/tests/ops/test_sbom.py::test_find_allowlist_match PASSED          [ 70%]
+kanban/tests/ops/test_sbom.py::test_extract_python_license PASSED        [ 72%]
+kanban/tests/ops/test_sbom.py::test_collect_python_components PASSED     [ 74%]
+kanban/tests/ops/test_sbom.py::test_format_npm_purl PASSED               [ 76%]
+kanban/tests/ops/test_sbom.py::test_collect_web_components PASSED        [ 78%]
+kanban/tests/ops/test_sbom.py::test_get_live_components_and_clear_cache PASSED [ 80%]
+kanban/tests/ops/test_sbom.py::test_calculate_sbom_summary PASSED        [ 82%]
+kanban/tests/ops/test_sbom.py::test_get_license_texts PASSED             [ 84%]
+kanban/tests/ops/test_sbom.py::test_generate_cyclonedx_1_5 PASSED        [ 86%]
+kanban/tests/ops/test_sbom.py::test_load_allowlist_invalid_items PASSED  [ 88%]
+kanban/tests/ops/test_sbom.py::test_extract_python_license_edge_cases PASSED [ 90%]
+kanban/tests/ops/test_sbom.py::test_collect_python_components_exception_handling PASSED [ 92%]
+kanban/tests/ops/test_sbom.py::test_collect_web_components_edge_cases PASSED [ 94%]
+kanban/tests/ops/test_sbom.py::test_get_license_texts_io_errors PASSED   [ 96%]
+kanban/tests/ops/test_sbom.py::test_get_license_texts_missing_files PASSED [ 98%]
+kanban/tests/ops/test_sbom.py::test_parse_web_package_json_with_node_modules_and_allowlist PASSED [100%]
+
+============================= 51 passed in 23.51s ==============================
+=== Frontend Unit Tests ===
+
+> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/ff6d4b77-3b05-4874-8107-3bce17b9f8d4/swarm-b-kan81-0a4e87d7/kanban/web
+> vitest run PdfAttachmentCard.test.tsx SafeMarkdownPreview.test.tsx CommentComposer.test.tsx autoConvertPaste.test.tsx IssueSurface.test.tsx MarkdownEditor.test.tsx cssTokensAudit.test.ts
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ff6d4b77-3b05-4874-8107-3bce17b9f8d4/swarm-b-kan81-0a4e87d7/kanban/web
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 23ms
+ ✓ src/features/activity/PdfAttachmentCard.test.tsx (4 tests) 218ms
+ ✓ src/features/activity/SafeMarkdownPreview.test.tsx (14 tests) 242ms
+ ✓ src/editor/clipboard/autoConvertPaste.test.tsx (27 tests) 362ms
+stderr | src/editor/MarkdownEditor.test.tsx > MarkdownEditor Component > handles attachment file upload in WYSIWYG and Raw modes, and handles upload failure
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/editor/MarkdownEditor.test.tsx > MarkdownEditor Component > handles attachment file upload in WYSIWYG and Raw modes, and handles upload failure
+An update to MarkdownEditor inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/editor/MarkdownEditor.test.tsx > MarkdownEditor Component > handles attachment file upload in WYSIWYG and Raw modes, and handles upload failure
+An update to MermaidBlockView inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/editor/MarkdownEditor.test.tsx > MarkdownEditor Component > handles attachment file upload in WYSIWYG and Raw modes, and handles upload failure
+An update to MermaidBlockView inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to MermaidBlockView inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/editor/MarkdownEditor.test.tsx > MarkdownEditor Component > handles attachment file upload in WYSIWYG and Raw modes, and handles upload failure
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/editor/MarkdownEditor.test.tsx > MarkdownEditor Component > handles attachment file upload in WYSIWYG and Raw modes, and handles upload failure
+An update to MermaidBlockView inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/editor/MarkdownEditor.test.tsx > MarkdownEditor Component > handles attachment file upload in WYSIWYG and Raw modes, and handles upload failure
+An update to MermaidBlockView inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to MermaidBlockView inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/editor/MarkdownEditor.test.tsx > MarkdownEditor Component > handles attachment file upload in WYSIWYG and Raw modes, and handles upload failure
+An update to MermaidBlockView inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/editor/MarkdownEditor.test.tsx > MarkdownEditor Component > handles attachment file upload in WYSIWYG and Raw modes, and handles upload failure
+An update to MermaidBlockView inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to MermaidBlockView inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/editor/MarkdownEditor.test.tsx > MarkdownEditor Component > handles attachment file upload in WYSIWYG and Raw modes, and handles upload failure
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/editor/MarkdownEditor.test.tsx > MarkdownEditor Component > handles attachment file upload in WYSIWYG and Raw modes, and handles upload failure
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/editor/MarkdownEditor.test.tsx > MarkdownEditor Component > handles attachment file upload in WYSIWYG and Raw modes, and handles upload failure
+An update to SparkleOverlayPortal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/editor/MarkdownEditor.test.tsx > MarkdownEditor Component > handles attachment file upload in WYSIWYG and Raw modes, and handles upload failure
+An update to SparkleOverlayPortal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/editor/MarkdownEditor.test.tsx > MarkdownEditor Component > handles attachment file upload in WYSIWYG and Raw modes, and handles upload failure
+An update to MarkdownEditor inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/editor/MarkdownEditor.test.tsx > MarkdownEditor Component > handles attachment file upload in WYSIWYG and Raw modes, and handles upload failure
+An update to Root inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/editor/MarkdownEditor.test.tsx > MarkdownEditor Component > renders and dismisses/reverts SanitizedPastePill on HTML paste in WYSIWYG and Raw modes
+An update to MarkdownEditor inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/editor/MarkdownEditor.test.tsx > MarkdownEditor Component > renders and dismisses/reverts SanitizedPastePill on HTML paste in WYSIWYG and Raw modes
+An update to MarkdownEditor inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/editor/MarkdownEditor.test.tsx > MarkdownEditor Component > handles oversized files, empty file selection, non-empty selection link, and raw mode paste revert
+An update to MarkdownEditor inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/editor/MarkdownEditor.test.tsx > MarkdownEditor Component > handles oversized files, empty file selection, non-empty selection link, and raw mode paste revert
+An update to MarkdownEditor inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/editor/MarkdownEditor.test.tsx > MarkdownEditor Component > handles oversized files, empty file selection, non-empty selection link, and raw mode paste revert
+An update to MarkdownEditor inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/editor/MarkdownEditor.test.tsx > MarkdownEditor Component > handles oversized files, empty file selection, non-empty selection link, and raw mode paste revert
+An update to MarkdownEditor inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to MarkdownEditor inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to MarkdownEditor inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/editor/MarkdownEditor.test.tsx (13 tests) 900ms
+ ✓ src/features/activity/CommentComposer.test.tsx (30 tests) 1099ms
+ ✓ src/features/drawer/IssueSurface.test.tsx (46 tests) 2375ms
+
+ Test Files  7 passed (7)
+      Tests  138 passed (138)
+   Start at  14:21:08
+   Duration  4.15s (environment 44%, tests 37%, import 17%, transform 2%, worker 1%)
+

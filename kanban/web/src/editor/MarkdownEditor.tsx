@@ -423,20 +423,35 @@ export function MarkdownEditor({
       onAnnounceRef.current?.(msg);
       return;
     }
+    const isPdf =
+      file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
     try {
       const result = await defaultUploadAttachment(file, projectId);
       const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
-      if (isRawMode) {
-        insertTextInRaw(`![${file.name}](${targetUri})`, '', '');
+      if (isPdf) {
+        if (isRawMode) {
+          insertTextInRaw(`[${file.name}](${targetUri})`, '', '');
+        } else {
+          /* v8 ignore next */
+          if (!viewRef.current) return;
+          const linkMark = editorSchema.marks.link.create({ href: targetUri });
+          const textNode = editorSchema.text(file.name, [linkMark]);
+          viewRef.current.dispatch(viewRef.current.state.tr.replaceSelectionWith(textNode));
+          viewRef.current.focus();
+        }
       } else {
-        /* v8 ignore next */
-        if (!viewRef.current) return;
-        const imgNode = editorSchema.nodes.image.create({
-          src: targetUri,
-          alt: file.name,
-        });
-        viewRef.current.dispatch(viewRef.current.state.tr.replaceSelectionWith(imgNode));
-        viewRef.current.focus();
+        if (isRawMode) {
+          insertTextInRaw(`![${file.name}](${targetUri})`, '', '');
+        } else {
+          /* v8 ignore next */
+          if (!viewRef.current) return;
+          const imgNode = editorSchema.nodes.image.create({
+            src: targetUri,
+            alt: file.name,
+          });
+          viewRef.current.dispatch(viewRef.current.state.tr.replaceSelectionWith(imgNode));
+          viewRef.current.focus();
+        }
       }
     } catch {
       const msg = 'Attachment upload failed';
@@ -605,7 +620,7 @@ export function MarkdownEditor({
           type="button"
           className="kb-editor__tool-btn"
           aria-label="Attach media or SVG"
-          title="Attach media or SVG (<=25MB)"
+          title="Attach media, SVG, or PDF (<=25MB)"
           onClick={handleTriggerMediaUpload}
           data-testid={`${testId}-tool-media`}
         >
@@ -614,7 +629,7 @@ export function MarkdownEditor({
         <input
           ref={fileInputRef}
           type="file"
-          accept="image/*,.svg"
+          accept="image/*,.svg,.pdf,application/pdf"
           tabIndex={-1}
           aria-hidden="true"
           className="kb-editor__file-input"

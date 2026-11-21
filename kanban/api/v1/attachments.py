@@ -314,6 +314,9 @@ async def get_attachment_direct(
             headers["Content-Disposition"] = f'inline; filename="{safe_filename}"'
         else:
             headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
+    elif attachment.content_type == "application/pdf":
+        headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
+        headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
     else:
         headers["Content-Disposition"] = f'inline; filename="{safe_filename}"'
 
@@ -392,6 +395,9 @@ async def get_attachment_content(  # noqa: PLR0913, PLR0917
             headers["Content-Disposition"] = f'inline; filename="{safe_filename}"'
         else:
             headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
+    elif attachment.content_type == "application/pdf":
+        headers["Content-Security-Policy"] = "default-src 'none'; sandbox"
+        headers["Content-Disposition"] = f'attachment; filename="{safe_filename}"'
     else:
         headers["Content-Disposition"] = f'inline; filename="{safe_filename}"'
 

@@ -71,11 +71,14 @@ export function resolveMediaUrl(
 
   // 2. Handle attachment://<id> protocol
   if (trimmed.startsWith('attachment://')) {
-    const attachmentId = trimmed.replace('attachment://', '');
+    const rawId = trimmed.replace('attachment://', '');
+    const cleanId = rawId.replace(/^att_/, '');
     const mapped =
-      options.resolveAttachmentUrl?.(attachmentId) ??
-      options.attachmentMap?.[attachmentId];
-    const resolvedUrl = mapped ?? `/api/v1/attachments/${attachmentId}`;
+      options.resolveAttachmentUrl?.(cleanId) ??
+      options.resolveAttachmentUrl?.(rawId) ??
+      options.attachmentMap?.[cleanId] ??
+      options.attachmentMap?.[rawId];
+    const resolvedUrl = mapped ?? `/api/v1/attachments/${cleanId}`;
     return {
       kind: 'attachment',
       url: resolvedUrl,

@@ -22,6 +22,10 @@ class AttachmentResponse(BaseModel):
     byte_size: Annotated[int, Field(ge=1, le=26_214_400, description="Payload byte size")]
     pixel_width: Annotated[int | None, Field(default=None, description="Raster width in pixels")]
     pixel_height: Annotated[int | None, Field(default=None, description="Raster height in pixels")]
+    page_count: Annotated[
+        int | None,
+        Field(default=None, description="Document page count for paginated media"),
+    ]
     signed_url: Annotated[str, Field(description="HMAC-SHA256 signed content retrieval URL")]
     expires_in: Annotated[int, Field(default=300, description="TTL in seconds for signed URL")]
 

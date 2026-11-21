@@ -49,10 +49,84 @@ import {
 import { pruneHiddenDom } from '../../editor/clipboard/hiddenDomPruner';
 import { SanitizedPastePill } from '../../editor/clipboard/SanitizedPastePill';
 import { SafeMarkdownPreview } from '../activity/SafeMarkdownPreview';
+import { PdfAttachmentCard } from '../activity/PdfAttachmentCard';
 import { copyToClipboard } from '../../utils/clipboard';
 import './IssueSurface.css';
 
 let moduleMountCounter = 0;
+
+interface RawAttachmentItem {
+  readonly id?: string | undefined;
+  readonly original_filename?: string | undefined;
+  readonly filename?: string | undefined;
+  readonly content_type?: string | undefined;
+  readonly byte_size?: number | undefined;
+  readonly page_count?: number | null | undefined;
+  readonly blob_sha256?: string | undefined;
+}
+
+export interface ExtractedAttachment {
+  readonly id: string;
+  readonly filename: string;
+  readonly contentType: string;
+  readonly byteSize?: number | undefined;
+  readonly pageCount?: number | null | undefined;
+  readonly sha256?: string | undefined;
+  readonly url: string;
+}
+
+/**
+ * Extract attachments from issue model or description markdown links.
+ */
+export function getIssueAttachments(issue: IssueDetail | null | undefined): ExtractedAttachment[] {
+  if (!issue) return [];
+  const rawAttachments = issue.attachments;
+  if (Array.isArray(rawAttachments) && rawAttachments.length > 0) {
+    return (rawAttachments as readonly RawAttachmentItem[]).map((att, idx) => {
+      const id = att.id ?? `att_${String(idx)}`;
+      const filename = att.original_filename ?? att.filename ?? 'attachment';
+      const contentType = att.content_type ?? '';
+      const byteSize = att.byte_size;
+      const pageCount = att.page_count;
+      const sha256 = att.blob_sha256;
+      const cleanId = id.replace(/^att_/, '');
+      return {
+        id: cleanId,
+        filename,
+        contentType,
+        byteSize,
+        pageCount,
+        sha256,
+        url: `/api/v1/attachments/${cleanId}`,
+      };
+    });
+  }
+
+  const desc = issue.description_markdown ?? '';
+  const regex =
+    /(?:!\[([^\]]*)\]|\[([^\]]+)\])\(((?:attachment:\/\/|\/api\/v1\/attachments\/)[^)]+)\)/g;
+  const found: ExtractedAttachment[] = [];
+  let m: RegExpExecArray | null;
+  while ((m = regex.exec(desc)) !== null) {
+    const rawAlt = m[1];
+    const rawName = m[2];
+    const altOrName = (rawAlt && rawAlt !== '' ? rawAlt : undefined) ?? (rawName && rawName !== '' ? rawName : undefined) ?? 'attachment';
+    const rawUri = m[3] ?? '';
+    const cleanId = rawUri
+      .replace(/^attachment:\/\//, '')
+      .replace(/^\/api\/v1\/attachments\//, '')
+      .replace(/^att_/, '');
+    const isPdf =
+      altOrName.toLowerCase().endsWith('.pdf') || rawUri.toLowerCase().endsWith('.pdf');
+    found.push({
+      id: cleanId,
+      filename: altOrName,
+      contentType: isPdf ? 'application/pdf' : 'image/png',
+      url: `/api/v1/attachments/${cleanId}`,
+    });
+  }
+  return found;
+}
 
 /**
  * Normalize backend IssueResponse payload so all drawer/rail components receive
@@ -533,6 +607,7 @@ function IssueSurfaceContent({
       return <></>;
     }
     const currentIssue: IssueDetail = issue;
+    const issueAttachments = getIssueAttachments(currentIssue);
 
     const handleIssueUpdate = (updated: IssueDetail): void => {
       queryClient.setQueryData<IssueDetail>(
@@ -611,11 +686,16 @@ function IssueSurfaceContent({
       if (file.size > MAX_ATTACHMENT_BYTES) {
         return;
       }
+      const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
       try {
         const proj = currentIssue.project_key;
         const result = await defaultUploadAttachment(file, proj);
         const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
-        insertTextInDesc(`![${file.name}](${targetUri})`, '', '');
+        if (isPdf) {
+          insertTextInDesc(`[${file.name}](${targetUri})`, '', '');
+        } else {
+          insertTextInDesc(`![${file.name}](${targetUri})`, '', '');
+        }
       } finally {
         e.target.value = '';
       }
@@ -624,19 +704,28 @@ function IssueSurfaceContent({
     const handleDescPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>): void => {
       const clipboardData = e.clipboardData;
 
-      // Check image file
+      // Check image or pdf file
       const files = Array.from(clipboardData.files);
       if (files.length > 0) {
         const file = files.find(
-          (f) => ALLOWED_IMAGE_MIME_TYPES.has(f.type) || f.name.toLowerCase().endsWith('.svg'),
+          (f) =>
+            ALLOWED_IMAGE_MIME_TYPES.has(f.type) ||
+            f.name.toLowerCase().endsWith('.svg') ||
+            f.type === 'application/pdf' ||
+            f.name.toLowerCase().endsWith('.pdf'),
         );
         if (file) {
           e.preventDefault();
           if (file.size > MAX_ATTACHMENT_BYTES) return;
           const proj = currentIssue.project_key;
+          const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
           void defaultUploadAttachment(file, proj).then((result) => {
             const targetUri = result.markdownUri || `attachment://${result.id}`;
-            insertTextInDesc(`![${file.name}](${targetUri})`, '', '');
+            if (isPdf) {
+              insertTextInDesc(`[${file.name}](${targetUri})`, '', '');
+            } else {
+              insertTextInDesc(`![${file.name}](${targetUri})`, '', '');
+            }
           });
           return;
         }
@@ -990,7 +1079,7 @@ function IssueSurfaceContent({
               <input
                 ref={descFileInputRef}
                 type="file"
-                accept="image/*,.svg"
+                accept="image/*,.svg,.pdf,application/pdf"
                 tabIndex={-1}
                 aria-hidden="true"
                 className="surface__hidden-file-input"
@@ -1562,7 +1651,7 @@ function IssueSurfaceContent({
                             <input
                               ref={descFileInputRef}
                               type="file"
-                              accept="image/*,.svg"
+                              accept="image/*,.svg,.pdf,application/pdf"
                               tabIndex={-1}
                               aria-hidden="true"
                               className="surface__hidden-file-input"
@@ -1672,7 +1761,43 @@ function IssueSurfaceContent({
                   <details open className="split-section" data-testid="split-section-attachments">
                     <summary className="split-section-summary">Attachments</summary>
                     <div className="split-section-body">
-                      <p className="split-empty-hint">No attachments yet. Drop or paste images into the description to attach.</p>
+                      {issueAttachments.length > 0 ? (
+                        <div className="split-attachments-list" data-testid="split-attachments-list">
+                          {issueAttachments.map((att) =>
+                            att.contentType === 'application/pdf' ||
+                            att.filename.toLowerCase().endsWith('.pdf') ? (
+                              <PdfAttachmentCard
+                                key={att.id}
+                                filename={att.filename}
+                                downloadUrl={att.url}
+                                byteSize={att.byteSize}
+                                pageCount={att.pageCount}
+                                sha256={att.sha256}
+                                testId={`issue-attachment-pdf-${att.id}`}
+                              />
+                            ) : (
+                              <div
+                                key={att.id}
+                                className="split-attachment-image-card"
+                                data-testid={`issue-attachment-img-${att.id}`}
+                              >
+                                <a
+                                  href={att.url}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="split-attachment-link"
+                                >
+                                  🖼 {att.filename}
+                                </a>
+                              </div>
+                            ),
+                          )}
+                        </div>
+                      ) : (
+                        <p className="split-empty-hint">
+                          No attachments yet. Drop or paste images into the description to attach.
+                        </p>
+                      )}
                     </div>
                   </details>
 

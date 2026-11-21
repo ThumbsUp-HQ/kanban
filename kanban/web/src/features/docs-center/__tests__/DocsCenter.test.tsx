@@ -1479,5 +1479,27 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
         </MemoryRouter>,
       );
     });
+
+    it('renders the 45-feature comparison matrix including OpenAI Symphony and 🎯✅ targets in DocsCenterPage', () => {
+      const comparisonChapter = getChapter('feature-comparison');
+      expect(comparisonChapter).toBeDefined();
+      expect(comparisonChapter?.content).toContain('OpenAI Symphony');
+      expect(comparisonChapter?.content).toContain('🎯✅');
+
+      render(
+        <MemoryRouter initialEntries={['/docs/feature-comparison']}>
+          <Routes>
+            <Route path="/docs/:slug" element={<DocsCenterPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+
+      const symphonyHeaders = screen.getAllByRole('columnheader', {
+        name: 'OpenAI Symphony',
+      });
+      expect(symphonyHeaders).toHaveLength(5);
+      expect(screen.getAllByRole('table')).toHaveLength(5);
+      expect(screen.getAllByRole('cell', { name: '🎯✅' })).toHaveLength(10);
+    });
   });
 });

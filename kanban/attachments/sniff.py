@@ -11,6 +11,7 @@ from kanban.api.problems import ProblemException
 MAX_ATTACHMENT_BYTES: Final[int] = 26_214_400  # 25 MiB exact
 _SVG_LEN: Final[int] = 4
 _MIN_BOX_HEADER: Final[int] = 12
+_MIN_PDF_HEADER: Final[int] = 8
 
 ALLOWED_MEDIA_TYPES: Final[frozenset[str]] = frozenset(
     {
@@ -20,6 +21,7 @@ ALLOWED_MEDIA_TYPES: Final[frozenset[str]] = frozenset(
         "image/avif",
         "image/gif",
         "image/svg+xml",
+        "application/pdf",
     }
 )
 
@@ -31,6 +33,7 @@ EXTENSION_TO_MEDIA_TYPE: Final[dict[str, str]] = {
     ".gif": "image/gif",
     ".avif": "image/avif",
     ".svg": "image/svg+xml",
+    ".pdf": "application/pdf",
 }
 
 MEDIA_TYPE_TO_DEFAULT_EXT: Final[dict[str, str]] = {
@@ -40,6 +43,7 @@ MEDIA_TYPE_TO_DEFAULT_EXT: Final[dict[str, str]] = {
     "image/gif": ".gif",
     "image/avif": ".avif",
     "image/svg+xml": ".svg",
+    "application/pdf": ".pdf",
 }
 
 
@@ -92,6 +96,39 @@ def _sniff_svg(header: bytes) -> str | None:
     return None
 
 
+def _sniff_pdf(header: bytes) -> str | None:
+    """Detect PDF document from magic bytes strictly at offset 0."""
+    if len(header) >= _MIN_PDF_HEADER and header.startswith((b"%PDF-1.", b"%PDF-2.")):
+        return "application/pdf"
+    return None
+
+
+def _check_special_type_hints(
+    detected: str,
+    filename: str,
+    declared_content_type: str | None,
+) -> None:
+    """Verify SVG or PDF has corresponding extension or declared Content-Type."""
+    if detected in ("image/svg+xml", "application/pdf"):
+        expected_ext = ".svg" if detected == "image/svg+xml" else ".pdf"
+        lower_fn = filename.lower()
+        has_ext = lower_fn.endswith(expected_ext)
+        decl_match = (
+            declared_content_type is not None
+            and declared_content_type.strip().lower().split(";")[0] == detected
+        )
+        if not (has_ext or decl_match):
+            label = "SVG" if detected == "image/svg+xml" else "PDF"
+            raise ProblemException(
+                code="MIME_MISMATCH_OR_UNSUPPORTED",
+                status=415,
+                title="Unsupported Media Type",
+                detail=(
+                    f"{label} content must have {expected_ext} extension or {detected} Content-Type"
+                ),
+            )
+
+
 def sniff_media_type(
     header_bytes: bytes,
     declared_content_type: str | None,
@@ -104,7 +141,7 @@ def sniff_media_type(
             If magic bytes are unknown, or conflict with declared Content-Type or extension.
 
     """
-    detected = _sniff_raster(header_bytes) or _sniff_svg(header_bytes)
+    detected = _sniff_raster(header_bytes) or _sniff_svg(header_bytes) or _sniff_pdf(header_bytes)
     if detected is None or detected not in ALLOWED_MEDIA_TYPES:
         raise ProblemException(
             code="MIME_MISMATCH_OR_UNSUPPORTED",
@@ -113,21 +150,7 @@ def sniff_media_type(
             detail="File content does not match any supported media type",
         )
 
-    # For SVG: additionally verify filename extension or declared type
-    if detected == "image/svg+xml":
-        lower_fn = filename.lower()
-        has_svg_ext = lower_fn.endswith(".svg")
-        decl_is_svg = (
-            declared_content_type is not None
-            and declared_content_type.strip().lower().split(";")[0] == "image/svg+xml"
-        )
-        if not (has_svg_ext or decl_is_svg):
-            raise ProblemException(
-                code="MIME_MISMATCH_OR_UNSUPPORTED",
-                status=415,
-                title="Unsupported Media Type",
-                detail="SVG content must have .svg extension or image/svg+xml Content-Type",
-            )
+    _check_special_type_hints(detected, filename, declared_content_type)
 
     # Verify declared Content-Type consistency if provided
     if declared_content_type:

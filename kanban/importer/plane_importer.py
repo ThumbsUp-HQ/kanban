@@ -31,6 +31,7 @@ from database.models import (
     RoleBinding,
     WorkflowState,
 )
+from kanban.attachments.pdf import sanitize_and_validate_pdf
 from kanban.attachments.raster import sanitize_and_reencode_raster
 from kanban.attachments.sniff import sniff_media_type
 from kanban.attachments.storage import LocalFilesystemBlobStore
@@ -502,16 +503,24 @@ class PlaneImporter:
                 is_svg = att_filename.lower().endswith(".svg") or raw_bytes.strip().startswith(
                     b"<svg"
                 )
+                is_pdf = att_filename.lower().endswith(".pdf") or raw_bytes.startswith(
+                    (b"%PDF-1.", b"%PDF-2.")
+                )
                 if is_svg:
                     clean_svg_val = sanitize_svg(raw_bytes)
                     clean_bytes = clean_svg_val.encode("utf-8")
                     detected_type = "image/svg+xml"
-                    p_w, p_h = None, None
+                    p_w, p_h, page_cnt = None, None, None
+                elif is_pdf:
+                    pdf_res = await sanitize_and_validate_pdf(raw_bytes)
+                    clean_bytes = pdf_res.clean_bytes
+                    detected_type = "application/pdf"
+                    p_w, p_h, page_cnt = None, None, pdf_res.page_count
                 else:
                     detected_type = sniff_media_type(raw_bytes[:4096], None, att_filename)
                     processed = await sanitize_and_reencode_raster(raw_bytes, detected_type)
                     clean_bytes = processed.clean_bytes
-                    p_w, p_h = processed.pixel_width, processed.pixel_height
+                    p_w, p_h, page_cnt = processed.pixel_width, processed.pixel_height, None
 
                 storage_key, raw_sha = self.blob_store.store(clean_bytes)
                 att_id = uuid.uuid4()
@@ -525,6 +534,7 @@ class PlaneImporter:
                     byte_size=len(clean_bytes),
                     pixel_width=p_w,
                     pixel_height=p_h,
+                    page_count=page_cnt,
                     blob_sha256=raw_sha,
                     storage_key=storage_key,
                 )
