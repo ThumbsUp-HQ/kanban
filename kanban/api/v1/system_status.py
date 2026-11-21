@@ -33,6 +33,7 @@ from kanban.jobs.scheduled_backup import (
 )
 from kanban.ops.backup_crypto import KeySource, PassphraseKeySource, RawKeySource
 from kanban.ops.backup_service import restore_backup, verify_backup
+from kanban.ops.build_info import get_build_info
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.standalone.export_service import (
     decrypt_backup,
@@ -65,6 +66,11 @@ class SystemStatusResponse(BaseModel):
         default_factory=lambda: ["scalar", "formula", "wasm", "nsjail"]
     )
     sandbox_unavailable_reason: str | None = None
+    git_commit: str | None = None
+    build_timestamp: str | None = None
+    openapi_version: str | None = "2.0.0"
+    openapi_bundle_hash: str | None = None
+    frontend_bundle_hash: str | None = None
 
 
 class StandaloneBackupRequest(BaseModel):
@@ -198,6 +204,11 @@ async def get_system_status_endpoint(
         )
     )
 
+    openapi_doc = None
+    if hasattr(request, "app") and hasattr(request.app, "openapi"):
+        openapi_doc = request.app.openapi()
+    b_info = get_build_info(openapi_doc)
+
     return SystemStatusResponse(
         deployment_mode=status_data["deployment_mode"],
         persistent_volume=status_data["persistent_volume"],
@@ -210,6 +221,11 @@ async def get_system_status_endpoint(
         allow_unlimited_mcp_keys=not disable_unlimited,
         supported_custom_field_tiers=supported_tiers,
         sandbox_unavailable_reason=sandbox_reason,
+        git_commit=b_info.git_commit,
+        build_timestamp=b_info.build_timestamp,
+        openapi_version=b_info.openapi_version,
+        openapi_bundle_hash=b_info.openapi_bundle_hash,
+        frontend_bundle_hash=b_info.frontend_bundle_hash,
     )
 
 
@@ -262,6 +278,11 @@ async def get_admin_standalone_status_endpoint(
         )
     )
 
+    openapi_doc = None
+    if hasattr(request, "app") and hasattr(request.app, "openapi"):
+        openapi_doc = request.app.openapi()
+    b_info = get_build_info(openapi_doc)
+
     return SystemStatusResponse(
         deployment_mode=status_data["deployment_mode"],
         persistent_volume=status_data["persistent_volume"],
@@ -274,6 +295,11 @@ async def get_admin_standalone_status_endpoint(
         allow_unlimited_mcp_keys=not disable_unlimited,
         supported_custom_field_tiers=supported_tiers,
         sandbox_unavailable_reason=sandbox_reason,
+        git_commit=b_info.git_commit,
+        build_timestamp=b_info.build_timestamp,
+        openapi_version=b_info.openapi_version,
+        openapi_bundle_hash=b_info.openapi_bundle_hash,
+        frontend_bundle_hash=b_info.frontend_bundle_hash,
     )
 
 

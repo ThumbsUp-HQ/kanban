@@ -86,11 +86,11 @@ jobs:
 
       - name: Build runtime-slim image
         shell: bash
-        run: docker buildx build --target runtime-slim -t kanban:runtime-slim --load .
+        run: docker buildx build --target runtime-slim --build-arg KB_GIT_COMMIT=${{ github.sha }} -t kanban:runtime-slim --load .
 
       - name: Build standalone image
         shell: bash
-        run: docker buildx build --target standalone -t kanban:standalone --load .
+        run: docker buildx build --target standalone --build-arg KB_GIT_COMMIT=${{ github.sha }} -t kanban:standalone --load .
 
       - name: Verify built images
         shell: bash
@@ -136,3 +136,5 @@ jobs:
           context: .
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/thumbs-up-kanban:latest
+          build-args: |
+            KB_GIT_COMMIT=${{ github.sha }}

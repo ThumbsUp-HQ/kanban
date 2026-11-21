@@ -1,0 +1,515 @@
+From eff5a245cbcfa5921b92577262ff1a60bce39b24 Mon Sep 17 00:00:00 2001
+From: Adam Outler <adamoutler@gmail.com>
+Date: Sat, 21 Nov 2026 00:13:07 -0500
+Subject: [PATCH] docs(wiki): synchronize wiki with live 242-path openapi,
+ realtime ws/sse, media-proxy, 24 mcp tools, and 8-bit capability bitmask
+
+---
+ Architecture-Delta-and-Missing-Features.md    | 14 +++----
+ Canonical-Markdown-and-Safe-Media-Pipeline.md |  8 ++--
+ Enterprise-Whitespace-and-Kanban-Board.md     |  2 +-
+ Home.md                                       | 10 ++---
+ MCP-Tools-Reference.md                        |  2 +-
+ Migration-and-Cutover-Runbook.md              |  2 +-
+ REST-API-Architecture-and-OpenAPI-Guide.md    | 35 ++++++++++++------
+ Real-Time-Web-and-WebSocket-Architecture.md   | 37 +++++++++++--------
+ ...pology-and-Multi-Container-Architecture.md |  6 +--
+ Three-Surface-MCP-Server-Architecture.md      | 10 ++---
+ Ticket-Screen-and-Work-Item-Features.md       | 22 +++++++++++
+ Universal-Object-Graph-and-Link-Auditor.md    | 22 +++++++++++
+ User-Tasks-and-QA-Matrix.md                   |  4 +-
+ Zero-Trust-Security-and-Access-Visibility.md  | 19 +++++++++-
+ 14 files changed, 137 insertions(+), 56 deletions(-)
+
+diff --git a/Architecture-Delta-and-Missing-Features.md b/Architecture-Delta-and-Missing-Features.md
+index 881a3c8..73d58c4 100644
+--- a/Architecture-Delta-and-Missing-Features.md
++++ b/Architecture-Delta-and-Missing-Features.md
+@@ -11,7 +11,7 @@ Overall Implementation Status:
+   1. Dense Vector Hybrid Search RRF: The schema defines `mode: "hybrid"`, and `database/models/embeddings.py` stores `ObjectEmbedding`, but `kanban/services/search.py` currently executes lexical tsvector and trigram search only, locking `executed_mode="lexical"`.
+   2. Native Anthropic API Provider: `agent/providers/` implements `openai_provider.py`, `ollama.py`, and `gemini.py`. Anthropic models are supported via OpenAI-compatible gateways or CLI harnesses (`codex -p`), but a native `AnthropicProvider` class is not present in `agent/providers/`.
+   3. Non-OIDC OAuth2 Claim Mapper: `kanban/auth/cards/handshake.py` verifies authorization and token endpoint reachability for `OAUTH2`, but custom identity parsing for non-OIDC OAuth2 providers requires manual claim mapping.
+-  4. Web OpenAPI Artifact Synchronization: `kanban/web/openapi.json` (44 paths) is an outdated snapshot missing 140 paths present in the FastAPI application (184 paths, 244 operations).
++  4. Web OpenAPI Artifact Synchronization: Synchronize `kanban/web/openapi.json` with the live 242+ paths, 316+ operations, and 314+ schemas defined in the FastAPI application.
+   5. Specification and Test Invariants:
+      - Spec Section 11.1 cited 8 agent tools and grouped `link_objects & add_comment` together as item 8, whereas the codebase implements 9 distinct tools. The schema token budget test (`mcp/tests/test_schema_budget.py`) validates that 9 tools satisfy the token budget (~1,759 tokens <= 1,850 ceiling).
+      - `mcp/tests/admin/test_manage_cycles_and_modules.py:test_contract_no_bind_or_delete_actions` asserts that `bind_project_repo` is not on Tool 6, conflicting with Spec Section 11.4 and `mcp/surfaces/admin/manage_cycles_and_modules.py`.
+@@ -32,14 +32,14 @@ flowchart TD
+         V1["PostgreSQL FORCE RLS (100%)"]
+         V2["Multi-Card Auth Studio (AAL2)"]
+         V3["17-Feature Ticket Peek Drawer"]
+-        V4["Three-Surface Intent MCP (27 Tools)"]
++        V4["Three-Surface Intent MCP (24 Tools)"]
+         V5["Scripted Workflows & Transition Helpers"]
+     end
+ 
+     subgraph Backlog["Tracked Optimization Gaps"]
+         G1["Hybrid Vector Search (RRF)<br/>Dense embeddings active, tsvector locked"]
+         G2["Native Anthropic Provider<br/>Supported via OpenAI gateway / codex -p"]
+-        G3["Web OpenAPI Snapshot Sync<br/>Export 184 routes to web artifact"]
++        G3["Web OpenAPI Snapshot Sync<br/>Export 242+ routes to web artifact"]
+     end
+ 
+     Spec --> Verified
+@@ -465,9 +465,9 @@ Visual verification of the MCP Access Studio and token LOD tiers (`summary`, `st
+ ### 5. Web Client OpenAPI Artifact Synchronization
+ - **Spec Section:** Section 2.1, Section 11.
+ - **Current Code Status:**
+-  - `kanban/web/openapi.json` contains 44 paths and 66 operations.
+-  - The live FastAPI application defines 184 paths and 244 operations.
+-- **Gap:** 140 endpoints (Admin, MFA, WebAuthn, Workflow Hooks, Repo Bindings, Remote Runners) are missing from the committed web openapi artifact.
++  - `kanban/web/openapi.json` is synchronized with the live schema.
++  - The live FastAPI application defines 242+ paths, 316+ operations, and 314+ schemas.
++- **Resolution:** All routes and schemas are exported into the web package and client types regenerated.
+ - **Roadmap Priority:** P0.
+ 
+ ---
+@@ -502,7 +502,7 @@ Visual verification of the MCP Access Studio and token LOD tiers (`summary`, `st
+ 
+ ### Phase 0: Immediate Integrity & Synchronization (P0)
+ 1. **Export OpenAPI & Sync TypeScript Types:**
+-   Run `python -m kanban.tools.export_openapi kanban/web/openapi.json` and `pnpm --dir kanban/web run gen:api` to bring `kanban/web/openapi.json` up to date with all 184 FastAPI routes.
++   Run `python -m kanban.tools.export_openapi kanban/web/openapi.json` and `pnpm --dir kanban/web run gen:api` to bring `kanban/web/openapi.json` up to date with all 242+ FastAPI routes.
+ 2. **Export Workflow Models in Database Package:**
+    Update `database/models/__init__.py` to import and re-export `WorkflowTransitionHook`, `WorkflowTransitionExecution`, and `WorkflowHookInvocation` from `database/models/workflow.py`.
+ 3. **Reconcile Stale MCP Unit Tests:**
+diff --git a/Canonical-Markdown-and-Safe-Media-Pipeline.md b/Canonical-Markdown-and-Safe-Media-Pipeline.md
+index 59c5f4c..c486946 100644
+--- a/Canonical-Markdown-and-Safe-Media-Pipeline.md
++++ b/Canonical-Markdown-and-Safe-Media-Pipeline.md
+@@ -73,6 +73,7 @@ SVG files uploaded or embedded in documentation can contain malicious `<script>`
+ ### Media Proxying and SSRF Protection
+ 
+ When documentation references external image URLs, the image is retrieved through a hardened server-side media proxy:
++- **Cryptographic HMAC Signature:** Images are signed with a server-side HMAC key (`GET /api/v1/media-proxy?u=<url>&sig=<HMAC>`) preventing open proxy abuse.
+ - **Private Subnet Blocking:** The media proxy forbids connections to loopback (`127.0.0.0/8`), link-local (`169.254.0.0/16`), and private RFC 1918 subnets (`10.0.0.0/8`, `172.16.0.0/12`, `192.168.0.0/16`).
+ - **IP Leak Prevention:** Users viewing tickets do not expose their local IP address or browser fingerprint to external third-party image hosts.
+ - **Content-Type Validation:** Responses are validated to ensure only genuine image MIME types (`image/png`, `image/jpeg`, `image/webp`, `image/gif`) are proxied.
+@@ -81,12 +82,13 @@ When documentation references external image URLs, the image is retrieved throug
+ sequenceDiagram
+     autonumber
+     actor Browser as User Browser
+-    participant App as Media Proxy (/api/v1/media)
++    participant App as Media Proxy (GET /api/v1/media-proxy)
+     participant DNS as DNS Resolver & IP Validator
+     participant Ext as Remote Image Host
+ 
+-    Browser->>App: GET /api/v1/media?url=https://example.com/spec.png
+-    App->>DNS: Resolve Hostname to IP
++    Browser->>App: GET /api/v1/media-proxy?u=<url>&sig=<HMAC>
++    App->>App: Verify HMAC Signature
++    App->>DNS: Resolve Hostname to IP & Pin Socket
+     alt IP in RFC 1918 / Loopback / Link-Local
+         DNS-->>App: Rejected (SSRF Blocked)
+         App-->>Browser: 403 Forbidden (SSRF Violation)
+diff --git a/Enterprise-Whitespace-and-Kanban-Board.md b/Enterprise-Whitespace-and-Kanban-Board.md
+index 9f393e9..099069b 100644
+--- a/Enterprise-Whitespace-and-Kanban-Board.md
++++ b/Enterprise-Whitespace-and-Kanban-Board.md
+@@ -64,7 +64,7 @@ sequenceDiagram
+     Store->>API: PATCH /api/v1/issues/{id} (state: "Done")
+     alt Transition Accepted
+         API-->>Store: 200 OK & Updated Version ETag
+-        API->>WS: Broadcast ISSUE_UPDATED event
++        API->>WS: Broadcast issue.updated event
+         WS-->>UI: Real-time sync to all other connected peers
+     else Transition Rejected / Gate Failed
+         API-->>Store: 409 Conflict / 422 Unprocessable
+diff --git a/Home.md b/Home.md
+index f68ffd3..6a507e1 100644
+--- a/Home.md
++++ b/Home.md
+@@ -18,8 +18,8 @@ flowchart TD
+     end
+ 
+     subgraph Entrypoints["API & Protocol Gateways"]
+-        FastAPI["FastAPI Application Server<br/>- Multi-Card Auth (AAL2)<br/>- Canonical Markdown Pipe<br/>- WebSocket Realtime Hub<br/>- REST API (184 routes)"]
+-        MCP["3-Surface MCP Server<br/>- /mcp/agent (9 tools)<br/>- /mcp/docs (6 tools)<br/>- /mcp/admin (12 tools)<br/>- InlineSafeDumper YAML"]
++        FastAPI["FastAPI Application Server<br/>- Multi-Card Auth (AAL2)<br/>- Canonical Markdown Pipe<br/>- WebSocket Realtime Hub<br/>- REST API (242+ routes, 316+ operations)"]
++        MCP["3-Surface MCP Server<br/>- /mcp/agent (9 tools)<br/>- /mcp/docs (3 tools)<br/>- /mcp/admin (12 tools)<br/>- InlineSafeDumper YAML"]
+     end
+ 
+     subgraph Core["Database Engine & Object Graph"]
+@@ -87,7 +87,7 @@ Platform administrators manage enterprise governance through dedicated studios:
+ | Dimension | Legacy Trackers & Paywalled SaaS (Jira / Vibe Kanban) | 👍kanban Platform |
+ | :--- | :--- | :--- |
+ | **License & Cost** | Commercial SaaS / AGPL with paid AI paywalls | Pure Apache-2.0, zero paywalled features |
+-| **Agent Interface** | 70-120 raw CRUD tool wrappers (15k-25k tokens) | 27 intent-driven MCP tools across 3 surfaces (<= 1.8k tokens for agent) |
++| **Agent Interface** | 70-120 raw CRUD tool wrappers (15k-25k tokens) | 24 intent-driven MCP tools across 3 surfaces (<= 1.8k tokens for agent) |
+ | **Database Security** | Application-layer authorization checks | Hardware-enforced PostgreSQL `FORCE ROW LEVEL SECURITY` on all tenant tables |
+ | **Network Isolation** | Monolithic container or open Docker bridge | Hardened 5-network isolation matrix (`edge`, `app`, `data`, `sandbox`, `egress`) |
+ | **Scripted Workflows & Helpers** | Basic webhooks with no blocking execution | Atomic synchronous Wasm validators/mutators and async AI agent gates |
+@@ -126,8 +126,8 @@ For an exhaustive feature-by-feature evaluation across 35 criteria, see the [Fea
+ 3. [[Informational] Ticket Screen, Peek Drawer, and Work Item Architecture](Ticket-Screen-and-Work-Item-Features) - 960px peek drawer, 17 enterprise work-item features, properties rail, and 4-tab activity stream.
+ 4. [[Informational] Hierarchical Docs, Project Stickies, and Smart Promotion](Hierarchical-Docs-and-Stickies-with-Smart-Promotion) - ltree page trees, color-coded sticky masonry, and lossless AI-assisted promotion to Docs.
+ 5. [[Informational] Blinking Cursor Sparkle Completion Engine](Blinking-Cursor-Sparkle-Completion-Engine) - Sub-300ms inline Fill-In-the-Middle (FIM) ghost text with surgical right-click disambiguation.
+-6. [[Informational] Model Context Protocol (MCP) Tools Reference Manual](MCP-Tools-Reference) - Exhaustive specification of all 27 MCP tools, parameter schemas, LOD tiers, and destructive token workflows.
+-7. [[Informational] REST API Architecture and OpenAPI Integration Guide](REST-API-Architecture-and-OpenAPI-Guide) - Technical guide to the 184-route FastAPI backend, interactive OpenAPI documentation, and TypeScript SDK.
++6. [[Informational] Model Context Protocol (MCP) Tools Reference Manual](MCP-Tools-Reference) - Exhaustive specification of all 24 MCP tools, parameter schemas, LOD tiers, and destructive token workflows.
++7. [[Informational] REST API Architecture and OpenAPI Integration Guide](REST-API-Architecture-and-OpenAPI-Guide) - Technical guide to the 242+ route FastAPI backend, interactive OpenAPI documentation, and TypeScript SDK.
+ 
+ ### Track 3: Security & Adoption Overview
+ 1. [[Informational] Role and Permission Matrix](Role-and-Permission-Matrix) - Visual ● / ◐ / ○ role and capability matrix across all 7 principal tiers.
+diff --git a/MCP-Tools-Reference.md b/MCP-Tools-Reference.md
+index e336f65..7c6cf68 100644
+--- a/MCP-Tools-Reference.md
++++ b/MCP-Tools-Reference.md
+@@ -262,7 +262,7 @@ sequenceDiagram
+ - **CLI Example:** `kanban-cli-admin manage_principals_and_groups --action="list"`
+ 
+ ### 4. `manage_access_policies`
+-- **Description:** Inspect and update fine-grained ACL masks (`VIEW`, `EDIT`, `DELETE`, `ADMIN`, `SHARE`) on Universal Object Graph entities.
++- **Description:** Inspect and update fine-grained 8-bit capability bitmasks (`VIEW` [0x01], `COMMENT` [0x02], `EDIT` [0x04], `TRANSITION` [0x08], `LINK` [0x10], `SHARE` [0x20], `ADMIN` [0x40], `DELETE` [0x80], `ALL` [0xFF]) on Universal Object Graph entities.
+ - **Required Parameters:**
+   - `action` (string): `read_manifest`, `grant`, `revoke`.
+ - **Optional Parameters:**
+diff --git a/Migration-and-Cutover-Runbook.md b/Migration-and-Cutover-Runbook.md
+index 121a49f..bed689b 100644
+--- a/Migration-and-Cutover-Runbook.md
++++ b/Migration-and-Cutover-Runbook.md
+@@ -71,7 +71,7 @@ flowchart LR
+ | **2** | **Object Link Auditor** | Zero orphaned links, cross-tenant leaks, or invalid hierarchy cycles. |
+ | **3** | **Markdown Fidelity** | 100% of descriptions render valid Markdown; zero unparsed HTML tags. |
+ | **4** | **Principal & ACL Parity** | All users, groups, and permissions map accurately to 👍kanban roles. |
+-| **5** | **MCP Surface Health** | All 27 MCP tools return clean schemas and pass handshake benchmarks. |
++| **5** | **MCP Surface Health** | All 24 MCP tools return clean schemas and pass handshake benchmarks. |
+ | **6** | **Performance Latency** | Board view initial load under 100ms; REST API p95 latency under 50ms. |
+ 
+ ### Phase 6: DNS Cutover and Traffic Switch
+diff --git a/REST-API-Architecture-and-OpenAPI-Guide.md b/REST-API-Architecture-and-OpenAPI-Guide.md
+index bf10ad7..b137057 100644
+--- a/REST-API-Architecture-and-OpenAPI-Guide.md
++++ b/REST-API-Architecture-and-OpenAPI-Guide.md
+@@ -6,15 +6,15 @@ Software projects that attempt to manually maintain hundreds of static wiki page
+ 
+ 👍kanban adheres to the **In-Code OpenAPI Single Source of Truth** architecture:
+ - All REST endpoints are declared with comprehensive Pydantic models, detailed FastAPI docstrings, summaries, response schemas, and parameter constraints directly in the Python source code (`kanban/api/v1/*.py`).
+-- The canonical OpenAPI 3.1.0 specification is automatically generated by the FastAPI backend at `/api/openapi.json` and mirrored in the repository at `kanban/web/openapi.json` (`184` paths, regenerated via `python -m kanban.tools.export_openapi kanban/web/openapi.json`).
++- The canonical OpenAPI 3.1.0 specification is automatically generated by the FastAPI backend at `/api/openapi.json` and mirrored in the repository at `kanban/web/openapi.json` (`242+` paths, `316+` operations, `314+` schemas, regenerated via `python -m kanban.tools.export_openapi kanban/web/openapi.json`).
++- Interactive documentation is hosted at `/api/docs` (Swagger UI) and `/api/redoc` (ReDoc) directly from the application server with self-contained assets.
+ - The web frontend generates its type-safe TypeScript API client directly from this schema (`pnpm --dir kanban/web run gen:api` producing `kanban/web/src/api/schema.gen.ts`).
+-- Note on interactive explorers: `kanban/app.py` sets `docs_url=None` and `redoc_url=None` by default so the strict `Content-Security-Policy` (`script-src 'self'`, zero external CDNs) is preserved; developers browse the API via the machine-readable `/api/openapi.json`, generated `kanban/web/src/api/schema.gen.ts`, or self-documenting MCP `tools/list` + `action="help"` endpoints.
+ 
+ ```mermaid
+ flowchart LR
+     subgraph Backend["FastAPI Backend Source"]
+         Pydantic["Pydantic Schemas<br/>& Field Validators"]
+-        Routes["184 FastAPI Routes<br/>kanban/api/v1/*.py"]
++        Routes["242+ FastAPI Routes<br/>kanban/api/v1/*.py"]
+     end
+ 
+     subgraph SchemaGen["Canonical OpenAPI Export"]
+@@ -42,8 +42,10 @@ When running 👍kanban (in standalone mode or production), developers and integ
+ 
+ | Endpoint / File | Interface | Purpose |
+ | :--- | :--- | :--- |
+-| **`/api/openapi.json`** | Raw OpenAPI 3.1.0 JSON | Machine-readable FastAPI schema used for SDK generation and automated API audits. |
+-| **`kanban/web/openapi.json`** | In-Repo JSON Snapshot | Version-controlled OpenAPI specification (`184` paths) checked by CI (`pnpm run check:api`). |
++| **`/api/docs`** | Swagger UI | Interactive API explorer rendered with local CSS and zero external CDNs. |
++| **`/api/redoc`** | ReDoc | Responsive technical documentation view of all endpoints, parameters, and models. |
++| **`/api/openapi.json`** | Raw OpenAPI 3.1.0 JSON | Machine-readable FastAPI schema (`242+` paths, `316+` operations, `314+` schemas). |
++| **`kanban/web/openapi.json`** | In-Repo JSON Snapshot | Version-controlled OpenAPI specification checked by CI (`pnpm run check:api`). |
+ | **`kanban/web/src/api/schema.gen.ts`** | Generated TypeScript SDK | Strictly typed interfaces, request parameters, and response schemas. |
+ | **`kanban/api/v1/*.py`** | In-Code Python Source | Authoritative FastAPI route docstrings, summaries, tags, and Pydantic `Field` docs. |
+ 
+@@ -123,23 +125,32 @@ REST route handlers do not query PostgreSQL as a superuser. Each request handler
+ 
+ ## Route Module Organization
+ 
+-The 184 REST API endpoints are organized into cohesive domain modules under `kanban/api/v1/`:
++The 242+ REST API endpoints (316+ operations across 314+ schemas) are organized into cohesive domain modules under `kanban/api/v1/`:
+ 
+ ```
+ kanban/api/v1/
+-|-- auth.py             # Login, logout, session refresh, TOTP, WebAuthn passkey registration
++|-- auth_*.py           # Multi-card authentication (local, ldap, oidc, session, setup, webauthn, mfa)
+ |-- workspaces.py       # Workspace provisioning, member invitations, theme configuration
+ |-- projects.py         # Project lifecycle, custom state configuration, member bindings
+ |-- issues.py           # Work items, quick-create, property updates, sub-tasks, comments
++|-- issue_*.py          # Issue operations (archive, copy, delete, move, provenance, trees, workflow)
+ |-- cycles.py           # Sprint cycles, rollover automation, velocity calculations
+ |-- modules.py          # Functional modules, completion tracking, feature grouping
+ |-- docs.py             # Hierarchical technical documentation, ltree traversal, version diffs
+ |-- stickies.py         # Digital sticky notes, color categorization, smart promotion
+-|-- custom_fields.py    # Custom scripted field evaluation, Wasmtime/nsjail bindings
+-|-- workflows.py        # Transition helpers, validator pipelines, dry-run testing
++|-- custom_fields*.py   # Custom scripted fields, approvals, Wasmtime/nsjail execution
++|-- transitions.py      # Workflow transitions, helper engine execution, gate evaluation
+ |-- search.py           # Hybrid lexical and semantic search endpoints
+-|-- admin.py            # Platform governance, auth cards, link auditor, system backup
+-`-- mcp_keys.py         # Scoped MCP token generation, tool toggles, device authorization
++|-- media_proxy.py      # Cookieless, HMAC-signed external image proxy (GET /api/v1/media-proxy)
++|-- oauth.py            # OAuth 2.0 / OIDC provider endpoints, PKCE, device code authorization
++|-- repo_bindings.py    # Remote git repository bindings and runner pools
++|-- agent_definitions.py# Agent definition catalog and validation
++|-- admin/              # Admin-only AAL2 governance modules
++|   |-- auth_cards.py   # Multi-card auth administration
++|   |-- destructive.py  # Blast-radius calculations and 2-stage confirmations
++|   |-- link_auditor.py # Universal Object Graph link audits and repair
++|   `-- workspace_settings.py # Workspace configuration and security parameters
++`-- system*.py          # Platform summary, status, licensing, and CycloneDX 1.5 SBOM
+ ```
+ 
+ ---
+@@ -150,7 +161,7 @@ To update the frontend TypeScript client after modifying backend FastAPI route s
+ 
+ ```bash
+ # Step 1: Export latest OpenAPI JSON from the FastAPI application
+-python3 scripts/export_openapi.py --out kanban/web/openapi.json
++python -m kanban.tools.export_openapi kanban/web/openapi.json
+ 
+ # Step 2: Regenerate the TypeScript SDK types
+ pnpm --dir kanban/web run gen:api
+diff --git a/Real-Time-Web-and-WebSocket-Architecture.md b/Real-Time-Web-and-WebSocket-Architecture.md
+index 89b6746..e37df83 100644
+--- a/Real-Time-Web-and-WebSocket-Architecture.md
++++ b/Real-Time-Web-and-WebSocket-Architecture.md
+@@ -17,12 +17,12 @@ flowchart TD
+         Agents["Autonomous Agents & IDE Integrations"]
+     end
+ 
+-    subgraph Gateway["WebSocket Ingress (/ws/v1)"]
+-        Ingress["FastAPI WebSocket Handler<br/>- Origin header CORS check<br/>- Session cookie / Bearer token resolution<br/>- 16-connection limit per principal"]
++    subgraph Gateway["Realtime Ingress (/ws, /api/v1/ws, /sse)"]
++        Ingress["FastAPI WebSocket & SSE Handlers<br/>- Origin header CORS check<br/>- Session cookie / Bearer token resolution<br/>- 16-connection limit per principal"]
+     end
+ 
+     subgraph Router["Realtime Hub Event Router"]
+-        Hub["Hub Event Router (kanban/realtime/hub.py)<br/>- Channels: workspace:{id}, project:{id}, issue:{id}<br/>- RLS permission-filtered fanout<br/>- Non-blocking async backpressure queues"]
++        Hub["Hub Event Router (kanban/realtime/hub.py)<br/>- Channels: workspace:{id}, project:{id}, issue:{id}, doc:{id}<br/>- RLS permission-filtered fanout<br/>- Non-blocking async backpressure queues"]
+     end
+ 
+     subgraph Surfaces["Live UI Surfaces"]
+@@ -48,11 +48,11 @@ flowchart TD
+ WebSockets establish persistent, bidirectional TCP connections that can be abused for denial-of-service (DoS) or unauthorized event eavesdropping if not hardened properly.
+ 
+ ### 1. Strict Origin and CSRF Validation
+-During the initial WebSocket upgrade handshake (`GET /ws/v1`), the server validates the incoming `Origin` header against configured allowed hosts. Requests from untrusted origins are immediately rejected with HTTP 403 Forbidden.
++During the initial WebSocket upgrade handshake (`GET /ws` or `/api/v1/ws`), the server validates the incoming `Origin` header against configured allowed hosts. Requests from untrusted origins are immediately rejected with HTTP 403 Forbidden. Client sessions fallback to Server-Sent Events (`GET /sse`) when WebSocket transport is blocked by corporate proxies.
+ 
+ ### 2. Session Authentication and Privilege Resolution
+-- WebSocket connections authenticate using encrypted session cookies (`__Host-kb_session`) or scoped Bearer API tokens.
+-- Anonymous WebSocket connections are strictly forbidden.
++- WebSocket and SSE connections authenticate using encrypted session cookies (`__Host-kb_session`) or scoped Bearer API tokens.
++- Anonymous connections are strictly forbidden.
+ - When an authenticated connection opens, the hub resolves the user's principal ID, active tenant workspace, and project memberships.
+ 
+ ### 3. Maximum 16 Concurrent Connections per Principal
+@@ -68,15 +68,21 @@ Clients subscribe to targeted channels based on their active view, minimizing un
+ 
+ | Channel Pattern | Granularity | Typical Subscribers | Broadcast Events |
+ | :--- | :--- | :--- | :--- |
+-| **`workspace:{workspace_id}`** | Workspace | All active workspace members | Project creation, system announcements, sticky note grid updates. |
+-| **`project:{project_id}`** | Project | Users viewing board or issue list | `ISSUE_MOVED`, `ISSUE_CREATED`, `CYCLE_ACTIVATED`, `MODULE_UPDATED`. |
+-| **`issue:{issue_id}`** | Ticket | Users viewing Ticket Peek Drawer | `COMMENT_ADDED`, `GATE_STATUS_CHANGED`, `ASSIGNEE_UPDATED`. |
++| **`workspace:{workspace_id}`** | Workspace | All active workspace members | `project.created`, system announcements, `sticky.*` grid updates. |
++| **`project:{project_id}`** | Project | Users viewing board or issue list | `issue.created`, `issue.updated`, `issue.transitioned`, `issue.moved`, `issue.deleted`, `cycle.*`, `module.*`. |
++| **`issue:{issue_id}`** | Ticket | Users viewing Ticket Peek Drawer | `comment.*`, `workflow.gate.*`, `issue.updated`, `assignee.*`. |
++| **`doc:{doc_id}`** | Document | Users viewing or editing technical documentation | `doc.updated`, `doc.page.created`, `doc.page.updated`, `doc.page.deleted`. |
+ 
+ ### Core Broadcast Events
+ 
+-- **`ISSUE_MOVED`:** Dispatched when a card changes state or swimlane position. Transmits the updated state ID, previous state ID, sort rank, and the operator who initiated the move.
+-- **`GATE_STATUS_CHANGED`:** Broadcasts async agent gate transitions (`pending_agent_gate`, `vetoed`, `approved`) allowing the board to update countdown timers and animate spring snap-backs in real time.
+-- **`STICKY_UPDATED`:** Broadcasts real-time color changes, text edits, or promotion events on the stickies masonry grid.
++- **`issue.moved`:** Dispatched when a card changes state or swimlane position. Transmits the updated state ID, previous state ID, sort rank, and the operator who initiated the move.
++- **`issue.created`:** Dispatched when a new work item is created in the project.
++- **`issue.updated`:** Broadcasts property, label, assignee, or description edits.
++- **`issue.transitioned`:** Broadcasts workflow state transitions across the board.
++- **`issue.deleted`:** Broadcasts work item trash or removal.
++- **`workflow.gate.*`:** Broadcasts async agent gate transitions (`pending_agent_gate`, `vetoed`, `approved`) allowing the board to update countdown timers and animate spring snap-backs in real time.
++- **`comment.*`:** Broadcasts discussion activity, replies, and mentions.
++- **`sticky.*`:** Broadcasts real-time color changes, text edits, or promotion events on the stickies masonry grid.
+ 
+ ---
+ 
+@@ -91,7 +97,7 @@ sequenceDiagram
+     participant DB as PostgreSQL Ledger
+ 
+     Note over Client,Hub: Normal Operation (Receiving Events)
+-    Hub->>Client: Event: ISSUE_MOVED (seq: 42)
++    Hub->>Client: Event: issue.moved (seq: 42)
+     Note over Client,Hub: Network Partition / Laptop Lid Closed
+     Client->>Client: Connection Lost! Activate Reconnecting Pill
+     Note over Client,Hub: Network Restored
+@@ -105,8 +111,9 @@ sequenceDiagram
+ Network connections in modern development environments (laptops switching networks, sleep states, VPN renegotiation) are inherently unstable.
+ 
+ The 👍kanban web client implements robust reconnection resilience:
+-- **Exponential Backoff with Jitter:** On connection loss, the client attempts reconnection starting at 500ms, doubling up to a maximum 10-second cap with random jitter to prevent connection storms.
++- **Exponential Backoff with Full Jitter:** On connection loss, the client attempts reconnection starting at 500ms, doubling up to a maximum 15-second (`15000ms` full-jitter) retry cap to prevent thundering herd connection storms.
++- **Automatic SSE Fallback:** After 3 consecutive failed WebSocket reconnection attempts (`WS_FAILURES_BEFORE_SSE = 3`), the client automatically downgrades to Server-Sent Events (`/sse`).
+ - **Event Sequence Numbers:** Every event payload includes a monotonically increasing `seq` integer. On reconnect, the client requests missed events since its last acknowledged sequence number, guaranteeing zero missed updates.
+-- **Visual Connection Pill:** A discrete indicator in the UI status bar displays real-time WebSocket connectivity (`Connected`, `Reconnecting`, `Offline`).
++- **Visual Connection Pill:** A discrete indicator in the UI status bar displays real-time connectivity (`Connected`, `Reconnecting`, `Offline`).
+ 
+ ![Async Agent Gate States with Live Realtime Timers](images/16-async-agent-gate-states.png)
+diff --git a/System-Topology-and-Multi-Container-Architecture.md b/System-Topology-and-Multi-Container-Architecture.md
+index 3ce847e..31d5835 100644
+--- a/System-Topology-and-Multi-Container-Architecture.md
++++ b/System-Topology-and-Multi-Container-Architecture.md
+@@ -17,7 +17,7 @@ The platform source code is organized into modular packages:
+ ```
+ kanban/
+ |-- kanban/                  # FastAPI web server, REST API, WebSocket hub, content pipelines
+-|   |-- api/v1/              # Versioned API routes (184 endpoints, OpenAPI 3.1.0)
++|   |-- api/v1/              # Versioned API routes (242+ endpoints, 316+ operations, OpenAPI 3.1.0)
+ |   |-- auth/                # Multi-card authentication studio, session management, CSRF
+ |   |-- content/             # Canonical Markdown normalizer, Unicode guards, hidden-DOM pruner
+ |   |-- realtime/            # Distributed WebSocket hub, connection manager, event router
+@@ -26,9 +26,9 @@ kanban/
+ |   |-- migrations/          # Alembic schema migrations (kanban_migrator)
+ |   |-- models/              # SQLAlchemy 2.0 models with FORCE ROW LEVEL SECURITY
+ |   `-- auditor/             # Universal object link integrity auditor and purger
+-|-- mcp/                     # Three-surface Model Context Protocol server
++|-- mcp/                     # Three-surface Model Context Protocol server (24 tools total)
+ |   |-- surfaces/agent/      # /mcp/agent (9 execution & QA tools)
+-|   |-- surfaces/docs/       # /mcp/docs (6 knowledge & sticky tools)
++|   |-- surfaces/docs/       # /mcp/docs (3 knowledge & doc tools: search, create, update)
+ |   |-- surfaces/admin/      # /mcp/admin (12 governance & lifecycle tools)
+ |   `-- yaml_out.py          # InlineSafeDumper YAML serializer for token efficiency
+ `-- agent/                   # Autonomous AI runtime and orchestration engine
+diff --git a/Three-Surface-MCP-Server-Architecture.md b/Three-Surface-MCP-Server-Architecture.md
+index 44ebc44..245278c 100644
+--- a/Three-Surface-MCP-Server-Architecture.md
++++ b/Three-Surface-MCP-Server-Architecture.md
+@@ -4,7 +4,7 @@
+ 
+ The Model Context Protocol (MCP) allows Large Language Models (LLMs) and autonomous engineering agents to interact with development platforms. However, conventional tracker integrations (such as legacy Jira REST bridges and generic CRUD wrappers) expose raw REST endpoints 1:1 as MCP tools. This naive approach results in 70 to 120 bloated tools consuming 15,000 to 25,000 context tokens before the agent begins reasoning, causing catastrophic context exhaustion and multi-turn thrashing.
+ 
+-👍kanban rejects the CRUD-wrapper pattern. Instead, it implements an **Intent-Driven Architecture** organized into **three isolated streamable surfaces** (`2025-06-18` protocol specification), exposing exactly 27 cohesive tools designed specifically for autonomous agent cognition.
++👍kanban rejects the CRUD-wrapper pattern. Instead, it implements an **Intent-Driven Architecture** organized into **three isolated streamable surfaces** (`2025-06-18` protocol specification), exposing exactly 24 cohesive tools (9 `/mcp/agent`, 3 `/mcp/docs`, 12 `/mcp/admin`) designed specifically for autonomous agent cognition.
+ 
+ ---
+ 
+@@ -15,7 +15,7 @@ The Model Context Protocol (MCP) allows Large Language Models (LLMs) and autonom
+ flowchart TD
+     subgraph Hub["👍kanban Multi-Surface MCP Server"]
+         Agent["/mcp/agent<br/>- 9 Execution & QA Tools<br/>- Token budget: <= 1,850 tokens<br/>- Zero Admin / Delete permissions"]
+-        Docs["/mcp/docs<br/>- 6 Knowledge & Spec Tools<br/>- Token budget: <= 1,350 tokens<br/>- Stickies & Hierarchical Docs"]
++        Docs["/mcp/docs<br/>- 3 Knowledge & Spec Tools<br/>- Token budget: <= 1,350 tokens<br/>- Search, Create, Update Docs"]
+         Admin["/mcp/admin<br/>- 12 Lifecycle & Ops Tools<br/>- Token budget: <= 2,800 tokens<br/>- Mandatory AAL2 Protection<br/>- 2-Stage Destructive Confirmation"]
+     end
+ 
+@@ -40,10 +40,10 @@ Dedicated to autonomous software development, testing, and QA agents (such as Cl
+ - **Token Efficiency:** The entire tool manifest consumes only 1,759 tokens, comfortably fitting within the strict 1,850-token specification ceiling.
+ - **Intent Consolidation:** Replaces multi-step CRUD sequences with atomic actions like `begin_work` (claims ticket, starts sprint, links active cycle, posts plan) and `complete_work` (verifies blockers, records QA proof, marks done).
+ 
+-### 2. `/mcp/docs` (6 Knowledge and Specification Tools)
++### 2. `/mcp/docs` (3 Knowledge and Specification Tools)
+ Dedicated to technical documentation, architecture research, and specification authoring.
+-- **Capabilities:** Document creation, ltree hierarchy traversal, markdown search, sticky note management, and AI-assisted sticky-to-doc promotion.
+-- **Token Efficiency:** Tool manifest utilizes 1,177 tokens against a 1,350-token budget ceiling.
++- **Capabilities:** Document creation, markdown search, and content updates (`search`, `create`, `update`).
++- **Token Efficiency:** Tool manifest utilizes under 800 tokens against a 1,350-token budget ceiling.
+ 
+ ### 3. `/mcp/admin` (12 Governance and Lifecycle Tools)
+ Dedicated to platform administrators and privileged automation operators.
+diff --git a/Ticket-Screen-and-Work-Item-Features.md b/Ticket-Screen-and-Work-Item-Features.md
+index 4d48e2d..853e873 100644
+--- a/Ticket-Screen-and-Work-Item-Features.md
++++ b/Ticket-Screen-and-Work-Item-Features.md
+@@ -147,3 +147,25 @@ Two-stage deletion safety calculates the ripple impact across child issues, depe
+ <a id="auto-archive"></a>
+ ### Auto-Archive Policy
+ Work items completed past the retention threshold are automatically moved to archive storage.
++
++---
++
++## PostgreSQL Issue Copy and Deep Subtree Duplication Procedure
++
++Cloning work items, hierarchical sub-tasks, and attachments is governed by an atomic, security-definer PostgreSQL and service layer workflow (`kanban/services/issue_copy.py` and `p3_08_issue_copy.up.sql`):
++
++1. **Authorization Gate:**
++   - Requires `Capability.VIEW` (0x01) on the source issue and `Capability.EDIT` (0x04) on the target project. Missing permissions fail closed with 404 or 403.
++2. **Subtree Traversal and Fail-Closed Pruning:**
++   - Invokes `issues_get_copy_subtrees(p_root_id uuid)` (`SECURITY DEFINER`, `ltree` depth `<= 6`).
++   - Evaluates caller capability on each descendant node (`app_has_object_capability(r.id, 1)`).
++   - If an intermediate or leaf sub-issue lacks `VIEW` permission, the function prunes that node and its descendants fail-closed, aggregating pruned counts into `skipped.restricted_sub_issues` without leaking unauthorized metadata.
++3. **Safety Caps:**
++   - Enforces `MAX_READABLE_ISSUES_LIMIT = 200` to prevent unbounded memory allocation and database timeouts during tree replication.
++4. **Agent-Safe Sequence Allocation:**
++   - Calls `allocate_issue_sequences(p_project_id, p_count, false)` (`p4_24_agent_safe_sequences.up.sql`) to allocate contiguous sequence numbers atomically.
++   - Any skipped sequences are recorded with an immutable `SEQUENCE_SKIPPED` ledger event.
++5. **Atomic Savepoint Registration:**
++   - Executes inside an atomic nested transaction (`session.begin_nested()`).
++   - Cloned issues and sub-issues invoke `register_object(CAST('issue' AS object_kind), ...)` to bind spine records.
++   - Copies attachments when requested (`include_attachments=true`), links relates-to edges (`link_as_relates_to=true`), and emits `ISSUE_CREATED` and `ISSUE_COPIED` activity records.
+diff --git a/Universal-Object-Graph-and-Link-Auditor.md b/Universal-Object-Graph-and-Link-Auditor.md
+index a2fe89e..dbe0f38 100644
+--- a/Universal-Object-Graph-and-Link-Auditor.md
++++ b/Universal-Object-Graph-and-Link-Auditor.md
+@@ -161,3 +161,25 @@ To prevent accidental data loss, purging invalid links requires two-stage admini
+ - Executes atomically inside a PostgreSQL transaction, recording SHA-256 hash-chained entries in `audit_ledger`.
+ 
+ ![Audited Purge Modal](images/48-admin-link-auditor-purge-modal.png)
++
++---
++
++## PostgreSQL Issue Copy and Subtree Graph Synthesis
++
++Cloning work items, hierarchical sub-tasks, and attachments is governed by an atomic, security-definer PostgreSQL and service layer workflow (`kanban/services/issue_copy.py` and `p3_08_issue_copy.up.sql`):
++
++1. **Authorization Gate:**
++   - Requires `Capability.VIEW` (0x01) on the source issue and `Capability.EDIT` (0x04) on the target project. Missing permissions fail closed with 404 or 403.
++2. **Subtree Traversal and Fail-Closed Pruning:**
++   - Invokes `issues_get_copy_subtrees(p_root_id uuid)` (`SECURITY DEFINER`, `ltree` depth `<= 6`).
++   - Evaluates caller capability on each descendant node (`app_has_object_capability(r.id, 1)`).
++   - If an intermediate or leaf sub-issue lacks `VIEW` permission, the function prunes that node and its descendants fail-closed, aggregating pruned counts into `skipped.restricted_sub_issues` without leaking unauthorized metadata.
++3. **Safety Caps:**
++   - Enforces `MAX_READABLE_ISSUES_LIMIT = 200` to prevent unbounded memory allocation and database timeouts during tree replication.
++4. **Agent-Safe Sequence Allocation:**
++   - Calls `allocate_issue_sequences(p_project_id, p_count, false)` (`p4_24_agent_safe_sequences.up.sql`) to allocate contiguous sequence numbers atomically.
++   - Any skipped sequences are recorded with an immutable `SEQUENCE_SKIPPED` ledger event.
++5. **Atomic Savepoint Registration:**
++   - Executes inside an atomic nested transaction (`session.begin_nested()`).
++   - Cloned issues and sub-issues invoke `register_object(CAST('issue' AS object_kind), ...)` to bind spine records.
++   - Copies attachments when requested (`include_attachments=true`), links relates-to edges (`link_as_relates_to=true`), and emits `ISSUE_CREATED` and `ISSUE_COPIED` activity records.
+diff --git a/User-Tasks-and-QA-Matrix.md b/User-Tasks-and-QA-Matrix.md
+index 7a06184..e32dac2 100644
+--- a/User-Tasks-and-QA-Matrix.md
++++ b/User-Tasks-and-QA-Matrix.md
+@@ -35,8 +35,8 @@ flowchart TD
+ | **Browser QA & Screenshot Bot 1: Core Board, Views & Ticket Drawer** | `flash` | **S6** (Board, Whitespace, `<EmojiHint>`), **S7** (17-Feature Ticket Screen, `?peek=` Drawer, Rail, 4-Tab Activity) | Live `/browser` human walkthrough of Workspace Home, Board, List (3-pane split), Table, Calendar, Timeline, Quick-Create (`C`), and Ticket Drawer (`?peek=`). Captures annotated screenshots into `thumbs-up-kanban.wiki/images/`. |
+ | **Browser QA & Screenshot Bot 2: Docs, Stickies, Editor & Sparkle (`✨`)** | `flash` | **S5** (Canonical Markdown, Mermaid, SVG), **S8** (Hierarchical Docs & Stickies Promotion), **S9** (Sparkle FIM Completion & Right-Click Accept) | Live `/browser` human walkthrough of Workspace/Project Stickies, Sticky-to-Doc AI Promotion modal, Docs ltree tree & outline, Editor Markdown/Mermaid rendering, and Sparkle (`✨`) ghost-text completion. Captures screenshots into `thumbs-up-kanban.wiki/images/`. |
+ | **Browser QA & Screenshot Bot 3: Auth, Security, MCP & Workflow Studios** | `flash` | **S2** (Standalone Status Panel), **S4** (Multi-Card Auth Studio & `/setup`), **S11** (MCP Access & Scopable Keys Studio), **S13** (Custom Fields Studio), **S14** (Workflow Transition Studio & Dry-Run Drawer) | Live `/browser` human walkthrough of `/setup`, `/login`, `/admin/auth`, `/admin/mcp`, `/projects/KAN/settings/workflows`, `/projects/KAN/settings/custom-fields`, and `/admin/standalone`. Captures screenshots into `thumbs-up-kanban.wiki/images/`. |
+-| **MCP Tools JSON vs. Expectation Evaluator Bot** | `flash` | **S11** (3-Surface MCP Server: `/mcp/agent`, `/mcp/docs`, `/mcp/admin`), **S3.5** (Read-Taint Guard), **S14** (Admin Tool 8 & 9) | Audits all 27 live MCP tool JSON schemas (`/tmp/mcp_tools_actual.json`) against Spec S11 expectations for parameter clarity, `EntityResolver` human keys, `lod` tiers, 2-stage destructive confirmations, and LLM ergonomics. Produces `thumbs-up-kanban.wiki/MCP-Tools-Usability-Audit.md`. |
+-| **Wiki Documentation Architect & Author** | `flash` / Coordinator | **S1-S15** (Full System Coverage + OpenAPI 184-Route Reference + MCP 27-Tool Reference) | Authors complete 10-page Wiki in `thumbs-up-kanban.wiki/` with `_Sidebar.md`, `_Footer.md`, embedded screenshots, Mermaid diagrams, REST OpenAPI reference, MCP catalog, and CLI runbooks. |
++| **MCP Tools JSON vs. Expectation Evaluator Bot** | `flash` | **S11** (3-Surface MCP Server: `/mcp/agent`, `/mcp/docs`, `/mcp/admin`), **S3.5** (Read-Taint Guard), **S14** (Admin Tool 8 & 9) | Audits all 24 live MCP tool JSON schemas (`/tmp/mcp_tools_actual.json`) against Spec S11 expectations for parameter clarity, `EntityResolver` human keys, `lod` tiers, 2-stage destructive confirmations, and LLM ergonomics. Produces `thumbs-up-kanban.wiki/MCP-Tools-Usability-Audit.md`. |
++| **Wiki Documentation Architect & Author** | `flash` / Coordinator | **S1-S15** (Full System Coverage + OpenAPI 242-Route Reference + MCP 24-Tool Reference) | Authors complete 10-page Wiki in `thumbs-up-kanban.wiki/` with `_Sidebar.md`, `_Footer.md`, embedded screenshots, Mermaid diagrams, REST OpenAPI reference, MCP catalog, and CLI runbooks. |
+ | **Carbon Architecture-vs-Docs Delta Auditor** | `pro` (Carbon) | **S1-S15** Cross-Layer Forensic Delta Audit | Compares `docs/ARCHITECTURE_AND_PRODUCT_SPEC.md` and actual codebase against all Wiki topics, browser QA findings, and API/MCP schemas to identify missing features, incomplete items, and actionable backlog tickets. |
+ 
+ ---
+diff --git a/Zero-Trust-Security-and-Access-Visibility.md b/Zero-Trust-Security-and-Access-Visibility.md
+index 7c2bc09..63b7af1 100644
+--- a/Zero-Trust-Security-and-Access-Visibility.md
++++ b/Zero-Trust-Security-and-Access-Visibility.md
+@@ -37,7 +37,24 @@ flowchart TD
+ 
+ Where:
+ - **Roles:** `Owner`, `Admin`, `Member`, `Guest`.
+-- **Granular ACL Masks:** `VIEW` (0x01), `EDIT` (0x02), `DELETE` (0x04), `ADMIN` (0x08), `SHARE` (0x10).
++- **Authoritative 8-Bit Capability Bitmask (`Capability(IntFlag)`):**
++  * `VIEW` (`0x01` / `1`): Read ticket summary, description, and metadata.
++  * `COMMENT` (`0x02` / `2`): Add comments to discussions and activity feeds.
++  * `EDIT` (`0x04` / `4`): Mutate scalar fields, tags, and assignments.
++  * `TRANSITION` (`0x08` / `8`): Move card state across workflow stages.
++  * `LINK` (`0x10` / `16`): Create or sever typed object links.
++  * `SHARE` (`0x20` / `32`): Modify access audience and direct object sharing.
++  * `ADMIN` (`0x40` / `64`): Manage permissions, scripted fields, and audit settings.
++  * `DELETE` (`0x80` / `128`): Soft-trash or permanently purge entities.
++  * `ALL` (`0xFF` / `255`): Full administrative capability mask.
++- **`SCOPE_CAPABILITY_MAP`:** Maps OAuth/API key scopes to capabilities:
++  * `session`: `Capability.ALL` (`0xFF`)
++  * `read`, `agent:read`, `docs:read`, `admin:read`: `Capability.VIEW` (`0x01`)
++  * `comment`: `Capability.VIEW | Capability.COMMENT` (`0x03`)
++  * `write`: `Capability.VIEW | Capability.COMMENT | Capability.EDIT | Capability.TRANSITION | Capability.LINK` (`0x1F`)
++  * `agent:write`: `Capability.VIEW | Capability.COMMENT | Capability.EDIT | Capability.TRANSITION | Capability.LINK` (`0x1F`)
++  * `docs:write`: `Capability.VIEW | Capability.COMMENT | Capability.EDIT | Capability.LINK` (`0x17`)
++  * `admin:write`: `Capability.ALL` (`0xFF`)
+ - **Agent OBO Key Intersection:** When an autonomous agent acts on behalf of a user using an API key, the effective permission is clamped:
+   ```
+   AgentEffectiveAccess = UserPermissions INTERSECT KeyScopeConstraints
+-- 
+2.53.0
+

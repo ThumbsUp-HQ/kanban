@@ -25,6 +25,10 @@ RUN uv sync --locked --no-dev --no-install-workspace --no-build-isolation && \
 
 # Stage 3: runtime-slim (python:3.12-slim-bookworm + tini + libpq5 + git, USER 65532:65532)
 FROM python:3.12-slim-bookworm@sha256:935c3c5b12357a7e10caa9c1e6ca5692344d97cf229832ef584be2cec9fc03df AS runtime-slim
+ARG KB_GIT_COMMIT=""
+ENV KB_GIT_COMMIT=${KB_GIT_COMMIT}
+ARG KB_BUILD_TIMESTAMP=""
+ENV KB_BUILD_TIMESTAMP=${KB_BUILD_TIMESTAMP}
 WORKDIR /opt/kanban
 # Base image digest is cryptographically pinned; allowing Debian security updates to flow
 # hadolint ignore=DL3008

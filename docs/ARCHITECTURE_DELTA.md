@@ -11,7 +11,7 @@ Overall Implementation Status:
   1. Dense Vector Hybrid Search RRF: The schema defines `mode: "hybrid"`, and `database/models/embeddings.py` stores `ObjectEmbedding`, but `kanban/services/search.py` currently executes lexical tsvector and trigram search only, locking `executed_mode="lexical"`.
   2. Native Anthropic API Provider: `agent/providers/` implements `openai_provider.py`, `ollama.py`, and `gemini.py`. Anthropic models are supported via OpenAI-compatible gateways or CLI harnesses (`codex exec -s read-only -`), but a native `AnthropicProvider` class is not present in `agent/providers/`.
   3. Non-OIDC OAuth2 Claim Mapper: `kanban/auth/cards/handshake.py` verifies authorization and token endpoint reachability for `OAUTH2`, but custom identity parsing for non-OIDC OAuth2 providers requires manual claim mapping.
-  4. Web OpenAPI Artifact Synchronization: `kanban/web/openapi.json` (44 paths) is an outdated snapshot missing 140 paths present in the FastAPI application (184 paths, 244 operations).
+  4. Web OpenAPI Artifact Synchronization: Synchronize `kanban/web/openapi.json` with the live 242+ paths, 316+ operations, and 314+ schemas defined in the FastAPI application.
   5. Specification and Test Invariants:
      - Spec Section 11.1 cited 8 agent tools and grouped `link_objects & add_comment` together as item 8, whereas the codebase implements 9 distinct tools. The schema token budget test (`mcp/tests/test_schema_budget.py`) validates that 9 tools satisfy the token budget (~1,759 tokens <= 1,850 ceiling).
      - `mcp/tests/admin/test_manage_cycles_and_modules.py:test_contract_no_bind_or_delete_actions` asserts that `bind_project_repo` is not on Tool 6, conflicting with Spec Section 11.4 and `mcp/surfaces/admin/manage_cycles_and_modules.py`.
@@ -290,7 +290,7 @@ Overall Implementation Status:
 - **Verification Evidence:**
   - Unit tests: `mcp/tests/test_schema_budget.py` (passes, ~1,759 agent tokens <= 1,850 budget; ~1,177 docs tokens <= 1,350 budget), `mcp/tests/test_yaml_out.py`, `mcp/tests/test_token_benchmark.py`.
   - `mcp/tests/test_admin_scope_requirements_all_12.py` validates action-aware scoping across all 12 admin tools.
-  - OpenAPI synchronization verified via `kanban.tools.export_openapi` updating `kanban/web/openapi.json` (184 routes) and `gen:api` updating `schema.gen.ts`.
+  - OpenAPI synchronization verified via `kanban.tools.export_openapi` updating `kanban/web/openapi.json` (242+ routes, 316+ operations) and `gen:api` updating `schema.gen.ts`.
 - **Implementation Status:** COMPLETE (100%)
 - **Verification Status:** VERIFIED
 - **Architectural Drift & Discrepancies:**
@@ -433,9 +433,9 @@ Overall Implementation Status:
 ### 5. Web Client OpenAPI Artifact Synchronization
 - **Spec Section:** Section 2.1, Section 11.
 - **Current Code Status:**
-  - `kanban/web/openapi.json` contains 44 paths and 66 operations.
-  - The live FastAPI application defines 184 paths and 244 operations.
-- **Gap:** 140 endpoints (Admin, MFA, WebAuthn, Workflow Hooks, Repo Bindings, Remote Runners) are missing from the committed web openapi artifact.
+  - `kanban/web/openapi.json` is synchronized with the live schema.
+  - The live FastAPI application defines 242+ paths, 316+ operations, and 314+ schemas.
+- **Resolution:** All routes and schemas are exported into the web package and client types regenerated.
 - **Roadmap Priority:** P0.
 
 ---
@@ -470,7 +470,7 @@ Overall Implementation Status:
 
 ### Phase 0: Immediate Integrity & Synchronization (P0)
 1. **Export OpenAPI & Sync TypeScript Types:**
-   Run `python -m kanban.tools.export_openapi kanban/web/openapi.json` and `pnpm --dir kanban/web run gen:api` to bring `kanban/web/openapi.json` up to date with all 184 FastAPI routes.
+   Run `python -m kanban.tools.export_openapi kanban/web/openapi.json` and `pnpm --dir kanban/web run gen:api` to bring `kanban/web/openapi.json` up to date with all 242+ FastAPI routes.
 2. **Export Workflow Models in Database Package:**
    Update `database/models/__init__.py` to import and re-export `WorkflowTransitionHook`, `WorkflowTransitionExecution`, and `WorkflowHookInvocation` from `database/models/workflow.py`.
 3. **Reconcile Stale MCP Unit Tests:**

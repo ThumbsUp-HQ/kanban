@@ -141,6 +141,46 @@ export interface paths {
         patch: operations["admin_patch_agent_definition_api_v1_admin_agent_definitions__agent__patch"];
         trace?: never;
     };
+    "/api/v1/admin/agent-definitions/{agent}/validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Admin Validate Agent Definition
+         * @description Run test validation (kanban-agent validate-echo) on an existing agent definition.
+         */
+        post: operations["validate_agent_definition_slash"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/agent-definitions/{agent}:validate": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Admin Validate Agent Definition
+         * @description Run test validation (kanban-agent validate-echo) on an existing agent definition.
+         */
+        post: operations["validate_agent_definition_colon"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/agent-runners": {
         parameters: {
             query?: never;
@@ -249,6 +289,66 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/ai/providers/order": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        /**
+         * Atomically reorder AI providers
+         * @description Atomically reorder all AI provider configurations in workspace.
+         */
+        put: operations["reorder_providers_api_v1_admin_ai_providers_order_put"];
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ai/providers/probe-models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Probe upstream models for unsaved AI provider configuration
+         * @description Probe models for an unsaved AI provider draft configuration.
+         */
+        post: operations["probe_provider_models_api_v1_admin_ai_providers_probe_models_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ai/providers/test-connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test connection to unsaved AI provider configuration
+         * @description Test connectivity, auth, and model listing for an unsaved AI provider configuration.
+         */
+        post: operations["check_provider_connection_api_v1_admin_ai_providers_test_connection_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/ai/providers/{provider_id}": {
         parameters: {
             query?: never;
@@ -263,7 +363,11 @@ export interface paths {
         get: operations["get_provider_api_v1_admin_ai_providers__provider_id__get"];
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Delete AI provider configuration
+         * @description Delete an AI provider configuration.
+         */
+        delete: operations["delete_provider_api_v1_admin_ai_providers__provider_id__delete"];
         options?: never;
         head?: never;
         /**
@@ -271,6 +375,46 @@ export interface paths {
          * @description Update settings, model allowlist, URL, priority, or credentials on an AI provider.
          */
         patch: operations["update_provider_api_v1_admin_ai_providers__provider_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/admin/ai/providers/{provider_id}/probe-models": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Probe upstream models for saved AI provider configuration
+         * @description Probe models for a saved AI provider configuration using stored envelope key.
+         */
+        post: operations["probe_saved_provider_models_api_v1_admin_ai_providers__provider_id__probe_models_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/ai/providers/{provider_id}/test-connection": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test connection to saved AI provider configuration
+         * @description Test connectivity, auth, and model listing for a saved AI provider configuration.
+         */
+        post: operations["check_saved_provider_connection_api_v1_admin_ai_providers__provider_id__test_connection_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/admin/ai/providers/{provider_id}:disable": {
@@ -331,6 +475,26 @@ export interface paths {
          * @description Parse Google Cloud Console client_secret_*.json and return preview without secrets.
          */
         post: operations["parse_google_json_api_v1_admin_auth_cards_parse_google_json_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/auth-cards/test-handshake": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Test authentication card draft handshake probe
+         * @description Execute live reachability and cryptographic probe on draft auth card.
+         */
+        post: operations["test_draft_card_handshake_api_v1_admin_auth_cards_test_handshake_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -527,6 +691,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/groups/{group_id}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List group members
+         * @description List direct member principals (users, groups, agents) of the group.
+         */
+        get: operations["list_group_members_endpoint_api_v1_admin_groups__group_id__members_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/groups/{group_id}/members/{principal_id}": {
         parameters: {
             query?: never;
@@ -615,6 +799,30 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/oauth-clients": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Admin list registered OAuth 2.1 clients (AAL2)
+         * @description Workspace/Server Admin list of all dynamically registered OAuth clients.
+         */
+        get: operations["admin_list_oauth_clients_api_v1_admin_oauth_clients_get"];
+        put?: never;
+        /**
+         * Admin register OAuth 2.1 client (AAL2)
+         * @description Workspace Admin registration of an OAuth 2.1 client requiring AAL2.
+         */
+        post: operations["admin_register_oauth_client_api_v1_admin_oauth_clients_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/oauth-clients/{client_id}": {
         parameters: {
             query?: never;
@@ -625,7 +833,11 @@ export interface paths {
         get?: never;
         put?: never;
         post?: never;
-        delete?: never;
+        /**
+         * Admin revoke or delete OAuth client (AAL2)
+         * @description Admin revocation of OAuth client and all issued grants.
+         */
+        delete: operations["admin_delete_oauth_client_api_v1_admin_oauth_clients__client_id__delete"];
         options?: never;
         head?: never;
         /**
@@ -1051,6 +1263,51 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/trash": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List soft-trashed objects in workspace
+         * @description List soft-trashed objects in caller's workspace.
+         *
+         *     Protected by require_admin_aal2.
+         *     Filtered strictly through RLSContext and evaluate_capabilities so restricted private
+         *     items with an explicit ACL DENY are never leaked to Workspace Admins,
+         *     and Project Admins see only items from projects they administer.
+         */
+        get: operations["api_admin_list_trash_api_v1_admin_trash_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/trash/{target_id}:restore": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Restore a soft-deleted object from trash by ID
+         * @description Restore soft-deleted object by UUID.
+         */
+        post: operations["api_admin_restore_by_id_api_v1_admin_trash__target_id__restore_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/workspace-settings": {
         parameters: {
             query?: never;
@@ -1117,6 +1374,26 @@ export interface paths {
          * @description Consume single-use token, validate CSR, sign leaf cert, and register runner.
          */
         post: operations["enroll_remote_runner_endpoint_api_v1_agent_runners_enroll_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attachments/{attachment_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Retrieve attachment blob directly for authenticated caller
+         * @description Retrieve attachment content blob enforcing caller capability and .svg sandbox shield.
+         */
+        get: operations["get_attachment_direct_api_v1_attachments__attachment_id__get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -1259,7 +1536,7 @@ export interface paths {
         put?: never;
         /**
          * Link Ldap Identity
-         * @description Complete LDAP identity linking using credentials within active AAL2 session.
+         * @description Complete LDAP identity linking using credentials within active session.
          */
         post: operations["link_ldap_identity_api_v1_auth_identities_link_ldap_post"];
         delete?: never;
@@ -1279,7 +1556,7 @@ export interface paths {
         put?: never;
         /**
          * Start Identity Link
-         * @description Initiate explicit AAL2 identity linking flow.
+         * @description Initiate explicit identity linking flow (conditional AAL2 enforced).
          */
         post: operations["start_identity_link_api_v1_auth_identities_link_start_post"];
         delete?: never;
@@ -2265,7 +2542,7 @@ export interface paths {
         };
         /**
          * Get an issue by key or UUID
-         * @description Return an issue, or 304 when If-None-Match matches current description ETag.
+         * @description Return an issue, or 304 when If-None-Match matches current issue ETag.
          */
         get: operations["get_issue_api_v1_issues__issue_key__get"];
         put?: never;
@@ -2704,6 +2981,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/links": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create a typed link between source and target objects
+         * @description Create an object link using source and target identifiers in request body.
+         */
+        post: operations["create_link_direct_api_v1_links_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/links/{link_id}": {
         parameters: {
             query?: never;
@@ -2719,6 +3016,50 @@ export interface paths {
          * @description Delete an object link with anti-enumeration protection on unreadable sources.
          */
         delete: operations["delete_object_link_endpoint_api_v1_links__link_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mcp-keys": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List MCP API keys (mine or governance)
+         * @description Retrieve MCP API keys matching view, scope, and principal permissions.
+         */
+        get: operations["list_unified_mcp_keys_api_v1_mcp_keys_get"];
+        put?: never;
+        /**
+         * Mint an MCP API key
+         * @description Mint a scoped MCP API key returning the one-time plaintext token.
+         */
+        post: operations["mint_unified_mcp_key_api_v1_mcp_keys_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/mcp-keys/{key_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Revoke an MCP API key
+         * @description Revoke an active MCP API key with owner or tier-matched governance authority.
+         */
+        delete: operations["revoke_unified_mcp_key_api_v1_mcp_keys__key_id__delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -2937,6 +3278,54 @@ export interface paths {
          *     the refreshed AccessManifest.
          */
         post: operations["agent_kill_switch_api_v1_objects__object_id__access_agent_kill_switch_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/objects/{object_id}/access/entries": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Grant or replace ACL entry on an object
+         * @description Grant or replace an ALLOW or DENY capability access control entry on target object.
+         *
+         *     Requires Capability.SHARE or Capability.ADMIN on the target object.
+         */
+        post: operations["grant_object_acl_entry_api_v1_objects__object_id__access_entries_post"];
+        /**
+         * Revoke ACL entry on an object
+         * @description Revoke an explicit ALLOW or DENY capability access control entry on target object.
+         *
+         *     Requires Capability.SHARE or Capability.ADMIN on the target object.
+         */
+        delete: operations["revoke_object_acl_entry_api_v1_objects__object_id__access_entries_delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/objects/{object_id}/access/principals": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Search workspace principals eligible for object ACL assignment
+         * @description List searchable workspace principals (Users, Groups, Agents) for managing access.
+         */
+        get: operations["list_object_acl_principals_api_v1_objects__object_id__access_principals_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -3235,6 +3624,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_ref}/docs/pages": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Create page in a project
+         * @description Create a hierarchical page within a project, auto-creating a parent doc if needed.
+         */
+        post: operations["create_project_page_api_v1_projects__project_ref__docs_pages_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_ref}/docs/tree": {
         parameters: {
             query?: never;
@@ -3355,7 +3764,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a label
-         * @description Permanently delete a project label, removing it from all tagged issues.
+         * @description Permanently delete a project label, optionally reassigning tagged issues.
          *
          *     Requires project ADMIN role.
          */
@@ -3367,6 +3776,74 @@ export interface paths {
          * @description Update a project label name or color code (project ADMIN capability required).
          */
         patch: operations["patch_label_api_v1_projects__project_ref__labels__label_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/projects/{project_ref}/labels/{label_id}/audit-impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reverse-audit impact of deleting a project label
+         * @description Return blast radius and migration readiness before deleting a project label.
+         */
+        get: operations["get_label_audit_impact_api_v1_projects__project_ref__labels__label_id__audit_impact_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_ref}/members": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List project members
+         * @description List role bindings for principals on this project.
+         */
+        get: operations["list_project_members_api_v1_projects__project_ref__members_get"];
+        put?: never;
+        /**
+         * Add project member
+         * @description Bind a principal to a project role (PROJECT_ADMIN, MEMBER, VIEWER).
+         *
+         *     Requires project ADMIN role.
+         */
+        post: operations["add_project_member_api_v1_projects__project_ref__members_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project_ref}/members/{principal_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Remove project member
+         * @description Remove a principal role binding from this project.
+         *
+         *     Requires project ADMIN role.
+         */
+        delete: operations["delete_project_member_api_v1_projects__project_ref__members__principal_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/projects/{project_ref}/module-defaults": {
@@ -3505,9 +3982,7 @@ export interface paths {
         post?: never;
         /**
          * Delete a workflow state
-         * @description Delete a workflow state with optional migration of associated issues.
-         *
-         *     Optionally migrates associated issues to a replacement state (project ADMIN only).
+         * @description Delete a workflow state with hardened reverse-audit and migration of associated issues.
          */
         delete: operations["delete_state_api_v1_projects__project_ref__states__state_id__delete"];
         options?: never;
@@ -3519,6 +3994,26 @@ export interface paths {
          *     Requires project ADMIN role.
          */
         patch: operations["patch_state_api_v1_projects__project_ref__states__state_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/projects/{project_ref}/states/{state_id}/audit-impact": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Reverse-audit impact of deleting a workflow state
+         * @description Return blast radius and migration readiness before deleting a workflow state.
+         */
+        get: operations["get_state_audit_impact_api_v1_projects__project_ref__states__state_id__audit_impact_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/projects/{project_ref}/stickies": {
@@ -3569,6 +4064,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_ref}/trash-items": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List all soft-deleted objects in project trash
+         * @description List all soft-deleted objects in project trash with retention days.
+         */
+        get: operations["list_trash_items_api_v1_projects__project_ref__trash_items_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_ref}/views": {
         parameters: {
             query?: never;
@@ -3593,6 +4108,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project}/approved-wasm-modules": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * List approved WebAssembly modules for project/workspace
+         * @description List approved Wasm modules, seeding verified built-in formulas if needed.
+         */
+        get: operations["list_approved_wasm_modules_api_v1_projects__project__approved_wasm_modules_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project}/custom-fields": {
         parameters: {
             query?: never;
@@ -3611,6 +4146,28 @@ export interface paths {
          * @description Create a new custom field definition (admin-only, requires AAL2 and CSRF).
          */
         post: operations["create_custom_field_api_v1_projects__project__custom_fields_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/projects/{project}/custom-fields/test-execute": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Evaluate custom field definition draft against an issue without saving
+         * @description Test-execute custom field draft against a chosen project issue.
+         *
+         *     Returns latency_ms, logs, rendered value, and execution status.
+         */
+        post: operations["test_execute_custom_field_api_v1_projects__project__custom_fields_test_execute_post"];
         delete?: never;
         options?: never;
         head?: never;
@@ -3820,7 +4377,7 @@ export interface paths {
         };
         /**
          * Unified cross-entity search
-         * @description Execute unified lexical full-text and trigram search under caller RLS.
+         * @description Execute unified search under caller RLS.
          */
         get: operations["search_unified_api_v1_search_get"];
         put?: never;
@@ -3911,6 +4468,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/sparkle/complete": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Complete Sparkle
+         * @description Stream Sparkle FIM suggestion via Server-Sent Events.
+         */
+        post: operations["complete_sparkle_api_v1_sparkle_complete_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/stickies": {
         parameters: {
             query?: never;
@@ -3965,6 +4542,26 @@ export interface paths {
          *     Enforces concurrency using the If-Match request header.
          */
         patch: operations["update_sticky_api_v1_stickies__sticky_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/stickies/{sticky_id}/preview-promotion": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Preview AI-structured Doc proposal for a sticky scratchpad (alias)
+         * @description Generate read-only preview of an AI-structured Doc proposal without writing database rows.
+         */
+        post: operations["preview_sticky_promotion_api_v1_stickies__sticky_id__preview_promotion_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
         trace?: never;
     };
     "/api/v1/stickies/{sticky_id}/promote-preview": {
@@ -4041,6 +4638,66 @@ export interface paths {
          * @description Clone a promoted sticky's content, color, and ACLs into a fresh unpromoted sticky note.
          */
         post: operations["unarchive_sticky_copy_api_v1_stickies__sticky_id__unarchive_copy_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/about": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get platform about metadata, licensing, and SBOM overview
+         * @description Returns platform branding, verbatim Apache-2.0 license, interactive doc URLs, and SBOM components.
+         */
+        get: operations["get_system_about_endpoint_api_v1_system_about_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/platform-summary": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get platform capability summary and world-class parity metadata
+         * @description Exposes verified enterprise capabilities across all 4 pillars.
+         */
+        get: operations["get_platform_summary_endpoint_api_v1_system_platform_summary_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/system/sbom": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get CycloneDX 1.5 Software Bill of Materials (SBOM)
+         * @description Returns complete CycloneDX 1.5 JSON manifest for Python and Web runtime dependencies.
+         */
+        get: operations["get_system_sbom_endpoint_api_v1_system_sbom_get"];
+        put?: never;
+        post?: never;
         delete?: never;
         options?: never;
         head?: never;
@@ -4270,6 +4927,50 @@ export interface paths {
          */
         post: operations["create_workspace_endpoint_api_v1_workspaces_post"];
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        /**
+         * Update workspace name or slug
+         * @description Update workspace name or slug. Requires WORKSPACE_ADMIN or SERVER_ADMIN.
+         */
+        patch: operations["update_workspace_endpoint_api_v1_workspaces__workspace_id__patch"];
+        trace?: never;
+    };
+    "/api/v1/workspaces/{workspace_id}/role-bindings": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Bind RBAC role to principal in workspace
+         * @description Bind role to principal at workspace scope.
+         */
+        post: operations["bind_workspace_role_endpoint_api_v1_workspaces__workspace_id__role_bindings_post"];
+        /**
+         * Unbind RBAC role from principal in workspace
+         * @description Unbind role from principal at workspace scope.
+         */
+        delete: operations["unbind_workspace_role_endpoint_api_v1_workspaces__workspace_id__role_bindings_delete"];
         options?: never;
         head?: never;
         patch?: never;
@@ -4782,15 +5483,61 @@ export interface components {
             };
         };
         /**
+         * AdminOAuthClientCreateRequest
+         * @description Payload for administrative registration of an OAuth 2.1 client (AAL2).
+         */
+        AdminOAuthClientCreateRequest: {
+            /**
+             * Client Name
+             * @description Human-readable client application name
+             * @default MCP Client
+             */
+            client_name: string;
+            /**
+             * Client Type
+             * @description OAuth 2.1 client type (public)
+             * @default public
+             */
+            client_type: string;
+            /**
+             * Grant Types
+             * @description Optional allowed grant types
+             */
+            grant_types?: string[] | null;
+            /**
+             * Redirect Uris
+             * @description List of redirect URIs using HTTPS or loopback HTTP
+             */
+            redirect_uris: string[];
+            /**
+             * Response Types
+             * @description Optional allowed response types
+             */
+            response_types?: string[] | null;
+            /**
+             * Token Endpoint Auth Method
+             * @description Authentication method: 'none' or 'private_key_jwt'
+             * @default none
+             */
+            token_endpoint_auth_method: string;
+        };
+        /**
          * AdminPlaneImportRequest
          * @description Payload requesting execution or preview of a Plane export import.
          */
         AdminPlaneImportRequest: {
             /**
+             * Bundle Data
+             * @description Direct JSON bundle payload for upload/paste import
+             */
+            bundle_data?: {
+                [key: string]: unknown;
+            } | null;
+            /**
              * Bundle Name
              * @description Name of bundle folder in imports storage (alphanumeric/dash/underscore)
              */
-            bundle_name: string;
+            bundle_name?: string | null;
             /**
              * Dry Run
              * @description Simulate import and return diff report without persisting database changes
@@ -4927,6 +5674,69 @@ export interface components {
              * Format: uuid
              */
             workspace_id: string;
+        };
+        /**
+         * AgentFirstCapabilities
+         * @description Priority #1 native agent architecture and context budget guarantees.
+         */
+        AgentFirstCapabilities: {
+            /**
+             * Agent Harnesses Supported
+             * @description Supported autonomous coding agent environments
+             */
+            agent_harnesses_supported?: string[];
+            /**
+             * Ai Providers
+             * @description Supported LLM engine providers with air-gapped and cloud choices
+             */
+            ai_providers?: string[];
+            /**
+             * Cli Pipe Harnesses
+             * @description Zero-shell stdin CLI pipe execution harnesses
+             */
+            cli_pipe_harnesses?: string[];
+            /**
+             * Lod Tiers
+             * @description Supported Level of Detail projection tiers
+             */
+            lod_tiers?: string[];
+            /**
+             * Mcp Surfaces
+             * @description Isolated intent-driven Model Context Protocol surfaces
+             */
+            mcp_surfaces?: string[];
+            /**
+             * Summary Token Budget
+             * @description Strict maximum token ceiling for summary LOD tool responses
+             * @default 1000
+             */
+            summary_token_budget: number;
+        };
+        /**
+         * AgentValidationResponse
+         * @description Validation report response for an autonomous agent definition.
+         */
+        AgentValidationResponse: {
+            /** Command */
+            command: string;
+            /** Exit Code */
+            exit_code: number;
+            /** Latency Ms */
+            latency_ms: number;
+            /** Rendered Context */
+            rendered_context: string;
+            /** Report Text */
+            report_text: string;
+            /** Status */
+            status: string;
+            /** Tokens In */
+            tokens_in: number;
+            /** Tokens Out */
+            tokens_out: number;
+            /** Tool Trace */
+            tool_trace: string;
+            /** Valid */
+            valid: boolean;
         };
         /**
          * ArchiveEligibility
@@ -5235,6 +6045,7 @@ export interface components {
             /**
              * Handle
              * @description Author handle
+             * @default
              */
             handle: string;
             /**
@@ -5243,6 +6054,17 @@ export interface components {
              * @description Author principal identifier
              */
             id: string;
+            /**
+             * Label
+             * @description Summary label if redacted
+             */
+            label?: string | null;
+            /**
+             * Redacted
+             * @description Whether author was redacted
+             * @default false
+             */
+            redacted: boolean;
         };
         /**
          * BackupFileItem
@@ -6039,6 +6861,72 @@ export interface components {
             workspace_id: string;
         };
         /**
+         * CustomFieldTestExecuteRequest
+         * @description Payload to test-execute an unsaved or draft custom field definition.
+         */
+        CustomFieldTestExecuteRequest: {
+            /**
+             * Credential Mode
+             * @default INVOKING_USER
+             * @enum {string}
+             */
+            credential_mode: "INVOKING_USER" | "PROJECT_ADMIN_SP" | "SERVER_ADMIN_SP";
+            /** Issue Key */
+            issue_key: string;
+            /**
+             * Output Format
+             * @enum {string}
+             */
+            output_format: "text" | "number" | "badge" | "markdown_snippet" | "url" | "json_table" | "severity_pill";
+            /** Output Format Metadata */
+            output_format_metadata?: {
+                [key: string]: unknown;
+            };
+            /** Script Source */
+            script_source: string;
+            /**
+             * Target Scope
+             * @default PROJECT
+             * @enum {string}
+             */
+            target_scope: "PROJECT" | "WORKSPACE" | "SERVER";
+            /**
+             * Tier
+             * @default wasm
+             * @enum {string}
+             */
+            tier: "wasm" | "nsjail";
+            /** Wasm Module Sha256 */
+            wasm_module_sha256?: string | null;
+        };
+        /**
+         * CustomFieldTestExecuteResponse
+         * @description Result of test execution.
+         */
+        CustomFieldTestExecuteResponse: {
+            /** Error */
+            error?: string | null;
+            /**
+             * Latency Ms
+             * @default 0
+             */
+            latency_ms: number;
+            /**
+             * Logs
+             * @default
+             */
+            logs: string;
+            /** Output Format */
+            output_format: string;
+            /**
+             * Status
+             * @default SUCCESS
+             */
+            status: string;
+            /** Value */
+            value?: unknown;
+        };
+        /**
          * CustomFieldUpdateRequest
          * @description Payload to update an existing admin-defined custom field.
          */
@@ -6222,6 +7110,23 @@ export interface components {
             to_cycle: string;
         };
         /**
+         * CycleSummary
+         * @description Sprint cycle metadata for issue response representation.
+         */
+        CycleSummary: {
+            /**
+             * Id
+             * Format: uuid
+             * @description Cycle UUID
+             */
+            id: string;
+            /**
+             * Name
+             * @description Cycle name
+             */
+            name: string;
+        };
+        /**
          * DestructiveExecuteIn
          * @description Payload for Stage 2 delete execution.
          */
@@ -6368,6 +7273,27 @@ export interface components {
             user_code: string;
         };
         /**
+         * DirectLinkCreateRequest
+         * @description Payload for creating a directed typed link specifying both source and target.
+         */
+        DirectLinkCreateRequest: {
+            /**
+             * Link Type
+             * @description User-creatable link kind (e.g. BLOCKS, RELATES_TO, VERIFIED_BY_DOC)
+             */
+            link_type: string;
+            /**
+             * Source Id
+             * @description Source object reference (UUID, canonical key, or project identifier)
+             */
+            source_id: string;
+            /**
+             * Target Id
+             * @description Target object reference (UUID, canonical key, or project identifier)
+             */
+            target_id: string;
+        };
+        /**
          * DocCreate
          * @description Payload for creating a new top-level documentation entity.
          */
@@ -6475,6 +7401,13 @@ export interface components {
              * @description Target state name or UUID
              */
             to_state: string;
+            /**
+             * Verification Proof
+             * @description Optional verification proof packet
+             */
+            verification_proof?: {
+                [key: string]: unknown;
+            } | null;
         };
         /**
          * DryRunResponse
@@ -6608,6 +7541,64 @@ export interface components {
             pool_slug: string;
         };
         /**
+         * EnterpriseUxCapabilities
+         * @description Pillar 4 high-ergonomics enterprise UX capabilities.
+         */
+        EnterpriseUxCapabilities: {
+            /**
+             * Canonical Markdown Storage
+             * @description 100% canonical UTF-8 Markdown storage with auto-detection at ingestion
+             * @default true
+             */
+            canonical_markdown_storage: boolean;
+            /**
+             * Emoji Hover Elaboration
+             * @description Standardized rich hover tooltips via EmojiHint replacing noisy text tags
+             * @default true
+             */
+            emoji_hover_elaboration: boolean;
+            /**
+             * Optimistic Drag And Drop
+             * @description Sub-16ms optimistic drag-and-drop state transitions
+             * @default true
+             */
+            optimistic_drag_and_drop: boolean;
+            /**
+             * Safe Mermaid Rendering
+             * @description Isolated Web Worker beautiful-mermaid rendering under strict CSP
+             * @default true
+             */
+            safe_mermaid_rendering: boolean;
+            /**
+             * Sparkle Cursor Completion
+             * @description Inline blinking sparkle completion with surgical contextmenu accept
+             * @default true
+             */
+            sparkle_cursor_completion: boolean;
+            /**
+             * Whitespace Optimized
+             * @description Breathable enterprise layout with 52px topbar and 960px peek drawer
+             * @default true
+             */
+            whitespace_optimized: boolean;
+        };
+        /**
+         * FieldError
+         * @description Validation failure on an individual request field without echoing raw user input.
+         */
+        FieldError: {
+            /**
+             * Message
+             * @description Human-readable explanation of the validation constraint
+             */
+            message: string;
+            /**
+             * Path
+             * @description JSON dot-separated path to the offending field
+             */
+            path: string;
+        };
+        /**
          * FilterSpec
          * @description Typed filter DSL for saved views and issue queries.
          */
@@ -6683,6 +7674,42 @@ export interface components {
              * @default false
              */
             notify: boolean;
+        };
+        /**
+         * FrictionFreeDeploymentCapabilities
+         * @description Pillar 3 FOSS deployment guarantees.
+         */
+        FrictionFreeDeploymentCapabilities: {
+            /**
+             * Air Gap Ready
+             * @description Complete operational readiness in air-gapped private networks
+             * @default true
+             */
+            air_gap_ready: boolean;
+            /**
+             * Docker Compose Production
+             * @description Hardened 5-network production docker-compose deployment stack
+             * @default true
+             */
+            docker_compose_production: boolean;
+            /**
+             * Standalone Single Container
+             * @description 1-command standalone docker run with embedded Unix-socket PostgreSQL 16
+             * @default true
+             */
+            standalone_single_container: boolean;
+            /**
+             * Sub 3S Startup
+             * @description Sub-3-second container cold-start readiness time
+             * @default true
+             */
+            sub_3s_startup: boolean;
+            /**
+             * Zero Cloud Telemetry
+             * @description Zero external analytics, telemetry phoning home, or tracking pixels
+             * @default true
+             */
+            zero_cloud_telemetry: boolean;
         };
         /**
          * GateStatus
@@ -7300,11 +8327,19 @@ export interface components {
              */
             capabilities: string[];
             /**
+             * Created At
+             * Format: date-time
+             * @description Issue creation timestamp
+             */
+            created_at: string;
+            /**
              * Created By Id
              * Format: uuid
              * @description UUID of the principal who created this issue
              */
             created_by_id: string;
+            /** @description Sprint cycle metadata if assigned */
+            cycle?: components["schemas"]["CycleSummary"] | null;
             /**
              * Cycle Id
              * @description Sprint cycle UUID if assigned
@@ -7325,6 +8360,11 @@ export interface components {
              * @description Target completion due date (YYYY-MM-DD)
              */
             due_date?: string | null;
+            /**
+             * Etag
+             * @description Quoted strong ETag digest covering description and serialized attributes (KANBA-212)
+             */
+            etag?: string | null;
             /**
              * Id
              * Format: uuid
@@ -7349,10 +8389,21 @@ export interface components {
              */
             module_ids?: string[] | null;
             /**
+             * Modules
+             * @description List of assigned module metadata
+             */
+            modules?: components["schemas"]["ModuleSummary"][];
+            /**
              * Note
              * @description Optional contextual note or transition reason
              */
             note?: string | null;
+            /**
+             * Object Id
+             * Format: uuid
+             * @description Spine object record UUID identifier matching issue.id
+             */
+            object_id: string;
             /**
              * Parent
              * @description Parent issue summary or masked restricted placeholder
@@ -7376,6 +8427,12 @@ export interface components {
              * @description Issue summary title
              */
             summary: string;
+            /**
+             * Updated At
+             * Format: date-time
+             * @description Issue last updated timestamp
+             */
+            updated_at: string;
         };
         /**
          * IssueSearchItem
@@ -7401,6 +8458,8 @@ export interface components {
              * @constant
              */
             kind: "issue";
+            /** Match Reason */
+            match_reason?: string | null;
             /** Match Spans */
             match_spans?: [
                 number,
@@ -7460,9 +8519,9 @@ export interface components {
             /**
              * Executed Mode
              * @default lexical
-             * @constant
+             * @enum {string}
              */
-            executed_mode: "lexical";
+            executed_mode: "lexical" | "hybrid";
             /** Items */
             items: components["schemas"]["IssueSearchItem"][];
             /** Next Cursor */
@@ -7588,6 +8647,8 @@ export interface components {
              * @enum {string}
              */
             kind: "doc" | "page" | "sticky";
+            /** Match Reason */
+            match_reason?: string | null;
             /** Match Spans */
             match_spans?: [
                 number,
@@ -7616,6 +8677,12 @@ export interface components {
              * @default 20
              */
             limit: number;
+            /**
+             * Mode
+             * @default lexical
+             * @enum {string}
+             */
+            mode: "lexical" | "hybrid";
             /** Project */
             project?: string | null;
             /** Query */
@@ -7629,15 +8696,41 @@ export interface components {
             /**
              * Executed Mode
              * @default lexical
-             * @constant
+             * @enum {string}
              */
-            executed_mode: "lexical";
+            executed_mode: "lexical" | "hybrid";
             /** Items */
             items: components["schemas"]["KnowledgeSearchItem"][];
             /** Next Cursor */
             next_cursor?: string | null;
             /** Total */
             total: number;
+        };
+        /**
+         * LabelAuditImpactResponse
+         * @description Reverse-audit impact response for deleting a project label.
+         */
+        LabelAuditImpactResponse: {
+            /** Blocking Reasons */
+            blocking_reasons?: string[];
+            /** Issues Count */
+            issues_count: number;
+            /**
+             * Label Id
+             * Format: uuid
+             */
+            label_id: string;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Sample Issue Keys */
+            sample_issue_keys?: string[];
+            /** Saved Views */
+            saved_views?: components["schemas"]["SavedViewSummary"][];
+            /** Valid Replacement Labels */
+            valid_replacement_labels?: components["schemas"]["LabelResponse"][];
         };
         /**
          * LabelCreate
@@ -8095,7 +9188,7 @@ export interface components {
              * @description Source of effective permissions
              * @enum {string}
              */
-            grant_source: "project_owner" | "project_role" | "workspace_role" | "direct_share";
+            grant_source: "project_owner" | "project_role" | "workspace_role" | "workspace_admin" | "direct_share";
             /**
              * Handle
              * @description Human handle prefixed with @
@@ -8167,7 +9260,7 @@ export interface components {
              * @default workspace
              * @enum {string}
              */
-            scope_tier: "global" | "workspace" | "project";
+            scope_tier: "global" | "workspace" | "project" | "server";
             /** Scopes */
             scopes: string[];
             /**
@@ -8372,6 +9465,8 @@ export interface components {
             execution_id?: string | null;
             /** Expires At */
             expires_at?: string | null;
+            /** Key Id */
+            key_id?: string | null;
             /** Max Calls */
             max_calls?: number | null;
             /** Owner Kind */
@@ -8614,6 +9709,23 @@ export interface components {
             target_date?: string | null;
         };
         /**
+         * ModuleSummary
+         * @description Module metadata for issue response representation.
+         */
+        ModuleSummary: {
+            /**
+             * Id
+             * Format: uuid
+             * @description Module UUID
+             */
+            id: string;
+            /**
+             * Name
+             * @description Module name
+             */
+            name: string;
+        };
+        /**
          * NormalActorSummary
          * @description Visible in-boundary principal metadata for activity actors.
          */
@@ -8727,11 +9839,12 @@ export interface components {
          * @description Admin patch request for client approval.
          */
         OAuthClientPatchRequest: {
-            /**
-             * Status
-             * @enum {string}
-             */
-            status: "active" | "disabled";
+            /** Client Name */
+            client_name?: string | null;
+            /** Redirect Uris */
+            redirect_uris?: string[] | null;
+            /** Status */
+            status?: ("active" | "disabled" | "suspended" | "revoked") | null;
         };
         /**
          * OAuthClientRegisterRequest
@@ -8800,6 +9913,45 @@ export interface components {
             scopes: string[];
             /** Surface */
             surface: string;
+        };
+        /**
+         * ObjectAclGrantRequest
+         * @description Payload for granting or replacing an object capability ACL entry.
+         */
+        ObjectAclGrantRequest: {
+            /**
+             * Capabilities
+             * @description Capability tokens
+             */
+            capabilities: string[];
+            /**
+             * Effect
+             * @description ALLOW or DENY
+             * @enum {string}
+             */
+            effect: "ALLOW" | "DENY";
+            /**
+             * Principal Id
+             * @description Subject principal UUID or handle
+             */
+            principal_id: string;
+        };
+        /**
+         * ObjectAclRevokeRequest
+         * @description Payload for revoking an object capability ACL entry.
+         */
+        ObjectAclRevokeRequest: {
+            /**
+             * Effect
+             * @description ALLOW or DENY
+             * @enum {string}
+             */
+            effect: "ALLOW" | "DENY";
+            /**
+             * Principal Id
+             * @description Subject principal UUID or handle
+             */
+            principal_id: string;
         };
         /**
          * OutboundLinkOut
@@ -8977,6 +10129,35 @@ export interface components {
             version_seq: number;
         };
         /**
+         * ParityMatrixCapabilities
+         * @description Competitive parity matrix against commercial SaaS and legacy open-core trackers.
+         */
+        ParityMatrixCapabilities: {
+            /**
+             * Competitive Parity
+             * @description Target platforms with verified capability parity or superiority
+             */
+            competitive_parity?: string[];
+            /**
+             * Unlimited Mcp Keys
+             * @description Unlimited scoped API keys for autonomous agent teams
+             * @default true
+             */
+            unlimited_mcp_keys: boolean;
+            /**
+             * Unlimited Seats
+             * @description Unlimited human users across all authentication providers
+             * @default true
+             */
+            unlimited_seats: boolean;
+            /**
+             * Zero Saas Paywalls
+             * @description Zero paywalled features, zero seat licenses, and zero artificial limits
+             * @default true
+             */
+            zero_saas_paywalls: boolean;
+        };
+        /**
          * PendingGateResponse
          * @description Response payload for an asynchronous agent transition gate hold (HTTP 202).
          */
@@ -9139,7 +10320,7 @@ export interface components {
              * @default workspace
              * @enum {string}
              */
-            scope_tier: "global" | "workspace" | "project";
+            scope_tier: "global" | "workspace" | "project" | "server";
             /** Scopes */
             scopes: string[];
             /**
@@ -9211,6 +10392,52 @@ export interface components {
             surface: string;
             /** Workspace Id */
             workspace_id?: string | null;
+        };
+        /**
+         * PlatformSummaryResponse
+         * @description Comprehensive platform capability summary and world-class parity response.
+         */
+        PlatformSummaryResponse: {
+            /**
+             * Github Issue 1 Resolved
+             * @description Affirmation of GitHub Issue #1 resolution across all 4 pillars
+             * @default true
+             */
+            github_issue_1_resolved: boolean;
+            /**
+             * License
+             * @description Open-source permissive license
+             * @default Apache-2.0
+             */
+            license: string;
+            /** @description World-class competitive parity matrix */
+            parity_matrix?: components["schemas"]["ParityMatrixCapabilities"];
+            /** @description Pillar 1: Native Agent-First Architecture */
+            pillar_1_agent_first?: components["schemas"]["AgentFirstCapabilities"];
+            /** @description Pillar 2: Priority #0 Hardened Security */
+            pillar_2_security_first?: components["schemas"]["SecurityFirstCapabilities"];
+            /** @description Pillar 3: Friction-Free FOSS Deployment */
+            pillar_3_friction_free?: components["schemas"]["FrictionFreeDeploymentCapabilities"];
+            /** @description Pillar 4: Enterprise Whitespace & High-Ergonomics UI */
+            pillar_4_enterprise_ux?: components["schemas"]["EnterpriseUxCapabilities"];
+            /**
+             * Platform
+             * @description Official platform brand name
+             * @default 👍kanban
+             */
+            platform: string;
+            /**
+             * Slug
+             * @description Distribution container and repository slug
+             * @default thumbs-up-kanban
+             */
+            slug: string;
+            /**
+             * Version
+             * @description Platform architecture release version
+             * @default 2.0.0
+             */
+            version: string;
         };
         /**
          * PrincipalAssigneeResponse
@@ -9338,6 +10565,117 @@ export interface components {
             slug: string;
         };
         /**
+         * ProblemDetails
+         * @description Canonical RFC 7807 problem document for the platform.
+         */
+        ProblemDetails: {
+            /**
+             * Candidates
+             * @description Candidate suggestions when identifier resolution is ambiguous
+             * @default null
+             */
+            candidates: {
+                [key: string]: string;
+            }[] | null;
+            /**
+             * Code
+             * @description Machine-readable error code
+             */
+            code: string;
+            /**
+             * Current Etag
+             * @description Current entity ETag during precondition failure
+             * @default null
+             */
+            current_etag: string | null;
+            /**
+             * Current Preview
+             * @description Fresh blast radius preview when precondition 412 BLAST_RADIUS_CHANGED fails
+             * @default null
+             */
+            current_preview: {
+                [key: string]: unknown;
+            } | null;
+            /**
+             * Detail
+             * @description Human-readable explanation specific to this occurrence
+             * @default null
+             */
+            detail: string | null;
+            /**
+             * Errors
+             * @description Field-level validation errors
+             * @default null
+             */
+            errors: components["schemas"]["FieldError"][] | null;
+            /**
+             * Field
+             * @description Target field associated with reference or validation failure
+             * @default null
+             */
+            field: string | null;
+            /**
+             * Hidden Open Count
+             * @description Count of open sub-issues hidden by RLS
+             * @default null
+             */
+            hidden_open_count: number | null;
+            /**
+             * Methods
+             * @description Available MFA methods for step-up elevation
+             * @default null
+             */
+            methods: string[] | null;
+            /**
+             * Open Subissue Keys
+             * @description Keys of open sub-issues preventing archive
+             * @default null
+             */
+            open_subissue_keys: string[] | null;
+            /**
+             * Request Id
+             * @description Correlating request identifier
+             */
+            request_id: string;
+            /**
+             * Retry After Seconds
+             * @description Numeric seconds after which the client may retry rate-limited requests
+             * @default null
+             */
+            retry_after_seconds: number | null;
+            /**
+             * State Group
+             * @description Current state group when archive transition is rejected
+             * @default null
+             */
+            state_group: string | null;
+            /**
+             * Status
+             * @description HTTP status code
+             */
+            status: number;
+            /**
+             * Title
+             * @description Short human-readable summary of the problem type
+             */
+            title: string;
+            /**
+             * Type
+             * @description Absolute URI referencing problem definition
+             */
+            type: string;
+            /**
+             * Unauthorized Mentions
+             * @description List of mentioned users who lack access to the resource
+             * @default null
+             */
+            unauthorized_mentions: {
+                [key: string]: string;
+            }[] | null;
+        } & {
+            [key: string]: unknown;
+        };
+        /**
          * ProjectBlueprint
          * @description Declarative specification of a project configuration.
          */
@@ -9411,6 +10749,11 @@ export interface components {
              * @description Human-readable project display name
              */
             name: string;
+            /**
+             * Skip Loaded Sequence Numbers
+             * @description Whether to skip culturally loaded sequence numbers (defaults to workspace setting if omitted)
+             */
+            skip_loaded_sequence_numbers?: boolean | null;
         };
         /**
          * ProjectList
@@ -9427,6 +10770,75 @@ export interface components {
              * @description Opaque keyset cursor for fetching the next page
              */
             next_cursor?: string | null;
+        };
+        /**
+         * ProjectMemberAdd
+         * @description Payload for adding or updating a member on a project.
+         */
+        ProjectMemberAdd: {
+            /**
+             * Principal Id
+             * Format: uuid
+             * @description Principal UUID to bind to the project
+             */
+            principal_id: string;
+            /**
+             * Role
+             * @description Role to grant on project scope
+             * @default MEMBER
+             * @enum {string}
+             */
+            role: "PROJECT_ADMIN" | "MEMBER" | "VIEWER";
+        };
+        /**
+         * ProjectMemberResponse
+         * @description Member binding on a project.
+         */
+        ProjectMemberResponse: {
+            /**
+             * Created At
+             * Format: date-time
+             * @description Binding creation timestamp
+             */
+            created_at: string;
+            /**
+             * Display Name
+             * @description Principal display name
+             */
+            display_name?: string | null;
+            /**
+             * Email
+             * @description User email address if user principal
+             */
+            email?: string | null;
+            /**
+             * Handle
+             * @description User handle or slug
+             */
+            handle?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             * @description Unique role binding UUID
+             */
+            id: string;
+            /**
+             * Principal Id
+             * Format: uuid
+             * @description Bound principal UUID
+             */
+            principal_id: string;
+            /**
+             * Project Id
+             * Format: uuid
+             * @description Target project UUID
+             */
+            project_id: string;
+            /**
+             * Role
+             * @description Assigned role: PROJECT_ADMIN, MEMBER, or VIEWER
+             */
+            role: string;
         };
         /**
          * ProjectPatch
@@ -9458,6 +10870,11 @@ export interface components {
              * @description Updated human-readable project display name
              */
             name?: string | null;
+            /**
+             * Skip Loaded Sequence Numbers
+             * @description Updated skip loaded sequence numbers toggle
+             */
+            skip_loaded_sequence_numbers?: boolean | null;
         };
         /**
          * ProjectResponse
@@ -9498,6 +10915,12 @@ export interface components {
              */
             identifier: string;
             /**
+             * Is Project Admin
+             * @description Whether the caller is an administrator of this project
+             * @default false
+             */
+            is_project_admin: boolean;
+            /**
              * Modules Enabled
              * @description Whether the modules feature is enabled
              */
@@ -9507,6 +10930,16 @@ export interface components {
              * @description Project human-readable display name
              */
             name: string;
+            /**
+             * Project Role
+             * @description Role held by caller on this project (PROJECT_ADMIN, MEMBER, VIEWER)
+             */
+            project_role?: string | null;
+            /**
+             * Skip Loaded Sequence Numbers
+             * @description Whether culturally loaded sequence numbers are skipped
+             */
+            skip_loaded_sequence_numbers: boolean;
         };
         /**
          * PromotedDocSummary
@@ -9529,6 +10962,16 @@ export interface components {
              * @default false
              */
             restricted: boolean;
+            /**
+             * Root Page Canonical Key
+             * @description Target document root page canonical key
+             */
+            root_page_canonical_key?: string | null;
+            /**
+             * Root Page Id
+             * @description Target document root page UUID for direct navigation
+             */
+            root_page_id?: string | null;
             /**
              * Title
              * @description Target document title
@@ -9707,6 +11150,81 @@ export interface components {
             settings?: {
                 [key: string]: unknown;
             } | null;
+        };
+        /**
+         * ProviderProbeRequest
+         * @description Payload for probing or testing connection to an unsaved AI provider.
+         */
+        ProviderProbeRequest: {
+            /**
+             * Api Key
+             * @description Optional secret API key
+             */
+            api_key?: string | null;
+            /**
+             * Base Url
+             * @description Optional custom HTTP base URL
+             */
+            base_url?: string | null;
+            /**
+             * Provider Kind
+             * @description Provider kind identifier (e.g. openai, gemini, ollama)
+             */
+            provider_kind: string;
+            /**
+             * Settings Json
+             * @description Optional settings
+             */
+            settings_json?: {
+                [key: string]: unknown;
+            } | null;
+        };
+        /**
+         * ProviderProbeResult
+         * @description Structured diagnostic result of server-side model probing or connection test.
+         */
+        ProviderProbeResult: {
+            /**
+             * Error Code
+             * @description Diagnostic error code if failed
+             */
+            error_code?: string | null;
+            /**
+             * Latency Ms
+             * @description Round-trip latency in milliseconds
+             */
+            latency_ms: number;
+            /**
+             * Message
+             * @description Human-readable status or error message
+             */
+            message?: string | null;
+            /**
+             * Model Count
+             * @description Count of discovered models
+             */
+            model_count: number;
+            /**
+             * Models
+             * @description List of discovered model identifiers
+             */
+            models?: string[];
+            /**
+             * Ok
+             * @description Whether connection and probe succeeded
+             */
+            ok: boolean;
+        };
+        /**
+         * ProviderReorderRequest
+         * @description Payload for atomically reordering AI providers.
+         */
+        ProviderReorderRequest: {
+            /**
+             * Ordered Ids
+             * @description List of provider UUIDs in ascending priority order
+             */
+            ordered_ids: string[];
         };
         /**
          * ProvisionPrincipalRequest
@@ -10051,7 +11569,12 @@ export interface components {
              * Role
              * @description RBAC role name to bind (e.g. SERVER_ADMIN, WORKSPACE_ADMIN, PROJECT_ADMIN)
              */
-            role: string;
+            role?: string | null;
+            /**
+             * Role Name
+             * @description Alternative field name for role
+             */
+            role_name?: string | null;
             /**
              * Scope Id
              * @description Optional scope target UUID (required when scope_type is project)
@@ -10063,6 +11586,119 @@ export interface components {
              * @enum {string}
              */
             scope_type: "server" | "workspace" | "project";
+        };
+        /**
+         * SavedProviderProbeRequest
+         * @description Optional payload when probing or testing an existing saved provider.
+         */
+        SavedProviderProbeRequest: {
+            /**
+             * Api Key
+             * @description Optional override API key (uses saved key if omitted)
+             */
+            api_key?: string | null;
+        };
+        /**
+         * SavedViewSummary
+         * @description Summary of a saved view referencing a state or label.
+         */
+        SavedViewSummary: {
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+        };
+        /**
+         * SbomComponentModel
+         * @description Structured third-party component representation.
+         */
+        SbomComponentModel: {
+            /**
+             * Description
+             * @description Package description or summary
+             * @default
+             */
+            description: string;
+            /**
+             * Ecosystem
+             * @description Packaging ecosystem (python or node)
+             */
+            ecosystem: string;
+            /**
+             * License
+             * @description SPDX license expression or name
+             */
+            license: string;
+            /**
+             * License Verdict
+             * @description License verdict (ALLOW, ALLOWLISTED, UNKNOWN, DENY)
+             */
+            license_verdict: string;
+            /**
+             * Name
+             * @description Component package name
+             */
+            name: string;
+            /**
+             * Purl
+             * @description Package URL (PURL)
+             */
+            purl: string;
+            /**
+             * Scope
+             * @description Dependency scope (required, dev, optional)
+             * @default required
+             */
+            scope: string;
+            /**
+             * Version
+             * @description Component semantic release version
+             */
+            version: string;
+        };
+        /**
+         * SbomSummaryModel
+         * @description Summary metrics of components and license compliance.
+         */
+        SbomSummaryModel: {
+            /**
+             * Allowlisted Count
+             * @description Explicitly allowlisted exceptions
+             */
+            allowlisted_count: number;
+            /**
+             * Deny Count
+             * @description Denylisted or copyleft licenses
+             */
+            deny_count: number;
+            /**
+             * Permissive Count
+             * @description Permissive approved licenses
+             */
+            permissive_count: number;
+            /**
+             * Python Components
+             * @description Python backend dependencies
+             */
+            python_components: number;
+            /**
+             * Total Components
+             * @description Total third-party components
+             */
+            total_components: number;
+            /**
+             * Unknown Count
+             * @description Unknown or unclassified licenses
+             */
+            unknown_count: number;
+            /**
+             * Web Components
+             * @description Web frontend dependencies
+             */
+            web_components: number;
         };
         /**
          * SearchItem
@@ -10083,6 +11719,8 @@ export interface components {
              * @enum {string}
              */
             kind: "issue" | "doc" | "page" | "sticky";
+            /** Match Reason */
+            match_reason?: string | null;
             /** Match Spans */
             match_spans?: [
                 number,
@@ -10107,15 +11745,51 @@ export interface components {
             /**
              * Executed Mode
              * @default lexical
-             * @constant
+             * @enum {string}
              */
-            executed_mode: "lexical";
+            executed_mode: "lexical" | "hybrid";
             /** Items */
             items: components["schemas"]["SearchItem"][];
             /** Next Cursor */
             next_cursor?: string | null;
             /** Total */
             total: number;
+        };
+        /**
+         * SecurityFirstCapabilities
+         * @description Priority #0 security architecture guarantees.
+         */
+        SecurityFirstCapabilities: {
+            /**
+             * Aal2 Admin Enforcement
+             * @description Mandatory Authenticator Assurance Level 2 (AAL2) on admin routes and tools
+             * @default true
+             */
+            aal2_admin_enforcement: boolean;
+            /**
+             * Csp Hardened
+             * @description Strict Content-Security-Policy with zero unsafe-inline styles or scripts
+             * @default true
+             */
+            csp_hardened: boolean;
+            /**
+             * Force Rls
+             * @description PostgreSQL FORCE ROW LEVEL SECURITY active across all tenant tables
+             * @default true
+             */
+            force_rls: boolean;
+            /**
+             * Surrogate Rejection
+             * @description Hostile Unicode UTF-16 lone-surrogate rejection at ingestion boundary
+             * @default true
+             */
+            surrogate_rejection: boolean;
+            /**
+             * Zero Plaintext Secrets
+             * @description AES-256-GCM envelope encryption and zero secret retention in memory or logs
+             * @default true
+             */
+            zero_plaintext_secrets: boolean;
         };
         /**
          * SetupClaimRequest
@@ -10138,6 +11812,18 @@ export interface components {
              */
             password: string;
             /**
+             * Project Key
+             * @description Uppercase key of initial project
+             * @default KAN
+             */
+            project_key: string;
+            /**
+             * Project Name
+             * @description Name of initial project
+             * @default Default Project
+             */
+            project_name: string;
+            /**
              * Token
              * @description First-boot single-use setup claim token
              */
@@ -10147,6 +11833,18 @@ export interface components {
              * @description Lowercase administrator username
              */
             username: string;
+            /**
+             * Workspace Name
+             * @description Name of initial workspace
+             * @default Default Workspace
+             */
+            workspace_name: string;
+            /**
+             * Workspace Slug
+             * @description Slug of initial workspace
+             * @default default
+             */
+            workspace_slug: string;
         };
         /**
          * SetupStatusResponse
@@ -10219,6 +11917,46 @@ export interface components {
              * @default false
              */
             use_master_kek: boolean;
+        };
+        /**
+         * StateAuditImpactResponse
+         * @description Reverse-audit impact response for deleting a workflow state.
+         */
+        StateAuditImpactResponse: {
+            /** Blocking Reasons */
+            blocking_reasons?: string[];
+            /**
+             * Historical Executions Count
+             * @default 0
+             */
+            historical_executions_count: number;
+            /** Is Default */
+            is_default: boolean;
+            /** Issues Count */
+            issues_count: number;
+            /**
+             * Pending Executions Count
+             * @default 0
+             */
+            pending_executions_count: number;
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Sample Issue Keys */
+            sample_issue_keys?: string[];
+            /** Saved Views */
+            saved_views?: components["schemas"]["SavedViewSummary"][];
+            /**
+             * State Id
+             * Format: uuid
+             */
+            state_id: string;
+            /** Valid Replacement States */
+            valid_replacement_states?: components["schemas"]["StateResponse"][];
+            /** Workflow Hooks */
+            workflow_hooks?: components["schemas"]["WorkflowHookSummary"][];
         };
         /**
          * StateCreate
@@ -10312,6 +12050,11 @@ export interface components {
          * @description Workflow state metadata for issue response representation.
          */
         StateSummary: {
+            /**
+             * Color Hex
+             * @description Workflow state display color hex (e.g. #7c3aed)
+             */
+            color_hex?: string | null;
             /**
              * Group
              * @description Workflow state group: backlog, unstarted, started, completed, or cancelled
@@ -10551,6 +12294,11 @@ export interface components {
             /** @description Updated 6-color palette token */
             color_token?: components["schemas"]["StickyColorToken"] | null;
             /**
+             * Promotion Snoozed At Length
+             * @description Length at which promotion was snoozed
+             */
+            promotion_snoozed_at_length?: number | null;
+            /**
              * Sort Rank
              * @description Updated sort rank
              */
@@ -10636,6 +12384,103 @@ export interface components {
             workspace_id: string;
         };
         /**
+         * SystemAboutResponse
+         * @description Comprehensive system metadata, licensing, and supply chain inventory.
+         */
+        SystemAboutResponse: {
+            /**
+             * Api Docs Urls
+             * @description Interactive documentation endpoints
+             */
+            api_docs_urls?: {
+                [key: string]: string;
+            };
+            /**
+             * Build Timestamp
+             * @description ISO build timestamp
+             */
+            build_timestamp?: string | null;
+            /**
+             * Components
+             * @description Discovered third-party components
+             */
+            components: components["schemas"]["SbomComponentModel"][];
+            /**
+             * Frontend Bundle Hash
+             * @description SHA-256 fingerprint of frontend bundle
+             */
+            frontend_bundle_hash?: string | null;
+            /**
+             * Git Commit
+             * @description Build git commit SHA
+             * @default unknown
+             */
+            git_commit: string;
+            /**
+             * License
+             * @description Verbatim Apache-2.0 LICENSE file text
+             */
+            license: string;
+            /**
+             * License Spdx
+             * @description Primary platform license SPDX ID
+             * @default Apache-2.0
+             */
+            license_spdx: string;
+            /**
+             * License Text
+             * @description Alias for license
+             */
+            license_text?: string | null;
+            /**
+             * Notice
+             * @description Verbatim third-party NOTICE file text
+             */
+            notice: string;
+            /**
+             * Notice Text
+             * @description Alias for notice
+             */
+            notice_text?: string | null;
+            /**
+             * Openapi Bundle Hash
+             * @description SHA-256 fingerprint of OpenAPI bundle
+             */
+            openapi_bundle_hash?: string | null;
+            /**
+             * Openapi Version
+             * @description OpenAPI specification version
+             * @default 2.0.0
+             */
+            openapi_version: string;
+            /**
+             * Platform
+             * @description Official brand name
+             * @default 👍kanban
+             */
+            platform: string;
+            /** @description Supply-chain component summary */
+            sbom_summary: components["schemas"]["SbomSummaryModel"];
+            /**
+             * Slug
+             * @description Container and repository slug
+             * @default thumbs-up-kanban
+             */
+            slug: string;
+            /**
+             * Tagline
+             * @description Official platform tagline
+             * @default The difference between a swarm and an Agile team is a kanban.
+             */
+            tagline: string;
+            /**
+             * Version
+             * @description Platform release version
+             * @default 2.0.0
+             */
+            version: string;
+        };
+        /**
          * SystemStatusResponse
          * @description Runtime deployment mode, persistence indicator, and infrastructure topology.
          */
@@ -10647,24 +12492,37 @@ export interface components {
              * @default true
              */
             allow_unlimited_mcp_keys: boolean;
+            /** Build Timestamp */
+            build_timestamp?: string | null;
             /** Data Mount Fstype */
             data_mount_fstype?: string | null;
             /** Data Mount Point */
             data_mount_point?: string | null;
             /** Deployment Mode */
             deployment_mode: string;
+            /** Frontend Bundle Hash */
+            frontend_bundle_hash?: string | null;
+            /** Git Commit */
+            git_commit?: string | null;
             /** Is Server Admin */
             is_server_admin: boolean;
             /** Local Llm Endpoint Host */
             local_llm_endpoint_host?: string | null;
+            /** Openapi Bundle Hash */
+            openapi_bundle_hash?: string | null;
+            /**
+             * Openapi Version
+             * @default 2.0.0
+             */
+            openapi_version: string | null;
             /** Persistent Volume */
             persistent_volume: boolean;
-            /** Tier B Sandbox Available */
-            tier_b_sandbox_available: boolean;
-            /** Supported Custom Field Tiers */
-            supported_custom_field_tiers?: string[];
             /** Sandbox Unavailable Reason */
             sandbox_unavailable_reason?: string | null;
+            /** Supported Custom Field Tiers */
+            supported_custom_field_tiers?: string[];
+            /** Tier B Sandbox Available */
+            tier_b_sandbox_available: boolean;
         };
         /**
          * TimelineLink
@@ -10797,6 +12655,263 @@ export interface components {
             next_cursor?: string | null;
         };
         /**
+         * TrashedObjectItem
+         * @description Unified representation of any soft-deleted entity in project or workspace trash.
+         */
+        TrashedObjectItem: {
+            /** Capabilities */
+            capabilities?: string[];
+            /**
+             * Deleted At
+             * Format: date-time
+             */
+            deleted_at: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key */
+            key: string;
+            /** Kind */
+            kind: string;
+            /** Project Id */
+            project_id?: string | null;
+            /**
+             * Purge After
+             * Format: date-time
+             */
+            purge_after: string;
+            /** Remaining Days */
+            remaining_days: number;
+            /** Title */
+            title: string;
+        };
+        /**
+         * TrashedObjectList
+         * @description Listing of all soft-deleted objects in project or workspace trash.
+         */
+        TrashedObjectList: {
+            /** Items */
+            items: components["schemas"]["TrashedObjectItem"][];
+            /** Retention Days */
+            retention_days: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+        };
+        /**
+         * UnifiedMcpApiKeyResponse
+         * @description Consistent metadata response for an MCP API key without secret hash.
+         */
+        UnifiedMcpApiKeyResponse: {
+            /** Allowed Cidrs */
+            allowed_cidrs?: string[] | null;
+            /** Allowed Project Ids */
+            allowed_project_ids?: string[] | null;
+            /** Allowed Projects */
+            allowed_projects?: string[] | null;
+            /** Allowed Tools */
+            allowed_tools?: string[] | null;
+            /** Allowed Workspace Ids */
+            allowed_workspace_ids?: string[] | null;
+            /**
+             * Capability Mask
+             * @default 7
+             */
+            capability_mask: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Disabled Tools */
+            disabled_tools?: string[];
+            /** Display Hint */
+            display_hint: string;
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key Prefix */
+            key_prefix: string;
+            /** Label */
+            label?: string | null;
+            /** Last Used At */
+            last_used_at?: string | null;
+            /**
+             * Owner Kind
+             * @default personal_user
+             */
+            owner_kind: string;
+            /**
+             * Principal Id
+             * Format: uuid
+             */
+            principal_id: string;
+            /** Project Id */
+            project_id?: string | null;
+            /** Revoked At */
+            revoked_at?: string | null;
+            /**
+             * Scope Tier
+             * @default workspace
+             */
+            scope_tier: string;
+            /** Scopes */
+            scopes: string[];
+            /** Surface */
+            surface: string;
+            /** Workspace Id */
+            workspace_id?: string | null;
+        };
+        /**
+         * UnifiedMcpKeyMintRequest
+         * @description Payload for minting a scoped MCP API key.
+         */
+        UnifiedMcpKeyMintRequest: {
+            /** Allowed Cidrs */
+            allowed_cidrs?: string[] | null;
+            /** Allowed Project Ids */
+            allowed_project_ids?: string[] | null;
+            /** Allowed Projects */
+            allowed_projects?: string[] | null;
+            /** Allowed Tools */
+            allowed_tools?: string[] | null;
+            /** Allowed Workspace Ids */
+            allowed_workspace_ids?: string[] | null;
+            /**
+             * Capability Mask
+             * @default 7
+             */
+            capability_mask: number;
+            /**
+             * Confirm Unlimited
+             * @default false
+             */
+            confirm_unlimited: boolean;
+            /** Disabled Tools */
+            disabled_tools?: string[];
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Expires In Days
+             * @default 60
+             */
+            expires_in_days: number | null;
+            /** Label */
+            label?: string | null;
+            /**
+             * Owner Kind
+             * @default personal_user
+             * @enum {string}
+             */
+            owner_kind: "service_bot" | "personal_user";
+            /** Principal Id */
+            principal_id?: string | null;
+            /** Project Id */
+            project_id?: string | null;
+            /** Project Ref */
+            project_ref?: string | null;
+            /**
+             * Scope Tier
+             * @default workspace
+             * @enum {string}
+             */
+            scope_tier: "global" | "workspace" | "project" | "server";
+            /** Scopes */
+            scopes?: string[] | null;
+            /**
+             * Surface
+             * @enum {string}
+             */
+            surface: "agent" | "docs" | "admin";
+            /**
+             * Unlimited
+             * @default false
+             */
+            unlimited: boolean;
+            /** Workspace Id */
+            workspace_id?: string | null;
+        };
+        /**
+         * UnifiedMcpKeyMintResponse
+         * @description Response returned exactly once carrying the one-time plaintext token.
+         */
+        UnifiedMcpKeyMintResponse: {
+            /** Allowed Cidrs */
+            allowed_cidrs?: string[] | null;
+            /** Allowed Project Ids */
+            allowed_project_ids?: string[] | null;
+            /** Allowed Projects */
+            allowed_projects?: string[] | null;
+            /** Allowed Tools */
+            allowed_tools?: string[] | null;
+            /** Allowed Workspace Ids */
+            allowed_workspace_ids?: string[] | null;
+            /**
+             * Capability Mask
+             * @default 7
+             */
+            capability_mask: number;
+            /**
+             * Created At
+             * Format: date-time
+             */
+            created_at: string;
+            /** Disabled Tools */
+            disabled_tools?: string[];
+            /** Display Hint */
+            display_hint: string;
+            /** Expires At */
+            expires_at?: string | null;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Key Prefix */
+            key_prefix: string;
+            /** Label */
+            label?: string | null;
+            /** Last Used At */
+            last_used_at?: string | null;
+            /**
+             * Owner Kind
+             * @default personal_user
+             */
+            owner_kind: string;
+            /**
+             * Principal Id
+             * Format: uuid
+             */
+            principal_id: string;
+            /** Project Id */
+            project_id?: string | null;
+            /** Raw Key */
+            raw_key?: string | null;
+            /** Revoked At */
+            revoked_at?: string | null;
+            /**
+             * Scope Tier
+             * @default workspace
+             */
+            scope_tier: string;
+            /** Scopes */
+            scopes: string[];
+            /** Surface */
+            surface: string;
+            /** Token */
+            token: string;
+            /** Workspace Id */
+            workspace_id?: string | null;
+        };
+        /**
          * UnrestrictedEndpointOut
          * @description Visible far endpoint details when readable by the caller.
          */
@@ -10860,6 +12975,22 @@ export interface components {
              * @default UTC
              */
             timezone: string;
+        };
+        /**
+         * UpdateWorkspaceRequest
+         * @description Payload for updating workspace name or slug.
+         */
+        UpdateWorkspaceRequest: {
+            /**
+             * Name
+             * @description Updated workspace display name
+             */
+            name?: string | null;
+            /**
+             * Slug
+             * @description Updated lowercase URL-safe slug
+             */
+            slug?: string | null;
         };
         /** ValidationError */
         ValidationError: {
@@ -11093,6 +13224,20 @@ export interface components {
             size_bytes: number;
         };
         /**
+         * WasmModuleSummaryResponse
+         * @description Schema for approved Wasm module summaries returned to workflow studio.
+         */
+        WasmModuleSummaryResponse: {
+            /** Description */
+            description?: string | null;
+            /** Name */
+            name: string;
+            /** Sha256 */
+            sha256: string;
+            /** Target Latency Budget */
+            target_latency_budget?: string | null;
+        };
+        /**
          * WasmModuleUploadRequest
          * @description Payload to upload and validate a WebAssembly module.
          */
@@ -11104,6 +13249,17 @@ export interface components {
              * @description Base64-encoded WebAssembly binary (max 1 MiB binary)
              */
             wasm_base64: string;
+        };
+        /**
+         * WebauthnRegisterOptionsRequest
+         * @description Payload for requesting WebAuthn registration options.
+         */
+        WebauthnRegisterOptionsRequest: {
+            /**
+             * Authenticator Attachment
+             * @description Optional attachment modality hint ('platform' or 'cross-platform')
+             */
+            authenticator_attachment?: ("platform" | "cross-platform") | null;
         };
         /**
          * WebauthnRenameRequest
@@ -11290,6 +13446,30 @@ export interface components {
             [key: string]: unknown;
         };
         /**
+         * WorkflowHookSummary
+         * @description Summary of a workflow transition hook referencing a state.
+         */
+        WorkflowHookSummary: {
+            /** From State Id */
+            from_state_id?: string | null;
+            /** Hook Kind */
+            hook_kind: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Is Enabled */
+            is_enabled: boolean;
+            /** Name */
+            name: string;
+            /**
+             * To State Id
+             * Format: uuid
+             */
+            to_state_id: string;
+        };
+        /**
          * WorkflowHookUpdateRequest
          * @description Payload for updating an existing workflow hook.
          */
@@ -11332,6 +13512,30 @@ export interface components {
             slug: string;
         };
         /**
+         * WorkspaceRoleBindingRequest
+         * @description Schema for workspace-scoped role binding accepting both role and role_name.
+         */
+        WorkspaceRoleBindingRequest: {
+            /**
+             * Principal Id
+             * Format: uuid
+             * @description Target principal UUID receiving the role assignment
+             */
+            principal_id: string;
+            /** Role */
+            role?: string | null;
+            /** Role Name */
+            role_name?: string | null;
+            /** Scope Id */
+            scope_id?: string | null;
+            /**
+             * Scope Type
+             * @default workspace
+             * @enum {string}
+             */
+            scope_type: "server" | "workspace" | "project";
+        };
+        /**
          * WorkspaceSettingsResponse
          * @description Schema representing current workspace settings.
          */
@@ -11343,14 +13547,29 @@ export interface components {
              * @enum {string}
              */
             default_project_visibility: "private" | "workspace";
+            /**
+             * Default Skip Loaded Sequence Numbers
+             * @default false
+             */
+            default_skip_loaded_sequence_numbers: boolean;
             /** Display Name */
             display_name: string;
             /** Mcp Key Max Ttl Days */
             mcp_key_max_ttl_days: number;
+            /**
+             * Name
+             * @default Workspace
+             */
+            name: string;
             /** Session Absolute Timeout Min */
             session_absolute_timeout_min: number;
             /** Session Idle Timeout Min */
             session_idle_timeout_min: number;
+            /**
+             * Slug
+             * @default default
+             */
+            slug: string;
             /** Trash Retention Days */
             trash_retention_days: number;
             /**
@@ -11373,14 +13592,20 @@ export interface components {
             air_gap_mode?: boolean | null;
             /** Default Project Visibility */
             default_project_visibility?: ("private" | "workspace") | null;
+            /** Default Skip Loaded Sequence Numbers */
+            default_skip_loaded_sequence_numbers?: boolean | null;
             /** Display Name */
             display_name?: string | null;
             /** Mcp Key Max Ttl Days */
             mcp_key_max_ttl_days?: number | null;
+            /** Name */
+            name?: string | null;
             /** Session Absolute Timeout Min */
             session_absolute_timeout_min?: number | null;
             /** Session Idle Timeout Min */
             session_idle_timeout_min?: number | null;
+            /** Slug */
+            slug?: string | null;
             /** Trash Retention Days */
             trash_retention_days?: number | null;
         };
@@ -11444,6 +13669,15 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -11477,6 +13711,15 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -11514,6 +13757,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -11545,6 +13797,15 @@ export interface operations {
                     "application/json": components["schemas"]["AccessManifest"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -11574,6 +13835,15 @@ export interface operations {
                     "application/json": components["schemas"]["AgentDefinitionResponse"][];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     admin_create_agent_definition_api_v1_admin_agent_definitions_post: {
@@ -11596,6 +13866,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentDefinitionResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -11629,6 +13908,15 @@ export interface operations {
                     "application/json": components["schemas"]["AgentDefinitionResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -11657,6 +13945,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -11693,6 +13990,95 @@ export interface operations {
                     "application/json": components["schemas"]["AgentDefinitionResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_agent_definition_slash: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentValidationResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    validate_agent_definition_colon: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                agent: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AgentValidationResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -11723,6 +14109,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RemoteRunnerResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -11758,6 +14153,15 @@ export interface operations {
                     "application/json": components["schemas"]["EnrollmentTokenResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -11791,6 +14195,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -11820,6 +14233,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BudgetRecord"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -11855,6 +14277,15 @@ export interface operations {
                     "application/json": components["schemas"]["BudgetRecord"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -11884,6 +14315,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderConfigPublic"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -11919,6 +14359,141 @@ export interface operations {
                     "application/json": components["schemas"]["ProviderConfigPublic"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    reorder_providers_api_v1_admin_ai_providers_order_put: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderReorderRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderConfigPublic"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    probe_provider_models_api_v1_admin_ai_providers_probe_models_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderProbeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderProbeResult"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_provider_connection_api_v1_admin_ai_providers_test_connection_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProviderProbeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderProbeResult"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -11948,6 +14523,53 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProviderConfigPublic"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_provider_api_v1_admin_ai_providers__provider_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -11985,6 +14607,103 @@ export interface operations {
                     "application/json": components["schemas"]["ProviderConfigPublic"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    probe_saved_provider_models_api_v1_admin_ai_providers__provider_id__probe_models_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SavedProviderProbeRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderProbeResult"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    check_saved_provider_connection_api_v1_admin_ai_providers__provider_id__test_connection_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                provider_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["SavedProviderProbeRequest"] | null;
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProviderProbeResult"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -12016,6 +14735,15 @@ export interface operations {
                     "application/json": components["schemas"]["ProviderConfigPublic"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -12045,6 +14773,15 @@ export interface operations {
                     "application/json": components["schemas"]["AuthCardAdminListResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     create_admin_card_api_v1_admin_auth_cards_post: {
@@ -12067,6 +14804,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthCardAdmin"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -12102,6 +14848,57 @@ export interface operations {
                     "application/json": components["schemas"]["GoogleOAuthJsonPreviewResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_draft_card_handshake_api_v1_admin_auth_cards_test_handshake_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AuthCardCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HandshakeProbeResult"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -12133,6 +14930,15 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -12162,6 +14968,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthCardAdmin"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -12196,6 +15011,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -12232,6 +15056,15 @@ export interface operations {
                     "application/json": components["schemas"]["AuthCardAdmin"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -12263,6 +15096,15 @@ export interface operations {
                     "application/json": components["schemas"]["AuthCardAdmin"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -12292,6 +15134,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AuthCardAdmin"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -12329,6 +15180,15 @@ export interface operations {
                     "application/json": components["schemas"]["AuthCardAdmin"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -12358,6 +15218,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HandshakeProbeResult"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -12393,6 +15262,24 @@ export interface operations {
                     "application/json": components["schemas"]["DestructiveExecuteOut"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -12426,6 +15313,24 @@ export interface operations {
                     "application/json": components["schemas"]["DestructiveRequestOut"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -12457,6 +15362,66 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DestructiveRestoreOut"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_group_members_endpoint_api_v1_admin_groups__group_id__members_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                group_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -12493,6 +15458,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -12527,6 +15501,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -12558,6 +15541,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ImportDiffReport"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -12594,6 +15586,15 @@ export interface operations {
                     "application/json": components["schemas"]["McpApiKeyResponse"][];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -12627,6 +15628,15 @@ export interface operations {
                     "application/json": components["schemas"]["McpApiKeyMintResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -12655,6 +15665,124 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_list_oauth_clients_api_v1_admin_oauth_clients_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    admin_register_oauth_client_api_v1_admin_oauth_clients_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminOAuthClientCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    admin_delete_oauth_client_api_v1_admin_oauth_clients__client_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                client_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -12691,6 +15819,15 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -12719,6 +15856,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -12758,6 +15904,15 @@ export interface operations {
                     "application/json": components["schemas"]["LinkAuditListResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -12787,6 +15942,15 @@ export interface operations {
                     "application/json": components["schemas"]["LinkAuditScanResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     post_purge_object_links_api_v1_admin_object_links_purge_post: {
@@ -12809,6 +15973,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LinkPurgeResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -12846,6 +16019,15 @@ export interface operations {
                     }[];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -12881,6 +16063,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -12912,6 +16103,15 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -12951,6 +16151,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -12988,6 +16197,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -13019,6 +16237,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BlueprintApplyResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -13054,6 +16281,15 @@ export interface operations {
                     "application/json": components["schemas"]["BlueprintPlanResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -13083,6 +16319,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectBlueprint"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -13120,6 +16365,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -13155,6 +16409,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -13187,6 +16450,15 @@ export interface operations {
                 content: {
                     "application/json": unknown;
                     "application/octet-stream": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description AAL2 or SERVER_ADMIN required */
@@ -13230,6 +16502,15 @@ export interface operations {
                     "application/json": components["schemas"]["BackupScheduleResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     update_backup_schedule_endpoint_api_v1_admin_standalone_backup_schedule_put: {
@@ -13252,6 +16533,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BackupScheduleResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -13285,6 +16575,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     list_backups_endpoint_api_v1_admin_standalone_backups_get: {
@@ -13303,6 +16602,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BackupFileItem"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -13327,6 +16635,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     download_backup_file_endpoint_api_v1_admin_standalone_backups__filename__get: {
@@ -13347,6 +16664,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -13378,6 +16704,15 @@ export interface operations {
                     "application/json": components["schemas"]["ComposeExportResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     restore_backup_endpoint_api_v1_admin_standalone_restore_post: {
@@ -13400,6 +16735,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     get_admin_standalone_status_endpoint_api_v1_admin_standalone_status_get: {
@@ -13420,6 +16764,124 @@ export interface operations {
                     "application/json": components["schemas"]["SystemStatusResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    api_admin_list_trash_api_v1_admin_trash_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by kind: all, project, issue, doc, page, sticky, cycle, module */
+                kind?: string;
+                /** @description Filter by project ID */
+                project_id?: string | null;
+                /** @description Search term for title or key */
+                q?: string | null;
+                /** @description Page size limit (1-500) */
+                limit?: number;
+                /** @description Page offset */
+                offset?: number;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrashedObjectList"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    api_admin_restore_by_id_api_v1_admin_trash__target_id__restore_post: {
+        parameters: {
+            query?: {
+                reason?: string;
+            };
+            header?: never;
+            path: {
+                target_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["DestructiveRestoreOut"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
         };
     };
     get_workspace_settings_api_v1_admin_workspace_settings_get: {
@@ -13438,6 +16900,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkspaceSettingsResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -13462,6 +16933,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkspaceSettingsResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -13495,6 +16975,15 @@ export interface operations {
                     "application/json": components["schemas"]["AgentDefinitionResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -13523,6 +17012,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -13559,6 +17057,15 @@ export interface operations {
                     "application/json": components["schemas"]["AgentDefinitionResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -13592,6 +17099,15 @@ export interface operations {
                     "application/json": components["schemas"]["EnrollRunnerResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -13599,6 +17115,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_attachment_direct_api_v1_attachments__attachment_id__get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -13630,6 +17195,15 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -13637,6 +17211,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -13661,6 +17244,15 @@ export interface operations {
                     "application/json": components["schemas"]["SignedUrlResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -13668,6 +17260,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -13732,7 +17333,6 @@ export interface operations {
             query?: {
                 next?: string | null;
                 return_to?: string | null;
-                link_intent_id?: string | null;
                 remember_me?: boolean;
             };
             header?: never;
@@ -13781,6 +17381,15 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     link_ldap_identity_api_v1_auth_identities_link_ldap_post: {
@@ -13803,6 +17412,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -13838,6 +17456,15 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -13867,6 +17494,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -13946,6 +17582,15 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     logout_api_v1_auth_logout_post: {
@@ -13966,6 +17611,15 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     list_personal_keys_api_v1_auth_mcp_keys_get: {
@@ -13984,6 +17638,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PersonalMcpKeyListResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -14008,6 +17671,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PersonalMcpKeyMintResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -14039,6 +17711,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -14068,6 +17749,15 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     update_profile_api_v1_auth_me_patch: {
@@ -14090,6 +17780,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -14121,6 +17820,15 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     delete_avatar_api_v1_auth_me_avatar_delete: {
@@ -14139,6 +17847,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -14163,6 +17880,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -14194,6 +17920,24 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     get_mfa_status_api_v1_auth_mfa_status_get: {
@@ -14214,6 +17958,24 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     delete_totp_api_v1_auth_mfa_totp_delete: {
@@ -14232,6 +17994,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -14258,6 +18038,15 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -14265,6 +18054,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -14285,6 +18083,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -14311,6 +18127,15 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -14318,6 +18143,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -14340,6 +18174,15 @@ export interface operations {
                     "application/json": components["schemas"]["OAuthGrantResponse"][];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     revoke_user_oauth_grant_api_v1_auth_oauth_grants__grant_id__delete: {
@@ -14360,6 +18203,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -14378,7 +18230,6 @@ export interface operations {
                 state?: string | null;
                 error?: string | null;
                 error_description?: string | null;
-                link_intent_id?: string | null;
             };
             header?: never;
             path: {
@@ -14412,7 +18263,6 @@ export interface operations {
         parameters: {
             query?: {
                 return_to?: string | null;
-                link_intent_id?: string | null;
                 remember_me?: boolean;
             };
             header?: never;
@@ -14481,6 +18331,15 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     authenticate_verify_api_v1_auth_webauthn_authenticate_verify_post: {
@@ -14501,6 +18360,15 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     list_credentials_api_v1_auth_webauthn_credentials_get: {
@@ -14519,6 +18387,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -14543,6 +18429,15 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -14550,6 +18445,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -14578,6 +18482,15 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -14585,6 +18498,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -14596,7 +18518,11 @@ export interface operations {
             path?: never;
             cookie?: never;
         };
-        requestBody?: never;
+        requestBody?: {
+            content: {
+                "application/json": components["schemas"]["WebauthnRegisterOptionsRequest"] | null;
+            };
+        };
         responses: {
             /** @description Successful Response */
             200: {
@@ -14605,6 +18531,33 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -14627,6 +18580,24 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     delete_comment_api_v1_comments__comment_id__delete: {
@@ -14646,6 +18617,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -14684,6 +18664,24 @@ export interface operations {
                     "application/json": components["schemas"]["CommentResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -14716,6 +18714,15 @@ export interface operations {
                     "application/json": components["schemas"]["ReactionSummary"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -14745,6 +18752,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -14779,6 +18795,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CustomFieldApprovalResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -14816,6 +18841,15 @@ export interface operations {
                     "application/json": components["schemas"]["CustomFieldApprovalResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -14845,6 +18879,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CustomFieldApprovalResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -14878,6 +18921,15 @@ export interface operations {
                     "application/json": components["schemas"]["CycleResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -14906,6 +18958,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -14942,6 +19003,15 @@ export interface operations {
                     "application/json": components["schemas"]["CycleResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -14973,6 +19043,15 @@ export interface operations {
                     "application/json": components["schemas"]["CycleResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -15002,6 +19081,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BurndownResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -15039,6 +19127,15 @@ export interface operations {
                     "application/json": components["schemas"]["CycleCompleteResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -15073,6 +19170,15 @@ export interface operations {
                     };
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -15102,6 +19208,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -15138,6 +19253,15 @@ export interface operations {
                     "application/json": components["schemas"]["CycleRolloverResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -15169,6 +19293,15 @@ export interface operations {
                     "application/json": components["schemas"]["CycleResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -15198,6 +19331,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DocSummaryResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -15233,6 +19375,15 @@ export interface operations {
                     "application/json": components["schemas"]["DocResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -15266,6 +19417,15 @@ export interface operations {
                     "application/json": components["schemas"]["DocResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -15297,6 +19457,15 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -15336,6 +19505,24 @@ export interface operations {
                     "application/json": components["schemas"]["DocResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -15371,6 +19558,15 @@ export interface operations {
                     "application/json": components["schemas"]["PageResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -15400,6 +19596,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PageTreeNode"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -15457,6 +19662,15 @@ export interface operations {
                     "application/json": components["schemas"]["MintEphemeralTokenResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -15486,6 +19700,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RevokeEphemeralTokenResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -15519,6 +19742,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["McpIntrospectResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -15555,6 +19787,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IssueResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -15594,6 +19835,24 @@ export interface operations {
                     "application/json": components["schemas"]["IssueResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -15629,6 +19888,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -15668,6 +19945,24 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -15697,6 +19992,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CustomFieldValueItem"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -15731,6 +20035,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CustomFieldValueItem"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -15768,6 +20081,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -15816,6 +20147,24 @@ export interface operations {
                     "application/json": components["schemas"]["PendingGateResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -15849,6 +20198,24 @@ export interface operations {
                     "application/json": components["schemas"]["IssueDeleteResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -15857,6 +20224,13 @@ export interface operations {
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
+            };
+            /** @description Precondition Required: Kb-Blast-Hash header is required. Directs callers to GET /api/v1/issues/{id}/delete-preview to obtain blast_hash (confirm_blast_hash). */
+            428: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
             };
         };
     };
@@ -15891,6 +20265,15 @@ export interface operations {
                     "application/json": components["schemas"]["ActivityFeedResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -15920,6 +20303,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IssueResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -15957,6 +20349,15 @@ export interface operations {
                     "application/json": components["schemas"]["PrincipalAssigneeResponse"] | components["schemas"]["FreeTextAssigneeResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -15986,6 +20387,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -16019,6 +20429,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CommentList"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -16056,6 +20475,15 @@ export interface operations {
                     "application/json": components["schemas"]["CommentResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -16089,6 +20517,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IssueCopyResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -16126,6 +20563,15 @@ export interface operations {
                     "application/json": components["schemas"]["IssueResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -16155,6 +20601,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["BlastRadiusResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -16192,6 +20656,15 @@ export interface operations {
                     "application/json": components["schemas"]["IssueModulesUpdate"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -16227,6 +20700,15 @@ export interface operations {
                     "application/json": components["schemas"]["IssueMoveResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -16258,6 +20740,15 @@ export interface operations {
                     "application/json": components["schemas"]["IssueResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -16287,6 +20778,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SubscriptionResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -16324,6 +20824,15 @@ export interface operations {
                     "application/json": components["schemas"]["SubscriptionResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -16352,6 +20861,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -16386,6 +20904,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SubscriptionResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -16423,6 +20950,57 @@ export interface operations {
                     "application/json": components["schemas"]["IssueResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_link_direct_api_v1_links_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["DirectLinkCreateRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["OutboundLinkOut"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -16451,6 +21029,142 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_unified_mcp_keys_api_v1_mcp_keys_get: {
+        parameters: {
+            query?: {
+                /** @description View mode: mine (personal keys) or governance (scoped keys) */
+                view?: "mine" | "governance";
+                /** @description Filter by scope tier (project, workspace, server, or global) */
+                scope_tier?: string | null;
+                /** @description Filter by target project key or UUID */
+                project_ref?: string | null;
+                /** @description Filter by surface (agent, docs, admin) */
+                surface?: string | null;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnifiedMcpApiKeyResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    mint_unified_mcp_key_api_v1_mcp_keys_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UnifiedMcpKeyMintRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["UnifiedMcpKeyMintResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_unified_mcp_key_api_v1_mcp_keys__key_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                key_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -16486,6 +21200,15 @@ export interface operations {
                     "application/json": unknown;
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -16493,6 +21216,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -16515,6 +21247,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ModuleResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -16545,6 +21286,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -16581,6 +21331,15 @@ export interface operations {
                     "application/json": components["schemas"]["ModuleResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -16611,6 +21370,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -16640,6 +21408,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -16677,6 +21454,15 @@ export interface operations {
                     "application/json": components["schemas"]["NotificationListResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -16706,6 +21492,15 @@ export interface operations {
                     "application/json": components["schemas"]["MarkAllReadResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     mark_notification_read_api_v1_notifications__notification_id__read_post: {
@@ -16725,6 +21520,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -16768,6 +21572,15 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     get_device_info_api_v1_oauth_device_info_get: {
@@ -16800,6 +21613,15 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     get_object_access_manifest_api_v1_objects__object_id__access_get: {
@@ -16820,6 +21642,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AccessManifest"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -16853,6 +21684,150 @@ export interface operations {
                     "application/json": components["schemas"]["AccessManifest"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    grant_object_acl_entry_api_v1_objects__object_id__access_entries_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                object_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ObjectAclGrantRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessManifest"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    revoke_object_acl_entry_api_v1_objects__object_id__access_entries_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                object_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ObjectAclRevokeRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AccessManifest"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_object_acl_principals_api_v1_objects__object_id__access_principals_get: {
+        parameters: {
+            query?: {
+                /** @description Search filter substring */
+                q?: string;
+                type?: string | null;
+                limit?: number;
+            };
+            header?: never;
+            path: {
+                object_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    }[];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -16884,6 +21859,15 @@ export interface operations {
                     "application/json": components["schemas"]["CanonicalUrlResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -16913,6 +21897,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LinksListResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -16950,6 +21943,15 @@ export interface operations {
                     "application/json": components["schemas"]["OutboundLinkOut"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -16983,6 +21985,15 @@ export interface operations {
                     "application/json": components["schemas"]["PageResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -17014,6 +22025,15 @@ export interface operations {
                     "application/json": {
                         [key: string]: string;
                     };
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -17053,6 +22073,24 @@ export interface operations {
                     "application/json": components["schemas"]["PageResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -17086,6 +22124,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PageResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -17122,6 +22169,15 @@ export interface operations {
                     "application/json": components["schemas"]["PageVersionResponse"][];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -17152,6 +22208,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PageVersionResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -17188,6 +22262,24 @@ export interface operations {
                     "application/json": components["schemas"]["PageResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -17218,6 +22310,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectList"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -17253,6 +22354,15 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -17282,6 +22392,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -17317,6 +22436,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ProjectResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -17361,6 +22489,15 @@ export interface operations {
                     "application/json": components["schemas"]["ActivityFeedResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -17374,9 +22511,9 @@ export interface operations {
     };
     get_assignee_suggestions_api_v1_projects__project_ref__assignee_suggestions_get: {
         parameters: {
-            query: {
-                /** @description Case-insensitive prefix query (1..64 chars) */
-                q: string;
+            query?: {
+                /** @description Case-insensitive prefix query (0..64 chars) */
+                q?: string;
                 /** @description Max suggestions to return (1..20) */
                 limit?: number;
             };
@@ -17395,6 +22532,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AssigneeSuggestionsResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -17428,6 +22574,15 @@ export interface operations {
                     "application/json": components["schemas"]["AttachmentResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -17435,6 +22590,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -17460,6 +22624,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CycleResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -17497,6 +22670,59 @@ export interface operations {
                     "application/json": components["schemas"]["CycleResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    create_project_page_api_v1_projects__project_ref__docs_pages_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["PageCreate"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PageResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -17526,6 +22752,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PageTreeNode"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -17561,6 +22796,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IssueTreeResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -17599,6 +22843,15 @@ export interface operations {
                     "application/json": components["schemas"]["IssueList"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -17632,6 +22885,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["IssueResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -17669,6 +22931,15 @@ export interface operations {
                     "application/json": components["schemas"]["ViewQueryResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -17698,6 +22969,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["LabelResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -17735,6 +23015,15 @@ export interface operations {
                     "application/json": components["schemas"]["LabelResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -17748,7 +23037,9 @@ export interface operations {
     };
     delete_label_api_v1_projects__project_ref__labels__label_id__delete: {
         parameters: {
-            query?: never;
+            query?: {
+                replacement_label_id?: string | null;
+            };
             header?: never;
             path: {
                 project_ref: string;
@@ -17764,6 +23055,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -17801,6 +23101,179 @@ export interface operations {
                     "application/json": components["schemas"]["LabelResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_label_audit_impact_api_v1_projects__project_ref__labels__label_id__audit_impact_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_ref: string;
+                label_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["LabelAuditImpactResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_project_members_api_v1_projects__project_ref__members_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectMemberResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    add_project_member_api_v1_projects__project_ref__members_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["ProjectMemberAdd"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            201: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectMemberResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    delete_project_member_api_v1_projects__project_ref__members__principal_id__delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_ref: string;
+                principal_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            204: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -17836,6 +23309,15 @@ export interface operations {
                     "application/json": components["schemas"]["ProjectResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -17865,6 +23347,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ModuleResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -17902,6 +23393,15 @@ export interface operations {
                     "application/json": components["schemas"]["ModuleResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -17931,6 +23431,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["PriorityResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -17968,6 +23477,15 @@ export interface operations {
                     "application/json": components["schemas"]["PriorityResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -17999,6 +23517,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -18036,6 +23563,15 @@ export interface operations {
                     "application/json": components["schemas"]["PriorityResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -18065,6 +23601,24 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StateResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -18102,6 +23656,24 @@ export interface operations {
                     "application/json": components["schemas"]["StateResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -18116,7 +23688,9 @@ export interface operations {
     delete_state_api_v1_projects__project_ref__states__state_id__delete: {
         parameters: {
             query?: {
+                replacement_state_id?: string | null;
                 migrate_to?: string | null;
+                migrate_hooks?: boolean;
             };
             header?: never;
             path: {
@@ -18133,6 +23707,24 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -18170,6 +23762,74 @@ export interface operations {
                     "application/json": components["schemas"]["StateResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_state_audit_impact_api_v1_projects__project_ref__states__state_id__audit_impact_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project_ref: string;
+                state_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StateAuditImpactResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -18201,6 +23861,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StickyResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -18238,6 +23907,15 @@ export interface operations {
                     "application/json": components["schemas"]["StickyResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -18272,6 +23950,76 @@ export interface operations {
                     "application/json": components["schemas"]["TrashedIssueList"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_trash_items_api_v1_projects__project_ref__trash_items_get: {
+        parameters: {
+            query?: {
+                /** @description Filter by kind: issue, cycle, module, sticky, doc, project, all */
+                kind?: string | null;
+            };
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["TrashedObjectList"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -18301,6 +24049,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ViewList"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -18338,6 +24095,55 @@ export interface operations {
                     "application/json": components["schemas"]["ViewResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    list_approved_wasm_modules_api_v1_projects__project__approved_wasm_modules_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WasmModuleSummaryResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -18367,6 +24173,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["CustomFieldResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -18404,6 +24219,59 @@ export interface operations {
                     "application/json": components["schemas"]["CustomFieldResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    test_execute_custom_field_api_v1_projects__project__custom_fields_test_execute_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                project: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["CustomFieldTestExecuteRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["CustomFieldTestExecuteResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -18433,6 +24301,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -18470,6 +24347,15 @@ export interface operations {
                     "application/json": components["schemas"]["CustomFieldResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -18499,6 +24385,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RepoBindingResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -18536,6 +24431,15 @@ export interface operations {
                     "application/json": components["schemas"]["RepoBindingResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -18571,6 +24475,15 @@ export interface operations {
                     "application/json": components["schemas"]["WasmModuleResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -18600,6 +24513,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["TransitionRule"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -18637,6 +24559,15 @@ export interface operations {
                     "application/json": components["schemas"]["WorkflowHookResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -18670,6 +24601,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["DryRunResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -18707,6 +24647,15 @@ export interface operations {
                     "application/json": components["schemas"]["WorkflowHookResponse"][];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -18735,6 +24684,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -18765,6 +24723,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RepoBindingResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -18805,6 +24772,15 @@ export interface operations {
                     "application/json": components["schemas"]["ResolvedRefResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -18829,6 +24805,8 @@ export interface operations {
                 limit?: number;
                 /** @description Opaque HMAC-signed keyset pagination cursor */
                 cursor?: string | null;
+                /** @description Search mode: lexical or hybrid */
+                mode?: "lexical" | "hybrid";
             };
             header?: never;
             path?: never;
@@ -18843,6 +24821,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SearchResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -18878,6 +24865,15 @@ export interface operations {
                     "application/json": components["schemas"]["IssueSearchResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -18909,6 +24905,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["KnowledgeSearchResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -18953,6 +24958,15 @@ export interface operations {
                     "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     get_setup_status_api_v1_setup_status_get: {
@@ -18971,6 +24985,49 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["SetupStatusResponse"];
+                };
+            };
+        };
+    };
+    complete_sparkle_api_v1_sparkle_complete_post: {
+        parameters: {
+            query?: never;
+            header?: {
+                "X-CSRF-Token"?: string | null;
+            };
+            path?: never;
+            cookie?: {
+                "__Host-kb_csrf"?: string | null;
+                kb_csrf?: string | null;
+            };
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
                 };
             };
         };
@@ -18994,6 +25051,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StickyList"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -19036,6 +25102,15 @@ export interface operations {
                 };
                 content?: never;
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -19067,6 +25142,15 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -19106,6 +25190,64 @@ export interface operations {
                     "application/json": components["schemas"]["StickyResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    preview_sticky_promotion_api_v1_stickies__sticky_id__preview_promotion_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                sticky_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["StickyPromotePreviewResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -19135,6 +25277,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StickyPromotePreviewResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -19172,6 +25323,15 @@ export interface operations {
                     "application/json": components["schemas"]["StickyResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -19201,6 +25361,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["StickyResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -19234,6 +25403,96 @@ export interface operations {
                     "application/json": components["schemas"]["StickyResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_system_about_endpoint_api_v1_system_about_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["SystemAboutResponse"];
+                };
+            };
+        };
+    };
+    get_platform_summary_endpoint_api_v1_system_platform_summary_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["PlatformSummaryResponse"];
+                };
+            };
+        };
+    };
+    get_system_sbom_endpoint_api_v1_system_sbom_get: {
+        parameters: {
+            query?: {
+                /** @description Trigger file download attachment header */
+                download?: boolean;
+            };
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -19263,6 +25522,15 @@ export interface operations {
                     "application/json": components["schemas"]["SystemStatusResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     cancel_transition_api_v1_transitions__execution_id__delete: {
@@ -19285,6 +25553,24 @@ export interface operations {
                     "application/json": components["schemas"]["CancelTransitionResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Precondition Failed - ETag, If-Match, or blast hash mismatch */
+            412: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -19298,7 +25584,9 @@ export interface operations {
     };
     get_user_avatar_api_v1_users__principal_id__avatar_get: {
         parameters: {
-            query?: never;
+            query?: {
+                v?: string | null;
+            };
             header?: never;
             path: {
                 principal_id: string;
@@ -19314,6 +25602,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -19347,6 +25644,15 @@ export interface operations {
                     "application/json": components["schemas"]["ViewResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -19375,6 +25681,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -19411,6 +25726,15 @@ export interface operations {
                     "application/json": components["schemas"]["ViewResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -19443,6 +25767,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ViewQueryResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -19479,6 +25812,15 @@ export interface operations {
                     "application/json": components["schemas"]["ViewQueryResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -19513,6 +25855,15 @@ export interface operations {
                     "application/json": components["schemas"]["ViewQueryResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -19541,6 +25892,15 @@ export interface operations {
                     [name: string]: unknown;
                 };
                 content?: never;
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
             };
             /** @description Validation Error */
             422: {
@@ -19577,6 +25937,15 @@ export interface operations {
                     "application/json": components["schemas"]["WorkflowHookResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -19606,6 +25975,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkflowHookResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -19639,6 +26017,15 @@ export interface operations {
                     "application/json": components["schemas"]["WorkflowHookResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -19668,6 +26055,15 @@ export interface operations {
                     "application/json": components["schemas"]["WorkspaceResponse"][];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
         };
     };
     create_workspace_endpoint_api_v1_workspaces_post: {
@@ -19690,6 +26086,151 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["WorkspaceResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    update_workspace_endpoint_api_v1_workspaces__workspace_id__patch: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["UpdateWorkspaceRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["WorkspaceResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    bind_workspace_role_endpoint_api_v1_workspaces__workspace_id__role_bindings_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspaceRoleBindingRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    unbind_workspace_role_endpoint_api_v1_workspaces__workspace_id__role_bindings_delete: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                workspace_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["WorkspaceRoleBindingRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": {
+                        [key: string]: unknown;
+                    };
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -19723,6 +26264,15 @@ export interface operations {
                     "application/json": components["schemas"]["SwitchWorkspaceResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -19752,6 +26302,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["AgentDefinitionResponse"][];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -19789,6 +26348,15 @@ export interface operations {
                     "application/json": components["schemas"]["AgentDefinitionResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -19822,6 +26390,15 @@ export interface operations {
                     "application/json": components["schemas"]["MintEphemeralTokenResponse"];
                 };
             };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
             /** @description Validation Error */
             422: {
                 headers: {
@@ -19851,6 +26428,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["RevokeEphemeralTokenResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -19884,6 +26470,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["McpIntrospectResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
             /** @description Validation Error */
@@ -20024,6 +26619,15 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
