@@ -521,13 +521,15 @@ class PlaneImporter:
 
                 if c_status == "active":
                     active_check = await self.session.execute(
-                        text("SELECT 1 FROM cycles WHERE project_id = :proj AND status = 'active' LIMIT 1"),
+                        text(
+                            "SELECT 1 FROM cycles WHERE project_id = :proj AND status = 'active' LIMIT 1"
+                        ),
                         {"proj": c_proj},
                     )
                     if active_check.scalar_one_or_none():
                         c_status = (
                             "upcoming"
-                            if (s_date and s_date > date.today())
+                            if (s_date and s_date > datetime.datetime.now(tz=datetime.UTC).date())
                             else "completed"
                         )
 
@@ -933,11 +935,7 @@ class PlaneImporter:
                 iss_archived_at = _parse_iso_datetime(getattr(issue, "archived_at", None))
                 if iss_archived_at:
                     await self.session.execute(
-                        text(
-                            "UPDATE objects SET "
-                            "archived_at = :archived_at "
-                            "WHERE id = :id"
-                        ),
+                        text("UPDATE objects SET archived_at = :archived_at WHERE id = :id"),
                         {
                             "id": issue_id,
                             "archived_at": iss_archived_at,

@@ -91,14 +91,15 @@ def decode_pdf_name(name_bytes: bytes) -> bytes:
 
 
 def _unescape_pdf_literal_string(s: bytes) -> bytes:
-    """Unescape PDF literal string escape sequences (octal \\ddd, \\n, \\r, \\t, etc.)."""
+    r"""Unescape PDF literal string escape sequences (octal \ddd, \n, \r, \t, etc.)."""
+
     def repl(m: re.Match[bytes]) -> bytes:
         seq = m.group(0)
         tail = seq[1:]
         if tail.isdigit():
             try:
                 return bytes([int(tail, 8)])
-            except Exception:
+            except (ValueError, OverflowError):
                 return seq
         escape_map = {
             b"n": b"\n",
@@ -122,7 +123,7 @@ def check_uri_destination(uri_payload: bytes) -> None:
         hex_str = trimmed[1:-1].strip()
         try:
             url_bytes = bytes.fromhex(hex_str.decode("ascii"))
-        except Exception as exc:
+        except (UnicodeDecodeError, ValueError) as exc:
             raise ProblemException(
                 code="UNSAFE_PDF_CONTENT",
                 status=422,
@@ -138,11 +139,7 @@ def check_uri_destination(uri_payload: bytes) -> None:
     lower_url = url_str.lower()
 
     # Reject dangerous protocols and non-safe schemes (allow https, mailto, tel)
-    if not (
-        lower_url.startswith("https://")
-        or lower_url.startswith("mailto:")
-        or lower_url.startswith("tel:")
-    ):
+    if not lower_url.startswith(("https://", "mailto:", "tel:")):
         raise ProblemException(
             code="UNSAFE_PDF_CONTENT",
             status=422,
