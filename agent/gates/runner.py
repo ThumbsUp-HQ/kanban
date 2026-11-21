@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import datetime as dt
 import logging
 import uuid
 from typing import TYPE_CHECKING, Any
@@ -53,6 +54,12 @@ class GateWorkerRunner:
             coordinator=self,
             entity_loader=self._load_entities,
         )
+        self._active_invocations: set[uuid.UUID] = set()
+
+    @property
+    def active_invocations(self) -> frozenset[uuid.UUID]:
+        """Active leased invocation IDs currently being processed."""
+        return frozenset(self._active_invocations)
 
     async def record_decision(
         self, execution_id: object, hook_id: object, decision: object
@@ -184,8 +191,8 @@ class GateWorkerRunner:
             }
             return exec_dict, issue_dict, agent_dict, None, None
 
-    async def poll_once(self) -> int:
-        """Poll for pending running gate hook invocations. Returns count handled."""
+    async def poll_once(self) -> int:  # noqa: C901
+        """Poll for pending running gate hook invocations with lease claiming and timeout sweep."""
         if self.session_factory is None:
             return 0
 
@@ -196,18 +203,64 @@ class GateWorkerRunner:
             aal_level=2,
         )
         handled = 0
+        now = dt.datetime.now(dt.UTC)
+
         async with self.session_factory.session(admin_ctx) as session:
-            stmt = (
+            # 1. Sweep expired invocations with SKIP LOCKED
+            sweep_stmt = (
                 select(WorkflowHookInvocation)
                 .where(
-                    WorkflowHookInvocation.status == "running",
+                    WorkflowHookInvocation.status.in_(["running", "pending_async"]),
                     WorkflowHookInvocation.hook_kind == "agent_interceptor",
                 )
+                .with_for_update(skip_locked=True)
                 .order_by(WorkflowHookInvocation.started_at)
-                .limit(10)
+                .limit(50)
             )
-            invs = list((await session.execute(stmt)).scalars().all())
-            for inv in invs:
+            candidates = list((await session.execute(sweep_stmt)).scalars().all())
+            expired_invs: list[WorkflowHookInvocation] = []
+            active_invs: list[WorkflowHookInvocation] = []
+
+            for inv in candidates:
+                deadline = getattr(inv, "deadline_at", None)
+                if deadline is None:
+                    hook = await session.get(WorkflowTransitionHook, inv.hook_id)
+                    agent_def = (
+                        await session.get(AgentDefinition, hook.agent_definition_id)
+                        if hook and hook.agent_definition_id
+                        else None
+                    )
+                    timeout_ms = (
+                        agent_def.timeout_ms if agent_def and agent_def.timeout_ms else 60000
+                    )
+                    if inv.started_at is not None:
+                        deadline = inv.started_at + dt.timedelta(milliseconds=timeout_ms)
+
+                if deadline is not None and deadline < now:
+                    expired_invs.append(inv)
+                elif inv.status == "running":
+                    active_invs.append(inv)
+
+            # Record failure for expired invocations
+            for inv in expired_invs:
+                try:
+                    await GateCoordinator(session).record_failure(
+                        invocation_id=inv.id,
+                        error_code="GATE_TIMEOUT",
+                        detail="Async agent gate exceeded deadline_at",
+                    )
+                    self._active_invocations.discard(inv.id)
+                    handled += 1
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("Error recording gate timeout failure: %s", exc)
+
+            # 2. Dispatch active non-expired invocations with in-memory lease guard
+            for inv in active_invs:
+                if inv.id in self._active_invocations:
+                    # Already claimed and executing; prevent double-dispatch
+                    continue
+
+                self._active_invocations.add(inv.id)
                 event = {
                     "execution_id": str(inv.execution_id),
                     "hook_id": str(inv.hook_id),
@@ -217,6 +270,10 @@ class GateWorkerRunner:
                     handled += 1
                 except Exception as exc:  # noqa: BLE001
                     logger.debug("Error handling gate dispatch: %s", exc)
+                finally:
+                    self._active_invocations.discard(inv.id)
+
+            await session.commit()
         return handled
 
     async def run(self, stop_event: asyncio.Event) -> None:

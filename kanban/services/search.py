@@ -811,6 +811,16 @@ async def _execute_hybrid_search_core(  # noqa: C901, PLR0912, PLR0913, PLR0915,
             object_ids=new_neighbor_ids,
             target_kinds=target_kinds,
         )
+        if project_id is not None:
+            proj_obj = await session.get(Project, project_id)
+            proj_ident = proj_obj.identifier.upper() if proj_obj else None
+            if proj_ident is not None:
+                new_hydrated = {
+                    nid: cand
+                    for nid, cand in new_hydrated.items()
+                    if cand.project_identifier is not None
+                    and cand.project_identifier.upper() == proj_ident
+                }
         hydrated.update(new_hydrated)
 
     # Apply synaptic activation scores and provenance match_reasons
@@ -886,9 +896,11 @@ async def search_unified(  # noqa: PLR0913, PLR0917
     target_kinds = _parse_target_kinds(kinds)
 
     project_id: uuid.UUID | None = None
+    resolved_proj_identifier: str | None = None
     if project_ref:
         proj = await get_project_or_404(session, caller, project_ref)
         project_id = proj.id
+        resolved_proj_identifier = proj.identifier
 
     q_hash = _compute_query_hash(clean_query, target_kinds, project_ref)
     cursor_score: float | None = None
@@ -917,7 +929,15 @@ async def search_unified(  # noqa: PLR0913, PLR0917
             lexical_rows=lex_rows,
         )
         if hybrid_candidates is not None:
-            filtered_cands = hybrid_candidates
+            filtered_cands = [
+                c
+                for c in hybrid_candidates
+                if resolved_proj_identifier is None
+                or (
+                    c.project_identifier is not None
+                    and c.project_identifier.upper() == resolved_proj_identifier.upper()
+                )
+            ]
             if cursor_score is not None and cursor_id is not None:
                 filtered_cands = [
                     c

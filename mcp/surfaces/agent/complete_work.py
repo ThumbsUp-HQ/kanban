@@ -16,6 +16,7 @@ from mcp.surfaces.agent.proof import (
     VERIFICATION_PROOF_SCHEMA,
     VerificationProof,
     validate_proof_ticket_key,
+    validate_reality_checker_report,
 )
 
 if TYPE_CHECKING:
@@ -85,6 +86,11 @@ def _validate_complete_work_arguments(  # noqa: C901, PLR0912
     if summary_bytes < 1 or summary_bytes > _MAX_SUMMARY_BYTES:
         msg = f"Argument 'summary_markdown' must be 1..{_MAX_SUMMARY_BYTES} bytes"
         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+
+    try:
+        validate_reality_checker_report(summary, require_ready=True)
+    except ValueError as err:
+        raise KbMcpError(McpErrorCode.VALIDATION_FAILED, str(err)) from err
 
     if "verification_proof" not in arguments:
         msg = "Missing required argument 'verification_proof'"

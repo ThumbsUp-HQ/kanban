@@ -549,3 +549,49 @@ async def test_service_policy_and_revocations(
         # Individual logout
         s3 = await service.create_after_login(db_sess, principal_id=p_id, workspace_id=ws_id)
         assert await service.logout(db_sess, s3.session_id) is True
+
+
+@pytest.mark.asyncio
+async def test_session_cookie_resolver_bearer_precedence_rejects_dummy_bearer(
+    pg_worker_db: AsyncEngine,
+    key_material: KeyMaterial,
+) -> None:
+    """SessionCookieResolver prioritizes Bearer.
+
+    Invalid Bearer token fails with None (401), with zero cookie fallback.
+    """
+    factory = RLSSessionFactory(pg_worker_db)
+    service = SessionService(key_material.session_hmac_key)
+    resolver = SessionCookieResolver(service, factory)
+
+    ws_id, p_id = await _create_test_principal(factory)
+    ctx = RLSContext(principal_id=p_id, workspace_id=ws_id, aal_level=1)
+    async with factory.session(ctx) as db_sess:
+        issued = await service.create_after_login(db_sess, principal_id=p_id, workspace_id=ws_id)
+        valid_cookie = issued.cookie_val
+
+    # 1. Valid cookie alone resolves successfully
+    req_cookie_only = Request(
+        {
+            "type": "http",
+            "headers": [
+                (b"cookie", f"__Host-kb_session={valid_cookie}".encode("latin1")),
+            ],
+        }
+    )
+    p_ctx = await resolver.resolve(req_cookie_only)
+    assert p_ctx is not None
+    assert p_ctx.principal_id == p_id
+
+    # 2. Valid cookie WITH invalid Bearer header -> must NOT fall back to cookie!
+    req_dummy_bearer = Request(
+        {
+            "type": "http",
+            "headers": [
+                (b"cookie", f"__Host-kb_session={valid_cookie}".encode("latin1")),
+                (b"authorization", b"Bearer dummy_invalid_token_12345"),
+            ],
+        }
+    )
+    p_ctx_dummy = await resolver.resolve(req_dummy_bearer)
+    assert p_ctx_dummy is None  # Rejection: zero CSRF bypass via dummy Bearer header!

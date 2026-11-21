@@ -8,7 +8,7 @@ KB-P5-17a, S14.1, S14.2.
 from __future__ import annotations
 
 import uuid  # noqa: TC003
-from datetime import datetime  # noqa: TC003
+from datetime import datetime
 from typing import Any
 
 from sqlalchemy import (
@@ -189,3 +189,20 @@ class WorkflowHookInvocation(Base):
         server_default=text("clock_timestamp()"),
     )
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    @property
+    def deadline_at(self) -> datetime | None:
+        """Computed or stored deadline timestamp."""
+        if hasattr(self, "_deadline_at") and self._deadline_at is not None:
+            return self._deadline_at
+        if self.output_json and "deadline_at" in self.output_json:
+            val = self.output_json["deadline_at"]
+            if isinstance(val, str):
+                return datetime.fromisoformat(val)
+            if isinstance(val, datetime):
+                return val
+        return None
+
+    @deadline_at.setter
+    def deadline_at(self, value: datetime | None) -> None:
+        self._deadline_at = value

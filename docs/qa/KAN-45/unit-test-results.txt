@@ -1,7 +1,7 @@
 === 1. Gate Hardening & Workflow API Tests (including Bearer CSRF bypass) ===
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan33-45-fix-999f22b1
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
@@ -9,12 +9,12 @@ collected 15 items
 
 kanban/tests/api/test_gate_enforcement_hardening.py ...............      [100%]
 
-============================== 15 passed in 1.42s ==============================
+============================== 15 passed in 1.36s ==============================
 
 === 2. Workflow & Built-in Wasm Validator Tests ===
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan33-45-fix-999f22b1
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
@@ -24,5 +24,84 @@ kanban/tests/workflows/test_qa_proof_validator_wasm.py ......            [ 20%]
 kanban/tests/workflows/test_dry_run.py .......                           [ 44%]
 kanban/tests/workflows/test_workflow_hooks_api.py ................       [100%]
 
-============================== 29 passed in 6.59s ==============================
+============================== 29 passed in 6.50s ==============================
+
+=== 3. Problem 2 Async Gate, Comment Persistence & Fail-Closed GateCoordinator ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 16 items
+
+kanban/tests/workflows/test_async_gate.py ................               [100%]
+
+============================== 16 passed in 4.89s ==============================
+
+=== 4. Problem 1 & 3 Proof Validation & complete_work Enforcement ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 9 items
+
+kanban/tests/issues/test_proof_validation.py .....                       [ 55%]
+kanban/tests/mcp/test_complete_work_enforcement.py ....                  [100%]
+
+============================== 9 passed in 1.47s ===============================
+
+=== 5. Problem 1 & 4 Gate Worker Runner Lease & Timeout Sweep ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 10 items
+
+agent/tests/gates/test_gate_runner.py ..........                         [100%]
+
+============================== 10 passed in 0.72s ==============================
+
+=== 6. Problem 4 Bearer-First Precedence in Session Resolver ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 11 items
+
+kanban/tests/auth/test_sessions.py ...........                           [100%]
+
+=============================== warnings summary ===============================
+kanban/tests/auth/test_sessions.py::test_case_1_positive_login_and_cookie_attributes
+kanban/tests/auth/test_sessions.py::test_case_9_security_logout
+kanban/tests/auth/test_sessions.py::test_case_10_mfa_pending_enforcement
+kanban/tests/auth/test_sessions.py::test_case_10_mfa_pending_enforcement
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587/.venv/lib/python3.12/site-packages/httpx/_client.py:1768: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    return await self.request(
+
+kanban/tests/auth/test_sessions.py::test_case_9_security_logout
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    return await self.request(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 11 passed, 5 warnings in 0.83s ========================
+
+=== 7. Synaptic Search Project Filter Scoping ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 13 items
+
+kanban/tests/services/test_synaptic_search.py .............              [100%]
+
+============================== 13 passed in 1.49s ==============================
 

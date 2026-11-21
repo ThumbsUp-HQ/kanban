@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING
 import pytest
 from sqlalchemy import select, text
 
+from database.models.activity import ActivityRecord
 from database.models.agent_definition import AgentDefinition
 from database.models.issues import Issue, IssueComment
 from database.models.outbox import OutboxEvent
@@ -25,7 +26,7 @@ from database.models.workflow import (
 )
 from kanban.api.deps import PrincipalContext
 from kanban.api.problems import ProblemException
-from kanban.workflows.async_gate import GateCoordinator
+from kanban.workflows.async_gate import GateCoordinator, format_approve_comment
 from kanban.workflows.engine import TransitionEngine
 from kanban.workflows.gate_types import GateDecision, LinkSpec
 from kanban.workflows.manifest import compute_hook_manifest_sha256
@@ -158,7 +159,7 @@ async def _get_states(session: AsyncSession, project_id: uuid.UUID) -> dict[str,
 # ---------------------------------------------------------------------------
 
 
-async def test_case_1_positive_single_agent_hook_202_then_approve(
+async def test_case_1_positive_single_agent_hook_202_then_approve(  # noqa: PLR0915
     api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],
     make_project: Callable[..., Awaitable[uuid.UUID]],
@@ -174,7 +175,7 @@ async def test_case_1_positive_single_agent_hook_202_then_approve(
     in_prog_id = states["In Progress"]
     done_id = states["Done"]
 
-    agent_def, _agent_p = await create_agent_definition(
+    agent_def, agent_p = await create_agent_definition(
         api_env.seed, api_env.workspace_id, proj_id, slug="qa-gate", display_name="QA Gate Bot"
     )
 
@@ -281,6 +282,42 @@ async def test_case_1_positive_single_agent_hook_202_then_approve(
     assert "verdict_json" not in ev.payload
     assert ev.payload["execution_id"] == str(exec_id)
     assert ev.payload["verdict_sha256"] == verdict_sha.hex()
+
+    # Step 7: Verify approval IssueComment persisted
+    comm_stmt = select(IssueComment).where(IssueComment.issue_id == issue_id)
+    comment_row = (await api_env.seed.execute(comm_stmt)).scalar_one()
+    assert "## ✅🤖 Workflow Transition Gate Approved" in comment_row.body_markdown
+    assert "\u2014" not in comment_row.body_markdown
+    assert "\u2013" not in comment_row.body_markdown
+    assert comment_row.author_id == agent_p.id
+
+    # Step 7: Verify COMMENT_CREATED activity record emitted in same transaction
+    act_stmt = select(ActivityRecord).where(
+        ActivityRecord.object_id == issue_id,
+        ActivityRecord.event_type == "COMMENT_CREATED",
+    )
+    act_row = (await api_env.seed.execute(act_stmt)).scalar_one()
+    assert act_row.payload["comment_id"] == str(comment_row.id)
+    assert act_row.actor_id == agent_p.id
+
+
+def test_format_approve_comment_canonical_header_and_no_dashes() -> None:
+    """format_approve_comment produces canonical header and zero em/en-dashes."""
+    comment = format_approve_comment(
+        hook_name="qa_gate",
+        harness_label="cli: agy -p",
+        from_state_name="In Progress",
+        to_state_name="Done",
+        reason_markdown="Verified all test assertions against live container.",
+    )
+    assert comment.startswith("## ✅🤖 Workflow Transition Gate Approved\n\n")
+    assert "- **Hook:** `qa_gate`" in comment
+    assert "- **Harness:** `cli: agy -p`" in comment
+    assert "- **Transition:** `In Progress` -> `Done`" in comment
+    assert "### Reality Check / Gate Rationale" in comment
+    assert "Verified all test assertions against live container." in comment
+    assert "\u2014" not in comment
+    assert "\u2013" not in comment
 
 
 async def test_case_2_positive_two_sequential_agent_hooks_and_reject(

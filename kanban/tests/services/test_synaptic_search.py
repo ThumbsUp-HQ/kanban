@@ -1185,3 +1185,115 @@ async def test_hybrid_search_issues_enforces_filters_and_workspace(
         )
         assert res_other_ws.total == 0
         assert len(res_other_ws.items) == 0
+
+
+async def test_search_unified_filters_synaptic_neighbors_to_project(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+) -> None:
+    """search_unified(..., project='KAN') strictly filters synaptic neighbors to project KAN."""
+    admin = await make_user("syn_proj_admin", workspace_role="WORKSPACE_ADMIN")
+    proj_kan = await make_project("KAN", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+    proj_priv = await make_project("PRIV", created_by=admin, roles={admin: "PROJECT_ADMIN"})
+    ws_id = api_env.workspace_id
+
+    st_kan = (
+        await api_env.seed.execute(
+            text("SELECT id FROM workflow_states WHERE project_id = :p LIMIT 1"), {"p": proj_kan}
+        )
+    ).scalar_one()
+    pri_kan = (
+        await api_env.seed.execute(
+            text("SELECT id FROM project_priorities WHERE project_id = :p LIMIT 1"),
+            {"p": proj_kan},
+        )
+    ).scalar_one()
+
+    st_priv = (
+        await api_env.seed.execute(
+            text("SELECT id FROM workflow_states WHERE project_id = :p LIMIT 1"), {"p": proj_priv}
+        )
+    ).scalar_one()
+    pri_priv = (
+        await api_env.seed.execute(
+            text("SELECT id FROM project_priorities WHERE project_id = :p LIMIT 1"),
+            {"p": proj_priv},
+        )
+    ).scalar_one()
+
+    # Create KAN-1 issue
+    kan_issue_id = await _seed_issue(
+        api_env.seed,
+        ws_id,
+        proj_kan,
+        "KAN",
+        1,
+        "Search Unified Target",
+        "Target issue in project KAN",
+        admin.id,
+        st_kan,
+        pri_kan,
+    )
+
+    # Create PRIV-1 issue
+    priv_issue_id = await _seed_issue(
+        api_env.seed,
+        ws_id,
+        proj_priv,
+        "PRIV",
+        1,
+        "Secret Private Partner",
+        "Partner issue in project PRIV linked via synaptic relation",
+        admin.id,
+        st_priv,
+        pri_priv,
+    )
+
+    # Link KAN-1 -> PRIV-1
+    await _link_objects(
+        api_env.seed,
+        ws_id,
+        kan_issue_id,
+        "issue",
+        priv_issue_id,
+        "issue",
+        "RELATES_TO",
+        admin.id,
+    )
+
+    # Insert vector embedding on KAN-1
+    test_vec = [0.0] * 384
+    test_vec[0] = 1.0
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO object_embeddings (object_id, object_type, chunk_index, "
+            "workspace_id, project_id, content_sha256, model_id, embedding) "
+            "VALUES (:oid, 'issue', 0, :ws, :proj, :sha, 'fixture-bge-small-en-v1.5', :emb)"
+        ),
+        {
+            "oid": kan_issue_id,
+            "ws": ws_id,
+            "proj": proj_kan,
+            "sha": hashlib.sha256(b"KAN-1-EMB").digest(),
+            "emb": str(test_vec),
+        },
+    )
+    await api_env.seed.commit()
+
+    caller = PrincipalContext(principal_id=admin.id, workspace_id=ws_id)
+    with patch("kanban.services.search._get_query_embedding", return_value=test_vec):
+        res = await search_unified(
+            session=api_env.seed,
+            caller=caller,
+            query="Target",
+            mode="hybrid",
+            project_ref="KAN",
+        )
+        assert res.total >= 1
+        # All returned items MUST belong to project KAN
+        for item in res.items:
+            assert item.project_identifier == "KAN"
+            if item.key:
+                assert item.key.startswith("KAN-")
+                assert not item.key.startswith("PRIV-")
