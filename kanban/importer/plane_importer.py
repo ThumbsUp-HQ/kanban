@@ -900,24 +900,17 @@ class PlaneImporter:
                     )
                 ).scalar_one()
 
-                # Preserve objects created_at, updated_at, archived_at timestamps
-                iss_created_at = _parse_iso_datetime(getattr(issue, "created_at", None))
-                iss_updated_at = _parse_iso_datetime(getattr(issue, "updated_at", None))
+                # Preserve objects archived_at timestamp if present
                 iss_archived_at = _parse_iso_datetime(getattr(issue, "archived_at", None))
-
-                if iss_created_at or iss_updated_at or iss_archived_at:
+                if iss_archived_at:
                     await self.session.execute(
                         text(
                             "UPDATE objects SET "
-                            "created_at = COALESCE(:created_at, created_at), "
-                            "updated_at = COALESCE(:updated_at, updated_at), "
                             "archived_at = :archived_at "
                             "WHERE id = :id"
                         ),
                         {
                             "id": issue_id,
-                            "created_at": iss_created_at,
-                            "updated_at": iss_updated_at,
                             "archived_at": iss_archived_at,
                         },
                     )
