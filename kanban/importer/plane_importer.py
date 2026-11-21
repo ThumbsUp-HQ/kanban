@@ -519,6 +519,35 @@ class PlaneImporter:
                     raw_status if raw_status in ("active", "upcoming", "completed") else "upcoming"
                 )
 
+                if c_status == "active":
+                    active_check = await self.session.execute(
+                        text("SELECT 1 FROM cycles WHERE project_id = :proj AND status = 'active' LIMIT 1"),
+                        {"proj": c_proj},
+                    )
+                    if active_check.scalar_one_or_none():
+                        c_status = (
+                            "upcoming"
+                            if (s_date and s_date > date.today())
+                            else "completed"
+                        )
+
+                if s_date and e_date and e_date < s_date:
+                    e_date = s_date
+
+                if s_date and e_date:
+                    overlap_check = await self.session.execute(
+                        text(
+                            "SELECT 1 FROM cycles "
+                            "WHERE project_id = :proj "
+                            "  AND start_date IS NOT NULL AND end_date IS NOT NULL "
+                            "  AND daterange(start_date, end_date, '[]') && daterange(:s, :e, '[]') "
+                            "LIMIT 1"
+                        ),
+                        {"proj": c_proj, "s": s_date, "e": e_date},
+                    )
+                    if overlap_check.scalar_one_or_none():
+                        e_date = None
+
                 new_cycle = Cycle(
                     id=cycle_id,
                     workspace_id=workspace_id,
