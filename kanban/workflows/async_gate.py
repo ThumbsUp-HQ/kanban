@@ -108,6 +108,37 @@ def format_approve_comment(
     return f"{header}\n\n{capped}"
 
 
+async def _ensure_agent_acl_and_role(
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    project_id: uuid.UUID,
+    issue_id: uuid.UUID,
+    principal_id: uuid.UUID,
+) -> None:
+    """Ensure agent principal has project member role and issue capability mask 15."""
+    rb_sql = text(
+        "INSERT INTO role_bindings "
+        "(id, workspace_id, principal_id, role, scope_type, project_id) "
+        "VALUES (uuidv7(), :ws_id, :p_id, 'MEMBER'::rbac_role, 'project', :proj_id) "
+        "ON CONFLICT DO NOTHING"
+    )
+    await session.execute(
+        rb_sql,
+        {"ws_id": workspace_id, "p_id": principal_id, "proj_id": project_id},
+    )
+    acl_sql = text(
+        "INSERT INTO resource_acl_entries "
+        "(id, workspace_id, object_id, principal_id, effect, capability_mask) "
+        "VALUES (uuidv7(), :ws_id, :obj_id, :p_id, 'ALLOW', 15) "
+        "ON CONFLICT (object_id, principal_id, effect) "
+        "DO UPDATE SET capability_mask = resource_acl_entries.capability_mask | 15"
+    )
+    await session.execute(
+        acl_sql,
+        {"ws_id": workspace_id, "obj_id": issue_id, "p_id": principal_id},
+    )
+
+
 class AgentGateDispatcher:
     """Dispatches asynchronous AI/CLI agent transition helpers (KB-P5-18)."""
 
@@ -148,6 +179,14 @@ class AgentGateDispatcher:
             if first_hook.agent_definition_id
             else None
         )
+        if agent_def and agent_def.principal_id:
+            await _ensure_agent_acl_and_role(
+                session=session,
+                workspace_id=execution.workspace_id,
+                project_id=execution.project_id,
+                issue_id=issue.id,
+                principal_id=agent_def.principal_id,
+            )
         timeout_ms = agent_def.timeout_ms if agent_def else 60000
         deadline_at = now + dt.timedelta(milliseconds=timeout_ms)
 
@@ -160,6 +199,7 @@ class AgentGateDispatcher:
             hook_kind="agent_interceptor",
             status="running",
             started_at=now,
+            output_json={"deadline_at": deadline_at.isoformat()},
         )
         session.add(inv)
         await session.flush()
@@ -424,7 +464,14 @@ class GateCoordinator:
             issue.pending_transition_exec_id = None
 
             # Post veto comment authored by agent principal
-            if agent_def is not None:
+            if agent_def is not None and agent_def.principal_id is not None:
+                await _ensure_agent_acl_and_role(
+                    session=session,
+                    workspace_id=execution.workspace_id,
+                    project_id=execution.project_id,
+                    issue_id=issue.id,
+                    principal_id=agent_def.principal_id,
+                )
                 veto_body = format_veto_comment(
                     hook.name, harness_label, from_name, to_name, decision.reason_markdown
                 )
@@ -435,7 +482,21 @@ class GateCoordinator:
                     author_id=agent_def.principal_id,
                     body_markdown=veto_body,
                 )
+                saved_p_res = await session.execute(
+                    text("SELECT current_setting('app.principal_id', true)")
+                )
+                saved_p = saved_p_res.scalar_one_or_none()
+                await session.execute(
+                    text("SELECT set_config('app.principal_id', :val, true)"),
+                    {"val": str(agent_def.principal_id)},
+                )
                 session.add(comment)
+                await session.flush()
+                if saved_p and saved_p != str(agent_def.principal_id):
+                    await session.execute(
+                        text("SELECT set_config('app.principal_id', :val, true)"),
+                        {"val": saved_p},
+                    )
 
             # Record GATE_REJECTED activity
             await record_activity(
@@ -521,6 +582,14 @@ class GateCoordinator:
                 if next_hook.agent_definition_id
                 else None
             )
+            if next_agent_def and next_agent_def.principal_id:
+                await _ensure_agent_acl_and_role(
+                    session=session,
+                    workspace_id=execution.workspace_id,
+                    project_id=execution.project_id,
+                    issue_id=issue.id,
+                    principal_id=next_agent_def.principal_id,
+                )
             next_timeout = next_agent_def.timeout_ms if next_agent_def else 60000
             next_deadline = now + dt.timedelta(milliseconds=next_timeout)
 
@@ -532,6 +601,7 @@ class GateCoordinator:
                 hook_kind="agent_interceptor",
                 status="running",
                 started_at=now,
+                output_json={"deadline_at": next_deadline.isoformat()},
             )
             session.add(next_inv)
             await session.flush()
@@ -691,6 +761,14 @@ class GateCoordinator:
             if agent_def and agent_def.principal_id is not None
             else execution.invoking_principal_id
         )
+        if agent_def and agent_def.principal_id:
+            await _ensure_agent_acl_and_role(
+                session=session,
+                workspace_id=execution.workspace_id,
+                project_id=execution.project_id,
+                issue_id=issue.id,
+                principal_id=agent_def.principal_id,
+            )
         approve_comment_body = format_approve_comment(
             hook.name,
             harness_label,
@@ -705,7 +783,21 @@ class GateCoordinator:
             author_id=approve_author_id,
             body_markdown=approve_comment_body,
         )
+        saved_p_res = await session.execute(
+            text("SELECT current_setting('app.principal_id', true)")
+        )
+        saved_p = saved_p_res.scalar_one_or_none()
+        await session.execute(
+            text("SELECT set_config('app.principal_id', :val, true)"),
+            {"val": str(approve_author_id)},
+        )
         session.add(comment)
+        await session.flush()
+        if saved_p and saved_p != str(approve_author_id):
+            await session.execute(
+                text("SELECT set_config('app.principal_id', :val, true)"),
+                {"val": saved_p},
+            )
         await record_activity(
             session=session,
             workspace_id=execution.workspace_id,
@@ -915,6 +1007,14 @@ class GateCoordinator:
                     if next_hook.agent_definition_id
                     else None
                 )
+                if next_agent_def and next_agent_def.principal_id:
+                    await _ensure_agent_acl_and_role(
+                        session=session,
+                        workspace_id=execution.workspace_id,
+                        project_id=execution.project_id,
+                        issue_id=issue.id,
+                        principal_id=next_agent_def.principal_id,
+                    )
                 next_timeout = next_agent_def.timeout_ms if next_agent_def else 60000
                 next_deadline = now + dt.timedelta(milliseconds=next_timeout)
 
@@ -926,6 +1026,7 @@ class GateCoordinator:
                     hook_kind="agent_interceptor",
                     status="running",
                     started_at=now,
+                    output_json={"deadline_at": next_deadline.isoformat()},
                 )
                 session.add(next_inv)
                 await session.flush()
@@ -999,7 +1100,14 @@ class GateCoordinator:
             issue.pending_gate_invocation_id = None
 
         # Post veto comment authored by agent principal
-        if agent_def is not None:
+        if agent_def is not None and agent_def.principal_id is not None:
+            await _ensure_agent_acl_and_role(
+                session=session,
+                workspace_id=execution.workspace_id,
+                project_id=execution.project_id,
+                issue_id=issue.id,
+                principal_id=agent_def.principal_id,
+            )
             header = f"🛑🤖 Gate `{hook.name}` ({harness_label}) vetoed {from_name} -> {to_name}"
             veto_comment_body = f"{header}\n\n{reason_text}"
             comment = IssueComment(
@@ -1009,7 +1117,21 @@ class GateCoordinator:
                 author_id=agent_def.principal_id,
                 body_markdown=veto_comment_body,
             )
+            saved_p_res = await session.execute(
+                text("SELECT current_setting('app.principal_id', true)")
+            )
+            saved_p = saved_p_res.scalar_one_or_none()
+            await session.execute(
+                text("SELECT set_config('app.principal_id', :val, true)"),
+                {"val": str(agent_def.principal_id)},
+            )
             session.add(comment)
+            await session.flush()
+            if saved_p and saved_p != str(agent_def.principal_id):
+                await session.execute(
+                    text("SELECT set_config('app.principal_id', :val, true)"),
+                    {"val": saved_p},
+                )
 
         act_type = (
             ActivityEventType.GATE_TIMED_OUT if is_timeout else ActivityEventType.GATE_REJECTED

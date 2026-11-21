@@ -1,107 +1,202 @@
 === 1. Gate Hardening & Workflow API Tests (including Bearer CSRF bypass) ===
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-rls-fix-f64fb72e
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 15 items
+collecting ... collected 15 items
 
-kanban/tests/api/test_gate_enforcement_hardening.py ...............      [100%]
+kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_reality_checker_report_positive PASSED [  6%]
+kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_reality_checker_report_rejects_surrogates PASSED [ 13%]
+kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_reality_checker_report_rejects_missing_h1 PASSED [ 20%]
+kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_reality_checker_report_rejects_missing_sections PASSED [ 26%]
+kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_reality_checker_report_rejects_empty_section_body PASSED [ 33%]
+kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_reality_checker_report_fenced_blocks_and_comments_ignored PASSED [ 40%]
+kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_reality_checker_report_rejects_contradiction_markers PASSED [ 46%]
+kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_reality_checker_report_contradiction_in_code_block_allowed PASSED [ 53%]
+kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_ci_run_url_edge_cases PASSED [ 60%]
+kanban/tests/api/test_gate_enforcement_hardening.py::test_verification_proof_artifact_traversals_and_invariants PASSED [ 66%]
+kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_proof_ticket_key_mismatches PASSED [ 73%]
+kanban/tests/api/test_gate_enforcement_hardening.py::test_validate_reality_checker_report_html_comments_and_order PASSED [ 80%]
+kanban/tests/api/test_gate_enforcement_hardening.py::test_agent_caller_blocked_from_completed_state_on_patch PASSED [ 86%]
+kanban/tests/api/test_gate_enforcement_hardening.py::test_patch_returns_409_transition_held_during_active_gate PASSED [ 93%]
+kanban/tests/api/test_gate_enforcement_hardening.py::test_agent_bearer_token_bypasses_csrf_and_enforces_gates PASSED [100%]
 
-============================== 15 passed in 1.36s ==============================
+============================== 15 passed in 1.43s ==============================
 
 === 2. Workflow & Built-in Wasm Validator Tests ===
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-rls-fix-f64fb72e
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 29 items
+collecting ... collected 29 items
 
-kanban/tests/workflows/test_qa_proof_validator_wasm.py ......            [ 20%]
-kanban/tests/workflows/test_dry_run.py .......                           [ 44%]
-kanban/tests/workflows/test_workflow_hooks_api.py ................       [100%]
+kanban/tests/workflows/test_qa_proof_validator_wasm.py::test_qa_proof_validator_wasm_bytecode_integrity PASSED [  3%]
+kanban/tests/workflows/test_qa_proof_validator_wasm.py::test_qa_proof_validator_execution_speed_and_fuel PASSED [  6%]
+kanban/tests/workflows/test_qa_proof_validator_wasm.py::test_qa_proof_validator_rejects_missing_ready PASSED [ 10%]
+kanban/tests/workflows/test_qa_proof_validator_wasm.py::test_qa_proof_validator_rejects_key_mismatch PASSED [ 13%]
+kanban/tests/workflows/test_qa_proof_validator_wasm.py::test_tier_a_wasm_runner_bounds_checks_alloc_ptr PASSED [ 17%]
+kanban/tests/workflows/test_qa_proof_validator_wasm.py::test_ensure_approved_wasm_modules PASSED [ 20%]
+kanban/tests/workflows/test_dry_run.py::test_dry_run_access_control PASSED [ 24%]
+kanban/tests/workflows/test_dry_run.py::test_dry_run_validation_errors PASSED [ 27%]
+kanban/tests/workflows/test_dry_run.py::test_dry_run_pipeline_steps_and_rowcount_invariance PASSED [ 31%]
+kanban/tests/workflows/test_dry_run.py::test_dry_run_rejection_step PASSED [ 34%]
+kanban/tests/workflows/test_dry_run.py::test_dry_run_with_existing_issue PASSED [ 37%]
+kanban/tests/workflows/test_dry_run.py::test_dry_run_failure_policies_and_edge_cases PASSED [ 41%]
+kanban/tests/workflows/test_dry_run.py::test_dry_run_wasm_exceptions_and_mutation_errors PASSED [ 44%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_list_workflow_hooks_empty PASSED [ 48%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_list_workflow_hooks_anti_enumeration PASSED [ 51%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_attach_workflow_hook_aal2_required PASSED [ 55%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_attach_workflow_hook_validations PASSED [ 58%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_attach_and_list_workflow_hooks_success PASSED [ 62%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_update_workflow_hook PASSED [ 65%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_enable_disable_workflow_hook PASSED [ 68%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_delete_workflow_hook PASSED [ 72%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_reorder_workflow_hooks PASSED [ 75%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_dry_run_endpoint PASSED [ 79%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_workflow_hook_not_found_and_invalid_ids PASSED [ 82%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_workflow_hook_advanced_updates_and_validations PASSED [ 86%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_reorder_hooks_edge_cases PASSED [ 89%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_hooks_service_internal_utilities PASSED [ 93%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_hooks_service_agent_and_sync_cross_configuration_rejections PASSED [ 96%]
+kanban/tests/workflows/test_workflow_hooks_api.py::test_approved_wasm_modules_list_and_builtin_auto_seed PASSED [100%]
 
-============================== 29 passed in 6.50s ==============================
+============================== 29 passed in 6.60s ==============================
 
-=== 3. Problem 2 Async Gate, Comment Persistence & Fail-Closed GateCoordinator ===
+=== 3. Problem 2 Async Gate, Comment Persistence & Real PostgreSQL RLS Integration ===
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-rls-fix-f64fb72e
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 16 items
+collecting ... collected 18 items
 
-kanban/tests/workflows/test_async_gate.py ................               [100%]
+kanban/tests/workflows/test_async_gate.py::test_case_1_positive_single_agent_hook_202_then_approve PASSED [  5%]
+kanban/tests/workflows/test_async_gate.py::test_format_approve_comment_canonical_header_and_no_dashes PASSED [ 11%]
+kanban/tests/workflows/test_async_gate.py::test_case_2_positive_two_sequential_agent_hooks_and_reject PASSED [ 16%]
+kanban/tests/workflows/test_async_gate.py::test_case_3_security_toctou_concurrent_description_edit PASSED [ 22%]
+kanban/tests/workflows/test_async_gate.py::test_case_4_security_forbidden_mutations_and_sanitization PASSED [ 27%]
+kanban/tests/workflows/test_async_gate.py::test_case_5_security_out_of_order_and_replay_idempotency PASSED [ 33%]
+kanban/tests/workflows/test_async_gate.py::test_case_6_boundary_concurrent_transition_during_pending_async PASSED [ 38%]
+kanban/tests/workflows/test_async_gate.py::test_case_7_boundary_cancel_invoker_vs_non_invoker PASSED [ 44%]
+kanban/tests/workflows/test_async_gate.py::test_case_8_serializer_pending_gate_and_latest_gate_verdict PASSED [ 50%]
+kanban/tests/workflows/test_async_gate.py::test_case_9_hop_depth_limit PASSED [ 55%]
+kanban/tests/workflows/test_async_gate.py::test_compute_harness_label_and_reason_preview PASSED [ 61%]
+kanban/tests/workflows/test_async_gate.py::test_apply_labels_and_links_in_decision PASSED [ 66%]
+kanban/tests/workflows/test_async_gate.py::test_fail_open_warn_advance_and_commit PASSED [ 72%]
+kanban/tests/workflows/test_async_gate.py::test_cancel_unauthorized_and_invalid_state PASSED [ 77%]
+kanban/tests/workflows/test_async_gate.py::test_gate_coverage_branches PASSED [ 83%]
+kanban/tests/workflows/test_async_gate.py::test_completed_state_forces_fail_closed PASSED [ 88%]
+kanban/tests/workflows/test_async_gate.py::test_gate_worker_runner_real_rls_approval_and_comment PASSED [ 94%]
+kanban/tests/workflows/test_async_gate.py::test_gate_worker_runner_real_rls_timeout_sweep PASSED [100%]
 
-============================== 16 passed in 4.89s ==============================
+============================== 18 passed in 5.65s ==============================
 
 === 4. Problem 1 & 3 Proof Validation & complete_work Enforcement ===
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-rls-fix-f64fb72e
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 9 items
+collecting ... collected 10 items
 
-kanban/tests/issues/test_proof_validation.py .....                       [ 55%]
-kanban/tests/mcp/test_complete_work_enforcement.py ....                  [100%]
+kanban/tests/issues/test_proof_validation.py::test_validate_reality_checker_report_positive PASSED [ 10%]
+kanban/tests/issues/test_proof_validation.py::test_validate_reality_checker_report_rejects_out_of_order_headings PASSED [ 20%]
+kanban/tests/issues/test_proof_validation.py::test_validate_reality_checker_report_rejects_needs_work_when_ready_omitted PASSED [ 30%]
+kanban/tests/issues/test_proof_validation.py::test_validate_reality_checker_report_rejects_failed_marker PASSED [ 40%]
+kanban/tests/issues/test_proof_validation.py::test_validate_reality_checker_report_require_ready_rejects_non_ready PASSED [ 50%]
+kanban/tests/issues/test_proof_validation.py::test_validate_reality_checker_report_require_ready_rejects_grade_a_without_ready PASSED [ 60%]
+kanban/tests/mcp/test_complete_work_enforcement.py::test_complete_work_rejects_needs_work_summary_even_if_proof_ready PASSED [ 70%]
+kanban/tests/mcp/test_complete_work_enforcement.py::test_complete_work_rejects_out_of_order_h2_sections PASSED [ 80%]
+kanban/tests/mcp/test_complete_work_enforcement.py::test_complete_work_rejects_missing_ready_verdict PASSED [ 90%]
+kanban/tests/mcp/test_complete_work_enforcement.py::test_service_complete_work_direct_invocation_invariants PASSED [100%]
 
-============================== 9 passed in 1.47s ===============================
+============================== 10 passed in 1.45s ==============================
 
-=== 5. Problem 1 & 4 Gate Worker Runner Lease & Timeout Sweep ===
+=== 5. Problem 4 Gate Worker Runner Leases, Timeouts & RLS Context Resolution ===
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-rls-fix-f64fb72e
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 10 items
+collecting ... collected 10 items
 
-agent/tests/gates/test_gate_runner.py ..........                         [100%]
+agent/tests/gates/test_gate_runner.py::test_gate_worker_runner_init_and_properties PASSED [ 10%]
+agent/tests/gates/test_gate_runner.py::test_gate_worker_runner_poll_once_empty PASSED [ 20%]
+agent/tests/gates/test_gate_runner.py::test_start_gate_worker_lifecycle PASSED [ 30%]
+agent/tests/gates/test_gate_runner.py::test_gate_worker_runner_dispatch_and_prevent_double_dispatch PASSED [ 40%]
+agent/tests/gates/test_gate_runner.py::test_gate_worker_runner_timeout_sweep PASSED [ 50%]
+agent/tests/gates/test_gate_runner.py::test_gate_worker_runner_record_decision_and_failure PASSED [ 60%]
+agent/tests/gates/test_gate_runner.py::test_gate_worker_runner_load_entities_no_session_factory PASSED [ 70%]
+agent/tests/gates/test_gate_runner.py::test_gate_worker_runner_load_entities PASSED [ 80%]
+agent/tests/gates/test_gate_runner.py::test_gate_worker_runner_poll_once_inferred_deadline_and_exceptions PASSED [ 90%]
+agent/tests/gates/test_gate_runner.py::test_gate_worker_runner_run_exception_and_start_worker_app_state PASSED [100%]
 
-============================== 10 passed in 0.72s ==============================
+============================== 10 passed in 0.71s ==============================
 
-=== 6. Problem 4 Bearer-First Precedence in Session Resolver ===
+=== 6. Session Cookie Resolver Bearer Precedence & CSRF Security ===
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-rls-fix-f64fb72e
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 11 items
+collecting ... collected 11 items
 
-kanban/tests/auth/test_sessions.py ...........                           [100%]
+kanban/tests/auth/test_sessions.py::test_case_1_positive_login_and_cookie_attributes PASSED [  9%]
+kanban/tests/auth/test_sessions.py::test_case_2_session_fixation_defense PASSED [ 18%]
+kanban/tests/auth/test_sessions.py::test_case_5_rotation_on_aal_elevation PASSED [ 27%]
+kanban/tests/auth/test_sessions.py::test_case_6_idle_and_absolute_timeouts PASSED [ 36%]
+kanban/tests/auth/test_sessions.py::test_case_9_security_logout PASSED   [ 45%]
+kanban/tests/auth/test_sessions.py::test_case_10_mfa_pending_enforcement PASSED [ 54%]
+kanban/tests/auth/test_sessions.py::test_case_12_config_timeout_bounds_validation PASSED [ 63%]
+kanban/tests/auth/test_sessions.py::test_resolver_direct_unit PASSED     [ 72%]
+kanban/tests/auth/test_sessions.py::test_require_full_session_direct_unit PASSED [ 81%]
+kanban/tests/auth/test_sessions.py::test_service_policy_and_revocations PASSED [ 90%]
+kanban/tests/auth/test_sessions.py::test_session_cookie_resolver_bearer_precedence_rejects_dummy_bearer PASSED [100%]
 
 =============================== warnings summary ===============================
 kanban/tests/auth/test_sessions.py::test_case_1_positive_login_and_cookie_attributes
 kanban/tests/auth/test_sessions.py::test_case_9_security_logout
 kanban/tests/auth/test_sessions.py::test_case_10_mfa_pending_enforcement
 kanban/tests/auth/test_sessions.py::test_case_10_mfa_pending_enforcement
-  /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587/.venv/lib/python3.12/site-packages/httpx/_client.py:1768: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+  /home/adamoutler/kanban/.venv/lib/python3.12/site-packages/httpx/_client.py:1768: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
     return await self.request(
 
 kanban/tests/auth/test_sessions.py::test_case_9_security_logout
-  /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+  /home/adamoutler/kanban/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
     return await self.request(
 
 -- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
-======================== 11 passed, 5 warnings in 0.83s ========================
+======================== 11 passed, 5 warnings in 0.78s ========================
 
-=== 7. Synaptic Search Project Filter Scoping ===
+=== 7. Synaptic Search Project Filter Scope Invariant ===
 ============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-final-ea722587
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan45-rls-fix-f64fb72e
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 13 items
+collecting ... collected 13 items
 
-kanban/tests/services/test_synaptic_search.py .............              [100%]
+kanban/tests/services/test_synaptic_search.py::test_hybrid_search_unindexed_graceful_degradation PASSED [  7%]
+kanban/tests/services/test_synaptic_search.py::test_hybrid_search_with_embeddings_and_rrf PASSED [ 15%]
+kanban/tests/services/test_synaptic_search.py::test_2hop_synaptic_activation_spreading PASSED [ 23%]
+kanban/tests/services/test_synaptic_search.py::test_synaptic_zero_oracle_leakage PASSED [ 30%]
+kanban/tests/services/test_synaptic_search.py::test_hybrid_search_issues_and_knowledge_endpoints PASSED [ 38%]
+kanban/tests/services/test_synaptic_search.py::test_synaptic_recency_decay PASSED [ 46%]
+kanban/tests/services/test_synaptic_search.py::test_synaptic_rescorer_edge_cases PASSED [ 53%]
+kanban/tests/services/test_synaptic_search.py::test_synaptic_statement_timeout_graceful_degradation PASSED [ 61%]
+kanban/tests/services/test_synaptic_search.py::test_synaptic_quantizer_and_maxsim_units PASSED [ 69%]
+kanban/tests/services/test_synaptic_search.py::test_empty_query_embedding PASSED [ 76%]
+kanban/tests/services/test_synaptic_search.py::test_hybrid_search_vector_only_hydration_and_pagination PASSED [ 84%]
+kanban/tests/services/test_synaptic_search.py::test_hybrid_search_issues_enforces_filters_and_workspace PASSED [ 92%]
+kanban/tests/services/test_synaptic_search.py::test_search_unified_filters_synaptic_neighbors_to_project PASSED [100%]
 
-============================== 13 passed in 1.49s ==============================
-
+============================== 13 passed in 1.55s ==============================

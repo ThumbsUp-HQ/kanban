@@ -2,8 +2,8 @@
 
 **Ticket:** `KAN-45`  
 **Title:** `[KB-P3-GATE-ENFORCE] Enforce Canonical Reality-Checker Report on complete_work, Real qa-proof-validator Wasm, Approval Comment Persistence, and Agent Done-Transition Guards (4 Problems)`  
-**Branch:** `main` (Post-Merge at commit `78074a1d`)  
-**Base Commit:** `78074a1d`  
+**Branch:** `main` (commit `9b163f07`)  
+**Base Commit:** `9b163f07`  
 **Live Stack Container:** `kanban-liveqa-4` (`http://127.0.0.1:18964`, PostgreSQL 16 + FORCE RLS)  
 **Live Stack Verdict:** `OVERALL LIVE_STACK_VERDICT: PASS`  
 
@@ -69,11 +69,23 @@ This deliverable implements all 4 problems specified in `KAN-45` to enterprise s
 
 ## 2. Verification Artifacts & Live Container Evidence
 
-### Live Container Verification (`kanban-liveqa-4`, `:18964`, commit `78074a1d`):
-- `Guard 1`: Stateless Bearer `PATCH`, `POST move`, `POST transition` into Done -> HTTP 422 `USE_COMPLETE_WORK` (88ms, 65ms, 37ms). Human cookie `POST move` -> HTTP 200 (human allowed).
+### Live Container Verification (`kanban-liveqa-4`, `:18964`, commit `9b163f07`):
+- `Guard 1`: Stateless Bearer `PATCH` (80ms), `POST move` (41ms), `POST transition` (32ms) into Done -> HTTP 422 `USE_COMPLETE_WORK`. Human cookie `POST move` (75ms) -> HTTP 200 (human allowed).
 - `Guard 2`: MCP tool calls and Bearer REST `complete_work` with short summary or contradictory reports -> HTTP 422 `INVALID_REALITY_CHECKER_REPORT` (`isError=true`).
-- `Guard 3`: Dry-Run UI and API with missing proof -> rejected by `require-qa-proof-link` (381us, 0 Wasm compile errors); valid proof -> allowed by `require-qa-proof-link` (299us) and `auto-label-verified` (149us).
-- `Guard 4`: Valid `/mcp/agent complete_work` -> HTTP 200 (124ms, `isError=false`, state: Done, comment: `KAN-2#c-01a1fb44`).
+- `Guard 2b`: `NEEDS WORK` (omitting READY) with proof claim `READY/A` -> MCP `isError=true` | Bearer REST HTTP 422 `code=INVALID_REALITY_CHECKER_REPORT` (`detail="Contradiction marker 'NEEDS WORK' found in certification or deployment readiness assessment"`).
+- `Guard 2c`: Cookie + dummy Bearer precedence -> `GET` HTTP 401 (8ms) | `POST` (no CSRF) HTTP 401 (8ms) | Cookie-only (no CSRF) HTTP 403.
+- `Guard 3`: Dry-Run UI and API with missing proof -> rejected by `require-qa-proof-link` (644us); valid proof -> allowed by `require-qa-proof-link` (361us) and `auto-label-verified` (155us).
+- `Guard 4`: Valid `/mcp/agent complete_work` -> HTTP 200 (146ms, `isError=false`, state: Done, comment: `KAN-2#c-01a1fbe5`).
+- `Problem 2 Gate Dispatch`: `POST /api/v1/issues/KAN-3/transitions` -> HTTP 202 `status=pending_agent_gate` | Held PATCH -> HTTP 409 `code=TRANSITION_HELD`.
+- `Problem 2 Decision Record`: `GateCoordinator.record_decision(approve)` -> `execution_status=approved`, KAN-3 transitioned to `In Progress`, `comment_id=69155cd3-3ef8-4d6c-8b45-c2bdfba6d26a`, author: `@qagatereviewer`.
+- `Screenshots in docs/qa/KAN-45/screenshots/` (all 7 screenshots present):
+  1. `live-workflow-wasm-dryrun-reject.png` (1440x900 desktop)
+  2. `live-workflow-wasm-dryrun-allow.png` (1440x900 desktop)
+  3. `live-issue-completed-proof-desktop-light.png` (1440x900 desktop light)
+  4. `live-issue-completed-proof-desktop-dark.png` (1440x900 desktop dark)
+  5. `live-issue-completed-proof-tablet.png` (768x1024 tablet)
+  6. `live-issue-completed-proof-mobile.png` (390x844 mobile)
+  7. `live-async-gate-approved-comment-desktop.png` (1440x900 desktop)
 - Telemetry: console errors 0, page errors 0, 5xx responses 0. `OVERALL LIVE_STACK_VERDICT: PASS`.
 
 ### Quality Gate Summary:
@@ -89,7 +101,7 @@ This deliverable implements all 4 problems specified in `KAN-45` to enterprise s
   - `kanban-ctl db check-migrations --static-only`: 63 migrations valid.
   - `ruff check .`: All checks passed!
   - `ruff format --check .`: Clean across 2027 files.
-  - `mypy`: Success: no issues found in 1140 source files.
+  - `mypy`: Success: no issues found in 997 source files.
   - `lint-imports`: Contracts: 2 kept, 0 broken.
   - `scripts.check_no_dashes --all`: Clean (0 forbidden dashes).
 - **Scope Invariants:** `.backup_schedule.json` and `backups/` strictly unstaged.

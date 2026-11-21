@@ -5,7 +5,7 @@
 - **Reviewer:** `api-spec-2` (Clean-Room Backend / API / Security Specialist)
 - **Date:** 2026-11-20
 - **Target Directory:** `/home/adamoutler/kanban/docs/qa/KAN-45`
-- **Branch:** `main` (commit `78074a1d`)
+- **Branch:** `main` (commit `9b163f07`)
 - **Container Environment:** `http://127.0.0.1:18964` (container: `kanban-liveqa-4`)
 - **Live Stack Status:** `OVERALL LIVE_STACK_VERDICT: PASS`
 - **Status:** APPROVED
@@ -14,7 +14,7 @@
 
 ## 1. Executive Summary & Audit Scope
 
-A clean-room API, Security, and Architecture audit was conducted for ticket **KAN-45** on branch `main` at commit `78074a1d`. The review integrates empirical evidence from zero-mock Live Full-Stack QA execution against container `kanban-liveqa-4` (`http://127.0.0.1:18964`, PostgreSQL 16 + FORCE RLS) documented in `docs/qa/KAN-45/live-fullstack-proof.txt`, visual screenshots in `docs/qa/KAN-45/screenshots/`, unit test logs (`unit-test-results.txt`), and static build outputs (`build-or-typecheck.txt`).
+A clean-room API, Security, and Architecture audit was conducted for ticket **KAN-45** on branch `main` at commit `9b163f07`. The review integrates empirical evidence from zero-mock Live Full-Stack QA execution against container `kanban-liveqa-4` (`http://127.0.0.1:18964`, PostgreSQL 16 + FORCE RLS) documented in `docs/qa/KAN-45/live-fullstack-proof.txt`, visual screenshots in `docs/qa/KAN-45/screenshots/`, unit test logs (`unit-test-results.txt`), contract samples (`contract-sample.json`), and static build outputs (`build-or-typecheck.txt`).
 
 KAN-45 hardens the workflow transition engine, closes completed-state bypasses, enforces canonical reality-checker report validation, replaces dummy Wasm placeholders with compilable WebAssembly bytecode, aligns CSRF middleware for stateless agent tokens, and establishes asynchronous gate runner infrastructure across the platform.
 
@@ -30,7 +30,7 @@ The audit inspects and certifies all four problems and live container proofs:
 3. **Real Wasm Bytecode & Bounds-Checked Linear Memory:**
    - Bounds-checks guest `kb_alloc` memory pointer before writing into Wasm linear memory.
    - Embeds real compiled 1097-byte Wasm bytecode (`qa-proof-validator`, SHA-256: `fddfe97e1b15829495364a2002bf0a0c830002f9ef673971a1a4167ee815d972`) running in `<2ms` and `<= 2,000,000` fuel.
-   - Provides valid, fully compilable WebAssembly bytecodes for built-in helpers in `kanban/workflows/builtins.py`: `sec_invariant_validator` (249 bytes, SHA-256: `7982de041f00a867a3f839e6172865450d0159fa77c288ec57440ceb87571874`) and `auto_label_mutator` (244 bytes, SHA-256: `2e7db622992707370042a3c5e15eda145d995048ef4f69f6c746f33dc43f93e9`), exporting `memory`, `kb_alloc`, `kb_run`, and `kb_on_transition`, returning `{"allowed": true, "decision": "allow"}`.
+   - Provides valid, fully compilable WebAssembly bytecodes for built-in helpers in `kanban/workflows/builtins.py`: `sec_invariant_validator` (249 bytes, SHA-256: `7982de041f00a867a3f839e6172865450d0159fa77c288ec57440ceb87571874`) and `auto_label_mutator` (244 bytes, SHA-256: `79cdc606bf7cab8b1de8a204a126e9302f831bdf32db6ea2170970bb822140dd`), exporting `memory`, `kb_alloc`, `kb_run`, and `kb_on_transition`, returning `{"allowed": true, "decision": "allow"}`.
    - Enriches `kb-sync-hook-input/v1` payload with verification proof and recent comments within 256 KiB ceiling, and unifies decision extraction.
 4. **Agent Completed-State Guards, CSRF Bearer Bypass & Gate Worker Runner:**
    - In `kanban/auth/sessions/csrf.py`: updated `CsrfMiddleware` to allow stateless `Authorization: Bearer <token>` requests to bypass ambient browser cookie CSRF enforcement while strictly enforcing cookie CSRF protection.
@@ -80,6 +80,7 @@ The audit inspects and certifies all four problems and live container proofs:
       return await call_next(request)
   ```
 - Evaluates that stateless API requests using Bearer tokens bypass CSRF cookie checks, while ambient browser cookie sessions continue to require `kb_csrf` token validation.
+- In `kanban/auth/sessions/resolver.py`: Bearer token precedence evaluates first; dummy or invalid Bearer tokens return 401 directly without falling back to ambient session cookies, preventing CSRF bypass attacks via fake Bearer headers.
 
 ### 2.3 Compilable Builtin Wasm Bytecodes (`kanban/workflows/builtins.py`)
 - Valid WebAssembly binary format:
@@ -87,12 +88,35 @@ The audit inspects and certifies all four problems and live container proofs:
   * `auto_label_mutator`: 244 bytes, valid Wasm header `\x00asm\x01\x00\x00\x00`, exports `memory`, `kb_alloc`, `kb_run`, and `kb_on_transition`. Output: `{"allowed": true, "decision": "allow"}`.
 - Both bytecodes are fully registered in `BUILTIN_WASM_BY_SHA` and `_LEGACY_PRESETS`.
 
-### 2.4 Live Container Verification (`kanban-liveqa-4`, `:18964`, commit `78074a1d`)
-- `Guard 1`: Stateless Bearer `PATCH`, `POST move`, `POST transition` into Done -> HTTP 422 `USE_COMPLETE_WORK` (88ms, 65ms, 37ms). Human cookie `POST move` -> HTTP 200 (human allowed).
-- `Guard 2`: MCP tool calls and Bearer REST `complete_work` with short summary or contradictory reports -> HTTP 422 `INVALID_REALITY_CHECKER_REPORT` (`isError=true`).
-- `Guard 3`: Dry-Run UI and API with missing proof -> rejected by `require-qa-proof-link` (381us, 0 Wasm compile errors); valid proof -> allowed by `require-qa-proof-link` (299us) and `auto-label-verified` (149us).
-- `Guard 4`: Valid `/mcp/agent complete_work` -> HTTP 200 (124ms, `isError=false`, state: Done, comment: `KAN-2#c-01a1fb44`).
-- Telemetry: console errors 0, page errors 0, 5xx responses 0. `OVERALL LIVE_STACK_VERDICT (KAN-45): PASS`.
+### 2.4 Live Container Verification (`kanban-liveqa-4`, `:18964`, commit `9b163f07`)
+- **Guard 1 (Stateless Bearer Bypass Blocked, Human Allowed):**
+  * `Guard 1a`: Stateless Bearer `PATCH /api/v1/issues/KAN-1` -> HTTP 422 (80ms) `code=USE_COMPLETE_WORK`
+  * `Guard 1b`: Stateless Bearer `POST /api/v1/issues/KAN-1/move` -> HTTP 422 (41ms) `code=USE_COMPLETE_WORK`
+  * `Guard 1c`: Stateless Bearer `POST /api/v1/issues/KAN-1/transition` -> HTTP 422 (32ms) `code=USE_COMPLETE_WORK`
+  * `Guard 1d`: Human cookie `POST /api/v1/issues/KAN-1/move` -> HTTP 200 (75ms, `state_id=01a1fbe5-f5fa-7e94-8c6a-429503f023f5`)
+- **Guard 2 (Short & Contradictory Report Rejection):**
+  * `Guard 2a`: Short summary -> MCP `isError=true` | Bearer REST HTTP 422 `code=INVALID_REALITY_CHECKER_REPORT`
+  * `Guard 2`: Contradictory report -> MCP `isError=true` | Bearer REST HTTP 422 `code=INVALID_REALITY_CHECKER_REPORT`
+  * `Guard 2b`: `NEEDS WORK` (omitting READY) with proof claim `READY/A` -> MCP `isError=true` | Bearer REST HTTP 422 `code=INVALID_REALITY_CHECKER_REPORT` detail: `Contradiction marker 'NEEDS WORK' found in certification or deployment readiness assessment`
+  * `Guard 2c`: Cookie + dummy Bearer precedence -> `GET` HTTP 401 (8ms) | `POST` (no CSRF) HTTP 401 (8ms) | Cookie-only (no CSRF) HTTP 403
+- **Guard 3 (Real Wasm Execution & Dry-Run API):**
+  * `Guard 3a`: Dry-Run API (missing proof) -> HTTP 200 (43ms) `steps=[{"order":1,"name":"require-qa-proof-link","hook_kind":"sync_validator","result":"rejected","duration_us":644}]`
+  * `Guard 3b`: Dry-Run API (valid proof) -> HTTP 200 (32ms) `steps=[{"order":1,"name":"require-qa-proof-link","result":"allowed","duration_us":361},{"order":2,"name":"auto-label-verified","result":"allowed","duration_us":155}]`
+- **Guard 4 (Valid Complete Work via MCP):**
+  * `Guard 4`: Valid `/mcp/agent complete_work` -> HTTP 200 (146ms) `isError=false`, body: `status: completed, key: KAN-2, state: Done, proof: {qa_dir: docs/qa/KAN-2, artifacts: 1, verdict: READY}, comment: KAN-2#c-01a1fbe5`
+- **Problem 2 (Async Gate Dispatch, Comment Persistence & RLS Enforcement):**
+  * `Problem 2 Gate Dispatch`: `POST /api/v1/issues/KAN-3/transitions` -> HTTP 202 `status=pending_agent_gate execution_id=ab9fadb7-8b6f-4cc8-a1e0-67b76bb8d4a7` | Held PATCH -> HTTP 409 `code=TRANSITION_HELD`
+  * `Problem 2 Decision Record`: `GateCoordinator.record_decision(approve)` -> `execution_status=approved`, KAN-3 transitioned to `In Progress`, `comment_id=69155cd3-3ef8-4d6c-8b45-c2bdfba6d26a`, author: `@qagatereviewer`
+  * `Problem 2 RLS Execution Observation`: Zero-UUID RLSContext -> `EXECUTION_NOT_FOUND`; Invoking-admin RLSContext -> `InsufficientPrivilegeError`; Gate-agent RLSContext (principal_id=agent_def.principal_id with VIEW/COMMENT/EDIT/TRANSITION ACL on KAN-3, workspace_id=kanban) -> PASS
+- **Visual UI Verification:**
+  * UI DryRunDrawer (missing proof): Displays rejection banner `🛑 Transition Blocked: Changes would not commit` and rejection reason `Missing required QA report or READY verdict in verification proof` (<1ms).
+  * UI DryRunDrawer (valid proof): Displays allow banner `✅ Transition Allowed: Changes would commit`, step 1 `require-qa-proof-link` Allowed (<1ms), step 2 `auto-label-verified` Allowed (<1ms).
+  * KAN-3 Async Gate Approval Comment: Displays canonical header `## ✅🤖 Workflow Transition Gate Approved` authored by `@qagatereviewer`.
+- **Runtime Error Telemetry:**
+  * Console errors: 0
+  * Page errors: 0
+  * 5xx responses: 0
+  * `OVERALL LIVE_STACK_VERDICT (KAN-45): PASS`
 
 ---
 
@@ -106,11 +130,11 @@ The audit inspects and certifies all four problems and live container proofs:
   * `agent/tests/gates/test_gate_runner.py`: 10 passed in 0.72s (97% module coverage)
   * `kanban/tests/auth/test_sessions.py`: 11 passed in 0.83s
   * `kanban/tests/services/test_synaptic_search.py`: 13 passed in 1.49s
-- Static Analysis Gates:
-  * Database Migrations (`check-migrations --static-only`): OK: All 63 migrations valid.
-  * Ruff Linter (`ruff check .`): Clean across all packages (0 errors).
+- Static Analysis Gates (commit `9b163f07`):
+  * Database Migrations (`check-migrations`): OK: All 63 migrations valid. Single head: `p4_24_agent_safe_sequences`
+  * Ruff Linter (`ruff check .`): All checks passed (0 errors).
   * Ruff Format Check (`ruff format --check .`): Clean across 2027 files.
-  * Mypy Strict Typecheck (`mypy`): Success across 1140 source files (0 errors).
+  * Mypy Strict Typecheck (`mypy database kanban mcp agent`): Success: no issues found in 997 source files.
   * Import Linter (`lint-imports`): Contracts: 2 kept, 0 broken (`agent -> mcp -> kanban -> database` KEPT).
   * Typography Audit (`check_no_dashes`): Clean (0 em/en-dashes across all files).
 
@@ -127,6 +151,7 @@ The audit inspects and certifies all four problems and live container proofs:
 | **Lone Surrogate Rejection** | Code points 0xD800..0xDFFF rejected | Explicit character scan in report parser | PASS |
 | **Anti-Fantasy Contradictions** | Reject `NEEDS WORK` / `FAILED` when claiming READY | Contradiction scanner in certification | PASS |
 | **CSRF Bearer Bypass** | Stateless Bearer tokens bypass CSRF | Handled in `CsrfMiddleware` | PASS |
+| **Bearer-First Precedence** | Dummy Bearer tokens return 401 without cookie fallback | Handled in `SessionCookieResolver` | PASS |
 | **Compilable Wasm Presets** | Valid Wasm bytecode exporting all symbols | 249-byte and 244-byte modules in `builtins.py` | PASS |
 | **Step 7 Comment Persistence** | Formatted approval comment authored by agent | Persisted via `format_approve_comment` | PASS |
 | **Fail-Closed Completed Gates** | Transitions into Done cannot fail open | Enforced in `record_failure` | PASS |
@@ -141,4 +166,4 @@ The audit inspects and certifies all four problems and live container proofs:
 
 STATUS: APPROVED
 
-All transition engine gates, reality-checker report validators, Wasm bytecode contracts, approval comment persistence mechanics, agent completed-state guards, stateless Bearer token CSRF bypass, and live container verifications for KAN-45 on branch `main` at commit `78074a1d` have been thoroughly audited, verified against all architectural and security invariants, and certified on container `kanban-liveqa-4` (`:18964`, `OVERALL LIVE_STACK_VERDICT: PASS`). Ready for Clean-Room Reality-Checker QA.
+All transition engine gates, reality-checker report validators, Wasm bytecode contracts, approval comment persistence mechanics, agent completed-state guards, stateless Bearer token CSRF bypass, and live container verifications for KAN-45 on branch `main` at commit `9b163f07` have been thoroughly audited, verified against all architectural and security invariants, and certified on container `kanban-liveqa-4` (`:18964`, `OVERALL LIVE_STACK_VERDICT: PASS`). Ready for Clean-Room Reality-Checker QA.

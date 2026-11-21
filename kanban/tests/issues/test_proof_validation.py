@@ -90,3 +90,13 @@ def test_validate_reality_checker_report_require_ready_rejects_non_ready() -> No
     # require_ready=True rejects because READY/A is missing
     with pytest.raises(ValueError, match="must certify READY with grade A"):
         validate_reality_checker_report(report, require_ready=True)
+
+
+def test_validate_reality_checker_report_require_ready_rejects_grade_a_without_ready() -> None:
+    """Grade: A with Status: PENDING (without READY keyword) is rejected when require_ready=True."""
+    report = _build_report(cert_verdict="PENDING", cert_grade="A", deployment_readiness="PENDING")
+    # require_ready=False allows if no contradiction markers
+    validate_reality_checker_report(report, require_ready=False)
+    # require_ready=True rejects because READY keyword is missing despite Grade: A
+    with pytest.raises(ValueError, match="must certify READY with grade A"):
+        validate_reality_checker_report(report, require_ready=True)
