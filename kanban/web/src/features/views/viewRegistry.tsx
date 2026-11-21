@@ -155,6 +155,22 @@ export interface IssuesWorkspaceRouteProps {
  * Mounts FilterDisplayBar, 2D SwimlaneBoardGrid when layout === 'board' && subGroupBy !== 'none',
  * floating BulkActionBar, QuickCreateIssueModal, and useIssueKeyboardMap.
  */
+function resolveIssueStateSummary(
+  issue: IssueItem,
+  projectStates: StateSummary[],
+): { id?: string; name?: string; group?: string; color_hex?: string | null } | undefined {
+  const rawState = (issue as { state?: { id?: string; name?: string; group?: string; color_hex?: string | null } }).state;
+  const explicitStateId = (issue as { state_id?: string }).state_id ?? rawState?.id;
+  if (rawState?.name && rawState.group) {
+    return rawState;
+  }
+  if (explicitStateId) {
+    const found = projectStates.find((s) => s.id === explicitStateId);
+    if (found) return found;
+  }
+  return rawState;
+}
+
 export function computeStateSummary(
   sId: string,
   projectStates?: StateSummary[],
@@ -277,7 +293,9 @@ export function IssuesWorkspaceRoute({
     queryClient,
   );
 
-  const [projectStates, setProjectStates] = useState<StateSummary[]>([]);
+  const [projectStates, setProjectStates] = useState<StateSummary[]>(() => {
+    return queryClient.getQueryData<StateSummary[]>(['states', projectKey]) ?? [];
+  });
 
   const issues = useMemo(
     () => issuesQuery.data ?? initialIssues ?? [],
@@ -469,13 +487,8 @@ export function IssuesWorkspaceRoute({
   // Filter issues based on activeFilters
   const filteredIssues = useMemo(() => {
     return issues.filter((issue) => {
-      const rawState = (issue as { state?: { id?: string; name?: string; group?: string; color_hex?: string } }).state;
-      const explicitStateId = (issue as { state_id?: string }).state_id ?? rawState?.id;
-      const hasCompleteState = Boolean(rawState?.name) && Boolean(rawState?.group);
-      const resolvedState =
-        hasCompleteState
-          ? rawState
-          : (explicitStateId ? projectStates.find((s) => s.id === explicitStateId) : undefined) ?? rawState;
+      const explicitStateId = (issue as { state_id?: string }).state_id;
+      const resolvedState = resolveIssueStateSummary(issue, projectStates);
 
       const stateGroup = resolvedState?.group ?? 'unstarted';
       const stateName = resolvedState?.name ?? '';
@@ -741,7 +754,7 @@ export function IssuesWorkspaceRoute({
   const handleFieldSelect = (field: QuickFieldType, value: unknown, targetKeyOverride?: string) => {
     const targetKey = targetKeyOverride ?? popoverState.issue?.key;
     if (!targetKey) return;
-    const currentIssue = issues.find((i) => i.key === targetKey) ?? popoverState.issue;
+    const currentIssue = issues.find((i) => i.key === targetKey);
     if (!currentIssue) return;
     let overrideReason: string | undefined;
 
@@ -755,12 +768,8 @@ export function IssuesWorkspaceRoute({
           (s) => s.id === sId || normalizeStateKey(s.name) === normalizeStateKey(sId),
         );
 
-      const curRawState = currentIssue.state as { id?: string; name?: string } | undefined;
-      const curStateId = (currentIssue as { state_id?: string }).state_id ?? curRawState?.id ?? '';
-      const curResolvedState =
-        curRawState?.name
-          ? curRawState
-          : (curStateId ? projectStates.find((s) => s.id === curStateId) : undefined) ?? curRawState;
+      const curResolvedState = resolveIssueStateSummary(currentIssue, projectStates);
+      const curStateId = (currentIssue as { state_id?: string }).state_id ?? curResolvedState?.id ?? '';
       const curStateName = curResolvedState?.name ?? '';
 
       const targetStateName = targetState?.name ?? sId;
@@ -772,16 +781,12 @@ export function IssuesWorkspaceRoute({
       if (isCrossState && targetStateAny?.wip_hard_limit != null) {
         const targetCount = issues.filter((i) => {
           if (i.key === targetKey) return false;
-          const iRawState = i.state as { id?: string; name?: string } | undefined;
-          const iStateId = (i as { state_id?: string }).state_id ?? iRawState?.id ?? '';
-          const iResolvedState =
-            iRawState?.name
-              ? iRawState
-              : (iStateId ? projectStates.find((s) => s.id === iStateId) : undefined) ?? iRawState;
+          const iResolvedState = resolveIssueStateSummary(i, projectStates);
+          const iStateId = (i as { state_id?: string }).state_id ?? iResolvedState?.id ?? '';
           const iStateName = iResolvedState?.name ?? '';
           return (
             iStateId === targetState?.id ||
-            (targetStateName ? normalizeStateKey(iStateName) === normalizeStateKey(targetStateName) : false)
+            normalizeStateKey(iStateName) === normalizeStateKey(targetStateName)
           );
         }).length;
 
@@ -881,15 +886,10 @@ export function IssuesWorkspaceRoute({
   };
 
   const boardIssues: BoardIssue[] = useMemo(() => {
-    const fallbackStateId = boardStates[0]?.id ?? 'state-backlog';
+    const fallbackStateId = boardStates[0]?.id ?? '';
     return filteredIssues.map((issue, idx) => {
-      const rawState = (issue as { state?: { id?: string; name?: string; group?: string; color_hex?: string } }).state;
-      const explicitStateId = (issue as { state_id?: string }).state_id ?? rawState?.id;
-      const hasCompleteState = Boolean(rawState?.name) && Boolean(rawState?.group);
-      const resolvedState =
-        hasCompleteState
-          ? rawState
-          : (explicitStateId ? projectStates.find((s) => s.id === explicitStateId) : undefined) ?? rawState;
+      const explicitStateId = (issue as { state_id?: string }).state_id;
+      const resolvedState = resolveIssueStateSummary(issue, projectStates);
 
       const stateId = resolvedState?.id ?? explicitStateId;
       const stateName = resolvedState?.name ?? '';
@@ -958,7 +958,20 @@ export function IssuesWorkspaceRoute({
   // 2D Swimlane condition: layout === 'board' and custom grouping or sub-grouping
   const is2DSwimlane = layout === 'board' && (subGroupBy !== 'none' || groupBy !== 'state');
 
-  const isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 768;
+  const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() => {
+    return typeof window !== 'undefined' && window.innerWidth <= 767;
+  });
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const handleResize = (): void => {
+      setIsMobileViewport(window.innerWidth <= 767);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => {
+      window.removeEventListener('resize', handleResize);
+    };
+  }, []);
 
   const [railSortBy, setRailSortBy] = useState<IssueSortOption>('updated');
   const [railSortDir, setRailSortDir] = useState<'asc' | 'desc'>('desc');
@@ -969,7 +982,8 @@ export function IssuesWorkspaceRoute({
 
   // Active peek key for 3-pane split list view (auto-selecting first issue if none specified, unless mobile <= 768px)
   const activePeekKey = useMemo(() => {
-    if (sortedRailIssues.length === 0) {
+    const firstRailIssue = sortedRailIssues[0];
+    if (sortedRailIssues.length === 0 || !firstRailIssue) {
       return peekParam ?? null;
     }
     if (peekParam) {
@@ -980,31 +994,30 @@ export function IssuesWorkspaceRoute({
       if (isMobileViewport) {
         return null;
       }
-      return sortedRailIssues[0]?.key ?? null;
+      return firstRailIssue.key;
     }
     if (isMobileViewport) {
       return null;
     }
-    if (closedSplitKey && closedSplitKey === sortedRailIssues[0]?.key) {
+    if (closedSplitKey && closedSplitKey === firstRailIssue.key) {
       return null;
     }
-    return sortedRailIssues[0]?.key ?? null;
+    return firstRailIssue.key;
   }, [peekParam, isMobileViewport, closedSplitKey, sortedRailIssues]);
 
   useEffect(() => {
+    const firstRailIssue = sortedRailIssues[0];
     if (
       layout === 'list' &&
       !isMobileViewport &&
       peekParam &&
-      sortedRailIssues.length > 0 &&
+      firstRailIssue &&
       !sortedRailIssues.some((i) => i.key === peekParam)
     ) {
-      const firstIssueKey = sortedRailIssues[0]?.key;
-      if (firstIssueKey) {
-        queueMicrotask(() => {
-          handleOpenPeek(firstIssueKey);
-        });
-      }
+      const firstIssueKey = firstRailIssue.key;
+      queueMicrotask(() => {
+        handleOpenPeek(firstIssueKey);
+      });
     }
   }, [layout, isMobileViewport, peekParam, sortedRailIssues, handleOpenPeek]);
 
@@ -1026,6 +1039,9 @@ export function IssuesWorkspaceRoute({
           onFiltersChange={setActiveFilters}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
+          onSearchSubmit={() => {
+            setActiveFilters((prev) => ({ ...prev }));
+          }}
           queryMode={queryMode}
           onQueryModeChange={setQueryMode}
           favoritesOnly={favoritesOnly}
@@ -1070,11 +1086,13 @@ export function IssuesWorkspaceRoute({
           onStateTransition={(issueKey, targetStateId) => {
             handleFieldSelect('state', targetStateId, issueKey);
           }}
-          onCardMove={(issueKey, targetColId) => {
-            if (groupBy === 'state') {
-              handleFieldSelect('state', targetColId, issueKey);
-            }
-          }}
+          onCardMove={
+            groupBy === 'state'
+              ? (issueKey, targetColId) => {
+                  handleFieldSelect('state', targetColId, issueKey);
+                }
+              : undefined
+          }
         />
       ) : layout === 'board' ? (
         <BoardView

@@ -62,7 +62,7 @@
   height: 32px;
   padding: 0 var(--space-3, 12px);
   background: var(--accent-primary);
-  color: #ffffff;
+  color: var(--accent-primary-fg, #ffffff);
   border: none;
   border-radius: var(--radius-sm, 4px);
   font-family: var(--font-sans);
@@ -145,8 +145,8 @@
 
 .navigator-fav-toggle--active {
   background: var(--bg-hover, #2c313a);
-  color: #fbbf24;
-  border-color: #fbbf24;
+  color: var(--text-warning, #fbbf24);
+  border-color: var(--border-warning, #fbbf24);
 }
 
 .navigator-saved-views-strip {
@@ -189,6 +189,6 @@
 
 .navigator-view-chip--active {
   background: var(--accent-primary);
-  color: #ffffff;
+  color: var(--accent-primary-fg, #ffffff);
   border-color: var(--accent-primary);
 }

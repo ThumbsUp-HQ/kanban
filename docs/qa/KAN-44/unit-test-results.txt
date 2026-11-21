@@ -41,3 +41,64 @@ All files          |   99.82 |    96.35 |     100 |    99.9 |
   ...ldPopover.tsx |     100 |    95.74 |     100 |     100 | 120,155           
   ...BoardGrid.tsx |     100 |     95.1 |     100 |     100 | ...95,313,363,477 
 -------------------|---------|----------|---------|---------|-------------------
+
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
+
+ ✓ src/app/AppShell.test.tsx (7 tests) 865ms
+   ✓ AppShell (7)
+     ✓ renders app shell with skip link, sidebar rail, topbar header, main canvas, and anchors 307ms
+stderr | src/features/table/TableView.test.tsx > TableView > supports capability-gated inline cell editing for State, Priority, Assignees, Dates, and Cycle
+An update to TableView inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/table/TableView.test.tsx > TableView > covers custom cycle option, empty dates, and terminal state branches in inline editing
+An update to TableView inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to TableView inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to TableView inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+Not implemented: navigation to another Document
+ ✓ src/features/table/TableView.test.tsx (18 tests) 1681ms
+   ✓ TableView (18)
+     ✓ renders default columns and cycles aria-sort ascending -> descending -> none on Priority click 340ms
+     ✓ sorts by other sortable columns (Key, Summary, State, Due date) 418ms
+
+ Test Files  2 passed (2)
+      Tests  25 passed (25)
+   Start at  18:32:35
+   Duration  2.67s (tests 55%, environment 29%, import 12%, transform 4%)
+

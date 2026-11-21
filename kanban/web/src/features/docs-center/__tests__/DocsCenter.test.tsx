@@ -1328,5 +1328,156 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
       expect(codeEl?.textContent).toBe('inline_code');
       expect(h2?.textContent).not.toContain('`inline_code`');
     });
+
+    it('pressing Escape on HelpDrawer after opening via FieldHelpHint restores focus without re-opening popover (KAN-16)', () => {
+      registerShellPanel('help', HelpDrawer);
+
+      function TestHarness() {
+        return (
+          <MemoryRouter>
+            <ShellPanelsProvider>
+              <div>
+                <FieldHelpHint
+                  title="Wasm Execution"
+                  summary="Runs in Wasmtime sandbox."
+                  docHref="/docs/custom-fields"
+                  testId="wasm-field-hint"
+                />
+              </div>
+            </ShellPanelsProvider>
+          </MemoryRouter>
+        );
+      }
+
+      render(<TestHarness />);
+      const triggerBtn = screen.getByTestId('wasm-field-hint');
+      expect(triggerBtn.getAttribute('aria-expanded')).toBe('false');
+
+      // Focus trigger to open popover
+      act(() => {
+        triggerBtn.focus();
+      });
+      expect(triggerBtn.getAttribute('aria-expanded')).toBe('true');
+
+      // Click "More info ->" doc link to open HelpDrawer
+      const moreInfoLink = screen.getByTestId('wasm-field-hint-doc-link');
+      act(() => {
+        fireEvent.click(moreInfoLink);
+      });
+
+      // Help drawer should be open and trigger popover should be closed
+      expect(screen.getByTestId('help-drawer')).toBeDefined();
+      expect(triggerBtn.getAttribute('aria-expanded')).toBe('false');
+
+      // Press Escape inside HelpDrawer
+      act(() => {
+        fireEvent.keyDown(window, { key: 'Escape' });
+      });
+
+      // HelpDrawer unmounts and restores focus to trigger
+      expect(screen.queryByTestId('help-drawer')).toBeNull();
+      expect(document.activeElement).toBe(triggerBtn);
+      // Popover MUST remain closed!
+      expect(triggerBtn.getAttribute('aria-expanded')).toBe('false');
+    });
+
+    it('renders architectural chapter badge and handles Tab key wrap in HelpDrawer', () => {
+      const onClose = vi.fn();
+      const { unmount } = render(
+        <MemoryRouter>
+          <HelpDrawer
+            arg={{ href: '/docs/admin-custom-scripted-fields-and-sandbox' }}
+            onClose={onClose}
+          />
+        </MemoryRouter>,
+      );
+      const badge = screen.getByTestId('help-drawer-category-badge');
+      expect(badge.textContent).toBe('[Architectural]');
+
+      const drawer = screen.getByTestId('help-drawer');
+      const focusable = drawer.querySelectorAll<HTMLElement>(
+        'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+      );
+      const firstEl = focusable[0];
+      const lastEl = focusable[focusable.length - 1];
+
+      // Tab key forward on last element wraps to first element
+      lastEl?.focus();
+      fireEvent.keyDown(window, { key: 'Tab' });
+
+      // Tab key forward on first element does not wrap
+      firstEl?.focus();
+      fireEvent.keyDown(window, { key: 'Tab' });
+
+      // Shift+Tab backward on first element wraps to last element
+      firstEl?.focus();
+      fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+
+      // Shift+Tab backward on last element does not wrap
+      lastEl?.focus();
+      fireEvent.keyDown(window, { key: 'Tab', shiftKey: true });
+
+      // Non-tab non-escape key on window
+      fireEvent.keyDown(window, { key: 'ArrowDown' });
+
+      // Fallback chapter branch when slug is not found
+      unmount();
+      render(
+        <MemoryRouter>
+          <HelpDrawer
+            arg={{ href: '/docs/nonexistent-doc-slug-999' }}
+            onClose={onClose}
+          />
+        </MemoryRouter>,
+      );
+      expect(screen.getByTestId('help-drawer')).toBeDefined();
+
+      // Unmount when previousActiveElement has no focus method
+      const origActiveEl = document.activeElement;
+      const fakeEl = document.createElement('div');
+      Object.defineProperty(document, 'activeElement', { value: fakeEl, configurable: true });
+      const { unmount: unmountNoFocus } = render(
+        <MemoryRouter>
+          <HelpDrawer arg={{ href: '/docs/home' }} onClose={onClose} />
+        </MemoryRouter>,
+      );
+      unmountNoFocus();
+      Object.defineProperty(document, 'activeElement', { value: origActiveEl, configurable: true });
+    });
+
+    it('covers category filter buttons: all, guide, architectural, informational in DocsCenterPage', () => {
+      const { rerender } = render(
+        <MemoryRouter initialEntries={['/docs/home']}>
+          <Routes>
+            <Route path="/docs/:slug" element={<DocsCenterPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+      const filterAll = screen.getByTestId('docs-filter-all');
+      const filterGuide = screen.getByTestId('docs-filter-guide');
+      const filterArch = screen.getByTestId('docs-filter-architectural');
+      const filterInfo = screen.getByTestId('docs-filter-informational');
+
+      fireEvent.click(filterGuide);
+      expect(filterGuide.classList.contains('active')).toBe(true);
+
+      fireEvent.click(filterArch);
+      expect(filterArch.classList.contains('active')).toBe(true);
+
+      fireEvent.click(filterInfo);
+      expect(filterInfo.classList.contains('active')).toBe(true);
+
+      fireEvent.click(filterAll);
+      expect(filterAll.classList.contains('active')).toBe(true);
+
+      // Re-render with new route to trigger slug !== prevSlug
+      rerender(
+        <MemoryRouter initialEntries={['/docs/guide-custom-fields']}>
+          <Routes>
+            <Route path="/docs/:slug" element={<DocsCenterPage />} />
+          </Routes>
+        </MemoryRouter>,
+      );
+    });
   });
 });

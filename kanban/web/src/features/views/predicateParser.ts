@@ -32,12 +32,10 @@ export function matchesIssueQuery(
     const clauses = query.split(/\s+AND\s+/i);
     return clauses.every((clause) => {
       const trimmedClause = clause.trim();
-      if (!trimmedClause) return true;
-
       const equalMatch = /^([a-zA-Z0-9_]+)\s*=\s*(.+)$/.exec(trimmedClause);
-      if (equalMatch) {
-        const field = equalMatch[1]?.toLowerCase();
-        const rawVal = stripQuotes(equalMatch[2] ?? '');
+      if (equalMatch?.[1] && equalMatch[2]) {
+        const field = equalMatch[1].toLowerCase();
+        const rawVal = stripQuotes(equalMatch[2]);
         return matchesFieldValue(field, rawVal, issue, projectKey);
       }
 
@@ -51,18 +49,17 @@ export function matchesIssueQuery(
 }
 
 function matchesFieldValue(
-  field: string | undefined,
+  field: string,
   val: string,
   issue: IssueItem,
   projectKey: string,
 ): boolean {
-  if (!field) return true;
   const targetVal = val.toLowerCase().trim();
 
   switch (field) {
     case 'project': {
       const pKey = projectKey.toLowerCase();
-      const issuePKey = issue.key.split('-')[0]?.toLowerCase() ?? '';
+      const issuePKey = (issue.key.split('-')[0] ?? '').toLowerCase();
       return pKey === targetVal || issuePKey === targetVal;
     }
     case 'status':
@@ -153,12 +150,10 @@ function matchesTokens(
       tokens.push({ value: match[3] });
     } else if (match[4]) {
       tokens.push({ value: match[4] });
-    } else if (match[5]) {
-      tokens.push({ value: match[5] });
+    } else {
+      tokens.push({ value: match[5] ?? '' });
     }
   }
-
-  if (tokens.length === 0) return true;
 
   return tokens.every((token) => {
     if (token.field) {

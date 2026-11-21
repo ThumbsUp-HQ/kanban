@@ -534,4 +534,72 @@ describe('CreateProjectModal & useSessionGuard', () => {
       expect(sentPayload?.skip_loaded_sequence_numbers).toBeUndefined();
     });
   });
+
+  it('covers missing csrfToken, non-Error throw, and omitted onCreated callback', async () => {
+    const onClose = vi.fn();
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes('/api/v1/auth/session')) {
+        return Promise.resolve(new Response(JSON.stringify({ authenticated: true }), { status: 200 }));
+      }
+      if (url.includes('/api/v1/projects') && init?.method === 'POST') {
+        const headers = init.headers as Record<string, string>;
+        expect(headers['X-CSRF-Token']).toBeUndefined();
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              id: 'p-no-csrf',
+              identifier: 'NOCSRF',
+              name: 'No CSRF Project',
+            }),
+            { status: 201, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      }
+      return Promise.resolve(new Response(null, { status: 404 }));
+    });
+
+    render(
+      <MemoryRouter>
+        <CreateProjectModal isOpen={true} onClose={onClose} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByLabelText('Project Name'), { target: { value: 'No CSRF Project' } });
+    fireEvent.click(screen.getByTestId('create-project-submit'));
+
+    await waitFor(() => {
+      expect(onClose).toHaveBeenCalled();
+    });
+  });
+
+  it('handles non-Error throw in submission catch block', async () => {
+    vi.spyOn(window, 'fetch').mockImplementation((input, init) => {
+      const url = typeof input === 'string' ? input : input instanceof URL ? input.href : input.url;
+      if (url.includes('/api/v1/admin/workspace-settings')) {
+        return Promise.resolve(new Response(JSON.stringify({ default_skip_loaded_sequence_numbers: false }), { status: 200 }));
+      }
+      if (url.includes('/api/v1/auth/session')) {
+        return Promise.resolve(new Response(JSON.stringify({ csrf_token: 'csrf' }), { status: 200 }));
+      }
+      if (url.includes('/api/v1/projects') && init?.method === 'POST') {
+        // eslint-disable-next-line @typescript-eslint/prefer-promise-reject-errors
+        return Promise.reject('raw network failure string');
+      }
+      return Promise.resolve(new Response(null, { status: 404 }));
+    });
+
+    render(
+      <MemoryRouter>
+        <CreateProjectModal isOpen={true} onClose={vi.fn()} />
+      </MemoryRouter>,
+    );
+
+    fireEvent.change(screen.getByLabelText('Project Name'), { target: { value: 'Fail Project' } });
+    fireEvent.click(screen.getByTestId('create-project-submit'));
+
+    await waitFor(() => {
+      expect(screen.getByRole('alert').textContent).toContain('Could not create project.');
+    });
+  });
 });

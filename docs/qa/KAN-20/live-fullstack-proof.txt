@@ -1,69 +1,80 @@
 ================================================================================
 KAN-20 LIVE UNMOCKED FULL-STACK QA PROOF (http://127.0.0.1:18963)
-Container: kanban-liveqa-3 (main commit 7913c2c8, PostgreSQL 16 + FORCE RLS)
+Container: kanban-liveqa-3 (main commit 78074a1d, PostgreSQL 16 + FORCE RLS)
 ================================================================================
 
-1. SUMMARY OF LIVE VERIFICATION FINDINGS
+1. SUMMARY OF LIVE VERIFICATION FINDINGS (ROUND 3 - commit 78074a1d)
 --------------------------------------------------------------------------------
 - Seeded issues KAN-1, KAN-2, KAN-3, KAN-4 and docs docs/verification-architecture-spec, docs/deployment-proof-checklist in KAN linked via VERIFIED_BY_DOC and BLOCKS, plus secret PRIV-1 and doc docs/classified-vault-runbook in PRIV with explicit @member ACL DENY on PRIV (and cross-project BLOCKS link from KAN-1 to PRIV-1).
 - Indexed embeddings using EmbeddingIndexer + OnnxBgeSmallEmbedder(fallback_to_fixture=True) under FORCE ROW LEVEL SECURITY, leaving KAN-4 and docs/deployment-proof-checklist as unindexed linked neighbors to exercise synaptic activation provenance.
-- COLD & WARM Hybrid Search + Synaptic Activation (0 HTTP 500s):
-  * COLD GET /api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid as @member:
-    status=200 OK, latency=30.35ms, executed_mode="hybrid", total=4, 0 PRIV leaks.
-  * WARM GET /api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid as @member:
-    status=200 OK, latency=30.10ms, executed_mode="hybrid", total=4, 0 PRIV leaks.
-  * @member secret query probe (q=CLASSIFIED_QUANTUM_CIPHER_KEY_ROTATION):
-    hybrid_status=200 priv_leaks=0, lexical_total=0 (zero PRIV leakage!).
-  * COLD GET /api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid as @admin:
-    status=200 OK, latency=30.44ms, executed_mode="hybrid", total=6 (and total=8 after adding KAN-4 and docs/deployment-proof-checklist).
-  * Provenance match_reason strings verified in exact backend RRF/synaptic rank order:
-    1. issue KAN-1 'Synaptic Vector Kernel' -> Semantic match
-    2. issue KAN-3 'Synaptic Vector Kernel Telemetry' -> Semantic match
-    3. doc docs/deployment-proof-checklist 'Deployment Proof Checklist' -> Linked via VERIFIED_BY_DOC to KAN-1
-    4. issue KAN-4 'Release Verification Gate' -> Linked via BLOCKS to KAN-1
-    5. issue KAN-2 'Release Gate Readiness Checklist' -> Semantic match
-    6. issue PRIV-1 'CLASSIFIED_QUANTUM_CIPHER_KEY_ROTATION' -> Semantic match
-    7. doc docs/classified-vault-runbook 'Classified Vault Runbook' -> Semantic match
-    8. doc docs/verification-architecture-spec 'Verification Architecture Spec' -> Semantic match
+- Hybrid Search + RLS Isolation + Provenance (0 HTTP 500s):
+  * @member GET /api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid (#1 / #2):
+    status=200 OK (75.55ms / 87.31ms), executed_mode="hybrid", total=6 (includes KAN-4 "Linked via BLOCKS to KAN-1" and docs/deployment-proof-checklist "Linked via VERIFIED_BY_DOC to KAN-1"), 0 PRIV leaks.
+  * @member secret query probe (q=CLASSIFIED_QUANTUM_CIPHER_KEY_ROTATION&mode=hybrid):
+    status=200 OK, executed_mode="hybrid", priv_leaks=0 (zero PRIV leakage!).
+  * @admin GET /api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid (unfiltered):
+    status=200 OK (110.84ms), executed_mode="hybrid", total=8.
+- Filtered Hybrid Search & extra_predicates Enforcement:
+  * /mcp/agent search_tickets (POST /api/v1/search/issues -> search_issues):
+    - Unfiltered: total=5 (KAN-1, KAN-3, KAN-4 [Linked via BLOCKS to KAN-1], KAN-2, PRIV-1).
+    - Filter project="KAN": total=4 (KAN-1, KAN-3, KAN-4, KAN-2) -> PRIV-1 excluded (cross-project vector + synaptic neighbor properly filtered).
+    - Filter project="KAN", states=["Backlog"]: total=4 (KAN-1, KAN-3, KAN-4, KAN-2).
+    - Filter project="KAN", states=["Done"]: total=0 -> extra_predicates enforced on BOTH vector and synaptic candidates!
+  * Direct REST POST /api/v1/search/issues {"query": "Synaptic Vector Kernel", "mode": "hybrid", "project": "KAN"}:
+    status=200, total=4, keys=['KAN-1', 'KAN-3', 'KAN-4', 'KAN-2'].
+  * Residual Note on REST GET /api/v1/search?project=KAN (search_unified, kanban/services/search.py):
+    For @admin (who holds ACL access to PRIV), GET /api/v1/search?q=Synaptic+Vector+Kernel&mode=hybrid&project=KAN returned total=7 including PRIV-1 (proj=PRIV, match_reason='Linked via BLOCKS to KAN-1') because search_unified does not post-filter synaptic neighbors by project_id (unlike search_issues). @member remains blocked by FORCE RLS / ACL DENY (0 PRIV leaks).
 - MCP JSON-RPC surfaces (BOTH emit executed_mode: hybrid alongside mode: hybrid and match_reason):
   * POST /mcp/agent tools/call search_tickets (mode="hybrid") -> mode: hybrid, executed_mode: hybrid, match_reason per item.
-  * POST /mcp/docs tools/call search (query="Synaptic Vector Kernel", mode="hybrid", lod="standard") -> mode: hybrid, executed_mode: hybrid, match_reason per item.
-- CommandPalette (Ctrl+K) Playwright UI on /w/kanban/p/KAN/issues across Desktop (1440x900 Light & Dark), Tablet (768x1024 Light), Mobile (390x844 Light):
-  * Rendered all 8 backend hybrid results in exact backend rank order including "Linked via VERIFIED_BY_DOC to KAN-1" and "Linked via BLOCKS to KAN-1" provenance pills!
-  * Desktop Light: searchMs=288ms, pillCount=8, docOverflow=false, dialogOverflow=false, outsideDialog=false
-  * Desktop Dark: searchMs=287ms, pillCount=8, docOverflow=false, dialogOverflow=false, outsideDialog=false
-  * Tablet Light: searchMs=285ms, pillCount=8, docOverflow=false, dialogOverflow=false, outsideDialog=false
-  * Mobile Light (390x844): searchMs=286ms, pillCount=8, headerFlexWrap=wrap (option title wraps cleanly without crushing), docOverflow=false, dialogOverflow=false, outsideDialog=false
-  * UI consoleErrors=0, pageErrors=0, serverErrors=0.
+  * POST /mcp/docs tools/call search (query="Synaptic Vector Kernel", mode="hybrid", lod="standard") -> mode: hybrid, executed_mode: hybrid, total: 3 (includes docs/deployment-proof-checklist -> "Linked via VERIFIED_BY_DOC to KAN-1").
+- CommandPalette (Ctrl+K) Playwright UI across Desktop (1440x900 Light/Dark), Tablet (768x1024 Light), Mobile (390x844 Light):
+  * Desktop Light: searchMs=291ms, pillCount=8, hasLinkedVerified=true, hasLinkedBlocks=true, headerFlexWrap=nowrap, docOverflow=false, dialogOverflow=false, outsideDialog=false
+  * Desktop Dark:  searchMs=296ms, pillCount=8, hasLinkedVerified=true, hasLinkedBlocks=true, headerFlexWrap=nowrap, docOverflow=false, dialogOverflow=false, outsideDialog=false
+  * Tablet Light:  searchMs=791ms, pillCount=8, hasLinkedVerified=true, hasLinkedBlocks=true, headerFlexWrap=nowrap, docOverflow=false, dialogOverflow=false, outsideDialog=false
+  * Mobile Light (390x844): searchMs=283ms, pillCount=8, headerFlexWrap=wrap (option title wraps cleanly without crushing), docOverflow=false, dialogOverflow=false, outsideDialog=false
+  * Mobile .kb-palette-badge getComputedStyle check on "Linked via VERIFIED_BY_DOC to KAN-1":
+    display="block" (computed from inline-block flex child per CSS Flexbox spec), textOverflow="ellipsis", overflow="hidden", whiteSpace="nowrap", scrollWidth=261, clientWidth=246 -> visually verified clean "Linked via VERIFIED_BY_DOC to K..." ellipsis truncation (zero mid-character flex clipping!).
+  * UI consoleErrors=0, pageErrors=0, badResponses=0 across all 4 viewports.
 
-2. VERBATIM API, INDEXER, RLS, AND MCP OUTPUT LOG
+2. VERBATIM ROUND 3 API & MCP PROBE TRANSCRIPT
 --------------------------------------------------------------------------------
-[SEED & INDEXER]
-[SEED] Created KAN-1, KAN-2, KAN-3, doc docs/verification-architecture-spec (01a1fb00-7d57-7b77-ae1c-da0f154a203e), PRIV PRIV-1, PRIV doc docs/classified-vault-runbook (01a1fb00-7da4-71ef-8bc0-1f29b832ac44)
-[LINKS] KAN-1 VERIFIED_BY_DOC->docs/verification-architecture-spec (201), BLOCKS->KAN-2 (201), BLOCKS->PRIV-1 (201)
-[PRE-INDEX SEARCH] status=200 executed_mode=lexical total=3
-[INDEXER] indexed issue 01a1fb00-7c7e-7410-93b8-dd23417084be writes=1
-[INDEXER] indexed issue 01a1fb00-7ccb-7042-9398-79e78ec8174b writes=1
-[INDEXER] indexed issue 01a1fb00-7d18-7795-bd1a-6008de4fa6d8 writes=1
-[INDEXER] indexed doc 01a1fb00-7d57-7b77-ae1c-da0f154a203e writes=1
-[INDEXER] indexed issue 01a1fb00-7d78-7598-a9cb-34617c6d8572 writes=1
-[INDEXER] indexed doc 01a1fb00-7da4-71ef-8bc0-1f29b832ac44 writes=1
-[COLD @member HYBRID SEARCH] status=200 latency=30.35ms executed_mode=hybrid total=4
-[WARM @member HYBRID SEARCH] status=200 latency=30.10ms executed_mode=hybrid total=4
-[@member SECRET PROBE] hybrid_status=200 priv_leaks=0 lexical_total=0 executed_mode=hybrid (0 PRIV leaks)
+[@member #1 GET /api/v1/search] status=200 latency=75.55ms executed_mode=hybrid total=6
+  - key=KAN-1 proj=KAN title='Synaptic Vector Kernel' match_reason='Semantic match'
+  - key=KAN-3 proj=KAN title='Synaptic Vector Kernel Telemetry' match_reason='Semantic match'
+  - key=docs/deployment-proof-checklist proj=KAN title='Deployment Proof Checklist' match_reason='Linked via VERIFIED_BY_DOC to KAN-1'
+  - key=KAN-4 proj=KAN title='Release Verification Gate' match_reason='Linked via BLOCKS to KAN-1'
+  - key=KAN-2 proj=KAN title='Release Gate Readiness Checklist' match_reason='Semantic match'
+  - key=docs/verification-architecture-spec proj=KAN title='Verification Architecture Spec' match_reason='Semantic match'
+[@member #2 GET /api/v1/search] status=200 latency=87.31ms executed_mode=hybrid total=6
+  - key=KAN-1 proj=KAN title='Synaptic Vector Kernel' match_reason='Semantic match'
+  - key=KAN-3 proj=KAN title='Synaptic Vector Kernel Telemetry' match_reason='Semantic match'
+  - key=docs/deployment-proof-checklist proj=KAN title='Deployment Proof Checklist' match_reason='Linked via VERIFIED_BY_DOC to KAN-1'
+  - key=KAN-4 proj=KAN title='Release Verification Gate' match_reason='Linked via BLOCKS to KAN-1'
+  - key=KAN-2 proj=KAN title='Release Gate Readiness Checklist' match_reason='Semantic match'
+  - key=docs/verification-architecture-spec proj=KAN title='Verification Architecture Spec' match_reason='Semantic match'
+[@member SECRET PROBE] status=200 latency=110.81ms executed_mode=hybrid total=6
+[@member SECRET PROBE ASSERT] priv_leaks=0
+[@admin GET /api/v1/search (unfiltered)] status=200 latency=110.84ms executed_mode=hybrid total=8
+  - key=KAN-1 proj=KAN title='Synaptic Vector Kernel' match_reason='Semantic match'
+  - key=KAN-3 proj=KAN title='Synaptic Vector Kernel Telemetry' match_reason='Semantic match'
+  - key=docs/deployment-proof-checklist proj=KAN title='Deployment Proof Checklist' match_reason='Linked via VERIFIED_BY_DOC to KAN-1'
+  - key=KAN-4 proj=KAN title='Release Verification Gate' match_reason='Linked via BLOCKS to KAN-1'
+  - key=KAN-2 proj=KAN title='Release Gate Readiness Checklist' match_reason='Semantic match'
+  - key=PRIV-1 proj=PRIV title='CLASSIFIED_QUANTUM_CIPHER_KEY_ROTATION' match_reason='Semantic match'
+  - key=docs/classified-vault-runbook proj=PRIV title='Classified Vault Runbook' match_reason='Semantic match'
+  - key=docs/verification-architecture-spec proj=KAN title='Verification Architecture Spec' match_reason='Semantic match'
+[@admin GET /api/v1/search?project=KAN] status=200 latency=38.21ms executed_mode=hybrid total=7
+  - key=KAN-1 proj=KAN title='Synaptic Vector Kernel' match_reason='Semantic match'
+  - key=KAN-3 proj=KAN title='Synaptic Vector Kernel Telemetry' match_reason='Semantic match'
+  - key=docs/deployment-proof-checklist proj=KAN title='Deployment Proof Checklist' match_reason='Linked via VERIFIED_BY_DOC to KAN-1'
+  - key=KAN-4 proj=KAN title='Release Verification Gate' match_reason='Linked via BLOCKS to KAN-1'
+  - key=PRIV-1 proj=PRIV title='CLASSIFIED_QUANTUM_CIPHER_KEY_ROTATION' match_reason='Linked via BLOCKS to KAN-1'
+  - key=KAN-2 proj=KAN title='Release Gate Readiness Checklist' match_reason='Semantic match'
+  - key=docs/verification-architecture-spec proj=KAN title='Verification Architecture Spec' match_reason='Semantic match'
+[GET /api/v1/search?project=KAN non_kan_synaptic_leaks] [('PRIV-1', 'PRIV', 'Linked via BLOCKS to KAN-1')]
+[POST /api/v1/search/issues project=KAN] status=200 total=4 keys=['KAN-1', 'KAN-3', 'KAN-4', 'KAN-2']
 
-[SYNAPTIC NEIGHBOR RANKING CHECK]
-Search status: 200 executed_mode: hybrid total: 8
-  issue KAN-1 'Synaptic Vector Kernel' -> Semantic match
-  issue KAN-3 'Synaptic Vector Kernel Telemetry' -> Semantic match
-  doc docs/deployment-proof-checklist 'Deployment Proof Checklist' -> Linked via VERIFIED_BY_DOC to KAN-1
-  issue KAN-4 'Release Verification Gate' -> Linked via BLOCKS to KAN-1
-  issue KAN-2 'Release Gate Readiness Checklist' -> Semantic match
-  issue PRIV-1 'CLASSIFIED_QUANTUM_CIPHER_KEY_ROTATION' -> Semantic match
-  doc docs/classified-vault-runbook 'Classified Vault Runbook' -> Semantic match
-  doc docs/verification-architecture-spec 'Verification Architecture Spec' -> Semantic match
-
-[MCP /mcp/agent search_tickets YAML]
+[MCP /mcp/agent search_tickets (project=KAN,states=['Backlog'])]
 mode: hybrid
 executed_mode: hybrid
 total: 4
@@ -84,6 +95,14 @@ items:
   priority: medium
   workspace: kanban
   match_reason: Semantic match
+- key: KAN-4
+  issue_key: KAN-4
+  sequence_number: 4
+  summary: Release Verification Gate
+  state: Backlog
+  priority: medium
+  workspace: kanban
+  match_reason: Linked via BLOCKS to KAN-1
 - key: KAN-2
   issue_key: KAN-2
   sequence_number: 2
@@ -92,19 +111,16 @@ items:
   priority: medium
   workspace: kanban
   match_reason: Semantic match
-- key: PRIV-1
-  issue_key: PRIV-1
-  sequence_number: 1
-  summary: CLASSIFIED_QUANTUM_CIPHER_KEY_ROTATION
-  state: Backlog
-  priority: urgent
-  workspace: kanban
-  match_reason: Semantic match
 
-[MCP /mcp/docs search YAML (mode="hybrid")]
+[MCP /mcp/agent search_tickets (project=KAN,states=['Done'])]
 mode: hybrid
 executed_mode: hybrid
-total: 2
+total: 0
+
+[MCP /mcp/docs search (mode='hybrid')]
+mode: hybrid
+executed_mode: hybrid
+total: 3
 items:
 - kind: doc
   key: docs/classified-vault-runbook
@@ -122,6 +138,14 @@ items:
 
     Formal proof specification for release validation and hybrid search.
   match_reason: Semantic match
+- kind: doc
+  key: docs/deployment-proof-checklist
+  title: Deployment Proof Checklist
+  snippet: |-
+    # Deployment Proof
+
+    Checklist without search keywords.
+  match_reason: Linked via VERIFIED_BY_DOC to KAN-1
 
 3. CAPTURED SCREENSHOTS (VISUALLY INSPECTED VIA read_file)
 --------------------------------------------------------------------------------
@@ -130,4 +154,4 @@ items:
 - docs/qa/KAN-20/screenshots/live-command-palette-tablet-light.png
 - docs/qa/KAN-20/screenshots/live-command-palette-mobile-light.png
 
-LIVE_STACK_VERDICT: PASS
+LIVE_STACK_VERDICT: PASS (scoped Round 3 /mcp/agent search_tickets extra_predicates + /mcp/docs mode="hybrid" + RLS isolation + Mobile .kb-palette-badge ellipsis truncation; follow-up note: GET /api/v1/search?project=KAN search_unified should post-filter cross-project synaptic neighbors by project_id for multi-project principals)

@@ -1,107 +1,126 @@
 # Integration Agent Reality-Based Report
 
 ## 🔍 Reality Check Validation
-**Commands Executed**: Passive forensic audit mode (`read_file` only; zero shell commands executed, zero URLs visited, zero files modified per clean-room protocol). Inspected `.agents/agents/reality-checker.md`, all verification artifacts in `/home/adamoutler/kanban/docs/qa/KAN-54/`, all 8 screenshots in `/home/adamoutler/kanban/docs/qa/KAN-54/screenshots/`, and on-disk implementation/test files (`WorkflowStudioPage.tsx`, `AttachHookDialog.tsx`, `HookPipelineRow.tsx`, `StudioDocLink.tsx`, `workflows.css`, `Topbar.css`, `Breadcrumb.css`, `WorkflowStudioPage.test.tsx`, `AttachHookDialog.test.tsx`).
+**Commands Executed**:
+- Passive forensic mode enforced (`read_file` only; zero shell commands, zero URLs visited, zero files modified).
+- Inspected `.agents/agents/reality-checker.md` and the complete Round 4 verification packet in `docs/qa/KAN-54/`:
+  - `docs/qa/KAN-54/message-to-reality-checker.md`
+  - `docs/qa/KAN-54/changed-files-manifest.txt`
+  - `docs/qa/KAN-54/git-diff.patch` (921 lines)
+  - `docs/qa/KAN-54/unit-test-results.txt`
+  - `docs/qa/KAN-54/build-or-typecheck.txt`
+  - `docs/qa/KAN-54/live-fullstack-proof.txt`
+  - `docs/qa/KAN-54/api-specialist-review.md`
+  - `docs/qa/KAN-54/ui-specialist-review.md`
+- Inspected all 8 live PNG screenshots in `docs/qa/KAN-54/screenshots/` via `read_file`.
+- Inspected on-disk implementation files: `kanban/web/src/features/workflows/WorkflowStudioPage.tsx`, `kanban/web/src/features/workflows/AttachHookDialog.tsx`, `kanban/web/src/features/workflows/HookPipelineRow.tsx`, `kanban/web/src/features/workflows/workflows.css`, `kanban/web/src/app/Topbar.css`, `kanban/web/src/app/Breadcrumb.css`, and `kanban/web/src/dev/IconStory.tsx`.
+
 **Evidence Captured**:
-- `docs/qa/KAN-54/message-to-reality-checker.md`
-- `docs/qa/KAN-54/changed-files-manifest.txt` (30 files with SHA-256 checksums)
-- `docs/qa/KAN-54/git-diff.patch` (893 lines)
-- `docs/qa/KAN-54/unit-test-results.txt` (7 test files, 74 tests passed in 7.34s; 98.81% Stmts, 96.76% Branch, 98.71% Funcs, 99.47% Lines; `HookPipelineRow.tsx` 98.5% Stmts, 97.53% Branch, 100% Funcs, 100% Lines)
-- `docs/qa/KAN-54/build-or-typecheck.txt` (at HEAD `7913c2c81b47de7e551fc5f76f5f180073d38b2a`: `check-migrations`, `ruff check`, `ruff format --check`, `mypy`, `lint-imports`, `tsc -b --noEmit`, `eslint --max-warnings 0`, `vite build`, `check_no_dashes` all exit 0)
-- `docs/qa/KAN-54/live-fullstack-proof.txt` (live container `kanban-liveqa-4` at `http://127.0.0.1:18964`, commit `7913c2c8`, 0 console errors, 0 page errors, 0 5xx responses)
-- `docs/qa/KAN-54/api-specialist-review.md` and `docs/qa/KAN-54/ui-specialist-review.md`
-- 8 PNG screenshots in `docs/qa/KAN-54/screenshots/`
+- Static & build verification at `HEAD` `78074a1d65216b6b3546b122445cdb322e0b1651` (`build-or-typecheck.txt`):
+  - `uv run kanban-ctl db check-migrations`: exit 0 (63 migrations valid, single head `p4_24_agent_safe_sequences`).
+  - `uv run ruff check .`: exit 0 (All checks passed!).
+  - `uv run ruff format --check .`: exit 0 (2023 files already formatted).
+  - `uv run mypy database kanban mcp agent`: exit 0 (0 issues in 995 source files).
+  - `uv run lint-imports`: exit 0 (Contracts: 2 kept, 0 broken).
+  - `pnpm --dir kanban/web run typecheck` (`tsc -b --noEmit`): exit 0.
+  - `pnpm --dir kanban/web run lint` (`eslint . --max-warnings 0`): exit 0.
+  - `pnpm --dir kanban/web run build` (`tsc -b && vite build`): exit 0 (built in 1.15s).
+  - `python3 -m scripts.check_no_dashes --all`: exit 0 (0 forbidden unicode dashes).
+- Unit test & v8 coverage (`unit-test-results.txt`):
+  - 7 test files passed, 74 tests passed in 7.34s, 0 failures:
+    - `cssTokensAudit.test.ts` (4)
+    - `TransitionRuleCardEdge.test.tsx` (2)
+    - `DryRunDrawer.test.tsx` (5)
+    - `GitRepoBindingsSection.test.tsx` (16)
+    - `AttachHookDialog.test.tsx` (6)
+    - `WorkflowStudioPage.test.tsx` (11)
+    - `workflowCoverageBooster.test.tsx` (30)
+  - Workflow v8 coverage (`All files`): 98.81% Stmts, 96.76% Branch, 98.71% Funcs, 99.47% Lines. `HookPipelineRow.tsx`: 98.5% Stmts, 97.53% Branch, 100% Funcs, 100% Lines. `AttachHookDialog.tsx`: 98.71% Stmts, 95.87% Branch, 100% Funcs, 100% Lines. `WorkflowStudioPage.tsx`: 100% Stmts, 97.64% Branch, 96.66% Funcs, 100% Lines.
+- Live container telemetry (`live-fullstack-proof.txt` against `kanban-liveqa-4` at `http://127.0.0.1:18964`, commit `78074a1d`):
+  - `GET /api/v1/setup/status` -> HTTP 200 (6ms)
+  - Desktop Light load: 964ms, `docLinkAriaLabel="Scripted Workflows & Transition Helpers Documentation"`, `docLinkCleanAmp=true`, `scriptRunnerCount=0`, `interceptorCount=0`, `scrollWidth=1440`, `innerWidth=1440`.
+  - Mobile 390x844: `scrollWidth=390`, `innerWidth=390`, `prefixChildrenOnSameLine=true`, `suffixWrapsBelowPrefix=true`, `breadcrumbClearsSearchBtn=true`, `breadcrumbOverflow="hidden"`, `breadcrumbTextOverflow="ellipsis"`, `breadcrumbWhiteSpace="nowrap"`.
+  - FieldHelpHint popover: `hasSyncWasmMutator=true`, `hasAsyncWasmPostMutation=false`, `zIndex="1220"`.
+  - Runtime telemetry: 0 console errors, 0 page errors, 0 5xx responses. `OVERALL LIVE_STACK_VERDICT (KAN-54): PASS`.
+
 **QA Cross-Validation**:
-- Confirmed live container telemetry, Vitest 74/74 pass + coverage tables, static build gates, and core visual layout improvements across desktop, tablet, and mobile viewports.
-- Challenged `ui-specialist-review.md` for factual inaccuracies against on-disk files: it cites a non-existent path `kanban/web/src/features/navigation/Topbar.css` (actual path is `kanban/web/src/app/Topbar.css`) and quotes non-existent TSX markup/classes (`.workflow-studio-icon`, `.workflow-project-pill`) whereas `WorkflowStudioPage.tsx` lines 280-284 render `<span>⚙️ Project</span>` and `.workflow-studio-title-badge`.
-- Challenged both specialist approvals (`APPROVED`) on two concrete defects present directly in the `KAN-54` diff (`WorkflowStudioPage.tsx:289` and `AttachHookDialog.tsx:227`) that were missed in `api-specialist-review.md` and `ui-specialist-review.md`.
+- Confirmed `api-specialist-review.md` (`APPROVED` by `api-spec-2`): On-disk `AttachHookDialog.tsx` and `HookPipelineRow.tsx` preserve wire value `hook_kind === 'agent_interceptor'` while presenting `"Agent Transition Helper"` in user-facing UI labels.
+- Confirmed `ui-specialist-review.md` (`APPROVED` by `ui-spec-2`) core findings against on-disk code and screenshots, with three minor documentation discrepancies noted in the specialist writeup (non-blocking):
+  1. `ui-specialist-review.md` cites `vite build` in `1.22s`, whereas `build-or-typecheck.txt` at `78074a1d` records `built in 1.15s`.
+  2. `ui-specialist-review.md` snippet shows `className="workflow-project-pill workflow-studio-title-badge"`, whereas on-disk `WorkflowStudioPage.tsx` line 282 uses `className="workflow-studio-title-badge"` only.
+  3. `ui-specialist-review.md` refers to `DryRunExecutionDrawer`, whereas the on-disk component is `DryRunDrawer` in `kanban/web/src/features/workflows/DryRunDrawer.tsx`.
 
 ## 📸 Complete System Evidence
 **Visual Documentation**:
-- Full system screenshots:
-  - `docs/qa/KAN-54/screenshots/live-workflow-studio-desktop-dark.png` (1440x900)
-  - `docs/qa/KAN-54/screenshots/live-workflow-studio-desktop-light.png` (1440x900)
-  - `docs/qa/KAN-54/screenshots/live-workflow-studio-tablet.png` (768x1024)
-  - `docs/qa/KAN-54/screenshots/live-workflow-studio-mobile.png` (390x844)
-- User journey & interaction evidence:
-  - `docs/qa/KAN-54/screenshots/live-attach-hook-dialog-dark.png`
-  - `docs/qa/KAN-54/screenshots/live-attach-hook-dialog-light.png`
-  - `docs/qa/KAN-54/screenshots/live-field-help-popover.png`
-  - `docs/qa/KAN-54/screenshots/live-dry-run-drawer.png`
-- Cross-browser comparison: Chromium/Playwright only (no multi-browser Firefox/WebKit captures in packet).
+- Full system screenshots (8 live captures in `docs/qa/KAN-54/screenshots/`):
+  - `live-workflow-studio-desktop-light.png` (1440x900 light mode)
+  - `live-workflow-studio-desktop-dark.png` (1440x900 dark mode)
+  - `live-workflow-studio-tablet.png` (768x1024 tablet viewport)
+  - `live-workflow-studio-mobile.png` (390x844 mobile viewport)
+  - `live-attach-hook-dialog-light.png` (Attach Workflow Helper Hook modal, light mode)
+  - `live-attach-hook-dialog-dark.png` (Attach Workflow Helper Hook modal, dark mode)
+  - `live-field-help-popover.png` (Workflow Hook Kind FieldHelpHint popover over modal)
+  - `live-dry-run-drawer.png` (Dry-Run slide-over drawer with blocked transition result)
 
 **What System Actually Delivers**:
-- Desktop Light/Dark (`live-workflow-studio-desktop-light.png`, `live-workflow-studio-desktop-dark.png`): Renders `⚙️ Project [KAN] > Scripted Workflows & Transition Helpers`, `📖 Documentation ->`, and `+ Add Transition Rule` cleanly with zero legacy `Interceptor` or `ScriptRunner` labels visible.
-- Tablet (`live-workflow-studio-tablet.png`, 768x1024): Sidebar collapses cleanly behind the hamburger button; action buttons wrap cleanly onto a second row below the header title; zero horizontal overflow (`scrollWidth: 768`).
-- Mobile (`live-workflow-studio-mobile.png`, 390x844): Topbar breadcrumb displays `< Workfl...` truncated cleanly with ellipsis and clears the search icon (`breadcrumbRight: 129`, `searchLeft: 137`); header keeps `⚙️ Project [KAN]` grouped on line 1 (`prefixHeight: 33`) and wraps `> Scripted Workflows & Transition Helpers` onto line 2 (`suffixTop: 121`); transition cards fit within 390px (`scrollWidth: 390`).
-- Dialog & Drawer (`live-attach-hook-dialog-dark.png`, `live-attach-hook-dialog-light.png`, `live-field-help-popover.png`, `live-dry-run-drawer.png`): Modal title renders `Attach Workflow Helper Hook`, radio option renders `Agent Transition Helper`, `FieldHelpHint` popover renders above the modal backdrop (`popoverZ: 1220` > `backdropZ: 1000`), and Dry-Run Drawer displays `[Sync Wasm Validator]` / `[Sync Wasm Mutator]` results cleanly.
-- However, `live-field-help-popover.png` visually confirms the `Workflow Hook Kind` help popover lists `Async Wasm Post-Mutation` while the underlying radio group (`AttachHookDialog.tsx:253`) and rule cards (`live-dry-run-drawer.png`) label the option `Sync Wasm Mutator` (`< 25.0 ms (Tier A)`).
+- **Desktop Light & Dark (`live-workflow-studio-desktop-light.png`, `live-workflow-studio-desktop-dark.png`)**: Renders `Project KAN > Scripted Workflows & Transition Helpers` header alongside `Documentation ->` and `+ Add Transition Rule` actions. Transition cards (`* Any State -> Done`, `Todo -> Cancelled`) and pipeline rows (`[Sync Wasm Validator] require-qa-proof-link`, `[Sync Wasm Mutator] auto-label-verified`, `[CLI Agent Gate] codex-forensic-qa-gate`) render with crisp contrast and zero legacy "Interceptor" or "ScriptRunner" user-facing terminology.
+- **Tablet (`live-workflow-studio-tablet.png`)**: Fits within 768px width with no horizontal overflow; header title remains on one line with action buttons stacked cleanly underneath.
+- **Mobile 390x844 (`live-workflow-studio-mobile.png`)**: Topbar breadcrumb truncates cleanly (`< Workfl...`) with ellipsis and clear separation to the left of the search button. Studio heading keeps `Project KAN` grouped on line 1 and wraps `> Scripted Workflows & Transition Helpers` onto line 2 without word-splitting or horizontal clipping.
+- **Attach Hook Dialog (`live-attach-hook-dialog-light.png`, `live-attach-hook-dialog-dark.png`)**: Modal header displays `Attach Workflow Helper Hook`; Hook Kind radio group displays `Sync Wasm Validator`, `Sync Wasm Mutator`, and `Agent Transition Helper` (selected, showing `Agent Definition`, `Agent Config Summary`, and `Failure Policy`). Zero inline JSX `style={...}` remains in `AttachHookDialog.tsx`.
+- **FieldHelpHint Popover (`live-field-help-popover.png`)**: Renders cleanly above the modal dialog (`z-index: 1220` over backdrop `z-index: 1000`) showing `Workflow Hook Kind`, summary `The execution tier for this transition helper rule.`, and valid values `Sync Wasm Validator`, `Sync Wasm Mutator` (`Synchronous WebAssembly mutator (< 25ms Tier A) that updates allowed issue fields during transition.`), `Agent Transition Helper`, plus `More info ->`.
+- **Dry-Run Drawer (`live-dry-run-drawer.png`)**: Displays `Dry-Run: [* Any State] -> [Done]` with `Sample ticket` / `Pick existing issue` tabs, form inputs, `Run Dry-Run` CTA, and rejection trace for `require-qa-proof-link`.
 
 ## 🧪 Integration Testing Results
-**End-to-End User Journeys**: PASS (visual/live probe) with minor copy defect - Studio load (897ms), responsive layouts, `AttachHookDialog` open in dark/light, `FieldHelpHint` popover open above modal backdrop, and `DryRunDrawer` execution all verified in `live-fullstack-proof.txt` and screenshots with 0 console errors, 0 page errors, and 0 5xx responses.
-**Cross-Device Consistency**: PASS - Desktop (1440x900), Tablet (768x1024), and Mobile (390x844) all show `scrollWidth === innerWidth` with no overlap or horizontal clipping.
-**Performance Validation**: PASS - `GET /api/v1/setup/status` 6ms (HTTP 200); Desktop Studio load 897ms (< 3000ms threshold); `vite build` 1.22s; Vitest 74 tests in 7.34s.
-**Specification Compliance**: PARTIAL / FAIL - Brand terminology cleanup (`Interceptor`/`ScriptRunner` removal while preserving `agent_interceptor` wire key), inline style removal, mobile breadcrumb/title grouping, and >=95% coverage (`98.81%` overall, `98.5%` on `HookPipelineRow.tsx`) are implemented; however, two newly introduced UI copy/JSX defects in the `KAN-54` diff prevent full compliance.
+**End-to-End User Journeys**: PASS
+- Live full-stack container (`kanban-liveqa-4`, `http://127.0.0.1:18964`, PostgreSQL 16 + FORCE RLS) served `/w/kanban/p/KAN/settings/workflows` in 964ms with 0 console errors, 0 page errors, and 0 HTTP 5xx responses (`live-fullstack-proof.txt`), verified across studio view, AttachHookDialog modal, FieldHelpHint popover, and DryRunDrawer screenshots.
+
+**Cross-Device Consistency**: PASS
+- Desktop (1440x900 light/dark), Tablet (768x1024), and Mobile (390x844) screenshots and DOM measurements confirm zero horizontal scroll overflow (`scrollWidth === innerWidth` on desktop 1440px and mobile 390px) and clean mobile breadcrumb ellipsis + title grouping.
+
+**Performance Validation**: PASS
+- Desktop route load measured at 964ms (< 3000ms threshold) and `GET /api/v1/setup/status` at 6ms (`live-fullstack-proof.txt`); Vite production bundle built in 1.15s (`build-or-typecheck.txt`).
+
+**Specification Compliance**: PASS
+- User-facing "Interceptor" / "ScriptRunner" labels replaced with "Scripted Workflows & Transition Helpers" / "Transition Helper" / "Agent Transition Helper" across `WorkflowStudioPage.tsx`, `AttachHookDialog.tsx`, `IconStory.tsx`, and `workflow-studio.spec.ts`, while wire `hook_kind` value `agent_interceptor` and API routes remain invariant.
+- Round 4 remediation items verified on disk and live stack: `StudioDocLink` clean `&` in `title` (`docLinkCleanAmp=true`), `FieldHelpHint` `Sync Wasm Mutator` alignment and `z-index: 1220`, mobile 390px breadcrumb ellipsis (`Topbar.css`, `Breadcrumb.css`) and title prefix/suffix wrapping (`workflows.css`), zero inline styles in `AttachHookDialog.tsx`, and `HookPipelineRow.tsx` coverage at 98.5% statements.
 
 ## 📊 Comprehensive Issue Assessment
 **Issues from QA Still Present**:
-- `message-to-reality-checker.md` states `WorkflowStudioPage.test.tsx`, `AttachHookDialog.test.tsx`, `DryRunDrawer.test.tsx`, `GitRepoBindingsSection.test.tsx`, `TransitionRuleCardEdge.test.tsx`, and `cssTokensAudit.test.ts` were modified in the change summary, whereas `git-diff.patch` at `7913c2c8` only modifies `workflowCoverageBooster.test.tsx` and `workflow-studio.spec.ts` (note: `WorkflowStudioPage.test.tsx` and `AttachHookDialog.test.tsx` on disk already contain the updated assertions from an earlier commit).
-- `live-fullstack-proof.txt` reports `"breadcrumbTextOverflow":"clip"` (likely measured on `.kb-breadcrumb` rather than `.kb-breadcrumb-current`), even though `Breadcrumb.css:98`, `Topbar.css:443`, and `live-workflow-studio-mobile.png` (`< Workfl...`) confirm ellipsis rendering on `.kb-breadcrumb-current`.
+- None within KAN-54 scope (P1 StudioDocLink aria-label & labels, P2 FieldHelpHint `Sync Wasm Mutator` & z-index 1220, P3 mobile 390px breadcrumb ellipsis & title grouping, inline-style removal, and `HookPipelineRow.tsx` coverage >= 95% are all resolved and verified).
 
 **New Issues Discovered**:
-1. **Literal `&amp;` entity in JSX string prop (`kanban/web/src/features/workflows/WorkflowStudioPage.tsx:289`)**:
-   - Line 289 passes `title="Scripted Workflows &amp; Transition Helpers Documentation"` to `<StudioDocLink>`.
-   - Unlike JSX text children (line 284), quoted string attributes in JSX are NOT HTML-entity decoded by React/TypeScript.
-   - `kanban/web/src/components/help/StudioDocLink.tsx:28,38` passes `title` verbatim into `aria-label={title ?? label}` and `shellPanels.openPanel('help', { href, title: title ?? label })`, leaking the raw literal string `&amp;` into both the accessibility label and the Help drawer panel title when clicked.
-2. **Contradictory Hook Kind label in newly added `FieldHelpHint` (`kanban/web/src/features/workflows/AttachHookDialog.tsx:227` vs `:253`)**:
-   - Line 227 (newly added in `KAN-54`, and visible in `docs/qa/KAN-54/screenshots/live-field-help-popover.png`) documents the second `Hook Kind` option as `Async Wasm Post-Mutation` ("Background WebAssembly post-action that mutates allowed fields.").
-   - Immediately below at line 253, the actual radio button is labeled `Sync Wasm Mutator`, and `HookPipelineRow.tsx:174` and `live-dry-run-drawer.png` display `[Sync Wasm Mutator]` with `< 25.0 ms (Tier A)` synchronous execution.
-3. **Inaccurate file path and class names in `docs/qa/KAN-54/ui-specialist-review.md` (`:18`, `:54-55`)**:
-   - References non-existent `kanban/web/src/features/navigation/Topbar.css` (actual: `kanban/web/src/app/Topbar.css`) and non-existent classes `.workflow-studio-icon` and `.workflow-project-pill` (actual: `.workflow-studio-title-badge`).
+- Minor non-blocking observation in `HookPipelineRow.tsx` line 306 (visible in `live-workflow-studio-desktop-light.png` and `live-workflow-studio-tablet.png`): when `hook.description` is unset on a `sync_mutator` hook (`auto-label-verified`), the pre-existing fallback string still reads `'Synchronous Wasm validator executing in isolated runtime.'` rather than distinguishing mutator vs validator.
+- Minor non-blocking documentation discrepancies in `docs/qa/KAN-54/ui-specialist-review.md` (`1.22s` vs `1.15s` build time, `workflow-project-pill` class mention, `DryRunExecutionDrawer` name vs `DryRunDrawer`).
+- Scope note: `unit-test-results.txt` covers the 7 targeted workflow/CSS-token Vitest files (74 tests); full-repo Vitest/Pytest suites are outside the Round 4 targeted log file, though live full-stack container proof and full-repo static/build checks (`ruff`, `mypy`, `lint-imports`, `tsc`, `eslint`, `vite build`, `check-migrations`, `check_no_dashes`) all passed cleanly at commit `78074a1d`.
 
-**Critical Issues**:
-- None (no runtime crashes, no security regressions, no console/5xx errors, no layout breakage).
-
-**Medium Issues**:
-1. Unescaped/raw `&amp;` string literal in `WorkflowStudioPage.tsx:289` (`StudioDocLink` `title` prop) leaking `&amp;` into `aria-label` and help panel heading.
-2. Contradictory `Async Wasm Post-Mutation` label in `AttachHookDialog.tsx:227` (`FieldHelpHint`) vs `Sync Wasm Mutator` radio control (`AttachHookDialog.tsx:253`) and `HookPipelineRow.tsx:174`.
-3. Factual inaccuracies in `docs/qa/KAN-54/ui-specialist-review.md` (wrong `Topbar.css` path and hallucinated JSX classes) and scope mismatch in `message-to-reality-checker.md`.
+**Critical Issues**: None.
+**Medium Issues**: None.
 
 ## 🎯 Realistic Quality Certification
-**Overall Quality Rating**: B+
-**Design Implementation Level**: Good
-**System Completeness**: 95%
-**Production Readiness**: NEEDS WORK
+**Overall Quality Rating**: A (Grade A / Production-Grade for KAN-54 scope)
+**Design Implementation Level**: Excellent
+**System Completeness**: 100% of KAN-54 specification and Round 4 remediation items implemented and verified
+**Production Readiness**: READY
 
 ## 🔄 Deployment Readiness Assessment
-**Status**: NEEDS WORK
+**Status**: READY
 
 **Required Fixes Before Production**:
-1. Replace `title="Scripted Workflows &amp; Transition Helpers Documentation"` with `title="Scripted Workflows & Transition Helpers Documentation"` in `kanban/web/src/features/workflows/WorkflowStudioPage.tsx:289`, and add/verify a unit assertion checking `aria-label` on `workflow-studio-doc-link` contains `&` rather than `&amp;`.
-2. Reconcile the `FieldHelpHint` entry in `kanban/web/src/features/workflows/AttachHookDialog.tsx:227` (`Async Wasm Post-Mutation`) to match the actual `Sync Wasm Mutator` radio option (`AttachHookDialog.tsx:253`) and `< 25ms` synchronous Wasm runtime behavior (visible in `docs/qa/KAN-54/screenshots/live-field-help-popover.png` and `live-dry-run-drawer.png`), then recapture `live-field-help-popover.png`.
-3. Correct `docs/qa/KAN-54/ui-specialist-review.md` (`kanban/web/src/app/Topbar.css` and actual `.workflow-studio-title-badge` markup) and ensure `live-fullstack-proof.txt` probes `.kb-breadcrumb-current` for `breadcrumbTextOverflow: "ellipsis"`.
+- None blocking KAN-54 closure.
 
-**Timeline for Production Readiness**: < 1 hour (1 targeted remediation cycle).
-**Revision Cycle Required**: YES
+**Timeline for Production Readiness**: Immediate for KAN-54 ticket closure.
+**Revision Cycle Required**: NO (Round 4 remediations complete).
 
 ## 📈 Success Metrics for Next Iteration
 **What Needs Improvement**:
-- Fix JSX string-prop entity literal (`&amp;` -> `&`) in `WorkflowStudioPage.tsx:289`.
-- Align `FieldHelpHint` valid-values copy in `AttachHookDialog.tsx:227` with the `Sync Wasm Mutator` radio option (`:253`).
-- Keep specialist review docs strictly grounded in verified on-disk paths and symbols.
-
+- In a future polish pass, consider differentiating the fallback description in `HookPipelineRow.tsx` line 306 for `sync_mutator` vs `sync_validator` when `hook.description` is null.
 **Quality Targets**:
-- 0 raw HTML entities in rendered DOM text, `aria-label`, or panel titles.
-- 100% terminology alignment between `FieldHelpHint` popovers and the controls they document.
-- Maintain >=95% Vitest coverage across all `src/features/workflows/` files and 0 static/build warnings.
-
+- Maintain >= 95% statement/branch/function/line coverage across `kanban/web/src/features/workflows/` and zero inline JSX `style={...}` attributes.
 **Evidence Requirements**:
-- Updated `git-diff.patch` / `unit-test-results.txt` / `build-or-typecheck.txt` after the two copy fixes.
-- Recaptured `docs/qa/KAN-54/screenshots/live-field-help-popover.png` showing `Sync Wasm Mutator` and `live-fullstack-proof.txt` confirming `workflow-studio-doc-link` `aria-label` and `.kb-breadcrumb-current` `textOverflow: "ellipsis"`.
-- Corrected `docs/qa/KAN-54/ui-specialist-review.md`.
+- Already satisfied for KAN-54 via `docs/qa/KAN-54/` (`live-fullstack-proof.txt`, `unit-test-results.txt`, `build-or-typecheck.txt`, specialist reviews, and 8 live screenshots).
 
 ---
 **Integration Agent**: RealityIntegration
 **Assessment Date**: 2026-11-20
-**Evidence Location**: docs/qa/KAN-54/
-**Re-assessment Required**: After fixes implemented
+**Evidence Location**: docs/qa/KAN-54/screenshots/
+**Re-assessment Required**: No (Certified Grade-A READY for KAN-54 closure)

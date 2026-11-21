@@ -4,7 +4,9 @@
  * using 100% canonical CSS tokens and zero inline style attributes.
  */
 
-.table-summary-cell {
+.table-summary-cell,
+.table-col-header--summary {
+  min-width: 180px;
   max-width: 280px;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -33,8 +35,10 @@
     padding: 0 var(--space-3, 12px);
   }
 
-  .table-summary-cell {
-    max-width: 200px;
+  .table-summary-cell,
+  .table-col-header--summary {
+    min-width: 180px;
+    max-width: 240px;
   }
 }
 
@@ -52,6 +56,7 @@
 
   .issues-table {
     font-size: 0.75rem;
+    min-width: 580px;
   }
 
   .issues-table thead tr {
@@ -105,12 +110,10 @@
     font-size: 0.75rem;
   }
 
-  /* Compact Summary column constrained to 105px on 390px screens */
+  /* Summary column preserved at >= 180px on 390px screens */
   .table-col-header--summary,
   .table-summary-cell {
-    width: 105px;
-    max-width: 105px;
-    min-width: 75px;
+    min-width: 180px;
     padding: 0 var(--space-1, 4px);
   }
 

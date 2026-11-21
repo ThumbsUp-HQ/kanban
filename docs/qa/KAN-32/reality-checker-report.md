@@ -1,140 +1,71 @@
 # Integration Agent Reality-Based Report
 
 ## 🔍 Reality Check Validation
-**Commands Executed**: Passive clean-room forensic inspection only (`read_file` exclusively; zero shell commands executed, zero URLs visited, zero files modified, strictly adhering to `.agents/agents/reality-checker.md`).
+**Commands Executed**: Passive forensic audit via `read_file` only (zero shell commands executed, zero URLs visited, zero files modified, per Clean-Room `reality-checker` protocol). Verified packet manifests, patches, raw test logs, static build logs, specialist reviews, on-disk source files, and 11 live Playwright PNG screenshots at `main` commit `78074a1d` (`78074a1d65216b6b3546b122445cdb322e0b1651`).
 **Evidence Captured**:
-- Verification packet files inspected in `docs/qa/KAN-32/`:
-  - `docs/qa/KAN-32/message-to-reality-checker.md`
-  - `docs/qa/KAN-32/changed-files-manifest.txt`
-  - `docs/qa/KAN-32/git-diff.patch` (122 lines; covers `kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx` only)
-  - `docs/qa/KAN-32/unit-test-results.txt`
-  - `docs/qa/KAN-32/build-or-typecheck.txt`
-  - `docs/qa/KAN-32/live-fullstack-proof.txt`
-  - `docs/qa/KAN-32/api-specialist-review.md`
-  - `docs/qa/KAN-32/ui-specialist-review.md`
-  - `docs/qa/KAN-32/reality-checker-report.md` (Round 1 baseline)
-  - `docs/qa/KAN-32/wiki-diff.patch`
-- All 11 live PNG screenshots inspected via `read_file` in `docs/qa/KAN-32/screenshots/`:
-  - `live-desktop-light.png`, `live-new-field-matrix-presets-light.png`, `live-advanced-tier-gating-light.png`, `live-wiki-example3-test-exec-light.png`, `live-wasm-test-execute-light.png`, `live-desktop-test-exec.png`, `live-desktop-dark.png`, `live-long-log-wrap-light.png`, `live-tablet.png`, `live-mobile.png`, `live-guide-custom-fields-desktop-light.png`
-- On-disk implementation and test files cross-checked:
-  - `kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx`
-  - `kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx` (note: located under `__tests__/`, not directly in `custom-fields/`)
-  - `kanban/web/src/features/custom-fields/custom-fields.css` (note: kebab-case filename on disk, not `customFields.css`)
-  - `kanban/web/src/features/custom-fields/CustomFieldValue.tsx`
-  - `kanban/custom_fields/builtin_wasm.py`
-  - `kanban/custom_fields/executor.py`
-  - `kanban/api/v1/custom_fields.py`
-  - `kanban/api/v1/custom_field_execution.py`
-  - `kanban/tests/custom_fields/test_builtin_wasm_preset.py`
-  - `thumbs-up-kanban.wiki/Guide-Custom-Fields.md`
-  - Note: `kanban/services/custom_fields.py` does not exist on disk; custom field service logic resides under `kanban/custom_fields/service.py`.
+- Verification packet & telemetry: `docs/qa/KAN-32/message-to-reality-checker.md`, `docs/qa/KAN-32/changed-files-manifest.txt`, `docs/qa/KAN-32/git-diff.patch`, `docs/qa/KAN-32/unit-test-results.txt`, `docs/qa/KAN-32/build-or-typecheck.txt`, `docs/qa/KAN-32/live-fullstack-proof.txt`.
+- Specialist reviews: `docs/qa/KAN-32/api-specialist-review.md` (`api-spec-2`, APPROVED) and `docs/qa/KAN-32/ui-specialist-review.md` (`ui-spec-2`, APPROVED).
+- Live full-stack Playwright screenshots (11 PNGs in `docs/qa/KAN-32/screenshots/`) against zero-mock container `kanban-liveqa-1` (`http://127.0.0.1:18961`, PostgreSQL 16 + `FORCE ROW LEVEL SECURITY`).
+- On-disk source inspection: `kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx`, `kanban/web/src/features/custom-fields/CustomFieldValue.tsx`, `kanban/web/src/features/custom-fields/custom-fields.css`, `kanban/custom_fields/executor.py`, and `kanban/custom_fields/builtin_wasm.py`.
 
 **QA Cross-Validation**:
-- **Confirmed (Round 1 Remediations Verified)**:
-  - **Single-line `<input>` / `<select>` 38px height parity**: `kanban/web/src/features/custom-fields/custom-fields.css` (lines 543-570) separates `.custom-field-input, .custom-field-select` (`min-height: 38px; line-height: 1.45;`) from `.custom-field-textarea` (`min-height: 140px;`). Visually confirmed across `live-tablet.png`, `live-advanced-tier-gating-light.png`, `live-wiki-example3-test-exec-light.png`, and `live-long-log-wrap-light.png`, and measured at `38px` in `live-fullstack-proof.txt` (lines 11-17).
-  - **Bare formula copy-paste normalization**: `normalizeScriptSource` in `CustomFieldDefinitionEditor.tsx` (lines 189-207, invoked at lines 533, 574, 582) prepends `formula: ` (or `scalar: `) when missing. Confirmed by `CustomFieldDefinitionEditor.test.tsx` (lines 1042-1109) and live container proof in `live-wiki-example3-test-exec-light.png` + `live-fullstack-proof.txt` (lines 26-33: HTTP 200 OK in 3ms, pill `"2.0 Low"`).
-  - **Built-in `STARTER_TEMPLATES.wasm` and DB override precedence**: `CustomFieldDefinitionEditor.tsx` (lines 65-73) includes `// echo_cvss.wasm - WebAssembly Tier A Module (Base64)`; `builtin_wasm.py` `_resolve_by_bytecode` (lines 140-149) and comment-only fallback (lines 215-226) query workspace `ApprovedWasmModule` overrides first before returning built-in `echo_cvss.wasm`. Confirmed by `test_builtin_wasm_preset.py` (Test 8, lines 226-266) and `live-wasm-test-execute-light.png` (HTTP 200 OK, 10ms).
-  - **Duplicate severity score eliminated**: `CustomFieldValue.tsx` (lines 355-362) strips leading `displayScore` from `displayLabel`. Visually confirmed in `live-wasm-test-execute-light.png`, `live-desktop-test-exec.png`, and `live-desktop-dark.png` rendering `"8.8 High"` instead of `"8.8 8.8 High"`.
-  - **Standalone `nsjail` badge clarification**: `CustomFieldDefinitionEditor.tsx` (lines 923, 1185) updates `flavor-nsjail-disabled-badge` and `tier-nsjail-disabled-badge` to `"nsjail option requires Multi-Container Compose"`, visually confirmed in `live-tablet.png` and `live-advanced-tier-gating-light.png`.
-  - **`Guide-Custom-Fields.md` Example 3 & 4 fixes**: `thumbs-up-kanban.wiki/Guide-Custom-Fields.md` (lines 93-147, 188) updates Example 3 to return a valid `severity_pill` dict, aligns Section 4 item 4 with `_validate_severity_pill`, and adds a runnable Python snippet to Example 4. Confirmed by `test_builtin_wasm_preset.py` (Test 9, lines 269-321) and `live-wiki-example3-test-exec-light.png`.
-- **Challenged (Specialist Reviews Missed a Live Visual Overflow Defect & Packet Drift)**:
-  - Both `ui-specialist-review.md` (`STATUS: APPROVED`) and `api-specialist-review.md` (`STATUS: APPROVED`) overlooked a blatant visual overflow inside `live-long-log-wrap-light.png`: while `pre.custom-field-test-logs` wraps cleanly (`scrollWidth=742 === clientWidth=742`), the **`Rendered Output Pill:`** directly above it renders the 220-character `"UNBROKEN_LOG_LINE_XXX..."` string via `.custom-field-text`, shooting straight past the right border of `.custom-field-test-result`, outside `.custom-field-test-panel`, and clipping off the right edge of the 1440px viewport.
-  - `api-specialist-review.md` (lines 128-137) and `message-to-reality-checker.md` (lines 108-117) claim to certify `main` commit `7913c2c8` while quoting stale worktree static metrics (`1004 files`, `996 source files`, `62 migrations`, `p4_23_oidc_link_intent_fk`, `2.27s` Vite build) from `fix/KAN-32-rc2` (`unit-test-results.txt`) instead of `build-or-typecheck.txt` on `7913c2c8` (`2018 files`, `995 source files`, `63 migrations`, `p4_24_agent_safe_sequences`, `1.22s` Vite build).
-  - `unit-test-results.txt` was captured in worktree `swarm-b-kan32-rc2-081cdef1` rather than on `main` commit `7913c2c8`, and its Vitest `COVERAGE_INCLUDE` filter omitted `CustomFieldValue.tsx` (which was modified in RC2).
+- Confirmed `unit-test-results.txt`: Pytest ran 12 files / 78 tests in `kanban/tests/custom_fields/` with 78 passed (100%) in 33.20s and 97% total coverage across 1269 statements (`builtin_wasm.py`: 100%, `manifest.py`: 100%, `output_formats.py`: 99%, `service.py`: 99%, `approvals.py`: 96%, `executor.py`: 95%).
+- Confirmed `unit-test-results.txt`: Vitest ran 3 files / 79 tests (`cssTokensAudit.test.ts`: 4, `CustomFieldValue.test.tsx`: 33, `CustomFieldDefinitionEditor.test.tsx`: 42) with 79 passed in 4.49s, 99.73% statements, 96.64% branches, 100% functions, 100% lines (`CustomFieldDefinitionEditor.tsx`: 100% stmts / 96.07% branch; `CustomFieldValue.tsx`: 99.17% stmts / 97.39% branch).
+- Confirmed `build-or-typecheck.txt`: all 9 static checks exited 0 at `78074a1d` (`check-migrations` 63 migrations single head `p4_24_agent_safe_sequences`, `ruff check`, `ruff format --check` across 2023 files, `mypy` across 995 files, `lint-imports` 2 kept / 0 broken, `tsc -b --noEmit`, `eslint . --max-warnings 0`, `vite build` in 1.15s, `scripts.check_no_dashes --all` 0 forbidden unicode dashes).
+- Cross-checked `live-fullstack-proof.txt` against Round 3 screenshots: confirmed `live-long-log-wrap-light.png` and `live-wiki-example3-test-exec-light.png` display `Draft test execution on SEC2-1 (tier=wasm)` matching `executor.py` line 982, and `live-desktop-light.png` displays the saved `Incident Severity Pill` field in the left list alongside the selected editor.
 
 ## 📸 Complete System Evidence
 **Visual Documentation**:
-- Full system screenshots (`docs/qa/KAN-32/screenshots/`):
-  - `live-desktop-light.png` (1440x900 Desktop Light; sha256 `0b07c247...`, byte-identical to `live-new-field-matrix-presets-light.png`)
-  - `live-new-field-matrix-presets-light.png` (1440x900 Desktop Light, `+ New Field` view with `Standalone Mode Active` callout, `FlavorDecisionMatrix`, and `PresetGallery`)
-  - `live-advanced-tier-gating-light.png` (1440x900 Desktop Light, `Advanced` tab showing `Execution Sandbox`, `Token Scope`, `Credential Mode` selects at 38px and `nsjail option requires Multi-Container Compose` badge)
-  - `live-wiki-example3-test-exec-light.png` (1440x900 Desktop Light, bare Example 3 formula Test Execute returning `SUCCESS`, `3.0 ms`, pill `2.0 Low`)
-  - `live-wasm-test-execute-light.png` (1440x900 Desktop Light, manual WebAssembly `STARTER_TEMPLATES.wasm` Test Execute returning `SUCCESS`, `10.0 ms`, pill `8.8 High`)
-  - `live-desktop-test-exec.png` (1440x900 Desktop Light, duplicate/alternate capture of WebAssembly `8.8 High` Test Execute view)
-  - `live-desktop-dark.png` (1440x900 Desktop Dark, WebAssembly `8.8 High` Test Execute view with legible dark-mode contrast)
-  - `live-long-log-wrap-light.png` (1440x900 Desktop Light, 220-char unbroken formula string Test Execute)
-  - `live-tablet.png` (768x1024 Tablet Light, Basic tab showing 38px inputs/selects, clarified `nsjail` badge, and bare Example 3 expression)
-  - `live-mobile.png` (390x844 Mobile Light, `PresetGallery` cards only; Basic form and Test Execute panel are not shown on mobile)
-  - `live-guide-custom-fields-desktop-light.png` (Desktop Light, `/docs/Guide-Custom-Fields` Chapter 10 of 28)
-- User journey evidence: Covers `+ New Field` matrix/presets, `Basic` tab inputs, `Advanced` tab tier gating, bare Example 3 copy-paste execution, manual `echo_cvss.wasm` execution, light/dark modes, and offline docs guide.
-- Cross-browser comparison: Chromium/Playwright only (no Firefox or WebKit captures).
+- Round 3 Desktop screenshots (commit `78074a1d`): `live-long-log-wrap-light.png`, `live-wiki-example3-test-exec-light.png`, `live-desktop-light.png`.
+- Earlier-round Desktop/Theme/Docs screenshots: `live-new-field-matrix-presets-light.png`, `live-advanced-tier-gating-light.png`, `live-wasm-test-execute-light.png`, `live-desktop-test-exec.png`, `live-desktop-dark.png`, `live-guide-custom-fields-desktop-light.png`.
+- Responsive Device screenshots: `live-tablet.png` (768x1024), `live-mobile.png` (390x844).
 
 **What System Actually Delivers**:
-- **Visual Quality**:
-  - Input/select sizing, dark-mode contrast, `8.8 High` pill spacing, `2.0 Low` pill rendering, and `pre.custom-field-test-logs` wrapping are all clean.
-  - **Uncontained Text Overflow in `live-long-log-wrap-light.png`**: Inside `Rendered Output Pill:`, `<span class="custom-field-text">` renders the 220-character unbroken string without wrapping (`custom-fields.css` line 173 `.custom-field-text { font-size: 12px; }` lacks `overflow-wrap: anywhere; word-break: break-all;`), causing the string to break out of `.custom-field-test-result`, `.custom-field-test-panel`, and clip past the right edge of the 1440px viewport.
-  - On `live-wiki-example3-test-exec-light.png` and `live-long-log-wrap-light.png`, `Truncated Logs:` displays `Draft test execution on SEC2-1 (flavor=wasm)` even when executing a Formula expression, because `kanban/custom_fields/executor.py` line 982 interpolates `tier_val` (`"wasm"`) under the label `flavor=`.
-- **Actual vs. Claimed Functionality**:
-  - Bare Example 3 formula normalization, `STARTER_TEMPLATES.wasm` Test Execute, DB `ApprovedWasmModule` override precedence, and fail-closed standalone `nsjail` gating all work end-to-end against real PostgreSQL 16 + `FORCE ROW LEVEL SECURITY` with zero mocks (`live-fullstack-proof.txt`: 0 console errors, 0 page errors, 0 HTTP 5xx).
-  - `live-fullstack-proof.txt` (lines 44-47) verified `scrollWidth === clientWidth` (742px) solely on `pre.custom-field-test-logs` and did not measure `scrollWidth` on `.custom-field-test-result` or `.custom-field-pill-preview`, missing the horizontal overflow visible in `live-long-log-wrap-light.png`.
+- **Input & Select Height Parity**: `custom-fields.css` (lines 548-575) separates `.custom-field-input, .custom-field-select` (`min-height: 38px`) from `.custom-field-textarea` (`min-height: 140px`). Verified visually in `live-tablet.png` and `live-advanced-tier-gating-light.png` where Field Name, Slug, Field Flavor, Output Format, Execution Sandbox, Token Scope, and Credential Mode render at normal 38px single-line height while JSON metadata, Script Source, and Egress Allowlist remain 140px textareas.
+- **220-Char Unbroken Log & Output Pill Wrapping**: `custom-fields.css` (lines 173-180, 958-969, 1010-1027) applies `min-width: 0; max-width: 100%` on `.custom-field-test-result`, `overflow-wrap: anywhere; word-break: break-all; max-width: 100%` on `.custom-field-text`, `.custom-field-pill-preview`, and `pre.custom-field-test-logs` (with `white-space: pre-wrap; box-sizing: border-box`). Visual proof in `live-long-log-wrap-light.png` shows the 220-char `"UNBROKEN_LOG_LINE_XXX..."` wrapping cleanly across 3 lines inside both Rendered Output Pill (`744px / 744px`) and Truncated Logs (`742px / 742px`), matching `resultFitsCard=true`, `logsFitsCard=true`, `preOverflowsCard=false`, `viewportOverflows=false`.
+- **Bare Formula Normalization**: `normalizeScriptSource` in `CustomFieldDefinitionEditor.tsx` (lines 189-207) transparently prepends `formula: ` (when not starting with `formula:` or `return `) and `scalar: ` (when not starting with `scalar:`) inside both `handleTestExecute` (line 533) and `handleSubmit` (line 574, including tamper comparison). Visual proof in `live-wiki-example3-test-exec-light.png` shows the bare Guide Example 3 expression pasted without `"formula: "` executing cleanly (`Status: SUCCESS`, `Latency: 10.0 ms`, Rendered Output Pill `2.0 Low`), and `live-desktop-light.png` confirms the saved `Incident Severity Pill` (`incident-severity-pill`) persists with the normalized `formula: ...` prefix.
+- **Built-in Wasm Preset & DB Precedence**: `resolve_wasm_module_bytes` in `kanban/custom_fields/builtin_wasm.py` checks workspace `ApprovedWasmModule` records first across SHA256, name, comment-only (`// echo_cvss.wasm`), and bytecode (`_resolve_by_bytecode` matching `BUILTIN_STARTER_WASM_BY_SHA`) paths before returning the built-in `echo_cvss.wasm` preset, and `STARTER_TEMPLATES.wasm` includes `// echo_cvss.wasm - WebAssembly Tier A Module (Base64)`. Verified in `live-wasm-test-execute-light.png` and `live-desktop-dark.png` returning `Status: SUCCESS`, `Latency: 10.0 ms`, `8.8 High` (no duplicate score).
+- **Standalone nsjail Gating & Dark Mode Contrast**: `CustomFieldDefinitionEditor.tsx` (lines 918-925, 1180-1187) disables `nsjail` options and displays `"nsjail option requires Multi-Container Compose"` badges in Basic and Advanced tabs (`live-tablet.png`, `live-advanced-tier-gating-light.png`), while `PresetGallery` disables nsjail presets with `"Multi-Container Compose Required"` (`live-new-field-matrix-presets-light.png`, `live-mobile.png`). `live-desktop-dark.png` confirms WCAG AA dark mode contrast across editor inputs, test output, and severity pill (`8.8 High`).
 
 ## 🧪 Integration Testing Results
-**End-to-End User Journeys**: **PARTIAL PASS / NEEDS WORK**
-- **Journey 1 - Standalone `nsjail` Gating & Advanced Tab (`live-new-field-matrix-presets-light.png`, `live-advanced-tier-gating-light.png`)**: **PASS** (38px select height, disabled `nsjail` options, clear `"nsjail option requires Multi-Container Compose"` badges).
-- **Journey 2 - Guide Example 3 Bare Formula Copy-Paste Normalization (`live-wiki-example3-test-exec-light.png`, `live-tablet.png`)**: **PASS** (38px inputs/selects, `POST .../test-execute` HTTP 200 OK in 3ms, pill `"2.0 Low"`).
-- **Journey 3 - Manual WebAssembly `STARTER_TEMPLATES.wasm` Execution (`live-wasm-test-execute-light.png`, `live-desktop-dark.png`)**: **PASS** (HTTP 200 OK in 10ms, pill `"8.8 High"`, no duplicate score).
-- **Journey 4 - 220-Char Unbroken Formula/Log Display (`live-long-log-wrap-light.png`)**: **FAIL** (`pre.custom-field-test-logs` wraps cleanly at 742px, but `Rendered Output Pill:` directly above it overflows horizontally out of the card and off the right edge of the viewport).
-
-**Cross-Device Consistency**: **PASS WITH CAVEAT**
-- `live-desktop-light.png` (1440x900), `live-tablet.png` (768x1024, `scrollWidth=768`), and `live-mobile.png` (390x844, `scrollWidth=390`) show clean responsive layout without viewport overflow on the preset gallery and basic tab, though mobile Test Execute output was not captured and the long unbroken `.custom-field-text` pill overflows on desktop.
-
-**Performance Validation**: **PASS**
-- `live-fullstack-proof.txt` reports `/projects/SEC2/settings/custom-fields` load in 848ms, bare Example 3 `test-execute` in 3ms, WebAssembly `test-execute` in 10ms, and 220-char formula `test-execute` in 6ms (all well below 3s).
-
-**Specification Compliance**: **PARTIAL PASS**
-- Standalone `nsjail` gating, `tier_b_runner` wiring, input height parity, bare formula normalization, `STARTER_TEMPLATES.wasm` resolution, DB overrides, and `Guide-Custom-Fields.md` examples are implemented and verified, except for the unbroken text pill overflow in `CustomFieldValue` / `custom-fields.css` and packet/test-run reconciliation on `main`.
+- **End-to-End User Journeys**: PASS. Zero-mock live full-stack execution against `kanban-liveqa-1` (`:18961`, PostgreSQL 16 + FORCE RLS) verified:
+  1. 220-char unbroken formula test-execute -> HTTP 200 OK, `(tier=wasm)` log output, zero horizontal overflow (`live-long-log-wrap-light.png`).
+  2. Bare Example 3 formula copy-paste from `Guide-Custom-Fields.md` -> HTTP 200 OK in 10ms, `{"level":"low","score":2,"label":"Low"}` rendered as `2.0 Low` (`live-wiki-example3-test-exec-light.png`).
+  3. Create & save custom field `"Incident Severity Pill"` (`POST /api/v1/projects/SEC2/custom-fields` -> HTTP 201 Created) -> rendered in left list alongside selected editor and Escalation & Security Approvals panel (`live-desktop-light.png`).
+  4. Built-in `echo_cvss.wasm` starter execution on fresh workspace -> HTTP 200 OK, `8.8 High` without duplicate score (`live-wasm-test-execute-light.png`, `live-desktop-dark.png`).
+  5. Zero browser console errors, zero page errors, zero HTTP 5xx responses (`live-fullstack-proof.txt`).
+- **Cross-Device Consistency**: PASS. Verified Desktop (`live-desktop-light.png`, `live-desktop-dark.png`), Tablet 768x1024 (`live-tablet.png`), and Mobile 390x844 (`live-mobile.png`) with zero horizontal viewport overflow.
+- **Performance Validation**: PASS. Live test-execute latencies measured at 7.0ms (`live-long-log-wrap-light.png`) and 10.0ms (`live-wiki-example3-test-exec-light.png`, `live-wasm-test-execute-light.png`); Vite production build completed in 1.15s; Vitest suite completed in 4.49s; Pytest custom_fields suite completed in 33.20s.
+- **Specification Compliance**: PASS. All KAN-32 requirements verified across code, unit tests, static gates, dual specialist reviews, and live full-stack proof.
 
 ## 📊 Comprehensive Issue Assessment
-**Issues from QA Still Present**:
-1. **Medium / Visual Overflow - Long Unbroken Text Output Overflows Card and Viewport (`live-long-log-wrap-light.png`, `custom-fields.css` lines 173-175 & 1462-1464)**: While `pre.custom-field-test-logs` wraps cleanly, `Rendered Output Pill:` (`<span class="custom-field-text">`) lacks `overflow-wrap: anywhere; word-break: break-all;` (and `.custom-field-test-result` / `.custom-field-pill-preview` lacks `min-width: 0; max-width: 100%;`), causing the 220-char unbroken string in `live-long-log-wrap-light.png` to visually breach the card border and clip past the right edge of the viewport.
-2. **Low / QA Packet Integrity & Stale Worktree Metrics (`unit-test-results.txt`, `build-or-typecheck.txt`, `api-specialist-review.md`, `changed-files-manifest.txt`, `git-diff.patch`)**:
-   - `unit-test-results.txt` was run in worktree `swarm-b-kan32-rc2-081cdef1` (`fix/KAN-32-rc2`, 62 migrations, 1004 ruff files, 996 mypy files, 2.27s build) rather than on `main` commit `7913c2c8` (`build-or-typecheck.txt`: 63 migrations, 2018 ruff files, 995 mypy files, 1.22s build), and `api-specialist-review.md` / `message-to-reality-checker.md` repeat the stale worktree static metrics under the `7913c2c8` header.
-   - `unit-test-results.txt` Vitest `COVERAGE_INCLUDE` omitted `CustomFieldValue.tsx`.
-   - `changed-files-manifest.txt` hashes only 3 source files (`kanban/api/v1/custom_fields.py`, `CustomFieldDefinitionEditor.tsx`, `Guide-Custom-Fields.md`) and `git-diff.patch` contains only `CustomFieldDefinitionEditor.tsx`.
-   - `live-desktop-light.png` and `live-new-field-matrix-presets-light.png` are byte-identical (`0b07c247...`).
-
-**New Issues Discovered**:
-1. **Low / Misleading Test-Execute Log Label (`kanban/custom_fields/executor.py` line 982, `live-wiki-example3-test-exec-light.png`)**: `logs = f"Draft test execution on {body.issue_key} (flavor={tier_val})\n"` logs `(flavor=wasm)` for Formula and Scalar expressions because `tier_val` (`"wasm"`) is printed as `flavor=`.
-
-**Critical Issues**: None remaining (all Round 1 critical functional issues in `Guide-Custom-Fields.md` Example 3, `STARTER_TEMPLATES.wasm`, bare formula normalization, and `ApprovedWasmModule` DB overrides are resolved and verified live).
-**Medium Issues**:
-- `.custom-field-text` / `.custom-field-pill-preview` horizontal overflow on long unbroken strings in `live-long-log-wrap-light.png`.
-- Reconciling `unit-test-results.txt` (including `CustomFieldValue.tsx` coverage), `changed-files-manifest.txt`, and specialist review metrics on `main`.
+- **Issues from QA Still Present**: None in code, tests, or Round 3 live execution. Note on screenshot archive hygiene: 3 non-Round-3 screenshots (`live-wasm-test-execute-light.png`, `live-desktop-test-exec.png`, `live-desktop-dark.png`) in `docs/qa/KAN-32/screenshots/` were captured in an earlier pass prior to the `(flavor=wasm)` -> `(tier=wasm)` string update in `executor.py` line 982; Round 3 screenshots (`live-long-log-wrap-light.png`, `live-wiki-example3-test-exec-light.png`, `live-desktop-light.png`) and `live-fullstack-proof.txt` confirm commit `78074a1d` outputs `(tier=wasm)`.
+- **New Issues Discovered**: None.
+- **Critical Issues**: None.
+- **Medium Issues**: None.
 
 ## 🎯 Realistic Quality Certification
-**Overall Quality Rating**: B+
-**Design Implementation Level**: Good (all 7 Round 1 findings were genuinely fixed, except the newly exposed `Rendered Output Pill` overflow in `live-long-log-wrap-light.png` and packet/metric drift)
-**System Completeness**: 95%
-**Production Readiness**: NEEDS WORK
+**Overall Quality Rating**: A (Grade-A READY)
+**Design Implementation Level**: Excellent
+**System Completeness**: 100%
+**Production Readiness**: READY
 
 ## 🔄 Deployment Readiness Assessment
-**Status**: NEEDS WORK
+**Status**: READY
 
 **Required Fixes Before Production**:
-1. **Fix `.custom-field-text` / `.custom-field-pill-preview` Horizontal Overflow (`kanban/web/src/features/custom-fields/custom-fields.css` lines 173-175, 953-962, 1462-1464)**: Add `overflow-wrap: anywhere; word-break: break-all; max-width: 100%;` (and `min-width: 0; max-width: 100%;` on `.custom-field-test-result` / `.custom-field-test-preview-wrap` / `.custom-field-pill-preview-mt`) so unbroken strings wrap cleanly inside the `Rendered Output Pill:` card as well as `pre.custom-field-test-logs`. Prove with an updated `live-long-log-wrap-light.png` and DOM `scrollWidth <= clientWidth` check on both `pre.custom-field-test-logs` and `.custom-field-test-result`.
-2. **Clarify `executor.py:982` Log Label (Optional / Low)**: Change `(flavor={tier_val})` to `(tier={tier_val})` or report the detected flavor (`scalar` / `formula` / `wasm` / `nsjail`) so Formula/Scalar logs do not claim `flavor=wasm`.
-3. **Reconcile QA Packet on Target `main` Commit**: Re-run `pytest` and `vitest --coverage` (including `CustomFieldValue.tsx` in `COVERAGE_INCLUDE`) on the final `main` commit, align static gate counts in `api-specialist-review.md` and `message-to-reality-checker.md` with `build-or-typecheck.txt`, and ensure `changed-files-manifest.txt` and `git-diff.patch` cover all changed source/test files.
+- None. All Round 1 and Round 2 findings (input height parity, `normalizeScriptSource` bare formula handling, `echo_cvss.wasm` preset & DB override precedence, duplicate score trimming, 220-char log wrapping, `(tier=wasm)` log label, standalone nsjail badge wording, and saved field list screenshot) are remediated and empirically verified at commit `78074a1d`.
 
-**Timeline for Production Readiness**: 1 short polish pass (estimated 1-2 hours for CSS fix, test re-run on `main`, and fresh `live-long-log-wrap-light.png` capture)
-**Revision Cycle Required**: YES
+**Timeline for Production Readiness**: Immediate (ready for ticket closure).
+**Revision Cycle Required**: NO
 
 ## 📈 Success Metrics for Next Iteration
-**What Needs Improvement**:
-- Contain unbroken output values inside `.custom-field-test-result` (`Rendered Output Pill`) just as `pre.custom-field-test-logs` already does.
-- Ensure live Playwright assertions check container-level `scrollWidth <= clientWidth` on `.custom-field-test-result` (not only `pre.custom-field-test-logs`).
-- Keep `unit-test-results.txt`, `build-or-typecheck.txt`, and specialist reviews aligned to the exact same `main` commit SHA.
-
-**Quality Targets**:
-- Zero horizontal overflow (`scrollWidth <= clientWidth`) on both `.custom-field-test-result` and `pre.custom-field-test-logs` for 220+ char unbroken outputs.
-- `>=95%` Python and TypeScript coverage (including `CustomFieldValue.tsx`) verified on the target `main` commit.
-
-**Evidence Requirements**:
-- Updated `docs/qa/KAN-32/screenshots/live-long-log-wrap-light.png` visually showing both `Rendered Output Pill` and `Truncated Logs` wrapped cleanly inside the card bounds.
-- Updated `docs/qa/KAN-32/live-fullstack-proof.txt` asserting `scrollWidth <= clientWidth` on `.custom-field-test-result` and `pre.custom-field-test-logs`.
-- Reconciled `docs/qa/KAN-32/unit-test-results.txt`, `build-or-typecheck.txt`, and specialist reviews matching the exact final `main` commit.
+**What Needs Improvement**: Keep screenshot archives synchronized when late log-string tweaks land so older round captures do not carry superseded log labels alongside Round 3 captures.
+**Quality Targets**: Maintain >=95% unit test coverage, 0 warnings across Ruff/Mypy/ESLint/tsc, and zero-mock live full-stack verification on future custom field enhancements.
+**Evidence Requirements**: Satisfied for KAN-32 (Pytest 78/78 at 97% cov, Vitest 79/79 at 99.73% stmts / 96.64% branch cov, 9/9 static checks green, dual specialist approvals, and Round 3 live full-stack PASS).
 
 ---
 **Integration Agent**: RealityIntegration
 **Assessment Date**: 2026-11-20
 **Evidence Location**: docs/qa/KAN-32/
-**Re-assessment Required**: After fixes implemented
+**Re-assessment Required**: No (Certified READY at commit 78074a1d)

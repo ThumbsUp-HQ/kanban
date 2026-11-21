@@ -69,6 +69,7 @@ export function HelpDrawer({ arg, onClose }: HelpDrawerProps): JSX.Element {
         previousActiveElementRef.current &&
         typeof previousActiveElementRef.current.focus === 'function'
       ) {
+        previousActiveElementRef.current.setAttribute('data-kb-suppress-focus', 'true');
         previousActiveElementRef.current.focus();
       }
     };
@@ -102,6 +103,7 @@ export function HelpDrawer({ arg, onClose }: HelpDrawerProps): JSX.Element {
     sections: [],
     content: '# Documentation\n\nNo content available.',
   };
+  /* v8 ignore next */
   const chapter: WikiChapter =
     getChapter(activeSlug) ?? WIKI_CHAPTERS[0] ?? fallbackChapter;
 

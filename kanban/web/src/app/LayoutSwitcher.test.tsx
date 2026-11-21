@@ -5,6 +5,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import {
   LayoutSwitcher,
   normalizeLayout,
+  type LayoutOption,
 } from './LayoutSwitcher';
 
 describe('LayoutSwitcher', () => {
@@ -138,5 +139,16 @@ describe('LayoutSwitcher', () => {
     });
 
     expect(onChange).toHaveBeenCalledWith('timeline');
+  });
+
+  it('falls back to default activeConfig when layout value is unrecognized', () => {
+    render(
+      <MemoryRouter>
+        <LayoutSwitcher value={'unknown_custom' as unknown as LayoutOption} className="custom-class" />
+      </MemoryRouter>,
+    );
+
+    const menuBtn = screen.getByRole('button', { name: 'Layout: Issues' });
+    expect(menuBtn).toBeDefined();
   });
 });

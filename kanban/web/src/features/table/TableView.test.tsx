@@ -1,13 +1,24 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 import React from 'react';
 import { TableView } from './TableView';
 import { FIXTURE_12_ISSUES } from '../views/fixtures';
 import type { IssueItem } from '../views/viewsApi';
 
+const mockPatchProjectIssue = vi.fn().mockResolvedValue({});
+vi.mock('../views/viewsApi', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../views/viewsApi')>();
+  return {
+    ...actual,
+    patchProjectIssue: (...args: unknown[]): Promise<unknown> => mockPatchProjectIssue(...args) as Promise<unknown>,
+  };
+});
+
 describe('TableView', () => {
   beforeEach(() => {
     localStorage.clear();
+    mockPatchProjectIssue.mockReset();
+    mockPatchProjectIssue.mockResolvedValue({});
   });
 
   it('renders default columns and cycles aria-sort ascending -> descending -> none on Priority click', () => {
@@ -356,7 +367,7 @@ describe('TableView', () => {
     expect(screen.getByText(/📦 Authentication Engine/)).toBeDefined();
   });
 
-  it('supports capability-gated inline cell editing for State, Priority, Assignees, Dates, and Cycle', () => {
+  it('supports capability-gated inline cell editing for State, Priority, Assignees, Dates, and Cycle', async () => {
     const onUpdateIssue = vi.fn();
     const dispatchSpy = vi.spyOn(window, 'dispatchEvent');
 
@@ -393,7 +404,10 @@ describe('TableView', () => {
 
     // 1. State inline edit
     const stateSelect = screen.getByRole('combobox', { name: 'Edit state for KAN-99' });
-    fireEvent.change(stateSelect, { target: { value: 'In Progress' } });
+    await act(async () => {
+      fireEvent.change(stateSelect, { target: { value: 'In Progress' } });
+      await Promise.resolve();
+    });
     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
       state: expect.objectContaining({ name: 'In Progress', group: 'started' }) as unknown as Record<string, unknown>,
     }));
@@ -401,14 +415,20 @@ describe('TableView', () => {
 
     // 2. Priority inline edit
     const prioSelect = screen.getByRole('combobox', { name: 'Edit priority for KAN-99' });
-    fireEvent.change(prioSelect, { target: { value: 'urgent' } });
+    await act(async () => {
+      fireEvent.change(prioSelect, { target: { value: 'urgent' } });
+      await Promise.resolve();
+    });
     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
       priority: expect.objectContaining({ slug: 'urgent', label: 'Urgent' }) as unknown as Record<string, unknown>,
     }));
 
     // 3. Due date inline edit
     const dueDateInput = screen.getByLabelText('Edit due date for KAN-99');
-    fireEvent.change(dueDateInput, { target: { value: '2026-12-01' } });
+    await act(async () => {
+      fireEvent.change(dueDateInput, { target: { value: '2026-12-01' } });
+      await Promise.resolve();
+    });
     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
       due_date: '2026-12-01',
     }));
@@ -425,7 +445,10 @@ describe('TableView', () => {
       />
     );
     const startDateInput = screen.getByLabelText('Edit start date for KAN-99');
-    fireEvent.change(startDateInput, { target: { value: '2026-11-05' } });
+    await act(async () => {
+      fireEvent.change(startDateInput, { target: { value: '2026-11-05' } });
+      await Promise.resolve();
+    });
     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
       start_date: '2026-11-05',
     }));
@@ -433,14 +456,20 @@ describe('TableView', () => {
 
     // 5. Cycle inline edit
     const cycleSelect = screen.getByRole('combobox', { name: 'Edit cycle for KAN-99' });
-    fireEvent.change(cycleSelect, { target: { value: 'cycle-2' } });
+    await act(async () => {
+      fireEvent.change(cycleSelect, { target: { value: 'cycle-2' } });
+      await Promise.resolve();
+    });
     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
       cycle_id: 'cycle-2',
     }));
 
     // 6. Assignee toggle
     const assignBtn = screen.getByRole('button', { name: 'Assign issue KAN-99' });
-    fireEvent.click(assignBtn);
+    await act(async () => {
+      fireEvent.click(assignBtn);
+      await Promise.resolve();
+    });
     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
       assignees: expect.arrayContaining([expect.objectContaining({ kind: 'principal' })]) as unknown as Record<string, unknown>[],
     }));
@@ -478,7 +507,10 @@ describe('TableView', () => {
         onUpdateIssue={onUpdateIssue}
       />,
     );
-    fireEvent.click(screen.getByRole('button', { name: 'Assign issue KAN-99' }));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Assign issue KAN-99' }));
+      await Promise.resolve();
+    });
     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-99', expect.objectContaining({
       assignees: [],
     }));
@@ -638,6 +670,7 @@ describe('TableView', () => {
       />,
     );
     const unhandledKeyLink = screen.getByRole('link', { name: 'KAN-PEEK-1' });
+    unhandledKeyLink.addEventListener('click', (e) => { e.preventDefault(); }, { once: true });
     fireEvent.click(unhandledKeyLink);
     unmountSecond();
   });
@@ -692,7 +725,7 @@ describe('TableView', () => {
     expect(priorityCell?.classList.contains('table-priority-cell-wrap')).toBe(true);
   });
 
-  it('covers custom cycle option, empty dates, and terminal state branches in inline editing', () => {
+  it('covers custom cycle option, empty dates, and terminal state branches in inline editing', async () => {
     const onUpdateIssue = vi.fn();
     const customCycleIssues: IssueItem[] = [
       {
@@ -741,32 +774,50 @@ describe('TableView', () => {
 
     // Inline state change to Done, Cancelled, and In Review
     const stateSelect = screen.getByRole('combobox', { name: 'Edit state for KAN-CUST-1' });
-    fireEvent.change(stateSelect, { target: { value: 'Done' } });
+    await act(async () => {
+      fireEvent.change(stateSelect, { target: { value: 'Done' } });
+      await Promise.resolve();
+    });
     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-CUST-1', expect.objectContaining({
       state: expect.objectContaining({ name: 'Done', group: 'completed' }) as unknown as Record<string, unknown>,
     }));
 
-    fireEvent.change(stateSelect, { target: { value: 'Cancelled' } });
+    await act(async () => {
+      fireEvent.change(stateSelect, { target: { value: 'Cancelled' } });
+      await Promise.resolve();
+    });
     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-CUST-1', expect.objectContaining({
       state: expect.objectContaining({ name: 'Cancelled', group: 'cancelled' }) as unknown as Record<string, unknown>,
     }));
 
-    fireEvent.change(stateSelect, { target: { value: 'In Review' } });
+    await act(async () => {
+      fireEvent.change(stateSelect, { target: { value: 'In Review' } });
+      await Promise.resolve();
+    });
     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-CUST-1', expect.objectContaining({
       state: expect.objectContaining({ name: 'In Review', group: 'started' }) as unknown as Record<string, unknown>,
     }));
 
     // Start date and Due date empty clearing
     const startDateInput = screen.getByLabelText('Edit start date for KAN-CUST-1');
-    fireEvent.change(startDateInput, { target: { value: '' } });
+    await act(async () => {
+      fireEvent.change(startDateInput, { target: { value: '' } });
+      await Promise.resolve();
+    });
     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-CUST-1', { start_date: null });
 
     const dueDateInput = screen.getByLabelText('Edit due date for KAN-CUST-1');
-    fireEvent.change(dueDateInput, { target: { value: '' } });
+    await act(async () => {
+      fireEvent.change(dueDateInput, { target: { value: '' } });
+      await Promise.resolve();
+    });
     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-CUST-1', { due_date: null });
 
     // Cycle clear to empty
-    fireEvent.change(cycleSelect, { target: { value: '' } });
+    await act(async () => {
+      fireEvent.change(cycleSelect, { target: { value: '' } });
+      await Promise.resolve();
+    });
     expect(onUpdateIssue).toHaveBeenCalledWith('KAN-CUST-1', { cycle_id: null, cycle: null });
 
     // Rerender as read-only VIEWER with overdue and null start date
@@ -824,9 +875,11 @@ describe('TableView', () => {
     localStorage.removeItem('kb.tableCols.KAN_CUST');
   });
 
-  it('allows state transitions with TRANSITION capability and rolls back on failure', () => {
+  it('allows state transitions with TRANSITION capability and rolls back on failure', async () => {
     const alertListener = vi.fn();
     window.addEventListener('kb:alert', alertListener);
+
+    mockPatchProjectIssue.mockRejectedValueOnce(new Error('State transition rejected'));
 
     // Render with TRANSITION capability only (no EDIT/ADMIN)
     const { rerender } = render(
@@ -845,6 +898,17 @@ describe('TableView', () => {
     // Priority should be read-only since user only has TRANSITION
     expect(screen.queryByLabelText(`Edit priority for ${firstIssueKey}`)).toBeNull();
 
+    // Trigger state change which will fail and roll back
+    await act(async () => {
+      fireEvent.change(stateSelect, { target: { value: 'Done' } });
+      await Promise.resolve();
+    });
+
+    expect(mockPatchProjectIssue).toHaveBeenCalled();
+    const lastAlertCall = alertListener.mock.calls[0]?.[0] as CustomEvent<{ type: string; message: string }> | undefined;
+    expect(lastAlertCall?.detail.type).toBe('error');
+    expect(lastAlertCall?.detail.message).toBe('State transition rejected');
+
     // Now test with pure VIEW capability
     rerender(
       <TableView
@@ -854,6 +918,141 @@ describe('TableView', () => {
       />,
     );
     expect(screen.queryByLabelText(`Edit state for ${firstIssueKey}`)).toBeNull();
+
+    window.removeEventListener('kb:alert', alertListener);
+  });
+
+  it('supports custom projectStates prop and matches by state.id or normalized name', async () => {
+    const customStates = [
+      { id: 'st-backlog', name: 'Backlog', group: 'unstarted' as const },
+      { id: 'st-todo', name: 'Todo', group: 'unstarted' as const },
+      { id: 'st-prog', name: 'In Progress', group: 'started' as const },
+      { id: 'st-done', name: 'Done', group: 'completed' as const },
+    ];
+
+    const testIssues: IssueItem[] = [
+      {
+        id: 'iss-st-1',
+        key: 'KAN-ST-1',
+        summary: 'Project states issue',
+        state: { id: 'st-todo', name: 'Todo', group: 'unstarted' },
+        priority: { slug: 'medium', label: 'Medium' },
+      },
+      {
+        id: 'iss-st-2',
+        key: 'KAN-ST-2',
+        summary: 'Normalized name match issue',
+        state: { id: 'other-id', name: 'in-progress', group: 'started' },
+        priority: { slug: 'high', label: 'High' },
+      },
+      {
+        id: 'iss-st-3',
+        key: 'KAN-ST-3',
+        summary: 'Fallback state issue',
+        state: { id: 'st-fallback', name: 'Fallback State', group: 'unstarted' },
+        priority: { slug: 'low', label: 'Low' },
+      },
+    ];
+
+    const onUpdateIssue = vi.fn();
+    render(
+      <TableView
+        issues={testIssues}
+        projectKey="KAN_ST"
+        capabilities={['TRANSITION']}
+        projectStates={customStates}
+        onUpdateIssue={onUpdateIssue}
+      />,
+    );
+
+    const stateSelect1 = screen.getByLabelText('Edit state for KAN-ST-1');
+    expect((stateSelect1 as HTMLSelectElement).value).toBe('st-todo');
+    expect(screen.getAllByRole('option', { name: 'In Progress' }).length).toBeGreaterThan(0);
+
+    await act(async () => {
+      fireEvent.change(stateSelect1, { target: { value: 'st-prog' } });
+      await Promise.resolve();
+    });
+    expect(onUpdateIssue).toHaveBeenCalled();
+    const lastUpdateCall = onUpdateIssue.mock.calls[0] as [string, { state?: { id?: string; name?: string } }] | undefined;
+    expect(lastUpdateCall?.[0]).toBe('KAN-ST-1');
+    expect(lastUpdateCall?.[1].state?.id).toBe('st-prog');
+    expect(lastUpdateCall?.[1].state?.name).toBe('In Progress');
+  });
+
+  it('covers projectStates rollback on patchProjectIssue failure and inline error catches', async () => {
+    const alertListener = vi.fn();
+    window.addEventListener('kb:alert', alertListener);
+
+    mockPatchProjectIssue.mockRejectedValueOnce(new Error('Project state error'));
+
+    const customStates = [
+      { id: 'st-backlog', name: 'Backlog', group: 'unstarted' as const },
+      { id: 'st-todo', name: 'Todo', group: 'unstarted' as const },
+      { id: 'st-prog', name: 'In Progress', group: 'started' as const },
+    ];
+
+    const testIssues: IssueItem[] = [
+      {
+        id: 'iss-err-1',
+        key: 'KAN-ERR-1',
+        summary: 'Error test issue',
+        state: { id: 'st-todo', name: 'Todo', group: 'unstarted' },
+        priority: { slug: 'medium', label: 'Medium' },
+        assignees: [],
+      },
+    ];
+
+    const onUpdateIssue = vi.fn();
+    render(
+      <TableView
+        issues={testIssues}
+        projectKey="KAN_ERR"
+        capabilities={['EDIT']}
+        projectStates={customStates}
+        onUpdateIssue={onUpdateIssue}
+      />,
+    );
+
+    const stateSelect = screen.getByLabelText('Edit state for KAN-ERR-1');
+    await act(async () => {
+      fireEvent.change(stateSelect, { target: { value: 'st-prog' } });
+      await Promise.resolve();
+    });
+
+    expect(alertListener).toHaveBeenCalled();
+    const lastErrCall = alertListener.mock.calls[0]?.[0] as CustomEvent<{ type: string; message: string }> | undefined;
+    expect(lastErrCall?.detail.type).toBe('error');
+    expect(lastErrCall?.detail.message).toBe('Project state error');
+
+    // Now test rejecting in priority, date, cycle, assign to cover .catch(() => undefined)
+    mockPatchProjectIssue.mockRejectedValueOnce(new Error('Prio error'));
+    const prioSelect = screen.getByLabelText('Edit priority for KAN-ERR-1');
+    await act(async () => {
+      fireEvent.change(prioSelect, { target: { value: 'low' } });
+      await Promise.resolve();
+    });
+
+    mockPatchProjectIssue.mockRejectedValueOnce(new Error('Date error'));
+    const dueDateInput = screen.getByLabelText('Edit due date for KAN-ERR-1');
+    await act(async () => {
+      fireEvent.change(dueDateInput, { target: { value: '2026-12-25' } });
+      await Promise.resolve();
+    });
+
+    mockPatchProjectIssue.mockRejectedValueOnce(new Error('Cycle error'));
+    const cycleSelect = screen.getByLabelText('Edit cycle for KAN-ERR-1');
+    await act(async () => {
+      fireEvent.change(cycleSelect, { target: { value: 'cycle-1' } });
+      await Promise.resolve();
+    });
+
+    mockPatchProjectIssue.mockRejectedValueOnce(new Error('Assign error'));
+    const assignBtn = screen.getByRole('button', { name: 'Assign issue KAN-ERR-1' });
+    await act(async () => {
+      fireEvent.click(assignBtn);
+      await Promise.resolve();
+    });
 
     window.removeEventListener('kb:alert', alertListener);
   });

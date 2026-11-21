@@ -119,5 +119,114 @@ describe('predicateParser (KAN-52)', () => {
       ],
     };
     expect(matchesIssueQuery('assignee:contractor', freeTextIssue, 'KAN')).toBe(true);
+
+    // Module matching by ID via module_ids when modules array has no match
+    const modIdIssue: IssueItem = {
+      ...mockIssue,
+      modules: [],
+      module_ids: ['mod-raw-only'],
+    };
+    expect(matchesIssueQuery('module = "mod-raw-only"', modIdIssue, 'KAN')).toBe(true);
+
+    // Default general field check
+    expect(matchesIssueQuery('customfield = "antenna"', mockIssue, 'KAN')).toBe(true);
+
+    // Structured query fallback to tokens (no equal sign in one clause)
+    expect(matchesIssueQuery('status = "Todo" AND antenna', mockIssue, 'KAN')).toBe(true);
+
+    // Single quoted string tokens
+    expect(matchesIssueQuery("'antenna'", mockIssue, 'KAN')).toBe(true);
+
+    // Empty or whitespace query returns true
+    expect(matchesIssueQuery('', mockIssue, 'KAN')).toBe(true);
+    expect(matchesIssueQuery('   ', mockIssue, 'KAN')).toBe(true);
+
+    // Project field match and mismatch
+    expect(matchesIssueQuery('project = "KAN"', mockIssue, 'KAN')).toBe(true);
+    expect(matchesIssueQuery('project = "OTHER"', mockIssue, 'KAN')).toBe(false);
+
+    // Key field match and mismatch
+    expect(matchesIssueQuery('key = "KAN-101"', mockIssue, 'KAN')).toBe(true);
+    expect(matchesIssueQuery('key = "KAN-999"', mockIssue, 'KAN')).toBe(false);
+
+    // Priority label match and slug match
+    expect(matchesIssueQuery('priority = "High"', mockIssue, 'KAN')).toBe(true);
+    expect(matchesIssueQuery('priority = "high"', mockIssue, 'KAN')).toBe(true);
+    expect(matchesIssueQuery('priority = "low"', mockIssue, 'KAN')).toBe(false);
+
+    // Assignee display name and principal ID
+    expect(matchesIssueQuery('assignee = "Alice Smith"', mockIssue, 'KAN')).toBe(true);
+    expect(matchesIssueQuery('assignee = "u-1"', mockIssue, 'KAN')).toBe(true);
+    expect(matchesIssueQuery('assignee = "nonexistent-user"', mockIssue, 'KAN')).toBe(false);
+
+    // Labels by name, ID, and substring
+    expect(matchesIssueQuery('label = "hardware"', mockIssue, 'KAN')).toBe(true);
+    expect(matchesIssueQuery('label = "hard"', mockIssue, 'KAN')).toBe(true);
+    expect(matchesIssueQuery('label = "lbl-1"', mockIssue, 'KAN')).toBe(true);
+    expect(matchesIssueQuery('label = "nonexistent"', mockIssue, 'KAN')).toBe(false);
+
+    // Cycle by ID, cycle name, and mismatch
+    expect(matchesIssueQuery('cycle = "cycle-1"', mockIssue, 'KAN')).toBe(true);
+    expect(matchesIssueQuery('cycle = "Sprint 1"', mockIssue, 'KAN')).toBe(true);
+    expect(matchesIssueQuery('cycle = "cycle-unknown"', mockIssue, 'KAN')).toBe(false);
+
+    // Description markdown search when word is only in description
+    const descOnlyIssue: IssueItem = {
+      ...mockIssue,
+      summary: 'Short title',
+      description_markdown: 'Deep space calibration telemetry',
+    };
+    expect(matchesIssueQuery('telemetry', descOnlyIssue, 'KAN')).toBe(true);
+    expect(matchesIssueQuery('nonexistent_word', descOnlyIssue, 'KAN')).toBe(false);
+
+    // Call matchesIssueQuery without projectKey (tests default parameter on line 23)
+    expect(matchesIssueQuery('priority = "High"', mockIssue)).toBe(true);
+
+    // Single-quoted and unquoted values in equal queries
+    expect(matchesIssueQuery("status = 'Todo'", mockIssue)).toBe(true);
+    expect(matchesIssueQuery('status = Todo', mockIssue)).toBe(true);
+
+    // State group, ID, and substring matches
+    expect(matchesIssueQuery('state = "unstarted"', mockIssue)).toBe(true);
+    expect(matchesIssueQuery('state = "state-todo"', mockIssue)).toBe(true);
+    expect(matchesIssueQuery('state = "od"', mockIssue)).toBe(true);
+
+    // Cycle when cycle_id is null and target is not none
+    const noCycleIssue: IssueItem = { ...mockIssue, cycle_id: null, cycle: null };
+    expect(matchesIssueQuery('cycle = "Sprint 1"', noCycleIssue)).toBe(false);
+
+    // Cycle when cycle_id is present but cycle object is null
+    const cycleIdOnlyIssue: IssueItem = { ...mockIssue, cycle_id: 'cycle-99', cycle: null };
+    expect(matchesIssueQuery('cycle = "cycle-99"', cycleIdOnlyIssue)).toBe(true);
+    expect(matchesIssueQuery('cycle = "Sprint 99"', cycleIdOnlyIssue)).toBe(false);
+
+    // Module matching by ID in modules array
+    expect(matchesIssueQuery('module = "mod-1"', mockIssue)).toBe(true);
+
+    // Module matching when modules and module_ids are undefined
+    const noModulesIssue = { ...mockIssue };
+    delete (noModulesIssue as unknown as Record<string, unknown>).modules;
+    delete (noModulesIssue as unknown as Record<string, unknown>).module_ids;
+    expect(matchesIssueQuery('module = "Rover"', noModulesIssue)).toBe(false);
+
+    // Default field matching key or failing
+    expect(matchesIssueQuery('custom = "101"', mockIssue)).toBe(true);
+    expect(matchesIssueQuery('custom = "nomatch"', mockIssue)).toBe(false);
+
+    // Description markdown nullish coalescing
+    const noDescIssue = { ...mockIssue };
+    delete (noDescIssue as unknown as Record<string, unknown>).description_markdown;
+    expect(matchesIssueQuery('antenna', noDescIssue)).toBe(true);
+    expect(matchesIssueQuery('telemetry', noDescIssue)).toBe(false);
+
+    // Project match via issuePKey when projectKey argument differs
+    expect(matchesIssueQuery('project = "KAN"', mockIssue, 'DIFFERENT')).toBe(true);
+
+    // Assignee and label matching when assignees or labels are undefined
+    const noAsgOrLabelsIssue = { ...mockIssue };
+    delete (noAsgOrLabelsIssue as unknown as Record<string, unknown>).assignees;
+    delete (noAsgOrLabelsIssue as unknown as Record<string, unknown>).labels;
+    expect(matchesIssueQuery('assignee = "alice"', noAsgOrLabelsIssue)).toBe(false);
+    expect(matchesIssueQuery('label = "hardware"', noAsgOrLabelsIssue)).toBe(false);
   });
 });

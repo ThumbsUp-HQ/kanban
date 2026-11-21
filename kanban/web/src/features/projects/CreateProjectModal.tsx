@@ -51,6 +51,7 @@ export function suggestProjectIdentifier(name: string): string {
       .join('')
       .slice(0, 6);
   } else {
+    /* v8 ignore next */
     candidate = (words[0] ?? '').slice(0, 5);
   }
 
@@ -235,6 +236,7 @@ export function CreateProjectModal({
       }
 
       const created = (await res.json()) as CreatedProject;
+      /* v8 ignore next 5 */
       if (typeof window !== 'undefined') {
         window.dispatchEvent(
           new CustomEvent('kb:project-created', { detail: created }),

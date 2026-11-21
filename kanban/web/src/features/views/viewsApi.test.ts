@@ -366,6 +366,59 @@ describe('viewsApi', () => {
     );
     expect(res.key).toBe('KAN-99');
 
+    // Create issue with empty payload (summary, description, priority defaults)
+    const resEmpty = await createProjectIssue('KAN', {});
+    expect(resEmpty.key).toBe('KAN-99');
+
+    // Patch issue without CSRF token
+    const patchRes = await patchProjectIssue('KAN-99', { summary: 'No CSRF patch' });
+    expect(patchRes.key).toBe('KAN-99');
+
+    // Fetch states returning { items: undefined }
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({ items: undefined }),
+    });
+    const statesEmpty = await fetchProjectStates('KAN');
+    expect(statesEmpty).toEqual([]);
+
+    // Fetch issues with total and next_cursor
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve({
+        items: [{ id: '01931234-5678-7000-8000-000000000099', key: 'KAN-99', summary: 'Total test', state: { id: 's-1', name: 'Todo', group: 'unstarted' } }],
+        total: 42,
+        next_cursor: 'cursor-42',
+      }),
+    });
+    const issuesTotal = await fetchProjectIssues('KAN');
+    expect(issuesTotal.total).toBe(42);
+    expect(issuesTotal.next_cursor).toBe('cursor-42');
+
+    // Fetch issues returning direct array
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve([
+        { id: '01931234-5678-7000-8000-000000000099', key: 'KAN-99', summary: 'Array test', state: { id: 's-rev', name: 'In Review', group: 'started' } },
+      ]),
+    });
+    const issuesArray = await fetchProjectIssues('KAN');
+    expect(issuesArray.items).toHaveLength(1);
+    expect(issuesArray.total).toBeUndefined();
+
+    // Fetch issues returning null
+    globalThis.fetch = vi.fn().mockResolvedValueOnce({
+      ok: true,
+      json: () => Promise.resolve(null),
+    });
+    const issuesNull = await fetchProjectIssues('KAN');
+    expect(issuesNull.items).toHaveLength(0);
+
+    // Normalize issue with state name 'To Do' vs non-todo
+    const normalizedToDo = normalizeIssueItem({ key: 'KAN-1', state: { id: 's-1', name: 'To Do', group: 'unstarted' } });
+    expect(normalizedToDo.state.name).toBe('Todo');
+
+    globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, status: 204 });
     await deleteProjectIssue('KAN-99');
   });
 });

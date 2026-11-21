@@ -1,39 +1,46 @@
-=== 1. DOCS TAXONOMY AUDIT (scripts.check_docs_taxonomy) ===
-Auditing documentation taxonomy and link integrity in /home/adamoutler/kanban/thumbs-up-kanban.wiki...
-OK: All documentation taxonomy, title labels, internal anchors, code links, and dashes verified successfully (0 violations).
 
-=== 2. FORBIDDEN DASHES AUDIT (scripts.check_no_dashes --all) ===
-Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan33-45-fix-999f22b1/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
+      Coverage enabled with v8
 
-=== 3. PYTEST DOCS SUITE ===
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 13ms
+Not implemented: navigation to another Document
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (40 tests) 2093ms
+
+ Test Files  2 passed (2)
+      Tests  44 passed (44)
+   Start at  18:26:24
+   Duration  3.33s (tests 57%, environment 35%, import 5%, worker 2%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.46 |    95.36 |     100 |     100 |                   
+ ...downViewer.tsx |   99.07 |    95.77 |     100 |     100 | ...50,169,241,475 
+ ...CenterPage.tsx |     100 |    92.85 |     100 |     100 | ...51-158,364,404 
+ docsService.ts    |     100 |      100 |     100 |     100 |                   
+ wikiManifest.ts   |     100 |      100 |     100 |     100 |                   
+-------------------|---------|----------|---------|---------|-------------------
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan33-45-fix-999f22b1
+rootdir: /home/adamoutler/kanban
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
 collected 38 items
 
 kanban/tests/docs/test_check_docs_taxonomy.py .....................      [ 55%]
-kanban/tests/platform/test_brand_terminology_audit.py ........           [ 76%]
-kanban/tests/docs/test_wiki_media_audit.py .........                     [100%]
+kanban/tests/docs/test_wiki_media_audit.py .........                     [ 78%]
+kanban/tests/platform/test_brand_terminology_audit.py ........           [100%]
 
-============================== 38 passed in 2.20s ==============================
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
 
-=== 4. VITEST DOCS CENTER SUITE (DocsCenter.test.tsx) ===
-
-> @kanban/web@0.1.0 test /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan33-45-fix-999f22b1/kanban/web
-> vitest run src/features/docs-center/__tests__/DocsCenter.test.tsx
-
-
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan33-45-fix-999f22b1/kanban/web
-
-Not implemented: navigation to another Document
- ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (40 tests) 1635ms
-
- Test Files  1 passed (1)
-      Tests  40 passed (40)
-   Start at  17:43:39
-   Duration  2.69s (tests 65%, environment 25%, import 7%, transform 2%)
-
-
+Name                                                    Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------------------------
+kanban/tests/docs/test_wiki_media_audit.py                226      1     68      4    98%   77, 86->71, 158->161, 223->222
+kanban/tests/platform/test_brand_terminology_audit.py     233      2     78      3    98%   140, 205, 223->226
+scripts/check_docs_taxonomy.py                            223      3    110      4    98%   42->44, 212, 236, 386
+---------------------------------------------------------------------------------------------------
+TOTAL                                                     682      6    256     11    98%
+============================== 38 passed in 6.86s ==============================

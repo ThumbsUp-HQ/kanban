@@ -226,7 +226,7 @@ index 43a20098..68c973e9 100644
    -webkit-user-select: text;
    box-sizing: border-box;
 diff --git a/kanban/web/src/components/help/FieldHelpHint.tsx b/kanban/web/src/components/help/FieldHelpHint.tsx
-index 7d57fe82..2a32a444 100644
+index 7d57fe82..61c783df 100644
 --- a/kanban/web/src/components/help/FieldHelpHint.tsx
 +++ b/kanban/web/src/components/help/FieldHelpHint.tsx
 @@ -12,6 +12,7 @@ import React, {
@@ -259,7 +259,34 @@ index 7d57fe82..2a32a444 100644
  
    const rawId = useId();
    const sanitizedId = rawId.replace(/[^a-zA-Z0-9_-]/g, '');
-@@ -278,14 +282,27 @@ export function FieldHelpHint({
+@@ -59,6 +63,15 @@ export function FieldHelpHint({
+   const popupRef = useRef<HTMLDivElement | null>(null);
+   const isPointerDownRef = useRef(false);
+   const isTouchRef = useRef(false);
++  const suppressNextFocusRef = useRef(false);
++
++  const prevActivePanelRef = useRef(shellPanels?.activePanel);
++  useEffect(() => {
++    if (prevActivePanelRef.current?.id === 'help' && !shellPanels?.activePanel) {
++      suppressNextFocusRef.current = true;
++    }
++    prevActivePanelRef.current = shellPanels?.activePanel;
++  }, [shellPanels?.activePanel]);
+ 
+   const [hintState, setHintState] = useState(() => ctrl.getState());
+ 
+@@ -160,6 +173,10 @@ export function FieldHelpHint({
+   };
+ 
+   const handleFocus = (): void => {
++    if (suppressNextFocusRef.current) {
++      suppressNextFocusRef.current = false;
++      return;
++    }
+     if (!isPointerDownRef.current) {
+       ctrl.focus(popupId);
+     }
+@@ -278,14 +295,28 @@ export function FieldHelpHint({
    // Normalize validValues into array
    const normalizedValues: FieldHelpValueItem[] = React.useMemo(() => {
      if (!validValues) return [];
@@ -279,6 +306,7 @@ index 7d57fe82..2a32a444 100644
 +  const handleDocLinkClick = (e: React.MouseEvent<HTMLAnchorElement>): void => {
 +    if (shellPanels && docHref) {
 +      e.preventDefault();
++      suppressNextFocusRef.current = true;
 +      triggerRef.current?.focus();
 +      ctrl.close(popupId);
 +      shellPanels.openPanel('help', { href: docHref, title });
@@ -289,7 +317,7 @@ index 7d57fe82..2a32a444 100644
  
    return (
      <>
-@@ -371,6 +388,7 @@ export function FieldHelpHint({
+@@ -371,6 +402,7 @@ export function FieldHelpHint({
                  target="_blank"
                  rel="noopener noreferrer"
                  data-testid={testId ? `${testId}-doc-link` : 'field-help-doc-link'}
@@ -311,7 +339,7 @@ index 5a289fb4..9ebd3d1b 100644
    ];
  
 diff --git a/kanban/web/src/features/workflows/AttachHookDialog.tsx b/kanban/web/src/features/workflows/AttachHookDialog.tsx
-index 7651eb2d..694b6eba 100644
+index 7651eb2d..0c1e7ddc 100644
 --- a/kanban/web/src/features/workflows/AttachHookDialog.tsx
 +++ b/kanban/web/src/features/workflows/AttachHookDialog.tsx
 @@ -3,6 +3,7 @@
@@ -343,7 +371,7 @@ index 7651eb2d..694b6eba 100644
 +                  summary="The execution tier for this transition helper rule."
 +                  validValues={[
 +                    { label: 'Sync Wasm Validator', description: 'Fast <25ms in-process WebAssembly validator that checks conditions and can veto.' },
-+                    { label: 'Async Wasm Post-Mutation', description: 'Background WebAssembly post-action that mutates allowed fields.' },
++                    { label: 'Sync Wasm Mutator', description: 'Synchronous WebAssembly mutator (< 25ms Tier A) that updates allowed issue fields during transition.' },
 +                    { label: 'Agent Transition Helper', description: 'Autonomous agent (CLI, SDK, or Runner) executing forensic QA gates.' },
 +                  ]}
 +                  docHref="/docs/scripted-workflows-and-transition-helpers#helper-architecture"
@@ -488,7 +516,7 @@ index 0cf9d8f4..75952717 100644
        // Fallback ignore in test env
      }
 diff --git a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
-index 87df93df..d23549be 100644
+index 87df93df..3dff41ab 100644
 --- a/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
 +++ b/kanban/web/src/features/workflows/WorkflowStudioPage.tsx
 @@ -30,6 +30,7 @@ import {
@@ -527,7 +555,7 @@ index 87df93df..d23549be 100644
 +        <div className="workflow-studio-actions">
 +          <StudioDocLink
 +            href="/docs/scripted-workflows-and-transition-helpers"
-+            title="Scripted Workflows &amp; Transition Helpers Documentation"
++            title="Scripted Workflows & Transition Helpers Documentation"
 +            testId="workflow-studio-doc-link"
 +          />
 +          <button

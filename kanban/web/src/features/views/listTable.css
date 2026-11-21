@@ -278,6 +278,7 @@
 
 .issues-table {
   width: 100%;
+  min-width: 580px;
   border-collapse: collapse;
   text-align: left;
   font-family: var(--font-sans);
@@ -747,7 +748,7 @@
   container-name: split-list;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .kb-split-layout {
     display: block;
     width: 100%;
@@ -810,7 +811,7 @@
   gap: 6px;
   padding: 6px 14px;
   background: var(--accent-primary);
-  color: #ffffff;
+  color: var(--accent-primary-fg, #ffffff);
   border: none;
   border-radius: var(--radius-sm, 4px);
   font-size: 13px;
@@ -1109,7 +1110,7 @@
 }
 
 .issue-card-star-btn--active {
-  color: #fbbf24;
+  color: var(--text-warning, #fbbf24);
 }
 
 .issue-card-line-2 {

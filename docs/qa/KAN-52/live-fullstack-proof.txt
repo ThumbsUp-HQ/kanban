@@ -1,39 +1,38 @@
-=== KAN-52 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, kanban-liveqa-2, commit 7913c2c8) ===
-Timestamp: 2026-11-20T22:14:43.025Z - 2026-11-20T22:15:19.232Z
+=== KAN-52 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, kanban-liveqa-2, commit 78074a1d) ===
+Timestamp: 2026-11-20T23:22:59.122Z - 2026-11-20T23:23:21.639Z
 Execution Mode: Zero-mock Playwright against live Docker standalone container (PostgreSQL 16 + FORCE RLS, UID 65532)
-Test Runner Script: live_qa_suite_v2.mjs
+Test Runner Script: live_qa_suite_r3.mjs
 
 --- Page Load Timings (< 3000ms threshold) ---
-- Desktop Navigator (?layout=list&peek=KAN-1): 898 ms
-- Tablet Navigator (?layout=list&peek=KAN-1): 874 ms
-- Mobile List (?layout=list): 840 ms
+- Desktop Navigator (?layout=list&peek=KAN-1): 965 ms
+- Tablet Navigator (?layout=list&peek=KAN-1): 846 ms
+- Mobile List (?layout=list): 876 ms
 
---- Problem 1 & 2: Unified IssueNavigatorBar + 300px Left Master Rail ---
-- Desktop Light & Dark (live-navigator-desktop-light.png, live-navigator-desktop-dark.png):
-  * Sidebar displays "📋 Issues" (LayoutSwitcher.tsx also defines "Issues").
-  * Unified issue-navigator-bar renders Basic filters (All States, All Priorities, All Assignees, All Labels, All Cycles, Favorites only), Saved Views strip ("Active Review Queue"), and Basic/Query mode toggle.
-  * Query mode JQL (live-navigator-query-jql-desktop.png): executed `project = "KAN" AND status = "Purple Review"` -> 3 matching issues rendered.
-  * 300px left master rail with 0 .list-section headers, Order by selector, sort direction toggle, refresh button, and compact 2-line issue-list-card-* items.
-- Collapsed Sidebar View (live-navigator-collapsed-rail-desktop.png):
-  * Collapsing left navigation sidebar provides full-width horizontal workspace for the 300px master rail + 2-column detail canvas.
-LIVE_STACK_VERDICT [P1_P2_NAVIGATOR_AND_MASTER_RAIL]: PASS
+--- Round 3 Verification Checks ---
+1. Desktop Light & Dark (1440x900):
+   - live-navigator-desktop-light.png, live-navigator-desktop-dark.png
+2. Assign to me Single-Line Button & POST /assignees (live-navigator-assign-to-me-desktop.png):
+   - Request: POST /api/v1/issues/KAN-1/assignees -> HTTP 201
+   - Response: {"id":"01a1fb45-7331-7f54-9f21-2b4859d4ce54","kind":"principal","principal":{"id":"01a1fb44-269d-7c85-bea9-5b9ffd8fca79","handle":"admin","display_name":"Server Administrator","type":"USER"}}
+   - Button CSS & geometry: {"btnWhiteSpace":"nowrap","btnFlexShrink":"0","btnHeight":29,"btnWidth":99,"singleLine":true}
+   - DETAILS ("Priority: High Assignee: Server Administrator") and PEOPLE ("Server Administrator") updated immediately.
+3. JQL Query Sync to First Matching Issue (live-navigator-query-jql-desktop.png):
+   - Executed JQL `project = "KAN" AND status = "Purple Review"`
+   - Telemetry: {"railKeys":["KAN-5","KAN-4","KAN-3"],"breadcrumb":"Kanban Core / KAN-5","pos":"1 of 3","nextDisabled":false,"url":"http://127.0.0.1:18962/projects/KAN/issues?layout=list&peek=KAN-5"}
+   - Right detail pane automatically synced activePeekKey to KAN-5 ("Purple Review") with pager "1 of 3" and enabled next button (NOT stuck on KAN-1).
+4. Sort Order & Pager Sync:
+   - Sorted by "Key" ascending: sortedKeys=["KAN-1","KAN-2","KAN-3","KAN-4","KAN-5","KAN-6"]
+   - Clicking issue-next-btn traversed: [{"pos":"1 of 6","peek":"KAN-1"},{"pos":"2 of 6","peek":"KAN-2"},{"pos":"3 of 6","peek":"KAN-3"}] (exactMatch=true).
+5. Collapsed Sidebar Rail (>879px split pane) + Separate Copy Timers (live-navigator-collapsed-rail-desktop.png):
+   - Telemetry: {"splitWidth":1084,"quickPropsDisplay":"flex","quickPropsStateDisplay":"none","detailsBodyHeight":46,"detailsText":"State:...Priority:HighAssignee:Server Administrator"}
+   - Confirmed [data-testid="split-section-details"] .surface__quick-props (display: flex) visibly renders Priority and Assignee inside DETAILS (not an empty box).
+   - Clicked split-git-branch-copy: {"branchBtnText":"✓ Copied!","shareBtnText":"🔗 Share / Export"} (separate timers, Share not stuck active).
+   - Clicked split-share-btn independently: "✓ Copied link!" (0 NotAllowedError).
+6. Tablet (768x1024) & Mobile (390x844) Single State Select in Split Mode:
+   - live-navigator-tablet.png: visible state selects in split mode = ["split-state-select"] (quick-props-state-select hidden inside DETAILS).
+   - live-navigator-mobile-list.png & live-navigator-mobile-detail.png: visible state selects in split mode = ["split-state-select"].
 
---- Problem 3 & 4: Right 2-Column Detail View, Assign to Me (POST /assignees), Clipboard Copy, Responsive ---
-1. Assign to me ([data-testid="split-assign-to-me-btn"], live-navigator-assign-to-me-desktop.png):
-   - Network Request: POST http://127.0.0.1:18962/api/v1/issues/KAN-1/assignees
-   - HTTP Status: 201 (zero 422)
-   - Response Body: {"id":"01a1fb07-1eec-7d8e-ab4f-e895d36ad55d","kind":"principal","principal":{"id":"01a1fb02-b6e8-7687-9847-764ea6b823e3","handle":"admin","display_name":"Server Administrator","type":"USER"}}
-   - UI Update: Both DETAILS ("Assignee: Server Administrator") and PEOPLE ("ASSIGNEE: Server Administrator") updated immediately and persisted across Tablet and Mobile views (React Query ['issues', targetProject] cache updated; note 2-line master rail cards intentionally render priority, key, state, favorite, and summary without an avatar chip).
-2. Git Branch Copy & Share / Export:
-   - Clicked [data-testid="split-git-branch-copy"] -> text updated to "✓ Copied!" (0 NotAllowedError, 0 crash modals).
-   - Clicked [data-testid="split-share-btn"] -> text updated to "✓ Copied link!" (0 NotAllowedError, 0 crash modals).
-3. Responsive Views:
-   - Tablet (768x1024): live-navigator-tablet.png
-   - Mobile List (390x844): live-navigator-mobile-list.png
-   - Mobile Detail (390x844): live-navigator-mobile-detail.png
-LIVE_STACK_VERDICT [P3_P4_DETAIL_ASSIGN_CLIPBOARD_DATES]: PASS
-
---- Runtime Error Telemetry (KAN-52 scope) ---
+--- Runtime Error Telemetry ---
 Console JS errors: 0
 Page errors: 0
 5xx responses: 0

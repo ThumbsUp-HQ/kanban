@@ -173,6 +173,11 @@ export function FieldHelpHint({
   };
 
   const handleFocus = (): void => {
+    if (triggerRef.current?.getAttribute('data-kb-suppress-focus') === 'true') {
+      triggerRef.current.removeAttribute('data-kb-suppress-focus');
+      suppressNextFocusRef.current = false;
+      return;
+    }
     if (suppressNextFocusRef.current) {
       suppressNextFocusRef.current = false;
       return;
@@ -310,7 +315,9 @@ export function FieldHelpHint({
     if (shellPanels && docHref) {
       e.preventDefault();
       suppressNextFocusRef.current = true;
+      triggerRef.current?.setAttribute('data-kb-suppress-focus', 'true');
       triggerRef.current?.focus();
+      suppressNextFocusRef.current = true;
       ctrl.close(popupId);
       shellPanels.openPanel('help', { href: docHref, title });
     }
