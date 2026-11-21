@@ -7,10 +7,11 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Annotated
 
-from fastapi import APIRouter, Depends, Query, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from kanban.api.deps import PrincipalContext, get_principal
+from kanban.ops.build_info import get_build_info
 from kanban.ops.sbom import (
     PLATFORM_LICENSE_SPDX,
     PLATFORM_NAME,
@@ -279,6 +280,15 @@ class SystemAboutResponse(BaseModel):
     notice_text: str | None = Field(default=None, description="Alias for notice")
     sbom_summary: SbomSummaryModel = Field(description="Supply-chain component summary")
     components: list[SbomComponentModel] = Field(description="Discovered third-party components")
+    git_commit: str = Field(default="unknown", description="Build git commit SHA")
+    build_timestamp: str | None = Field(default=None, description="ISO build timestamp")
+    openapi_version: str = Field(default="2.0.0", description="OpenAPI specification version")
+    openapi_bundle_hash: str | None = Field(
+        default=None, description="SHA-256 fingerprint of OpenAPI bundle"
+    )
+    frontend_bundle_hash: str | None = Field(
+        default=None, description="SHA-256 fingerprint of frontend bundle"
+    )
 
 
 def get_platform_summary(settings: Settings | None = None) -> PlatformSummaryResponse:
@@ -301,12 +311,18 @@ router = APIRouter(prefix="/system", tags=["system"])
 )
 async def get_system_about_endpoint(
     caller: Annotated[PrincipalContext, Depends(get_principal)],
+    request: Request,
 ) -> SystemAboutResponse:
     """Retrieve comprehensive platform metadata, verbatim licenses, and SBOM."""
     del caller  # Authentication enforced via Depends(get_principal) -> 401 if missing
     comps = get_live_components()
     summary = calculate_sbom_summary(comps)
     license_text, notice_text = get_license_texts()
+
+    openapi_doc = None
+    if hasattr(request, "app") and hasattr(request.app, "openapi"):
+        openapi_doc = request.app.openapi()
+    b_info = get_build_info(openapi_doc)
 
     return SystemAboutResponse(
         platform=PLATFORM_NAME,
@@ -325,6 +341,11 @@ async def get_system_about_endpoint(
         notice_text=notice_text,
         sbom_summary=SbomSummaryModel(**summary.to_dict()),
         components=[SbomComponentModel(**c.to_dict()) for c in comps],
+        git_commit=b_info.git_commit,
+        build_timestamp=b_info.build_timestamp,
+        openapi_version=b_info.openapi_version,
+        openapi_bundle_hash=b_info.openapi_bundle_hash,
+        frontend_bundle_hash=b_info.frontend_bundle_hash,
     )
 
 

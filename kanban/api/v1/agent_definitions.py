@@ -181,8 +181,16 @@ async def admin_delete_agent_definition(
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@admin_router.post("/{agent}:validate", response_model=AgentValidationResponse)
-@admin_router.post("/{agent}/validate", response_model=AgentValidationResponse)
+@admin_router.post(
+    "/{agent}:validate",
+    response_model=AgentValidationResponse,
+    operation_id="validate_agent_definition_colon",
+)
+@admin_router.post(
+    "/{agent}/validate",
+    response_model=AgentValidationResponse,
+    operation_id="validate_agent_definition_slash",
+)
 async def admin_validate_agent_definition(
     agent: str, caller: AdminCaller, session: Session
 ) -> AgentValidationResponse:

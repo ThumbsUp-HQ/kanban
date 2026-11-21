@@ -190,13 +190,13 @@ jobs:
         shell: bash
         run: |
           scripts/ci/run_and_log.sh build-runtime-slim -- \
-            docker buildx build --target runtime-slim -t kanban:runtime-slim --load .
+            docker buildx build --target runtime-slim --build-arg KB_GIT_COMMIT=${{ github.sha }} -t kanban:runtime-slim --load .
 
       - name: Build standalone image
         shell: bash
         run: |
           scripts/ci/run_and_log.sh build-standalone -- \
-            docker buildx build --target standalone -t kanban:standalone --load .
+            docker buildx build --target standalone --build-arg KB_GIT_COMMIT=${{ github.sha }} -t kanban:standalone --load .
 
       - name: List built images
         shell: bash
@@ -276,6 +276,8 @@ jobs:
           context: .
           push: true
           tags: ${{ secrets.DOCKERHUB_USERNAME }}/thumbs-up-kanban:latest
+          build-args: |
+            KB_GIT_COMMIT=${{ github.sha }}
 
       - name: Upload logs to Dash
         if: always()

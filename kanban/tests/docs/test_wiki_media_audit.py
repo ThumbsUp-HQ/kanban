@@ -278,14 +278,128 @@ class TestWikiMediaAndLinkAudit:
         assert "ScriptRunner" not in content
         assert "Transition Interceptor Engine" not in content
 
+    def test_wiki_media_proxy_urls_canonical(self) -> None:
+        """Assert wiki docs use canonical media-proxy endpoint and zero stale /api/v1/media."""
+        if self.wiki_dir is not None:
+            pages = [
+                (f.name, f.read_text(encoding="utf-8")) for f in sorted(self.wiki_dir.glob("*.md"))
+            ]
+        else:
+            chapters = load_bundled_chapters()
+            pages = [(ch["slug"], ch.get("content", "")) for ch in chapters]
+
+        for page_name, content in pages:
+            assert "/api/v1/media?url=" not in content, (
+                f"Page {page_name} contains obsolete /api/v1/media?url= endpoint"
+            )
+
+        # Check media pipeline doc specifically
+        media_doc = next(
+            (c for name, c in pages if "media" in name.lower() and "pipeline" in name.lower()),
+            "",
+        )
+        assert "/api/v1/media-proxy" in media_doc, (
+            "Canonical media pipeline doc must document /api/v1/media-proxy endpoint"
+        )
+
+    def test_realtime_protocol_and_events_canonical(self) -> None:
+        """Assert realtime architecture specifies /ws, /sse, dotted events, and 15s retry."""
+        if self.wiki_dir is not None:
+            pages = [
+                (f.name, f.read_text(encoding="utf-8")) for f in sorted(self.wiki_dir.glob("*.md"))
+            ]
+        else:
+            chapters = load_bundled_chapters()
+            pages = [(ch["slug"], ch.get("content", "")) for ch in chapters]
+
+        rt_doc = next(
+            (c for name, c in pages if "real-time" in name.lower() or "realtime" in name.lower()),
+            "",
+        )
+        assert rt_doc, "Could not find realtime architecture doc"
+
+        # No /ws/v1 or uppercase event names
+        assert "/ws/v1" not in rt_doc, "Realtime doc must not reference obsolete /ws/v1 path"
+        assert "ISSUE_MOVED" not in rt_doc, "Realtime doc must not reference uppercase ISSUE_MOVED"
+        assert "ISSUE_CREATED" not in rt_doc, (
+            "Realtime doc must not reference uppercase ISSUE_CREATED"
+        )
+
+        # Canonical endpoints, lowercase events, and retry limits
+        assert "/ws" in rt_doc, "Realtime doc must document canonical /ws endpoint"
+        assert "/sse" in rt_doc, "Realtime doc must document canonical /sse endpoint"
+        assert "issue.moved" in rt_doc, "Realtime doc must document lowercase dotted issue.moved"
+        assert "issue.created" in rt_doc, (
+            "Realtime doc must document lowercase dotted issue.created"
+        )
+        assert "doc:{id}" in rt_doc, "Realtime doc must document doc:{id} channel"
+        assert "15000" in rt_doc or "15 seconds" in rt_doc or "15-second" in rt_doc, (
+            "Realtime doc must document 15-second / 15000ms max retry cap"
+        )
+
+    def test_mcp_surface_tool_counts_canonical(self) -> None:
+        """Assert MCP docs reference 24 tools total (9 agent, 3 docs, 12 admin) and no 27 tools."""
+        if self.wiki_dir is not None:
+            pages = [
+                (f.name, f.read_text(encoding="utf-8")) for f in sorted(self.wiki_dir.glob("*.md"))
+            ]
+        else:
+            chapters = load_bundled_chapters()
+            pages = [(ch["slug"], ch.get("content", "")) for ch in chapters]
+
+        for page_name, content in pages:
+            assert "27 tools" not in content.lower(), (
+                f"Page {page_name} references obsolete '27 tools'"
+            )
+            assert "6 /mcp/docs tools" not in content, (
+                f"Page {page_name} references obsolete '6 /mcp/docs tools'"
+            )
+
+        mcp_doc = next(
+            (c for name, c in pages if "three-surface" in name.lower()),
+            "",
+        )
+        assert mcp_doc, "Could not find Three-Surface MCP architecture doc"
+        assert bool(
+            re.search(r"24\s+(?:cohesive\s+)?tools", mcp_doc, re.IGNORECASE) or "24-tool" in mcp_doc
+        )
+        assert "9" in mcp_doc  # 9 agent tools
+        assert "3" in mcp_doc  # 3 docs tools
+        assert "12" in mcp_doc  # 12 admin tools
+
+    def test_capability_bitmasks_canonical(self) -> None:
+        """Assert access security doc specifies 8-bit Capability(IntFlag) bitmasks."""
+        if self.wiki_dir is not None:
+            pages = [
+                (f.name, f.read_text(encoding="utf-8")) for f in sorted(self.wiki_dir.glob("*.md"))
+            ]
+        else:
+            chapters = load_bundled_chapters()
+            pages = [(ch["slug"], ch.get("content", "")) for ch in chapters]
+
+        sec_doc = next(
+            (c for name, c in pages if "zero-trust" in name.lower()),
+            "",
+        )
+        assert sec_doc, "Could not find Zero-Trust security doc"
+        assert "0x01" in sec_doc
+        assert "0x80" in sec_doc
+        assert "0xFF" in sec_doc
+        assert "SCOPE_CAPABILITY_MAP" in sec_doc
+        assert "VIEW = 0x01, COMMENT = 0x02, EDIT = 0x04, MOVE = 0x08, DELETE = 0x10" not in sec_doc
+
     def test_bundled_manifest_fallback_all_checks(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        """Assert all 4 audit gates pass against wikiManifest.ts when wiki repo is absent."""
+        """Assert all audit gates pass against wikiManifest.ts when wiki repo is absent."""
         monkeypatch.setenv("KANBAN_WIKI_PATH", "/nonexistent")
         self.wiki_dir = None
         self.test_renamed_scripted_workflows_doc_exists_and_old_is_purged()
         self.test_all_internal_wiki_links_resolve_cleanly()
         self.test_all_wiki_image_references_exist_on_disk()
         self.test_wiki_mermaid_and_headings_use_canonical_branding()
+        self.test_wiki_media_proxy_urls_canonical()
+        self.test_realtime_protocol_and_events_canonical()
+        self.test_mcp_surface_tool_counts_canonical()
+        self.test_capability_bitmasks_canonical()
 
     def test_github_heading_slug_and_extract_slugs_unit(self) -> None:
         """Unit test confirming heading slug extraction and deduplication logic."""

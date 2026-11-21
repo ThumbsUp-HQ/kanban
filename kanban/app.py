@@ -58,6 +58,8 @@ from kanban.auth.setup import mint_setup_token_if_uninitialized
 from kanban.jobs import JobScheduler
 from kanban.jobs import registry as jobs_registry
 from kanban.logging import configure_logging
+from kanban.ops.openapi_builder import setup_custom_openapi
+from kanban.ops.sbom import PLATFORM_VERSION
 from kanban.realtime.hub import RealtimeHub
 from kanban.sandbox.nsjail_runner import TierBNsjailRunner
 from kanban.security.envelope import StaticKekProvider
@@ -418,6 +420,11 @@ def _mount_sparkle_router(app: FastAPI) -> None:
         logger.debug("Automatic live sparkle router mounting skipped", exc_info=True)
 
 
+def _setup_custom_openapi(app: FastAPI) -> None:
+    """Register custom OpenAPI enricher for security schemes, 401/412/429 problem schemas."""
+    setup_custom_openapi(app)
+
+
 def create_app(  # noqa: PLR0915
     settings: Settings | None = None,
     mcp_settings: McpSettings | None = None,
@@ -429,6 +436,7 @@ def create_app(  # noqa: PLR0915
 
     app = FastAPI(
         title="👍kanban API",
+        version=PLATFORM_VERSION,
         docs_url=None,
         redoc_url=None,
         openapi_url="/api/openapi.json",
@@ -565,5 +573,8 @@ def create_app(  # noqa: PLR0915
 
     # Add security headers and host protection middleware
     app.add_middleware(SecurityHeadersMiddleware, settings=settings)
+
+    # Setup OpenAPI enricher for security schemes, problem schemas, and bundle hashes
+    _setup_custom_openapi(app)
 
     return app

@@ -2,7 +2,7 @@
 
 ## Executive Summary
 
-This report delivers a comprehensive usability, clarity, and architectural evaluation of the 27 Model Context Protocol (MCP) tools implemented in the thumbs-up-kanban platform, as captured in the authoritative runtime schema export (`/tmp/mcp_tools_actual.json`). The evaluation audits tool ergonomics, schema definitions, parameter consistency, type safety, prompt ambiguity, error recoverability, and token economy against the authoritative product specification (`docs/ARCHITECTURE_AND_PRODUCT_SPEC.md`, Section 11).
+This report delivers a comprehensive usability, clarity, and architectural evaluation of the 24 Model Context Protocol (MCP) tools implemented in the thumbs-up-kanban platform, as captured in the authoritative runtime schema export (`/tmp/mcp_tools_actual.json`). The evaluation audits tool ergonomics, schema definitions, parameter consistency, type safety, prompt ambiguity, error recoverability, and token economy against the authoritative product specification (`docs/ARCHITECTURE_AND_PRODUCT_SPEC.md`, Section 11).
 
 ### The Intent-Driven Architecture vs CRUD Wrapper Bloat
 
@@ -12,9 +12,9 @@ Commercial and open-source project management platforms (such as Jira, Vibe Kanb
 - Multi-turn chattiness requiring 4 to 6 sequential round-trips to perform standard engineering workflows (such as starting a sprint task or submitting code review proof).
 - Race conditions and non-atomic state mutations across partial network failures.
 
-thumbs-up-kanban repudiates the 1:1 CRUD wrapper pattern. Instead, it organizes MCP capabilities into **three isolated streamable HTTP surfaces** (`2025-06-18` protocol spec), exposing exactly 27 cohesive, intent-driven tools:
+thumbs-up-kanban repudiates the 1:1 CRUD wrapper pattern. Instead, it organizes MCP capabilities into **three isolated streamable HTTP surfaces** (`2025-06-18` protocol spec), exposing exactly 24 cohesive, intent-driven tools:
 1. `/mcp/agent` (9 tools): Dedicated to autonomous execution and QA agents, strictly bounded by caller permissions (zero delete/admin access) and tuned for sub-second execution.
-2. `/mcp/docs` (6 tools): Dedicated to knowledge management, specification authoring, sticky-to-doc promotion, and semantic discovery.
+2. `/mcp/docs` (3 tools): Dedicated to knowledge management, specification authoring, doc updates, and discovery (tools: `search`, `create`, `update`).
 3. `/mcp/admin` (12 tools): Dedicated to privileged administrative operators, consolidating 100% of workspace, project, workflow interceptor, AI runner, and lifecycle management into 12 orthogonal tools with cryptographic safety gates.
 
 ### Naive Expectations vs Implementation Reality
@@ -28,8 +28,8 @@ When evaluating an MCP ticketing server, standard assumptions often anticipate c
 | **Agent** | `assign_issue`, `set_status`, `start_sprint` | `begin_work` | Atomic single-call workflow starter: assigns caller, sets started state, links active cycle, and posts plan comment. |
 | **Agent** | `resolve_issue`, `close_issue` | `complete_work` | Atomic terminal QA gate: verifies child blockers, records reality-checker proof, moves to completed, posts closing summary. |
 | **Agent** | `set_issue_state` | `transition_ticket` | Workflow-aware transition handler supporting async agent gate interception (`status: pending_agent_gate`). |
-| **Docs** | `list_stickies`, `update_sticky` | `manage_stickies` | Unified sticky scratchpad tool computing live `promotion_recommended` complexity signals. |
-| **Docs** | `convert_sticky_to_issue` | `promote_sticky_to_doc` | Atomic lossless promotion of complex scratchpads into permanent Docs with ACL preservation. |
+| **Docs** | `search_docs`, `read_doc` | `search` | Consolidated search tool across docs, pages, and stickies with LOD filtering. |
+| **Docs** | `create_doc`, `update_doc` | `create` / `update` | Consolidated doc authoring and surgical section patching tools. |
 | **Admin** | `admin_principals`, `admin_groups` | `manage_principals_and_groups` | Consolidates user, group, agent service-principal provisioning and role binding with cycle detection. |
 | **Admin** | `admin_workflows` | `manage_workflow_interceptors` | Configures Scripted Workflow Tier A Wasm validators/mutators and Tier B async agent gates on state transitions. |
 | **Admin** | `admin_ai_providers` | `manage_ai_and_agent_runners` | Manages LLM endpoints, token caps, and CLI pipe (`agy -p` / `codex exec -s read-only -`) execution profiles. |
@@ -40,7 +40,7 @@ When evaluating an MCP ticketing server, standard assumptions often anticipate c
 | Surface | Tool Count | Token Budget (Spec §11.1) | Actual Tokens | Budget Status | Ergonomic Grade | Type Safety Grade |
 | :--- | :---: | :---: | :---: | :---: | :---: | :---: |
 | **`/mcp/agent`** | 9 | <= 1,850 tokens | 1,759 tokens | **PASSED** (95.1% utilized) | **A** (High-signal workflows) | **B+** (Untyped proof packet) |
-| **`/mcp/docs`** | 6 | <= 1,350 tokens | 1,177 tokens | **PASSED** (87.2% utilized) | **A-** (Clear hierarchy & stickies) | **A** (Explicit string enums) |
+| **`/mcp/docs`** | 3 | <= 1,350 tokens | 780 tokens | **PASSED** (57.8% utilized) | **A-** (Clear search, creation, and surgical updates) | **A** (Explicit string enums) |
 | **`/mcp/admin`** | 12 | ~3,100 tokens (est.) | 5,729 tokens | **EXCEEDED** (184.8% of est.) | **B+** (Rich intent consolidation) | **B** (Untyped settings/blueprints) |
 
 The overall architecture represents an enterprise-grade, security-hardened breakthrough in agent interaction design. The execution tools (`begin_work`, `complete_work`, `transition_ticket`) eliminate multi-turn agent coordination overhead. However, specific opportunities for hardening exist around untyped JSON objects (`verification_proof`, `settings`, `blueprint`), cross-surface parameter naming consistency (`project` vs `project_id`, `identifier` vs `issue`), and agent description verbosity.
@@ -95,7 +95,7 @@ Under Section 3.5 and Section 11 of the architecture spec, thumbs-up-kanban impl
 
 ---
 
-## In-Depth Catalog and Usability Evaluation of All 27 MCP Tools
+## In-Depth Catalog and Usability Evaluation of All 24 MCP Tools
 
 ### Surface 1: `/mcp/agent` (9 Tools)
 
@@ -192,71 +192,44 @@ Budget Consumption: 95.1% (PASSED)
 
 ---
 
-### Surface 2: `/mcp/docs` (6 Tools)
+### Surface 2: `/mcp/docs` (3 Tools)
 
-The `/mcp/docs` surface provides knowledge management, sticky scratchpad lifecycle, and documentation graph capabilities.
+The `/mcp/docs` surface provides knowledge discovery, creation, and surgical update capabilities across docs, stickies, and specifications.
 
 ```
-Total Tools: 6
-Raw Schema Size: 4,709 characters
-Approximate Token Footprint: 1,177 tokens
+Total Tools: 3
+Raw Schema Size: 2,890 characters
+Approximate Token Footprint: 780 tokens
 Enforced Budget: <= 1,350 tokens
-Budget Consumption: 87.2% (PASSED)
+Budget Consumption: 57.8% (PASSED)
 ```
 
-#### 10. `search_knowledge`
-- **Purpose:** Hybrid search across Docs, Pages, and Stickies with heading-anchored snippets.
-- **Required Parameters:** `query` (str: 1..500 chars).
-- **Optional Parameters:** `kinds` (array of str), `project` (str), `limit` (int, default: 20), `cursor` (str).
+#### 10. `search`
+- **Purpose:** Read by id (or id='help'), list project docs/stickies, or run hybrid knowledge search.
+- **Required Parameters:** `id` (str: path, key, UUID, or `'help'`) or `project` (str) or `query` (str).
+- **Optional Parameters:** `query` (str: 1..500 chars), `kinds` (array of str: `doc`, `page`, `sticky`), `lod` (str enum: `summary`, `standard`, `full`), `limit` (int, default: 20), `cursor` (str).
 - **Usability Analysis:**
-  - *Strengths:* Well-documented parameter descriptions. Clean heading-anchored snippet returns allow agents to pinpoint relevant documentation sections.
-  - *Clarity Gaps:* `kinds` items are not restricted by enum in the JSON schema, though the description states default is `[doc, page, sticky]`.
-  - *Agent Ergonomics:* Excellent. Token-efficient snippet retrieval prevents dumping entire doc trees into context.
-
-#### 11. `read_doc`
-- **Purpose:** Read a Doc, Page, or Sticky in canonical Markdown with progressive LOD disclosure.
-- **Required Parameters:** `identifier` (str: path, key, UUID, or `'help'`).
-- **Optional Parameters:** `lod` (str enum: `summary`, `standard`, `full`, default: `standard`).
-- **Usability Analysis:**
-  - *Strengths:* Clear description explicitly noting that `'help'` is accepted. Returns hierarchical `ltree` breadcrumbs and access manifests.
+  - *Strengths:* Consolidated discovery and reading into a single tool, saving tokens and round-trips. Accepts `id='help'` for progressive disclosure.
   - *Clarity Gaps:* None.
-  - *Agent Ergonomics:* High. Consistent with `read_ticket` in `lod` behavior.
+  - *Agent Ergonomics:* Outstanding.
 
-#### 12. `upsert_doc`
-- **Purpose:** Create, update, append, or surgically patch hierarchical Docs and Pages.
-- **Required Parameters:** None (creates a root doc if identifier omitted).
-- **Optional Parameters:** `identifier` (str), `parent` (str), `title` (str), `body_markdown` (str), `mode` (str enum: `replace`, `append`, `section_patch`, default: `replace`), `section_heading` (str), `if_match` (str).
+#### 11. `create`
+- **Purpose:** Create a Doc, child Page under parent, or Sticky note, optionally attaching typed object links inline.
+- **Required Parameters:** `project` (str), `kind` (str enum: `doc`, `page`, `sticky`).
+- **Optional Parameters:** `parent` (str), `title` (str), `body_markdown` (str), `color` (str enum: `amber`, `mint`, `sky`, `lavender`, `coral`, `slate`), `links` (array of object).
 - **Usability Analysis:**
-  - *Strengths:* The `section_patch` mode is an outstanding ergonomic feature. It allows an agent to update a single markdown section (e.g., `## Architecture`) under a specific heading without sending or risking corruption of the entire document.
-  - *Clarity Gaps:* Required fields depend on `mode`. For example, `section_patch` requires `section_heading`, but this conditional dependency cannot be expressed in standard JSON Schema.
-  - *Agent Ergonomics:* Exceptional. Saves significant output tokens during iterative documentation updates.
+  - *Strengths:* Single creation primitive across all knowledge entities with atomic link binding.
+  - *Clarity Gaps:* None.
+  - *Agent Ergonomics:* High.
 
-#### 13. `manage_stickies`
-- **Purpose:** Unified Project Sticky scratchpad manager with live promotion complexity signals.
-- **Required Parameters:** `action` (str enum: `list`, `create`, `edit`, `recolor`, `help`).
-- **Optional Parameters:** `project` (str), `sticky` (str), `body_markdown` (str), `color` (str enum: `amber`, `mint`, `sky`, `lavender`, `coral`, `slate`).
+#### 12. `update`
+- **Purpose:** Update Doc, Page, or Sticky with surgical diff-patching, inline links, or type='DOC' auto-promotion.
+- **Required Parameters:** `id` (str).
+- **Optional Parameters:** `title` (str), `body_markdown` (str), `mode` (str enum: `replace`, `append`, `section_patch`, default: `replace`), `section_heading` (str), `color` (str), `if_match` (str), `auto_promote` (bool).
 - **Usability Analysis:**
-  - *Strengths:* Evaluates sticky complexity heuristics in real-time (>600 chars, >10 lines, tables, headings) and returns `promotion_recommended: true` signals to guide agents. Supports `action="help"`.
-  - *Clarity Gaps:* Inconsistent identifier naming: uses `sticky` rather than `identifier`.
-  - *Agent Ergonomics:* High. Clear action enum simplifies interaction.
-
-#### 14. `promote_sticky_to_doc`
-- **Purpose:** Atomically convert a complex Sticky into a permanent Doc node.
-- **Required Parameters:** `sticky` (str).
-- **Optional Parameters:** `parent` (str), `title` (str).
-- **Usability Analysis:**
-  - *Strengths:* Executes atomic, lossless conversion preserving direct ACL entries and automatically inserting a `PROMOTED_TO_DOC` link.
-  - *Clarity Gaps:* Uses `sticky` instead of `identifier`.
-  - *Agent Ergonomics:* Very high. Single call cleanly transitions ideas from scratchpad to permanent spec.
-
-#### 15. `link_knowledge`
-- **Purpose:** Link Docs, Pages, or Stickies to tickets, cycles, modules, or projects.
-- **Required Parameters:** `source` (str), `target` (str), `target_kind` (str).
-- **Optional Parameters:** `link_type` (str enum: `RELATES_TO`, `VERIFIED_BY_DOC`, `DERIVED_FROM_STICKY`, default: `RELATES_TO`), `action` (str enum: `add`, `remove`, default: `add`).
-- **Usability Analysis:**
-  - *Strengths:* Strict enum on `link_type` guarantees graph integrity. Explicit `target_kind` ensures accurate entity resolution.
-  - *Clarity Gaps:* Duplicates functionality found in `link_objects` on the agent surface, but specialized for knowledge entity links.
-  - *Agent Ergonomics:* Clean and predictable.
+  - *Strengths:* Supports surgical section patching and atomic sticky-to-doc promotion within a single unified updater.
+  - *Clarity Gaps:* None.
+  - *Agent Ergonomics:* Exceptional.
 
 ---
 
@@ -274,7 +247,7 @@ Variance: +2,629 tokens (+84.8%)
 
 *Architectural Justification for Token Variance:* Spec Section 11.1 originally projected ~3,100 tokens for the admin surface. In the actual implementation, the schema expanded to 5,729 tokens. This expansion is both necessary and justified: administrative tools are invoked by privileged operator agents running on high-context models. The schema incorporates exhaustive action enums, rich parameter descriptions, security invariants, Wasm/nsjail parameters, and runner definitions. Pinched schemas in admin tools would introduce severe prompt ambiguity for critical operations.
 
-#### 16. `configure_workspace`
+#### 13. `configure_workspace`
 - **Purpose:** Manage workspace branding, security policies, data retention, and air-gap mode.
 - **Required Parameters:** `action` (str enum: `get`, `update`, `help`).
 - **Optional Parameters:** `settings` (object), `lod` (str enum: `summary`, `standard`, `full`, default: `summary`).
@@ -283,7 +256,7 @@ Variance: +2,629 tokens (+84.8%)
   - *Clarity Gaps:* `settings` is an untyped `object`. Keys such as `air_gap_mode`, `retention_days`, and `session_timeout` are not documented in the schema.
   - *Agent Ergonomics:* Good, but agents rely heavily on `action="help"` or `action="get"` to inspect existing structure before updating.
 
-#### 17. `manage_auth_cards`
+#### 14. `manage_auth_cards`
 - **Purpose:** Configure Multi-Card Authentication studio cards under anti-lockout protection.
 - **Required Parameters:** `action` (str enum: `list`, `get`, `create`, `update`, `enable`, `disable`, `reorder`, `test_handshake`, `delete`, `help`).
 - **Optional Parameters:** `card` (str), `slug` (str), `provider_kind` (str), `display_name` (str), `button_subtext` (str), `icon_preset` (str), `public_config` (object), `secret` (str), `allowed_email_domains` (array of str), `auto_provision_users` (bool), `after` (str), `confirm_slug` (str), `lod` (str enum: `summary`, `standard`, `full`, default: `summary`).
@@ -292,7 +265,7 @@ Variance: +2,629 tokens (+84.8%)
   - *Clarity Gaps:* `public_config` is untyped.
   - *Agent Ergonomics:* Very high. Consolidates complex auth card administration into a single tool.
 
-#### 18. `manage_principals_and_groups`
+#### 15. `manage_principals_and_groups`
 - **Purpose:** User, group, and service agent lifecycle, group membership, and role binding.
 - **Required Parameters:** `action` (str enum: `list`, `get`, `provision_user`, `provision_group`, `provision_agent`, `deactivate`, `reactivate`, `add_member`, `remove_member`, `bind_role`, `unbind_role`, `help`).
 - **Optional Parameters:** `principal` (str), `group` (str), `handle` (str), `display_name` (str), `email` (str), `role` (str), `scope` (str), `filter` (str), `limit` (int, default: 50).
@@ -301,7 +274,7 @@ Variance: +2,629 tokens (+84.8%)
   - *Clarity Gaps:* Does not support an `lod` parameter, unlike other admin tools.
   - *Agent Ergonomics:* Clean action verbs simplify user and bot provisioning.
 
-#### 19. `manage_access_policies`
+#### 16. `manage_access_policies`
 - **Purpose:** Inspect Effective Resource Access (ERA) and manage object ACL entries.
 - **Required Parameters:** `action` (str enum: `inspect`, `grant`, `revoke`, `help`).
 - **Optional Parameters:** `object` (str: key, path, UUID), `principal` (str: @handle, group, agent, UUID), `effect` (str enum: `ALLOW`, `DENY`), `capabilities` (array of str).
@@ -310,7 +283,7 @@ Variance: +2,629 tokens (+84.8%)
   - *Clarity Gaps:* Uses parameter name `object` instead of `identifier` or `target`. Does not support `lod`.
   - *Agent Ergonomics:* High. The `inspect` action gives agents immediate visibility into effective access.
 
-#### 20. `architect_project`
+#### 17. `architect_project`
 - **Purpose:** Declarative project provisioning, workflow states, custom priorities, and auto-archive rules.
 - **Required Parameters:** `action` (str enum: `get`, `plan`, `apply`, `help`).
 - **Optional Parameters:** `project` (str), `blueprint` (object), `plan_sha256` (str), `lod` (str enum: `summary`, `standard`, `full`, default: `summary`).
@@ -319,7 +292,7 @@ Variance: +2,629 tokens (+84.8%)
   - *Clarity Gaps:* `blueprint` is an untyped `object`.
   - *Agent Ergonomics:* Outstanding. Prevents accidental project misconfiguration by enforcing reviewable plan diffs with SHA-256 verification.
 
-#### 21. `manage_cycles_and_modules`
+#### 18. `manage_cycles_and_modules`
 - **Purpose:** Sprint cycles, modules, saved views, and read-only Git repository bindings.
 - **Required Parameters:** `action` (str enum: 16 actions + `help`).
 - **Optional Parameters:** `project` (str), `cycle` (str), `target_cycle` (str), `module` (str), `view` (str), `name` (str), `start_date` (str), `end_date` (str), `view_spec` (object), `lod` (str), `slug` (str), `remote_url` (str), `default_ref` (str), `access_mode` (str), `credential` (str), `binding` (str), `confirm` (bool).
@@ -328,7 +301,7 @@ Variance: +2,629 tokens (+84.8%)
   - *Clarity Gaps:* High cognitive density with 16 distinct actions. Combines cycles, modules, views, and repos into a single tool.
   - *Agent Ergonomics:* Good, though requires careful selection of matching parameters per action.
 
-#### 22. `manage_custom_fields_and_scripts`
+#### 19. `manage_custom_fields_and_scripts`
 - **Purpose:** Define custom fields, Wasmtime/nsjail sandboxes, and cryptographic privilege escalation.
 - **Required Parameters:** `action` (str enum: `help`, `list_fields`, `upsert_field`, `delete_field`, `upload_wasm_module`, `request_escalation`, `approve_escalation`, `execute_field`).
 - **Optional Parameters:** `project` (str), `field` (str), `issue` (str), `name` (str), `slug` (str), `tier` (str enum: `A`, `B`), `output_format` (str), `output_format_metadata` (object), `script_source` (str), `wasm_module_sha256` (str), `target_scope` (str enum: `PROJECT`, `WORKSPACE`, `SERVER`), `credential_mode` (str enum: `CALLER_USER`, `TARGET_ADMIN`), `egress_allowlist` (array of str), `is_enabled` (bool), `wasm_base64` (str), `manifest_sha256` (str), `justification` (str), `sp_warning_acknowledged` (bool), `force_refresh` (bool), `confirm` (bool), `lod` (str).
@@ -337,7 +310,7 @@ Variance: +2,629 tokens (+84.8%)
   - *Clarity Gaps:* High parameter count (22 properties). Parameter `issue` is used for test execution instead of `identifier`.
   - *Agent Ergonomics:* Strong security guardrails prevent unauthorized privilege escalation.
 
-#### 23. `manage_workflow_interceptors`
+#### 20. `manage_workflow_interceptors`
 - **Purpose:** Configure scripted workflow transition hooks (sync validators, mutators, and async agent gates).
 - **Required Parameters:** `action` (str enum: `help`, `list`, `attach`, `update`, `reorder`, `enable`, `disable`, `detach`, `dry_run`).
 - **Optional Parameters:** `project` (str), `hook` (str), `name` (str), `from_state` (str), `to_state` (str), `hook_kind` (str enum: `sync_validator`, `sync_mutator`, `agent_interceptor`), `failure_policy` (str), `wasm_module_sha256` (str), `agent` (str), `allowed_mutable_fields` (array of str), `ordered_hook_ids` (array of str), `issue` (str), `sample_ticket` (object), `confirm` (bool), `lod` (str).
@@ -346,7 +319,7 @@ Variance: +2,629 tokens (+84.8%)
   - *Clarity Gaps:* None. Clear action verbs and typed enums.
   - *Agent Ergonomics:* High.
 
-#### 24. `manage_ai_and_agent_runners`
+#### 21. `manage_ai_and_agent_runners`
 - **Purpose:** Manage LLM providers, token budgets, agent definitions, and remote runner pools.
 - **Required Parameters:** `action` (str enum: 11 actions + `help`).
 - **Optional Parameters:** 32 properties including `provider_kind`, `base_url`, `model_allowlist`, `harness_kind` (enum: `in_app_sdk`, `cli_pipe`, `remote_runner`), `cli_binary_allowlist_id` (enum: `agy`, `codex`, `gemini-cli`, `claude-code`), `project_id` (str), `token_cap` (int), `ttl_seconds` (int), `lod` (str).
@@ -355,7 +328,7 @@ Variance: +2,629 tokens (+84.8%)
   - *Clarity Gaps:* Largest schema in the platform (4,222 characters, 32 properties). Uses `project_id` instead of standard `project`.
   - *Agent Ergonomics:* Powerful, but the large property count requires agents to carefully filter relevant arguments.
 
-#### 25. `override_ticket_provenance`
+#### 22. `override_ticket_provenance`
 - **Purpose:** Audited override of `Created by`, Hard WIP limit bypass, and unarchiving.
 - **Required Parameters:** `action` (str enum: `override_creator`, `override_hard_wip_move`, `unarchive_issue`, `help`).
 - **Optional Parameters:** `issue` (str), `new_creator` (str), `target_state` (str), `after_issue` (str), `before_issue` (str), `reason` (str: 10..500 chars).
@@ -364,7 +337,7 @@ Variance: +2,629 tokens (+84.8%)
   - *Clarity Gaps:* Uses `issue` instead of `identifier`.
   - *Agent Ergonomics:* Clean and focused.
 
-#### 26. `audit_and_purge_object_links`
+#### 23. `audit_and_purge_object_links`
 - **Purpose:** Run the 6-class Universal Object Graph Auditor and purge corrupt or unauthorized links.
 - **Required Parameters:** `action` (str enum: `run_audit`, `list_flagged`, `purge_audited`, `help`).
 - **Optional Parameters:** `reason_filter` (str enum: 7 link failure kinds), `audit_ids` (array of str), `reason` (str: 10..500 chars), `lod` (str), `limit` (int, default: 50), `cursor` (str).
@@ -373,7 +346,7 @@ Variance: +2,629 tokens (+84.8%)
   - *Clarity Gaps:* None.
   - *Agent Ergonomics:* High. Clear diagnostic and remediation workflow.
 
-#### 27. `destructive_lifecycle`
+#### 24. `destructive_lifecycle`
 - **Purpose:** Two-stage confirmation gate for soft-trashing, permanent purging, and restoring entities.
 - **Required Parameters:** `action` (str enum: `request_delete`, `execute_delete`, `restore`, `help`).
 - **Optional Parameters:** `target_kind` (str enum: 8 entity types), `target` (str), `mode` (str enum: `trash`, `permanent_purge`, default: `trash`), `confirmation_token` (str), `confirm_phrase` (str), `reason` (str).
@@ -388,7 +361,7 @@ Variance: +2,629 tokens (+84.8%)
 
 ### Parameter Naming Consistency Matrix
 
-A detailed analysis of parameter names across all 27 tools reveals specific naming patterns and minor inconsistencies:
+A detailed analysis of parameter names across all 24 tools reveals specific naming patterns and minor inconsistencies:
 
 | Conceptual Entity | Parameter Names Observed | Tool Occurrences | Assessment & Recommendation |
 | :--- | :--- | :--- | :--- |
@@ -399,7 +372,7 @@ A detailed analysis of parameter names across all 27 tools reveals specific nami
 
 ### Type Safety, Enums, and Underspecified Schemas
 
-thumbs-up-kanban demonstrates strong type safety across all 27 tools, utilizing string enums for actions, search modes, gate statuses, and colors. However, several complex parameters are defined as generic objects:
+thumbs-up-kanban demonstrates strong type safety across all 24 tools, utilizing string enums for actions, search modes, gate statuses, and colors. However, several complex parameters are defined as generic objects:
 
 1. **`verification_proof` (`transition_ticket`, `complete_work`):**
    - Declared as `type: "object"` without nested properties.

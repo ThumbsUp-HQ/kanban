@@ -97,7 +97,7 @@ Every entity (`Issue`, `Doc`, `Page`, `Sticky`, `View`, `Comment`, `Attachment`)
 Access rights are evaluated dynamically by combining:
 1. Workspace Role Bindings: `WORKSPACE_ADMIN`, `MEMBER`, `GUEST`
 2. Project Role Bindings: `PROJECT_ADMIN`, `COLLABORATOR`, `VIEWER`
-3. Resource ACL Entries: Explicit `ALLOW` or `DENY` capability masks (`VIEW`, `EDIT`, `DELETE`, `ADMIN`, `SHARE`)
+3. Resource ACL Entries: Explicit `ALLOW` or `DENY` 8-bit capability bitmasks (`VIEW` [0x01], `COMMENT` [0x02], `EDIT` [0x04], `TRANSITION` [0x08], `LINK` [0x10], `SHARE` [0x20], `ADMIN` [0x40], `DELETE` [0x80], `ALL` [0xFF]), governed by `SCOPE_CAPABILITY_MAP`.
 4. Explicit Sharing Audience: `Audience` principals list
 
 ```
