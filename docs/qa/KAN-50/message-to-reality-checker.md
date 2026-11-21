@@ -3,80 +3,96 @@
 ## Ticket Details
 - **Key:** KAN-50
 - **Summary:** [KB-AGENT-SEQ-02] Expose skip_loaded_sequence_numbers in Project/Workspace REST API and Settings UI
-- **Branch:** `feat/KAN-50`
-- **Base Commit:** `6b543847` (main, containing merged KAN-49)
+- **Branch:** `main` (commit `78074a1d`)
+- **Container Environment:** `http://127.0.0.1:18963` (container: `kanban-liveqa-3`)
+- **Live Stack Status:** `OVERALL LIVE_STACK_VERDICT: PASS`
 
-## Executive Summary & Scope
-Ticket KAN-50 exposes the `skip_loaded_sequence_numbers` setting across the Project REST API, Workspace Settings API, and frontend user interfaces, providing seamless control over agent-safe sequence numbering. Culturally loaded and distracting ticket numbers (13, 69, 88, 404, 420, 666, 1337, 1488) are bypassed when enabled.
+---
 
-## Detailed Implementation & DoD Audit
+## 1. Executive Summary & Problem Resolution
+
+Ticket KAN-50 exposes the `skip_loaded_sequence_numbers` setting across the Project REST API, Workspace Settings API, and frontend settings surfaces, providing seamless control over agent-safe sequence numbering. Culturally loaded and distracting ticket numbers (13, 69, 88, 404, 420, 666, 1337, 1488) are bypassed when enabled.
 
 ### 1. Backend REST Schemas & Services
 - `kanban/api/v1/schemas/projects.py`:
-  * `ProjectCreate`: Exposed `skip_loaded_sequence_numbers: bool | None = Field(default=None, ...)` with fallback description.
+  * `ProjectCreate`: Exposed `skip_loaded_sequence_numbers: bool | None = Field(default=None, ...)`.
   * `ProjectPatch`: Exposed `skip_loaded_sequence_numbers: bool | None = Field(default=None, ...)`.
   * `ProjectResponse`: Exposed `skip_loaded_sequence_numbers: bool = Field(...)`.
 - `kanban/services/projects.py`:
-  * `create_project`: When `body.skip_loaded_sequence_numbers` is omitted or None, automatically defaults to `workspace_settings.default_skip_loaded_sequence_numbers`. Passes explicit or inherited boolean to `Project(...)`.
+  * `create_project`: When `body.skip_loaded_sequence_numbers` is omitted or None, automatically defaults to `workspace_settings.default_skip_loaded_sequence_numbers`. Explicit booleans override workspace defaults.
   * `update_project`: Tracks mutable field updates and records `changes["skip_loaded_sequence_numbers"] = {"old": ..., "new": ...}` in `ActivityEventType.PROJECT_UPDATED` activity diffs.
   * `serialize_project`: Serializes `skip_loaded_sequence_numbers=project.skip_loaded_sequence_numbers` into `ProjectResponse`.
 - `kanban/api/v1/admin/workspace_settings.py`:
   * `WorkspaceSettingsResponse`: Added `default_skip_loaded_sequence_numbers: bool = False`.
   * `WorkspaceSettingsUpdate`: Added `default_skip_loaded_sequence_numbers: bool | None = None`.
-  * `_get_or_create_settings`: Populates default value `False` on new workspace settings creation.
   * `get_workspace_settings`: Returns `default_skip_loaded_sequence_numbers` in response payload.
   * `update_workspace_settings`: Diff tracking and updates `settings.default_skip_loaded_sequence_numbers = body.default_skip_loaded_sequence_numbers`.
 
 ### 2. Frontend Settings UI & Emoji Hint
 - `kanban/web/src/components/emoji/emojiRegistry.ts`:
   * Added `agentSafeNumbering` (glyph: '🔢', domain: 'Agent-Safe Sequence Numbering', ariaLabel: 'Agent-safe sequence numbering', defaultHint: 'Skip distracting / culturally loaded ticket numbers (13, 69, 88, 404, 420, 666, 1337, 1488)') to `EXTENDED_EMOJI_REGISTRY`.
-  * Preserved strict 21-key invariant on `EMOJI_REGISTRY`.
-  * Extended `ExtendedEmojiKey` union with `'agentSafeNumbering'`.
 - `kanban/web/src/features/projects/CreateProjectModal.tsx`:
-  * Added `skipLoadedSeq` state (defaulting to `false`, reset on close/reset).
-  * Rendered checkbox with `data-testid="create-project-skip-loaded-seq"`.
-  * Attached `<EmojiHint kind="agentSafeNumbering" />` with accessible label.
-  * Wired `skip_loaded_sequence_numbers: skipLoadedSeq` into `POST /api/v1/projects` payload.
+  * Pre-hydrates `skipLoadedSeq` from `WorkspaceSettings`.
+  * Attached `<EmojiHint kind="agentSafeNumbering" />` outside `<label>`.
+  * Floating z-index: `popupZIndex="10050" > scrimZIndex="9999"`, occludedByModal=false across all 4 viewports.
 - `kanban/web/src/features/settings/ProjectSettingsPage.tsx`:
-  * Added `skip_loaded_sequence_numbers?: boolean` to `ProjectDetail` interface.
-  * Added `skipLoadedSeq` state (hydrated from `projRes.skip_loaded_sequence_numbers ?? false`).
-  * Rendered checkbox under General tab with `data-testid="project-skip-loaded-seq-checkbox"` and `EmojiHint kind="agentSafeNumbering"`.
-  * Wired `skip_loaded_sequence_numbers: skipLoadedSeq` into `PATCH /api/v1/projects/{key}` payload.
-  * Preserved strict UI invariants: 0 inline JSX `style={{...}}` props and 100% canonical CSS tokens.
-- Strict Sibling Boundaries:
-  * Zero modifications to `WorkspaceSettingsPage.tsx` (owned by sibling worker b-kan30-rc2).
+  * Renders checkbox under General tab with `data-testid="project-skip-loaded-seq-checkbox"` and `EmojiHint kind="agentSafeNumbering"` outside `<label>`.
+  * Toggled OFF -> saved -> reloaded -> persisted false; toggled ON -> saved -> reloaded -> persisted true.
+- Sibling Isolation & Clean-Room Boundaries:
   * Untracked `.backup_schedule.json` and `backups/` left strictly unstaged.
 
-### 3. Unit Test Coverage & Verification
-- Backend Pytest (`28 passed in 19.79s`, isolated worker `gw_kan50`):
+---
+
+## 2. Live Full-Stack Proof Highlights (`kanban-liveqa-3`, `:18963`)
+
+- **0ms Workspace Settings Inheritance via REST:**
+  * `PATCH /api/v1/admin/workspace-settings` (`{"default_skip_loaded_sequence_numbers": true}`) -> 200 OK.
+  * Immediate 0ms `POST /api/v1/projects` (SAFE, omitted skip_loaded_sequence_numbers) -> 201 Created with `skip_loaded_sequence_numbers=true`.
+- **PATCH /api/v1/projects/SAFE & Activity Ledger Diffs:**
+  * Toggled false -> true: `PROJECT_UPDATED` activity records emitted in PostgreSQL.
+- **WorkspaceSettingsPage:**
+  * Checkbox toggled ON -> saved -> reloaded -> persisted true.
+  * EmojiHint renders outside `<label>` across Desktop Light/Dark, Tablet, Mobile (load times: 678ms, 706ms, 681ms, 697ms).
+- **CreateProjectModal:**
+  * Pre-hydrated checked (true), EmojiHint popup at `z-index: 10050` renders on top of scrim (`z-index: 9999`).
+  * Created project UISAF4 -> 201 Created with `skip_loaded_sequence_numbers=true`.
+- **ProjectSettingsPage:**
+  * Concise label + EmojiHint outside `<label>`. Reload persistence confirmed for both true and false states.
+  * Zero overflow, 0 console errors, 0 page errors, 0 bad responses.
+
+---
+
+## 3. Unit Test Coverage & Verification
+
+- **Backend Pytest Suite (`28 passed in 19.79s`):**
   * `kanban/services/projects.py`: 99% statement coverage (194/195 statements).
   * `kanban/api/v1/schemas/projects.py`: 100% statement coverage (67/67 statements).
   * `kanban/api/v1/admin/workspace_settings.py`: 95% statement coverage (161/163 statements).
-  * Verified inheritance of workspace `default_skip_loaded_sequence_numbers` when omitted on `POST /api/v1/projects`.
-  * Verified explicit `skip_loaded_sequence_numbers=True` override on `POST /api/v1/projects`.
-  * Verified toggle via `PATCH /api/v1/projects/{key}` and corresponding `PROJECT_UPDATED` activity diff.
-  * Verified end-to-end REST issue creation sequence progression: skipping sequence 13 to 14, emitting `SEQUENCE_SKIPPED` activity record.
-  * Verified `GET` and `PATCH` on `/api/v1/admin/workspace-settings` for `default_skip_loaded_sequence_numbers`.
-- Frontend Vitest (`4 test files passed, 58 tests passed in 4.45s`, 0 `act(...)` warnings):
-  * `CreateProjectModal.test.tsx`: 9 tests passed, 100% statements, 93.88% branch, 100% functions, 100% lines.
-  * `ProjectSettingsPage.test.tsx`: 38 tests passed, 99.55% statements, 95.45% branch, 100% functions, 100% lines.
-  * `emojiRegistry.test.ts`: 7 tests passed, 100% across statements, branches, functions, lines.
+  * Verified inheritance when omitted, explicit override, toggle diffs, and REST sequence skipping.
+- **Frontend Vitest Suite (`58 passed in 4.45s`, 0 `act(...)` warnings):**
+  * `CreateProjectModal.test.tsx`: 9 tests passed, 100% statements, 91.83% branch.
+  * `ProjectSettingsPage.test.tsx`: 38 tests passed, 99.55% statements, 95.45% branch.
+  * `emojiRegistry.test.ts`: 7 tests passed, 100% statements and branches.
   * `cssTokensAudit.test.ts`: 4/4 passed (0 inline JSX style attributes, 100% CSS token coverage).
+- **Static Analysis Quality Gates (Commit `78074a1d`):**
+  * `kanban-ctl db check-migrations`: OK (63 migrations valid, single head: `p4_24_agent_safe_sequences`).
+  * `ruff check .` & `ruff format --check .`: Clean across 2023 files.
+  * `mypy database kanban mcp agent`: Clean (Success: 995 source files).
+  * `lint-imports`: Clean (Contracts: 2 kept, 0 broken).
+  * `tsc -b --noEmit`: Clean (0 type errors).
+  * `eslint . --max-warnings 0`: Clean (0 warnings).
+  * `vite build`: Clean production build in 1.15s.
+  * `scripts.check_no_dashes`: Clean (0 em/en-dashes across codebase and wiki).
 
-### 4. Static Analysis Quality Gates
-- `uv run ruff check kanban database mcp agent scripts`: Clean (All checks passed).
-- `uv run ruff format --check kanban database mcp agent scripts`: Clean (1007 files formatted).
-- `uv run lint-imports`: Clean (Contracts: 2 kept, 0 broken).
-- `python3 -m scripts.check_no_dashes --all`: Clean (0 em/en-dashes).
-- `uv run kanban-ctl db check-migrations`: Clean (All 63 migrations valid, single head: `p4_24_agent_safe_sequences`).
-- `uv run mypy kanban database mcp agent scripts`: Clean (Success: no issues found in 999 source files).
-- `pnpm --dir kanban/web exec tsc -b --noEmit`: Clean (0 type errors).
-- `pnpm --dir kanban/web exec eslint . --max-warnings 0`: Clean (0 errors, 0 warnings).
-- `pnpm --dir kanban/web run build`: Clean (Vite production build succeeded in 1.14s).
+---
 
-## Proof Files Manifest
-- `docs/qa/KAN-50/changed-files-manifest.txt`
-- `docs/qa/KAN-50/git-diff.patch`
-- `docs/qa/KAN-50/unit-test-results.txt`
-- `docs/qa/KAN-50/build-or-typecheck.txt`
-- `docs/qa/KAN-50/message-to-reality-checker.md`
+## 4. Artifact Index in `docs/qa/KAN-50/`
+
+- `live-fullstack-proof.txt`: Round 3 live execution telemetry against `kanban-liveqa-3` (`:18963`, commit `78074a1d`)
+- `unit-test-results.txt`: Verbatim execution outputs for Vitest (58 passed) and Pytest (28 passed)
+- `build-or-typecheck.txt`: Static analysis and verification proof
+- `changed-files-manifest.txt`: List of modified source files
+- `git-diff.patch`: Git diff patch
+- `api-specialist-review.md`: Dual-specialist API and security audit signoff
+- `ui-specialist-review.md`: Dual-specialist UI and layout audit signoff
+- Screenshots (all 12 verified): `live-workspace-settings-*`, `live-create-project-*`, `live-project-settings-*`

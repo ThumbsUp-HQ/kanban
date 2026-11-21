@@ -1,64 +1,46 @@
 ================================================================================
-KAN-32 LIVE FULL-STACK BLACK-BOX QA PROOF (main commit 7913c2c8)
+KAN-32 LIVE FULL-STACK BLACK-BOX QA ROUND 3 PROOF (main commit 78074a1d)
 Target: http://127.0.0.1:18961 (container: kanban-liveqa-1)
 Database: Embedded PostgreSQL 16 with FORCE ROW LEVEL SECURITY
 Mocks/Stubs: ZERO (0 mockApi, 0 page.route, 0 context.route)
 ================================================================================
 
-1. CUSTOM FIELDS STUDIO CONTROLS & TIER GATING (/projects/SEC2/settings/custom-fields)
+1. 220-CHAR UNBROKEN FORMULA WRAPPING & (tier=wasm) LOG VERIFICATION
 --------------------------------------------------------------------------------
-Loaded /projects/SEC2/settings/custom-fields as @admin (AAL2, 848 ms) with issue SEC2-1:
-- Single-line <input> and <select> heights (all < 55px, zero 140px bloated inputs):
-  * field-name-input: height=38px
-  * field-slug-input: height=38px
-  * field-flavor-select: height=38px
-  * output-format-select: height=38px
-  * test-issue-key-input: height=38px
-  * execution-tier-select (Advanced tab): height=38px
-- + New Field: FlavorDecisionMatrix + PresetGallery (6 presets; nsjail presets disabled and badged "Multi-Container Compose Required").
-- Advanced tab: execution-tier-select nsjail option disabled + "nsjail option requires Multi-Container Compose" badge.
-- Screenshots:
-  * docs/qa/KAN-32/screenshots/live-new-field-matrix-presets-light.png
-  * docs/qa/KAN-32/screenshots/live-advanced-tier-gating-light.png
-
-2. BARE FORMULA COPY-PASTE NORMALIZATION (EXAMPLE 3 WITHOUT "formula: " PREFIX)
---------------------------------------------------------------------------------
-- Selected Field Flavor = formula, Output Format = severity_pill.
-- Pasted exact bare Example 3 expression from Guide-Custom-Fields.md WITHOUT "formula: " prefix:
-  {"level": "critical", "score": 9.5, "label": "Critical"} if priority == "URGENT" else ({"level": "high", "score": 8.0, "label": "High"} if priority == "HIGH" else ({"level": "medium", "score": 5.0, "label": "Medium"} if priority == "MEDIUM" else {"level": "low", "score": 2.0, "label": "Low"}))
-- Entered Test With Issue Key = SEC2-1 and clicked Test Execute:
+Script: round3_auth_qa.mjs on /projects/SEC2/settings/custom-fields (issue SEC2-1, @admin AAL2)
+- Executed 220-char unbroken formula string ("UNBROKEN_LOG_LINE_" + "X" * 220) with Field Flavor = formula, Output Format = text:
   * POST /api/v1/projects/SEC2/custom-fields/test-execute -> HTTP 200 OK
-  * Response: {"output_format":"severity_pill","value":{"level":"low","score":2,"label":"Low"},"latency_ms":3,"logs":"Draft test execution on SEC2-1 (flavor=wasm)\nEvaluated Formula expression: ...","status":"SUCCESS","error":null}
-  * Rendered UI preview: Status SUCCESS, Latency 3.0 ms, pill "2.0 Low" (zero 422 WASM_BINARY_INVALID).
-- Screenshot: docs/qa/KAN-32/screenshots/live-wiki-example3-test-exec-light.png
-
-3. MANUAL WebAssembly ("8.8 High") & 220-CHAR LOG WRAPPING
---------------------------------------------------------------------------------
-- Manual Field Flavor -> WebAssembly (STARTER_TEMPLATES.wasm.severity_pill) Test Execute on SEC2-1:
-  * POST /api/v1/projects/SEC2/custom-fields/test-execute -> HTTP 200 OK (latency_ms=10)
-  * Rendered Output Pill: "8.8 High" (hasDuplicateScore=false)
-  * Screenshots:
-    - docs/qa/KAN-32/screenshots/live-wasm-test-execute-light.png
-    - docs/qa/KAN-32/screenshots/live-desktop-test-exec.png
-    - docs/qa/KAN-32/screenshots/live-desktop-dark.png
-- 220-char unbroken formula expression log line wrapping inside pre.custom-field-test-logs:
-  * POST /api/v1/projects/SEC2/custom-fields/test-execute -> HTTP 200 OK (latency_ms=6)
-  * pre.custom-field-test-logs: scrollWidth=742, clientWidth=742, scrollEqualsClient=true, overflowsCard=false, whiteSpace="pre-wrap", overflowWrap="anywhere", wordBreak="break-all"
+  * Logs verbatim:
+    "Draft test execution on SEC2-1 (tier=wasm)\nEvaluated Formula expression: \"UNBROKEN_LOG_LINE_XXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX\"\nSuccess: validated format text\n"
+  * Verified log line prints "(tier=wasm)" (hasTierWasmLog=true, hasLegacyFlavorWasmLog=false).
+  * Wrapping & card boundary metrics:
+    - .custom-field-test-result: resultScrollWidth=768, resultClientWidth=768 (resultFitsCard=true)
+    - [data-testid="test-output-pill"]: pillScrollWidth=744, pillClientWidth=744, textOverflowsCard=false
+    - pre.custom-field-test-logs: logsScrollWidth=742, logsClientWidth=742 (logsFitsCard=true), preOverflowsCard=false
+    - viewportOverflows=false
   * Screenshot: docs/qa/KAN-32/screenshots/live-long-log-wrap-light.png
-- Responsive screenshots:
-  * docs/qa/KAN-32/screenshots/live-desktop-light.png
-  * docs/qa/KAN-32/screenshots/live-tablet.png (scrollWidth=768, overflows=false)
-  * docs/qa/KAN-32/screenshots/live-mobile.png (scrollWidth=390, overflows=false)
-  * docs/qa/KAN-32/screenshots/live-guide-custom-fields-desktop-light.png
 
-4. TELEMETRY & VERDICT
+2. BARE EXAMPLE 3 FORMULA COPY-PASTE & SAVED FIELD LIST VIEW
+--------------------------------------------------------------------------------
+- Selected Field Flavor = formula, Output Format = severity_pill, pasted exact bare Example 3 expression from Guide-Custom-Fields.md WITHOUT "formula: " prefix:
+  * POST /api/v1/projects/SEC2/custom-fields/test-execute -> HTTP 200 OK (latency_ms=10)
+  * Response: {"output_format":"severity_pill","value":{"level":"low","score":2,"label":"Low"},"latency_ms":10,"logs":"Draft test execution on SEC2-1 (tier=wasm)\nEvaluated Formula expression: ...","status":"SUCCESS","error":null}
+  * ex3HasTierWasm=true
+  * Screenshot: docs/qa/KAN-32/screenshots/live-wiki-example3-test-exec-light.png
+
+- Saved field "Incident Severity Pill" (slug: incident-severity-pill):
+  * POST /api/v1/projects/SEC2/custom-fields -> HTTP 201 Created
+  * Verified saved row [data-testid="field-item-incident-severity-pill"] rendered in left Custom Fields list alongside selected editor.
+  * Distinct list+editor screenshot: docs/qa/KAN-32/screenshots/live-desktop-light.png (distinct from live-new-field-matrix-presets-light.png)
+
+3. TELEMETRY & VERDICT
 --------------------------------------------------------------------------------
 - Browser console errors: 0
 - Browser page errors: 0
 - HTTP 5xx server errors: 0
 
 LIVE_STACK_VERDICT: PASS
-- Bare Example 3 formula copy-paste WITHOUT "formula: " prefix -> HTTP 200 OK: PASS
-- Single-line <input>/<select> 38px height parity: PASS
-- "8.8 High" formatted severity pill (STARTER_TEMPLATES.wasm): PASS
-- 220-char unbroken log line wrapping (scrollWidth === clientWidth): PASS
+- 220-char unbroken formula wraps cleanly inside both Rendered Output Pill (.custom-field-test-result) & pre.custom-field-test-logs: PASS
+- Test Execute logs print "(tier=wasm)" instead of "(flavor=wasm)": PASS
+- Bare Example 3 formula copy-paste -> HTTP 200 OK: PASS
+- Distinct live-desktop-light.png showing saved custom field row: PASS

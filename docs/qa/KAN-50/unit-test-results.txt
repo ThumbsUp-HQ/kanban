@@ -1,126 +1,31 @@
 === FRONTEND UNIT TESTS & COVERAGE ===
 
-> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan50-430a21fc/kanban/web
-> vitest run src/components/emoji/emojiRegistry.test.ts src/features/projects/CreateProjectModal.test.tsx src/features/settings/__tests__/ProjectSettingsPage.test.tsx src/styles/__tests__/cssTokensAudit.test.ts --coverage --coverage.include=src/components/emoji/emojiRegistry.ts --coverage.include=src/features/projects/CreateProjectModal.tsx --coverage.include=src/features/settings/ProjectSettingsPage.tsx
-
-
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan50-430a21fc/kanban/web
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
       Coverage enabled with v8
 
- ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 14ms
  ✓ src/components/emoji/emojiRegistry.test.ts (7 tests) 13ms
- ✓ src/features/projects/CreateProjectModal.test.tsx (9 tests) 264ms
- ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (38 tests) 2982ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 23ms
+ ✓ src/features/projects/CreateProjectModal.test.tsx (10 tests) 309ms
+ ✓ src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx (35 tests) 2219ms
+   ✓ WorkspaceSettingsPage (KANBA-202) (35)
+     ✓ renders workspace settings page and updates workspace name and slug 338ms
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (38 tests) 3141ms
 
- Test Files  4 passed (4)
-      Tests  58 passed (58)
-   Start at  15:10:26
-   Duration  4.31s (tests 50%, environment 40%, import 6%, worker 3%, transform 2%)
+ Test Files  5 passed (5)
+      Tests  94 passed (94)
+   Start at  18:47:56
+   Duration  4.57s (tests 56%, environment 35%, import 6%, worker 3%, transform 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   99.61 |    95.13 |     100 |     100 |                   
+All files          |   99.61 |    94.71 |     100 |   99.91 |                   
  components/emoji  |     100 |      100 |     100 |     100 |                   
   emojiRegistry.ts |     100 |      100 |     100 |     100 |                   
- features/projects |     100 |    91.83 |     100 |     100 |                   
-  ...jectModal.tsx |     100 |    91.83 |     100 |     100 | 54,181,213-223    
- features/settings |   99.55 |    95.45 |     100 |     100 |                   
-  ...tingsPage.tsx |   99.55 |    95.45 |     100 |     100 | ...1007,1019-1022 
+ features/projects |     100 |    91.22 |     100 |     100 |                   
+  ...jectModal.tsx |     100 |    91.22 |     100 |     100 | ...26,202,238-248 
+ features/settings |   99.56 |    94.92 |     100 |    99.9 |                   
+  ...tingsPage.tsx |   99.41 |    94.78 |     100 |   99.84 | 184               
+  ...tingsPage.tsx |   99.78 |    95.11 |     100 |     100 | ...59,477,654,681 
 -------------------|---------|----------|---------|---------|-------------------
-
-=== BACKEND UNIT TESTS & COVERAGE ===
-============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan50-430a21fc
-configfile: pyproject.toml
-plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
-asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 28 items
-
-kanban/tests/api/test_projects.py ...............                        [ 53%]
-kanban/tests/api/test_workspace_settings.py .............                [100%]
-
-================================ tests coverage ================================
-_______________ coverage: platform linux, python 3.12.7-final-0 ________________
-
-Name                                        Stmts   Miss Branch BrPart  Cover   Missing
----------------------------------------------------------------------------------------
-kanban/api/v1/admin/__init__.py                 2      0      0      0   100%
-kanban/api/v1/admin/acl.py                     35      3      0      0    91%   86, 108, 129
-kanban/api/v1/admin/ai_providers.py           236    186     40      0    18%   54-55, 72-80, 95-132, 151-158, 172-228, 242-253, 267-278, 293-315, 330-352, 366-373, 389-442, 457-520, 534-557, 571-595, 609-623, 646-685
-kanban/api/v1/admin/ai_schemas.py             102     16      8      0    78%   86-89, 123-126, 183-186, 201-204
-kanban/api/v1/admin/auth_cards.py              87     44      6      0    46%   43-52, 67-81, 89, 109-110, 124, 138-149, 174, 195-203, 218, 241-249, 265, 285-286, 304, 324-333
-kanban/api/v1/admin/destructive.py            133     55     26      0    49%   142-149, 175-185, 208-215, 248-347, 363-374
-kanban/api/v1/admin/imports.py                 81     50     22      0    30%   63-95, 104-143, 171-223
-kanban/api/v1/admin/link_auditor.py            32     11      2      0    62%   40-49, 62-63, 95-96, 118-119
-kanban/api/v1/admin/mcp_keys.py               189     93     54      0    40%   131-196, 236-242, 249-254, 269-330, 371-407
-kanban/api/v1/admin/principals.py             104     43     20      0    49%   129-141, 158-161, 180-224, 243, 261-269, 290, 309, 327, 347, 366-375, 396-405
-kanban/api/v1/admin/project_blueprint.py       43      5      0      0    88%   83, 97-98, 116-117
-kanban/api/v1/admin/workspace_settings.py     161      2     58      8    95%   212, 218->243, 229, 260->267, 263->267, 276->293, 325->328, 345->404
-kanban/api/v1/schemas/__init__.py               0      0      0      0   100%
-kanban/api/v1/schemas/activity.py              75     16     10      0    69%   129-136, 143-150
-kanban/api/v1/schemas/assignees.py             45      5      2      0    85%   29-38
-kanban/api/v1/schemas/attachments.py           16      0      0      0   100%
-kanban/api/v1/schemas/comments.py              55      0      0      0   100%
-kanban/api/v1/schemas/custom_fields.py        121      0      0      0   100%
-kanban/api/v1/schemas/cycles.py                76     12      6      0    78%   30-34, 50-56
-kanban/api/v1/schemas/docs.py                 103      0      0      0   100%
-kanban/api/v1/schemas/issue_copy.py            23      0      0      0   100%
-kanban/api/v1/schemas/issue_delete.py          52      0      0      0   100%
-kanban/api/v1/schemas/issue_move.py            23      0      0      0   100%
-kanban/api/v1/schemas/issue_provenance.py      24      0      0      0   100%
-kanban/api/v1/schemas/issue_trees.py           37      0      0      0   100%
-kanban/api/v1/schemas/issues.py               170     44     30      1    64%   144-152, 157-165, 202-210, 215-223, 315->318, 325-332
-kanban/api/v1/schemas/link_auditor.py          44      0      0      0   100%
-kanban/api/v1/schemas/links.py                 45      0      0      0   100%
-kanban/api/v1/schemas/modules.py               94     30     20      0    56%   49-57, 62-69, 73-80, 98-108, 113-122, 151-164
-kanban/api/v1/schemas/notifications.py         73     22     18      0    56%   55-81, 96-120
-kanban/api/v1/schemas/project_config.py       146     16      8      0    84%   49-56, 75-82, 117-120, 138-141
-kanban/api/v1/schemas/projects.py              67      0      2      0   100%
-kanban/api/v1/schemas/search.py                87      1      0      0    99%   113
-kanban/api/v1/schemas/stickies.py              71      0      0      0   100%
-kanban/api/v1/schemas/views.py                257     72     50      0    60%   36-45, 95-132, 173-180, 186-201, 215-222, 273-281, 315-325, 416-425, 444-449
-kanban/services/__init__.py                     0      0      0      0   100%
-kanban/services/activity.py                   214      6      8      2    96%   411, 441-442, 454-455, 493
-kanban/services/activity_feed.py              329    286    120      0    10%   62-65, 76-79, 83, 97-116, 126-131, 157-158, 165-189, 199-289, 300-317, 328-380, 395-559, 579-759
-kanban/services/archive.py                      3      3      0      0     0%   3-7
-kanban/services/assignees.py                  121     86     36      1    23%   50, 55, 71-211, 230-295, 311-333, 348-377, 395-472, 498-512
-kanban/services/board_rank.py                 126     88     52      3    24%   28-32, 37-42, 48-49, 51, 62-71, 78, 84, 89-96, 101-103, 108-133, 144-154, 159, 164-169, 174-192, 197
-kanban/services/burndown.py                   121    103     44      0    11%   35-58, 66-97, 105-136, 147-219, 228-286
-kanban/services/comments.py                   268    225     88      0    12%   71-84, 89-111, 116-117, 122-137, 152-204, 211-235, 240-241, 251-369, 376-389, 400-492, 503-636, 645-672, 692-737, 751-778
-kanban/services/cycles.py                     235    205     92      0     9%   46-49, 54-55, 65-66, 81-99, 107-122, 141-157, 167-219, 228-237, 247-308, 317-371, 381-494, 508-592, 606-633, 643-689, 709-744
-kanban/services/destructive_lifecycle.py      463    387    188      0    12%   88, 120, 148, 171, 182-184, 203-365, 392-598, 622-697, 722-1137, 1156-1252
-kanban/services/docs.py                       439    387    148      0     9%   72-80, 85-94, 99-101, 106-116, 121-123, 128-147, 165-181, 192-246, 256-345, 354-441, 446-452, 466-499, 508-595, 604-662, 673-718, 727-746, 762-854, 869-883, 897-917, 922-944, 954-1039, 1048-1161, 1172-1215, 1225-1281, 1290-1313, 1331-1344, 1365-1381, 1400-1445
-kanban/services/issue_archive.py               56     39     16      0    24%   47-119, 139-169
-kanban/services/issue_copy.py                 126    108     40      0    11%   49-82, 87-103, 118-462
-kanban/services/issue_delete.py               163    125     42      0    19%   94-174, 198-272, 293-363, 372-412, 423-475
-kanban/services/issue_keys.py                  49     39     22      0    14%   50-124
-kanban/services/issue_move.py                 114     91     36      0    15%   42-44, 53-71, 82-107, 118-155, 166-243, 253-370
-kanban/services/issue_provenance.py            96     58     28      3    33%   44, 52, 81-97, 115-132, 142-152, 161-175, 192-237, 254-314
-kanban/services/issues.py                     456    308    184     18    26%   98-108, 120, 125-134, 148, 163-164, 168, 182-189, 192, 199, 209-227, 243-288, 301, 316-335, 348, 363-382, 391-404, 417, 425-461, 471-504, 513-525, 533, 542-560, 570-573, 618-629, 648-650, 739-740, 818-820, 827, 832-834, 864, 875-1171, 1185-1214
-kanban/services/lexorank.py                    49     38     16      0    17%   22-25, 30-38, 53-87
-kanban/services/link_auditor_admin.py          82     62     24      0    19%   39-40, 45-50, 64-72, 90-172, 188-244
-kanban/services/links.py                      139    119     66      0    10%   73-157, 162-181, 191-208, 226-343, 363-426, 441-468
-kanban/services/markdown_outline.py            88     61     28      0    23%   38, 50-57, 62-72, 81-83, 87-113, 126-154
-kanban/services/mentions.py                    86     60     28      0    23%   59-86, 92-105, 126-194
-kanban/services/modules.py                    159    132     52      0    13%   38-39, 54-77, 91-114, 128-151, 170-191, 201-267, 276-291, 300-301, 311-402, 411-435, 452-535, 545-595, 612-624
-kanban/services/notifications.py              153     95     56      6    34%   58-59, 64-69, 86-163, 170-183, 188-199, 207, 243-246, 257->exit, 269-278, 287-298, 305-311, 332-342, 368-370, 376-434
-kanban/services/object_ref.py                  29     18     14      0    26%   45-73
-kanban/services/project_config.py             464    429    226      0     5%   65-78, 88-108, 118-133, 138-145, 150-151, 163-177, 191-216, 235-237, 254-320, 342-501, 522-623, 648-878, 903-913, 935-988, 1008-1088, 1108-1196, 1221-1231, 1250-1290, 1307-1370, 1386-1432, 1451-1561
-kanban/services/projects.py                   194      1     56      1    99%   262
-kanban/services/query_engine.py               213    177     66      0    13%   69-71, 81-93, 98, 112-144, 151-159, 164-174, 193-280, 295-329, 348-362, 374-452, 459-470, 480-491, 498-511, 518-533, 540-553, 560-575, 584-595
-kanban/services/realtime_outbox.py             63     19     28      7    60%   75-79, 91->101, 94-99, 101->112, 108->112, 113, 120, 144-156, 196-198
-kanban/services/search.py                     530    461    192      0    10%   110, 126-134, 150-157, 162-164, 169-181, 198-238, 250-322, 327-359, 364-397, 407-444, 451-471, 494-512, 524-569, 579-660, 672-829, 834-850, 860-869, 883-973, 989-1002, 1007-1012, 1021-1207, 1221-1358
-kanban/services/snippets.py                    97     74     38      0    17%   38, 47-48, 55-85, 90-98, 103-111, 116-130, 150-163
-kanban/services/stickies.py                   374    323    108      0    11%   81-90, 95-113, 118-120, 131-147, 152-154, 159-177, 189-190, 195-210, 224-265, 275-312, 322-395, 406-430, 441-483, 492-506, 517-599, 608-637, 646-690, 701-786, 799-859, 870-884, 898-938, 948-1063, 1072-1169
-kanban/services/sticky_heuristic.py           108     74     36      0    24%   63-74, 79-86, 91-127, 144-182
-kanban/services/subscriptions.py               48     36     10      0    21%   35-50, 64-92, 106-125, 136-159
-kanban/services/synaptic_rescorer.py          218    146     58      0    26%   109-112, 117-124, 129-135, 140-145, 155-163, 168-194, 204-234, 242-247, 256, 261, 266, 271, 281, 291, 296, 301-308, 323-469
-kanban/services/trash.py                        2      2      0      0     0%   3-11
-kanban/services/view_dsl.py                   154    134     80      0     9%   41-63, 73-100, 105-149, 154-164, 174-196, 201-232, 237-246, 251-272, 277-292, 302-336
-kanban/services/views.py                      226    192     78      0    11%   74-89, 94-95, 105-121, 126-133, 138-146, 155-174, 202-210, 220-310, 319-336, 344-358, 367-405, 415-471, 480-513, 524-543, 566-569
----------------------------------------------------------------------------------------
-TOTAL                                        9764   5923   2786     50    32%
-============================= 28 passed in 19.79s ==============================

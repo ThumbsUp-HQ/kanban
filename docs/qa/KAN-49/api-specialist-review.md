@@ -1,28 +1,28 @@
 # API Specialist Clean-Room Audit & Signoff: KAN-49
 
-- Ticket: KAN-49 (`[KB-AGENT-SEQ-01]`)
-- Title: Add DB Migration, Swarm Batch Sequence Allocator & SEQUENCE_SKIPPED Audit Event
-- Reviewer: api-spec-2 (Clean-Room Backend / API / Security Specialist)
-- Date: 2026-11-20
-- Target Directory: `/home/adamoutler/kanban/docs/qa/KAN-49`
-- Branch: `main` (commit `7913c2c8`)
-- Container Environment: `http://127.0.0.1:18963` (container: `kanban-liveqa-3`)
-- Live Stack Status: `LIVE_STACK_VERDICT: PASS`
-- Status: STATUS: APPROVED
+- **Ticket:** KAN-49 (`[KB-AGENT-SEQ-01]`)
+- **Title:** Add DB Migration, Swarm Batch Sequence Allocator & SEQUENCE_SKIPPED Audit Event
+- **Reviewer:** `api-spec-2` (Clean-Room Backend, API, MCP, and Security Specialist)
+- **Date:** 2026-11-20
+- **Target Directory:** `/home/adamoutler/kanban/docs/qa/KAN-49`
+- **Branch:** `main` (commit `78074a1d`)
+- **Container Environment:** `http://127.0.0.1:18963` (container: `kanban-liveqa-3`)
+- **Live Stack Status:** `LIVE_STACK_VERDICT: PASS`
+- **Status:** APPROVED
 
 ---
 
 ## 1. Executive Summary & Audit Scope
 
-This clean-room API, Security, and Database Architecture audit inspects ticket KAN-49 on branch `main` at commit `7913c2c8`. KAN-49 establishes agent-safe sequence allocation across the universal object graph, preventing collision with culturally sensitive or agent-triggering loaded numbers while maintaining strict relational integrity, linear migration history, high-concurrency throughput, and cryptographic audit accountability. This review incorporates direct evidence from zero-mock live execution against container `kanban-liveqa-3` (`http://127.0.0.1:18963`, PostgreSQL 16 + FORCE RLS), verified unit test results (`unit-test-results.txt`), and static build gates (`build-or-typecheck.txt`).
+This clean-room API, Security, and Database Architecture audit inspects ticket **KAN-49** on branch `main` at commit `78074a1d`. KAN-49 establishes agent-safe sequence allocation across the universal object graph, preventing collision with culturally sensitive or agent-triggering loaded numbers while maintaining strict relational integrity, linear migration history, high-concurrency throughput, and cryptographic audit accountability. This review incorporates direct evidence from zero-mock live execution against container `kanban-liveqa-3` (`http://127.0.0.1:18963`, PostgreSQL 16 + FORCE RLS) documented in `docs/qa/KAN-49/live-fullstack-proof.txt`, verified unit test results (`unit-test-results.txt`), and static build gates (`build-or-typecheck.txt`).
 
 The implementation addresses four architectural requirements and incorporates all reality-checker remediations:
-1. Linear Single-Head Database Migration (`p4_24_agent_safe_sequences`):
+1. **Linear Single-Head Database Migration (`p4_24_agent_safe_sequences`):**
    - Adds `skip_loaded_sequence_numbers BOOLEAN NOT NULL DEFAULT FALSE` to `projects`.
    - Adds `default_skip_loaded_sequence_numbers BOOLEAN NOT NULL DEFAULT FALSE` to `workspace_settings`.
    - Synchronizes SQLAlchemy ORM models with 100% column-level parity (`database/models/projects.py` and `database/models/workspace_settings.py`).
    - Clean linear migration chaining off `p4_23_oidc_link_intent_fk` verified by `kanban-ctl db check-migrations` (63 valid migrations).
-2. Pure Sequence Mathematics & Atomic Locking:
+2. **Pure Sequence Mathematics & Atomic Locking:**
    - Pure function `compute_agent_safe_sequence_batch(p_current_seq BIGINT, p_count INTEGER, p_skip_loaded BOOLEAN)` declared `IMMUTABLE PARALLEL SAFE`.
    - Skips only exact integers `ARRAY[13, 69, 88, 404, 420, 666, 1337, 1488]`.
    - Preserves substrings (e.g. `113`, `4040`, `6660`) without false positive filtering.
@@ -30,16 +30,15 @@ The implementation addresses four architectural requirements and incorporates al
    - State-modifying function `allocate_issue_sequences(p_project_id UUID, p_count INTEGER, p_emit_activity BOOLEAN)` declared `SECURITY DEFINER SET search_path = pg_catalog, public`.
    - Acquires `FOR UPDATE` lock once per batch on the target `projects` row, eliminating lock thrashing.
    - Preserves backward compatibility via legacy delegate `allocate_issue_sequence(p_project_id UUID)`.
-3. Service Integration & Batch Optimization:
+3. **Service Integration & Batch Optimization:**
    - Registered `ActivityEventType.SEQUENCE_SKIPPED = "SEQUENCE_SKIPPED"` mapped to `ActivityCategory.SYSTEM` in `kanban/services/activity.py`.
    - Refactored `create_issue` (`kanban/services/issues.py`): allocates sequence via `allocate_issue_sequences(:proj, 1, false)` and records `SEQUENCE_SKIPPED` via Python's `record_activity`, maintaining strict boundary discipline (zero modifications to `serialize_issue`).
    - Refactored `create_issue_tree` (`kanban/issues/tree_service.py`): computes total node count N, executes single batch allocation, assigns sequence IDs via breadth-first traversal, and emits a single consolidated `SEQUENCE_SKIPPED` event.
    - Refactored `copy_issue` (`kanban/services/issue_copy.py`): computes total count `1 + len(readable_rows)`, executes single batch allocation, assigns sequence IDs across parent and sub-issues, and emits a single consolidated `SEQUENCE_SKIPPED` event.
-4. Cryptographic Audit Chain & Comprehensive Test Coverage:
+4. **Cryptographic Audit Chain & Comprehensive Test Coverage:**
    - All `SEQUENCE_SKIPPED` audit events preserve ledger continuity, verified by `verify_activity_chain(workspace_id)`.
-   - High-concurrency stress test with 150 concurrent workers allocating 300 total sequences confirms 0 duplicates, 0 sequence leaks, and monotonic ordering.
-   - Comprehensive coverage exceeding 95% threshold across ALL 6 modified modules (`database/models/projects.py`: 99%, `database/models/workspace_settings.py`: 100%, `kanban/issues/tree_service.py`: 95%, `kanban/services/activity.py`: 99%, `kanban/services/issue_copy.py`: 100%, `kanban/services/issues.py`: 95%; total: 96% across 1273 statements).
-   - Passing `database/tests/test_p1_17_models.py` and `database/tests/test_p1_14_rls_catalog.py` (14/14 passed in 1.48s).
+   - Live execution on container `kanban-liveqa-3` confirmed `verify_activity_chain('01a1fb43-704a-786f-8bf1-28f9315b14ef')` returned `is_valid=t`, `checked_rows=463`, `first_broken_seq=NULL`.
+   - Comprehensive test coverage: Database tests (12 passed in 5.98s), Kanban tests (65 passed in 49.69s), totaling 77 passed tests with 98% statement and branch coverage across all 10 modified production files (1565 statements, 450 branches).
 
 ---
 
@@ -47,139 +46,101 @@ The implementation addresses four architectural requirements and incorporates al
 
 ### 2.1 Database Schema & Migration Parity
 - Files Audited:
-  - `database/migrations/versions/p4_24_agent_safe_sequences.py`
-  - `database/migrations/sql/p4_24_agent_safe_sequences.up.sql`
-  - `database/migrations/sql/p4_24_agent_safe_sequences.down.sql`
-  - `database/models/projects.py`
-  - `database/models/workspace_settings.py`
+  * `database/migrations/versions/p4_24_agent_safe_sequences.py`
+  * `database/migrations/sql/p4_24_agent_safe_sequences.up.sql`
+  * `database/migrations/sql/p4_24_agent_safe_sequences.down.sql`
+  * `database/models/projects.py`
+  * `database/models/workspace_settings.py`
 - Schema Invariants:
-  - Migration cleanly downgrades back to `p4_23_oidc_link_intent_fk` by dropping batch functions, dropping columns, and restoring the original `allocate_issue_sequence(uuid)` definition.
-  - Full lifecycle upgrade -> downgrade -> upgrade tested and verified in `database/tests/migrations/test_p4_24_agent_safe_sequences_migration.py`.
-  - Column parity:
-    * `projects.skip_loaded_sequence_numbers`: mapped in `Project` as `Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))`.
-    * `workspace_settings.default_skip_loaded_sequence_numbers`: mapped in `WorkspaceSettings` as `Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")`.
-  - Ownership & Grants:
-    * `compute_agent_safe_sequence_batch`: Owner `kanban_migrator`, granted to `kanban_app, app_rls_reader`.
-    * `allocate_issue_sequences`: Owner `kanban_migrator`, granted to `kanban_app`.
-    * `allocate_issue_sequence`: Owner `kanban_migrator`, granted to `kanban_app`.
+  * Migration cleanly downgrades back to `p4_23_oidc_link_intent_fk` by dropping batch functions, dropping columns, and restoring the original `allocate_issue_sequence(uuid)` definition.
+  * Full lifecycle upgrade -> downgrade -> upgrade tested and verified in `database/tests/migrations/test_p4_24_agent_safe_sequences_migration.py`.
+  * Column parity:
+    - `projects.skip_loaded_sequence_numbers`: mapped in `Project` as `Mapped[bool] = mapped_column(Boolean, nullable=False, server_default=text("false"))`.
+    - `workspace_settings.default_skip_loaded_sequence_numbers`: mapped in `WorkspaceSettings` as `Mapped[bool] = mapped_column(Boolean, nullable=False, server_default="false")`.
+  * Ownership & Grants:
+    - `compute_agent_safe_sequence_batch`: Owner `kanban_migrator`, granted to `kanban_app, app_rls_reader`.
+    - `allocate_issue_sequences`: Owner `kanban_migrator`, granted to `kanban_app`.
+    - `allocate_issue_sequence`: Owner `kanban_migrator`, granted to `kanban_app`.
 
-### 2.2 PL/pgSQL Function Contracts & Boundary Safety
-- Pure Sequence Calculation:
-  - `compute_agent_safe_sequence_batch(p_current_seq BIGINT, p_count INTEGER, p_skip_loaded BOOLEAN)`
-  - Parameter `p_count`: Enforces `1 <= p_count <= 1000`. Test `test_09_invalid_sequence_count_bounds` confirms that `p_count = 0`, `p_count = -1`, `p_count = 1001`, and `p_count = NULL` all raise exception `INVALID_SEQUENCE_COUNT` (SQLSTATE `P0001`).
-  - Loaded sequence array: `ARRAY[13, 69, 88, 404, 420, 666, 1337, 1488]`.
-  - Substring preservation: Tested in `test_08_compute_agent_safe_sequence_batch_exact_skipping_1_to_1500`. Integers `113` and `4040` are kept. Exact integer `404` is skipped.
-  - Skip iterations ceiling: Maximum of 16 skips prevents infinite loops under catastrophic configuration.
-- Concurrency & Lock Isolation:
-  - `allocate_issue_sequences` uses `SELECT ... FROM public.projects WHERE id = p_project_id FOR UPDATE`.
-  - This ensures serialization of concurrent allocations for the same project without deadlocks or counter races.
-  - Verified by `test_06_sequence_concurrency_20_connections` (20 concurrent workers) and `test_07_sequence_concurrency_150_connections_batches` (150 workers allocating batches of 2 = 300 total sequences). Zero collisions or gaps occurred.
-
-### 2.3 Service Caller Refactoring & Audit Event Integrity
-- Event Registration (`kanban/services/activity.py`):
-  - `ActivityEventType.SEQUENCE_SKIPPED = "SEQUENCE_SKIPPED"` added to `ActivityEventType` enum.
-  - Mapped to `ActivityCategory.SYSTEM` in `EVENT_CATEGORY` dictionary.
-  - Tested in `test_activity_event_type_registration`.
-- Service Callers:
-  - `create_issue` (`kanban/services/issues.py`):
-    * Invokes `allocate_issue_sequences(:proj, 1, false)`.
-    * If `skipped_sequences` is non-empty, calls `record_activity` with `workspace_id`, `project.id`, `caller.principal_id`, `ActivityEventType.SEQUENCE_SKIPPED`, and payload containing `project_key`, `skipped_sequences`, `allocated_sequence`, and `reason: "agent_safe_sequence_numbering"`.
-    * Scope Boundary Audit: Confirmed 0 modifications to `serialize_issue` or unrelated issue endpoints.
-  - `create_issue_tree` (`kanban/issues/tree_service.py`):
-    * Replaced per-node serial `allocate_issue_sequence` with a single batch allocation for `len(resolved_nodes_data)`.
-    * Sequences assigned sequentially via breadth-first queue traversal.
-    * Single `SEQUENCE_SKIPPED` event emitted if any sequence in the tree was skipped.
-  - `copy_issue` (`kanban/services/issue_copy.py`):
-    * Replaced per-issue serial `allocate_issue_sequence` with a single batch allocation for `1 + len(readable_rows)`.
-    * First sequence allocated to the root cloned issue; subsequent sequences allocated to cloned sub-issues.
-    * Single `SEQUENCE_SKIPPED` event emitted if any sequence was skipped.
-- Audit Ledger Continuity:
-  - Tested via `test_10_allocate_issue_sequences_and_verify_activity_chain` and `test_create_issue_skips_loaded_and_records_activity`.
-  - Cryptographic verification function `verify_activity_chain(:ws)` confirms hash chain validity (`is_valid = True`).
+### 2.2 Live Full-Stack Execution on Container `kanban-liveqa-3` (`:18963`, Commit `78074a1d`)
+1. **Single Issue Sequence Progression:**
+   - Created SAFE-1 through SAFE-12 sequentially.
+   - Next single issue creation allocated `SAFE-14` (sequence 13 was skipped cleanly).
+   - PostgreSQL activity ledger emitted `SEQUENCE_SKIPPED` event:
+     `70|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [13], "allocated_sequence": 14}`.
+2. **Issue Tree Batch Sequence Allocation:**
+   - Created 5-issue tree batch starting at sequence 68:
+     Allocated keys: `['SAFE-68', 'SAFE-70', 'SAFE-71', 'SAFE-72', 'SAFE-73']` (sequence 69 was skipped cleanly in batch).
+     `125|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [69], "allocated_sequence": 68}`.
+3. **Substring Preservation & 88 Boundary:**
+   - Created 40-issue batch spanning 74 to 114:
+     Skipped sequence 88; allocated sequence 113 (`SAFE-113` was NOT skipped, confirming substring preservation).
+     `131|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [88], "allocated_sequence": 74}`.
+4. **Immediate 0ms Copy Issue Allocation:**
+   - Executed `POST /api/v1/issues/SAFE-401/copy` right after issue tree creation at 0ms latency:
+     Succeeded on the very first attempt with HTTP 201 Created (0ms commit race permanently eliminated).
+     Allocated root `SAFE-403` and sub-issue `SAFE-405` (sequence 404 skipped cleanly).
+     `460|SEQUENCE_SKIPPED|{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [404], "allocated_sequence": 403}`.
+5. **Ledger Integrity:**
+   - Ran `verify_activity_chain('01a1fb43-704a-786f-8bf1-28f9315b14ef')`:
+     `is_valid=True`, `checked_rows=463`, `first_broken_seq=NULL`.
+6. **UI & Page Load Performance:**
+   - Measured board and list view load latencies across Desktop Light/Dark, Tablet, Mobile:
+     Desktop Light Board: 1917ms; Desktop Dark Board: 1887ms; Tablet: 1847ms; Mobile: 1805ms; Desktop List: 1891ms; SAFE-14 detail: 829ms (all well below 3000ms threshold).
+     `consoleErrors=0`, `pageErrors=0`, `badResponses=0`.
 
 ---
 
-## 3. Live Full-Stack Proof Verification (`live-fullstack-proof.txt`)
+## 3. Test Suites, Coverage, & Static Analysis Verification
 
-Verbatim inspection of `/home/adamoutler/kanban/docs/qa/KAN-49/live-fullstack-proof.txt` executed against target container `kanban-liveqa-3` (`http://127.0.0.1:18963`, commit `07d04cde`):
-1. Setup & Project Configuration:
-   - Project `SAFE` (id=`01a1fab4-3e33-71f5-9c13-ae9fdd6194e4`) configured with `skip_loaded_sequence_numbers=true`.
-2. Sequence Skipping Boundary Checks:
-   - Single issue boundary 12 -> 14: Created `SAFE-1..SAFE-12`; next `POST /api/v1/projects/SAFE/issues` allocated `SAFE-14` (skipped 13).
-   - Issue tree batch allocation across 68 -> 71: `POST /api/v1/projects/SAFE/issue-trees` (5 issues starting at 68) allocated `[SAFE-68, SAFE-70, SAFE-71, SAFE-72, SAFE-73]` (skipped 69).
-   - Substring preservation & 88 boundary: `POST /api/v1/projects/SAFE/issue-trees` (40 issues starting at 74) skipped `SAFE-88` and allocated up to `SAFE-113` (113 kept without false positive filtering).
-   - Issue copy batch allocation across 403 -> 405: `POST /api/v1/issues/SAFE-401/copy` (`include_sub_issues=true`) allocated `root=SAFE-403`, `copied_sub_issues=[{source_key: SAFE-402, copy_key: SAFE-405}]` (skipped 404).
-3. Verbatim PostgreSQL SEQUENCE_SKIPPED Activity Records:
-   - Seq 124: `SEQUENCE_SKIPPED` | `{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [13], "allocated_sequence": 14}`
-   - Seq 179: `SEQUENCE_SKIPPED` | `{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [69], "allocated_sequence": 68}`
-   - Seq 185: `SEQUENCE_SKIPPED` | `{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [88], "allocated_sequence": 74}`
-   - Seq 514: `SEQUENCE_SKIPPED` | `{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [404], "allocated_sequence": 403}`
-4. Cryptographic Hash Chain Verification:
-   - Executed `verify_activity_chain('01a1faac-6c26-751e-ac04-ea2d2a34337e')`: `is_valid=t`, `checked_rows=517`, `first_broken_seq=NULL`, `failure_reason=NULL`.
-   - `LIVE_STACK_VERDICT: PASS`
+### 3.1 Test Suites and Coverage Breakdown (98% Coverage)
+- **Database Suite:** 12/12 passed in 5.98s (`test_p1_17_models.py`, `test_p1_14_rls_catalog.py`, `test_p1_05_sequence_concurrency.py`, `test_p4_24_agent_safe_sequences_migration.py`).
+- **Kanban Suite:** 65/65 passed in 49.69s (`test_agent_safe_sequences.py`, `test_activity.py`, `test_issues.py`, `test_issue_copy.py`, `test_issue_trees.py`, `test_projects.py`, `test_issue_patch_etag_parity.py`, `test_issue_archive.py`).
+- **Combined Results:** 77 passed in 55.67s (100% pass rate).
+- **Coverage on 10 Modified Production Files:**
+  * `database/models/projects.py`: 99% (108 stmts, 1 miss)
+  * `database/models/workspace_settings.py`: 100% (22 stmts)
+  * `kanban/api/v1/issue_copy.py`: 100% (18 stmts)
+  * `kanban/api/v1/issue_trees.py`: 100% (20 stmts)
+  * `kanban/api/v1/issues.py`: 100% (58 stmts)
+  * `kanban/issues/tree_service.py`: 95% (344 stmts, 152 branch)
+  * `kanban/services/activity.py`: 99% (214 stmts, 8 branch)
+  * `kanban/services/issue_copy.py`: 100% (126 stmts, 40 branch)
+  * `kanban/services/issues.py`: 97% (461 stmts, 186 branch)
+  * `kanban/services/projects.py`: 99% (194 stmts, 56 branch)
+  * **TOTAL:** 98% across 1565 statements and 450 branches (surpassing 95% threshold).
 
----
-
-## 4. Test Suite & Coverage Verification
-
-- Migration Test Suite (`unit-test-results.txt`):
-  - `database/tests/migrations/test_p4_24_agent_safe_sequences_migration.py::test_p4_24_agent_safe_sequences_migration_lifecycle`: PASSED (0.63s).
-- Database Concurrency & Batch Suite (`unit-test-results.txt`):
-  - `database/tests/test_p1_05_sequence_concurrency.py`: 5 passed in 0.72s.
-    * `test_06_sequence_concurrency_20_connections`: PASSED
-    * `test_07_sequence_concurrency_150_connections_batches`: PASSED
-    * `test_08_compute_agent_safe_sequence_batch_exact_skipping_1_to_1500`: PASSED
-    * `test_09_invalid_sequence_count_bounds`: PASSED
-    * `test_10_allocate_issue_sequences_and_verify_activity_chain`: PASSED
-- Database Models & RLS Catalog Suite (`unit-test-results.txt`):
-  - `database/tests/test_p1_17_models.py` & `database/tests/test_p1_14_rls_catalog.py`: 14 passed in 1.48s.
-- Service Audit Suite (`unit-test-results.txt`):
-  - `kanban/tests/services/test_agent_safe_sequences.py`: 5 passed in 0.88s.
-    * `test_activity_event_type_registration`: PASSED
-    * `test_create_issue_skips_loaded_and_records_activity`: PASSED
-    * `test_create_issue_does_not_skip_when_disabled`: PASSED
-    * `test_create_issue_tree_batch_sequence_and_skip_activity`: PASSED
-    * `test_copy_issue_batch_sequence_and_skip_activity`: PASSED
-- Existing Regression Suite (`unit-test-results.txt`):
-  - `test_issue_trees.py`, `test_issue_copy.py`, `test_issues.py`, `test_activity.py`: 42 passed in 18.12s.
-- Module Coverage Report (>=95% across ALL 6 modified modules):
-  - `database/models/projects.py`: 108 stmts, 1 miss, 99% coverage.
-  - `database/models/workspace_settings.py`: 22 stmts, 0 miss, 100% coverage.
-  - `kanban/issues/tree_service.py`: 347 stmts, 14 miss, 152 branch, 5 brpart, 95% coverage.
-  - `kanban/services/activity.py`: 214 stmts, 1 miss, 8 branch, 1 brpart, 99% coverage.
-  - `kanban/services/issue_copy.py`: 126 stmts, 0 miss, 40 branch, 0 brpart, 100% coverage.
-  - `kanban/services/issues.py`: 456 stmts, 19 miss, 184 branch, 6 brpart, 95% coverage.
-  - Total: 1273 stmts, 35 miss, 384 branch, 12 brpart, 96% coverage.
-- Static Analysis Gates (`build-or-typecheck.txt`):
-  - `kanban-ctl db check-migrations`: PASS (All 63 migrations valid. Single head: `p4_24_agent_safe_sequences`).
-  - `ruff check database kanban agent mcp`: PASS (0 errors, all checks passed).
-  - `mypy database kanban agent mcp`: PASS (Success: no issues found in 989 source files).
-  - `lint-imports`: PASS (Unidirectional module layers `agent -> mcp -> kanban -> database` KEPT, `mcp` forbidden from importing `database` KEPT; Contracts: 2 kept, 0 broken).
-  - `check_no_dashes`: PASS (0 em/en-dashes across codebase).
+### 3.2 Static Gate Verification (Commit `78074a1d`)
+- `uv run kanban-ctl db check-migrations`: OK: 63 migrations valid, single head (`p4_24_agent_safe_sequences`).
+- `uv run ruff check .`: Clean across 2023 files.
+- `uv run ruff format --check .`: Clean across 2023 files.
+- `uv run mypy database kanban mcp agent`: Clean (Success: 995 source files).
+- `uv run lint-imports`: Contracts: 2 kept, 0 broken (`agent -> mcp -> kanban -> database`).
+- `pnpm --dir kanban/web run typecheck`: Clean (0 errors).
+- `pnpm --dir kanban/web run lint`: Clean (0 errors, 0 warnings).
+- `pnpm --dir kanban/web run build`: Production bundle built in 1.15s.
+- `python3 -m scripts.check_no_dashes --all` and `thumbs-up-kanban.wiki`: 0 forbidden unicode dashes.
 
 ---
 
-## 5. Security & Isolation Matrix
+## 4. Security & Isolation Matrix
 
-| Capability / Invariant | Specification Standard | Implementation | Verdict |
+| Capability / Concern | Specification Standard | Implementation | Verdict |
 | :--- | :--- | :--- | :--- |
-| Single Head Migration Chain | Linear chain off `p4_23_oidc_link_intent_fk` | Validated by `check-migrations` (63 valid) | PASS |
-| Clean Migration Downgrade | Drops new functions/columns, restores legacy | Validated by migration lifecycle test | PASS |
-| Column-Level ORM Parity | Exact match on `projects` and `workspace_settings` | Models updated with server_default | PASS |
-| Pure Sequence Function | `IMMUTABLE PARALLEL SAFE`, no side-effects | `compute_agent_safe_sequence_batch` | PASS |
-| Bound Checks Enforcement | `1 <= count <= 1000`, max 16 skip iterations | Validated by `test_09` with `INVALID_SEQUENCE_COUNT` | PASS |
-| Substring Preservation | Preserves `113`, `4040`, skips exact integers | Validated by `test_08` across 1..1500 | PASS |
-| Atomic Project Locking | `FOR UPDATE` lock on `projects` row | Single lock per batch, 0 counter races | PASS |
-| Concurrency Throughput | Clean allocation under high concurrency | Tested with 150 concurrent connection workers | PASS |
-| Hash-Chained Audit Event | `SEQUENCE_SKIPPED` in `SYSTEM` category | Validated with `verify_activity_chain` | PASS |
-| Boundary Isolation | Do not touch `serialize_issue` in `issues.py` | Strictly verified in git diff | PASS |
-| Unidirectional Layering | Layer hierarchy preserved | `lint-imports` confirms 2 kept, 0 broken | PASS |
-| Dash Character Policy | 0 em-dashes and 0 en-dashes | Checked with `scripts.check_no_dashes` | PASS |
+| **Exact Sequence Skipping** | Skip only exact integers `[13, 69, 88, 404, 420, 666, 1337, 1488]` | Immutable PL/pgSQL function | PASS |
+| **Substring Safety** | Keep `113`, `4040`, `6660` without false positives | Strict integer equality in array search | PASS |
+| **Locking Isolation** | `FOR UPDATE` on projects row per batch | Serialized batch lock in PL/pgSQL | PASS |
+| **Single-Allocation Trees** | Batch sequence allocation for issue trees | `create_issue_tree` single batch call | PASS |
+| **Single-Allocation Copies** | Batch sequence allocation for issue clones | `copy_issue` single batch call | PASS |
+| **Audit Ledger Continuity** | `SEQUENCE_SKIPPED` preserved in hash chain | `verify_activity_chain` returns `is_valid=t` | PASS |
+| **Single Migration Head** | Linear single-head migration chain | Verified via `check-migrations` (63 valid) | PASS |
+| **Unidirectional Layering** | `agent -> mcp -> kanban -> database` | Verified via `lint-imports` (2 kept, 0 broken) | PASS |
+| **Style Compliance** | 0 em-dashes and 0 en-dashes | Checked with `scripts.check_no_dashes` | PASS |
 
 ---
 
-## 6. Verdict & Signoff
+## 5. Certification Signoff
 
 STATUS: APPROVED
 
-The database migration `p4_24_agent_safe_sequences`, ORM model parity, PL/pgSQL batch sequence allocation functions, service layer refactoring (`create_issue`, `create_issue_tree`, `copy_issue`), and `SEQUENCE_SKIPPED` cryptographic audit records for KAN-49 on branch `main` at commit `7913c2c8` have been thoroughly audited, verified against strict concurrency and migration fixtures, and certified on live stack `kanban-liveqa-3` with `LIVE_STACK_VERDICT: PASS`. Dual specialist gate (API Specialist + UI Specialist) is complete. Ready for Clean-Room Reality-Checker QA.
+Ticket KAN-49 is fully verified on `main` at commit `78074a1d` against live container `kanban-liveqa-3` (`:18963`, `LIVE_STACK_VERDICT: PASS`). Database migration `p4_24_agent_safe_sequences`, batch sequence allocation functions, service callers, audit ledger chain continuity, and unit test coverage (98% across 10 touched modules) are certified ready for reality-checker QA gate closure.

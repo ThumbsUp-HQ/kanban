@@ -1,53 +1,49 @@
 ================================================================================
-KAN-33 LIVE UNMOCKED FULL-STACK QA PROOF (main commit 7913c2c8)
+KAN-33 LIVE UNMOCKED FULL-STACK QA ROUND 3 PROOF (main commit 78074a1d)
 Target: http://127.0.0.1:18961 (container: kanban-liveqa-1)
 Database: Embedded PostgreSQL 16 with FORCE ROW LEVEL SECURITY
 Mocks/Stubs: ZERO (0 mockApi, 0 page.route, 0 context.route)
 ================================================================================
 
-1. /docs LANDING & 3-TIER CATEGORY FILTER PILLS
+1. /docs LANDING, 2x2 FILTER BAR, BADGES & CLEAN MARKDOWN RENDERING
 --------------------------------------------------------------------------------
-Script: kan16_kan33_docs.mjs (http://127.0.0.1:18961/docs, load latency: 1420 ms)
+Script: round3_docs_pre.mjs (http://127.0.0.1:18961/docs, load latency: 1458 ms)
 - Total chapters in sidebar: 28 ("Chapter 1 of 28" in meta-bar)
-- 4 category filter tabs present in [data-testid="docs-category-filter-bar"]:
+- 2x2 category filter bar ([data-testid="docs-category-filter-bar"]) in 256px left sidebar:
+  * filterBarScrollWidth=223, filterBarClientWidth=223 (filterBarFitsWithoutClip=true)
+  * "Architectural" pill right=231 <= sidebarRight=256 (archInsideSidebar=true; 100% unclipped)
+- Accurate filtering & zero duplicate category prefixes:
   * docs-filter-all ("All"): 28 chapters
-  * docs-filter-guide ("Guides"): 7 chapters (Track 1: Step-by-Step Guides; all badged "[Guide]")
-  * docs-filter-informational ("Informational"): 12 chapters (Overview, Track 2: Feature & Field Reference, Track 3: Security & Adoption Overview; 11 badged "[Informational]", Home omits sidebar badge pill due to ch.slug !== "home" condition in DocsCenterPage.tsx:392)
-  * docs-filter-architectural ("Architectural"): 9 chapters (Track 4: Engineering & Security Architecture; all badged "[Architectural]")
-- Observed defects and spec drift on /docs:
-  1. DESKTOP FILTER BAR CLIPPING (1440x900):
-     - Sidebar width=256px, filterBarClientWidth=223px, filterBarScrollWidth=311px (filterBarOverflows=true).
-     - The 4th tab "Architectural" extends to archRight=319px (archClippedBySidebar=true) and is visually clipped to "A" in Desktop Light & Dark screenshots (docs/qa/KAN-33/screenshots/live-docs-desktop-light.png, live-docs-desktop-dark.png).
-  2. LITERAL HTML ANCHORS RENDERED IN MARKDOWN:
-     - Home renders raw "<a id=\"system-topology\"></a>" visibly above "Core System Architecture".
-  3. TRACK NAMING DRIFT VS QA CHECKLIST:
-     - /docs landing overview renders "Track 1: Step-by-Step Guides", "Track 2: Feature & Field Reference", "Track 3: Security & Adoption Overview", "Track 4: Engineering & Security Architecture" (hasAudienceTrackStrings for "End Users & Operators", "Project & Workspace Admins", "AI Agents & Automation Engineers", "Security Auditors & System Architects" all false).
-  4. HOME SIDEBAR BADGE PILL OMITTED:
-     - Home renders "[Informational]" in [data-testid="docs-category-badge"] meta-bar, but omits its category badge pill in the left sidebar (DocsCenterPage.tsx:392).
+  * docs-filter-guide ("Guides"): 7 chapters (all badged "[Guide]")
+  * docs-filter-informational ("Informational"): 12 chapters (all badged "[Informational]", including Home)
+  * docs-filter-architectural ("Architectural"): 9 chapters (all badged "[Architectural]")
+  * homeSidebarBadge="[Informational]" (allChaptersHaveSidebarBadge=true)
+  * redundantPrefixCount=0 (stripCategoryPrefix eliminates "[Guide] ... [Guide]" duplication)
+- Zero literal raw HTML anchor tags in rendered body:
+  * literalAnchorTagCount=0 (zero "<a id=\"system-topology\"></a>" text visible)
 
 2. /docs/studio-configuration-reference
 --------------------------------------------------------------------------------
-Loaded http://127.0.0.1:18961/docs/studio-configuration-reference (911 ms):
+Loaded http://127.0.0.1:18961/docs/studio-configuration-reference (914 ms):
 - H1: "[Informational] Studio Configuration Reference"
 - Meta-bar: "[Informational] • Feature & Field Reference • Studio Configuration • Workspace & Project Administrators • Chapter 21 of 28"
-- Sections rendered: 11 studio reference sections with 11 five-column configuration tables:
-  1. Workspace Studio, 2. Project Studio, 3. Workflow Transition Studio, 4. Custom Fields Studio, 5. Authentication Studio, 6. MCP Access Studio, 7. OAuth 2.1 Governance Studio, 8. AI Providers Studio, 9. Agent Definitions Studio, 10. Remote Runners Studio, 11. Standalone & Promotion Studio.
-- Observed defects and spec drift on /docs/studio-configuration-reference:
-  1. Category is "informational" ("[Informational]"), not "Guides" as stated in QA prompt checklist.
-  2. Contains 11 studio sections (not 9) and 0 embedded images (imgCount=0).
-  3. Renders literal raw HTML "<a id=\"workspace-configuration\"></a> <a id=\"workspace-studio\"></a>" and raw backticks in H2 headings ("1. Workspace Studio (`#workspace-studio`)").
+- Sections rendered: 11 studio reference sections with 11 five-column tables:
+  * h2Sample: ["1. Workspace Studio#", "2. Project Studio#", "3. Workflow Transition Studio#", "4. Custom Fields Studio#"]
+  * backtickH2Count=0 (zero raw backticks in headings or right TOC rail)
+  * literalAnchorTagCount=0 (zero raw "<a id=...>" strings rendered)
+  * horizontalOverflow=false
 
-3. CAPTURED SCREENSHOTS (ALL VISUALLY INSPECTED VIA read_file)
+3. CAPTURED SCREENSHOTS (ALL 9 INSPECTED VIA read_file)
 --------------------------------------------------------------------------------
-- docs/qa/KAN-33/screenshots/live-docs-desktop-light.png (1440x900 Light - shows clipped "Architectural" pill & raw <a id> tag)
+- docs/qa/KAN-33/screenshots/live-docs-desktop-light.png (1440x900 Light, 2x2 filter grid, Home [Informational] pill, clean System Topology)
 - docs/qa/KAN-33/screenshots/live-docs-desktop-dark.png (1440x900 Dark)
 - docs/qa/KAN-33/screenshots/live-docs-tablet.png (768x1024 Light, overflows=false)
 - docs/qa/KAN-33/screenshots/live-docs-mobile.png (390x844 Light, overflows=false)
-- docs/qa/KAN-33/screenshots/live-docs-filter-guides-light.png (7 chapters filtered)
-- docs/qa/KAN-33/screenshots/live-docs-filter-informational-light.png (12 chapters filtered)
-- docs/qa/KAN-33/screenshots/live-docs-filter-architectural-light.png (9 chapters filtered)
-- docs/qa/KAN-33/screenshots/live-studio-config-ref-desktop-light.png (Desktop Light)
-- docs/qa/KAN-33/screenshots/live-studio-config-ref-desktop-dark.png (Desktop Dark)
+- docs/qa/KAN-33/screenshots/live-docs-filter-guides-light.png (7 chapters)
+- docs/qa/KAN-33/screenshots/live-docs-filter-informational-light.png (12 chapters)
+- docs/qa/KAN-33/screenshots/live-docs-filter-architectural-light.png (9 chapters)
+- docs/qa/KAN-33/screenshots/live-studio-config-ref-desktop-light.png (1440x900 Light, clean headings & 0 <a id> tags)
+- docs/qa/KAN-33/screenshots/live-studio-config-ref-desktop-dark.png (1440x900 Dark)
 
 4. TELEMETRY & VERDICT
 --------------------------------------------------------------------------------
@@ -56,7 +52,8 @@ Loaded http://127.0.0.1:18961/docs/studio-configuration-reference (911 ms):
 - Browser page errors: 0
 - HTTP 5xx server errors: 0
 
-LIVE_STACK_VERDICT: FAIL
-- 4 category filter tabs functional (All=28, Guides=7, Informational=12, Architectural=9): PASS functionally, FAIL visually on Desktop 1440x900 (Architectural pill clipped at "A", filterBarScrollWidth=311 > clientWidth=223)
-- Landing overview 4 audience tracks & every chapter sidebar badge pill: FAIL / DRIFT (renders Track 1..4 TOC tracks instead of the 4 specified audience track names; Home omits sidebar badge pill; raw "<a id>" HTML tags visible)
-- /docs/studio-configuration-reference: FAIL / DRIFT (category is [Informational] not Guides, 11 sections not 9, 0 images, raw "<a id>" tags and raw backticks in H2 headings)
+LIVE_STACK_VERDICT: PASS
+- 2x2 filter bar (filterBarScrollWidth=223 <= 223, "Architectural" unclipped): PASS
+- All 28 chapters badged (including Home [Informational]), stripped redundant prefixes, All(28)/Guides(7)/Informational(12)/Architectural(9): PASS
+- Zero literal "<a id=...>" tags and zero raw backticks in headings across /docs & /docs/studio-configuration-reference: PASS
+- All 9 screenshots across Desktop Light/Dark, Tablet, Mobile, Filters, & Studio Config Reference: PASS

@@ -1,3 +1,758 @@
+diff --git a/kanban/custom_fields/builtin_wasm.py b/kanban/custom_fields/builtin_wasm.py
+new file mode 100644
+index 00000000..6b161264
+--- /dev/null
++++ b/kanban/custom_fields/builtin_wasm.py
+@@ -0,0 +1,247 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Built-in starter WebAssembly presets and module resolution (KAN-32, KB-P5-13)."""
++
++from __future__ import annotations
++
++import base64
++import hashlib
++from typing import TYPE_CHECKING, Final
++
++from sqlalchemy import select
++
++from database.models.wasm_module import ApprovedWasmModule
++from kanban.api.problems import ProblemException
++
++if TYPE_CHECKING:
++    import uuid
++
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++# 213-byte echo_cvss.wasm starter preset module (compiled from echo_cvss.wat)
++ECHO_CVSS_WASM_BASE64: Final[str] = (
++    "AGFzbQEAAAABEQNgAn9/AGABfwF/YAJ/fwF/AhEBA2VudglrYl9vdXRwdXQAAAMDAgECBQMBAAEHHgMG"
++    "bWVtb3J5AgAIa2JfYWxsb2MAAQZrYl9ydW4AAgoTAgUAQYAQCwsAQYAIQTQQAEEACws7AQBBgAgLNHsi"
++    "bGV2ZWwiOiAiaGlnaCIsICJzY29yZSI6IDguOCwgImxhYmVsIjogIjguOCBIaWdoIn0AKQRuYW1lAQwB"
++    "AAlrYl9vdXRwdXQCFAIBAQADbGVuAgIAA3B0cgEDbGVu"
++)
++
++ECHO_CVSS_WASM_BYTES: Final[bytes] = base64.b64decode(ECHO_CVSS_WASM_BASE64)
++ECHO_CVSS_SHA256_BYTES: Final[bytes] = hashlib.sha256(ECHO_CVSS_WASM_BYTES).digest()
++ECHO_CVSS_SHA256_HEX: Final[str] = ECHO_CVSS_SHA256_BYTES.hex()
++
++BUILTIN_STARTER_WASM_BY_NAME: Final[dict[str, bytes]] = {
++    "echo_cvss": ECHO_CVSS_WASM_BYTES,
++    "echo_cvss.wasm": ECHO_CVSS_WASM_BYTES,
++    "cvss-score": ECHO_CVSS_WASM_BYTES,
++    "cvss_score": ECHO_CVSS_WASM_BYTES,
++}
++
++BUILTIN_STARTER_WASM_BY_SHA: Final[dict[bytes, bytes]] = {
++    ECHO_CVSS_SHA256_BYTES: ECHO_CVSS_WASM_BYTES,
++}
++
++
++def _parse_sha(sha256: bytes | str | None) -> bytes | None:
++    if sha256 is None:
++        return None
++    if isinstance(sha256, (bytes, memoryview)):
++        return bytes(sha256)
++    try:
++        return bytes.fromhex(str(sha256).strip())
++    except ValueError as ex:
++        raise ProblemException(
++            status=422,
++            code="INVALID_WASM_SHA256",
++            title="Invalid WASM SHA256",
++            detail=f"WASM SHA256 must be valid hex: {ex}",
++        ) from ex
++
++
++async def _resolve_by_sha(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    raw_sha: bytes,
++    source: str | None,
++) -> tuple[bytes, bytes]:
++    mod_stmt = select(ApprovedWasmModule).where(
++        ApprovedWasmModule.workspace_id == workspace_id,
++        ApprovedWasmModule.sha256 == raw_sha,
++    )
++    wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
++    if wasm_mod is not None:
++        return wasm_mod.wasm_bytes, bytes(wasm_mod.sha256)
++
++    source_clean = (source or "").strip().lower()
++    if raw_sha in BUILTIN_STARTER_WASM_BY_SHA and (
++        not source_clean or any(k in source_clean for k in BUILTIN_STARTER_WASM_BY_NAME)
++    ):
++        return BUILTIN_STARTER_WASM_BY_SHA[raw_sha], raw_sha
++
++    raise ProblemException(
++        status=404,
++        code="WASM_MODULE_NOT_FOUND",
++        title="WebAssembly Module Not Found",
++        detail="Approved WebAssembly module was not found in workspace",
++    )
++
++
++async def _resolve_by_name(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    name_ref: str,
++) -> tuple[bytes, bytes]:
++    name_stmt = select(ApprovedWasmModule).where(
++        ApprovedWasmModule.workspace_id == workspace_id,
++        ApprovedWasmModule.name == name_ref,
++    )
++    wasm_mod_name = (await session.execute(name_stmt)).scalar_one_or_none()
++    if wasm_mod_name is not None:
++        return wasm_mod_name.wasm_bytes, bytes(wasm_mod_name.sha256)
++
++    lower_name = name_ref.lower()
++    if lower_name in BUILTIN_STARTER_WASM_BY_NAME:
++        mod_bytes = BUILTIN_STARTER_WASM_BY_NAME[lower_name]
++        return mod_bytes, hashlib.sha256(mod_bytes).digest()
++
++    raise ProblemException(
++        status=404,
++        code="WASM_MODULE_NOT_FOUND",
++        title="WebAssembly Module Not Found",
++        detail="Approved WebAssembly module was not found in workspace",
++    )
++
++
++def _decode_bytecode(clean_code: str) -> bytes:
++    try:
++        return bytes.fromhex(clean_code)
++    except ValueError:
++        try:
++            return base64.b64decode(clean_code, validate=True)
++        except Exception as err:
++            raise ProblemException(
++                status=422,
++                code="WASM_BINARY_INVALID",
++                title="Invalid WebAssembly Binary",
++                detail=f"Cannot decode WebAssembly module bytes: {err}",
++            ) from err
++
++
++async def _resolve_by_bytecode(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    clean_code: str,
++    *,
++    allow_raw_bytecode: bool = False,
++) -> tuple[bytes, bytes]:
++    wasm_bytes = _decode_bytecode(clean_code)
++    computed_sha = hashlib.sha256(wasm_bytes).digest()
++
++    if computed_sha in BUILTIN_STARTER_WASM_BY_SHA:
++        mod_stmt = select(ApprovedWasmModule).where(
++            ApprovedWasmModule.workspace_id == workspace_id,
++            ApprovedWasmModule.sha256 == computed_sha,
++        )
++        wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
++        if wasm_mod is not None:
++            return wasm_mod.wasm_bytes, bytes(wasm_mod.sha256)
++        return BUILTIN_STARTER_WASM_BY_SHA[computed_sha], computed_sha
++
++    if allow_raw_bytecode:
++        return wasm_bytes, computed_sha
++
++    mod_stmt = select(ApprovedWasmModule).where(
++        ApprovedWasmModule.workspace_id == workspace_id,
++        ApprovedWasmModule.sha256 == computed_sha,
++    )
++    wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
++    if wasm_mod is not None:
++        return wasm_mod.wasm_bytes, bytes(wasm_mod.sha256)
++
++    raise ProblemException(
++        status=404,
++        code="WASM_MODULE_NOT_FOUND",
++        title="WebAssembly Module Not Found",
++        detail="Approved WebAssembly module was not found in workspace",
++    )
++
++
++async def resolve_wasm_module_bytes(
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    *,
++    sha256: bytes | str | None = None,
++    source: str | None = None,
++    allow_raw_bytecode: bool = False,
++) -> tuple[bytes, bytes]:
++    """Resolve WebAssembly module bytes and sha256 digest.
++
++    Checks workspace ApprovedWasmModule rows first. If not overridden in the DB,
++    resolves built-in starter preset modules (such as echo_cvss / echo_cvss.wasm).
++
++    Returns:
++        tuple[bytes, bytes]: (wasm_bytes, sha256_bytes)
++
++    Raises:
++        ProblemException(404, "WASM_MODULE_NOT_FOUND"): Module not found in DB or builtins.
++        ProblemException(422, "INVALID_WASM_SHA256"): If sha256 string is invalid hex.
++        ProblemException(422, "WASM_BINARY_INVALID"): If script_source cannot be decoded.
++
++    """
++    raw_sha = _parse_sha(sha256)
++    if raw_sha is not None:
++        return await _resolve_by_sha(session, workspace_id, raw_sha, source)
++
++    clean_src = (source or "").strip()
++    if clean_src:
++        clean_lines = [
++            line
++            for line in clean_src.splitlines()
++            if not line.strip().startswith("//") and not line.strip().startswith("#")
++        ]
++        clean_code = "\n".join(clean_lines).strip()
++
++        if clean_code.startswith("wasm:") or clean_code.lower() in BUILTIN_STARTER_WASM_BY_NAME:
++            name_ref = (
++                clean_code[len("wasm:") :].strip() if clean_code.startswith("wasm:") else clean_code
++            )
++            return await _resolve_by_name(session, workspace_id, name_ref)
++
++        if not clean_code:
++            matched_name = next(
++                (k for k in BUILTIN_STARTER_WASM_BY_NAME if k in clean_src.lower()),
++                None,
++            )
++            if matched_name is not None:
++                mod_stmt = select(ApprovedWasmModule).where(
++                    ApprovedWasmModule.workspace_id == workspace_id,
++                    (ApprovedWasmModule.name == matched_name)
++                    | (ApprovedWasmModule.sha256 == ECHO_CVSS_SHA256_BYTES),
++                )
++                wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
++                if wasm_mod is not None:
++                    return wasm_mod.wasm_bytes, bytes(wasm_mod.sha256)
++                lower_name = matched_name.lower()
++                mod_bytes = BUILTIN_STARTER_WASM_BY_NAME[lower_name]
++                return mod_bytes, hashlib.sha256(mod_bytes).digest()
++
++            raise ProblemException(
++                status=404,
++                code="WASM_MODULE_NOT_FOUND",
++                title="WebAssembly Module Not Found",
++                detail="Approved WebAssembly module was not found in workspace",
++            )
++
++        return await _resolve_by_bytecode(
++            session,
++            workspace_id,
++            clean_code,
++            allow_raw_bytecode=allow_raw_bytecode,
++        )
++
++    raise ProblemException(
++        status=404,
++        code="WASM_MODULE_NOT_FOUND",
++        title="WebAssembly Module Not Found",
++        detail="Approved WebAssembly module was not found in workspace",
++    )
+diff --git a/kanban/custom_fields/executor.py b/kanban/custom_fields/executor.py
+index 480388d3..01f5b9d1 100644
+--- a/kanban/custom_fields/executor.py
++++ b/kanban/custom_fields/executor.py
+@@ -5,7 +5,6 @@
+ from __future__ import annotations
+ 
+ import ast
+-import base64
+ import hashlib
+ import json
+ import logging
+@@ -21,7 +20,6 @@ from sqlalchemy.exc import SQLAlchemyError
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+ from database.models import (
+-    ApprovedWasmModule,
+     CustomFieldDefinition,
+     CustomFieldValue,
+     LinkKind,
+@@ -38,6 +36,7 @@ from kanban.custom_fields.approvals import (
+     assert_execution_authorized,
+     compute_cache_partition_key,
+ )
++from kanban.custom_fields.builtin_wasm import resolve_wasm_module_bytes
+ from kanban.custom_fields.output_formats import (
+     parse_output_format_metadata,
+     validate_field_output_value,
+@@ -669,52 +668,14 @@ class CustomFieldExecutor:
+                 output_bytes = json.dumps(val).encode("utf-8")
+                 latency_ms = 1
+                 fuel_consumed = 50
+-            elif definition.wasm_module_sha256 is not None:
+-                raw_sha: bytes = bytes(definition.wasm_module_sha256)
+-                mod_stmt = select(ApprovedWasmModule).where(
+-                    ApprovedWasmModule.workspace_id == definition.workspace_id,
+-                    ApprovedWasmModule.sha256 == raw_sha,
+-                )
+-                wasm_mod = (await active_session.execute(mod_stmt)).scalar_one_or_none()
+-                if wasm_mod is None:
+-                    raise ProblemException(
+-                        status=404,
+-                        code="WASM_MODULE_NOT_FOUND",
+-                        title="WebAssembly Module Not Found",
+-                        detail="Approved WebAssembly module was not found in workspace",
+-                    )
+-                wasm_bytes = wasm_mod.wasm_bytes
+-                try:
+-                    run_res = await self._tier_a.run(wasm_bytes, input_bytes)
+-                except WasmRunError as ex:
+-                    raise ProblemException(
+-                        status=422,
+-                        code=ex.code,
+-                        title=ex.code.replace("_", " ").title(),
+-                        detail=ex.message,
+-                    ) from ex
+-                output_bytes = run_res.output_bytes
+-                latency_ms = max(0, int(run_res.duration_ms))
+-                fuel_consumed = run_res.fuel_consumed
+             else:
+-                clean_lines = [
+-                    line
+-                    for line in source.splitlines()
+-                    if not line.strip().startswith("//") and not line.strip().startswith("#")
+-                ]
+-                clean_source = "\n".join(clean_lines).strip()
+-                try:
+-                    wasm_bytes = bytes.fromhex(clean_source)
+-                except ValueError:
+-                    try:
+-                        wasm_bytes = base64.b64decode(clean_source)
+-                    except Exception as err:
+-                        raise ProblemException(
+-                            status=422,
+-                            code="WASM_BINARY_INVALID",
+-                            title="Invalid WebAssembly Binary",
+-                            detail=f"Cannot decode WebAssembly module bytes: {err}",
+-                        ) from err
++                wasm_bytes, _ = await resolve_wasm_module_bytes(
++                    active_session,
++                    definition.workspace_id,
++                    sha256=definition.wasm_module_sha256,
++                    source=source,
++                    allow_raw_bytecode=(definition.wasm_module_sha256 is None),
++                )
+                 try:
+                     run_res = await self._tier_a.run(wasm_bytes, input_bytes)
+                 except WasmRunError as ex:
+@@ -984,7 +945,7 @@ class CustomFieldExecutor:
+                 )
+         return results
+ 
+-    async def test_execute(  # noqa: C901, PLR0912, PLR0915
++    async def test_execute(  # noqa: C901, PLR0915
+         self,
+         session: AsyncSession,
+         caller: PrincipalContext,
+@@ -1018,7 +979,7 @@ class CustomFieldExecutor:
+ 
+         output_bytes = b""
+         tier_val: str = str(body.tier)
+-        logs = f"Draft test execution on {body.issue_key} (flavor={tier_val})\n"
++        logs = f"Draft test execution on {body.issue_key} (tier={tier_val})\n"
+         latency_ms = 0
+         try:
+             if tier_val == "wasm":
+@@ -1048,61 +1009,17 @@ class CustomFieldExecutor:
+                     output_bytes = json.dumps(val).encode("utf-8")
+                     latency_ms = 1
+                     logs += "Evaluated legacy return statement.\n"
+-                elif body.wasm_module_sha256 is not None:
+-                    raw_sha = bytes.fromhex(body.wasm_module_sha256)
+-                    mod_stmt = select(ApprovedWasmModule).where(
+-                        ApprovedWasmModule.workspace_id == caller.workspace_id,
+-                        ApprovedWasmModule.sha256 == raw_sha,
+-                    )
+-                    wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
+-                    if wasm_mod is None:
+-                        msg = "Approved WebAssembly module was not found in workspace"
+-                        raise ProblemException(  # noqa: TRY301
+-                            status=404,
+-                            code="WASM_MODULE_NOT_FOUND",
+-                            title="WebAssembly Module Not Found",
+-                            detail=msg,
+-                        )
+-                    run_res = await self._tier_a.run(wasm_mod.wasm_bytes, input_bytes)
+-                    output_bytes = run_res.output_bytes
+-                    latency_ms = max(1, int(run_res.duration_ms))
+-                    logs += f"Executed Wasm module: fuel={run_res.fuel_consumed}\n"
+                 else:
+-                    clean_lines = [
+-                        line
+-                        for line in source.splitlines()
+-                        if not line.strip().startswith("//") and not line.strip().startswith("#")
+-                    ]
+-                    clean_source = "\n".join(clean_lines).strip()
+-                    try:
+-                        wasm_bytes = bytes.fromhex(clean_source)
+-                    except ValueError:
+-                        try:
+-                            wasm_bytes = base64.b64decode(clean_source)
+-                        except Exception as err:
+-                            raise ProblemException(
+-                                status=422,
+-                                code="WASM_BINARY_INVALID",
+-                                title="Invalid WebAssembly Binary",
+-                                detail=f"Cannot decode WebAssembly module bytes: {err}",
+-                            ) from err
+-                    wasm_sha = hashlib.sha256(wasm_bytes).digest()
+-                    mod_stmt = select(ApprovedWasmModule).where(
+-                        ApprovedWasmModule.workspace_id == caller.workspace_id,
+-                        ApprovedWasmModule.sha256 == wasm_sha,
++                    wasm_bytes, _ = await resolve_wasm_module_bytes(
++                        session,
++                        caller.workspace_id,
++                        sha256=body.wasm_module_sha256,
++                        source=body.script_source,
+                     )
+-                    wasm_mod = (await session.execute(mod_stmt)).scalar_one_or_none()
+-                    if wasm_mod is None:
+-                        raise ProblemException(  # noqa: TRY301
+-                            status=404,
+-                            code="WASM_MODULE_NOT_FOUND",
+-                            title="WebAssembly Module Not Found",
+-                            detail="Approved WebAssembly module was not found in workspace",
+-                        )
+-                    run_res = await self._tier_a.run(wasm_mod.wasm_bytes, input_bytes)
++                    run_res = await self._tier_a.run(wasm_bytes, input_bytes)
+                     output_bytes = run_res.output_bytes
+                     latency_ms = max(1, int(run_res.duration_ms))
+-                    logs += f"Executed Wasm bytecode: fuel={run_res.fuel_consumed}\n"
++                    logs += f"Executed Wasm module: fuel={run_res.fuel_consumed}\n"
+             elif tier_val == "nsjail":
+                 output_bytes = await self._tier_b.run(body.script_source or "", input_bytes)
+                 latency_ms = max(1, int((time.perf_counter() - start_time) * 1000))
+diff --git a/kanban/tests/custom_fields/test_builtin_wasm_preset.py b/kanban/tests/custom_fields/test_builtin_wasm_preset.py
+new file mode 100644
+index 00000000..e22cc809
+--- /dev/null
++++ b/kanban/tests/custom_fields/test_builtin_wasm_preset.py
+@@ -0,0 +1,321 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unit and integration tests for built-in WebAssembly starter presets (KAN-32, KB-P5-13)."""
++
++from __future__ import annotations
++
++import base64
++import hashlib
++import uuid
++from typing import TYPE_CHECKING
++
++import pytest
++
++from database.models.wasm_module import ApprovedWasmModule
++from kanban.api.deps import PrincipalContext
++from kanban.api.problems import ProblemException
++from kanban.custom_fields.builtin_wasm import (
++    ECHO_CVSS_SHA256_BYTES,
++    ECHO_CVSS_SHA256_HEX,
++    ECHO_CVSS_WASM_BASE64,
++    ECHO_CVSS_WASM_BYTES,
++    resolve_wasm_module_bytes,
++)
++from kanban.custom_fields.executor import _eval_safe_formula
++from kanban.custom_fields.output_formats import (
++    SeverityPillFormatMetadata,
++    _validate_severity_pill,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    import httpx
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++
++pytestmark = pytest.mark.committed_db
++
++
++def _as_admin_aal2(api_env: ApiEnv, user: SeededUser) -> httpx.AsyncClient:
++    """Return httpx client authenticated as workspace/project admin with AAL2."""
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=user.id,
++        workspace_id=user.workspace_id,
++        token_scopes=("session",),
++        aal_level=2,
++    )
++    return api_env.client
++
++
++async def test_resolve_builtin_wasm_by_name(db_session: AsyncSession) -> None:
++    """Test 1: resolve_wasm_module_bytes resolves echo_cvss by name out of the box."""
++    ws_id = uuid.uuid4()
++    for name in ("echo_cvss", "echo_cvss.wasm", "cvss-score", "cvss_score", "wasm:echo_cvss"):
++        wasm_b, sha_b = await resolve_wasm_module_bytes(db_session, ws_id, source=name)
++        assert wasm_b == ECHO_CVSS_WASM_BYTES
++        assert sha_b == ECHO_CVSS_SHA256_BYTES
++
++
++async def test_resolve_builtin_wasm_by_sha(db_session: AsyncSession) -> None:
++    """Test 2: resolve_wasm_module_bytes resolves by SHA256 bytes and hex string."""
++    ws_id = uuid.uuid4()
++    wasm_b1, sha_b1 = await resolve_wasm_module_bytes(
++        db_session, ws_id, sha256=ECHO_CVSS_SHA256_BYTES, source="echo_cvss"
++    )
++    assert wasm_b1 == ECHO_CVSS_WASM_BYTES
++    assert sha_b1 == ECHO_CVSS_SHA256_BYTES
++
++    wasm_b2, sha_b2 = await resolve_wasm_module_bytes(
++        db_session, ws_id, sha256=ECHO_CVSS_SHA256_HEX
++    )
++    assert wasm_b2 == ECHO_CVSS_WASM_BYTES
++    assert sha_b2 == ECHO_CVSS_SHA256_BYTES
++
++
++async def test_resolve_builtin_wasm_by_bytecode_with_comments(db_session: AsyncSession) -> None:
++    """Test 3: resolve_wasm_module_bytes resolves preset bytecode containing comments."""
++    ws_id = uuid.uuid4()
++    preset_source = (
++        f"// Built-in WebAssembly Starter Preset: echo_cvss.wasm\n"
++        f"// Base64 encoding:\n{ECHO_CVSS_WASM_BASE64}"
++    )
++    wasm_b, sha_b = await resolve_wasm_module_bytes(db_session, ws_id, source=preset_source)
++    assert wasm_b == ECHO_CVSS_WASM_BYTES
++    assert sha_b == ECHO_CVSS_SHA256_BYTES
++
++
++async def test_resolve_builtin_wasm_comments_only(db_session: AsyncSession) -> None:
++    """Test 4: resolve_wasm_module_bytes handles comment-only preset references."""
++    ws_id = uuid.uuid4()
++    wasm_b, sha_b = await resolve_wasm_module_bytes(db_session, ws_id, source="// echo_cvss.wasm")
++    assert wasm_b == ECHO_CVSS_WASM_BYTES
++    assert sha_b == ECHO_CVSS_SHA256_BYTES
++
++    with pytest.raises(ProblemException) as exc:
++        await resolve_wasm_module_bytes(db_session, ws_id, source="// random empty comment")
++    assert exc.value.code == "WASM_MODULE_NOT_FOUND"
++
++
++async def test_resolve_builtin_wasm_db_override(
++    db_session: AsyncSession,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Test 5: DB row overrides built-in starter preset when present in workspace."""
++    admin = await make_user("db_override_admin", workspace_role="WORKSPACE_ADMIN")
++    custom_bytes = b"\x00asm\x01\x00\x00\x00\x01\x04\x01`\x00\x00\x03\x02\x01\x00"
++    custom_sha = hashlib.sha256(custom_bytes).digest()
++
++    try:
++        db_mod = ApprovedWasmModule(
++            workspace_id=admin.workspace_id,
++            name="echo_cvss",
++            sha256=custom_sha,
++            wasm_bytes=custom_bytes,
++            approved_by_id=admin.id,
++        )
++        db_session.add(db_mod)
++        await db_session.flush()
++
++        # Resolution by name returns DB row instead of builtin
++        wasm_b, sha_b = await resolve_wasm_module_bytes(
++            db_session, admin.workspace_id, source="wasm:echo_cvss"
++        )
++        assert wasm_b == custom_bytes
++        assert sha_b == custom_sha
++
++        # DB row matching preset sha and comments (line 174)
++        db_preset_mod = ApprovedWasmModule(
++            workspace_id=admin.workspace_id,
++            name="echo_cvss_custom",
++            sha256=ECHO_CVSS_SHA256_BYTES,
++            wasm_bytes=ECHO_CVSS_WASM_BYTES,
++            approved_by_id=admin.id,
++        )
++        db_session.add(db_preset_mod)
++        await db_session.flush()
++
++        b64_preset = base64.b64encode(ECHO_CVSS_WASM_BYTES).decode("ascii")
++        src_commented = f"// echo_cvss\n{b64_preset}"
++        wasm_from_db, sha_from_db = await resolve_wasm_module_bytes(
++            db_session, admin.workspace_id, source=src_commented
++        )
++        assert wasm_from_db == ECHO_CVSS_WASM_BYTES
++        assert sha_from_db == ECHO_CVSS_SHA256_BYTES
++    finally:
++        await db_session.rollback()
++
++
++async def test_resolve_builtin_wasm_error_branches(db_session: AsyncSession) -> None:
++    """Test 6: Invalid hex sha, invalid base64, and missing module raise expected errors."""
++    ws_id = uuid.uuid4()
++
++    # Invalid hex sha
++    with pytest.raises(ProblemException) as exc1:
++        await resolve_wasm_module_bytes(db_session, ws_id, sha256="not_a_hex_string_zzz")
++    assert exc1.value.code == "INVALID_WASM_SHA256"
++
++    # Unknown sha
++    with pytest.raises(ProblemException) as exc2:
++        await resolve_wasm_module_bytes(db_session, ws_id, sha256="11" * 32)
++    assert exc2.value.code == "WASM_MODULE_NOT_FOUND"
++
++    # Unknown name
++    with pytest.raises(ProblemException) as exc3:
++        await resolve_wasm_module_bytes(db_session, ws_id, source="wasm:totally_nonexistent")
++    assert exc3.value.code == "WASM_MODULE_NOT_FOUND"
++
++    # Raw bytecode allowed branch (line 179)
++    arbitrary_bytes = b"\x00asm\x01\x00\x00\x00\x00\x00\x00\x00"
++    arb_b64 = base64.b64encode(arbitrary_bytes).decode("ascii")
++    raw_b, raw_sha = await resolve_wasm_module_bytes(
++        db_session, ws_id, source=arb_b64, allow_raw_bytecode=True
++    )
++    assert raw_b == arbitrary_bytes
++    assert raw_sha == hashlib.sha256(arbitrary_bytes).digest()
++
++    # Invalid base64 bytecode
++    with pytest.raises(ProblemException) as exc4:
++        await resolve_wasm_module_bytes(db_session, ws_id, source="bad_base64_data_!@#$%^")
++    assert exc4.value.code == "WASM_BINARY_INVALID"
++
++    # Empty source and no sha
++    with pytest.raises(ProblemException) as exc5:
++        await resolve_wasm_module_bytes(db_session, ws_id)
++    assert exc5.value.code == "WASM_MODULE_NOT_FOUND"
++
++
++async def test_api_test_execute_preset_cvss_score_fresh_project_200(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++) -> None:
++    """Test 7: POST /test-execute with cvss-score preset on fresh project returns HTTP 200."""
++    admin = await make_user("admin_preset", workspace_role="WORKSPACE_ADMIN")
++    _ = await make_project("PRESET", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++
++    client = _as_admin_aal2(api_env, admin)
++
++    # 1. Create real issue PRESET-1
++    resp_issue = await client.post(
++        "/api/v1/projects/PRESET/issues",
++        json={"summary": "Preset Verification Issue", "description_markdown": "Test Description"},
++    )
++    assert resp_issue.status_code == 201
++    issue_key = resp_issue.json()["key"]
++
++    # 2. Test-execute cvss-score preset with zero DB rows in ApprovedWasmModule
++    resp_test = await client.post(
++        "/api/v1/projects/PRESET/custom-fields/test-execute",
++        json={
++            "issue_key": issue_key,
++            "tier": "wasm",
++            "output_format": "severity_pill",
++            "output_format_metadata": {},
++            "script_source": "// Built-in Starter Preset Module: echo_cvss.wasm\nwasm:echo_cvss",
++        },
++    )
++    assert resp_test.status_code == 200, resp_test.text
++    data = resp_test.json()
++    assert data["status"] == "SUCCESS"
++    assert data["value"] == {"level": "high", "score": 8.8, "label": "8.8 High"}
++    assert "Executed Wasm module" in data["logs"]
++
++
++async def test_resolve_starter_templates_wasm_without_echo_cvss_comment(
++    db_session: AsyncSession,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Test 8: Starter WASM without echo comment resolves via preset SHA and checks DB first."""
++    # 1. Fresh workspace without DB overrides
++    ws_id = uuid.uuid4()
++    raw_starter_source = f"// WebAssembly Tier A Module (Base64)\n{ECHO_CVSS_WASM_BASE64}"
++    wasm_b, sha_b = await resolve_wasm_module_bytes(db_session, ws_id, source=raw_starter_source)
++    assert wasm_b == ECHO_CVSS_WASM_BYTES
++    assert sha_b == ECHO_CVSS_SHA256_BYTES
++
++    # 2. Workspace with ApprovedWasmModule DB override for ECHO_CVSS_SHA256_BYTES
++    admin = await make_user("wasm_override_admin", workspace_role="WORKSPACE_ADMIN")
++    try:
++        override_bytes = b"\x00asm\x01\x00\x00\x00\x01\x04\x01`\x00\x00\x03\x02\x01\x00"
++        db_override = ApprovedWasmModule(
++            workspace_id=admin.workspace_id,
++            name="custom_override_cvss",
++            sha256=ECHO_CVSS_SHA256_BYTES,
++            wasm_bytes=override_bytes,
++            approved_by_id=admin.id,
++        )
++        db_session.add(db_override)
++        await db_session.flush()
++
++        wasm_overridden, sha_overridden = await resolve_wasm_module_bytes(
++            db_session, admin.workspace_id, source=raw_starter_source
++        )
++        assert wasm_overridden == override_bytes
++        assert sha_overridden == ECHO_CVSS_SHA256_BYTES
++
++        # 3. Comment-only // echo_cvss.wasm path also checks DB override
++        comment_source = "// echo_cvss.wasm"
++        wasm_comment_overridden, sha_comment_overridden = await resolve_wasm_module_bytes(
++            db_session, admin.workspace_id, source=comment_source
++        )
++        assert wasm_comment_overridden == override_bytes
++        assert sha_comment_overridden == ECHO_CVSS_SHA256_BYTES
++    finally:
++        await db_session.rollback()
++
++
++async def test_guide_example_3_severity_pill_formula_and_test_execute(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++) -> None:
++    """Test 9: Copy-pasting Example 3 formula passes _validate_severity_pill and test-execute."""
++    guide_formula = (
++        '{"level": "critical", "score": 9.5, "label": "Critical"} if priority == "URGENT" '
++        'else ({"level": "high", "score": 8.0, "label": "High"} if priority == "HIGH" '
++        'else ({"level": "medium", "score": 5.0, "label": "Medium"} if priority == "MEDIUM" '
++        'else {"level": "low", "score": 2.0, "label": "Low"}))'
++    )
++
++    # (a) Verify AST safe evaluation and _validate_severity_pill across priority levels
++    for prio, expected_lvl in [
++        ("URGENT", "critical"),
++        ("HIGH", "high"),
++        ("MEDIUM", "medium"),
++        ("LOW", "low"),
++    ]:
++        evaluated = _eval_safe_formula(guide_formula, {"priority": prio})
++        validated = _validate_severity_pill(SeverityPillFormatMetadata(), evaluated)
++        assert validated["level"] == expected_lvl
++
++    # (b) Verify test-execute returns HTTP 200 OK on fresh project
++    admin = await make_user("admin_guide_ex3", workspace_role="WORKSPACE_ADMIN")
++    _ = await make_project("GUIDE", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = _as_admin_aal2(api_env, admin)
++
++    resp_issue = await client.post(
++        "/api/v1/projects/GUIDE/issues",
++        json={
++            "summary": "Urgent Security Breach",
++            "description_markdown": "Critical vulnerability",
++        },
++    )
++    assert resp_issue.status_code == 201
++    issue_key = resp_issue.json()["key"]
++
++    resp_test = await client.post(
++        "/api/v1/projects/GUIDE/custom-fields/test-execute",
++        json={
++            "issue_key": issue_key,
++            "tier": "wasm",
++            "output_format": "severity_pill",
++            "output_format_metadata": {},
++            "script_source": f"formula: {guide_formula}",
++        },
++    )
++    assert resp_test.status_code == 200, resp_test.text
++    data = resp_test.json()
++    assert data["status"] == "SUCCESS"
++    assert data["value"]["level"] in ("low", "medium", "high", "critical")
 diff --git a/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx b/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
 index a4e88615..8826bd48 100644
 --- a/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
@@ -120,3 +875,321 @@ index a4e88615..8826bd48 100644
                    </span>
                  )}
                  <div className="custom-field-form-hint">
+diff --git a/kanban/web/src/features/custom-fields/CustomFieldValue.tsx b/kanban/web/src/features/custom-fields/CustomFieldValue.tsx
+index 1828fedb..d98fd898 100644
+--- a/kanban/web/src/features/custom-fields/CustomFieldValue.tsx
++++ b/kanban/web/src/features/custom-fields/CustomFieldValue.tsx
+@@ -353,7 +353,13 @@ export function CustomFieldValue({
+       }
+ 
+       const displayScore = score !== undefined ? score.toFixed(1) : null;
+-      const displayLabel = label ?? (level.charAt(0).toUpperCase() + level.slice(1));
++      let displayLabel = label ?? (level.charAt(0).toUpperCase() + level.slice(1));
++      if (displayScore && displayLabel.startsWith(displayScore)) {
++        const trimmed = displayLabel.slice(displayScore.length).trimStart();
++        if (trimmed) {
++          displayLabel = trimmed;
++        }
++      }
+ 
+       return (
+         <span
+diff --git a/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx b/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx
+index b3fe645b..fae18568 100644
+--- a/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx
++++ b/kanban/web/src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx
+@@ -6,7 +6,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { MemoryRouter } from 'react-router';
+-import { CustomFieldDefinitionEditor } from '../CustomFieldDefinitionEditor';
++import {
++  CustomFieldDefinitionEditor,
++  normalizeScriptSource,
++} from '../CustomFieldDefinitionEditor';
+ import * as api from '../api';
+ 
+ vi.mock('../api', async () => {
+@@ -987,14 +990,18 @@ describe('CustomFieldDefinitionEditor', () => {
+     const flavorSelect = screen.getByTestId<HTMLSelectElement>('field-flavor-select');
+     const nsjailFlavorOpt = flavorSelect.querySelector<HTMLOptionElement>('option[value="nsjail"]');
+     expect(nsjailFlavorOpt?.disabled).toBe(true);
+-    expect(screen.getByTestId('flavor-nsjail-disabled-badge')).toBeDefined();
++    const flavorBadge = screen.getByTestId('flavor-nsjail-disabled-badge');
++    expect(flavorBadge).toBeDefined();
++    expect(flavorBadge.textContent).toContain('nsjail option requires Multi-Container Compose');
+ 
+     // 3. Execution tier nsjail option disabled with badge in Advanced tab
+     fireEvent.click(screen.getByTestId('custom-fields-advanced-tab'));
+     const tierSelect = screen.getByTestId<HTMLSelectElement>('execution-tier-select');
+     const nsjailTierOpt = tierSelect.querySelector<HTMLOptionElement>('option[value="nsjail"]');
+     expect(nsjailTierOpt?.disabled).toBe(true);
+-    expect(screen.getByTestId('tier-nsjail-disabled-badge')).toBeDefined();
++    const tierBadge = screen.getByTestId('tier-nsjail-disabled-badge');
++    expect(tierBadge).toBeDefined();
++    expect(tierBadge.textContent).toContain('nsjail option requires Multi-Container Compose');
+ 
+     // 4. Pre-existing nsjail field selection shows warning banner
+     await waitFor(() => {
+@@ -1031,4 +1038,73 @@ describe('CustomFieldDefinitionEditor', () => {
+     // Pre-existing warning banner not present
+     expect(screen.queryByTestId('preexisting-nsjail-warning-banner')).toBeNull();
+   });
++
++  describe('normalizeScriptSource helper', () => {
++    it('normalizes bare formula expressions and preserves already-prefixed scripts', () => {
++      expect(normalizeScriptSource('formula', 'a + b')).toBe('formula: a + b');
++      expect(normalizeScriptSource('formula', 'formula: a + b')).toBe('formula: a + b');
++      expect(normalizeScriptSource('formula', 'return a + b')).toBe('return a + b');
++      expect(normalizeScriptSource('formula', '   ')).toBe('   ');
++      expect(normalizeScriptSource('scalar', '42')).toBe('scalar: 42');
++      expect(normalizeScriptSource('scalar', 'scalar: 42')).toBe('scalar: 42');
++      expect(normalizeScriptSource('wasm', 'AGFzbQE...')).toBe('AGFzbQE...');
++      expect(normalizeScriptSource('nsjail', 'import sys')).toBe('import sys');
++    });
++  });
++
++  it('normalizes bare formula expression on Test Execute and Save (KAN-32)', async () => {
++    vi.mocked(api.fetchProjectCustomFields).mockResolvedValue([]);
++    const testResult: api.CustomFieldTestExecuteResult = {
++      output_format: 'text',
++      value: 'critical',
++      status: 'SUCCESS',
++      latency_ms: 5,
++      logs: 'ok',
++    };
++    vi.mocked(api.testExecuteCustomField).mockResolvedValue(testResult);
++    vi.mocked(api.createCustomField).mockResolvedValue(def0);
++
++    renderEditor(true);
++
++    // Switch flavor to formula
++    fireEvent.change(screen.getByTestId('field-flavor-select'), {
++      target: { value: 'formula' },
++    });
++
++    // Enter bare expression without "formula: " prefix
++    const bareExpr = '{"level": "critical"} if priority == "URGENT" else {"level": "medium"}';
++    fireEvent.change(screen.getByTestId('script-source-textarea'), {
++      target: { value: bareExpr },
++    });
++
++    // Test Execute with bare expression
++    fireEvent.change(screen.getByTestId('test-issue-key-input'), {
++      target: { value: 'KAN-42' },
++    });
++    fireEvent.click(screen.getByTestId('test-execute-btn'));
++
++    await waitFor(() => {
++      expect(api.testExecuteCustomField).toHaveBeenCalledWith(
++        'KAN',
++        expect.objectContaining({
++          issue_key: 'KAN-42',
++          script_source: `formula: ${bareExpr}`,
++        }),
++      );
++    });
++
++    // Save with bare expression
++    fireEvent.change(screen.getByTestId('field-name-input'), { target: { value: 'Formula Field' } });
++    fireEvent.change(screen.getByTestId('field-slug-input'), { target: { value: 'formula-field' } });
++    fireEvent.click(screen.getByTestId('save-definition-btn'));
++
++    await waitFor(() => {
++      expect(api.createCustomField).toHaveBeenCalledWith(
++        'KAN',
++        expect.objectContaining({
++          script_source: `formula: ${bareExpr}`,
++        }),
++      );
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/custom-fields/custom-fields.css b/kanban/web/src/features/custom-fields/custom-fields.css
+index 2aa1f561..3ded063e 100644
+--- a/kanban/web/src/features/custom-fields/custom-fields.css
++++ b/kanban/web/src/features/custom-fields/custom-fields.css
+@@ -170,8 +170,13 @@
+   font-size: 11px;
+ }
+ 
+-.custom-field-text {
++.custom-field-text,
++.custom-field-pill-preview,
++.custom-field-pill-preview-mt {
+   font-size: 12px;
++  overflow-wrap: anywhere;
++  word-break: break-all;
++  max-width: 100%;
+ }
+ 
+ .custom-field-number {
+@@ -198,33 +203,33 @@
+ }
+ 
+ .custom-field-badge--info {
+-  background-color: #eff6ff;
+-  color: #1d4ed8;
+-  border-color: #bfdbfe;
++  background-color: var(--bg-accent-subtle, #eff6ff);
++  color: var(--brand-primary, #1d4ed8);
++  border-color: var(--border-accent-subtle, #bfdbfe);
+ }
+ 
+ .custom-field-badge--success {
+-  background-color: #ecfdf5;
+-  color: #047857;
+-  border-color: #a7f3d0;
++  background-color: var(--bg-success-subtle, #ecfdf5);
++  color: var(--text-success, #047857);
++  border-color: var(--border-success, #a7f3d0);
+ }
+ 
+ .custom-field-badge--warning {
+-  background-color: var(--warn-bg, #fef3c7);
+-  color: var(--warn-fg, #78350f);
+-  border-color: #fde68a;
++  background-color: var(--bg-warning-subtle, var(--warn-bg, #fef3c7));
++  color: var(--text-warning, var(--warn-fg, #78350f));
++  border-color: var(--border-warning, #fde68a);
+ }
+ 
+ .custom-field-badge--danger {
+-  background-color: var(--danger-bg, #ffe4e6);
+-  color: var(--danger-fg, #881337);
+-  border-color: #fecdd3;
++  background-color: var(--bg-danger-subtle, var(--danger-bg, #ffe4e6));
++  color: var(--text-danger, var(--danger-fg, #881337));
++  border-color: var(--border-danger, #fecdd3);
+ }
+ 
+ .custom-field-badge--accent {
+-  background-color: #f5f3ff;
+-  color: #6d28d9;
+-  border-color: #ddd6fe;
++  background-color: var(--state-custom-bg, #f5f3ff);
++  color: var(--state-custom-fg, #6d28d9);
++  border-color: var(--state-custom-border, #ddd6fe);
+ }
+ 
+ /* Markdown snippet */
+@@ -312,15 +317,15 @@
+ }
+ 
+ .custom-field-severity--low {
+-  background-color: #eff6ff;
+-  color: #1d4ed8;
+-  border-color: #bfdbfe;
++  background-color: var(--bg-accent-subtle, #eff6ff);
++  color: var(--brand-primary, #1d4ed8);
++  border-color: var(--border-accent-subtle, #bfdbfe);
+ }
+ 
+ .custom-field-severity--medium {
+-  background-color: var(--warn-bg, #fef3c7);
+-  color: var(--warn-fg, #78350f);
+-  border-color: #fde68a;
++  background-color: var(--bg-warning-subtle, var(--warn-bg, #fef3c7));
++  color: var(--text-warning, var(--warn-fg, #78350f));
++  border-color: var(--border-warning, #fde68a);
+ }
+ 
+ .custom-field-severity--high {
+@@ -329,10 +334,16 @@
+   border-color: #fed7aa;
+ }
+ 
++[data-theme="dark"] .custom-field-severity--high {
++  background-color: rgba(194, 65, 12, 0.25);
++  color: #fdba74;
++  border-color: rgba(249, 115, 22, 0.35);
++}
++
+ .custom-field-severity--critical {
+-  background-color: var(--danger-bg, #ffe4e6);
+-  color: var(--danger-fg, #881337);
+-  border-color: #fecdd3;
++  background-color: var(--bg-danger-subtle, var(--danger-bg, #ffe4e6));
++  color: var(--text-danger, var(--danger-fg, #881337));
++  border-color: var(--border-danger, #fecdd3);
+ }
+ 
+ .custom-field-severity-score {
+@@ -399,8 +410,18 @@
+ }
+ 
+ .custom-fields-def-item--selected {
+-  background-color: #eff6ff;
+-  border-color: #bfdbfe;
++  background-color: var(--bg-surface-selected, #eff6ff);
++  border-color: var(--border-accent-subtle, #bfdbfe);
++}
++
++.custom-fields-def-item--selected .custom-fields-def-item__title {
++  color: var(--fg-primary, #111827);
++  font-weight: 600;
++}
++
++[data-theme="dark"] .custom-fields-def-item--selected {
++  background-color: var(--bg-surface-selected, rgba(37, 99, 235, 0.25));
++  border-color: var(--border-accent-subtle, rgba(96, 165, 250, 0.4));
+ }
+ 
+ .custom-fields-def-item__title {
+@@ -525,7 +546,20 @@
+ }
+ 
+ .custom-field-input,
+-.custom-field-select,
++.custom-field-select {
++  width: 100%;
++  padding: 8px 10px;
++  border: 1px solid var(--border-subtle, #e5e7eb);
++  border-radius: var(--radius-sm, 4px);
++  background-color: var(--bg-surface, #ffffff);
++  color: var(--fg-primary, #111827);
++  font-size: 13px;
++  font-family: inherit;
++  box-sizing: border-box;
++  min-height: 38px;
++  line-height: 1.45;
++}
++
+ .custom-field-textarea {
+   width: 100%;
+   padding: 8px 10px;
+@@ -930,6 +964,8 @@
+   display: flex;
+   flex-direction: column;
+   gap: 10px;
++  min-width: 0;
++  max-width: 100%;
+ }
+ 
+ .custom-field-test-result-header {
+@@ -971,8 +1007,9 @@
+   color: var(--fg-muted, #6b7280);
+ }
+ 
++pre.custom-field-test-logs,
+ .custom-field-logs {
+-  margin: 0;
++  margin: 4px 0 0 0;
+   padding: 8px 10px;
+   background-color: var(--bg-secondary, #f3f4f6);
+   border: 1px solid var(--border-subtle, #e5e7eb);
+@@ -980,10 +1017,13 @@
+   font-size: 11px;
+   line-height: 1.4;
+   color: var(--fg-primary, #111827);
+-  max-height: 120px;
++  max-height: 140px;
+   overflow-y: auto;
+   white-space: pre-wrap;
++  overflow-wrap: anywhere;
+   word-break: break-all;
++  max-width: 100%;
++  box-sizing: border-box;
+ }
+ 
+ .custom-field-error--sandbox {

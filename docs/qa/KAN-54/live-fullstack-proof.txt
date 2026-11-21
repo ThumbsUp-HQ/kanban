@@ -1,15 +1,15 @@
-=== KAN-54 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18964, commit 7913c2c8) ===
-Timestamp: 2026-11-20T22:12:49.166Z
-GET /api/v1/setup/status -> HTTP 200 (6ms) body={"initialized":true}
-Desktop Light (/w/kanban/p/KAN/settings/workflows) loaded in 897ms: {"prefix":"⚙️ ProjectKAN","suffix":"> Scripted Workflows & Transition Helpers","scriptRunnerCount":0,"interceptorCount":0,"scrollWidth":1440,"innerWidth":1440}
-Tablet (768x1024) geometry: {"scrollWidth":768,"innerWidth":768}
-Mobile (390x844) layout & breadcrumb audit: {"scrollWidth":390,"innerWidth":390,"prefixTop":80,"prefixBottom":113,"prefixHeight":33,"prefixChildrenOnSameLine":true,"suffixTop":121,"suffixWrapsBelowPrefix":true,"breadcrumbRight":129,"searchLeft":137,"breadcrumbClearsSearchBtn":true,"breadcrumbOverflow":"hidden","breadcrumbTextOverflow":"clip"}
-AttachHookDialog FieldHelpHint popover z-index check: {"popoverZ":"1220","backdropZ":"1000"}
+=== KAN-54 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18964, commit 78074a1d) ===
+Timestamp: 2026-11-20T23:21:54.964Z
+GET /api/v1/setup/status -> HTTP 200 (6ms) body={"initialized":false}
+Desktop Light (/w/kanban/p/KAN/settings/workflows) loaded in 964ms: {"prefix":"⚙️ ProjectKAN","suffix":"> Scripted Workflows & Transition Helpers","docLinkAriaLabel":"Scripted Workflows & Transition Helpers Documentation","docLinkCleanAmp":true,"scriptRunnerCount":0,"interceptorCount":0,"scrollWidth":1440,"innerWidth":1440}
+Mobile (390x844) layout & .kb-breadcrumb-current audit: {"scrollWidth":390,"innerWidth":390,"prefixChildrenOnSameLine":true,"suffixWrapsBelowPrefix":true,"breadcrumbClearsSearchBtn":true,"breadcrumbOverflow":"hidden","breadcrumbTextOverflow":"ellipsis","breadcrumbWhiteSpace":"nowrap"}
+AttachHookDialog FieldHelpHint popover copy audit: {"hasSyncWasmMutator":true,"hasAsyncWasmPostMutation":false,"zIndex":"1220"}
 
 --- Runtime Error Telemetry ---
 Console errors: 0
 Page errors: 0
 5xx responses: 0
-LIVE_STACK_VERDICT [P1_STUDIO_LABELS_AND_WIKI_IMAGE]: PASS
-LIVE_STACK_VERDICT [P2_MOBILE_BREADCRUMB_ELLIPSIS_AND_TITLE_GROUPING]: PASS
+LIVE_STACK_VERDICT [P1_STUDIO_DOC_LINK_ARIA_LABEL_AND_LABELS]: PASS
+LIVE_STACK_VERDICT [P2_FIELD_HELP_POPOVER_SYNC_WASM_MUTATOR]: PASS
+LIVE_STACK_VERDICT [P3_MOBILE_BREADCRUMB_ELLIPSIS_AND_TITLE_GROUPING]: PASS
 OVERALL LIVE_STACK_VERDICT (KAN-54): PASS

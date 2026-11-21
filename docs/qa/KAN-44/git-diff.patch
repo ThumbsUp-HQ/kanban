@@ -383,7 +383,7 @@ index 9ea240de..9103cf28 100644
            );
          })}
 diff --git a/kanban/web/src/features/drawer/IssueSurface.css b/kanban/web/src/features/drawer/IssueSurface.css
-index cc7c2001..256e237e 100644
+index cc7c2001..f6604172 100644
 --- a/kanban/web/src/features/drawer/IssueSurface.css
 +++ b/kanban/web/src/features/drawer/IssueSurface.css
 @@ -295,9 +295,8 @@
@@ -398,7 +398,7 @@ index cc7c2001..256e237e 100644
    height: 100%;
    background: var(--bg-surface, #1e2025);
    border-left: 1px solid var(--border-subtle, #333842);
-@@ -485,4 +484,437 @@
+@@ -485,4 +484,458 @@
    display: none;
  }
  
@@ -425,6 +425,18 @@ index cc7c2001..256e237e 100644
 +}
 +
 +.surface__quick-props {
++  display: none;
++}
++
++.surface--split [data-testid="split-section-details"] .surface__quick-props {
++  display: flex;
++}
++
++.surface--split [data-testid="split-section-details"] [data-testid="quick-props-state-select"] {
++  display: none;
++}
++
++.surface--split [data-testid="split-section-details"] .quick-props__group:has([data-testid="quick-props-state-select"]) {
 +  display: none;
 +}
 +
@@ -670,6 +682,11 @@ index cc7c2001..256e237e 100644
 +  letter-spacing: 0.05em;
 +}
 +
++.split-assign-to-me-btn {
++  white-space: nowrap;
++  flex-shrink: 0;
++}
++
 +.split-assign-to-me-btn,
 +.split-git-branch-copy {
 +  display: inline-flex;
@@ -789,7 +806,11 @@ index cc7c2001..256e237e 100644
 +    display: none;
 +  }
 +
-+  .surface--split .split-side-col [data-testid="quick-props-state-select"] {
++  .surface--split [data-testid="split-section-details"] [data-testid="quick-props-state-select"] {
++    display: none;
++  }
++
++  .surface--split [data-testid="split-section-details"] .quick-props__group:has([data-testid="quick-props-state-select"]) {
 +    display: none;
 +  }
 +
@@ -837,7 +858,7 @@ index cc7c2001..256e237e 100644
 +
  
 diff --git a/kanban/web/src/features/drawer/IssueSurface.tsx b/kanban/web/src/features/drawer/IssueSurface.tsx
-index 14dc4451..a7b5feb0 100644
+index 14dc4451..ecf01915 100644
 --- a/kanban/web/src/features/drawer/IssueSurface.tsx
 +++ b/kanban/web/src/features/drawer/IssueSurface.tsx
 @@ -1,6 +1,7 @@
@@ -898,7 +919,7 @@ index 14dc4451..a7b5feb0 100644
  }: IssueSurfaceContentProps): JSX.Element {
    const [mountId] = useState(() => safeRandomUUID());
    const [mountSeq] = useState(() => {
-@@ -143,10 +156,22 @@ function IssueSurfaceContent({
+@@ -143,10 +156,27 @@ function IssueSurfaceContent({
    const descFileInputRef = useRef<HTMLInputElement | null>(null);
    const descTextareaRef = useRef<HTMLTextAreaElement | null>(null);
    const [conflictError, setConflictError] = useState<{
@@ -907,22 +928,27 @@ index 14dc4451..a7b5feb0 100644
      message: string;
    } | null>(null);
    const [projectStates, setProjectStates] = useState<StateSummary[]>([]);
-+  const copyTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
++  const copyBranchTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
++  const copyShareTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 +  const [copiedBranch, setCopiedBranch] = useState(false);
 +  const [copiedShare, setCopiedShare] = useState(false);
 +
 +  useEffect(() => {
 +    return () => {
-+      if (copyTimeoutRef.current !== null) {
-+        clearTimeout(copyTimeoutRef.current);
-+        copyTimeoutRef.current = null;
++      if (copyBranchTimeoutRef.current !== null) {
++        clearTimeout(copyBranchTimeoutRef.current);
++        copyBranchTimeoutRef.current = null;
++      }
++      if (copyShareTimeoutRef.current !== null) {
++        clearTimeout(copyShareTimeoutRef.current);
++        copyShareTimeoutRef.current = null;
 +      }
 +    };
 +  }, []);
  
    const openerRef = useRef<HTMLElement | null>(null);
  
-@@ -193,10 +218,9 @@ function IssueSurfaceContent({
+@@ -193,10 +223,9 @@ function IssueSurfaceContent({
  
    const resolvedProjectForAux =
      issue?.project_key ?? projectKey ?? issueKey.split('-')[0] ?? 'KAN';
@@ -934,7 +960,7 @@ index 14dc4451..a7b5feb0 100644
        return;
      }
      let active = true;
-@@ -213,9 +237,10 @@ function IssueSurfaceContent({
+@@ -213,9 +242,10 @@ function IssueSurfaceContent({
      return () => {
        active = false;
      };
@@ -946,7 +972,7 @@ index 14dc4451..a7b5feb0 100644
      void navigate(toPeekPath(location, null));
      const opener =
        getOpenerElement() ??
-@@ -237,7 +262,7 @@ function IssueSurfaceContent({
+@@ -237,7 +267,7 @@ function IssueSurfaceContent({
          main?.focus();
        }
      }
@@ -955,7 +981,7 @@ index 14dc4451..a7b5feb0 100644
  
    const handleToggleFullScreen = useCallback((): void => {
      if (mode === 'drawer') {
-@@ -248,6 +273,105 @@ function IssueSurfaceContent({
+@@ -248,6 +278,105 @@ function IssueSurfaceContent({
      }
    }, [mode, projectKey, issueKey, location, navigate]);
  
@@ -1061,7 +1087,7 @@ index 14dc4451..a7b5feb0 100644
    useEffect(() => {
      const unregister = registerShortcut(
        'mod+shift+f',
-@@ -303,7 +427,19 @@ function IssueSurfaceContent({
+@@ -303,7 +432,19 @@ function IssueSurfaceContent({
        return (
          <>
            <div className={`surface__header ${mode === 'split' ? 'surface__header--split' : ''}`}>
@@ -1082,7 +1108,7 @@ index 14dc4451..a7b5feb0 100644
                <button
                  type="button"
                  className="issue-header__btn"
-@@ -332,6 +468,19 @@ function IssueSurfaceContent({
+@@ -332,6 +473,19 @@ function IssueSurfaceContent({
        return (
          <>
            <div className={`surface__header ${mode === 'split' ? 'surface__header--split' : ''}`}>
@@ -1102,7 +1128,7 @@ index 14dc4451..a7b5feb0 100644
              {mode !== 'split' && (
                <>
                  <button
-@@ -578,6 +727,85 @@ function IssueSurfaceContent({
+@@ -578,6 +732,85 @@ function IssueSurfaceContent({
          }>
        | undefined;
  
@@ -1188,7 +1214,7 @@ index 14dc4451..a7b5feb0 100644
      const proseBody = (
        <>
          {conflictError && (
-@@ -646,6 +874,53 @@ function IssueSurfaceContent({
+@@ -646,6 +879,53 @@ function IssueSurfaceContent({
            </div>
          )}
          <SummaryField issue={currentIssue} descriptionFocusRef={descRef} />
@@ -1242,7 +1268,7 @@ index 14dc4451..a7b5feb0 100644
          {DescriptionSlot ? (
            <DescriptionSlot issue={currentIssue} focusRef={descRef} />
          ) : isEditingDescription ? (
-@@ -826,10 +1101,197 @@ function IssueSurfaceContent({
+@@ -826,10 +1106,197 @@ function IssueSurfaceContent({
        </>
      );
  
@@ -1380,12 +1406,12 @@ index 14dc4451..a7b5feb0 100644
 +      const shareUrl = `${window.location.origin}/projects/${resolvedProjectForAux}/issues/${currentIssue.key}`;
 +      await safeCopyToClipboard(shareUrl);
 +      setCopiedShare(true);
-+      if (copyTimeoutRef.current !== null) {
-+        clearTimeout(copyTimeoutRef.current);
++      if (copyShareTimeoutRef.current !== null) {
++        clearTimeout(copyShareTimeoutRef.current);
 +      }
-+      copyTimeoutRef.current = setTimeout(() => {
++      copyShareTimeoutRef.current = setTimeout(() => {
 +        setCopiedShare(false);
-+        copyTimeoutRef.current = null;
++        copyShareTimeoutRef.current = null;
 +      }, 2000);
 +    };
 +
@@ -1394,12 +1420,12 @@ index 14dc4451..a7b5feb0 100644
 +      const branch = `feat/${currentIssue.key}-${slug}`;
 +      await safeCopyToClipboard(branch);
 +      setCopiedBranch(true);
-+      if (copyTimeoutRef.current !== null) {
-+        clearTimeout(copyTimeoutRef.current);
++      if (copyBranchTimeoutRef.current !== null) {
++        clearTimeout(copyBranchTimeoutRef.current);
 +      }
-+      copyTimeoutRef.current = setTimeout(() => {
++      copyBranchTimeoutRef.current = setTimeout(() => {
 +        setCopiedBranch(false);
-+        copyTimeoutRef.current = null;
++        copyBranchTimeoutRef.current = null;
 +      }, 2000);
 +    };
 +
@@ -1440,7 +1466,7 @@ index 14dc4451..a7b5feb0 100644
              <a
                href={`/projects/${resolvedProjectForAux}/issues/${currentIssue.key}`}
                target="_blank"
-@@ -843,6 +1305,56 @@ function IssueSurfaceContent({
+@@ -843,6 +1310,56 @@ function IssueSurfaceContent({
              </a>
  
              <span className="mono issue-header__key">#{currentIssue.key}</span>
@@ -1497,7 +1523,7 @@ index 14dc4451..a7b5feb0 100644
              <AccessPill issue={currentIssue} />
            </header>
          ) : (
-@@ -851,27 +1363,467 @@ function IssueSurfaceContent({
+@@ -851,27 +1368,467 @@ function IssueSurfaceContent({
              mode={mode}
              onClose={handleClose}
              toggleFullScreen={handleToggleFullScreen}
@@ -1974,7 +2000,7 @@ index 14dc4451..a7b5feb0 100644
        </>
      );
    };
-@@ -968,11 +1920,23 @@ export function IssueSurfaceRoot(props: IssueSurfaceRootProps): JSX.Element {
+@@ -968,11 +1925,23 @@ export function IssueSurfaceRoot(props: IssueSurfaceRootProps): JSX.Element {
  export function IssueSurface(): JSX.Element | null {
    const { mode, issueKey, projectKey } = useIssueSurfaceRoute();
    useRealtimeSubscription(issueKey ? `issue:${issueKey}` : null);
@@ -2113,10 +2139,10 @@ index feb5f69c..3ea04732 100644
    );
  }
 diff --git a/kanban/web/src/features/list/ListView.test.tsx b/kanban/web/src/features/list/ListView.test.tsx
-index a402a296..8127cbaf 100644
+index a402a296..48a34cd7 100644
 --- a/kanban/web/src/features/list/ListView.test.tsx
 +++ b/kanban/web/src/features/list/ListView.test.tsx
-@@ -1,543 +1,209 @@
+@@ -1,543 +1,233 @@
  import { describe, it, expect, vi } from 'vitest';
 -import { render, screen, fireEvent, act, within } from '@testing-library/react';
 +import { render, screen, fireEvent } from '@testing-library/react';
@@ -2128,58 +2154,6 @@ index a402a296..8127cbaf 100644
 -describe('ListView', () => {
 -  it('groups 12 fixture issues into state sections in sort_order with exact counts', () => {
 -    const onToggleSelect = vi.fn();
--
--    const { container } = render(
--      <ListView
--        issues={FIXTURE_12_ISSUES}
--        projectKey="KAN"
--        modulesEnabled={true}
--        onToggleSelect={onToggleSelect}
--      />
--    );
--
--    const toggles = container.querySelectorAll('.list-section-toggle');
--    expect(toggles.length).toBeGreaterThan(0);
--
--    const backlogToggle = Array.from(toggles).find((t) => t.textContent.includes('Backlog'));
--    expect(backlogToggle).toBeDefined();
--    expect(backlogToggle?.textContent).toContain('2');
--
--    const inProgressToggle = Array.from(toggles).find((t) => t.textContent.includes('In Progress'));
--    expect(inProgressToggle).toBeDefined();
--    expect(inProgressToggle?.textContent).toContain('2');
--
--    const doneToggle = Array.from(toggles).find((t) => t.textContent.includes('Done'));
--    expect(doneToggle).toBeDefined();
--    expect(doneToggle?.textContent).toContain('3');
--  });
--
--  it('collapses and expands Backlog section via aria-expanded toggle', () => {
--    const { container } = render(
--      <ListView
--        issues={FIXTURE_12_ISSUES}
--        projectKey="KAN"
--        modulesEnabled={true}
--      />
--    );
--
--    const toggles = container.querySelectorAll('.list-section-toggle');
--    const backlogToggle = Array.from(toggles).find((t) => t.textContent.includes('Backlog')) as HTMLButtonElement;
--    expect(backlogToggle).toBeDefined();
--    expect(backlogToggle.getAttribute('aria-expanded')).toBe('true');
--
--    // Issue KAN-140 is visible
--    expect(screen.getByText('KAN-140')).toBeDefined();
--
--    // Click to collapse
--    fireEvent.click(backlogToggle);
--    expect(backlogToggle.getAttribute('aria-expanded')).toBe('false');
--    expect(screen.queryByText('KAN-140')).toBeNull();
--
--    // Click to expand again
--    fireEvent.click(backlogToggle);
--    expect(backlogToggle.getAttribute('aria-expanded')).toBe('true');
--    expect(screen.getByText('KAN-140')).toBeDefined();
 +describe('ListView (KAN-52 Left Master Rail)', () => {
 +  const mockIssues: IssueItem[] = [
 +    {
@@ -2219,16 +2193,17 @@ index a402a296..8127cbaf 100644
 +    const refreshBtn = screen.getByTestId('issue-rail-refresh-btn');
 +    fireEvent.click(refreshBtn);
 +    expect(onRefresh).toHaveBeenCalled();
-   });
++  });
  
--  it('renders external assignee with literal hint and links KAN-142 to peek', () => {
+-    const { container } = render(
 +  it('renders compact 2-line cards with priority icon, key, state button, favorite star, and summary', () => {
 +    const onOpenPeek = vi.fn();
-     render(
++    render(
        <ListView
 -        issues={FIXTURE_12_ISSUES}
 -        projectKey="KAN"
 -        modulesEnabled={true}
+-        onToggleSelect={onToggleSelect}
 -      />
 +        issues={mockIssues}
 +        activeKey="KAN-101"
@@ -2236,21 +2211,16 @@ index a402a296..8127cbaf 100644
 +      />,
      );
  
--    // Link for KAN-142
--    const link = screen.getByRole('link', { name: 'KAN-142' });
--    expect(link.getAttribute('href')).toBe('?layout=list&peek=KAN-142');
+-    const toggles = container.querySelectorAll('.list-section-toggle');
+-    expect(toggles.length).toBeGreaterThan(0);
 -
--    // Free text assignee Ext: SecAudit
--    expect(screen.getByText('Ext: SecAudit')).toBeDefined();
+-    const backlogToggle = Array.from(toggles).find((t) => t.textContent.includes('Backlog'));
+-    expect(backlogToggle).toBeDefined();
+-    expect(backlogToggle?.textContent).toContain('2');
 -
--    // External assignee emoji trigger
--    const extAssigneeBtn = screen.getByRole('button', { name: 'External free-text assignee' });
--    expect(extAssigneeBtn).toBeDefined();
--
--    // Focus to reveal popup with literal S7.2 8b text
--    act(() => {
--      fireEvent.focus(extAssigneeBtn);
--    });
+-    const inProgressToggle = Array.from(toggles).find((t) => t.textContent.includes('In Progress'));
+-    expect(inProgressToggle).toBeDefined();
+-    expect(inProgressToggle?.textContent).toContain('2');
 +    const card101 = screen.getByTestId('issue-list-card-KAN-101');
 +    expect(card101).toBeDefined();
 +    expect(card101.classList.contains('list-row--active')).toBe(true);
@@ -2269,17 +2239,15 @@ index a402a296..8127cbaf 100644
 +      expect(firstStar.textContent).toBe('⭐');
 +    }
  
--    const popup = document.querySelector('.emoji-hint-popup');
--    expect(popup).toBeDefined();
--    expect(popup?.textContent).toContain(
--      'External free-text label - grants zero access and sends zero notifications'
--    );
+-    const doneToggle = Array.from(toggles).find((t) => t.textContent.includes('Done'));
+-    expect(doneToggle).toBeDefined();
+-    expect(doneToggle?.textContent).toContain('3');
 +    // Click card opens peek
 +    fireEvent.click(card101);
 +    expect(onOpenPeek).toHaveBeenCalledWith('KAN-101');
    });
  
--  it('handles keyboard navigation and Enter peek link trigger', () => {
+-  it('collapses and expands Backlog section via aria-expanded toggle', () => {
 -    const { container } = render(
 -      <ListView
 -        issues={FIXTURE_12_ISSUES}
@@ -2287,23 +2255,115 @@ index a402a296..8127cbaf 100644
 -        modulesEnabled={true}
 -      />
 -    );
+-
+-    const toggles = container.querySelectorAll('.list-section-toggle');
+-    const backlogToggle = Array.from(toggles).find((t) => t.textContent.includes('Backlog')) as HTMLButtonElement;
+-    expect(backlogToggle).toBeDefined();
+-    expect(backlogToggle.getAttribute('aria-expanded')).toBe('true');
 +  it('handles Order by sorting across priority, key, created, and due date', () => {
 +    render(<ListView issues={mockIssues} />);
  
--    const listView = container.querySelector('.list-view');
--    expect(listView).toBeDefined();
+-    // Issue KAN-140 is visible
+-    expect(screen.getByText('KAN-140')).toBeDefined();
 +    const sortSelect = screen.getByTestId('issue-sort-select');
 +    const dirBtn = screen.getByTestId('issue-sort-dir-btn');
+ 
+-    // Click to collapse
+-    fireEvent.click(backlogToggle);
+-    expect(backlogToggle.getAttribute('aria-expanded')).toBe('false');
+-    expect(screen.queryByText('KAN-140')).toBeNull();
++    // Sort by priority desc: urgent (KAN-102) before high (KAN-101)
++    fireEvent.change(sortSelect, { target: { value: 'priority' } });
++    const cardsPriority = screen.getAllByRole('row');
++    expect(cardsPriority[0]?.getAttribute('data-issue-key')).toBe('KAN-102');
+ 
+-    // Click to expand again
+-    fireEvent.click(backlogToggle);
+-    expect(backlogToggle.getAttribute('aria-expanded')).toBe('true');
+-    expect(screen.getByText('KAN-140')).toBeDefined();
+-  });
++    // Toggle dir to asc: high (KAN-101) before urgent (KAN-102)
++    fireEvent.click(dirBtn);
++    const cardsPriorityAsc = screen.getAllByRole('row');
++    expect(cardsPriorityAsc[0]?.getAttribute('data-issue-key')).toBe('KAN-101');
+ 
+-  it('renders external assignee with literal hint and links KAN-142 to peek', () => {
+-    render(
+-      <ListView
+-        issues={FIXTURE_12_ISSUES}
+-        projectKey="KAN"
+-        modulesEnabled={true}
+-      />
+-    );
+-
+-    // Link for KAN-142
+-    const link = screen.getByRole('link', { name: 'KAN-142' });
+-    expect(link.getAttribute('href')).toBe('?layout=list&peek=KAN-142');
++    // Sort by key
++    fireEvent.change(sortSelect, { target: { value: 'key' } });
++    expect(screen.getAllByRole('row')[0]?.getAttribute('data-issue-key')).toBe('KAN-101');
+ 
+-    // Free text assignee Ext: SecAudit
+-    expect(screen.getByText('Ext: SecAudit')).toBeDefined();
++    // Sort by created
++    fireEvent.change(sortSelect, { target: { value: 'created' } });
++    expect(screen.getAllByRole('row')).toBeDefined();
+ 
+-    // External assignee emoji trigger
+-    const extAssigneeBtn = screen.getByRole('button', { name: 'External free-text assignee' });
+-    expect(extAssigneeBtn).toBeDefined();
++    // Sort by due date
++    fireEvent.change(sortSelect, { target: { value: 'due_date' } });
++    expect(screen.getAllByRole('row')).toBeDefined();
+ 
+-    // Focus to reveal popup with literal S7.2 8b text
+-    act(() => {
+-      fireEvent.focus(extAssigneeBtn);
+-    });
++    // Sort by rank
++    fireEvent.change(sortSelect, { target: { value: 'rank' } });
++    expect(screen.getAllByRole('row')).toBeDefined();
+ 
+-    const popup = document.querySelector('.emoji-hint-popup');
+-    expect(popup).toBeDefined();
+-    expect(popup?.textContent).toContain(
+-      'External free-text label - grants zero access and sends zero notifications'
+-    );
++    // Sort by state
++    fireEvent.change(sortSelect, { target: { value: 'state' } });
++    expect(screen.getAllByRole('row')).toBeDefined();
+   });
+ 
+-  it('handles keyboard navigation and Enter peek link trigger', () => {
+-    const { container } = render(
++  it('forwards state button click to onOpenFieldPopover and preserves KAN-44 mobile controls', () => {
++    const onOpenFieldPopover = vi.fn();
++    render(
+       <ListView
+-        issues={FIXTURE_12_ISSUES}
+-        projectKey="KAN"
+-        modulesEnabled={true}
+-      />
++        issues={mockIssues}
++        onOpenFieldPopover={onOpenFieldPopover}
++      />,
+     );
+ 
+-    const listView = container.querySelector('.list-view');
+-    expect(listView).toBeDefined();
++    const stateBtn = screen.getByTestId('list-row-state-btn-KAN-101');
++    fireEvent.click(stateBtn);
++    expect(onOpenFieldPopover).toHaveBeenCalledWith('state', mockIssues[0], expect.any(Object));
++  });
  
 -    if (listView) {
 -      // ArrowDown and ArrowUp roving focus
 -      fireEvent.keyDown(listView, { key: 'ArrowDown' });
 -      fireEvent.keyDown(listView, { key: 'ArrowUp' });
 -    }
-+    // Sort by priority desc: urgent (KAN-102) before high (KAN-101)
-+    fireEvent.change(sortSelect, { target: { value: 'priority' } });
-+    const cardsPriority = screen.getAllByRole('row');
-+    expect(cardsPriority[0]?.getAttribute('data-issue-key')).toBe('KAN-102');
++  it('renders calm empty state when issues array is empty', () => {
++    const onCreateIssue = vi.fn();
++    render(<ListView issues={[]} onCreateIssue={onCreateIssue} />);
  
 -    // Enter on a list row
 -    const row = container.querySelector('.list-row');
@@ -2311,36 +2371,36 @@ index a402a296..8127cbaf 100644
 -    if (row) {
 -      fireEvent.keyDown(row, { key: 'Enter' });
 -    }
--  });
-+    // Toggle dir to asc: high (KAN-101) before urgent (KAN-102)
-+    fireEvent.click(dirBtn);
-+    const cardsPriorityAsc = screen.getAllByRole('row');
-+    expect(cardsPriorityAsc[0]?.getAttribute('data-issue-key')).toBe('KAN-101');
++    expect(screen.getByText('No work items found')).toBeDefined();
++    const createBtn = screen.getByText('+ Create first work item');
++    fireEvent.click(createBtn);
++    expect(onCreateIssue).toHaveBeenCalled();
+   });
  
 -  it('renders Load more button and handles click and loading state', () => {
--    const onLoadMore = vi.fn();
++  it('renders Load more button when nextCursor is present', () => {
+     const onLoadMore = vi.fn();
 -    const { rerender } = render(
--      <ListView
++    render(
+       <ListView
 -        issues={FIXTURE_12_ISSUES}
 -        projectKey="KAN"
 -        modulesEnabled={true}
 -        nextCursor="cur_page_2"
--        onLoadMore={onLoadMore}
--        isLoading={false}
++        issues={mockIssues}
++        nextCursor="cur_123"
+         onLoadMore={onLoadMore}
+         isLoading={false}
 -      />
--    );
-+    // Sort by key
-+    fireEvent.change(sortSelect, { target: { value: 'key' } });
-+    expect(screen.getAllByRole('row')[0]?.getAttribute('data-issue-key')).toBe('KAN-101');
++      />,
+     );
  
 -    const loadMoreBtn = screen.getByRole('button', { name: /Load more/i });
 -    expect(loadMoreBtn).toBeDefined();
--    fireEvent.click(loadMoreBtn);
++    const loadMoreBtn = screen.getByRole('button', { name: 'Load more' });
+     fireEvent.click(loadMoreBtn);
 -    expect(onLoadMore).toHaveBeenCalledTimes(1);
-+    // Sort by created
-+    fireEvent.change(sortSelect, { target: { value: 'created' } });
-+    expect(screen.getAllByRole('row')).toBeDefined();
- 
+-
 -    // Rerender with isLoading true
 -    rerender(
 -      <ListView
@@ -2353,27 +2413,27 @@ index a402a296..8127cbaf 100644
 -      />
 -    );
 -    expect(screen.getByText('Loading...')).toBeDefined();
--  });
-+    // Sort by due date
-+    fireEvent.change(sortSelect, { target: { value: 'due_date' } });
-+    expect(screen.getAllByRole('row')).toBeDefined();
++    expect(onLoadMore).toHaveBeenCalled();
+   });
  
 -  it('unmounts Modules pill completely when modulesEnabled is false', () => {
--    render(
--      <ListView
++  it('handles keyboard Enter on card to open peek', () => {
++    const onOpenPeek = vi.fn();
+     render(
+       <ListView
 -        issues={FIXTURE_12_ISSUES}
 -        projectKey="KAN"
 -        modulesEnabled={false}
 -      />
--    );
-+    // Sort by rank
-+    fireEvent.change(sortSelect, { target: { value: 'rank' } });
-+    expect(screen.getAllByRole('row')).toBeDefined();
++        issues={mockIssues}
++        onOpenPeek={onOpenPeek}
++      />,
+     );
  
 -    expect(screen.queryByText('Modules')).toBeNull();
-+    // Sort by state
-+    fireEvent.change(sortSelect, { target: { value: 'state' } });
-+    expect(screen.getAllByRole('row')).toBeDefined();
++    const card = screen.getByTestId('issue-list-card-KAN-101');
++    fireEvent.keyDown(card, { key: 'Enter' });
++    expect(onOpenPeek).toHaveBeenCalledWith('KAN-101');
    });
  
 -  it('safely renders hostile issue summary, drops invalid label hex, and handles fallback fields', () => {
@@ -2394,8 +2454,8 @@ index a402a296..8127cbaf 100644
 -      priority: { slug: 'low', label: 'Low' },
 -    };
 -
-+  it('forwards state button click to onOpenFieldPopover and preserves KAN-44 mobile controls', () => {
-+    const onOpenFieldPopover = vi.fn();
++  it('opens local QuickFieldPopover when onOpenFieldPopover is omitted', () => {
++    const onStateSelect = vi.fn();
      render(
        <ListView
 -        issues={[hostileIssue, unnamedStateIssue]}
@@ -2403,7 +2463,7 @@ index a402a296..8127cbaf 100644
 -        modulesEnabled={true}
 -      />
 +        issues={mockIssues}
-+        onOpenFieldPopover={onOpenFieldPopover}
++        onStateSelect={onStateSelect}
 +      />,
      );
  
@@ -2418,49 +2478,51 @@ index a402a296..8127cbaf 100644
 -    expect(labelDot?.getAttribute('style') ?? '').toBe('');
 +    const stateBtn = screen.getByTestId('list-row-state-btn-KAN-101');
 +    fireEvent.click(stateBtn);
-+    expect(onOpenFieldPopover).toHaveBeenCalledWith('state', mockIssues[0], expect.any(Object));
++    // Popover is open
++    expect(screen.getByRole('dialog')).toBeDefined();
    });
  
 -  it('renders calm empty state when project has 0 issues', () => {
 -    const onCreate = vi.fn();
 -    render(
--      <ListView
++  it('enforces VIEWER RBAC gating with static StateBadge when TRANSITION/EDIT is absent', () => {
++    // 1. Read-only viewer capabilities
++    const { rerender } = render(
+       <ListView
 -        issues={[]}
 -        projectKey="KAN"
 -        modulesEnabled={true}
 -        onCreateIssue={onCreate}
 -      />
--    );
-+  it('renders calm empty state when issues array is empty', () => {
-+    const onCreateIssue = vi.fn();
-+    render(<ListView issues={[]} onCreateIssue={onCreateIssue} />);
++        issues={mockIssues}
++        capabilities={['VIEW']}
++      />,
+     );
  
-     expect(screen.getByText('No work items found')).toBeDefined();
+-    expect(screen.getByText('No work items found')).toBeDefined();
 -    const createBtn = screen.getByRole('button', { name: /\+ Create first work item/i });
 -    expect(createBtn).toBeDefined();
--
-+    const createBtn = screen.getByText('+ Create first work item');
-     fireEvent.click(createBtn);
--    expect(onCreate).toHaveBeenCalledTimes(1);
-+    expect(onCreateIssue).toHaveBeenCalled();
-   });
++    expect(screen.getByTestId('list-row-state-readonly-KAN-101')).toBeDefined();
++    expect(screen.queryByTestId('list-row-state-btn-KAN-101')).toBeNull();
  
+-    fireEvent.click(createBtn);
+-    expect(onCreate).toHaveBeenCalledTimes(1);
+-  });
+-
 -  it('suppresses overdue indicator for completed or cancelled issues', () => {
-+  it('renders Load more button when nextCursor is present', () => {
-+    const onLoadMore = vi.fn();
-     render(
+-    render(
++    // 2. Interactive with TRANSITION capability
++    rerender(
        <ListView
 -        issues={FIXTURE_12_ISSUES}
 -        projectKey="KAN"
 -        modulesEnabled={true}
 -      />
 +        issues={mockIssues}
-+        nextCursor="cur_123"
-+        onLoadMore={onLoadMore}
-+        isLoading={false}
++        capabilities={['TRANSITION']}
 +      />,
      );
- 
+-
 -    // KAN-148 is Done with past due date 2026-01-01 -> overdue pill must NOT be applied
 -    const kan148Row = screen.getByText('KAN-148').closest('li');
 -    expect(kan148Row).toBeDefined();
@@ -2472,29 +2534,28 @@ index a402a296..8127cbaf 100644
 -    expect(kan150Row).toBeDefined();
 -    const cancelledOverdue = kan150Row?.querySelectorAll('.due-pill--overdue');
 -    expect(cancelledOverdue?.length ?? 0).toBe(0);
-+    const loadMoreBtn = screen.getByRole('button', { name: 'Load more' });
-+    fireEvent.click(loadMoreBtn);
-+    expect(onLoadMore).toHaveBeenCalled();
++    expect(screen.getByTestId('list-row-state-btn-KAN-101')).toBeDefined();
++    expect(screen.queryByTestId('list-row-state-readonly-KAN-101')).toBeNull();
    });
  
 -  it('renders Single Filter Card Dropdown and handles search, state, priority, and + New (KANBA-174)', () => {
 -    const onCreate = vi.fn();
-+  it('handles keyboard Enter on card to open peek', () => {
-     const onOpenPeek = vi.fn();
+-    const onOpenPeek = vi.fn();
 -
++  it('supports controlled sortBy and sortDir props with change callbacks', () => {
++    const onSortByChange = vi.fn();
++    const onSortDirChange = vi.fn();
      render(
        <ListView
 -        issues={FIXTURE_12_ISSUES}
 -        projectKey="KAN"
 -        modulesEnabled={true}
 -        onCreateIssue={onCreate}
-+        issues={mockIssues}
-         onOpenPeek={onOpenPeek}
+-        onOpenPeek={onOpenPeek}
 -        activeKey="KAN-140"
 -      />
-+      />,
-     );
- 
+-    );
+-
 -    // Verify compact topbar rendered
 -    expect(screen.getByTestId('list-compact-topbar')).toBeDefined();
 -
@@ -2551,11 +2612,8 @@ index a402a296..8127cbaf 100644
 -      fireEvent.click(kan142Row);
 -      expect(onOpenPeek).toHaveBeenCalledWith('KAN-142');
 -    }
-+    const card = screen.getByTestId('issue-list-card-KAN-101');
-+    fireEvent.keyDown(card, { key: 'Enter' });
-+    expect(onOpenPeek).toHaveBeenCalledWith('KAN-101');
-   });
- 
+-  });
+-
 -  it('navigates to workflow settings when + Workflow button is clicked', () => {
 -    const assignSpy = vi.fn();
 -    Object.defineProperty(window, 'location', {
@@ -2712,16 +2770,10 @@ index a402a296..8127cbaf 100644
 -      },
 -    ];
 -
-+  it('opens local QuickFieldPopover when onOpenFieldPopover is omitted', () => {
-+    const onStateSelect = vi.fn();
-     render(
+-    render(
 -      <ListView issues={issuesWithCycleAndMod} projectKey="KAN" modulesEnabled={true} />
-+      <ListView
-+        issues={mockIssues}
-+        onStateSelect={onStateSelect}
-+      />,
-     );
- 
+-    );
+-
 -    const filterBtn = screen.getByRole('button', { name: 'Filter & Group' });
 -    fireEvent.click(filterBtn);
 -    const popover = screen.getByRole('dialog', { name: 'Filter and Group options' });
@@ -2738,12 +2790,8 @@ index a402a296..8127cbaf 100644
 -    expect(screen.getByText('Core Engine')).toBeDefined();
 -    expect(screen.getByText('Module mod-fa')).toBeDefined();
 -    expect(screen.getByText('No Module')).toBeDefined();
-+    const stateBtn = screen.getByTestId('list-row-state-btn-KAN-101');
-+    fireEvent.click(stateBtn);
-+    // Popover is open
-+    expect(screen.getByRole('dialog')).toBeDefined();
-   });
- 
+-  });
+-
 -  it('groups by cycle and module with real summaries and fallback labels', () => {
 -    const firstIssue = FIXTURE_12_ISSUES[0];
 -    const secondIssue = FIXTURE_12_ISSUES[1];
@@ -2774,12 +2822,11 @@ index a402a296..8127cbaf 100644
 -
 -    render(
 -      <ListView issues={issuesWithCycleAndMod} projectKey="KAN" modulesEnabled={true} />
-+  it('enforces VIEWER RBAC gating with static StateBadge when TRANSITION/EDIT is absent', () => {
-+    // 1. Read-only viewer capabilities
-+    const { rerender } = render(
-+      <ListView
 +        issues={mockIssues}
-+        capabilities={['VIEW']}
++        sortBy="priority"
++        onSortByChange={onSortByChange}
++        sortDir="asc"
++        onSortDirChange={onSortDirChange}
 +      />,
      );
  
@@ -2787,31 +2834,27 @@ index a402a296..8127cbaf 100644
 -    fireEvent.click(filterBtn);
 -    const popover = screen.getByRole('dialog', { name: 'Filter and Group options' });
 -    const groupSelect = within(popover).getByLabelText(/Group By/i);
--
++    const sortSelect = screen.getByTestId<HTMLSelectElement>('issue-sort-select');
++    expect(sortSelect.value).toBe('priority');
+ 
 -    // Group by Cycle
 -    fireEvent.change(groupSelect, { target: { value: 'cycle' } });
 -    expect(screen.getByText('Sprint Alpha')).toBeDefined();
 -    expect(screen.getByText('Cycle cycle-')).toBeDefined();
-+    expect(screen.getByTestId('list-row-state-readonly-KAN-101')).toBeDefined();
-+    expect(screen.queryByTestId('list-row-state-btn-KAN-101')).toBeNull();
++    fireEvent.change(sortSelect, { target: { value: 'created' } });
++    expect(onSortByChange).toHaveBeenCalledWith('created');
  
 -    // Group by Module
 -    fireEvent.change(groupSelect, { target: { value: 'module' } });
 -    expect(screen.getByText('Core Engine')).toBeDefined();
 -    expect(screen.getByText('Module mod-fa')).toBeDefined();
-+    // 2. Interactive with TRANSITION capability
-+    rerender(
-+      <ListView
-+        issues={mockIssues}
-+        capabilities={['TRANSITION']}
-+      />,
-+    );
-+    expect(screen.getByTestId('list-row-state-btn-KAN-101')).toBeDefined();
-+    expect(screen.queryByTestId('list-row-state-readonly-KAN-101')).toBeNull();
++    const dirBtn = screen.getByTestId('issue-sort-dir-btn');
++    fireEvent.click(dirBtn);
++    expect(onSortDirChange).toHaveBeenCalledWith('desc');
    });
  });
 diff --git a/kanban/web/src/features/list/ListView.tsx b/kanban/web/src/features/list/ListView.tsx
-index 3566be94..b4ce8b8a 100644
+index 3566be94..0d83a2ac 100644
 --- a/kanban/web/src/features/list/ListView.tsx
 +++ b/kanban/web/src/features/list/ListView.tsx
 @@ -1,11 +1,20 @@
@@ -2838,7 +2881,7 @@ index 3566be94..b4ce8b8a 100644
    modulesEnabled?: boolean | undefined;
    selectedIds?: string[] | undefined;
    onToggleSelect?: ((key: string, selected: boolean) => void) | undefined;
-@@ -17,19 +26,38 @@ export interface ListViewProps {
+@@ -17,19 +26,101 @@ export interface ListViewProps {
    onOpenPeek?: ((issueKey: string) => void) | undefined;
    activeKey?: string | null | undefined;
    canManageWorkflows?: boolean | undefined;
@@ -2846,6 +2889,10 @@ index 3566be94..b4ce8b8a 100644
 +  onOpenFieldPopover?: ((field: 'state', issue: IssueItem, rect: DOMRect) => void) | undefined;
 +  onStateSelect?: ((issueKey: string, stateId: string) => void) | undefined;
 +  onRefresh?: (() => void) | undefined;
++  sortBy?: IssueSortOption | undefined;
++  onSortByChange?: ((sortBy: IssueSortOption) => void) | undefined;
++  sortDir?: ('asc' | 'desc') | undefined;
++  onSortDirChange?: ((sortDir: 'asc' | 'desc') => void) | undefined;
  }
  
 -interface GroupSection {
@@ -2874,6 +2921,65 @@ index 3566be94..b4ce8b8a 100644
 +  const parts = key.split('-');
 +  const num = parseInt(parts[1] ?? '0', 10);
 +  return isNaN(num) ? 0 : num;
++}
++
++export function sortIssuesList<T extends IssueItem>(
++  issues: readonly T[],
++  sortBy: IssueSortOption,
++  sortDir: 'asc' | 'desc',
++): T[] {
++  const sorted = [...issues].sort((a, b) => {
++    let cmp = 0;
++    switch (sortBy) {
++      case 'updated': {
++        const aUp = a.updated_at ?? '';
++        const bUp = b.updated_at ?? '';
++        cmp = aUp.localeCompare(bUp);
++        break;
++      }
++      case 'created': {
++        const aCr = a.created_at ?? '';
++        const bCr = b.created_at ?? '';
++        cmp = aCr.localeCompare(bCr);
++        break;
++      }
++      case 'priority': {
++        const wA = PRIORITY_WEIGHTS[a.priority.slug.toLowerCase()] ?? 0;
++        const wB = PRIORITY_WEIGHTS[b.priority.slug.toLowerCase()] ?? 0;
++        cmp = wA - wB;
++        break;
++      }
++      case 'state': {
++        const orderA = a.state.sort_order ?? 999;
++        const orderB = b.state.sort_order ?? 999;
++        cmp = orderA - orderB;
++        if (cmp === 0) {
++          cmp = a.state.name.localeCompare(b.state.name);
++        }
++        break;
++      }
++      case 'key': {
++        cmp = parseIssueNumber(a.key) - parseIssueNumber(b.key);
++        break;
++      }
++      case 'due_date': {
++        const dA = a.due_date ?? '';
++        const dB = b.due_date ?? '';
++        cmp = dA.localeCompare(dB);
++        break;
++      }
++      case 'rank': {
++        const rA = a.board_rank ?? '';
++        const rB = b.board_rank ?? '';
++        cmp = rA.localeCompare(rB);
++        break;
++      }
++      default:
++        cmp = 0;
++    }
++    return sortDir === 'asc' ? cmp : -cmp;
++  });
++  return sorted;
  }
  
  export function ListView({
@@ -2884,7 +2990,7 @@ index 3566be94..b4ce8b8a 100644
    selectedIds = [],
    onToggleSelect,
    onCreateIssue,
-@@ -37,247 +65,128 @@ export function ListView({
+@@ -37,247 +128,95 @@ export function ListView({
    onLoadMore,
    isLoading = false,
    focusedKey,
@@ -2895,6 +3001,10 @@ index 3566be94..b4ce8b8a 100644
 +  onOpenFieldPopover,
 +  onStateSelect,
 +  onRefresh,
++  sortBy: sortByProp,
++  onSortByChange,
++  sortDir: sortDirProp,
++  onSortDirChange,
  }: ListViewProps): JSX.Element {
 -  // Collapsed state map: key is section name/id, value is boolean (true if collapsed)
 -  const [collapsedSections, setCollapsedSections] = useState<Record<string, boolean>>({});
@@ -2908,25 +3018,9 @@ index 3566be94..b4ce8b8a 100644
 -  const [groupByOption, setGroupByOption] = useState<'state' | 'priority' | 'cycle' | 'module' | 'none'>('state');
 -
 -  const filterCardRef = useRef<HTMLDivElement>(null);
-+  const [sortBy, setSortBy] = useState<IssueSortOption>('updated');
-+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
-+
-+  // Favorites tracking (persisted in localStorage)
-+  const [favoriteKeys, setFavoriteKeys] = useState<Set<string>>(() => {
-+    try {
-+      const stored = localStorage.getItem('kb_favorite_issues');
-+      if (stored) {
-+        const parsed: unknown = JSON.parse(stored);
-+        return new Set(Array.isArray(parsed) ? (parsed as unknown[]).filter((x): x is string => typeof x === 'string') : []);
-+      }
-+    } catch {
-+      // ignore localStorage errors in hermetic tests
-+    }
-+    return new Set<string>();
-+  });
- 
+-
 -  // Close filter popover on outside click or Escape
-   useEffect(() => {
+-  useEffect(() => {
 -    if (!filterCardOpen) return;
 -    const handleOutsideClick = (e: MouseEvent): void => {
 -      if (
@@ -2939,29 +3033,16 @@ index 3566be94..b4ce8b8a 100644
 -    const handleKeyDown = (e: KeyboardEvent): void => {
 -      if (e.key === 'Escape') {
 -        setFilterCardOpen(false);
-+    if (typeof window === 'undefined') return;
-+    const handleFavChange = (): void => {
-+      try {
-+        const stored = localStorage.getItem('kb_favorite_issues');
-+        if (stored) {
-+          const parsed: unknown = JSON.parse(stored);
-+          setFavoriteKeys(new Set(Array.isArray(parsed) ? (parsed as unknown[]).filter((x): x is string => typeof x === 'string') : []));
-+        }
-+      } catch {
-+        // ignore
-       }
-     };
+-      }
+-    };
 -    document.addEventListener('mousedown', handleOutsideClick);
 -    window.addEventListener('keydown', handleKeyDown);
-+    window.addEventListener('kb:favorites-changed', handleFavChange);
-     return () => {
+-    return () => {
 -      document.removeEventListener('mousedown', handleOutsideClick);
 -      window.removeEventListener('keydown', handleKeyDown);
-+      window.removeEventListener('kb:favorites-changed', handleFavChange);
-     };
+-    };
 -  }, [filterCardOpen]);
-+  }, []);
- 
+-
 -  // Filter issues based on single-card filter controls
 -  const filteredIssues = useMemo(() => {
 -    return issues.filter((issue) => {
@@ -2980,31 +3061,21 @@ index 3566be94..b4ce8b8a 100644
 -        if (group !== selectedState && name !== selectedState && !name.includes(selectedState)) {
 -          return false;
 -        }
-+  const toggleFavorite = useCallback((key: string) => {
-+    setFavoriteKeys((prev) => {
-+      const next = new Set(prev);
-+      if (next.has(key)) {
-+        next.delete(key);
-+      } else {
-+        next.add(key);
-       }
+-      }
 -
 -      // 3. Priority Filter
 -      if (selectedPriority !== 'all') {
 -        const slug = issue.priority.slug.toLowerCase();
 -        if (slug !== selectedPriority) return false;
-+      try {
-+        localStorage.setItem('kb_favorite_issues', JSON.stringify(Array.from(next)));
-+        window.dispatchEvent(new CustomEvent('kb:favorites-changed'));
-+      } catch {
-+        // ignore
-       }
--
+-      }
++  const [internalSortBy, setInternalSortBy] = useState<IssueSortOption>('updated');
++  const [internalSortDir, setInternalSortDir] = useState<'asc' | 'desc'>('desc');
+ 
 -      return true;
-+      return next;
-     });
+-    });
 -  }, [issues, searchQuery, selectedState, selectedPriority]);
-+  }, []);
++  const sortBy = sortByProp ?? internalSortBy;
++  const sortDir = sortDirProp ?? internalSortDir;
  
 -  // Default workflow state sections order
 -  const defaultStates: { name: string; sortOrder: number }[] = useMemo(
@@ -3018,9 +3089,10 @@ index 3566be94..b4ce8b8a 100644
 -    ],
 -    []
 -  );
-+  // QuickFieldPopover local fallback state
-+  const [localPopoverIssue, setLocalPopoverIssue] = useState<IssueItem | null>(null);
-+  const [localAnchor, setLocalAnchor] = useState<DOMRect | null>(null);
++  const handleSortByChange = (val: IssueSortOption): void => {
++    setInternalSortBy(val);
++    onSortByChange?.(val);
++  };
  
 -  // Group issues by state, priority, or none
 -  const sections = useMemo(() => {
@@ -3057,7 +3129,11 @@ index 3566be94..b4ce8b8a 100644
 -      }
 -      return Array.from(prioMap.values()).filter((s) => s.items.length > 0);
 -    }
-+  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
++  const handleSortDirToggle = (): void => {
++    const next = sortDir === 'asc' ? 'desc' : 'asc';
++    setInternalSortDir(next);
++    onSortDirChange?.(next);
++  };
  
 -    if (groupByOption === 'cycle') {
 -      const cycleMap = new Map<string, GroupSection>();
@@ -3074,21 +3150,22 @@ index 3566be94..b4ce8b8a 100644
 -            sortOrder: cId === 'no-cycle' ? 9999 : 10,
 -            items: [issue],
 -          });
-+  // Sort issues according to sortBy and sortDir
-+  const sortedIssues = useMemo(() => {
-+    const sorted = [...issues].sort((a, b) => {
-+      let cmp = 0;
-+      switch (sortBy) {
-+        case 'updated': {
-+          const aUp = a.updated_at ?? '';
-+          const bUp = b.updated_at ?? '';
-+          cmp = aUp.localeCompare(bUp);
-+          break;
-         }
--      }
+-        }
++  // Favorites tracking (persisted in localStorage)
++  const [favoriteKeys, setFavoriteKeys] = useState<Set<string>>(() => {
++    try {
++      const stored = localStorage.getItem('kb_favorite_issues');
++      if (stored) {
++        const parsed: unknown = JSON.parse(stored);
++        return new Set(Array.isArray(parsed) ? (parsed as unknown[]).filter((x): x is string => typeof x === 'string') : []);
+       }
 -      return Array.from(cycleMap.values()).sort((a, b) => a.sortOrder - b.sortOrder);
--    }
--
++    } catch {
++      // ignore localStorage errors in hermetic tests
+     }
++    return new Set<string>();
++  });
+ 
 -    if (groupByOption === 'module') {
 -      const modMap = new Map<string, GroupSection>();
 -      for (const issue of filteredIssues) {
@@ -3109,45 +3186,18 @@ index 3566be94..b4ce8b8a 100644
 -              sortOrder: m.id === 'no-module' ? 9999 : 10,
 -              items: [issue],
 -            });
-+        case 'created': {
-+          const aCr = a.created_at ?? '';
-+          const bCr = b.created_at ?? '';
-+          cmp = aCr.localeCompare(bCr);
-+          break;
-+        }
-+        case 'priority': {
-+          const wA = PRIORITY_WEIGHTS[a.priority.slug.toLowerCase()] ?? 0;
-+          const wB = PRIORITY_WEIGHTS[b.priority.slug.toLowerCase()] ?? 0;
-+          cmp = wA - wB;
-+          break;
-+        }
-+        case 'state': {
-+          const orderA = a.state.sort_order ?? 999;
-+          const orderB = b.state.sort_order ?? 999;
-+          cmp = orderA - orderB;
-+          if (cmp === 0) {
-+            cmp = a.state.name.localeCompare(b.state.name);
-           }
-+          break;
+-          }
++  useEffect(() => {
++    if (typeof window === 'undefined') return;
++    const handleFavChange = (): void => {
++      try {
++        const stored = localStorage.getItem('kb_favorite_issues');
++        if (stored) {
++          const parsed: unknown = JSON.parse(stored);
++          setFavoriteKeys(new Set(Array.isArray(parsed) ? (parsed as unknown[]).filter((x): x is string => typeof x === 'string') : []));
          }
-+        case 'key': {
-+          cmp = parseIssueNumber(a.key) - parseIssueNumber(b.key);
-+          break;
-+        }
-+        case 'due_date': {
-+          const dA = a.due_date ?? '';
-+          const dB = b.due_date ?? '';
-+          cmp = dA.localeCompare(dB);
-+          break;
-+        }
-+        case 'rank': {
-+          const rA = a.board_rank ?? '';
-+          const rB = b.board_rank ?? '';
-+          cmp = rA.localeCompare(rB);
-+          break;
-+        }
-+        default:
-+          cmp = 0;
++      } catch {
++        // ignore
        }
 -      return Array.from(modMap.values()).sort((a, b) => a.sortOrder - b.sortOrder);
 -    }
@@ -3175,21 +3225,33 @@ index 3566be94..b4ce8b8a 100644
 -        items: [],
 -      });
 -    }
--
++    };
++    window.addEventListener('kb:favorites-changed', handleFavChange);
++    return () => {
++      window.removeEventListener('kb:favorites-changed', handleFavChange);
++    };
++  }, []);
+ 
 -    // Populate issues
 -    for (const issue of filteredIssues) {
 -      const stateName = issue.state.name;
 -      const existing = sectionMap.get(stateName);
 -      if (existing) {
 -        existing.items.push(issue);
--      } else {
++  const toggleFavorite = useCallback((key: string) => {
++    setFavoriteKeys((prev) => {
++      const next = new Set(prev);
++      if (next.has(key)) {
++        next.delete(key);
+       } else {
 -        sectionMap.set(stateName, {
 -          id: stateName.toLowerCase().replace(/\s+/g, '-'),
 -          name: stateName,
 -          sortOrder: issue.state.sort_order ?? 999,
 -          items: [issue],
 -        });
--      }
++        next.add(key);
+       }
 -    }
 -
 -    // Convert to sorted array
@@ -3197,16 +3259,28 @@ index 3566be94..b4ce8b8a 100644
 -      (a, b) => a.sortOrder - b.sortOrder
 -    );
 -  }, [filteredIssues, defaultStates, groupByOption]);
--
++      try {
++        localStorage.setItem('kb_favorite_issues', JSON.stringify(Array.from(next)));
++        window.dispatchEvent(new CustomEvent('kb:favorites-changed'));
++      } catch {
++        // ignore
++      }
++      return next;
++    });
++  }, []);
+ 
 -  const toggleSection = (sectionName: string) => {
 -    setCollapsedSections((prev) => ({
 -      ...prev,
 -      [sectionName]: !prev[sectionName],
 -    }));
 -  };
--
--  const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
--
++  // QuickFieldPopover local fallback state
++  const [localPopoverIssue, setLocalPopoverIssue] = useState<IssueItem | null>(null);
++  const [localAnchor, setLocalAnchor] = useState<DOMRect | null>(null);
+ 
+   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+ 
 -  // Flattened visible items for keyboard navigation
 -  const visibleIssues = useMemo(() => {
 -    const list: IssueItem[] = [];
@@ -3227,14 +3301,14 @@ index 3566be94..b4ce8b8a 100644
 -      setFocusedIndex((prev) => Math.max(prev - 1, 0));
 -    }
 -  };
-+      return sortDir === 'asc' ? cmp : -cmp;
-+    });
-+    return sorted;
++  // Sort issues according to sortBy and sortDir
++  const sortedIssues = useMemo(() => {
++    return sortIssuesList(issues, sortBy, sortDir);
 +  }, [issues, sortBy, sortDir]);
  
    if (issues.length === 0) {
      return (
-@@ -298,226 +207,218 @@ export function ListView({
+@@ -298,226 +237,216 @@ export function ListView({
    }
  
    return (
@@ -3263,7 +3337,7 @@ index 3566be94..b4ce8b8a 100644
 +            aria-label="Order by"
 +            value={sortBy}
 +            onChange={(e) => {
-+              setSortBy(e.target.value as IssueSortOption);
++              handleSortByChange(e.target.value as IssueSortOption);
 +            }}
            >
 -            <span>🔍 Filter & Group</span>
@@ -3389,9 +3463,7 @@ index 3566be94..b4ce8b8a 100644
 +          className="issue-sort-dir-btn"
 +          data-testid="issue-sort-dir-btn"
 +          aria-label={`Sort direction: ${sortDir === 'asc' ? 'ascending' : 'descending'}`}
-+          onClick={() => {
-+            setSortDir((prev) => (prev === 'asc' ? 'desc' : 'asc'));
-+          }}
++          onClick={handleSortDirToggle}
 +        >
 +          {sortDir === 'asc' ? '↑' : '↓'}
 +        </button>
@@ -3649,7 +3721,7 @@ index 3566be94..b4ce8b8a 100644
  
        {nextCursor && (
          <div className="view-load-more">
-@@ -531,6 +432,25 @@ export function ListView({
+@@ -531,6 +460,25 @@ export function ListView({
            </button>
          </div>
        )}
@@ -3676,10 +3748,44 @@ index 3566be94..b4ce8b8a 100644
    );
  }
 diff --git a/kanban/web/src/features/table/TableView.css b/kanban/web/src/features/table/TableView.css
-index f17434a8..d845dc53 100644
+index f17434a8..be8f3b38 100644
 --- a/kanban/web/src/features/table/TableView.css
 +++ b/kanban/web/src/features/table/TableView.css
-@@ -166,3 +166,25 @@
+@@ -122,12 +122,17 @@
+     white-space: nowrap;
+   }
+ 
++  .table-scroll-wrap {
++    overflow-x: auto;
++    -webkit-overflow-scrolling: touch;
++  }
++
+   /* State pill column */
+   .table-col-header--state,
+   .table-state-cell {
+-    width: 78px;
+-    min-width: 74px;
+-    max-width: 82px;
++    width: 124px;
++    min-width: 124px;
++    max-width: 150px;
+     padding: 0 var(--space-1, 4px);
+   }
+ 
+@@ -144,9 +149,9 @@
+   /* Priority column */
+   .table-col-header--priority,
+   .table-priority-cell-wrap {
+-    width: 70px;
+-    min-width: 66px;
+-    max-width: 76px;
++    width: 96px;
++    min-width: 96px;
++    max-width: 110px;
+     padding: 0 var(--space-1, 4px);
+   }
+ 
+@@ -166,3 +171,25 @@
      max-width: 100%;
    }
  }
@@ -4556,10 +4662,16 @@ index ecea2ce4..2d0cfd62 100644
 +  width: 100%;
 +}
 diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
-index 97a810a9..480d3478 100644
+index 97a810a9..bdbed1a3 100644
 --- a/kanban/web/src/features/views/viewRegistry.tsx
 +++ b/kanban/web/src/features/views/viewRegistry.tsx
-@@ -8,6 +8,8 @@ import { TableView } from '../table/TableView';
+@@ -3,11 +3,13 @@ import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-quer
+ import { qk } from '../../api/queryKeys';
+ import { BoardView, type BoardViewProps } from '../board/BoardView.tsx';
+ import type { BoardIssue, BoardWorkflowState, StateGroup } from '../board/boardApi.ts';
+-import { ListView } from './ListView';
++import { ListView, type IssueSortOption, sortIssuesList } from './ListView';
+ import { TableView } from '../table/TableView';
  import { CalendarView } from '../calendar/CalendarView';
  import { TimelineView } from '../timeline/TimelineView';
  import { FilterDisplayBar, type ActiveFilters } from './FilterDisplayBar';
@@ -4675,11 +4787,23 @@ index 97a810a9..480d3478 100644
        window.history.pushState({}, '', url.toString());
        window.dispatchEvent(new PopStateEvent('popstate'));
      },
-@@ -350,6 +383,50 @@ export function IssuesWorkspaceRoute({
+@@ -350,6 +383,62 @@ export function IssuesWorkspaceRoute({
      return filters;
    });
  
 +  const [favoritesOnly, setFavoritesOnly] = useState(false);
++  const [favVersion, setFavVersion] = useState(0);
++
++  useEffect(() => {
++    if (typeof window === 'undefined') return;
++    const handleFavChange = (): void => {
++      setFavVersion((v) => v + 1);
++    };
++    window.addEventListener('kb:favorites-changed', handleFavChange);
++    return () => {
++      window.removeEventListener('kb:favorites-changed', handleFavChange);
++    };
++  }, []);
 +  const [searchQuery, setSearchQuery] = useState('');
 +  const [queryMode, setQueryMode] = useState<'basic' | 'query'>('basic');
 +  const [savedViews, setSavedViews] = useState<SavedView[]>([]);
@@ -4726,12 +4850,13 @@ index 97a810a9..480d3478 100644
    const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
    const [isSaveViewModalOpen, setIsSaveViewModalOpen] = useState(false);
    const [isFilterOpen, setIsFilterOpen] = useState(false);
-@@ -482,9 +559,35 @@ export function IssuesWorkspaceRoute({
+@@ -482,9 +571,36 @@ export function IssuesWorkspaceRoute({
          if (activeFilters.due_date.includes('no_due_date') && issue.due_date) return false;
        }
  
 +      // 9. Favorites-only filter
 +      if (favoritesOnly) {
++        if (favVersion < 0) return false;
 +        try {
 +          const raw = typeof window !== 'undefined' ? localStorage.getItem('kb_favorite_issues') : null;
 +          const parsed: unknown = raw ? JSON.parse(raw) : [];
@@ -4759,11 +4884,11 @@ index 97a810a9..480d3478 100644
        return true;
      });
 -  }, [issues, activeFilters, modulesEnabled, projectStates]);
-+  }, [issues, activeFilters, modulesEnabled, projectStates, favoritesOnly, searchQuery, queryMode, projectKey]);
++  }, [issues, activeFilters, modulesEnabled, projectStates, favoritesOnly, searchQuery, queryMode, projectKey, favVersion]);
  
    // Normalize board workflow states and issues so "Todo" and "To Do" match seamlessly (KANBA-164)
    const boardStates: BoardWorkflowState[] = useMemo(() => {
-@@ -505,6 +608,7 @@ export function IssuesWorkspaceRoute({
+@@ -505,6 +621,7 @@ export function IssuesWorkspaceRoute({
              ? s.group
              : 'unstarted') as BoardWorkflowState['group'],
            sort_order: s.sort_order ?? idx + 1,
@@ -4771,7 +4896,7 @@ index 97a810a9..480d3478 100644
            ...(wipHard != null ? { wip_hard_limit: wipHard } : {}),
            ...(wipSoft != null ? { wip_soft_limit: wipSoft } : {}),
          };
-@@ -527,6 +631,7 @@ export function IssuesWorkspaceRoute({
+@@ -527,6 +644,7 @@ export function IssuesWorkspaceRoute({
      selectedIds,
      setSelectedIds,
      modulesEnabled,
@@ -4779,7 +4904,7 @@ index 97a810a9..480d3478 100644
      onOpenCreateModal: canEdit ? () => { setIsCreateModalOpen(true); } : undefined,
      onOpenFilter: () => { setIsFilterOpen(true); },
      onOpenFieldPopover: (field, issue, rect) => {
-@@ -620,10 +725,11 @@ export function IssuesWorkspaceRoute({
+@@ -620,10 +738,11 @@ export function IssuesWorkspaceRoute({
      return item;
    };
  
@@ -4794,7 +4919,7 @@ index 97a810a9..480d3478 100644
      let overrideReason: string | undefined;
  
      if (field === 'state') {
-@@ -683,6 +789,10 @@ export function IssuesWorkspaceRoute({
+@@ -683,6 +802,10 @@ export function IssuesWorkspaceRoute({
        }
      }
  
@@ -4805,7 +4930,7 @@ index 97a810a9..480d3478 100644
      setIssues((prev) =>
        prev.map((i) => {
          if (i.key !== targetKey) return i;
-@@ -708,7 +818,7 @@ export function IssuesWorkspaceRoute({
+@@ -708,7 +831,7 @@ export function IssuesWorkspaceRoute({
          }
          if (field === 'state') {
            const sId = String(value);
@@ -4814,7 +4939,7 @@ index 97a810a9..480d3478 100644
            return {
              ...i,
              state: nextState,
-@@ -720,10 +830,20 @@ export function IssuesWorkspaceRoute({
+@@ -720,10 +843,20 @@ export function IssuesWorkspaceRoute({
  
      if (isLiveMode) {
        if (field === 'priority') {
@@ -4837,7 +4962,7 @@ index 97a810a9..480d3478 100644
          const resolvedUuid = resolveStateUuid(desired, projectStates);
          if (resolvedUuid) {
            const patchPayload: Record<string, unknown> = { state_id: resolvedUuid };
-@@ -731,7 +851,17 @@ export function IssuesWorkspaceRoute({
+@@ -731,7 +864,17 @@ export function IssuesWorkspaceRoute({
              patchPayload.override_wip = true;
              patchPayload.wip_override_reason = overrideReason;
            }
@@ -4856,31 +4981,67 @@ index 97a810a9..480d3478 100644
          }
        }
      }
-@@ -815,13 +945,21 @@ export function IssuesWorkspaceRoute({
+@@ -815,13 +958,55 @@ export function IssuesWorkspaceRoute({
    // 2D Swimlane condition: layout === 'board' and custom grouping or sub-grouping
    const is2DSwimlane = layout === 'board' && (subGroupBy !== 'none' || groupBy !== 'state');
  
 -  // Active peek key for 3-pane split list view (auto-selecting first issue if none specified)
 +  const isMobileViewport = typeof window !== 'undefined' && window.innerWidth <= 768;
 +
++  const [railSortBy, setRailSortBy] = useState<IssueSortOption>('updated');
++  const [railSortDir, setRailSortDir] = useState<'asc' | 'desc'>('desc');
++
++  const sortedRailIssues = useMemo(() => {
++    return sortIssuesList(filteredIssues, railSortBy, railSortDir);
++  }, [filteredIssues, railSortBy, railSortDir]);
++
 +  // Active peek key for 3-pane split list view (auto-selecting first issue if none specified, unless mobile <= 768px)
    const activePeekKey = useMemo(() => {
++    if (sortedRailIssues.length === 0) {
++      return peekParam ?? null;
++    }
      if (peekParam) {
-       return peekParam;
-     }
+-      return peekParam;
++      const existsInList = sortedRailIssues.some((i) => i.key === peekParam);
++      if (existsInList) {
++        return peekParam;
++      }
++      if (isMobileViewport) {
++        return null;
++      }
++      return sortedRailIssues[0]?.key ?? null;
++    }
 +    if (isMobileViewport) {
 +      return null;
-+    }
-+    if (closedSplitKey && closedSplitKey === filteredIssues[0]?.key) {
+     }
+-    return filteredIssues[0]?.key ?? null;
+-  }, [peekParam, filteredIssues]);
++    if (closedSplitKey && closedSplitKey === sortedRailIssues[0]?.key) {
 +      return null;
 +    }
-     return filteredIssues[0]?.key ?? null;
--  }, [peekParam, filteredIssues]);
-+  }, [peekParam, isMobileViewport, closedSplitKey, filteredIssues]);
++    return sortedRailIssues[0]?.key ?? null;
++  }, [peekParam, isMobileViewport, closedSplitKey, sortedRailIssues]);
++
++  useEffect(() => {
++    if (
++      layout === 'list' &&
++      !isMobileViewport &&
++      peekParam &&
++      sortedRailIssues.length > 0 &&
++      !sortedRailIssues.some((i) => i.key === peekParam)
++    ) {
++      const firstIssueKey = sortedRailIssues[0]?.key;
++      if (firstIssueKey) {
++        queueMicrotask(() => {
++          handleOpenPeek(firstIssueKey);
++        });
++      }
++    }
++  }, [layout, isMobileViewport, peekParam, sortedRailIssues, handleOpenPeek]);
  
    return (
      <QueryClientProvider client={queryClient}>
-@@ -831,20 +969,42 @@ export function IssuesWorkspaceRoute({
+@@ -831,20 +1016,42 @@ export function IssuesWorkspaceRoute({
          data-layout={layout}
        >
          {/* 1. Filter and Display Bar */}
@@ -4937,7 +5098,7 @@ index 97a810a9..480d3478 100644
  
        {/* 2. Main View: 2D Swimlane Board Grid, 3-pane split list view, or standard ViewHost */}
        {is2DSwimlane ? (
-@@ -854,10 +1014,20 @@ export function IssuesWorkspaceRoute({
+@@ -854,10 +1061,20 @@ export function IssuesWorkspaceRoute({
            groupBy={groupBy}
            subGroupBy={subGroupBy}
            modulesEnabled={modulesEnabled}
@@ -4958,9 +5119,12 @@ index 97a810a9..480d3478 100644
          />
        ) : layout === 'board' ? (
          <BoardView
-@@ -874,14 +1044,24 @@ export function IssuesWorkspaceRoute({
+@@ -872,16 +1089,30 @@ export function IssuesWorkspaceRoute({
+         <div className="kb-split-layout" data-testid="split-list-layout">
+           <div className="kb-split-list-pane">
              <ListView
-               issues={filteredIssues}
+-              issues={filteredIssues}
++              issues={sortedRailIssues}
                projectKey={projectKey}
 +              projectStates={projectStates}
                modulesEnabled={modulesEnabled}
@@ -4972,6 +5136,10 @@ index 97a810a9..480d3478 100644
                onOpenPeek={handleOpenPeek}
                activeKey={activePeekKey}
                canManageWorkflows={canAdmin}
++              sortBy={railSortBy}
++              onSortByChange={setRailSortBy}
++              sortDir={railSortDir}
++              onSortDirChange={setRailSortDir}
 +              onOpenFieldPopover={(field, issue, rect) => {
 +                setPopoverState({
 +                  isOpen: true,
@@ -4983,11 +5151,11 @@ index 97a810a9..480d3478 100644
              />
            </div>
            {activePeekKey && (
-@@ -889,6 +1069,15 @@ export function IssuesWorkspaceRoute({
+@@ -889,6 +1120,15 @@ export function IssuesWorkspaceRoute({
                mode="split"
                issueKey={activePeekKey}
                projectKey={projectKey}
-+              issuesList={filteredIssues}
++              issuesList={sortedRailIssues}
 +              onNavigateIssue={(key: string) => {
 +                handleOpenPeek(key);
 +              }}
@@ -4999,7 +5167,7 @@ index 97a810a9..480d3478 100644
              />
            )}
          </div>
-@@ -897,6 +1086,7 @@ export function IssuesWorkspaceRoute({
+@@ -897,6 +1137,7 @@ export function IssuesWorkspaceRoute({
            layout={layout}
            issues={filteredIssues}
            projectKey={projectKey}
@@ -5007,7 +5175,7 @@ index 97a810a9..480d3478 100644
            modulesEnabled={modulesEnabled}
            selectedIds={selectedIds}
            onToggleSelect={canEdit ? handleToggleSelect : undefined}
-@@ -916,10 +1106,19 @@ export function IssuesWorkspaceRoute({
+@@ -916,10 +1157,19 @@ export function IssuesWorkspaceRoute({
            onClearSelection={() => { setSelectedIds([]); }}
            modulesEnabled={modulesEnabled}
            onBatchUpdateState={(targetStateSlug) => {

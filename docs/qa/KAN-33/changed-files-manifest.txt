@@ -1,48 +1,28 @@
-=== Main Repository (feat/KAN-33) ===
-kanban/web/src/features/docs-center/DocMarkdownViewer.tsx
-kanban/web/src/features/docs-center/DocsCenterPage.css
-kanban/web/src/features/docs-center/DocsCenterPage.tsx
-kanban/web/src/features/docs-center/HelpDrawer.css
-kanban/web/src/features/docs-center/HelpDrawer.tsx
-kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
-kanban/web/src/features/docs-center/docsService.ts
-kanban/web/src/features/docs-center/wikiManifest.ts
-scripts/sync_wiki_bundle.py
-scripts/check_docs_taxonomy.py
-kanban/tests/docs/test_check_docs_taxonomy.py
-docs/qa/KAN-33/wiki-diff.patch
-docs/qa/KAN-33/git-diff.patch
-docs/qa/KAN-33/changed-files-manifest.txt
-docs/qa/KAN-33/unit-test-results.txt
-docs/qa/KAN-33/build-or-typecheck.txt
-docs/qa/KAN-33/message-to-reality-checker.md
-
-=== Wiki Repository (/home/adamoutler/kanban/thumbs-up-kanban.wiki, commit 03c25da) ===
-Admin-Custom-Scripted-Fields-and-Sandbox.md
-Architecture-Delta-and-Missing-Features.md
-Blinking-Cursor-Sparkle-Completion-Engine.md
-Canonical-Markdown-and-Safe-Media-Pipeline.md
-Clean-DB-Testing-and-Governance-Gates.md
-Custom-Scripts-and-JSON-Security-Architecture.md
-Enterprise-Whitespace-and-Kanban-Board.md
-Feature-Comparison.md
-Guide-Custom-Fields.md
-Hierarchical-Docs-and-Stickies-with-Smart-Promotion.md
-Home.md
-MCP-Tools-Reference.md
-Migration-and-Cutover-Runbook.md
-Multi-Card-Authentication-Studio.md
-Multi-Provider-AI-Engine-and-Runners.md
-Production-Promotion-and-Backup-Runbook.md
-REST-API-Architecture-and-OpenAPI-Guide.md
-Real-Time-Web-and-WebSocket-Architecture.md
-Role-and-Permission-Matrix.md
-Scripted-Workflows-and-Transition-Helpers.md
-Studio-Configuration-Reference.md (NEW)
-System-Topology-and-Multi-Container-Architecture.md
-Three-Surface-MCP-Server-Architecture.md
-Ticket-Screen-and-Work-Item-Features.md
-Universal-Object-Graph-and-Link-Auditor.md
-User-Tasks-and-QA-Matrix.md
-Zero-Trust-Security-and-Access-Visibility.md
-_Sidebar.md
+a321ca53f6624a6a1c14be42356e535ccec1a2a8ff04789f9eb5ee1c6ec5b74a       10779  docs/qa/KAN-33/api-specialist-review.md
+cb066a37cf0ea06f20a4f6378756d2de6e3bf3e62ee4fc2ee95848e13ec885e5        1037  docs/qa/KAN-33/build-or-typecheck.txt
+44ee6e6bf854318271e4c994ee9c2f4a95ddf4be66c314a1ade766f9d3269a82      598099  docs/qa/KAN-33/git-diff.patch
+1e3bd11a1714311dfb938cd921eb8984927e0e65e6624c6e7a655ad3ada654e8        4094  docs/qa/KAN-33/live-fullstack-proof.txt
+7f60bdd14b7e2acef6343360e914de8bf51c9abf2c94b7b17d70c5f32b239d33        7697  docs/qa/KAN-33/message-to-reality-checker.md
+6c8e899cf34e1575db41534c559480eb71730f73991ad23582c6283c79df12ca      202886  docs/qa/KAN-33/screenshots/live-docs-desktop-dark.png
+01de363a628aaa5283bc59499e511afb5c2646f04251c05b6d400857bede67f0      201800  docs/qa/KAN-33/screenshots/live-docs-desktop-light.png
+92d72f79eff56bfccd686b8cc4e3028c9c4e2f96ae2c1617a9e85ea38f2e8f04      201342  docs/qa/KAN-33/screenshots/live-docs-filter-architectural-light.png
+88e22bf691858edf299c01aa1d43d16c8de2782ef2b593fd4c97d84e5fdc5404      192876  docs/qa/KAN-33/screenshots/live-docs-filter-guides-light.png
+837619365144ccd94efe6f72e76d2ac210b99c146405ebcc99b9a0f0ba53e45f      195672  docs/qa/KAN-33/screenshots/live-docs-filter-informational-light.png
+b4f4235c25e0042aac2b453d9b363db6e3db4551adebf60bd0d8fbc6c4aba177       67671  docs/qa/KAN-33/screenshots/live-docs-mobile.png
+bce4f29ebe86ce87ae868c43c7126a96c83bbaf449edcf7943631430d7b29b0d      105505  docs/qa/KAN-33/screenshots/live-docs-tablet.png
+39f70d3278f3dd7c00575b6f182ce8bd2f9bbdf74964a2eea15acdadc598e5ca      193958  docs/qa/KAN-33/screenshots/live-studio-config-ref-desktop-dark.png
+1fcc6af0bcc61bf0b8de3bf421790dd12e2392350ec2ce5091205a15d0a39ae6      193521  docs/qa/KAN-33/screenshots/live-studio-config-ref-desktop-light.png
+e16ef52dc432f27ad5bedf828e09130bf121dad95f40a78bb17c6611945ea025        9576  docs/qa/KAN-33/ui-specialist-review.md
+fb7f493655c81ce037a1ec8974e7a85c3f44b4b010ba6b45fe12a9dc9bcd0287        2857  docs/qa/KAN-33/unit-test-results.txt
+c8c4c64f65f0410e13ee2091815bb859aa5637c5cdc98968f4855a96936ca421       52912  docs/qa/KAN-33/wiki-diff.patch
+bdf37120e92a9f04f8ae88ab90377aeb902c094ee95ab8bf8aa033071936941b       13264  kanban/tests/docs/test_check_docs_taxonomy.py
+e680f75439ca236766cde58317af4036ff0bbe3b5ad78fc62ddf7c847cab3d58       16162  kanban/tests/docs/test_wiki_media_audit.py
+b5bfac778a8f5f0e15a5c830bea90c8bf24bfd98352cff77fde15c1c343bf382       17829  kanban/tests/platform/test_brand_terminology_audit.py
+d0ffd7df3304ed65eed096d7229fcf69ad0bfb28da6ed608642ef27233acb6be       15497  kanban/web/src/features/docs-center/DocMarkdownViewer.tsx
+83fad49d130d1c35e7c6d139dcab0e48b0b4319a81677f767d8a7deb1f317909       11065  kanban/web/src/features/docs-center/DocsCenterPage.css
+22ae7c59167f2442552cbb8b895552ed0da4616736667d5654f1c1cedab49461       17969  kanban/web/src/features/docs-center/DocsCenterPage.tsx
+96dcae07d258d41e4b25679a9646229fcba6a7744c812cfb282359c118854d6a       47773  kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
+b8deac460377e344e020aaa6f58d12abc5a45db762c26a42017af81dd9183377        3631  kanban/web/src/features/docs-center/docsService.ts
+78eda525faa530cdc3a15397c64e44b11f6a25f636ef4e99f67ce50942d90ec2      403177  kanban/web/src/features/docs-center/wikiManifest.ts
+ed0b0685ecd6d3a511ed44a8798c6b150ee0c7bf0b7d1e9a2fb52a25e8bed3cd       14969  scripts/check_docs_taxonomy.py
+188e47e6c2d0ec6ed88b8c641392eabebc0d2d4cb80c0cd12f1bb6b6c24838ba       26152  scripts/sync_wiki_bundle.py

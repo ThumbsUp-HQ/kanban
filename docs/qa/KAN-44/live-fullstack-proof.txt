@@ -1,54 +1,50 @@
-=== KAN-44 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, kanban-liveqa-2, commit 7913c2c8) ===
-Timestamp: 2026-11-20T22:14:43.025Z - 2026-11-20T22:15:19.232Z
+=== KAN-44 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18962, kanban-liveqa-2, commit 78074a1d) ===
+Timestamp: 2026-11-20T23:22:59.122Z - 2026-11-20T23:23:21.639Z
 Execution Mode: Zero-mock Playwright against live Docker standalone container (PostgreSQL 16 + FORCE RLS, UID 65532)
-Test Runner Script: live_qa_suite_v2.mjs
+Test Runner Script: live_qa_suite_r3.mjs
 
---- Page Load & Transition Latency Metrics (< 3000ms threshold) ---
-- Board load: 941 ms | Board popover transition: 56 ms
-- Swimlane load: 933 ms
-- Table load: 848 ms | Table Desktop transition: 144 ms | Table Mobile transition: 128 ms
-- Mobile Board load: 848 ms | Mobile List load: 910 ms
-- Single Issue load: 741 ms
+--- Page Load Timings (< 3000ms threshold) ---
+- Board load: 860 ms
+- Swimlane load: 872 ms
+- Table load: 814 ms
+- Mobile Board load: 920 ms
+- Mobile List load: 862 ms
+- Single Issue load: 758 ms
 
---- Problem 1: Full-Page Issue View, Quick Properties Bar & Topbar z-index ---
+--- Problem 1: Full-Page Issue View, Quick Properties Bar, Tab Bar Overflow & Topbar z-index ---
 - Desktop Light & Dark (/projects/KAN/issues/KAN-1): live-issue-desktop-light.png, live-issue-desktop-dark.png
-- Tablet (768x1024) & Mobile (390x844): live-issue-tablet.png, live-issue-mobile.png
-- Topbar Avatar Menu Above .surface--full (live-topbar-menu-above-surface.png):
-  {"topbarZ":"120","menuZ":"150","surfaceZ":"100","menuItemNotOccluded":true}
-LIVE_STACK_VERDICT [P1_HEADER_QUICKPROPS_ZINDEX]: PASS
+- Tablet (768x1024): live-issue-tablet.png
+- Mobile (390x844, live-issue-mobile.png):
+  * Telemetry: {"scrollWidth":390,"innerWidth":390,"noHorizontalOverflow":true,"tabBarWidth":310,"tabBarRight":350}
+  * Confirmed All | Comments | History | Gates tab bar fits cleanly inside 390px viewport with zero horizontal overflow.
+- Topbar Avatar Menu Above .surface--full: live-topbar-menu-above-surface.png
+LIVE_STACK_VERDICT [P1_HEADER_QUICKPROPS_MOBILE_TABBAR]: PASS
 
---- Problem 2: QuickFieldPopover Portal on Board & Swimlane + Table View Transitions ---
-- Desktop Board Popover (live-board-popover-desktop.png):
-  {"isDirectBodyChild":true,"insideCardWrapper":false,"peekDrawers":0,"withinViewport1440x900":true,"transitionStatus":200,"peekAfterTransition":0}
-- Desktop Swimlane Popover (live-swimlane-popover-desktop.png):
-  {"isDirectBodyChild":true,"peekDrawers":0,"withinViewport":true}
-- Mobile Board Bottom Sheet (live-board-bottom-sheet-mobile.png):
-  {"isDirectBodyChild":true,"insideCardWrapper":false,"width":390,"bottom":844,"zIndex":"350","minOptionHeight":44,"transitionStatus":200}
-- Table View (?layout=table) Transitions:
-  * Desktop (1440x900, live-table-desktop.png): .table-inline-select--state transition -> HTTP 200 (144 ms).
-  * Mobile (390x844, live-table-mobile.png): .table-inline-select height=44px (>=44px touch target), transition -> HTTP 200 (128 ms).
-LIVE_STACK_VERDICT [P2_PORTAL_POPOVER_AND_TABLE_TRANSITIONS]: PASS
+--- Problem 2: QuickFieldPopover Portal & Mobile Table View Full Legible State Names ---
+- Desktop Board & Swimlane Popovers: live-board-popover-desktop.png (transitionStatus=200), live-swimlane-popover-desktop.png
+- Mobile Board Bottom Sheet: live-board-bottom-sheet-mobile.png
+- Desktop Table (?layout=table): live-table-desktop.png (transitionStatus=200)
+- Mobile (390x844) Table View (?layout=table, live-table-mobile.png):
+  * Telemetry: {"scrollWrapOverflowX":"auto","stateCellMinWidth":"124px","stateCellMaxWidth":"150px","stateCellWidth":143,"prioWrapMinWidth":"96px","prioWrapWidth":110,"pageScrollWidth":390,"innerWidth":390,"transitionStatus":200}
+  * Interactive state <select> widths/heights: all 6 rows measure width=127px, height=44px (>=44px touch target), rendering full legible state names ("Todo", "Purple Review", "Backlog", "In Progress") with zero 1-letter truncation.
+LIVE_STACK_VERDICT [P2_POPOVER_AND_MOBILE_TABLE_WIDTHS]: PASS
 
---- Problem 3 & 4: Mobile List Card Geometry, Bottom Sheet & Consolidated Mobile Split Detail ---
-- Mobile List Initial Load (?layout=list, live-list-mobile.png):
-  * .issue-list-card.list-row (height: auto; min-height: 68px; measured 85px) expands cleanly with zero summary overlap/bleeding across bottom card border:
-    {"allCardsNoBleed":true,"sampleCards":[{"key":"issue-list-card-KAN-6","cardHeight":85,"minHeight":"68px","summaryBottom":439,"cardBottom":448,"noBorderBleed":true},{"key":"issue-list-card-KAN-5","cardHeight":85,"minHeight":"68px","summaryBottom":528,"cardBottom":537,"noBorderBleed":true}]}
-- Mobile List Bottom Sheet (live-list-bottom-sheet-mobile.png):
-  {"listRowBtnBox":{"width":44,"height":44},"sheet":{"width":390,"bottom":844,"zIndex":"350"},"transitionStatus":200}
-- Mobile Split Detail (?layout=list&peek=KAN-1, live-list-split-mobile.png):
-  * {"splitSurfaceCount":1,"drawerInHostCount":0,"closeBtnRect":{"w":44,"h":44},"descOpen":true,"descBodyHeight":89,"descText":"Auth gateway with TOTP and AAL2.Edit description","peopleOpen":true,"peopleBodyHeight":79,"minToolbarControlHeight":44,"visibleStateSelectCountInMobileSplit":2,"visibleStateSelectTestIds":["split-state-select","quick-props-state-select"],"scrollWidth":390,"innerWidth":390}
-  * Confirmed DESCRIPTION and PEOPLE <details> bodies render full content, mobile split toolbar controls meet >=44px height, and duplicate header-state-select was consolidated out of mobile split header.
-LIVE_STACK_VERDICT [P3_P4_MOBILE_LIST_AND_SPLIT_DETAIL]: PASS
+--- Problem 3 & 4: Mobile List Cards & Single-Select Split Detail ---
+- Mobile List (?layout=list): live-list-mobile.png, live-list-bottom-sheet-mobile.png
+- Mobile (390x844) Split Detail (?layout=list&peek=KAN-1, live-list-split-mobile.png):
+  * Telemetry: {"quickPropsStatePresentInDom":true,"quickPropsStateDisplay":"none","quickPropsStateHidden":true,"visibleStateSelectCount":1,"visibleStateSelectTestIds":["split-state-select"],"splitStateSelectRect":{"w":130,"h":44},"detailsText":"State:...Priority:HighAssignee:Unassigned","descText":"Auth gateway with TOTP and AAL2.Edit description","peopleText":"AssigneeUnassignedAssign to me","scrollWidth":390,"innerWidth":390}
+  * Confirmed quick-props-state-select inside split-section-details is hidden (display: none) in split mode so ONLY ONE state selector (split-state-select in action toolbar, height=44px) is visible, while DETAILS (Priority, Assignee), DESCRIPTION, and PEOPLE render full content.
+LIVE_STACK_VERDICT [P3_P4_MOBILE_LIST_AND_SINGLE_SELECT_SPLIT]: PASS
 
---- Multi-View VIEWER RBAC Verification (viewer2: WORKSPACE_GUEST + project VIEWER on KAN) ---
-- Board: {"stateBtnCount":0,"readOnlyBadgeCount":0} (interactive board-card-state-btn-* omitted for VIEWER; column header retains static StateBadge)
-- Swimlane: {"stateBtnCount":0,"readOnlyBadgeCount":0} (interactive board-card-state-btn-* omitted for VIEWER)
-- List (?layout=list, live-viewer-list-mobile.png): {"interactiveStateBtnCount":0,"readOnlyStateBadgeCount":6} (list-row-state-readonly-* static StateBadge pills)
-- Table (?layout=table, live-viewer-table-mobile.png): {"interactiveStateSelectCount":0,"readOnlyStateBadgeCount":6} (static .table-state-cell .state-badge pills)
-- Single Issue (/projects/KAN/issues/KAN-1, live-viewer-readonly-mobile.png): {"hasHeaderStateBadge":true,"headerSelectCount":0,"quickPropsSelectCount":0}
-LIVE_STACK_VERDICT [MULTI_VIEW_VIEWER_RBAC]: PASS
+--- VIEWER RBAC Verification (viewer2: WORKSPACE_GUEST + project VIEWER on KAN) ---
+- Mobile List (?layout=list): live-viewer-list-mobile.png
+- Mobile Table (?layout=table, live-viewer-table-mobile.png):
+  * Telemetry: {"interactiveStateSelectCount":0,"readOnlyStateBadgeCount":6,"scrollWidth":390,"innerWidth":390}
+  * All 6 read-only <StateBadge> pills render full, untruncated labels ("In Progress" 109px, "Purple Review" 123px, "Backlog" 91px; labelScrollWidth === labelClientWidth, notTruncated=true) with zero interactive <select> controls.
+- Mobile Single Issue (/projects/KAN/issues/KAN-1): live-viewer-readonly-mobile.png
+LIVE_STACK_VERDICT [VIEWER_MULTI_VIEW_RBAC]: PASS
 
---- Runtime Error Telemetry (KAN-44 scope) ---
+--- Runtime Error Telemetry ---
 Console JS errors: 0
 Page errors: 0
 5xx responses: 0

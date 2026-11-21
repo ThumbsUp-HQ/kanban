@@ -29,140 +29,107 @@ index 69a69e3e..acaa23af 100644
  
  class PrincipalResolver(Protocol):
      """Protocol for resolving PrincipalContext from an inbound HTTP request."""
-diff --git a/kanban/api/v1/admin/workspace_settings.py b/kanban/api/v1/admin/workspace_settings.py
-index fad7f34d..f42621ba 100644
---- a/kanban/api/v1/admin/workspace_settings.py
-+++ b/kanban/api/v1/admin/workspace_settings.py
-@@ -43,6 +43,7 @@ class WorkspaceSettingsResponse(BaseModel):
-     trash_retention_days: int
-     mcp_key_max_ttl_days: int
-     air_gap_mode: bool
-+    default_skip_loaded_sequence_numbers: bool = False
-     updated_at: datetime
+diff --git a/kanban/api/v1/assignees.py b/kanban/api/v1/assignees.py
+index 255aabfa..7aae13a0 100644
+--- a/kanban/api/v1/assignees.py
++++ b/kanban/api/v1/assignees.py
+@@ -39,7 +39,9 @@ async def add_assignee(
+ ) -> AssigneeResponse:
+     """Assign an eligible project viewer or free-text external label to an issue (EDIT required)."""
+     async with timing_floor(floor_ms=25.0):
+-        return await svc.add_assignee(session, caller, issue_ref, body)
++        res = await svc.add_assignee(session, caller, issue_ref, body)
++        await session.commit()
++        return res
  
  
-@@ -60,6 +61,7 @@ class WorkspaceSettingsUpdate(BaseModel):
-     trash_retention_days: int | None = Field(default=None, ge=7, le=365)
-     mcp_key_max_ttl_days: int | None = Field(default=None, ge=1, le=365)
-     air_gap_mode: bool | None = None
-+    default_skip_loaded_sequence_numbers: bool | None = None
+ @router.delete(
+@@ -56,6 +58,7 @@ async def remove_assignee(
+     """Remove an assignee join from an issue (EDIT required)."""
+     async with timing_floor(floor_ms=25.0):
+         await svc.remove_assignee(session, caller, issue_ref, assignee_id)
++        await session.commit()
+         return Response(status_code=204)
  
  
- async def require_workspace_or_server_admin(
-@@ -119,6 +121,7 @@ async def _get_or_create_settings(
-         trash_retention_days=trash_days,
-         mcp_key_max_ttl_days=90,
-         air_gap_mode=False,
-+        default_skip_loaded_sequence_numbers=False,
-     )
-     session.add(settings)
-     await session.flush()
-@@ -150,6 +153,7 @@ async def get_workspace_settings(
-         trash_retention_days=settings.trash_retention_days,
-         mcp_key_max_ttl_days=settings.mcp_key_max_ttl_days,
-         air_gap_mode=settings.air_gap_mode,
-+        default_skip_loaded_sequence_numbers=settings.default_skip_loaded_sequence_numbers,
-         updated_at=settings.updated_at,
-     )
+diff --git a/kanban/api/v1/comments.py b/kanban/api/v1/comments.py
+index 258628b5..8b7a0c6b 100644
+--- a/kanban/api/v1/comments.py
++++ b/kanban/api/v1/comments.py
+@@ -89,6 +89,7 @@ async def create_issue_comment(  # noqa: PLR0913, PLR0917
+         )
+         response.headers["Location"] = result.permalink
+         response.headers["ETag"] = etag
++        await session.commit()
+         return result
  
-@@ -211,29 +215,30 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
-                 title="AAL2 Required",
-                 detail="Updating trash_retention_days requires AAL2 authentication.",
-             )
--        verified_at = caller.aal2_verified_at
--        if verified_at is None:
--            raise ProblemException(
--                code="AAL2_STALE",
--                status=403,
--                title="AAL2 Session Stale",
--                detail="AAL2 verification timestamp is missing or stale.",
--            )
--        now_utc = datetime.now(UTC)
--        if verified_at.tzinfo is None:
--            verified_at = verified_at.replace(tzinfo=UTC)
--        age_sec = (now_utc - verified_at).total_seconds()
--        if age_sec > _AAL2_FRESHNESS_MAX_AGE_SECONDS:
--            stale_msg = (
--                f"AAL2 verification is stale ({int(age_sec)}s > "
--                f"{_AAL2_FRESHNESS_MAX_AGE_SECONDS}s)."
--            )
--            raise ProblemException(
--                code="AAL2_STALE",
--                status=403,
--                title="AAL2 Session Stale",
--                detail=stale_msg,
--            )
-+        if "session" in caller.token_scopes:
-+            verified_at = caller.aal2_verified_at
-+            if verified_at is None:
-+                raise ProblemException(
-+                    code="AAL2_STALE",
-+                    status=403,
-+                    title="AAL2 Session Stale",
-+                    detail="AAL2 verification timestamp is missing or stale.",
-+                )
-+            now_utc = datetime.now(UTC)
-+            if verified_at.tzinfo is None:
-+                verified_at = verified_at.replace(tzinfo=UTC)
-+            age_sec = (now_utc - verified_at).total_seconds()
-+            if age_sec > _AAL2_FRESHNESS_MAX_AGE_SECONDS:
-+                stale_msg = (
-+                    f"AAL2 verification is stale ({int(age_sec)}s > "
-+                    f"{_AAL2_FRESHNESS_MAX_AGE_SECONDS}s)."
-+                )
-+                raise ProblemException(
-+                    code="AAL2_STALE",
-+                    status=403,
-+                    title="AAL2 Session Stale",
-+                    detail=stale_msg,
-+                )
  
-     before: dict[str, Any] = {
-         "name": ws.name if ws else settings.display_name,
-@@ -245,6 +250,7 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
-         "trash_retention_days": settings.trash_retention_days,
-         "mcp_key_max_ttl_days": settings.mcp_key_max_ttl_days,
-         "air_gap_mode": settings.air_gap_mode,
-+        "default_skip_loaded_sequence_numbers": settings.default_skip_loaded_sequence_numbers,
-     }
+@@ -115,6 +116,7 @@ async def update_comment(  # noqa: PLR0913, PLR0917
+             if_match=if_match,
+         )
+         response.headers["ETag"] = new_etag
++        await session.commit()
+         return result
  
-     diff: dict[str, Any] = {}
-@@ -331,6 +337,11 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
-         diff["air_gap_mode"] = body.air_gap_mode
-         settings.air_gap_mode = bool(body.air_gap_mode)
  
-+    skip_seq = body.default_skip_loaded_sequence_numbers
-+    if skip_seq is not None and skip_seq != settings.default_skip_loaded_sequence_numbers:
-+        diff["default_skip_loaded_sequence_numbers"] = skip_seq
-+        settings.default_skip_loaded_sequence_numbers = skip_seq
-+
-     if diff:
-         await session.flush()
-         await session.refresh(settings)
-@@ -345,6 +356,7 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
-             "trash_retention_days": settings.trash_retention_days,
-             "mcp_key_max_ttl_days": settings.mcp_key_max_ttl_days,
-             "air_gap_mode": settings.air_gap_mode,
-+            "default_skip_loaded_sequence_numbers": settings.default_skip_loaded_sequence_numbers,
-         }
+@@ -135,6 +137,7 @@ async def delete_comment(
+             caller=caller,
+             comment_id=comment_id,
+         )
++        await session.commit()
  
-         await record_activity(
-@@ -389,6 +401,8 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
-                 },
-             )
  
-+    await session.commit()
-+
-     return WorkspaceSettingsResponse(
-         workspace_id=settings.workspace_id,
-         name=ws.name if ws else settings.display_name,
-@@ -400,5 +414,6 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
-         trash_retention_days=settings.trash_retention_days,
-         mcp_key_max_ttl_days=settings.mcp_key_max_ttl_days,
-         air_gap_mode=settings.air_gap_mode,
-+        default_skip_loaded_sequence_numbers=settings.default_skip_loaded_sequence_numbers,
-         updated_at=settings.updated_at,
-     )
+ @router.put(
+@@ -150,12 +153,14 @@ async def add_reaction(
+ ) -> ReactionResponse:
+     """Idempotently add an allowlisted emoji reaction to a visible comment."""
+     async with timing_floor(floor_ms=25.0):
+-        return await svc.add_reaction(
++        res = await svc.add_reaction(
+             session=session,
+             caller=caller,
+             comment_id=comment_id,
+             emoji=emoji,
+         )
++        await session.commit()
++        return res
+ 
+ 
+ @router.delete(
+@@ -177,3 +182,4 @@ async def delete_reaction(
+             comment_id=comment_id,
+             emoji=emoji,
+         )
++        await session.commit()
+diff --git a/kanban/api/v1/issue_archive.py b/kanban/api/v1/issue_archive.py
+index 81702225..63e89fe7 100644
+--- a/kanban/api/v1/issue_archive.py
++++ b/kanban/api/v1/issue_archive.py
+@@ -46,7 +46,9 @@ async def archive_issue(
+ ) -> IssueResponse:
+     """Archive an issue enforcing completed/cancelled state and no open sub-issues."""
+     async with timing_floor(floor_ms=25.0):
+-        return await svc.archive_issue(session, caller, issue_ref)
++        res = await svc.archive_issue(session, caller, issue_ref)
++        await session.commit()
++        return res
+ 
+ 
+ @router.post(
+@@ -64,10 +66,12 @@ async def unarchive_issue(
+     async with timing_floor(floor_ms=25.0):
+         reason = body.reason if body else None
+         admin_override = body.admin_override if body else False
+-        return await svc.unarchive_issue(
++        res = await svc.unarchive_issue(
+             session,
+             caller,
+             issue_ref,
+             reason=reason,
+             admin_override=admin_override,
+         )
++        await session.commit()
++        return res
 diff --git a/kanban/api/v1/issue_copy.py b/kanban/api/v1/issue_copy.py
 index 1cdda12e..b721dc8e 100644
 --- a/kanban/api/v1/issue_copy.py
@@ -173,6 +140,72 @@ index 1cdda12e..b721dc8e 100644
          response.headers["Location"] = f"/api/v1/issues/{canonical_key}"
 +        await session.commit()
          return result
+diff --git a/kanban/api/v1/issue_delete.py b/kanban/api/v1/issue_delete.py
+index b791bf1f..7bbe4abc 100644
+--- a/kanban/api/v1/issue_delete.py
++++ b/kanban/api/v1/issue_delete.py
+@@ -75,7 +75,9 @@ async def delete_issue(
+ ) -> IssueDeleteResponse:
+     """Soft-delete an issue into trash guarded by blast-radius hash concurrency check."""
+     async with timing_floor(floor_ms=25.0):
+-        return await svc.trash_issue(session, caller, issue_ref, kb_blast_hash)
++        res = await svc.trash_issue(session, caller, issue_ref, kb_blast_hash)
++        await session.commit()
++        return res
+ 
+ 
+ @router.get(
+@@ -126,4 +128,6 @@ async def restore_issue(
+ ) -> IssueResponse:
+     """Restore a soft-deleted issue from trash back into active state."""
+     async with timing_floor(floor_ms=25.0):
+-        return await svc.restore_issue(session, caller, issue_ref)
++        res = await svc.restore_issue(session, caller, issue_ref)
++        await session.commit()
++        return res
+diff --git a/kanban/api/v1/issue_move.py b/kanban/api/v1/issue_move.py
+index 37e3027d..ee4e56df 100644
+--- a/kanban/api/v1/issue_move.py
++++ b/kanban/api/v1/issue_move.py
+@@ -4,7 +4,7 @@ from __future__ import annotations
+ 
+ from typing import Annotated
+ 
+-from fastapi import APIRouter, Depends
++from fastapi import APIRouter, Depends, Response
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
+@@ -13,6 +13,8 @@ from kanban.api.v1.schemas.issue_move import (
+     IssueMoveRequest,
+     IssueMoveResponse,
+ )
++from kanban.security.read_taint import TaintGuard, get_taint_guard
++from kanban.services.issue_keys import resolve_issue_ref
+ from kanban.services.issue_move import move_issue
+ 
+ router = APIRouter(tags=["issues"])
+@@ -27,12 +29,18 @@ Session = Annotated[AsyncSession, Depends(get_rls_session)]
+     response_model_exclude_none=False,
+     summary="Move or reorder an issue on the board",
+ )
+-async def post_issue_move(
++async def post_issue_move(  # noqa: PLR0913, PLR0917
+     issue_ref: str,
+     body: IssueMoveRequest,
+     caller: Caller,
+     session: Session,
++    response: Response,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+ ) -> IssueMoveResponse:
+     """Move an issue across columns or reorder it within a column (S6.4)."""
+     async with timing_floor(floor_ms=25.0):
+-        return await move_issue(session, caller, issue_ref, body)
++        issue = await resolve_issue_ref(session, caller, issue_ref)
++        await taint_guard.check_write(issue.project_id, tool_name="move_issue")
++        res = await move_issue(session, caller, issue_ref, body, response=response)
++        await session.commit()
++        return res
 diff --git a/kanban/api/v1/issue_trees.py b/kanban/api/v1/issue_trees.py
 index 4bc8ccea..5f925433 100644
 --- a/kanban/api/v1/issue_trees.py
@@ -184,7 +217,7 @@ index 4bc8ccea..5f925433 100644
 +        await session.commit()
          return result
 diff --git a/kanban/api/v1/issues.py b/kanban/api/v1/issues.py
-index 3e82fe20..406d4e43 100644
+index b5cd773c..406d4e43 100644
 --- a/kanban/api/v1/issues.py
 +++ b/kanban/api/v1/issues.py
 @@ -46,6 +46,7 @@ async def create_issue(
@@ -195,16 +228,8 @@ index 3e82fe20..406d4e43 100644
          return result
  
  
-@@ -106,6 +107,7 @@ async def patch_issue(  # noqa: PLR0913, PLR0917
-         issue = await svc.get_issue_or_404(session, caller, issue_key)
-         await taint_guard.check_write(issue.project_id, tool_name="update_ticket")
-         result, new_etag = await svc.update_issue(session, caller, issue_key, body, if_match)
-+        await session.commit()
-         response.headers["ETag"] = new_etag
-         return result
- 
 diff --git a/kanban/api/v1/transitions.py b/kanban/api/v1/transitions.py
-index 98ede3e5..28cd52ff 100644
+index 98ede3e5..819a644d 100644
 --- a/kanban/api/v1/transitions.py
 +++ b/kanban/api/v1/transitions.py
 @@ -4,6 +4,7 @@
@@ -255,7 +280,7 @@ index 98ede3e5..28cd52ff 100644
          content: dict[str, Any] = {
              "status": "pending_agent_gate",
              "execution_id": str(outcome.execution_id),
-@@ -121,13 +141,23 @@ async def post_issue_transition(
+@@ -121,13 +141,26 @@ async def post_issue_transition(
          }
          return JSONResponse(status_code=status.HTTP_202_ACCEPTED, content=content)
  
@@ -272,14 +297,70 @@ index 98ede3e5..28cd52ff 100644
          sync_duration_ms=outcome.sync_duration_ms,
      )
 -    return JSONResponse(status_code=200, content=resp_data.model_dump(mode="json"))
++    content_dict = resp_data.model_dump(mode="json")
++    if "ETag" in headers:
++        content_dict["etag"] = headers["ETag"]
 +    return JSONResponse(
 +        status_code=200,
-+        content=resp_data.model_dump(mode="json"),
++        content=content_dict,
 +        headers=headers or None,
 +    )
  
  
  @router.delete(
+@@ -147,6 +180,7 @@ async def cancel_transition(
+     from kanban.workflows.async_gate import GateCoordinator  # noqa: PLC0415
+ 
+     execution = await GateCoordinator.cancel(session, execution_id, caller)
++    await session.commit()
+     return CancelTransitionResponse(
+         status="cancelled",
+         execution_id=execution.id,
+diff --git a/kanban/api/v1/workspaces.py b/kanban/api/v1/workspaces.py
+index 0a635364..4929c433 100644
+--- a/kanban/api/v1/workspaces.py
++++ b/kanban/api/v1/workspaces.py
+@@ -454,6 +454,7 @@ async def update_workspace_endpoint(
+             ws.slug = cleaned_slug
+ 
+     await session.flush()
++    await session.commit()
+     return WorkspaceResponse(
+         id=ws.id,
+         name=ws.name,
+@@ -515,7 +516,7 @@ async def bind_workspace_role_endpoint(
+             title="Insufficient Capability",
+             detail="Operation requires SERVER_ADMIN or WORKSPACE_ADMIN role.",
+         )
+-    return await principal_service.bind_role(
++    res = await principal_service.bind_role(
+         session,
+         workspace_id,
+         caller.principal_id,
+@@ -524,6 +525,8 @@ async def bind_workspace_role_endpoint(
+         scope_type=body.scope_type,
+         project_id=body.scope_id,
+     )
++    await session.commit()
++    return res
+ 
+ 
+ @router.delete(
+@@ -547,7 +550,7 @@ async def unbind_workspace_role_endpoint(
+             title="Insufficient Capability",
+             detail="Operation requires SERVER_ADMIN or WORKSPACE_ADMIN role.",
+         )
+-    return await principal_service.unbind_role(
++    res = await principal_service.unbind_role(
+         session,
+         workspace_id,
+         caller.principal_id,
+@@ -556,3 +559,5 @@ async def unbind_workspace_role_endpoint(
+         scope_type=body.scope_type,
+         project_id=body.scope_id,
+     )
++    await session.commit()
++    return res
 diff --git a/kanban/auth/sessions/resolver.py b/kanban/auth/sessions/resolver.py
 index 9b5c6f21..66068ea6 100644
 --- a/kanban/auth/sessions/resolver.py
@@ -313,106 +394,256 @@ index 9b5c6f21..66068ea6 100644
          )
          request.state.principal = ctx
          bind_request_log_user(
+diff --git a/kanban/issues/workflow_service.py b/kanban/issues/workflow_service.py
+index bf3d25d1..949f1d18 100644
+--- a/kanban/issues/workflow_service.py
++++ b/kanban/issues/workflow_service.py
+@@ -9,17 +9,24 @@ from dataclasses import dataclass
+ from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
+ 
+ from pydantic import ValidationError
+-from sqlalchemy import select, text
++from sqlalchemy import or_, select, text
+ 
+ from database.models.issues import Issue, IssueAssignee, IssueComment
+ from database.models.projects import Cycle, Project, WorkflowState
++from database.models.workflow import WorkflowTransitionHook
+ from kanban.api.problems import ProblemException
+ from kanban.content import normalize_to_markdown
+-from kanban.issues.proof import VerificationProof, validate_proof_ticket_key
++from kanban.issues.proof import (
++    VerificationProof,
++    validate_proof_ticket_key,
++    validate_reality_checker_report,
++)
+ from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.issue_keys import resolve_issue_ref
+ 
++_HTTP_ACCEPTED: Final[int] = 202
++
+ if TYPE_CHECKING:
+     from sqlalchemy.ext.asyncio import AsyncSession
+ 
+@@ -495,18 +502,24 @@ async def _collect_open_blockers(
+     caller: PrincipalContext,
+     issue: Issue,
+ ) -> list[str]:
+-    """Inspect recursive child issues and incoming BLOCKS links for uncompleted work."""
++    """Inspect recursive child issues and incoming BLOCKS / outgoing BLOCKED_BY links."""
+     visible_keys: list[str] = []
+     redacted_count = 0
+     seen_ids: set[uuid.UUID] = set()
+ 
+-    # 1. Recursive child issues
++    # 1. Recursive child issues filtering deleted_at IS NULL
+     stmt_children = text(
+         "WITH RECURSIVE descendants AS ("
+-        "    SELECT id, project_id, state_id, sequence_id FROM issues WHERE parent_issue_id = :iid "
++        "    SELECT i.id, i.project_id, i.state_id, i.sequence_id "
++        "    FROM issues i "
++        "    JOIN objects o ON o.id = i.id "
++        "    WHERE i.parent_issue_id = :iid AND o.deleted_at IS NULL "
+         "    UNION ALL "
+-        "    SELECT i.id, i.project_id, i.state_id, i.sequence_id FROM issues i "
++        "    SELECT i.id, i.project_id, i.state_id, i.sequence_id "
++        "    FROM issues i "
+         "    JOIN descendants d ON i.parent_issue_id = d.id "
++        "    JOIN objects o ON o.id = i.id "
++        "    WHERE o.deleted_at IS NULL "
+         ") "
+         "SELECT d.id, d.project_id, d.sequence_id, p.identifier "
+         "FROM descendants d "
+@@ -526,16 +539,24 @@ async def _collect_open_blockers(
+         else:
+             redacted_count += 1
+ 
+-    # 2. Inbound BLOCKS links from object_links
+-    stmt_blocks = text(
+-        "SELECT ol.source_id, ol.source_key_snapshot "
+-        "FROM object_links ol "
+-        "WHERE ol.target_id = :iid "
+-        "  AND ol.link_type = 'BLOCKS' "
+-        "  AND ol.link_state = 'ACTIVE'"
++    # 2. Inbound BLOCKS and outgoing BLOCKED_BY links
++    stmt_links = text(
++        "SELECT blocker_id FROM ("
++        "  SELECT ol.source_id AS blocker_id "
++        "  FROM object_links ol "
++        "  WHERE ol.target_id = :iid "
++        "    AND ol.link_type = 'BLOCKS' "
++        "    AND ol.link_state = 'ACTIVE' "
++        "  UNION "
++        "  SELECT ol.target_id AS blocker_id "
++        "  FROM object_links ol "
++        "  WHERE ol.source_id = :iid "
++        "    AND ol.link_type = 'BLOCKED_BY' "
++        "    AND ol.link_state = 'ACTIVE' "
++        ") blockers"
+     )
+-    block_links = (await session.execute(stmt_blocks, {"iid": issue.id})).all()
+-    for row in block_links:
++    link_rows = (await session.execute(stmt_links, {"iid": issue.id})).all()
++    for row in link_rows:
+         src_id = row[0]
+         if src_id in seen_ids:
+             continue
+@@ -546,13 +567,14 @@ async def _collect_open_blockers(
+             redacted_count += 1
+             continue
+ 
+-        # For readable source, check whether its state is non-terminal
++        # For readable blocker, check whether its state is non-terminal
+         src_state_stmt = text(
+             "SELECT p.identifier, src.sequence_id, ws.state_group "
+             "FROM issues src "
++            "JOIN objects o ON o.id = src.id "
+             "JOIN projects p ON p.id = src.project_id "
+             "JOIN workflow_states ws ON ws.id = src.state_id "
+-            "WHERE src.id = :sid"
++            "WHERE src.id = :sid AND o.deleted_at IS NULL"
+         )
+         src_state_row = (await session.execute(src_state_stmt, {"sid": src_id})).first()
+         if src_state_row is not None:
+@@ -568,7 +590,7 @@ async def _collect_open_blockers(
+     return result_keys
+ 
+ 
+-async def complete_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
++async def complete_work(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
+     session: AsyncSession,
+     caller: PrincipalContext,
+     issue_ref: str,
+@@ -639,6 +661,16 @@ async def complete_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
+             detail="summary_markdown length must be between 1 and 65536 bytes",
+         )
+ 
++    try:
++        validate_reality_checker_report(summary_markdown)
++    except ValueError as exc:
++        raise ProblemException(
++            code="INVALID_REALITY_CHECKER_REPORT",
++            status=422,
++            title="Invalid Reality-Checker Report",
++            detail=str(exc),
++        ) from exc
++
+     # Resolve target completed state
+     if to_state_ref:
+         target_state = await _resolve_state_by_ref(session, issue.project_id, to_state_ref)
+@@ -708,37 +740,80 @@ async def complete_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
+             detail="Current issue state could not be resolved",
+         )
+ 
+-    # 3. Evaluate gate hook
+-    hook = get_workflow_gate_hook()
+-    gate_hold = await hook.evaluate_transition(
+-        session,
+-        caller,
+-        issue,
+-        from_state,
+-        target_state,
+-        verification_proof=verification_proof,
++    # 3. Evaluate transition hooks / gate hook
++    hooks_stmt = (
++        select(WorkflowTransitionHook.id)
++        .where(
++            WorkflowTransitionHook.project_id == issue.project_id,
++            WorkflowTransitionHook.to_state_id == target_state.id,
++            WorkflowTransitionHook.is_enabled.is_(True),
++            or_(
++                WorkflowTransitionHook.from_state_id == from_state.id,
++                WorkflowTransitionHook.from_state_id.is_(None),
++            ),
++        )
++        .limit(1)
+     )
+-
+-    if gate_hold is not None:
+-        issue.pending_transition_exec_id = gate_hold.execution_id
+-    elif issue.state_id != target_state.id:
+-        await session.execute(text("SELECT set_config('app.transition_exec_id', 'bypass', true)"))
+-        old_id = issue.state_id
+-        issue.state_id = target_state.id
+-        await record_activity(
++    has_hooks = (await session.execute(hooks_stmt)).scalar_one_or_none() is not None
++
++    gate_hold: GateHoldResult | None = None
++    if has_hooks:
++        from kanban.workflows.engine import TransitionEngine  # noqa: PLC0415
++
++        engine = TransitionEngine(session)
++        outcome = await engine.execute_transition(
++            issue_key=str(issue.id),
++            to_state=target_state.id,
++            actor=caller,
++            if_match=if_match,
++            is_complete_work=True,
++            verification_proof=verification_proof,
++        )
++        if outcome.status_code == _HTTP_ACCEPTED or outcome.status == "pending_agent_gate":
++            active_ag = (
++                outcome.field_updates.get("active_agent", "") if outcome.field_updates else ""
++            )
++            gate_hold = GateHoldResult(
++                execution_id=outcome.execution_id
++                or (uuid.uuid7() if hasattr(uuid, "uuid7") else uuid.uuid4()),
++                active_agent=active_ag,
++                from_state=from_state.name,
++                to_state=target_state.name,
++            )
++            issue.pending_transition_exec_id = gate_hold.execution_id
++    else:
++        hook = get_workflow_gate_hook()
++        gate_hold = await hook.evaluate_transition(
+             session,
+-            workspace_id=caller.workspace_id,
+-            object_id=issue.id,
+-            actor_principal_id=caller.principal_id,
+-            event_type=ActivityEventType.ISSUE_STATE_CHANGED,
+-            payload={
+-                "from_state_id": str(old_id),
+-                "to_state_id": str(target_state.id),
+-                "from_state": from_state.name,
+-                "to_state": target_state.name,
+-            },
++            caller,
++            issue,
++            from_state,
++            target_state,
++            verification_proof=verification_proof,
+         )
+ 
++        if gate_hold is not None:
++            issue.pending_transition_exec_id = gate_hold.execution_id
++        elif issue.state_id != target_state.id:
++            await session.execute(
++                text("SELECT set_config('app.transition_exec_id', 'bypass', true)")
++            )
++            old_id = issue.state_id
++            issue.state_id = target_state.id
++            await record_activity(
++                session,
++                workspace_id=caller.workspace_id,
++                object_id=issue.id,
++                actor_principal_id=caller.principal_id,
++                event_type=ActivityEventType.ISSUE_STATE_CHANGED,
++                payload={
++                    "from_state_id": str(old_id),
++                    "to_state_id": str(target_state.id),
++                    "from_state": from_state.name,
++                    "to_state": target_state.name,
++                },
++            )
++
+     # 4. Post summary comment with rendered proof table
+     comment_content = render_proof_table(summary_markdown, verification_proof)
+     normalized_content = normalize_to_markdown(comment_content)
 diff --git a/kanban/services/issues.py b/kanban/services/issues.py
-index a7d07a00..13140f56 100644
+index e1750585..13140f56 100644
 --- a/kanban/services/issues.py
 +++ b/kanban/services/issues.py
-@@ -27,7 +27,7 @@ import base64
- import binascii
- import hashlib
- import uuid
--from datetime import date, datetime
-+from datetime import UTC, date, datetime
- from typing import TYPE_CHECKING, Any, Final
- 
- from sqlalchemy import delete, select, text, update
-@@ -656,8 +656,11 @@ async def serialize_issue(
- 
-     sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
- 
--    obj = await session.get(ObjectRecord, issue.id)
-+    obj = await session.get(ObjectRecord, issue.id, populate_existing=True)
-     archived_at = obj.archived_at if obj is not None else None
-+    now_utc = datetime.now(UTC)
-+    issue_created_at = obj.created_at if obj is not None else now_utc
-+    issue_updated_at = obj.updated_at if obj is not None else now_utc
-     archive_eligibility = await _resolve_archive_eligibility(session, issue, state, archived_at)
- 
-     pending_gate = await resolve_pending_gate(session, issue)
-@@ -674,7 +677,12 @@ async def serialize_issue(
-             else issue.description_markdown
-         ),
-         description_sha256=sha256_hex,
--        state=StateSummary(id=state.id, name=state.name, group=state.state_group),
-+        state=StateSummary(
-+            id=state.id,
-+            name=state.name,
-+            group=state.state_group,
-+            color_hex=state.color_hex,
-+        ),
-         priority=PrioritySummary(slug=priority.slug, label=priority.label, emoji=priority.emoji),
-         start_date=issue.start_date,
-         due_date=issue.due_date,
-@@ -692,6 +700,8 @@ async def serialize_issue(
-         provenance=provenance,
-         access_manifest=manifest,
-         capabilities=capabilities_to_names(caps),
-+        created_at=issue_created_at,
-+        updated_at=issue_updated_at,
-         archived_at=archived_at,
-         archive_eligibility=archive_eligibility,
-         pending_gate=pending_gate,
-@@ -740,15 +750,37 @@ async def create_issue(
- 
-     try:
-         async with session.begin_nested():
--            seq_id = (
-+            seq_row = (
-                 await session.execute(
--                    text("SELECT allocate_issue_sequence(:proj)"), {"proj": project.id}
-+                    text(
-+                        "SELECT allocated_sequences, skipped_sequences "
-+                        "FROM allocate_issue_sequences(:proj, 1, false)"
-+                    ),
-+                    {"proj": project.id},
-                 )
--            ).scalar_one()
-+            ).one()
-+            allocated_seqs: list[int] = list(seq_row[0])
-+            skipped_seqs: list[int] = list(seq_row[1])
-+            seq_id = allocated_seqs[0]
- 
-             canonical_key = f"{project.identifier}-{seq_id}"
-             rank = initial_board_rank(seq_id)
- 
-+            if skipped_seqs:
-+                await record_activity(
-+                    session,
-+                    workspace_id=caller.workspace_id,
-+                    object_id=project.id,
-+                    actor_principal_id=caller.principal_id,
-+                    event_type=ActivityEventType.SEQUENCE_SKIPPED,
-+                    payload={
-+                        "project_key": project.identifier,
-+                        "skipped_sequences": skipped_seqs,
-+                        "allocated_sequence": seq_id,
-+                        "reason": "agent_safe_sequence_numbering",
-+                    },
-+                )
-+
-             issue_id = (
-                 await session.execute(
-                     text(
-@@ -846,7 +878,7 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
- ) -> tuple[IssueResponse, str]:
-     """Patch issue fields under description ETag concurrency check and emit activity."""
-     issue = await resolve_issue_ref(session, caller, issue_ref)
--    obj = await session.get(ObjectRecord, issue.id)
-+    obj = await session.get(ObjectRecord, issue.id, populate_existing=True)
-     if obj is not None and obj.archived_at is not None:
-         raise _problem(
-             code="ISSUE_ARCHIVED",
-@@ -855,6 +887,14 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
+@@ -887,6 +887,14 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
              detail="Archived issues are read-only and cannot be modified",
          )
  
@@ -427,82 +658,14 @@ index a7d07a00..13140f56 100644
      project = await session.get(Project, issue.project_id)
      if project is None:  # pragma: no cover
          not_found()
-@@ -1130,11 +1170,12 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
-             },
-         )
- 
--    updated_issue = (
--        await session.execute(select(Issue).where(Issue.id == issue_id))
--    ).scalar_one_or_none()
--    if updated_issue is None:  # pragma: no cover
--        not_found()
-+    await session.flush()
-+    await session.refresh(issue)
-+    obj_rec = await session.get(ObjectRecord, issue_id, populate_existing=True)
-+    if obj_rec is not None:
-+        await session.refresh(obj_rec)
-+    updated_issue = issue
- 
-     serialized = await serialize_issue(session, caller, updated_issue)
-     new_etag = serialized.etag or (
 diff --git a/kanban/tests/api/test_issue_patch_etag_parity.py b/kanban/tests/api/test_issue_patch_etag_parity.py
-new file mode 100644
-index 00000000..f01e577c
---- /dev/null
+index dc710c06..f01e577c 100644
+--- a/kanban/tests/api/test_issue_patch_etag_parity.py
 +++ b/kanban/tests/api/test_issue_patch_etag_parity.py
-@@ -0,0 +1,289 @@
-+# Copyright 2026 Kanban Platform Contributors
-+# Apache-2.0 License. See LICENSE for details.
-+"""Integration tests for issue PATCH ETag parity and drift prevention.
-+
-+Validates KB-P3-PENTEST-01 / KAN-36.
-+Verifies that:
-+1. Chained PATCH -> GET -> PATCH maintains 100% ETag parity.
-+   (response.headers["ETag"] == body.etag == immediate GET ETag).
-+2. Immediate subsequent PATCH with If-Match: <PATCH_ETag> succeeds without 412.
-+3. If-None-Match on GET returns 304 with identical ETag.
-+4. TransitionEngine.execute_transition and workflow_service._check_if_match_etag accept BOTH
-+   composite compute_issue_etag AND backward-compatible description_sha256 in If-Match.
-+5. Composite issue workflow endpoints (begin-work, transition, complete-work) and creator override
-+   return matching ETags without drift.
-+6. MCP update_ticket returns etag matching subsequent read_ticket.
-+"""
-+
-+from __future__ import annotations
-+
-+import hashlib
-+from typing import TYPE_CHECKING, Any
-+
-+import pytest
-+
-+if TYPE_CHECKING:
-+    import uuid
-+    from collections.abc import Awaitable, Callable
-+
-+    import httpx
-+
-+    from kanban.tests.api.conftest import SeededUser
-+
-+pytestmark = pytest.mark.committed_db
-+
-+
-+def _make_valid_proof(key: str) -> dict[str, Any]:
-+    """Build a valid VerificationProof dictionary for a ticket key."""
-+    return {
-+        "qa_dir": f"docs/qa/{key}/",
-+        "reality_checker": {
-+            "verdict": "READY",
-+            "grade": "A",
-+            "report_path": f"docs/qa/{key}/reality-checker-report.md",
-+        },
-+        "ci_run_url": "https://dash.hackedyour.info/runs/9876",
-+        "artifacts": [
-+            f"docs/qa/{key}/git-diff.patch",
-+            f"docs/qa/{key}/unit-test-results.txt",
-+        ],
-+    }
-+
-+
+@@ -50,6 +50,35 @@ def _make_valid_proof(key: str) -> dict[str, Any]:
+     }
+ 
+ 
 +def _make_valid_report(verdict: str = "READY", grade: str = "A") -> str:
 +    return f"""# Integration Agent Reality-Based Report
 +
@@ -532,211 +695,400 @@ index 00000000..f01e577c
 +"""
 +
 +
-+async def test_chained_patch_get_patch_etag_parity(
-+    make_user: Callable[..., Awaitable[SeededUser]],
-+    make_project: Callable[..., Awaitable[uuid.UUID]],
-+    as_principal: Callable[..., httpx.AsyncClient],
-+) -> None:
-+    """Scenario 3: Chained PATCH -> GET -> PATCH maintains ETag parity without drift.
-+
-+    Asserts:
-+    - PATCH response.headers["ETag"] == body["etag"].
-+    - Immediate GET returns identical ETag.
-+    - If-None-Match returns 304.
-+    - Subsequent PATCH using If-Match from previous PATCH succeeds.
-+    - Stale ETag in If-Match correctly fails with 412.
-+    """
-+    admin = await make_user("etag_admin", workspace_role="WORKSPACE_ADMIN")
-+    _ = await make_project(
-+        "ETAG", created_by=admin, roles={admin: "PROJECT_ADMIN"}, modules_enabled=True
-+    )
-+    client = as_principal(admin)
-+
-+    desc = "Initial description content for ETag parity testing."
-+    # 1. Create issue
-+    create_resp = await client.post(
-+        "/api/v1/projects/ETAG/issues",
-+        json={
-+            "summary": "Initial Issue Summary",
-+            "description_markdown": desc,
-+            "priority": "none",
-+        },
-+    )
-+    assert create_resp.status_code == 201, create_resp.text
-+    issue_data = create_resp.json()
-+    issue_key = issue_data["key"]
-+    init_etag = create_resp.headers["ETag"]
-+    assert init_etag == issue_data["etag"]
-+
-+    # 2. Patch 1: Update summary
-+    patch1_resp = await client.patch(
-+        f"/api/v1/issues/{issue_key}",
-+        json={"summary": "Updated Summary 1"},
-+    )
-+    assert patch1_resp.status_code == 200, patch1_resp.text
-+    patch1_etag = patch1_resp.headers["ETag"]
-+    patch1_body = patch1_resp.json()
-+    assert patch1_etag == patch1_body["etag"]
-+    assert patch1_etag != init_etag
-+
-+    # 3. Immediate GET: verify ZERO ETag drift
-+    get1_resp = await client.get(f"/api/v1/issues/{issue_key}")
-+    assert get1_resp.status_code == 200
-+    assert get1_resp.headers["ETag"] == patch1_etag, "Immediate GET ETag drifted from PATCH ETag!"
-+    assert get1_resp.json()["etag"] == patch1_etag
-+
-+    # 4. GET with If-None-Match: returns 304
-+    get304_resp = await client.get(
-+        f"/api/v1/issues/{issue_key}",
-+        headers={"If-None-Match": patch1_etag},
-+    )
-+    assert get304_resp.status_code == 304
-+    assert get304_resp.headers["ETag"] == patch1_etag
-+
-+    # 5. Patch 2: Chained PATCH with If-Match: patch1_etag must succeed without 412
-+    patch2_resp = await client.patch(
-+        f"/api/v1/issues/{issue_key}",
-+        json={"summary": "Updated Summary 2", "description_markdown": f"{desc}\n\nAppended."},
-+        headers={"If-Match": patch1_etag},
-+    )
-+    assert patch2_resp.status_code == 200, patch2_resp.text
-+    patch2_etag = patch2_resp.headers["ETag"]
-+    assert patch2_etag == patch2_resp.json()["etag"]
-+    assert patch2_etag != patch1_etag
-+
-+    # 6. Immediate GET after Patch 2: verify ZERO ETag drift
-+    get2_resp = await client.get(f"/api/v1/issues/{issue_key}")
-+    assert get2_resp.status_code == 200
-+    assert get2_resp.headers["ETag"] == patch2_etag, (
-+        "Immediate GET 2 ETag drifted from PATCH 2 ETag!"
-+    )
-+    assert get2_resp.json()["etag"] == patch2_etag
-+
-+    # 7. Patch with STALE ETag (patch1_etag when current is patch2_etag) must return 412
-+    stale_resp = await client.patch(
-+        f"/api/v1/issues/{issue_key}",
-+        json={"summary": "Stale Attempt"},
-+        headers={"If-Match": patch1_etag},
-+    )
-+    assert stale_resp.status_code == 412
-+    stale_body = stale_resp.json()
-+    assert stale_body["current_etag"] == patch2_etag
-+
-+
-+async def test_workflow_and_provenance_and_mcp_etag_parity(
-+    make_user: Callable[..., Awaitable[SeededUser]],
-+    make_project: Callable[..., Awaitable[uuid.UUID]],
-+    as_principal: Callable[..., httpx.AsyncClient],
-+) -> None:
-+    """Scenario 4: Verify workflow, provenance, and MCP accept composite ETags without drift.
-+
-+    Asserts:
-+    - begin-work, transition, and complete-work return matching ETags in headers and body.
-+    - Transitions accept composite compute_issue_etag AND description_sha256 in If-Match.
-+    - override_issue_created_by returns resp.etag matching immediate GET.
-+    """
-+    admin = await make_user("wf_admin", workspace_role="WORKSPACE_ADMIN")
-+    member = await make_user("wf_member", workspace_role="WORKSPACE_MEMBER")
-+    _ = await make_project("WF", created_by=admin, roles={admin: "PROJECT_ADMIN", member: "MEMBER"})
-+    client = as_principal(admin)
-+
-+    desc = "Workflow ETag parity ticket content."
-+    desc_sha = hashlib.sha256(desc.encode("utf-8")).hexdigest()
-+
-+    # 1. Create issue
-+    create_resp = await client.post(
-+        "/api/v1/projects/WF/issues",
-+        json={
-+            "summary": "Workflow Parity Issue",
-+            "description_markdown": desc,
-+            "priority": "none",
-+        },
-+    )
-+    assert create_resp.status_code == 201
-+    issue_key = create_resp.json()["key"]
-+    init_etag = create_resp.headers["ETag"]
-+
-+    # 2. Begin work: moves state to In Progress, assigns caller
-+    # Validation error on empty plan_markdown
-+    bad_bw = await client.post(
-+        f"/api/v1/issues/{issue_key}/begin-work",
-+        json={"plan_markdown": ""},
-+        headers={"If-Match": init_etag},
-+    )
-+    assert bad_bw.status_code == 422
-+
-+    bw_resp = await client.post(
-+        f"/api/v1/issues/{issue_key}/begin-work",
-+        json={"plan_markdown": "Execution plan notes."},
-+        headers={"If-Match": init_etag},
-+    )
-+    assert bw_resp.status_code == 200, bw_resp.text
-+    bw_etag = bw_resp.headers.get("ETag")
-+    assert bw_etag is not None, "begin-work must return ETag header"
-+    assert bw_etag == bw_resp.json()["etag"]
-+
-+    # Immediate GET matches begin-work ETag
-+    get_bw = await client.get(f"/api/v1/issues/{issue_key}")
-+    assert get_bw.headers["ETag"] == bw_etag
-+
-+    # 3. Intermediate transition using backward-compatible description_sha256 in If-Match
-+    # Also verify weak ETag prefix (W/) stripping and oversized comment validation
-+    bad_comment_resp = await client.post(
-+        f"/api/v1/issues/{issue_key}/transition",
-+        json={"to_state": "In Progress", "comment_markdown": "a" * 70000},
-+        headers={"If-Match": f'W/"{desc_sha}"'},
-+    )
-+    assert bad_comment_resp.status_code == 422
-+
-+    trans_resp = await client.post(
-+        f"/api/v1/issues/{issue_key}/transition",
-+        json={"to_state": "In Progress", "comment_markdown": "Transition note."},
-+        headers={"If-Match": f'W/"{desc_sha}"'},
-+    )
-+    assert trans_resp.status_code == 200, trans_resp.text
-+    trans_etag = trans_resp.headers.get("ETag")
-+    assert trans_etag is not None
-+    assert trans_etag == trans_resp.json()["etag"]
-+
-+    # Immediate GET matches transition ETag
-+    get_trans = await client.get(f"/api/v1/issues/{issue_key}")
-+    assert get_trans.headers["ETag"] == trans_etag
-+
-+    # 4. Complete work using composite ETag in If-Match
-+    proof = _make_valid_proof(issue_key)
-+    cw_resp = await client.post(
-+        f"/api/v1/issues/{issue_key}/complete-work",
-+        json={
+ async def test_chained_patch_get_patch_etag_parity(
+     make_user: Callable[..., Awaitable[SeededUser]],
+     make_project: Callable[..., Awaitable[uuid.UUID]],
+@@ -225,7 +254,7 @@ async def test_workflow_and_provenance_and_mcp_etag_parity(
+     cw_resp = await client.post(
+         f"/api/v1/issues/{issue_key}/complete-work",
+         json={
+-            "summary_markdown": "Completed all implementation and tests.",
 +            "summary_markdown": _make_valid_report(),
-+            "verification_proof": proof,
-+        },
-+        headers={"If-Match": trans_etag},
-+    )
-+    assert cw_resp.status_code == 200, cw_resp.text
-+    cw_etag = cw_resp.headers.get("ETag")
-+    assert cw_etag is not None
-+    assert cw_etag == cw_resp.json()["etag"]
+             "verification_proof": proof,
+         },
+         headers={"If-Match": trans_etag},
+diff --git a/kanban/tests/auth/test_workspace_switch_session_persistence.py b/kanban/tests/auth/test_workspace_switch_session_persistence.py
+index a3ffba4e..6f3264ae 100644
+--- a/kanban/tests/auth/test_workspace_switch_session_persistence.py
++++ b/kanban/tests/auth/test_workspace_switch_session_persistence.py
+@@ -18,18 +18,29 @@ from __future__ import annotations
+ import uuid
+ from datetime import UTC, datetime, timedelta
+ from typing import TYPE_CHECKING
++from unittest.mock import patch
+ 
+ import httpx
+ import pytest
+ from fastapi import FastAPI
+ from sqlalchemy import select, text
++from starlette.requests import Request
+ from starlette.responses import Response
+ 
+ from database.models.auth import UserSession
+ from database.session import RLSContext, RLSSessionFactory
++from kanban.api.deps import PrincipalContext
+ from kanban.api.problems import ProblemException, problem_exception_handler
+ from kanban.api.request_id import RequestIdMiddleware
+ from kanban.api.v1 import build_v1_router
++from kanban.api.v1.workspaces import (
++    UpdateWorkspaceRequest,
++    WorkspaceRoleBindingRequest,
++    bind_workspace_role_endpoint,
++    switch_workspace_endpoint,
++    unbind_workspace_role_endpoint,
++    update_workspace_endpoint,
++)
+ from kanban.auth.sessions.cookies import (
+     FALLBACK_SESSION_COOKIE_NAME,
+     SESSION_COOKIE_NAME,
+@@ -45,6 +56,7 @@ from kanban.auth.sessions.resolver import SessionCookieResolver
+ from kanban.auth.sessions.service import SessionService
+ from kanban.security.envelope import StaticKekProvider
+ from kanban.security.keys import KeyMaterial
++from kanban.security.mcp_keys import mint_mcp_api_key
+ 
+ if TYPE_CHECKING:
+     from sqlalchemy.ext.asyncio import AsyncEngine
+@@ -326,17 +338,28 @@ async def test_workspace_switch_preserves_absolute_expiry_and_stale_aal2(
+         assert age >= 1000, "Stale AAL2 verification must stay stale"
+ 
+     # 4. Non-cookie caller rejection:
+-    # A caller lacking a valid browser cookie session (caller.session_id is None)
+-    # must be rejected with 401
++    # A caller authenticating with a REAL valid non-cookie token (caller.session_id is None)
++    # must reach workspaces.py:287 and be rejected with 401 SESSION_REQUIRED
++    async with factory.session(ctx_admin) as sess:
++        _key_rec, valid_token = await mint_mcp_api_key(
++            sess,
++            workspace_id=ws1_id,
++            principal_id=admin_id,
++            surface="agent",
++            scopes=["agent:read", "agent:write"],
++            created_by_id=admin_id,
++        )
 +
-+    # Immediate GET matches complete-work ETag
-+    get_cw = await client.get(f"/api/v1/issues/{issue_key}")
-+    assert get_cw.headers["ETag"] == cw_etag
+     async with httpx.AsyncClient(
+         transport=transport, base_url="https://kanban.local"
+     ) as client_no_cookie:
+         resp_no_cookie = await client_no_cookie.post(
+             f"/api/v1/workspaces/{ws2_id}/switch",
+-            headers={"X-KB-Subject-Token": "kb_ephem_dummy_token_without_session"},
++            headers={"X-KB-Subject-Token": valid_token},
+         )
+-        # 401 Unauthorized or 403 Forbidden without session cookie
+-        assert resp_no_cookie.status_code in (401, 403)
++        assert resp_no_cookie.status_code == 401
++        data_no_cookie = resp_no_cookie.json()
++        assert data_no_cookie.get("code") == "SESSION_REQUIRED"
+         assert "set-cookie" not in resp_no_cookie.headers
+ 
+ 
+@@ -445,3 +468,149 @@ async def test_direct_session_service_rotate_for_workspace_switch_unit(
+ 
+         revoked_count = await session_service.revoke_all_for_principal(session, admin_id)
+         assert revoked_count >= 1
 +
-+    # 5. Provenance override: PATCH /api/v1/issues/{issue_key}/created-by
-+    client_admin = as_principal(admin, aal_level=2)
-+    prov_resp = await client_admin.patch(
-+        f"/api/v1/issues/{issue_key}/created-by",
-+        json={
-+            "created_by": "@wf_member",
-+            "reason": "Administrative audit trail correction for ticket origin",
-+        },
-+    )
-+    assert prov_resp.status_code == 200, prov_resp.text
-+    prov_etag = prov_resp.headers.get("ETag")
-+    assert prov_etag is not None
-+    assert prov_etag == prov_resp.json()["etag"]
-+    assert prov_etag.startswith('"')
-+    assert prov_etag.endswith('"')
 +
-+    # Immediate GET matches provenance override ETag
-+    get_prov = await client.get(f"/api/v1/issues/{issue_key}")
-+    assert get_prov.headers["ETag"] == prov_etag
++@pytest.mark.asyncio
++async def test_workspace_switch_error_branches(
++    pg_worker_db: AsyncEngine,
++    key_material: KeyMaterial,
++) -> None:
++    """Test error handling branches in switch_workspace_endpoint.
++
++    - line 296: session_factory is None -> 500 INTERNAL_ERROR
++    - lines 325-326: rotate_for_workspace_switch raises ValueError -> 401 SESSION_EXPIRED
++    """
++    factory = RLSSessionFactory(pg_worker_db)
++    session_service = SessionService(key_material.session_hmac_key)
++    ws1_id, admin_id = await _setup_workspace_and_admin(factory)
++    ws2_id = uuid.uuid4()
++
++    ctx_admin = RLSContext(principal_id=admin_id, workspace_id=ws1_id, aal_level=1)
++    async with factory.session(ctx_admin) as sess:
++        await sess.execute(
++            text("INSERT INTO workspaces (id, slug, name) VALUES (:id, :slug, 'WS 2')"),
++            {"id": ws2_id, "slug": f"ws-{ws2_id.hex[:10]}"},
++        )
++        issued = await session_service.create_after_login(
++            sess,
++            principal_id=admin_id,
++            workspace_id=ws1_id,
++            remember_me=False,
++            aal_level=1,
++        )
++
++        app = _create_app(factory, key_material, session_service)
++        req = Request({"type": "http", "app": app, "headers": []})
++        caller = PrincipalContext(
++            principal_id=admin_id,
++            workspace_id=ws1_id,
++            session_id=issued.session_id,
++        )
++
++        # 1. session_factory is None -> 500 INTERNAL_ERROR (workspaces.py:296)
++        req.app.state.session_factory = None
++        with pytest.raises(ProblemException) as exc_info:
++            await switch_workspace_endpoint(ws2_id, caller, sess, req)
++        assert exc_info.value.code == "INTERNAL_ERROR"
++        assert exc_info.value.status == 500
++
++        # Restore session_factory
++        req.app.state.session_factory = factory
++
++        # 2. rotate_for_workspace_switch raises ValueError ->
++        # 401 SESSION_EXPIRED (workspaces.py:325-326)
++        with patch.object(
++            session_service,
++            "rotate_for_workspace_switch",
++            side_effect=ValueError("Session revoked or expired"),
++        ):
++            with pytest.raises(ProblemException) as exc_info:
++                await switch_workspace_endpoint(ws2_id, caller, sess, req)
++            assert exc_info.value.code == "SESSION_EXPIRED"
++            assert exc_info.value.status == 401
++
++
++@pytest.mark.asyncio
++async def test_workspace_endpoint_admin_checks_and_conflicts(
++    pg_worker_db: AsyncEngine,
++) -> None:
++    """Test update_workspace_endpoint and role binding error branches.
++
++    - line 403: non-admin update -> 403 INSUFFICIENT_CAPABILITY
++    - line 416: non-existent workspace -> 404 NOT_FOUND
++    - line 448: conflicting slug -> 409 WORKSPACE_SLUG_CONFLICT
++    - lines 512, 544: non-admin role bindings -> 403 INSUFFICIENT_CAPABILITY
++    """
++    factory = RLSSessionFactory(pg_worker_db)
++    ws1_id, admin_id = await _setup_workspace_and_admin(factory)
++    member_id = uuid.uuid4()
++
++    # Member session without admin roles
++    ctx_member = RLSContext(principal_id=member_id, workspace_id=ws1_id, aal_level=1)
++    async with factory.session(ctx_member) as sess_member:
++        caller_member = PrincipalContext(principal_id=member_id, workspace_id=ws1_id)
++
++        # 1. Non-admin update -> 403 (workspaces.py:403)
++        with pytest.raises(ProblemException) as exc_info:
++            await update_workspace_endpoint(
++                ws1_id, UpdateWorkspaceRequest(name="Hacked"), caller_member, sess_member
++            )
++        assert exc_info.value.code == "INSUFFICIENT_CAPABILITY"
++        assert exc_info.value.status == 403
++
++        # 2. Non-admin bind role -> 403 (workspaces.py:512)
++        binding_req = WorkspaceRoleBindingRequest(principal_id=member_id, role="MEMBER")
++        with pytest.raises(ProblemException) as exc_info:
++            await bind_workspace_role_endpoint(ws1_id, binding_req, caller_member, sess_member)
++        assert exc_info.value.code == "INSUFFICIENT_CAPABILITY"
++        assert exc_info.value.status == 403
++
++        # 3. Non-admin unbind role -> 403 (workspaces.py:544)
++        with pytest.raises(ProblemException) as exc_info:
++            await unbind_workspace_role_endpoint(ws1_id, binding_req, caller_member, sess_member)
++        assert exc_info.value.code == "INSUFFICIENT_CAPABILITY"
++        assert exc_info.value.status == 403
++
++    # Admin session
++    ctx_admin = RLSContext(principal_id=admin_id, workspace_id=ws1_id, aal_level=1)
++    async with factory.session(ctx_admin) as sess_admin:
++        caller_admin = PrincipalContext(principal_id=admin_id, workspace_id=ws1_id)
++
++        # 4. Non-existent workspace -> 404 (workspaces.py:416)
++        fake_ws = uuid.uuid4()
++        with pytest.raises(ProblemException) as exc_info:
++            await update_workspace_endpoint(
++                fake_ws, UpdateWorkspaceRequest(name="New"), caller_admin, sess_admin
++            )
++        assert exc_info.value.code == "NOT_FOUND"
++        assert exc_info.value.status == 404
++
++        # 5. Conflicting slug -> 409 (workspaces.py:448)
++        other_ws = uuid.uuid4()
++        await sess_admin.execute(
++            text(
++                "INSERT INTO workspaces (id, slug, name) "
++                "VALUES (:id, 'slug-conflict-x', 'WS Other')"
++            ),
++            {"id": other_ws},
++        )
++        with pytest.raises(ProblemException) as exc_info:
++            await update_workspace_endpoint(
++                ws1_id, UpdateWorkspaceRequest(slug="slug-conflict-x"), caller_admin, sess_admin
++            )
++        assert exc_info.value.code == "WORKSPACE_SLUG_CONFLICT"
++        assert exc_info.value.status == 409
++
++        # 6. Name update when WorkspaceSettings row exists (covers lines 428-430)
++        resp_name = await update_workspace_endpoint(
++            ws1_id, UpdateWorkspaceRequest(name="Updated Name WS"), caller_admin, sess_admin
++        )
++        assert resp_name.name == "Updated Name WS"
++
++    # 7. Slug update with same slug in fresh session (post-commit) (covers line 440->456 no-op path)
++    async with factory.session(ctx_admin) as sess_admin2:
++        caller_admin2 = PrincipalContext(principal_id=admin_id, workspace_id=ws1_id)
++        resp_same_slug = await update_workspace_endpoint(
++            ws1_id, UpdateWorkspaceRequest(slug=resp_name.slug), caller_admin2, sess_admin2
++        )
++        assert resp_same_slug.slug == resp_name.slug
+diff --git a/kanban/workflows/engine.py b/kanban/workflows/engine.py
+index 7afeb733..fbfaa7bf 100644
+--- a/kanban/workflows/engine.py
++++ b/kanban/workflows/engine.py
+@@ -33,6 +33,9 @@ from kanban.services.issue_keys import resolve_issue_ref
+ from kanban.workflows.manifest import compute_hook_manifest_sha256
+ from kanban.workflows.mutations import apply_field_updates, validate_field_updates
+ 
++_MAX_DESC_BYTES: Final[int] = 131072
++_TRUNC_DESC_CHARS: Final[int] = 65536
++
+ if TYPE_CHECKING:
+     from collections.abc import Sequence
+ 
+@@ -149,6 +152,8 @@ class TransitionEngine:
+         parent_execution_id: uuid.UUID | None = None,
+         comment_markdown: str | None = None,
+         *,
++        verification_proof: dict[str, Any] | None = None,
++        is_complete_work: bool = False,
+         wasm_runner: WasmRunnerProtocol | None = None,
+         async_dispatcher: AsyncGateDispatcher | None = None,
+     ) -> TransitionOutcome:
+@@ -161,6 +166,8 @@ class TransitionEngine:
+             if_match=if_match,
+             parent_execution_id=parent_execution_id,
+             comment_markdown=comment_markdown,
++            verification_proof=verification_proof,
++            is_complete_work=is_complete_work,
+         )
+ 
+     async def execute_transition(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
+@@ -171,6 +178,9 @@ class TransitionEngine:
+         if_match: str | None = None,
+         parent_execution_id: uuid.UUID | None = None,
+         comment_markdown: str | None = None,
++        *,
++        verification_proof: dict[str, Any] | None = None,
++        is_complete_work: bool = False,
+     ) -> TransitionOutcome:
+         """Execute state transition pipeline under S14.1 / S14.2 invariants."""
+         session = self.session
+@@ -231,6 +241,22 @@ class TransitionEngine:
+                 detail="Current issue state could not be found",
+             )
+ 
++        # Agent completed state bypass guard (KB-P3-GATE-ENFORCE Problem 4)
++        if (
++            not is_complete_work
++            and target_state.state_group == "completed"
++            and actor.is_agent_or_mcp_caller
++        ):
++            raise ProblemException(
++                code="USE_COMPLETE_WORK",
++                status=422,
++                title="Use Complete Work",
++                detail=(
++                    "Agents and MCP callers must complete issues using the "
++                    "complete_work tool or canonical completion flow"
++                ),
++            )
++
+         # 2. Hop depth calculation
+         hop_depth = 0
+         if parent_execution_id is not None:
+@@ -313,6 +339,7 @@ class TransitionEngine:
+             from_state=from_state,
+             to_state=target_state,
+             actor=actor,
++            verification_proof=verification_proof,
+         )
+         hook_input_bytes = json.dumps(hook_input_dict, sort_keys=True).encode("utf-8")
+ 
+@@ -445,9 +472,17 @@ class TransitionEngine:
+                 continue
+ 
+             # Evaluate guest decision
+-            is_allow = output_json.get("decision") == "allow" or output_json.get("allowed") is True
++            is_allow = (
++                output_json.get("verdict") == "allow"
++                or output_json.get("decision") == "allow"
++                or output_json.get("allowed") is True
++                or output_json.get("allow") is True
++            )
+             is_reject = (
+-                output_json.get("decision") == "reject" or output_json.get("allowed") is False
++                output_json.get("verdict") == "reject"
++                or output_json.get("decision") == "reject"
++                or output_json.get("allowed") is False
++                or output_json.get("allow") is False
+             )
+ 
+             if not (is_allow or is_reject):
+@@ -747,13 +782,14 @@ class TransitionEngine:
+         )
+         session.add(inv)
+ 
+-    async def _build_hook_input(
++    async def _build_hook_input(  # noqa: PLR0913, PLR0917
+         self,
+         session: AsyncSession,
+         issue: Issue,
+         from_state: WorkflowState,
+         to_state: WorkflowState,
+         actor: PrincipalContext,
++        verification_proof: dict[str, Any] | None = None,
+     ) -> dict[str, Any]:
+         """Construct the kb-sync-hook-input/v1 JSON input payload."""
+         prio = await session.get(ProjectPriority, issue.priority_id)
+@@ -773,12 +809,35 @@ class TransitionEngine:
+             for a in assignees
+         ]
+ 
++        # Fetch recent non-deleted comments (KB-P3-GATE-ENFORCE Problem 3)
++        comments_stmt = (
++            select(IssueComment)
++            .where(IssueComment.issue_id == issue.id, IssueComment.deleted_at.is_(None))
++            .order_by(IssueComment.created_at.desc())
++            .limit(10)
++        )
++        comment_rows = list((await session.execute(comments_stmt)).scalars().all())
++        comments_list: list[dict[str, Any]] = [
++            {
++                "id": str(c.id),
++                "author_id": str(c.author_id),
++                "body_markdown": (c.body_markdown or "")[:16384],
++                "created_at": c.created_at.isoformat(),
++            }
++            for c in reversed(comment_rows)
++        ]
++
+         # Fetch project identifier for issue key
+         proj_ident = (
+             await session.execute(select(Project.identifier).where(Project.id == issue.project_id))
+         ).scalar_one_or_none()
+         issue_key = f"{proj_ident}-{issue.sequence_id}" if proj_ident else str(issue.id)
+ 
++        desc = issue.description_markdown or ""
++        # Cap description if needed to fit 256 KiB Wasm input limit
++        if len(desc.encode("utf-8")) > _MAX_DESC_BYTES:
++            desc = desc[:_TRUNC_DESC_CHARS]
++
+         return {
+             "contract": "kb-sync-hook-input/v1",
+             "schema": "kb-sync-hook-input/v1",
+@@ -786,10 +845,12 @@ class TransitionEngine:
+                 "id": str(issue.id),
+                 "key": issue_key,
+                 "summary": issue.summary,
+-                "description_markdown": issue.description_markdown,
++                "description_markdown": desc,
+                 "priority": prio_slug,
+                 "labels": labels,
+                 "assignees": assignees_list,
++                "comments": comments_list,
++                "verification_proof": verification_proof,
+                 "custom_fields": {},
+             },
+             "transition": {

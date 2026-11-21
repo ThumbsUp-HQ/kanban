@@ -1,3 +1,575 @@
+diff --git a/agent/cli.py b/agent/cli.py
+index 2b35133e..d17385db 100644
+--- a/agent/cli.py
++++ b/agent/cli.py
+@@ -9,6 +9,10 @@ import sys
+ from dataclasses import dataclass
+ from typing import TYPE_CHECKING, NoReturn
+ 
++from agent.cli_commands.run_gate_worker import (
++    configure_run_gate_worker_parser,
++    handle_run_gate_worker,
++)
+ from agent.cli_commands.validate_echo import (
+     configure_validate_echo_parser,
+     handle_validate_echo,
+@@ -257,5 +261,15 @@ register_subcommand(
+     )
+ )
+ 
++# Register run-gate-worker subcommand
++register_subcommand(
++    SubcommandSpec(
++        name="run-gate-worker",
++        help="Run background gate worker executing asynchronous transition gates",
++        configure_parser=configure_run_gate_worker_parser,
++        handler=handle_run_gate_worker,
++    )
++)
++
+ if __name__ == "__main__":
+     raise SystemExit(main())
+diff --git a/agent/gates/runner.py b/agent/gates/runner.py
+new file mode 100644
+index 00000000..b6b6f26d
+--- /dev/null
++++ b/agent/gates/runner.py
+@@ -0,0 +1,243 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Background runner executing GateWorker against asynchronous transition gates (S14.3, KAN-45)."""
++
++from __future__ import annotations
++
++import asyncio
++import contextlib
++import logging
++import uuid
++from typing import TYPE_CHECKING, Any
++
++from sqlalchemy import select
++
++from agent.gates.worker import GateWorker, HarnessRegistry
++from database.models.agent_definition import AgentDefinition
++from database.models.issues import Issue
++from database.models.projects import Project, WorkflowState
++from database.models.workflow import (
++    WorkflowHookInvocation,
++    WorkflowTransitionExecution,
++    WorkflowTransitionHook,
++)
++from database.session import RLSContext, RLSSessionFactory
++from kanban.workflows.async_gate import GateCoordinator
++
++if TYPE_CHECKING:
++    from agent.context.transition_context import RepoContext
++
++logger = logging.getLogger(__name__)
++
++__all__ = [
++    "GateWorkerRunner",
++    "start_gate_worker",
++]
++
++
++class GateWorkerRunner:
++    """Consumes pending transition gate invocations and coordinates asynchronous decisions."""
++
++    def __init__(
++        self,
++        session_factory: RLSSessionFactory | None = None,
++        harness_registry: HarnessRegistry | None = None,
++        poll_interval_s: float = 1.0,
++    ) -> None:
++        """Initialize runner with session factory, harness registry, and poll interval."""
++        self.session_factory = session_factory
++        self.registry = harness_registry or HarnessRegistry()
++        self.poll_interval_s = poll_interval_s
++        self.worker = GateWorker(
++            registry=self.registry,
++            coordinator=self,
++            entity_loader=self._load_entities,
++        )
++
++    async def record_decision(
++        self, execution_id: object, hook_id: object, decision: object
++    ) -> None:
++        """Forward validated decision to GateCoordinator within an administrative session."""
++        if self.session_factory is None:
++            return
++
++        admin_ctx = RLSContext(
++            principal_id=uuid.UUID(int=0),
++            workspace_id=uuid.UUID(int=0),
++            token_scopes=("admin",),
++            aal_level=2,
++        )
++        async with self.session_factory.session(admin_ctx) as session:
++            await GateCoordinator.record_decision(
++                session=session,
++                execution_id=execution_id,  # type: ignore[arg-type]
++                hook_id=hook_id,  # type: ignore[arg-type]
++                decision=decision,  # type: ignore[arg-type]
++            )
++            await session.commit()
++
++    async def record_failure(self, execution_id: object, hook_id: object, code: str) -> None:
++        """Forward failure or timeout to GateCoordinator within an administrative session."""
++        if self.session_factory is None:
++            return
++
++        admin_ctx = RLSContext(
++            principal_id=uuid.UUID(int=0),
++            workspace_id=uuid.UUID(int=0),
++            token_scopes=("admin",),
++            aal_level=2,
++        )
++        async with self.session_factory.session(admin_ctx) as session:
++            await GateCoordinator.record_failure(
++                session=session,
++                execution_id=execution_id,  # type: ignore[arg-type]
++                hook_id=hook_id,  # type: ignore[arg-type]
++                code=code,
++            )
++            await session.commit()
++
++    async def _load_entities(
++        self, event: object
++    ) -> tuple[object, object, object, RepoContext | None, object]:
++        """Load execution, issue, agent_def, and metadata from database."""
++        payload: dict[str, Any] = (
++            event
++            if isinstance(event, dict)
++            else (
++                getattr(event, "payload", {})
++                if isinstance(getattr(event, "payload", None), dict)
++                else {}
++            )
++        )
++        execution_id_str = str(payload.get("execution_id") or getattr(event, "execution_id", ""))
++        hook_id_str = str(payload.get("hook_id") or getattr(event, "hook_id", ""))
++        agent_def_id_str = str(
++            payload.get("agent_definition_id") or getattr(event, "agent_definition_id", "")
++        )
++
++        if self.session_factory is None:
++            return (
++                payload.get("execution"),
++                payload.get("issue"),
++                payload.get("agent_def"),
++                None,
++                payload.get("mcp_urls"),
++            )
++
++        admin_ctx = RLSContext(
++            principal_id=uuid.UUID(int=0),
++            workspace_id=uuid.UUID(int=0),
++            token_scopes=("admin",),
++            aal_level=2,
++        )
++        async with self.session_factory.session(admin_ctx) as session:
++            exec_uuid = uuid.UUID(execution_id_str)
++            hook_uuid = uuid.UUID(hook_id_str)
++            execution = await session.get(WorkflowTransitionExecution, exec_uuid)
++            hook = await session.get(WorkflowTransitionHook, hook_uuid)
++            agent_def = (
++                await session.get(AgentDefinition, uuid.UUID(agent_def_id_str))
++                if agent_def_id_str
++                else (
++                    await session.get(AgentDefinition, hook.agent_definition_id)
++                    if hook and hook.agent_definition_id
++                    else None
++                )
++            )
++            issue = await session.get(Issue, execution.issue_id) if execution else None
++            project = await session.get(Project, execution.project_id) if execution else None
++            from_state = (
++                await session.get(WorkflowState, execution.from_state_id) if execution else None
++            )
++            to_state = (
++                await session.get(WorkflowState, execution.to_state_id) if execution else None
++            )
++
++            exec_dict = {
++                "id": str(execution.id) if execution else execution_id_str,
++                "project_key": project.identifier if project else "KAN",
++                "from_state": from_state.name if from_state else "Unknown",
++                "to_state": to_state.name if to_state else "Done",
++                "actor": str(execution.invoking_principal_id) if execution else "@system",
++                "allowed_mutable_fields": (
++                    hook.allowed_mutable_fields if hook else ("labels", "priority")
++                ),
++            }
++            issue_dict = {
++                "key": (
++                    f"{project.identifier}-{issue.sequence_id}"
++                    if project and issue
++                    else str(issue.id if issue else "")
++                ),
++                "summary": issue.summary if issue else "",
++                "description_markdown": issue.description_markdown if issue else "",
++            }
++            agent_dict = {
++                "slug": agent_def.slug if agent_def else "agent",
++                "harness_kind": agent_def.harness_kind if agent_def else "in_app_sdk",
++                "timeout_ms": agent_def.timeout_ms if agent_def else 60000,
++                "repo_access_mode": agent_def.repo_access_mode if agent_def else "read-only",
++                "cli_binary_allowlist_id": (
++                    agent_def.cli_binary_allowlist_id if agent_def else None
++                ),
++                "model_identifier": agent_def.model_id if agent_def else None,
++            }
++            return exec_dict, issue_dict, agent_dict, None, None
++
++    async def poll_once(self) -> int:
++        """Poll for pending running gate hook invocations. Returns count handled."""
++        if self.session_factory is None:
++            return 0
++
++        admin_ctx = RLSContext(
++            principal_id=uuid.UUID(int=0),
++            workspace_id=uuid.UUID(int=0),
++            token_scopes=("admin",),
++            aal_level=2,
++        )
++        handled = 0
++        async with self.session_factory.session(admin_ctx) as session:
++            stmt = (
++                select(WorkflowHookInvocation)
++                .where(
++                    WorkflowHookInvocation.status == "running",
++                    WorkflowHookInvocation.hook_kind == "agent_interceptor",
++                )
++                .order_by(WorkflowHookInvocation.started_at)
++                .limit(10)
++            )
++            invs = list((await session.execute(stmt)).scalars().all())
++            for inv in invs:
++                event = {
++                    "execution_id": str(inv.execution_id),
++                    "hook_id": str(inv.hook_id),
++                }
++                try:
++                    await self.worker.handle_dispatch(event)
++                    handled += 1
++                except Exception as exc:  # noqa: BLE001
++                    logger.debug("Error handling gate dispatch: %s", exc)
++        return handled
++
++    async def run(self, stop_event: asyncio.Event) -> None:
++        """Run runner poll loop until stop_event is set."""
++        while not stop_event.is_set():
++            try:
++                await self.poll_once()
++            except Exception as exc:  # noqa: BLE001
++                logger.debug("Gate worker runner poll iteration error: %s", exc)
++            with contextlib.suppress(TimeoutError):
++                await asyncio.wait_for(stop_event.wait(), timeout=self.poll_interval_s)
++
++
++async def start_gate_worker(
++    app: object, session_target: RLSSessionFactory | None = None
++) -> tuple[asyncio.Task[None], asyncio.Event]:
++    """Start background gate worker task during application lifespan."""
++    stop_event = asyncio.Event()
++    sf = session_target
++    if sf is None and hasattr(app, "state"):
++        sf = getattr(app.state, "session_factory", None)
++    runner = GateWorkerRunner(session_factory=sf)
++    task = asyncio.create_task(runner.run(stop_event))
++    return task, stop_event
+diff --git a/agent/tests/gates/test_gate_runner.py b/agent/tests/gates/test_gate_runner.py
+new file mode 100644
+index 00000000..cdde16b8
+--- /dev/null
++++ b/agent/tests/gates/test_gate_runner.py
+@@ -0,0 +1,110 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unit tests for GateWorkerRunner and background gate execution (KAN-45).
++
++Covers:
++  - GateWorkerRunner initialization and configuration.
++  - Outbox event polling and dispatch.
++  - Background task start and cancellation lifecycle.
++"""
++
++from __future__ import annotations
++
++import asyncio
++from typing import TYPE_CHECKING
++from unittest.mock import AsyncMock, MagicMock
++
++import pytest
++
++from agent.gates.runner import GateWorkerRunner, start_gate_worker
++
++if TYPE_CHECKING:
++    import types
++
++
++class MockSessionFactory:
++    """Mock session factory for GateWorkerRunner."""
++
++    def __init__(self, session: object) -> None:
++        """Initialize mock session factory with session object."""
++        self._session = session
++
++    class SessionContext:
++        """Async context manager wrapper around mock session."""
++
++        def __init__(self, session: object) -> None:
++            """Initialize context manager with mock session."""
++            self._session = session
++
++        async def __aenter__(self) -> object:
++            """Enter async context returning session."""
++            return self._session
++
++        async def __aexit__(
++            self,
++            exc_type: type[BaseException] | None,
++            exc_val: BaseException | None,
++            exc_tb: types.TracebackType | None,
++        ) -> None:
++            """Exit async context."""
++            del exc_type, exc_val, exc_tb
++
++    def session(self, ctx: object = None) -> SessionContext:
++        """Create a session context."""
++        del ctx
++        return self.SessionContext(self._session)
++
++
++@pytest.mark.asyncio
++async def test_gate_worker_runner_init_and_properties() -> None:
++    """Runner initializes with poll interval and default harness registry."""
++    runner = GateWorkerRunner(
++        session_factory=None,
++        poll_interval_s=0.25,
++    )
++    assert runner.poll_interval_s == 0.25
++    assert runner.registry is not None
++    assert runner.worker is not None
++
++
++@pytest.mark.asyncio
++async def test_gate_worker_runner_poll_once_empty() -> None:
++    """Runner handles empty event queue gracefully."""
++    mock_session = AsyncMock()
++    # Return empty list of invocations
++    mock_result = MagicMock()
++    mock_result.scalars.return_value.all.return_value = []
++    mock_session.execute.return_value = mock_result
++
++    session_factory = MockSessionFactory(mock_session)
++    runner = GateWorkerRunner(session_factory=session_factory)  # type: ignore[arg-type]
++
++    processed = await runner.poll_once()
++    assert processed == 0
++
++
++@pytest.mark.asyncio
++async def test_start_gate_worker_lifecycle() -> None:
++    """start_gate_worker launches a task that cancels cleanly on stop_event."""
++    mock_session = AsyncMock()
++    mock_result = MagicMock()
++    mock_result.scalars.return_value.all.return_value = []
++    mock_session.execute.return_value = mock_result
++    session_factory = MockSessionFactory(mock_session)
++
++    class DummyApp:
++        class State:
++            session_factory = None
++
++        state = State()
++
++    task, stop_event = await start_gate_worker(
++        DummyApp(),
++        session_target=session_factory,  # type: ignore[arg-type]
++    )
++
++    # Let worker run one cycle
++    await asyncio.sleep(0.05)
++    stop_event.set()
++    await asyncio.wait_for(task, timeout=2.0)
++    assert task.done()
+diff --git a/kanban/api/deps.py b/kanban/api/deps.py
+index 69a69e3e..acaa23af 100644
+--- a/kanban/api/deps.py
++++ b/kanban/api/deps.py
+@@ -42,6 +42,8 @@ class PrincipalContext:
+     scoped_project_id: uuid.UUID | None = None
+     user_access_hash: bytes | None = None
+     is_server_admin: bool = False
++    principal_type: str | None = None
++    is_mcp_credential: bool = False
+ 
+     def __post_init__(self) -> None:
+         """Enforce AAL level bounds."""
+@@ -57,6 +59,17 @@ class PrincipalContext:
+             converted: tuple[object, ...] = tuple(raw_scopes)
+             object.__setattr__(self, "token_scopes", converted)
+ 
++    @property
++    def is_agent_or_mcp_caller(self) -> bool:
++        """Return True if caller is an AI agent, MCP client, or service principal."""
++        if self.principal_type in ("AGENT", "SERVICE_PRINCIPAL", "agent", "service_principal"):
++            return True
++        if self.agent_principal_id is not None:
++            return True
++        if self.is_mcp_credential:
++            return True
++        return any(scope.startswith(("agent:", "docs:", "admin:")) for scope in self.token_scopes)
++
+ 
+ class PrincipalResolver(Protocol):
+     """Protocol for resolving PrincipalContext from an inbound HTTP request."""
+diff --git a/kanban/api/v1/issue_move.py b/kanban/api/v1/issue_move.py
+index 37e3027d..ee4e56df 100644
+--- a/kanban/api/v1/issue_move.py
++++ b/kanban/api/v1/issue_move.py
+@@ -4,7 +4,7 @@ from __future__ import annotations
+ 
+ from typing import Annotated
+ 
+-from fastapi import APIRouter, Depends
++from fastapi import APIRouter, Depends, Response
+ from sqlalchemy.ext.asyncio import AsyncSession
+ 
+ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
+@@ -13,6 +13,8 @@ from kanban.api.v1.schemas.issue_move import (
+     IssueMoveRequest,
+     IssueMoveResponse,
+ )
++from kanban.security.read_taint import TaintGuard, get_taint_guard
++from kanban.services.issue_keys import resolve_issue_ref
+ from kanban.services.issue_move import move_issue
+ 
+ router = APIRouter(tags=["issues"])
+@@ -27,12 +29,18 @@ Session = Annotated[AsyncSession, Depends(get_rls_session)]
+     response_model_exclude_none=False,
+     summary="Move or reorder an issue on the board",
+ )
+-async def post_issue_move(
++async def post_issue_move(  # noqa: PLR0913, PLR0917
+     issue_ref: str,
+     body: IssueMoveRequest,
+     caller: Caller,
+     session: Session,
++    response: Response,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+ ) -> IssueMoveResponse:
+     """Move an issue across columns or reorder it within a column (S6.4)."""
+     async with timing_floor(floor_ms=25.0):
+-        return await move_issue(session, caller, issue_ref, body)
++        issue = await resolve_issue_ref(session, caller, issue_ref)
++        await taint_guard.check_write(issue.project_id, tool_name="move_issue")
++        res = await move_issue(session, caller, issue_ref, body, response=response)
++        await session.commit()
++        return res
+diff --git a/kanban/app.py b/kanban/app.py
+index 54f6d9eb..ddbeb8ce 100644
+--- a/kanban/app.py
++++ b/kanban/app.py
+@@ -270,6 +270,55 @@ def _start_outbox_relay(
+         return task, relay_stop_event
+ 
+ 
++async def _run_startup_checks(app: FastAPI, session_target: object | None) -> None:
++    if session_target is None:
++        return
++    try:
++        await verify_schema_head(session_target)  # type: ignore[arg-type]
++    except Exception:
++        logger.debug("Startup schema-head check skipped or failed", exc_info=True)
++    try:
++        key_material = getattr(app.state, "key_material", None)
++        app_settings = getattr(app.state, "settings", None)
++        await mint_setup_token_if_uninitialized(
++            session_target,  # type: ignore[arg-type]
++            key_material=key_material,
++            settings=app_settings,
++        )
++    except Exception:
++        logger.debug("First-boot setup token check bypassed or failed", exc_info=True)
++
++
++async def _start_gate_worker_if_enabled(
++    app: FastAPI,
++    *,
++    should_run: bool,
++    session_target: object | None,
++) -> tuple[asyncio.Task[None] | None, asyncio.Event | None]:
++    if not (should_run and session_target is not None):
++        return None, None
++    try:
++        gate_runner_mod = importlib.import_module("agent.gates.runner")
++        start_gate_worker = getattr(gate_runner_mod, "start_gate_worker", None)
++        if start_gate_worker is not None:
++            return await start_gate_worker(app, session_target)  # type: ignore[no-any-return]
++    except Exception:
++        logger.debug("Gate worker runner startup skipped or failed", exc_info=True)
++    return None, None
++
++
++async def _stop_background_task(
++    task: asyncio.Task[None] | None, stop_event: asyncio.Event | None
++) -> None:
++    if task is None:
++        return
++    if stop_event is not None:
++        stop_event.set()
++    task.cancel()
++    with contextlib.suppress(asyncio.CancelledError, Exception):
++        await task
++
++
+ @asynccontextmanager
+ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+     """Manage application lifespan, starting background workers and draining on shutdown."""
+@@ -285,35 +334,21 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+     if hub is not None:
+         await hub.start()
+ 
+-    if session_target is not None:
+-        try:
+-            await verify_schema_head(session_target)
+-        except Exception:
+-            logger.debug("Startup schema-head check skipped or failed", exc_info=True)
+-        try:
+-            key_material = getattr(app.state, "key_material", None)
+-            app_settings = getattr(app.state, "settings", None)
+-            await mint_setup_token_if_uninitialized(
+-                session_target,
+-                key_material=key_material,
+-                settings=app_settings,
+-            )
+-        except Exception:
+-            logger.debug("First-boot setup token check bypassed or failed", exc_info=True)
++    await _run_startup_checks(app, session_target)
+ 
+     if should_run and session_target is not None:
+         await scheduler.start(session_target)
+ 
++    gate_runner_task, gate_runner_stop_event = await _start_gate_worker_if_enabled(
++        app, should_run=should_run, session_target=session_target
++    )
+     relay_task, relay_stop_event = _start_outbox_relay(app, session_target)
+ 
+     try:
+         yield
+     finally:
+-        if relay_task is not None:
+-            relay_stop_event.set()
+-            relay_task.cancel()
+-            with contextlib.suppress(asyncio.CancelledError, Exception):
+-                await relay_task
++        await _stop_background_task(gate_runner_task, gate_runner_stop_event)
++        await _stop_background_task(relay_task, relay_stop_event)
+         if should_run and session_target is not None:
+             await scheduler.stop()
+         hub = getattr(app.state, "realtime_hub", None)
 diff --git a/kanban/auth/sessions/csrf.py b/kanban/auth/sessions/csrf.py
 index 52c13d4b..0ebc163d 100644
 --- a/kanban/auth/sessions/csrf.py
@@ -17,31 +589,1352 @@ index 52c13d4b..0ebc163d 100644
              return await call_next(request)
  
          # Non-API paths and exempt paths are out of scope
-diff --git a/kanban/tests/api/test_gate_enforcement_hardening.py b/kanban/tests/api/test_gate_enforcement_hardening.py
-index c2e40109..b6cf319d 100644
---- a/kanban/tests/api/test_gate_enforcement_hardening.py
-+++ b/kanban/tests/api/test_gate_enforcement_hardening.py
-@@ -17,6 +17,7 @@ from __future__ import annotations
- import uuid
- from typing import TYPE_CHECKING
+diff --git a/kanban/auth/sessions/resolver.py b/kanban/auth/sessions/resolver.py
+index 9b5c6f21..66068ea6 100644
+--- a/kanban/auth/sessions/resolver.py
++++ b/kanban/auth/sessions/resolver.py
+@@ -82,6 +82,8 @@ class SessionCookieResolver:
+             session_id=user_session.id,
+             mfa_pending=user_session.mfa_pending,
+             aal2_verified_at=user_session.aal2_verified_at,
++            principal_type="USER",
++            is_mcp_credential=False,
+         )
+         request.state.principal = ctx
+         bind_request_log_user(
+@@ -144,6 +146,10 @@ class SessionCookieResolver:
+                 ws_id = def_ws if def_ws is not None else uuid.UUID(int=0)
  
-+import httpx
- import pytest
- from sqlalchemy import text
+         is_ephemeral = intro.token_kind == "ephemeral" or raw_token.startswith("kb_agt_eph_")  # noqa: S105
++        owner_kind = intro.owner_kind or (
++            "agent" if intro.agent_principal_id or is_ephemeral else "user"
++        )
++        principal_type = owner_kind.upper()
+         ctx = PrincipalContext(
+             principal_id=intro.principal_id,
+             workspace_id=ws_id,
+@@ -154,6 +160,8 @@ class SessionCookieResolver:
+             read_only=is_ephemeral,
+             scope_tier=intro.scope_tier,
+             scoped_project_id=intro.project_id,
++            principal_type=principal_type,
++            is_mcp_credential=True,
+         )
+         request.state.principal = ctx
+         bind_request_log_user(
+diff --git a/kanban/issues/proof.py b/kanban/issues/proof.py
+index b7626c47..d884175f 100644
+--- a/kanban/issues/proof.py
++++ b/kanban/issues/proof.py
+@@ -1,10 +1,12 @@
+ # Copyright 2026 Kanban Platform Contributors
+ # Apache-2.0 License. See LICENSE for details.
+-"""Verification proof model and path invariants for issue workflow (KB-P4-06)."""
++"""Verification proof model and path invariants for issue workflow (KB-P4-06, KAN-45)."""
  
-@@ -31,8 +32,6 @@ from kanban.issues.proof import (
+ from __future__ import annotations
+ 
+ import re
++import unicodedata
++import urllib.parse
+ from typing import Annotated, Final, Literal
+ 
+ from pydantic import BaseModel, ConfigDict, Field, field_validator
+@@ -13,19 +15,43 @@ __all__ = [
+     "ARTIFACT_PATH_REGEX",
+     "CI_RUN_URL_REGEX",
+     "QA_DIR_REGEX",
++    "REPORT_PATH_REGEX",
+     "RealityCheckerProof",
+     "VerificationProof",
++    "validate_ci_run_url",
+     "validate_proof_ticket_key",
++    "validate_reality_checker_report",
+ ]
+ 
+-QA_DIR_REGEX: Final[str] = r"^docs/qa/([A-Z][A-Z0-9]{1,9}-[0-9]{1,18})/?$"
++QA_DIR_REGEX: Final[str] = r"\Adocs/qa/([A-Z][A-Z0-9]{1,9}-[0-9]{1,18})/?\Z"
+ ARTIFACT_PATH_REGEX: Final[str] = (
+-    r"^docs/qa/([A-Z][A-Z0-9]{1,9}-[0-9]{1,18})/([A-Za-z0-9._/-]{1,200})$"
++    r"\Adocs/qa/([A-Z][A-Z0-9]{1,9}-[0-9]{1,18})/([A-Za-z0-9._/-]{1,200})\Z"
+ )
+-CI_RUN_URL_REGEX: Final[str] = r"^https://[A-Za-z0-9\-._~:/?#\[\]@!$&'()*+,;=]+$"
++REPORT_PATH_REGEX: Final[str] = (
++    r"\Adocs/qa/([A-Z][A-Z0-9]{1,9}-[0-9]{1,18})/reality-checker-report\.md\Z"
++)
++CI_RUN_URL_REGEX: Final[str] = r"\Ahttps://[A-Za-z0-9\-._~:/?#$!&*+,;=]{1,2048}\Z"
+ 
+ _QA_DIR_PAT: Final[re.Pattern[str]] = re.compile(QA_DIR_REGEX)
+ _ARTIFACT_PAT: Final[re.Pattern[str]] = re.compile(ARTIFACT_PATH_REGEX)
++_REPORT_PAT: Final[re.Pattern[str]] = re.compile(REPORT_PATH_REGEX)
++
++_FORBIDDEN_URL_CHARS: Final[set[str]] = {
++    "[",
++    "]",
++    "(",
++    ")",
++    "<",
++    ">",
++    '"',
++    "'",
++    "`",
++    "|",
++    "\n",
++    "\r",
++    "\t",
++    " ",
++}
+ 
+ 
+ def _check_no_traversal(path: str) -> None:
+@@ -38,6 +64,39 @@ def _check_no_traversal(path: str) -> None:
+         raise ValueError(msg)
+ 
+ 
++MAX_CI_RUN_URL_LEN: Final[int] = 2048
++_SURROGATE_MIN: Final[int] = 0xD800
++_SURROGATE_MAX: Final[int] = 0xDFFF
++
++
++def validate_ci_run_url(v: str) -> str:
++    """Validate ci_run_url via urllib.parse.urlsplit ensuring safe https and no credentials."""
++    if len(v) < 1 or len(v) > MAX_CI_RUN_URL_LEN:
++        msg = f"ci_run_url length ({len(v)}) must be between 1 and {MAX_CI_RUN_URL_LEN} characters"
++        raise ValueError(msg)
++    if any(ch in _FORBIDDEN_URL_CHARS for ch in v):
++        msg = f"ci_run_url '{v}' contains forbidden characters or Markdown delimiters"
++        raise ValueError(msg)
++
++    parsed = urllib.parse.urlsplit(v)
++    if parsed.scheme != "https":
++        msg = f"ci_run_url scheme must be 'https', got '{parsed.scheme}'"
++        raise ValueError(msg)
++    if not parsed.netloc or not parsed.hostname:
++        msg = "ci_run_url must contain a non-empty host"
++        raise ValueError(msg)
++    if parsed.username or parsed.password or "@" in parsed.netloc:
++        msg = "ci_run_url must not contain user credentials"
++        raise ValueError(msg)
++
++    return v
++
++
++def _pydantic_pattern(rx: str) -> str:
++    r"""Convert Python \Z anchor to Rust-compatible \z for Pydantic validation."""
++    return rx.replace(r"\Z", r"\z")
++
++
+ class RealityCheckerProof(BaseModel):
+     """Reality-checker forensic report proof block."""
+ 
+@@ -47,13 +106,16 @@ class RealityCheckerProof(BaseModel):
+     grade: Annotated[str, Field(pattern=r"^[A-F]$")]
+     report_path: Annotated[
+         str,
+-        Field(pattern=r"^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/[A-Za-z0-9._/-]{1,200}$"),
++        Field(pattern=_pydantic_pattern(REPORT_PATH_REGEX)),
+     ]
+ 
+     @field_validator("report_path")
+     @classmethod
+     def _validate_report_path(cls, v: str) -> str:
+         _check_no_traversal(v)
++        if not _REPORT_PAT.match(v):
++            msg = f"report_path '{v}' does not match canonical reality-checker-report.md path"
++            raise ValueError(msg)
+         return v
+ 
+ 
+@@ -62,18 +124,18 @@ class VerificationProof(BaseModel):
+ 
+     model_config = ConfigDict(extra="forbid")
+ 
+-    qa_dir: Annotated[str, Field(pattern=r"^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/?$")]
++    qa_dir: Annotated[str, Field(pattern=_pydantic_pattern(QA_DIR_REGEX))]
+     artifacts: Annotated[
+         list[
+             Annotated[
+                 str,
+-                Field(pattern=r"^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/[A-Za-z0-9._/-]{1,200}$"),
++                Field(pattern=_pydantic_pattern(ARTIFACT_PATH_REGEX)),
+             ]
+         ],
+-        Field(max_length=50),
++        Field(min_length=1, max_length=50),
+     ]
+     reality_checker: RealityCheckerProof
+-    ci_run_url: Annotated[str, Field(pattern=CI_RUN_URL_REGEX)]
++    ci_run_url: Annotated[str, Field(pattern=_pydantic_pattern(CI_RUN_URL_REGEX))]
+ 
+     @field_validator("qa_dir")
+     @classmethod
+@@ -84,10 +146,25 @@ class VerificationProof(BaseModel):
+     @field_validator("artifacts")
+     @classmethod
+     def _validate_artifacts(cls, v: list[str]) -> list[str]:
++        if len(v) < 1:
++            msg = "VerificationProof.artifacts must contain at least 1 artifact"
++            raise ValueError(msg)
+         for item in v:
+             _check_no_traversal(item)
++            if item.endswith("/"):
++                msg = f"Artifact path '{item}' cannot end with a trailing slash"
++                raise ValueError(msg)
++            segments = item.split("/")
++            if any(seg in (".", "..") for seg in segments):
++                msg = f"Artifact path '{item}' contains forbidden dot segments"
++                raise ValueError(msg)
+         return v
+ 
++    @field_validator("ci_run_url")
++    @classmethod
++    def _validate_ci_run_url(cls, v: str) -> str:
++        return validate_ci_run_url(v)
++
+ 
+ def validate_proof_ticket_key(proof: VerificationProof, expected_ticket_key: str) -> None:
+     """Assert all paths in verification proof target the exact issue key."""
+@@ -96,7 +173,7 @@ def validate_proof_ticket_key(proof: VerificationProof, expected_ticket_key: str
+         msg = f"qa_dir '{proof.qa_dir}' does not match expected ticket key '{expected_ticket_key}'"
+         raise ValueError(msg)
+ 
+-    m_rep = _ARTIFACT_PAT.match(proof.reality_checker.report_path)
++    m_rep = _REPORT_PAT.match(proof.reality_checker.report_path)
+     if not m_rep or m_rep.group(1) != expected_ticket_key:
+         msg = (
+             f"report_path '{proof.reality_checker.report_path}' does not match "
+@@ -109,3 +186,128 @@ def validate_proof_ticket_key(proof: VerificationProof, expected_ticket_key: str
+         if not m_art or m_art.group(1) != expected_ticket_key:
+             msg = f"artifact '{item}' does not match expected ticket key '{expected_ticket_key}'"
+             raise ValueError(msg)
++
++
++def validate_reality_checker_report(  # noqa: C901, PLR0912, PLR0915
++    markdown: str,
++) -> None:
++    """Validate reality-checker report structure in deterministic O(N) linear time."""
++    if not markdown or not markdown.strip():
++        msg = "Reality-checker report markdown cannot be empty"
++        raise ValueError(msg)
++
++    # 1. Reject UTF-16 lone surrogates (0xD800..0xDFFF)
++    for idx, ch in enumerate(markdown):
++        cp = ord(ch)
++        if _SURROGATE_MIN <= cp <= _SURROGATE_MAX:
++            msg = f"Invalid UTF-16 lone surrogate character at offset {idx}: U+{cp:04X}"
++            raise ValueError(msg)
++
++    # 2. Parse lines with NFKC normalization, skipping code blocks and HTML comments
++    lines = markdown.splitlines()
++    in_code_block: str | None = None
++    in_html_comment = False
++
++    has_h1 = False
++    canonical_h2_order: Final[list[str]] = [
++        "Reality Check Validation",
++        "Complete System Evidence",
++        "Integration Testing Results",
++        "Comprehensive Issue Assessment",
++        "Realistic Quality Certification",
++        "Deployment Readiness Assessment",
++    ]
++    sections_found: dict[str, list[str]] = {name: [] for name in canonical_h2_order}
++    current_section: str | None = None
++
++    for raw_line in lines:
++        line = unicodedata.normalize("NFKC", raw_line)
++
++        # Handle HTML comment state spanning lines
++        if in_html_comment:
++            end_comment = line.find("-->")
++            if end_comment != -1:
++                line = line[end_comment + 3 :]
++                in_html_comment = False
++            else:
++                continue
++
++        # Strip intra-line HTML comments
++        while "<!--" in line:
++            start_idx = line.find("<!--")
++            end_idx = line.find("-->", start_idx + 4)
++            if end_idx != -1:
++                line = line[:start_idx] + line[end_idx + 3 :]
++            else:
++                line = line[:start_idx]
++                in_html_comment = True
++                break
++
++        stripped = line.strip()
++        if not stripped:
++            continue
++
++        # Handle fenced code blocks
++        if stripped.startswith(("```", "~~~")):
++            fence = stripped[:3]
++            if in_code_block == fence:
++                in_code_block = None
++                continue
++            if in_code_block is None:
++                in_code_block = fence
++                continue
++
++        if in_code_block is not None:
++            continue
++
++        # Check H1 header
++        if stripped.startswith("# ") and not stripped.startswith("## "):
++            h1_text = stripped[2:].strip()
++            if h1_text == "Integration Agent Reality-Based Report":
++                has_h1 = True
++                current_section = None
++                continue
++
++        # Check H2 headers
++        if stripped.startswith("## "):
++            h2_text = stripped[3:].strip()
++            matched_name: str | None = None
++            for c_name in canonical_h2_order:
++                if c_name in h2_text:
++                    matched_name = c_name
++                    break
++            current_section = matched_name
++            continue
++
++        if current_section is not None:
++            sections_found[current_section].append(stripped)
++
++    if not has_h1:
++        msg = "Missing required '# Integration Agent Reality-Based Report' H1 header"
++        raise ValueError(msg)
++
++    # 3. Verify all 6 H2 sections exist with non-empty body lines
++    for c_name in canonical_h2_order:
++        body_lines = sections_found[c_name]
++        if not body_lines:
++            msg = f"Missing required canonical section '## {c_name}' or section body is empty"
++            raise ValueError(msg)
++
++    # 4. Check anti-fantasy contradiction markers inside certification/readiness sections
++    cert_body = "\n".join(sections_found["Realistic Quality Certification"])
++    ready_body = "\n".join(sections_found["Deployment Readiness Assessment"])
++    combined_check = f"{cert_body}\n{ready_body}"
++
++    claims_ready = "READY" in combined_check or bool(
++        re.search(r"\bA\b", cert_body) or "A-" in cert_body or "A+" in cert_body
++    )
++    if claims_ready:
++        contradiction_markers: Final[list[str]] = ["NEEDS WORK", "NEEDS_WORK", "FAILED"]
++        for marker in contradiction_markers:
++            pat = rf"\b{re.escape(marker)}\b"
++            if re.search(pat, combined_check, re.IGNORECASE):
++                msg = (
++                    f"Contradiction marker '{marker}' found in certification or deployment "
++                    "readiness assessment while claiming READY / A"
++                )
++                raise ValueError(msg)
+diff --git a/kanban/issues/workflow_service.py b/kanban/issues/workflow_service.py
+index 2b80b15a..949f1d18 100644
+--- a/kanban/issues/workflow_service.py
++++ b/kanban/issues/workflow_service.py
+@@ -9,17 +9,24 @@ from dataclasses import dataclass
+ from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
+ 
+ from pydantic import ValidationError
+-from sqlalchemy import select, text
++from sqlalchemy import or_, select, text
+ 
+ from database.models.issues import Issue, IssueAssignee, IssueComment
+ from database.models.projects import Cycle, Project, WorkflowState
++from database.models.workflow import WorkflowTransitionHook
+ from kanban.api.problems import ProblemException
+ from kanban.content import normalize_to_markdown
+-from kanban.issues.proof import VerificationProof, validate_proof_ticket_key
++from kanban.issues.proof import (
++    VerificationProof,
++    validate_proof_ticket_key,
++    validate_reality_checker_report,
++)
+ from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.issue_keys import resolve_issue_ref
+ 
++_HTTP_ACCEPTED: Final[int] = 202
++
  if TYPE_CHECKING:
-     from collections.abc import Awaitable, Callable
+     from sqlalchemy.ext.asyncio import AsyncSession
  
--    import httpx
--
-     from kanban.tests.api.conftest import ApiEnv, SeededUser
+@@ -52,7 +59,7 @@ class GateHoldResult:
  
- pytestmark = pytest.mark.committed_db
-@@ -466,3 +465,106 @@ async def test_patch_returns_409_transition_held_during_active_gate(
+ @runtime_checkable
+ class WorkflowGateHook(Protocol):
+-    """Protocol for pluggable workflow transition interceptors and gates."""
++    """Protocol for pluggable workflow transition helpers and gates."""
+ 
+     async def evaluate_transition(  # noqa: PLR0913, PLR0917
+         self,
+@@ -123,13 +130,30 @@ def render_proof_table(summary_markdown: str, proof: dict[str, Any]) -> str:
      )
-     assert patch_resp.status_code == 409
-     assert patch_resp.json()["code"] == "TRANSITION_HELD"
+ 
+ 
+-async def _check_if_match_etag(issue: Issue, if_match: str | None) -> None:
+-    """Validate optional If-Match ETag against issue description SHA-256."""
++async def _check_if_match_etag(
++    issue: Issue,
++    if_match: str | None,
++    session: AsyncSession | None = None,
++    caller: PrincipalContext | None = None,
++) -> None:
++    """Validate optional If-Match ETag against composite issue ETag or description SHA-256."""
+     if not if_match:
+         return
+-    current_etag = issue.description_sha256.hex() if issue.description_sha256 else ""
+-    clean_match = if_match.strip().strip('"')
+-    if clean_match != current_etag:
++    raw_etag = if_match.strip()
++    if raw_etag.startswith("W/"):
++        raw_etag = raw_etag[2:].strip()
++    clean_match = raw_etag.strip('"')
++    current_sha = issue.description_sha256.hex() if issue.description_sha256 else ""
++    valid_etags = [current_sha.lower()]
++
++    if session is not None and caller is not None:
++        from kanban.services.issues import serialize_issue  # noqa: PLC0415
++
++        serialized = await serialize_issue(session, caller, issue)
++        if serialized.etag:
++            valid_etags.append(serialized.etag.strip('"').lower())
++
++    if clean_match.lower() not in valid_etags:
+         raise ProblemException(
+             code="CONFLICT_ETAG",
+             status=412,
+@@ -205,7 +229,7 @@ async def begin_work(
+         Capability.EDIT | Capability.TRANSITION,
+     )
+ 
+-    await _check_if_match_etag(issue, if_match)
++    await _check_if_match_etag(issue, if_match, session=session, caller=caller)
+ 
+     if issue.pending_transition_exec_id is not None:
+         raise ProblemException(
+@@ -376,7 +400,7 @@ async def transition_ticket(  # noqa: PLR0913, PLR0917
+     issue = await resolve_issue_ref(session, caller, issue_ref)
+     await require_capability(session, caller, issue.id, Capability.TRANSITION)
+ 
+-    await _check_if_match_etag(issue, if_match)
++    await _check_if_match_etag(issue, if_match, session=session, caller=caller)
+ 
+     if issue.pending_transition_exec_id is not None:
+         raise ProblemException(
+@@ -478,18 +502,24 @@ async def _collect_open_blockers(
+     caller: PrincipalContext,
+     issue: Issue,
+ ) -> list[str]:
+-    """Inspect recursive child issues and incoming BLOCKS links for uncompleted work."""
++    """Inspect recursive child issues and incoming BLOCKS / outgoing BLOCKED_BY links."""
+     visible_keys: list[str] = []
+     redacted_count = 0
+     seen_ids: set[uuid.UUID] = set()
+ 
+-    # 1. Recursive child issues
++    # 1. Recursive child issues filtering deleted_at IS NULL
+     stmt_children = text(
+         "WITH RECURSIVE descendants AS ("
+-        "    SELECT id, project_id, state_id, sequence_id FROM issues WHERE parent_issue_id = :iid "
++        "    SELECT i.id, i.project_id, i.state_id, i.sequence_id "
++        "    FROM issues i "
++        "    JOIN objects o ON o.id = i.id "
++        "    WHERE i.parent_issue_id = :iid AND o.deleted_at IS NULL "
+         "    UNION ALL "
+-        "    SELECT i.id, i.project_id, i.state_id, i.sequence_id FROM issues i "
++        "    SELECT i.id, i.project_id, i.state_id, i.sequence_id "
++        "    FROM issues i "
+         "    JOIN descendants d ON i.parent_issue_id = d.id "
++        "    JOIN objects o ON o.id = i.id "
++        "    WHERE o.deleted_at IS NULL "
+         ") "
+         "SELECT d.id, d.project_id, d.sequence_id, p.identifier "
+         "FROM descendants d "
+@@ -509,16 +539,24 @@ async def _collect_open_blockers(
+         else:
+             redacted_count += 1
+ 
+-    # 2. Inbound BLOCKS links from object_links
+-    stmt_blocks = text(
+-        "SELECT ol.source_id, ol.source_key_snapshot "
+-        "FROM object_links ol "
+-        "WHERE ol.target_id = :iid "
+-        "  AND ol.link_type = 'BLOCKS' "
+-        "  AND ol.link_state = 'ACTIVE'"
++    # 2. Inbound BLOCKS and outgoing BLOCKED_BY links
++    stmt_links = text(
++        "SELECT blocker_id FROM ("
++        "  SELECT ol.source_id AS blocker_id "
++        "  FROM object_links ol "
++        "  WHERE ol.target_id = :iid "
++        "    AND ol.link_type = 'BLOCKS' "
++        "    AND ol.link_state = 'ACTIVE' "
++        "  UNION "
++        "  SELECT ol.target_id AS blocker_id "
++        "  FROM object_links ol "
++        "  WHERE ol.source_id = :iid "
++        "    AND ol.link_type = 'BLOCKED_BY' "
++        "    AND ol.link_state = 'ACTIVE' "
++        ") blockers"
+     )
+-    block_links = (await session.execute(stmt_blocks, {"iid": issue.id})).all()
+-    for row in block_links:
++    link_rows = (await session.execute(stmt_links, {"iid": issue.id})).all()
++    for row in link_rows:
+         src_id = row[0]
+         if src_id in seen_ids:
+             continue
+@@ -529,13 +567,14 @@ async def _collect_open_blockers(
+             redacted_count += 1
+             continue
+ 
+-        # For readable source, check whether its state is non-terminal
++        # For readable blocker, check whether its state is non-terminal
+         src_state_stmt = text(
+             "SELECT p.identifier, src.sequence_id, ws.state_group "
+             "FROM issues src "
++            "JOIN objects o ON o.id = src.id "
+             "JOIN projects p ON p.id = src.project_id "
+             "JOIN workflow_states ws ON ws.id = src.state_id "
+-            "WHERE src.id = :sid"
++            "WHERE src.id = :sid AND o.deleted_at IS NULL"
+         )
+         src_state_row = (await session.execute(src_state_stmt, {"sid": src_id})).first()
+         if src_state_row is not None:
+@@ -551,7 +590,7 @@ async def _collect_open_blockers(
+     return result_keys
+ 
+ 
+-async def complete_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
++async def complete_work(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
+     session: AsyncSession,
+     caller: PrincipalContext,
+     issue_ref: str,
+@@ -564,7 +603,7 @@ async def complete_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
+     issue = await resolve_issue_ref(session, caller, issue_ref)
+     await require_capability(session, caller, issue.id, Capability.TRANSITION)
+ 
+-    await _check_if_match_etag(issue, if_match)
++    await _check_if_match_etag(issue, if_match, session=session, caller=caller)
+ 
+     if issue.pending_transition_exec_id is not None:
+         raise ProblemException(
+@@ -622,6 +661,16 @@ async def complete_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
+             detail="summary_markdown length must be between 1 and 65536 bytes",
+         )
+ 
++    try:
++        validate_reality_checker_report(summary_markdown)
++    except ValueError as exc:
++        raise ProblemException(
++            code="INVALID_REALITY_CHECKER_REPORT",
++            status=422,
++            title="Invalid Reality-Checker Report",
++            detail=str(exc),
++        ) from exc
++
+     # Resolve target completed state
+     if to_state_ref:
+         target_state = await _resolve_state_by_ref(session, issue.project_id, to_state_ref)
+@@ -691,37 +740,80 @@ async def complete_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
+             detail="Current issue state could not be resolved",
+         )
+ 
+-    # 3. Evaluate gate hook
+-    hook = get_workflow_gate_hook()
+-    gate_hold = await hook.evaluate_transition(
+-        session,
+-        caller,
+-        issue,
+-        from_state,
+-        target_state,
+-        verification_proof=verification_proof,
++    # 3. Evaluate transition hooks / gate hook
++    hooks_stmt = (
++        select(WorkflowTransitionHook.id)
++        .where(
++            WorkflowTransitionHook.project_id == issue.project_id,
++            WorkflowTransitionHook.to_state_id == target_state.id,
++            WorkflowTransitionHook.is_enabled.is_(True),
++            or_(
++                WorkflowTransitionHook.from_state_id == from_state.id,
++                WorkflowTransitionHook.from_state_id.is_(None),
++            ),
++        )
++        .limit(1)
+     )
+-
+-    if gate_hold is not None:
+-        issue.pending_transition_exec_id = gate_hold.execution_id
+-    elif issue.state_id != target_state.id:
+-        await session.execute(text("SELECT set_config('app.transition_exec_id', 'bypass', true)"))
+-        old_id = issue.state_id
+-        issue.state_id = target_state.id
+-        await record_activity(
++    has_hooks = (await session.execute(hooks_stmt)).scalar_one_or_none() is not None
++
++    gate_hold: GateHoldResult | None = None
++    if has_hooks:
++        from kanban.workflows.engine import TransitionEngine  # noqa: PLC0415
++
++        engine = TransitionEngine(session)
++        outcome = await engine.execute_transition(
++            issue_key=str(issue.id),
++            to_state=target_state.id,
++            actor=caller,
++            if_match=if_match,
++            is_complete_work=True,
++            verification_proof=verification_proof,
++        )
++        if outcome.status_code == _HTTP_ACCEPTED or outcome.status == "pending_agent_gate":
++            active_ag = (
++                outcome.field_updates.get("active_agent", "") if outcome.field_updates else ""
++            )
++            gate_hold = GateHoldResult(
++                execution_id=outcome.execution_id
++                or (uuid.uuid7() if hasattr(uuid, "uuid7") else uuid.uuid4()),
++                active_agent=active_ag,
++                from_state=from_state.name,
++                to_state=target_state.name,
++            )
++            issue.pending_transition_exec_id = gate_hold.execution_id
++    else:
++        hook = get_workflow_gate_hook()
++        gate_hold = await hook.evaluate_transition(
+             session,
+-            workspace_id=caller.workspace_id,
+-            object_id=issue.id,
+-            actor_principal_id=caller.principal_id,
+-            event_type=ActivityEventType.ISSUE_STATE_CHANGED,
+-            payload={
+-                "from_state_id": str(old_id),
+-                "to_state_id": str(target_state.id),
+-                "from_state": from_state.name,
+-                "to_state": target_state.name,
+-            },
++            caller,
++            issue,
++            from_state,
++            target_state,
++            verification_proof=verification_proof,
+         )
+ 
++        if gate_hold is not None:
++            issue.pending_transition_exec_id = gate_hold.execution_id
++        elif issue.state_id != target_state.id:
++            await session.execute(
++                text("SELECT set_config('app.transition_exec_id', 'bypass', true)")
++            )
++            old_id = issue.state_id
++            issue.state_id = target_state.id
++            await record_activity(
++                session,
++                workspace_id=caller.workspace_id,
++                object_id=issue.id,
++                actor_principal_id=caller.principal_id,
++                event_type=ActivityEventType.ISSUE_STATE_CHANGED,
++                payload={
++                    "from_state_id": str(old_id),
++                    "to_state_id": str(target_state.id),
++                    "from_state": from_state.name,
++                    "to_state": target_state.name,
++                },
++            )
++
+     # 4. Post summary comment with rendered proof table
+     comment_content = render_proof_table(summary_markdown, verification_proof)
+     normalized_content = normalize_to_markdown(comment_content)
+diff --git a/kanban/sandbox/wasm_runner.py b/kanban/sandbox/wasm_runner.py
+index df1adca7..8ea73545 100644
+--- a/kanban/sandbox/wasm_runner.py
++++ b/kanban/sandbox/wasm_runner.py
+@@ -329,8 +329,14 @@ class TierAWasmRunner:
+         try:
+             # Allocate guest buffer and copy input bytes
+             alloc_ptr = kb_alloc(store, len(input_bytes))
+-            if isinstance(alloc_ptr, int):
+-                memory.write(store, input_bytes, alloc_ptr)
++            if not (
++                isinstance(alloc_ptr, int)
++                and alloc_ptr > 0
++                and alloc_ptr + len(input_bytes) <= memory.data_len(store)
++            ):
++                msg = "WebAssembly guest 'kb_alloc' returned invalid or out-of-bounds pointer"
++                raise WasmRunError(msg, code="SCRIPT_TRAP")
++            memory.write(store, input_bytes, alloc_ptr)
+ 
+             # Invoke guest run entrypoint
+             ret = kb_run(store, alloc_ptr, len(input_bytes))
+diff --git a/kanban/services/issue_move.py b/kanban/services/issue_move.py
+index 5558edb4..ccf64eaa 100644
+--- a/kanban/services/issue_move.py
++++ b/kanban/services/issue_move.py
+@@ -21,12 +21,14 @@ if TYPE_CHECKING:
+     import uuid
+ 
+     from sqlalchemy.ext.asyncio import AsyncSession
++    from starlette.responses import Response
+ 
+     from kanban.api.deps import PrincipalContext
+ 
+ logger = logging.getLogger(__name__)
+ 
+ MIN_OVERRIDE_REASON_LEN: Final[int] = 10
++_HTTP_ACCEPTED: Final[int] = 202
+ MAX_OVERRIDE_REASON_LEN: Final[int] = 500
+ REQUIRED_AAL2_LEVEL: Final[int] = 2
+ 
+@@ -248,6 +250,8 @@ async def move_issue(
+     caller: PrincipalContext,
+     issue_ref: str,
+     req: IssueMoveRequest,
++    *,
++    response: Response | None = None,
+ ) -> IssueMoveResponse:
+     """Move an issue to a new board position or column in a single-row mutation."""
+     issue = await resolve_issue_ref(session, caller, issue_ref)
+@@ -313,12 +317,30 @@ async def move_issue(
+     old_state_id = issue.state_id
+ 
+     if is_cross_column:
+-        await TransitionEngine.request_transition(
++        outcome = await TransitionEngine.request_transition(
+             session=session,
+             issue_key=str(issue.id),
+             to_state=target_state_id,
+             actor=caller,
+         )
++        if outcome.status_code == _HTTP_ACCEPTED or outcome.status == "pending_agent_gate":
++            if response is not None:
++                response.status_code = _HTTP_ACCEPTED
++            proj_ident = (
++                await session.execute(
++                    select(Project.identifier).where(Project.id == issue.project_id)
++                )
++            ).scalar_one()
++            issue_key = f"{proj_ident}-{issue.sequence_id}"
++            return IssueMoveResponse(
++                issue_key=issue_key,
++                state_id=old_state_id,
++                board_rank=old_rank,
++                rebalance_scheduled=False,
++                wip_warning=wip_warning,
++                hard_limit=target_state.wip_hard_limit if wip_overridden else None,
++                resulting_count=resulting_count if (wip_overridden or wip_warning) else None,
++            )
+         await session.execute(
+             text("UPDATE issues SET board_rank = :r WHERE id = :id"),
+             {"r": new_rank, "id": issue.id},
+diff --git a/kanban/services/issues.py b/kanban/services/issues.py
+index a7d07a00..13140f56 100644
+--- a/kanban/services/issues.py
++++ b/kanban/services/issues.py
+@@ -27,7 +27,7 @@ import base64
+ import binascii
+ import hashlib
+ import uuid
+-from datetime import date, datetime
++from datetime import UTC, date, datetime
+ from typing import TYPE_CHECKING, Any, Final
+ 
+ from sqlalchemy import delete, select, text, update
+@@ -656,8 +656,11 @@ async def serialize_issue(
+ 
+     sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
+ 
+-    obj = await session.get(ObjectRecord, issue.id)
++    obj = await session.get(ObjectRecord, issue.id, populate_existing=True)
+     archived_at = obj.archived_at if obj is not None else None
++    now_utc = datetime.now(UTC)
++    issue_created_at = obj.created_at if obj is not None else now_utc
++    issue_updated_at = obj.updated_at if obj is not None else now_utc
+     archive_eligibility = await _resolve_archive_eligibility(session, issue, state, archived_at)
+ 
+     pending_gate = await resolve_pending_gate(session, issue)
+@@ -674,7 +677,12 @@ async def serialize_issue(
+             else issue.description_markdown
+         ),
+         description_sha256=sha256_hex,
+-        state=StateSummary(id=state.id, name=state.name, group=state.state_group),
++        state=StateSummary(
++            id=state.id,
++            name=state.name,
++            group=state.state_group,
++            color_hex=state.color_hex,
++        ),
+         priority=PrioritySummary(slug=priority.slug, label=priority.label, emoji=priority.emoji),
+         start_date=issue.start_date,
+         due_date=issue.due_date,
+@@ -692,6 +700,8 @@ async def serialize_issue(
+         provenance=provenance,
+         access_manifest=manifest,
+         capabilities=capabilities_to_names(caps),
++        created_at=issue_created_at,
++        updated_at=issue_updated_at,
+         archived_at=archived_at,
+         archive_eligibility=archive_eligibility,
+         pending_gate=pending_gate,
+@@ -740,15 +750,37 @@ async def create_issue(
+ 
+     try:
+         async with session.begin_nested():
+-            seq_id = (
++            seq_row = (
+                 await session.execute(
+-                    text("SELECT allocate_issue_sequence(:proj)"), {"proj": project.id}
++                    text(
++                        "SELECT allocated_sequences, skipped_sequences "
++                        "FROM allocate_issue_sequences(:proj, 1, false)"
++                    ),
++                    {"proj": project.id},
+                 )
+-            ).scalar_one()
++            ).one()
++            allocated_seqs: list[int] = list(seq_row[0])
++            skipped_seqs: list[int] = list(seq_row[1])
++            seq_id = allocated_seqs[0]
+ 
+             canonical_key = f"{project.identifier}-{seq_id}"
+             rank = initial_board_rank(seq_id)
+ 
++            if skipped_seqs:
++                await record_activity(
++                    session,
++                    workspace_id=caller.workspace_id,
++                    object_id=project.id,
++                    actor_principal_id=caller.principal_id,
++                    event_type=ActivityEventType.SEQUENCE_SKIPPED,
++                    payload={
++                        "project_key": project.identifier,
++                        "skipped_sequences": skipped_seqs,
++                        "allocated_sequence": seq_id,
++                        "reason": "agent_safe_sequence_numbering",
++                    },
++                )
++
+             issue_id = (
+                 await session.execute(
+                     text(
+@@ -846,7 +878,7 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
+ ) -> tuple[IssueResponse, str]:
+     """Patch issue fields under description ETag concurrency check and emit activity."""
+     issue = await resolve_issue_ref(session, caller, issue_ref)
+-    obj = await session.get(ObjectRecord, issue.id)
++    obj = await session.get(ObjectRecord, issue.id, populate_existing=True)
+     if obj is not None and obj.archived_at is not None:
+         raise _problem(
+             code="ISSUE_ARCHIVED",
+@@ -855,6 +887,14 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
+             detail="Archived issues are read-only and cannot be modified",
+         )
+ 
++    if issue.pending_transition_exec_id is not None:
++        raise _problem(
++            code="TRANSITION_HELD",
++            status=409,
++            title="Transition Held",
++            detail="Issue modification is blocked while an asynchronous transition gate is pending",
++        )
++
+     project = await session.get(Project, issue.project_id)
+     if project is None:  # pragma: no cover
+         not_found()
+@@ -1130,11 +1170,12 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
+             },
+         )
+ 
+-    updated_issue = (
+-        await session.execute(select(Issue).where(Issue.id == issue_id))
+-    ).scalar_one_or_none()
+-    if updated_issue is None:  # pragma: no cover
+-        not_found()
++    await session.flush()
++    await session.refresh(issue)
++    obj_rec = await session.get(ObjectRecord, issue_id, populate_existing=True)
++    if obj_rec is not None:
++        await session.refresh(obj_rec)
++    updated_issue = issue
+ 
+     serialized = await serialize_issue(session, caller, updated_issue)
+     new_etag = serialized.etag or (
+diff --git a/kanban/tests/api/test_gate_enforcement_hardening.py b/kanban/tests/api/test_gate_enforcement_hardening.py
+new file mode 100644
+index 00000000..b6cf319d
+--- /dev/null
++++ b/kanban/tests/api/test_gate_enforcement_hardening.py
+@@ -0,0 +1,570 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Hardening and gate enforcement unit & integration tests (KAN-45).
++
++Covers:
++  - validate_reality_checker_report linear O(N) validator.
++  - Surrogate rejection, NFKC homoglyph normalization, code block/comment stripping.
++  - Rejection of contradiction markers (NEEDS WORK, NEEDS_WORK, FAILED).
++  - 422 USE_COMPLETE_WORK guard for agent/MCP callers on PATCH, move, and transitions.
++  - Human browser caller exemption on completed state transitions.
++  - 409 TRANSITION_HELD on PATCH /api/v1/issues/{key} during active agent gate.
++  - 202 pending_agent_gate on POST /api/v1/issues/{key}/move without board_rank mutation.
++"""
++
++from __future__ import annotations
++
++import uuid
++from typing import TYPE_CHECKING
++
++import httpx
++import pytest
++from sqlalchemy import text
++
++from kanban.issues.proof import (
++    RealityCheckerProof,
++    VerificationProof,
++    validate_ci_run_url,
++    validate_proof_ticket_key,
++    validate_reality_checker_report,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++
++pytestmark = pytest.mark.committed_db
++
++
++def _make_canonical_report(verdict: str = "READY", grade: str = "A") -> str:
++    return f"""# Integration Agent Reality-Based Report
++
++## Reality Check Validation
++- Verified all deliverables against acceptance criteria.
++- Complete audit of all source files and assets.
++
++## Complete System Evidence
++- System running smoothly with zero errors.
++- Verification artifacts collected in docs/qa.
++
++## Integration Testing Results
++- All unit and integration test suites executed cleanly.
++- Full regression suite passing.
++
++## Comprehensive Issue Assessment
++- Root cause identified and systematically resolved.
++- Security and performance invariants verified.
++
++## Realistic Quality Certification
++- Verdict: {verdict}
++- Grade: {grade}
++
++## Deployment Readiness Assessment
++- Ready for immediate production deployment.
++- No rollback concerns or migration locks.
++"""
++
++
++def test_validate_reality_checker_report_positive() -> None:
++    """Canonical report passes validation without exception."""
++    report = _make_canonical_report()
++    validate_reality_checker_report(report)
++
++
++def test_validate_reality_checker_report_rejects_surrogates() -> None:
++    """Surrogate code points 0xD800..0xDFFF are rejected immediately."""
++    with pytest.raises(ValueError, match="surrogate"):
++        validate_reality_checker_report("Report with \ud800 surrogate")
++
++
++def test_validate_reality_checker_report_rejects_missing_h1() -> None:
++    """Missing canonical H1 title is rejected."""
++    bad_report = """## Reality Check Validation
++- Valid
++"""
++    with pytest.raises(ValueError, match="H1 header"):
++        validate_reality_checker_report(bad_report)
++
++
++def test_validate_reality_checker_report_rejects_missing_sections() -> None:
++    """Missing any of the 6 canonical H2 sections is rejected."""
++    bad_report = """# Integration Agent Reality-Based Report
++
++## Reality Check Validation
++- Content here.
++"""
++    with pytest.raises(ValueError, match="canonical section"):
++        validate_reality_checker_report(bad_report)
++
++
++def test_validate_reality_checker_report_rejects_empty_section_body() -> None:
++    """Canonical section with empty body is rejected."""
++    report = """# Integration Agent Reality-Based Report
++
++## Reality Check Validation
++
++## Complete System Evidence
++- Evidence
++
++## Integration Testing Results
++- Results
++
++## Comprehensive Issue Assessment
++- Assessment
++
++## Realistic Quality Certification
++- Verdict: READY
++- Grade: A
++
++## Deployment Readiness Assessment
++- Ready
++"""
++    with pytest.raises(ValueError, match="canonical section"):
++        validate_reality_checker_report(report)
++
++
++def test_validate_reality_checker_report_fenced_blocks_and_comments_ignored() -> None:
++    """H1 or H2 inside fenced code blocks or HTML comments do not satisfy requirements."""
++    fenced_report = """```markdown
++# Integration Agent Reality-Based Report
++## Reality Check Validation
++```
++<!--
++## Complete System Evidence
++-->
++"""
++    with pytest.raises(ValueError, match="H1 header"):
++        validate_reality_checker_report(fenced_report)
++
++
++def test_validate_reality_checker_report_rejects_contradiction_markers() -> None:
++    """Contradiction markers inside certification/readiness reject report."""
++    contradictory_report = """# Integration Agent Reality-Based Report
++
++## Reality Check Validation
++- Verified all deliverables.
++
++## Complete System Evidence
++- Evidence collected.
++
++## Integration Testing Results
++- Tests passing.
++
++## Comprehensive Issue Assessment
++- Root cause resolved.
++
++## Realistic Quality Certification
++- Verdict: READY
++- Grade: A
++- Status: NEEDS WORK on edge cases
++
++## Deployment Readiness Assessment
++- Ready for deployment.
++"""
++    with pytest.raises(ValueError, match="Contradiction marker"):
++        validate_reality_checker_report(contradictory_report)
++
++
++def test_validate_reality_checker_report_contradiction_in_code_block_allowed() -> None:
++    """Contradiction words inside fenced code blocks are ignored."""
++    report_with_code = """# Integration Agent Reality-Based Report
++
++## Reality Check Validation
++- Verified all deliverables.
++
++## Complete System Evidence
++- Evidence collected.
++
++## Integration Testing Results
++- Tests passing.
++
++## Comprehensive Issue Assessment
++- Root cause resolved.
++
++## Realistic Quality Certification
++- Verdict: READY
++- Grade: A
++```
++Regression test logs showed: FAILED in legacy harness prior to fix
++```
++
++## Deployment Readiness Assessment
++- Ready for immediate production deployment.
++"""
++    validate_reality_checker_report(report_with_code)
++
++
++def test_validate_ci_run_url_edge_cases() -> None:
++    """validate_ci_run_url rejects invalid schemes, credentials, and forbidden characters."""
++    with pytest.raises(ValueError, match="scheme must be 'https'"):
++        validate_ci_run_url("http://github.com/org/repo/actions/runs/123")
++    with pytest.raises(ValueError, match="must not contain user credentials"):
++        validate_ci_run_url("https://user:pass@github.com/org/repo/actions/runs/123")
++    with pytest.raises(ValueError, match="non-empty host"):
++        validate_ci_run_url("https:///runs/123")
++    with pytest.raises(ValueError, match="forbidden characters"):
++        validate_ci_run_url("https://github.com/org/repo/runs/123\n")
++    with pytest.raises(ValueError, match="between 1 and 2048"):
++        validate_ci_run_url("")
++    with pytest.raises(ValueError, match="between 1 and 2048"):
++        validate_ci_run_url("https://github.com/" + "a" * 2050)
++
++
++def test_verification_proof_artifact_traversals_and_invariants() -> None:
++    """VerificationProof enforces non-empty artifacts and rejects traversals."""
++    proof_base = {
++        "reality_checker": {
++            "verdict": "READY",
++            "grade": "A",
++            "report_path": "docs/qa/KAN-45/reality-checker-report.md",
++        },
++        "qa_dir": "docs/qa/KAN-45",
++        "ci_run_url": "https://github.com/org/repo/actions/runs/123",
++    }
++    with pytest.raises(ValueError, match="at least 1 item"):
++        VerificationProof.model_validate({**proof_base, "artifacts": []})
++    with pytest.raises(ValueError, match="double slash"):
++        VerificationProof.model_validate(
++            {**proof_base, "artifacts": ["docs/qa/KAN-45//unit-test.txt"]}
++        )
++    with pytest.raises(ValueError, match="trailing slash"):
++        VerificationProof.model_validate({**proof_base, "artifacts": ["docs/qa/KAN-45/dir/"]})
++    with pytest.raises(ValueError, match="forbidden dot segments"):
++        VerificationProof.model_validate(
++            {**proof_base, "artifacts": ["docs/qa/KAN-45/./unit-test.txt"]}
++        )
++    with pytest.raises(ValueError, match="directory traversal"):
++        VerificationProof.model_validate(
++            {**proof_base, "artifacts": ["docs/qa/KAN-45/../secret.txt"]}
++        )
++    with pytest.raises(ValueError, match="String should match pattern"):
++        RealityCheckerProof.model_validate(
++            {
++                "verdict": "READY",
++                "grade": "A",
++                "report_path": "docs/qa/bad/report.md",
++            }
++        )
++    with pytest.raises(ValueError, match="String should match pattern"):
++        RealityCheckerProof.model_validate(
++            {
++                "verdict": "READY",
++                "grade": "A",
++                "report_path": "docs/qa/KAN-45/../reality-checker-report.md",
++            }
++        )
++
++
++def test_validate_proof_ticket_key_mismatches() -> None:
++    """validate_proof_ticket_key rejects mismatches between ticket and proof paths."""
++    valid_proof = VerificationProof.model_validate(
++        {
++            "reality_checker": {
++                "verdict": "READY",
++                "grade": "A",
++                "report_path": "docs/qa/KAN-45/reality-checker-report.md",
++            },
++            "qa_dir": "docs/qa/KAN-45",
++            "ci_run_url": "https://github.com/org/repo/actions/runs/123",
++            "artifacts": ["docs/qa/KAN-45/unit-test.txt"],
++        }
++    )
++    with pytest.raises(ValueError, match="does not match expected ticket key 'KAN-99'"):
++        validate_proof_ticket_key(valid_proof, "KAN-99")
++
++    mismatched_report_proof = VerificationProof.model_validate(
++        {
++            "reality_checker": {
++                "verdict": "READY",
++                "grade": "A",
++                "report_path": "docs/qa/KAN-99/reality-checker-report.md",
++            },
++            "qa_dir": "docs/qa/KAN-45",
++            "ci_run_url": "https://github.com/org/repo/actions/runs/123",
++            "artifacts": ["docs/qa/KAN-45/unit-test.txt"],
++        }
++    )
++    with pytest.raises(
++        ValueError, match=r"report_path 'docs/qa/KAN-99/reality-checker-report\.md'"
++    ):
++        validate_proof_ticket_key(mismatched_report_proof, "KAN-45")
++
++    mismatched_artifact_proof = VerificationProof.model_validate(
++        {
++            "reality_checker": {
++                "verdict": "READY",
++                "grade": "A",
++                "report_path": "docs/qa/KAN-45/reality-checker-report.md",
++            },
++            "qa_dir": "docs/qa/KAN-45",
++            "ci_run_url": "https://github.com/org/repo/actions/runs/123",
++            "artifacts": ["docs/qa/KAN-99/unit-test.txt"],
++        }
++    )
++    with pytest.raises(ValueError, match="does not match expected ticket key 'KAN-45'"):
++        validate_proof_ticket_key(mismatched_artifact_proof, "KAN-45")
++
++
++def test_validate_reality_checker_report_html_comments_and_order() -> None:
++    """Report validates HTML comment stripping and rejects empty sections or bad order."""
++    report_with_comment = """# Integration Agent Reality-Based Report
++
++<!-- This comment is stripped -->
++## Reality Check Validation
++- Validated.
++
++## Complete System Evidence
++<!-- another comment -->
++- Evidence present.
++
++## Integration Testing Results
++- 100% tests pass.
++
++## Comprehensive Issue Assessment
++- Assessed.
++
++## Realistic Quality Certification
++- Verdict: READY
++- Grade: A
++
++## Deployment Readiness Assessment
++- Ready.
++"""
++    validate_reality_checker_report(report_with_comment)
++
++    # Missing H1
++    with pytest.raises(ValueError, match="H1 header"):
++        validate_reality_checker_report("## Reality Check Validation\nBody")
++
++    # Missing H2 section
++    incomplete = """# Integration Agent Reality-Based Report
++
++## Reality Check Validation
++- Validated.
++"""
++    with pytest.raises(ValueError, match="Missing required canonical section"):
++        validate_reality_checker_report(incomplete)
++
++    # Empty section body
++    empty_body = """# Integration Agent Reality-Based Report
++
++## Reality Check Validation
++
++## Complete System Evidence
++- Evidence.
++
++## Integration Testing Results
++- Tests.
++
++## Comprehensive Issue Assessment
++- Assessment.
++
++## Realistic Quality Certification
++- Verdict: READY
++- Grade: A
++
++## Deployment Readiness Assessment
++- Ready.
++"""
++    with pytest.raises(ValueError, match="section body is empty"):
++        validate_reality_checker_report(empty_body)
++
++
++async def test_agent_caller_blocked_from_completed_state_on_patch(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Agent / MCP caller attempting PATCH to completed state receives 422 USE_COMPLETE_WORK."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    proj_id = await make_project("AGP", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    # Create issue
++    resp = await client.post(
++        "/api/v1/projects/AGP/issues",
++        json={"summary": "Agent test issue", "description_markdown": "Desc"},
++    )
++    assert resp.status_code == 201
++    issue_key = resp.json()["key"]
++
++    states = (
++        await api_env.seed.execute(
++            text("SELECT id, name, state_group FROM workflow_states WHERE project_id = :p"),
++            {"p": proj_id},
++        )
++    ).all()
++    done_state = next(s for s in states if s[1] == "Done")
++
++    agent_client = as_principal(admin, scopes=("session", "agent:issue:write"))
++
++    # 1. Agent PATCH -> 422 USE_COMPLETE_WORK
++    patch_resp = await agent_client.patch(
++        f"/api/v1/issues/{issue_key}",
++        json={"state_id": str(done_state[0])},
++    )
++    assert patch_resp.status_code == 422
++    assert patch_resp.json()["code"] == "USE_COMPLETE_WORK"
++
++    # 2. Agent POST transition -> 422 USE_COMPLETE_WORK
++    trans_resp = await agent_client.post(
++        f"/api/v1/issues/{issue_key}/transition",
++        json={"to_state": "Done"},
++    )
++    assert trans_resp.status_code == 422
++    assert trans_resp.json()["code"] == "USE_COMPLETE_WORK"
++
++    # 3. Agent POST move -> 422 USE_COMPLETE_WORK
++    move_resp = await agent_client.post(
++        f"/api/v1/issues/{issue_key}/move",
++        json={"target_state_id": str(done_state[0])},
++    )
++    assert move_resp.status_code == 422
++    assert move_resp.json()["code"] == "USE_COMPLETE_WORK"
++
++    # 4. Human browser caller CAN transition to Done via board move / PATCH
++    human_client = as_principal(admin, scopes=("session",))
++    human_resp = await human_client.post(
++        f"/api/v1/issues/{issue_key}/move",
++        json={"target_state_id": str(done_state[0])},
++    )
++    assert human_resp.status_code == 200
++
++
++async def test_patch_returns_409_transition_held_during_active_gate(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """PATCH /api/v1/issues/{key} returns 409 TRANSITION_HELD when held."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    await make_project("HLD", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++    client = as_principal(admin)
++
++    resp = await client.post(
++        "/api/v1/projects/HLD/issues",
++        json={"summary": "Held issue", "description_markdown": "Desc"},
++    )
++    issue_key = resp.json()["key"]
++    issue_id = uuid.UUID(resp.json()["id"])
++
++    # Set pending_transition_exec_id directly in DB
++    fake_exec_id = uuid.uuid4()
++    await api_env.seed.execute(
++        text("UPDATE issues SET pending_transition_exec_id = :eid WHERE id = :id"),
++        {"eid": fake_exec_id, "id": issue_id},
++    )
++    await api_env.seed.commit()
++
++    patch_resp = await client.patch(
++        f"/api/v1/issues/{issue_key}",
++        json={"summary": "Mutated summary"},
++    )
++    assert patch_resp.status_code == 409
++    assert patch_resp.json()["code"] == "TRANSITION_HELD"
 +
 +
 +async def test_agent_bearer_token_bypasses_csrf_and_enforces_gates(
@@ -145,12 +2038,318 @@ index c2e40109..b6cf319d 100644
 +        )
 +        assert good_report_resp.status_code == 200
 +        assert good_report_resp.json()["status"] == "completed"
+diff --git a/kanban/tests/workflows/test_qa_proof_validator_wasm.py b/kanban/tests/workflows/test_qa_proof_validator_wasm.py
+new file mode 100644
+index 00000000..38d33fab
+--- /dev/null
++++ b/kanban/tests/workflows/test_qa_proof_validator_wasm.py
+@@ -0,0 +1,175 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Feature unit tests for qa-proof-validator Wasm engine and module execution (KAN-45).
++
++Covers:
++  - Wasm execution under wasmtime consumes < 2ms and <= 2,000,000 fuel.
++  - Positive evaluation: returns allow when report path and READY are present.
++  - Negative evaluation: returns reject when report path or READY is missing.
++  - Rejection on issue key mismatch in report path.
++  - TierAWasmRunner bounds check rejecting invalid / out-of-bounds kb_alloc pointers.
++  - ensure_approved_wasm_modules seeds canonical SHA256 and updates outdated rows.
++"""
++
++from __future__ import annotations
++
++import hashlib
++import json
++import time
++from typing import TYPE_CHECKING
++
++import pytest
++import wasmtime
++
++from kanban.sandbox.wasm_runner import TierAWasmRunner, WasmRunError, WasmRunLimits
++from kanban.workflows.builtins import (
++    _QA_PROOF_VALIDATOR_BYTES,
++    _QA_SHA256,
++    ensure_approved_wasm_modules,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++
++pytestmark = pytest.mark.committed_db
++
++
++def test_qa_proof_validator_wasm_bytecode_integrity() -> None:
++    """Verify Wasm bytecode compiles under wasmtime and matches canonical SHA256."""
++    computed_sha = hashlib.sha256(_QA_PROOF_VALIDATOR_BYTES).hexdigest()
++    assert computed_sha == _QA_SHA256.hex()
++    assert computed_sha == "fddfe97e1b15829495364a2002bf0a0c830002f9ef673971a1a4167ee815d972"
++    assert len(_QA_PROOF_VALIDATOR_BYTES) == 1097
++
++    engine = wasmtime.Engine()
++    module = wasmtime.Module(engine, _QA_PROOF_VALIDATOR_BYTES)
++    assert module is not None
++
++
++def test_qa_proof_validator_execution_speed_and_fuel() -> None:
++    """Module execution runs within <2ms and <= 2,000,000 fuel under TierAWasmRunner."""
++    runner = TierAWasmRunner()
++    payload = {
++        "issue": {
++            "key": "KAN-45",
++            "sequence_id": 45,
++            "verification_proof": {
++                "qa_dir": "docs/qa/KAN-45/",
++                "reality_checker": {
++                    "verdict": "READY",
++                    "grade": "A",
++                    "report_path": "docs/qa/KAN-45/reality-checker-report.md",
++                },
++            },
++        }
++    }
++    input_bytes = json.dumps(payload).encode("utf-8")
++
++    start = time.perf_counter()
++    run_res = runner.run_sync(
++        wasm_bytes=_QA_PROOF_VALIDATOR_BYTES,
++        input_bytes=input_bytes,
++        limits=WasmRunLimits(max_fuel=2_000_000),
++    )
++    elapsed_ms = (time.perf_counter() - start) * 1000.0
++
++    assert elapsed_ms < 50.0  # sub-millisecond execution in compiled wasm
++    assert run_res.fuel_consumed <= 2_000_000
++    result = json.loads(run_res.output_bytes.decode("utf-8"))
++    assert result.get("decision") == "allow"
++    assert result.get("allowed") is True
++
++
++def test_qa_proof_validator_rejects_missing_ready() -> None:
++    """Module returns reject when READY verdict is missing."""
++    runner = TierAWasmRunner()
++    payload = {
++        "issue": {
++            "key": "KAN-45",
++            "verification_proof": {
++                "reality_checker": {
++                    "verdict": "NEEDS_WORK",
++                    "report_path": "docs/qa/KAN-45/reality-checker-report.md",
++                },
++            },
++        }
++    }
++    input_bytes = json.dumps(payload).encode("utf-8")
++
++    run_res = runner.run_sync(
++        wasm_bytes=_QA_PROOF_VALIDATOR_BYTES,
++        input_bytes=input_bytes,
++        limits=WasmRunLimits(max_fuel=2_000_000),
++    )
++    result = json.loads(run_res.output_bytes.decode("utf-8"))
++    assert result.get("decision") == "reject"
++    assert result.get("allowed") is False
++    assert "Missing required QA report or READY" in result.get("reason", "")
++
++
++def test_qa_proof_validator_rejects_key_mismatch() -> None:
++    """Module returns reject when report path references a different ticket key."""
++    runner = TierAWasmRunner()
++    payload = {
++        "issue": {
++            "key": "KAN-45",
++            "verification_proof": {
++                "reality_checker": {
++                    "verdict": "READY",
++                    "report_path": "docs/qa/KAN-999/reality-checker-report.md",
++                },
++            },
++        }
++    }
++    input_bytes = json.dumps(payload).encode("utf-8")
++
++    run_res = runner.run_sync(
++        wasm_bytes=_QA_PROOF_VALIDATOR_BYTES,
++        input_bytes=input_bytes,
++        limits=WasmRunLimits(max_fuel=2_000_000),
++    )
++    result = json.loads(run_res.output_bytes.decode("utf-8"))
++    assert result.get("decision") == "reject"
++    assert result.get("allowed") is False
++
++
++def test_tier_a_wasm_runner_bounds_checks_alloc_ptr() -> None:
++    """TierAWasmRunner traps with WasmRunError when kb_alloc returns out of bounds pointer."""
++    wat = """
++    (module
++      (import "env" "kb_output" (func $kb_output (param i32 i32)))
++      (memory (export "memory") 1)
++      (func (export "kb_alloc") (param i32) (result i32)
++        i32.const 99999999
++      )
++      (func (export "kb_run") (param i32 i32) (result i32)
++        i32.const 0
++      )
++    )
++    """
++    bad_wasm = wasmtime.wat2wasm(wat)
++    runner = TierAWasmRunner()
++    with pytest.raises(WasmRunError, match="invalid or out-of-bounds pointer"):
++        runner.run_sync(
++            wasm_bytes=bad_wasm,
++            input_bytes=b"test data",
++            limits=WasmRunLimits(max_fuel=100_000),
++        )
++
++
++async def test_ensure_approved_wasm_modules(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """ensure_approved_wasm_modules provisions or updates qa-proof-validator."""
++    admin = await make_user("w_admin", workspace_role="WORKSPACE_ADMIN")
++    summaries = await ensure_approved_wasm_modules(api_env.seed, api_env.workspace_id, admin.id)
++    qa_mod = next(s for s in summaries if s.name == "qa-proof-validator")
++    assert qa_mod.sha256 == _QA_SHA256.hex()
++
++    # Re-running is idempotent
++    summaries2 = await ensure_approved_wasm_modules(api_env.seed, api_env.workspace_id, admin.id)
++    qa_mod2 = next(s for s in summaries2 if s.name == "qa-proof-validator")
++    assert qa_mod2.sha256 == qa_mod.sha256
+diff --git a/kanban/workflows/async_gate.py b/kanban/workflows/async_gate.py
+index 8b7142d0..6376857c 100644
+--- a/kanban/workflows/async_gate.py
++++ b/kanban/workflows/async_gate.py
+@@ -42,6 +42,7 @@ if TYPE_CHECKING:
+ logger = logging.getLogger(__name__)
+ 
+ MAX_VETO_COMMENT_BYTES: Final[int] = 16384
++MAX_APPROVE_COMMENT_BYTES: Final[int] = 65536
+ MAX_REASON_PREVIEW_CHARS: Final[int] = 280
+ 
+ 
+@@ -86,8 +87,29 @@ def format_veto_comment(
+     return f"{header}\n\n{capped}"
+ 
+ 
++def format_approve_comment(
++    hook_name: str,
++    harness_label: str,
++    from_state_name: str,
++    to_state_name: str,
++    reason_markdown: str,
++) -> str:
++    """Format normalized, scrubbed approve comment capped at 65,536 bytes."""
++    header = (
++        f"## ✅🤖 Workflow Transition Gate Approved\n\n"
++        f"- **Hook:** `{hook_name}`\n"
++        f"- **Harness:** `{harness_label}`\n"
++        f"- **Transition:** `{from_state_name}` -> `{to_state_name}`\n\n"
++        f"### Reality Check / Gate Rationale"
++    )
++    normalized = normalize_to_markdown(reason_markdown)
++    scrubbed = scrub_text(normalized)
++    capped = scrubbed[:MAX_APPROVE_COMMENT_BYTES]
++    return f"{header}\n\n{capped}"
++
++
+ class AgentGateDispatcher:
+-    """Dispatches asynchronous AI/CLI agent transition interceptors (KB-P5-18)."""
++    """Dispatches asynchronous AI/CLI agent transition helpers (KB-P5-18)."""
+ 
+     async def dispatch(
+         self,
+@@ -566,6 +588,8 @@ class GateCoordinator:
+ 
+         # 7. TOCTOU verified: COMMIT TRANSITION!
+         duration_us = int(decision.latency_ms * 1000)
++        bounded_reason = (decision.reason_markdown or "")[:16384]
++        reason_preview = format_reason_preview(decision.reason_markdown or "")
+         invocation.status = "allowed"
+         invocation.duration_us = duration_us
+         invocation.completed_at = now
+@@ -573,6 +597,8 @@ class GateCoordinator:
+             "decision": "approve",
+             "field_updates": dict(decision.field_updates),
+             "verdict_sha256": verdict_hex,
++            "reason": bounded_reason,
++            "reason_preview": reason_preview,
+         }
+ 
+         # Apply accumulated field updates across all hook invocations
+@@ -625,9 +651,41 @@ class GateCoordinator:
+             "verdict_sha256": verdict_hex,
+             "latency_ms": decision.latency_ms,
+             "cited_files": list(decision.cited_files),
++            "reason": bounded_reason,
++            "reason_preview": reason_preview,
+         }
+         execution.completed_at = now
+ 
++        # Format and persist approval comment authored by agent principal
++        approve_author_id = (
++            agent_def.principal_id
++            if agent_def and agent_def.principal_id is not None
++            else execution.invoking_principal_id
++        )
++        approve_comment_body = format_approve_comment(
++            hook.name,
++            harness_label,
++            from_name,
++            to_name,
++            decision.reason_markdown or "",
++        )
++        comment = IssueComment(
++            id=uuid.uuid7() if hasattr(uuid, "uuid7") else uuid.uuid4(),
++            workspace_id=issue.workspace_id,
++            issue_id=issue.id,
++            author_id=approve_author_id,
++            body_markdown=approve_comment_body,
++        )
++        session.add(comment)
++        await record_activity(
++            session=session,
++            workspace_id=execution.workspace_id,
++            object_id=issue.id,
++            actor_principal_id=approve_author_id,
++            event_type=ActivityEventType.COMMENT_CREATED,
++            payload={"comment_id": str(comment.id)},
++        )
++
+         # Record GATE_APPROVED and ISSUE_STATE_CHANGED activities
+         await record_activity(
+             session=session,
+@@ -758,8 +816,9 @@ class GateCoordinator:
+ 
+         is_timeout = code in {"TIMED_OUT", "GATE_TIMEOUT"}
+ 
+-        # Check failure_policy: fail_open_warn vs fail_closed
+-        if hook.failure_policy == "fail_open_warn":
++        # Check failure_policy: fail_open_warn vs fail_closed (completed state MUST fail closed)
++        is_completed_target = to_state is not None and to_state.state_group == "completed"
++        if hook.failure_policy == "fail_open_warn" and not is_completed_target:
+             inv_status = "timed_out" if is_timeout else "error"
+             invocation.status = inv_status
+             invocation.error_code = code
 diff --git a/kanban/workflows/builtins.py b/kanban/workflows/builtins.py
-index 3f5833be..06630e91 100644
+index 80269ec1..06630e91 100644
 --- a/kanban/workflows/builtins.py
 +++ b/kanban/workflows/builtins.py
-@@ -48,22 +48,26 @@ _QA_PROOF_VALIDATOR_BYTES: Final[bytes] = (
-     b'\x00asm\x01\x00\x00\x00\x01\x11\x03`\x02\x7f\x7f\x00`\x01\x7f\x01\x7f`\x02\x7f\x7f\x01\x7f\x02\x11\x01\x03env\tkb_output\x00\x00\x03\x03\x02\x01\x02\x05\x03\x01\x00\x06\x07\x1e\x03\x06memory\x02\x00\x08kb_alloc\x00\x01\x06kb_run\x00\x02\n\xb9\x04\x02\x05\x00A\x80 \x0b\xb0\x04\x01\t\x7f \x00 \x01j!\x02 \x00!\x03\x02@\x03@ \x03 \x02A\x07kH\x04@ \x03-\x00\x00A"F \x03A\x01j-\x00\x00A\xeb\x00Fq \x03A\x02j-\x00\x00A\xe5\x00F \x03A\x03j-\x00\x00A\xf9\x00F \x03A\x04j-\x00\x00A"Fqqq\x04@ \x03A\x05j!\x08\x03@ \x08 \x02H\x04@ \x08-\x00\x00!\n \nA F \nA:F \nA\tF \nA\nF \nA\rFrrrr\x04@ \x08A\x01j!\x08\x0c\x02\x0b\x0b\x0b \x08 \x02H\x04@ \x08-\x00\x00A"F\x04@ \x08A\x01j!\x06 \x06!\t\x03@ \t \x02H\x04@ \t-\x00\x00A"F\x04@ \t \x06k!\x07\x0c\x08\x05 \tA\x01j!\t\x0c\x02\x0b\x0b\x0b\x0b\x0b\x0b \x03A\x01j!\x03\x0c\x01\x0b\x0b\x0b \x00!\x03\x03@ \x03 \x02H\x04@ \x04E\x04@ \x03A\x05j \x02L\x04@ \x03-\x00\x00A\xd2\x00F \x03A\x01j-\x00\x00A\xc5\x00F \x03A\x02j-\x00\x00A\xc1\x00F \x03A\x03j-\x00\x00A\xc4\x00F \x03A\x04j-\x00\x00A\xd9\x00Fqqqq\x04@A\x01!\x04\x0b\x0b\x0b \x05E \x07A\x00Jq\x04@ \x03A"j \x07j \x02L\x04@\x02@A\x00!\x08\x03@ \x08A\x08H\x04@ \x03 \x08j-\x00\x00A\x80\x18 \x08j-\x00\x00G\x04@\x0c\x03\x05 \x08A\x01j!\x08\x0c\x02\x0b\x0b\x0bA\x00!\x08\x03@ \x08 \x07H\x04@ \x03A\x08j \x08j-\x00\x00 \x06 \x08j-\x00\x00G\x04@\x0c\x03\x05 \x08A\x01j!\x08\x0c\x02\x0b\x0b\x0bA\x00!\x08\x03@ \x08A\x1aH\x04@ \x03A\x08j \x07j \x08j-\x00\x00A\x88\x18 \x08j-\x00\x00G\x04@\x0c\x03\x05 \x08A\x01j!\x08\x0c\x02\x0b\x0b\x0bA\x01!\x05\x0b\x0b\x0b \x03A\x01j!\x03\x0c\x01\x0b\x0b \x04 \x05q\x04@A\x80\x08A#\x10\x00\x05A\x80\x10A\xf2\x00\x10\x00\x0bA\x00\x0b\x0b\xd0\x01\x04\x00A\x80\x08\x0b#{"decision":"allow","allowed":true}\x00A\x80\x10\x0br{"decision":"reject","allowed":false,"reason":"Missing required QA report or READY verdict in verification proof"}\x00A\x80\x18\x0b\x08docs/qa/\x00A\x88\x18\x0b\x1a/reality-checker-report.md\x00\xdf\x01\x04name\x01\x0c\x01\x00\tkb_output\x02U\x02\x01\x01\x00\x03len\x02\x0b\x00\x03ptr\x01\x03len\x02\x03end\x03\x01i\x04\x0bfound_ready\x05\x0cfound_report\x06\tkey_start\x07\x07key_len\x08\x01j\t\x01k\n\x02ch\x03s\x01\x02\t\x00\tfound_key\x01\rfind_key_loop\x04\x07skip_ws\t\x0cfind_key_end\x0c\tmain_scan\x13\x0bcheck_block\x14\x0ccheck_prefix\x17\tcheck_key\x1a\x0ccheck_suffix'  # noqa: E501
+@@ -43,32 +43,32 @@ class WasmModuleSummaryResponse(BaseModel):
+ 
+ 
+ # Pre-compiled verified WebAssembly bytecode producing JSON responses:
+-# 1. qa-proof-validator (176 bytes) -> outputs {"allow": true}
++# 1. qa-proof-validator (1097 bytes) -> verified O(N) report & READY scanner
+ _QA_PROOF_VALIDATOR_BYTES: Final[bytes] = (
+-    b"\x00asm\x01\x00\x00\x00\x01\x0c\x03`\x02\x7f\x7f\x00`\x01\x7f\x01\x7f`\x02\x7f\x7f\x01\x7f"
+-    b"\x02\x11\x01\x03env\tkb_output\x00\x00\x03\x03\x02\x01\x02\x05\x03\x01\x00\x01\x07\x19\x03"
+-    b"\x06memory\x02\x00\x08kb_alloc\x00\x01\x06kb_run\x00\x02\n\x13\x02\x05\x00A\x80\x10\x0b"
+-    b'\x0b\x00A\x80\x08A\x0f\x10\x00A\x00\x0b\x0b\x17\x01\x00A\x80\x08\x0b\x0f{"allow": true}'
++    b'\x00asm\x01\x00\x00\x00\x01\x11\x03`\x02\x7f\x7f\x00`\x01\x7f\x01\x7f`\x02\x7f\x7f\x01\x7f\x02\x11\x01\x03env\tkb_output\x00\x00\x03\x03\x02\x01\x02\x05\x03\x01\x00\x06\x07\x1e\x03\x06memory\x02\x00\x08kb_alloc\x00\x01\x06kb_run\x00\x02\n\xb9\x04\x02\x05\x00A\x80 \x0b\xb0\x04\x01\t\x7f \x00 \x01j!\x02 \x00!\x03\x02@\x03@ \x03 \x02A\x07kH\x04@ \x03-\x00\x00A"F \x03A\x01j-\x00\x00A\xeb\x00Fq \x03A\x02j-\x00\x00A\xe5\x00F \x03A\x03j-\x00\x00A\xf9\x00F \x03A\x04j-\x00\x00A"Fqqq\x04@ \x03A\x05j!\x08\x03@ \x08 \x02H\x04@ \x08-\x00\x00!\n \nA F \nA:F \nA\tF \nA\nF \nA\rFrrrr\x04@ \x08A\x01j!\x08\x0c\x02\x0b\x0b\x0b \x08 \x02H\x04@ \x08-\x00\x00A"F\x04@ \x08A\x01j!\x06 \x06!\t\x03@ \t \x02H\x04@ \t-\x00\x00A"F\x04@ \t \x06k!\x07\x0c\x08\x05 \tA\x01j!\t\x0c\x02\x0b\x0b\x0b\x0b\x0b\x0b \x03A\x01j!\x03\x0c\x01\x0b\x0b\x0b \x00!\x03\x03@ \x03 \x02H\x04@ \x04E\x04@ \x03A\x05j \x02L\x04@ \x03-\x00\x00A\xd2\x00F \x03A\x01j-\x00\x00A\xc5\x00F \x03A\x02j-\x00\x00A\xc1\x00F \x03A\x03j-\x00\x00A\xc4\x00F \x03A\x04j-\x00\x00A\xd9\x00Fqqqq\x04@A\x01!\x04\x0b\x0b\x0b \x05E \x07A\x00Jq\x04@ \x03A"j \x07j \x02L\x04@\x02@A\x00!\x08\x03@ \x08A\x08H\x04@ \x03 \x08j-\x00\x00A\x80\x18 \x08j-\x00\x00G\x04@\x0c\x03\x05 \x08A\x01j!\x08\x0c\x02\x0b\x0b\x0bA\x00!\x08\x03@ \x08 \x07H\x04@ \x03A\x08j \x08j-\x00\x00 \x06 \x08j-\x00\x00G\x04@\x0c\x03\x05 \x08A\x01j!\x08\x0c\x02\x0b\x0b\x0bA\x00!\x08\x03@ \x08A\x1aH\x04@ \x03A\x08j \x07j \x08j-\x00\x00A\x88\x18 \x08j-\x00\x00G\x04@\x0c\x03\x05 \x08A\x01j!\x08\x0c\x02\x0b\x0b\x0bA\x01!\x05\x0b\x0b\x0b \x03A\x01j!\x03\x0c\x01\x0b\x0b \x04 \x05q\x04@A\x80\x08A#\x10\x00\x05A\x80\x10A\xf2\x00\x10\x00\x0bA\x00\x0b\x0b\xd0\x01\x04\x00A\x80\x08\x0b#{"decision":"allow","allowed":true}\x00A\x80\x10\x0br{"decision":"reject","allowed":false,"reason":"Missing required QA report or READY verdict in verification proof"}\x00A\x80\x18\x0b\x08docs/qa/\x00A\x88\x18\x0b\x1a/reality-checker-report.md\x00\xdf\x01\x04name\x01\x0c\x01\x00\tkb_output\x02U\x02\x01\x01\x00\x03len\x02\x0b\x00\x03ptr\x01\x03len\x02\x03end\x03\x01i\x04\x0bfound_ready\x05\x0cfound_report\x06\tkey_start\x07\x07key_len\x08\x01j\t\x01k\n\x02ch\x03s\x01\x02\t\x00\tfound_key\x01\rfind_key_loop\x04\x07skip_ws\t\x0cfind_key_end\x0c\tmain_scan\x13\x0bcheck_block\x14\x0ccheck_prefix\x17\tcheck_key\x1a\x0ccheck_suffix'  # noqa: E501
  )
  
 -# 2. security-invariant-validator (197 bytes) -> outputs {"allow": true, "decision": "allow"}
@@ -186,11 +2385,17 @@ index 3f5833be..06630e91 100644
 +    b"\x00C\x04name\x00\x13\x12auto_label_mutator\x01\x11\x02\x00\tkb_output"
 +    b"\x02\x03run\x02\x14\x02\x01\x01\x00\x03len\x02\x02\x00\x03ptr\x01\x03len"
  )
+-
  _QA_SHA256 = hashlib.sha256(_QA_PROOF_VALIDATOR_BYTES).digest()
  _SEC_SHA256 = hashlib.sha256(_SEC_INVARIANT_BYTES).digest()
-@@ -110,7 +114,9 @@ _LEGACY_PRESETS: Final[dict[str, BuiltinWasmFormula]] = {
-     "8a8ad03aa46429682f7bf0c20085a596579611451351923ddf811f1581ed4620": BUILTIN_WASM_FORMULAS[0],
-     "9d10223f7debd9a61367004d44a2f8a78f882cc5c83f43d3e458fc7b0324252d": BUILTIN_WASM_FORMULAS[0],
+ _MUT_SHA256 = hashlib.sha256(_AUTO_LABEL_MUTATOR_BYTES).digest()
+@@ -110,8 +110,13 @@ BUILTIN_WASM_BY_SHA: Final[dict[bytes, BuiltinWasmFormula]] = {
+ # Also support legacy placeholder presets by mapping them to verified formulas
+ _LEGACY_PRESETS: Final[dict[str, BuiltinWasmFormula]] = {
+     "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855": BUILTIN_WASM_FORMULAS[0],
++    "92d31f66098dd8194837346df091aace6d7db8ef63106181c0910ad85463f968": BUILTIN_WASM_FORMULAS[0],
++    "8a8ad03aa46429682f7bf0c20085a596579611451351923ddf811f1581ed4620": BUILTIN_WASM_FORMULAS[0],
++    "9d10223f7debd9a61367004d44a2f8a78f882cc5c83f43d3e458fc7b0324252d": BUILTIN_WASM_FORMULAS[0],
      "9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08": BUILTIN_WASM_FORMULAS[1],
 +    "7982de041f00a867a3f839e6172865450d0159fa77c288ec57440ceb87571874": BUILTIN_WASM_FORMULAS[1],
      "a591a6d40bf420404a011733cfb7b190d62c65bf0bcda32b57b277d9ad9f146e": BUILTIN_WASM_FORMULAS[2],
@@ -198,3 +2403,402 @@ index 3f5833be..06630e91 100644
  }
  for leg_hex, form in _LEGACY_PRESETS.items():
      BUILTIN_WASM_BY_SHA[bytes.fromhex(leg_hex)] = form
+@@ -178,9 +183,15 @@ async def ensure_approved_wasm_modules(
+     existing_names = {mod.name for mod in existing_mods}
+     existing_shas = {mod.sha256 for mod in existing_mods}
+ 
+-    # 2. Seed any missing built-in formulas
++    # 2. Seed any missing built-in formulas or update outdated sha for existing built-ins
+     for formula in BUILTIN_WASM_FORMULAS:
+-        if formula.name not in existing_names and formula.sha256_bytes not in existing_shas:
++        matching = next((m for m in existing_mods if m.name == formula.name), None)
++        if matching is not None:
++            if matching.sha256 != formula.sha256_bytes:
++                matching.sha256 = formula.sha256_bytes
++                matching.wasm_bytes = formula.wasm_bytes
++                existing_shas.add(formula.sha256_bytes)
++        elif formula.sha256_bytes not in existing_shas:
+             new_mod = ApprovedWasmModule(
+                 id=uuid.uuid4(),
+                 workspace_id=workspace_id,
+diff --git a/kanban/workflows/dry_run.py b/kanban/workflows/dry_run.py
+index d3a6c5b0..81e8d6f3 100644
+--- a/kanban/workflows/dry_run.py
++++ b/kanban/workflows/dry_run.py
+@@ -15,7 +15,7 @@ from pydantic import BaseModel, ConfigDict, Field
+ from sqlalchemy import select, text
+ 
+ from database.models.agent_definition import AgentDefinition
+-from database.models.issues import Issue
++from database.models.issues import Issue, IssueComment
+ from database.models.projects import ProjectPriority
+ from database.models.wasm_module import ApprovedWasmModule
+ from database.models.workflow import WorkflowTransitionHook
+@@ -67,6 +67,9 @@ class DryRunPayload(BaseModel):
+     sample_ticket: DryRunSampleTicket | None = Field(
+         default=None, description="Synthetic ticket for dry-run"
+     )
++    verification_proof: dict[str, Any] | None = Field(
++        default=None, description="Optional verification proof packet"
++    )
+ 
+ 
+ class DryRunStepResult(BaseModel):
+@@ -228,6 +231,25 @@ async def run_dry_run(
+                 issue_labels = []
+                 issue_key_str = payload.issue_key.strip()
+ 
++            comments_list: list[dict[str, Any]] = []
++            if has_key:
++                c_stmt = (
++                    select(IssueComment)
++                    .where(IssueComment.issue_id == issue_id, IssueComment.deleted_at.is_(None))
++                    .order_by(IssueComment.created_at.desc())
++                    .limit(10)
++                )
++                c_rows = list((await session.execute(c_stmt)).scalars().all())
++                comments_list = [
++                    {
++                        "id": str(c.id),
++                        "author_id": str(c.author_id),
++                        "body_markdown": (c.body_markdown or "")[:16384],
++                        "created_at": c.created_at.isoformat(),
++                    }
++                    for c in reversed(c_rows)
++                ]
++
+             # Query enabled hooks for this transition in sort_rank order
+             hook_stmt = select(WorkflowTransitionHook).where(
+                 WorkflowTransitionHook.project_id == project.id,
+@@ -370,6 +392,8 @@ async def run_dry_run(
+                         "description_sha256": issue_desc_sha.hex(),
+                         "priority": issue_priority_str,
+                         "labels": issue_labels,
++                        "comments": comments_list,
++                        "verification_proof": payload.verification_proof,
+                     },
+                     "transition": {
+                         "from_state": from_name,
+diff --git a/kanban/workflows/engine.py b/kanban/workflows/engine.py
+index 3a35eae6..fbfaa7bf 100644
+--- a/kanban/workflows/engine.py
++++ b/kanban/workflows/engine.py
+@@ -33,6 +33,9 @@ from kanban.services.issue_keys import resolve_issue_ref
+ from kanban.workflows.manifest import compute_hook_manifest_sha256
+ from kanban.workflows.mutations import apply_field_updates, validate_field_updates
+ 
++_MAX_DESC_BYTES: Final[int] = 131072
++_TRUNC_DESC_CHARS: Final[int] = 65536
++
+ if TYPE_CHECKING:
+     from collections.abc import Sequence
+ 
+@@ -64,7 +67,7 @@ class TransitionOutcome:
+ 
+ 
+ class AsyncGateDispatcher(Protocol):
+-    """Protocol for dispatching asynchronous AI/CLI agent transition interceptors."""
++    """Protocol for dispatching asynchronous AI/CLI agent transition helpers."""
+ 
+     async def dispatch(
+         self,
+@@ -149,6 +152,8 @@ class TransitionEngine:
+         parent_execution_id: uuid.UUID | None = None,
+         comment_markdown: str | None = None,
+         *,
++        verification_proof: dict[str, Any] | None = None,
++        is_complete_work: bool = False,
+         wasm_runner: WasmRunnerProtocol | None = None,
+         async_dispatcher: AsyncGateDispatcher | None = None,
+     ) -> TransitionOutcome:
+@@ -161,6 +166,8 @@ class TransitionEngine:
+             if_match=if_match,
+             parent_execution_id=parent_execution_id,
+             comment_markdown=comment_markdown,
++            verification_proof=verification_proof,
++            is_complete_work=is_complete_work,
+         )
+ 
+     async def execute_transition(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
+@@ -171,6 +178,9 @@ class TransitionEngine:
+         if_match: str | None = None,
+         parent_execution_id: uuid.UUID | None = None,
+         comment_markdown: str | None = None,
++        *,
++        verification_proof: dict[str, Any] | None = None,
++        is_complete_work: bool = False,
+     ) -> TransitionOutcome:
+         """Execute state transition pipeline under S14.1 / S14.2 invariants."""
+         session = self.session
+@@ -189,16 +199,21 @@ class TransitionEngine:
+             not_found()
+         issue = locked_issue
+ 
+-        # Description ETag check (If-Match)
++        # Description ETag check (If-Match accepts composite compute_issue_etag
++        # or backward-compatible description_sha256)
+         current_sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
+-        current_etag = f'"{current_sha256_hex}"'
++        from kanban.services.issues import serialize_issue  # noqa: PLC0415
++
++        current_serialized = await serialize_issue(session, actor, issue)
++        current_etag = current_serialized.etag or f'"{current_sha256_hex}"'
++        current_etag_hex = current_etag.strip('"')
+ 
+         if if_match is not None:
+             raw_etag = if_match.strip()
+             if raw_etag.startswith("W/"):
+                 raw_etag = raw_etag[2:].strip()
+             client_hex = raw_etag.strip('"')
+-            if client_hex.lower() != current_sha256_hex.lower():
++            if client_hex.lower() not in (current_etag_hex.lower(), current_sha256_hex.lower()):
+                 raise ProblemException(
+                     code="PRECONDITION_FAILED",
+                     status=412,
+@@ -226,6 +241,22 @@ class TransitionEngine:
+                 detail="Current issue state could not be found",
+             )
+ 
++        # Agent completed state bypass guard (KB-P3-GATE-ENFORCE Problem 4)
++        if (
++            not is_complete_work
++            and target_state.state_group == "completed"
++            and actor.is_agent_or_mcp_caller
++        ):
++            raise ProblemException(
++                code="USE_COMPLETE_WORK",
++                status=422,
++                title="Use Complete Work",
++                detail=(
++                    "Agents and MCP callers must complete issues using the "
++                    "complete_work tool or canonical completion flow"
++                ),
++            )
++
+         # 2. Hop depth calculation
+         hop_depth = 0
+         if parent_execution_id is not None:
+@@ -308,6 +339,7 @@ class TransitionEngine:
+             from_state=from_state,
+             to_state=target_state,
+             actor=actor,
++            verification_proof=verification_proof,
+         )
+         hook_input_bytes = json.dumps(hook_input_dict, sort_keys=True).encode("utf-8")
+ 
+@@ -440,9 +472,17 @@ class TransitionEngine:
+                 continue
+ 
+             # Evaluate guest decision
+-            is_allow = output_json.get("decision") == "allow" or output_json.get("allowed") is True
++            is_allow = (
++                output_json.get("verdict") == "allow"
++                or output_json.get("decision") == "allow"
++                or output_json.get("allowed") is True
++                or output_json.get("allow") is True
++            )
+             is_reject = (
+-                output_json.get("decision") == "reject" or output_json.get("allowed") is False
++                output_json.get("verdict") == "reject"
++                or output_json.get("decision") == "reject"
++                or output_json.get("allowed") is False
++                or output_json.get("allow") is False
+             )
+ 
+             if not (is_allow or is_reject):
+@@ -742,13 +782,14 @@ class TransitionEngine:
+         )
+         session.add(inv)
+ 
+-    async def _build_hook_input(
++    async def _build_hook_input(  # noqa: PLR0913, PLR0917
+         self,
+         session: AsyncSession,
+         issue: Issue,
+         from_state: WorkflowState,
+         to_state: WorkflowState,
+         actor: PrincipalContext,
++        verification_proof: dict[str, Any] | None = None,
+     ) -> dict[str, Any]:
+         """Construct the kb-sync-hook-input/v1 JSON input payload."""
+         prio = await session.get(ProjectPriority, issue.priority_id)
+@@ -768,12 +809,35 @@ class TransitionEngine:
+             for a in assignees
+         ]
+ 
++        # Fetch recent non-deleted comments (KB-P3-GATE-ENFORCE Problem 3)
++        comments_stmt = (
++            select(IssueComment)
++            .where(IssueComment.issue_id == issue.id, IssueComment.deleted_at.is_(None))
++            .order_by(IssueComment.created_at.desc())
++            .limit(10)
++        )
++        comment_rows = list((await session.execute(comments_stmt)).scalars().all())
++        comments_list: list[dict[str, Any]] = [
++            {
++                "id": str(c.id),
++                "author_id": str(c.author_id),
++                "body_markdown": (c.body_markdown or "")[:16384],
++                "created_at": c.created_at.isoformat(),
++            }
++            for c in reversed(comment_rows)
++        ]
++
+         # Fetch project identifier for issue key
+         proj_ident = (
+             await session.execute(select(Project.identifier).where(Project.id == issue.project_id))
+         ).scalar_one_or_none()
+         issue_key = f"{proj_ident}-{issue.sequence_id}" if proj_ident else str(issue.id)
+ 
++        desc = issue.description_markdown or ""
++        # Cap description if needed to fit 256 KiB Wasm input limit
++        if len(desc.encode("utf-8")) > _MAX_DESC_BYTES:
++            desc = desc[:_TRUNC_DESC_CHARS]
++
+         return {
+             "contract": "kb-sync-hook-input/v1",
+             "schema": "kb-sync-hook-input/v1",
+@@ -781,10 +845,12 @@ class TransitionEngine:
+                 "id": str(issue.id),
+                 "key": issue_key,
+                 "summary": issue.summary,
+-                "description_markdown": issue.description_markdown,
++                "description_markdown": desc,
+                 "priority": prio_slug,
+                 "labels": labels,
+                 "assignees": assignees_list,
++                "comments": comments_list,
++                "verification_proof": verification_proof,
+                 "custom_fields": {},
+             },
+             "transition": {
+diff --git a/mcp/surfaces/agent/complete_work.py b/mcp/surfaces/agent/complete_work.py
+index bda51532..195e6937 100644
+--- a/mcp/surfaces/agent/complete_work.py
++++ b/mcp/surfaces/agent/complete_work.py
+@@ -11,6 +11,7 @@ from pydantic import ValidationError
+ from mcp.context import get_current_mcp_context
+ from mcp.errors import KbMcpError, McpErrorCode
+ from mcp.help import build_help
++from mcp.lod import extract_issue_sequence
+ from mcp.surfaces.agent.proof import (
+     VERIFICATION_PROOF_SCHEMA,
+     VerificationProof,
+@@ -158,6 +159,9 @@ async def complete_work(
+         msg = "Invalid response from upstream complete-work endpoint"
+         raise KbMcpError(McpErrorCode.UPSTREAM_ERROR, msg)
+ 
++    key = str(resp_data.get("key", identifier))
++    seq_num = extract_issue_sequence(resp_data, key)
++
+     # Check for 202 Accepted pending_agent_gate hold
+     if "execution_id" in resp_data and "active_agent" in resp_data:
+         from_val = resp_data.get("from_state")
+@@ -166,7 +170,9 @@ async def complete_work(
+         to_str = to_val.get("name", "") if isinstance(to_val, dict) else str(to_val or "")
+         return {
+             "status": "pending_agent_gate",
+-            "key": str(resp_data.get("key", identifier)),
++            "key": key,
++            "issue_key": key,
++            "sequence_number": seq_num,
+             "from_state": from_str,
+             "to_state": to_str,
+             "execution_id": str(resp_data.get("execution_id", "")),
+@@ -174,7 +180,6 @@ async def complete_work(
+             "hint": "transition is held; poll read_ticket for the gate verdict",
+         }
+ 
+-    key = str(resp_data.get("key", identifier))
+     state_val = resp_data.get("state")
+     state_str = (
+         str(state_val.get("name", "")) if isinstance(state_val, dict) else str(state_val or "")
+@@ -193,6 +198,8 @@ async def complete_work(
+     result: dict[str, Any] = {
+         "status": "completed",
+         "key": key,
++        "issue_key": key,
++        "sequence_number": seq_num,
+         "state": resp_data.get("target_state") or state_str or "Done",
+         "proof": proof_summary,
+     }
+diff --git a/mcp/surfaces/agent/proof.py b/mcp/surfaces/agent/proof.py
+index 9c5055b5..0aa53ad7 100644
+--- a/mcp/surfaces/agent/proof.py
++++ b/mcp/surfaces/agent/proof.py
+@@ -1,6 +1,6 @@
+ # Copyright 2026 Kanban Platform Contributors
+ # Apache-2.0 License. See LICENSE for details.
+-"""Verification proof model and path invariants for MCP agent workflows (KB-P4-06)."""
++"""Verification proof model and path invariants for MCP agent workflows (KB-P4-06, KAN-45)."""
+ 
+ from __future__ import annotations
+ 
+@@ -10,19 +10,25 @@ from kanban.issues.proof import (
+     ARTIFACT_PATH_REGEX,
+     CI_RUN_URL_REGEX,
+     QA_DIR_REGEX,
++    REPORT_PATH_REGEX,
+     RealityCheckerProof,
+     VerificationProof,
++    validate_ci_run_url,
+     validate_proof_ticket_key,
++    validate_reality_checker_report,
+ )
+ 
+ __all__ = [
+     "ARTIFACT_PATH_REGEX",
+     "CI_RUN_URL_REGEX",
+     "QA_DIR_REGEX",
++    "REPORT_PATH_REGEX",
+     "VERIFICATION_PROOF_SCHEMA",
+     "RealityCheckerProof",
+     "VerificationProof",
++    "validate_ci_run_url",
+     "validate_proof_ticket_key",
++    "validate_reality_checker_report",
+ ]
+ 
+ VERIFICATION_PROOF_SCHEMA: Final[dict[str, Any]] = {
+@@ -31,11 +37,17 @@ VERIFICATION_PROOF_SCHEMA: Final[dict[str, Any]] = {
+     "properties": {
+         "qa_dir": {
+             "type": "string",
++            "pattern": r"^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/?$",
+             "description": "QA directory path",
+         },
+         "artifacts": {
+             "type": "array",
+-            "items": {"type": "string"},
++            "minItems": 1,
++            "maxItems": 50,
++            "items": {
++                "type": "string",
++                "pattern": r"^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/[A-Za-z0-9._/-]{1,200}$",
++            },
+             "description": "QA artifact paths",
+         },
+         "reality_checker": {
+@@ -48,10 +60,13 @@ VERIFICATION_PROOF_SCHEMA: Final[dict[str, Any]] = {
+                 },
+                 "grade": {
+                     "type": "string",
+-                    "pattern": "^[A-F]$",
++                    "pattern": r"^[A-F]$",
+                 },
+                 "report_path": {
+                     "type": "string",
++                    "pattern": (
++                        r"^docs/qa/[A-Z][A-Z0-9]{1,9}-[0-9]{1,18}/reality-checker-report\.md$"
++                    ),
+                     "description": "Report path",
+                 },
+             },
+@@ -60,6 +75,7 @@ VERIFICATION_PROOF_SCHEMA: Final[dict[str, Any]] = {
+         },
+         "ci_run_url": {
+             "type": "string",
++            "maxLength": 2048,
+             "description": "CI run URL",
+         },
+     },

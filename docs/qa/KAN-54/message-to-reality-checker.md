@@ -3,26 +3,30 @@
 ## Ticket Information
 - **Ticket ID**: `KAN-54`
 - **Title**: `[KB-BRAND-CLEAN-01] Replace Workflow Studio UI Interceptor Labels with Scripted Workflows & Transition Helpers`
-- **Branch**: `main` (Post-Merge at commit `7913c2c8`)
-- **Base Commit**: `7913c2c8`
+- **Branch**: `main` (Post-Merge at commit `78074a1d`)
+- **Base Commit**: `78074a1d`
+- **Live Stack Container**: `kanban-liveqa-4` (`http://127.0.0.1:18964`, PostgreSQL 16 + FORCE RLS)
+- **Live Stack Verdict**: `OVERALL LIVE_STACK_VERDICT: PASS`
 
 ## Executive Summary of Changes
 Replaced legacy "Workflow & Transition Interceptors" and "Interceptor" user-facing UI labels, modal headers, button captions, and tooltips in the Workflow Studio with "Scripted Workflows & Transition Helpers" and "Transition Helper", eliminating all legacy Interceptor and ScriptRunner brand terminology from user-visible surfaces while preserving internal wire/API identifiers (`agent_interceptor`, route paths):
 
 1. **WorkflowStudioPage.tsx**:
    - Header title updated from `Workflow & Transition Interceptors` to `Scripted Workflows & Transition Helpers`.
-   - StudioDocLink title updated from `Workflow Interceptor Documentation` to `Scripted Workflows & Transition Helpers Documentation`.
+   - StudioDocLink title updated from `Workflow Interceptor Documentation` to `Scripted Workflows & Transition Helpers Documentation` (clean unescaped `&` prop).
    - Loading placeholder copy updated from `Loading workflow interceptor rules...` to `Loading workflow helper rules...`.
+   - Title badge styled via `.workflow-studio-title-badge`.
 
 2. **AttachHookDialog.tsx**:
    - Dialog title updated from `Attach Workflow Interceptor Hook` to `Attach Workflow Helper Hook`.
    - FieldHelpHint summary updated from `The execution tier for this transition interceptor rule.` to `The execution tier for this transition helper rule.`.
    - Radio option and FieldHelpHint label updated from `Agent Interceptor` to `Agent Transition Helper`.
+   - Valid values label aligned with `Sync Wasm Mutator` (replacing `Async Wasm Post-Mutation`).
    - Warning callout updated to reference `Agent Transition Helper hook`.
    - Failure policy description updated to reference `helper times out`.
 
-3. **Breadcrumb Styling & Geometry (`kanban/web/src/app/Breadcrumb.css`)**:
-   - Updated responsive breadcrumb styling in `kanban/web/src/app/Breadcrumb.css` so mobile viewports (390x844) group project prefixes on line 1, wrap suffixes onto line 2, and clear the search button (`breadcrumbRight < searchLeft`).
+3. **Topbar & Breadcrumb Styling (`kanban/web/src/app/Topbar.css` & `kanban/web/src/app/Breadcrumb.css`)**:
+   - Updated responsive breadcrumb styling in `kanban/web/src/app/Breadcrumb.css` and topbar layout in `kanban/web/src/app/Topbar.css` so mobile viewports (390x844) group project prefixes on line 1 (`prefixChildrenOnSameLine: true`), wrap suffixes onto line 2 (`suffixWrapsBelowPrefix: true`), clear search buttons (`breadcrumbClearsSearchBtn: true`), and apply `text-overflow: ellipsis; white-space: nowrap; overflow: hidden;`.
 
 4. **IconStory.tsx**:
    - Module chip name updated from `AI Interceptors` to `AI Transition Helpers`.
@@ -39,6 +43,11 @@ Replaced legacy "Workflow & Transition Interceptors" and "Interceptor" user-faci
 ## Verification & Coverage Proof
 - **Zero Interceptor/ScriptRunner UI strings**:
   - `grep -rnI -E "Interceptor|ScriptRunner" kanban/web/src/features/workflows/ kanban/web/src/dev/IconStory.tsx` returns `0` occurrences.
+- **Live Container Proof (`kanban-liveqa-4`, `:18964`, commit `78074a1d`)**:
+  - Desktop Light: loaded in 964ms, `docLinkAriaLabel="Scripted Workflows & Transition Helpers Documentation"`, `docLinkCleanAmp=true`, `scriptRunnerCount=0`, `interceptorCount=0`.
+  - Mobile 390x844: `prefixChildrenOnSameLine=true`, `suffixWrapsBelowPrefix=true`, `breadcrumbClearsSearchBtn=true`, `breadcrumbTextOverflow="ellipsis"`.
+  - AttachHookDialog FieldHelpHint: `hasSyncWasmMutator=true`, `hasAsyncWasmPostMutation=false`, `zIndex="1220"`.
+  - Telemetry: console errors 0, page errors 0, 5xx responses 0. `OVERALL LIVE_STACK_VERDICT: PASS`.
 - **Automated Tests**:
   - 7 test files passed (74 tests passed, 0 failures, 0 errors in 7.34s).
   - 0 `act(...)` warnings in test logs.
@@ -51,12 +60,12 @@ Replaced legacy "Workflow & Transition Interceptors" and "Interceptor" user-faci
 - **Static & Build Gates**:
   - `kanban-ctl db check-migrations`: 63 migrations valid (single head: `p4_24_agent_safe_sequences`)
   - `ruff check .`: All checks passed!
-  - `ruff format --check .`: 2018 files already formatted
+  - `ruff format --check .`: Clean across 2023 files
   - `mypy database kanban mcp agent`: Success: no issues found in 995 source files
   - `lint-imports`: Contracts: 2 kept, 0 broken
   - `tsc -b --noEmit`: PASS (0 errors)
   - `eslint . --max-warnings 0`: PASS (0 warnings)
-  - `vite build`: PASS (built in 1.22s)
+  - `vite build`: PASS (built in 1.15s)
   - `python3 -m scripts.check_no_dashes --all`: PASS (0 unescaped em/en-dashes)
 
 ## Artifact Checklist

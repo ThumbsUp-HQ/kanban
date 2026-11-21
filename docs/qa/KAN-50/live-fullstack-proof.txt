@@ -1,50 +1,70 @@
 ================================================================================
 KAN-50 LIVE UNMOCKED FULL-STACK QA PROOF (http://127.0.0.1:18963)
-Container: kanban-liveqa-3 (main commit 7913c2c8, PostgreSQL 16 + FORCE RLS)
+Container: kanban-liveqa-3 (main commit 78074a1d, PostgreSQL 16 + FORCE RLS)
 ================================================================================
 
-1. SUMMARY OF LIVE VERIFICATION FINDINGS
+1. SUMMARY OF LIVE VERIFICATION FINDINGS (ROUND 3 - commit 78074a1d)
 --------------------------------------------------------------------------------
-- Immediate 0ms Workspace Settings Inheritance (PASS):
+- Immediate 0ms Workspace Settings Inheritance via REST (PASS):
   * PATCH /api/v1/admin/workspace-settings ({"default_skip_loaded_sequence_numbers": true}) -> 200 OK.
   * Immediate 0ms POST /api/v1/projects (SAFE, omitting skip_loaded_sequence_numbers) -> 201 Created with skip_loaded_sequence_numbers=true on the very first project creation!
-- PATCH /api/v1/projects/SAFE (PASS):
+- PATCH /api/v1/projects/SAFE & PostgreSQL Audit Diff (PASS):
   * Toggled false -> true and verified PROJECT_UPDATED activity diff rows in PostgreSQL activity_records.
-- CreateProjectModal UI & EmojiHint z-index (PASS):
-  * Opened CreateProjectModal across Desktop (1440x900 Light & Dark), Tablet (768x1024 Light), Mobile (390x844 Light).
-  * Clicked the EmojiHint button (aria-label="Agent-safe sequence numbering") next to create-project-skip-loaded-seq.
-  * Verified [data-testid="emoji-hint-popup"] renders ON TOP OF .kb-create-project-scrim across ALL 4 viewports:
+- WorkspaceSettingsPage (/workspaces/settings) UI + Reload Persistence + EmojiHint (PASS):
+  * Verified [data-testid="workspace-default-skip-loaded-seq-checkbox"] started unchecked (false), toggled ON, clicked save-workspace-btn (200 OK), reloaded page, and verified checkbox persisted as checked (true).
+  * Verified <EmojiHint kind="agentSafeNumbering" /> renders OUTSIDE <label> (emojiOutsideLabel=true; labelText="Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)") and opens [data-testid="emoji-hint-popup"] cleanly across Desktop Light/Dark, Tablet, and Mobile.
+  * Measured load times (< 3000ms): desktop-light 678ms, desktop-dark 706ms, tablet-light 681ms, mobile-light 697ms.
+- CreateProjectModal UI Inheritance + EmojiHint z-index Layering (PASS):
+  * Opened CreateProjectModal across Desktop Light/Dark, Tablet, Mobile: verified [data-testid="create-project-skip-loaded-seq"] pre-hydrated checked (true) from WorkspaceSettings!
+  * Verified <EmojiHint kind="agentSafeNumbering" /> renders OUTSIDE <label> (emojiOutsideLabel=true) and renders ON TOP OF [data-testid="create-project-scrim"] across ALL 4 viewports:
     popupZIndex="10050" > scrimZIndex="9999", occludedByModal=false via document.elementFromPoint (topElementTag="DIV.emoji-hint-popup-content").
-- ProjectSettingsPage General Tab (PASS):
-  * Hydrated project-skip-loaded-seq-checkbox as checked=true for project SAFE; clicking EmojiHint opened data-testid="emoji-hint-popup" visibly with zero overflow, consoleErrors=0, pageErrors=0, serverErrors=0.
+  * Created project UISAF4 (UI Inherited Safe 4) via CreateProjectModal WITHOUT touching create-project-skip-loaded-seq -> POST /api/v1/projects returned 201 Created with skip_loaded_sequence_numbers=true!
+- ProjectSettingsPage (/w/kanban/p/SAFE/settings) General Tab + Toggle Reload Persistence (PASS):
+  * Verified [data-testid="project-skip-loaded-seq-checkbox"] renders concise label + <EmojiHint kind="agentSafeNumbering" /> OUTSIDE <label> (emojiOutsideLabel=true).
+  * Toggled OFF -> saved -> reloaded -> persisted false; toggled ON -> saved -> reloaded -> persisted true.
+  * Measured load times (< 3000ms): desktop-light 834ms, desktop-dark 947ms, tablet-light 868ms, mobile-light 881ms.
+  * Zero overflow, consoleErrors=0, pageErrors=0, badResponses=0 across all 4 viewports.
 
-2. VERBATIM REST, POSTGRESQL, AND PLAYWRIGHT OUTPUT LOG
+2. VERBATIM ROUND 3 REST, POSTGRESQL, AND PLAYWRIGHT OUTPUT LOG
 --------------------------------------------------------------------------------
 [REST - 0ms Workspace Settings Inheritance]
 Initial GET /api/v1/admin/workspace-settings: status=200 default_skip_loaded_sequence_numbers=False
-PATCH /api/v1/admin/workspace-settings (true): status=200 body={"workspace_id":"01a1fb00-3e06-75c4-a91a-259fbbfbb327","name":"Kanban Primary","slug":"kanban","display_name":"Default Workspace","default_project_visibility":"private","session_idle_timeout_min":60,"session_absolute_timeout_min":720,"trash_retention_days":30,"mcp_key_max_ttl_days":90,"air_gap_mode":false,"default_skip_loaded_sequence_numbers":true,"updated_at":"2026-11-20T22:09:45.044209Z"}
+PATCH /api/v1/admin/workspace-settings (true): status=200 body={"workspace_id":"01a1fb43-704a-786f-8bf1-28f9315b14ef","name":"Kanban Primary","slug":"kanban","display_name":"Default Workspace","default_project_visibility":"private","session_idle_timeout_min":60,"session_absolute_timeout_min":720,"trash_retention_days":30,"mcp_key_max_ttl_days":90,"air_gap_mode":false,"default_skip_loaded_sequence_numbers":true,"updated_at":"2026-11-20T23:25:34.565804Z"}
 Immediate 0ms POST /api/v1/projects (SAFE, omitted skip_loaded_sequence_numbers): status=201 skip_loaded_sequence_numbers=True
 PATCH /api/v1/projects/SAFE (false): status=200 skip_loaded_sequence_numbers=False
 PATCH /api/v1/projects/SAFE (true): status=200 skip_loaded_sequence_numbers=True
 
 [PostgreSQL PROJECT_UPDATED Activity Rows for SAFE]
-50|PROJECT_UPDATED|{"changes": {"skip_loaded_sequence_numbers": {"new": false, "old": true}}}
-51|PROJECT_UPDATED|{"changes": {"skip_loaded_sequence_numbers": {"new": true, "old": false}}}
+56|PROJECT_UPDATED|{"changes": {"skip_loaded_sequence_numbers": {"new": false, "old": true}}}
+57|PROJECT_UPDATED|{"changes": {"skip_loaded_sequence_numbers": {"new": true, "old": false}}}
 
-[Playwright UI - CreateProjectModal EmojiHint Layering]
-- desktop-light: popupZIndex="10050", scrimZIndex="9999", occludedByModal=false, topElementTag="DIV.emoji-hint-popup-content", docOverflow=false, dialogOverflow=false, outsideDialog=false
-- desktop-dark:  popupZIndex="10050", scrimZIndex="9999", occludedByModal=false, topElementTag="DIV.emoji-hint-popup-content", docOverflow=false, dialogOverflow=false, outsideDialog=false
-- tablet-light:  popupZIndex="10050", scrimZIndex="9999", occludedByModal=false, topElementTag="DIV.emoji-hint-popup-content", docOverflow=false, dialogOverflow=false, outsideDialog=false
-- mobile-light:  popupZIndex="10050", scrimZIndex="9999", occludedByModal=false, topElementTag="DIV.emoji-hint-popup-content", docOverflow=false, dialogOverflow=false, outsideDialog=false
+[Playwright UI - WorkspaceSettingsPage (/workspaces/settings)]
+- Persistence check (desktop-light): initialChecked=false -> toggle ON + save -> reload -> afterReloadChecked=true
+- desktop-light: wsLoadMs=678ms, checked=true, emojiOutsideLabel=true, docOverflow=false
+- desktop-dark:  wsLoadMs=706ms, checked=true, emojiOutsideLabel=true, docOverflow=false
+- tablet-light:  wsLoadMs=681ms, checked=true, emojiOutsideLabel=true, docOverflow=false
+- mobile-light:  wsLoadMs=697ms, checked=true, emojiOutsideLabel=true, docOverflow=false
 
-[Playwright UI - ProjectSettingsPage General Tab]
-- desktop-light: isChecked=true, popupVisible=true, docOverflow=false, consoleErrors=0, pageErrors=0, serverErrors=0
-- desktop-dark:  isChecked=true, popupVisible=true, docOverflow=false, consoleErrors=0, pageErrors=0, serverErrors=0
-- tablet-light:  isChecked=true, popupVisible=true, docOverflow=false, consoleErrors=0, pageErrors=0, serverErrors=0
-- mobile-light:  isChecked=true, popupVisible=true, docOverflow=false, consoleErrors=0, pageErrors=0, serverErrors=0
+[Playwright UI - CreateProjectModal EmojiHint Layering & Inheritance]
+- Create without touching checkbox: identifier="UISAF4", skip_loaded_sequence_numbers=true
+- desktop-light: createPreHydrated=true, emojiOutsideLabel=true, popupZIndex="10050", scrimZIndex="9999", occludedByModal=false, topElementTag="DIV.emoji-hint-popup-content", docOverflow=false, dialogOverflow=false, outsideDialog=false
+- desktop-dark:  createPreHydrated=true, emojiOutsideLabel=true, popupZIndex="10050", scrimZIndex="9999", occludedByModal=false, topElementTag="DIV.emoji-hint-popup-content", docOverflow=false, dialogOverflow=false, outsideDialog=false
+- tablet-light:  createPreHydrated=true, emojiOutsideLabel=true, popupZIndex="10050", scrimZIndex="9999", occludedByModal=false, topElementTag="DIV.emoji-hint-popup-content", docOverflow=false, dialogOverflow=false, outsideDialog=false
+- mobile-light:  createPreHydrated=true, emojiOutsideLabel=true, popupZIndex="10050", scrimZIndex="9999", occludedByModal=false, topElementTag="DIV.emoji-hint-popup-content", docOverflow=false, dialogOverflow=false, outsideDialog=false
+
+[Playwright UI - ProjectSettingsPage (/w/kanban/p/SAFE/settings)]
+- Persistence check (desktop-light): toggle OFF -> save -> reload -> offAfterReload=false; toggle ON -> save -> reload -> onAfterReload=true
+- desktop-light: projSetLoadMs=834ms, isChecked=true, emojiOutsideLabel=true, docOverflow=false, consoleErrors=0, pageErrors=0, badResponses=0
+- desktop-dark:  projSetLoadMs=947ms, isChecked=true, emojiOutsideLabel=true, docOverflow=false, consoleErrors=0, pageErrors=0, badResponses=0
+- tablet-light:  projSetLoadMs=868ms, isChecked=true, emojiOutsideLabel=true, docOverflow=false, consoleErrors=0, pageErrors=0, badResponses=0
+- mobile-light:  projSetLoadMs=881ms, isChecked=true, emojiOutsideLabel=true, docOverflow=false, consoleErrors=0, pageErrors=0, badResponses=0
 
 3. CAPTURED SCREENSHOTS (VISUALLY INSPECTED VIA read_file)
 --------------------------------------------------------------------------------
+- docs/qa/KAN-50/screenshots/live-workspace-settings-desktop-light.png
+- docs/qa/KAN-50/screenshots/live-workspace-settings-desktop-dark.png
+- docs/qa/KAN-50/screenshots/live-workspace-settings-tablet-light.png
+- docs/qa/KAN-50/screenshots/live-workspace-settings-mobile-light.png
 - docs/qa/KAN-50/screenshots/live-create-project-desktop-light.png
 - docs/qa/KAN-50/screenshots/live-create-project-desktop-dark.png
 - docs/qa/KAN-50/screenshots/live-create-project-tablet-light.png

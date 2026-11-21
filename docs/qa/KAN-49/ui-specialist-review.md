@@ -1,23 +1,21 @@
-# UI/UX Specialist Clean-Room Audit & Signoff: KAN-49 (RC1 Remediation & Coverage Verification)
+# UI/UX Specialist Clean-Room Audit & Signoff: KAN-49 (Round 3 Live Full-Stack Verification)
 
 - **Ticket:** KAN-49 (`[KB-AGENT-SEQ-01]`)
 - **Title:** Add DB Migration, Swarm Batch Sequence Allocator & SEQUENCE_SKIPPED Audit Event
-- **Branch:** `main` (integrated at commit `7913c2c8`)
-- **Commit Under Audit:** `7913c2c8`
+- **Branch:** `main` (integrated at commit `78074a1d`)
+- **Commit Under Audit:** `78074a1d65216b6b3546b122445cdb322e0b1651`
 - **Reviewer:** `ui-spec-2` (Clean-Room UI Specialist, System Architect)
 - **Live Full-Stack Target:** `kanban-liveqa-3` (`http://127.0.0.1:18963`, PostgreSQL 16 + FORCE RLS)
-- **Live Full-Stack Verdict:** PASS (`LIVE_STACK_VERDICT: PASS`)
+- **Live Full-Stack Verdict:** PASS (`OVERALL LIVE_STACK_VERDICT: PASS`)
 - **Status:** APPROVED
 
 ---
 
 ## 1. Executive Summary & Verification Scope
 
-An independent clean-room UI and UX architectural audit was conducted for ticket **KAN-49** integrated into `main` at commit `7913c2c8` and validated against zero-mock live container execution on `kanban-liveqa-3` (`http://127.0.0.1:18963`) documented in `docs/qa/KAN-49/live-fullstack-proof.txt`.
+An independent clean-room UI and UX architectural audit was conducted for ticket **KAN-49** integrated into `main` at commit `78074a1d` and validated against zero-mock live container execution on `kanban-liveqa-3` (`http://127.0.0.1:18963`) documented in `docs/qa/KAN-49/live-fullstack-proof.txt`.
 
 KAN-49 implements the backend database migration (`p4_24_agent_safe_sequences`), ORM model parity, SQL batch sequence allocation functions (`compute_agent_safe_sequence_batch` and `allocate_issue_sequences`), and `SEQUENCE_SKIPPED` hash-chained audit logging across single-issue creation, tree creation, and issue cloning services.
-
-The implementation provides comprehensive unit test evidence proving >=95% test coverage across all 6 modified modules, validates database model parity and RLS catalog constraints, fixes traversal terminology in documentation, and appends non-empty dash audit logs.
 
 Under the project dual-specialist gate standard, this review verifies that:
 1. Allocated sequence numbers maintain 100% semantic and formatting compatibility with frontend issue key consumers (`<PROJECT_KEY>-<SEQ>`, e.g. `KAN-1`, `SAFE-14`, `SAFE-405`).
@@ -31,10 +29,10 @@ Under the project dual-specialist gate standard, this review verifies that:
 
 ## 2. Live Full-Stack Execution Proof & Boundary Verification
 
-Live container testing (`http://127.0.0.1:18963`, `kanban-liveqa-3`, commit `7913c2c8`) verified sequence allocation boundaries against embedded PostgreSQL 16 with `FORCE ROW LEVEL SECURITY`:
+Live container testing (`http://127.0.0.1:18963`, `kanban-liveqa-3`, commit `78074a1d`) verified sequence allocation boundaries against embedded PostgreSQL 16 with `FORCE ROW LEVEL SECURITY`:
 
 ### 2.1. Sequence Boundary Verification (Project `SAFE`)
-Project `SAFE` (id `01a1fb00-3e06-75c4-a91a-259fbbfbb327`) was configured with `skip_loaded_sequence_numbers=true`:
+Project `SAFE` (id `01a1fb43-704a-786f-8bf1-28f9315b14ef`) was configured with `skip_loaded_sequence_numbers=true`:
 - **Single Issue Boundary (12 -> 14):**
   Created `SAFE-1` through `SAFE-12`. The next `POST /api/v1/projects/SAFE/issues` allocated `SAFE-14` (sequence `13` cleanly skipped).
 - **Issue Tree Batch Allocation (68 -> 71):**
@@ -51,7 +49,7 @@ Project `SAFE` (id `01a1fb00-3e06-75c4-a91a-259fbbfbb327`) was configured with `
   * Sequence 88 skipped: `{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [88], "allocated_sequence": 74}`
   * Sequence 404 skipped: `{"reason": "agent_safe_sequence_numbering", "project_key": "SAFE", "skipped_sequences": [404], "allocated_sequence": 403}`
 - Cryptographic hash chain verification:
-  `verify_activity_chain('01a1fb00-3e06-75c4-a91a-259fbbfbb327')` -> `is_valid=true`, `checked_rows=457`, `first_broken_seq=NULL`, `failure_reason=NULL`.
+  `verify_activity_chain('01a1fb43-704a-786f-8bf1-28f9315b14ef')` -> `is_valid=true`, `checked_rows=463`, `first_broken_seq=NULL`, `failure_reason=NULL`.
 
 ---
 
@@ -78,7 +76,12 @@ Direct visual inspection via `read_file` of all 5 captured Playwright screenshot
 1. **Unit Test Coverage:**
    - Exceeds >=95% statement coverage across all 6 modified modules (96% overall).
    - SQL functions and migrations validated for PostgreSQL 16 `FORCE ROW LEVEL SECURITY`.
-2. **Static & Brand Gates:**
+2. **Live Telemetry:**
+   - Target: `kanban-liveqa-3` (`http://127.0.0.1:18963`, commit `78074a1d`).
+   - Page load times: Safe Board 1917ms, Safe List 1891ms, SAFE-14 detail 829ms (< 3000ms threshold).
+   - UI console errors: 0, page errors: 0, bad responses: 0.
+   - `OVERALL LIVE_STACK_VERDICT (KAN-49)`: PASS
+3. **Static & Brand Gates:**
    - `uv run ruff check .` and `uv run ruff format --check .` passed cleanly.
    - `uv run mypy database kanban mcp agent` passed with 0 errors.
    - `python3 -m scripts.check_no_dashes docs/qa/KAN-49/` passed cleanly (0 em/en-dashes).

@@ -1,42 +1,27 @@
-=== KAN-45 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18964, commit 7913c2c8) ===
-Timestamp: 2026-11-20T22:12:49.166Z
-Approved qa-proof-validator Wasm module: sha256=fddfe97e1b15829495364a2002bf0a0c830002f9ef673971a1a4167ee815d972
-UI DryRunDrawer (missing proof -> qa-proof-validator Wasm REJECT): {"banner":"🛑Transition Blocked: Changes would not commit (would_commit: false)","step1":"🛑 1. require-qa-proof-link[sync_validator]Rejected<1msRejection Reason: Missing required QA report or READY verdict in verification proof"}
-UI DryRunDrawer (valid proof -> qa-proof-validator Wasm ALLOW): {"banner":"✅Transition Allowed: Changes would commit","step1":"✅ 1. require-qa-proof-link[sync_validator]Allowed<1ms"}
-POST /api/v1/mcp-keys -> HTTP 201 (31ms) key=kb_agt_5tSW...eFdk
-Guard 1a Agent PATCH /api/v1/issues/KAN-1 -> HTTP 403 (33ms) code=CSRF_REJECTED
-Guard 1b Agent POST /api/v1/issues/KAN-1/move -> HTTP 403 (24ms) code=CSRF_REJECTED
-Guard 1c Agent POST /api/v1/issues/KAN-1/transition -> HTTP 403 (14ms) code=CSRF_REJECTED
-Guard 1d Human cookie POST /api/v1/issues/KAN-1/move -> HTTP 200 (79ms) state=undefined
-Guard 3a Dry-Run API (missing proof) -> HTTP 200 (34ms) step1={"order":1,"name":"require-qa-proof-link","hook_kind":"sync_validator","result":"rejected","reason":"Missing required QA report or READY verdict in verification proof","field_updates":null,"duration_us":256,"cli_command":null}
-Guard 3b Dry-Run API (valid proof) -> HTTP 200 (32ms) step1={"order":1,"name":"require-qa-proof-link","hook_kind":"sync_validator","result":"allowed","reason":null,"field_updates":null,"duration_us":665,"cli_command":null}
-MCP /mcp/agent initialize -> HTTP 200 (17ms) session=TzT5OiMJw22efsPMXn8kyJInttPSb9vLimEdg6R3TVE
-Guard 2a short summary: MCP isError=true snippet="error: {code: VALIDATION_FAILED, message: Missing required '# Integration Agent Reality-Based Report' H1 header}\n" | REST HTTP 403 code=CSRF_REJECTED
-Guard 2b contradictory report: MCP isError=true snippet="error: {code: VALIDATION_FAILED, message: Contradiction marker 'NEEDS WORK' found in certification or deployment readiness\n    assessment while claiming READY / A}\n" | REST HTTP 403 code=CSRF_REJECTED
-Guard 4 valid /mcp/agent complete_work -> HTTP 200 (114ms) isError=false snippet="status: completed\nkey: KAN-2\nissue_key: KAN-2\nsequence_number: 2\nstate: Done\nproof: {qa_dir: docs/qa/KAN-2, artifacts: 1, verdict: READY}\ncomment: KAN-2#c-01a1fb05\n"
+=== KAN-45 LIVE FULL-STACK QA PROOF (http://127.0.0.1:18964, commit 78074a1d) ===
+Timestamp: 2026-11-20T23:21:54.964Z
+Approved Wasm modules: qa-proof-validator=fddfe97e1b15829495364a2002bf0a0c830002f9ef673971a1a4167ee815d972, auto-label-mutator=79cdc606bf7cab8b1de8a204a126e9302f831bdf32db6ea2170970bb822140dd
+UI DryRunDrawer (missing proof -> qa-proof-validator REJECT): {"banner":"🛑Transition Blocked: Changes would not commit (would_commit: false)","step1":"🛑 1. require-qa-proof-link[sync_validator]Rejected<1msRejection Reason: Missing required QA report or READY verdict in verification proof","hasWasmCompileErr":false}
+UI DryRunDrawer (KAN-1 valid proof -> qa-proof-validator + auto-label-mutator ALLOW): {"banner":"✅Transition Allowed: Changes would commit","step1":"✅ 1. require-qa-proof-link[sync_validator]Allowed<1ms","step2":"✅ 2. auto-label-verified[sync_mutator]Allowed<1ms","hasWasmCompileErr":false}
+POST /api/v1/mcp-keys -> HTTP 201 (30ms) key=kb_agt_douB...V2CU
+Guard 1a Stateless Bearer PATCH /api/v1/issues/KAN-1 -> HTTP 422 (88ms) code=USE_COMPLETE_WORK
+Guard 1b Stateless Bearer POST /api/v1/issues/KAN-1/move -> HTTP 422 (65ms) code=USE_COMPLETE_WORK
+Guard 1c Stateless Bearer POST /api/v1/issues/KAN-1/transition -> HTTP 422 (37ms) code=USE_COMPLETE_WORK
+Guard 1d Human cookie POST /api/v1/issues/KAN-1/move -> HTTP 200 (70ms) status=undefined
+Guard 3a Dry-Run API (missing proof) -> HTTP 200 (33ms) steps=[{"order":1,"name":"require-qa-proof-link","hook_kind":"sync_validator","result":"rejected","reason":"Missing required QA report or READY verdict in verification proof","field_updates":null,"duration_us":381,"cli_command":null}]
+Guard 3b Dry-Run API (KAN-1 valid proof) -> HTTP 200 (32ms) steps=[{"order":1,"name":"require-qa-proof-link","hook_kind":"sync_validator","result":"allowed","reason":null,"field_updates":null,"duration_us":299,"cli_command":null},{"order":2,"name":"auto-label-verified","hook_kind":"sync_mutator","result":"allowed","reason":null,"field_updates":null,"duration_us":149,"cli_command":null}]
+MCP /mcp/agent initialize -> HTTP 200 (20ms) session=opO8VBWayF4CN3jopY5Fo8BTNsiPzYli9GbYiC6Hazs
+Guard 2a short summary: MCP isError=true | Bearer REST HTTP 422 code=INVALID_REALITY_CHECKER_REPORT
+Guard 2b contradictory report: MCP isError=true | Bearer REST HTTP 422 code=INVALID_REALITY_CHECKER_REPORT
+Guard 4 valid /mcp/agent complete_work -> HTTP 200 (124ms) isError=false body="status: completed\nkey: KAN-2\nissue_key: KAN-2\nsequence_number: 2\nstate: Done\nproof: {qa_dir: docs/qa/KAN-2, artifacts: 1, verdict: READY}\ncomment: KAN-2#c-01a1fb44"
 Completed KAN-2 UI verification: {"textHasDone":true,"textHasReport":true}
-
---- Follow-up X-KB-Subject-Token Diagnostic Probe (vs Authorization: Bearer) ---
-X-KB-Subject-Token PATCH /api/v1/issues/KAN-1 -> HTTP 422 code=USE_COMPLETE_WORK
-X-KB-Subject-Token POST /api/v1/issues/KAN-1/move -> HTTP 422 code=USE_COMPLETE_WORK
-X-KB-Subject-Token POST /api/v1/issues/KAN-1/transition -> HTTP 422 code=USE_COMPLETE_WORK
-X-KB-Subject-Token POST /api/v1/issues/KAN-2/complete-work (short) -> HTTP 422 code=INVALID_REALITY_CHECKER_REPORT
-
-FAIL DETAIL (CsrfMiddleware Blocks Stateless Authorization: Bearer kb_agt_... REST Callers):
-  kanban/auth/sessions/resolver.py:103 accepts both X-KB-Subject-Token and Authorization: Bearer kb_agt_...,
-  but CsrfMiddleware.dispatch (kanban/auth/sessions/csrf.py:354) only exempts x-kb-subject-token and x-kb-internal-auth.
-  Consequently, external agents calling /api/v1/issues/* with Authorization: Bearer kb_agt_... (without cookies)
-  are rejected with HTTP 403 CSRF_REJECTED ("Missing CSRF token header or cookie") before reaching 422 USE_COMPLETE_WORK
-  or 422 INVALID_REALITY_CHECKER_REPORT.
-Note (Dry-Run Step 2 auto-label-mutator): Step 1 (qa-proof-validator) compiled and executed cleanly in <1ms (256us reject, 665us allow),
-  while Step 2 (auto-label-mutator) logged fail_open_warn: "Failed to compile WebAssembly binary: failed to parse WebAssembly module Caused by: unexpected end-of-file (at offset 0x16)".
 
 --- Runtime Error Telemetry ---
 Console errors: 0
 Page errors: 0
 5xx responses: 0
-LIVE_STACK_VERDICT [G1_AGENT_REST_BYPASS_BLOCKED_HUMAN_ALLOWED]: FAIL (Authorization: Bearer kb_agt_... blocked at 403 CSRF_REJECTED by CsrfMiddleware; X-KB-Subject-Token returns 422 USE_COMPLETE_WORK; Human cookie returns 200)
-LIVE_STACK_VERDICT [G2_COMPLETE_WORK_REJECTS_SHORT_AND_CONTRADICTORY]: PASS_MCP_FAIL_BEARER_REST (/mcp/agent complete_work rejects both with isError=true VALIDATION_FAILED; X-KB-Subject-Token REST returns 422 INVALID_REALITY_CHECKER_REPORT; Authorization: Bearer REST blocked at 403 CSRF_REJECTED)
-LIVE_STACK_VERDICT [G3_QA_PROOF_VALIDATOR_WASM_UNDER_5MS]: PASS
+LIVE_STACK_VERDICT [G1_STATELESS_BEARER_BYPASS_BLOCKED_HUMAN_ALLOWED]: PASS
+LIVE_STACK_VERDICT [G2_MCP_AND_BEARER_REST_REJECT_SHORT_CONTRADICTORY]: PASS
+LIVE_STACK_VERDICT [G3_WASM_QA_PROOF_AND_AUTO_LABEL_CLEAN]: PASS
 LIVE_STACK_VERDICT [G4_VALID_CANONICAL_REPORT_COMPLETE_WORK]: PASS
-OVERALL LIVE_STACK_VERDICT (KAN-45): FAIL
+OVERALL LIVE_STACK_VERDICT (KAN-45): PASS

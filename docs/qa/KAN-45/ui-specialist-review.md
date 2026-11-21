@@ -2,9 +2,11 @@
 
 **Ticket ID:** KAN-45  
 **Title:** [KB-P3-GATE-ENFORCE] Enforce Canonical Reality-Checker Report on complete_work, Real qa-proof-validator Wasm, Approval Comment Persistence, and Agent Done-Transition Guards  
-**Branch:** `feat/KAN-45`  
-**Commit Under Audit:** `5c345a8e`  
+**Branch:** `main` (integrated at commit `78074a1d`)  
+**Commit Under Audit:** `78074a1d65216b6b3546b122445cdb322e0b1651`  
 **Base Commit Reference:** `73caabe7` (merged on `main`)  
+**Live Full-Stack Target:** `kanban-liveqa-4` (`http://127.0.0.1:18964`, PostgreSQL 16 + FORCE RLS)  
+**Live Full-Stack Verdict:** PASS (`OVERALL LIVE_STACK_VERDICT: PASS`)  
 **Reviewer:** `ui-spec-2` (Clean-Room UI Specialist, System Architect)  
 **Date:** 2026-11-20  
 **Status:** APPROVED  
@@ -13,7 +15,7 @@
 
 ## 1. Executive Summary & Verification Scope
 
-An independent clean-room UI and UX architectural audit was conducted for ticket **KAN-45** on branch `feat/KAN-45` at commit `5c345a8e` pursuant to the mandatory Dual Specialist Gate defined in `GEMINI.md`.
+An independent clean-room UI and UX architectural audit was conducted for ticket **KAN-45** integrated into `main` at commit `78074a1d` pursuant to the mandatory Dual Specialist Gate defined in `GEMINI.md`.
 
 Although ticket KAN-45 focuses on transition engine gate enforcement, real Wasm bytecode validation, and MCP tool verification, it introduces critical behavioral invariants directly governing user-facing surfaces:
 1. REST completed-state transitions are guarded against agent bypasses while preserving seamless human interaction on the board and issue detail surfaces.
@@ -42,7 +44,11 @@ The UI Specialist audit confirms:
 - **Agent Enforcement Impact:**
   * Automated agents attempting to transition issues into completed states via standard REST routes receive `422 USE_COMPLETE_WORK`.
   * Forces agents through `mcp_kanban_complete_work`, ensuring no automated ticket closure bypasses reality-checker verification.
-- **Verification:** Verified in `test_agent_caller_blocked_from_completed_state_on_patch` in `kanban/tests/api/test_gate_enforcement_hardening.py` (lines 428-435).
+- **Live Stack Proof Telemetry:**
+  * Guard 1a: Stateless Bearer `PATCH /api/v1/issues/KAN-1` -> HTTP 422 `code=USE_COMPLETE_WORK` (88ms).
+  * Guard 1b: Stateless Bearer `POST /api/v1/issues/KAN-1/move` -> HTTP 422 `code=USE_COMPLETE_WORK` (65ms).
+  * Guard 1c: Stateless Bearer `POST /api/v1/issues/KAN-1/transition` -> HTTP 422 `code=USE_COMPLETE_WORK` (37ms).
+  * Guard 1d: Human cookie `POST /api/v1/issues/KAN-1/move` -> HTTP 200 (70ms).
 
 ### 2.2. Approval Report Comment in Activity & Comments Stream
 - **Format Structure (`format_approve_comment` in `kanban/workflows/async_gate.py`):**
@@ -71,46 +77,70 @@ The UI Specialist audit confirms:
   * `serialize_issue` remains completely untouched, ensuring read-only viewing of held issues remains fluid.
 
 ### 2.4. Wasm Runner Performance & Dry-Run Responsiveness
-- **Execution Budget:** In `kanban/workflows/builtins.py`, the real compiled Wasm module (`fddfe97e1b...`) executes within `<2ms` and uses `<= 2,000,000` fuel.
+- **Execution Budget:** In `kanban/workflows/builtins.py`, the real compiled Wasm modules:
+  * `qa-proof-validator` (`sha256:fddfe97e1b15829495364a2002bf0a0c830002f9ef673971a1a4167ee815d972`)
+  * `auto-label-mutator` (`sha256:79cdc606bf7cab8b1de8a204a126e9302f831bdf32db6ea2170970bb822140dd`)
+  execute deterministically within `<2ms` (< 500us in live container: 381us for rejection, 299us for allow) and <= 2,000,000 fuel.
 - **Studio Dry-Run Impact:**
   * In `WorkflowStudioPage.tsx` and `DryRunDrawer.tsx`, executing a dry-run test against sample tickets returns instantaneous results.
   * Prevents UI spinners from hanging and provides instant validator feedback in the dry-run console.
 
 ---
 
-## 3. Test Suites, Coverage & Quality Gates
+## 3. Visual Screenshot Audit (`docs/qa/KAN-45/screenshots/`)
 
-### 3.1. Automated Backend Test Suites
-- **Comprehensive Suite Execution:**
-  - `kanban/tests/api/test_gate_enforcement_hardening.py`: 14 passed
-  - `kanban/tests/api/test_issue_workflow.py`: 13 passed
-  - `kanban/tests/api/test_issue_patch_etag_parity.py`: 2 passed
-  - `kanban/tests/workflows/test_qa_proof_validator_wasm.py`: 6 passed
-  - `kanban/tests/workflows/test_async_gate.py`: 15 passed
-  - `kanban/tests/workflows/test_transition_engine.py`: 16 passed
-  - `kanban/tests/workflows/test_dry_run.py`: 7 passed
-  - `agent/tests/gates/test_gate_runner.py`: 3 passed
-  - `agent/tests/gates/test_worker.py`: 8 passed
-  - `mcp/tests/agent/test_workflow_tools.py`: 9 passed
-  - `mcp/tests/agent/test_transition_ticket_gate.py`: 3 passed
-  - `mcp/tests/agent/test_pending_gate_contract.py`: 3 passed
-  - `mcp/tests/agent/test_workflow_argument_validation.py`: 6 passed
-  - **Total:** 105 passed in 33.77s across 13 test suites.
-
-### 3.2. Static Quality & Security Gates
-- **Ruff Linter:** Clean across all directories (0 errors).
-- **Ruff Formatter:** 1012 files checked, 0 formatting errors.
-- **Mypy Typechecking:** Clean across 1132 source files (0 errors).
-- **Import Layering (`lint-imports`):** Strict architectural layering preserved (`agent -> mcp -> kanban -> database`, 2 kept, 0 broken).
-- **Typography Check (`check_no_dashes`):** Clean across all modified files (0 em/en-dashes).
-- **Untracked Hygiene:** `.backup_schedule.json` and `backups/` strictly preserved unstaged.
+Direct visual inspection via `read_file` confirms:
+1. `live-workflow-wasm-dryrun-reject.png`:
+   - Dry-Run drawer displays rejection banner: `🛑 Transition Blocked: Changes would not commit (would_commit: false)`.
+   - Step 1 clearly shows: `🛑 1. require-qa-proof-link [sync_validator] Rejected <1ms`.
+   - Rejection Reason displays: `Missing required QA report or READY verdict in verification proof`.
+   - Clear typography, red warning container tokens, and 0 layout shifts.
+2. `live-workflow-wasm-dryrun-allow.png`:
+   - Dry-Run drawer displays success banner: `✅ Transition Allowed: Changes would commit`.
+   - Step 1 shows: `✅ 1. require-qa-proof-link [sync_validator] Allowed <1ms`.
+   - Step 2 shows: `✅ 2. auto-label-verified [sync_mutator] Allowed <1ms`.
+   - Clean green state tokens, responsive slide-over drawer layout.
+3. `live-issue-completed-proof-desktop-light.png` & `live-issue-completed-proof-desktop-dark.png`:
+   - Renders completed issue `KAN-2` in light and dark modes with status badge `Done`.
+   - Activity feed shows the canonical comment authored during `complete_work`:
+     `# Integration Agent Reality-Based Report`
+     `## Reality Check Validation Verified live full-stack enforcement for KAN-2 against kanban-liveqa-4 with FORCE ROW LEVEL SECURITY active.`
+   - Contrast passes WCAG AA, robot avatar and author badge `@qaadmin` display properly without clipping.
 
 ---
 
-## 4. Certification Verdict
+## 4. Test Suites, Coverage & Quality Gates
+
+### 4.1. Automated Backend Test Suites
+- `kanban/tests/api/test_gate_enforcement_hardening.py`: 15 passed in 1.42s.
+- `kanban/tests/workflows/test_qa_proof_validator_wasm.py`: 6 passed.
+- `kanban/tests/workflows/test_dry_run.py`: 7 passed.
+- `kanban/tests/workflows/test_workflow_hooks_api.py`: 16 passed.
+- Combined workflow suite: 29 passed in 6.59s.
+
+### 4.2. Live Container Verification (`live-fullstack-proof.txt`)
+- Target: `kanban-liveqa-4` (`http://127.0.0.1:18964`, commit `78074a1d`).
+- Runtime Telemetry:
+  * Console errors: 0
+  * Page errors: 0
+  * 5xx responses: 0
+- Individual Verdicts:
+  * `G1_STATELESS_BEARER_BYPASS_BLOCKED_HUMAN_ALLOWED`: PASS
+  * `G2_MCP_AND_BEARER_REST_REJECT_SHORT_CONTRADICTORY`: PASS
+  * `G3_WASM_QA_PROOF_AND_AUTO_LABEL_CLEAN`: PASS
+  * `G4_VALID_CANONICAL_REPORT_COMPLETE_WORK`: PASS
+- Overall Verdict: `OVERALL LIVE_STACK_VERDICT (KAN-45): PASS`
+
+### 4.3. Static Quality & Security Gates
+- Ruff Linter: Clean across all files (0 errors).
+- Ruff Formatter: Clean (0 formatting errors).
+- Typography Check (`check_no_dashes`): Clean (0 em/en-dashes).
+
+---
+
+## 5. Certification Verdict
 
 The architecture, UX contracts, human interaction protections, comment formatting, and concurrency guards for **KAN-45** have been verified and certified.
 
 - **UI Specialist Sign-off:** APPROVED
 - **Status:** APPROVED
-- **Recommendation:** Proceed to API Specialist review completion, reality-checker QA gate, and merge coordination.

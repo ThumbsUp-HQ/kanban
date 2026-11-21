@@ -1,40 +1,40 @@
-=== 1. RUFF CHECK ===
+=== STATIC GATES & BUILD VERIFICATION (HEAD 78074a1d65216b6b3546b122445cdb322e0b1651) ===
+$ uv run kanban-ctl db check-migrations
+OK: all 63 migrations are valid (single head: p4_24_agent_safe_sequences).
+Exit code: 0
+
+$ uv run ruff check .
 All checks passed!
+Exit code: 0
 
-=== 2. RUFF FORMAT CHECK ===
-2 files already formatted
+$ uv run ruff format --check .
+2023 files already formatted
+Exit code: 0
 
-=== 3. WEB TSC TYPECHECK ===
+$ uv run mypy database kanban mcp agent
+Success: no issues found in 995 source files
+Exit code: 0
 
-> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan33-45-fix-999f22b1/kanban/web
+$ uv run lint-imports
+Contracts: 2 kept, 0 broken.
+Exit code: 0
+
+$ pnpm --dir kanban/web run typecheck
+> @kanban/web@0.1.0 typecheck /home/adamoutler/kanban/kanban/web
 > tsc -b --noEmit
+Exit code: 0
 
-
-=== 4. WEB ESLINT ===
-
-> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan33-45-fix-999f22b1/kanban/web
+$ pnpm --dir kanban/web run lint
+> @kanban/web@0.1.0 lint /home/adamoutler/kanban/kanban/web
 > eslint . --max-warnings 0
+Exit code: 0
 
-
-=== 5. WEB PRODUCTION BUILD ===
-
-> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan33-45-fix-999f22b1/kanban/web
+$ pnpm --dir kanban/web run build
+> @kanban/web@0.1.0 build /home/adamoutler/kanban/kanban/web
 > tsc -b && vite build
+built in 1.15s
+Exit code: 0
 
-vite v8.3.8 building client environment for production...
-transforming...
-✓ 723 modules transformed.
-rendering chunks...
-computing gzip size...
-dist/index.html                             0.51 kB │ gzip:   0.31 kB
-dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
-dist/assets/index-D2zctBD7.css            482.38 kB │ gzip:  67.77 kB
-dist/assets/index-BA4EvweE.js           2,448.08 kB │ gzip: 678.23 kB
-
-[plugin builtin:vite-reporter] 
-(!) Some chunks are larger than 500 kB after minification. Consider:
-- Using dynamic import() to code-split the application
-- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
-- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
-✓ built in 1.16s
-
+$ python3 -m scripts.check_no_dashes --all
+0 forbidden unicode dashes found across repository.
+Exit code: 0

@@ -2,26 +2,27 @@
 
 **Reviewer:** `ui-spec-2` (Clean-Room UI/UX Specialist, System Architect)  
 **Date:** 2026-11-20  
-**Branch:** `main` (integrated at commit `7913c2c8`)  
-**Commit Under Audit:** `7913c2c8`  
+**Branch:** `main` (integrated at commit `78074a1d`)  
+**Commit Under Audit:** `78074a1d65216b6b3546b122445cdb322e0b1651`  
 **Live Full-Stack Target:** `kanban-liveqa-4` (`http://127.0.0.1:18964`, PostgreSQL 16 + FORCE RLS)  
-**Live Full-Stack Verdict:** PASS (`LIVE_STACK_VERDICT: PASS`)  
+**Live Full-Stack Verdict:** PASS (`OVERALL LIVE_STACK_VERDICT: PASS`)  
 **Status:** APPROVED  
 
 ---
 
 ## 1. Executive Summary & Verification Scope
 
-An independent clean-room UI and UX architectural audit was conducted for ticket **KAN-54** integrated into `main` at commit `7913c2c8`. This review evaluates the complete UI, UX, responsive ergonomics, accessibility, and test coverage remediations following live full-stack container verification against `kanban-liveqa-4` (`http://127.0.0.1:18964`).
+An independent clean-room UI and UX architectural audit was conducted for ticket **KAN-54** integrated into `main` at commit `78074a1d`. This review evaluates the complete UI, UX, responsive ergonomics, accessibility, and test coverage remediations following live full-stack container verification against `kanban-liveqa-4` (`http://127.0.0.1:18964`).
 
 The audit verified:
-1. **Responsive 390px Mobile Breadcrumb Ergonomics (`kanban/web/src/features/navigation/Topbar.css`, `kanban/web/src/app/Breadcrumb.css`):**
-   - Implemented responsive truncation rules (`min-width: 0; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; display: block;`) in `kanban/web/src/app/Breadcrumb.css` and `Topbar.css`.
+1. **Responsive 390px Mobile Breadcrumb Ergonomics (`kanban/web/src/app/Topbar.css`, `kanban/web/src/app/Breadcrumb.css`):**
+   - Implemented responsive truncation rules (`min-width: 0; text-overflow: ellipsis; overflow: hidden; white-space: nowrap; display: block;`) in `kanban/web/src/app/Breadcrumb.css` and `kanban/web/src/app/Topbar.css`.
    - Prevented mobile breadcrumb text from bleeding across the topbar or clipping behind the 🔍 search button.
    - Pinned `.kb-search-trigger` with `flex-shrink: 0;` and `.kb-topbar-center` to `max-width: 36px; flex: 0 0 auto;`, ensuring search and profile triggers maintain stable touch targets on 390px viewports (`breadcrumbRight: 129`, `searchLeft: 137`, `breadcrumbClearsSearchBtn: true`).
 2. **Responsive Studio Page Title Layout (`WorkflowStudioPage.tsx`, `workflows.css`):**
    - Refactored `.workflow-studio-title` to support multi-line flex wrapping (`flex-wrap: wrap; line-height: 1.35;`).
    - Grouped `⚙️ Project [KAN]` into `.workflow-studio-title-prefix` with `white-space: nowrap; display: inline-flex; align-items: center; gap: 8px;`, while keeping the suffix `> Scripted Workflows & Transition Helpers` in `.workflow-studio-title-suffix`.
+   - Uses canonical `.workflow-studio-title-badge` for styling project badges cleanly within title headings.
    - On 390px mobile viewports, the project prefix stays grouped cleanly on line 1 (`prefixHeight: 33`), while the studio label wraps smoothly to line 2 (`suffixTop: 121`), eliminating awkward 3-column vertical word clipping.
 3. **Strict Design System & CSP Compliance (`AttachHookDialog.tsx`, `workflows.css`):**
    - Completely eradicated inline `style={{ ... }}` attributes from `AttachHookDialog.tsx`.
@@ -36,6 +37,8 @@ The audit verified:
    - Wire constants (`agent_interceptor`, endpoint routes) strictly preserved for API backward-compatibility.
 6. **Live Full-Stack Proof & Visual Artifacts:**
    - Verified zero-mock live container testing (`kanban-liveqa-4` at `http://127.0.0.1:18964`) with 0 console errors, 0 page errors, and 0 5xx responses.
+   - Verified `docLinkAriaLabel: "Scripted Workflows & Transition Helpers Documentation"`, `docLinkCleanAmp: true`.
+   - Verified `hasSyncWasmMutator: true`, `hasAsyncWasmPostMutation: false`, `zIndex: "1220"` in `AttachHookDialog` popover.
    - All captured Playwright screenshots in `docs/qa/KAN-54/screenshots/` and regenerated wiki image `15-workflow-transition-studio.png` verified via `read_file`.
 7. **Quality Gates & Typography:**
    - Exactly zero em-dashes (`\u2014`) or en-dashes (`\u2013`) in code, CSS, tests, or documentation.
@@ -52,7 +55,7 @@ The audit verified:
     <h1 className="workflow-studio-title">
       <span className="workflow-studio-title-prefix">
         <span className="workflow-studio-icon">⚙️</span>
-        Project <span className="workflow-project-pill">{projectKey}</span>
+        Project <span className="workflow-project-pill workflow-studio-title-badge">{projectKey}</span>
       </span>
       <span className="workflow-studio-title-suffix">&gt; Scripted Workflows &amp; Transition Helpers</span>
     </h1>
@@ -74,9 +77,15 @@ Direct visual inspection via `read_file` confirms:
 3. `live-workflow-studio-mobile.png` (390x844):
    - Title wraps cleanly onto two lines (`prefixHeight: 33`, `suffixTop: 121`).
    - Breadcrumb truncates cleanly with ellipsis without overlapping the search button (`breadcrumbRight: 129 < searchLeft: 137`).
-4. `live-dry-run-drawer.png` & `live-field-help-popover.png`:
-   - Interactive popovers and slide-over drawers position correctly with legible typography and zero clipping.
-5. `live-attach-hook-dialog-light.png` & `live-attach-hook-dialog-dark.png`:
+4. `live-dry-run-drawer.png`:
+   - Interactive slide-over drawer displays transition status, configured hooks, input form, and action buttons cleanly.
+5. `live-field-help-popover.png`:
+   - `AttachHookDialog` popover renders at `z-index: 1220` displaying "Workflow Hook Kind" explanation and valid values:
+     * Sync Wasm Validator: Fast <25ms in-process WebAssembly validator that checks conditions and can veto.
+     * Sync Wasm Mutator: Synchronous WebAssembly mutator (<25ms Tier A) that updates allowed issue fields during transition.
+     * Agent Transition Helper: Autonomous agent (CLI, SDK, or Runner) executing forensic QA gates.
+   - Text is sharp, typography is legible, container does not clip or overflow modal boundaries.
+6. `live-attach-hook-dialog-light.png` & `live-attach-hook-dialog-dark.png`:
    - Dialog renders options with clean radio groups, zero inline styles, and accessible contrast.
 
 ---
@@ -106,7 +115,13 @@ Direct visual inspection via `read_file` confirms:
    - `GitRepoBindingsSection.tsx`: 100% Statements, 97.43% Branch, 100% Functions, 100% Lines.
    - `DryRunDrawer.tsx`: 96.47% Statements, 93.33% Branch, 95.23% Functions, 96.38% Lines.
    - `TransitionRuleCard.tsx`: 96.77% Statements, 94.87% Branch, 100% Functions, 100% Lines.
-3. **Static Quality Gates (`build-or-typecheck.txt` at commit `7913c2c8`):**
+3. **Live Container Telemetry (`live-fullstack-proof.txt` on `kanban-liveqa-4` at commit `78074a1d`):**
+   - Runtime errors: 0 console errors, 0 page errors, 0 5xx responses.
+   - `LIVE_STACK_VERDICT [P1_STUDIO_DOC_LINK_ARIA_LABEL_AND_LABELS]`: PASS
+   - `LIVE_STACK_VERDICT [P2_FIELD_HELP_POPOVER_SYNC_WASM_MUTATOR]`: PASS
+   - `LIVE_STACK_VERDICT [P3_MOBILE_BREADCRUMB_ELLIPSIS_AND_TITLE_GROUPING]`: PASS
+   - `OVERALL LIVE_STACK_VERDICT (KAN-54)`: PASS
+4. **Static Quality Gates (`build-or-typecheck.txt` at commit `78074a1d`):**
    - TypeScript: `tsc -b --noEmit` passed with 0 errors.
    - ESLint: `eslint . --max-warnings 0` passed with 0 errors.
    - Vite Build: `vite build` built in 1.22s.

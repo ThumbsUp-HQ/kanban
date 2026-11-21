@@ -1,25 +1,25 @@
-Limit  (cost=16.77..16.78 rows=1 width=53) (actual time=0.040..0.041 rows=2 loops=1)
+Limit  (cost=16.66..16.66 rows=1 width=32) (actual time=0.040..0.042 rows=2 loops=1)
   Buffers: shared hit=10
-  ->  Sort  (cost=16.77..16.78 rows=1 width=53) (actual time=0.039..0.040 rows=2 loops=1)
+  ->  Sort  (cost=16.66..16.66 rows=1 width=32) (actual time=0.039..0.040 rows=2 loops=1)
         Sort Key: p.display_name, o.canonical_key
         Sort Method: quicksort  Memory: 25kB
         Buffers: shared hit=10
-        ->  Nested Loop  (cost=0.45..16.76 rows=1 width=53) (actual time=0.024..0.032 rows=2 loops=1)
+        ->  Nested Loop  (cost=0.45..16.65 rows=1 width=32) (actual time=0.023..0.031 rows=2 loops=1)
               Buffers: shared hit=10
-              ->  Nested Loop  (cost=0.30..16.40 rows=1 width=49) (actual time=0.014..0.019 rows=2 loops=1)
+              ->  Nested Loop  (cost=0.30..16.38 rows=1 width=37) (actual time=0.013..0.018 rows=2 loops=1)
                     Buffers: shared hit=6
-                    ->  Index Scan using effective_resource_access_pkey on effective_resource_access era  (cost=0.15..8.18 rows=1 width=16) (actual time=0.011..0.013 rows=2 loops=1)
-                          Index Cond: (object_id = '01a1f1a9-8577-76ad-8835-a123858a5a37'::uuid)
-                          Filter: ((workspace_id = '01a1f1a9-854b-74a3-8343-a5c4b619ce72'::uuid) AND ((allow_mask & 1) = 1) AND ((deny_mask & 1) = 0))
+                    ->  Index Scan using effective_resource_access_pkey on effective_resource_access era  (cost=0.15..8.18 rows=1 width=16) (actual time=0.010..0.012 rows=2 loops=1)
+                          Index Cond: (object_id = '01a1fb5a-95d6-7322-b8f5-3dd2e856b6b8'::uuid)
+                          Filter: ((workspace_id = '01a1fb5a-95b2-7bc5-b3bb-f3b36eea088e'::uuid) AND ((allow_mask & 1) = 1) AND ((deny_mask & 1) = 0))
                           Buffers: shared hit=2
-                    ->  Index Scan using objects_id_object_type_key on objects o  (cost=0.15..8.17 rows=1 width=33) (actual time=0.001..0.002 rows=1 loops=2)
+                    ->  Index Scan using objects_id_object_type_key on objects o  (cost=0.15..8.17 rows=1 width=21) (actual time=0.002..0.002 rows=1 loops=2)
                           Index Cond: (id = era.principal_id)
                           Buffers: shared hit=4
-              ->  Index Scan using principals_id_principal_type_key on principals p  (cost=0.15..0.35 rows=1 width=36) (actual time=0.005..0.005 rows=1 loops=2)
+              ->  Index Scan using principals_id_principal_type_key on principals p  (cost=0.15..0.26 rows=1 width=27) (actual time=0.006..0.006 rows=1 loops=2)
                     Index Cond: (id = o.id)
-                    Filter: ((principal_type = ANY ('{USER,AGENT}'::text[])) AND (workspace_id = '01a1f1a9-854b-74a3-8343-a5c4b619ce72'::uuid) AND (status = 'ACTIVE'::text) AND ((o.canonical_key ~~* 'a%'::text) OR (display_name ~~* 'a%'::text)))
+                    Filter: ((principal_type = ANY ('{USER,AGENT}'::text[])) AND (workspace_id = '01a1fb5a-95b2-7bc5-b3bb-f3b36eea088e'::uuid) AND (status = 'ACTIVE'::text) AND ((o.canonical_key ~~* 'a%'::text) OR (display_name ~~* 'a%'::text)))
                     Buffers: shared hit=4
 Planning:
-  Buffers: shared hit=44
-Planning Time: 0.523 ms
-Execution Time: 0.069 ms
+  Buffers: shared hit=24
+Planning Time: 0.526 ms
+Execution Time: 0.070 ms
