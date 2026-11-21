@@ -468,17 +468,28 @@ function IssueSurfaceContent({
       return (
         <>
           <div className={`surface__header ${mode === 'split' ? 'surface__header--split' : ''}`}>
-            <button
-              type="button"
-              className="issue-header__btn split-surface-close-btn"
-              data-testid="split-surface-close-btn"
-              aria-label="Back to issues list"
-              title="Back to list"
-              onClick={handleClose}
-            >
-              <span aria-hidden="true" className="issue-header__glyph">←</span>
-              <span className="split-back-text" data-testid="issue-back-to-list-btn"> Back to list</span>
-            </button>
+            {mode === 'split' || mode === 'full' ? (
+              <button
+                type="button"
+                className="issue-header__btn split-surface-close-btn"
+                data-testid="split-surface-close-btn"
+                aria-label="Back to issues list"
+                title="Back to list"
+                onClick={handleClose}
+              >
+                <span aria-hidden="true" className="issue-header__glyph">←</span>
+                <span className="split-back-text" data-testid="issue-back-to-list-btn"> Back to list</span>
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="issue-header__btn"
+                aria-label="Close issue panel"
+                onClick={handleClose}
+              >
+                <span aria-hidden="true" className="issue-header__glyph">→</span>
+              </button>
+            )}
             {mode !== 'split' && (
               <button
                 type="button"
@@ -487,7 +498,7 @@ function IssueSurfaceContent({
                 aria-keyshortcuts="Meta+Shift+F Control+Shift+F"
                 onClick={handleToggleFullScreen}
               >
-                <span aria-hidden="true" className="issue-header__glyph">↗</span>
+                <span aria-hidden="true" className="issue-header__glyph">{mode === 'full' ? '↙' : '↗'}</span>
               </button>
             )}
             <span className="mono issue-header__key">{mode === 'split' ? `#${issueKey}` : issueKey}</span>

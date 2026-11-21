@@ -356,7 +356,7 @@ describe('Drawer Extra Coverage', () => {
 
       expect(container.querySelector('.surface__skeleton')).toBeDefined();
 
-      const closeBtn = screen.getByRole('button', { name: 'Close issue panel' });
+      const closeBtn = screen.getByRole('button', { name: /close issue panel|back to issues list/i });
       fireEvent.click(closeBtn);
 
       await waitFor(() => {
@@ -388,7 +388,7 @@ describe('Drawer Extra Coverage', () => {
       const fsBtn = screen.getByRole('button', { name: 'Open in full screen' });
       fireEvent.click(fsBtn);
 
-      const closeBtn = screen.getByRole('button', { name: 'Close issue panel' });
+      const closeBtn = screen.getByRole('button', { name: /close issue panel|back to issues list/i });
       fireEvent.click(closeBtn);
     });
 

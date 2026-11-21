@@ -1,34 +1,76 @@
+=== SECTION 1: FULL PYTHON PYTEST & >=95% MODULE COVERAGE (265 passed, 97% combined) ===
 ============================= test session starts ==============================
 platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
-rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan61-62-rc1-5dee2cbe
+rootdir: /home/adamoutler/kanban
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collected 13 items
+collected 265 items
 
+agent/tests/providers/test_air_gap.py .....                              [  1%]
+agent/tests/providers/test_base_protocol.py .........                    [  5%]
+agent/tests/providers/test_circuit_breaker.py .......                    [  7%]
+agent/tests/providers/test_gemini.py ..............................      [ 19%]
+agent/tests/providers/test_net_guard.py ................................ [ 31%]
+.......                                                                  [ 33%]
+agent/tests/providers/test_ollama.py ................................... [ 47%]
+........                                                                 [ 50%]
+agent/tests/providers/test_openai_provider.py ......................     [ 58%]
+agent/tests/providers/test_router.py .....................               [ 66%]
+agent/tests/providers/test_schema_utils.py .......                       [ 69%]
+agent/tests/harnesses/test_in_app_sdk.py ........                        [ 72%]
+agent/tests/harnesses/test_remote_runner_harness.py .......              [ 74%]
+agent/tests/gates/test_gate_runner.py .................                  [ 81%]
+agent/tests/gates/test_worker.py ...........                             [ 85%]
+kanban/tests/ai_config/test_net_guard.py ...........                     [ 89%]
+kanban/tests/ai_config/test_service.py ...................               [ 96%]
+kanban/tests/security/test_scrubber.py .........                         [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                 Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------------
+agent/gates/runner.py                  260      2     74     13    96%   89->92, 92->102, 97->102, 333->445, 346->360, 415->438, 488->520, 491->520, 494->520, 496->498, 498->520, 512->520, 517-518, 546->484
+agent/gates/worker.py                   99      1     14      2    97%   70->exit, 117
+agent/harnesses/in_app_sdk.py          176      4     42      6    95%   172-174, 281->331, 307->319, 349->351, 351->353, 354
+agent/providers/errors.py               70      0      2      0   100%
+agent/providers/gemini.py              247      8    104      9    95%   157-158, 160-161, 166-170, 313->exit, 334->333, 337, 345->348, 431->430, 434
+agent/providers/ollama.py              305     10     78      5    96%   90->104, 94->104, 111-112, 244->249, 272-273, 354-355, 438-439, 491-492
+agent/providers/openai_provider.py     194      4     54      2    98%   80-81, 83-86
+agent/providers/schema_utils.py        101      1     60      4    97%   50->52, 66->68, 85, 121->126
+kanban/ai_config/service.py            442     11    152      9    96%   555-556, 578->580, 604, 658-659, 694, 704, 793, 891->916, 911-912, 966
+kanban/security/scrubber.py            137      0     52      0   100%
+--------------------------------------------------------------------------------
+TOTAL                                 2031     41    632     50    97%
+============================= 265 passed in 8.14s ==============================
+
+=== SECTION 2: WORKFLOW ASYNC GATE & WIKI MEDIA AUDIT TESTS (31 passed) ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 31 items
+
+kanban/tests/workflows/test_async_gate.py ..................             [ 58%]
 kanban/tests/docs/test_wiki_media_audit.py .............                 [100%]
 
-============================== 13 passed in 0.13s ==============================
+============================== 31 passed in 5.99s ==============================
 
-> @kanban/web@0.1.0 test /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan61-62-rc1-5dee2cbe/kanban/web
-> vitest run run src/features/docs-center/DocsCenter.test.tsx src/features/docs-center/__tests__/DocsCenter.test.tsx
+=== SECTION 3: FRONTEND VITEST TESTS (DocsCenter, ActivityEventRow, SafeMarkdownPreview, useGateRealtimeSync) (125 passed) ===
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
 
-
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan61-62-rc1-5dee2cbe/kanban/web
-
- ✓ src/editor/clipboard/hiddenDomPruner.test.ts (13 tests) 165ms
- ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx (5 tests) 334ms
+ ✓ src/features/gates/__tests__/useGateRealtimeSync.test.tsx (13 tests) 53ms
+ ✓ src/features/activity/ActivityEventRow.test.tsx (13 tests) 286ms
+ ✓ src/features/activity/SafeMarkdownPreview.test.tsx (13 tests) 242ms
 Not implemented: navigation to another Document
 Not implemented: navigation to another Document
- ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (43 tests) 1836ms
- ✓ src/features/docs-center/DocsCenter.test.tsx (43 tests) 1845ms
- ✓ src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx (16 tests) 2437ms
-   ✓ RunnerStudioPage & Components (KANBA-219) (16)
-     ✓ MintEnrollmentTokenModal component (9)
-       ✓ resets copied state after 2 seconds 2118ms
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (43 tests) 1873ms
+ ✓ src/features/docs-center/DocsCenter.test.tsx (43 tests) 1914ms
 
  Test Files  5 passed (5)
-      Tests  120 passed (120)
-   Start at  02:27:53
-   Duration  3.60s (tests 58%, environment 33%, import 8%, transform 1%, worker 1%)
-
+      Tests  125 passed (125)
+   Start at  03:16:57
+   Duration  3.14s (tests 47%, environment 41%, import 10%, transform 2%, worker 1%)

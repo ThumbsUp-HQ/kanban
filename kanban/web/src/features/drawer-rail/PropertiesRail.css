@@ -16,7 +16,7 @@
 
 .prop-row {
   display: grid;
-  grid-template-columns: 112px minmax(0, 1fr);
+  grid-template-columns: 96px minmax(0, 1fr);
   column-gap: var(--space-3, 12px);
   min-height: var(--prop-row-h, 38px);
   align-items: center;
@@ -55,11 +55,18 @@
 
 .prop-row[data-prop="state"] .prop-row__value {
   flex-wrap: nowrap;
+  gap: 6px;
+  min-width: 0;
+  overflow: visible;
 }
 
 .prop-row[data-prop="state"] .prop-row__select {
-  min-width: 132px;
-  flex: 1;
+  min-width: 108px;
+  max-width: 100%;
+  width: 100%;
+  flex: 1 1 auto;
+  padding-right: 20px;
+  box-sizing: border-box;
 }
 
 .prop-row__select:focus {

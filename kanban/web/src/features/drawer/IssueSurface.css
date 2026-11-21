@@ -387,9 +387,19 @@
   font-size: 12px;
 }
 
+.surface__rail .prop-row[data-prop="state"] .prop-row__value {
+  gap: 6px;
+  min-width: 0;
+  overflow: visible;
+}
+
 .surface__rail .prop-row[data-prop="state"] .prop-row__select {
-  min-width: 132px;
-  flex: 1;
+  min-width: 108px;
+  max-width: 100%;
+  width: 100%;
+  flex: 1 1 auto;
+  padding-right: 20px;
+  box-sizing: border-box;
 }
 .issue-header__new-tab-link {
   display: inline-flex;

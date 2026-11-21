@@ -22,3 +22,17 @@ Screenshots: docs/qa/KAN-62/screenshots/62..67 + tablet/mobile captures
 Runtime Telemetry: 0 console errors, 0 page errors, 0 HTTP 5xx, 0 secret leaks.
 
 OVERALL LIVE_STACK_VERDICT (KAN-62): PASS
+
+=== ROUND 1 REMEDIATION RE-VERIFICATION (http://127.0.0.1:18962, main 2f84e8757f56) ===
+Timestamp: 2026-11-21T07:56:30Z
+1. Live Re-Verification (gemma4:e2b on 192.168.1.101:11434, Done QA Gatekeeper):
+   - Positive KAN-1: HTTP 202 -> approve -> Done in 14623ms (comment 371c3100-e54c-4da6-988d-38bcfb67eef2); Comments(1); formatted HTML headings/lists verified (hasRawMarkdownHashes=false)
+   - Negative KAN-2 Saturn ice cream: HTTP 202 -> reject -> In Progress in 5649ms (comment 84db9fe1-f236-4066-a1d4-e9405ea2a15b); Comments(1); evaluating gate via in_app_sdk (ollama/gemma4:e2b) verified; right-rail State select unclipped (scrollWidth=130 == clientWidth=130)
+   - AttachHookDialog (65-workflow-attach-qa-done-gate.png): Allowed Mutable Fields unclipped above footer (paddingBottom=16px, noticeBottom=745.5 < actionsTop=761)
+   - Console errors: 0 | Page errors: 0 | HTTP 5xx: 0
+2. Wiki Sync & Media Audit:
+   - uv run python -m scripts.sync_wiki_bundle: 28 chapters, 71 images synced
+   - uv run pytest kanban/tests/docs/test_wiki_media_audit.py -q: 13 passed in 0.10s
+3. Raw Secret-Scan Verification:
+   Command: grep -rnE "AQ\.Ab8R[A-Za-z0-9_-]{5,}|sk-proj-FBDD[A-Za-z0-9_-]{5,}" docs/qa/ thumbs-up-kanban.wiki/ kanban/ agent/ || echo "0 matches across docs/qa/, thumbs-up-kanban.wiki/, kanban/, agent/"
+   Output: 0 matches across docs/qa/, thumbs-up-kanban.wiki/, kanban/, agent/

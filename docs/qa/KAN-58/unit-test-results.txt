@@ -1,33 +1,96 @@
- RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan57-58-rc1-d26313f9/kanban/web
+=== SECTION 1: FULL @kanban/web VITEST SUITE (238/238 PASSED, 3298 TESTS) ===
+
+ ✓ src/features/auth/webauthn.test.ts (6 tests) 20ms
+ ✓ src/utils/safeJson.test.ts (6 tests) 15ms
+ ✓ src/styles/theme.test.ts (14 tests) 14ms
+ ✓ src/features/views/predicateParser.test.ts (4 tests) 22ms
+ ✓ src/styles/tokens.test.ts (4 tests) 21ms
+ ✓ src/api/queryKeys.test.ts (2 tests) 28ms
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (4 tests) 21ms
+ ✓ src/features/admin-imports/__tests__/planeImportApi.test.ts (1 test) 12ms
+ ✓ src/editor/mermaid/elkWorkerShim.test.ts (4 tests) 11ms
+ ✓ src/editor/media/mediaUrlResolver.test.ts (7 tests) 9ms
+ ✓ src/editor/media/panZoomMath.test.ts (6 tests) 12ms
+ ✓ src/features/about/__tests__/aboutApi.test.ts (2 tests) 9ms
+ ✓ src/components/emoji/positionHint.test.ts (5 tests) 7ms
+ ✓ e2e/support/csp.unit.test.ts (1 test) 6ms
+ ✓ e2e/support/testGuard.unit.test.ts (6 tests) 14ms
+
+ Test Files  238 passed (238)
+      Tests  3298 passed (3298)
+   Start at  03:11:46
+   Duration  54.50s (environment 46%, tests 40%, import 11%, transform 2%, worker 1%)
+
+Environment  jsdom was created 238 times · 413.51s total, 46% of tracked time
+             create it once per worker with pool: 'vmThreads' (keeps per-file isolation) or isolate: false (shares it across files)
+             learn more: https://vitest.dev/guide/improving-performance#test-environments
+
+
+=== SECTION 2: TARGETED KAN-58 9-FILE COVERAGE (197/197 PASSED, >= 95.0% PER FILE) ===
+
+
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
       Coverage enabled with v8
 
- ✓ src/features/views/IssueNavigatorBar.test.tsx (7 tests) 174ms
- ✓ src/app/LayoutSwitcher.test.tsx (8 tests) 454ms
- ✓ src/features/drawer/IssueHeader.test.tsx (12 tests) 662ms
- ✓ src/features/drawer/IssueSurfaceSplitMasterDetail.test.tsx (9 tests) 795ms
- ✓ src/app/AppShell.test.tsx (9 tests) 1152ms
- ✓ src/features/list/ListView.test.tsx (17 tests) 1243ms
- ✓ src/app/Sidebar.test.tsx (32 tests) 2894ms
- ✓ src/features/drawer/IssueSurface.test.tsx (46 tests) 5389ms
- ✓ src/features/views/viewRegistry.test.tsx (57 tests) 14230ms
+ ✓ src/features/views/IssueNavigatorBar.test.tsx (7 tests) 182ms
+ ✓ src/app/LayoutSwitcher.test.tsx (8 tests) 456ms
+ ✓ src/features/drawer/IssueHeader.test.tsx (12 tests) 765ms
+   ✓ IssueHeader (12)
+     ✓ renders collapse, full-screen toggle, priority, key, access pill and slots 331ms
+ ✓ src/features/list/ListView.test.tsx (17 tests) 939ms
+ ✓ src/features/drawer/IssueSurfaceSplitMasterDetail.test.tsx (9 tests) 1221ms
+   ✓ IssueSurface split mode (KAN-52 Problem 3) (9)
+     ✓ split mode description editor formatting tools and quick-props state select work cleanly 472ms
+ ✓ src/app/AppShell.test.tsx (9 tests) 1697ms
+   ✓ AppShell (9)
+     ✓ renders app shell with skip link, sidebar rail, topbar header, main canvas, and anchors 609ms
+     ✓ toggles mobile sidebar via hamburger button and closes it 346ms
+ ✓ src/features/drawer/IssueSurface.test.tsx (46 tests) 3844ms
+   ✓ IssueSurface (46)
+     ✓ Required Test Case 1: Positive / Zero-remount invariant (1)
+       ✓ maintains identical data-mount-id and data-mount-seq across 5 round-trip toggles with exactly 1 GET fetch 306ms
+     ✓ Live Persistence & Backend Normalization (KANBA-165) (20)
+       ✓ handles Reload Latest and Overwrite actions on conflict banner 308ms
+       ✓ connects toolbar buttons, media upload, preview toggle, and sanitized paste pill in description editor 402ms
+       ✓ covers conflict banner actions: reload, overwrite, overwrite failure, and discard 325ms
+ ✓ src/app/Sidebar.test.tsx (32 tests) 4895ms
+   ✓ Sidebar (32)
+     ✓ renders sidebar navigation items with WorkspaceBadge and workspace brand 790ms
+     ✓ sets aria-current on active workspace and project subitem links 860ms
+     ✓ highlights table, calendar, timeline subnav items and custom fields page 366ms
+ ✓ src/features/views/viewRegistry.test.tsx (57 tests) 14794ms
+   ✓ viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) (57)
+     ✓ renders TableView when layout is table 368ms
+     ✓ IssuesWorkspaceRoute: creates a new issue via QuickCreateIssueModal and updates state/priority via field popover 958ms
+     ✓ IssuesWorkspaceRoute: handles multi-select, batch archive, and batch delete in BulkActionBar 753ms
+     ✓ IssuesWorkspaceRoute: filters by Priority, Assignee (unassigned and alice), Cycle, Module, Due Date 2505ms
+     ✓ IssuesWorkspaceRoute: tests state filter Active preset, alice assignee, and select-all 825ms
+     ✓ IssuesWorkspaceRoute: tests field popovers for high/low priority and in-progress/backlog state, and / shortcut 352ms
+     ✓ IssuesWorkspaceRoute: covers handleToggleSelect 100 cap and unassigned I shortcut 2726ms
+     ✓ Live Mode API Wiring & Board State Normalization (KANBA-164) (21)
+       ✓ creates, updates, and bulk-operates on issues in live mode via REST endpoints 525ms
+       ✓ covers opening, cancelling, and saving custom view via SaveViewModal in IssuesWorkspaceRoute 707ms
+       ✓ covers BulkActionBar batch delete and archive in table layout 560ms
+     ✓ KAN-44 Mobile & Touch View Routing Tests (16)
+       ✓ exercises Swimlane with groupBy=priority, live mode transitions, WIP override, and batch update 351ms
 
  Test Files  9 passed (9)
       Tests  197 passed (197)
-   Start at  02:14:33
-   Duration  16.65s (tests 66%, environment 21%, import 9%, transform 2%, worker 2%)
+   Start at  03:12:57
+   Duration  17.22s (tests 67%, environment 21%, import 9%, worker 2%, transform 1%)
 
  % Coverage report from v8
 -------------------|---------|----------|---------|---------|-------------------
 File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
 -------------------|---------|----------|---------|---------|-------------------
-All files          |   99.41 |    95.57 |   99.53 |   99.93 |                   
+All files          |   99.41 |    95.59 |   99.53 |   99.93 |                   
  app               |   99.55 |    95.44 |   99.06 |   99.76 |                   
   AppShell.tsx     |     100 |    95.37 |     100 |     100 | 118-121,181,209   
   ...tSwitcher.tsx |     100 |    97.05 |     100 |     100 | 97                
   Sidebar.tsx      |   99.25 |    95.28 |   98.43 |    99.6 | 1103              
- features/drawer   |   99.44 |    95.46 |     100 |     100 |                   
+ features/drawer   |   99.44 |     95.5 |     100 |     100 |                   
   IssueHeader.tsx  |     100 |    95.74 |     100 |     100 | 62,79,137,206     
-  IssueSurface.tsx |   99.37 |     95.4 |     100 |     100 | ...1184-1188,1222 
+  IssueSurface.tsx |   99.37 |    95.46 |     100 |     100 | ...1195-1199,1233 
  features/list     |     100 |    96.09 |     100 |     100 |                   
   ListView.tsx     |     100 |    96.09 |     100 |     100 | 83-84,108,386,413 
  features/views    |   99.14 |    95.67 |   99.41 |     100 |                   
