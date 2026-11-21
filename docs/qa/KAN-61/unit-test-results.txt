@@ -1,0 +1,44 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/cec3609e-f993-4e05-b8c5-be0070e6116c/swarm-b-kan61-ai-harness-125007cc
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 255 items
+
+agent/tests/providers/test_air_gap.py .....                              [  1%]
+agent/tests/providers/test_base_protocol.py .........                    [  5%]
+agent/tests/providers/test_circuit_breaker.py .......                    [  8%]
+agent/tests/providers/test_gemini.py ..............................      [ 20%]
+agent/tests/providers/test_net_guard.py ................................ [ 32%]
+.......                                                                  [ 35%]
+agent/tests/providers/test_ollama.py ................................... [ 49%]
+........                                                                 [ 52%]
+agent/tests/providers/test_openai_provider.py ......................     [ 60%]
+agent/tests/providers/test_router.py .....................               [ 69%]
+agent/tests/providers/test_schema_utils.py .......                       [ 71%]
+agent/tests/harnesses/test_in_app_sdk.py .......                         [ 74%]
+agent/tests/harnesses/test_remote_runner_harness.py .......              [ 77%]
+agent/tests/gates/test_gate_runner.py .............                      [ 82%]
+agent/tests/gates/test_worker.py ........                                [ 85%]
+kanban/tests/ai_config/test_net_guard.py ...........                     [ 89%]
+kanban/tests/ai_config/test_service.py .................                 [ 96%]
+kanban/tests/security/test_scrubber.py .........                         [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                 Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------------
+agent/gates/runner.py                  245     18     68     13    88%   79, 82, 88-101, 315->438, 342->438, 408->431, 443, 481->494, 484->494, 487->494, 489->494, 491-492, 511->477, 523
+agent/gates/worker.py                   99      6     14      2    93%   70->exit, 78-79, 117, 249-251
+agent/harnesses/in_app_sdk.py          176      4     42      6    95%   172-174, 283->333, 309->321, 351->353, 353->355, 356
+agent/providers/errors.py               70      0      2      0   100%
+agent/providers/gemini.py              243      8    104      9    95%   157-158, 160-161, 166-170, 291->exit, 312->311, 315, 323->326, 409->408, 412
+agent/providers/ollama.py              305     10     78      5    96%   90->104, 94->104, 111-112, 244->249, 272-273, 354-355, 438-439, 491-492
+agent/providers/openai_provider.py     194      4     54      2    98%   80-81, 83-86
+agent/providers/schema_utils.py        100      0     60      4    98%   49->51, 65->67, 80->83, 119->124
+kanban/security/scrubber.py            137      0     52      0   100%
+--------------------------------------------------------------------------------
+TOTAL                                 1569     50    474     41    95%
+============================= 255 passed in 9.28s ==============================

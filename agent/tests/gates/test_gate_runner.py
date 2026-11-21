@@ -19,7 +19,13 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from agent.gates.runner import GateWorkerRunner, start_gate_worker
+from agent.gates.worker import GateWorker, HarnessRegistry
+from agent.providers.errors import ProviderTimeout
+from agent.providers.gemini import GeminiProvider
+from agent.providers.ollama import OllamaProvider
+from agent.providers.openai_provider import OpenAIProvider
 from database.models.agent_definition import AgentDefinition
+from database.models.ai import AIProviderConfig
 from database.models.issues import Issue
 from database.models.projects import Project, WorkflowState
 from database.models.workflow import WorkflowTransitionExecution, WorkflowTransitionHook
@@ -405,3 +411,241 @@ async def test_gate_worker_runner_run_exception_and_start_worker_app_state() -> 
     s2.set()
     await t2
     assert t2.done()
+
+
+@pytest.mark.asyncio
+async def test_gate_worker_runner_load_entities_wires_live_provider_and_timeout() -> None:  # noqa: PLR0915
+    """_load_entities queries AIProviderConfig, unwraps key, and sets effective cutoff."""
+    exec_id = uuid.uuid4()
+    hook_id = uuid.uuid4()
+    agent_def_id = uuid.uuid4()
+    ws_id = uuid.uuid4()
+
+    mock_agent = MagicMock()
+    mock_agent.slug = "live-gemini-agent"
+    mock_agent.harness_kind = "in_app_sdk"
+    mock_agent.provider_kind = "gemini"
+    mock_agent.model_id = "gemini-2.5-flash-lite"
+    mock_agent.timeout_ms = 45000
+    mock_agent.repo_access_mode = "none"
+    mock_agent.cli_binary_allowlist_id = None
+    mock_agent.system_instructions_md = "Evaluate carefully"
+    mock_agent.mcp_allowed_tools = ["read_ticket"]
+
+    mock_exec = MagicMock()
+    mock_exec.id = exec_id
+    mock_exec.issue_id = uuid.uuid4()
+    mock_exec.project_id = uuid.uuid4()
+    mock_exec.from_state_id = uuid.uuid4()
+    mock_exec.to_state_id = uuid.uuid4()
+    mock_exec.invoking_principal_id = uuid.uuid4()
+
+    mock_hook = MagicMock()
+    mock_hook.agent_definition_id = agent_def_id
+    mock_hook.allowed_mutable_fields = ("labels",)
+
+    mock_cfg = MagicMock(spec=AIProviderConfig)
+    mock_cfg.id = uuid.uuid4()
+    mock_cfg.workspace_id = ws_id
+    mock_cfg.provider_kind = "gemini"
+    mock_cfg.display_name = "Gemini Express"
+    mock_cfg.base_url = None
+    mock_cfg.model_allowlist = ["gemini-2.5-flash-lite"]
+    mock_cfg.settings_json = {"timeout_ms": 20000}
+    mock_cfg.wrapped_api_key = b"encrypted"
+    mock_cfg.residency_tier = "gemini-vertex:us-central1"
+
+    mock_session = AsyncMock()
+
+    async def fake_get(model_cls: type, _key: uuid.UUID) -> object:
+        if model_cls == AgentDefinition:
+            return mock_agent
+        if model_cls == WorkflowTransitionExecution:
+            return mock_exec
+        if model_cls == WorkflowTransitionHook:
+            return mock_hook
+        return None
+
+    mock_session.get.side_effect = fake_get
+
+    mock_exec_result = MagicMock()
+    mock_exec_result.scalar_one_or_none.return_value = mock_cfg
+    mock_session.execute.return_value = mock_exec_result
+
+    with patch(
+        "kanban.ai_config.service.AIProviderConfigService.unwrap_api_key",
+        new_callable=AsyncMock,
+    ) as mock_unwrap:
+        mock_unwrap.return_value = bytearray(b"AQ.mockkey12345678901234567890")
+
+        session_factory = MockSessionFactory(mock_session)
+        runner = GateWorkerRunner(session_factory=session_factory, workspace_id=ws_id)  # type: ignore[arg-type]
+
+        event = {
+            "execution_id": str(exec_id),
+            "hook_id": str(hook_id),
+            "agent_definition_id": str(agent_def_id),
+            "workspace_id": str(ws_id),
+        }
+
+        _ex, _iss, agent_dict, _rc, _mcp = await runner._load_entities(event)  # noqa: SLF001
+
+        assert agent_dict["model"] == "gemini-2.5-flash-lite"
+        assert agent_dict["model_identifier"] == "gemini-2.5-flash-lite"
+        assert agent_dict["provider_kind"] == "gemini"
+        assert agent_dict["system_instructions_md"] == "Evaluate carefully"
+        assert agent_dict["mcp_allowed_tools"] == ["read_ticket"]
+        assert agent_dict["timeout_ms"] == 20000  # min(20000, 45000)
+        assert isinstance(agent_dict["provider"], GeminiProvider)
+        assert runner.registry.get("in_app_sdk") is not None
+
+
+@pytest.mark.asyncio
+async def test_gate_worker_runner_load_entities_wires_ollama_and_openai_providers() -> None:  # noqa: PLR0915
+    """_load_entities correctly builds Ollama and OpenAI providers and handles unwrap failures."""
+    exec_id = uuid.uuid4()
+    ws_id = uuid.uuid4()
+
+    mock_exec = MagicMock()
+    mock_exec.id = exec_id
+    mock_exec.issue_id = uuid.uuid4()
+    mock_exec.project_id = uuid.uuid4()
+    mock_exec.from_state_id = uuid.uuid4()
+    mock_exec.to_state_id = uuid.uuid4()
+    mock_exec.invoking_principal_id = uuid.uuid4()
+
+    # 1. Ollama provider
+    mock_agent_ollama = MagicMock()
+    mock_agent_ollama.slug = "ollama-agent"
+    mock_agent_ollama.harness_kind = "in_app_sdk"
+    mock_agent_ollama.provider_kind = "ollama"
+    mock_agent_ollama.model_id = "gemma3:4b"
+    mock_agent_ollama.timeout_ms = 35000
+    mock_agent_ollama.repo_access_mode = "none"
+    mock_agent_ollama.cli_binary_allowlist_id = None
+    mock_agent_ollama.system_instructions_md = ""
+    mock_agent_ollama.mcp_allowed_tools = []
+
+    mock_cfg_ollama = MagicMock(spec=AIProviderConfig)
+    mock_cfg_ollama.id = uuid.uuid4()
+    mock_cfg_ollama.workspace_id = ws_id
+    mock_cfg_ollama.provider_kind = "ollama"
+    mock_cfg_ollama.base_url = "http://127.0.0.1:11434"
+    mock_cfg_ollama.model_allowlist = ["gemma3:4b"]
+    mock_cfg_ollama.settings_json = {"timeout_ms": 30000}
+    mock_cfg_ollama.wrapped_api_key = None
+
+    mock_session_ollama = AsyncMock()
+    mock_session_ollama.get.return_value = mock_agent_ollama
+    mock_result_ollama = MagicMock()
+    mock_result_ollama.scalar_one_or_none.return_value = mock_cfg_ollama
+    mock_session_ollama.execute.return_value = mock_result_ollama
+
+    runner_ollama = GateWorkerRunner(
+        session_factory=MockSessionFactory(mock_session_ollama), workspace_id=ws_id  # type: ignore[arg-type]
+    )
+    event_ollama = {
+        "execution_id": str(exec_id),
+        "hook_id": str(uuid.uuid4()),
+        "agent_definition_id": str(uuid.uuid4()),
+    }
+    _ex, _iss, agent_dict_ollama, _rc, _mcp = await runner_ollama._load_entities(event_ollama)  # noqa: SLF001
+    assert isinstance(agent_dict_ollama["provider"], OllamaProvider)
+    assert agent_dict_ollama["timeout_ms"] == 30000
+
+    # 2. OpenAI provider with unwrapped key
+    mock_agent_openai = MagicMock()
+    mock_agent_openai.slug = "openai-agent"
+    mock_agent_openai.harness_kind = "in_app_sdk"
+    mock_agent_openai.provider_kind = "openai"
+    mock_agent_openai.model_id = "gpt-4o-mini"
+    mock_agent_openai.timeout_ms = 50000
+    mock_agent_openai.repo_access_mode = "none"
+    mock_agent_openai.cli_binary_allowlist_id = None
+    mock_agent_openai.system_instructions_md = ""
+    mock_agent_openai.mcp_allowed_tools = []
+
+    mock_cfg_openai = MagicMock(spec=AIProviderConfig)
+    mock_cfg_openai.id = uuid.uuid4()
+    mock_cfg_openai.workspace_id = ws_id
+    mock_cfg_openai.provider_kind = "openai"
+    mock_cfg_openai.base_url = "https://api.openai.com/v1"
+    mock_cfg_openai.model_allowlist = ["gpt-4o-mini"]
+    mock_cfg_openai.settings_json = {"timeout_ms": 40000}
+    mock_cfg_openai.wrapped_api_key = b"wrapped_secret_bytes"
+    mock_cfg_openai.residency_tier = "openai-zdr-us"
+
+    mock_session_openai = AsyncMock()
+    mock_session_openai.get.return_value = mock_agent_openai
+    mock_result_openai = MagicMock()
+    mock_result_openai.scalar_one_or_none.return_value = mock_cfg_openai
+    mock_session_openai.execute.return_value = mock_result_openai
+
+    with patch(
+        "kanban.ai_config.service.AIProviderConfigService.unwrap_api_key",
+        return_value=b"sk-test-openai-key-valid-12345",
+    ):
+        runner_openai = GateWorkerRunner(
+            session_factory=MockSessionFactory(mock_session_openai), workspace_id=ws_id  # type: ignore[arg-type]
+        )
+        event_openai = {
+            "execution_id": str(exec_id),
+            "hook_id": str(uuid.uuid4()),
+            "agent_definition_id": str(uuid.uuid4()),
+        }
+        _ex, _iss, agent_dict_openai, _rc, _mcp = await runner_openai._load_entities(event_openai)  # noqa: SLF001
+        assert isinstance(agent_dict_openai["provider"], OpenAIProvider)
+        assert agent_dict_openai["timeout_ms"] == 40000
+
+    # 3. OpenAI provider with corrupted key unwrap failure handled gracefully
+    with patch(
+        "kanban.ai_config.service.AIProviderConfigService.unwrap_api_key",
+        side_effect=ValueError("Corrupted key envelope"),
+    ):
+        runner_openai_fail = GateWorkerRunner(
+            session_factory=MockSessionFactory(mock_session_openai), workspace_id=ws_id  # type: ignore[arg-type]
+        )
+        event_openai_fail = {
+            "execution_id": str(exec_id),
+            "hook_id": str(uuid.uuid4()),
+            "agent_definition_id": str(uuid.uuid4()),
+        }
+        _ex, _iss, agent_dict_openai_fail, _rc, _mcp = await runner_openai_fail._load_entities(  # noqa: SLF001
+            event_openai_fail
+        )
+        assert agent_dict_openai_fail.get("provider") is None
+        assert agent_dict_openai_fail["timeout_ms"] == 40000
+
+
+
+@pytest.mark.asyncio
+async def test_gate_worker_fail_closed_on_provider_timeout() -> None:
+    """GateWorker fails closed with GATE_TIMEOUT when provider raises ProviderTimeout."""
+    mock_coordinator = AsyncMock()
+    registry = HarnessRegistry()
+
+    class TimingOutHarness:
+        async def run(self, _ctx: object, _agent_def: object) -> bytes:
+            msg = "Upstream request timed out: deadline breached"
+            raise ProviderTimeout(msg, code="TIMEOUT")
+
+    registry.register("in_app_sdk", TimingOutHarness())  # type: ignore[arg-type]
+
+    worker = GateWorker(registry=registry, coordinator=mock_coordinator)
+
+    event = {
+        "execution_id": "0196ed40-7b2a-7000-8000-112233445566",
+        "hook_id": "0196ed40-7b2a-7000-8000-223344556677",
+        "harness_kind": "in_app_sdk",
+        "timeout_ms": 5000,
+        "to_state": "Done",
+    }
+
+    await worker.handle_dispatch(event)
+
+    mock_coordinator.record_failure.assert_called_once_with(
+        "0196ed40-7b2a-7000-8000-112233445566",
+        "0196ed40-7b2a-7000-8000-223344556677",
+        "GATE_TIMEOUT",
+    )
+

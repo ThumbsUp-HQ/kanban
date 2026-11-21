@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import ipaddress
+import json
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -793,3 +794,113 @@ def test_ollama_auto_populate_default_cidrs() -> None:
         model_allowlist=("llama3",),
     )
     assert ipaddress.ip_network("fc00::2/128") in s_extra_v6.allowed_ollama_cidrs
+
+
+class NestedDetail(BaseModel):
+    """Nested detail model for schema dereferencing test."""
+
+    detail_id: str
+    active: bool
+
+
+class NestedStructuredOutput(BaseModel):
+    """Schema with nested model to verify $defs dereferencing in format."""
+
+    title: str
+    details: list[NestedDetail]
+
+
+@pytest.mark.asyncio
+async def test_ollama_generate_structured_system_prompt_options_and_dereference() -> None:
+    """Verify system_prompt is prepended, options passed, and $defs dereferenced in format."""
+    from typing import Any  # noqa: PLC0415
+
+    captured_payload: dict[str, Any] = {}
+
+    class MockCaptureTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+            nonlocal captured_payload
+            captured_payload = json.loads(request.content.decode("utf-8"))
+            content_str = json.dumps(
+                {"title": "Test Gate", "details": [{"detail_id": "d1", "active": True}]}
+            )
+            resp_data = {
+                "message": {
+                    "role": "assistant",
+                    "content": content_str,
+                },
+                "prompt_eval_count": 45,
+                "eval_count": 22,
+            }
+            return httpx.Response(200, json=resp_data)
+
+    settings = _make_settings(models=("gemma3:4b",))
+    provider = OllamaProvider(settings, transport=MockCaptureTransport())
+
+    req = StructuredRequest(
+        model="gemma3:4b",
+        prompt="Verify transition",
+        system_prompt="You are a strict security auditor.",
+        response_model=NestedStructuredOutput,
+        temperature=0.3,
+        max_output_tokens=256,
+    )
+
+    res = await provider.generate_structured(req)
+    assert res.parsed.title == "Test Gate"
+    assert len(res.parsed.details) == 1
+    assert res.parsed.details[0].detail_id == "d1"
+
+    # Verify captured wire payload
+    assert captured_payload["model"] == "gemma3:4b"
+    assert captured_payload["messages"] == [
+        {"role": "system", "content": "You are a strict security auditor."},
+        {"role": "user", "content": "Verify transition"},
+    ]
+    assert captured_payload["options"] == {
+        "temperature": 0.3,
+        "num_predict": 256,
+    }
+    format_schema = captured_payload["format"]
+    assert "$defs" not in format_schema
+    assert "definitions" not in format_schema
+    assert "details" in format_schema["properties"]
+    items = format_schema["properties"]["details"]["items"]
+    assert items["type"] == "object"
+    assert "detail_id" in items["properties"]
+
+
+@pytest.mark.asyncio
+async def test_ollama_generate_structured_strips_think_tags() -> None:
+    """Verify reasoning model <think>...</think> traces are stripped before parsing."""
+    class MockReasoningTransport(httpx.AsyncBaseTransport):
+        async def handle_async_request(self, _request: httpx.Request) -> httpx.Response:
+            raw_content = (
+                "<think>\n"
+                "Evaluating the transition context and checking bounds.\n"
+                "Everything appears secure and within policy.\n"
+                "</think>\n"
+                '{"echo": "verified", "ok": true}'
+            )
+            resp_data = {
+                "message": {"role": "assistant", "content": raw_content},
+                "prompt_eval_count": 80,
+                "eval_count": 40,
+            }
+            return httpx.Response(200, json=resp_data)
+
+    settings = _make_settings(models=("deepseek-r1",))
+    provider = OllamaProvider(settings, transport=MockReasoningTransport())
+
+    req = StructuredRequest(
+        model="deepseek-r1",
+        prompt="Audit check",
+        response_model=DummyStructuredOutput,
+    )
+
+    res = await provider.generate_structured(req)
+    assert res.parsed.echo == "verified"
+    assert res.parsed.ok is True
+    assert "<think>" not in res.raw_json
+    assert res.raw_json == '{"echo": "verified", "ok": true}'
+

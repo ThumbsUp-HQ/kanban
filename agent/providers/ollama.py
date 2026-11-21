@@ -37,6 +37,7 @@ from agent.providers.errors import (
     ProviderUnavailable,
 )
 from agent.providers.net_guard import Resolver, resolve_and_pin
+from agent.providers.schema_utils import dereference_json_schema, strip_think_tags
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -361,11 +362,20 @@ class OllamaProvider(LLMProvider):
         self._verify_model_allowed(req.model)
         url, headers, extensions = await self._resolve_target("/api/chat")
 
-        schema = req.response_model.model_json_schema()
+        messages: list[dict[str, str]] = []
+        if req.system_prompt:
+            messages.append({"role": "system", "content": req.system_prompt})
+        messages.append({"role": "user", "content": req.prompt})
+
+        schema = dereference_json_schema(req.response_model.model_json_schema())
         payload = {
             "model": req.model,
-            "messages": [{"role": "user", "content": req.prompt}],
+            "messages": messages,
             "format": schema,
+            "options": {
+                "temperature": req.temperature,
+                "num_predict": req.max_output_tokens,
+            },
             "stream": False,
             "keep_alive": self._settings.keep_alive,
         }
@@ -391,9 +401,10 @@ class OllamaProvider(LLMProvider):
 
             msg_obj = data.get("message", {})
             content_str = str(msg_obj.get("content", ""))
+            cleaned_content = strip_think_tags(content_str)
 
             try:
-                parsed_json = json.loads(content_str)
+                parsed_json = json.loads(cleaned_content)
             except json.JSONDecodeError as err:
                 msg = f"Ollama message content is not valid JSON: {content_str!r}"
                 raise ProviderSchemaError(msg) from err
@@ -410,7 +421,7 @@ class OllamaProvider(LLMProvider):
 
             return StructuredResponse(
                 parsed=parsed_model,
-                raw_json=content_str,
+                raw_json=cleaned_content,
                 tool_trace=(),
                 prompt_tokens=prompt_tokens,
                 completion_tokens=completion_tokens,

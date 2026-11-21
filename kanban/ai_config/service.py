@@ -4,6 +4,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import ipaddress
 import re
 import time
@@ -221,6 +222,7 @@ def _check_air_gap(
 
 
 _HTTP_OK = 200
+_HTTP_BAD_REQUEST = 400
 _HTTP_UNAUTHORIZED = 401
 _HTTP_FORBIDDEN = 403
 _HTTP_NOT_FOUND = 404
@@ -664,6 +666,8 @@ class AIProviderConfigService:
         config_id: uuid.UUID | None = None,
         air_gap_mode: bool | None = None,
         resolver: Resolver | None = None,
+        timeout_ms: int | None = None,
+        settings_json: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """Probe upstream provider models and latency with zeroize key cleanup and SSRF defense."""
         norm_kind = provider_kind.strip().lower()
@@ -777,13 +781,30 @@ class AIProviderConfigService:
 
             active_key = key_material.decode("utf-8") if key_material is not None else ""
 
+            if settings_json is None and config_id is not None:
+                cfg_stmt = text("SELECT settings_json FROM ai_provider_configs WHERE id = :cid")
+                cfg_res = await self._session.execute(cfg_stmt, {"cid": config_id})
+                row = cfg_res.first()
+                if row is not None and row[0]:
+                    settings_json = dict(row[0])
+
+            effective_timeout_ms = (
+                timeout_ms
+                or (settings_json.get("timeout_ms") if settings_json else None)
+                or 8000
+            )
+            probe_timeout_s = float(effective_timeout_ms) / 1000.0
+
             # 5. Dispatch upstream probe request
             start_time = time.monotonic()
-            async with httpx.AsyncClient(
-                follow_redirects=False,
-                trust_env=False,
-                timeout=5.0,
-            ) as client:
+            async with (
+                asyncio.timeout(probe_timeout_s),
+                httpx.AsyncClient(
+                    follow_redirects=False,
+                    trust_env=False,
+                    timeout=httpx.Timeout(probe_timeout_s),
+                ) as client,
+            ):
                 if norm_kind == "ollama":
                     tags_url = f"{pinned_base_url.rstrip('/')}/api/tags"
                     resp = await client.get(tags_url, headers=base_headers, extensions=extensions)
@@ -821,6 +842,40 @@ class AIProviderConfigService:
                         headers["x-goog-api-key"] = active_key
                     resp = await client.get(models_url, headers=headers, extensions=extensions)
                     latency = (time.monotonic() - start_time) * 1000.0
+                    bad_statuses = (
+                        _HTTP_BAD_REQUEST,
+                        _HTTP_UNAUTHORIZED,
+                        _HTTP_FORBIDDEN,
+                    )
+                    if active_key.startswith("AQ.") and resp.status_code in bad_statuses:
+                        vertex_url = (
+                            "https://aiplatform.googleapis.com/v1/publishers/google/"
+                            "models/gemini-2.5-flash-lite:countTokens"
+                        )
+                        v_headers = {
+                            "x-goog-api-key": active_key,
+                            "Content-Type": "application/json",
+                        }
+                        v_resp = await client.post(
+                            vertex_url,
+                            headers=v_headers,
+                            json={"contents": [{"parts": [{"text": "ping"}]}]},
+                            params={"key": active_key},
+                        )
+                        if v_resp.status_code == _HTTP_OK:
+                            models = ["gemini-2.5-flash-lite", "gemini-2.5-flash", "gemini-2.5-pro"]
+                            msg = (
+                                "Successfully connected to Gemini (Vertex Express) "
+                                f"({len(models)} models available)"
+                            )
+                            return {
+                                "ok": True,
+                                "latency_ms": round((time.monotonic() - start_time) * 1000.0, 2),
+                                "models": models,
+                                "model_count": len(models),
+                                "error_code": None,
+                                "message": msg,
+                            }
                     if resp.status_code in (_HTTP_UNAUTHORIZED, _HTTP_FORBIDDEN):
                         return {
                             "ok": False,
@@ -912,14 +967,15 @@ class AIProviderConfigService:
                 "error_code": "CONNECTION_REFUSED",
                 "message": f"Connection refused: {exc}",
             }
-        except httpx.TimeoutException as exc:
+        except (httpx.TimeoutException, TimeoutError) as exc:
+            lat = float(effective_timeout_ms if "effective_timeout_ms" in locals() else 8000.0)
             return {
                 "ok": False,
-                "latency_ms": 5000.0,
+                "latency_ms": lat,
                 "models": [],
                 "model_count": 0,
                 "error_code": "UPSTREAM_TIMEOUT",
-                "message": f"Connection timed out (5.0s): {exc}",
+                "message": f"Connection timed out: {exc}",
             }
         except Exception as exc:  # noqa: BLE001
             return {
