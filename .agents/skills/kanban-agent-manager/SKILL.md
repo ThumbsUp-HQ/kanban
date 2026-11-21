@@ -61,10 +61,72 @@ Adapt sub-agent delegation to the active harness's native primitives while prese
 | Action | Gemini CLI / Antigravity | Claude Code | OpenAI Codex / ChatGPT |
 | :--- | :--- | :--- | :--- |
 | **Consult Specialists Before Planning/Coding** | `invoke_subagent` (`TypeName: "self"`, `Model: "flash"`, reads `.agents/agents/<role>.md`) or reuse `conversationId` via `send_message` | Parallel `Task` calls (`model: "haiku"` or `"sonnet"`) with `.agents/agents/<role>.md` | Parallel specialist workers on fast model tier |
-| **Spawn Implementation Sub-Agent** | `invoke_subagent` (`TypeName: "self"`, `Model: "flash"`) or `swarm` `add` (`model: "gemini-3.8-flash-medium"` / `"claude-sonnet-5-5-medium"`) | `Task` tool (`model: "sonnet"` or `"haiku"`, edit/bash access) | Spawn worker/sub-agent task on fast/medium model with workspace write permissions |
-| **Spawn / Reuse Read-Only `reality-checker`** | `invoke_subagent` (`Model: "flash"`) or reuse warm `reality-checker` via `send_message` / `@reality-checker` | `Task` tool (`model: "haiku"`, read-only instructions from `./references/reality-checker.md`) | Reuse or spawn read-only review sub-agent on fast model tier with `./references/reality-checker.md` |
+| **Spawn Implementation Sub-Agent** | `invoke_subagent` (`TypeName: "self"`, `Model: "flash"`) or `swarm` `add` (`model: "gemini-3.8-flash-high"` / `"gemini-3.8-flash-medium"`, `workspace: "share"`) | `Task` tool (`model: "sonnet"` or `"haiku"`, edit/bash access) | Spawn worker/sub-agent task on fast/medium model with workspace write permissions |
+| **Spawn / Reuse Read-Only `reality-checker`** | `invoke_subagent` (`TypeName: "reality-checker"`, `Model: "flash"`) or reuse warm `reality-checker` via `send_message` / `@reality-checker` | `Task` tool (`model: "haiku"`, read-only instructions from `./references/reality-checker.md`) | Reuse or spawn read-only review sub-agent on fast model tier with `./references/reality-checker.md` |
 | **Black-Box Browser QA** | `invoke_subagent` or `swarm` `add` pinned to `gemini-4-argon-low` / `flash` with user-level test plan only (use `ServerName: "chrome-devtools"` with hyphen for Chrome DevTools MCP tools) | `Task` tool (`model: "haiku"`) with browser MCP and user-level test plan | Fast/low-reasoning worker with browser harness and user-level test plan |
 | **Return QA Critique for Fixes** | `send_message` to the original sub-agent's `conversationId` or `@mention` on swarm board | Resume sub-agent or dispatch targeted remediation `Task` with `docs/qa/<TICKET_ID>/` context | Message existing worker or dispatch remediation task against the same workspace |
+
+---
+
+## High-Throughput Quota-Sipping Swarm Playbook (Flash 3.8 Execution + Clean-Room QA)
+
+To maximize velocity while sipping model quota across large multi-ticket waves, structure every session around these 5 operational pillars:
+
+### 1. Coordinator-as-State-Machine & Flash 3.8 Roster Topology
+- **Coordinator Role:** The Coordinator never writes large feature diffs or runs long test loops directly in its own context. It orchestrates ticket state transitions, dispatches parallel Flash 3.8 workers, routes Clean-Room `reality-checker` verdicts, and closes certified tickets.
+- **Swarm & Sub-Agent Roster Pinning (`Gemini 3.8 Flash`):**
+  - **Sharded Implementation Builders (`b-<ticket>`, `gemini-3.8-flash-high`, `workspace: "share"`):** Each builder owns a disjoint ticket or file slice on its own branch (`feat/<KEY>-...` or `fix/<KEY>-rc1`), writes unit tests (`>=95%` coverage on touched files, `0` warnings), and populates `docs/qa/<KEY>/`. Kill temporary builder workers (`swarm(action="kill")`) immediately after their branch is merged into `main` so worktrees stay clean.
+  - **Persistent Specialist Reviewers (`api-spec`, `ui-spec`, `gemini-3.8-flash-medium`, `workspace: "inherit"`):** Keep warm on the board (`waiting` costs `0` tokens) and wake via `@mention` to audit diffs/screenshots and write `api-specialist-review.md` and `ui-specialist-review.md`.
+  - **Persistent Merge & CI Gatekeeper (`merge-ci`, `gemini-3.8-flash-high`, `workspace: "inherit"`):** Merges approved branches into `main`, runs all static checks, rebuilds local QA containers (`thumbs-up-kanban:local-qa` with `--build-arg KB_GIT_COMMIT=$(git rev-parse --short=12 HEAD)`), pushes to `origin`, and polls Dash CI until green.
+  - **Persistent Live Full-Stack Verifiers (`invoke_subagent(TypeName="self", Model="flash")`):** Reuse via `send_message` across rounds to drive zero-mock Playwright browser verification and live API benchmarks against isolated local containers (`kanban-liveqa-1`, `kanban-liveqa-2`).
+  - **Clean-Room `reality-checker` Auditors (`invoke_subagent(TypeName="reality-checker", Model="flash")`):** Spawn a fresh, isolated `reality-checker` sub-agent per ticket/round in 100% passive forensic mode so it has zero shared implementation bias.
+
+### 2. Dynamic Ticket Triage, Mid-Flight Creation & Board State Guard
+- **Triage & Create As You Go:** When the user reports a bug, requests new capabilities, or points out `Todo` items mid-session:
+  1. Consult `research`, `backend-architect`, and `ux-architect` sub-agents **in parallel** on `Model: "flash"`.
+  2. Call `search_tickets` first to avoid duplicates; create or update atomic tickets conforming to `kanban-ticket`.
+  3. Move active tickets to `In Progress` via `begin_work`.
+- **Custom State Sort-Order Guard (`begin_work` -> `transition_ticket`):** On boards where a custom holding state (e.g., `Crazy_Ideas`) has `state_group="started"` and `sort_order=0`, `begin_work` may transition the ticket into that state instead of `In Progress`. Always inspect the state returned by `begin_work` and immediately call `transition_ticket(identifier=key, to_state="In Progress")` if it is not `"In Progress"`. Never modify or execute tickets parked in user holding states (`Crazy_Ideas`) unless explicitly instructed.
+
+### 3. Zero-Mock Local Container Verification & Positive/Negative AI Harness Testing
+- **Zero Mocks in Proof Artifacts:** Never use `page.route`, `context.route`, or `mockApi` in `docs/qa/<KEY>/` live proof scripts or screenshots. Always verify against a real local container instance backed by PostgreSQL + `FORCE ROW LEVEL SECURITY` (never mutate the protected pre-production instance).
+- **Responsive Viewport Matrix:** For UI tickets, capture and visually inspect (`read_file`) screenshots across Desktop (`1440x900` Light & Dark), Tablet (`768x1024`), Mobile Portrait (`390x844`), and Mobile Landscape (`844x390`), asserting single-surface DOM count, unoccluded navigation, unclipped control borders/chevrons, and `< 3000 ms` load timings.
+- **Positive + Negative + Cutoff AI Testing:** When testing AI providers, structured outputs, or workflow transition gates, always test in-transition (`In Progress -> Done`) against:
+  1. **Positive Case:** A completed ticket with full DoD and test proof -> verifies `approve` -> transitions to `Done` (`✅🤖`).
+  2. **Negative Case:** An impossible/incomplete ticket (e.g., `"Build a rocket ship and serve ice cream on Saturn"`) -> verifies `reject` -> fail-closed veto keeps ticket in `In Progress` (`🛑🤖`).
+  3. **Strict Cutoff Timeout Case:** A tight `timeout_ms` cutoff -> verifies `GATE_TIMEOUT` aborts cleanly and fails closed without hanging workers.
+
+### 4. Pre-Audit Packet Hygiene Checklist (Eliminating Round-2 Bounces)
+Before launching a Clean-Room `reality-checker` sub-agent on `docs/qa/<KEY>/`, verify:
+1. [ ] **Specialist Reviews Re-Stamped:** `api-specialist-review.md`, `ui-specialist-review.md`, and `message-to-reality-checker.md` all cite the **current merged commit SHA**, current test counts, and exact current screenshot filenames (zero stale SHAs or deleted Round-0 filenames).
+2. [ ] **Complete Verbatim Test & Coverage Logs (`unit-test-results.txt`):** Contains both the full suite run and the targeted per-module coverage table proving `>=95%` coverage on every touched file and `0` warnings (never overwrite Python backend coverage logs when appending frontend or docs tests).
+3. [ ] **Complete Verbatim Static Gate Logs (`build-or-typecheck.txt`):** Contains verbatim command headers and exit-0 output for every gate claimed (`check-migrations`, `ruff check`, `ruff format --check`, `mypy`, `lint-imports`, `eslint --report-unused-disable-directives . --max-warnings 0`, `tsc -b`, `vite build`, and `check_no_dashes`).
+4. [ ] **Zero Secret Leaks & Zero Em/En-Dashes:** Any test API keys used during live benchmarking are redacted (`AQ....REDACTED`, `sk-proj-...REDACTED`) with raw secret-scan output (`0` matches) recorded in `live-fullstack-proof.txt`, and `check_no_dashes` exits `0`.
+5. [ ] **Manifest Computed Last (`changed-files-manifest.txt`):** Generated via `sha256sum` across all modified files in `git-diff.patch` + `docs/qa/<KEY>/` *after* all markdown reviews and messages are finalized, and verified with `sha256sum -c` (`0` mismatches).
+
+### 5. Dash CI Verification & Canonical `complete_work` Closure
+- After all tickets in the wave achieve Grade `A` & `READY`:
+  1. Commit and push `.wiki` (if modified) and `main` (never staging runtime artifacts like `.backup_schedule.json` or `backups/`).
+  2. Poll `https://dash.hackedyour.info/api/status?query=<repo>` (without `&sha=`) until the CI run completes **100% GREEN**.
+  3. Close each ticket via `complete_work` passing the **entire, verbatim `# Integration Agent Reality-Based Report`** as `summary_markdown`, `to_state: "Done"`, and the structured `verification_proof` object:
+     ```json
+     {
+       "qa_dir": "docs/qa/<KEY>",
+       "artifacts": [
+         "docs/qa/<KEY>/unit-test-results.txt",
+         "docs/qa/<KEY>/build-or-typecheck.txt",
+         "docs/qa/<KEY>/live-fullstack-proof.txt",
+         "docs/qa/<KEY>/api-specialist-review.md",
+         "docs/qa/<KEY>/ui-specialist-review.md"
+       ],
+       "reality_checker": {
+         "verdict": "READY",
+         "grade": "A",
+         "report_path": "docs/qa/<KEY>/reality-checker-report.md"
+       },
+       "ci_run_url": "https://git.adamoutler.com/AI/thumbs-up-kanban/actions/runs/<RUN_ID>/jobs/0/attempt/1"
+     }
+     ```
 
 ---
 
