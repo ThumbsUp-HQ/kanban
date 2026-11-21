@@ -1,269 +1,7 @@
-diff --git a/kanban/web/src/app/AppShell.test.tsx b/kanban/web/src/app/AppShell.test.tsx
-index 7a9891c1..fb050b2b 100644
---- a/kanban/web/src/app/AppShell.test.tsx
-+++ b/kanban/web/src/app/AppShell.test.tsx
-@@ -172,6 +172,7 @@ describe('AppShell', () => {
-   });
- 
-   it('covers computeCurrentSection branches and kb:open-manage-access events', () => {
-+    expect(computeCurrentSection('/about')).toBe('About');
-     expect(computeCurrentSection('/projects/KAN/settings/workflows')).toBe('Workflows');
-     expect(computeCurrentSection('/workflows')).toBe('Workflows');
-     expect(computeCurrentSection('/projects/KAN/settings/custom-fields')).toBe('Custom Fields');
-@@ -459,4 +460,51 @@ describe('AppShell', () => {
-     expect(surfaceHost).toBeDefined();
-     expect(surfaceHost?.querySelector('.surface--drawer')).toBeNull();
-   });
-+
-+  it('KAN-58: does not mount duplicate global drawer when layout is omitted on /issues route', () => {
-+    render(
-+      <QueryClientProvider client={queryClient}>
-+        <ThemeProvider>
-+          <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KAN-1']}>
-+            <AppShell projectKey="KAN" projectName="kanban" />
-+          </MemoryRouter>
-+        </ThemeProvider>
-+      </QueryClientProvider>,
-+    );
-+
-+    const surfaceHost = document.getElementById('kb-surface-host');
-+    expect(surfaceHost).toBeDefined();
-+    expect(surfaceHost?.querySelector('.surface--drawer')).toBeNull();
-+  });
-+
-+  it('KAN-58: Topbar & Hamburger Always Accessible Above Ticket Views and auto-closes mobile sidebar on resize', () => {
-+    render(
-+      <QueryClientProvider client={queryClient}>
-+        <ThemeProvider>
-+          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
-+            <AppShell projectKey="KAN" projectName="kanban" />
-+          </MemoryRouter>
-+        </ThemeProvider>
-+      </QueryClientProvider>,
-+    );
-+
-+    // Topbar is rendered with sticky positioning and topbar header
-+    const topbar = document.querySelector('.kb-topbar');
-+    expect(topbar).toBeDefined();
-+
-+    // Open mobile sidebar via hamburger button
-+    const hamburger = screen.getByRole('button', { name: 'Open navigation' });
-+    expect(hamburger).toBeDefined();
-+    act(() => {
-+      hamburger.click();
-+    });
-+    expect(screen.getByRole('dialog', { name: 'Sidebar navigation' })).toBeDefined();
-+
-+    // Resize viewport past 1279px auto-closes mobile sidebar
-+    act(() => {
-+      window.innerWidth = 1440;
-+      window.dispatchEvent(new Event('resize'));
-+    });
-+    expect(screen.queryByRole('dialog', { name: 'Sidebar navigation' })).toBeNull();
-+  });
- });
-diff --git a/kanban/web/src/app/AppShell.tsx b/kanban/web/src/app/AppShell.tsx
-index fc09b264..1aef2b26 100644
---- a/kanban/web/src/app/AppShell.tsx
-+++ b/kanban/web/src/app/AppShell.tsx
-@@ -126,7 +126,8 @@ export function AppShell({
- 
-   const isProjectIssuesRoute = /^(?:\/projects|\/w\/[^/]+\/p)\/[^/]+\/issues(?:\/)?$/.test(location.pathname);
-   const searchParams = new URLSearchParams(location.search);
--  const isListSplitHandled = isProjectIssuesRoute && searchParams.get('layout') === 'list';
-+  const rawLayout = searchParams.get('layout');
-+  const isListSplitHandled = isProjectIssuesRoute && (!rawLayout || rawLayout.toLowerCase() === 'list');
- 
-   const isPublicRoute =
-     location.pathname.startsWith('/login') ||
-@@ -165,6 +166,27 @@ export function AppShell({
-   }, [activeProjectKey, navigate]);
- 
-   const [mobileSidebarOpen, setMobileSidebarOpen] = useState(false);
-+
-+  // Auto-close mobile sidebar on navigation
-+  const currentLoc = location.pathname + location.search;
-+  const [prevLocation, setPrevLocation] = useState(currentLoc);
-+  if (prevLocation !== currentLoc) {
-+    setPrevLocation(currentLoc);
-+    setMobileSidebarOpen(false);
-+  }
-+
-+  // Auto-close mobile sidebar when viewport expands past 1280px
-+  useEffect(() => {
-+    function handleResize(): void {
-+      if (window.innerWidth > 1279) {
-+        setMobileSidebarOpen(false);
-+      }
-+    }
-+    window.addEventListener('resize', handleResize);
-+    return () => {
-+      window.removeEventListener('resize', handleResize);
-+    };
-+  }, []);
-   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(() => {
-     try {
-       const stored = localStorage.getItem(SIDEBAR_STORAGE_KEY);
-diff --git a/kanban/web/src/app/LayoutSwitcher.css b/kanban/web/src/app/LayoutSwitcher.css
-index 29cc5032..fe440bc2 100644
---- a/kanban/web/src/app/LayoutSwitcher.css
-+++ b/kanban/web/src/app/LayoutSwitcher.css
-@@ -39,6 +39,24 @@
-   position: relative;
- }
- 
-+@media (max-width: 767px), (max-height: 540px) {
-+  .kb-layout-switcher-desktop {
-+    display: none;
-+  }
-+  .kb-layout-switcher-mobile {
-+    display: block;
-+  }
-+}
-+
-+@media (min-width: 768px) and (min-height: 541px) {
-+  .kb-layout-switcher-desktop {
-+    display: flex;
-+  }
-+  .kb-layout-switcher-mobile {
-+    display: none;
-+  }
-+}
-+
- .kb-layout-switcher-mobile-btn {
-   background: var(--bg-surface-raised, #24272f);
-   color: var(--fg-primary, #f8fafc);
-diff --git a/kanban/web/src/app/Sidebar.css b/kanban/web/src/app/Sidebar.css
-index a140728a..13bd0576 100644
---- a/kanban/web/src/app/Sidebar.css
-+++ b/kanban/web/src/app/Sidebar.css
-@@ -1,7 +1,7 @@
- .kb-sidebar {
-   width: var(--sidebar-w, 200px);
-   min-width: var(--sidebar-w, 200px);
--  height: 100vh;
-+  height: 100dvh;
-   background: var(--bg-surface, #1e2025);
-   border-right: 1px solid var(--border-subtle, #333842);
-   display: flex;
-@@ -430,6 +430,7 @@
-     top: 0;
-     left: 0;
-     bottom: 0;
-+    height: 100dvh;
-     z-index: 1001;
-     box-shadow: var(--shadow-xl, 0 20px 25px -5px rgba(0, 0, 0, 0.6));
-     width: var(--sidebar-w, 256px) !important;
-diff --git a/kanban/web/src/app/Sidebar.test.tsx b/kanban/web/src/app/Sidebar.test.tsx
-index 7668131f..4e964300 100644
---- a/kanban/web/src/app/Sidebar.test.tsx
-+++ b/kanban/web/src/app/Sidebar.test.tsx
-@@ -1452,4 +1452,36 @@ describe('Sidebar', () => {
-     uEmptyItems();
-     fetchSpyEmpty.mockRestore();
-   });
-+
-+  it('KAN-58: Mobile Sidebar Dismiss & Navigation Auto-Close', () => {
-+    const onCloseSpy = vi.fn();
-+    const onToggleSpy = vi.fn();
-+
-+    render(
-+      <MemoryRouter initialEntries={['/projects/KAN']}>
-+        <Sidebar
-+          isOpen={true}
-+          onClose={onCloseSpy}
-+          onToggleCollapse={onToggleSpy}
-+          projectKey="KAN"
-+          projectName="kanban"
-+        />
-+      </MemoryRouter>,
-+    );
-+
-+    // 1. Close button in mobile overlay calls onClose, NOT desktop handleToggleCollapse
-+    const closeBtn = screen.getByRole('button', { name: 'Collapse navigation sidebar' });
-+    act(() => {
-+      closeBtn.click();
-+    });
-+    expect(onCloseSpy).toHaveBeenCalledTimes(1);
-+    expect(onToggleSpy).not.toHaveBeenCalled();
-+
-+    // 2. Clicking any nav link in mobile overlay automatically closes the sidebar
-+    const homeLink = screen.getByRole('link', { name: /Home/i });
-+    act(() => {
-+      homeLink.click();
-+    });
-+    expect(onCloseSpy).toHaveBeenCalledTimes(2);
-+  });
- });
-diff --git a/kanban/web/src/app/Sidebar.tsx b/kanban/web/src/app/Sidebar.tsx
-index 84b5204f..c6fd2c01 100644
---- a/kanban/web/src/app/Sidebar.tsx
-+++ b/kanban/web/src/app/Sidebar.tsx
-@@ -590,6 +590,12 @@ export function Sidebar({
-           isOpen ? 'kb-sidebar-overlay' : ''
-         }`}
-         onKeyDown={handleMobileKeyDown}
-+        onClickCapture={(e) => {
-+          const target = e.target as HTMLElement | null;
-+          if (target?.closest('a') && isOpen && onClose) {
-+            onClose();
-+          }
-+        }}
-       >
-         {/* Workspace Brand & Switcher & New Item Button */}
-         <div className="kb-sidebar-header">
-@@ -673,7 +679,13 @@ export function Sidebar({
-               className="kb-sidebar-nav-close-btn"
-               aria-label="Collapse navigation sidebar"
-               title="Collapse sidebar ([)"
--              onClick={handleToggleCollapse}
-+              onClick={() => {
-+                if (isOpen && onClose) {
-+                  onClose();
-+                } else {
-+                  handleToggleCollapse();
-+                }
-+              }}
-             >
-               <PanelLeftClose size={16} />
-             </button>
-diff --git a/kanban/web/src/app/Topbar.css b/kanban/web/src/app/Topbar.css
-index d9f37ad0..fcc7f5b5 100644
---- a/kanban/web/src/app/Topbar.css
-+++ b/kanban/web/src/app/Topbar.css
-@@ -8,8 +8,9 @@
-   border-bottom: 1px solid var(--border-subtle, #333842);
-   background: var(--bg-surface, #1e2025);
-   box-sizing: border-box;
--  position: relative;
--  z-index: 120;
-+  position: sticky;
-+  top: 0;
-+  z-index: 300;
-   user-select: none;
-   -webkit-user-select: none;
- }
-@@ -36,6 +37,7 @@
-   justify-content: center;
-   user-select: none;
-   -webkit-user-select: none;
-+  flex-shrink: 0;
- }
- 
- .kb-topbar-hamburger:hover {
 diff --git a/kanban/web/src/features/board/board.css b/kanban/web/src/features/board/board.css
-index 5f3b5a3a..60989b59 100644
+index e6d1df01..60989b59 100644
 --- a/kanban/web/src/features/board/board.css
 +++ b/kanban/web/src/features/board/board.css
-@@ -9,7 +9,7 @@
-  * - 24px 28px outer canvas padding (--board-canvas-pad, 16px mobile)
-  */
- 
--.kb-main-canvas {
-+.kb-main-canvas:has(.board-canvas) {
-   height: 100%;
-   max-height: 100%;
-   min-height: 0;
 @@ -51,7 +51,7 @@
  }
  
@@ -273,95 +11,37 @@ index 5f3b5a3a..60989b59 100644
      padding: 12px;
      max-width: 100%;
      overflow-x: hidden;
-diff --git a/kanban/web/src/features/drawer/IssueHeader.tsx b/kanban/web/src/features/drawer/IssueHeader.tsx
-index f72cede0..76f0358b 100644
---- a/kanban/web/src/features/drawer/IssueHeader.tsx
-+++ b/kanban/web/src/features/drawer/IssueHeader.tsx
-@@ -149,22 +149,30 @@ export function IssueHeader({
-     <header className="surface__header">
-       <button
-         type="button"
--        className="issue-header__btn"
--        aria-label="Close issue panel"
-+        className="issue-header__btn issue-header__back-btn"
-+        data-testid="issue-back-to-list-btn"
-+        aria-label={mode === 'full' ? 'Back to issues list' : 'Close issue panel'}
-+        title={mode === 'full' ? 'Back to list' : 'Close issue panel'}
-         onClick={onClose}
-       >
--        <span aria-hidden="true" className="issue-header__glyph">→</span>
-+        <span aria-hidden="true" className="issue-header__glyph">
-+          {mode === 'full' ? '←' : '→'}
-+        </span>
-+        {mode === 'full' && <span className="issue-back-to-list-text"> Back to list</span>}
-       </button>
- 
-       <button
-         type="button"
--        className="issue-header__btn"
-+        className={`issue-header__btn ${mode === 'full' ? 'issue-header__fullscreen-toggle--active' : ''}`}
-         aria-label={mode === 'full' ? 'Return to side panel' : 'Open in full screen'}
-+        title={mode === 'full' ? 'Return to side panel' : 'Open in full screen'}
-         aria-keyshortcuts="Meta+Shift+F Control+Shift+F"
-         onMouseDown={(e) => { e.preventDefault(); }}
-         onClick={toggleFullScreen}
-       >
--        <span aria-hidden="true" className="issue-header__glyph">↗</span>
-+        <span aria-hidden="true" className="issue-header__glyph">
-+          {mode === 'full' ? '↙' : '↗'}
-+        </span>
-       </button>
- 
-       {priorityKey && issue.priority && (
 diff --git a/kanban/web/src/features/drawer/IssueSurface.css b/kanban/web/src/features/drawer/IssueSurface.css
-index 44fce293..f9c569c5 100644
+index dd4fa01f..83039ab5 100644
 --- a/kanban/web/src/features/drawer/IssueSurface.css
 +++ b/kanban/web/src/features/drawer/IssueSurface.css
-@@ -262,20 +262,22 @@
-   }
- }
- 
--@media (max-width: 767px) {
-+@media (max-width: 767px), (max-height: 540px) {
-   .surface--drawer,
-   .surface--full,
-   .surface--split {
-     position: fixed;
--    inset: 0;
--    top: 0;
-+    top: var(--topbar-h, 52px);
-     left: 0;
-     right: 0;
-     bottom: 0;
+@@ -274,7 +274,10 @@
      width: 100vw;
      max-width: 100%;
--    height: 100dvh;
--    z-index: 200;
-+    height: calc(100dvh - var(--topbar-h, 52px));
+     height: calc(100dvh - var(--topbar-h, 52px));
 +    min-height: calc(100dvh - var(--topbar-h, 52px));
-+    z-index: 100;
+     z-index: 100;
 +    border-left: none;
 +    border-top: none;
      box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.2);
    }
    .surface__body,
-@@ -344,24 +346,6 @@
+@@ -343,23 +346,6 @@
    }
  }
  
--@media (max-width: 767px) {
+-@media (max-width: 767px), (max-height: 540px) {
 -  .surface--split {
 -    position: fixed;
--    inset: 0;
--    top: 0;
+-    top: var(--topbar-h, 52px);
 -    left: 0;
 -    right: 0;
 -    bottom: 0;
 -    width: 100vw;
 -    max-width: 100%;
--    height: 100dvh;
--    min-height: 100dvh;
--    z-index: 200;
+-    height: calc(100dvh - var(--topbar-h, 52px));
+-    min-height: calc(100dvh - var(--topbar-h, 52px));
+-    z-index: 100;
 -    border-left: none;
 -    border-top: none;
 -  }
@@ -370,7 +50,7 @@ index 44fce293..f9c569c5 100644
  .surface__header--split {
    display: flex;
    align-items: center;
-@@ -373,6 +357,36 @@
+@@ -371,6 +357,50 @@
    flex-shrink: 0;
  }
  
@@ -404,10 +84,24 @@ index 44fce293..f9c569c5 100644
 +  font-size: 12px;
 +}
 +
++.surface__rail .prop-row[data-prop="state"] .prop-row__value {
++  gap: 6px;
++  min-width: 0;
++  overflow: visible;
++}
++
++.surface__rail .prop-row[data-prop="state"] .prop-row__select {
++  min-width: 108px;
++  max-width: 100%;
++  width: 100%;
++  flex: 1 1 auto;
++  padding-right: 20px;
++  box-sizing: border-box;
++}
  .issue-header__new-tab-link {
    display: inline-flex;
    align-items: center;
-@@ -484,28 +498,6 @@
+@@ -482,28 +512,6 @@
    display: none;
  }
  
@@ -437,66 +131,10 @@ index 44fce293..f9c569c5 100644
    display: none;
  }
 diff --git a/kanban/web/src/features/drawer/IssueSurface.test.tsx b/kanban/web/src/features/drawer/IssueSurface.test.tsx
-index 709af4a5..ffa13bb7 100644
+index 5c34e2c3..ffa13bb7 100644
 --- a/kanban/web/src/features/drawer/IssueSurface.test.tsx
 +++ b/kanban/web/src/features/drawer/IssueSurface.test.tsx
-@@ -1349,6 +1349,55 @@ describe('IssueSurface', () => {
-       expect(onClose).toHaveBeenCalledTimes(1);
-     });
- 
-+    it('KAN-58: renders issue-back-to-list-btn in split mode and full mode, navigating back to list cleanly', async () => {
-+      vi.spyOn(apiClient, 'get').mockResolvedValue(validIssue);
-+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-+      const onClose = vi.fn();
-+
-+      // Split mode
-+      const { unmount } = render(
-+        <QueryClientProvider client={queryClient}>
-+          <MemoryRouter initialEntries={['/projects/KAN/issues?layout=list&peek=KAN-142']}>
-+            <IssueSurfaceRoot
-+              mode="split"
-+              issueKey="KAN-142"
-+              projectKey="KAN"
-+              onClose={onClose}
-+            />
-+          </MemoryRouter>
-+        </QueryClientProvider>,
-+      );
-+
-+      await waitFor(() => {
-+        expect(screen.getByTestId('issue-back-to-list-btn')).toBeDefined();
-+      });
-+      fireEvent.click(screen.getByTestId('issue-back-to-list-btn'));
-+      expect(onClose).toHaveBeenCalledTimes(1);
-+      unmount();
-+
-+      // Full mode
-+      const onCloseFull = vi.fn();
-+      render(
-+        <QueryClientProvider client={queryClient}>
-+          <MemoryRouter initialEntries={['/projects/KAN/issues/KAN-142']}>
-+            <IssueSurfaceRoot
-+              mode="full"
-+              issueKey="KAN-142"
-+              projectKey="KAN"
-+              onClose={onCloseFull}
-+            />
-+          </MemoryRouter>
-+        </QueryClientProvider>,
-+      );
-+
-+      await waitFor(() => {
-+        expect(screen.getByTestId('issue-back-to-list-btn')).toBeDefined();
-+      });
-+      expect(screen.getByTitle('Return to side panel')).toBeDefined();
-+      fireEvent.click(screen.getByTestId('issue-back-to-list-btn'));
-+      expect(onCloseFull).toHaveBeenCalledTimes(1);
-+    });
-+
-     it('renders split-surface-close-btn and invokes onClose in loading and error states', async () => {
-       let resolvePromise: (val: unknown) => void = () => {
-         /* no-op */
-@@ -1373,6 +1422,7 @@ describe('IssueSurface', () => {
+@@ -1422,6 +1422,7 @@ describe('IssueSurface', () => {
          </QueryClientProvider>,
        );
  
@@ -504,7 +142,7 @@ index 709af4a5..ffa13bb7 100644
        const closeLoadingBtn = screen.getByTestId('split-surface-close-btn');
        fireEvent.click(closeLoadingBtn);
        expect(onCloseLoading).toHaveBeenCalledTimes(1);
-@@ -1401,6 +1451,7 @@ describe('IssueSurface', () => {
+@@ -1450,6 +1451,7 @@ describe('IssueSurface', () => {
          expect(screen.getByText('Could not load KAN-ERR.')).toBeDefined();
        });
  
@@ -513,18 +151,9 @@ index 709af4a5..ffa13bb7 100644
        fireEvent.click(closeErrorBtn);
        expect(onCloseError).toHaveBeenCalledTimes(1);
 diff --git a/kanban/web/src/features/drawer/IssueSurface.tsx b/kanban/web/src/features/drawer/IssueSurface.tsx
-index 8016853f..9ad9d963 100644
+index 17c8de6e..a1b681c9 100644
 --- a/kanban/web/src/features/drawer/IssueSurface.tsx
 +++ b/kanban/web/src/features/drawer/IssueSurface.tsx
-@@ -243,7 +243,7 @@ function IssueSurfaceContent({
- 
-   const handleClose = useCallback((): void => {
-     onCloseProp?.();
--    void navigate(toPeekPath(location, null));
-+    void navigate(toPeekPath(location, null), { state: { suppressAutoPeek: true } });
-     const opener =
-       getOpenerElement() ??
-       openerRef.current ??
 @@ -427,7 +427,7 @@ function IssueSurfaceContent({
        return (
          <>
@@ -543,41 +172,33 @@ index 8016853f..9ad9d963 100644
                </button>
              ) : (
                <button
-@@ -468,40 +468,28 @@ function IssueSurfaceContent({
+@@ -468,7 +468,7 @@ function IssueSurfaceContent({
        return (
          <>
            <div className={`surface__header ${mode === 'split' ? 'surface__header--split' : ''}`}>
 -            {mode === 'split' && (
-+            <button
-+              type="button"
-+              className="issue-header__btn split-surface-close-btn"
-+              data-testid="split-surface-close-btn"
-+              aria-label="Back to issues list"
-+              title="Back to list"
-+              onClick={handleClose}
-+            >
-+              <span aria-hidden="true" className="issue-header__glyph">←</span>
-+              <span className="split-back-text" data-testid="issue-back-to-list-btn"> Back to list</span>
-+            </button>
-+            {mode !== 'split' && (
++            {mode === 'split' || mode === 'full' ? (
                <button
                  type="button"
--                className="issue-header__btn split-surface-close-btn"
--                data-testid="split-surface-close-btn"
--                aria-label="Back to issues list"
--                title="Back to list"
--                onClick={handleClose}
-+                className="issue-header__btn"
-+                aria-label={mode === 'full' ? 'Return to side panel' : 'Open in full screen'}
-+                aria-keyshortcuts="Meta+Shift+F Control+Shift+F"
-+                onClick={handleToggleFullScreen}
+                 className="issue-header__btn split-surface-close-btn"
+@@ -478,29 +478,28 @@ function IssueSurfaceContent({
+                 onClick={handleClose}
                >
--                <span aria-hidden="true" className="issue-header__glyph">←</span>
+                 <span aria-hidden="true" className="issue-header__glyph">←</span>
 -                <span className="sr-only">Back</span>
-+                <span aria-hidden="true" className="issue-header__glyph">↗</span>
++                <span className="split-back-text" data-testid="issue-back-to-list-btn"> Back to list</span>
++              </button>
++            ) : (
++              <button
++                type="button"
++                className="issue-header__btn"
++                aria-label="Close issue panel"
++                onClick={handleClose}
++              >
++                <span aria-hidden="true" className="issue-header__glyph">→</span>
                </button>
              )}
--            {mode !== 'split' && (
+             {mode !== 'split' && (
 -              <>
 -                <button
 -                  type="button"
@@ -597,95 +218,53 @@ index 8016853f..9ad9d963 100644
 -                  <span aria-hidden="true" className="issue-header__glyph">↗</span>
 -                </button>
 -              </>
--            )}
++              <button
++                type="button"
++                className="issue-header__btn"
++                aria-label={mode === 'full' ? 'Return to side panel' : 'Open in full screen'}
++                aria-keyshortcuts="Meta+Shift+F Control+Shift+F"
++                onClick={handleToggleFullScreen}
++              >
++                <span aria-hidden="true" className="issue-header__glyph">{mode === 'full' ? '↙' : '↗'}</span>
++              </button>
+             )}
              <span className="mono issue-header__key">{mode === 'split' ? `#${issueKey}` : issueKey}</span>
            </div>
-           <div className="surface__body">
-@@ -1285,7 +1273,7 @@ function IssueSurfaceContent({
-               onClick={handleClose}
-             >
-               <span aria-hidden="true" className="issue-header__glyph">←</span>
--              <span className="sr-only">Back</span>
-+              <span className="split-back-text" data-testid="issue-back-to-list-btn"> Back to list</span>
-             </button>
+diff --git a/kanban/web/src/features/drawer/drawerCoverage.test.tsx b/kanban/web/src/features/drawer/drawerCoverage.test.tsx
+index 37c40673..54fcfb21 100644
+--- a/kanban/web/src/features/drawer/drawerCoverage.test.tsx
++++ b/kanban/web/src/features/drawer/drawerCoverage.test.tsx
+@@ -356,7 +356,7 @@ describe('Drawer Extra Coverage', () => {
  
-             <div className="split-breadcrumb" data-testid="split-breadcrumb">
-diff --git a/kanban/web/src/features/list/ListView.test.tsx b/kanban/web/src/features/list/ListView.test.tsx
-index bb2de9a3..0fbc3127 100644
---- a/kanban/web/src/features/list/ListView.test.tsx
-+++ b/kanban/web/src/features/list/ListView.test.tsx
-@@ -575,4 +575,9 @@ describe('ListView (KAN-52 Left Master Rail)', () => {
-     unmount();
-     localStorage.clear();
-   });
-+
-+  it('renders list-view-loading skeleton when issues is empty and isLoading is true', () => {
-+    render(<ListView issues={[]} isLoading={true} />);
-+    expect(screen.getByTestId('list-view-loading')).toBeDefined();
-+  });
- });
-diff --git a/kanban/web/src/features/list/ListView.tsx b/kanban/web/src/features/list/ListView.tsx
-index 7f760447..44f0d643 100644
---- a/kanban/web/src/features/list/ListView.tsx
-+++ b/kanban/web/src/features/list/ListView.tsx
-@@ -220,6 +220,15 @@ export function ListView({
-   }, [issues, sortBy, sortDir]);
+       expect(container.querySelector('.surface__skeleton')).toBeDefined();
  
-   if (issues.length === 0) {
-+    if (isLoading) {
-+      return (
-+        <div className="list-view-loading" data-testid="list-view-loading">
-+          <div className="list-loading-skeleton" />
-+          <div className="list-loading-skeleton" />
-+          <div className="list-loading-skeleton" />
-+        </div>
-+      );
-+    }
-     return (
-       <div className="view-empty-state">
-         <h2 className="view-empty-title">No work items found</h2>
+-      const closeBtn = screen.getByRole('button', { name: 'Close issue panel' });
++      const closeBtn = screen.getByRole('button', { name: /close issue panel|back to issues list/i });
+       fireEvent.click(closeBtn);
+ 
+       await waitFor(() => {
+@@ -388,7 +388,7 @@ describe('Drawer Extra Coverage', () => {
+       const fsBtn = screen.getByRole('button', { name: 'Open in full screen' });
+       fireEvent.click(fsBtn);
+ 
+-      const closeBtn = screen.getByRole('button', { name: 'Close issue panel' });
++      const closeBtn = screen.getByRole('button', { name: /close issue panel|back to issues list/i });
+       fireEvent.click(closeBtn);
+     });
+ 
 diff --git a/kanban/web/src/features/views/IssueNavigatorBar.css b/kanban/web/src/features/views/IssueNavigatorBar.css
-index 84834151..7c51bc42 100644
+index 7c51bc42..ad7b3af6 100644
 --- a/kanban/web/src/features/views/IssueNavigatorBar.css
 +++ b/kanban/web/src/features/views/IssueNavigatorBar.css
-@@ -99,6 +99,37 @@
-   transition: all 120ms ease;
+@@ -117,7 +117,7 @@
+ .navigator-filters-toggle:hover,
+ .navigator-filters-toggle--active {
+   color: var(--fg-primary, #f8fafc);
+-  border-color: var(--border-muted, #4b5263);
++  border-color: var(--border-subtle, #4b5263);
  }
  
-+.navigator-filters-toggle {
-+  display: none;
-+  align-items: center;
-+  gap: 4px;
-+  background: var(--bg-surface, #1e2025);
-+  border: 1px solid var(--border-subtle, #333842);
-+  border-radius: var(--radius-sm, 4px);
-+  padding: 4px 10px;
-+  color: var(--fg-secondary, #94a3b8);
-+  font-size: 12px;
-+  font-weight: 500;
-+  cursor: pointer;
-+  transition: all 120ms ease;
-+}
-+
-+.navigator-filters-toggle:hover,
-+.navigator-filters-toggle--active {
-+  color: var(--fg-primary, #f8fafc);
-+  border-color: var(--border-muted, #4b5263);
-+}
-+
-+@media (max-width: 767px), (max-height: 540px) {
-+  .navigator-filters-toggle {
-+    display: inline-flex;
-+  }
-+
-+  .navigator-filters-row:not(.navigator-filters-row--expanded) {
-+    display: none;
-+  }
-+}
-+
- .navigator-mode-btn--active {
-   background: var(--bg-hover, #2c313a);
-   color: var(--fg-primary, #f8fafc);
+ @media (max-width: 767px), (max-height: 540px) {
 diff --git a/kanban/web/src/features/views/IssueNavigatorBar.test.tsx b/kanban/web/src/features/views/IssueNavigatorBar.test.tsx
 index e3582bf1..5c59ebe9 100644
 --- a/kanban/web/src/features/views/IssueNavigatorBar.test.tsx
@@ -712,121 +291,23 @@ index e3582bf1..5c59ebe9 100644
 +    expect(toggleBtn.getAttribute('aria-expanded')).toBe('false');
 +  });
  });
-diff --git a/kanban/web/src/features/views/IssueNavigatorBar.tsx b/kanban/web/src/features/views/IssueNavigatorBar.tsx
-index 3d5cbc4a..fe034379 100644
---- a/kanban/web/src/features/views/IssueNavigatorBar.tsx
-+++ b/kanban/web/src/features/views/IssueNavigatorBar.tsx
-@@ -120,6 +120,7 @@ export function IssueNavigatorBar({
-   const currentLabel = activeFilters.label?.[0] ?? 'all';
-   const currentCycle = activeFilters.cycle?.[0] ?? 'all';
-   const currentModule = activeFilters.module?.[0] ?? 'all';
-+  const [filtersExpanded, setFiltersExpanded] = React.useState<boolean>(false);
- 
-   return (
-     <div
-@@ -201,11 +202,30 @@ export function IssueNavigatorBar({
-             Query
-           </button>
-         </div>
-+
-+        {/* Mobile / Compact Landscape Filters Toggle */}
-+        {queryMode === 'basic' && (
-+          <button
-+            type="button"
-+            className={`navigator-filters-toggle ${filtersExpanded ? 'navigator-filters-toggle--active' : ''}`}
-+            data-testid="navigator-filters-toggle"
-+            aria-expanded={filtersExpanded}
-+            onClick={() => {
-+              setFiltersExpanded((prev) => !prev);
-+            }}
-+          >
-+            <span>Filters</span>
-+            <span aria-hidden="true">{filtersExpanded ? '▲' : '▼'}</span>
-+          </button>
-+        )}
-       </div>
- 
-       {/* Basic Mode Structured Dropdowns & Chips */}
-       {queryMode === 'basic' && (
--        <div className="navigator-filters-row" data-testid="navigator-filters-row">
-+        <div
-+          className={`navigator-filters-row ${filtersExpanded ? 'navigator-filters-row--expanded' : ''}`}
-+          data-testid="navigator-filters-row"
-+        >
-           {/* State */}
-           <select
-             className="navigator-filter-select"
-diff --git a/kanban/web/src/features/views/listTable.css b/kanban/web/src/features/views/listTable.css
-index a4bc3308..5383c233 100644
---- a/kanban/web/src/features/views/listTable.css
-+++ b/kanban/web/src/features/views/listTable.css
-@@ -15,6 +15,22 @@
-   background: var(--bg-canvas);
- }
- 
-+.list-view-loading {
-+  display: flex;
-+  flex-direction: column;
-+  gap: var(--space-3, 12px);
-+  padding: var(--space-4, 16px);
-+  width: 100%;
-+  box-sizing: border-box;
-+}
-+
-+.list-loading-skeleton {
-+  height: 48px;
-+  background: var(--bg-surface-raised, #24272f);
-+  border-radius: var(--radius-md, 6px);
-+  animation: pulse 1.5s ease-in-out infinite;
-+}
-+
- .list-section {
-   display: flex;
-   flex-direction: column;
 diff --git a/kanban/web/src/features/views/viewRegistry.test.tsx b/kanban/web/src/features/views/viewRegistry.test.tsx
-index a5814e66..d7159e83 100644
+index a762b310..d7159e83 100644
 --- a/kanban/web/src/features/views/viewRegistry.test.tsx
 +++ b/kanban/web/src/features/views/viewRegistry.test.tsx
-@@ -2057,6 +2057,87 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
-       }
-     });
+@@ -2083,7 +2083,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+         Object.defineProperty(window, 'innerHeight', { writable: true, configurable: true, value: 900 });
+         window.history.replaceState({ suppressAutoPeek: true }, '', '/projects/KAN/issues?layout=list');
  
-+    it('KAN-58: Negative / Bounce-Back Regression Case - phone landscape (844x390) and suppressAutoPeek prevent bounce-back into issues[0]', () => {
-+      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
-+      const originalInnerWidth = window.innerWidth;
-+      const originalInnerHeight = window.innerHeight;
-+      try {
-+        // Phone landscape: 844px wide, 390px high
-+        Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 844 });
-+        Object.defineProperty(window, 'innerHeight', { writable: true, configurable: true, value: 390 });
-+
-+        const { unmount } = render(
-+          <IssuesWorkspaceRoute
-+            projectKey="KAN"
-+            initialLayout="list"
-+            initialIssues={FIXTURE_12_ISSUES}
-+          />
-+        );
-+
-+        // On phone landscape (innerHeight <= 540), activePeekKey is null when ?peek= is absent
-+        expect(screen.queryByTestId('split-surface-close-btn')).toBeNull();
-+        unmount();
-+
-+        // When closed via suppressAutoPeek history state on desktop
-+        Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: 1200 });
-+        Object.defineProperty(window, 'innerHeight', { writable: true, configurable: true, value: 900 });
-+        window.history.replaceState({ suppressAutoPeek: true }, '', '/projects/KAN/issues?layout=list');
-+
+-        render(
 +        const { unmount: unmountTop } = render(
-+          <IssuesWorkspaceRoute
-+            projectKey="KAN"
-+            initialLayout="list"
-+            initialIssues={FIXTURE_12_ISSUES}
-+          />
-+        );
-+
-+        // Does NOT bounce back into issues[0]!
-+        expect(screen.queryByTestId('split-surface-close-btn')).toBeNull();
+           <IssuesWorkspaceRoute
+             projectKey="KAN"
+             initialLayout="list"
+@@ -2093,6 +2093,44 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+ 
+         // Does NOT bounce back into issues[0]!
+         expect(screen.queryByTestId('split-surface-close-btn')).toBeNull();
 +        unmountTop();
 +
 +        // React Router usr.suppressAutoPeek nested state
@@ -865,102 +346,38 @@ index a5814e66..d7159e83 100644
 +        const splitCloseBtn = screen.getByTestId('split-surface-close-btn');
 +        fireEvent.click(splitCloseBtn);
 +        unmountClose();
-+      } finally {
-+        window.history.replaceState({}, '', '/projects/KAN/issues?layout=list');
-+        Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: originalInnerWidth });
-+        Object.defineProperty(window, 'innerHeight', { writable: true, configurable: true, value: originalInnerHeight });
-+      }
-+    });
-+
-     it('wires onOpenFieldPopover from ListView to QuickFieldPopover', async () => {
-       window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
-       render(
+       } finally {
+         window.history.replaceState({}, '', '/projects/KAN/issues?layout=list');
+         Object.defineProperty(window, 'innerWidth', { writable: true, configurable: true, value: originalInnerWidth });
 diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
-index 3e16a030..4e0cdeac 100644
+index 1d78db7f..4e0cdeac 100644
 --- a/kanban/web/src/features/views/viewRegistry.tsx
 +++ b/kanban/web/src/features/views/viewRegistry.tsx
-@@ -958,12 +958,12 @@ export function IssuesWorkspaceRoute({
-   const is2DSwimlane = layout === 'board' && (subGroupBy !== 'none' || groupBy !== 'state');
- 
-   const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() => {
--    return typeof window !== 'undefined' && window.innerWidth <= 767;
-+    return typeof window !== 'undefined' && (window.innerWidth <= 767 || window.innerHeight <= 540);
-   });
- 
-   useEffect(() => {
-     const handleResize = (): void => {
--      setIsMobileViewport(window.innerWidth <= 767);
-+      setIsMobileViewport(window.innerWidth <= 767 || window.innerHeight <= 540);
-     };
-     window.addEventListener('resize', handleResize);
-     return () => {
-@@ -978,26 +978,37 @@ export function IssuesWorkspaceRoute({
-     return sortIssuesList(filteredIssues, railSortBy, railSortDir);
-   }, [filteredIssues, railSortBy, railSortDir]);
- 
--  // Active peek key for 3-pane split list view (auto-selecting first issue if none specified, unless mobile <= 768px)
-+  // Active peek key for 3-pane split list view (auto-selecting first issue if none specified, unless mobile/landscape or explicitly closed)
-   const activePeekKey = useMemo(() => {
-     const firstRailIssue = sortedRailIssues[0];
-     if (sortedRailIssues.length === 0 || !firstRailIssue) {
--      return peekParam ?? null;
-+      return peekParam && peekParam !== 'none' ? peekParam : null;
+@@ -985,11 +985,15 @@ export function IssuesWorkspaceRoute({
+       return peekParam && peekParam !== 'none' ? peekParam : null;
      }
-+    const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
+     const searchParams = typeof window !== 'undefined' ? new URLSearchParams(window.location.search) : null;
 +    const historyState =
 +      typeof window !== 'undefined'
 +        ? (window.history.state as { suppressAutoPeek?: boolean; usr?: { suppressAutoPeek?: boolean } } | null)
 +        : null;
-+    const isExplicitlyClosed =
+     const isExplicitlyClosed =
+-      closedSplitKey === '__ALL__' ||
 +      Boolean(closedSplitKey) ||
-+      searchParams?.get('closed') === '1' ||
-+      searchParams?.get('peek') === 'none' ||
+       searchParams?.get('closed') === '1' ||
+       searchParams?.get('peek') === 'none' ||
+-      (typeof window !== 'undefined' && Boolean((window.history.state as { suppressAutoPeek?: boolean } | null)?.suppressAutoPeek));
 +      Boolean(historyState?.suppressAutoPeek ?? historyState?.usr?.suppressAutoPeek);
-+
+ 
      if (peekParam) {
-+      if (peekParam === 'none') {
-+        return null;
-+      }
-       const existsInList = sortedRailIssues.some((i) => i.key === peekParam);
-       if (existsInList) {
-         return peekParam;
-       }
--      if (isMobileViewport) {
-+      if (isMobileViewport || isExplicitlyClosed) {
-         return null;
-       }
-       return firstRailIssue.key;
-     }
--    if (isMobileViewport) {
--      return null;
--    }
--    if (closedSplitKey && closedSplitKey === firstRailIssue.key) {
-+    if (isMobileViewport || isExplicitlyClosed) {
+       if (peekParam === 'none') {
+@@ -1007,9 +1011,6 @@ export function IssuesWorkspaceRoute({
+     if (isMobileViewport || isExplicitlyClosed) {
        return null;
      }
+-    if (closedSplitKey && (closedSplitKey === firstRailIssue.key || closedSplitKey === '__ALL__')) {
+-      return null;
+-    }
      return firstRailIssue.key;
-@@ -1009,6 +1020,7 @@ export function IssuesWorkspaceRoute({
-       layout === 'list' &&
-       !isMobileViewport &&
-       peekParam &&
-+      peekParam !== 'none' &&
-       firstRailIssue &&
-       !sortedRailIssues.some((i) => i.key === peekParam)
-     ) {
-@@ -1106,6 +1118,7 @@ export function IssuesWorkspaceRoute({
-           <div className="kb-split-list-pane">
-             <ListView
-               issues={sortedRailIssues}
-+              isLoading={issuesQuery.isLoading}
-               projectKey={projectKey}
-               projectStates={projectStates}
-               modulesEnabled={modulesEnabled}
-@@ -1142,7 +1155,7 @@ export function IssuesWorkspaceRoute({
-               }}
-               projectName={typeof projectMetadata?.name === 'string' ? projectMetadata.name : undefined}
-               onClose={() => {
--                setClosedSplitKey(activePeekKey);
-+                setClosedSplitKey('__ALL__');
-                 handleOpenPeek(null);
-               }}
-             />
+   }, [peekParam, isMobileViewport, closedSplitKey, sortedRailIssues]);
+ 

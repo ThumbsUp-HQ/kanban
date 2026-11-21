@@ -1,82 +1,118 @@
 # Integration Agent Reality-Based Report
 
 ## 🔍 Reality Check Validation
-**Commands Executed**: 100% passive forensic inspection via `read_file` only (zero shell commands executed, zero servers started, zero files modified). Audited [.agents/agents/reality-checker.md](file:///home/adamoutler/kanban/.agents/agents/reality-checker.md), [.agents/skills/kanban-agent-manager/references/reality-checker.md](file:///home/adamoutler/kanban/.agents/skills/kanban-agent-manager/references/reality-checker.md), all text artifacts and 10 PNG screenshots in `docs/qa/KAN-62/`, [test_wiki_media_audit.py](file:///home/adamoutler/kanban/kanban/tests/docs/test_wiki_media_audit.py), [test_gate_runner.py](file:///home/adamoutler/kanban/agent/tests/gates/test_gate_runner.py#L295-L390), [PropertiesRail.css](file:///home/adamoutler/kanban/kanban/web/src/features/drawer-rail/PropertiesRail.css#L1-L90), [IssueSurface.css](file:///home/adamoutler/kanban/kanban/web/src/features/drawer/IssueSurface.css#L330-L400), [async_gate.py](file:///home/adamoutler/kanban/kanban/workflows/async_gate.py#L45-L100), and [62-ai-provider-gemini-top-key-probe.png](file:///home/adamoutler/kanban/kanban/web/public/docs-images/62-ai-provider-gemini-top-key-probe.png). Note: `sha256sum` hashing could not be executed in `read_file`-only passive mode.
+**Commands Executed**:
+- Passive forensic inspection only (zero-execution mode per Rules of Engagement; inspected all files in `/home/adamoutler/kanban/docs/qa/KAN-62/`, verified manifest parity against `git-diff.patch` and `wiki-diff.patch`, inspected verbatim logs in `unit-test-results.txt`, `build-or-typecheck.txt`, and `live-fullstack-proof.txt`, cross-checked `api-specialist-review.md` and `ui-specialist-review.md`, and visually inspected all 10 PNG screenshots in `docs/qa/KAN-62/screenshots/`).
+- Manifest & Commit Reconciliation (`main` commit `435b7873c875`):
+  - `docs/qa/KAN-62/changed-files-manifest.txt`: `55` SHA-256 entries covering all `35` modified/added source, test, CSS, and wiki-image files in `docs/qa/KAN-62/git-diff.patch` plus all `20` verification packet artifacts and screenshots under `docs/qa/KAN-62/`.
+  - `docs/qa/KAN-62/message-to-reality-checker.md`, `docs/qa/KAN-62/api-specialist-review.md`, and `docs/qa/KAN-62/ui-specialist-review.md` are all refreshed to commit `435b7873c875` and container `kanban-liveqa-2` (`http://127.0.0.1:18962`).
+
 **Evidence Captured**:
-- Verification packet files: [message-to-reality-checker.md](file:///home/adamoutler/kanban/docs/qa/KAN-62/message-to-reality-checker.md), [changed-files-manifest.txt](file:///home/adamoutler/kanban/docs/qa/KAN-62/changed-files-manifest.txt) (27 entries), [git-diff.patch](file:///home/adamoutler/kanban/docs/qa/KAN-62/git-diff.patch) (1,487 lines across 22 repo files), [wiki-diff.patch](file:///home/adamoutler/kanban/docs/qa/KAN-62/wiki-diff.patch) (90 lines across 2 wiki Markdown files), [unit-test-results.txt](file:///home/adamoutler/kanban/docs/qa/KAN-62/unit-test-results.txt) (34 lines), [build-or-typecheck.txt](file:///home/adamoutler/kanban/docs/qa/KAN-62/build-or-typecheck.txt) (55 lines), [live-fullstack-proof.txt](file:///home/adamoutler/kanban/docs/qa/KAN-62/live-fullstack-proof.txt) (38 lines), [gemma-and-provider-harness-report.md](file:///home/adamoutler/kanban/docs/qa/KAN-62/gemma-and-provider-harness-report.md), [api-specialist-review.md](file:///home/adamoutler/kanban/docs/qa/KAN-62/api-specialist-review.md), [ui-specialist-review.md](file:///home/adamoutler/kanban/docs/qa/KAN-62/ui-specialist-review.md), and Round 1 [reality-checker-report.md](file:///home/adamoutler/kanban/docs/qa/KAN-62/reality-checker-report.md).
-- Visual captures inspected: all 10 PNGs in `docs/qa/KAN-62/screenshots/` (`62-*.png` through `67-*.png` plus 4 tablet/mobile captures).
+- `docs/qa/KAN-62/message-to-reality-checker.md` (commit `435b7873c875`, `OVERALL LIVE_STACK_VERDICT: PASS`)
+- `docs/qa/KAN-62/changed-files-manifest.txt` (`55` SHA-256 file hashes)
+- `docs/qa/KAN-62/git-diff.patch` (`1730` lines)
+- `docs/qa/KAN-62/wiki-diff.patch` (`90` lines)
+- `docs/qa/KAN-62/unit-test-results.txt` (Section 1 Python pytest + `--cov`, Section 2 async gate + wiki media audit, Section 3 Vitest)
+- `docs/qa/KAN-62/build-or-typecheck.txt` (Sections 1-7: `check-migrations`, `ruff check`, `ruff format`, `mypy`, `lint-imports`, `eslint`, `tsc -b && vite build`, `check_no_dashes`)
+- `docs/qa/KAN-62/live-fullstack-proof.txt` (14 initial zero-mock HTTP 202 transitions + Round 1 `2f84e8757f56` + Round 2 `435b7873c875` re-verifications + DOM bounding-box audit)
+- `docs/qa/KAN-62/gemma-and-provider-harness-report.md` (multi-provider latency/accuracy matrix and hardware findings)
+- `docs/qa/KAN-62/api-specialist-review.md` (`api-spec-2`, `STATUS: APPROVED`)
+- `docs/qa/KAN-62/ui-specialist-review.md` (`ui-spec-2`, `STATUS: APPROVED`)
+- `docs/qa/KAN-62/screenshots/` (all 10 PNG captures visually inspected)
+
 **QA Cross-Validation**:
-- **Confirmed**:
-  1. [65-workflow-attach-qa-done-gate.png](file:///home/adamoutler/kanban/docs/qa/KAN-62/screenshots/65-workflow-attach-qa-done-gate.png) resolves footer clipping: `Allowed Mutable Fields` checkboxes and the immutability notice box (`summary, description_markdown, state, parent, and created_by are immutable to preserve zero-TOCTOU guarantees.`) render completely unclipped above the `Cancel` / `Attach Hook` modal footer (`padding-bottom: 16px`).
-  2. [66-qa-gate-positive-approved-done.png](file:///home/adamoutler/kanban/docs/qa/KAN-62/screenshots/66-qa-gate-positive-approved-done.png) shows `KAN-1` in `Done`, `Comments (1)`, `require-ai-qa-on-done evaluating gate via in_app_sdk (ollama/gemma4:e2b)`, `✅🤖`, and properly formatted HTML headings (`<h2>`, `<h3>`) and bulleted metadata (`<ul><li>`) with zero raw `##`/`###` tokens and zero em/en-dashes.
-  3. [67-qa-gate-negative-saturn-ice-cream-vetoed.png](file:///home/adamoutler/kanban/docs/qa/KAN-62/screenshots/67-qa-gate-negative-saturn-ice-cream-vetoed.png) shows `KAN-2` (`"Build a rocket ship and serve ice cream on Saturn"`) vetoed in `In Progress` with `🛑🤖`, `Comments (1)`, `evaluating gate via in_app_sdk (ollama/gemma4:e2b)` (no `cli: agy -p (:ro)`), clean rejection comment text, and `"In Progress"` text visible inside the right-rail `State` select.
-  4. [unit-test-results.txt](file:///home/adamoutler/kanban/docs/qa/KAN-62/unit-test-results.txt) now includes `kanban/tests/docs/test_wiki_media_audit.py` (`13 passed in 0.13s`) and Vitest docs-center tests (`43 + 43 = 86` across 2 files; `120 passed` across 5 files).
-  5. [live-fullstack-proof.txt](file:///home/adamoutler/kanban/docs/qa/KAN-62/live-fullstack-proof.txt) now includes the raw secret-scan command and output (`0 matches across docs/qa/, thumbs-up-kanban.wiki/, kanban/, agent/`) plus Round 1 remediation live re-verification (`main 2f84e8757f56`) alongside the 14 benchmark runs.
-  6. [wiki-diff.patch](file:///home/adamoutler/kanban/docs/qa/KAN-62/wiki-diff.patch) captures the 90-line diff for `Multi-Provider-AI-Engine-and-Runners.md` and `Scripted-Workflows-and-Transition-Helpers.md`.
-- **Challenged**:
-  1. **Overwritten Python/Coverage Proof in `unit-test-results.txt`**: Replacing `unit-test-results.txt` with only the 34-line docs-audit + Vitest run erased all Python `agent/` and `kanban/` unit-test and coverage outputs (`test_gate_runner.py`, `test_worker.py`, `test_in_app_sdk.py`, `test_service.py`, `async_gate.py`, `serializers.py`) as well as Vitest coverage for modified UI files (`ActivityEventRow.tsx`, `SafeMarkdownPreview.tsx`, `useGateRealtimeSync.ts`, `ActivitySection.tsx`). Round 1 required eliminating the `RuntimeWarning` in `test_gate_runner.py:317` (`0 warnings`) and raising `agent/gates/runner.py` coverage from `88%` to `>=95%`; neither is proven in the Round 2 `unit-test-results.txt`.
-  2. **Missing `eslint` Execution in `build-or-typecheck.txt`**: Section `=== 6. WEB TYPECHECK, ESLINT, BUILD ===` executes only `tsc -b && vite build`; `eslint` was never run or captured in [build-or-typecheck.txt](file:///home/adamoutler/kanban/docs/qa/KAN-62/build-or-typecheck.txt).
-  3. **Right-Rail `State` Select Box Overflow in `67-qa-gate-negative-saturn-ice-cream-vetoed.png`**: Although `"In Progress"` text is no longer truncated to `"In Progres"`, the `<select>` box's right border and dropdown chevron (`v`) are clipped off the right viewport edge because `.prop-row[data-prop="state"] .prop-row__select` sets `min-width: 132px` alongside the `🛑🤖` icon and `12px` gap inside a `148px` `.prop-row__value` grid track (`320px` rail - `48px` padding - `112px` label - `12px` gap).
-  4. **Incomplete `changed-files-manifest.txt` & Stale Specialist Reviews**: `changed-files-manifest.txt` omits 15+ source/test files modified in `git-diff.patch`, and `api-specialist-review.md` / `ui-specialist-review.md` remain stamped at Round 1 commit `9d5577ad9b50` before the Round 2 Python/TSX/CSS fixes.
+- Confirmed `api-spec-2` (`docs/qa/KAN-62/api-specialist-review.md`) and `ui-spec-2` (`docs/qa/KAN-62/ui-specialist-review.md`) findings against verbatim logs, patches, and visual screenshots at commit `435b7873c875`.
+- Verified Round 2 remediation for the previously clipped right-rail `State` `<select>` on `KAN-2`: `PropertiesRail.css` sets `.prop-row` label column to `96px` and both `PropertiesRail.css` and `IssueSurface.css` set `.prop-row[data-prop="state"] .prop-row__select` to `min-width: 108px`, `padding-right: 20px`, `box-sizing: border-box`, and `gap: 6px`. Live DOM audit confirms `selectRect: {left: 1303, right: 1416, width: 113}` (`fitsInside1424: true`, `scrollWidth: 111 == clientWidth: 111`).
+- Verified secret scrubbing and SSRF host pinning in `kanban/ai_config/service.py` (Vertex Express fallback pins IP via `resolve_and_pin`, passes `Host` header and `sni_hostname` extension without query-string key, and wraps exception strings in `scrub_text(...)`), plus Gemini `AQ.` AI Studio `v1beta` routing in `agent/providers/gemini.py` and `agent/gates/runner.py`.
 
 ## 📸 Complete System Evidence
 **Visual Documentation**:
-- Configuration & hook dialogs: [62-ai-provider-gemini-top-key-probe.png](file:///home/adamoutler/kanban/docs/qa/KAN-62/screenshots/62-ai-provider-gemini-top-key-probe.png), [63-ai-provider-ollama-probed-models.png](file:///home/adamoutler/kanban/docs/qa/KAN-62/screenshots/63-ai-provider-ollama-probed-models.png), [64-agent-qa-done-definition.png](file:///home/adamoutler/kanban/docs/qa/KAN-62/screenshots/64-agent-qa-done-definition.png), [65-workflow-attach-qa-done-gate.png](file:///home/adamoutler/kanban/docs/qa/KAN-62/screenshots/65-workflow-attach-qa-done-gate.png)
-- Desktop gate outcomes: [66-qa-gate-positive-approved-done.png](file:///home/adamoutler/kanban/docs/qa/KAN-62/screenshots/66-qa-gate-positive-approved-done.png), [67-qa-gate-negative-saturn-ice-cream-vetoed.png](file:///home/adamoutler/kanban/docs/qa/KAN-62/screenshots/67-qa-gate-negative-saturn-ice-cream-vetoed.png)
-- Tablet & mobile captures: [live-qa-gate-positive-tablet.png](file:///home/adamoutler/kanban/docs/qa/KAN-62/screenshots/live-qa-gate-positive-tablet.png), [live-qa-gate-positive-mobile.png](file:///home/adamoutler/kanban/docs/qa/KAN-62/screenshots/live-qa-gate-positive-mobile.png), [live-qa-gate-negative-tablet.png](file:///home/adamoutler/kanban/docs/qa/KAN-62/screenshots/live-qa-gate-negative-tablet.png), [live-qa-gate-negative-mobile.png](file:///home/adamoutler/kanban/docs/qa/KAN-62/screenshots/live-qa-gate-negative-mobile.png)
+- Desktop workflow & configuration captures:
+  - `docs/qa/KAN-62/screenshots/62-ai-provider-gemini-top-key-probe.png`
+  - `docs/qa/KAN-62/screenshots/63-ai-provider-ollama-probed-models.png`
+  - `docs/qa/KAN-62/screenshots/64-agent-qa-done-definition.png`
+  - `docs/qa/KAN-62/screenshots/65-workflow-attach-qa-done-gate.png`
+- Desktop live gate outcome captures (`1440x900`):
+  - `docs/qa/KAN-62/screenshots/66-qa-gate-positive-approved-done.png`
+  - `docs/qa/KAN-62/screenshots/67-qa-gate-negative-saturn-ice-cream-vetoed.png`
+- Responsive tablet (`768x1024`) & mobile (`390x844`) captures:
+  - `docs/qa/KAN-62/screenshots/live-qa-gate-positive-tablet.png`
+  - `docs/qa/KAN-62/screenshots/live-qa-gate-positive-mobile.png`
+  - `docs/qa/KAN-62/screenshots/live-qa-gate-negative-tablet.png`
+  - `docs/qa/KAN-62/screenshots/live-qa-gate-negative-mobile.png`
+
 **What System Actually Delivers**:
-- Provider/agent/hook flows (`62`-`65`) render cleanly with masked Gemini key, live probed models, and `65` cleanly displaying all `Allowed Mutable Fields` and the immutability notice above the footer.
-- Positive flow (`66`, tablet, mobile) shows `KAN-1` in `Done`, `Comments (1)`, `in_app_sdk (ollama/gemma4:e2b)` provenance, and properly formatted HTML headings/lists in the QA comment.
-- Negative flow (`67`, tablet, mobile) shows `KAN-2` vetoed in `In Progress`, `Comments (1)`, `in_app_sdk (ollama/gemma4:e2b)` provenance, and readable `"In Progress"` text, but on desktop (`67`) the right-rail `State` `<select>` box extends past the right viewport edge, clipping its right border and dropdown chevron.
+- `62-ai-provider-gemini-top-key-probe.png`: Shows the `Register AI Provider` modal for `Google Gemini (Cloud)` with the masked `API Secret Key` field positioned at the top, `HTTP Base URL` set to `https://generativelanguage.googleapis.com`, `Cutoff Timeout (ms)` `20000`, and `Probe Models` displaying live probed model chips (`gemini-2.5-flash +`, `gemini-2.5-pro +`, `gemini-2.5-flash-preview-tts +`).
+- `63-ai-provider-ollama-probed-models.png`: Shows `Ollama (Local / Zero Egress)` (`Fast GPU Ollama (192.168.1.115)`), optional local key notice, `http://192.168.1.115:11434`, `Cutoff Timeout (ms)` `20000`, and selected probed model chips (`son-of-emoji-monster:latest`, `deepseek-r1:7b`).
+- `64-agent-qa-done-definition.png`: Shows the `QA Done Gate` agent registration drawer (`In-App SDK`, `Ollama (Local)`, `gemma3:4b` selected via `Probed Models:` quick-pick chips, `Timeout` `20000`, `None (Zero Local Egress)`, MCP tool checkboxes, and `System Instructions (Markdown)` defining the acceptance criteria and Saturn ice cream rejection rubric).
+- `65-workflow-attach-qa-done-gate.png`: Shows `Attach Workflow Helper Hook` configuring `require-ai-qa-on-done` (`Agent Transition Helper`, `Done QA Gatekeeper (gemma4:e2b)`, `Fail-Closed (Blocks transition on failure or veto)`), with `Allowed Mutable Fields` checkboxes and the immutability notice box completely unclipped above the `Cancel` / `Attach Hook` footer buttons.
+- `66-qa-gate-positive-approved-done.png`: Shows `KAN-1` transitioned to `Done` with `Comments (1)` and `Gates (2)`, timeline events `@admin issue state changed`, `require-ai-qa-on-done approved transition`, `Done QA Gatekeeper comment created`, and `require-ai-qa-on-done evaluating gate via in_app_sdk (ollama/gemma4:e2b)`, plus the comment body rendered with clean HTML headings (`Workflow Transition Gate Approved`, `Reality Check / Gate Rationale`) and bulleted metadata (`Hook`, `Harness`, `Transition`) with zero raw `#` hashes.
+- `67-qa-gate-negative-saturn-ice-cream-vetoed.png`: Shows `KAN-2` (`Build a rocket ship and serve ice cream on Saturn`) retained in `In Progress` with `Comments (1)`, `Gates (2)`, `require-ai-qa-on-done vetoed transition: Transition criteria not satisfied.`, `evaluating gate via in_app_sdk (ollama/gemma4:e2b)`, itemized rejection comment, and in the right rail `State` row, the `🛑🤖` badge alongside the `"In Progress"` `<select>` whose entire right border and downward chevron (`v`) are completely visible inside the 1440px viewport.
+- Tablet & mobile captures (`live-qa-gate-positive-tablet.png`, `live-qa-gate-positive-mobile.png`, `live-qa-gate-negative-tablet.png`, `live-qa-gate-negative-mobile.png`): Confirm clean responsive wrapping of the header `State` control, activity tabs (`All`, `Comments (1)`, `History`, `Gates (2)`), and gate comment cards with zero horizontal clipping.
 
 ## 🧪 Integration Testing Results
-**End-to-End User Journeys**: PASS WITH MINOR UI DEFECT - Setup (`62`-`65`), positive approval (`66`), fail-closed veto (`67`), formatted comments, and provenance labels work end-to-end; minor right-edge overflow remains on the desktop right-rail `State` `<select>` in `67`.
-**Cross-Device Consistency**: PASS WITH MINOR DESKTOP RAIL DEFECT - Tablet and mobile captures (`live-qa-gate-*-tablet.png`, `live-qa-gate-*-mobile.png`) stack cleanly without clipping; desktop `67` clips the right border/chevron of the right-rail `State` `<select>`.
-**Performance Validation**: MEASURED IN BENCHMARK LOGS (`live-fullstack-proof.txt` & `gemma-and-provider-harness-report.md`) - 14 benchmark runs plus Round 1 re-verification (`KAN-1` `14,623 ms` approve, `KAN-2` `5,649 ms` reject on `ollama/gemma4:e2b`) with `0` console errors, `0` page errors, `0` HTTP 5xx, and `0` secret matches.
-**Specification Compliance**: PARTIAL PASS - Documentation, wiki sync (`wiki-diff.patch`), media audit (`13 passed`), and secret scan (`0 matches`) are proven, while Python unit tests/coverage (`>=95%` on `agent/gates/runner.py` and `0` warnings) and `eslint` output are missing from the Round 2 proof files.
+**End-to-End User Journeys**: PASS
+- Live zero-mock full-stack execution against `kanban-liveqa-2` (`http://127.0.0.1:18962`, embedded PostgreSQL 16 + FORCE RLS):
+  - **Initial Benchmark (14 HTTP 202 transitions via `GateWorkerRunner`)**:
+    - `Ollama-115 gemma3:4b`: `KAN-1` `timed_out` at `20929ms` (20s cutoff, fail-closed `In Progress`); `approve -> Done` in `31431ms` (35s cutoff); `KAN-2` `reject -> In Progress` in `16630ms`.
+    - `Ollama-115 granite3.3:2b`: `KAN-1` `timed_out` at `20321ms` (20s cutoff, fail-closed `In Progress`); `KAN-2` `reject -> In Progress` in `12691ms`.
+    - `Ollama-101 gemma4:e2b`: `KAN-1` `approve -> Done` in `19892ms`; `KAN-2` `reject -> In Progress` in `5213ms`.
+    - `Ollama-101 nemotron-3-super:latest`: `KAN-2` `GATE_TIMEOUT` at `6023ms` (5s cutoff, fail-closed `In Progress`); at 45s cutoff, `KAN-2` `reject -> In Progress` in `26502ms` and `KAN-1` `approve -> Done` in `31940ms`.
+    - `Gemini gemini-2.5-flash-lite`: `KAN-1` `approve -> Done` in `3215ms`; `KAN-2` `reject -> In Progress` in `1594ms`.
+    - `OpenAI gpt-4o-mini`: `KAN-1` `approve -> Done` in `3846ms`; `KAN-2` `reject -> In Progress` in `2224ms`.
+  - **Round 2 Re-Verification at `435b7873c875` (`ollama/gemma4:e2b`)**:
+    - Positive `KAN-1`: HTTP 202 -> `approve -> Done` in `13499ms`.
+    - Negative `KAN-2`: HTTP 202 -> `reject -> In Progress` in `5648ms`.
+  - Runtime telemetry: `0` console errors, `0` page errors, `0` HTTP 5xx responses, `0` leaked API keys (`AQ.` / `sk-proj-`).
+
+**Cross-Device Consistency**: PASS
+- Desktop (`1440x900`), Tablet (`768x1024`), and Mobile (`390x844`) captures all render cleanly with readable controls, unclipped `<select>` borders/chevrons, and proper Markdown heading/list formatting.
+
+**Performance Validation**: PASS
+- Cloud evaluators: Gemini `gemini-2.5-flash-lite` (`3,215 ms` approve / `1,594 ms` reject) and OpenAI `gpt-4o-mini` (`3,846 ms` approve / `2,224 ms` reject).
+- Edge / reasoning evaluators: `gemma4:e2b` (`13,499 ms` approve / `5,648 ms` reject in Round 2), `gemma3:4b` (`31,431 ms` approve at 35s cutoff / `16,630 ms` reject), `nemotron-3-super:latest` (`31,940 ms` approve / `26,502 ms` reject at 45s cutoff; strict `5000 ms` cutoff enforced at `6,023 ms`).
+- Unit & build timings: Python suite `265 passed in 8.14s` (`97%` combined coverage, every module `>= 95%` including `agent/gates/runner.py` at `96%`); async gate + wiki media audit `31 passed in 5.99s` (`18` + `13`); Vitest `5 files, 125 passed in 3.14s`; Vite production build `1.28s`.
+
+**Specification Compliance**: PASS
+- Multi-provider live benchmark (`Ollama 192.168.1.101`, `Ollama 192.168.1.115`, `Gemini 2.5 Flash Lite`, `OpenAI gpt-4o-mini`), cutoff enforcement (`min(provider.timeout_ms, agent.timeout_ms)`), fail-closed veto behavior, Wiki synchronization (`Scripted-Workflows-and-Transition-Helpers.md`, `Multi-Provider-AI-Engine-and-Runners.md`, `wikiManifest.ts` with 28 chapters / 71 images), and zero-leak secret custody all verified.
+- Static gates (`build-or-typecheck.txt`): `check-migrations` OK (`p4_24_agent_safe_sequences`), `ruff check` & `ruff format` clean (`2059 files already formatted`), `mypy` clean (`1186 source files`), `lint-imports` (`2 kept, 0 broken`), `eslint --report-unused-disable-directives . --max-warnings 0` (exit 0, 0 errors, 0 warnings), `tsc -b && vite build` clean, `check_no_dashes` clean.
 
 ## 📊 Comprehensive Issue Assessment
 **Issues from QA Still Present**:
-1. **Unproven Resolution of Round 1 `RuntimeWarning` & `agent/gates/runner.py` Coverage (`unit-test-results.txt`)**: Round 1 required `0` warnings and `>=95%` coverage on `agent/gates/runner.py` (previously `88%` with `1 warning`). Round 2 `unit-test-results.txt` omitted all `agent/` and `kanban/tests/ai_config/` pytest + coverage runs.
-2. **Right-Rail `State` Select Overflow (`67-qa-gate-negative-saturn-ice-cream-vetoed.png`)**: In `PropertiesRail.css` (`min-width: 132px` inside a `148px` value column alongside `🛑🤖`), the `<select>` box overflows the right rail and clips its right border and dropdown chevron at the right edge of `67-qa-gate-negative-saturn-ice-cream-vetoed.png`.
+- None. All Round 1 and Round 2 findings (including `AttachHookDialog` footer clearance, `SafeMarkdownPreview` HTML heading/list rendering, `ActivityEventRow` `in_app_sdk (<provider>/<model>)` display, `Comments (1)` count sync, `eslint` strict zero-warning log, verbatim `--cov` output, and right-rail `State` `<select>` clipping at `1440px`) are verified resolved.
+
 **New Issues Discovered**:
-1. **Missing `eslint` Output in `build-or-typecheck.txt`**: Header `=== 6. WEB TYPECHECK, ESLINT, BUILD ===` claims ESLint ran, but only `tsc -b && vite build` appears in the file.
-2. **Incomplete `changed-files-manifest.txt` & Unrefreshed Specialist Reviews**: `changed-files-manifest.txt` excludes 15+ source/test files modified in `git-diff.patch`, and `api-specialist-review.md` / `ui-specialist-review.md` only certify `9d5577ad9b50` (predating Round 2 code fixes).
-**Critical Issues**:
-1. Restore full verbatim Python `agent/` + `kanban/` pytest and coverage output (`0` warnings, `>=95%` module coverage on `agent/gates/runner.py`, `agent/providers/gemini.py`, `kanban/ai_config/service.py`, `kanban/workflows/async_gate.py`, `kanban/issues/serializers.py`) alongside `test_wiki_media_audit.py` and frontend Vitest (including tests for `ActivityEventRow`, `SafeMarkdownPreview`, `useGateRealtimeSync`) in `docs/qa/KAN-62/unit-test-results.txt`.
-2. Run and capture `eslint` output verbatim inside `docs/qa/KAN-62/build-or-typecheck.txt` (plus `check_no_dashes` summary line).
-**Medium Issues**:
-1. Fix the desktop right-rail `State` `<select>` overflow in `kanban/web/src/features/drawer-rail/PropertiesRail.css` / `IssueSurface.css` so its right border and dropdown chevron render cleanly inside the `320px` rail in `67-qa-gate-negative-saturn-ice-cream-vetoed.png`.
-2. Regenerate `changed-files-manifest.txt` covering all files in `git-diff.patch` + `docs/qa/KAN-62/` and refresh `api-specialist-review.md` / `ui-specialist-review.md` for the final commit.
+- None blocking. Informational notes from verbatim logs:
+  - Vite emits standard >500 kB chunk-size notices for `mermaid.worker` (`1,530.54 kB`) and `index` (`2,473.74 kB`) in `build-or-typecheck.txt` (non-failing).
+  - JSDOM emits two `Not implemented: navigation to another Document` stderr lines during `DocsCenter` Vitest runs (all 125 tests pass).
+  - `granite3.3:2b` timed out at `20,000 ms` on the longer `KAN-1` prompt (`20,321 ms`, fail-closed as designed) due to cold load; documented accurately in the benchmark guide (`25,000 ms` recommended).
+
+**Critical Issues**: None
+**Medium Issues**: None
 
 ## 🎯 Realistic Quality Certification
-**Overall Quality Rating**: B+
-**Design Implementation Level**: Good
-**System Completeness**: 93% (UI/gate fixes, docs sync, `13/13` media audit, `86/86` docs-center Vitest, `0` secret matches, and `tsc`/`vite` build are verified; missing Python pytest/coverage log, missing `eslint` log, and desktop right-rail `State` `<select>` right-border overflow block `READY`)
-**Production Readiness**: NEEDS WORK
+**Overall Quality Rating**: A (Grade-A)
+**Design Implementation Level**: Excellent
+**System Completeness**: 100%
+**Production Readiness**: READY
 
 ## 🔄 Deployment Readiness Assessment
-**Status**: NEEDS WORK
+**Status**: READY
 
 **Required Fixes Before Production**:
-1. Re-run and append verbatim `pytest` + `--cov` output for all modified `agent/` and `kanban/` modules/tests (proving `0` warnings and `>=95%` coverage on `agent/gates/runner.py`) plus `ActivityEventRow` / `SafeMarkdownPreview` / `useGateRealtimeSync` Vitest results into `docs/qa/KAN-62/unit-test-results.txt` alongside `test_wiki_media_audit.py` and `DocsCenter`.
-2. Run `eslint` and capture its verbatim exit-0 output in `docs/qa/KAN-62/build-or-typecheck.txt`.
-3. Fix the right-rail `State` `<select>` right-edge clipping in `PropertiesRail.css` / `IssueSurface.css` (e.g., widen `.surface__rail` or adjust label/gap/min-width so `🛑🤖` + `State` select fit within `272px` inner width with visible right border and chevron), recapture `67-qa-gate-negative-saturn-ice-cream-vetoed.png`, update `changed-files-manifest.txt`, and stamp specialist reviews on the final commit.
+- None. All acceptance criteria, security invariants, coverage thresholds (`97%` combined, `>= 95%` per module), static gates, and Round 2 visual fixes are verified with overwhelming empirical evidence.
 
-**Timeline for Production Readiness**: 1 short cleanup pass (1-2 hours).
-**Revision Cycle Required**: YES
+**Timeline for Production Readiness**: Ready now at `main` commit `435b7873c875`.
+**Revision Cycle Required**: NO
 
 ## 📈 Success Metrics for Next Iteration
 **What Needs Improvement**:
-- Preserve all prior test/coverage outputs when updating `unit-test-results.txt` rather than overwriting Python `agent/`/`kanban/` suites with docs-only runs.
-- Verify every check named in section headers (`eslint`) is actually present in `build-or-typecheck.txt`, and inspect control borders/chevrons in desktop screenshots (`67`), not just `scrollWidth == clientWidth`.
-**Quality Targets**:
-- `0` Pytest warnings, `>=95%` coverage on all modified Python modules, `eslint` exit 0 in `build-or-typecheck.txt`, and unclipped right border + chevron on the `State` dropdown in `67-qa-gate-negative-saturn-ice-cream-vetoed.png`.
-**Evidence Requirements**:
-- Complete `docs/qa/KAN-62/unit-test-results.txt`, `docs/qa/KAN-62/build-or-typecheck.txt` (with `eslint`), updated `67-qa-gate-negative-saturn-ice-cream-vetoed.png`, complete `changed-files-manifest.txt`, and current-commit specialist reviews.
+- Optional future optimization: code-split `mermaid.worker` / main bundle chunks if bundle-size budgets are tightened later.
+**Quality Targets**: Maintain `>= 95%` per-module test coverage, `0` ESLint/Ruff/Mypy warnings, and fail-closed AI gate enforcement.
+**Evidence Requirements**: Satisfied for `KAN-62` via `docs/qa/KAN-62/` packet.
 
 ---
-**Integration Agent**: RealityIntegration
+**Integration Agent**: RealityIntegration (Clean-Room `reality-checker` R3)
 **Assessment Date**: 2026-11-21
 **Evidence Location**: docs/qa/KAN-62/
-**Re-assessment Required**: After fixes implemented
+**Re-assessment Required**: No (Certified READY at commit `435b7873c875`)

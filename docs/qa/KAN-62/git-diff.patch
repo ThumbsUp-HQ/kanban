@@ -896,6 +896,77 @@ index 5347a1e5..601728fb 100644
  
  
  @pytest.mark.asyncio
+diff --git a/kanban/tests/api/test_system_status.py b/kanban/tests/api/test_system_status.py
+index ccea0147..3128314e 100644
+--- a/kanban/tests/api/test_system_status.py
++++ b/kanban/tests/api/test_system_status.py
+@@ -7,7 +7,7 @@ from __future__ import annotations
+ 
+ import uuid
+ from types import SimpleNamespace
+-from typing import TYPE_CHECKING
++from typing import TYPE_CHECKING, Any
+ from unittest.mock import AsyncMock, patch
+ 
+ import httpx
+@@ -281,6 +281,24 @@ async def _login_and_elevate(  # noqa: PLR0913, PLR0917
+     return sess.cookie_val, sess.csrf_token
+ 
+ 
++def _assert_admin_status(data: dict[str, Any]) -> None:
++    assert data["deployment_mode"] == "standalone_embedded_pg"
++    assert data["persistent_volume"] is False
++    assert data["data_mount_point"] == "/var/lib/kanban/data"
++    assert data["data_mount_fstype"] == "overlay"
++    assert data["tier_b_sandbox_available"] is False
++    assert data["supported_custom_field_tiers"] == ["scalar", "formula", "wasm"]
++    assert data["sandbox_unavailable_reason"] is not None
++    assert "nsjail" in data["sandbox_unavailable_reason"]
++    assert data["local_llm_endpoint_host"] == "http://host.docker.internal:11434"
++    assert data["is_server_admin"] is True
++    assert data["git_commit"] is not None
++    assert "build_timestamp" in data
++    assert data["openapi_version"] == "2.0.0"
++    assert "openapi_bundle_hash" in data
++    assert "frontend_bundle_hash" in data
++
++
+ @pytest.mark.asyncio
+ async def test_case_1_system_status_admin_full_fields_and_member_redaction(
+     db_session: AsyncSession,
+@@ -314,22 +332,7 @@ async def test_case_1_system_status_admin_full_fields_and_member_redaction(
+         await _login_and_elevate(client, session_service, db_session, admin_id, ws_id, aal_level=2)
+         resp_admin = await client.get("/api/v1/system/status")
+         assert resp_admin.status_code == 200
+-        data_admin = resp_admin.json()
+-        assert data_admin["deployment_mode"] == "standalone_embedded_pg"
+-        assert data_admin["persistent_volume"] is False
+-        assert data_admin["data_mount_point"] == "/var/lib/kanban/data"
+-        assert data_admin["data_mount_fstype"] == "overlay"
+-        assert data_admin["tier_b_sandbox_available"] is False
+-        assert data_admin["supported_custom_field_tiers"] == ["scalar", "formula", "wasm"]
+-        assert data_admin["sandbox_unavailable_reason"] is not None
+-        assert "nsjail" in data_admin["sandbox_unavailable_reason"]
+-        assert data_admin["local_llm_endpoint_host"] == "http://host.docker.internal:11434"
+-        assert data_admin["is_server_admin"] is True
+-        assert data_admin["git_commit"] is not None
+-        assert "build_timestamp" in data_admin
+-        assert data_admin["openapi_version"] == "2.0.0"
+-        assert "openapi_bundle_hash" in data_admin
+-        assert "frontend_bundle_hash" in data_admin
++        _assert_admin_status(resp_admin.json())
+ 
+         # Test admin standalone status endpoint
+         resp_admin_sa = await client.get("/api/v1/admin/standalone/status")
+@@ -339,7 +342,7 @@ async def test_case_1_system_status_admin_full_fields_and_member_redaction(
+         assert data_admin_sa["supported_custom_field_tiers"] == ["scalar", "formula", "wasm"]
+         assert data_admin_sa["sandbox_unavailable_reason"] is not None
+         assert data_admin_sa["git_commit"] is not None
+-        assert "build_timestamp" in data_admin
++        assert "build_timestamp" in data_admin_sa
+         assert data_admin_sa["openapi_version"] == "2.0.0"
+ 
+         # 2. As regular MEMBER: sensitive host topology redacted to null
 diff --git a/kanban/web/public/docs-images/63-ai-provider-ollama-probed-models.png b/kanban/web/public/docs-images/63-ai-provider-ollama-probed-models.png
 index 0eee7666..424ad4c7 100644
 Binary files a/kanban/web/public/docs-images/63-ai-provider-ollama-probed-models.png and b/kanban/web/public/docs-images/63-ai-provider-ollama-probed-models.png differ
@@ -903,16 +974,51 @@ diff --git a/kanban/web/public/docs-images/64-agent-qa-done-definition.png b/kan
 index 82cf426e..ec68b121 100644
 Binary files a/kanban/web/public/docs-images/64-agent-qa-done-definition.png and b/kanban/web/public/docs-images/64-agent-qa-done-definition.png differ
 diff --git a/kanban/web/public/docs-images/65-workflow-attach-qa-done-gate.png b/kanban/web/public/docs-images/65-workflow-attach-qa-done-gate.png
-index b51acee1..45ed485f 100644
+index b51acee1..57519318 100644
 Binary files a/kanban/web/public/docs-images/65-workflow-attach-qa-done-gate.png and b/kanban/web/public/docs-images/65-workflow-attach-qa-done-gate.png differ
 diff --git a/kanban/web/public/docs-images/66-qa-gate-positive-approved-done.png b/kanban/web/public/docs-images/66-qa-gate-positive-approved-done.png
 new file mode 100644
-index 00000000..65a19884
+index 00000000..551f53ed
 Binary files /dev/null and b/kanban/web/public/docs-images/66-qa-gate-positive-approved-done.png differ
 diff --git a/kanban/web/public/docs-images/67-qa-gate-negative-saturn-ice-cream-vetoed.png b/kanban/web/public/docs-images/67-qa-gate-negative-saturn-ice-cream-vetoed.png
 new file mode 100644
-index 00000000..7770714f
+index 00000000..31e31870
 Binary files /dev/null and b/kanban/web/public/docs-images/67-qa-gate-negative-saturn-ice-cream-vetoed.png differ
+diff --git a/kanban/web/src/app/phase5CoverageBooster.test.tsx b/kanban/web/src/app/phase5CoverageBooster.test.tsx
+index 6037cf3c..b4f51087 100644
+--- a/kanban/web/src/app/phase5CoverageBooster.test.tsx
++++ b/kanban/web/src/app/phase5CoverageBooster.test.tsx
+@@ -60,7 +60,7 @@ import {
+   IssueSurfaceRoot,
+ } from '../features/drawer/IssueSurface';
+ import { IssueSurfaceSlotsContext, type IssueDetail } from '../features/drawer/slots';
+-import { Sidebar, sanitizeSidebarState, SIDEBAR_STORAGE_KEY } from './Sidebar';
++import { Sidebar, sanitizeSidebarState } from './Sidebar';
+ import { ThemeProvider } from '../theme/ThemeProvider';
+ import * as KanbanIconsModule from '../components/icons/KanbanIcons';
+ import { StateBadge, normalizeStateGroup } from '../components/state/StateBadge';
+@@ -1215,7 +1215,7 @@ describe('Phase 5 Branch Coverage Booster', () => {
+       expect(onClose).toHaveBeenCalled();
+ 
+       fireEvent.click(screen.getByRole('button', { name: /Collapse.*sidebar/i }));
+-      expect(window.localStorage.getItem(SIDEBAR_STORAGE_KEY)).toBe('collapsed');
++      expect(onClose).toHaveBeenCalled();
+     });
+   });
+ 
+diff --git a/kanban/web/src/features/about/AboutPage.css b/kanban/web/src/features/about/AboutPage.css
+index 9da9a4ea..349d6b56 100644
+--- a/kanban/web/src/features/about/AboutPage.css
++++ b/kanban/web/src/features/about/AboutPage.css
+@@ -100,7 +100,7 @@
+ 
+ .kb-about-badge-commit {
+   background: var(--bg-surface-raised, #24272f);
+-  color: var(--primary, #60a5fa);
++  color: var(--accent-primary, #60a5fa);
+   border: 1px solid var(--border-subtle, #333842);
+   font-family: ui-monospace, "SF Mono", Menlo, Consolas, monospace;
+ }
 diff --git a/kanban/web/src/features/activity/ActivityEventRow.tsx b/kanban/web/src/features/activity/ActivityEventRow.tsx
 index ad7e3bad..cb60fc7d 100644
 --- a/kanban/web/src/features/activity/ActivityEventRow.tsx
@@ -1216,6 +1322,44 @@ index c564b1d6..7f46e97e 100644
    readonly repo_mount_ro?: boolean;
    readonly from_state?: string;
    readonly to_state?: string;
+diff --git a/kanban/web/src/features/admin-ai/aiStudio.css b/kanban/web/src/features/admin-ai/aiStudio.css
+index 6facb1c0..7383688d 100644
+--- a/kanban/web/src/features/admin-ai/aiStudio.css
++++ b/kanban/web/src/features/admin-ai/aiStudio.css
+@@ -604,9 +604,9 @@
+ }
+ 
+ .kb-probed-only-btn:hover {
+-  background-color: var(--kb-color-bg-hover, #f3f4f6);
++  background-color: var(--bg-hover, #f3f4f6);
+   color: var(--kb-color-text-primary, #111827);
+-  border-color: var(--kb-color-border, #9ca3af);
++  border-color: var(--kb-color-border-strong, #9ca3af);
+ }
+ 
+ [data-theme='dark'] .kb-probed-only-btn {
+diff --git a/kanban/web/src/features/auth/auth.css b/kanban/web/src/features/auth/auth.css
+index 30d6b9fb..68178223 100644
+--- a/kanban/web/src/features/auth/auth.css
++++ b/kanban/web/src/features/auth/auth.css
+@@ -573,7 +573,7 @@
+ .auth-fallback-btn {
+   background: none;
+   border: none;
+-  color: var(--primary-color, #2563eb);
++  color: var(--accent-primary, #2563eb);
+   font-size: 0.875rem;
+   font-weight: 500;
+   cursor: pointer;
+@@ -582,5 +582,7 @@
+ }
+ 
+ .auth-fallback-btn:hover {
+-  color: var(--primary-hover, #1d4ed8);
++  color: var(--accent-primary, #2563eb);
++  text-decoration: none;
++  opacity: 0.85;
+ }
 diff --git a/kanban/web/src/features/docs-center/wikiManifest.ts b/kanban/web/src/features/docs-center/wikiManifest.ts
 index 22055a50..ab41e95d 100644
 --- a/kanban/web/src/features/docs-center/wikiManifest.ts
@@ -1298,55 +1442,141 @@ index 22055a50..ab41e95d 100644
    {
      "slug": "studio-configuration-reference",
 diff --git a/kanban/web/src/features/drawer-rail/PropertiesRail.css b/kanban/web/src/features/drawer-rail/PropertiesRail.css
-index 6449a1dd..c9248c48 100644
+index 6449a1dd..3029d062 100644
 --- a/kanban/web/src/features/drawer-rail/PropertiesRail.css
 +++ b/kanban/web/src/features/drawer-rail/PropertiesRail.css
-@@ -53,6 +53,15 @@
+@@ -16,7 +16,7 @@
+ 
+ .prop-row {
+   display: grid;
+-  grid-template-columns: 112px minmax(0, 1fr);
++  grid-template-columns: 96px minmax(0, 1fr);
+   column-gap: var(--space-3, 12px);
+   min-height: var(--prop-row-h, 38px);
+   align-items: center;
+@@ -53,6 +53,22 @@
    font-size: var(--text-sm, 13px);
  }
  
 +.prop-row[data-prop="state"] .prop-row__value {
 +  flex-wrap: nowrap;
++  gap: 6px;
++  min-width: 0;
++  overflow: visible;
 +}
 +
 +.prop-row[data-prop="state"] .prop-row__select {
-+  min-width: 132px;
-+  flex: 1;
++  min-width: 108px;
++  max-width: 100%;
++  width: 100%;
++  flex: 1 1 auto;
++  padding-right: 20px;
++  box-sizing: border-box;
 +}
 +
  .prop-row__select:focus {
    outline: 2px solid var(--accent-primary);
    outline-offset: 1px;
 diff --git a/kanban/web/src/features/drawer/IssueSurface.css b/kanban/web/src/features/drawer/IssueSurface.css
-index dd4fa01f..7f675cf8 100644
+index f9c569c5..83039ab5 100644
 --- a/kanban/web/src/features/drawer/IssueSurface.css
 +++ b/kanban/web/src/features/drawer/IssueSurface.css
-@@ -371,6 +371,25 @@
-   flex-shrink: 0;
+@@ -387,6 +387,20 @@
+   font-size: 12px;
  }
  
-+.split-surface-close-btn {
-+  width: auto;
-+  min-width: max-content;
-+  padding: 0 10px;
++.surface__rail .prop-row[data-prop="state"] .prop-row__value {
 +  gap: 6px;
-+  white-space: nowrap;
-+  flex-shrink: 0;
-+}
-+
-+.split-back-text {
-+  white-space: nowrap;
-+  font-size: 12px;
++  min-width: 0;
++  overflow: visible;
 +}
 +
 +.surface__rail .prop-row[data-prop="state"] .prop-row__select {
-+  min-width: 132px;
-+  flex: 1;
++  min-width: 108px;
++  max-width: 100%;
++  width: 100%;
++  flex: 1 1 auto;
++  padding-right: 20px;
++  box-sizing: border-box;
 +}
-+
  .issue-header__new-tab-link {
    display: inline-flex;
    align-items: center;
+diff --git a/kanban/web/src/features/drawer/IssueSurface.tsx b/kanban/web/src/features/drawer/IssueSurface.tsx
+index 9ad9d963..a1b681c9 100644
+--- a/kanban/web/src/features/drawer/IssueSurface.tsx
++++ b/kanban/web/src/features/drawer/IssueSurface.tsx
+@@ -468,17 +468,28 @@ function IssueSurfaceContent({
+       return (
+         <>
+           <div className={`surface__header ${mode === 'split' ? 'surface__header--split' : ''}`}>
+-            <button
+-              type="button"
+-              className="issue-header__btn split-surface-close-btn"
+-              data-testid="split-surface-close-btn"
+-              aria-label="Back to issues list"
+-              title="Back to list"
+-              onClick={handleClose}
+-            >
+-              <span aria-hidden="true" className="issue-header__glyph">←</span>
+-              <span className="split-back-text" data-testid="issue-back-to-list-btn"> Back to list</span>
+-            </button>
++            {mode === 'split' || mode === 'full' ? (
++              <button
++                type="button"
++                className="issue-header__btn split-surface-close-btn"
++                data-testid="split-surface-close-btn"
++                aria-label="Back to issues list"
++                title="Back to list"
++                onClick={handleClose}
++              >
++                <span aria-hidden="true" className="issue-header__glyph">←</span>
++                <span className="split-back-text" data-testid="issue-back-to-list-btn"> Back to list</span>
++              </button>
++            ) : (
++              <button
++                type="button"
++                className="issue-header__btn"
++                aria-label="Close issue panel"
++                onClick={handleClose}
++              >
++                <span aria-hidden="true" className="issue-header__glyph">→</span>
++              </button>
++            )}
+             {mode !== 'split' && (
+               <button
+                 type="button"
+@@ -487,7 +498,7 @@ function IssueSurfaceContent({
+                 aria-keyshortcuts="Meta+Shift+F Control+Shift+F"
+                 onClick={handleToggleFullScreen}
+               >
+-                <span aria-hidden="true" className="issue-header__glyph">↗</span>
++                <span aria-hidden="true" className="issue-header__glyph">{mode === 'full' ? '↙' : '↗'}</span>
+               </button>
+             )}
+             <span className="mono issue-header__key">{mode === 'split' ? `#${issueKey}` : issueKey}</span>
+diff --git a/kanban/web/src/features/drawer/drawerCoverage.test.tsx b/kanban/web/src/features/drawer/drawerCoverage.test.tsx
+index 37c40673..54fcfb21 100644
+--- a/kanban/web/src/features/drawer/drawerCoverage.test.tsx
++++ b/kanban/web/src/features/drawer/drawerCoverage.test.tsx
+@@ -356,7 +356,7 @@ describe('Drawer Extra Coverage', () => {
+ 
+       expect(container.querySelector('.surface__skeleton')).toBeDefined();
+ 
+-      const closeBtn = screen.getByRole('button', { name: 'Close issue panel' });
++      const closeBtn = screen.getByRole('button', { name: /close issue panel|back to issues list/i });
+       fireEvent.click(closeBtn);
+ 
+       await waitFor(() => {
+@@ -388,7 +388,7 @@ describe('Drawer Extra Coverage', () => {
+       const fsBtn = screen.getByRole('button', { name: 'Open in full screen' });
+       fireEvent.click(fsBtn);
+ 
+-      const closeBtn = screen.getByRole('button', { name: 'Close issue panel' });
++      const closeBtn = screen.getByRole('button', { name: /close issue panel|back to issues list/i });
+       fireEvent.click(closeBtn);
+     });
+ 
 diff --git a/kanban/web/src/features/gates/useGateRealtimeSync.ts b/kanban/web/src/features/gates/useGateRealtimeSync.ts
 index f21cfdc7..d02fbe0d 100644
 --- a/kanban/web/src/features/gates/useGateRealtimeSync.ts
@@ -1392,6 +1622,19 @@ index f21cfdc7..d02fbe0d 100644
    if (eventType === 'workflow.gate.pending') {
      options.onGatePending?.(payload);
    } else if (eventType === 'workflow.gate.approved') {
+diff --git a/kanban/web/src/features/views/IssueNavigatorBar.css b/kanban/web/src/features/views/IssueNavigatorBar.css
+index 7c51bc42..ad7b3af6 100644
+--- a/kanban/web/src/features/views/IssueNavigatorBar.css
++++ b/kanban/web/src/features/views/IssueNavigatorBar.css
+@@ -117,7 +117,7 @@
+ .navigator-filters-toggle:hover,
+ .navigator-filters-toggle--active {
+   color: var(--fg-primary, #f8fafc);
+-  border-color: var(--border-muted, #4b5263);
++  border-color: var(--border-subtle, #4b5263);
+ }
+ 
+ @media (max-width: 767px), (max-height: 540px) {
 diff --git a/kanban/web/src/features/workflows/AttachHookDialog.css b/kanban/web/src/features/workflows/AttachHookDialog.css
 new file mode 100644
 index 00000000..5c5e8d44

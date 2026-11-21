@@ -36,3 +36,15 @@ Timestamp: 2026-11-21T07:56:30Z
 3. Raw Secret-Scan Verification:
    Command: grep -rnE "AQ\.Ab8R[A-Za-z0-9_-]{5,}|sk-proj-FBDD[A-Za-z0-9_-]{5,}" docs/qa/ thumbs-up-kanban.wiki/ kanban/ agent/ || echo "0 matches across docs/qa/, thumbs-up-kanban.wiki/, kanban/, agent/"
    Output: 0 matches across docs/qa/, thumbs-up-kanban.wiki/, kanban/, agent/
+
+=== ROUND 2 UI POLISH RE-VERIFICATION (http://127.0.0.1:18962, main 435b7873c875) ===
+Timestamp: 2026-11-21T08:27:59Z
+1. Live Re-Verification (ollama/gemma4:e2b on 192.168.1.101:11434, Done QA Gatekeeper):
+   - Positive KAN-1: HTTP 202 -> approve -> Done in 13499ms (comment 6879fb66-dc74-4cae-bd6a-2811bd460d52)
+   - Negative KAN-2 Saturn ice cream: HTTP 202 -> reject -> In Progress in 5648ms (comment c04abccf-f388-4574-95c8-3de87a96d9e2)
+2. Right-Rail State <select> DOM Bounding Box Verification (1440x900, 67-qa-gate-negative-saturn-ice-cream-vetoed.png):
+   - railRect: {left: 1120, right: 1440, width: 320}, labelRect.width: 96
+   - selectRect: {left: 1303, right: 1416, width: 113} (fitsInside1424: true, fitsInsideRail: true)
+   - selectStyle: {minWidth: "108px", paddingRight: "20px", boxSizing: "border-box"}
+   - scrollWidth: 111 == clientWidth: 111 (entire right border and chevron completely visible)
+   - Console errors: 0 | Page errors: 0 | HTTP 5xx: 0

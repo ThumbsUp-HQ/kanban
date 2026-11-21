@@ -1,9 +1,8 @@
-Zero-Mock Live Full-Stack QA Proof (Round 1 Remediation) - KAN-58 ([KB-MOBILE-SHELL-NAV])
+Zero-Mock Live Full-Stack QA Proof (Round 2 Remediation) - KAN-58 ([KB-MOBILE-SHELL-NAV])
 ==========================================================================================
 Target Container: kanban-liveqa-1 (http://localhost:18961)
-Image / Build Commit: thumbs-up-kanban:local-qa (KB_GIT_COMMIT=2f84e8757f56)
+Image / Build Commit: thumbs-up-kanban:local-qa (commit 435b7873c875)
 Database: Embedded PostgreSQL 16 + FORCE ROW LEVEL SECURITY
-Execution Timestamp: 2026-11-21T07:55:38.907Z
 Mocks / Route Interception: ZERO (zero page.route, zero context.route, zero source edits)
 Page Runtime Errors: 0
 
@@ -41,6 +40,10 @@ Page Runtime Errors: 0
   * Captured: docs/qa/KAN-58/screenshots/live-mobile-portrait-back-to-list-board.png
   * Clicked [data-testid="navigator-filters-toggle"] -> [data-testid="navigator-filters-row"] expanded cleanly.
   * Captured: docs/qa/KAN-58/screenshots/live-mobile-portrait-filters-expanded.png
+  * Verified Board layout (/w/kanban/p/KAN/issues?layout=board) and Table layout (/w/kanban/p/KAN/issues?layout=table) in mobile portrait with .kb-topbar pinned at {top: 0, bottom: 52, z: "300"} and hamburger visible & unoccluded.
+  * Captured:
+    - docs/qa/KAN-58/screenshots/live-mobile-portrait-board-layout.png
+    - docs/qa/KAN-58/screenshots/live-mobile-portrait-table-layout.png
   * Switched layouts via mobile sidebar across Board (/projects/KAN/issues?layout=board), Table (/projects/KAN/issues?layout=table), and Issues (/projects/KAN/issues?layout=list).
 - Mobile Landscape (844x390):
   * /w/kanban/p/KAN/issues/KAN-1: surfaceCount=1 (.surface--full), topbarBox={top: 0, bottom: 52, height: 52, z: "300"}, hamburgerVisible=true, hamburgerUnoccluded=true, surfaceBox={top: 52, left: 0, width: 844, height: 338, z: "100"}.
@@ -53,4 +56,4 @@ Page Runtime Errors: 0
   * /w/kanban/p/KAN/issues/KAN-1: surfaceCount=1 (.surface--full), topbarBox={top: 0, bottom: 52, height: 52, z: "300"}, hamburgerVisible=true, hamburgerUnoccluded=true, surfaceBox={top: 52, left: 0, width: 768, height: 972, z: "100"}.
   * Captured: docs/qa/KAN-58/screenshots/live-tablet-ticket-topbar.png
 
-VERDICT: PASS (100% Zero-Mock Live Full-Stack Verified on 2f84e8757f56)
+VERDICT: PASS (100% Zero-Mock Live Full-Stack Verified on 435b7873c875)
