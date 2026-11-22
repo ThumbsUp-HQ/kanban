@@ -2,7 +2,14 @@
 
 ## Ticket Scope & Component Classification
 - **Ticket:** `KAN-307` - `[KB-ADMIN-DIAG-01] Unified Admin Diagnostics & Link Inspector Studio (/admin/link-auditor & /admin/diagnostics)`
-- **Branch:** `feat/KAN-307-admin-diagnostics`
+- **Branch:** `main` (merged from `feat/KAN-307-admin-diagnostics`)
+- **Merged `main` Commit SHA:** `92247be44f7f10dc1d4288216b9df1dc91e2a5df` (`92247be4`, merging `74cde23a21c173d70ad27a03d3e977e33a656b91`)
+- **Zero-Mock Live Container Playwright Screenshots (`docs/qa/KAN-307/screenshots/`, captured against local `kanban-liveqa-1` on `http://localhost:18961/admin/diagnostics`):**
+  - `docs/qa/KAN-307/screenshots/01-desktop-light-admin-diagnostics.png` (`1440x900` Light)
+  - `docs/qa/KAN-307/screenshots/02-desktop-dark-admin-diagnostics.png` (`1440x900` Dark)
+  - `docs/qa/KAN-307/screenshots/03-tablet-admin-diagnostics.png` (`768x1024` Tablet)
+  - `docs/qa/KAN-307/screenshots/04-mobile-portrait-admin-diagnostics.png` (`390x844` Mobile Portrait)
+  - `docs/qa/KAN-307/screenshots/05-mobile-landscape-admin-diagnostics.png` (`844x390` Mobile Landscape)
 - **UI Surface:** Admin Diagnostics Studio mounted at `/admin/diagnostics` and `/admin/link-auditor` (tabbed view switching between System Health and Link Inspector & Purger)
 - **Owned Slice Modified:**
   - `kanban/api/v1/admin/diagnostics.py` (New: Complete admin diagnostics API)
