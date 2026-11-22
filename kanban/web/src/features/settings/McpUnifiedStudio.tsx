@@ -110,8 +110,8 @@ export function WorkloadFederationSection({
       const data = (await apiFetch(
         'GET',
         '/api/v1/admin/workload-identities' as unknown as keyof import('../../api/schema.gen.ts').paths,
-      )) as WorkloadIdentityPolicyItem[];
-      setPolicies(data);
+      )) as WorkloadIdentityPolicyItem[] | undefined;
+      setPolicies(Array.isArray(data) ? data : []);
     } catch (err) {
       const challenge = extractAal2Challenge(err);
       if (challenge) {

@@ -1878,9 +1878,31 @@ index 09f6fa36..3206af0a 100644
      assert "/api/v1/admin/audit-ledger/request-shred" in admin_paths
      assert "/api/v1/admin/audit-ledger/execute-shred" in admin_paths
 +    assert "/api/v1/admin/workload-identities" in admin_paths
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.tsx b/kanban/web/src/features/settings/McpAccessStudio.tsx
+index 6a3b14e2..85d7c983 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.tsx
++++ b/kanban/web/src/features/settings/McpAccessStudio.tsx
+@@ -19,6 +19,7 @@ import {
+ } from './settingsApi';
+ import { McpConfigSnippetModal } from './McpConfigSnippetModal';
+ import { ConnectOAuthAppModal } from './ConnectOAuthAppModal';
++import { WorkloadFederationSection } from './McpUnifiedStudio';
+ import { SecondFactorStep } from '../auth/SecondFactorStep';
+ import type { MfaMethod } from '../auth/authApi';
+ import { ApiProblem } from '../../api/problem';
+@@ -1159,6 +1160,9 @@ export function McpAccessStudio({
+         </section>
+       )}
+ 
++      {/* Workload Identity Federation (RFC 8693) */}
++      <WorkloadFederationSection isAdmin={isWorkspaceAdmin} />
++
+       {/* Mint Key Modal */}
+       {showMintModal && (
+         <div
 diff --git a/kanban/web/src/features/settings/McpUnifiedStudio.tsx b/kanban/web/src/features/settings/McpUnifiedStudio.tsx
 new file mode 100644
-index 00000000..a6f5a1f6
+index 00000000..f1d8b912
 --- /dev/null
 +++ b/kanban/web/src/features/settings/McpUnifiedStudio.tsx
 @@ -0,0 +1,633 @@
@@ -1996,8 +2018,8 @@ index 00000000..a6f5a1f6
 +      const data = (await apiFetch(
 +        'GET',
 +        '/api/v1/admin/workload-identities' as unknown as keyof import('../../api/schema.gen.ts').paths,
-+      )) as WorkloadIdentityPolicyItem[];
-+      setPolicies(data);
++      )) as WorkloadIdentityPolicyItem[] | undefined;
++      setPolicies(Array.isArray(data) ? data : []);
 +    } catch (err) {
 +      const challenge = extractAal2Challenge(err);
 +      if (challenge) {

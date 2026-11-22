@@ -19,6 +19,7 @@ import {
 } from './settingsApi';
 import { McpConfigSnippetModal } from './McpConfigSnippetModal';
 import { ConnectOAuthAppModal } from './ConnectOAuthAppModal';
+import { WorkloadFederationSection } from './McpUnifiedStudio';
 import { SecondFactorStep } from '../auth/SecondFactorStep';
 import type { MfaMethod } from '../auth/authApi';
 import { ApiProblem } from '../../api/problem';
@@ -1158,6 +1159,9 @@ export function McpAccessStudio({
           </div>
         </section>
       )}
+
+      {/* Workload Identity Federation (RFC 8693) */}
+      <WorkloadFederationSection isAdmin={isWorkspaceAdmin} />
 
       {/* Mint Key Modal */}
       {showMintModal && (
