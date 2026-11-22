@@ -180,6 +180,21 @@ async def mark_notification_read(
 
     if notif.read_at is None:
         notif.read_at = datetime.now(UTC)
+        await session.execute(
+            insert(OutboxEvent)
+            .inline()
+            .values(
+                workspace_id=notif.workspace_id,
+                project_id=None,
+                object_id=None,
+                topic="notification.read",
+                payload={
+                    "topic": "notification.read",
+                    "recipient_principal_id": str(caller.principal_id),
+                    "notification_id": str(notification_id),
+                },
+            )
+        )
         await session.flush()
 
 
@@ -195,8 +210,25 @@ async def mark_all_read(session: AsyncSession, caller: PrincipalContext) -> int:
         .values(read_at=now)
     )
     result = await session.execute(stmt)
+    marked = int(result.rowcount)
+    if marked > 0:
+        await session.execute(
+            insert(OutboxEvent)
+            .inline()
+            .values(
+                workspace_id=caller.workspace_id,
+                project_id=None,
+                object_id=None,
+                topic="notification.read_all",
+                payload={
+                    "topic": "notification.read_all",
+                    "recipient_principal_id": str(caller.principal_id),
+                    "marked_count": marked,
+                },
+            )
+        )
     await session.flush()
-    return int(result.rowcount)
+    return marked
 
 
 async def handle_activity_event(

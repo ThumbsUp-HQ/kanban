@@ -1,0 +1,47 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan310-10b40f76
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 65 items
+
+kanban/tests/realtime/test_notification_realtime_isolation.py ......     [  9%]
+kanban/tests/realtime/test_hub_unit.py ...........................       [ 50%]
+kanban/tests/realtime/test_rls_event_filter.py ........                  [ 63%]
+kanban/tests/realtime/test_sse_resume.py .......                         [ 73%]
+kanban/tests/realtime/test_realtime_e2e_pipeline.py ......               [ 83%]
+kanban/tests/api/test_notifications.py ...                               [ 87%]
+kanban/tests/services/test_notifications.py ........                     [100%]
+
+============================= 65 passed in 35.57s ==============================
+Name                               Stmts   Miss Branch BrPart  Cover   Missing
+------------------------------------------------------------------------------
+kanban/realtime/hub.py               446     14    158     15    95%   257-258, 382->404, 418, 500->502, 528-536, 594->592, 673, 716->709, 730-731, 771-772, 783->exit, 785->783, 786->785, 803->exit, 813->809, 818-819, 823->exit, 848->833, 853-854
+kanban/realtime/replay.py            132      1     46      1    99%   204
+kanban/realtime/rls_filter.py         62      1     26      2    97%   133->136, 149
+kanban/services/notifications.py     157      0     58      2    99%   289->exit, 305->exit
+------------------------------------------------------------------------------
+TOTAL                                797     16    288     20    97%
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan310-10b40f76/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/api/realtime.test.ts (48 tests) 116ms
+ ✓ src/features/notifications/NotificationsBell.test.tsx (14 tests) 717ms
+
+ Test Files  2 passed (2)
+      Tests  62 passed (62)
+   Start at  09:35:05
+   Duration  2.09s (environment 52%, tests 29%, import 14%, worker 4%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.57 |    95.78 |     100 |   99.56 |                   
+ api               |   99.41 |    96.18 |     100 |   99.41 |                   
+  realtime.ts      |   99.41 |    96.18 |     100 |   99.41 | 317-318           
+ .../notifications |     100 |       95 |     100 |     100 |                   
+  ...tionsBell.tsx |     100 |       95 |     100 |     100 | ...37-138,161-164 
+-------------------|---------|----------|---------|---------|-------------------

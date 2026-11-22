@@ -9,6 +9,9 @@ import { useNavigate } from 'react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client';
 import { qk } from '../../api/queryKeys';
+import type { RealtimeState } from '../../api/RealtimeStatus';
+import type { RealtimeEvent } from '../../api/realtime';
+import { useRealtimeLiveState, useRealtimeSubscription } from '../../realtime/context';
 import './NotificationsBell.css';
 
 export interface NotificationItem {
@@ -62,14 +65,117 @@ export function formatTimeAgo(isoString: string): string {
   return `${String(days)}d ago`;
 }
 
+export function isNotificationUnread(item: NotificationItem): boolean {
+  return item.read_at === null || item.read_at === undefined ? item.read !== true : false;
+}
+
 export function NotificationsBell(): JSX.Element {
   const [isOpen, setIsOpen] = useState(false);
+  const [liveAnnouncement, setLiveAnnouncement] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
+  const isOpenRef = useRef(isOpen);
+  const pendingAnnounceCountRef = useRef(0);
+  const announceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const navigate = useNavigate();
   const queryClient = useQueryClient();
+  const realtimeState = useRealtimeLiveState();
+  const prevRealtimeStateRef = useRef<RealtimeState>(realtimeState);
+  const isFallbackPolling = realtimeState === 'reconnecting' || realtimeState === 'closed';
 
-  // Query notifications feed
+  const clearPendingAnnouncement = (): void => {
+    if (announceTimerRef.current !== null) {
+      clearTimeout(announceTimerRef.current);
+      announceTimerRef.current = null;
+    }
+    pendingAnnounceCountRef.current = 0;
+  };
+
+  useEffect(() => {
+    isOpenRef.current = isOpen;
+  }, [isOpen]);
+
+  useEffect(() => {
+    return () => {
+      if (announceTimerRef.current !== null) {
+        clearTimeout(announceTimerRef.current);
+        announceTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  // Single-shot recovery resync when transitioning from disconnected to active transport
+  useEffect(() => {
+    const prev = prevRealtimeStateRef.current;
+    prevRealtimeStateRef.current = realtimeState;
+    const wasDisconnected = prev === 'reconnecting' || prev === 'closed';
+    const isRecovered = realtimeState === 'open' || realtimeState === 'sse-fallback';
+    if (wasDisconnected && isRecovered) {
+      void queryClient.invalidateQueries({ queryKey: qk.notifications() });
+    }
+  }, [realtimeState, queryClient]);
+
+  // Recipient-scoped realtime subscription for live arrivals and multi-tab read sync
+  useRealtimeSubscription('notifications:self', (event: RealtimeEvent) => {
+    if (event.type === 'notification.created') {
+      void queryClient.invalidateQueries({ queryKey: qk.notifications() });
+      if (!isOpenRef.current) {
+        pendingAnnounceCountRef.current += 1;
+        announceTimerRef.current ??= setTimeout(() => {
+          const count = pendingAnnounceCountRef.current;
+          pendingAnnounceCountRef.current = 0;
+          announceTimerRef.current = null;
+          setLiveAnnouncement(
+            count === 1 ? '1 new notification' : `${String(count)} new notifications`,
+          );
+        }, 1000);
+      }
+      return;
+    }
+
+    if (event.type === 'notification.read') {
+      const rawId = event.payload.notification_id ?? event.payload.notificationId ?? event.payload.id;
+      if (typeof rawId === 'string') {
+        const cached = queryClient.getQueryData<{ items: NotificationItem[] }>(qk.notifications());
+        if (cached?.items.some((item) => item.id === rawId)) {
+          const nowIso = new Date().toISOString();
+          queryClient.setQueryData<{ items: NotificationItem[] }>(qk.notifications(), {
+            ...cached,
+            items: cached.items.map((item) =>
+              item.id === rawId
+                ? {
+                    ...item,
+                    read_at: item.read_at ?? nowIso,
+                    read: true,
+                  }
+                : item,
+            ),
+          });
+        } else {
+          void queryClient.invalidateQueries({ queryKey: qk.notifications() });
+        }
+      }
+      return;
+    }
+
+    if (event.type === 'notification.read_all') {
+      const nowIso = new Date().toISOString();
+      queryClient.setQueryData<{ items: NotificationItem[] }>(qk.notifications(), (old) =>
+        old
+          ? {
+              ...old,
+              items: old.items.map((item) => ({
+                ...item,
+                read_at: item.read_at ?? nowIso,
+                read: true,
+              })),
+            }
+          : old,
+      );
+    }
+  });
+
+  // Query notifications feed (fallback polling active only while reconnecting or closed)
   const { data, refetch } = useQuery<{ items: NotificationItem[] }>({
     queryKey: qk.notifications(),
     queryFn: async () => {
@@ -84,11 +190,16 @@ export function NotificationsBell(): JSX.Element {
         return { items: [] };
       }
     },
-    refetchInterval: 30000,
+    refetchInterval: isFallbackPolling ? 30000 : false,
+    refetchIntervalInBackground: false,
+    refetchOnWindowFocus: false,
   });
 
   const items = useMemo(() => data?.items ?? [], [data?.items]);
-  const unreadCount = useMemo(() => items.filter((n) => !n.read_at).length, [items]);
+  const unreadCount = useMemo(
+    () => items.filter((n) => (n.read_at == null ? n.read !== true : false)).length,
+    [items],
+  );
 
   // Mark single notification read
   const markReadMutation = useMutation({
@@ -141,7 +252,7 @@ export function NotificationsBell(): JSX.Element {
 
   const handleDeepLink = (issueKey: string): void => {
     setIsOpen(false);
-    const pKey = issueKey.includes('-') ? (issueKey.split('-')[0] ?? 'KAN') : 'KAN';
+    const pKey = issueKey.includes('-') ? issueKey.slice(0, issueKey.indexOf('-')) : 'KAN';
     void navigate(`/projects/${pKey}/issues?peek=${encodeURIComponent(issueKey)}`);
     window.dispatchEvent(
       new CustomEvent('kb:open-issue-peek', {
@@ -153,6 +264,14 @@ export function NotificationsBell(): JSX.Element {
 
   return (
     <div ref={containerRef} className="kb-notif-wrapper">
+      <span
+        className="sr-only"
+        aria-live="polite"
+        aria-atomic="true"
+        data-testid="notifications-live-announcer"
+      >
+        {isOpen ? '' : liveAnnouncement}
+      </span>
       <button
         ref={triggerRef}
         type="button"
@@ -161,10 +280,17 @@ export function NotificationsBell(): JSX.Element {
         aria-expanded={isOpen}
         aria-haspopup="dialog"
         onClick={() => {
-          setIsOpen(!isOpen);
-          if (!isOpen) void refetch();
+          const nextOpen = !isOpen;
+          setIsOpen(nextOpen);
+          if (nextOpen) {
+            clearPendingAnnouncement();
+            setLiveAnnouncement('');
+            void refetch();
+          }
         }}
         data-testid="notifications-bell"
+        data-realtime-state={realtimeState}
+        data-polling-active={String(isFallbackPolling)}
       >
         <span aria-hidden="true" className="kb-notif-bell-icon">🔔</span>
         {unreadCount > 0 && (
@@ -207,10 +333,9 @@ export function NotificationsBell(): JSX.Element {
             ) : (
               <ul className="kb-notif-list">
                 {items.map((item) => {
-                  const isUnread = item.read_at === null || item.read_at === undefined
-                    ? (item.read !== undefined ? !item.read : true)
-                    : false;
+                  const isUnread = isNotificationUnread(item);
                   const badge = formatEventBadge(item.event_type ?? item.type);
+                  const issueKey = item.issue?.key;
                   const actorName =
                     item.actor?.display_name ??
                     (item.actor?.handle ? `@${item.actor.handle.replace(/^@+/, '')}` : (item.actor?.label ?? 'System'));
@@ -230,7 +355,7 @@ export function NotificationsBell(): JSX.Element {
                           <button
                             type="button"
                             className="kb-notif-mark-read-btn"
-                            aria-label={`Mark as read: ${item.issue?.key ?? item.id}`}
+                            aria-label={`Mark as read: ${issueKey ?? item.id}`}
                             onClick={() => {
                               markReadMutation.mutate(item.id);
                             }}
@@ -244,20 +369,18 @@ export function NotificationsBell(): JSX.Element {
 
                       <div className="kb-notif-item-content">
                         <span className="kb-notif-actor">{actorName}</span>
-                        {item.issue?.key ? (
+                        {issueKey ? (
                           <a
-                            href={`?peek=${encodeURIComponent(item.issue.key)}`}
+                            href={`?peek=${encodeURIComponent(issueKey)}`}
                             className="kb-notif-link"
                             onClick={(e) => {
                               e.preventDefault();
-                              if (item.issue?.key) {
-                                handleDeepLink(item.issue.key);
-                              }
+                              handleDeepLink(issueKey);
                             }}
-                            data-testid={`notif-deep-link-${item.issue.key}`}
+                            data-testid={`notif-deep-link-${issueKey}`}
                           >
-                            <span className="kb-notif-issue-key">{item.issue.key}</span>
-                            <span className="kb-notif-summary">{item.issue.summary ?? ''}</span>
+                            <span className="kb-notif-issue-key">{issueKey}</span>
+                            <span className="kb-notif-summary">{item.issue?.summary ?? ''}</span>
                           </a>
                         ) : (
                           <span className="kb-notif-summary">{item.title ?? item.body ?? 'Notification'}</span>

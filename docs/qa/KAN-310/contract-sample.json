@@ -1,0 +1,185 @@
+{
+  "ticket": "KAN-310",
+  "summary": "Recipient-scoped WebSocket/SSE notification delivery, multi-tab read sync, and transport-gated fallback polling",
+  "polling_and_multitab_proof": {
+    "transport_open_window_ms": 65000,
+    "periodic_http_polls_while_open": 0,
+    "periodic_http_polls_while_sse_fallback": 0,
+    "fallback_polling_interval_while_reconnecting_or_closed_ms": 30000,
+    "multi_tab_badge_sync_latency_ms": 1,
+    "multi_tab_optimistic_patch_http_refetches": 0
+  },
+  "exchanges": [
+    {
+      "name": "ws_subscribe_notifications_self_ack",
+      "request": {
+        "op": "subscribe",
+        "req_id": "sub-self-1",
+        "channels": [
+          "notifications:self"
+        ]
+      },
+      "response": {
+        "channels": [
+          "notifications:self"
+        ],
+        "req_id": "sub-self-1",
+        "type": "subscribe_ack"
+      }
+    },
+    {
+      "name": "ws_subscribe_cross_user_not_found",
+      "request": {
+        "op": "subscribe",
+        "req_id": "sub-cross-1",
+        "channels": [
+          "user:3b3d374d-052a-4a01-a9bb-857ac3f24041",
+          "notifications:all"
+        ]
+      },
+      "response": [
+        {
+          "channel": "user:3b3d374d-052a-4a01-a9bb-857ac3f24041",
+          "code": "NOT_FOUND",
+          "req_id": "sub-cross-1",
+          "type": "subscribe_error"
+        },
+        {
+          "channel": "notifications:all",
+          "code": "NOT_FOUND",
+          "req_id": "sub-cross-1",
+          "type": "subscribe_error"
+        }
+      ]
+    },
+    {
+      "name": "ws_notification_created_frame",
+      "request": {
+        "seq": 701
+      },
+      "response": {
+        "channel": "notifications:self",
+        "created_at": "2026-11-22T14:34:30.796349+00:00",
+        "event_id": "701",
+        "object_id": "575bb512-4199-4db9-a127-35815d1d9ff5",
+        "payload": {
+          "notification_id": "0366db04-becf-4e00-be2e-7cec291fb6dc",
+          "recipient_principal_id": "68397e23-6ce0-4e67-afb9-b63cb3518ea8",
+          "topic": "notification.created"
+        },
+        "project_id": "87eca062-b14f-4f40-adc1-a3dcf732a8d4",
+        "topic": "notification.created",
+        "type": "event",
+        "workspace_id": "0dc2fec2-eb5d-4e73-812a-c17aef7dba50"
+      }
+    },
+    {
+      "name": "ws_notification_read_frame",
+      "request": {
+        "seq": 702
+      },
+      "response": {
+        "channel": "notifications:self",
+        "created_at": "2026-11-22T14:34:31.050823+00:00",
+        "event_id": "702",
+        "object_id": null,
+        "payload": {
+          "notification_id": "0366db04-becf-4e00-be2e-7cec291fb6dc",
+          "recipient_principal_id": "68397e23-6ce0-4e67-afb9-b63cb3518ea8",
+          "topic": "notification.read"
+        },
+        "project_id": null,
+        "topic": "notification.read",
+        "type": "event",
+        "workspace_id": "0dc2fec2-eb5d-4e73-812a-c17aef7dba50"
+      }
+    },
+    {
+      "name": "ws_notification_read_all_frame",
+      "request": {
+        "seq": 703
+      },
+      "response": {
+        "channel": "notifications:self",
+        "created_at": "2026-11-22T14:34:31.302075+00:00",
+        "event_id": "703",
+        "object_id": null,
+        "payload": {
+          "marked_count": 3,
+          "recipient_principal_id": "68397e23-6ce0-4e67-afb9-b63cb3518ea8",
+          "topic": "notification.read_all"
+        },
+        "project_id": null,
+        "topic": "notification.read_all",
+        "type": "event",
+        "workspace_id": "0dc2fec2-eb5d-4e73-812a-c17aef7dba50"
+      }
+    },
+    {
+      "name": "http_post_mark_notification_read_204",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/notifications/0366db04-becf-4e00-be2e-7cec291fb6dc/read"
+      },
+      "response": {
+        "status": 204,
+        "outbox_event": {
+          "topic": "notification.read",
+          "project_id": null,
+          "object_id": null,
+          "payload": {
+            "topic": "notification.read",
+            "recipient_principal_id": "68397e23-6ce0-4e67-afb9-b63cb3518ea8",
+            "notification_id": "0366db04-becf-4e00-be2e-7cec291fb6dc"
+          }
+        }
+      }
+    },
+    {
+      "name": "http_post_mark_all_read_200",
+      "request": {
+        "method": "POST",
+        "path": "/api/v1/notifications/read-all"
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "marked": 1
+        },
+        "outbox_event": {
+          "topic": "notification.read_all",
+          "project_id": null,
+          "object_id": null,
+          "payload": {
+            "topic": "notification.read_all",
+            "recipient_principal_id": "68397e23-6ce0-4e67-afb9-b63cb3518ea8",
+            "marked_count": 1
+          }
+        }
+      }
+    },
+    {
+      "name": "sse_notifications_self_replay",
+      "request": {
+        "url": "/sse?channels=notifications:self&last_event_id=1"
+      },
+      "response": [
+        {
+          "id": "2",
+          "event": "notification.created",
+          "data": "{\"channel\":\"notifications:self\",\"created_at\":\"2026-11-22T14:34:31.797869+00:00\",\"event_id\":\"2\",\"object_id\":\"dacfd589-e7d6-4829-83db-0b182101e51e\",\"payload\":{\"notification_id\":\"6d65cf51-bdea-42dc-8541-0d63646961c3\",\"recipient_principal_id\":\"638a714b-7fdf-419b-b4ae-05942cd360dd\",\"topic\":\"notification.created\"},\"project_id\":\"9467316f-ed22-4779-92da-d5af45882856\",\"topic\":\"notification.created\",\"type\":\"event\",\"workspace_id\":\"9e2576ca-89f6-46ea-9e68-b039a9b74f91\"}"
+        },
+        {
+          "id": "3",
+          "event": "notification.read",
+          "data": "{\"channel\":\"notifications:self\",\"created_at\":\"2026-11-22T14:34:31.797869+00:00\",\"event_id\":\"3\",\"object_id\":null,\"payload\":{\"notification_id\":\"6d65cf51-bdea-42dc-8541-0d63646961c3\",\"recipient_principal_id\":\"638a714b-7fdf-419b-b4ae-05942cd360dd\",\"topic\":\"notification.read\"},\"project_id\":null,\"topic\":\"notification.read\",\"type\":\"event\",\"workspace_id\":\"9e2576ca-89f6-46ea-9e68-b039a9b74f91\"}"
+        },
+        {
+          "id": "4",
+          "event": "notification.read_all",
+          "data": "{\"channel\":\"notifications:self\",\"created_at\":\"2026-11-22T14:34:31.797869+00:00\",\"event_id\":\"4\",\"object_id\":null,\"payload\":{\"marked_count\":2,\"recipient_principal_id\":\"638a714b-7fdf-419b-b4ae-05942cd360dd\",\"topic\":\"notification.read_all\"},\"project_id\":null,\"topic\":\"notification.read_all\",\"type\":\"event\",\"workspace_id\":\"9e2576ca-89f6-46ea-9e68-b039a9b74f91\"}"
+        }
+      ]
+    }
+  ]
+}
