@@ -996,6 +996,24 @@ export function Sidebar({
                           <span>Docs</span>
                         </NavLink>
                       </li>
+
+                      <li>
+                        <NavLink
+                          to={`/projects/${proj.key}/analytics`}
+                          className="kb-sidebar-nav-item"
+                          data-testid={`sidebar-analytics-${proj.key}`}
+                          aria-current={
+                            currentPath.startsWith(`/projects/${proj.key}/analytics`)
+                              ? 'page'
+                              : undefined
+                          }
+                        >
+                          <span className="kb-sidebar-icon" aria-hidden="true">
+                            📊
+                          </span>
+                          <span>Analytics</span>
+                        </NavLink>
+                      </li>
                       {(proj.is_project_admin ??
                         proj.capabilities?.includes('ADMIN') ??
                         proj.capabilities?.includes('PROJECT_ADMIN') ??

@@ -44,6 +44,7 @@ from kanban.api.v1.custom_field_execution import (
 from kanban.api.v1.custom_fields import router as custom_fields_router
 from kanban.api.v1.cycles import router as cycles_router
 from kanban.api.v1.docs import router as docs_router
+from kanban.api.v1.flow_metrics import router as flow_metrics_router
 from kanban.api.v1.health import router as health_router
 from kanban.api.v1.issue_archive import router as archive_router
 from kanban.api.v1.issue_copy import router as issue_copy_router
@@ -118,6 +119,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(auth_setup_router)
     v1.include_router(auth_webauthn_router)
     v1.include_router(cycles_router)
+    v1.include_router(flow_metrics_router)
     v1.include_router(docs_router)
     v1.include_router(stickies_router)
     v1.include_router(sticky_promo_ai_router)

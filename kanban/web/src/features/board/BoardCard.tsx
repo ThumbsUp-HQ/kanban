@@ -28,6 +28,9 @@ export interface BoardCardProps {
   onStateTransition?: ((issueKey: string, targetStateId: string) => void) | undefined;
   projectStates?: BoardWorkflowState[] | undefined;
   currentUserCapabilities?: string[] | undefined;
+  columnP85AgeHours?: number | undefined;
+  ageInCurrentStateHours?: number | undefined;
+  isAgingWarning?: boolean | undefined;
 }
 
 export function getCardDragData(issue: BoardIssue) {
@@ -106,11 +109,31 @@ export function BoardCard({
   onStateTransition,
   projectStates,
   currentUserCapabilities,
+  columnP85AgeHours,
+  ageInCurrentStateHours,
+  isAgingWarning,
 }: BoardCardProps): JSX.Element {
   const cardRef = useRef<HTMLDivElement | null>(null);
   const isGatePending = issue.gate_status === 'pending' || Boolean(issue.pending_gate);
   const [isStatePopoverOpen, setIsStatePopoverOpen] = useState(false);
   const [popoverAnchor, setPopoverAnchor] = useState<DOMRect | null>(null);
+
+  const currentAgeHours =
+    typeof issue.age_in_current_state_hours === 'number'
+      ? issue.age_in_current_state_hours
+      : ageInCurrentStateHours;
+  const thresholdP85 =
+    columnP85AgeHours ??
+    (typeof issue.column_p85_age_hours === 'number'
+      ? issue.column_p85_age_hours
+      : undefined);
+  const showAgingWip =
+    (isAgingWarning ?? false) ||
+    Boolean(issue.is_aging_wip) ||
+    (stateGroup === 'started' &&
+      currentAgeHours !== undefined &&
+      thresholdP85 !== undefined &&
+      currentAgeHours > thresholdP85);
 
   const rawCaps = (issue.capabilities as string[] | undefined) ?? currentUserCapabilities;
   const capabilities = rawCaps ?? ['EDIT', 'TRANSITION'];
@@ -356,6 +379,16 @@ export function BoardCard({
         {issue.cycle && (
           <span className="board-card-chip" data-testid={`cycle-${issue.key}`}>
             🔄 {issue.cycle.name}
+          </span>
+        )}
+
+        {showAgingWip && (
+          <span
+            className="board-card-chip board-card-chip--aging-wip"
+            data-testid={`aging-wip-${issue.key}`}
+            aria-label={`Aging WIP warning: issue has been in progress for ${currentAgeHours !== undefined ? String(Math.round(currentAgeHours)) : ''} hours`}
+          >
+            ⏱️ Aging WIP{currentAgeHours !== undefined ? ` (${String(Math.round(currentAgeHours))}h)` : ''}
           </span>
         )}
       </div>
