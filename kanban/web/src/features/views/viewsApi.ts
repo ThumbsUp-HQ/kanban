@@ -153,7 +153,25 @@ export interface IssueQueryParams {
   sort_dir?: SortDirection;
   cursor?: string | null;
   limit?: number;
+  signal?: AbortSignal | undefined;
 }
+
+export interface FetchAllProjectIssuesOptions {
+  pageSize?: number | undefined;
+  maxPages?: number | undefined;
+  sort_by?: string | undefined;
+  sort_dir?: SortDirection | undefined;
+  signal?: AbortSignal | undefined;
+}
+
+export interface FetchAllProjectIssuesResult {
+  items: IssueItem[];
+  pagesFetched: number;
+  truncated: boolean;
+}
+
+export const DEFAULT_ISSUES_PAGE_SIZE = 100;
+export const DEFAULT_MAX_ISSUE_PAGES = 100;
 
 const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -286,6 +304,7 @@ export async function fetchProjectIssues(
     headers: {
       Accept: 'application/json',
     },
+    ...(params.signal ? { signal: params.signal } : {}),
   });
 
   if (!response.ok) {
@@ -298,9 +317,12 @@ export async function fetchProjectIssues(
     : (rawData && typeof rawData === 'object' && Array.isArray((rawData as { items?: unknown[] }).items))
     ? (rawData as { items: unknown[] }).items
     : [];
-  const nextCursor = (rawData && typeof rawData === 'object' && 'next_cursor' in rawData)
-    ? (rawData as { next_cursor: string | null }).next_cursor
-    : null;
+  const rawNextCursor =
+    rawData && typeof rawData === 'object' && 'next_cursor' in rawData
+      ? (rawData as { next_cursor?: unknown }).next_cursor
+      : null;
+  const nextCursor =
+    typeof rawNextCursor === 'string' && rawNextCursor.length > 0 ? rawNextCursor : null;
   const total = (rawData && typeof rawData === 'object' && 'total' in rawData)
     ? (rawData as { total?: number }).total
     : undefined;
@@ -310,6 +332,70 @@ export async function fetchProjectIssues(
     next_cursor: nextCursor,
     ...(total !== undefined ? { total } : {}),
   };
+}
+
+/**
+ * Traverse keyset cursor pagination to load all issues for a project without 50-item truncation.
+ */
+export async function fetchAllProjectIssues(
+  projectKey: string,
+  options: FetchAllProjectIssuesOptions = {},
+): Promise<FetchAllProjectIssuesResult> {
+  if (!projectKey || projectKey === 'undefined') {
+    return { items: [], pagesFetched: 0, truncated: false };
+  }
+
+  const maxPages = Math.max(options.maxPages ?? DEFAULT_MAX_ISSUE_PAGES, 1);
+  const limit = Math.min(Math.max(options.pageSize ?? DEFAULT_ISSUES_PAGE_SIZE, 1), 100);
+  const items: IssueItem[] = [];
+  const seenKeys = new Set<string>();
+  const seenCursors = new Set<string>();
+  let cursor: string | null = null;
+  let pagesFetched = 0;
+
+  for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
+    if (options.signal?.aborted) {
+      const reason: unknown = options.signal.reason;
+      if (reason instanceof Error || reason instanceof DOMException) {
+        throw reason;
+      }
+      throw new DOMException('Aborted', 'AbortError');
+    }
+
+    const page = await fetchProjectIssues(projectKey, {
+      limit,
+      ...(cursor ? { cursor } : {}),
+      ...(options.sort_by ? { sort_by: options.sort_by } : {}),
+      ...(options.sort_dir ? { sort_dir: options.sort_dir } : {}),
+      ...(options.signal ? { signal: options.signal } : {}),
+    });
+
+    for (const item of page.items) {
+      const dedupKey = item.key || item.id;
+      if (dedupKey) {
+        if (seenKeys.has(dedupKey)) {
+          continue;
+        }
+        seenKeys.add(dedupKey);
+      }
+      items.push(item);
+    }
+
+    pagesFetched += 1;
+
+    if (!page.next_cursor || page.items.length === 0) {
+      return { items, pagesFetched, truncated: false };
+    }
+
+    if (seenCursors.has(page.next_cursor)) {
+      return { items, pagesFetched, truncated: true };
+    }
+
+    seenCursors.add(page.next_cursor);
+    cursor = page.next_cursor;
+  }
+
+  return { items, pagesFetched, truncated: cursor !== null };
 }
 
 /**

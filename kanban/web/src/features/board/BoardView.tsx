@@ -12,6 +12,7 @@ import { BoardColumn } from './BoardColumn.tsx';
 import { HardWipOverrideModal } from './HardWipOverrideModal.tsx';
 import {
   applyOptimisticMove,
+  fetchAllBoardIssues,
   moveIssueApi,
   type BoardIssue,
   type BoardWorkflowState,
@@ -142,23 +143,8 @@ export function BoardView({
   // Fetch issues if propIssues is not provided
   const issuesQuery = useQuery({
     queryKey: qk.issues(projectKey, {}),
-    queryFn: async (): Promise<BoardIssue[]> => {
-      const data: unknown = await apiFetch('GET', '/api/v1/projects/{project_ref}/issues', {
-        params: { project_ref: projectKey },
-      });
-      if (Array.isArray(data)) {
-        return data as BoardIssue[];
-      }
-      if (
-        data !== null &&
-        typeof data === 'object' &&
-        'items' in data &&
-        Array.isArray(data.items)
-      ) {
-        return data.items as BoardIssue[];
-      }
-      return [];
-    },
+    queryFn: async ({ signal }): Promise<BoardIssue[]> =>
+      fetchAllBoardIssues(projectKey, { signal }),
     enabled: propIssues === undefined,
     initialData: propIssues,
   });

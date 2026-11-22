@@ -18,7 +18,7 @@ import { QuickFieldPopover, type QuickFieldType } from './QuickFieldPopover';
 import { useIssueKeyboardMap } from './useIssueKeyboardMap';
 import { announce } from '../../realtime';
 import {
-  fetchProjectIssues,
+  fetchAllProjectIssues,
   fetchProjectStates,
   fetchProjectSavedViews,
   createProjectIssue,
@@ -283,8 +283,8 @@ export function IssuesWorkspaceRoute({
   const issuesQuery = useQuery(
     {
       queryKey: qk.issues(projectKey, {}),
-      queryFn: async () => {
-        const res = await fetchProjectIssues(projectKey);
+      queryFn: async ({ signal }) => {
+        const res = await fetchAllProjectIssues(projectKey, { signal });
         return res.items;
       },
       enabled: Boolean(projectKey) && isLiveMode,
@@ -357,26 +357,31 @@ export function IssuesWorkspaceRoute({
       return;
     }
     let active = true;
+    let currentController: AbortController | null = null;
     const refreshLive = (): void => {
+      currentController?.abort();
+      const controller = new AbortController();
+      currentController = controller;
       void Promise.all([
-        fetchProjectIssues(projectKey),
+        fetchAllProjectIssues(projectKey, { signal: controller.signal }),
         fetchProjectStates(projectKey).catch((): StateSummary[] => []),
       ])
         .then(([issuesRes, statesRes]) => {
-          if (!active) return;
+          if (!active || controller.signal.aborted) return;
           setIssues(issuesRes.items);
           if (statesRes.length > 0) {
             setProjectStates(statesRes);
           }
         })
         .catch(() => {
-          // Preserve existing state on offline/transient error
+          // Preserve existing state on offline/transient/abort error
         });
     };
     refreshLive();
     window.addEventListener('kb:issue-updated', refreshLive);
     return () => {
       active = false;
+      currentController?.abort();
       window.removeEventListener('kb:issue-updated', refreshLive);
     };
   }, [isLiveMode, projectKey, setIssues, setProjectStates]);
