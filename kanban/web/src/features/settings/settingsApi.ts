@@ -22,6 +22,7 @@ export interface McpApiKeyItem {
   disabled_tools?: string[];
   allowed_tools?: string[] | null;
   allowed_cidrs?: string[] | null;
+  capability_mask?: number | undefined;
   raw_key?: string | undefined;
 }
 
@@ -42,6 +43,8 @@ export interface MintMcpKeyRequest {
   confirm_unlimited?: boolean | undefined;
   disabled_tools?: string[] | undefined;
   allowed_tools?: string[] | undefined;
+  capability_mask?: number | undefined;
+  allowed_cidrs?: string[] | null | undefined;
 }
 
 export interface OAuthConnectedApp {
@@ -73,6 +76,8 @@ function normalizeMcpKeyItem(
     revoked_at: raw.revoked_at ?? null,
     disabled_tools: raw.disabled_tools ?? [],
     allowed_tools: raw.allowed_tools ?? null,
+    allowed_cidrs: raw.allowed_cidrs ?? null,
+    ...(raw.capability_mask !== undefined ? { capability_mask: raw.capability_mask } : {}),
     ...(raw.owner_kind !== undefined ? { owner_kind: raw.owner_kind } : {}),
     ...(raw.raw_key !== undefined ? { raw_key: raw.raw_key } : {}),
   };

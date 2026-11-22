@@ -88,6 +88,76 @@ export const WRITE_MCP_TOOLS = new Set([
   'destructive_lifecycle',
 ]);
 
+export const CAPABILITY_BITS = [
+  { bit: 1, name: 'VIEW', label: 'View (1)' },
+  { bit: 2, name: 'COMMENT', label: 'Comment (2)' },
+  { bit: 4, name: 'EDIT', label: 'Edit (4)' },
+  { bit: 8, name: 'TRANSITION', label: 'Transition (8)' },
+  { bit: 16, name: 'LINK', label: 'Link (16)' },
+  { bit: 32, name: 'SHARE', label: 'Share (32)' },
+  { bit: 64, name: 'ADMIN', label: 'Admin (64)' },
+  { bit: 128, name: 'DELETE', label: 'Delete (128)' },
+] as const;
+
+function isValidIPv4Cidr(cidr: string): boolean {
+  const parts = cidr.split('/');
+  if (parts.length !== 2) return false;
+  const ip = parts[0];
+  const prefixStr = parts[1];
+  if (!ip || !prefixStr || !/^\d+$/.test(prefixStr)) return false;
+  const prefix = Number(prefixStr);
+  if (prefix < 0 || prefix > 32) return false;
+  const octets = ip.split('.');
+  if (octets.length !== 4) return false;
+  for (const oct of octets) {
+    if (!/^\d+$/.test(oct)) return false;
+    const n = Number(oct);
+    if (n < 0 || n > 255) return false;
+    if (oct.length > 1 && oct.startsWith('0')) return false;
+  }
+  return true;
+}
+
+function isValidIPv6Cidr(cidr: string): boolean {
+  const parts = cidr.split('/');
+  if (parts.length !== 2) return false;
+  const ip = parts[0];
+  const prefixStr = parts[1];
+  if (!ip || !prefixStr || !/^\d+$/.test(prefixStr)) return false;
+  const prefix = Number(prefixStr);
+  if (prefix < 0 || prefix > 128) return false;
+  if (!/^[0-9a-fA-F:]+$/.test(ip)) return false;
+  if (ip.includes(':::')) return false;
+  const doubleColonCount = (ip.match(/::/g) ?? []).length;
+  if (doubleColonCount > 1) return false;
+  const groups = ip.split(':');
+  if (doubleColonCount === 0 && groups.length !== 8) return false;
+  if (doubleColonCount === 1 && groups.length > 8) return false;
+  for (const g of groups) {
+    if (g.length > 4) return false;
+    if (g.length > 0 && !/^[0-9a-fA-F]{1,4}$/.test(g)) return false;
+  }
+  return true;
+}
+
+export function validateCidrInput(rawInput: string): { valid: boolean; cidrs: string[]; error?: string } {
+  const trimmed = rawInput.trim();
+  if (!trimmed) {
+    return { valid: true, cidrs: [] };
+  }
+  const parts = trimmed.split(/[\s,]+/).filter(Boolean);
+  for (const part of parts) {
+    if (!isValidIPv4Cidr(part) && !isValidIPv6Cidr(part)) {
+      return {
+        valid: false,
+        cidrs: [],
+        error: `Invalid CIDR format: "${part}". Must be valid IPv4 (e.g. 192.168.1.0/24) or IPv6 (e.g. 2001:db8::/32).`,
+      };
+    }
+  }
+  return { valid: true, cidrs: parts };
+}
+
 export type ActiveScopeFilter = 'all' | 'project' | 'workspace' | 'server';
 export type ActiveView = 'mine' | 'governance';
 
@@ -285,6 +355,9 @@ export function McpAccessStudio({
   const [isUnlimited, setIsUnlimited] = useState<boolean>(false);
   const [confirmUnlimited, setConfirmUnlimited] = useState<boolean>(false);
   const [disabledTools, setDisabledTools] = useState<string[]>([]);
+  const [capabilityMask, setCapabilityMask] = useState<number>(31);
+  const [allowedCidrsInput, setAllowedCidrsInput] = useState<string>('');
+  const [cidrError, setCidrError] = useState<string | null>(null);
   const [minting, setMinting] = useState<boolean>(false);
   const [mintError, setMintError] = useState<string | null>(null);
   const [studioError, setStudioError] = useState<string | null>(null);
@@ -416,6 +489,12 @@ export function McpAccessStudio({
     setMintError(null);
 
     const mintAction = async (): Promise<void> => {
+      const parsedCidrs = validateCidrInput(allowedCidrsInput);
+      if (!parsedCidrs.valid) {
+        setMintError(parsedCidrs.error ?? 'Invalid CIDR format.');
+        return;
+      }
+
       const resolvedScopeTier: ScopeTier =
         tier === 'global'
           ? 'global'
@@ -432,9 +511,14 @@ export function McpAccessStudio({
       const payload: MintMcpKeyRequest = {
         label: newKeyLabel.trim(),
         surface: newKeySurface,
-        scopes: [`${newKeySurface}:read`, `${newKeySurface}:write`],
+        scopes:
+          capabilityMask === 1
+            ? [`${newKeySurface}:read`]
+            : [`${newKeySurface}:read`, `${newKeySurface}:write`],
         scope_tier: resolvedScopeTier,
         owner_kind: newKeyOwnerKind,
+        capability_mask: capabilityMask,
+        ...(parsedCidrs.cidrs.length > 0 ? { allowed_cidrs: parsedCidrs.cidrs } : {}),
         ...(resolvedScopeTier === 'project'
           ? {
               project_ref: targetProject,
@@ -461,6 +545,9 @@ export function McpAccessStudio({
       setConfirmUnlimited(false);
       setDisabledTools([]);
       setNewKeyExpiry(60);
+      setCapabilityMask(31);
+      setAllowedCidrsInput('');
+      setCidrError(null);
       setMintError(null);
     };
 
@@ -710,6 +797,9 @@ export function McpAccessStudio({
         <div className="kb-mcp-explainer-item">
           <strong>Scope Tiers:</strong> Project keys are confined to tickets and docs in designated projects. Workspace keys cover all projects in this workspace. Server keys have system-wide privileges for administrative orchestration.
         </div>
+        <div className="kb-mcp-explainer-item" data-testid="mcp-credential-boundary-explainer">
+          <strong>Monotonic Credential Boundary:</strong> Keys enforce downward capability narrowing via capability ceilings and allowed source CIDRs without privilege escalation. PostgreSQL FORCE RLS guarantees access constraints are enforced equally across /mcp/* and /api/v1/*.
+        </div>
       </div>
 
       {/* Scope Filter Pills & Project Selector */}
@@ -823,7 +913,31 @@ export function McpAccessStudio({
                         {prefix}...{k.display_hint}
                       </code>
                     </td>
-                    <td className="kb-mcp-td">{getTierBadge(k.scope_tier, k.allowed_projects)}</td>
+                    <td className="kb-mcp-td">
+                      <div>{getTierBadge(k.scope_tier, k.allowed_projects)}</div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', marginTop: '4px' }}>
+                        {k.capability_mask !== undefined && (
+                          <span
+                            className="kb-mcp-unlimited-pill"
+                            data-testid={`key-cap-mask-${k.id}`}
+                            title={`Capability Mask: ${String(k.capability_mask)}`}
+                            style={{ fontSize: '0.75rem', padding: '2px 6px' }}
+                          >
+                            Mask: {k.capability_mask}
+                          </span>
+                        )}
+                        {k.allowed_cidrs && k.allowed_cidrs.length > 0 && (
+                          <span
+                            className="kb-mcp-unlimited-pill"
+                            data-testid={`key-cidr-badge-${k.id}`}
+                            title={`Allowed CIDRs: ${k.allowed_cidrs.join(', ')}`}
+                            style={{ fontSize: '0.75rem', padding: '2px 6px' }}
+                          >
+                            CIDR: {k.allowed_cidrs.join(', ')}
+                          </span>
+                        )}
+                      </div>
+                    </td>
                     <td className="kb-mcp-td">{k.surface.toUpperCase()}</td>
                     <td className="kb-mcp-td" data-testid={`key-expires-${k.id}`}>
                       {k.expires_at ? (
@@ -1246,6 +1360,103 @@ export function McpAccessStudio({
               )}
 
               <div className="kb-mcp-form-row">
+                <label htmlFor="capability-preset-select" className="kb-mcp-form-label">
+                  Capability Ceiling:
+                </label>
+                <select
+                  id="capability-preset-select"
+                  className="kb-mcp-form-select"
+                  data-testid="capability-preset-select"
+                  value={
+                    [1, 3, 31, 255].includes(capabilityMask)
+                      ? String(capabilityMask)
+                      : 'custom'
+                  }
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    if (val !== 'custom') {
+                      setCapabilityMask(Number(val));
+                    }
+                  }}
+                >
+                  <option value="1">View Only (1)</option>
+                  <option value="3">View + Comment (3)</option>
+                  <option value="31">Standard Member (31)</option>
+                  <option value="255">Full / Admin (255)</option>
+                  {![1, 3, 31, 255].includes(capabilityMask) && (
+                    <option value="custom">Custom ({capabilityMask})</option>
+                  )}
+                </select>
+                <span className="kb-mcp-form-hint">
+                  Sets the maximum permission ceiling. Keys narrow permissions downward without escalating privileges.
+                </span>
+              </div>
+
+              <div className="kb-mcp-form-row">
+                <label className="kb-mcp-form-label">
+                  Granular Capability Bit Toggles:
+                </label>
+                <div className="kb-mcp-tools-grid" data-testid="capability-bits-grid">
+                  {CAPABILITY_BITS.map(({ bit, name }) => {
+                    const isChecked = (capabilityMask & bit) === bit;
+                    return (
+                      <label key={bit} className="kb-mcp-tool-checkbox-label">
+                        <input
+                          type="checkbox"
+                          data-testid={`cap-bit-${String(bit)}`}
+                          checked={isChecked}
+                          onChange={(e) => {
+                            if (e.target.checked) {
+                              setCapabilityMask((prev) => prev | bit);
+                            } else {
+                              setCapabilityMask((prev) => prev & ~bit);
+                            }
+                          }}
+                        />
+                        <span>{name} ({bit})</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="kb-mcp-form-row">
+                <label htmlFor="mint-allowed-cidrs-input" className="kb-mcp-form-label">
+                  Allowed CIDRs (Optional):
+                </label>
+                <input
+                  id="mint-allowed-cidrs-input"
+                  type="text"
+                  className="kb-mcp-form-input"
+                  data-testid="mint-allowed-cidrs-input"
+                  placeholder="e.g. 192.168.1.0/24, 10.0.0.0/8"
+                  value={allowedCidrsInput}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setAllowedCidrsInput(val);
+                    const res = validateCidrInput(val);
+                    setCidrError(res.error ?? null);
+                  }}
+                  aria-invalid={Boolean(cidrError)}
+                  aria-describedby={cidrError ? 'cidr-error-message' : undefined}
+                />
+                {cidrError && (
+                  <div
+                    id="cidr-error-message"
+                    className="kb-mcp-warning-text"
+                    role="alert"
+                    data-testid="cidr-error-message"
+                    style={{ color: '#ef4444', marginTop: '4px' }}
+                  >
+                    {cidrError}
+                  </div>
+                )}
+                <span className="kb-mcp-form-hint">
+                  Optional comma-separated IPv4 or IPv6 CIDR blocks restricting source networks.
+                </span>
+              </div>
+
+              <div className="kb-mcp-form-row">
                 <label className="kb-mcp-form-label">
                   Narrow Tools (Disable specific capabilities):
                 </label>
@@ -1285,6 +1496,9 @@ export function McpAccessStudio({
                     setIsUnlimited(false);
                     setConfirmUnlimited(false);
                     setDisabledTools([]);
+                    setCapabilityMask(31);
+                    setAllowedCidrsInput('');
+                    setCidrError(null);
                   }}
                 >
                   Cancel
@@ -1293,7 +1507,13 @@ export function McpAccessStudio({
                   type="submit"
                   className="kb-snippet-done-btn"
                   data-testid="mint-submit-btn"
-                  disabled={minting || !newKeyLabel.trim() || (isUnlimited && !confirmUnlimited)}
+                  disabled={
+                    minting ||
+                    !newKeyLabel.trim() ||
+                    (isUnlimited && !confirmUnlimited) ||
+                    Boolean(cidrError) ||
+                    capabilityMask <= 0
+                  }
                 >
                   {minting ? 'Minting...' : 'Mint Key'}
                 </button>
