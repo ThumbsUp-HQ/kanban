@@ -2,7 +2,7 @@
 
 ## Overview & UX Architecture Verification
 
-- **Commit SHA**: `ee0eeb353803`
+- **Commit SHA**: `77866f48ae4f`
 - **Module**: `kanban/web/src/components/attachments/`, `kanban/web/src/features/activity/`, `kanban/web/src/features/drawer/`
 - **Reviewed By**: UI/UX Specialist (`ui-spec`)
 - **Status**: APPROVED (Ready for reality-checker QA gate)

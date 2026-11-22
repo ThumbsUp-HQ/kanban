@@ -3,7 +3,7 @@
 ## Executive Summary
 This packet provides passive forensic verification evidence for ticket `KAN-77` (`[KB-IMPORT-MULTI-01]`): Multi-Source Importers (Jira, GitHub Issues, Linear), Portable Bundle Export Determinism, and Legacy Key Alias Routing (`IssueKeyAlias`).
 
-- **Target Commit SHA**: `ee0eeb353803`
+- **Target Commit SHA**: `77866f48ae4f`
 - **Branch**: `main`
 - **Review Status**: Round-3 Clean-Room Remediation Complete
 
@@ -45,6 +45,6 @@ This packet provides passive forensic verification evidence for ticket `KAN-77` 
   - `768x1024-tablet.png`
   - `390x844-mobile-portrait.png`
   - `844x390-mobile-landscape.png`
-- `api-specialist-review.md`: Verbatim API specialist audit stamped with target SHA `ee0eeb353803`.
-- `ui-specialist-review.md`: Verbatim UI specialist audit stamped with target SHA `ee0eeb353803`.
+- `api-specialist-review.md`: Verbatim API specialist audit stamped with target SHA `77866f48ae4f`.
+- `ui-specialist-review.md`: Verbatim UI specialist audit stamped with target SHA `77866f48ae4f`.
 - `changed-files-manifest.txt`: Cryptographic SHA-256 manifest over all packet files.

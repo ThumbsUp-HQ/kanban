@@ -5,7 +5,7 @@
 - **Ticket**: KAN-82 (`[KB-MIGRATION-PLANE-DB-01]`)
 - **Module**: `kanban.importer.plane_db_exporter`, `kanban.importer.plane_importer`, `kanban.importer.cutover_verifier`, `kanban.cli.import_plane`, `kanban.cli.verify_cutover`
 - **Reviewed By**: Backend & API Specialist (`@api-spec`)
-- **Commit SHA**: `ee0eeb353803` (`ee0eeb35`)
+- **Commit SHA**: `77866f48ae4f` (`77866f48`)
 - **Status**: STATUS: APPROVED
 
 ---

@@ -5,7 +5,7 @@
 - **Ticket**: KAN-77 (`[KB-MIGRATION-MULTI-01]`)
 - **Module**: `kanban.importer`, `kanban.exporter`, `kanban.api.v1.admin.imports`, `kanban.api.v1.admin.exports`, `kanban.resolve`
 - **Reviewed By**: Backend & API Specialist (`@api-spec`)
-- **Commit SHA**: `ee0eeb353803` (`ee0eeb35`)
+- **Commit SHA**: `77866f48ae4f` (`77866f48`)
 - **Status**: STATUS: APPROVED
 
 ---

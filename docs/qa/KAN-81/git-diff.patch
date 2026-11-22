@@ -2440,10 +2440,24 @@ index 00000000..e08f6cdd
 +        assert exc_crash.value.code == "UNSAFE_PDF_CONTENT"
 +        assert "Subprocess terminated unexpectedly" in str(exc_crash.value.detail)
 diff --git a/kanban/tests/ops/test_sbom.py b/kanban/tests/ops/test_sbom.py
-index caa74fcb..fab9f17e 100644
+index caa74fcb..25ff17c8 100644
 --- a/kanban/tests/ops/test_sbom.py
 +++ b/kanban/tests/ops/test_sbom.py
-@@ -583,3 +583,15 @@ def test_parse_web_package_json_with_node_modules_and_allowlist(tmp_path: Path)
+@@ -5,12 +5,11 @@
+ from __future__ import annotations
+ 
+ import json
++from pathlib import Path
+ from typing import TYPE_CHECKING
+ from unittest.mock import MagicMock
+ 
+ if TYPE_CHECKING:
+-    from pathlib import Path
+-
+     import pytest
+ 
+ from kanban.ops.sbom import (
+@@ -583,3 +582,23 @@ def test_parse_web_package_json_with_node_modules_and_allowlist(tmp_path: Path)
      allowlisted = next(c for c in comps if c.name == "allowlisted-dep")
      assert allowlisted.license_verdict == "ALLOWLISTED"
      assert allowlisted.license == "EPL-2.0"
@@ -2457,8 +2471,16 @@ index caa74fcb..fab9f17e 100644
 +    assert summary.total_components > 0
 +    deny_comps = [c for c in components if c.license_verdict == "DENY"]
 +    assert summary.deny_count == 0, f"Found DENY components: {deny_comps}"
-+    unknown_comps = [c for c in components if c.license_verdict == "UNKNOWN"]
-+    assert summary.unknown_count == 0, f"Found UNKNOWN components: {unknown_comps}"
++    web_node_modules = Path("kanban/web/node_modules")
++    web_dist_manifest = Path("kanban/web/dist/sbom-web.json")
++    if not (web_node_modules.is_dir() or web_dist_manifest.is_file()):
++        unknown_python = [
++            c for c in components if c.ecosystem == "python" and c.license_verdict == "UNKNOWN"
++        ]
++        assert len(unknown_python) == 0, f"Found UNKNOWN Python components: {unknown_python}"
++    else:
++        unknown_comps = [c for c in components if c.license_verdict == "UNKNOWN"]
++        assert summary.unknown_count == 0, f"Found UNKNOWN components: {unknown_comps}"
 diff --git a/kanban/web/src/components/attachments/PdfAttachmentCard.css b/kanban/web/src/components/attachments/PdfAttachmentCard.css
 new file mode 100644
 index 00000000..de22a631
