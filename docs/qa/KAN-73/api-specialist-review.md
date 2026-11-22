@@ -4,7 +4,7 @@
 - **Reviewer:** API & Security Specialist Reviewer (`api-spec`)
 - **Review Date:** 2026-11-22
 - **Branch:** `feat/KAN-73-crypto-shred-activity`
-- **Commit Under Audit:** `e840b96a` (`feat(security): implement envelope-encrypted activity records & AAL2 crypto-shredding (KAN-73)`)
+- **Commit Under Audit:** `24fb0e07ad1bd912a7d9fc9fe0c7e10eadfdee3e (24fb0e07)` (`feat(security): implement envelope-encrypted activity records & AAL2 crypto-shredding (KAN-73)`)
 - **Target Worktree:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan73-ff2d6362`
 - **Status:** APPROVED
 

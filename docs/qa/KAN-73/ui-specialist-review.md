@@ -2,7 +2,7 @@
 
 - **Reviewer Persona:** `ux-architect` / `ui-designer` (UI & UX Specialist Reviewer)
 - **Ticket:** `KAN-73` (`[KB-SEC-SHRED-01] Add Envelope-Encrypted activity_records Payloads & AAL2 Two-Stage Crypto-Shredding Without Chain Breakage`)
-- **Audited Commit (`HEAD`):** `32e22b0043003580a7d5d29ea93f523f64930ddc` (`32e22b00`)
+- **Audited Commit (`HEAD`):** `24fb0e07ad1bd912a7d9fc9fe0c7e10eadfdee3e` (`24fb0e07`)
 - **Audited Branch:** `feat/KAN-73-crypto-shred-activity`
 - **Reviewed Artifacts:**
   - `docs/qa/KAN-73/git-diff.patch`
