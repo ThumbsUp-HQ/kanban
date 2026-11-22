@@ -72,9 +72,9 @@ async def _resolve_project_uuid(
 
 def _resolve_verified_service_principal(request: Request) -> str | None:
     """Resolve verified service principal via HMAC header or ASGI TLS client_cert only."""
-    if (
-        request.headers.get("x-kb-internal-auth") is not None
-        or request.scope.get("client_cert") is not None
+    scope = getattr(request, "scope", None)
+    if request.headers.get("x-kb-internal-auth") is not None or (
+        isinstance(scope, dict) and scope.get("client_cert") is not None
     ):
         return verify_internal_service_auth(
             request,

@@ -7,6 +7,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import importlib
+import json
 import re
 import secrets
 import time
@@ -26,12 +27,13 @@ from database.models.oauth import (
     OAuthClient,
 )
 from kanban.api.deps import PrincipalContext
+from kanban.app import create_internal_app
 from kanban.oauth.jwt import (
     get_jwks,
     mint_access_token,
     verify_access_token,
 )
-from kanban.security.mcp_keys import create_internal_mcp_auth_header
+from kanban.security.service_auth import create_internal_service_auth_header
 
 if TYPE_CHECKING:
     from collections.abc import Callable
@@ -62,14 +64,50 @@ def setup_test_key_material(monkeypatch: pytest.MonkeyPatch) -> None:
 
 
 class _InternalAuthTransport(httpx.AsyncBaseTransport):
-    """Transport wrapping kanban app and injecting X-KB-Internal-Auth header."""
+    """Transport routing /internal/* to create_internal_app and injecting role-bound auth."""
 
     def __init__(self, inner: httpx.AsyncBaseTransport) -> None:
         self.inner = inner
+        raw_app = getattr(inner, "app", None)
+        self.internal_transport = (
+            httpx.ASGITransport(app=create_internal_app(raw_app)) if raw_app is not None else inner
+        )
 
     async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
-        request.headers["x-kb-internal-auth"] = create_internal_mcp_auth_header()
+        body_bytes = request.content
+        request.headers["x-kb-internal-auth"] = create_internal_service_auth_header(
+            principal="mcp-gateway",
+            method=request.method,
+            path=request.url.path,
+            body_bytes=body_bytes,
+        )
+        if request.url.path.startswith("/internal/"):
+            return await self.internal_transport.handle_async_request(request)
         return await self.inner.handle_async_request(request)
+
+
+async def _post_introspect(client: httpx.AsyncClient, payload: dict[str, Any]) -> httpx.Response:
+    """Invoke POST /internal/v1/mcp/introspect on the isolated internal ASGI app."""
+    raw_app = getattr(client._transport, "app", None)  # noqa: SLF001
+    assert raw_app is not None
+    internal_app = create_internal_app(raw_app)
+    body_bytes = json.dumps(payload).encode("utf-8")
+    path = "/internal/v1/mcp/introspect"
+    auth_hdr = create_internal_service_auth_header(
+        principal="mcp-gateway",
+        method="POST",
+        path=path,
+        body_bytes=body_bytes,
+    )
+    async with httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=internal_app),
+        base_url="http://internal.test",
+    ) as int_client:
+        return await int_client.post(
+            path,
+            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": auth_hdr},
+            content=body_bytes,
+        )
 
 
 def _setup_mcp_app(
@@ -254,10 +292,9 @@ async def test_case_1_positive_oauth_flow(  # noqa: PLR0915
     assert claims["ws"] == str(user.workspace_id)
 
     # Introspect directly to check active state
-    resp_intro = await client.post(
-        "/internal/v1/mcp/introspect",
-        headers={"X-KB-Internal-Auth": create_internal_mcp_auth_header()},
-        json={"token": access_token, "surface": "agent"},
+    resp_intro = await _post_introspect(
+        client,
+        {"token": access_token, "surface": "agent"},
     )
     assert resp_intro.json()["active"] is True
 
@@ -416,10 +453,9 @@ async def test_case_2_pkce_security(
     assert "already consumed" in resp_reuse.json()["error_description"]
 
     # Verify first token is now revoked via introspection
-    resp_intro = await client.post(
-        "/internal/v1/mcp/introspect",
-        headers={"X-KB-Internal-Auth": create_internal_mcp_auth_header()},
-        json={"token": first_token, "surface": "agent"},
+    resp_intro = await _post_introspect(
+        client,
+        {"token": first_token, "surface": "agent"},
     )
     assert resp_intro.status_code == 200
     assert resp_intro.json()["active"] is False
@@ -500,10 +536,9 @@ async def test_case_3_audience_binding_and_alg_confusion(
     agent_jwt = resp_token.json()["access_token"]
 
     # 3a. Present agent JWT to admin introspection -> active: false, reason: SURFACE_KEY_MISMATCH
-    resp_intro_admin = await client.post(
-        "/internal/v1/mcp/introspect",
-        headers={"X-KB-Internal-Auth": create_internal_mcp_auth_header()},
-        json={"token": agent_jwt, "surface": "admin"},
+    resp_intro_admin = await _post_introspect(
+        client,
+        {"token": agent_jwt, "surface": "admin"},
     )
     assert resp_intro_admin.status_code == 200
     assert resp_intro_admin.json()["active"] is False
@@ -547,10 +582,9 @@ async def test_case_3_audience_binding_and_alg_confusion(
     }
     forged_jwt = jwt.encode(header, payload, hs_key)
 
-    resp_forged_intro = await client.post(
-        "/internal/v1/mcp/introspect",
-        headers={"X-KB-Internal-Auth": create_internal_mcp_auth_header()},
-        json={"token": forged_jwt, "surface": "agent"},
+    resp_forged_intro = await _post_introspect(
+        client,
+        {"token": forged_jwt, "surface": "agent"},
     )
     assert resp_forged_intro.status_code == 200
     assert resp_forged_intro.json()["active"] is False
@@ -681,10 +715,9 @@ async def test_case_4_boundary_conditions(  # noqa: PLR0915
         workspace_id=user.workspace_id,
         ttl_seconds=-10,  # Already expired
     )
-    resp_expired_intro = await client.post(
-        "/internal/v1/mcp/introspect",
-        headers={"X-KB-Internal-Auth": create_internal_mcp_auth_header()},
-        json={"token": expired_token, "surface": "agent"},
+    resp_expired_intro = await _post_introspect(
+        client,
+        {"token": expired_token, "surface": "agent"},
     )
     assert resp_expired_intro.status_code == 200
     assert resp_expired_intro.json()["active"] is False
@@ -767,10 +800,9 @@ async def test_case_4_boundary_conditions(  # noqa: PLR0915
     assert "reuse detected" in resp_reuse_rt.json()["error_description"]
 
     # Verify entire family revoked: T2 and RT2 are now useless
-    resp_t2_intro = await client.post(
-        "/internal/v1/mcp/introspect",
-        headers={"X-KB-Internal-Auth": create_internal_mcp_auth_header()},
-        json={"token": t2, "surface": "agent"},
+    resp_t2_intro = await _post_introspect(
+        client,
+        {"token": t2, "surface": "agent"},
     )
     assert resp_t2_intro.status_code == 200
     assert resp_t2_intro.json()["active"] is False
@@ -999,10 +1031,9 @@ async def test_case_6_consent_narrowing_and_deauthorization(  # noqa: PLR0915
     refresh_token = resp_token.json()["refresh_token"]
 
     # Verify introspection shows narrowed scopes and allowed projects
-    resp_intro = await client.post(
-        "/internal/v1/mcp/introspect",
-        headers={"X-KB-Internal-Auth": create_internal_mcp_auth_header()},
-        json={"token": access_token, "surface": "agent"},
+    resp_intro = await _post_introspect(
+        client,
+        {"token": access_token, "surface": "agent"},
     )
     intro_data = resp_intro.json()
     assert intro_data["scopes"] == ["agent:read"]
@@ -1060,10 +1091,9 @@ async def test_case_6_consent_narrowing_and_deauthorization(  # noqa: PLR0915
     assert resp_revoke.status_code == 200
 
     # Introspection is now inactive
-    resp_intro_revoked = await client.post(
-        "/internal/v1/mcp/introspect",
-        headers={"X-KB-Internal-Auth": create_internal_mcp_auth_header()},
-        json={"token": access_token, "surface": "agent"},
+    resp_intro_revoked = await _post_introspect(
+        client,
+        {"token": access_token, "surface": "agent"},
     )
     assert resp_intro_revoked.json()["active"] is False
 
@@ -1136,10 +1166,9 @@ async def test_case_6_consent_narrowing_and_deauthorization(  # noqa: PLR0915
     assert resp_del_grant.status_code == 204
 
     # Introspect tok3 -> inactive
-    resp_tok3_intro = await client.post(
-        "/internal/v1/mcp/introspect",
-        headers={"X-KB-Internal-Auth": create_internal_mcp_auth_header()},
-        json={"token": tok3, "surface": "agent"},
+    resp_tok3_intro = await _post_introspect(
+        client,
+        {"token": tok3, "surface": "agent"},
     )
     assert resp_tok3_intro.json()["active"] is False
 

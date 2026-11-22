@@ -425,7 +425,7 @@ describe('IssuesWorkspaceRoute', () => {
       />,
     );
 
-    expect(screen.getByText('Backlog')).toBeDefined();
+    expect(screen.getByTestId('navigator-filter-state')).toBeDefined();
     const firstIssue = FIXTURE_12_ISSUES[0];
     expect(firstIssue).toBeDefined();
     if (!firstIssue) return;

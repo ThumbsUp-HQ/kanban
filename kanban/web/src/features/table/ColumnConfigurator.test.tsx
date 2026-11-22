@@ -24,7 +24,7 @@ describe('ColumnConfigurator', () => {
 
     const trigger = screen.getByRole('button', { name: /Columns/i });
     expect(trigger).toBeDefined();
-    expect(trigger.textContent).toContain(`Columns (${String(defaultCols.length)}/12)`);
+    expect(trigger.textContent).toContain(`Columns (${String(defaultCols.length)}/13)`);
 
     // Click trigger opens dialog
     fireEvent.click(trigger);
@@ -158,6 +158,6 @@ describe('ColumnConfigurator', () => {
     // Modules should not be in DOM at all
     expect(screen.queryByLabelText(/Modules/i)).toBeNull();
     const trigger = screen.getByRole('button', { name: /Columns/i });
-    expect(trigger.textContent).toContain(`Columns (${String(defaultCols.length)}/11)`);
+    expect(trigger.textContent).toContain(`Columns (${String(defaultCols.length)}/12)`);
   });
 });

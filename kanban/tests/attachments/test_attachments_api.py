@@ -500,10 +500,24 @@ async def test_case_8_anti_enumeration_and_rate_limit(
     assert r_no_view.json()["code"] == "NOT_FOUND"
 
     # Rate limiting: 30 uploads allowed within 60s, 31st returns 429
+    # Pin rate limiter evaluation clock to a single window so 60s bucket boundaries
+    # never roll over mid-loop under parallel CI load.
+    from datetime import UTC, datetime  # noqa: PLC0415
+
+    pinned_now = datetime(2026, 6, 1, 12, 0, 15, tzinfo=UTC)
+    app = api_env.client._transport.app  # type: ignore[attr-defined]
+    base_limiter = PgRateLimiter(engine=app.state.session_factory._engine)
+
+    class _PinnedPgRateLimiter(PgRateLimiter):
+        async def hit(self, policy: object, key: bytes, _now: object = None) -> object:
+            return await base_limiter.hit(policy, key, now=pinned_now)  # type: ignore[arg-type]
+
+    app.state.rate_limiter = _PinnedPgRateLimiter()
+
     # Switch back to admin
     client_admin = as_principal(admin)
-    # Admin has already made 1 upload above. Let's make 29 more (total 30)
-    for _ in range(29):
+    # Execute 30 uploads within the pinned 60s window
+    for _ in range(30):
         resp = await client_admin.post(
             "/api/v1/projects/SECRET/attachments",
             files={"file": ("sec.png", buf.getvalue(), "image/png")},

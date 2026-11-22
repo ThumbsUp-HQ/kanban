@@ -1323,9 +1323,19 @@ async def test_condition_f_protocol_headers_session_taintguard_revocation() -> N
     class _MockSession:
         pass
 
+    from kanban.security.service_auth import create_internal_service_auth_header  # noqa: PLC0415
+
+    auth_hdr = create_internal_service_auth_header(
+        principal="mcp-gateway",
+        method="GET",
+        path="/api/v1/issues",
+        body_bytes=b"",
+    )
     scope_no_sess = {
         "type": "http",
-        "headers": [(b"x-kb-service-principal", b"mcp-gateway")],
+        "method": "GET",
+        "path": "/api/v1/issues",
+        "headers": [(b"x-kb-internal-auth", auth_hdr.encode("ascii"))],
     }
     with pytest.raises(ProblemException) as exc_missing:
         TaintGuard(Request(scope_no_sess), _MockSession(), _MockPrincipal())  # type: ignore[arg-type]

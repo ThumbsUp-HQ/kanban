@@ -17,7 +17,7 @@ describe('tableColumns', () => {
   });
 
   it('provides all expected column definitions', () => {
-    expect(ALL_TABLE_COLUMNS.length).toBe(12);
+    expect(ALL_TABLE_COLUMNS.length).toBe(13);
     const ids = ALL_TABLE_COLUMNS.map((c) => c.id);
     expect(ids).toContain('key');
     expect(ids).toContain('summary');
@@ -29,6 +29,7 @@ describe('tableColumns', () => {
     expect(ids).toContain('modules');
     expect(ids).toContain('start_date');
     expect(ids).toContain('due_date');
+    expect(ids).toContain('updated_at');
     expect(ids).toContain('created_by');
     expect(ids).toContain('access');
   });

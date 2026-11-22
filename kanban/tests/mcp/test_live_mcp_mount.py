@@ -273,4 +273,5 @@ async def test_in_process_client_security_headers_and_loopback() -> None:
     assert len(received_requests) == 1
     req = received_requests[0]
     assert req.url.host == "localhost"
-    assert req.headers.get("x-kb-service-principal") == "mcp-gateway"
+    assert req.headers.get("x-kb-service-principal") is None
+    assert "p=mcp-gateway,v2=" in req.headers.get("x-kb-internal-auth", "")
