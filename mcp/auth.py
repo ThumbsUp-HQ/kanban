@@ -390,6 +390,157 @@ class McpAuthMiddleware:
 
         digest = hash_mcp_api_key(token)
 
+        # Workload Identity Federation JWT access token fast path (KB-AUTH-OIDC-EXCHANGE-01)
+        if token.startswith("eyJ"):
+            from kanban.oauth.jwt import OAuthTokenError, verify_access_token  # noqa: PLC0415
+
+            try:
+                jwt_claims = verify_access_token(token)
+            except OAuthTokenError:
+                resp = self._unauthorized_response(
+                    surface, req_scope=req_scope, headers=headers, scope=scope
+                )
+                await resp(scope, receive, send)
+                return
+
+            if jwt_claims.get("token_kind") == "workload":
+                token_surf = jwt_claims.get("surface")
+                if token_surf != surface.value or token_surf not in ("agent", "docs"):
+                    resp = JSONResponse({"error": "SURFACE_KEY_MISMATCH"}, status_code=403)
+                    await resp(scope, receive, send)
+                    return
+
+                allowed_cidrs = jwt_claims.get("allowed_cidrs")
+                if allowed_cidrs:
+                    from kanban.security.client_ip import resolve_client_ip  # noqa: PLC0415
+
+                    trusted_proxies = getattr(self.settings, "trusted_proxies", None)
+                    if not trusted_proxies:
+                        trusted_proxies = (
+                            os.environ.get("KANBAN_TRUSTED_PROXIES")
+                            or os.environ.get("KB_TRUSTED_PROXIES")
+                            or "127.0.0.1/32,::1/128"
+                        )
+                    client_ip = resolve_client_ip(scope, trusted_proxies=trusted_proxies)
+                    if client_ip:
+                        try:
+                            clean_ip = client_ip.split("/")[0] if "/" in client_ip else client_ip
+                            ip = ipaddress.ip_address(clean_ip)
+                            matched = any(
+                                ip in ipaddress.ip_network(str(c), strict=False)
+                                for c in allowed_cidrs
+                            )
+                            if not matched:
+                                msg = f"Client IP '{client_ip}' not allowed by key CIDR restriction"
+                                resp = JSONResponse(
+                                    {
+                                        "error": "KEY_CIDR_DENIED",
+                                        "message": msg,
+                                    },
+                                    status_code=403,
+                                )
+                                await resp(scope, receive, send)
+                                return
+                        except ValueError:
+                            resp = JSONResponse(
+                                {"error": "KEY_CIDR_DENIED", "message": "Invalid client IP format"},
+                                status_code=403,
+                            )
+                            await resp(scope, receive, send)
+                            return
+
+                ws_id_str = jwt_claims.get("ws")
+                ws_uuid = uuid.UUID(ws_id_str) if ws_id_str else None
+                workload_proj_set: set[uuid.UUID] = set()
+                proj_strings: list[str] = []
+                allowed_proj_raw = jwt_claims.get("allowed_project_ids") or jwt_claims.get(
+                    "allowed_projects"
+                )
+                if allowed_proj_raw and isinstance(allowed_proj_raw, list):
+                    for p in allowed_proj_raw:
+                        p_str = str(p)
+                        proj_strings.append(p_str)
+                        with contextlib.suppress(ValueError):
+                            workload_proj_set.add(uuid.UUID(p_str))
+
+                cap_mask = int(jwt_claims.get("capability_mask", 255))
+                scopes_list = jwt_claims.get("scope", "").split()
+                cidrs_tuple = tuple(str(c) for c in (allowed_cidrs or ()))
+
+                from mcp.scoping import CredentialBoundary  # noqa: PLC0415
+
+                cred_boundary = CredentialBoundary(
+                    scope_tier="project" if (workload_proj_set or proj_strings) else "workspace",
+                    surface=surface.value,
+                    workspace_allowlist=frozenset({ws_uuid}) if ws_uuid else frozenset(),
+                    project_allowlist=frozenset(workload_proj_set),
+                    capability_mask=cap_mask,
+                    allowed_tools=None,
+                    allowed_cidrs=cidrs_tuple,
+                    execution_id=None,
+                    has_aal2_provenance=False,
+                )
+
+                auth_context = McpAuthContext(
+                    token=token,
+                    token_sha256=digest,
+                    surface=surface,
+                    scopes=frozenset(scopes_list),
+                    principal_id=str(jwt_claims.get("sub", "")),
+                    workspace_id=ws_id_str,
+                    token_kind="workload",  # noqa: S106
+                    capability_mask=cap_mask,
+                    allowed_projects=proj_strings or None,
+                    allowed_project_ids=(
+                        [str(p) for p in workload_proj_set] if workload_proj_set else None
+                    ),
+                    allowed_project_keys=(
+                        [s.upper() for s in proj_strings] if proj_strings else None
+                    ),
+                    allowed_cidrs=list(allowed_cidrs) if allowed_cidrs else None,
+                    credential_boundary=cred_boundary,
+                )
+
+                raw_headers = list(scope.get("headers", []))
+                filtered_headers = [
+                    (k, v) for k, v in raw_headers if k.lower() != b"x-kb-subject-token"
+                ]
+                filtered_headers.append((b"x-kb-subject-token", token.encode("ascii")))
+                scope["headers"] = filtered_headers
+
+                mcp_actor = format_log_actor(auth_context.principal_id)
+                user_ctx_token = set_log_user(mcp_actor)
+                try:
+                    try:
+                        effective_scope = intersect_key_and_connection_scope(
+                            auth_context, req_scope
+                        )
+                    except KbMcpError as exc:
+                        status_code = 403 if exc.code == McpErrorCode.KEY_SCOPE_VIOLATION else 400
+                        err_payload: dict[str, Any] = {
+                            "error": exc.code.value,
+                            "message": exc.message,
+                        }
+                        if exc.extra:
+                            err_payload.update(exc.extra)
+                        if exc.hint:
+                            err_payload["hint"] = exc.hint
+                        resp = JSONResponse(err_payload, status_code=status_code)
+                        await resp(scope, receive, send)
+                        return
+
+                    state = scope.setdefault("state", {})
+                    state["mcp_auth"] = auth_context
+                    state["mcp_scopes"] = auth_context.scopes
+                    state["mcp_token_sha256"] = digest
+                    state["connection_scope"] = effective_scope
+                    state["log_user"] = mcp_actor
+
+                    await self.app(scope, receive, send)
+                    return
+                finally:
+                    reset_log_user(user_ctx_token)
+
         # Check positive introspection cache (bypassed for ephemeral tokens)
         intro_result = (
             None
