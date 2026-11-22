@@ -27,6 +27,7 @@ from kanban.api.request_id import RequestIdMiddleware
 from kanban.api.v1.issues import router as issues_router
 from kanban.api.v1.resolve import resolve_router
 from kanban.resolve.service import ResolutionService
+from kanban.services.issue_keys import resolve_issue_ref
 
 
 class _TestPrincipalResolver:
@@ -257,6 +258,44 @@ async def test_legacy_key_aliases_resolution_and_rls(
         resolve_data = res_resolve.json()
         assert resolve_data["canonical_key"] == "CORE-1"
         assert resolve_data["id"] == str(issue_id)
+
+        # 7b. Direct ResolutionService and resolve_issue_ref unit assertions
+        rec = await resolve_issue_ref(db_session, principal_1, "KANBA-123")
+        assert rec.id == issue_id
+        rec_linear = await resolve_issue_ref(db_session, principal_1, "ENG-42")
+        assert rec_linear.id == issue_id
+        rec_uuid = await resolve_issue_ref(db_session, principal_1, str(issue_id))
+        assert rec_uuid.id == issue_id
+        rec_canon = await resolve_issue_ref(db_session, principal_1, "CORE-1")
+        assert rec_canon.id == issue_id
+        with pytest.raises(ProblemException):
+            await resolve_issue_ref(db_session, principal_1, "DOES-NOT-EXIST-999")
+
+        direct_resolver = ResolutionService()
+        for test_key in ("KANBA-123", "JIRA-101", "GH-88", "ENG-42"):
+            resolved = await direct_resolver.resolve(
+                session=db_session,
+                kind="issue",
+                ref=test_key,
+                caller_workspace_id=ws1_id,
+                caller_principal_id=admin1_id,
+            )
+            assert resolved is not None
+            assert resolved.kind == "issue"
+            assert resolved.id == issue_id
+            assert resolved.canonical_key == "CORE-1"
+            assert resolved.is_alias is True
+
+        canonical_res = await direct_resolver.resolve(
+            session=db_session,
+            kind="issue",
+            ref="CORE-1",
+            caller_workspace_id=ws1_id,
+            caller_principal_id=admin1_id,
+        )
+        assert canonical_res is not None
+        assert canonical_res.id == issue_id
+        assert canonical_res.is_alias is False
 
         # 8. Cross-Workspace RLS Isolation: Switch principal and GUC to Workspace 2
         resolver_wrapper.principal = principal_2
