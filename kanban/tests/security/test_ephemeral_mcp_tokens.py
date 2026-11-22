@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import uuid
 from typing import TYPE_CHECKING
 
@@ -20,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
 from database.session import RLSContext, RLSSessionFactory, bind_rls_context
 from kanban.api.deps import PrincipalContext
 from kanban.api.problems import ProblemException
-from kanban.app import create_app
+from kanban.app import create_app, create_internal_app
 from kanban.security.ephemeral_mcp_tokens import (
     EPHEMERAL_TOKEN_PREFIX,
     generate_ephemeral_mcp_token,
@@ -30,7 +31,6 @@ from kanban.security.ephemeral_mcp_tokens import (
 )
 from kanban.security.mcp_keys import (
     McpIntrospectionResult,
-    create_internal_mcp_auth_header,
     hash_mcp_api_key,
 )
 from kanban.security.permissions import (
@@ -38,6 +38,7 @@ from kanban.security.permissions import (
     evaluate_capabilities,
     require_capability,
 )
+from kanban.security.service_auth import create_internal_service_auth_header
 from kanban.settings import Settings
 from kanban.tests.security.helpers import (
     add_acl_entry,
@@ -48,6 +49,7 @@ from kanban.tests.security.helpers import (
     create_workspace,
     rebuild_era,
 )
+from kanban.tests.security.test_internal_route_isolation import seed_bound_execution
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -74,7 +76,13 @@ async def test_case_1_positive_mint_and_token_format(db_session: AsyncSession) -
     adam_id = await create_user(db_session, ws_id, handle="@adam", display_name="Adam")
     agent_id = await create_agent(db_session, ws_id, display_name="agy-gate")
     proj_id = await create_project(db_session, ws_id, identifier="KAN", name="Kanban")
-    exec_id = uuid.uuid4()
+    exec_id = await seed_bound_execution(
+        db_session,
+        ws_id=ws_id,
+        proj_id=proj_id,
+        invoking_principal_id=adam_id,
+        agent_principal_id=agent_id,
+    )
 
     record, token = await mint_ephemeral_token(
         db_session,
@@ -326,7 +334,13 @@ async def test_case_3_surface_isolation_and_revocation(db_session: AsyncSession)
     user_id = await create_user(db_session, ws_id, handle="@user3", display_name="User 3")
     agent_id = await create_agent(db_session, ws_id, display_name="agent-3")
     proj_id = await create_project(db_session, ws_id, identifier="PRJ3", name="Project 3")
-    exec_id = uuid.uuid4()
+    exec_id = await seed_bound_execution(
+        db_session,
+        ws_id=ws_id,
+        proj_id=proj_id,
+        invoking_principal_id=user_id,
+        agent_principal_id=agent_id,
+    )
 
     _rec, token = await mint_ephemeral_token(
         db_session,
@@ -536,21 +550,29 @@ async def test_case_4_triple_intersection_and_project_pin(db_session: AsyncSessi
 
 @pytest.mark.asyncio
 async def test_case_5_internal_endpoints_and_mtls_boundary(db_session: AsyncSession) -> None:
-    """Test Case 5: mTLS boundary for minting (mcp-gateway 403, agent-runtime 201)."""
+    """Test Case 5: Role-bound HMAC boundary for minting (mcp-gateway 403, agent-runtime 201)."""
     ws_id = await create_workspace(db_session, name="WS-Eph-5")
     user_id = await create_user(db_session, ws_id, handle="@user5", display_name="User 5")
     agent_id = await create_agent(db_session, ws_id, display_name="agent-5")
     proj_id = await create_project(db_session, ws_id, identifier="PRJ5", name="Project 5")
-    exec_id = uuid.uuid4()
+    exec_id = await seed_bound_execution(
+        db_session,
+        ws_id=ws_id,
+        proj_id=proj_id,
+        invoking_principal_id=user_id,
+        agent_principal_id=agent_id,
+    )
 
     settings = Settings()
     app = create_app(settings)
     app.state.session_factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
+    internal_app = create_internal_app(app)
 
     await db_session.commit()
 
-    transport = httpx.ASGITransport(app=app)
+    transport = httpx.ASGITransport(app=internal_app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        mint_path = "/internal/v1/mcp/ephemeral-tokens"
         mint_payload = {
             "workspace_id": str(ws_id),
             "execution_id": str(exec_id),
@@ -560,25 +582,38 @@ async def test_case_5_internal_endpoints_and_mtls_boundary(db_session: AsyncSess
             "ttl_seconds": 60,
             "max_calls": 10,
         }
+        mint_body = json.dumps(mint_payload).encode("utf-8")
 
         # 1. Unauthenticated request -> 401
-        res_unauth = await client.post("/internal/v1/mcp/ephemeral-tokens", json=mint_payload)
+        res_unauth = await client.post(mint_path, json=mint_payload)
         assert res_unauth.status_code == 401
 
         # 2. mcp-gateway service principal -> 403 Forbidden
+        gw_hdr = create_internal_service_auth_header(
+            principal="mcp-gateway",
+            method="POST",
+            path=mint_path,
+            body_bytes=mint_body,
+        )
         res_gw = await client.post(
-            "/internal/v1/mcp/ephemeral-tokens",
-            json=mint_payload,
-            headers={"X-KB-Service-Principal": "mcp-gateway"},
+            mint_path,
+            content=mint_body,
+            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": gw_hdr},
         )
         assert res_gw.status_code == 403
         assert res_gw.json()["code"] == "FORBIDDEN"
 
         # 3. agent-runtime service principal -> 201 Created
+        agt_hdr = create_internal_service_auth_header(
+            principal="agent-runtime",
+            method="POST",
+            path=mint_path,
+            body_bytes=mint_body,
+        )
         res_agent = await client.post(
-            "/internal/v1/mcp/ephemeral-tokens",
-            json=mint_payload,
-            headers={"X-KB-Service-Principal": "agent-runtime"},
+            mint_path,
+            content=mint_body,
+            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": agt_hdr},
         )
         assert res_agent.status_code == 201
         data = res_agent.json()
@@ -588,10 +623,20 @@ async def test_case_5_internal_endpoints_and_mtls_boundary(db_session: AsyncSess
         minted_token = data["token"]
 
         # 4. Introspect through /internal/v1/mcp/introspect
+        intro_path = "/internal/v1/mcp/introspect"
+        intro_body = json.dumps(
+            {"token": minted_token, "surface": "agent", "consume_call": False}
+        ).encode("utf-8")
+        intro_hdr = create_internal_service_auth_header(
+            principal="mcp-gateway",
+            method="POST",
+            path=intro_path,
+            body_bytes=intro_body,
+        )
         res_intro = await client.post(
-            "/internal/v1/mcp/introspect",
-            json={"token": minted_token, "surface": "agent", "consume_call": False},
-            headers={"X-KB-Service-Principal": "mcp-gateway"},
+            intro_path,
+            content=intro_body,
+            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": intro_hdr},
         )
         assert res_intro.status_code == 200
         intro_data = res_intro.json()
@@ -600,18 +645,25 @@ async def test_case_5_internal_endpoints_and_mtls_boundary(db_session: AsyncSess
         assert set(intro_data["allowed_tools"]) == {"search_tickets", "read_ticket"}
 
         # 5. Revoke by execution ID
+        revoke_path = f"/internal/v1/mcp/ephemeral-tokens/by-execution/{exec_id}/revoke"
+        revoke_hdr = create_internal_service_auth_header(
+            principal="agent-runtime",
+            method="POST",
+            path=revoke_path,
+            body_bytes=b"",
+        )
         res_revoke = await client.post(
-            f"/internal/v1/mcp/ephemeral-tokens/by-execution/{exec_id}/revoke",
-            headers={"X-KB-Service-Principal": "agent-runtime"},
+            revoke_path,
+            headers={"X-KB-Internal-Auth": revoke_hdr},
         )
         assert res_revoke.status_code == 200
         assert res_revoke.json()["revoked_count"] == 1
 
         # 6. Introspect post-revoke -> inactive
         res_intro_revoked = await client.post(
-            "/internal/v1/mcp/introspect",
-            json={"token": minted_token, "surface": "agent", "consume_call": False},
-            headers={"X-KB-Service-Principal": "mcp-gateway"},
+            intro_path,
+            content=intro_body,
+            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": intro_hdr},
         )
         assert res_intro_revoked.status_code == 200
         assert res_intro_revoked.json()["active"] is False
@@ -624,7 +676,13 @@ async def test_case_6_concurrent_budget_exhaustion(db_session: AsyncSession) -> 
     user_id = await create_user(db_session, ws_id, handle="@user6", display_name="User 6")
     agent_id = await create_agent(db_session, ws_id, display_name="agent-6")
     proj_id = await create_project(db_session, ws_id, identifier="PRJ6", name="Project 6")
-    exec_id = uuid.uuid4()
+    exec_id = await seed_bound_execution(
+        db_session,
+        ws_id=ws_id,
+        proj_id=proj_id,
+        invoking_principal_id=user_id,
+        agent_principal_id=agent_id,
+    )
 
     _record, token = await mint_ephemeral_token(
         db_session,
@@ -669,7 +727,13 @@ async def test_case_7_edge_cases_and_branch_coverage(db_session: AsyncSession) -
     proj_id = await create_project(db_session, ws_id, identifier="PRJ7", name="Project 7")
     other_ws_id = await create_workspace(db_session, name="WS-Eph-7-Other")
     other_proj_id = await create_project(db_session, other_ws_id, identifier="OTH7", name="Other 7")
-    exec_id = uuid.uuid4()
+    exec_id = await seed_bound_execution(
+        db_session,
+        ws_id=ws_id,
+        proj_id=proj_id,
+        invoking_principal_id=user_id,
+        agent_principal_id=agent_id,
+    )
 
     # 1. Invalid invoking principal (non-existent)
     with pytest.raises(ProblemException) as exc1:
@@ -805,43 +869,67 @@ async def test_case_7_edge_cases_and_branch_coverage(db_session: AsyncSession) -
     assert res_budget_nc.reason == "EPHEMERAL_CALL_BUDGET_EXCEEDED"
 
     # 10. Internal endpoint auth checks
+    exec_id_2 = await seed_bound_execution(
+        db_session,
+        ws_id=ws_id,
+        proj_id=proj_id,
+        invoking_principal_id=user_id,
+        agent_principal_id=agent_id,
+    )
+    await db_session.commit()
+
     settings = Settings()
     app = create_app(settings)
     app.state.session_factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
+    internal_app = create_internal_app(app)
 
-    transport = httpx.ASGITransport(app=app)
+    transport = httpx.ASGITransport(app=internal_app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        revoke_path = f"/internal/v1/mcp/ephemeral-tokens/by-execution/{exec_id}/revoke"
         # Revoke unauthenticated
-        res_rev_unauth = await client.post(
-            f"/internal/v1/mcp/ephemeral-tokens/by-execution/{exec_id}/revoke"
-        )
+        res_rev_unauth = await client.post(revoke_path)
         assert res_rev_unauth.status_code == 401
 
-        # Revoke with client cert
+        # Revoke with unverified X-SSL-Client-Cert header is rejected (401)
         res_rev_cert = await client.post(
-            f"/internal/v1/mcp/ephemeral-tokens/by-execution/{exec_id}/revoke",
+            revoke_path,
             headers={"X-SSL-Client-Cert": "test-cert"},
         )
-        assert res_rev_cert.status_code == 200
+        assert res_rev_cert.status_code == 401
 
-        # Revoke with internal HMAC auth header
-        hmac_header = create_internal_mcp_auth_header()
+        # Revoke with role-bound internal HMAC auth header
+        hmac_header = create_internal_service_auth_header(
+            principal="mcp-gateway",
+            method="POST",
+            path=revoke_path,
+            body_bytes=b"",
+        )
         res_rev_hmac = await client.post(
-            f"/internal/v1/mcp/ephemeral-tokens/by-execution/{exec_id}/revoke",
+            revoke_path,
             headers={"X-KB-Internal-Auth": hmac_header},
         )
         assert res_rev_hmac.status_code == 200
 
-        # Mint with client cert (no service principal)
-        res_mint_cert = await client.post(
-            "/internal/v1/mcp/ephemeral-tokens",
-            json={
+        # Mint with role-bound kanban-api HMAC signature
+        mint_path = "/internal/v1/mcp/ephemeral-tokens"
+        mint_body = json.dumps(
+            {
                 "workspace_id": str(ws_id),
-                "execution_id": str(uuid.uuid4()),
+                "execution_id": str(exec_id_2),
                 "invoking_principal_id": str(user_id),
                 "agent_principal_id": str(agent_id),
                 "project_id": str(proj_id),
-            },
-            headers={"X-SSL-Client-Cert": "test-cert"},
+            }
+        ).encode("utf-8")
+        mint_hmac = create_internal_service_auth_header(
+            principal="kanban-api",
+            method="POST",
+            path=mint_path,
+            body_bytes=mint_body,
+        )
+        res_mint_cert = await client.post(
+            mint_path,
+            content=mint_body,
+            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": mint_hmac},
         )
         assert res_mint_cert.status_code == 201

@@ -1,0 +1,26 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan63-628c7c79
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 42 items
+
+kanban/tests/security/test_internal_route_isolation.py ....              [  9%]
+kanban/tests/security/test_ephemeral_mcp_tokens.py .......               [ 26%]
+mcp/tests/test_ephemeral_auth.py ....................                    [ 73%]
+kanban/tests/api/test_admin_mcp_keys_api.py ....                         [ 83%]
+kanban/tests/security/test_read_taint.py .......                         [100%]
+
+============================= 42 passed in 14.41s ==============================
+Name                                      Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------------
+kanban/api/internal/mcp_ephemeral.py         50      1      2      1    96%   90
+kanban/api/internal/mcp_introspect.py        66      0      8      1    99%   119->122
+kanban/api/v1/__init__.py                   133      0      0      0   100%
+kanban/security/ephemeral_mcp_tokens.py     132      3     58      3    97%   499, 554, 566
+kanban/security/read_taint.py               122      3     36      5    95%   61->66, 181->exit, 202, 297->302, 322-330
+kanban/security/service_auth.py             171      0     74      2    99%   173->170, 218->229
+mcp/internal_client.py                      214      4    100     13    95%   148->155, 150->155, 153-154, 155->exit, 185->198, 187->191, 253->259, 256->259, 285, 341->391, 356->391, 363->369, 369->391, 428
+-------------------------------------------------------------------------------------
+TOTAL                                       888     11    278     25    97%

@@ -39,6 +39,7 @@ from kanban.auth.sessions.csrf import (
     PRE_SESSION_ID,
     generate_csrf_token,
 )
+from kanban.security.service_auth import create_internal_service_auth_header
 from kanban.tests.security.helpers import (
     add_role_binding,
     create_project,
@@ -51,6 +52,23 @@ if TYPE_CHECKING:
     from collections.abc import AsyncIterator
 
 pytestmark = pytest.mark.committed_db
+
+
+class _McpGatewaySigningTransport(httpx.AsyncBaseTransport):
+    """Wraps ASGITransport and signs requests bearing X-KB-Service-Principal: mcp-gateway."""
+
+    def __init__(self, inner: httpx.AsyncBaseTransport) -> None:
+        self._inner = inner
+
+    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
+        if request.headers.get("x-kb-service-principal") == "mcp-gateway":
+            request.headers["x-kb-internal-auth"] = create_internal_service_auth_header(
+                principal="mcp-gateway",
+                method=request.method,
+                path=request.url.path,
+                body_bytes=request.content,
+            )
+        return await self._inner.handle_async_request(request)
 
 
 class _TestTokenResolver:
@@ -250,7 +268,7 @@ async def taint_test_env(
     app.state.principal_resolver = resolver
 
     csrf_token = generate_csrf_token(PRE_SESSION_ID, b"\x00" * 32)
-    transport = httpx.ASGITransport(app=app)
+    transport = _McpGatewaySigningTransport(httpx.ASGITransport(app=app))
     async with httpx.AsyncClient(
         transport=transport,
         base_url="http://test",

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import asyncio
 import base64
+import json
 import os
 import time
 import uuid
@@ -25,12 +26,13 @@ from starlette.routing import Route
 
 from database.session import RLSSessionFactory
 from kanban.api.deps import PrincipalContext
-from kanban.app import create_app
+from kanban.app import create_app, create_internal_app
 from kanban.security.ephemeral_mcp_tokens import (
     EPHEMERAL_TOKEN_PREFIX,
     introspect_and_consume_ephemeral_token,
     mint_ephemeral_token,
 )
+from kanban.security.service_auth import create_internal_service_auth_header
 from kanban.settings import Settings
 from kanban.tests.security.helpers import (
     add_role_binding,
@@ -40,8 +42,17 @@ from kanban.tests.security.helpers import (
     create_workspace,
     rebuild_era,
 )
+from kanban.tests.security.test_internal_route_isolation import seed_bound_execution
 from mcp.app import create_mcp_app
+from mcp.context import (
+    McpRequestContext,
+    reset_current_mcp_context,
+    set_current_mcp_context,
+)
+from mcp.errors import KbMcpError, McpErrorCode
+from mcp.internal_client import KanbanApiClient
 from mcp.registry import Surface, ToolRegistry, ToolSpec
+from mcp.scoping import ConnectionScope, ScopeMode
 from mcp.settings import McpSettings
 from mcp.tests.test_auth import *  # noqa: F403
 
@@ -806,7 +817,13 @@ async def test_case_4_triple_intersection_and_project_pin_confinement(
     await rebuild_era(committed_db_session, ws_id)
 
     # Mint ephemeral token pinned strictly to project KAN
-    exec_id = uuid.uuid4()
+    exec_id = await seed_bound_execution(
+        committed_db_session,
+        ws_id=ws_id,
+        proj_id=proj_kan_id,
+        invoking_principal_id=adam_id,
+        agent_principal_id=agent_id,
+    )
     _rec, eph_token = await mint_ephemeral_token(
         committed_db_session,
         workspace_id=ws_id,
@@ -846,7 +863,7 @@ async def test_case_4_triple_intersection_and_project_pin_confinement(
     )
 
     mcp_settings = McpSettings(mode="standalone_inprocess", auth_enabled=True)
-    mcp_app = create_mcp_app(mcp_settings, kanban_app=kanban_fastapi_app)
+    mcp_app = create_mcp_app(mcp_settings, kanban_app=kanban_fastapi_app.state.internal_dispatcher)
 
     transport = httpx.ASGITransport(app=mcp_app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
@@ -889,21 +906,29 @@ async def test_case_4_triple_intersection_and_project_pin_confinement(
 
 @pytest.mark.asyncio
 async def test_case_5_mtls_mint_boundary(db_session: AsyncSession) -> None:
-    """Test Case 5: mTLS mint boundary (mcp-gateway 403, agent-runtime 201)."""
+    """Test Case 5: Role-bound HMAC mint boundary (mcp-gateway 403, agent-runtime 201)."""
     ws_id = await create_workspace(db_session, name="WS-Mint-Boundary")
     user_id = await create_user(db_session, ws_id, handle="@user-mint", display_name="User Mint")
     agent_id = await create_agent(db_session, ws_id, display_name="agent-mint")
     proj_id = await create_project(db_session, ws_id, identifier="MNT", name="Mint Project")
-    exec_id = uuid.uuid4()
+    exec_id = await seed_bound_execution(
+        db_session,
+        ws_id=ws_id,
+        proj_id=proj_id,
+        invoking_principal_id=user_id,
+        agent_principal_id=agent_id,
+    )
 
     settings = Settings()
     app = create_app(settings)
     app.state.session_factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
+    internal_app = create_internal_app(app)
 
     await db_session.commit()
 
-    transport = httpx.ASGITransport(app=app)
+    transport = httpx.ASGITransport(app=internal_app)
     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        mint_path = "/internal/v1/mcp/ephemeral-tokens"
         payload = {
             "workspace_id": str(ws_id),
             "execution_id": str(exec_id),
@@ -913,21 +938,34 @@ async def test_case_5_mtls_mint_boundary(db_session: AsyncSession) -> None:
             "ttl_seconds": 60,
             "max_calls": 5,
         }
+        body_bytes = json.dumps(payload).encode("utf-8")
 
         # 1. mcp-gateway service principal -> 403 Forbidden
+        gw_hdr = create_internal_service_auth_header(
+            principal="mcp-gateway",
+            method="POST",
+            path=mint_path,
+            body_bytes=body_bytes,
+        )
         res_gw = await client.post(
-            "/internal/v1/mcp/ephemeral-tokens",
-            json=payload,
-            headers={"X-KB-Service-Principal": "mcp-gateway"},
+            mint_path,
+            content=body_bytes,
+            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": gw_hdr},
         )
         assert res_gw.status_code == 403
         assert res_gw.json()["code"] == "FORBIDDEN"
 
         # 2. agent-runtime service principal -> 201 Created
+        agt_hdr = create_internal_service_auth_header(
+            principal="agent-runtime",
+            method="POST",
+            path=mint_path,
+            body_bytes=body_bytes,
+        )
         res_agt = await client.post(
-            "/internal/v1/mcp/ephemeral-tokens",
-            json=payload,
-            headers={"X-KB-Service-Principal": "agent-runtime"},
+            mint_path,
+            content=body_bytes,
+            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": agt_hdr},
         )
         assert res_agt.status_code == 201
         data = res_agt.json()
@@ -958,10 +996,15 @@ async def test_case_6_kan18_ephemeral_docs_tools_and_security(
     await add_role_binding(
         committed_db_session, ws_id, adam_id, role="WORKSPACE_ADMIN", scope_type="workspace"
     )
+    exec_id = await seed_bound_execution(
+        committed_db_session,
+        ws_id=ws_id,
+        proj_id=proj_id,
+        invoking_principal_id=adam_id,
+        agent_principal_id=agent_id,
+    )
     await rebuild_era(committed_db_session, ws_id)
     await committed_db_session.commit()
-
-    exec_id = uuid.uuid4()
 
     # 1. Mint with allowed_tools=['search']
     _rec1, tok_search = await mint_ephemeral_token(
@@ -1151,3 +1194,182 @@ async def test_case_6_kan18_ephemeral_docs_tools_and_security(
         assert c_update.status_code == 200
         assert c_update.json()["result"]["isError"] is True
         assert "EPHEMERAL_TOOL_FORBIDDEN" in c_update.json()["result"]["content"][0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_case_7_internal_client_hmac_and_error_mapping_coverage(
+    tmp_path: Any,  # noqa: ANN401
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Test Case 7: Exercise KanbanApiClient HMAC signing, mTLS init, and error mapping."""
+    with pytest.raises(ValueError, match="kanban_app or transport is required"):
+        KanbanApiClient(McpSettings(mode="standalone_inprocess"))
+
+    with pytest.raises(ValueError, match="Plaintext http:// base URL is strictly prohibited"):
+        KanbanApiClient(McpSettings(mode="mtls", kanban_api_base_url="http://insecure.local"))
+
+    ca_file = tmp_path / "ca.pem"
+    cert_file = tmp_path / "cert.pem"
+    key_file = tmp_path / "key.pem"
+    for f in (ca_file, cert_file, key_file):
+        f.write_text("dummy", encoding="utf-8")
+
+    responses: dict[str, tuple[int, dict[str, Any] | bytes]] = {
+        "/api/v1/auth/session": (200, {"csrf_token": "csrf-tok-123"}),
+        "/api/empty": (204, b""),
+        "/api/text": (200, b"\xff\xfeinvalid-utf8"),
+        "/api/err-409": (
+            409,
+            {
+                "type": "urn:kanban:problem:etag-mismatch",
+                "detail": "Stale ETag",
+                "current_etag": "etag-99",
+                "layer": "optimistic_lock",
+                "candidates": [{"id": "1"}],
+                "blockers": ["KAN-2"],
+                "tainted_by": ["SEC"],
+                "unauthorized_mentions": ["@bob"],
+            },
+        ),
+        "/api/err-promoted": (
+            409,
+            {"code": "ALREADY_PROMOTED", "detail": "Promoted", "target_doc_key": "DOC-1"},
+        ),
+        "/api/err-transition": (
+            409,
+            {
+                "code": "INVALID_TRANSITION",
+                "detail": "Bad transition",
+                "valid_states": ["In Progress", "Done"],
+            },
+        ),
+        "/api/err-section": (
+            404,
+            {"code": "SECTION_NOT_FOUND", "detail": "No section", "doc_id": "DOC-9"},
+        ),
+        "/api/err-nf": (
+            404,
+            {"type": "urn:kanban:problem:not-found", "detail": "Missing", "key": "KAN-9"},
+        ),
+        "/api/err-503": (503, b"unavailable"),
+        "/api/err-429": (429, {"title": "Rate Limited"}),
+    }
+
+    def _mock_handler(req: httpx.Request) -> httpx.Response:
+        if req.url.path in responses:
+            code, payload = responses[req.url.path]
+            if isinstance(payload, bytes):
+                return httpx.Response(code, content=payload)
+            return httpx.Response(code, json=payload)
+        return httpx.Response(200, json={"signed": "x-kb-internal-auth" in req.headers})
+
+    mock_trans = httpx.MockTransport(_mock_handler)
+    mtls_settings = McpSettings(
+        mode="mtls",
+        kanban_api_base_url="https://127.0.0.1:8443",
+        internal_ca_path=ca_file,
+        client_cert_path=cert_file,
+        client_key_path=key_file,
+    )
+    async with KanbanApiClient(mtls_settings, transport=mock_trans) as mtls_client:
+        res_ok = await mtls_client.request("POST", "/api/ok", json_data={"a": 1})
+        assert res_ok == {"signed": False}
+
+    real_mtls_client = KanbanApiClient(
+        McpSettings(mode="mtls", kanban_api_base_url="https://127.0.0.1:8443")
+    )
+    await real_mtls_client.aclose()
+
+    inproc_settings = McpSettings(mode="standalone_inprocess", response_body_limit_bytes=4096)
+    ctx_tok = set_current_mcp_context(
+        McpRequestContext(
+            surface=Surface.AGENT,
+            caller_scopes=frozenset({"agent:read"}),
+            subject_token=f"kb_agt_{uuid.uuid4().hex}",
+            session_id="sess-ctx-1",
+            connection_scope=ConnectionScope(
+                mode=ScopeMode.GLOBAL,
+                workspace_slug="ws-slug",
+                project_key="KAN",
+            ),
+        )
+    )
+    try:
+        async with KanbanApiClient(inproc_settings, transport=mock_trans) as client:
+            assert await client.request("GET", "/api/empty") is None
+            assert isinstance(await client.request("POST", "/api/text"), str)
+
+            for err_path, expected_code in (
+                ("/api/err-409", McpErrorCode.CONFLICT_ETAG),
+                ("/api/err-promoted", McpErrorCode.ALREADY_PROMOTED),
+                ("/api/err-transition", McpErrorCode.INVALID_TRANSITION),
+                ("/api/err-section", McpErrorCode.SECTION_NOT_FOUND),
+                ("/api/err-nf", McpErrorCode.NOT_FOUND),
+                ("/api/err-503", McpErrorCode.UPSTREAM_UNAVAILABLE),
+                ("/api/err-429", McpErrorCode.RATE_LIMITED),
+            ):
+                with pytest.raises(KbMcpError) as exc_err:
+                    await client.request("POST", err_path)
+                assert exc_err.value.code == expected_code
+    finally:
+        reset_current_mcp_context(ctx_tok)
+
+    def _big_handler(_req: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, content=b"x" * 64)
+
+    async with KanbanApiClient(
+        McpSettings(mode="standalone_inprocess", response_body_limit_bytes=16),
+        transport=httpx.MockTransport(_big_handler),
+    ) as c_big:
+        with pytest.raises(KbMcpError) as exc_big:
+            await c_big.request("GET", "/api/big")
+        assert exc_big.value.code == McpErrorCode.UPSTREAM_ERROR
+
+    def _err_handler(_req: httpx.Request) -> httpx.Response:
+        err_msg = "boom"
+        raise httpx.ConnectError(err_msg)
+
+    async with KanbanApiClient(
+        inproc_settings, transport=httpx.MockTransport(_err_handler)
+    ) as c_err:
+        with pytest.raises(KbMcpError) as exc_conn:
+            await c_err.request("GET", "/api/down")
+        assert exc_conn.value.code == McpErrorCode.UPSTREAM_UNAVAILABLE
+
+    assert (
+        KanbanApiClient._resolve_conflict_code(  # noqa: SLF001
+            "urn:problem:cross-scope-taint", ""
+        )
+        == McpErrorCode.CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED
+    )
+    assert (
+        KanbanApiClient._resolve_conflict_code(  # noqa: SLF001
+            "urn:problem:mention-access-warning", ""
+        )
+        == McpErrorCode.MENTION_ACCESS_WARNING
+    )
+    assert (
+        KanbanApiClient._resolve_conflict_code(  # noqa: SLF001
+            "urn:problem:state-in-use", ""
+        )
+        == McpErrorCode.STATE_IN_USE
+    )
+    assert (
+        KanbanApiClient._resolve_conflict_code(  # noqa: SLF001
+            "urn:problem:unknown-conflict", ""
+        )
+        == McpErrorCode.VALIDATION_FAILED
+    )
+    assert (
+        KanbanApiClient._resolve_error_code(  # noqa: SLF001
+            403, "urn:problem:aal2-required", ""
+        )
+        == McpErrorCode.AAL2_REQUIRED
+    )
+    assert (
+        KanbanApiClient._resolve_error_code(  # noqa: SLF001
+            418, "urn:problem:teapot", ""
+        )
+        == McpErrorCode.UPSTREAM_ERROR
+    )
+    monkeypatch.undo()

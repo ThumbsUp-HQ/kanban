@@ -1,0 +1,64 @@
+=== make check ===
+uv run ruff check .
+All checks passed!
+uv run ruff format --check .
+2108 files already formatted
+uv run mypy
+Success: no issues found in 1183 source files
+uv run lint-imports
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 1033 files, 3753 dependencies.
+---------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT (7 ignored imports)
+mcp forbidden from importing database KEPT (50 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+uv run python -m scripts.check_no_dashes --all
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan63-628c7c79/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+uv run python -m database.migrations.cli check-migrations --static-only
+OK: All 65 migrations valid. Single head: p6_03_multi_source_imports_and_aliases
+
+=== pnpm --dir kanban/web run check:api ===
+
+> @kanban/web@0.1.0 check:api /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan63-628c7c79/kanban/web
+> node scripts/gen-api.mjs && git diff --exit-code src/api/schema.gen.ts openapi.json
+
+✨ openapi-typescript 7.6.1
+🚀 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan63-628c7c79/kanban/web/openapi.json → /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan63-628c7c79/kanban/web/src/api/schema.gen.ts [576.8ms]
+
+=== pnpm --dir kanban/web run build ===
+
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan63-628c7c79/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 726 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.51 kB │ gzip:   0.32 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-CM4cus8f.css            491.35 kB │ gzip:  68.96 kB
+dist/assets/index-DQjQCL9d.js           2,504.52 kB │ gzip: 695.72 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.24s

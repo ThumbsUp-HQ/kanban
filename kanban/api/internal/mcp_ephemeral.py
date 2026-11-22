@@ -1,6 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""Internal ephemeral MCP token minting and revocation endpoints (KB-P4-13, S14.3)."""
+"""Internal ephemeral MCP token minting and revocation endpoints (KB-P4-13, KAN-63, S14.3)."""
 
 from __future__ import annotations
 
@@ -9,15 +9,17 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Request, status
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002  # Runtime import required for FastAPI Depends
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+)
 
 from kanban.api.internal.mcp_introspect import get_internal_session
-from kanban.api.problems import ProblemException
 from kanban.security.ephemeral_mcp_tokens import (
     mint_ephemeral_token,
     revoke_ephemeral_tokens_by_execution,
 )
-from kanban.security.mcp_keys import verify_internal_mcp_auth_header
+from kanban.security.service_auth import verify_internal_service_auth
 
 router = APIRouter(tags=["internal-mcp-ephemeral"])
 
@@ -56,72 +58,36 @@ class RevokeEphemeralTokenResponse(BaseModel):
     revoked_count: int
 
 
-def verify_mint_service_principal(request: Request) -> None:
-    """Enforce that only agent-runtime or kanban-api can mint ephemeral tokens.
+async def verify_mint_service_principal(request: Request) -> None:
+    """Enforce that only cryptographically verified agent-runtime or kanban-api can mint tokens.
 
     mcp-gateway is strictly forbidden (HTTP 403).
-    Unauthenticated callers are rejected (HTTP 401).
+    Unauthenticated or header-spoofed callers are rejected (HTTP 401).
     """
-    service_principal = (
-        request.headers.get("x-kb-service-principal")
-        or request.headers.get("x-client-cert-cn")
-        or request.headers.get("x-ssl-client-cn")
-    )
-    auth_header = request.headers.get("x-kb-internal-auth")
-    client_cert = request.headers.get("x-ssl-client-cert") or request.scope.get("client_cert")
-
-    # If caller identifies as mcp-gateway or presents mcp-gateway HMAC header -> 403 Forbidden
-    if (
-        service_principal == "mcp-gateway"
-        or (client_cert and "mcp-gateway" in str(client_cert))
-        or verify_internal_mcp_auth_header(auth_header)
-    ):
-        raise ProblemException(
-            code="FORBIDDEN",
-            status=403,
-            title="Forbidden",
-            detail="mcp-gateway service principal is forbidden from minting ephemeral tokens.",
-        )
-
-    # Require client certificate or valid agent-runtime / kanban-api principal
-    if service_principal in ("agent-runtime", "kanban-api"):
-        return
-
-    if client_cert:
-        return
-
-    raise ProblemException(
-        code="AUTHENTICATION_REQUIRED",
-        status=401,
-        title="Authentication Required",
-        detail="Internal agent-runtime or kanban-api client certificate required.",
+    body_bytes = await request.body()
+    verify_internal_service_auth(
+        request,
+        allowed_principals=("agent-runtime", "kanban-api"),
+        body_bytes=body_bytes,
     )
 
 
-def verify_revoke_auth(request: Request) -> None:
-    """Enforce internal authentication for token revocation."""
-    auth_header = request.headers.get("x-kb-internal-auth")
-    if verify_internal_mcp_auth_header(auth_header):
-        return
-
-    client_cert = request.headers.get("x-ssl-client-cert") or request.scope.get("client_cert")
-    if client_cert:
-        return
-
-    service_principal = (
-        request.headers.get("x-kb-service-principal")
-        or request.headers.get("x-client-cert-cn")
-        or request.headers.get("x-ssl-client-cn")
+async def verify_revoke_auth(request: Request) -> None:
+    """Enforce verified internal service authentication for token revocation."""
+    body_bytes = await request.body()
+    verify_internal_service_auth(
+        request,
+        allowed_principals=("agent-runtime", "kanban-api", "mcp-gateway"),
+        body_bytes=body_bytes,
     )
-    if service_principal in ("agent-runtime", "kanban-api", "mcp-gateway"):
-        return
 
-    raise ProblemException(
-        code="AUTHENTICATION_REQUIRED",
-        status=401,
-        title="Authentication Required",
-        detail="Internal authentication required to revoke ephemeral tokens.",
-    )
+
+async def _commit_if_pooled_engine(request: Request, session: AsyncSession) -> None:
+    """Commit transaction when session_factory is backed by a pooled AsyncEngine."""
+    sf = getattr(request.app.state, "session_factory", None)
+    engine = getattr(sf, "_engine", None) if sf is not None else None
+    if isinstance(engine, AsyncEngine):
+        await session.commit()
 
 
 @router.post(
@@ -132,6 +98,7 @@ def verify_revoke_auth(request: Request) -> None:
     dependencies=[Depends(verify_mint_service_principal)],
 )
 async def mint_token_endpoint(
+    request: Request,
     body: MintEphemeralTokenRequest,
     session: Annotated[AsyncSession, Depends(get_internal_session)],
 ) -> MintEphemeralTokenResponse:
@@ -147,6 +114,7 @@ async def mint_token_endpoint(
         ttl_seconds=body.ttl_seconds,
         max_calls=body.max_calls,
     )
+    await _commit_if_pooled_engine(request, session)
     return MintEphemeralTokenResponse(
         token=plaintext,
         expires_at=record.expires_at.isoformat(),
@@ -162,9 +130,11 @@ async def mint_token_endpoint(
     dependencies=[Depends(verify_revoke_auth)],
 )
 async def revoke_tokens_endpoint(
+    request: Request,
     execution_id: uuid.UUID,
     session: Annotated[AsyncSession, Depends(get_internal_session)],
 ) -> RevokeEphemeralTokenResponse:
     """Revoke all active tokens for the specified execution ID."""
     count = await revoke_ephemeral_tokens_by_execution(session, execution_id=execution_id)
+    await _commit_if_pooled_engine(request, session)
     return RevokeEphemeralTokenResponse(revoked_count=count)

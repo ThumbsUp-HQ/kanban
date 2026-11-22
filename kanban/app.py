@@ -362,8 +362,63 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
             await owned_engine.dispose()
 
 
+def create_internal_app(owner_app: FastAPI | None = None) -> FastAPI:
+    """Create isolated internal ASGI FastAPI application for service-to-service MCP routes."""
+    internal_app = FastAPI(
+        title="👍kanban Internal Service API",
+        version=PLATFORM_VERSION,
+        docs_url=None,
+        redoc_url=None,
+        openapi_url=None,
+    )
+    if owner_app is not None:
+        internal_app.state = owner_app.state
+        owner_app.state.internal_app = internal_app
+    else:
+        internal_app.state.settings = Settings()
+        internal_app.state.session_factory = None
+
+    internal_app.add_exception_handler(ProblemException, problem_exception_handler)  # type: ignore[arg-type]
+    internal_app.add_exception_handler(RequestValidationError, validation_exception_handler)  # type: ignore[arg-type]
+    internal_app.add_exception_handler(StarletteHTTPException, starlette_http_exception_handler)  # type: ignore[arg-type]
+    internal_app.add_exception_handler(Exception, unhandled_exception_handler)
+
+    internal_app.include_router(mcp_introspect_router)
+    internal_app.include_router(mcp_ephemeral_router)
+
+    internal_app.add_middleware(RequestIdMiddleware)
+    internal_app.add_middleware(JsonLimitsMiddleware)
+
+    return internal_app
+
+
+def _build_internal_and_api_dispatcher(
+    public_app: FastAPI, target_internal_app: FastAPI
+) -> ASGIApp:
+    """Create composite ASGI dispatcher forwarding /internal/* to internal_app and /api/* to app."""
+
+    class _InternalAndApiDispatcher:
+        def __init__(self, pub: FastAPI, internal: FastAPI) -> None:
+            self._public_app = pub
+            self._internal_app = internal
+
+        async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
+            if scope["type"] == "http":
+                path = scope.get("path", "")
+                if path == "/internal" or path.startswith("/internal/"):
+                    await self._internal_app(scope, receive, send)
+                    return
+            await self._public_app(scope, receive, send)
+
+    return _InternalAndApiDispatcher(public_app, target_internal_app)
+
+
 def _mount_mcp_surfaces(app: FastAPI, mcp_settings: McpSettings | None = None) -> None:
     """Mount live MCP surfaces and RFC 9728 protected-resource metadata endpoints."""
+    internal_app: FastAPI = getattr(app.state, "internal_app", None) or create_internal_app(app)
+    dispatcher = _build_internal_and_api_dispatcher(app, internal_app)
+    app.state.internal_dispatcher = dispatcher
+
     mcp_app = getattr(app.state, "mcp_app", None)
     if mcp_app is None:
         try:
@@ -377,7 +432,7 @@ def _mount_mcp_surfaces(app: FastAPI, mcp_settings: McpSettings | None = None) -
                 if mcp_settings is not None
                 else mcp_settings_cls(mode="standalone_inprocess", auth_enabled=True)
             )
-            mcp_app = create_mcp_app(active_settings, kanban_app=app)
+            mcp_app = create_mcp_app(active_settings, kanban_app=dispatcher)
             app.state.mcp_app = mcp_app
         except Exception:
             logger.debug("Automatic live MCP application mounting skipped", exc_info=True)
@@ -486,11 +541,10 @@ def create_app(  # noqa: PLR0915
             headers=exc.headers,
         )
 
-    # Mount canonical /api/v1 router tree
+    # Mount canonical /api/v1 router tree and isolated internal app
     app.include_router(build_v1_router(), prefix="/api/v1")
-    app.include_router(mcp_introspect_router)
-    app.include_router(mcp_ephemeral_router)
     app.include_router(oauth_root_router)
+    create_internal_app(app)
 
     # Register activity listeners for notifications and realtime domain outbox
     register_notifications_listener()
@@ -502,7 +556,7 @@ def create_app(  # noqa: PLR0915
     # Mount agent sparkle FIM completion router if available
     _mount_sparkle_router(app)
 
-    # Fallback API router for legacy/subpath 404s
+    # Fallback API and /internal routers returning 404 on the public application surface
     api_router = APIRouter(prefix="/api")
 
     @api_router.api_route(
@@ -523,6 +577,32 @@ def create_app(  # noqa: PLR0915
         )
 
     app.include_router(api_router)
+
+    internal_router = APIRouter(prefix="/internal")
+
+    @internal_router.api_route(
+        "",
+        methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
+        include_in_schema=False,
+    )
+    @internal_router.api_route(
+        "/{full_path:path}",
+        methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
+        include_in_schema=False,
+    )
+    async def internal_not_found(full_path: str = "") -> JSONResponse:
+        del full_path
+        return JSONResponse(
+            status_code=404,
+            content={
+                "type": "about:blank",
+                "title": "Not Found",
+                "status": 404,
+            },
+            media_type="application/problem+json",
+        )
+
+    app.include_router(internal_router)
 
     # Authenticated WebSocket realtime endpoint (/ws, /api/v1/ws)
     @app.websocket("/api/v1/ws")

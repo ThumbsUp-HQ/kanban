@@ -5,15 +5,18 @@
 from __future__ import annotations
 
 import base64
+import json
 from typing import TYPE_CHECKING
 
+import httpx
 import pytest
 from sqlalchemy import text
 from starlette.requests import Request
 
 from kanban.api.deps import PrincipalContext
 from kanban.api.internal.mcp_introspect import get_internal_session
-from kanban.security.mcp_keys import create_internal_mcp_auth_header
+from kanban.app import create_internal_app
+from kanban.security.service_auth import create_internal_service_auth_header
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -159,51 +162,71 @@ async def test_admin_mcp_keys_endpoints_lifecycle(  # noqa: PLR0915
     assert resp_list_docs.status_code == 200
     assert not any(k["id"] == key_id for k in resp_list_docs.json())
 
-    # 5. Internal introspection via POST /internal/v1/mcp/introspect
-    # 5a. Missing internal auth header returns 401
-    resp_intro_noauth = await client.post(
-        "/internal/v1/mcp/introspect",
-        json={"token": token, "surface": "agent"},
-    )
-    assert resp_intro_noauth.status_code == 401
+    # 5. Internal introspection via POST /internal/v1/mcp/introspect on internal_app
+    raw_app = getattr(client._transport, "app", None)  # noqa: SLF001
+    assert raw_app is not None
+    internal_app = create_internal_app(raw_app)
+    int_transport = httpx.ASGITransport(app=internal_app)
+    async with httpx.AsyncClient(
+        transport=int_transport, base_url="http://internal.test"
+    ) as int_client:
+        intro_path = "/internal/v1/mcp/introspect"
+        # 5a. Missing internal auth header returns 401
+        resp_intro_noauth = await int_client.post(
+            intro_path,
+            json={"token": token, "surface": "agent"},
+        )
+        assert resp_intro_noauth.status_code == 401
 
-    # 5a2. Client certificate authentication bypasses HMAC header requirement
-    resp_intro_cert = await client.post(
-        "/internal/v1/mcp/introspect",
-        headers={"X-Ssl-Client-Cert": "test-client-cert-content"},
-        json={"token": token, "surface": "agent"},
-    )
-    assert resp_intro_cert.status_code == 200
-    assert resp_intro_cert.json()["active"] is True
+        # 5a2. Spoofed X-Ssl-Client-Cert HTTP header is rejected (401)
+        resp_intro_cert = await int_client.post(
+            intro_path,
+            headers={"X-Ssl-Client-Cert": "test-client-cert-content"},
+            json={"token": token, "surface": "agent"},
+        )
+        assert resp_intro_cert.status_code == 401
 
-    # 5b. Valid internal auth header returns active: true
-    internal_auth = create_internal_mcp_auth_header()
-    resp_intro = await client.post(
-        "/internal/v1/mcp/introspect",
-        headers={"X-KB-Internal-Auth": internal_auth},
-        json={"token": token, "surface": "agent"},
-    )
-    assert resp_intro.status_code == 200
-    contract_recorder.record("mcp_introspect_active_200", resp_intro.request, resp_intro)
-    intro_data = resp_intro.json()
-    assert intro_data["active"] is True
-    assert intro_data["surface"] == "agent"
-    assert intro_data["scopes"] == ["agent:read", "agent:write"]
+        # 5b. Valid role-bound internal auth header returns active: true
+        body_agent = json.dumps({"token": token, "surface": "agent"}).encode("utf-8")
+        internal_auth = create_internal_service_auth_header(
+            principal="mcp-gateway",
+            method="POST",
+            path=intro_path,
+            body_bytes=body_agent,
+        )
+        resp_intro = await int_client.post(
+            intro_path,
+            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": internal_auth},
+            content=body_agent,
+        )
+        assert resp_intro.status_code == 200
+        contract_recorder.record("mcp_introspect_active_200", resp_intro.request, resp_intro)
+        intro_data = resp_intro.json()
+        assert intro_data["active"] is True
+        assert intro_data["surface"] == "agent"
+        assert intro_data["scopes"] == ["agent:read", "agent:write"]
 
-    # 5c. Surface mismatch via introspection returns active: false, reason: SURFACE_KEY_MISMATCH
-    resp_intro_mismatch = await client.post(
-        "/internal/v1/mcp/introspect",
-        headers={"X-KB-Internal-Auth": internal_auth},
-        json={"token": token, "surface": "admin"},
-    )
-    assert resp_intro_mismatch.status_code == 200
-    contract_recorder.record(
-        "mcp_introspect_surface_mismatch_200",
-        resp_intro_mismatch.request,
-        resp_intro_mismatch,
-    )
-    assert resp_intro_mismatch.json()["active"] is False
-    assert resp_intro_mismatch.json()["reason"] == "SURFACE_KEY_MISMATCH"
+        # 5c. Surface mismatch via introspection returns active: false, reason: SURFACE_KEY_MISMATCH
+        body_admin = json.dumps({"token": token, "surface": "admin"}).encode("utf-8")
+        internal_auth_admin = create_internal_service_auth_header(
+            principal="mcp-gateway",
+            method="POST",
+            path=intro_path,
+            body_bytes=body_admin,
+        )
+        resp_intro_mismatch = await int_client.post(
+            intro_path,
+            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": internal_auth_admin},
+            content=body_admin,
+        )
+        assert resp_intro_mismatch.status_code == 200
+        contract_recorder.record(
+            "mcp_introspect_surface_mismatch_200",
+            resp_intro_mismatch.request,
+            resp_intro_mismatch,
+        )
+        assert resp_intro_mismatch.json()["active"] is False
+        assert resp_intro_mismatch.json()["reason"] == "SURFACE_KEY_MISMATCH"
 
     # 6. Revoke key via DELETE /api/v1/admin/mcp-keys/{key_id} -> 204
     resp_del = await client.delete(f"/api/v1/admin/mcp-keys/{key_id}")
@@ -216,18 +239,21 @@ async def test_admin_mcp_keys_endpoints_lifecycle(  # noqa: PLR0915
     assert resp_del_unknown.json()["code"] == "NOT_FOUND"
 
     # 7. Introspection of revoked key returns active: false
-    resp_intro_revoked = await client.post(
-        "/internal/v1/mcp/introspect",
-        headers={"X-KB-Internal-Auth": internal_auth},
-        json={"token": token, "surface": "agent"},
-    )
-    assert resp_intro_revoked.status_code == 200
-    contract_recorder.record(
-        "mcp_introspect_revoked_200",
-        resp_intro_revoked.request,
-        resp_intro_revoked,
-    )
-    assert resp_intro_revoked.json()["active"] is False
+    async with httpx.AsyncClient(
+        transport=int_transport, base_url="http://internal.test"
+    ) as int_client:
+        resp_intro_revoked = await int_client.post(
+            intro_path,
+            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": internal_auth},
+            content=body_agent,
+        )
+        assert resp_intro_revoked.status_code == 200
+        contract_recorder.record(
+            "mcp_introspect_revoked_200",
+            resp_intro_revoked.request,
+            resp_intro_revoked,
+        )
+        assert resp_intro_revoked.json()["active"] is False
 
 
 @pytest.mark.asyncio
