@@ -36,12 +36,17 @@ jobs:
         run: |
           uv run ruff check .
           uv run ruff format --check .
+          uv run mypy
+          uv run lint-imports
           uv run python -m scripts.check_no_dashes --all
+          uv run python -m database.migrations.cli check-migrations --static-only
 
       - name: Fast smoke unit tests
         shell: bash
+        env:
+          KB_TEST_SKIP_PG_CHECK: "1"
         run: |
-          uv run pytest scripts/tests/test_ci_workflow.py tests/test_workspace_layout.py kanban/tests/ci/test_github_workflows.py kanban/tests/platform/test_brand_terminology_audit.py kanban/tests/docs/test_wiki_media_audit.py
+          uv run pytest scripts/tests/test_ci_workflow.py scripts/tests/test_run_and_log.py scripts/tests/test_upload_dash_log.py tests/test_workspace_layout.py kanban/tests/ci/test_github_workflows.py kanban/tests/platform/test_brand_terminology_audit.py kanban/tests/docs/test_wiki_media_audit.py
 
   web-smoke:
     runs-on: ubuntu-latest
@@ -69,6 +74,10 @@ jobs:
       - name: Typecheck
         shell: bash
         run: pnpm --dir kanban/web typecheck
+
+      - name: Unit tests
+        shell: bash
+        run: pnpm --dir kanban/web test:unit
 
       - name: Build web application
         shell: bash
