@@ -39,6 +39,9 @@ import { ThemeProvider } from '../theme/ThemeProvider';
 import { ShellPanelsProvider } from './shellPanels';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { IssuesWorkspaceRoute } from '../features/views/viewRegistry';
+import { fetchStagedProjectIssues } from '../features/views/viewsApi';
+import { AdminDiagnosticsStudio } from '../features/admin/AdminDiagnosticsStudio';
+import { IssueSurfaceRoot } from '../features/drawer/IssueSurface';
 import { RailStory } from '../dev/RailStory';
 import { DrawerActionsStory } from '../dev/DrawerActionsStory';
 import { StickiesStory } from '../dev/StickiesStory';
@@ -784,6 +787,513 @@ describe('Browser QA Branch Coverage Booster', () => {
       fireEvent.click(screen.getByTestId('btn-toggle-theme'));
       fireEvent.click(screen.getByTestId('btn-reset'));
       u6();
+    });
+
+    it('covers fetchStagedProjectIssues abort, dedup, cycle detection, and maxPages truncation branches', async () => {
+      // 1. Empty and 'undefined' projectKey
+      expect(await fetchStagedProjectIssues('')).toEqual({
+        items: [],
+        pagesFetched: 0,
+        truncated: false,
+      });
+      expect(await fetchStagedProjectIssues('undefined')).toEqual({
+        items: [],
+        pagesFetched: 0,
+        truncated: false,
+      });
+
+      // 2. Phase 1 aborted with Error reason and string reason
+      const ac1 = new AbortController();
+      ac1.abort(new Error('phase1-err'));
+      await expect(fetchStagedProjectIssues('KAN', { signal: ac1.signal })).rejects.toThrow(
+        'phase1-err',
+      );
+
+      const ac2 = new AbortController();
+      ac2.abort('raw-string-reason');
+      await expect(fetchStagedProjectIssues('KAN', { signal: ac2.signal })).rejects.toThrow(
+        'Aborted',
+      );
+
+      // 3. Phase 1 + Phase 2 deduplication, sort_by/sort_dir, and cycle detection
+      let callIdx = 0;
+      vi.spyOn(globalThis, 'fetch').mockImplementation(() => {
+        callIdx += 1;
+        if (callIdx === 1) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                items: [
+                  { id: '1', key: 'KAN-1', summary: 'One' },
+                  { id: '1-dup', key: 'KAN-1', summary: 'One dup' },
+                ],
+                next_cursor: 'cur-1',
+              }),
+              { status: 200 },
+            ),
+          );
+        }
+        if (callIdx === 2) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                items: [
+                  { id: '1-dup2', key: 'KAN-1', summary: 'One dup phase2' },
+                  { id: '2', key: 'KAN-2', summary: 'Two' },
+                ],
+                next_cursor: 'cur-1', // cycle!
+              }),
+              { status: 200 },
+            ),
+          );
+        }
+        return Promise.resolve(
+          new Response(JSON.stringify({ items: [], next_cursor: null }), { status: 200 }),
+        );
+      });
+
+      const phase1Seen: number[] = [];
+      const cycleRes = await fetchStagedProjectIssues('KAN', {
+        sort_by: 'sequence_id',
+        sort_dir: 'desc',
+        onPhase1: (items, hasMore) => {
+          phase1Seen.push(items.length, hasMore ? 1 : 0);
+        },
+      });
+      expect(phase1Seen).toEqual([1, 1]);
+      expect(cycleRes.truncated).toBe(true);
+      expect(cycleRes.items.map((i) => i.key)).toEqual(['KAN-1', 'KAN-2']);
+
+      // 4. Phase 2 maxPages truncation
+      callIdx = 0;
+      vi.spyOn(globalThis, 'fetch').mockImplementation(() => {
+        callIdx += 1;
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [{ id: String(callIdx), key: `KAN-${String(callIdx)}`, summary: 'Item' }],
+              next_cursor: `cur-${String(callIdx)}`,
+            }),
+            { status: 200 },
+          ),
+        );
+      });
+      const maxRes = await fetchStagedProjectIssues('KAN', { maxPages: 2 });
+      expect(maxRes.pagesFetched).toBe(2);
+      expect(maxRes.truncated).toBe(true);
+
+      // 5. Phase 2 abort during page 1 fetch (with Error and with string reason)
+      const acPhase2Err = new AbortController();
+      vi.spyOn(globalThis, 'fetch').mockImplementationOnce(() => {
+        acPhase2Err.abort(new Error('phase2-err'));
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [{ id: '1', key: 'KAN-1', summary: 'Item' }],
+              next_cursor: 'cur-next',
+            }),
+            { status: 200 },
+          ),
+        );
+      });
+      await expect(
+        fetchStagedProjectIssues('KAN', { signal: acPhase2Err.signal }),
+      ).rejects.toThrow('phase2-err');
+
+      const acPhase2Str = new AbortController();
+      vi.spyOn(globalThis, 'fetch').mockImplementationOnce(() => {
+        acPhase2Str.abort('phase2-str');
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              items: [{ id: '1', key: 'KAN-1', summary: 'Item' }],
+              next_cursor: 'cur-next',
+            }),
+            { status: 200 },
+          ),
+        );
+      });
+      await expect(
+        fetchStagedProjectIssues('KAN', { signal: acPhase2Str.signal }),
+      ).rejects.toThrow('Aborted');
+    });
+
+    it('covers AdminDiagnosticsStudio all panels, probes, WS lifecycle, config filters, and IssueSurface placeholderData cache lookup', async () => {
+      document.cookie = 'kb_csrf=csrf-diag; path=/';
+      const clipboardWrite = vi.fn().mockResolvedValue(undefined);
+      Object.assign(navigator, { clipboard: { writeText: clipboardWrite } });
+
+      let probeMode: 'ok' | 'fail-status' | 'throw-msg' | 'throw-empty' = 'ok';
+      let containerRuntime = 'podman';
+      let isNonRoot = false;
+
+      vi.spyOn(globalThis, 'fetch').mockImplementation((input) => {
+        const path = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (path.includes('/api/v1/auth/me')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                is_server_admin: false,
+                is_workspace_admin: true,
+                auth_aal: 'aal2',
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } },
+            ),
+          );
+        }
+        if (path.includes('/api/v1/admin/diagnostics/probes/realtime')) {
+          if (probeMode === 'ok') {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  success: true,
+                  db_latency_ms: 1.1,
+                  notify_rtt_ms: 2.2,
+                  message: 'Broker healthy',
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            );
+          }
+          if (probeMode === 'fail-status') {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify({
+                  success: false,
+                  db_latency_ms: 5.0,
+                  message: 'Broker degraded',
+                }),
+                { status: 200, headers: { 'Content-Type': 'application/json' } },
+              ),
+            );
+          }
+          if (probeMode === 'throw-msg') {
+            return Promise.reject(new Error('Broker timeout'));
+          }
+          return Promise.reject(new Error(''));
+        }
+        if (path.includes('/api/v1/admin/diagnostics')) {
+          return Promise.resolve(
+            new Response(
+              JSON.stringify({
+                status: 'degraded',
+                runtime_and_container: {
+                  deployment_mode: 'standalone',
+                  in_container: true,
+                  container_runtime: containerRuntime,
+                  os_platform: 'Linux',
+                  python_version: '3.12',
+                  is_non_root: isNonRoot,
+                  uptime_seconds: 120,
+                  cgroup_version: 'v2',
+                },
+                storage: {
+                  persistent_volume: true,
+                  attachments_backend: 'local',
+                  sri_manifest_present: true,
+                  directories: [
+                    {
+                      name: 'writable-dir',
+                      path: '/var/lib/kanban/w',
+                      exists: true,
+                      writable: true,
+                      free_bytes: 1073741824,
+                      total_bytes: 2147483648,
+                    },
+                    {
+                      name: 'readonly-dir',
+                      path: '/var/lib/kanban/ro',
+                      exists: true,
+                      writable: false,
+                      free_bytes: 1073741824,
+                      total_bytes: 2147483648,
+                    },
+                    {
+                      name: 'missing-dir',
+                      path: '/var/lib/kanban/missing',
+                      exists: false,
+                      writable: false,
+                      free_bytes: 0,
+                      total_bytes: 0,
+                    },
+                  ],
+                },
+                database: {
+                  connected: true,
+                  latency_ms: 1.0,
+                  server_version: '16',
+                  active_role_non_bypass: true,
+                  force_rls_verified: true,
+                  alembic_head_current: true,
+                  code_heads: ['h1'],
+                  db_heads: ['h1'],
+                  pool: { size: 5, checked_in: 4, checked_out: 1, overflow: 0 },
+                },
+                realtime: {
+                  ws_enabled: true,
+                  ws_paths: ['/ws'],
+                  sse_enabled: true,
+                  sse_path: '/sse',
+                  hub_running: true,
+                  hub_draining: false,
+                  broker_kind: 'pg_notify',
+                  broker_listener_connected: true,
+                  broker_publisher_connected: true,
+                  outbox_relay_running: true,
+                  outbox_pending_count: 2,
+                  outbox_dead_letter_count: 1,
+                  active_connections_total: 3,
+                  workspace_connections: {},
+                  ws_connections: 2,
+                  sse_connections: 1,
+                  heartbeat_interval_s: 25,
+                  session_recheck_interval_s: 60,
+                  replay_retention_minutes: 60,
+                  background_tasks: {
+                    listener_alive: true,
+                    ping_alive: true,
+                    session_check_alive: true,
+                  },
+                },
+                request_proxy_check: {
+                  detected_scheme: 'http',
+                  is_https: false,
+                  forwarded_proto_present: false,
+                  origin_allowed_for_ws: true,
+                  trusted_proxies_configured: false,
+                  csp_connect_src_allows_wss: true,
+                  warnings: [],
+                },
+                sandbox: {
+                  tier_a_wasm: {
+                    available: true,
+                    engine: 'wasmtime',
+                    max_fuel: 1000,
+                    max_memory_bytes: 1024,
+                    timeout_ms: 100,
+                    cached_modules: 1,
+                  },
+                  tier_b_nsjail: {
+                    available: false,
+                    binary_exists: false,
+                    binary_owned_by_root: false,
+                    permissions_safe: false,
+                    userns_probe_ok: false,
+                    seccomp_profile_present: false,
+                  },
+                },
+                services: {
+                  rate_limiter_backend: 'pg',
+                  valkey_configured: false,
+                  background_jobs: [],
+                  mcp_mounted: true,
+                  mcp_surfaces: ['/mcp/agent'],
+                  ai_providers: { total: 1, enabled: 1, kinds: ['openai'] },
+                  auth_cards: { total: 1, enabled: 1, kinds: ['local'] },
+                  remote_runners: { connected_count: 0 },
+                  keyring: { configured: true, source: 'env' },
+                },
+                config: [
+                  {
+                    key: 'session_timeout',
+                    subsystem: 'Auth & AAL2',
+                    value: 3600,
+                    source: 'default',
+                    redacted: false,
+                    notes: 'Timeout',
+                  },
+                  {
+                    key: 'secret_pepper',
+                    subsystem: 'Security & CSP',
+                    value: '[REDACTED]',
+                    source: 'env',
+                    redacted: true,
+                    notes: 'Secret',
+                  },
+                ],
+                build: { version: '2.0.0' },
+                subsystems: {
+                  s1: {
+                    subsystem: 's1',
+                    name: 'Sub 1',
+                    status: 'healthy',
+                    description: 'OK',
+                    details: { a: 1 },
+                  },
+                  s2: {
+                    subsystem: 's2',
+                    name: 'Sub 2',
+                    status: 'degraded',
+                    description: 'Warn',
+                    details: { b: 2 },
+                  },
+                  s3: {
+                    subsystem: 's3',
+                    name: 'Sub 3',
+                    status: 'unhealthy',
+                    description: 'Down',
+                    details: { c: 3 },
+                  },
+                },
+              }),
+              { status: 200, headers: { 'Content-Type': 'application/json' } },
+            ),
+          );
+        }
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({ flagged_total: 0, by_reason: {}, items: [], has_more: false }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        );
+      });
+
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const { unmount } = render(
+        <QueryClientProvider client={qc}>
+          <MemoryRouter initialEntries={['/admin/diagnostics']}>
+            <AdminDiagnosticsStudio defaultTab="all" />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('admin-diagnostics-studio')).toBeDefined();
+      });
+
+      // Summary card shows Podman Container and Root Process
+      expect(screen.getByText('Podman Container')).toBeDefined();
+      expect(screen.getByText('Root Process')).toBeDefined();
+      expect(screen.getByText('Read-Only')).toBeDefined();
+      expect(screen.getByText('Missing')).toBeDefined();
+
+      // Switch tabs including All and Health
+      fireEvent.click(screen.getByTestId('tab-health'));
+      fireEvent.click(screen.getByTestId('tab-all'));
+
+      // Filter config by key, subsystem, value, and select dropdown + copy JSON
+      const searchInput = screen.getByTestId('config-search-input');
+      fireEvent.change(searchInput, { target: { value: '3600' } });
+      fireEvent.change(searchInput, { target: { value: 'Security & CSP' } });
+      fireEvent.change(searchInput, { target: { value: '' } });
+
+      const subSelect = screen.getByTestId('config-subsystem-select');
+      fireEvent.change(subSelect, { target: { value: 'Auth & AAL2' } });
+      fireEvent.change(subSelect, { target: { value: 'ALL' } });
+
+      fireEvent.click(screen.getByTestId('copy-config-btn'));
+      expect(clipboardWrite).toHaveBeenCalled();
+
+      // Run PG probe across all 4 outcome branches
+      const pgProbeBtn = screen.getByTestId('run-pg-probe-btn');
+      fireEvent.click(pgProbeBtn);
+      await waitFor(() => {
+        expect(screen.getByTestId('probe-alert').textContent).toContain('Broker healthy');
+      });
+
+      probeMode = 'fail-status';
+      fireEvent.click(pgProbeBtn);
+      await waitFor(() => {
+        expect(screen.getByTestId('probe-alert').textContent).toContain('Broker degraded');
+      });
+
+      probeMode = 'throw-msg';
+      fireEvent.click(pgProbeBtn);
+      await waitFor(() => {
+        expect(screen.getByTestId('probe-alert').textContent).toContain('Broker timeout');
+      });
+
+      probeMode = 'throw-empty';
+      fireEvent.click(pgProbeBtn);
+      await waitFor(() => {
+        expect(screen.getByTestId('probe-alert').textContent).toContain(
+          'Realtime probe execution failed',
+        );
+      });
+
+      // Refresh diagnostics with bare-metal host fallback
+      containerRuntime = 'bare-metal';
+      isNonRoot = true;
+      fireEvent.click(screen.getByTestId('refresh-diagnostics-btn'));
+      await waitFor(() => {
+        expect(screen.getByText('Bare Metal Host')).toBeDefined();
+      });
+
+      // WebSocket ping probe: mock WebSocket onopen + onmessage pong
+      const origWs = globalThis.WebSocket;
+      class FakeWsPong {
+        static CONNECTING = 0;
+        static OPEN = 1;
+        readyState = 1;
+        onopen: (() => void) | null = null;
+        onmessage: ((ev: { data: unknown }) => void) | null = null;
+        onerror: (() => void) | null = null;
+        send = vi.fn();
+        close = vi.fn();
+        constructor() {
+          setTimeout(() => {
+            this.onopen?.();
+            this.onmessage?.({ data: 'not-json' });
+            this.onmessage?.({ data: JSON.stringify({ op: 'pong' }) });
+          }, 0);
+        }
+      }
+      globalThis.WebSocket = FakeWsPong as unknown as typeof WebSocket;
+      fireEvent.click(screen.getByTestId('run-ws-ping-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('ws-probe-badge').textContent).toContain('WS Live');
+      });
+
+      // WebSocket ping probe: constructor throws
+      globalThis.WebSocket = function ThrowWs() {
+        throw new Error('ws blocked');
+      } as unknown as typeof WebSocket;
+      fireEvent.click(screen.getByTestId('run-ws-ping-btn'));
+      globalThis.WebSocket = origWs;
+      unmount();
+
+      // IssueSurfaceRoot placeholderData from queryClient ['issues'] cache (array & envelope)
+      const qcSurface = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      qcSurface.setQueryData(['issues', 'null-entry'], null);
+      qcSurface.setQueryData(
+        ['issues', 'array-entry'],
+        [
+          {
+            id: 'id-99',
+            key: 'KAN-99',
+            summary: 'Cached Array Issue',
+            state: { id: 's1', name: 'Todo', group: 'unstarted' },
+            priority: { slug: 'medium', label: 'Medium' },
+          },
+        ],
+      );
+      qcSurface.setQueryData(['issues', 'envelope-entry'], {
+        items: [
+          {
+            id: 'id-100',
+            key: 'KAN-100',
+            summary: 'Cached Envelope Issue',
+            state: { id: 's1', name: 'Todo', group: 'unstarted' },
+            priority: { slug: 'high', label: 'High' },
+          },
+        ],
+      });
+
+      vi.spyOn(clientModule.apiClient, 'get').mockImplementation(() => {
+        return new Promise(() => {
+          /* keep pending to exercise placeholderData */
+        });
+      });
+
+      const { unmount: uSurface } = render(
+        <QueryClientProvider client={qcSurface}>
+          <MemoryRouter>
+            <IssueSurfaceRoot mode="drawer" issueKey="KAN-100" projectKey="KAN" />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+      expect(screen.getByText('Cached Envelope Issue')).toBeDefined();
+      uSurface();
     });
   });
 });
