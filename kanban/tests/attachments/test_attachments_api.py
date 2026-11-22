@@ -508,7 +508,7 @@ async def test_case_8_anti_enumeration_and_rate_limit(
     app = api_env.client._transport.app  # type: ignore[attr-defined]
     base_limiter = PgRateLimiter(engine=app.state.session_factory._engine)
 
-    class _PinnedPgRateLimiter(PgRateLimiter):
+    class _PinnedPgRateLimiter:
         async def hit(self, policy: object, key: bytes, _now: object = None) -> object:
             return await base_limiter.hit(policy, key, now=pinned_now)  # type: ignore[arg-type]
 
