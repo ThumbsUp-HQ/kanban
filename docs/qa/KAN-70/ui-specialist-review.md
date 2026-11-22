@@ -5,7 +5,7 @@
 - **Review Date:** 2026-11-22
 - **Branch:** `feat/KAN-70-content-provenance-taint`
 - **Target Worktree:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan70-13acc0b7`
-- **Commit Under Audit:** `c8dfa07c` (`feat(security): KAN-70 content provenance trust tiers, taint tracking and capability stripping`)
+- **Commit Under Audit:** `9b61293affa822de6d97c13542c93bcbfe8ec7c4 (9b61293a)` (`feat(security): KAN-70 content provenance trust tiers, taint tracking and capability stripping`)
 - **Status:** APPROVED
 
 ---

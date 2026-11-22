@@ -13,7 +13,7 @@ All 4 scoped problems for KAN-70 have been fully implemented, rigorously tested 
 
 ### Problem 1: Content Provenance Trust Tiers & Schema Invariants
 - **Alembic Migration:**
-  * Created `database/migrations/versions/p6_07_content_provenance_and_taint.py` (`revision = "p6_07_content_provenance_and_taint"`, `down_revision = "p6_05_issue_leases_and_fencing"`).
+  * Created `database/migrations/versions/p6_07_content_provenance_and_taint.py` (`revision = "p6_07_content_provenance_and_taint"`, `down_revision = "p6_06_crypto_shredded_activity_ledger"`).
   * Up/Down SQL pair in `database/migrations/sql/p6_07_content_provenance_and_taint.{up,down}.sql`.
 - **Database Schema & ORM Parity:**
   * Added `provenance_tier TEXT NOT NULL DEFAULT 'trusted_member'` with check constraint on valid values (`trusted_member`, `verified_agent`, `imported`, `external_webhook`, `public_reporter`, `untrusted_intake`).
@@ -108,7 +108,7 @@ Results:
 - `uv run mypy` -> Success: no issues found in 1235 source files
 - `uv run lint-imports` -> 2 kept, 0 broken (Contracts clean)
 - `uv run python -m scripts.check_no_dashes --all` -> 0 violations
-- `uv run python -m database.migrations.cli check-migrations --static-only` -> OK: All 68 migrations valid. Single head: `p6_07_content_provenance_and_taint`
+- `uv run python -m database.migrations.cli check-migrations --static-only` -> OK: All 69 migrations valid. Single head: `p6_07_content_provenance_and_taint`
 
 ---
 

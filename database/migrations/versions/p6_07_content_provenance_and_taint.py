@@ -3,7 +3,7 @@
 """Content provenance trust tiers and untrusted content taint tracking.
 
 Revision ID: p6_07_content_provenance_and_taint
-Revises: p6_05_issue_leases_and_fencing
+Revises: p6_06_crypto_shredded_activity_ledger
 Create Date: 2026-11-22 20:00:00.000000
 """
 
@@ -13,7 +13,7 @@ from database.migrations.sqlfile import execute_sql_file
 
 # revision identifiers, used by Alembic.
 revision: str = "p6_07_content_provenance_and_taint"
-down_revision: str | None = "p6_05_issue_leases_and_fencing"
+down_revision: str | None = "p6_06_crypto_shredded_activity_ledger"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 
