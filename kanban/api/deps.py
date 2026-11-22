@@ -22,6 +22,7 @@ if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
 
     from database.session import RLSSessionFactory
+    from kanban.security.boundary import CredentialBoundary
 
 
 @dataclass(frozen=True, slots=True)
@@ -44,6 +45,7 @@ class PrincipalContext:
     is_server_admin: bool = False
     principal_type: str | None = None
     is_mcp_credential: bool = False
+    credential_boundary: CredentialBoundary | None = None
 
     def __post_init__(self) -> None:
         """Enforce AAL level bounds."""
@@ -141,6 +143,9 @@ async def get_principal(request: Request) -> PrincipalContext:
             detail="Session requires second-factor verification before accessing this resource.",
         )
 
+    if principal.credential_boundary is not None:
+        principal.credential_boundary.validate_request(request, principal.workspace_id)
+
     return principal
 
 
@@ -183,6 +188,17 @@ async def get_rls_session(
                 if res_ws:
                     target_ws_id = res_ws
 
+    if (
+        principal.credential_boundary is not None
+        and not principal.credential_boundary.allows_workspace(target_ws_id)
+    ):
+        raise ProblemException(
+            code="CREDENTIAL_SCOPE_VIOLATION",
+            status=403,
+            title="Credential Scope Violation",
+            detail=f"Workspace '{target_ws_id}' is outside allowed workspaces.",
+        )
+
     user_access_hash = principal.user_access_hash
     if user_access_hash is None:
         scopes_str = ",".join(sorted(principal.token_scopes))
@@ -210,3 +226,7 @@ def get_settings(request: Request) -> Settings:
     if isinstance(settings, Settings):
         return settings
     return Settings()
+
+
+# Alias for backwards compatibility and clarity across dependencies
+get_current_principal = get_principal

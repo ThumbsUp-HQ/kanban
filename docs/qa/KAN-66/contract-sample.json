@@ -1,0 +1,170 @@
+{
+  "200_OK_AGENT_REQUEST": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/issues",
+      "headers": {
+        "authorization": "Bearer kb_pat_[REDACTED]",
+        "x-forwarded-for": "192.168.1.50"
+      },
+      "body": {
+        "title": "Fix memory leak in parser",
+        "description": "Details here"
+      }
+    },
+    "credential_boundary": {
+      "scope_tier": "workspace",
+      "surface": "agent",
+      "workspace_allowlist": ["b7f16a67-0c7d-4c7a-9774-6ea278dcb7b1"],
+      "project_allowlist": ["2a2221b7-a359-42b7-81ec-aa0b18f62f39"],
+      "capability_mask": 255,
+      "allowed_tools": ["create_issue", "read_ticket"],
+      "allowed_cidrs": ["192.168.1.0/24"],
+      "has_aal2_provenance": false
+    },
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": "e9b5f492-c9ee-4740-9a29-bdfbc4a889fa",
+      "key": "PRJA-42",
+      "title": "Fix memory leak in parser"
+    }
+  },
+  "200_OK_DOCS_MUTATION": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/docs",
+      "headers": {
+        "authorization": "Bearer kb_pat_[REDACTED]"
+      },
+      "body": {
+        "title": "Architecture Overview",
+        "content_markdown": "# Overview"
+      }
+    },
+    "credential_boundary": {
+      "scope_tier": "workspace",
+      "surface": "docs",
+      "workspace_allowlist": ["b7f16a67-0c7d-4c7a-9774-6ea278dcb7b1"],
+      "project_allowlist": [],
+      "capability_mask": 255,
+      "allowed_tools": ["search_docs", "write_doc"],
+      "allowed_cidrs": [],
+      "has_aal2_provenance": false
+    },
+    "status": 200,
+    "headers": {
+      "content-type": "application/json"
+    },
+    "body": {
+      "id": "019349e5-9e67-7501-a67b-f9754f738f6b",
+      "title": "Architecture Overview"
+    }
+  },
+  "403_CIDR_NOT_ALLOWED": {
+    "request": {
+      "method": "GET",
+      "path": "/api/v1/issues",
+      "headers": {
+        "authorization": "Bearer kb_pat_[REDACTED]",
+        "x-forwarded-for": "10.0.0.50"
+      }
+    },
+    "credential_boundary": {
+      "scope_tier": "global",
+      "surface": "agent",
+      "allowed_cidrs": ["192.168.1.0/24"]
+    },
+    "status": 403,
+    "headers": {
+      "content-type": "application/problem+json"
+    },
+    "body": {
+      "type": "urn:kanban:problem:CIDR_NOT_ALLOWED",
+      "title": "CIDR Not Allowed",
+      "status": 403,
+      "code": "CIDR_NOT_ALLOWED",
+      "detail": "Client IP '10.0.0.50' is outside allowed CIDRs."
+    }
+  },
+  "403_CREDENTIAL_SCOPE_VIOLATION": {
+    "request": {
+      "method": "GET",
+      "path": "/api/v1/issues",
+      "headers": {
+        "authorization": "Bearer kb_pat_[REDACTED]",
+        "x-kb-scope-workspace": "74880bbd-c6a6-4b2a-b731-8e7c10b27138"
+      }
+    },
+    "credential_boundary": {
+      "scope_tier": "workspace",
+      "surface": "agent",
+      "workspace_allowlist": ["b7f16a67-0c7d-4c7a-9774-6ea278dcb7b1"]
+    },
+    "status": 403,
+    "headers": {
+      "content-type": "application/problem+json"
+    },
+    "body": {
+      "type": "urn:kanban:problem:CREDENTIAL_SCOPE_VIOLATION",
+      "title": "Credential Scope Violation",
+      "status": 403,
+      "code": "CREDENTIAL_SCOPE_VIOLATION",
+      "detail": "Workspace '74880bbd-c6a6-4b2a-b731-8e7c10b27138' is outside allowed workspaces."
+    }
+  },
+  "403_INSUFFICIENT_SCOPE_DOCS_SURFACE": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/issues",
+      "headers": {
+        "authorization": "Bearer kb_pat_[REDACTED]"
+      },
+      "body": {
+        "title": "Unauthorized Issue Creation"
+      }
+    },
+    "credential_boundary": {
+      "scope_tier": "global",
+      "surface": "docs"
+    },
+    "status": 403,
+    "headers": {
+      "content-type": "application/problem+json"
+    },
+    "body": {
+      "type": "urn:kanban:problem:INSUFFICIENT_SCOPE",
+      "title": "Insufficient Scope",
+      "status": 403,
+      "code": "INSUFFICIENT_SCOPE",
+      "detail": "Docs surface credential cannot invoke mutation endpoints on non-doc resources (/api/v1/issues)."
+    }
+  },
+  "403_AAL2_REQUIRED_HEADLESS_ADMIN": {
+    "request": {
+      "method": "GET",
+      "path": "/api/v1/admin/server/settings",
+      "headers": {
+        "authorization": "Bearer kb_pat_[REDACTED]"
+      }
+    },
+    "credential_boundary": {
+      "scope_tier": "global",
+      "surface": "agent",
+      "has_aal2_provenance": false
+    },
+    "status": 403,
+    "headers": {
+      "content-type": "application/problem+json"
+    },
+    "body": {
+      "type": "urn:kanban:problem:AAL2_REQUIRED",
+      "title": "AAL2 Authentication Required",
+      "status": 403,
+      "code": "AAL2_REQUIRED",
+      "detail": "Credential with surface 'agent' cannot invoke administrative endpoints."
+    }
+  }
+}
