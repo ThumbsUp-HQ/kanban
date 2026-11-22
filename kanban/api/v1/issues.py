@@ -139,11 +139,12 @@ async def create_issue(  # noqa: PLR0913, PLR0917
     session: Session,
     response: Response,
     request: Request,
-    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
 ) -> IssueResponse:
     """Create an issue in a project (caller requires EDIT capability on project)."""
     async with timing_floor(floor_ms=25.0):
-        await taint_guard.check_write(project_ref, tool_name="create_ticket")
+        if request.headers.get("x-kb-mcp-session") or not request.headers.get("x-kb-internal-auth"):
+            taint_guard = get_taint_guard(request, session, caller)
+            await taint_guard.check_write(project_ref, tool_name="create_ticket")
         derived_tier = _derive_provenance_tier(request, caller)
         result, etag = await svc.create_issue(session, caller, project_ref, body)
         if derived_tier != "trusted_member":

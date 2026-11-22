@@ -28,6 +28,9 @@ EXPECTED_LINK_KIND_LABELS: list[str] = [
     "DERIVED_FROM_STICKY",
     "EMBEDS_OBJECT",
     "GOVERNED_BY_VIEW",
+    "IMPLEMENTED_IN_PR",
+    "REFERENCED_BY_COMMIT",
+    "TRACKED_ON_BRANCH",
 ]
 
 EXPECTED_USER_LINK_KINDS: set[str] = {
@@ -47,6 +50,9 @@ EXPECTED_SYSTEM_LINK_KINDS: set[str] = {
     "IN_MODULE",
     "EMBEDS_OBJECT",
     "GOVERNED_BY_VIEW",
+    "IMPLEMENTED_IN_PR",
+    "REFERENCED_BY_COMMIT",
+    "TRACKED_ON_BRANCH",
 }
 
 
@@ -519,6 +525,6 @@ async def test_06_boundary_enum_order_and_link_type_matrix(db_session: AsyncSess
     # Union covers all 13 enum kinds
     assert (user_kinds | system_kinds) == set(EXPECTED_LINK_KIND_LABELS)
 
-    # Total row count in link_type_matrix: 57 user-creatable + 39 system = 96 rows
+    # Total row count in link_type_matrix: 57 user-creatable + 45 system = 102 rows
     total_count = await db_session.execute(text("SELECT count(*) FROM link_type_matrix"))
-    assert total_count.scalar_one() == 96
+    assert total_count.scalar_one() == 102
