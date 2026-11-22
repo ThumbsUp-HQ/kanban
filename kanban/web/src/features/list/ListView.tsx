@@ -34,6 +34,10 @@ export interface ListViewProps {
   onSortByChange?: ((sortBy: IssueSortOption) => void) | undefined;
   sortDir?: ('asc' | 'desc') | undefined;
   onSortDirChange?: ((sortDir: 'asc' | 'desc') => void) | undefined;
+  totalProjectIssueCount?: number | undefined;
+  hiddenByStateCount?: number | undefined;
+  onShowAllStates?: (() => void) | undefined;
+  onResetFilters?: (() => void) | undefined;
 }
 
 export type IssueSortOption =
@@ -53,10 +57,18 @@ const PRIORITY_WEIGHTS: Record<string, number> = {
   none: 1,
 };
 
-function parseIssueNumber(key: string): number {
+export function parseIssueNumber(key: string): number {
   const parts = key.split('-');
   const num = parseInt(parts[1] ?? '0', 10);
   return isNaN(num) ? 0 : num;
+}
+
+export function parseTimestampMs(iso: string | null | undefined): number {
+  if (!iso || typeof iso !== 'string') return 0;
+  const trimmed = iso.trim();
+  if (!trimmed) return 0;
+  const ms = Date.parse(trimmed);
+  return Number.isFinite(ms) ? ms : 0;
 }
 
 export function sortIssuesList<T extends IssueItem>(
@@ -68,15 +80,23 @@ export function sortIssuesList<T extends IssueItem>(
     let cmp = 0;
     switch (sortBy) {
       case 'updated': {
-        const aUp = a.updated_at ?? '';
-        const bUp = b.updated_at ?? '';
-        cmp = aUp.localeCompare(bUp);
+        const aMs = parseTimestampMs(a.updated_at ?? a.created_at);
+        const bMs = parseTimestampMs(b.updated_at ?? b.created_at);
+        cmp = aMs - bMs;
+        if (cmp === 0) {
+          const numDiff = parseIssueNumber(a.key) - parseIssueNumber(b.key);
+          return numDiff !== 0 ? numDiff : a.key.localeCompare(b.key);
+        }
         break;
       }
       case 'created': {
-        const aCr = a.created_at ?? '';
-        const bCr = b.created_at ?? '';
-        cmp = aCr.localeCompare(bCr);
+        const aMs = parseTimestampMs(a.created_at);
+        const bMs = parseTimestampMs(b.created_at);
+        cmp = aMs - bMs;
+        if (cmp === 0) {
+          const numDiff = parseIssueNumber(a.key) - parseIssueNumber(b.key);
+          return numDiff !== 0 ? numDiff : a.key.localeCompare(b.key);
+        }
         break;
       }
       case 'priority': {
@@ -96,6 +116,9 @@ export function sortIssuesList<T extends IssueItem>(
       }
       case 'key': {
         cmp = parseIssueNumber(a.key) - parseIssueNumber(b.key);
+        if (cmp === 0) {
+          cmp = a.key.localeCompare(b.key);
+        }
         break;
       }
       case 'due_date': {
@@ -138,6 +161,10 @@ export function ListView({
   onSortByChange,
   sortDir: sortDirProp,
   onSortDirChange,
+  totalProjectIssueCount = 0,
+  hiddenByStateCount = 0,
+  onShowAllStates,
+  onResetFilters,
 }: ListViewProps): JSX.Element {
   const [internalSortBy, setInternalSortBy] = useState<IssueSortOption>('updated');
   const [internalSortDir, setInternalSortDir] = useState<'asc' | 'desc'>('desc');
@@ -226,6 +253,46 @@ export function ListView({
           <div className="list-loading-skeleton" />
           <div className="list-loading-skeleton" />
           <div className="list-loading-skeleton" />
+        </div>
+      );
+    }
+    if (totalProjectIssueCount > 0 && hiddenByStateCount > 0) {
+      return (
+        <div className="view-empty-state" data-testid="empty-state-hidden-terminal">
+          <h2 className="view-empty-title">No actionable work items</h2>
+          <p className="view-empty-desc">
+            {hiddenByStateCount} completed or cancelled work item(s) are hidden by your state filter.
+          </p>
+          <button
+            type="button"
+            className="view-empty-create-btn"
+            data-testid="empty-show-all-states-btn"
+            onClick={() => {
+              onShowAllStates?.();
+            }}
+          >
+            Show all states
+          </button>
+        </div>
+      );
+    }
+    if (totalProjectIssueCount > 0) {
+      return (
+        <div className="view-empty-state" data-testid="empty-state-filtered">
+          <h2 className="view-empty-title">No matching work items</h2>
+          <p className="view-empty-desc">
+            No work items match your active search or filter criteria.
+          </p>
+          <button
+            type="button"
+            className="view-empty-create-btn"
+            data-testid="empty-reset-filters-btn"
+            onClick={() => {
+              onResetFilters?.();
+            }}
+          >
+            Reset to default filters
+          </button>
         </div>
       );
     }

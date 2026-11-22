@@ -2,6 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
 import React from 'react';
 import { TableView } from './TableView';
+import {
+  getAvailableColumns,
+  getDefaultColumns,
+  parseTableColumns,
+  reorderColumn,
+  saveTableColumns,
+  toggleColumn,
+} from './tableColumns';
 import { FIXTURE_12_ISSUES } from '../views/fixtures';
 import type { IssueItem } from '../views/viewsApi';
 
@@ -1055,5 +1063,135 @@ describe('TableView', () => {
     });
 
     window.removeEventListener('kb:alert', alertListener);
+  });
+
+  it('KAN-308 Problem 4: defaults unsorted TableView to updated desc, supports optional updated_at column sorting, and renders context-aware empty states', () => {
+    localStorage.setItem(
+      'kb.tableCols.KAN_UPD',
+      JSON.stringify(['key', 'summary', 'state', 'priority', 'updated_at']),
+    );
+
+    const tzIssues: IssueItem[] = [
+      {
+        id: 'u-1',
+        key: 'KAN-10',
+        summary: 'Older update (+02:00 = 13:30Z)',
+        state: { id: 's-1', name: 'Todo', group: 'unstarted' },
+        priority: { slug: 'medium', label: 'Medium' },
+        updated_at: '2026-11-20T15:30:00+02:00',
+      },
+      {
+        id: 'u-2',
+        key: 'KAN-20',
+        summary: 'Newer update (14:00Z)',
+        state: { id: 's-1', name: 'Todo', group: 'unstarted' },
+        priority: { slug: 'high', label: 'High' },
+        updated_at: '2026-11-20T14:00:00Z',
+      },
+    ];
+
+    const { container, unmount } = render(
+      <TableView issues={tzIssues} projectKey="KAN_UPD" modulesEnabled={false} />,
+    );
+
+    // Unsorted default is updated desc: KAN-20 before KAN-10
+    const initialRows = container.querySelectorAll('tbody tr');
+    expect(initialRows[0]?.getAttribute('data-issue-key')).toBe('KAN-20');
+    expect(initialRows[1]?.getAttribute('data-issue-key')).toBe('KAN-10');
+
+    // Click Updated header to sort ascending, then descending
+    const updatedSortBtn = screen.getByRole('button', { name: 'Updated' });
+    fireEvent.click(updatedSortBtn); // asc
+    const ascRows = container.querySelectorAll('tbody tr');
+    expect(ascRows[0]?.getAttribute('data-issue-key')).toBe('KAN-10');
+
+    fireEvent.click(updatedSortBtn); // desc
+    const descRows = container.querySelectorAll('tbody tr');
+    expect(descRows[0]?.getAttribute('data-issue-key')).toBe('KAN-20');
+    unmount();
+
+    // Context-aware empty states when totalProjectIssueCount > 0
+    const onShowAllStates = vi.fn();
+    const onResetFilters = vi.fn();
+    const { rerender } = render(
+      <TableView
+        issues={[]}
+        projectKey="KAN"
+        totalProjectIssueCount={5}
+        hiddenByStateCount={5}
+        onShowAllStates={onShowAllStates}
+      />,
+    );
+    expect(screen.getByTestId('empty-state-hidden-terminal')).toBeDefined();
+    fireEvent.click(screen.getByTestId('empty-show-all-states-btn'));
+    expect(onShowAllStates).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <TableView
+        issues={[]}
+        projectKey="KAN"
+        totalProjectIssueCount={5}
+        hiddenByStateCount={0}
+        onResetFilters={onResetFilters}
+      />,
+    );
+    expect(screen.getByTestId('empty-state-filtered')).toBeDefined();
+    fireEvent.click(screen.getByTestId('empty-reset-filters-btn'));
+    expect(onResetFilters).toHaveBeenCalledTimes(1);
+  });
+
+  it('covers tableColumns helpers (getAvailableColumns, parseTableColumns, reorderColumn, toggleColumn, saveTableColumns) including updated_at', () => {
+    expect(getAvailableColumns(true).some((c) => c.id === 'updated_at')).toBe(true);
+    expect(getAvailableColumns(false).some((c) => c.id === 'modules')).toBe(false);
+    expect(getDefaultColumns(false).includes('modules')).toBe(false);
+
+    // parseTableColumns edge cases: invalid JSON, non-array, missing key/summary, modules disabled
+    expect(parseTableColumns('{bad_json', 'KAN', true)).toEqual(getDefaultColumns(true));
+    expect(parseTableColumns({ not: 'array' }, 'KAN', true)).toEqual(getDefaultColumns(true));
+    expect(parseTableColumns(['state', 'updated_at', 'modules'], 'KAN', false)).toEqual([
+      'key',
+      'summary',
+      'state',
+      'updated_at',
+    ]);
+
+    // reorderColumn edge cases: unknown column, locked key/summary, out of bounds, before locked columns
+    const cols = ['key', 'summary', 'state', 'priority', 'updated_at'] as const;
+    expect(reorderColumn(cols, 'due_date', 'up')).toEqual([...cols]);
+    expect(reorderColumn(cols, 'key', 'down')).toEqual([...cols]);
+    expect(reorderColumn(cols, 'summary', 'up')).toEqual([...cols]);
+    expect(reorderColumn(cols, 'state', 'up')).toEqual([...cols]);
+    expect(reorderColumn(cols, 'updated_at', 'down')).toEqual([...cols]);
+    expect(reorderColumn(cols, 'priority', 'up')).toEqual([
+      'key',
+      'summary',
+      'priority',
+      'state',
+      'updated_at',
+    ]);
+    expect(reorderColumn(cols, 'state', 'down')).toEqual([
+      'key',
+      'summary',
+      'priority',
+      'state',
+      'updated_at',
+    ]);
+
+    // toggleColumn edge cases: locked key/summary, modules disabled, show/hide optional column
+    expect(toggleColumn(cols, 'key', false)).toEqual([...cols]);
+    expect(toggleColumn(['key', 'summary', 'modules'], 'modules', true, false)).toEqual([
+      'key',
+      'summary',
+    ]);
+    expect(toggleColumn(cols, 'due_date', true)).toContain('due_date');
+    expect(toggleColumn(cols, 'updated_at', false)).not.toContain('updated_at');
+    expect(toggleColumn(cols, 'updated_at', true)).toEqual([...cols]);
+
+    // saveTableColumns with quota throw
+    const setSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementationOnce(() => {
+      throw new Error('QuotaExceeded');
+    });
+    saveTableColumns(['key', 'summary'], 'KAN');
+    setSpy.mockRestore();
   });
 });

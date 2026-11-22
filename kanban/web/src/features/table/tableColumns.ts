@@ -13,6 +13,7 @@ export type TableColumnId =
   | 'modules'
   | 'start_date'
   | 'due_date'
+  | 'updated_at'
   | 'created_by'
   | 'access';
 
@@ -93,6 +94,13 @@ export const ALL_TABLE_COLUMNS: readonly TableColumnDef[] = Object.freeze([
     defaultVisible: true,
     sortable: true,
     sortField: 'due_date',
+  }),
+  Object.freeze({
+    id: 'updated_at',
+    label: 'Updated',
+    defaultVisible: false,
+    sortable: true,
+    sortField: 'updated_at',
   }),
   Object.freeze({
     id: 'created_by',

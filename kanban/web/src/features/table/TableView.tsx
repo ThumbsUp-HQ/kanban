@@ -9,6 +9,11 @@ import {
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { StateBadge } from '../../components/state/StateBadge';
 import {
+  parseIssueNumber,
+  parseTimestampMs,
+  sortIssuesList,
+} from '../list/ListView';
+import {
   patchProjectIssue,
   type IssueItem,
   type SortDirection,
@@ -34,6 +39,10 @@ export interface TableViewProps {
   currentUserCapabilities?: string[] | undefined;
   projectStates?: StateSummary[] | undefined;
   onUpdateIssue?: ((issueKey: string, patch: Partial<IssueItem>) => Promise<void> | void) | undefined;
+  totalProjectIssueCount?: number | undefined;
+  hiddenByStateCount?: number | undefined;
+  onShowAllStates?: (() => void) | undefined;
+  onResetFilters?: (() => void) | undefined;
 }
 
 export function TableView({
@@ -52,6 +61,10 @@ export function TableView({
   capabilities,
   currentUserCapabilities,
   onUpdateIssue,
+  totalProjectIssueCount = 0,
+  hiddenByStateCount = 0,
+  onShowAllStates,
+  onResetFilters,
 }: TableViewProps): JSX.Element {
   const [prevIssues, setPrevIssues] = useState<IssueItem[]>(issues);
   const [localIssues, setLocalIssues] = useState<IssueItem[]>(issues);
@@ -289,16 +302,19 @@ export function TableView({
     }
   };
 
-  // Sort issues deterministically
+  // Sort issues deterministically (defaulting to updated desc when unsorted per KAN-308 Problem 4)
   const sortedIssues = useMemo(() => {
     if (!sortField || sortDir === 'none') {
-      return localIssues;
+      return sortIssuesList(localIssues, 'updated', 'desc');
     }
 
     return [...localIssues].sort((a, b) => {
       let cmp = 0;
       if (sortField === 'key') {
-        cmp = a.key.localeCompare(b.key);
+        cmp = parseIssueNumber(a.key) - parseIssueNumber(b.key);
+        if (cmp === 0) {
+          cmp = a.key.localeCompare(b.key);
+        }
       } else if (sortField === 'summary') {
         cmp = a.summary.localeCompare(b.summary);
       } else if (sortField === 'state') {
@@ -317,6 +333,10 @@ export function TableView({
         const dA = a.start_date ?? '';
         const dB = b.start_date ?? '';
         cmp = dA.localeCompare(dB);
+      } else if (sortField === 'updated_at') {
+        const uA = parseTimestampMs(a.updated_at ?? a.created_at);
+        const uB = parseTimestampMs(b.updated_at ?? b.created_at);
+        cmp = uA - uB;
       } else if (sortField === 'created_by') {
         const cA = (a.created_by_handle ?? a.created_by_id) ?? '';
         const cB = (b.created_by_handle ?? b.created_by_id) ?? '';
@@ -326,8 +346,9 @@ export function TableView({
       if (cmp !== 0) {
         return sortDir === 'asc' ? cmp : -cmp;
       }
-      // Tie break on key
-      return a.key.localeCompare(b.key);
+      // Deterministic tie break on issue number then key
+      const numDiff = parseIssueNumber(a.key) - parseIssueNumber(b.key);
+      return numDiff !== 0 ? numDiff : a.key.localeCompare(b.key);
     });
   }, [localIssues, sortField, sortDir]);
 
@@ -353,6 +374,46 @@ export function TableView({
   }, [columns, modulesEnabled]);
 
   if (issues.length === 0) {
+    if (totalProjectIssueCount > 0 && hiddenByStateCount > 0) {
+      return (
+        <div className="view-empty-state" data-testid="empty-state-hidden-terminal">
+          <h2 className="view-empty-title">No actionable work items</h2>
+          <p className="view-empty-desc">
+            {hiddenByStateCount} completed or cancelled work item(s) are hidden by your state filter.
+          </p>
+          <button
+            type="button"
+            className="view-empty-create-btn"
+            data-testid="empty-show-all-states-btn"
+            onClick={() => {
+              onShowAllStates?.();
+            }}
+          >
+            Show all states
+          </button>
+        </div>
+      );
+    }
+    if (totalProjectIssueCount > 0) {
+      return (
+        <div className="view-empty-state" data-testid="empty-state-filtered">
+          <h2 className="view-empty-title">No matching work items</h2>
+          <p className="view-empty-desc">
+            No work items match your active search or filter criteria.
+          </p>
+          <button
+            type="button"
+            className="view-empty-create-btn"
+            data-testid="empty-reset-filters-btn"
+            onClick={() => {
+              onResetFilters?.();
+            }}
+          >
+            Reset to default filters
+          </button>
+        </div>
+      );
+    }
     return (
       <div className="view-empty-state">
         <h2 className="view-empty-title">No work items found</h2>
@@ -770,6 +831,15 @@ export function TableView({
                                 handleInlineDateChange(issue, 'due_date', e.target.value);
                               }}
                             />
+                          </td>
+                        );
+                      }
+                      if (colId === 'updated_at') {
+                        const rawUpdated = issue.updated_at ?? issue.created_at ?? '';
+                        const displayUpdated = rawUpdated ? rawUpdated.slice(0, 10) : '';
+                        return (
+                          <td key={colId} data-col="updated_at" title={rawUpdated}>
+                            {displayUpdated}
                           </td>
                         );
                       }

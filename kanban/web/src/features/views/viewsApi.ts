@@ -119,6 +119,12 @@ export type ViewLayout = 'board' | 'list' | 'table' | 'calendar' | 'timeline';
 export type GroupAxis = 'none' | 'state' | 'priority' | 'assignee' | 'cycle' | 'module' | 'label';
 export type SortDirection = 'asc' | 'desc' | 'none';
 
+export interface SavedViewFilters {
+  state_ids?: string[];
+  state_groups?: string[];
+  search_query?: string | null;
+}
+
 export interface SavedView {
   id: string;
   project_id?: string | null;
@@ -127,6 +133,7 @@ export interface SavedView {
   layout: ViewLayout;
   group_by: GroupAxis;
   sub_group_by: GroupAxis;
+  filters?: SavedViewFilters;
   display_json?: {
     table_columns?: string[];
   };
