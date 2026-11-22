@@ -8,6 +8,36 @@ import { RunnerStudioPage } from '../RunnerStudioPage';
 import { MintEnrollmentTokenModal } from '../MintEnrollmentTokenModal';
 import * as runnersApi from '../runnersAdminApi';
 import * as clientModule from '../../../api/client';
+import { ApiProblem } from '../../../api/problem';
+
+vi.mock('../../auth/SecondFactorStep', () => ({
+  SecondFactorStep: ({
+    onSuccess,
+    onError,
+    onSessionExpired,
+    onCancel,
+  }: {
+    onSuccess: () => void;
+    onError: (err: unknown) => void;
+    onSessionExpired: () => void;
+    onCancel?: () => void;
+  }) => (
+    <div data-testid="mock-second-factor-step">
+      <button type="button" data-testid="mock-mfa-success-btn" onClick={onSuccess}>
+        Trigger MFA Success
+      </button>
+      <button type="button" data-testid="mock-mfa-error-btn" onClick={() => { onError('mfa error'); }}>
+        Trigger MFA Error
+      </button>
+      <button type="button" data-testid="mock-mfa-expired-btn" onClick={onSessionExpired}>
+        Trigger MFA Expired
+      </button>
+      <button type="button" data-testid="mock-mfa-cancel-btn" onClick={onCancel}>
+        Trigger MFA Cancel
+      </button>
+    </div>
+  ),
+}));
 
 describe('RunnerStudioPage & Components (KANBA-219)', () => {
   const mockActiveRunner: runnersApi.RemoteRunnerResponse = {
@@ -244,6 +274,117 @@ describe('RunnerStudioPage & Components (KANBA-219)', () => {
       fireEvent.click(screen.getByTestId('close-mint-modal-btn'));
       expect(screen.queryByTestId('mint-enrollment-token-modal')).toBeNull();
     });
+
+    it('renders certificate rotation guidance card and revocation rotation notice (KAN-68 Action 2)', async () => {
+      vi.spyOn(runnersApi, 'fetchRemoteRunners').mockResolvedValue([mockActiveRunner]);
+
+      render(<RunnerStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('runner-rotation-guidance')).toBeDefined();
+      });
+
+      expect(screen.getByTestId('runner-rotation-guidance').textContent).toContain(
+        'Certificate Rotation & Runner Lifecycle Guidance',
+      );
+
+      // Open revocation modal
+      fireEvent.click(screen.getByTestId('revoke-runner-btn-runner-1'));
+      expect(screen.getByTestId('revoke-rotation-note')).toBeDefined();
+      expect(screen.getByTestId('revoke-rotation-note').textContent).toContain(
+        'To complete rotation, mint a fresh enrollment token to re-enroll this runner daemon',
+      );
+    });
+
+    it('handles AAL2_REQUIRED on runner revoke by opening inline SecondFactorStep modal (KAN-68 Negative)', async () => {
+      vi.spyOn(runnersApi, 'fetchRemoteRunners').mockResolvedValue([mockActiveRunner]);
+      vi.spyOn(runnersApi, 'revokeRemoteRunner').mockRejectedValue(
+        new ApiProblem(403, {
+          code: 'AAL2_REQUIRED',
+          title: 'AAL2 Required',
+          challenge_id: 'challenge-aal2-runner-revoke',
+          methods: ['totp', 'webauthn'],
+        }),
+      );
+
+      render(<RunnerStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('revoke-runner-btn-runner-1')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('revoke-runner-btn-runner-1'));
+      fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+      });
+
+      expect(screen.getByText('Admin Verification Required (AAL2)')).toBeDefined();
+
+      // Exercise error and cancel
+      fireEvent.click(screen.getByTestId('mock-mfa-error-btn'));
+      fireEvent.click(screen.getByTestId('mock-mfa-cancel-btn'));
+      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
+
+      // Trigger again for expired
+      fireEvent.click(screen.getByTestId('revoke-runner-btn-runner-1'));
+      fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+      });
+      fireEvent.click(screen.getByTestId('mock-mfa-expired-btn'));
+      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
+
+      // Trigger again for close button
+      fireEvent.click(screen.getByTestId('revoke-runner-btn-runner-1'));
+      fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+      });
+      fireEvent.click(screen.getByTestId('close-aal2-modal-btn'));
+      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
+
+      // Trigger again for success
+      fireEvent.click(screen.getByTestId('revoke-runner-btn-runner-1'));
+      fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
+      await waitFor(() => {
+        expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+      });
+      const revokeSpySuccess = vi.spyOn(runnersApi, 'revokeRemoteRunner').mockResolvedValue({
+        id: 'runner-1',
+        status: 'revoked',
+        revoked_at: new Date().toISOString(),
+      });
+      fireEvent.click(screen.getByTestId('mock-mfa-success-btn'));
+      await waitFor(() => {
+        expect(revokeSpySuccess).toHaveBeenCalledWith('runner-1');
+      });
+      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
+    });
+
+    it('handles AAL2_STALE and generic object error with default challenge fallbacks', async () => {
+      vi.spyOn(runnersApi, 'fetchRemoteRunners').mockResolvedValue([mockActiveRunner]);
+      vi.spyOn(runnersApi, 'revokeRemoteRunner').mockRejectedValue({
+        code: 'AAL2_STALE',
+      });
+
+      render(<RunnerStudioPage />);
+
+      await waitFor(() => {
+        expect(screen.getByTestId('revoke-runner-btn-runner-1')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('revoke-runner-btn-runner-1'));
+      fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+      });
+
+      fireEvent.click(screen.getByTestId('close-aal2-modal-btn'));
+      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
+    });
   });
 
   describe('MintEnrollmentTokenModal component', () => {
@@ -440,6 +581,37 @@ describe('RunnerStudioPage & Components (KANBA-219)', () => {
 
       fireEvent.click(screen.getByTestId('cancel-mint-token-btn'));
       expect(onClose).toHaveBeenCalled();
+    });
+
+    it('renders exact kanban-agent-runner enroll CLI snippet with --url and dedicated :8444 notice (KAN-68 Positive)', async () => {
+      vi.spyOn(runnersApi, 'mintEnrollmentToken').mockResolvedValue(mockTokenResponse);
+
+      render(
+        <MintEnrollmentTokenModal
+          isOpen={true}
+          onClose={vi.fn()}
+        />,
+      );
+
+      fireEvent.change(screen.getByTestId('token-pool-slug-input'), {
+        target: { value: 'ci-cluster' },
+      });
+
+      fireEvent.click(screen.getByTestId('submit-mint-token-btn'));
+
+      await waitFor(() => {
+        expect(screen.getByTestId('runner-cli-command')).toBeDefined();
+      });
+
+      const cliText = screen.getByTestId('runner-cli-command').textContent;
+      expect(cliText).toContain('uv run kanban-agent-runner enroll');
+      expect(cliText).toContain('--url http://localhost:3000');
+      expect(cliText).toContain('--token-stdin');
+      expect(cliText).toContain('--pool ci-cluster');
+
+      expect(screen.getByTestId('runner-mtls-notice').textContent).toContain(
+        'dedicated mutual TLS port (default :8444)',
+      );
     });
   });
 });

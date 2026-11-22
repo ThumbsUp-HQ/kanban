@@ -6,9 +6,39 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import React from 'react';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { McpAccessStudio } from '../McpAccessStudio';
+import { McpAccessStudio, validateCidrInput } from '../McpAccessStudio';
 import * as settingsApi from '../settingsApi';
 import * as clientModule from '../../../api/client';
+import { ApiProblem } from '../../../api/problem';
+
+vi.mock('../../auth/SecondFactorStep', () => ({
+  SecondFactorStep: ({
+    onSuccess,
+    onError,
+    onSessionExpired,
+    onCancel,
+  }: {
+    onSuccess: () => void;
+    onError: (err: unknown) => void;
+    onSessionExpired: () => void;
+    onCancel?: () => void;
+  }) => (
+    <div data-testid="mock-second-factor-step">
+      <button type="button" data-testid="mock-mfa-success-btn" onClick={onSuccess}>
+        Trigger MFA Success
+      </button>
+      <button type="button" data-testid="mock-mfa-error-btn" onClick={() => { onError('mfa error'); }}>
+        Trigger MFA Error
+      </button>
+      <button type="button" data-testid="mock-mfa-expired-btn" onClick={onSessionExpired}>
+        Trigger MFA Expired
+      </button>
+      <button type="button" data-testid="mock-mfa-cancel-btn" onClick={onCancel}>
+        Trigger MFA Cancel
+      </button>
+    </div>
+  ),
+}));
 
 vi.mock('../../../app/useSystemStatus', () => ({
   useSystemStatus: vi.fn(() => ({
@@ -120,6 +150,8 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
           items: [
             { id: 'proj-kanba', identifier: 'KANBA', name: 'Kanban Core' },
             { id: 'proj-ops', identifier: 'OPS', name: 'Operations' },
+            { id: 'proj-same', identifier: 'SAME', name: 'SAME' },
+            { id: 'proj-noname', identifier: 'NONAME', name: '' },
           ],
         });
       }
@@ -1186,6 +1218,903 @@ describe('McpAccessStudio & McpConfigSnippetModal (KB-P4-16)', () => {
 
     await waitFor(() => {
       expect(revokeSpy).toHaveBeenCalledWith('bot-foreign-999');
+    });
+  });
+
+  it('selects View Only preset, sends scopes: ["agent:read"], capability_mask: 1, allowed_cidrs: ["192.168.1.0/24"], and renders narrowing badges on key row (KAN-68 Action 1)', async () => {
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+    const mintSpy = vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockResolvedValue({
+      id: 'key-view-only-1',
+      label: 'Readonly Auditor Key',
+      display_hint: 'v1v1',
+      surface: 'agent',
+      scope_tier: 'workspace',
+      scopes: ['agent:read'],
+      allowed_projects: null,
+      capability_mask: 1,
+      allowed_cidrs: ['192.168.1.0/24'],
+      created_at: new Date().toISOString(),
+      expires_at: null,
+      last_used_at: null,
+      revoked_at: null,
+      raw_key: 'kb_agt_readonly_token',
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/settings/mcp']}>
+        <McpAccessStudio tier="personal" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByTestId('mint-key-button'));
+
+    // Label
+    fireEvent.change(screen.getByTestId('mint-label-input'), {
+      target: { value: 'Readonly Auditor Key' },
+    });
+
+    // Capability preset selector: choose View Only (1)
+    const presetSelect = screen.getByTestId('capability-preset-select');
+    fireEvent.change(presetSelect, { target: { value: '1' } });
+
+    // Allowed CIDRs input: enter valid CIDR
+    const cidrInput = screen.getByTestId('mint-allowed-cidrs-input');
+    fireEvent.change(cidrInput, { target: { value: '192.168.1.0/24' } });
+
+    expect(screen.queryByTestId('cidr-error-message')).toBeNull();
+
+    // Submit
+    fireEvent.click(screen.getByTestId('mint-submit-btn'));
+
+    await waitFor(() => {
+      expect(mintSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          label: 'Readonly Auditor Key',
+          surface: 'agent',
+          scopes: ['agent:read'],
+          capability_mask: 1,
+          allowed_cidrs: ['192.168.1.0/24'],
+        }),
+      );
+    });
+
+    // Close snippet modal
+    fireEvent.click(screen.getByTestId('modal-close-button'));
+
+    // Check narrowing badges rendered on key row
+    await waitFor(() => {
+      expect(screen.getByTestId('key-cap-mask-key-view-only-1').textContent).toContain('Mask: 1');
+      expect(screen.getByTestId('key-cidr-badge-key-view-only-1').textContent).toContain('CIDR: 192.168.1.0/24');
+    });
+  });
+
+  it('validates CIDR input client-side, showing inline accessible error on malformed CIDR and disabling submit (KAN-68 Negative)', async () => {
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+
+    render(
+      <MemoryRouter initialEntries={['/settings/mcp']}>
+        <McpAccessStudio tier="personal" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByTestId('mint-key-button'));
+
+    fireEvent.change(screen.getByTestId('mint-label-input'), {
+      target: { value: 'CIDR Test Key' },
+    });
+
+    const cidrInput = screen.getByTestId('mint-allowed-cidrs-input');
+    const submitBtn = screen.getByTestId<HTMLButtonElement>('mint-submit-btn');
+
+    // Enter malformed CIDR
+    fireEvent.change(cidrInput, { target: { value: '999.999.1.1/99' } });
+
+    expect(screen.getByTestId('cidr-error-message')).toBeDefined();
+    expect(screen.getByTestId('cidr-error-message').textContent).toContain('Invalid CIDR format');
+    expect(submitBtn.disabled).toBe(true);
+
+    // Enter another invalid format (missing prefix)
+    fireEvent.change(cidrInput, { target: { value: '192.168.1.1' } });
+    expect(screen.getByTestId('cidr-error-message')).toBeDefined();
+    expect(submitBtn.disabled).toBe(true);
+
+    // Enter valid IPv4 and IPv6 CIDRs
+    fireEvent.change(cidrInput, { target: { value: '10.0.0.0/8, 2001:db8::/32' } });
+    expect(screen.queryByTestId('cidr-error-message')).toBeNull();
+    expect(submitBtn.disabled).toBe(false);
+  });
+
+  it('supports granular capability bit toggles and switches preset to custom (KAN-68 Edge)', async () => {
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+
+    render(
+      <MemoryRouter initialEntries={['/settings/mcp']}>
+        <McpAccessStudio tier="personal" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByTestId('mint-key-button'));
+
+    const presetSelect = screen.getByTestId<HTMLSelectElement>('capability-preset-select');
+    expect(presetSelect.value).toBe('31');
+
+    // Toggle bit 128 (DELETE) on -> mask becomes 31 | 128 = 159
+    const deleteBit = screen.getByTestId<HTMLInputElement>('cap-bit-128');
+    expect(deleteBit.checked).toBe(false);
+    fireEvent.click(deleteBit);
+    expect(deleteBit.checked).toBe(true);
+
+    // Preset select reflects custom
+    expect(presetSelect.value).toBe('custom');
+
+    // Toggle bit 128 back off
+    fireEvent.click(deleteBit);
+    expect(deleteBit.checked).toBe(false);
+    expect(presetSelect.value).toBe('31');
+
+    // Select Full / Admin (255)
+    fireEvent.change(presetSelect, { target: { value: '255' } });
+    expect(deleteBit.checked).toBe(true);
+  });
+
+  it('handles AAL2 step-up challenge on mint, load, and revoke operations', async () => {
+    // 1. AAL2 on loadData
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockRejectedValueOnce(
+      new ApiProblem(403, {
+        code: 'AAL2_REQUIRED',
+        challenge_id: 'chal-load',
+        methods: ['webauthn', 'totp'],
+      }),
+    );
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/settings/mcp']}>
+        <McpAccessStudio tier="personal" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+    });
+
+    // Close via 'x' button
+    fireEvent.click(screen.getByText('x'));
+    expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
+    unmount();
+
+    // 2. AAL2 on minting
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+    const aal2MintProblem = new ApiProblem(403, {
+      code: 'AAL2_REQUIRED',
+      challenge_id: 'chal-mint',
+      methods: ['totp'],
+    });
+    vi
+      .spyOn(settingsApi, 'mintUnifiedMcpKey')
+      .mockRejectedValueOnce(aal2MintProblem)
+      .mockRejectedValueOnce(aal2MintProblem)
+      .mockRejectedValueOnce(aal2MintProblem)
+      .mockResolvedValueOnce({
+        id: 'k-stepped-up',
+        label: 'Step-Up Key',
+        display_hint: 'su1',
+        surface: 'agent',
+        scope_tier: 'workspace',
+        scopes: ['agent:read'],
+        allowed_projects: null,
+        created_at: new Date().toISOString(),
+        expires_at: null,
+        last_used_at: null,
+        revoked_at: null,
+        raw_key: 'kb_agt_stepped_key',
+      });
+
+    render(
+      <MemoryRouter initialEntries={['/settings/mcp']}>
+        <McpAccessStudio tier="personal" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByTestId('mint-key-button'));
+    fireEvent.change(screen.getByTestId('mint-label-input'), {
+      target: { value: 'Step-Up Key' },
+    });
+    fireEvent.click(screen.getByTestId('mint-submit-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+    });
+
+    // Test error and cancel
+    fireEvent.click(screen.getByTestId('mock-mfa-error-btn'));
+    fireEvent.click(screen.getByTestId('mock-mfa-cancel-btn'));
+    expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
+
+    // Re-submit and test expired
+    fireEvent.click(screen.getByTestId('mint-submit-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('mock-mfa-expired-btn'));
+    expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
+
+    // Re-submit and test success
+    fireEvent.click(screen.getByTestId('mint-submit-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('mock-mfa-success-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mcp-snippet-modal')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('modal-close-button'));
+
+    // 3. AAL2 on revoke
+    const revokeSpy = vi
+      .spyOn(settingsApi, 'revokeUnifiedMcpKey')
+      .mockRejectedValueOnce(
+        new ApiProblem(403, {
+          code: 'AAL2_REQUIRED',
+          challenge_id: 'chal-revoke',
+          methods: ['totp'],
+        }),
+      )
+      .mockResolvedValueOnce(undefined);
+
+    fireEvent.click(screen.getByTestId('revoke-btn-k-stepped-up'));
+    fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+    });
+
+    revokeSpy.mockResolvedValueOnce(undefined);
+    fireEvent.click(screen.getByTestId('mock-mfa-success-btn'));
+    await waitFor(() => {
+      expect(revokeSpy).toHaveBeenCalledWith('k-stepped-up');
+    });
+  });
+
+  it('exercises validateCidrInput comprehensive branch coverage', () => {
+    // Empty / whitespace
+    expect(validateCidrInput('')).toEqual({ valid: true, cidrs: [] });
+    expect(validateCidrInput('   \n  ')).toEqual({ valid: true, cidrs: [] });
+
+    // IPv4 valid and invalid
+    expect(validateCidrInput('192.168.1.1').valid).toBe(false);
+    expect(validateCidrInput('192.168.1.1/33').valid).toBe(false);
+    expect(validateCidrInput('192.168.1.1/abc').valid).toBe(false);
+    expect(validateCidrInput('192.168.1/24').valid).toBe(false);
+    expect(validateCidrInput('192.168.1.1.1/24').valid).toBe(false);
+    expect(validateCidrInput('192.168.1.256/24').valid).toBe(false);
+    expect(validateCidrInput('192.168.01.1/24').valid).toBe(false);
+    expect(validateCidrInput('192.168.1.x/24').valid).toBe(false);
+
+    // IPv6 valid and invalid
+    expect(validateCidrInput('2001:db8::/129').valid).toBe(false);
+    expect(validateCidrInput('2001:db8::/abc').valid).toBe(false);
+    expect(validateCidrInput('2001:::1/64').valid).toBe(false);
+    expect(validateCidrInput('2001::db8::1/64').valid).toBe(false);
+    expect(validateCidrInput('2001:db8:1:2:3:4:5/64').valid).toBe(false);
+    expect(validateCidrInput('2001:db8:1:2:3:4:5:6:7::/64').valid).toBe(false);
+    expect(validateCidrInput('2001:db8:12345::1/64').valid).toBe(false);
+    expect(validateCidrInput('2001:db8:zzzz::1/64').valid).toBe(false);
+    expect(validateCidrInput('2001:db8:0:0:0:0:0:1/128').valid).toBe(true);
+    expect(validateCidrInput('fe80::1/64').valid).toBe(true);
+
+    // Multiple valid
+    const multi = validateCidrInput('2001:db8::/32, 10.0.0.0/8');
+    expect(multi.valid).toBe(true);
+    expect(multi.cidrs).toEqual(['2001:db8::/32', '10.0.0.0/8']);
+  });
+
+  it('covers scope filter pills, project selector change, and view toggling', async () => {
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+
+    render(
+      <MemoryRouter initialEntries={['/settings/mcp?scope=all']}>
+        <McpAccessStudio tier="global" user={{ is_server_admin: true }} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mcp-filter-bar')).not.toBeNull();
+    });
+
+    // Toggle views
+    fireEvent.click(screen.getByTestId('view-governance-btn'));
+    fireEvent.click(screen.getByTestId('view-mine-btn'));
+
+    // Toggle scope pills
+    fireEvent.click(screen.getByTestId('scope-pill-project'));
+    expect(screen.getByTestId('scope-project-container')).not.toBeNull();
+    fireEvent.change(screen.getByTestId('scope-project-select'), { target: { value: 'OPS' } });
+
+    fireEvent.click(screen.getByTestId('scope-pill-workspace'));
+    fireEvent.click(screen.getByTestId('scope-pill-server'));
+    fireEvent.click(screen.getByTestId('scope-pill-all'));
+  });
+
+  it('supports minting personal_user and project scoped keys with custom CIDRs', async () => {
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+
+    const mintSpy = vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockResolvedValue({
+      id: 'k-custom-scope',
+      label: 'Personal Key',
+      display_hint: 'ps1',
+      surface: 'agent',
+      scope_tier: 'workspace',
+      scopes: ['agent:read'],
+      allowed_projects: ['PROJ-A'],
+      created_at: new Date().toISOString(),
+      expires_at: null,
+      last_used_at: null,
+      revoked_at: null,
+      raw_key: 'kb_agt_proj_secret',
+    });
+
+    render(
+      <MemoryRouter initialEntries={['/settings/mcp']}>
+        <McpAccessStudio tier="workspace" user={{ is_server_admin: true }} />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByTestId('mint-key-button'));
+
+    // Select personal_user
+    fireEvent.change(screen.getByTestId('mint-scope-select'), {
+      target: { value: 'personal_user' },
+    });
+
+    // Select project
+    fireEvent.change(screen.getByTestId('mint-scope-select'), {
+      target: { value: 'project' },
+    });
+    expect(screen.getByTestId('mint-project-input')).not.toBeNull();
+    fireEvent.change(screen.getByTestId('mint-project-input'), {
+      target: { value: 'PROJ-A' },
+    });
+
+    // Set valid IPv6 and IPv4 CIDRs
+    fireEvent.change(screen.getByTestId('mint-allowed-cidrs-input'), {
+      target: { value: '2001:db8::/32, 10.0.0.0/8' },
+    });
+    fireEvent.change(screen.getByTestId('mint-label-input'), {
+      target: { value: 'Project Key' },
+    });
+
+    fireEvent.click(screen.getByTestId('mint-submit-btn'));
+
+    await waitFor(() => {
+      expect(mintSpy).toHaveBeenCalledWith(
+        expect.objectContaining({
+          label: 'Project Key',
+          scope_tier: 'project',
+          allowed_projects: ['PROJ-A'],
+          allowed_cidrs: ['2001:db8::/32', '10.0.0.0/8'],
+        }),
+      );
+    });
+  });
+
+  it('handles AAL2_STALE challenge on loadData, minting, and revoking with default fallbacks and error reporting', async () => {
+    // 1. Stale on loadData
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockRejectedValueOnce(
+      new ApiProblem(403, { code: 'AAL2_STALE' }),
+    );
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/settings/mcp?project=UNKNOWN_PROJ&scope=project']}>
+        <McpAccessStudio tier="project" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+    });
+    fireEvent.click(screen.getByText('x'));
+    unmount();
+
+    // 2. Stale on minting with default fallbacks
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockRejectedValueOnce(
+      new ApiProblem(403, { code: 'AAL2_STALE' }),
+    );
+
+    const { unmount: unmount2 } = render(
+      <MemoryRouter initialEntries={['/settings/mcp']}>
+        <McpAccessStudio tier="personal" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByTestId('mint-key-button'));
+    fireEvent.change(screen.getByTestId('mint-label-input'), { target: { value: 'Stale Key' } });
+    fireEvent.click(screen.getByTestId('mint-submit-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('mock-mfa-cancel-btn'));
+    unmount2();
+
+    // 3. Stale on revoke
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([
+      {
+        id: 'k-stale-rev',
+        label: 'Stale Revoke',
+        display_hint: 'sr1',
+        surface: 'agent',
+        scope_tier: 'workspace',
+        scopes: ['agent:read'],
+        allowed_projects: null,
+        created_at: new Date().toISOString(),
+        expires_at: null,
+        last_used_at: null,
+        revoked_at: null,
+      },
+    ]);
+    const revokeSpy = vi.spyOn(settingsApi, 'revokeUnifiedMcpKey').mockRejectedValueOnce(
+      new ApiProblem(403, { code: 'AAL2_STALE' }),
+    );
+
+    render(
+      <MemoryRouter initialEntries={['/settings/mcp']}>
+        <McpAccessStudio tier="personal" />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('revoke-btn-k-stale-rev')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByTestId('revoke-btn-k-stale-rev'));
+    fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('mock-mfa-cancel-btn'));
+
+    // Also cover regular Error on revoke
+    revokeSpy.mockRejectedValueOnce(new Error('Generic revoke failure'));
+    fireEvent.click(screen.getByTestId('revoke-btn-k-stale-rev'));
+    fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('studio-error-banner')).not.toBeNull();
+    });
+  });
+
+  it('handles global scope in query parameters', async () => {
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+
+    render(
+      <MemoryRouter initialEntries={['/settings/mcp?scope=global']}>
+        <McpAccessStudio tier="personal" user={{ is_server_admin: true }} />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('mcp-filter-bar')).not.toBeNull();
+    });
+  });
+
+  it('renders keys with project scope and null allowed_projects', async () => {
+    const sampleKeys: settingsApi.McpApiKeyItem[] = [
+      {
+        id: 'k-proj-null',
+        label: 'Proj Key Null Allowed',
+        display_hint: 'pn1',
+        surface: 'agent',
+        scope_tier: 'project',
+        scopes: ['agent:read'],
+        allowed_projects: null,
+        created_at: new Date().toISOString(),
+        expires_at: null,
+        last_used_at: null,
+        revoked_at: null,
+      },
+    ];
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue(sampleKeys);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/settings/mcp?scope=project&project=OPS']}>
+          <McpAccessStudio tier="project" user={{ is_server_admin: true }} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('key-row-k-proj-null')).not.toBeNull();
+    });
+  });
+
+  it('handles non-Error rejection on revoke and displays studio error banner', async () => {
+    const sampleKeys: settingsApi.McpApiKeyItem[] = [
+      {
+        id: 'k-serv',
+        label: 'Server Key',
+        display_hint: 'sv1',
+        surface: 'agent',
+        scope_tier: 'global',
+        scopes: ['agent:read'],
+        allowed_projects: null,
+        created_at: new Date().toISOString(),
+        expires_at: null,
+        last_used_at: null,
+        revoked_at: null,
+      },
+    ];
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue(sampleKeys);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'revokeUnifiedMcpKey').mockRejectedValueOnce('string revoke rejection');
+
+    render(
+      <MemoryRouter initialEntries={['/settings/mcp?scope=server']}>
+        <McpAccessStudio tier="global" user={{ is_server_admin: true }} />
+      </MemoryRouter>,
+    );
+    await waitFor(() => {
+      expect(screen.getByTestId('revoke-btn-k-serv')).not.toBeNull();
+    });
+    fireEvent.click(screen.getByTestId('revoke-btn-k-serv'));
+    fireEvent.click(screen.getByTestId('confirm-revoke-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('studio-error-banner')).not.toBeNull();
+    });
+  });
+
+  it('completes AAL2 challenge on loadData and mints global key with invalid CIDR submit edge case', async () => {
+    // 1. AAL2 on loadData resolved via MFA success
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys')
+      .mockRejectedValueOnce(new ApiProblem(403, { code: 'AAL2_REQUIRED', challenge_id: 'c1' }))
+      .mockResolvedValueOnce([]);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/settings/mcp']}>
+          <McpAccessStudio tier="workspace" user={{ is_server_admin: true }} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('mock-mfa-success-btn'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
+    });
+
+    // 2. Select Global scope in mint modal, enter invalid CIDR, and force form submit
+    fireEvent.click(screen.getByTestId('mint-key-button'));
+    fireEvent.change(screen.getByTestId('mint-scope-select'), { target: { value: 'global' } });
+    fireEvent.change(screen.getByTestId('mint-label-input'), { target: { value: 'Global Key' } });
+    fireEvent.change(screen.getByTestId('mint-allowed-cidrs-input'), { target: { value: '999.999.999.999/99' } });
+
+    const form = screen.getByTestId('mint-label-input').closest('form');
+    expect(form).not.toBeNull();
+    if (form) {
+      fireEvent.submit(form);
+    }
+    await waitFor(() => {
+      expect(screen.getByTestId('mint-error-banner')).not.toBeNull();
+    });
+  });
+
+  it('covers fallback projects from keys and error catching in projects/workspaces queries', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method, path) => {
+      if (path === '/api/v1/projects' || path === '/api/v1/workspaces') {
+        return Promise.reject(new Error('Network failure'));
+      }
+      return Promise.resolve({});
+    });
+
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([
+      {
+        id: 'k-fallback-p',
+        label: 'Fallback Key',
+        display_hint: 'fb1',
+        surface: 'agent',
+        scope_tier: 'project',
+        scopes: ['agent:read'],
+        allowed_projects: ['FALLBACK_PROJ', ''],
+        created_at: new Date().toISOString(),
+        expires_at: null,
+        last_used_at: null,
+        revoked_at: null,
+      },
+    ]);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/settings/mcp?scope=all']}>
+          <McpAccessStudio tier="personal" user={{ is_server_admin: true }} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('key-row-k-fallback-p')).not.toBeNull();
+    });
+  });
+
+  it('covers custom preset selection, project datalist fallback, and snippet modal projectKey branch', async () => {
+    vi.spyOn(settingsApi, 'fetchUnifiedMcpKeys').mockResolvedValue([]);
+    vi.spyOn(settingsApi, 'fetchConnectedApps').mockResolvedValue([]);
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method: string, path: string) => {
+      if (path === '/api/v1/projects') {
+        return Promise.resolve({
+          items: [
+            { id: 'proj-kanba', identifier: 'KANBA', name: 'Kanban Core' },
+            { id: 'proj-same', identifier: 'SAME', name: 'SAME' },
+            { id: 'proj-noname', identifier: 'NONAME', name: '' },
+          ],
+        });
+      }
+      return Promise.resolve({
+        is_server_admin: true,
+        is_workspace_admin: true,
+      });
+    });
+
+    const mintSpy = vi.spyOn(settingsApi, 'mintUnifiedMcpKey').mockResolvedValue({
+      id: 'k-snippet-p',
+      label: 'Snippet Proj Key',
+      display_hint: 'sn1',
+      surface: 'agent',
+      scope_tier: 'project',
+      scopes: ['agent:read'],
+      allowed_projects: ['KANBA'],
+      created_at: new Date().toISOString(),
+      expires_at: null,
+      last_used_at: null,
+      revoked_at: null,
+      raw_key: 'kb_agt_snip_key',
+    });
+
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <MemoryRouter initialEntries={['/settings/mcp']}>
+          <McpAccessStudio tier="workspace" user={{ is_server_admin: true }} />
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mint-key-button')).not.toBeNull();
+    });
+
+    fireEvent.click(screen.getByTestId('mint-key-button'));
+
+    // 1. Toggle bit to make capability mask custom (e.g. uncheck bit 128 DELETE)
+    const delBit = screen.getByTestId<HTMLInputElement>('cap-bit-128');
+    fireEvent.click(delBit);
+
+    // Now preset select renders custom option; select 'custom' to test val !== 'custom' false branch
+    const presetSelect = screen.getByTestId('capability-preset-select');
+    fireEvent.change(presetSelect, { target: { value: 'custom' } });
+
+    // 2. Switch to project scope tier so mint-project-datalist renders with SAME and NONAME
+    fireEvent.change(screen.getByTestId('mint-scope-select'), { target: { value: 'project' } });
+    const datalist = screen.getByTestId('mint-project-input');
+    expect(datalist).toBeDefined();
+
+    // 3. Leave project input empty so newKeyProject.trim() is false and falls back to effectiveProjectKey
+    fireEvent.change(screen.getByTestId('mint-project-input'), { target: { value: '' } });
+    fireEvent.change(screen.getByTestId('mint-label-input'), { target: { value: 'Empty Proj Key' } });
+
+    const form = screen.getByTestId('mint-label-input').closest('form');
+    expect(form).not.toBeNull();
+    if (form) {
+      fireEvent.submit(form);
+    }
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mcp-snippet-modal')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('modal-close-button'));
+
+    // 4. Open again and submit with non-empty projectKey so newKeyProject.trim() is true
+    fireEvent.click(screen.getByTestId('mint-key-button'));
+    fireEvent.change(screen.getByTestId('mint-scope-select'), { target: { value: 'project' } });
+    fireEvent.change(screen.getByTestId('mint-project-input'), { target: { value: 'PROJ-SNIP' } });
+    fireEvent.change(screen.getByTestId('mint-label-input'), { target: { value: 'Snippet Proj Key' } });
+
+    const form2 = screen.getByTestId('mint-label-input').closest('form');
+    expect(form2).not.toBeNull();
+    if (form2) {
+      fireEvent.submit(form2);
+    }
+
+    await waitFor(() => {
+      expect(screen.getByTestId('mcp-snippet-modal')).toBeDefined();
+    });
+    expect(mintSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        label: 'Snippet Proj Key',
+        scope_tier: 'project',
+        allowed_projects: ['PROJ-SNIP'],
+      }),
+    );
+  });
+
+  describe('settingsApi standalone helpers', () => {
+    beforeEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('exercises fetchUnifiedMcpKeys with all options and both response shapes', async () => {
+      const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue({
+        keys: [
+          {
+            id: 'k-1',
+            label: 'Key 1',
+            surface: 'agent',
+            capability_mask: 7,
+            allowed_cidrs: ['10.0.0.0/8'],
+          },
+        ],
+      });
+
+      const res1 = await settingsApi.fetchUnifiedMcpKeys({
+        view: 'governance',
+        scope_tier: 'workspace',
+        project_ref: 'KANBA',
+        surface: 'agent',
+      });
+      expect(res1[0]?.id).toBe('k-1');
+      expect(res1[0]?.capability_mask).toBe(7);
+      expect(res1[0]?.allowed_cidrs).toEqual(['10.0.0.0/8']);
+      expect(apiFetchSpy).toHaveBeenCalledWith(
+        'GET',
+        '/api/v1/mcp-keys?view=governance&scope_tier=workspace&project_ref=KANBA&surface=agent',
+      );
+
+      // Array shape
+      apiFetchSpy.mockResolvedValueOnce([
+        { id: 'k-2', surface: 'docs', display_hint: 'd2' },
+      ]);
+      const res2 = await settingsApi.fetchUnifiedMcpKeys();
+      expect(res2[0]?.id).toBe('k-2');
+      expect(res2[0]?.label).toBe('d2');
+    });
+
+    it('exercises mintUnifiedMcpKey and revokeUnifiedMcpKey', async () => {
+      const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue({
+        id: 'k-mint',
+        surface: 'agent',
+      });
+
+      const res = await settingsApi.mintUnifiedMcpKey({
+        label: 'New Minter',
+        surface: 'agent',
+        scopes: ['agent:read'],
+        capability_mask: 1,
+        allowed_cidrs: ['192.168.1.0/24'],
+      });
+      expect(res.id).toBe('k-mint');
+      expect(res.label).toBe('New Minter');
+      expect(apiFetchSpy).toHaveBeenCalledWith('POST', '/api/v1/mcp-keys', {
+        body: JSON.stringify({
+          label: 'New Minter',
+          surface: 'agent',
+          scopes: ['agent:read'],
+          capability_mask: 1,
+          allowed_cidrs: ['192.168.1.0/24'],
+        }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      apiFetchSpy.mockResolvedValueOnce(undefined);
+      await settingsApi.revokeUnifiedMcpKey('k-mint');
+      expect(apiFetchSpy).toHaveBeenCalledWith('DELETE', '/api/v1/mcp-keys/{key_id}', {
+        params: { key_id: 'k-mint' },
+      });
+    });
+
+    it('exercises personal MCP key operations with global and standard tier', async () => {
+      const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue([
+        { id: 'k-p1', surface: 'agent' },
+      ]);
+
+      const resStandard = await settingsApi.fetchPersonalMcpKeys();
+      expect(resStandard[0]?.id).toBe('k-p1');
+      expect(apiFetchSpy).toHaveBeenCalledWith('GET', '/api/v1/auth/mcp-keys');
+
+      apiFetchSpy.mockResolvedValueOnce({
+        keys: [{ id: 'k-pg', surface: 'admin' }],
+      });
+      const resGlobal = await settingsApi.fetchPersonalMcpKeys('global');
+      expect(resGlobal[0]?.id).toBe('k-pg');
+      expect(apiFetchSpy).toHaveBeenCalledWith('GET', '/api/v1/admin/mcp-keys');
+
+      apiFetchSpy.mockResolvedValueOnce({ id: 'k-p-mint', surface: 'agent' });
+      await settingsApi.mintPersonalMcpKey(
+        { label: 'Personal', surface: 'agent', scopes: ['agent:read'] },
+        'global',
+      );
+      expect(apiFetchSpy).toHaveBeenCalledWith('POST', '/api/v1/admin/mcp-keys', {
+        body: JSON.stringify({ label: 'Personal', surface: 'agent', scopes: ['agent:read'] }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      apiFetchSpy.mockResolvedValueOnce({ id: 'k-p-mint2', surface: 'agent' });
+      await settingsApi.mintPersonalMcpKey({
+        label: 'Personal2',
+        surface: 'agent',
+        scopes: ['agent:read'],
+      });
+      expect(apiFetchSpy).toHaveBeenCalledWith('POST', '/api/v1/auth/mcp-keys', {
+        body: JSON.stringify({ label: 'Personal2', surface: 'agent', scopes: ['agent:read'] }),
+        headers: { 'Content-Type': 'application/json' },
+      });
+
+      apiFetchSpy.mockResolvedValueOnce(undefined);
+      await settingsApi.revokePersonalMcpKey('k-pg', 'global');
+      expect(apiFetchSpy).toHaveBeenCalledWith('DELETE', '/api/v1/admin/mcp-keys/{key_id}', {
+        params: { key_id: 'k-pg' },
+      });
+
+      apiFetchSpy.mockResolvedValueOnce(undefined);
+      await settingsApi.revokePersonalMcpKey('k-p1');
+      expect(apiFetchSpy).toHaveBeenCalledWith('DELETE', '/api/v1/auth/mcp-keys/{key_id}', {
+        params: { key_id: 'k-p1' },
+      });
+    });
+
+    it('exercises fetchConnectedApps and revokeConnectedApp', async () => {
+      const apiFetchSpy = vi.spyOn(clientModule, 'apiFetch').mockResolvedValue([
+        { id: 'app-1', client_id: 'cid', surface: 'agent', scopes: ['agent:read'], created_at: '', revoked_at: null },
+      ]);
+
+      const apps = await settingsApi.fetchConnectedApps();
+      expect(apps[0]?.id).toBe('app-1');
+      expect(apiFetchSpy).toHaveBeenCalledWith('GET', '/api/v1/auth/oauth-grants');
+
+      apiFetchSpy.mockResolvedValueOnce(undefined);
+      await settingsApi.revokeConnectedApp('app-1');
+      expect(apiFetchSpy).toHaveBeenCalledWith('DELETE', '/api/v1/auth/oauth-grants/{grant_id}', {
+        params: { grant_id: 'app-1' },
+      });
     });
   });
 });

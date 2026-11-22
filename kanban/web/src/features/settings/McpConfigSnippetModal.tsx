@@ -222,6 +222,10 @@ agy mcp add kanban ${endpointUrl} --auth oauth`;
           </div>
         )}
 
+        <div className="kb-snippet-boundary-note" data-testid="credential-boundary-note">
+          <strong>Monotonic Credential Boundary:</strong> Access through this key is monotonically bounded by your account effective permissions. Capability ceilings, allowed CIDRs, and disabled tools narrow access across <code>/mcp/*</code> and <code>/api/v1/*</code> without privilege escalation.
+        </div>
+
         <div className="kb-snippet-url-row">
           <label htmlFor="url-scope-select" className="kb-snippet-url-label">
             Target Scope URL:

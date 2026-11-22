@@ -185,9 +185,12 @@ function MintEnrollmentTokenContent({
 
           <div className="kb-form-group">
             <label className="kb-form-label">Example Runner CLI Ingestion:</label>
-            <pre className="kb-runner-cli-pre">
-              {`echo "${mintedToken.enrollment_token}" | uv run kanban-runner enroll --token-stdin --pool ${mintedToken.pool_slug}`}
+            <pre className="kb-runner-cli-pre" data-testid="runner-cli-command">
+              {`echo "${mintedToken.enrollment_token}" | uv run kanban-agent-runner enroll --url ${window.location.origin} --token-stdin --pool ${mintedToken.pool_slug}`}
             </pre>
+            <div className="kb-form-hint kb-runner-mtls-notice" data-testid="runner-mtls-notice">
+              <strong>Dedicated mTLS Endpoint Notice:</strong> Autonomous runners communicate over a dedicated mutual TLS port (default :8444) for Proof-of-Possession handshakes and real-time WebSocket job coordination.
+            </div>
           </div>
 
           <div className="kb-modal-footer">
