@@ -421,6 +421,73 @@
         "title": "AdHocQueryRequest",
         "type": "object"
       },
+      "AdminGenericImportRequest": {
+        "description": "Payload requesting execution or preview of Jira, GitHub, or Linear imports.",
+        "properties": {
+          "bundle_data": {
+            "anyOf": [
+              {},
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Direct JSON or CSV data payload for upload/paste import",
+            "title": "Bundle Data"
+          },
+          "bundle_name": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Bundle file or folder name in imports storage",
+            "title": "Bundle Name"
+          },
+          "dry_run": {
+            "default": false,
+            "description": "Simulate import and return diff report without persisting database changes",
+            "title": "Dry Run",
+            "type": "boolean"
+          },
+          "project_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Target project key (e.g. JIRA, GH, LIN)",
+            "title": "Project Key"
+          },
+          "user_map": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "Mapping from source user identifiers to Kanban handles",
+            "title": "User Map",
+            "type": "object"
+          },
+          "workspace_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Target workspace slug (defaults to caller active workspace)",
+            "title": "Workspace Slug"
+          }
+        },
+        "title": "AdminGenericImportRequest",
+        "type": "object"
+      },
       "AdminOAuthClientCreateRequest": {
         "additionalProperties": false,
         "description": "Payload for administrative registration of an OAuth 2.1 client (AAL2).",
@@ -547,6 +614,31 @@
           }
         },
         "title": "AdminPlaneImportRequest",
+        "type": "object"
+      },
+      "AdminPortableExportRequest": {
+        "description": "Payload requesting portable deterministic workspace bundle export.",
+        "properties": {
+          "scrub": {
+            "default": false,
+            "description": "Scrub secrets and sensitive tokens from markdown and text fields",
+            "title": "Scrub",
+            "type": "boolean"
+          },
+          "workspace_slug": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Target workspace slug (defaults to caller's active workspace)",
+            "title": "Workspace Slug"
+          }
+        },
+        "title": "AdminPortableExportRequest",
         "type": "object"
       },
       "AgentDefinitionCreate": {
@@ -1177,6 +1269,57 @@
         "title": "AssigneeSuggestionsResponse",
         "type": "object"
       },
+      "AttachmentMetaResponse": {
+        "description": "Lightweight metadata response for an attachment.",
+        "properties": {
+          "blob_sha256": {
+            "description": "Hex-encoded SHA-256 digest",
+            "title": "Blob Sha256",
+            "type": "string"
+          },
+          "byte_size": {
+            "description": "Payload byte size",
+            "title": "Byte Size",
+            "type": "integer"
+          },
+          "content_type": {
+            "description": "MIME media type",
+            "title": "Content Type",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "original_filename": {
+            "description": "Original filename",
+            "title": "Original Filename",
+            "type": "string"
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Document page count",
+            "title": "Page Count"
+          }
+        },
+        "required": [
+          "id",
+          "original_filename",
+          "content_type",
+          "byte_size",
+          "blob_sha256"
+        ],
+        "title": "AttachmentMetaResponse",
+        "type": "object"
+      },
       "AttachmentResponse": {
         "description": "Response returned upon successful attachment upload.",
         "properties": {
@@ -1207,6 +1350,18 @@
             "description": "Canonical attachment URI for markdown embedding (attachment://att_<id>)",
             "title": "Markdown Uri",
             "type": "string"
+          },
+          "page_count": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Document page count for paginated media",
+            "title": "Page Count"
           },
           "pixel_height": {
             "anyOf": [
@@ -5588,6 +5743,13 @@
             "default": 0,
             "title": "Invalid Link Count",
             "type": "integer"
+          },
+          "key_remap_manifest": {
+            "additionalProperties": {
+              "type": "string"
+            },
+            "title": "Key Remap Manifest",
+            "type": "object"
           },
           "rewritten_attachments": {
             "default": 0,
@@ -13473,6 +13635,18 @@
       "ResolvedRefResponse": {
         "description": "Canonical JSON response representing a resolved entity reference.",
         "properties": {
+          "canonical_key": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "description": "Canonical issue key when resolved via legacy alias",
+            "title": "Canonical Key"
+          },
           "id": {
             "description": "Unique entity identifier (UUIDv7)",
             "format": "uuid",
@@ -18246,8 +18420,8 @@
   "info": {
     "title": "\ud83d\udc4dkanban API",
     "version": "2.0.0",
-    "x-build-commit": "9d5577ad9b50",
-    "x-openapi-bundle-hash": "98656c3ca40eae675f7d5cb5f7363fcddef82f3f756aef316febe37606bfaf19"
+    "x-build-commit": "9f640629a0bc",
+    "x-openapi-bundle-hash": "9097584815a9fb47c42aa9acc6da1afd9e0cab21095c97323f5d4ede512b8485"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -20970,6 +21144,63 @@
         ]
       }
     },
+    "/api/v1/admin/exports/portable": {
+      "post": {
+        "description": "Generate and return a deterministic .tar.gz portable bundle for the workspace.",
+        "operationId": "export_portable_workspace_api_v1_admin_exports_portable_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminPortableExportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/gzip": {}
+            },
+            "description": "Deterministic .tar.gz workspace archive with manifest.json SHA-256 digests"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Export deterministic portable workspace bundle (Server Admin + AAL2)",
+        "tags": [
+          "Admin Exports"
+        ]
+      }
+    },
     "/api/v1/admin/groups/{group_id}/members": {
       "get": {
         "description": "List direct member principals (users, groups, agents) of the group.",
@@ -21182,6 +21413,189 @@
         "summary": "Add group member",
         "tags": [
           "admin-principals"
+        ]
+      }
+    },
+    "/api/v1/admin/imports/github": {
+      "post": {
+        "description": "Import a validated GitHub issues JSON export into the workspace.",
+        "operationId": "import_github_bundle_api_v1_admin_imports_github_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminGenericImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportDiffReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Import or preview GitHub issues bundle (Server Admin + AAL2)",
+        "tags": [
+          "Admin Imports"
+        ]
+      }
+    },
+    "/api/v1/admin/imports/jira": {
+      "post": {
+        "description": "Import a validated Jira JSON export into the workspace.",
+        "operationId": "import_jira_bundle_api_v1_admin_imports_jira_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminGenericImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportDiffReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Import or preview Jira export bundle (Server Admin + AAL2)",
+        "tags": [
+          "Admin Imports"
+        ]
+      }
+    },
+    "/api/v1/admin/imports/linear": {
+      "post": {
+        "description": "Import a validated Linear JSON or CSV export into the workspace.",
+        "operationId": "import_linear_bundle_api_v1_admin_imports_linear_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/AdminGenericImportRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ImportDiffReport"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Import or preview Linear JSON/CSV export bundle (Server Admin + AAL2)",
+        "tags": [
+          "Admin Imports"
         ]
       }
     },
@@ -23814,6 +24228,78 @@
           }
         ],
         "summary": "Retrieve attachment blob content",
+        "tags": [
+          "attachments"
+        ]
+      }
+    },
+    "/api/v1/attachments/{attachment_id}/meta": {
+      "get": {
+        "description": "Retrieve attachment metadata enforcing caller VIEW capability.",
+        "operationId": "get_attachment_meta_api_v1_attachments__attachment_id__meta_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "attachment_id",
+            "required": true,
+            "schema": {
+              "format": "uuid",
+              "title": "Attachment Id",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AttachmentMetaResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          },
+          "429": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Too Many Requests - rate limit exceeded"
+          }
+        },
+        "security": [
+          {
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Retrieve attachment metadata",
         "tags": [
           "attachments"
         ]
@@ -32967,6 +33453,34 @@
               "default": false,
               "title": "Only Archived",
               "type": "boolean"
+            }
+          },
+          {
+            "description": "Optional workflow state_group filter",
+            "in": "query",
+            "name": "state_group",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "items": {
+                    "enum": [
+                      "backlog",
+                      "unstarted",
+                      "started",
+                      "completed",
+                      "cancelled"
+                    ],
+                    "type": "string"
+                  },
+                  "type": "array"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional workflow state_group filter",
+              "title": "State Group"
             }
           }
         ],

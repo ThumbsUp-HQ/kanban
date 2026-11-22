@@ -691,6 +691,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/exports/portable": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Export deterministic portable workspace bundle (Server Admin + AAL2)
+         * @description Generate and return a deterministic .tar.gz portable bundle for the workspace.
+         */
+        post: operations["export_portable_workspace_api_v1_admin_exports_portable_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/groups/{group_id}/members": {
         parameters: {
             query?: never;
@@ -730,6 +750,66 @@ export interface paths {
          * @description Remove a member principal from the specified administrative group.
          */
         delete: operations["remove_group_member_endpoint_api_v1_admin_groups__group_id__members__principal_id__delete"];
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/github": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import or preview GitHub issues bundle (Server Admin + AAL2)
+         * @description Import a validated GitHub issues JSON export into the workspace.
+         */
+        post: operations["import_github_bundle_api_v1_admin_imports_github_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/jira": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import or preview Jira export bundle (Server Admin + AAL2)
+         * @description Import a validated Jira JSON export into the workspace.
+         */
+        post: operations["import_jira_bundle_api_v1_admin_imports_jira_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/imports/linear": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Import or preview Linear JSON/CSV export bundle (Server Admin + AAL2)
+         * @description Import a validated Linear JSON or CSV export into the workspace.
+         */
+        post: operations["import_linear_bundle_api_v1_admin_imports_linear_post"];
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -1412,6 +1492,26 @@ export interface paths {
          * @description Retrieve attachment content blob enforcing signature, live RLS, and .svg sandbox shield.
          */
         get: operations["get_attachment_content_api_v1_attachments__attachment_id__content_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/attachments/{attachment_id}/meta": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Retrieve attachment metadata
+         * @description Retrieve attachment metadata enforcing caller VIEW capability.
+         */
+        get: operations["get_attachment_meta_api_v1_attachments__attachment_id__meta_get"];
         put?: never;
         post?: never;
         delete?: never;
@@ -5483,6 +5583,45 @@ export interface components {
             };
         };
         /**
+         * AdminGenericImportRequest
+         * @description Payload requesting execution or preview of Jira, GitHub, or Linear imports.
+         */
+        AdminGenericImportRequest: {
+            /**
+             * Bundle Data
+             * @description Direct JSON or CSV data payload for upload/paste import
+             */
+            bundle_data?: unknown | null;
+            /**
+             * Bundle Name
+             * @description Bundle file or folder name in imports storage
+             */
+            bundle_name?: string | null;
+            /**
+             * Dry Run
+             * @description Simulate import and return diff report without persisting database changes
+             * @default false
+             */
+            dry_run: boolean;
+            /**
+             * Project Key
+             * @description Target project key (e.g. JIRA, GH, LIN)
+             */
+            project_key?: string | null;
+            /**
+             * User Map
+             * @description Mapping from source user identifiers to Kanban handles
+             */
+            user_map?: {
+                [key: string]: string;
+            };
+            /**
+             * Workspace Slug
+             * @description Target workspace slug (defaults to caller active workspace)
+             */
+            workspace_slug?: string | null;
+        };
+        /**
          * AdminOAuthClientCreateRequest
          * @description Payload for administrative registration of an OAuth 2.1 client (AAL2).
          */
@@ -5551,6 +5690,23 @@ export interface components {
             user_map?: {
                 [key: string]: string;
             };
+            /**
+             * Workspace Slug
+             * @description Target workspace slug (defaults to caller's active workspace)
+             */
+            workspace_slug?: string | null;
+        };
+        /**
+         * AdminPortableExportRequest
+         * @description Payload requesting portable deterministic workspace bundle export.
+         */
+        AdminPortableExportRequest: {
+            /**
+             * Scrub
+             * @description Scrub secrets and sensitive tokens from markdown and text fields
+             * @default false
+             */
+            scrub: boolean;
             /**
              * Workspace Slug
              * @description Target workspace slug (defaults to caller's active workspace)
@@ -5790,6 +5946,42 @@ export interface components {
             items: components["schemas"]["AssigneeSuggestionItem"][];
         };
         /**
+         * AttachmentMetaResponse
+         * @description Lightweight metadata response for an attachment.
+         */
+        AttachmentMetaResponse: {
+            /**
+             * Blob Sha256
+             * @description Hex-encoded SHA-256 digest
+             */
+            blob_sha256: string;
+            /**
+             * Byte Size
+             * @description Payload byte size
+             */
+            byte_size: number;
+            /**
+             * Content Type
+             * @description MIME media type
+             */
+            content_type: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /**
+             * Original Filename
+             * @description Original filename
+             */
+            original_filename: string;
+            /**
+             * Page Count
+             * @description Document page count
+             */
+            page_count?: number | null;
+        };
+        /**
          * AttachmentResponse
          * @description Response returned upon successful attachment upload.
          */
@@ -5820,6 +6012,11 @@ export interface components {
              * @description Canonical attachment URI for markdown embedding (attachment://att_<id>)
              */
             markdown_uri: string;
+            /**
+             * Page Count
+             * @description Document page count for paginated media
+             */
+            page_count?: number | null;
             /**
              * Pixel Height
              * @description Raster height in pixels
@@ -7872,6 +8069,10 @@ export interface components {
              * @default 0
              */
             invalid_link_count: number;
+            /** Key Remap Manifest */
+            key_remap_manifest?: {
+                [key: string]: string;
+            };
             /**
              * Rewritten Attachments
              * @default 0
@@ -11465,6 +11666,11 @@ export interface components {
          * @description Canonical JSON response representing a resolved entity reference.
          */
         ResolvedRefResponse: {
+            /**
+             * Canonical Key
+             * @description Canonical issue key when resolved via legacy alias
+             */
+            canonical_key?: string | null;
             /**
              * Id
              * Format: uuid
@@ -15397,6 +15603,48 @@ export interface operations {
             };
         };
     };
+    export_portable_workspace_api_v1_admin_exports_portable_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminPortableExportRequest"];
+            };
+        };
+        responses: {
+            /** @description Deterministic .tar.gz workspace archive with manifest.json SHA-256 digests */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/gzip": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
     list_group_members_endpoint_api_v1_admin_groups__group_id__members_get: {
         parameters: {
             query?: never;
@@ -15503,6 +15751,132 @@ export interface operations {
                     "application/json": {
                         [key: string]: unknown;
                     };
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_github_bundle_api_v1_admin_imports_github_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminGenericImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportDiffReport"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_jira_bundle_api_v1_admin_imports_jira_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminGenericImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportDiffReport"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    import_linear_bundle_api_v1_admin_imports_linear_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody: {
+            content: {
+                "application/json": components["schemas"]["AdminGenericImportRequest"];
+            };
+        };
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ImportDiffReport"];
                 };
             };
             /** @description Unauthorized - authentication required */
@@ -17197,6 +17571,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": unknown;
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+            /** @description Too Many Requests - rate limit exceeded */
+            429: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    get_attachment_meta_api_v1_attachments__attachment_id__meta_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                attachment_id: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AttachmentMetaResponse"];
                 };
             };
             /** @description Unauthorized - authentication required */
@@ -22829,6 +23252,8 @@ export interface operations {
                 limit?: number;
                 include_archived?: boolean;
                 only_archived?: boolean;
+                /** @description Optional workflow state_group filter */
+                state_group?: ("backlog" | "unstarted" | "started" | "completed" | "cancelled")[] | null;
             };
             header?: never;
             path: {
