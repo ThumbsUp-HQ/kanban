@@ -1,10 +1,9 @@
-=== make check ===
 uv run ruff check .
 All checks passed!
 uv run ruff format --check .
-2061 files already formatted
+2100 files already formatted
 uv run mypy
-Success: no issues found in 1215 source files
+Success: no issues found in 1213 source files
 uv run lint-imports
 
 ╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
@@ -21,7 +20,7 @@ uv run lint-imports
 Contracts
 ---------
 
-Analyzed 1032 files, 3733 dependencies.
+Analyzed 1030 files, 3724 dependencies.
 ---------------------------------------
 
 Unidirectional module layers agent -> mcp -> kanban -> database KEPT (7 ignored imports)
@@ -32,14 +31,12 @@ uv run python -m scripts.check_no_dashes --all
 Notice: skipping /home/adamoutler/kanban/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
 uv run python -m database.migrations.cli check-migrations --static-only
 OK: All 65 migrations valid. Single head: p6_03_multi_source_imports_and_aliases
-
-=== check-migrations ===
 OK: All 65 migrations valid. Single head: p6_03_multi_source_imports_and_aliases
 
-=== pnpm typecheck ===
 > @kanban/web@0.1.0 typecheck /home/adamoutler/kanban/kanban/web
 > tsc -b --noEmit
 
-=== pnpm lint ===
+
 > @kanban/web@0.1.0 lint /home/adamoutler/kanban/kanban/web
 > eslint . --max-warnings 0
+

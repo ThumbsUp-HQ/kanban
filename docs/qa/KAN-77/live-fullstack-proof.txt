@@ -1,16 +1,16 @@
 === KAN-77 Zero-Mock Live Full-Stack Verification ===
 Container: kanban-local-import (127.0.0.1:18970)
-Commit SHA: 77866f48ae4f
+Commit SHA: fd1dc06e1429
 
 1. GET /api/v1/resolve?kind=issue&ref=KANBA-1 (Legacy Key Alias Resolution)
 ---------------------------------------------------------------------------
 HTTP/1.1 200 OK
-date: Sat, 21 Nov 2026 23:06:40 GMT
+date: Sun, 22 Nov 2026 01:16:25 GMT
 server: uvicorn
 content-length: 153
 content-type: application/json
 x-kanban-canonical-key: KAN-84
-x-request-id: 8898bc96607e4909b9e5926ecd3aa09e
+x-request-id: 9f079e57fd1b43b786a95101a91b6636
 content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
 x-content-type-options: nosniff
 referrer-policy: no-referrer
@@ -19,25 +19,17 @@ cross-origin-opener-policy: same-origin
 cross-origin-resource-policy: same-origin
 permissions-policy: camera=(), microphone=(), geolocation=()
 
-{
-  "id": "fc047283-4523-4337-a1cb-9c41988707f9",
-  "kind": "issue",
-  "key": "KAN-84",
-  "title": "Welcome to Plane 👋",
-  "workspace": "kanban",
-  "canonical_key": "KAN-84"
-}
-
+{"id":"fc047283-4523-4337-a1cb-9c41988707f9","kind":"issue","key":"KAN-84","title":"Welcome to Plane 👋","workspace":"kanban","canonical_key":"KAN-84"}
 2. GET /api/v1/issues/KANBA-1 (Direct Issue Alias Access with Canonical Key Header)
 ----------------------------------------------------------------------------------
 HTTP/1.1 200 OK
-date: Sat, 21 Nov 2026 23:06:40 GMT
+date: Sun, 22 Nov 2026 01:16:25 GMT
 server: uvicorn
 content-length: 3530
 content-type: application/json
 etag: "6af51dfd5909192549cd573f71250de55e203d4f9fa8330505f6d5a4280c2610"
 x-kanban-canonical-key: KAN-84
-x-request-id: 3252903e958d4c77a7313d0372e3fe81
+x-request-id: 802b7b32cd404f8d9b587829c37180ce
 content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
 x-content-type-options: nosniff
 referrer-policy: no-referrer
@@ -46,15 +38,68 @@ cross-origin-opener-policy: same-origin
 cross-origin-resource-policy: same-origin
 permissions-policy: camera=(), microphone=(), geolocation=()
 
-3. POST /api/v1/admin/exports/portable (Deterministic Workspace Bundle Export)
+{"id":"fc047283-4523-4337-a1cb-9c41988707f9","object_id":"fc047283-4523-4337-a1cb-9c41988707f9","key":"KAN-84","summary":"Welcome to Plane 👋","description_markdown":"> Imported from `KANBA-1`\n\nHey there! This demo project is your playground to get hands-on with Plane. We've set this up so you can click around and see how everything works without worrying about breaking anything.\n\nEach work item is designed to make you familiar with the basics of using Plane. Just follow along card by card at your own pace.\n\nFirst thing to try\n\n1. Look in the **Properties** section below where it says **State: Todo**.\n2. Click on it and change it to **Done** from the dropdown. Alternatively, you can drag and drop the card to the Done column.","description_sha256":"b63fa5c996d7fb9eba0b0b721eaedbcac1b9bcc7157287195232c8ba8a9424d9","etag":"\"6af51dfd5909192549cd573f71250de55e203d4f9fa8330505f6d5a4280c2610\"","state":{"id":"01a1dd7a-4ab2-7cda-8f5a-f44870bd0839","name":"Done","group":"completed","color_hex":"#16A34A"},"priority":{"slug":"urgent","label":"Urgent","emoji":"🔥"},"start_date":null,"due_date":null,"cycle_id":"a38797ee-750f-4f0c-b403-a60e5fe99465","cycle":{"id":"a38797ee-750f-4f0c-b403-a60e5fe99465","name":"Cycle 1: Getting Started with Plane"},"parent":null,"labels":[],"module_ids":["01aeebd4-791a-4804-aea3-8a60511890eb"],"modules":[{"id":"01aeebd4-791a-4804-aea3-8a60511890eb","name":"Core Workflow (System)"}],"assignees":[],"board_rank":"a00001M","created_by_id":"01a1dd7a-02bd-7cc1-8cab-4048520ed4b5","provenance":{"created_by":{"id":"01a1dd7a-02bd-7cc1-8cab-4048520ed4b5","handle":"admin"},"original_created_by":{"id":"01a1dd7a-02bd-7cc1-8cab-4048520ed4b5","handle":"admin"},"overridden":false,"creator_modified_by":null,"creator_modified_at":null,"reason":null},"access_manifest":{"pill_label":"Project","explicit_grant_count":0,"inherited_scope":{"kind":"project","scope_label":"Project: KAN","workspace_id":"01a1dd7a-02ba-7682-b151-001ab2abeb6c","workspace_name":"Default Workspace","project_id":"01a1dd7a-4aa8-7461-a7bf-250ec82495f3","project_key":"KAN","project_name":"Kanban Platform"},"users":[{"principal_id":"01a1dd7a-02bd-7cc1-8cab-4048520ed4b5","handle":"@admin","display_name":"Adam Outler","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"grant_source":"project_owner"},{"principal_id":"01a1e9fc-2154-747b-aca6-37c63590d6dc","handle":"@adamoutler@gmail.com","display_name":"Adam Outler","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"},{"principal_id":"5ba50fae-8e7a-4ad2-bf9f-32b8d654a566","handle":"@daybreak-admin","display_name":"Admin Daybreak","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"grant_source":"workspace_admin"},{"principal_id":"8bfdc2ea-ac41-43c6-b11e-1ccb945278a1","handle":"@daybreak","display_name":"ChatGPT Daybreak","capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK"],"grant_source":"workspace_role"}],"groups":[],"agents":[],"deny_overrides":[],"redacted_entries":[],"redacted_count":0,"caller_capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"canonical_key":"KAN-84","object_type":"issue"},"capabilities":["VIEW","COMMENT","EDIT","TRANSITION","LINK","SHARE","ADMIN","DELETE"],"created_at":"2026-11-11T21:48:37.508364Z","updated_at":"2026-11-18T18:28:42.221947Z","archived_at":null,"archive_eligibility":{"allowed":true,"reason":null},"note":null,"pending_gate":null,"latest_gate_verdict":null}
+3. GET /api/v1/issues/KANBA-1 (HTML 308 Permanent Redirect to Canonical URL)
+---------------------------------------------------------------------------
+HTTP/1.1 308 Permanent Redirect
+date: Sun, 22 Nov 2026 01:16:25 GMT
+server: uvicorn
+location: /projects/KAN/issues/KAN-84
+x-kanban-canonical-key: KAN-84
+content-length: 0
+x-request-id: 2197a60b6f704ef08af64fd086528ab1
+content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
+x-content-type-options: nosniff
+referrer-policy: no-referrer
+x-frame-options: DENY
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+permissions-policy: camera=(), microphone=(), geolocation=()
+
+
+4. POST /api/v1/admin/imports/jira (Dry-Run Simulation Preview)
+----------------------------------------------------------------
+HTTP/1.1 200 OK
+date: Sun, 22 Nov 2026 01:16:25 GMT
+server: uvicorn
+content-length: 183
+content-type: application/json
+x-request-id: e086a6d30c124d98a4f19eb898fc43b2
+content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
+x-content-type-options: nosniff
+referrer-policy: no-referrer
+x-frame-options: DENY
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+permissions-policy: camera=(), microphone=(), geolocation=()
+
+{"to_create":1,"to_update":0,"unchanged":0,"sequence_high_water_mark":305,"unmapped_members":[],"rewritten_attachments":0,"invalid_link_count":0,"warnings":[],"key_remap_manifest":{}}
+5. POST /api/v1/admin/imports/linear (Dry-Run Simulation Preview)
+------------------------------------------------------------------
+HTTP/1.1 200 OK
+date: Sun, 22 Nov 2026 01:16:26 GMT
+server: uvicorn
+content-length: 183
+content-type: application/json
+x-request-id: 47a6983cb35e4ad8b59c75cd39f1ed60
+content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
+x-content-type-options: nosniff
+referrer-policy: no-referrer
+x-frame-options: DENY
+cross-origin-opener-policy: same-origin
+cross-origin-resource-policy: same-origin
+permissions-policy: camera=(), microphone=(), geolocation=()
+
+{"to_create":1,"to_update":0,"unchanged":0,"sequence_high_water_mark":305,"unmapped_members":[],"rewritten_attachments":0,"invalid_link_count":0,"warnings":[],"key_remap_manifest":{}}
+6. POST /api/v1/admin/exports/portable (Deterministic Workspace Bundle Export)
 ------------------------------------------------------------------------------
 HTTP/1.1 200 OK
-date: Sat, 21 Nov 2026 23:07:08 GMT
+date: Sun, 22 Nov 2026 01:16:26 GMT
 server: uvicorn
 content-disposition: attachment; filename="kanban-kanban-portable.tar.gz"
 content-type: application/gzip
-content-length: 2339746
-x-request-id: e80a434e06d64d2ca57a287fc43e9bd8
+content-length: 2339742
+x-request-id: 515ed869f7fa49578e9086dc58c7bead
 content-security-policy: default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; img-src 'self' blob: data:; font-src 'self'; connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify;
 x-content-type-options: nosniff
 referrer-policy: no-referrer
@@ -63,21 +108,18 @@ cross-origin-opener-policy: same-origin
 cross-origin-resource-policy: same-origin
 permissions-policy: camera=(), microphone=(), geolocation=()
 
-Verified Archive Entities:
-- entities/attachments.jsonl
-- entities/comments.jsonl
-- entities/cycles.jsonl
-- entities/docs.jsonl
-- entities/issue_key_aliases.jsonl (221 aliases mapped)
-- entities/issues.jsonl (316 issues total)
-- entities/labels.jsonl
-- entities/links.jsonl
-- entities/modules.jsonl
-- entities/object_links.jsonl
-- entities/pages.jsonl
-- entities/priorities.jsonl
-- entities/projects.jsonl
-- entities/states.jsonl
-- entities/workspaces.jsonl
-- manifest.json (SHA-256 digests for all files)
-- markdown/issues/*.md (With YAML front matter and body markdown)
+
+Verifying Portable Archive Contents via tar -ztvf:
+---------------------------------------------------
+-rw-r--r-- 0/0               0 1969-12-31 19:00 attachments/sha256/89a0197d5fdcd37fa4d4ce0189e0e9fb633ba2aa8c0bf6fd809f74800aee3794
+-rw-r--r-- 0/0               0 1969-12-31 19:00 attachments/sha256/a4eb6ce3629f76379076334035d4c75c595e3b71b85179ea1d0eda2ca85c5a43
+-rw-r--r-- 0/0               0 1969-12-31 19:00 attachments/sha256/a5ffffc91f142ff0ab1459af0e4a328082d9943a77f94ed50aa7ffdd2d7556c1
+-rw-r--r-- 0/0               0 1969-12-31 19:00 attachments/sha256/aa8f34bbd52b2875cd6eb902250541f95e81a09d850b64cc635eeb9d85f5f889
+-rw-r--r-- 0/0         2092624 1969-12-31 19:00 entities/comments.jsonl
+-rw-r--r-- 0/0             278 1969-12-31 19:00 entities/docs.jsonl
+-rw-r--r-- 0/0           44763 1969-12-31 19:00 entities/issue_key_aliases.jsonl
+-rw-r--r-- 0/0         2885706 1969-12-31 19:00 entities/issues.jsonl
+-rw-r--r-- 0/0               0 1969-12-31 19:00 entities/stickies.jsonl
+-rw-r--r-- 0/0             161 1969-12-31 19:00 markdown/docs/d01a1e60bd40c74b3aab4881d6b0e1434.md
+
+Full Archive File Count: 338 files

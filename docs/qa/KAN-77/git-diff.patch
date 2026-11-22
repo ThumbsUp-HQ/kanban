@@ -1,194 +1,23 @@
-diff --git a/database/migrations/sql/p6_03_multi_source_imports_and_aliases.down.sql b/database/migrations/sql/p6_03_multi_source_imports_and_aliases.down.sql
-new file mode 100644
-index 00000000..b0d00181
---- /dev/null
-+++ b/database/migrations/sql/p6_03_multi_source_imports_and_aliases.down.sql
-@@ -0,0 +1,11 @@
-+-- Copyright 2026 Kanban Platform Contributors
-+-- Apache-2.0 License. See LICENSE for details.
-+
-+DROP TABLE IF EXISTS issue_key_aliases;
-+
-+ALTER TABLE import_entity_mappings
-+    DROP CONSTRAINT IF EXISTS import_entity_mappings_source_system_check;
-+
-+ALTER TABLE import_entity_mappings
-+    ADD CONSTRAINT import_entity_mappings_source_system_check
-+    CHECK (source_system = 'plane');
-diff --git a/database/migrations/sql/p6_03_multi_source_imports_and_aliases.up.sql b/database/migrations/sql/p6_03_multi_source_imports_and_aliases.up.sql
-new file mode 100644
-index 00000000..821b9908
---- /dev/null
-+++ b/database/migrations/sql/p6_03_multi_source_imports_and_aliases.up.sql
-@@ -0,0 +1,51 @@
-+-- Copyright 2026 Kanban Platform Contributors
-+-- Apache-2.0 License. See LICENSE for details.
-+
-+ALTER TABLE import_entity_mappings
-+    DROP CONSTRAINT IF EXISTS import_entity_mappings_source_system_check;
-+
-+ALTER TABLE import_entity_mappings
-+    ADD CONSTRAINT import_entity_mappings_source_system_check
-+    CHECK (source_system IN ('plane', 'jira', 'github', 'linear'));
-+
-+CREATE TABLE IF NOT EXISTS issue_key_aliases (
-+    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
-+    legacy_key TEXT NOT NULL CHECK (legacy_key ~ '^[A-Z][A-Z0-9_-]{1,24}-[0-9]{1,18}$'),
-+    issue_id UUID NOT NULL REFERENCES issues(id) ON DELETE CASCADE,
-+    source_system TEXT NOT NULL CHECK (source_system IN ('plane', 'jira', 'github', 'linear')),
-+    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
-+    PRIMARY KEY (workspace_id, legacy_key)
-+);
-+
-+CREATE INDEX IF NOT EXISTS idx_issue_key_aliases_workspace_issue
-+    ON issue_key_aliases (workspace_id, issue_id);
-+
-+ALTER TABLE issue_key_aliases OWNER TO kanban_migrator;
-+
-+ALTER TABLE issue_key_aliases ENABLE ROW LEVEL SECURITY;
-+ALTER TABLE issue_key_aliases FORCE ROW LEVEL SECURITY;
-+
-+CREATE POLICY issue_key_aliases_select_rls ON issue_key_aliases
-+    FOR SELECT USING (
-+        workspace_id = app_current_workspace_id()
-+    );
-+
-+CREATE POLICY issue_key_aliases_insert_rls ON issue_key_aliases
-+    FOR INSERT WITH CHECK (
-+        workspace_id = app_current_workspace_id()
-+    );
-+
-+CREATE POLICY issue_key_aliases_update_rls ON issue_key_aliases
-+    FOR UPDATE USING (
-+        workspace_id = app_current_workspace_id()
-+    ) WITH CHECK (
-+        workspace_id = app_current_workspace_id()
-+    );
-+
-+CREATE POLICY issue_key_aliases_delete_rls ON issue_key_aliases
-+    FOR DELETE USING (
-+        workspace_id = app_current_workspace_id()
-+    );
-+
-+GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE issue_key_aliases TO kanban_app;
-+GRANT SELECT ON TABLE issue_key_aliases TO app_rls_reader;
-diff --git a/database/migrations/versions/p6_03_multi_source_imports_and_aliases.py b/database/migrations/versions/p6_03_multi_source_imports_and_aliases.py
-new file mode 100644
-index 00000000..c7bafed0
---- /dev/null
-+++ b/database/migrations/versions/p6_03_multi_source_imports_and_aliases.py
-@@ -0,0 +1,28 @@
-+# Copyright 2026 Kanban Platform Contributors
-+# Apache-2.0 License. See LICENSE for details.
-+"""Multi source imports and issue key aliases.
-+
-+Revision ID: p6_03_multi_source_imports_and_aliases
-+Revises: p6_02_pdf_attachments
-+Create Date: 2026-11-21 18:16:41.000000
-+"""
-+
-+from collections.abc import Sequence
-+
-+from database.migrations.sqlfile import execute_sql_file
-+
-+# revision identifiers, used by Alembic.
-+revision: str = "p6_03_multi_source_imports_and_aliases"
-+down_revision: str | None = "p6_02_pdf_attachments"
-+branch_labels: str | Sequence[str] | None = None
-+depends_on: str | Sequence[str] | None = None
-+
-+
-+def upgrade() -> None:
-+    """Apply p6_03_multi_source_imports_and_aliases migration."""
-+    execute_sql_file("p6_03_multi_source_imports_and_aliases.up.sql")
-+
-+
-+def downgrade() -> None:
-+    """Revert p6_03_multi_source_imports_and_aliases migration."""
-+    execute_sql_file("p6_03_multi_source_imports_and_aliases.down.sql")
-diff --git a/database/models/import_mapping.py b/database/models/import_mapping.py
-index ba5f6da4..2e54d153 100644
---- a/database/models/import_mapping.py
-+++ b/database/models/import_mapping.py
-@@ -27,7 +27,7 @@ class ImportEntityMapping(Base):
-     __tablename__ = "import_entity_mappings"
-     __table_args__ = (
-         CheckConstraint(
--            "source_system = 'plane'",
-+            "source_system IN ('plane', 'jira', 'github', 'linear')",
-             name="import_entity_mappings_source_system_check",
-         ),
-         CheckConstraint(
-diff --git a/database/models/issue_alias.py b/database/models/issue_alias.py
-new file mode 100644
-index 00000000..116c0382
---- /dev/null
-+++ b/database/models/issue_alias.py
-@@ -0,0 +1,64 @@
-+# Copyright 2026 Kanban Platform Contributors
-+# Apache-2.0 License. See LICENSE for details.
-+"""SQLAlchemy 2.0 ORM model for legacy issue key aliases (KB-P6-03)."""
-+
-+from __future__ import annotations
-+
-+import uuid  # noqa: TC003
-+from datetime import UTC, datetime
-+
-+from sqlalchemy import (
-+    CheckConstraint,
-+    DateTime,
-+    ForeignKey,
-+    Index,
-+    String,
-+    text,
-+)
-+from sqlalchemy.orm import Mapped, mapped_column
-+
-+from database.models.base import Base
-+
-+
-+class IssueKeyAlias(Base):
-+    """Legacy issue key aliases mapping former foreign keys to canonical issues."""
-+
-+    __tablename__ = "issue_key_aliases"
-+    __table_args__ = (
-+        CheckConstraint(
-+            "legacy_key ~ '^[A-Z][A-Z0-9_-]{1,24}-[0-9]{1,18}$'",
-+            name="issue_key_aliases_legacy_key_check",
-+        ),
-+        CheckConstraint(
-+            "source_system IN ('plane', 'jira', 'github', 'linear')",
-+            name="issue_key_aliases_source_system_check",
-+        ),
-+        Index(
-+            "idx_issue_key_aliases_workspace_issue",
-+            "workspace_id",
-+            "issue_id",
-+        ),
-+    )
-+
-+    workspace_id: Mapped[uuid.UUID] = mapped_column(
-+        ForeignKey("workspaces.id", ondelete="CASCADE"),
-+        primary_key=True,
-+    )
-+    legacy_key: Mapped[str] = mapped_column(
-+        String,
-+        primary_key=True,
-+    )
-+    issue_id: Mapped[uuid.UUID] = mapped_column(
-+        ForeignKey("issues.id", ondelete="CASCADE"),
-+        nullable=False,
-+    )
-+    source_system: Mapped[str] = mapped_column(
-+        String,
-+        nullable=False,
-+    )
-+    created_at: Mapped[datetime] = mapped_column(
-+        DateTime(timezone=True),
-+        nullable=False,
-+        server_default=text("clock_timestamp()"),
-+        default=lambda: datetime.now(UTC),
-+    )
+diff --git a/database/models/__init__.py b/database/models/__init__.py
+index 6f029986..2625ece4 100644
+--- a/database/models/__init__.py
++++ b/database/models/__init__.py
+@@ -32,6 +32,7 @@ from database.models.custom_field_approval import CustomFieldApproval
+ from database.models.destructive_token import DestructiveConfirmationToken
+ from database.models.embeddings import ObjectEmbedding
+ from database.models.import_mapping import ImportEntityMapping
++from database.models.issue_alias import IssueKeyAlias
+ from database.models.issues import (
+     CommentReaction,
+     Issue,
+@@ -120,6 +121,7 @@ __all__ = [
+     "Issue",
+     "IssueAssignee",
+     "IssueComment",
++    "IssueKeyAlias",
+     "IssueLabel",
+     "IssueModule",
+     "IssueSubscription",
 diff --git a/database/tests/migrations/test_p6_03_multi_source_imports_and_aliases_migration.py b/database/tests/migrations/test_p6_03_multi_source_imports_and_aliases_migration.py
 new file mode 100644
 index 00000000..421ce1ee
@@ -219,6 +48,26 @@ index 00000000..421ce1ee
 +
 +        # 3. Upgrade back to head
 +        await harness.upgrade("p6_03_multi_source_imports_and_aliases")
+diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
+index 45697948..6173228a 100644
+--- a/kanban/api/v1/__init__.py
++++ b/kanban/api/v1/__init__.py
+@@ -11,6 +11,7 @@ from kanban.api.v1.admin.acl import router as admin_acl_router
+ from kanban.api.v1.admin.ai_providers import router as admin_ai_router
+ from kanban.api.v1.admin.auth_cards import router as admin_auth_cards_router
+ from kanban.api.v1.admin.destructive import router as admin_destructive_router
++from kanban.api.v1.admin.exports import router as admin_exports_router
+ from kanban.api.v1.admin.imports import router as admin_imports_router
+ from kanban.api.v1.admin.link_auditor import router as admin_link_auditor_router
+ from kanban.api.v1.admin.mcp_keys import router as admin_mcp_keys_router
+@@ -132,6 +133,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
+     v1.include_router(admin_auth_cards_router)
+     v1.include_router(admin_ai_router)
+     v1.include_router(admin_destructive_router)
++    v1.include_router(admin_exports_router)
+     v1.include_router(admin_imports_router)
+     v1.include_router(admin_link_auditor_router)
+     v1.include_router(admin_mcp_keys_router)
 diff --git a/kanban/api/v1/admin/exports.py b/kanban/api/v1/admin/exports.py
 new file mode 100644
 index 00000000..8687fa83
@@ -650,6 +499,188 @@ index 96ee6fec..9ce8bf9a 100644
              workspace=resolved.workspace,
 +            canonical_key=resolved.canonical_key if resolved.is_alias else None,
          )
+diff --git a/kanban/cli/ctl.py b/kanban/cli/ctl.py
+index e8ae39c6..b0e038c1 100644
+--- a/kanban/cli/ctl.py
++++ b/kanban/cli/ctl.py
+@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
+ 
+ from kanban.cli.auth import register_auth_subparsers
+ from kanban.cli.db import register_db_subparsers
++from kanban.cli.export import register_export_subparsers
+ from kanban.cli.import_plane import register_import_subparsers
+ from kanban.cli.jobs import register_jobs_subparsers
+ from kanban.cli.ops import (
+@@ -43,6 +44,7 @@ def main(argv: Sequence[str] | None = None) -> int:
+     register_ops_subparsers(subparsers)
+     register_jobs_subparsers(subparsers)
+     register_auth_subparsers(subparsers)
++    register_export_subparsers(subparsers)
+     register_import_subparsers(subparsers)
+     register_cutover_subparsers(subparsers)
+     register_db_subparsers(subparsers)
+diff --git a/kanban/cli/export.py b/kanban/cli/export.py
+new file mode 100644
+index 00000000..9bba0a7b
+--- /dev/null
++++ b/kanban/cli/export.py
+@@ -0,0 +1,156 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""CLI commands for workspace export (KB-P6-03)."""
++# ruff: noqa: E501, TC003, ASYNC240, BLE001
++
++from __future__ import annotations
++
++import argparse
++import asyncio
++import logging
++import os
++import sys
++import uuid
++from collections.abc import AsyncIterator
++from contextlib import asynccontextmanager
++from pathlib import Path
++from typing import Any
++
++from sqlalchemy import text
++from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
++
++from kanban.api.deps import PrincipalContext
++from kanban.exporter.portable_bundle import PortableWorkspaceExporter
++
++logger = logging.getLogger(__name__)
++
++
++def _get_admin_dsn() -> str:
++    """Resolve administrative database connection DSN from environment."""
++    dsn = (
++        os.environ.get("KANBAN_ADMIN_DATABASE_URL")
++        or os.environ.get("KANBAN_DATABASE_URL")
++        or os.environ.get("DATABASE_URL")
++    )
++    if dsn:
++        return dsn
++
++    socket_dir = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")  # noqa: S108
++    user = os.environ.get("KB_ADMIN_PGUSER", "kanban_migrator")
++    dbname = os.environ.get("PGDATABASE", "kanban")
++    return f"postgresql+asyncpg://{user}@/{dbname}?host={socket_dir}"
++
++
++def register_export_subparsers(
++    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
++) -> None:
++    """Register 'export' root subcommand and portable export utilities."""
++    export_parser = subparsers.add_parser(
++        "export",
++        help="Workspace export utilities",
++        description="Deterministic workspace and graph export utilities",
++    )
++    export_subparsers = export_parser.add_subparsers(dest="export_subcommand", required=True)
++
++    portable_parser = export_subparsers.add_parser(
++        "portable",
++        help="Export deterministic portable workspace bundle (.tar.gz)",
++        description="Lossless deterministic portable workspace exporter with manifest SHA-256 digests",
++    )
++    portable_parser.add_argument(
++        "--workspace",
++        required=True,
++        help="Target workspace slug to export",
++    )
++    portable_parser.add_argument(
++        "--out",
++        required=True,
++        help="Destination path for output .tar.gz bundle archive",
++    )
++    portable_parser.add_argument(
++        "--scrub",
++        action="store_true",
++        default=False,
++        help="Scrub credentials and secrets from exported text and markdown",
++    )
++    portable_parser.set_defaults(func=_run_portable_export)
++
++
++def _run_portable_export(args: argparse.Namespace) -> int:
++    """Execute portable workspace bundle export."""
++    return asyncio.run(_execute_portable_export(args))
++
++
++async def _execute_portable_export(
++    args: argparse.Namespace,
++    session: AsyncSession | None = None,
++) -> int:
++    engine = None
++    try:
++        ctx: Any
++        if session is not None:
++
++            @asynccontextmanager
++            async def _scoped_session() -> AsyncIterator[AsyncSession]:
++                yield session
++
++            ctx = _scoped_session()
++        else:
++            dsn = _get_admin_dsn()
++            engine = create_async_engine(dsn, isolation_level="READ COMMITTED")
++            session_maker = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
++            ctx = session_maker()
++
++        async with ctx as active_session:
++            ws_res = await active_session.execute(
++                text("SELECT id, slug FROM workspaces WHERE slug = :slug"),
++                {"slug": args.workspace},
++            )
++            row = ws_res.mappings().one_or_none()
++            if not row:
++                sys.stderr.write(f"Error: Workspace slug '{args.workspace}' not found.\n")
++                return 2
++
++            ws_id = row["id"]
++            principal_res = await active_session.execute(
++                text(
++                    "SELECT principal_id FROM role_bindings "
++                    "WHERE workspace_id = :ws "
++                    "AND role::text IN ('WORKSPACE_ADMIN', 'SERVER_ADMIN') "
++                    "LIMIT 1"
++                ),
++                {"ws": ws_id},
++            )
++            principal_id = principal_res.scalar_one_or_none() or uuid.uuid4()
++
++            await active_session.execute(
++                text(
++                    "SELECT set_config('app.principal_id', :pid, true), "
++                    "set_config('app.workspace_id', :ws, true), "
++                    "set_config('app.aal_level', '2', true)"
++                ),
++                {"pid": str(principal_id), "ws": str(ws_id)},
++            )
++
++            caller = PrincipalContext(
++                principal_id=principal_id,
++                workspace_id=ws_id,
++                aal_level=2,
++            )
++
++            exporter = PortableWorkspaceExporter(
++                session=active_session,
++                workspace_id=ws_id,
++                caller=caller,
++            )
++
++            out_path = Path(args.out).resolve()
++            await exporter.export_to_file(out_path, scrub=args.scrub)
++            sys.stdout.write(f"Exported portable workspace bundle to {out_path}\n")
++            return 0
++    except Exception as exc:
++        sys.stderr.write(f"Export Error: {exc}\n")
++        return 1
++    finally:
++        if engine is not None:
++            await engine.dispose()
 diff --git a/kanban/exporter/__init__.py b/kanban/exporter/__init__.py
 new file mode 100644
 index 00000000..e50741c0
@@ -3846,498 +3877,6 @@ index 00000000..1c9c2827
 +            is_consistent=audit_rep.overall_passed,
 +            report=audit_rep,
 +        )
-diff --git a/kanban/resolve/service.py b/kanban/resolve/service.py
-index 09100c0c..19bfc25d 100644
---- a/kanban/resolve/service.py
-+++ b/kanban/resolve/service.py
-@@ -10,6 +10,7 @@ from typing import TYPE_CHECKING, Final, Protocol
- 
- from sqlalchemy import func, select
- 
-+from database.models.issue_alias import IssueKeyAlias
- from database.models.issues import Issue
- from database.models.principals import Principal, User
- from database.models.projects import Cycle, Module, Project, ProjectLabel, WorkflowState
-@@ -34,6 +35,7 @@ _RFC4122_UUID_REGEX: Final[re.Pattern[str]] = re.compile(
- )
- _PROJECT_IDENTIFIER_REGEX: Final[re.Pattern[str]] = re.compile(r"^[A-Z][A-Z0-9]{1,9}$")
- _ISSUE_KEY_REGEX: Final[re.Pattern[str]] = re.compile(r"^([A-Z][A-Z0-9]{1,9})-([0-9]{1,18})$")
-+_LEGACY_KEY_REGEX: Final[re.Pattern[str]] = re.compile(r"^([A-Z][A-Z0-9_-]{1,24})-([0-9]{1,18})$")
- 
- 
- @dataclass(frozen=True, slots=True)
-@@ -45,6 +47,8 @@ class ResolvedRef:
-     key: str
-     title: str
-     workspace: str | None = None
-+    canonical_key: str | None = None
-+    is_alias: bool = False
- 
- 
- class KindProvider(Protocol):
-@@ -356,36 +360,65 @@ class ResolutionService:
-                     key=f"{proj_ident}-{issue.sequence_id}",
-                     title=issue.summary,
-                     workspace=ws_slug,
-+                    canonical_key=f"{proj_ident}-{issue.sequence_id}",
-                 )
-                 for issue, proj_ident, ws_slug in rows
-             ]
- 
-         match = _ISSUE_KEY_REGEX.match(ref)
--        if not match:
--            return []
-+        if match:
-+            proj_ident = match.group(1)
-+            seq_id = int(match.group(2))
- 
--        proj_ident = match.group(1)
--        seq_id = int(match.group(2))
-+            stmt_key = (
-+                select(Issue, Project.identifier, Workspace.slug)
-+                .join(Project, Issue.project_id == Project.id)
-+                .join(Workspace, Project.workspace_id == Workspace.id)
-+                .where(Project.identifier == proj_ident, Issue.sequence_id == seq_id)
-+            )
-+            if workspace_id is not None:
-+                stmt_key = stmt_key.where(Project.workspace_id == workspace_id)
-+            rows_key = (await session.execute(stmt_key)).all()
-+            if rows_key:
-+                return [
-+                    ResolvedRef(
-+                        id=issue.id,
-+                        kind="issue",
-+                        key=f"{p_ident}-{issue.sequence_id}",
-+                        title=issue.summary,
-+                        workspace=ws_slug,
-+                        canonical_key=f"{p_ident}-{issue.sequence_id}",
-+                    )
-+                    for issue, p_ident, ws_slug in rows_key
-+                ]
- 
--        stmt_key = (
--            select(Issue, Project.identifier, Workspace.slug)
--            .join(Project, Issue.project_id == Project.id)
--            .join(Workspace, Project.workspace_id == Workspace.id)
--            .where(Project.identifier == proj_ident, Issue.sequence_id == seq_id)
--        )
--        if workspace_id is not None:
--            stmt_key = stmt_key.where(Project.workspace_id == workspace_id)
--        rows_key = (await session.execute(stmt_key)).all()
--        return [
--            ResolvedRef(
--                id=issue.id,
--                kind="issue",
--                key=f"{p_ident}-{issue.sequence_id}",
--                title=issue.summary,
--                workspace=ws_slug,
-+        # Check legacy alias
-+        if _LEGACY_KEY_REGEX.match(ref):
-+            stmt_alias = (
-+                select(Issue, Project.identifier, Workspace.slug)
-+                .join(IssueKeyAlias, IssueKeyAlias.issue_id == Issue.id)
-+                .join(Project, Issue.project_id == Project.id)
-+                .join(Workspace, Project.workspace_id == Workspace.id)
-+                .where(IssueKeyAlias.legacy_key == ref)
-             )
--            for issue, p_ident, ws_slug in rows_key
--        ]
-+            if workspace_id is not None:
-+                stmt_alias = stmt_alias.where(IssueKeyAlias.workspace_id == workspace_id)
-+            rows_alias = (await session.execute(stmt_alias)).all()
-+            if rows_alias:
-+                return [
-+                    ResolvedRef(
-+                        id=issue.id,
-+                        kind="issue",
-+                        key=f"{p_ident}-{issue.sequence_id}",
-+                        title=issue.summary,
-+                        workspace=ws_slug,
-+                        canonical_key=f"{p_ident}-{issue.sequence_id}",
-+                        is_alias=True,
-+                    )
-+                    for issue, p_ident, ws_slug in rows_alias
-+                ]
-+
-+        return []
- 
-     async def _resolve_user(  # noqa: PLR0913
-         self,
-diff --git a/kanban/services/issue_keys.py b/kanban/services/issue_keys.py
-index 218cdac0..a8388bc5 100644
---- a/kanban/services/issue_keys.py
-+++ b/kanban/services/issue_keys.py
-@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Final, cast
- 
- from sqlalchemy import select
- 
--from database.models import Issue, ObjectRecord, Project, Workspace
-+from database.models import Issue, IssueKeyAlias, ObjectRecord, Project, Workspace
- from kanban.api.problems import ProblemException, not_found
- 
- if TYPE_CHECKING:
-@@ -23,9 +23,11 @@ if TYPE_CHECKING:
- 
- ISSUE_KEY_PATTERN: Final[str] = r"^[A-Z][A-Z0-9]{1,9}-[1-9][0-9]{0,17}$"
- _ISSUE_KEY_RE: Final[re.Pattern[str]] = re.compile(ISSUE_KEY_PATTERN)
-+LEGACY_KEY_PATTERN: Final[str] = r"^[A-Z][A-Z0-9_-]{1,24}-[0-9]{1,18}$"
-+_LEGACY_KEY_RE: Final[re.Pattern[str]] = re.compile(LEGACY_KEY_PATTERN)
- 
- 
--async def resolve_issue_ref(  # noqa: C901, PLR0912
-+async def resolve_issue_ref(  # noqa: C901, PLR0912, PLR0915
-     session: AsyncSession,
-     caller: PrincipalContext,
-     issue_ref: str,
-@@ -103,7 +105,51 @@ async def resolve_issue_ref(  # noqa: C901, PLR0912
-             )
-         if len(rows) == 1:
-             return cast("Issue", rows[0][0])
--        not_found()
-+
-+    if _LEGACY_KEY_RE.fullmatch(issue_ref):
-+        stmt_alias = (
-+            select(Issue, Project.identifier, Workspace.slug)
-+            .join(IssueKeyAlias, IssueKeyAlias.issue_id == Issue.id)
-+            .join(ObjectRecord, ObjectRecord.id == Issue.id)
-+            .join(Project, Project.id == Issue.project_id)
-+            .join(Workspace, Workspace.id == Project.workspace_id)
-+            .where(IssueKeyAlias.legacy_key == issue_ref)
-+        )
-+        if not include_deleted:
-+            stmt_alias = stmt_alias.where(ObjectRecord.deleted_at.is_(None))
-+        if target_ws_id is not None:
-+            stmt_alias = stmt_alias.where(IssueKeyAlias.workspace_id == target_ws_id)
-+
-+        rows_alias = list((await session.execute(stmt_alias)).all())
-+        if len(rows_alias) > 1:
-+            candidates = [
-+                {
-+                    "workspace": ws_slug,
-+                    "project": p_ident,
-+                    "key": f"{p_ident}-{iss.sequence_id}",
-+                    "title": iss.summary,
-+                }
-+                for iss, p_ident, ws_slug in rows_alias
-+            ]
-+            raise ProblemException(
-+                code="AMBIGUOUS_IDENTIFIER",
-+                status=409,
-+                title="Ambiguous Identifier",
-+                detail=f"Issue key '{issue_ref}' exists in multiple authorized workspaces",
-+                candidates=candidates,
-+                extra={
-+                    "hint": (
-+                        "Pass workspace='<slug>' (e.g. workspace='prod') "
-+                        "or connect via /mcp/agent/w/<slug>"
-+                    )
-+                },
-+            )
-+        if len(rows_alias) == 1:
-+            iss = cast("Issue", rows_alias[0][0])
-+            p_ident = rows_alias[0][1]
-+            iss._resolved_canonical_key = f"{p_ident}-{iss.sequence_id}"  # type: ignore[attr-defined] # noqa: SLF001
-+            iss._resolved_via_alias = True  # type: ignore[attr-defined] # noqa: SLF001
-+            return iss
- 
-     try:
-         issue_id = uuid.UUID(issue_ref)
-diff --git a/kanban/tests/api/test_admin_routes_protected.py b/kanban/tests/api/test_admin_routes_protected.py
-new file mode 100644
-index 00000000..b97843f2
---- /dev/null
-+++ b/kanban/tests/api/test_admin_routes_protected.py
-@@ -0,0 +1,36 @@
-+# Copyright 2026 Kanban Platform Contributors
-+# Apache-2.0 License. See LICENSE for details.
-+"""Security tests ensuring all administrative routes enforce AAL2 (KB-P6-03)."""
-+
-+from __future__ import annotations
-+
-+from kanban.app import create_app
-+from kanban.auth.mfa.policy import assert_admin_routes_protected
-+
-+
-+def test_assert_admin_routes_protected_compliance() -> None:
-+    """Verify Section 4.3 invariant: assert_admin_routes_protected returns empty list."""
-+    app = create_app()
-+    unprotected = assert_admin_routes_protected(app)
-+    assert unprotected == [], f"Found unprotected admin routes: {unprotected}"
-+
-+
-+def test_multi_source_and_export_routes_registered() -> None:
-+    """Verify newly added multi-source import and export routes are properly registered."""
-+    app = create_app()
-+    admin_paths: set[str] = set()
-+    for route in app.routes:
-+        if hasattr(route, "effective_route_contexts") and callable(route.effective_route_contexts):
-+            for ctx in route.effective_route_contexts():
-+                path = getattr(ctx, "path", "")
-+                if path.startswith("/api/v1/admin"):
-+                    admin_paths.add(path)
-+        else:
-+            path = getattr(route, "path", "")
-+            if path.startswith("/api/v1/admin"):
-+                admin_paths.add(path)
-+
-+    assert "/api/v1/admin/exports/portable" in admin_paths
-+    assert "/api/v1/admin/imports/jira" in admin_paths
-+    assert "/api/v1/admin/imports/github" in admin_paths
-+    assert "/api/v1/admin/imports/linear" in admin_paths
-diff --git a/kanban/tests/api/test_legacy_key_aliases.py b/kanban/tests/api/test_legacy_key_aliases.py
-new file mode 100644
-index 00000000..39de6878
---- /dev/null
-+++ b/kanban/tests/api/test_legacy_key_aliases.py
-@@ -0,0 +1,239 @@
-+# Copyright 2026 Kanban Platform Contributors
-+# Apache-2.0 License. See LICENSE for details.
-+"""Integration tests for legacy key alias resolution (KB-P6-03)."""
-+# ruff: noqa: E501, PLC0415, TC002, RUF059
-+
-+from __future__ import annotations
-+
-+import uuid
-+
-+import pytest
-+from sqlalchemy import select, text
-+from sqlalchemy.ext.asyncio import AsyncSession
-+
-+from database.models import Issue, IssueKeyAlias
-+from database.tests.conftest import bootstrap_workspace_admin
-+from kanban.api.deps import PrincipalContext
-+from kanban.api.problems import ProblemException
-+from kanban.app import create_app
-+from kanban.resolve.service import ResolutionService
-+from kanban.services.issue_keys import resolve_issue_ref
-+
-+
-+@pytest.fixture
-+async def setup_alias_env(
-+    db_session: AsyncSession,
-+) -> tuple[AsyncSession, PrincipalContext, Issue, IssueKeyAlias]:
-+    """Bootstrap workspace, project, canonical issue, and alias."""
-+    ws_id, admin_id = await bootstrap_workspace_admin(db_session)
-+
-+    await db_session.execute(
-+        text(
-+            "SELECT set_config('app.current_workspace_id', :ws, true), "
-+            "set_config('app.current_principal_id', :pid, true), "
-+            "set_config('app.aal_level', '2', true)"
-+        ),
-+        {"ws": str(ws_id), "pid": str(admin_id)},
-+    )
-+
-+    caller = PrincipalContext(
-+        principal_id=admin_id,
-+        workspace_id=ws_id,
-+        aal_level=2,
-+    )
-+
-+    # Create project
-+    proj_id = (
-+        await db_session.execute(
-+            text(
-+                "SELECT register_object('project'::object_kind, :ws, NULL, 'CORE', 'Core Project', :admin)"
-+            ),
-+            {"ws": ws_id, "admin": admin_id},
-+        )
-+    ).scalar_one()
-+
-+    await db_session.execute(
-+        text(
-+            "INSERT INTO projects (id, workspace_id, identifier, name, description_markdown) "
-+            "VALUES (:id, :ws, 'CORE', 'Core Project', 'Core issue tracking')"
-+        ),
-+        {"id": proj_id, "ws": ws_id},
-+    )
-+
-+    # Get default state (seeded by trigger)
-+    state_id = (
-+        await db_session.execute(
-+            text("SELECT id FROM workflow_states WHERE project_id = :proj AND is_default LIMIT 1"),
-+            {"proj": proj_id},
-+        )
-+    ).scalar_one()
-+
-+    # Create canonical issue: CORE-1
-+    seq = (
-+        await db_session.execute(
-+            text("SELECT allocate_issue_sequence(:proj)"),
-+            {"proj": proj_id},
-+        )
-+    ).scalar_one()
-+
-+    issue_id = (
-+        await db_session.execute(
-+            text(
-+                "SELECT register_object('issue'::object_kind, :ws, :proj, :key, 'Canonical Issue One', :admin)"
-+            ),
-+            {"ws": ws_id, "proj": proj_id, "key": f"CORE-{seq}", "admin": admin_id},
-+        )
-+    ).scalar_one()
-+
-+    # Get default priority (seeded by trigger)
-+    prio_id = (
-+        await db_session.execute(
-+            text(
-+                "SELECT id FROM project_priorities WHERE project_id = :proj AND is_default LIMIT 1"
-+            ),
-+            {"proj": proj_id},
-+        )
-+    ).scalar_one()
-+
-+    await db_session.execute(
-+        text(
-+            "INSERT INTO issues (id, workspace_id, project_id, sequence_id, summary, description_markdown, state_id, priority_id, created_by_id, original_created_by_id, board_rank) "
-+            "VALUES (:id, :ws, :proj, :seq, 'Canonical Issue One', 'Canonical description', :state, :prio, :admin, :admin, '0|hzzzzz:')"
-+        ),
-+        {
-+            "id": issue_id,
-+            "ws": ws_id,
-+            "proj": proj_id,
-+            "seq": seq,
-+            "state": state_id,
-+            "prio": prio_id,
-+            "admin": admin_id,
-+        },
-+    )
-+
-+    # Create legacy aliases: KANBA-123, JIRA-101, GH-88, ENG-42
-+    aliases = [
-+        ("KANBA-123", "plane"),
-+        ("JIRA-101", "jira"),
-+        ("GH-88", "github"),
-+        ("ENG-42", "linear"),
-+    ]
-+    created_aliases = []
-+    for leg_key, src in aliases:
-+        alias = IssueKeyAlias(
-+            workspace_id=ws_id,
-+            legacy_key=leg_key,
-+            issue_id=issue_id,
-+            source_system=src,
-+        )
-+        db_session.add(alias)
-+        created_aliases.append(alias)
-+
-+    await db_session.commit()
-+
-+    iss_res = await db_session.execute(select(Issue).where(Issue.id == issue_id))
-+    canonical_issue = iss_res.scalar_one()
-+
-+    return db_session, caller, canonical_issue, created_aliases[0]
-+
-+
-+@pytest.mark.asyncio
-+async def test_resolution_service_legacy_aliases(
-+    setup_alias_env: tuple[AsyncSession, PrincipalContext, Issue, IssueKeyAlias],
-+) -> None:
-+    """Verify ResolutionService resolves KANBA-123, JIRA-101, GH-88, and ENG-42 to CORE-1."""
-+    session, caller, canonical_issue, _ = setup_alias_env
-+
-+    resolver = ResolutionService()
-+
-+    for test_key in ("KANBA-123", "JIRA-101", "GH-88", "ENG-42"):
-+        resolved = await resolver.resolve(
-+            session=session,
-+            kind="issue",
-+            ref=test_key,
-+            caller_workspace_id=caller.workspace_id,
-+            caller_principal_id=caller.principal_id,
-+        )
-+        assert resolved is not None
-+        assert resolved.kind == "issue"
-+        assert resolved.id == canonical_issue.id
-+        assert resolved.canonical_key == "CORE-1"
-+        assert resolved.is_alias is True
-+
-+    # Canonical key resolution returns is_alias=False
-+    canonical_res = await resolver.resolve(
-+        session=session,
-+        kind="issue",
-+        ref="CORE-1",
-+        caller_workspace_id=caller.workspace_id,
-+        caller_principal_id=caller.principal_id,
-+    )
-+    assert canonical_res is not None
-+    assert canonical_res.id == canonical_issue.id
-+    assert canonical_res.is_alias is False
-+
-+
-+@pytest.mark.asyncio
-+async def test_api_resolve_headers_and_response(
-+    setup_alias_env: tuple[AsyncSession, PrincipalContext, Issue, IssueKeyAlias],
-+) -> None:
-+    """Verify legacy aliases resolve to canonical issue records and populate canonical headers."""
-+    session, caller, canonical_issue, _ = setup_alias_env
-+    from fastapi import Request, Response
-+
-+    from kanban.api.v1.resolve import resolve_entity
-+
-+    rec = await resolve_issue_ref(session, caller, "KANBA-123")
-+    assert rec.id == canonical_issue.id
-+
-+    rec_linear = await resolve_issue_ref(session, caller, "ENG-42")
-+    assert rec_linear.id == canonical_issue.id
-+
-+    # UUID resolution
-+    rec_uuid = await resolve_issue_ref(session, caller, str(canonical_issue.id))
-+    assert rec_uuid.id == canonical_issue.id
-+
-+    # Canonical key resolution
-+    rec_canon = await resolve_issue_ref(session, caller, "CORE-1")
-+    assert rec_canon.id == canonical_issue.id
-+
-+    # Invalid ref raises 404 ProblemException
-+    with pytest.raises(ProblemException):
-+        await resolve_issue_ref(session, caller, "DOES-NOT-EXIST-999")
-+
-+    # FastAPI resolve_entity route
-+    req = Request(scope={"type": "http", "app": create_app(), "headers": []})
-+    resp = Response()
-+    api_res = await resolve_entity(
-+        request=req,
-+        response=resp,
-+        principal=caller,
-+        session=session,
-+        kind="issue",
-+        ref="KANBA-123",
-+    )
-+    assert api_res.id == canonical_issue.id
-+    assert api_res.canonical_key == "CORE-1"
-+    assert resp.headers.get("X-Kanban-Canonical-Key") == "CORE-1"
-+
-+
-+@pytest.mark.asyncio
-+async def test_cross_workspace_rls_isolation(
-+    setup_alias_env: tuple[AsyncSession, PrincipalContext, Issue, IssueKeyAlias],
-+) -> None:
-+    """Verify RLS prevents foreign workspace from discovering or resolving aliases."""
-+    session, _, canonical_issue, _ = setup_alias_env
-+
-+    # Foreign workspace
-+    foreign_ws = uuid.uuid4()
-+    foreign_admin = uuid.uuid4()
-+
-+    foreign_resolver = ResolutionService()
-+    with pytest.raises(ProblemException):
-+        await foreign_resolver.resolve(
-+            session=session,
-+            kind="issue",
-+            ref="KANBA-123",
-+            caller_workspace_id=foreign_ws,
-+            caller_principal_id=foreign_admin,
-+        )
-diff --git a/kanban/tests/exporter/__init__.py b/kanban/tests/exporter/__init__.py
-new file mode 100644
-index 00000000..7b5fbee3
---- /dev/null
-+++ b/kanban/tests/exporter/__init__.py
-@@ -0,0 +1,3 @@
-+# Copyright 2026 Kanban Platform Contributors
-+# Apache-2.0 License. See LICENSE for details.
-+"""Tests for workspace exporter package."""
 diff --git a/kanban/tests/exporter/test_portable_bundle_determinism.py b/kanban/tests/exporter/test_portable_bundle_determinism.py
 new file mode 100644
 index 00000000..01ae2801
@@ -6929,21 +6468,12 @@ index 00000000..1deb0b53
 +    }
 +    rep_lin = await lin_imp.run_import(lin_edge_payload, target_project_key="EDGL", dry_run=False)
 +    assert rep_lin.to_create == 2
-diff --git a/kanban/tests/resolve/__init__.py b/kanban/tests/resolve/__init__.py
-new file mode 100644
-index 00000000..72b1e6d0
---- /dev/null
-+++ b/kanban/tests/resolve/__init__.py
-@@ -0,0 +1,3 @@
-+# Copyright 2026 Kanban Platform Contributors
-+# Apache-2.0 License. See LICENSE for details.
-+"""Tests for legacy key alias resolution (KB-P6-03)."""
 diff --git a/kanban/tests/resolve/test_legacy_key_aliases.py b/kanban/tests/resolve/test_legacy_key_aliases.py
 new file mode 100644
-index 00000000..8fb3ca98
+index 00000000..f0d5f0e6
 --- /dev/null
 +++ b/kanban/tests/resolve/test_legacy_key_aliases.py
-@@ -0,0 +1,290 @@
+@@ -0,0 +1,329 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Integration tests for legacy key alias resolution and cross-workspace RLS isolation (KB-P6-03)."""
@@ -6973,6 +6503,7 @@ index 00000000..8fb3ca98
 +from kanban.api.v1.issues import router as issues_router
 +from kanban.api.v1.resolve import resolve_router
 +from kanban.resolve.service import ResolutionService
++from kanban.services.issue_keys import resolve_issue_ref
 +
 +
 +class _TestPrincipalResolver:
@@ -7204,6 +6735,44 @@ index 00000000..8fb3ca98
 +        assert resolve_data["canonical_key"] == "CORE-1"
 +        assert resolve_data["id"] == str(issue_id)
 +
++        # 7b. Direct ResolutionService and resolve_issue_ref unit assertions
++        rec = await resolve_issue_ref(db_session, principal_1, "KANBA-123")
++        assert rec.id == issue_id
++        rec_linear = await resolve_issue_ref(db_session, principal_1, "ENG-42")
++        assert rec_linear.id == issue_id
++        rec_uuid = await resolve_issue_ref(db_session, principal_1, str(issue_id))
++        assert rec_uuid.id == issue_id
++        rec_canon = await resolve_issue_ref(db_session, principal_1, "CORE-1")
++        assert rec_canon.id == issue_id
++        with pytest.raises(ProblemException):
++            await resolve_issue_ref(db_session, principal_1, "DOES-NOT-EXIST-999")
++
++        direct_resolver = ResolutionService()
++        for test_key in ("KANBA-123", "JIRA-101", "GH-88", "ENG-42"):
++            resolved = await direct_resolver.resolve(
++                session=db_session,
++                kind="issue",
++                ref=test_key,
++                caller_workspace_id=ws1_id,
++                caller_principal_id=admin1_id,
++            )
++            assert resolved is not None
++            assert resolved.kind == "issue"
++            assert resolved.id == issue_id
++            assert resolved.canonical_key == "CORE-1"
++            assert resolved.is_alias is True
++
++        canonical_res = await direct_resolver.resolve(
++            session=db_session,
++            kind="issue",
++            ref="CORE-1",
++            caller_workspace_id=ws1_id,
++            caller_principal_id=admin1_id,
++        )
++        assert canonical_res is not None
++        assert canonical_res.id == issue_id
++        assert canonical_res.is_alias is False
++
 +        # 8. Cross-Workspace RLS Isolation: Switch principal and GUC to Workspace 2
 +        resolver_wrapper.principal = principal_2
 +        await db_session.execute(
@@ -7234,6 +6803,125 @@ index 00000000..8fb3ca98
 +        # Entity resolve endpoint also returns 404
 +        res_ws2_resolve = await client.get("/api/v1/resolve?kind=issue&ref=JIRA-101")
 +        assert res_ws2_resolve.status_code == 404
+diff --git a/kanban/tests/security/test_admin_routes_protected.py b/kanban/tests/security/test_admin_routes_protected.py
+new file mode 100644
+index 00000000..b97843f2
+--- /dev/null
++++ b/kanban/tests/security/test_admin_routes_protected.py
+@@ -0,0 +1,36 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Security tests ensuring all administrative routes enforce AAL2 (KB-P6-03)."""
++
++from __future__ import annotations
++
++from kanban.app import create_app
++from kanban.auth.mfa.policy import assert_admin_routes_protected
++
++
++def test_assert_admin_routes_protected_compliance() -> None:
++    """Verify Section 4.3 invariant: assert_admin_routes_protected returns empty list."""
++    app = create_app()
++    unprotected = assert_admin_routes_protected(app)
++    assert unprotected == [], f"Found unprotected admin routes: {unprotected}"
++
++
++def test_multi_source_and_export_routes_registered() -> None:
++    """Verify newly added multi-source import and export routes are properly registered."""
++    app = create_app()
++    admin_paths: set[str] = set()
++    for route in app.routes:
++        if hasattr(route, "effective_route_contexts") and callable(route.effective_route_contexts):
++            for ctx in route.effective_route_contexts():
++                path = getattr(ctx, "path", "")
++                if path.startswith("/api/v1/admin"):
++                    admin_paths.add(path)
++        else:
++            path = getattr(route, "path", "")
++            if path.startswith("/api/v1/admin"):
++                admin_paths.add(path)
++
++    assert "/api/v1/admin/exports/portable" in admin_paths
++    assert "/api/v1/admin/imports/jira" in admin_paths
++    assert "/api/v1/admin/imports/github" in admin_paths
++    assert "/api/v1/admin/imports/linear" in admin_paths
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index d16144f7..f3a2c390 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -78,7 +78,7 @@ import { fetchProjectModules } from '../features/drawer-rail/railApi';
+ export { IssuesWorkspaceRoute, type IssuesWorkspaceRouteProps };
+ 
+ export const PROJECT_KEY_REGEX = /^[A-Z][A-Z0-9]{1,9}$/;
+-export const ISSUE_KEY_REGEX = /^[A-Z][A-Z0-9]{1,9}-[0-9]{1,9}$/;
++export const ISSUE_KEY_REGEX = /^[A-Z][A-Z0-9_-]{1,24}-[0-9]{1,18}$/;
+ 
+ export const VALID_LAYOUTS = new Set([
+   'list',
+@@ -1652,6 +1652,52 @@ export function ProjectViewsRedirect(): JSX.Element {
+   return <Navigate to={`/projects/${key}/issues`} replace />;
+ }
+ 
++export function IssueKeyRedirectRoute(): JSX.Element {
++  const { issueKey } = useParams<{ issueKey: string }>();
++  const navigate = useNavigate();
++
++  const resolveQuery = useQuery({
++    queryKey: ['resolve', 'issue', issueKey ?? ''],
++    queryFn: async ({ signal }) => {
++      const res = await fetch(
++        `/api/v1/resolve?kind=issue&ref=${encodeURIComponent(issueKey ?? '')}`,
++        {
++          headers: { Accept: 'application/json' },
++          credentials: 'same-origin',
++          signal,
++        },
++      );
++      if (!res.ok) {
++        return { isNotFound: true };
++      }
++      return (await res.json()) as { canonical_key?: string; key?: string; isNotFound?: boolean };
++    },
++    enabled: Boolean(issueKey),
++  });
++
++  useEffect(() => {
++    if (resolveQuery.data && !resolveQuery.data.isNotFound) {
++      const canonicalKey = resolveQuery.data.canonical_key ?? resolveQuery.data.key;
++      if (canonicalKey) {
++        const projKey = canonicalKey.includes('-')
++          ? canonicalKey.slice(0, canonicalKey.lastIndexOf('-'))
++          : canonicalKey;
++        void navigate(`/projects/${projKey}/issues/${canonicalKey}`, { replace: true });
++      }
++    }
++  }, [resolveQuery.data, navigate]);
++
++  if (!issueKey || resolveQuery.isError || resolveQuery.data?.isNotFound) {
++    return <NotFoundView />;
++  }
++
++  return (
++    <div data-testid="issue-key-resolving" style={{ padding: '2rem', textAlign: 'center' }}>
++      Resolving issue {issueKey}...
++    </div>
++  );
++}
++
+ export { ProjectSavedViewsView };
+ 
+ export function StandaloneStatusRoute(): JSX.Element {
+@@ -1974,6 +2020,10 @@ export const appRoutes: RouteObject[] = [
+         element: <ProjectRouteContainer />,
+         children: projectRouteChildren,
+       },
++      {
++        path: 'issues/:issueKey',
++        element: <IssueKeyRedirectRoute />,
++      },
+       {
+         path: 'activate',
+         element: <DeviceActivatePage />,
 diff --git a/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx b/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
 index a01ca2ef..3620afd2 100644
 --- a/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
@@ -8235,3 +7923,54 @@ index 76b033e3..cff02907 100644
 +  }
 +  return await response.blob();
 +}
+diff --git a/mcp/resolver.py b/mcp/resolver.py
+index 420dffe2..4cd408a7 100644
+--- a/mcp/resolver.py
++++ b/mcp/resolver.py
+@@ -28,6 +28,7 @@ class ResolvedRef:
+     kind: str
+     key: str
+     title: str
++    canonical_key: str | None = None
+ 
+ 
+ class EntityResolver:
+@@ -79,11 +80,13 @@ class EntityResolver:
+             msg = f"Unexpected non-object response from /api/v1/resolve: {res!r}"
+             raise KbMcpError(McpErrorCode.UPSTREAM_ERROR, msg)
+ 
++        canonical_key = res.get("canonical_key")
+         resolved = ResolvedRef(
+             id=str(res["id"]),
+             kind=str(res["kind"]),
+             key=str(res["key"]),
+             title=str(res["title"]),
++            canonical_key=str(canonical_key) if canonical_key is not None else None,
+         )
+         self._cache[cache_key] = resolved
+         return resolved
+diff --git a/mcp/tests/test_resolver.py b/mcp/tests/test_resolver.py
+index 098d109d..5f0db446 100644
+--- a/mcp/tests/test_resolver.py
++++ b/mcp/tests/test_resolver.py
+@@ -137,3 +137,20 @@ async def test_resolver_handles_non_dict_response() -> None:
+     with pytest.raises(KbMcpError) as exc_info:
+         await resolver.resolve("project", "KAN")
+     assert exc_info.value.code == McpErrorCode.UPSTREAM_ERROR
++
++
++@pytest.mark.asyncio
++async def test_resolver_alias_resolves_canonical_key() -> None:
++    """Verify EntityResolver propagates canonical_key from alias resolution."""
++    mock_client = AsyncMock()
++    mock_client.request.return_value = {
++        "id": "44444444-4444-4444-4444-444444444444",
++        "kind": "issue",
++        "key": "CORE-1",
++        "title": "Canonical Issue",
++        "canonical_key": "CORE-1",
++    }
++    resolver = EntityResolver(mock_client)
++    res = await resolver.resolve("issue", "JIRA-101")
++    assert res.id == "44444444-4444-4444-4444-444444444444"
++    assert res.canonical_key == "CORE-1"
