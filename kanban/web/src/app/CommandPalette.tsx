@@ -338,6 +338,19 @@ export function CommandPalette({
             },
           ]
         : []),
+      ...((user ? user.is_server_admin === true || user.is_workspace_admin === true : true)
+        ? [
+            {
+              id: 'nav-admin-diagnostics',
+              title: 'Go to Diagnostics & Link Inspector',
+              icon: '🩺',
+              category: 'navigation' as const,
+              onSelect: () => {
+                void navigate('/admin/diagnostics');
+              },
+            },
+          ]
+        : []),
       {
         id: 'nav-mcp-keys',
         title: 'Go to Personal MCP Keys',

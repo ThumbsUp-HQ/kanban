@@ -58,7 +58,7 @@ import { AuthStudioPage } from '../features/admin-auth/AuthStudioPage';
 import { AiStudioPage } from '../features/admin-ai/AiStudioPage';
 import { AgentStudioPage } from '../features/admin-agents/AgentStudioPage';
 import { RunnerStudioPage } from '../features/admin-runners/RunnerStudioPage';
-import { LinkAuditorStudio } from '../features/admin/LinkAuditorStudio';
+import { AdminDiagnosticsStudio } from '../features/admin/AdminDiagnosticsStudio';
 import { DeviceActivatePage } from '../features/oauth/DeviceActivatePage';
 import { McpAccessStudio } from '../features/settings/McpAccessStudio';
 import { OAuthClientGovernanceStudio } from '../features/oauth/OAuthClientGovernanceStudio';
@@ -2113,7 +2113,11 @@ export const appRoutes: RouteObject[] = [
             children: [
               {
                 path: 'link-auditor',
-                element: <LinkAuditorStudio />,
+                element: <AdminDiagnosticsStudio defaultTab="links" />,
+              },
+              {
+                path: 'diagnostics',
+                element: <AdminDiagnosticsStudio defaultTab="health" />,
               },
               {
                 path: 'mcp',

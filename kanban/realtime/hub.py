@@ -209,6 +209,53 @@ class RealtimeHub:
         """Current number of active registered connections."""
         return len(self._connections)
 
+    def get_diagnostics_snapshot(self) -> dict[str, Any]:
+        """Return diagnostic snapshot of realtime hub connections, broker, and tasks."""
+        ws_count = sum(1 for c in self._connections.values() if isinstance(c, WebSocketConnection))
+        sse_count = sum(1 for c in self._connections.values() if isinstance(c, SSEConnection))
+
+        ws_by_workspace: dict[str, int] = defaultdict(int)
+        for (w_id, _), conn_ids in self._user_connections.items():
+            ws_by_workspace[str(w_id)] += len(conn_ids)
+
+        broker_kind = "none"
+        broker_listener_connected = False
+        broker_publisher_connected = False
+        if self._broker is not None:
+            broker_kind = getattr(self._broker, "kind", "pg_notify")
+            if hasattr(self._broker, "get_diagnostics_snapshot"):
+                b_snap = self._broker.get_diagnostics_snapshot()
+                broker_listener_connected = b_snap.get("listener_connected", False)
+                broker_publisher_connected = b_snap.get("publisher_connected", False)
+
+        return {
+            "hub_running": self._running,
+            "hub_draining": self._draining,
+            "broker_kind": broker_kind,
+            "broker_listener_connected": broker_listener_connected,
+            "broker_publisher_connected": broker_publisher_connected,
+            "active_connections_total": len(self._connections),
+            "ws_connections": ws_count,
+            "sse_connections": sse_count,
+            "workspace_connections": dict(ws_by_workspace),
+            "heartbeat_interval_s": self._ping_interval_s,
+            "session_recheck_interval_s": self._session_check_interval_s,
+            "replay_retention_minutes": 60,
+            "background_tasks": {
+                "listener_alive": (
+                    self._listener_task is not None and not self._listener_task.done()
+                ),
+                "ping_alive": self._ping_task is not None and not self._ping_task.done(),
+                "session_check_alive": (
+                    self._session_check_task is not None and not self._session_check_task.done()
+                ),
+            },
+        }
+
+    def get_status(self) -> dict[str, Any]:
+        """Alias for get_diagnostics_snapshot."""
+        return self.get_diagnostics_snapshot()
+
     async def start(self) -> None:
         """Start background listener, heartbeat ping, and session expiration loops."""
         async with self._lock:

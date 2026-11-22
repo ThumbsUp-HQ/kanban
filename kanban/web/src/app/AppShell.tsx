@@ -52,6 +52,9 @@ export interface AppShellProps {
 }
 
 export function computeCurrentSection(pathname: string, fallback = 'Work Items'): string {
+  if (pathname.includes('/admin/diagnostics') || pathname.includes('/admin/link-auditor')) {
+    return 'Diagnostics';
+  }
   if (pathname === '/about' || pathname.startsWith('/about') || pathname.includes('/about')) {
     return 'About';
   }

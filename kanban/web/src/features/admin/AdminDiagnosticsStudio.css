@@ -1,0 +1,356 @@
+/* Copyright 2026 Kanban Platform Contributors */
+/* Apache-2.0 License. See LICENSE for details. */
+
+.admin-diag-container {
+  padding: 24px;
+  max-width: 1440px;
+  margin: 0 auto;
+  color: var(--fg-primary);
+  font-family: var(--font-sans);
+}
+
+.admin-diag-loading {
+  padding: 48px;
+  text-align: center;
+  color: var(--fg-muted);
+  font-size: 1rem;
+}
+
+.admin-diag-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 24px;
+  flex-wrap: wrap;
+}
+
+.admin-diag-title {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0 0 8px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.admin-diag-subtitle {
+  margin: 0;
+  color: var(--fg-secondary);
+  font-size: 0.9375rem;
+  line-height: 1.5;
+  max-width: 800px;
+}
+
+.admin-diag-header-actions {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.admin-diag-btn {
+  height: 38px;
+  padding: 0 16px;
+  font-size: 0.875rem;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--fg-primary);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  transition: background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.admin-diag-btn:hover:not(:disabled) {
+  background: var(--bg-hover);
+  border-color: var(--border-strong);
+}
+
+.admin-diag-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.admin-diag-btn--primary {
+  background: var(--accent-primary);
+  color: var(--accent-primary-fg);
+  border-color: var(--accent-primary);
+}
+
+.admin-diag-btn--primary:hover:not(:disabled) {
+  background: var(--brand-primary-hover);
+  border-color: var(--brand-primary-hover);
+}
+
+.admin-diag-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 10px;
+  border-radius: 9999px;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+}
+
+.admin-diag-badge--ok {
+  color: var(--ok-fg);
+  background: var(--bg-success-subtle);
+  border-color: var(--border-success);
+}
+
+.admin-diag-badge--warn {
+  color: var(--warn-fg);
+  background: var(--warn-bg);
+  border-color: var(--border-warning);
+}
+
+.admin-diag-badge--danger {
+  color: var(--danger-fg);
+  background: var(--danger-bg);
+  border-color: var(--border-danger);
+}
+
+/* 4-Card Top Summary Strip */
+.admin-diag-summary-strip {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.admin-diag-summary-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.admin-diag-summary-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.admin-diag-summary-card-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--fg-secondary);
+}
+
+.admin-diag-summary-card-body {
+  font-size: 1.125rem;
+  font-weight: 700;
+  color: var(--fg-primary);
+}
+
+.admin-diag-summary-card-footer {
+  font-size: 0.8125rem;
+  color: var(--fg-muted);
+}
+
+/* Tab Navigation */
+.admin-diag-tabs {
+  display: flex;
+  gap: 8px;
+  border-bottom: 1px solid var(--border-subtle);
+  margin-bottom: 24px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.admin-diag-tab {
+  padding: 8px 16px;
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--fg-secondary);
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  transition: color 0.15s ease, border-color 0.15s ease;
+}
+
+.admin-diag-tab:hover {
+  color: var(--fg-primary);
+}
+
+.admin-diag-tab--active {
+  color: var(--accent-primary);
+  border-bottom-color: var(--accent-primary);
+}
+
+/* Subsystem Health Cards Grid */
+.admin-diag-subsystems-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 16px;
+  margin-bottom: 24px;
+}
+
+.admin-diag-subsystem-card {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.admin-diag-subsystem-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.admin-diag-subsystem-card-title {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--fg-primary);
+}
+
+.admin-diag-subsystem-card-desc {
+  font-size: 0.8125rem;
+  color: var(--fg-secondary);
+  line-height: 1.4;
+}
+
+.admin-diag-subsystem-details {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--bg-canvas);
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 0.8125rem;
+}
+
+.admin-diag-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.admin-diag-detail-key {
+  color: var(--fg-secondary);
+}
+
+.admin-diag-detail-val {
+  font-weight: 600;
+  color: var(--fg-primary);
+  font-family: var(--font-mono);
+}
+
+/* Detailed Panels */
+.admin-diag-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 20px;
+  margin-bottom: 24px;
+}
+
+.admin-diag-panel-title {
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin: 0 0 16px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Config Table */
+.admin-diag-filter-bar {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  margin-bottom: 16px;
+  flex-wrap: wrap;
+}
+
+.admin-diag-search-input {
+  flex: 1;
+  min-width: 240px;
+  height: 38px;
+  padding: 0 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border-subtle);
+  background: var(--bg-surface);
+  color: var(--fg-primary);
+  font-size: 0.875rem;
+}
+
+.admin-diag-table-container {
+  overflow-x: auto;
+  border: 1px solid var(--border-subtle);
+  border-radius: 6px;
+}
+
+.admin-diag-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+  text-align: left;
+}
+
+.admin-diag-table th {
+  background: var(--bg-canvas);
+  padding: 10px 14px;
+  font-weight: 600;
+  color: var(--fg-secondary);
+  border-bottom: 1px solid var(--border-subtle);
+}
+
+.admin-diag-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid var(--border-subtle);
+  color: var(--fg-primary);
+}
+
+.admin-diag-table tr:last-child td {
+  border-bottom: none;
+}
+
+.admin-diag-code {
+  font-family: var(--font-mono);
+  background: var(--bg-canvas);
+  padding: 2px 6px;
+  border-radius: 4px;
+  font-size: 0.8125rem;
+}
+
+/* Responsive */
+@media (max-width: 1024px) {
+  .admin-diag-summary-strip {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .admin-diag-summary-strip {
+    grid-template-columns: 1fr;
+  }
+  .admin-diag-subsystems-grid {
+    grid-template-columns: 1fr;
+  }
+  .admin-diag-header {
+    flex-direction: column;
+    align-items: stretch;
+  }
+}

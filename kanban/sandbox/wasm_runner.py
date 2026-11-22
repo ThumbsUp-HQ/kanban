@@ -11,7 +11,7 @@ import threading
 import time
 from collections import OrderedDict
 from dataclasses import dataclass
-from typing import Final, Protocol
+from typing import Any, Final, Protocol
 
 import wasmtime
 
@@ -127,6 +127,10 @@ class _ModuleLRU:
     def clear(self) -> None:
         with self._lock:
             self._cache.clear()
+
+    def __len__(self) -> int:
+        with self._lock:
+            return len(self._cache)
 
 
 class TierAWasmRunner:
@@ -411,3 +415,22 @@ class TierAWasmRunner:
         except TimeoutError:
             msg = f"WebAssembly execution timed out (> {effective_limits.timeout_ms}ms)"
             raise WasmRunError(msg, code="SCRIPT_TIMEOUT") from None
+
+    def get_diagnostics_snapshot(self) -> dict[str, Any]:
+        """Return diagnostic snapshot of Tier A Wasmtime engine and cache."""
+        cached_count = len(self._cache)
+        return {
+            "available": True,
+            "engine": "wasmtime",
+            "max_fuel": _MAX_PERMITTED_FUEL,
+            "max_memory_bytes": _MAX_PERMITTED_MEMORY_BYTES,
+            "timeout_ms": _MAX_PERMITTED_TIMEOUT_MS,
+            "cached_modules": cached_count,
+        }
+
+    def get_status(self) -> dict[str, Any]:
+        """Alias for get_diagnostics_snapshot."""
+        return self.get_diagnostics_snapshot()
+
+
+WasmScriptRunner = TierAWasmRunner
