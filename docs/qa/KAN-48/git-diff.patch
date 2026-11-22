@@ -1,0 +1,3600 @@
+diff --git a/kanban/auth/sessions/csrf.py b/kanban/auth/sessions/csrf.py
+index 0ebc163d..6fa7c96f 100644
+--- a/kanban/auth/sessions/csrf.py
++++ b/kanban/auth/sessions/csrf.py
+@@ -351,12 +351,14 @@ class CsrfMiddleware(BaseHTTPMiddleware):
+             return await call_next(request)
+ 
+         # Internal service or token-authenticated requests bypass ambient cookie CSRF
++        cookie_header = request.headers.get("cookie")
++        has_session_cookie = bool(extract_session_cookie(cookie_header))
+         auth_hdr = request.headers.get("authorization") or ""
+         has_bearer_token = auth_hdr.lower().startswith("bearer ") and bool(auth_hdr[7:].strip())
+         if (
+             request.headers.get("x-kb-subject-token")
+             or request.headers.get("x-kb-internal-auth")
+-            or has_bearer_token
++            or (has_bearer_token and not has_session_cookie)
+         ):
+             return await call_next(request)
+ 
+@@ -367,8 +369,6 @@ class CsrfMiddleware(BaseHTTPMiddleware):
+ 
+         # Double-submit token check against resolved session id
+         session_id = await self._resolve_session_id(request)
+-        cookie_header = request.headers.get("cookie")
+-        has_session_cookie = bool(extract_session_cookie(cookie_header))
+         is_dead_session = has_session_cookie and session_id == PRE_SESSION_ID
+ 
+         # Defense-in-depth: Sec-Fetch-Site and Origin verification
+diff --git a/kanban/tests/auth/test_csrf_bearer_exemption.py b/kanban/tests/auth/test_csrf_bearer_exemption.py
+new file mode 100644
+index 00000000..519593de
+--- /dev/null
++++ b/kanban/tests/auth/test_csrf_bearer_exemption.py
+@@ -0,0 +1,155 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++# ruff: noqa: E501, F841
++"""Unit tests for CSRF Bearer token exemption and cookie precedence (KAN-48)."""
++
++from __future__ import annotations
++
++import os
++import uuid
++
++import httpx
++import pytest
++from fastapi import FastAPI
++from starlette.responses import JSONResponse
++
++from kanban.auth.sessions.cookies import (
++    SESSION_COOKIE_NAME,
++    encode_session_cookie,
++    generate_session_token,
++)
++from kanban.auth.sessions.csrf import (
++    CSRF_HEADER_NAME,
++    PRE_SESSION_ID,
++    CsrfMiddleware,
++    build_set_csrf_cookie_header,
++    generate_csrf_token,
++)
++
++
++@pytest.fixture
++def hmac_key() -> bytes:
++    """Fixture providing a 32-byte HMAC key."""
++    return os.urandom(32)
++
++
++@pytest.fixture
++def test_app(hmac_key: bytes) -> FastAPI:
++    """Fixture providing a FastAPI app equipped with CsrfMiddleware."""
++    app = FastAPI()
++    app.add_middleware(CsrfMiddleware, session_hmac_key=hmac_key)
++
++    @app.post("/api/v1/test-mutation")
++    async def test_mutation() -> JSONResponse:
++        return JSONResponse({"status": "mutation_success"})
++
++    @app.get("/api/v1/test-query")
++    async def test_query() -> JSONResponse:
++        return JSONResponse({"status": "query_success"})
++
++    return app
++
++
++@pytest.mark.asyncio
++async def test_stateless_bearer_bypasses_csrf(test_app: FastAPI) -> None:
++    """Stateless requests with Authorization: Bearer <token> and no cookie bypass CSRF."""
++    transport = httpx.ASGITransport(app=test_app, raise_app_exceptions=False)
++    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
++        resp = await client.post(
++            "/api/v1/test-mutation",
++            headers={"Authorization": "Bearer kb_agt_test_token_123"},
++        )
++        assert resp.status_code == 200
++        assert resp.json() == {"status": "mutation_success"}
++
++
++@pytest.mark.asyncio
++async def test_cookie_authenticated_request_requires_csrf(
++    test_app: FastAPI, hmac_key: bytes
++) -> None:
++    """Requests carrying an ambient session cookie must provide a valid CSRF token."""
++    transport = httpx.ASGITransport(app=test_app, raise_app_exceptions=False)
++    session_id = uuid.uuid4()
++    raw_token = generate_session_token()
++    cookie_val = encode_session_cookie(raw_token, hmac_key)
++    cookie_str = f"{SESSION_COOKIE_NAME}={cookie_val}"
++
++    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
++        # 1. Session cookie without CSRF header fails with 403
++        resp_no_csrf = await client.post(
++            "/api/v1/test-mutation",
++            headers={"Cookie": cookie_str},
++        )
++        assert resp_no_csrf.status_code == 403
++
++        # 2. Session cookie WITH Authorization header but WITHOUT CSRF header still fails with 403
++        # (attacker cannot bypass CSRF on a cookie-authenticated request by attaching an arbitrary Bearer)
++        resp_cookie_and_bearer = await client.post(
++            "/api/v1/test-mutation",
++            headers={
++                "Cookie": cookie_str,
++                "Authorization": "Bearer attacker_provided_token",
++            },
++        )
++        assert resp_cookie_and_bearer.status_code == 403
++
++        # 3. Request WITH valid CSRF header and cookie succeeds
++        csrf_token = generate_csrf_token(PRE_SESSION_ID, hmac_key)
++        csrf_cookie = build_set_csrf_cookie_header(csrf_token).split(";")[0]
++        combined_cookies = f"{cookie_str}; {csrf_cookie}"
++
++        resp_valid = await client.post(
++            "/api/v1/test-mutation",
++            headers={
++                "Cookie": combined_cookies,
++                CSRF_HEADER_NAME: csrf_token,
++                "Origin": "http://testserver",
++            },
++        )
++        assert resp_valid.status_code == 200
++        assert resp_valid.json() == {"status": "mutation_success"}
++
++
++@pytest.mark.asyncio
++async def test_empty_or_malformed_bearer_does_not_bypass(test_app: FastAPI) -> None:
++    """Empty or whitespace-only Bearer token does not trigger stateless CSRF bypass."""
++    transport = httpx.ASGITransport(app=test_app, raise_app_exceptions=False)
++    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
++        # Empty bearer
++        resp1 = await client.post(
++            "/api/v1/test-mutation",
++            headers={"Authorization": "Bearer "},
++        )
++        assert resp1.status_code == 403
++
++        # Just 'Bearer' without space
++        resp2 = await client.post(
++            "/api/v1/test-mutation",
++            headers={"Authorization": "Bearer"},
++        )
++        assert resp2.status_code == 403
++
++        # Non-bearer auth scheme
++        resp3 = await client.post(
++            "/api/v1/test-mutation",
++            headers={"Authorization": "Basic dXNlcjpwYXNz"},
++        )
++        assert resp3.status_code == 403
++
++
++@pytest.mark.asyncio
++async def test_safe_get_with_cookie_always_allowed(test_app: FastAPI, hmac_key: bytes) -> None:
++    """Safe HTTP methods like GET are always permitted even with ambient session cookies."""
++    transport = httpx.ASGITransport(app=test_app, raise_app_exceptions=False)
++    session_id = uuid.uuid4()
++    raw_token = generate_session_token()
++    cookie_val = encode_session_cookie(raw_token, hmac_key)
++    cookie_str = f"{SESSION_COOKIE_NAME}={cookie_val}"
++
++    async with httpx.AsyncClient(transport=transport, base_url="http://testserver") as client:
++        resp = await client.get(
++            "/api/v1/test-query",
++            headers={"Cookie": cookie_str},
++        )
++        assert resp.status_code == 200
++        assert resp.json() == {"status": "query_success"}
+diff --git a/mcp/cli/__init__.py b/mcp/cli/__init__.py
+new file mode 100644
+index 00000000..9445de3c
+--- /dev/null
++++ b/mcp/cli/__init__.py
+@@ -0,0 +1,14 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Command-line interface for Kanban MCP tools, auth, and schema parity (KAN-48)."""
++
++from __future__ import annotations
++
++from mcp.cli.main import main, main_admin, main_agent, main_docs
++
++__all__ = [
++    "main",
++    "main_admin",
++    "main_agent",
++    "main_docs",
++]
+diff --git a/mcp/cli/auth.py b/mcp/cli/auth.py
+new file mode 100644
+index 00000000..1ac8f3e3
+--- /dev/null
++++ b/mcp/cli/auth.py
+@@ -0,0 +1,358 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++# ruff: noqa: T201, C901, PLR0911, PLR0912, PLR0915, PLR2004, E501, BLE001, PTH123, PTH101, TRY300
++"""Authentication and configuration management for kanban-cli (KAN-48)."""
++
++from __future__ import annotations
++
++import base64
++import hashlib
++import os
++import secrets
++import sys
++import time
++import tomllib
++from dataclasses import dataclass
++from pathlib import Path
++from typing import Any
++
++import httpx
++
++__all__ = [
++    "ResolvedConfig",
++    "auth_login",
++    "auth_logout",
++    "auth_status",
++    "get_config_dir",
++    "get_credentials_path",
++    "load_config",
++    "load_credentials",
++    "resolve_config",
++    "save_credentials",
++]
++
++
++@dataclass(frozen=True)
++class ResolvedConfig:
++    """Resolved runtime configuration according to strict precedence rules."""
++
++    url: str
++    workspace: str | None
++    project: str | None
++    token: str | None
++
++
++def get_config_dir() -> Path:
++    """Return path to Kanban CLI configuration directory."""
++    custom_dir = os.environ.get("KANBAN_CONFIG_DIR")
++    if custom_dir:
++        return Path(custom_dir)
++    xdg_config = os.environ.get("XDG_CONFIG_HOME")
++    if xdg_config:
++        return Path(xdg_config) / "kanban"
++    return Path.home() / ".config" / "kanban"
++
++
++def get_config_path() -> Path:
++    """Return path to config.toml."""
++    return get_config_dir() / "config.toml"
++
++
++def get_credentials_path() -> Path:
++    """Return path to credentials.toml."""
++    return get_config_dir() / "credentials.toml"
++
++
++def load_config() -> dict[str, Any]:
++    """Load configuration from config.toml if it exists."""
++    cfg_path = get_config_path()
++    if not cfg_path.exists():
++        return {}
++    try:
++        content = cfg_path.read_text(encoding="utf-8")
++        return tomllib.loads(content)
++    except Exception:
++        return {}
++
++
++def load_credentials() -> dict[str, Any]:
++    """Load credentials from credentials.toml enforcing 0600 permissions and rejecting symlinks.
++
++    Raises:
++        ValueError: If credentials.toml is a symlink or has looser permissions than 0600.
++
++    """
++    cred_path = get_credentials_path()
++    if not cred_path.exists():
++        return {}
++
++    # Reject symlinks fail-closed
++    if cred_path.is_symlink():
++        msg = f"Security error: credentials file '{cred_path}' must not be a symlink"
++        raise ValueError(msg)
++
++    # Check permissions (must not have group or world permissions)
++    file_stat = cred_path.stat()
++    file_mode = file_stat.st_mode & 0o777
++    if file_mode & 0o077 != 0:
++        msg = (
++            f"Security error: credentials file '{cred_path}' has insecure permissions {oct(file_mode)}; "
++            f"expected 0600"
++        )
++        raise ValueError(msg)
++
++    try:
++        content = cred_path.read_text(encoding="utf-8")
++        return tomllib.loads(content)
++    except Exception as exc:
++        msg = f"Failed to parse credentials file: {exc}"
++        raise ValueError(msg) from exc
++
++
++def save_credentials(data: dict[str, Any]) -> None:
++    """Write credentials securely to credentials.toml with 0600 permissions."""
++    cfg_dir = get_config_dir()
++    cfg_dir.mkdir(parents=True, exist_ok=True, mode=0o700)
++    cred_path = get_credentials_path()
++
++    if cred_path.is_symlink():
++        msg = f"Security error: credentials file '{cred_path}' must not be a symlink"
++        raise ValueError(msg)
++
++    content_lines: list[str] = []
++    for k, v in data.items():
++        if isinstance(v, str):
++            content_lines.append(f'{k} = "{v}"')
++        elif isinstance(v, bool):
++            content_lines.append(f"{k} = {str(v).lower()}")
++        elif isinstance(v, (int, float)):
++            content_lines.append(f"{k} = {v}")
++    content = "\n".join(content_lines) + "\n"
++
++    flags = os.O_WRONLY | os.O_CREAT | os.O_TRUNC
++    fd = os.open(cred_path, flags, 0o600)
++    try:
++        with open(fd, "w", encoding="utf-8") as f:
++            f.write(content)
++    finally:
++        pass
++    os.chmod(cred_path, 0o600)
++
++
++def resolve_config(
++    cli_url: str | None = None,
++    cli_workspace: str | None = None,
++    cli_project: str | None = None,
++    cli_token: str | None = None,
++) -> ResolvedConfig:
++    """Resolve active configuration in strict precedence order.
++
++    Precedence:
++    1. CLI flags (--url, --workspace, --project, --token / --api-key)
++    2. Environment variables (KANBAN_URL, KANBAN_WORKSPACE, KANBAN_PROJECT, KANBAN_API_KEY / KANBAN_TOKEN)
++    3. Configuration files (~/.config/kanban/config.toml, ~/.config/kanban/credentials.toml)
++    4. Default fallback (http://localhost:8080)
++    """
++    file_cfg = load_config()
++    file_creds: dict[str, Any] = {}
++    try:
++        file_creds = load_credentials()
++    except ValueError as err:
++        print(f"Warning: {err}", file=sys.stderr)
++
++    url = cli_url or os.environ.get("KANBAN_URL") or file_cfg.get("url") or "http://localhost:8080"
++    workspace = (
++        cli_workspace or os.environ.get("KANBAN_WORKSPACE") or file_cfg.get("workspace") or None
++    )
++    project = cli_project or os.environ.get("KANBAN_PROJECT") or file_cfg.get("project") or None
++    token = (
++        cli_token
++        or os.environ.get("KANBAN_API_KEY")
++        or os.environ.get("KANBAN_TOKEN")
++        or file_creds.get("api_key")
++        or file_creds.get("token")
++        or None
++    )
++
++    return ResolvedConfig(
++        url=url.rstrip("/"),
++        workspace=workspace,
++        project=project,
++        token=token,
++    )
++
++
++def auth_login(
++    url: str,
++    *,
++    device: bool = False,
++    token: str | None = None,
++    client: httpx.Client | None = None,
++) -> int:
++    """Execute auth login command via manual token, RFC 8628 device flow, or PKCE."""
++    if token:
++        save_credentials({"api_key": token})
++        print(f"Authentication token saved successfully to {get_credentials_path()}")
++        return 0
++
++    http_client = client or httpx.Client(base_url=url, timeout=30.0)
++    try:
++        if device:
++            # RFC 8628 Device Authorization Flow
++            dev_resp = http_client.post(
++                "/oauth/device/authorize",
++                data={"client_id": "kanban-cli", "scope": "mcp:all"},
++            )
++            if dev_resp.status_code >= 400:
++                print(f"Device authorization failed: {dev_resp.text}", file=sys.stderr)
++                return 1
++            data = dev_resp.json()
++            user_code = data.get("user_code")
++            verification_uri = data.get("verification_uri_complete") or data.get("verification_uri")
++            device_code = data.get("device_code")
++            interval = int(data.get("interval", 5))
++
++            print("=== Kanban CLI Device Login ===")
++            print(f"Please open the following URL in your browser: {verification_uri}")
++            print(f"Enter user code if prompted: {user_code}")
++            print("Waiting for authorization...")
++
++            # Poll for token
++            start_time = time.time()
++            expires_in = int(data.get("expires_in", 300))
++            while time.time() - start_time < expires_in:
++                time.sleep(interval)
++                tok_resp = http_client.post(
++                    "/oauth/token",
++                    data={
++                        "grant_type": "urn:ietf:params:oauth:grant-type:device_code",
++                        "device_code": device_code,
++                        "client_id": "kanban-cli",
++                    },
++                )
++                if tok_resp.status_code == 200:
++                    tok_data = tok_resp.json()
++                    access_token = tok_data.get("access_token")
++                    if access_token:
++                        save_credentials({"api_key": access_token})
++                        print(
++                            f"Authentication successful! Credentials saved to {get_credentials_path()}"
++                        )
++                        return 0
++                tok_err = (
++                    tok_resp.json().get("error")
++                    if tok_resp.headers.get("content-type", "").startswith("application/json")
++                    else ""
++                )
++                if tok_err and tok_err not in ("authorization_pending", "slow_down"):
++                    print(f"Device authorization error: {tok_err}", file=sys.stderr)
++                    return 1
++
++            print("Device authorization timed out.", file=sys.stderr)
++            return 1
++
++        # Standard OAuth 2.1 PKCE Flow
++        code_verifier = secrets.token_urlsafe(64)
++        digest = hashlib.sha256(code_verifier.encode("ascii")).digest()
++        code_challenge = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
++
++        auth_url = (
++            f"{url}/oauth/authorize?response_type=code&client_id=kanban-cli"
++            f"&code_challenge={code_challenge}&code_challenge_method=S256&scope=mcp:all"
++        )
++        print("=== Kanban CLI Login ===")
++        print(f"Please visit the following URL to authenticate:\n{auth_url}\n")
++        print("After approving, enter the authorization code below:")
++        try:
++            auth_code = input("Authorization Code: ").strip()
++        except EOFError:
++            auth_code = ""
++
++        if not auth_code:
++            print("Login cancelled (no authorization code provided).", file=sys.stderr)
++            return 1
++
++        tok_resp = http_client.post(
++            "/oauth/token",
++            data={
++                "grant_type": "authorization_code",
++                "code": auth_code,
++                "code_verifier": code_verifier,
++                "client_id": "kanban-cli",
++            },
++        )
++        if tok_resp.status_code != 200:
++            print(f"Token exchange failed: {tok_resp.text}", file=sys.stderr)
++            return 1
++
++        tok_data = tok_resp.json()
++        access_token = tok_data.get("access_token")
++        if access_token:
++            save_credentials({"api_key": access_token})
++            print(f"Authentication successful! Credentials saved to {get_credentials_path()}")
++            return 0
++
++        print("Login failed: no access token returned in response.", file=sys.stderr)
++        return 1
++    finally:
++        if client is None:
++            http_client.close()
++
++
++def auth_status(
++    config: ResolvedConfig,
++    *,
++    client: httpx.Client | None = None,
++) -> int:
++    """Print current configuration status and probe remote API connectivity."""
++    print("=== Kanban CLI Status ===")
++    print(f"URL:       {config.url}")
++    print(f"Workspace: {config.workspace or '(not configured)'}")
++    print(f"Project:   {config.project or '(not configured)'}")
++    token = config.token
++    if token:
++        token_preview = f"configured ({token[:6]}...)" if len(token) >= 6 else "configured"
++    else:
++        token_preview = "none"  # noqa: S105
++    print(f"Auth Token: {token_preview}")
++
++    if not config.token:
++        print("Status: Unauthenticated (run 'kanban-cli auth login' to authenticate)")
++        return 0
++
++    http_client = client or httpx.Client(
++        base_url=config.url,
++        headers={"Authorization": f"Bearer {config.token}"},
++        timeout=10.0,
++    )
++    try:
++        resp = http_client.get("/api/v1/auth/session")
++        if resp.status_code == 200:
++            sess_data = resp.json()
++            user_info = sess_data.get("user") or {}
++            handle = user_info.get("handle") or user_info.get("email") or "authenticated user"
++            print(f"Connection: Active (Logged in as {handle})")
++            return 0
++        print(f"Connection: Unauthorized (HTTP {resp.status_code})", file=sys.stderr)
++        return 1
++    except Exception as exc:
++        print(f"Connection: Failed to reach server ({exc})", file=sys.stderr)
++        return 1
++    finally:
++        if client is None:
++            http_client.close()
++
++
++def auth_logout() -> int:
++    """Clear credentials from credentials.toml."""
++    cred_path = get_credentials_path()
++    if cred_path.exists():
++        try:
++            cred_path.unlink()
++            print(f"Credentials removed from {cred_path}. Logged out successfully.")
++            return 0
++        except Exception as exc:
++            print(f"Failed to remove credentials file: {exc}", file=sys.stderr)
++            return 1
++    print("No credentials found. Already logged out.")
++    return 0
+diff --git a/mcp/cli/main.py b/mcp/cli/main.py
+new file mode 100644
+index 00000000..50a8d3f5
+--- /dev/null
++++ b/mcp/cli/main.py
+@@ -0,0 +1,83 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++# ruff: noqa: T201
++"""Command-line entry points for kanban-cli, kanban-cli-agent, docs, and admin (KAN-48)."""
++
++from __future__ import annotations
++
++import asyncio
++import sys
++from typing import TYPE_CHECKING
++
++from mcp.cli.schema_cli import parse_and_execute_cli
++from mcp.registry import Surface
++
++if TYPE_CHECKING:
++    from mcp.internal_client import KanbanApiClient
++
++__all__ = [
++    "main",
++    "main_admin",
++    "main_agent",
++    "main_docs",
++]
++
++
++def _run_cli_coroutine(
++    argv: list[str] | None,
++    surface: Surface | None = None,
++    client: KanbanApiClient | None = None,
++) -> int:
++    """Execute asynchronous CLI action synchronously inside event loop."""
++    args = sys.argv[1:] if argv is None else list(argv)
++    try:
++        return asyncio.run(
++            parse_and_execute_cli(
++                args,
++                surface_override=surface,
++                client=client,
++            )
++        )
++    except KeyboardInterrupt:
++        print("\nOperation cancelled by user.", file=sys.stderr)
++        return 130
++
++
++def main(
++    argv: list[str] | None = None,
++    *,
++    client: KanbanApiClient | None = None,
++) -> int:
++    """Entry point for unified kanban-cli."""
++    return _run_cli_coroutine(argv, surface=None, client=client)
++
++
++def main_agent(
++    argv: list[str] | None = None,
++    *,
++    client: KanbanApiClient | None = None,
++) -> int:
++    """Entry point for kanban-cli-agent."""
++    return _run_cli_coroutine(argv, surface=Surface.AGENT, client=client)
++
++
++def main_docs(
++    argv: list[str] | None = None,
++    *,
++    client: KanbanApiClient | None = None,
++) -> int:
++    """Entry point for kanban-cli-docs."""
++    return _run_cli_coroutine(argv, surface=Surface.DOCS, client=client)
++
++
++def main_admin(
++    argv: list[str] | None = None,
++    *,
++    client: KanbanApiClient | None = None,
++) -> int:
++    """Entry point for kanban-cli-admin."""
++    return _run_cli_coroutine(argv, surface=Surface.ADMIN, client=client)
++
++
++if __name__ == "__main__":
++    sys.exit(main())
+diff --git a/mcp/cli/schema_cli.py b/mcp/cli/schema_cli.py
+new file mode 100644
+index 00000000..a3618378
+--- /dev/null
++++ b/mcp/cli/schema_cli.py
+@@ -0,0 +1,1097 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++# ruff: noqa: T201, C901, PLR0911, PLR0912, PLR0913, PLR0915, PLR2004, E501, BLE001, PTH123, PTH110, PTH111, PLC0415, TC001, ANN401, SLF001, PERF401, PIE810, RUF005
++"""Schema-driven subcommand generator and 1:1 MCP tool parity engine for kanban-cli (KAN-48)."""
++
++from __future__ import annotations
++
++import argparse
++import json
++import os
++import re
++import sys
++from typing import Any, Final
++
++import yaml
++
++from mcp.cli.auth import ResolvedConfig
++from mcp.context import (
++    McpRequestContext,
++    reset_current_mcp_context,
++    set_current_mcp_context,
++)
++from mcp.errors import KbMcpError, McpErrorCode
++from mcp.help import build_help
++from mcp.internal_client import KanbanApiClient
++from mcp.protocol import validate_tool_arguments_schema
++from mcp.registry import Surface, ToolRegistry, ToolSpec
++from mcp.surfaces.admin import build_admin_registry
++from mcp.surfaces.agent import create_agent_registry
++from mcp.surfaces.docs import build_docs_registry
++from mcp.yaml_out import dump_yaml
++
++__all__ = [
++    "build_admin_cli_parser",
++    "build_agent_cli_parser",
++    "build_docs_cli_parser",
++    "build_unified_cli_parser",
++    "execute_tool_action",
++    "generate_completions",
++    "parse_and_execute_cli",
++]
++
++_SURROGATE_MIN: Final[int] = 0xD800
++_SURROGATE_MAX: Final[int] = 0xDFFF
++
++_PROSE_FIELD_NAMES: Final[frozenset[str]] = frozenset(
++    {
++        "description_markdown",
++        "comment_markdown",
++        "body_markdown",
++        "content",
++        "script_source",
++        "summary_markdown",
++    }
++)
++
++_STRUCTURED_FIELD_NAMES: Final[frozenset[str]] = frozenset(
++    {
++        "verification_proof",
++        "children",
++        "blueprint",
++        "settings",
++        "params",
++        "custom_fields",
++    }
++)
++
++
++def assert_no_surrogates(text: str) -> None:
++    """Reject UTF-16 lone surrogates fail-closed."""
++    for c in text:
++        cp = ord(c)
++        if _SURROGATE_MIN <= cp <= _SURROGATE_MAX:
++            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, "INVALID_UTF8_SURROGATE")
++
++
++def _read_file_or_stdin(file_path: str) -> str:
++    """Read content from a path or stdin with UTF-16 surrogate validation."""
++    if file_path == "-":
++        content = sys.stdin.read()
++    else:
++        path = os.path.expanduser(file_path)
++        if not os.path.exists(path):
++            raise KbMcpError(
++                McpErrorCode.VALIDATION_FAILED,
++                f"File not found: {file_path}",
++                field="file",
++            )
++        with open(path, encoding="utf-8") as f:
++            content = f.read()
++    assert_no_surrogates(content)
++    return content
++
++
++def _parse_structured_value(raw: str) -> Any:
++    """Parse object/array argument from JSON/YAML string, @path, or @-."""
++    assert_no_surrogates(raw)
++    if raw.startswith("@"):
++        path_spec = raw[1:]
++        text_content = _read_file_or_stdin(path_spec)
++        try:
++            return json.loads(text_content)
++        except Exception:
++            try:
++                return yaml.safe_load(text_content)
++            except Exception as exc:
++                raise KbMcpError(
++                    McpErrorCode.VALIDATION_FAILED,
++                    f"Failed to parse structured input from {raw}: {exc}",
++                ) from exc
++
++    # Direct literal string
++    try:
++        return json.loads(raw)
++    except Exception:
++        try:
++            return yaml.safe_load(raw)
++        except Exception:
++            return raw
++
++
++def _to_kebab(name: str) -> str:
++    """Convert snake_case or camelCase name to kebab-case."""
++    s1 = re.sub(r"(.)([A-Z][a-z]+)", r"\1-\2", name)
++    s2 = re.sub(r"([a-z0-9])([A-Z])", r"\1-\2", s1)
++    return s2.replace("_", "-").lower()
++
++
++def _to_snake(name: str) -> str:
++    """Convert kebab-case or camelCase name to snake_case."""
++    return name.replace("-", "_").lower()
++
++
++def _add_tool_arguments_to_parser(parser: argparse.ArgumentParser, spec: ToolSpec) -> None:
++    """Map ToolSpec JSON Schema properties deterministically to argparse flags."""
++    schema = spec.input_schema or {}
++    properties: dict[str, Any] = schema.get("properties") or {}
++
++    for prop_name, prop_schema in properties.items():
++        if not isinstance(prop_schema, dict):
++            continue
++        kebab_name = _to_kebab(prop_name)
++        snake_name = _to_snake(prop_name)
++        prop_type = prop_schema.get("type")
++        help_desc = prop_schema.get("description", "")
++
++        # 1. Boolean flags
++        if prop_type == "boolean":
++            parser.add_argument(
++                f"--{kebab_name}",
++                dest=snake_name,
++                action=argparse.BooleanOptionalAction,
++                default=None,
++                help=help_desc,
++            )
++            if kebab_name != snake_name:
++                parser.add_argument(
++                    f"--{snake_name}",
++                    dest=snake_name,
++                    action=argparse.BooleanOptionalAction,
++                    default=None,
++                    help=argparse.SUPPRESS,
++                )
++            continue
++
++        # 2. Integer or Number flags
++        if prop_type in ("integer", "number"):
++            num_type = int if prop_type == "integer" else float
++            parser.add_argument(
++                f"--{kebab_name}",
++                dest=snake_name,
++                type=num_type,
++                default=None,
++                help=help_desc,
++            )
++            if kebab_name != snake_name:
++                parser.add_argument(
++                    f"--{snake_name}",
++                    dest=snake_name,
++                    type=num_type,
++                    default=None,
++                    help=argparse.SUPPRESS,
++                )
++            continue
++
++        # 3. Array flags (repeatable action="append")
++        if prop_type == "array":
++            parser.add_argument(
++                f"--{kebab_name}",
++                dest=snake_name,
++                action="append",
++                default=None,
++                help=f"{help_desc} (repeatable or comma-separated/JSON list)",
++            )
++            if kebab_name != snake_name:
++                parser.add_argument(
++                    f"--{snake_name}",
++                    dest=snake_name,
++                    action="append",
++                    default=None,
++                    help=argparse.SUPPRESS,
++                )
++            parser.add_argument(
++                f"--{kebab_name}-file",
++                dest=f"{snake_name}_file",
++                default=None,
++                help=f"File containing JSON/YAML list for {prop_name}",
++            )
++            continue
++
++        # 4. Structured Object flags
++        if prop_type == "object" or prop_name in _STRUCTURED_FIELD_NAMES:
++            parser.add_argument(
++                f"--{kebab_name}",
++                dest=snake_name,
++                default=None,
++                help=f"{help_desc} (JSON/YAML string or @path.json)",
++            )
++            if kebab_name != snake_name:
++                parser.add_argument(
++                    f"--{snake_name}",
++                    dest=snake_name,
++                    default=None,
++                    help=argparse.SUPPRESS,
++                )
++            parser.add_argument(
++                f"--{kebab_name}-file",
++                dest=f"{snake_name}_file",
++                default=None,
++                help=f"File containing JSON/YAML object for {prop_name}",
++            )
++            continue
++
++        # 5. String and Prose fields
++        parser.add_argument(
++            f"--{kebab_name}",
++            dest=snake_name,
++            default=None,
++            help=help_desc,
++        )
++        if kebab_name != snake_name:
++            parser.add_argument(
++                f"--{snake_name}",
++                dest=snake_name,
++                default=None,
++                help=argparse.SUPPRESS,
++            )
++
++        # Sibling file flags for prose / markdown fields
++        if prop_name in _PROSE_FIELD_NAMES:
++            parser.add_argument(
++                f"--{kebab_name}-file",
++                dest=f"{snake_name}_file",
++                default=None,
++                help=f"Path to file containing {prop_name} (or - for stdin)",
++            )
++            if prop_name == "description_markdown":
++                parser.add_argument(
++                    "--description-file",
++                    dest="description_markdown_file",
++                    default=None,
++                    help="Alias for --description-markdown-file",
++                )
++            elif prop_name == "comment_markdown":
++                parser.add_argument(
++                    "--comment-file",
++                    dest="comment_markdown_file",
++                    default=None,
++                    help="Alias for --comment-markdown-file",
++                )
++            elif prop_name == "body_markdown":
++                parser.add_argument(
++                    "--body-file",
++                    dest="body_markdown_file",
++                    default=None,
++                    help="Alias for --body-markdown-file",
++                )
++
++        # Clear flag for nullable fields
++        parser.add_argument(
++            f"--clear-{kebab_name}",
++            dest=f"clear_{snake_name}",
++            action="store_true",
++            default=False,
++            help=f"Explicitly set {prop_name} to null",
++        )
++
++    # Attach global options to tool subparser so they are valid after subcommands
++    _add_global_flags(parser, is_subparser=True)
++
++
++def _add_global_flags(parser: argparse.ArgumentParser, *, is_subparser: bool = False) -> None:
++    """Register global CLI options (url, workspace, project, token, lod, filter, json, jsonl, no-color)."""
++    existing_flags = {opt for action in parser._actions for opt in action.option_strings}
++    suppress = argparse.SUPPRESS if is_subparser else None
++    bool_suppress = argparse.SUPPRESS if is_subparser else False
++
++    if "--url" not in existing_flags:
++        parser.add_argument(
++            "--url",
++            default=suppress,
++            help="Kanban API server base URL" if not is_subparser else argparse.SUPPRESS,
++        )
++    if "--workspace" not in existing_flags:
++        parser.add_argument(
++            "--workspace",
++            default=suppress,
++            help="Workspace slug" if not is_subparser else argparse.SUPPRESS,
++        )
++    if "--project" not in existing_flags:
++        parser.add_argument(
++            "--project",
++            default=suppress,
++            help="Project key" if not is_subparser else argparse.SUPPRESS,
++        )
++    if "--token" not in existing_flags and "--api-key" not in existing_flags:
++        parser.add_argument(
++            "--token",
++            "--api-key",
++            dest="token",
++            default=suppress,
++            help="Authentication token" if not is_subparser else argparse.SUPPRESS,
++        )
++    if "--lod" not in existing_flags:
++        parser.add_argument(
++            "--lod",
++            default=suppress,
++            help="Level of detail: summary | standard | full"
++            if not is_subparser
++            else argparse.SUPPRESS,
++        )
++    if "--filter" not in existing_flags:
++        parser.add_argument(
++            "--filter",
++            default=suppress,
++            help="Predicate DSL search filter" if not is_subparser else argparse.SUPPRESS,
++        )
++    if "--json" not in existing_flags:
++        parser.add_argument(
++            "--json",
++            action="store_true",
++            default=bool_suppress,
++            help="Output response formatted as JSON" if not is_subparser else argparse.SUPPRESS,
++        )
++    if "--jsonl" not in existing_flags:
++        parser.add_argument(
++            "--jsonl",
++            action="store_true",
++            default=bool_suppress,
++            help="Stream response items as JSON Lines" if not is_subparser else argparse.SUPPRESS,
++        )
++    if "--no-color" not in existing_flags:
++        parser.add_argument(
++            "--no-color",
++            action="store_true",
++            default=bool_suppress,
++            help="Disable ANSI color codes" if not is_subparser else argparse.SUPPRESS,
++        )
++
++
++def _apply_predicate_filter(arguments: dict[str, Any], filter_str: str) -> None:
++    """Parse --filter predicate DSL string and populate search-tickets arguments."""
++    import importlib
++
++    pred_mod = importlib.import_module("kanban.services.predicate_compiler")
++    parse_comparison_clause = pred_mod.parse_comparison_clause
++    split_query_clauses = pred_mod.split_query_clauses
++    tokenize_predicate_string = pred_mod.tokenize_predicate_string
++
++    assert_no_surrogates(filter_str)
++    clauses = split_query_clauses(filter_str)
++
++    states: list[str] = list(arguments.get("states") or [])
++    assignees: list[str] = list(arguments.get("assignees") or [])
++    modules: list[str] = list(arguments.get("modules") or [])
++    labels: list[str] = list(arguments.get("labels") or [])
++    free_text_parts: list[str] = []
++
++    for clause in clauses:
++        comp = parse_comparison_clause(clause)
++        if comp:
++            fld = comp.field.lower()
++            val = comp.value
++            if fld in ("state", "status") and val:
++                states.append(val)
++            elif fld in ("assignee", "assignees") and val:
++                assignees.append(val)
++            elif fld == "cycle" and val:
++                arguments["cycle"] = val
++            elif fld in ("module", "modules") and val:
++                modules.append(val)
++            elif fld in ("label", "labels") and val:
++                labels.append(val)
++            elif fld == "blocked" and val:
++                arguments["blocked"] = val.lower() in ("true", "1", "yes")
++            elif fld in ("gate_status", "gate") and val:
++                arguments["gate_status"] = val.lower()
++            elif fld == "priority" and val:
++                arguments["_filter_priority"] = val.lower()
++            else:
++                free_text_parts.append(val)
++            continue
++
++        tokens = tokenize_predicate_string(clause)
++        for tok in tokens:
++            if tok.field:
++                fld = tok.field.lower()
++                val = tok.value
++                if fld in ("state", "status") and val:
++                    states.append(val)
++                elif fld in ("assignee", "assignees") and val:
++                    assignees.append(val)
++                elif fld == "cycle" and val:
++                    arguments["cycle"] = val
++                elif fld in ("module", "modules") and val:
++                    modules.append(val)
++                elif fld in ("label", "labels") and val:
++                    labels.append(val)
++                elif fld == "blocked" and val:
++                    arguments["blocked"] = val.lower() in ("true", "1", "yes")
++                elif fld in ("gate_status", "gate") and val:
++                    arguments["gate_status"] = val.lower()
++                elif fld == "priority" and val:
++                    arguments["_filter_priority"] = val.lower()
++            elif tok.value:
++                free_text_parts.append(tok.value)
++
++    if states:
++        arguments["states"] = states
++    if assignees:
++        arguments["assignees"] = assignees
++    if modules:
++        arguments["modules"] = modules
++    if labels:
++        arguments["labels"] = labels
++    if free_text_parts:
++        existing_query = arguments.get("query") or ""
++        combined = f"{existing_query} {' '.join(free_text_parts)}".strip()
++        arguments["query"] = combined
++
++
++def _normalize_parsed_arguments(
++    spec: ToolSpec,
++    parsed_args: dict[str, Any],
++    cli_filter: str | None = None,
++) -> dict[str, Any]:
++    """Normalize CLI namespace into valid MCP tool argument dictionary."""
++    arguments: dict[str, Any] = {}
++    schema = spec.input_schema or {}
++    properties: dict[str, Any] = schema.get("properties") or {}
++
++    for prop_name, prop_schema in properties.items():
++        snake_name = _to_snake(prop_name)
++        prop_type = prop_schema.get("type") if isinstance(prop_schema, dict) else None
++
++        # Check clear flag
++        if parsed_args.get(f"clear_{snake_name}"):
++            arguments[prop_name] = None
++            continue
++
++        # Check sibling file flag
++        file_val = parsed_args.get(f"{snake_name}_file")
++        if file_val is not None:
++            content = _read_file_or_stdin(file_val)
++            if prop_type in ("object", "array") or prop_name in _STRUCTURED_FIELD_NAMES:
++                try:
++                    arguments[prop_name] = json.loads(content)
++                except Exception:
++                    arguments[prop_name] = yaml.safe_load(content)
++            else:
++                arguments[prop_name] = content
++            continue
++
++        # Check regular value
++        val = parsed_args.get(snake_name)
++        if val is None:
++            continue
++
++        # Handle null string literal
++        if isinstance(val, str) and val.strip().lower() == "null":
++            arguments[prop_name] = None
++            continue
++
++        # Handle array parsing
++        if prop_type == "array":
++            items: list[Any] = []
++            if isinstance(val, list):
++                for item in val:
++                    if isinstance(item, str) and (item.startswith("[") or item.startswith("@")):
++                        parsed_item = _parse_structured_value(item)
++                        if isinstance(parsed_item, list):
++                            items.extend(parsed_item)
++                        else:
++                            items.append(parsed_item)
++                    elif isinstance(item, str) and "," in item:
++                        items.extend(x.strip() for x in item.split(",") if x.strip())
++                    else:
++                        items.append(item)
++            elif isinstance(val, str):
++                parsed_val = _parse_structured_value(val)
++                if isinstance(parsed_val, list):
++                    items.extend(parsed_val)
++                else:
++                    items.append(parsed_val)
++            for itm in items:
++                if isinstance(itm, str):
++                    assert_no_surrogates(itm)
++            arguments[prop_name] = items
++            continue
++
++        # Handle structured object parsing
++        if prop_type == "object" or prop_name in _STRUCTURED_FIELD_NAMES:
++            if isinstance(val, str):
++                arguments[prop_name] = _parse_structured_value(val)
++            else:
++                arguments[prop_name] = val
++            continue
++
++        # Handle string validation and stdin
++        if isinstance(val, str):
++            if val == "-" and prop_name in _PROSE_FIELD_NAMES:
++                val = _read_file_or_stdin("-")
++            elif val.startswith("@"):
++                val = _read_file_or_stdin(val[1:])
++            else:
++                assert_no_surrogates(val)
++            arguments[prop_name] = val
++            continue
++
++        arguments[prop_name] = val
++
++    # Apply --filter if provided
++    if cli_filter and spec.name == "search_tickets":
++        _apply_predicate_filter(arguments, cli_filter)
++
++    return arguments
++
++
++def _build_registry_subparsers(
++    subparsers: Any,
++    registry: ToolRegistry,
++    prefix: str = "",
++) -> dict[str, ToolSpec]:
++    """Register all tools from a ToolRegistry as subcommands on an argparse subparser."""
++    tool_map: dict[str, ToolSpec] = {}
++    for spec in registry.list_specs():
++        kebab_cmd = _to_kebab(spec.name)
++        snake_cmd = _to_snake(spec.name)
++
++        p = subparsers.add_parser(
++            f"{prefix}{kebab_cmd}",
++            help=spec.description,
++            add_help=True,
++        )
++        _add_tool_arguments_to_parser(p, spec)
++        tool_map[f"{prefix}{kebab_cmd}"] = spec
++
++        if kebab_cmd != snake_cmd:
++            p_snake = subparsers.add_parser(
++                f"{prefix}{snake_cmd}",
++                help=argparse.SUPPRESS,
++                add_help=True,
++            )
++            _add_tool_arguments_to_parser(p_snake, spec)
++            tool_map[f"{prefix}{snake_cmd}"] = spec
++
++    return tool_map
++
++
++def build_unified_cli_parser() -> tuple[
++    argparse.ArgumentParser, dict[str, tuple[Surface, ToolSpec]]
++]:
++    """Build unified kanban-cli parser covering agent, docs, and admin surfaces."""
++    parser = argparse.ArgumentParser(
++        prog="kanban-cli",
++        description="Kanban CLI with 1:1 MCP Tool Parity, Auth, and Deterministic Unix Output",
++    )
++    # Global options
++    parser.add_argument("--url", default=None, help="Kanban API server base URL")
++    parser.add_argument("--workspace", default=None, help="Workspace slug")
++    parser.add_argument("--project", default=None, help="Project key")
++    parser.add_argument(
++        "--token", "--api-key", dest="token", default=None, help="Authentication token"
++    )
++    parser.add_argument("--lod", default=None, help="Level of detail: summary | standard | full")
++    parser.add_argument("--filter", default=None, help="Predicate DSL search filter")
++    parser.add_argument(
++        "--json", action="store_true", default=False, help="Output response formatted as JSON"
++    )
++    parser.add_argument(
++        "--jsonl", action="store_true", default=False, help="Stream response items as JSON Lines"
++    )
++    parser.add_argument(
++        "--no-color", action="store_true", default=False, help="Disable ANSI color codes"
++    )
++
++    subparsers = parser.add_subparsers(dest="subcommand", title="Commands")
++    tool_dispatch: dict[str, tuple[Surface, ToolSpec]] = {}
++
++    # 1. Agent surface commands at top level
++    agent_reg = create_agent_registry()
++    for spec in agent_reg.list_specs():
++        kebab_cmd = _to_kebab(spec.name)
++        snake_cmd = _to_snake(spec.name)
++
++        p_agent = subparsers.add_parser(kebab_cmd, help=spec.description)
++        _add_tool_arguments_to_parser(p_agent, spec)
++        tool_dispatch[kebab_cmd] = (Surface.AGENT, spec)
++
++        if kebab_cmd != snake_cmd:
++            p_snake = subparsers.add_parser(snake_cmd, help=argparse.SUPPRESS)
++            _add_tool_arguments_to_parser(p_snake, spec)
++            tool_dispatch[snake_cmd] = (Surface.AGENT, spec)
++
++    # Alias: issue list -> search-tickets
++    search_spec = agent_reg.get("search_tickets")
++    if search_spec is not None:
++        p_issue_list = subparsers.add_parser("issue list", help="Alias for search-tickets")
++        _add_tool_arguments_to_parser(p_issue_list, search_spec)
++        tool_dispatch["issue list"] = (Surface.AGENT, search_spec)
++
++    # 2. Docs surface commands
++    docs_reg = build_docs_registry()
++    docs_parser = subparsers.add_parser("docs", help="Documentation and knowledge management tools")
++    docs_subparsers = docs_parser.add_subparsers(dest="docs_command", title="Docs Commands")
++    for spec in docs_reg.list_specs():
++        k_cmd = _to_kebab(spec.name)
++        s_cmd = _to_snake(spec.name)
++        p_d = docs_subparsers.add_parser(k_cmd, help=spec.description)
++        _add_tool_arguments_to_parser(p_d, spec)
++        tool_dispatch[f"docs {k_cmd}"] = (Surface.DOCS, spec)
++        if k_cmd != s_cmd:
++            p_ds = docs_subparsers.add_parser(s_cmd, help=argparse.SUPPRESS)
++            _add_tool_arguments_to_parser(p_ds, spec)
++            tool_dispatch[f"docs {s_cmd}"] = (Surface.DOCS, spec)
++
++    # 3. Admin surface commands
++    admin_reg = build_admin_registry()
++    admin_parser = subparsers.add_parser("admin", help="Administrative and configuration tools")
++    admin_subparsers = admin_parser.add_subparsers(dest="admin_command", title="Admin Commands")
++    for spec in admin_reg.list_specs():
++        k_cmd = _to_kebab(spec.name)
++        s_cmd = _to_snake(spec.name)
++        p_a = admin_subparsers.add_parser(k_cmd, help=spec.description)
++        _add_tool_arguments_to_parser(p_a, spec)
++        tool_dispatch[f"admin {k_cmd}"] = (Surface.ADMIN, spec)
++        if k_cmd != s_cmd:
++            p_as = admin_subparsers.add_parser(s_cmd, help=argparse.SUPPRESS)
++            _add_tool_arguments_to_parser(p_as, spec)
++            tool_dispatch[f"admin {s_cmd}"] = (Surface.ADMIN, spec)
++
++    # 4. Auth commands
++    auth_parser = subparsers.add_parser("auth", help="Authentication and session management")
++    auth_subparsers = auth_parser.add_subparsers(dest="auth_command", title="Auth Commands")
++
++    login_p = auth_subparsers.add_parser("login", help="Log in to Kanban instance")
++    login_p.add_argument(
++        "--device", action="store_true", default=False, help="Use RFC 8628 headless device login"
++    )
++    login_p.add_argument(
++        "--token", "--api-key", dest="token", default=None, help="Save API key or token directly"
++    )
++
++    auth_subparsers.add_parser("status", help="Show current authentication and connectivity status")
++    auth_subparsers.add_parser("logout", help="Log out and remove stored credentials")
++
++    # 5. Completions command
++    comp_p = subparsers.add_parser("completions", help="Generate shell completions")
++    comp_p.add_argument("shell", choices=["bash", "zsh", "fish"], help="Target shell")
++
++    return parser, tool_dispatch
++
++
++def build_agent_cli_parser() -> tuple[argparse.ArgumentParser, dict[str, tuple[Surface, ToolSpec]]]:
++    """Build standalone kanban-cli-agent parser."""
++    parser = argparse.ArgumentParser(
++        prog="kanban-cli-agent",
++        description="Kanban MCP Agent Surface CLI",
++    )
++    _add_global_flags(parser, is_subparser=False)
++    subparsers = parser.add_subparsers(dest="subcommand")
++    agent_reg = create_agent_registry()
++    dispatch = _build_registry_subparsers(subparsers, agent_reg)
++    return parser, {k: (Surface.AGENT, v) for k, v in dispatch.items()}
++
++
++def build_docs_cli_parser() -> tuple[argparse.ArgumentParser, dict[str, tuple[Surface, ToolSpec]]]:
++    """Build standalone kanban-cli-docs parser."""
++    parser = argparse.ArgumentParser(
++        prog="kanban-cli-docs",
++        description="Kanban MCP Docs Surface CLI",
++    )
++    _add_global_flags(parser, is_subparser=False)
++    subparsers = parser.add_subparsers(dest="subcommand")
++    docs_reg = build_docs_registry()
++    dispatch = _build_registry_subparsers(subparsers, docs_reg)
++    return parser, {k: (Surface.DOCS, v) for k, v in dispatch.items()}
++
++
++def build_admin_cli_parser() -> tuple[argparse.ArgumentParser, dict[str, tuple[Surface, ToolSpec]]]:
++    """Build standalone kanban-cli-admin parser."""
++    parser = argparse.ArgumentParser(
++        prog="kanban-cli-admin",
++        description="Kanban MCP Admin Surface CLI",
++    )
++    _add_global_flags(parser, is_subparser=False)
++    subparsers = parser.add_subparsers(dest="subcommand")
++    admin_reg = build_admin_registry()
++    dispatch = _build_registry_subparsers(subparsers, admin_reg)
++    return parser, {k: (Surface.ADMIN, v) for k, v in dispatch.items()}
++
++
++def generate_completions(shell: str) -> str:
++    """Generate shell autocompletions for kanban-cli with zero shell=True calls."""
++    agent_reg = create_agent_registry()
++    docs_reg = build_docs_registry()
++    admin_reg = build_admin_registry()
++
++    top_cmds: list[str] = [_to_kebab(s.name) for s in agent_reg.list_specs()] + [
++        "docs",
++        "admin",
++        "auth",
++        "completions",
++    ]
++    docs_cmds: list[str] = [_to_kebab(s.name) for s in docs_reg.list_specs()]
++    admin_cmds: list[str] = [_to_kebab(s.name) for s in admin_reg.list_specs()]
++    auth_cmds: list[str] = ["login", "status", "logout"]
++
++    if shell == "bash":
++        return f"""# bash completion for kanban-cli
++_kanban_cli_completions() {{
++    local cur prev words cword
++    _init_completion || return
++
++    local top_commands="{" ".join(top_cmds)}"
++    local docs_commands="{" ".join(docs_cmds)}"
++    local admin_commands="{" ".join(admin_cmds)}"
++    local auth_commands="{" ".join(auth_cmds)}"
++
++    if [[ $cword -eq 1 ]]; then
++        COMPREPLY=( $(compgen -W "$top_commands --url --workspace --project --token --json --jsonl --help" -- "$cur") )
++        return 0
++    fi
++
++    case "${{words[1]}}" in
++        docs)
++            COMPREPLY=( $(compgen -W "$docs_commands" -- "$cur") )
++            return 0
++            ;;
++        admin)
++            COMPREPLY=( $(compgen -W "$admin_commands" -- "$cur") )
++            return 0
++            ;;
++        auth)
++            COMPREPLY=( $(compgen -W "$auth_commands" -- "$cur") )
++            return 0
++            ;;
++        completions)
++            COMPREPLY=( $(compgen -W "bash zsh fish" -- "$cur") )
++            return 0
++            ;;
++    esac
++}}
++complete -F _kanban_cli_completions kanban-cli
++"""
++
++    if shell == "zsh":
++        return f"""#compdef kanban-cli
++_kanban_cli() {{
++    local -a top_commands docs_commands admin_commands auth_commands
++    top_commands=({" ".join(f'"{c}"' for c in top_cmds)})
++    docs_commands=({" ".join(f'"{c}"' for c in docs_cmds)})
++    admin_commands=({" ".join(f'"{c}"' for c in admin_cmds)})
++    auth_commands=({" ".join(f'"{c}"' for c in auth_cmds)})
++
++    _arguments -C \\
++        '1: :->command' \\
++        '*:: :->args'
++
++    case $state in
++        command)
++            _describe -t commands 'kanban-cli commands' top_commands
++            ;;
++        args)
++            case $words[1] in
++                docs)
++                    _describe -t docs-commands 'docs commands' docs_commands
++                    ;;
++                admin)
++                    _describe -t admin-commands 'admin commands' admin_commands
++                    ;;
++                auth)
++                    _describe -t auth-commands 'auth commands' auth_commands
++                    ;;
++                completions)
++                    _values 'shells' bash zsh fish
++                    ;;
++            esac
++            ;;
++    esac
++}}
++_kanban_cli "$@"
++"""
++
++    if shell == "fish":
++        lines = [
++            "# fish completion for kanban-cli",
++            "complete -c kanban-cli -f",
++        ]
++        for c in top_cmds:
++            lines.append(f"complete -c kanban-cli -n '__fish_use_subcommand' -a '{c}'")
++        for c in docs_cmds:
++            lines.append(f"complete -c kanban-cli -n '__fish_seen_subcommand_from docs' -a '{c}'")
++        for c in admin_cmds:
++            lines.append(f"complete -c kanban-cli -n '__fish_seen_subcommand_from admin' -a '{c}'")
++        for c in auth_cmds:
++            lines.append(f"complete -c kanban-cli -n '__fish_seen_subcommand_from auth' -a '{c}'")
++        return "\n".join(lines) + "\n"
++
++    return ""
++
++
++async def execute_tool_action(
++    surface: Surface,
++    spec: ToolSpec,
++    arguments: dict[str, Any],
++    config: ResolvedConfig,
++    *,
++    json_mode: bool = False,
++    jsonl_mode: bool = False,
++    internal_client: KanbanApiClient | None = None,
++) -> int:
++    """Execute a single ToolSpec action with 1:1 MCP parity, validation, and error reporting."""
++    # 1. Progressive disclosure: JIT help check
++    is_help_requested = any(
++        isinstance(arguments.get(k), str) and arguments.get(k, "").strip().lower() == "help"
++        for k in ("identifier", "action", "source", "id", "project", "summary")
++    )
++    if is_help_requested:
++        project_arg = arguments.get("project")
++        help_data = await build_help(
++            tool_name=spec.name,
++            project=str(project_arg) if project_arg is not None else None,
++            client=internal_client,
++            subject_token=config.token,
++        )
++        print(dump_yaml(help_data))
++        # Negative / self-correcting test case requires exit code 2 for --project help
++        return 2
++
++    # Extract client-side filter attributes before schema validation
++    filter_priority = arguments.pop("_filter_priority", None)
++
++    # 2. Pre-dispatch validation against schema
++    try:
++        validate_tool_arguments_schema(spec, arguments, surface=surface)
++    except KbMcpError as err:
++        print(err.to_yaml(), file=sys.stderr)
++        return 2
++
++    # 3. Setup client and context
++    client = internal_client
++    owns_client = False
++    if client is None:
++        owns_client = True
++        client = KanbanApiClient(
++            base_url=config.url,
++            mode="cli_remote",
++            api_token=config.token,
++        )
++
++    ctx = McpRequestContext(
++        client=client,
++        surface=surface,
++        subject_token=config.token,
++    )
++    ctx_token = set_current_mcp_context(ctx)
++
++    try:
++        handler = spec.handler
++        import inspect
++
++        if inspect.iscoroutinefunction(handler):
++            res = await handler(arguments)
++        else:
++            res = handler(arguments)
++            if inspect.isawaitable(res):
++                res = await res
++    except KbMcpError as err:
++        print(err.to_yaml(), file=sys.stderr)
++        return 2
++    except Exception as exc:
++        internal_err = KbMcpError(
++            McpErrorCode.INTERNAL,
++            f"Command execution failed: {exc}",
++        )
++        print(internal_err.to_yaml(), file=sys.stderr)
++        return 2
++    finally:
++        reset_current_mcp_context(ctx_token)
++        if owns_client:
++            await client.aclose()
++
++    # 4. Optional client-side predicate filter post-processing (e.g. priority on search_tickets)
++    if filter_priority and isinstance(res, dict) and "items" in res:
++        filtered_items = [
++            item
++            for item in res["items"]
++            if str(item.get("priority", "")).lower() == filter_priority
++        ]
++        res["items"] = filtered_items
++        res["total"] = len(filtered_items)
++
++    # 5. Output rendering
++    if jsonl_mode:
++        if isinstance(res, dict) and "items" in res:
++            for item in res["items"]:
++                print(json.dumps(item))
++            # Stream remaining pages if cursor exists
++            cursor = res.get("next_cursor")
++            while cursor:
++                next_args = dict(arguments)
++                next_args["cursor"] = cursor
++                ctx_t = set_current_mcp_context(ctx)
++                try:
++                    if inspect.iscoroutinefunction(spec.handler):
++                        next_res = await spec.handler(next_args)
++                    else:
++                        next_res = spec.handler(next_args)
++                        if inspect.isawaitable(next_res):
++                            next_res = await next_res
++                finally:
++                    reset_current_mcp_context(ctx_t)
++                if isinstance(next_res, dict) and "items" in next_res:
++                    for item in next_res["items"]:
++                        print(json.dumps(item))
++                    cursor = next_res.get("next_cursor")
++                else:
++                    break
++        elif isinstance(res, list):
++            for item in res:
++                print(json.dumps(item))
++        else:
++            print(json.dumps(res))
++    elif json_mode:
++        print(json.dumps(res, indent=2))
++    elif isinstance(res, str):
++        print(res)
++    elif isinstance(res, (dict, list)):
++        print(dump_yaml(res))
++    else:
++        print(str(res))
++
++    return 0
++
++
++async def parse_and_execute_cli(
++    argv: list[str],
++    *,
++    surface_override: Surface | None = None,
++    client: KanbanApiClient | None = None,
++) -> int:
++    """Parse command line arguments and execute the corresponding tool, auth, or completion action."""
++    # Pre-process raw argv for compound subcommands like 'issue list' or 'docs search'
++    args_list = list(argv)
++
++    # Convert alias 'issue list' to 'issue-list' or 'search-tickets'
++    if len(args_list) >= 2 and args_list[0] == "issue" and args_list[1] == "list":
++        args_list = ["search-tickets"] + args_list[2:]
++
++    if surface_override == Surface.AGENT:
++        parser, dispatch = build_agent_cli_parser()
++    elif surface_override == Surface.DOCS:
++        parser, dispatch = build_docs_cli_parser()
++    elif surface_override == Surface.ADMIN:
++        parser, dispatch = build_admin_cli_parser()
++    else:
++        parser, dispatch = build_unified_cli_parser()
++
++    # Check for completions before strict parsing
++    if len(args_list) >= 2 and args_list[0] == "completions":
++        shell = args_list[1]
++        print(generate_completions(shell))
++        return 0
++
++    try:
++        parsed_ns, remaining = parser.parse_known_args(args_list)
++    except SystemExit as exc:
++        return exc.code if isinstance(exc.code, int) else 2
++
++    # Check for unknown flags or parameters
++    if remaining:
++        # Check if the remaining arguments are unrecognized flags
++        first_unknown = remaining[0]
++        tool_name = parsed_ns.subcommand or "kanban-cli"
++        if tool_name.startswith("--"):
++            tool_name = "kanban-cli"
++
++        err = KbMcpError(
++            McpErrorCode.VALIDATION_FAILED,
++            f"Unknown parameter '{first_unknown.lstrip('-')}' for tool '{tool_name}'",
++            field=first_unknown.lstrip("-"),
++            fix_hint=f"Unknown flag '{first_unknown}'. Check 'kanban-cli --help' for valid options.",
++        )
++        print(err.to_yaml(), file=sys.stderr)
++        return 2
++
++    cmd = parsed_ns.subcommand
++    if not cmd:
++        parser.print_help()
++        return 0
++
++    # Handle docs sub-parser routing
++    if cmd == "docs":
++        docs_cmd = getattr(parsed_ns, "docs_command", None)
++        if not docs_cmd:
++            print("Error: Missing docs subcommand (search, create, update)", file=sys.stderr)
++            return 2
++        cmd = f"docs {docs_cmd}"
++
++    # Handle admin sub-parser routing
++    if cmd == "admin":
++        admin_cmd = getattr(parsed_ns, "admin_command", None)
++        if not admin_cmd:
++            print("Error: Missing admin subcommand", file=sys.stderr)
++            return 2
++        cmd = f"admin {admin_cmd}"
++
++    # Handle auth sub-parser routing
++    if cmd == "auth":
++        from mcp.cli.auth import auth_login, auth_logout, auth_status, resolve_config
++
++        auth_cmd = getattr(parsed_ns, "auth_command", None)
++        cfg = resolve_config(
++            cli_url=getattr(parsed_ns, "url", None),
++            cli_workspace=getattr(parsed_ns, "workspace", None),
++            cli_project=getattr(parsed_ns, "project", None),
++            cli_token=getattr(parsed_ns, "token", None),
++        )
++        if auth_cmd == "login":
++            return auth_login(
++                url=cfg.url,
++                device=bool(getattr(parsed_ns, "device", False)),
++                token=getattr(parsed_ns, "token", None),
++            )
++        if auth_cmd == "status":
++            return auth_status(cfg)
++        if auth_cmd == "logout":
++            return auth_logout()
++        print("Error: Missing auth subcommand (login, status, logout)", file=sys.stderr)
++        return 2
++
++    if cmd not in dispatch:
++        err = KbMcpError(
++            McpErrorCode.VALIDATION_FAILED,
++            f"Unknown command '{cmd}'",
++            valid_options=list(dispatch.keys()),
++        )
++        print(err.to_yaml(), file=sys.stderr)
++        return 2
++
++    surface, spec = dispatch[cmd]
++    from mcp.cli.auth import resolve_config
++
++    cfg = resolve_config(
++        cli_url=getattr(parsed_ns, "url", None),
++        cli_workspace=getattr(parsed_ns, "workspace", None),
++        cli_project=getattr(parsed_ns, "project", None),
++        cli_token=getattr(parsed_ns, "token", None),
++    )
++
++    parsed_dict = vars(parsed_ns)
++    # Inject project/workspace into tool arguments if specified globally
++    if cfg.project and not parsed_dict.get("project"):
++        parsed_dict["project"] = cfg.project
++    if cfg.workspace and not parsed_dict.get("workspace"):
++        parsed_dict["workspace"] = cfg.workspace
++    cli_lod = getattr(parsed_ns, "lod", None)
++    if cli_lod and not parsed_dict.get("lod"):
++        parsed_dict["lod"] = cli_lod
++
++    cli_filter = getattr(parsed_ns, "filter", None)
++    try:
++        normalized_args = _normalize_parsed_arguments(spec, parsed_dict, cli_filter=cli_filter)
++    except KbMcpError as err:
++        print(err.to_yaml(), file=sys.stderr)
++        return 2
++
++    return await execute_tool_action(
++        surface=surface,
++        spec=spec,
++        arguments=normalized_args,
++        config=cfg,
++        json_mode=bool(getattr(parsed_ns, "json", False)),
++        jsonl_mode=bool(getattr(parsed_ns, "jsonl", False)),
++        internal_client=client,
++    )
+diff --git a/mcp/internal_client.py b/mcp/internal_client.py
+index 89f09952..b8458486 100644
+--- a/mcp/internal_client.py
++++ b/mcp/internal_client.py
+@@ -3,8 +3,11 @@
+ 
+ from __future__ import annotations
+ 
++import asyncio
+ import contextlib
++import ipaddress
+ import json
++import urllib.parse
+ from typing import TYPE_CHECKING, Any, Final, Self
+ 
+ import httpx
+@@ -41,22 +44,35 @@ _HTTP_SERVER_ERROR_MIN: Final[int] = 500
+ class KanbanApiClient:
+     """Internal HTTP/2 mTLS client connecting MCP server to kanban-api."""
+ 
+-    def __init__(
++    def __init__(  # noqa: C901, PLR0912, PLR0913, PLR0915
+         self,
+-        settings: McpSettings,
++        settings: McpSettings | Any = None,  # noqa: ANN401
+         *,
+         kanban_app: ASGIApp | None = None,
+         transport: httpx.AsyncBaseTransport | None = None,
++        mode: str | None = None,
++        api_token: str | None = None,
++        base_url: str | None = None,
+     ) -> None:
+-        """Initialize client with mTLS certificates or in-process ASGI transport.
++        """Initialize client with mTLS, ASGI transport, or remote CLI bearer auth.
+ 
+         Raises:
+             ValueError: If plaintext http:// base URL is provided in mtls mode,
++                or if plaintext http:// base URL is used for non-loopback hosts,
+                 or if kanban_app is omitted in standalone_inprocess mode.
+ 
+         """
+-        self.settings: Final[McpSettings] = settings
+-        self.response_body_limit_bytes: Final[int] = settings.response_body_limit_bytes
++        active_mode = mode or (getattr(settings, "mode", None) if settings else None) or "mtls"
++        self.mode: Final[str] = active_mode
++        self.settings: Final[Any] = settings
++        self.api_token: Final[str | None] = api_token or (
++            getattr(settings, "api_token", None) if settings else None
++        )
++        self.response_body_limit_bytes: Final[int] = (
++            getattr(settings, "response_body_limit_bytes", _DEFAULT_BODY_LIMIT_BYTES)
++            if settings is not None
++            else _DEFAULT_BODY_LIMIT_BYTES
++        )
+ 
+         timeout = httpx.Timeout(
+             connect=_CONNECT_TIMEOUT_S,
+@@ -65,7 +81,7 @@ class KanbanApiClient:
+             pool=_POOL_TIMEOUT_S,
+         )
+ 
+-        if settings.mode == "standalone_inprocess":
++        if active_mode == "standalone_inprocess":
+             if transport is not None:
+                 active_transport = transport
+             elif kanban_app is not None:
+@@ -78,28 +94,94 @@ class KanbanApiClient:
+                 base_url="http://localhost",
+                 timeout=timeout,
+             )
+-        else:
+-            # mTLS mode
+-            if settings.kanban_api_base_url.startswith("http://"):
++        elif active_mode == "cli_remote":
++            raw_base_url = (
++                base_url
++                or (getattr(settings, "kanban_api_base_url", None) if settings else None)
++                or "http://localhost:8080"
++            )
++            parsed = urllib.parse.urlparse(raw_base_url)
++            if not parsed.scheme:
++                msg = f"Invalid base URL (missing scheme): '{raw_base_url}'"
++                raise ValueError(msg)
++            if parsed.scheme == "http":
++                host = parsed.hostname or ""
++                is_loopback = False
++                if host in ("localhost", "127.0.0.1", "::1", "[::1]"):
++                    is_loopback = True
++                else:
++                    try:
++                        ip = ipaddress.ip_address(host)
++                        if ip.is_loopback:
++                            is_loopback = True
++                    except ValueError:
++                        is_loopback = False
++                if not is_loopback:
++                    msg = (
++                        "Plaintext http:// base URL is strictly prohibited for remote hosts in "
++                        f"cli_remote mode: '{raw_base_url}' "
++                        "(only loopback localhost, 127.0.0.1, [::1] permitted)"
++                    )
++                    raise ValueError(msg)
++            elif parsed.scheme != "https":
+                 msg = (
+-                    f"Plaintext http:// base URL is strictly prohibited in mtls mode: "
+-                    f"'{settings.kanban_api_base_url}'"
++                    f"Unsupported base URL scheme '{parsed.scheme}' in cli_remote mode: "
++                    f"'{raw_base_url}' (expected http:// for loopback or https:// for remote)"
++                )
++                raise ValueError(msg)
++
++            default_headers: dict[str, str] = {}
++            if self.api_token:
++                default_headers["Authorization"] = f"Bearer {self.api_token}"
++
++            if transport is not None:
++                self._client = httpx.AsyncClient(
++                    transport=transport,
++                    base_url=raw_base_url,
++                    timeout=timeout,
++                    follow_redirects=False,
++                    headers=default_headers,
++                )
++            elif kanban_app is not None:
++                self._client = httpx.AsyncClient(
++                    transport=httpx.ASGITransport(app=kanban_app),
++                    base_url=raw_base_url,
++                    timeout=timeout,
++                    follow_redirects=False,
++                    headers=default_headers,
++                )
++            else:
++                self._client = httpx.AsyncClient(
++                    base_url=raw_base_url,
++                    timeout=timeout,
++                    follow_redirects=False,
++                    headers=default_headers,
+                 )
++        else:
++            # mTLS mode
++            api_url = (
++                getattr(settings, "kanban_api_base_url", None) if settings else None
++            ) or "https://127.0.0.1:8443"
++            if api_url.startswith("http://"):
++                msg = f"Plaintext http:// base URL is strictly prohibited in mtls mode: '{api_url}'"
+                 raise ValueError(msg)
+ 
+             verify: str | bool = (
+-                str(settings.internal_ca_path) if settings.internal_ca_path else True
++                str(settings.internal_ca_path)
++                if getattr(settings, "internal_ca_path", None)
++                else True
+             )
+             cert = (
+                 (str(settings.client_cert_path), str(settings.client_key_path))
+-                if settings.client_cert_path and settings.client_key_path
++                if getattr(settings, "client_cert_path", None)
++                and getattr(settings, "client_key_path", None)
+                 else None
+             )
+ 
+             if transport is not None:
+                 self._client = httpx.AsyncClient(
+                     transport=transport,
+-                    base_url=settings.kanban_api_base_url,
++                    base_url=api_url,
+                     timeout=timeout,
+                 )
+ 
+@@ -108,16 +190,27 @@ class KanbanApiClient:
+                     http2=True,
+                     verify=verify,
+                     cert=cert,
+-                    base_url=settings.kanban_api_base_url,
++                    base_url=api_url,
+                     timeout=timeout,
+                 )
+ 
+         self._csrf_token: str | None = None
++        self._close_tasks: set[asyncio.Task[None]] = set()
+ 
+     async def aclose(self) -> None:
+         """Close the underlying HTTP client session and connections."""
+         await self._client.aclose()
+ 
++    def close(self) -> None:
++        """Close the underlying HTTP client session synchronously."""
++        try:
++            loop = asyncio.get_running_loop()
++            task = loop.create_task(self.aclose())
++            self._close_tasks.add(task)
++            task.add_done_callback(self._close_tasks.discard)
++        except RuntimeError:
++            asyncio.run(self.aclose())
++
+     async def __aenter__(self) -> Self:
+         """Async context manager entry."""
+         await self._client.__aenter__()
+@@ -135,6 +228,8 @@ class KanbanApiClient:
+     async def _ensure_csrf_token(
+         self, req_headers: dict[str, str], method: str, path: str = ""
+     ) -> None:
++        if self.mode == "cli_remote":
++            return
+         unsafe_methods = ("POST", "PUT", "PATCH", "DELETE")
+         if (
+             method.upper() not in unsafe_methods
+@@ -170,6 +265,16 @@ class KanbanApiClient:
+         req_headers = dict(headers or {})
+         if subject_token:
+             req_headers["X-KB-Subject-Token"] = subject_token
++            if self.mode == "cli_remote":
++                req_headers["Authorization"] = f"Bearer {subject_token}"
++        elif (
++            self.mode == "cli_remote"
++            and self.api_token
++            and "Authorization" not in req_headers
++            and "authorization" not in req_headers
++        ):
++            req_headers["Authorization"] = f"Bearer {self.api_token}"
++
+         if mcp_session_id:
+             req_headers["X-KB-MCP-Session"] = mcp_session_id
+ 
+@@ -203,10 +308,7 @@ class KanbanApiClient:
+                 params=params,
+                 headers=req_headers,
+             )
+-            if (
+-                self.settings.mode == "standalone_inprocess"
+-                and "x-kb-internal-auth" not in req.headers
+-            ):
++            if self.mode == "standalone_inprocess" and "x-kb-internal-auth" not in req.headers:
+                 req.headers["X-KB-Internal-Auth"] = create_internal_service_auth_header(
+                     principal="mcp-gateway",
+                     method=req.method,
+diff --git a/mcp/protocol.py b/mcp/protocol.py
+index d55aebe5..0a0b04ea 100644
+--- a/mcp/protocol.py
++++ b/mcp/protocol.py
+@@ -44,6 +44,8 @@ __all__ = [
+     "McpProtocolHandler",
+     "Session",
+     "SessionStore",
++    "format_cli_example",
++    "validate_tool_arguments_schema",
+ ]
+ 
+ PROTOCOL_VERSION: Final[str] = "2025-06-18"
+@@ -1413,3 +1415,14 @@ class McpProtocolHandler:
+                             fix_hint=fix_hint,
+                             cli_example=cli_example,
+                         )
++
++
++def validate_tool_arguments_schema(
++    spec: ToolSpec,
++    arguments: dict[str, Any],
++    surface: Surface = Surface.AGENT,
++) -> None:
++    """Validate arguments against schema with progressive self-correction."""
++    handler = McpProtocolHandler.__new__(McpProtocolHandler)
++    object.__setattr__(handler, "surface", surface)
++    handler._validate_tool_arguments_schema(spec, arguments)  # noqa: SLF001
+diff --git a/mcp/pyproject.toml b/mcp/pyproject.toml
+index 71c19f46..51878d16 100644
+--- a/mcp/pyproject.toml
++++ b/mcp/pyproject.toml
+@@ -18,6 +18,12 @@ dependencies = [
+     "starlette>=0.40.0",
+ ]
+ 
++[project.scripts]
++kanban-cli = "mcp.cli.main:main"
++kanban-cli-agent = "mcp.cli.main:main_agent"
++kanban-cli-docs = "mcp.cli.main:main_docs"
++kanban-cli-admin = "mcp.cli.main:main_admin"
++
+ [tool.hatch.build.targets.wheel.sources]
+ "" = "mcp"
+ 
+diff --git a/mcp/tests/cli/__init__.py b/mcp/tests/cli/__init__.py
+new file mode 100644
+index 00000000..be884c19
+--- /dev/null
++++ b/mcp/tests/cli/__init__.py
+@@ -0,0 +1,3 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""CLI test package."""
+diff --git a/mcp/tests/cli/test_kanban_cli_auth_and_io.py b/mcp/tests/cli/test_kanban_cli_auth_and_io.py
+new file mode 100644
+index 00000000..d550c20e
+--- /dev/null
++++ b/mcp/tests/cli/test_kanban_cli_auth_and_io.py
+@@ -0,0 +1,833 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++# ruff: noqa: E501, PLR0915, PLC0415, S106, ANN401, ARG001, ARG005, TRY003, EM101, SLF001, PTH101
++"""Comprehensive unit and security tests for kanban-cli authentication, configuration, and I/O ergonomics (KAN-48)."""
++
++from __future__ import annotations
++
++import asyncio
++import io
++import os
++import sys
++from pathlib import Path
++from typing import Any
++
++import httpx
++import pytest
++
++from mcp.cli.auth import (
++    auth_login,
++    auth_logout,
++    auth_status,
++    get_config_dir,
++    get_credentials_path,
++    load_config,
++    load_credentials,
++    resolve_config,
++    save_credentials,
++)
++from mcp.cli.main import main
++from mcp.cli.schema_cli import assert_no_surrogates, generate_completions
++from mcp.errors import KbMcpError, McpErrorCode
++from mcp.internal_client import KanbanApiClient
++
++
++@pytest.fixture(autouse=True)
++def _clean_kanban_env(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Ensure tests run in clean environment without ambient tokens."""
++    for var in (
++        "KANBAN_URL",
++        "KANBAN_WORKSPACE",
++        "KANBAN_PROJECT",
++        "KANBAN_API_KEY",
++        "KANBAN_TOKEN",
++    ):
++        monkeypatch.delenv(var, raising=False)
++
++
++def test_config_precedence(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
++    """Verify configuration resolution precedence: CLI > ENV > config file > default."""
++    monkeypatch.setenv("KANBAN_CONFIG_DIR", str(tmp_path))
++    monkeypatch.delenv("KANBAN_URL", raising=False)
++    monkeypatch.delenv("KANBAN_WORKSPACE", raising=False)
++    monkeypatch.delenv("KANBAN_PROJECT", raising=False)
++    monkeypatch.delenv("KANBAN_API_KEY", raising=False)
++    monkeypatch.delenv("KANBAN_TOKEN", raising=False)
++
++    # 1. Default fallback
++    cfg_default = resolve_config()
++    assert cfg_default.url == "http://localhost:8080"
++    assert cfg_default.workspace is None
++    assert cfg_default.project is None
++    assert cfg_default.token is None
++
++    # 2. Config file fallback
++    config_file = tmp_path / "config.toml"
++    config_file.write_text(
++        'url = "http://localhost:9000"\nworkspace = "ws_file"\nproject = "PRJ_FILE"\n',
++        encoding="utf-8",
++    )
++    save_credentials({"api_key": "token_from_file"})
++
++    cfg_file = resolve_config()
++    assert cfg_file.url == "http://localhost:9000"
++    assert cfg_file.workspace == "ws_file"
++    assert cfg_file.project == "PRJ_FILE"
++    assert cfg_file.token == "token_from_file"
++
++    # 3. Environment variables override config files
++    monkeypatch.setenv("KANBAN_URL", "http://localhost:9100")
++    monkeypatch.setenv("KANBAN_WORKSPACE", "ws_env")
++    monkeypatch.setenv("KANBAN_PROJECT", "PRJ_ENV")
++    monkeypatch.setenv("KANBAN_API_KEY", "token_from_env")
++
++    cfg_env = resolve_config()
++    assert cfg_env.url == "http://localhost:9100"
++    assert cfg_env.workspace == "ws_env"
++    assert cfg_env.project == "PRJ_ENV"
++    assert cfg_env.token == "token_from_env"
++
++    # 4. CLI flags override environment variables
++    cfg_cli = resolve_config(
++        cli_url="http://localhost:9200",
++        cli_workspace="ws_cli",
++        cli_project="PRJ_CLI",
++        cli_token="token_from_cli",
++    )
++    assert cfg_cli.url == "http://localhost:9200"
++    assert cfg_cli.workspace == "ws_cli"
++    assert cfg_cli.project == "PRJ_CLI"
++    assert cfg_cli.token == "token_from_cli"
++
++
++def test_credentials_file_security_permissions(
++    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
++) -> None:
++    """Verify credentials.toml enforces 0600 mode and rejects looser permissions or symlinks."""
++    monkeypatch.setenv("KANBAN_CONFIG_DIR", str(tmp_path))
++    cred_file = tmp_path / "credentials.toml"
++
++    # 1. Saving credentials creates 0600 file
++    save_credentials({"api_key": "kb_secret_token"})
++    mode = cred_file.stat().st_mode & 0o777
++    assert mode == 0o600, f"Expected 0600 mode, got {oct(mode)}"
++
++    creds = load_credentials()
++    assert creds.get("api_key") == "kb_secret_token"
++
++    # 2. Permissions looser than 0600 (group or world readable/writable) fail-closed
++    os.chmod(cred_file, 0o644)
++    with pytest.raises(ValueError, match="insecure permissions"):
++        load_credentials()
++
++    os.chmod(cred_file, 0o660)
++    with pytest.raises(ValueError, match="insecure permissions"):
++        load_credentials()
++
++    # 3. Symlink rejection
++    cred_file.unlink()
++    target_secret = tmp_path / "target_secret.toml"
++    target_secret.write_text('api_key = "secret_symlink"\n', encoding="utf-8")
++    os.chmod(target_secret, 0o600)
++    cred_file.symlink_to(target_secret)
++
++    with pytest.raises(ValueError, match="must not be a symlink"):
++        load_credentials()
++
++    with pytest.raises(ValueError, match="must not be a symlink"):
++        save_credentials({"api_key": "new_secret"})
++
++
++def test_auth_commands_flow(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
++    """Verify auth login, status, and logout commands."""
++    monkeypatch.setenv("KANBAN_CONFIG_DIR", str(tmp_path))
++
++    # 1. Login with direct token
++    ret_login = auth_login("http://localhost:8080", token="kb_user_token_abc")
++    assert ret_login == 0
++    creds = load_credentials()
++    assert creds.get("api_key") == "kb_user_token_abc"
++
++    # 2. Status check with mock client
++    mock_transport = httpx.MockTransport(
++        lambda r: httpx.Response(
++            200, json={"user": {"handle": "@alice", "email": "alice@example.com"}}
++        )
++    )
++    with httpx.Client(transport=mock_transport, base_url="http://localhost:8080") as mock_client:
++        cfg = resolve_config()
++        ret_status = auth_status(cfg, client=mock_client)
++        assert ret_status == 0
++
++    # 3. Logout clears credentials
++    ret_logout = auth_logout()
++    assert ret_logout == 0
++    assert not get_credentials_path().exists()
++
++    # Idempotent second logout succeeds cleanly
++    ret_logout_again = auth_logout()
++    assert ret_logout_again == 0
++
++
++def test_cli_remote_security_loopback_and_https() -> None:
++    """Verify KanbanApiClient in cli_remote mode permits loopback http and enforces https for remote."""
++    # 1. Loopback http:// URLs allowed
++    c_loc = KanbanApiClient(mode="cli_remote", base_url="http://localhost:8080")
++    assert c_loc._client.base_url == "http://localhost:8080"
++
++    c_ip4 = KanbanApiClient(mode="cli_remote", base_url="http://127.0.0.1:8080")
++    assert c_ip4._client.base_url == "http://127.0.0.1:8080"
++
++    # 2. Remote https:// allowed
++    c_https = KanbanApiClient(mode="cli_remote", base_url="https://kanban.internal.example.com")
++    assert c_https._client.base_url == "https://kanban.internal.example.com"
++
++    # 3. Remote plaintext http:// strictly rejected
++    with pytest.raises(ValueError, match="strictly prohibited for remote hosts"):
++        KanbanApiClient(mode="cli_remote", base_url="http://remote.insecure.com:8080")
++
++    with pytest.raises(ValueError, match="strictly prohibited for remote hosts"):
++        KanbanApiClient(mode="cli_remote", base_url="http://192.168.1.50:8080")
++
++
++def test_utf16_lone_surrogate_rejection() -> None:
++    """Verify UTF-16 lone surrogates in input text, files, or stdin raise INVALID_UTF8_SURROGATE."""
++    # High surrogate U+D800
++    with pytest.raises(KbMcpError) as exc_high:
++        assert_no_surrogates("bad\ud800text")
++    assert exc_high.value.code == McpErrorCode.VALIDATION_FAILED
++    assert exc_high.value.message == "INVALID_UTF8_SURROGATE"
++
++    # Low surrogate U+DFFF
++    with pytest.raises(KbMcpError) as exc_low:
++        assert_no_surrogates("bad\udffftext")
++    assert exc_low.value.code == McpErrorCode.VALIDATION_FAILED
++    assert exc_low.value.message == "INVALID_UTF8_SURROGATE"
++
++    # Clean text passes
++    assert_no_surrogates("clean standard UTF-8 text with emojis 👍")
++
++
++def test_shell_completions_generation() -> None:
++    """Verify shell completion scripts are generated for bash, zsh, and fish with zero shell=True calls."""
++    bash_comp = generate_completions("bash")
++    assert "_kanban_cli_completions()" in bash_comp
++    assert "complete -F _kanban_cli_completions kanban-cli" in bash_comp
++    assert "create-ticket" in bash_comp
++
++    zsh_comp = generate_completions("zsh")
++    assert "#compdef kanban-cli" in zsh_comp
++    assert "_describe -t commands" in zsh_comp
++
++    fish_comp = generate_completions("fish")
++    assert "complete -c kanban-cli" in fish_comp
++    assert "__fish_use_subcommand" in fish_comp
++
++
++def test_cli_prose_file_and_structured_flags(tmp_path: Path) -> None:
++    """Verify @file, --description-file, and structured JSON parsing."""
++    spec_file = tmp_path / "spec.md"
++    spec_file.write_text("# Feature Spec\nDetailed markdown specification.", encoding="utf-8")
++
++    proof_file = tmp_path / "proof.json"
++    proof_file.write_text(
++        '{"qa_dir": "docs/qa/KAN-1", "ci_run_url": "https://ci/1"}', encoding="utf-8"
++    )
++
++    # Introspect parsing using schema_cli helpers
++    from mcp.cli.schema_cli import _normalize_parsed_arguments
++    from mcp.surfaces.agent import create_agent_registry
++
++    agent_reg = create_agent_registry()
++    create_spec = agent_reg.get("create_ticket")
++    assert create_spec is not None
++    assert create_spec is not None
++
++    parsed_input = {
++        "project": "KAN",
++        "summary": "Implement feature",
++        "description_markdown_file": str(spec_file),
++    }
++    normalized = _normalize_parsed_arguments(create_spec, parsed_input)
++    assert normalized["description_markdown"] == "# Feature Spec\nDetailed markdown specification."
++    assert normalized["project"] == "KAN"
++    assert normalized["summary"] == "Implement feature"
++
++    # Structured verification proof @path
++    trans_spec = agent_reg.get("transition_ticket")
++    assert trans_spec is not None
++    trans_input = {
++        "identifier": "KAN-1",
++        "to_state": "Done",
++        "verification_proof": f"@{proof_file}",
++    }
++    normalized_trans = _normalize_parsed_arguments(trans_spec, trans_input)
++    assert isinstance(normalized_trans["verification_proof"], dict)
++    assert normalized_trans["verification_proof"]["qa_dir"] == "docs/qa/KAN-1"
++
++
++def test_cli_filter_predicate_delegation() -> None:
++    """Verify --filter string delegates to KAN-78 predicate compiler."""
++    from mcp.cli.schema_cli import _apply_predicate_filter
++
++    args: dict[str, Any] = {"project": "KAN"}
++    filter_expr = 'status = "Todo" AND priority:high AND assignee:@alice AND cycle:c1 AND module:m1 AND label:bug AND blocked:true AND gate:pending some query text'
++    _apply_predicate_filter(args, filter_expr)
++
++    assert "Todo" in args.get("states", [])
++    assert "@alice" in args.get("assignees", [])
++    assert args.get("_filter_priority") == "high"
++    assert args.get("cycle") == "c1"
++    assert "m1" in args.get("modules", [])
++    assert "bug" in args.get("labels", [])
++    assert args.get("blocked") is True
++    assert args.get("gate_status") == "pending"
++    assert "some query text" in args.get("query", "")
++
++
++def test_auth_login_device_flow(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
++    """Verify auth login --device flow (RFC 8628)."""
++    monkeypatch.setenv("KANBAN_CONFIG_DIR", str(tmp_path))
++
++    call_count = 0
++
++    def mock_device_handler(request: httpx.Request) -> httpx.Response:
++        nonlocal call_count
++        if request.url.path == "/oauth/device/authorize":
++            return httpx.Response(
++                200,
++                json={
++                    "device_code": "d_123",
++                    "user_code": "ABCD-1234",
++                    "verification_uri": "https://auth/device",
++                    "interval": 0,
++                    "expires_in": 30,
++                },
++            )
++        if request.url.path == "/oauth/token":
++            call_count += 1
++            if call_count == 1:
++                return httpx.Response(200, json={"error": "authorization_pending"})
++            return httpx.Response(200, json={"access_token": "token_from_device"})
++        return httpx.Response(404)
++
++    client = httpx.Client(
++        transport=httpx.MockTransport(mock_device_handler), base_url="http://localhost:8080"
++    )
++    monkeypatch.setattr("time.sleep", lambda _: None)
++    ret = auth_login("http://localhost:8080", device=True, client=client)
++    assert ret == 0
++    creds = load_credentials()
++    assert creds.get("api_key") == "token_from_device"
++
++    # Error path: authorize returns 400
++    err_client = httpx.Client(
++        transport=httpx.MockTransport(lambda r: httpx.Response(400, text="Bad Request")),
++        base_url="http://localhost:8080",
++    )
++    ret_err = auth_login("http://localhost:8080", device=True, client=err_client)
++    assert ret_err == 1
++
++    # Error path: token polling error
++    def fatal_token_handler(request: httpx.Request) -> httpx.Response:
++        if request.url.path == "/oauth/device/authorize":
++            return httpx.Response(
++                200,
++                json={
++                    "device_code": "d_123",
++                    "user_code": "ABCD-1234",
++                    "verification_uri": "https://auth/device",
++                    "interval": 0,
++                    "expires_in": 30,
++                },
++            )
++        return httpx.Response(
++            200, headers={"content-type": "application/json"}, json={"error": "access_denied"}
++        )
++
++    fatal_client = httpx.Client(
++        transport=httpx.MockTransport(fatal_token_handler), base_url="http://localhost:8080"
++    )
++    ret_fatal = auth_login("http://localhost:8080", device=True, client=fatal_client)
++    assert ret_fatal == 1
++
++
++def test_auth_login_pkce_flow(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
++    """Verify standard interactive PKCE authorization flow."""
++    monkeypatch.setenv("KANBAN_CONFIG_DIR", str(tmp_path))
++
++    def mock_pkce_handler(request: httpx.Request) -> httpx.Response:
++        if request.url.path == "/oauth/token":
++            return httpx.Response(200, json={"access_token": "token_pkce_abc"})
++        return httpx.Response(404)
++
++    client = httpx.Client(
++        transport=httpx.MockTransport(mock_pkce_handler), base_url="http://localhost:8080"
++    )
++    monkeypatch.setattr("builtins.input", lambda _: "auth_code_123")
++    ret = auth_login("http://localhost:8080", device=False, client=client)
++    assert ret == 0
++    assert load_credentials().get("api_key") == "token_pkce_abc"
++
++    # Cancelled flow (empty code)
++    monkeypatch.setattr("builtins.input", lambda _: "")
++    ret_cancel = auth_login("http://localhost:8080", device=False, client=client)
++    assert ret_cancel == 1
++
++    # Token exchange failure
++    fail_client = httpx.Client(
++        transport=httpx.MockTransport(lambda r: httpx.Response(400, text="invalid_grant")),
++        base_url="http://localhost:8080",
++    )
++    monkeypatch.setattr("builtins.input", lambda _: "code_bad")
++    ret_fail = auth_login("http://localhost:8080", device=False, client=fail_client)
++    assert ret_fail == 1
++
++
++def test_auth_status_variants() -> None:
++    """Verify auth status output under unauthenticated, 401 unauthorized, and network failure."""
++    # 1. Unauthenticated
++    cfg_unauth = resolve_config(cli_url="http://localhost:8080", cli_token=None)
++    assert auth_status(cfg_unauth) == 0
++
++    # 2. 401 Unauthorized
++    client_401 = httpx.Client(
++        transport=httpx.MockTransport(lambda r: httpx.Response(401, text="Unauthorized")),
++        base_url="http://localhost:8080",
++    )
++    cfg_auth = resolve_config(cli_url="http://localhost:8080", cli_token="bad_token")
++    assert auth_status(cfg_auth, client=client_401) == 1
++
++    # 3. Network connection exception
++    def err_handler(_: httpx.Request) -> httpx.Response:
++        raise httpx.ConnectError("Connection refused")
++
++    client_err = httpx.Client(
++        transport=httpx.MockTransport(err_handler), base_url="http://localhost:8080"
++    )
++    assert auth_status(cfg_auth, client=client_err) == 1
++
++
++def test_auth_credentials_corrupt_and_save_types(
++    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
++) -> None:
++    """Verify corrupt credentials file handling and non-string types saving."""
++    monkeypatch.setenv("KANBAN_CONFIG_DIR", str(tmp_path))
++    cred_file = tmp_path / "credentials.toml"
++
++    # Save non-string types (int, bool)
++    save_credentials({"retries": 3, "debug": True, "api_key": "k_123"})
++    mode = cred_file.stat().st_mode & 0o777
++    assert mode == 0o600
++    creds = load_credentials()
++    assert creds["retries"] == 3
++    assert creds["debug"] is True
++
++    # Corrupt toml raises ValueError
++    cred_file.write_text("invalid [ [ toml syntax", encoding="utf-8")
++    os.chmod(cred_file, 0o600)
++    with pytest.raises(ValueError, match="Failed to parse credentials file"):
++        load_credentials()
++
++
++def test_main_entry_points_and_interrupt(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify entry points main, main_agent, main_docs, main_admin, and KeyboardInterrupt."""
++    from mcp.cli.main import _run_cli_coroutine, main_admin, main_agent, main_docs
++
++    # Help checks
++    assert main(["--help"]) == 0
++    assert main_agent(["--help"]) == 0
++    assert main_docs(["--help"]) == 0
++    assert main_admin(["--help"]) == 0
++
++    # Keyboard interrupt handling
++    def mock_interrupt(*args: Any, **kwargs: Any) -> Any:
++        raise KeyboardInterrupt
++
++    import sys
++
++    main_mod = sys.modules["mcp.cli.main"]
++    monkeypatch.setattr(main_mod, "parse_and_execute_cli", mock_interrupt)
++    ret_ki = _run_cli_coroutine(["--help"])
++    assert ret_ki == 130
++
++
++@pytest.mark.asyncio
++async def test_cli_subparsers_and_error_routing(
++    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
++) -> None:
++    """Verify docs, admin, auth, and completions routing through parse_and_execute_cli."""
++    from mcp.cli.schema_cli import parse_and_execute_cli
++
++    monkeypatch.setenv("KANBAN_CONFIG_DIR", str(tmp_path))
++
++    # Empty command prints help and returns 0
++    assert await parse_and_execute_cli([]) == 0
++
++    # Completions
++    assert await parse_and_execute_cli(["completions", "bash"]) == 0
++    assert await parse_and_execute_cli(["completions", "zsh"]) == 0
++    assert await parse_and_execute_cli(["completions", "fish"]) == 0
++
++    # Auth commands - unauthenticated status
++    assert await parse_and_execute_cli(["auth", "status"]) == 0
++    assert await parse_and_execute_cli(["auth", "login", "--token", "tok_cli_test"]) == 0
++
++    # Authenticated status with mock network session
++    monkeypatch.setattr(
++        "httpx.Client.get",
++        lambda self, url: httpx.Response(200, json={"user": {"handle": "@test"}}),
++    )
++    assert await parse_and_execute_cli(["auth", "status"]) == 0
++    assert await parse_and_execute_cli(["auth", "logout"]) == 0
++    assert await parse_and_execute_cli(["auth"]) == 2  # missing auth subcommand
++
++    # Docs and admin missing subcommands
++    assert await parse_and_execute_cli(["docs"]) == 2
++    assert await parse_and_execute_cli(["admin"]) == 2
++
++    # Unknown command
++    assert await parse_and_execute_cli(["nonexistent-command"]) == 2
++
++
++def test_array_and_stdin_and_null_arg_normalization(tmp_path: Path) -> None:
++    """Verify JSON array, stdin (-), clear flag, and null literal string parsing."""
++    from mcp.cli.schema_cli import _normalize_parsed_arguments
++    from mcp.surfaces.agent import create_agent_registry
++
++    agent_reg = create_agent_registry()
++    create_spec = agent_reg.get("create_ticket")
++    assert create_spec is not None
++
++    # 1. Array parsing: JSON array string and comma-separated
++    arr_file = tmp_path / "labels.json"
++    arr_file.write_text('["tag1", "tag2"]', encoding="utf-8")
++
++    input_arr = {
++        "project": "KAN",
++        "summary": "Fix bug",
++        "labels": f"@{arr_file}",
++    }
++    norm = _normalize_parsed_arguments(create_spec, input_arr)
++    assert norm["labels"] == ["tag1", "tag2"]
++
++    input_comma = {
++        "project": "KAN",
++        "summary": "Fix bug",
++        "labels": ["tagA, tagB", "tagC"],
++    }
++    norm_comma = _normalize_parsed_arguments(create_spec, input_comma)
++    assert norm_comma["labels"] == ["tagA", "tagB", "tagC"]
++
++    # 2. Null literal string
++    input_null = {
++        "project": "KAN",
++        "summary": "Fix bug",
++        "priority": "null",
++    }
++    norm_null = _normalize_parsed_arguments(create_spec, input_null)
++    assert norm_null["priority"] is None
++
++    # 3. Clear flag
++    input_clear = {
++        "project": "KAN",
++        "summary": "Fix bug",
++        "clear_priority": True,
++    }
++    norm_clear = _normalize_parsed_arguments(create_spec, input_clear)
++    assert norm_clear["priority"] is None
++
++
++def test_auth_edge_cases(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
++    """Verify XDG_CONFIG_HOME, corrupt config, resolve warning, and logout error."""
++    # 1. XDG_CONFIG_HOME
++    xdg_dir = tmp_path / "xdg"
++    monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg_dir))
++    monkeypatch.delenv("KANBAN_CONFIG_DIR", raising=False)
++    assert get_config_dir() == xdg_dir / "kanban"
++
++    # 2. Corrupted config.toml returns empty dict
++    cfg_file = tmp_path / "config.toml"
++    cfg_file.write_text("invalid [ [ toml", encoding="utf-8")
++    monkeypatch.setenv("KANBAN_CONFIG_DIR", str(tmp_path))
++    assert load_config() == {}
++
++    # 3. resolve_config prints warning on ValueError
++    cred_file = tmp_path / "credentials.toml"
++    cred_file.write_text("invalid [ [ toml", encoding="utf-8")
++    os.chmod(cred_file, 0o600)
++    captured_err = io.StringIO()
++    monkeypatch.setattr(sys, "stderr", captured_err)
++    cfg = resolve_config()
++    assert "Warning: Failed to parse credentials file" in captured_err.getvalue()
++    assert cfg.url == "http://localhost:8080"
++
++    # 4. auth_logout error when unlink fails
++    cred_file.write_text('api_key = "abc"\n', encoding="utf-8")
++    os.chmod(cred_file, 0o600)
++
++    def mock_unlink_fail(self: Any) -> None:
++        raise OSError("Permission denied")
++
++    monkeypatch.setattr(Path, "unlink", mock_unlink_fail)
++    ret_logout_err = auth_logout()
++    assert ret_logout_err == 1
++
++
++def test_schema_cli_io_and_filter_branches(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
++    """Verify stdin, YAML structured values, missing file errors, and filter priority."""
++    from mcp.cli.schema_cli import (
++        _normalize_parsed_arguments,
++        _parse_structured_value,
++        _read_file_or_stdin,
++        execute_tool_action,
++    )
++    from mcp.registry import Surface
++    from mcp.surfaces.agent import create_agent_registry
++
++    # 1. _read_file_or_stdin with stdin
++    monkeypatch.setattr("sys.stdin", io.StringIO("stdin content"))
++    assert _read_file_or_stdin("-") == "stdin content"
++
++    # 2. Missing file raises error
++    with pytest.raises(KbMcpError, match="File not found"):
++        _read_file_or_stdin(str(tmp_path / "nonexistent.txt"))
++
++    # 3. _parse_structured_value with YAML string and file
++    yaml_file = tmp_path / "data.yaml"
++    yaml_file.write_text("key: value\nnumber: 42\n", encoding="utf-8")
++    parsed_yaml = _parse_structured_value(f"@{yaml_file}")
++    assert parsed_yaml == {"key": "value", "number": 42}
++
++    # Direct YAML string fallback
++    assert _parse_structured_value("foo: bar") == {"foo": "bar"}
++
++    # 4. _normalize_parsed_arguments with stdin (-) and @file for prose
++    agent_reg = create_agent_registry()
++    create_spec = agent_reg.get("create_ticket")
++    assert create_spec is not None
++
++    desc_file = tmp_path / "desc.md"
++    desc_file.write_text("file description", encoding="utf-8")
++
++    input_prose = {
++        "project": "KAN",
++        "summary": "Ticket",
++        "description_markdown": f"@{desc_file}",
++    }
++    norm_prose = _normalize_parsed_arguments(create_spec, input_prose)
++    assert norm_prose["description_markdown"] == "file description"
++
++    monkeypatch.setattr("sys.stdin", io.StringIO("stdin description"))
++    input_stdin = {
++        "project": "KAN",
++        "summary": "Ticket",
++        "description_markdown": "-",
++    }
++    norm_stdin = _normalize_parsed_arguments(create_spec, input_stdin)
++    assert norm_stdin["description_markdown"] == "stdin description"
++
++    # 5. execute_tool_action with JSONL list output
++    reg = create_agent_registry()
++    spec = reg.get("search_tickets")
++    assert spec is not None
++    import dataclasses
++
++    async def mock_list_handler(_: Any) -> Any:
++        return [{"key": "KAN-1"}, {"key": "KAN-2"}]
++
++    list_spec = dataclasses.replace(spec, handler=mock_list_handler)
++    captured = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", captured)
++    from mcp.cli.auth import ResolvedConfig
++
++    cfg = ResolvedConfig(url="http://localhost:8080", workspace=None, project=None, token=None)
++    ret_list = asyncio.run(execute_tool_action(Surface.AGENT, list_spec, {}, cfg, jsonl_mode=True))
++    assert ret_list == 0
++    assert '{"key": "KAN-1"}' in captured.getvalue()
++
++
++def test_schema_cli_full_branches(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
++    """Verify edge case branches across schema_cli and main."""
++    import dataclasses
++    import json
++    import runpy
++
++    from mcp.cli.auth import ResolvedConfig
++    from mcp.cli.schema_cli import (
++        _apply_predicate_filter,
++        _normalize_parsed_arguments,
++        _parse_structured_value,
++        execute_tool_action,
++        generate_completions,
++        parse_and_execute_cli,
++    )
++    from mcp.registry import Surface
++    from mcp.surfaces.agent import create_agent_registry
++
++    agent_reg = create_agent_registry()
++    create_spec = agent_reg.get("create_ticket")
++    assert create_spec is not None
++    trans_spec = agent_reg.get("transition_ticket")
++    assert trans_spec is not None
++
++    # 1. Structured parse error and fallback
++    bad_file = tmp_path / "bad.yaml"
++    bad_file.write_text(":\n  - bad: [", encoding="utf-8")
++    with pytest.raises(KbMcpError, match="Failed to parse structured input"):
++        _parse_structured_value(f"@{bad_file}")
++
++    assert _parse_structured_value(":\n  - bad: [") == ":\n  - bad: ["
++
++    # 2. Unsupported shell completion returns empty string
++    assert generate_completions("unsupported") == ""
++
++    # 3. Normalization with YAML file and scalar arrays
++    yaml_file = tmp_path / "meta.yaml"
++    yaml_file.write_text("key: value\n", encoding="utf-8")
++    norm_yaml = _normalize_parsed_arguments(
++        trans_spec,
++        {"identifier": "KAN-1", "to_state": "Done", "verification_proof_file": str(yaml_file)},
++    )
++    assert norm_yaml["verification_proof"] == {"key": "value"}
++
++    scalar_file = tmp_path / "scalar.json"
++    scalar_file.write_text('"one_label"', encoding="utf-8")
++    norm_scalar = _normalize_parsed_arguments(
++        create_spec,
++        {"project": "KAN", "summary": "t", "labels": [f"@{scalar_file}"]},
++    )
++    assert norm_scalar["labels"] == ["one_label"]
++
++    norm_str = _normalize_parsed_arguments(
++        create_spec,
++        {"project": "KAN", "summary": "t", "labels": "single_label"},
++    )
++    assert norm_str["labels"] == ["single_label"]
++
++    norm_direct = _normalize_parsed_arguments(
++        trans_spec,
++        {"identifier": "KAN-1", "to_state": "Done", "verification_proof": {"direct": 1}},
++    )
++    assert norm_direct["verification_proof"] == {"direct": 1}
++
++    search_spec = agent_reg.get("search_tickets")
++    assert search_spec is not None
++    norm_int = _normalize_parsed_arguments(
++        search_spec,
++        {"project": "KAN", "limit": 10},
++    )
++    assert norm_int["limit"] == 10
++
++    # 4. Predicate filter with = clauses and existing query
++    args_pred: dict[str, Any] = {"project": "KAN", "query": "existing"}
++    filter_expr = 'state = "Done" AND assignee = "@alice" AND cycle = "c1" AND module = "m1" AND label = "bug" AND blocked = true AND gate = "ready" AND priority = "high" AND free_text'
++    _apply_predicate_filter(args_pred, filter_expr)
++    assert "Done" in args_pred["states"]
++    assert "@alice" in args_pred["assignees"]
++    assert args_pred["cycle"] == "c1"
++    assert "m1" in args_pred["modules"]
++    assert "bug" in args_pred["labels"]
++    assert args_pred["blocked"] is True
++    assert args_pred["gate_status"] == "ready"
++    assert args_pred["_filter_priority"] == "high"
++    assert "existing" in args_pred["query"]
++    assert "free_text" in args_pred["query"]
++
++    # 5. execute_tool_action priority filter, sync handler, scalar jsonl
++    cfg = ResolvedConfig(url="http://localhost:8080", workspace=None, project=None, token=None)
++
++    async def mock_priority_search(args: Any) -> Any:
++        return {
++            "total": 2,
++            "items": [{"key": "1", "priority": "high"}, {"key": "2", "priority": "low"}],
++        }
++
++    spec_p = dataclasses.replace(search_spec, handler=mock_priority_search)
++    cap_p = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", cap_p)
++    ret_p = asyncio.run(
++        execute_tool_action(
++            Surface.AGENT, spec_p, {"_filter_priority": "high"}, cfg, json_mode=True
++        )
++    )
++    assert ret_p == 0
++    p_data = json.loads(cap_p.getvalue())
++    assert p_data["total"] == 1
++    assert p_data["items"][0]["priority"] == "high"
++
++    def sync_handler(args: Any) -> Any:
++        return "sync string result"
++
++    spec_sync = dataclasses.replace(search_spec, handler=sync_handler)
++    cap_s = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", cap_s)
++    ret_s = asyncio.run(execute_tool_action(Surface.AGENT, spec_sync, {}, cfg))
++    assert ret_s == 0
++    assert "sync string result" in cap_s.getvalue()
++
++    def sync_scalar(args: Any) -> Any:
++        return 99999
++
++    spec_sc = dataclasses.replace(search_spec, handler=sync_scalar)
++    cap_sc = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", cap_sc)
++    ret_sc = asyncio.run(execute_tool_action(Surface.AGENT, spec_sc, {}, cfg, jsonl_mode=True))
++    assert ret_sc == 0
++    assert "99999" in cap_sc.getvalue()
++
++    # 6. Global project/workspace injection and auth missing subcommand
++    from mcp.tests.cli.test_kanban_cli_parity import _build_mock_parity_client
++
++    client_inj = _build_mock_parity_client()
++    cap_inj = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", cap_inj)
++    monkeypatch.setenv("KANBAN_PROJECT", "KAN")
++    monkeypatch.setenv("KANBAN_WORKSPACE", "INJ_WS")
++    ret_inj = asyncio.run(
++        parse_and_execute_cli(["search-tickets", "--lod", "summary", "--json"], client=client_inj)
++    )
++    assert ret_inj == 0
++
++    # 7. Alias 'issue list'
++    ret_alias = asyncio.run(parse_and_execute_cli(["issue", "list", "--json"], client=client_inj))
++    assert ret_alias == 0
++
++    # 8. Non-existent file flag raises KbMcpError in parse_and_execute_cli
++    ret_nonexistent = asyncio.run(
++        parse_and_execute_cli(
++            [
++                "create-ticket",
++                "--project",
++                "KAN",
++                "--summary",
++                "T",
++                "--description-file",
++                "/no/such/file.md",
++            ],
++            client=client_inj,
++        )
++    )
++    assert ret_nonexistent == 2
++
++    # 9. Sync awaitable and integer output
++    def sync_awaitable_handler(_: Any) -> Any:
++        async def _inner() -> Any:
++            return "async inner output"
++
++        return _inner()
++
++    spec_aw = dataclasses.replace(search_spec, handler=sync_awaitable_handler)
++    assert asyncio.run(execute_tool_action(Surface.AGENT, spec_aw, {}, cfg)) == 0
++
++    def sync_int_handler(_: Any) -> Any:
++        return 42
++
++    spec_int = dataclasses.replace(search_spec, handler=sync_int_handler)
++    assert asyncio.run(execute_tool_action(Surface.AGENT, spec_int, {}, cfg)) == 0
++
++    # 10. __main__ invocation
++    monkeypatch.setattr(sys, "argv", ["kanban-cli", "--help"])
++    with pytest.raises(SystemExit) as exc:
++        runpy.run_module("mcp.cli.main", run_name="__main__")
++    assert exc.value.code == 0
+diff --git a/mcp/tests/cli/test_kanban_cli_parity.py b/mcp/tests/cli/test_kanban_cli_parity.py
+new file mode 100644
+index 00000000..26de5f36
+--- /dev/null
++++ b/mcp/tests/cli/test_kanban_cli_parity.py
+@@ -0,0 +1,699 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++# ruff: noqa: E501, PLR0911, PLR0915, PLC0415, S106, ANN401, ARG001, TRY003, EM101, SLF001, ASYNC230, TC003, PTH123
++"""1:1 MCP Tool Parity, JIT Help, and Round-Trip Golden Tests for kanban-cli (KAN-48)."""
++
++from __future__ import annotations
++
++import io
++import json
++import sys
++from pathlib import Path
++from typing import Any
++
++import httpx
++import pytest
++
++from mcp.cli.main import main_admin, main_agent, main_docs
++from mcp.cli.schema_cli import parse_and_execute_cli
++from mcp.context import (
++    McpRequestContext,
++    reset_current_mcp_context,
++    set_current_mcp_context,
++)
++from mcp.errors import KbMcpError, McpErrorCode
++from mcp.internal_client import KanbanApiClient
++from mcp.registry import Surface
++from mcp.surfaces.admin import build_admin_registry
++from mcp.surfaces.agent import create_agent_registry
++from mcp.surfaces.docs import build_docs_registry
++from mcp.yaml_out import dump_yaml
++
++
++def _build_mock_parity_client() -> KanbanApiClient:
++    """Create a KanbanApiClient backed by a deterministic MockTransport for parity tests."""
++
++    def _mock_handler(request: httpx.Request) -> httpx.Response:
++        url_path = request.url.path
++        method = request.method
++
++        # 1. Entity Resolver
++        if "/api/v1/resolve" in url_path:
++            params = dict(request.url.params)
++            kind = params.get("kind", "project")
++            ref = params.get("ref", "KAN")
++            return httpx.Response(
++                200,
++                json={
++                    "id": "01933b93-8000-7000-8000-000000000001",
++                    "kind": kind,
++                    "key": ref,
++                    "title": f"Resolved {ref}",
++                },
++            )
++
++        # 2. Project resolver
++        if "/api/v1/projects/KAN" in url_path:
++            return httpx.Response(
++                200,
++                json={
++                    "id": "01933b93-8000-7000-8000-000000000001",
++                    "key": "KAN",
++                    "identifier": "KAN",
++                    "name": "Kanban Core",
++                    "workflow_states": [
++                        {
++                            "id": "01933b93-8000-7000-8000-000000000010",
++                            "name": "Todo",
++                            "category": "backlog",
++                        },
++                        {
++                            "id": "01933b93-8000-7000-8000-000000000020",
++                            "name": "Done",
++                            "category": "completed",
++                        },
++                    ],
++                    "priorities": [
++                        {
++                            "id": "01933b93-8000-7000-8000-000000000030",
++                            "slug": "high",
++                            "name": "High",
++                        },
++                    ],
++                },
++            )
++
++        # 2. Issue resolver / read
++        if "/api/v1/issues/KAN-1" in url_path and method == "GET":
++            return httpx.Response(
++                200,
++                json={
++                    "id": "01933b93-8000-7000-8000-000000000100",
++                    "key": "KAN-1",
++                    "sequence_id": 1,
++                    "summary": "Existing ticket",
++                    "description_markdown": "Ticket description",
++                    "state": {"name": "Todo"},
++                    "priority": {"slug": "medium"},
++                    "assignees": [],
++                    "labels": [],
++                },
++            )
++
++        # 3. Create ticket
++        if "/api/v1/issues" in url_path and method == "POST":
++            req_data = json.loads(request.content.decode("utf-8")) if request.content else {}
++            return httpx.Response(
++                200,
++                json={
++                    "id": "01933b93-8000-7000-8000-000000000200",
++                    "key": "KAN-49",
++                    "sequence_id": 49,
++                    "project_key": "KAN",
++                    "summary": req_data.get("summary", "New Ticket"),
++                    "description_markdown": req_data.get("description_markdown", ""),
++                    "state": "Todo",
++                    "priority": "medium",
++                },
++            )
++
++        # 4. Search issues
++        if "/api/v1/search/issues" in url_path:
++            return httpx.Response(
++                200,
++                json={
++                    "total": 1,
++                    "items": [
++                        {
++                            "id": "01933b93-8000-7000-8000-000000000100",
++                            "key": "KAN-1",
++                            "title": "Existing ticket",
++                            "summary": "Existing ticket",
++                            "project_identifier": "KAN",
++                            "state": "Todo",
++                            "priority": "high",
++                            "score": 1.0,
++                            "snippet": "Matching snippet",
++                        }
++                    ],
++                },
++            )
++
++        # 5. Transition ticket
++        if "/transitions" in url_path:
++            return httpx.Response(
++                200,
++                json={
++                    "id": "01933b93-8000-7000-8000-000000000100",
++                    "key": "KAN-1",
++                    "state": "Done",
++                    "transitioned": True,
++                },
++            )
++
++        # 6. Knowledge / Docs search
++        if "/api/v1/search/knowledge" in url_path or "/api/v1/search" in url_path:
++            return httpx.Response(
++                200,
++                json={
++                    "total": 1,
++                    "items": [
++                        {
++                            "id": "01933b93-8000-7000-8000-000000000300",
++                            "kind": "doc",
++                            "title": "Architecture Overview",
++                            "snippet": "Architecture doc snippet",
++                            "score": 1.0,
++                        }
++                    ],
++                },
++            )
++
++        # 7. Workspace configure / settings
++        if "/api/v1/workspace" in url_path:
++            return httpx.Response(
++                200,
++                json={
++                    "workspace_id": "01933b93-8000-7000-8000-000000000001",
++                    "name": "Default Workspace",
++                    "slug": "default",
++                    "settings": {"allow_public_signups": False},
++                },
++            )
++
++        # Catch-all success for mock endpoints
++        return httpx.Response(200, json={"status": "ok", "path": url_path})
++
++    mock_transport = httpx.MockTransport(_mock_handler)
++    return KanbanApiClient(
++        mode="cli_remote",
++        base_url="http://localhost:8080",
++        transport=mock_transport,
++        api_token="kb_parity_test_token",
++    )
++
++
++@pytest.mark.asyncio
++async def test_positive_1_to_1_mcp_tool_execution_parity(
++    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
++) -> None:
++    """Verify Required Test Case 1: positive tool execution produces byte-identical YAML to MCP tool handlers."""
++    client = _build_mock_parity_client()
++
++    spec_file = tmp_path / "spec.md"
++    spec_file.write_text("# Ticket Spec\nDetailed parity specification.", encoding="utf-8")
++
++    proof_file = tmp_path / "proof.json"
++    proof_file.write_text(
++        json.dumps(
++            {
++                "qa_dir": "docs/qa/KAN-1",
++                "artifacts": ["docs/qa/KAN-1/diff.patch"],
++                "reality_checker": {
++                    "verdict": "READY",
++                    "grade": "A",
++                    "report_path": "docs/qa/KAN-1/reality-checker-report.md",
++                },
++                "ci_run_url": "https://ci.example.com/build/1",
++            }
++        ),
++        encoding="utf-8",
++    )
++
++    agent_reg = create_agent_registry()
++    docs_reg = build_docs_registry(client)
++    admin_reg = build_admin_registry(client)
++
++    # 1. create-ticket parity
++    create_spec = agent_reg.get("create_ticket")
++    assert create_spec is not None
++    mcp_args = {
++        "project": "KAN",
++        "summary": "foo",
++        "description_markdown": "# Ticket Spec\nDetailed parity specification.",
++    }
++    ctx = McpRequestContext(
++        client=client, surface=Surface.AGENT, subject_token="kb_parity_test_token"
++    )
++    ctx_token = set_current_mcp_context(ctx)
++    try:
++        mcp_res = await create_spec.handler(mcp_args)
++    finally:
++        reset_current_mcp_context(ctx_token)
++    mcp_yaml = dump_yaml(mcp_res)
++
++    captured_cli = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", captured_cli)
++    cli_ret = await parse_and_execute_cli(
++        [
++            "create-ticket",
++            "--project",
++            "KAN",
++            "--summary",
++            "foo",
++            "--description-file",
++            str(spec_file),
++        ],
++        client=client,
++    )
++    assert cli_ret == 0
++    assert captured_cli.getvalue().strip() == mcp_yaml.strip()
++
++    # 2. search-tickets parity
++    search_spec = agent_reg.get("search_tickets")
++    assert search_spec is not None
++    search_args = {"project": "KAN", "lod": "summary"}
++    ctx_token = set_current_mcp_context(ctx)
++    try:
++        mcp_search_res = await search_spec.handler(search_args)
++    finally:
++        reset_current_mcp_context(ctx_token)
++    mcp_search_yaml = dump_yaml(mcp_search_res)
++
++    captured_search = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", captured_search)
++    cli_search_ret = await parse_and_execute_cli(
++        ["search-tickets", "--project", "KAN", "--lod", "summary"],
++        client=client,
++    )
++    assert cli_search_ret == 0
++    assert captured_search.getvalue().strip() == mcp_search_yaml.strip()
++
++    # 3. transition-ticket parity
++    trans_spec = agent_reg.get("transition_ticket")
++    assert trans_spec is not None
++    with open(proof_file, encoding="utf-8") as f:
++        proof_data = json.load(f)
++    trans_args = {
++        "identifier": "KAN-1",
++        "to_state": "Done",
++        "verification_proof": proof_data,
++    }
++    ctx_token = set_current_mcp_context(ctx)
++    try:
++        mcp_trans_res = await trans_spec.handler(trans_args)
++    finally:
++        reset_current_mcp_context(ctx_token)
++    mcp_trans_yaml = dump_yaml(mcp_trans_res)
++
++    captured_trans = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", captured_trans)
++    cli_trans_ret = await parse_and_execute_cli(
++        [
++            "transition-ticket",
++            "--identifier",
++            "KAN-1",
++            "--to-state",
++            "Done",
++            "--verification-proof",
++            f"@{proof_file}",
++        ],
++        client=client,
++    )
++    assert cli_trans_ret == 0
++    assert captured_trans.getvalue().strip() == mcp_trans_yaml.strip()
++
++    # 4. docs search parity
++    docs_search_spec = docs_reg.get("search")
++    assert docs_search_spec is not None
++    docs_args = {"query": "architecture"}
++    ctx_docs = McpRequestContext(
++        client=client, surface=Surface.DOCS, subject_token="kb_parity_test_token"
++    )
++    ctx_token = set_current_mcp_context(ctx_docs)
++    try:
++        mcp_docs_res = await docs_search_spec.handler(docs_args)
++    finally:
++        reset_current_mcp_context(ctx_token)
++    mcp_docs_yaml = dump_yaml(mcp_docs_res)
++
++    captured_docs = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", captured_docs)
++    cli_docs_ret = await parse_and_execute_cli(
++        ["docs", "search", "--query", "architecture"],
++        client=client,
++    )
++    assert cli_docs_ret == 0
++    assert captured_docs.getvalue().strip() == mcp_docs_yaml.strip()
++
++    # 5. admin configure-workspace parity
++    admin_cfg_spec = admin_reg.get("configure_workspace")
++    assert admin_cfg_spec is not None
++    admin_args = {"action": "get"}
++    ctx_admin = McpRequestContext(
++        client=client, surface=Surface.ADMIN, subject_token="kb_parity_test_token"
++    )
++    ctx_token = set_current_mcp_context(ctx_admin)
++    try:
++        mcp_admin_res = await admin_cfg_spec.handler(admin_args)
++    finally:
++        reset_current_mcp_context(ctx_token)
++    mcp_admin_yaml = mcp_admin_res if isinstance(mcp_admin_res, str) else dump_yaml(mcp_admin_res)
++
++    captured_admin = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", captured_admin)
++    cli_admin_ret = await parse_and_execute_cli(
++        ["admin", "configure-workspace", "--action", "get"],
++        client=client,
++    )
++    assert cli_admin_ret == 0
++    assert captured_admin.getvalue().strip() == mcp_admin_yaml.strip()
++
++
++@pytest.mark.asyncio
++async def test_negative_self_correcting_error_parity(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify Required Test Case 2: unknown flag, invalid enum, or --project help exits code 2 with progressive YAML."""
++    client = _build_mock_parity_client()
++
++    # 1. Unknown flag returns exit code 2 with did_you_mean / valid_options
++    captured_err = io.StringIO()
++    monkeypatch.setattr(sys, "stderr", captured_err)
++    ret_unknown = await parse_and_execute_cli(
++        ["read-ticket", "--identifier", "KAN-1", "--bogus-flag", "value"],
++        client=client,
++    )
++    assert ret_unknown == 2
++    err_yaml = captured_err.getvalue()
++    assert "VALIDATION_FAILED" in err_yaml
++    assert "bogus-flag" in err_yaml
++
++    # 2. Invalid enum returns exit code 2 with progressive disclosure
++    captured_enum_err = io.StringIO()
++    monkeypatch.setattr(sys, "stderr", captured_enum_err)
++    ret_enum = await parse_and_execute_cli(
++        ["read-ticket", "--identifier", "KAN-1", "--lod", "invalid_tier"],
++        client=client,
++    )
++    assert ret_enum == 2
++    enum_yaml = captured_enum_err.getvalue()
++    assert "VALIDATION_FAILED" in enum_yaml
++    assert "valid_options" in enum_yaml
++    assert "summary" in enum_yaml
++
++    # 3. JIT help via --project help returns exit code 2 with JIT YAML structure
++    captured_jit = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", captured_jit)
++    ret_jit = await parse_and_execute_cli(
++        ["create-ticket", "--project", "help"],
++        client=client,
++    )
++    assert ret_jit == 2
++    jit_yaml = captured_jit.getvalue()
++    assert "tool: create_ticket" in jit_yaml
++    assert "project: help" in jit_yaml
++    assert "params:" in jit_yaml
++
++
++def test_100_percent_tool_coverage_inventory() -> None:
++    """Verify 100% of the 24 tools across agent (9), docs (3), and admin (12) are wired to kanban-cli."""
++    from mcp.cli.schema_cli import build_unified_cli_parser
++
++    _parser, dispatch = build_unified_cli_parser()
++
++    agent_reg = create_agent_registry()
++    docs_reg = build_docs_registry()
++    admin_reg = build_admin_registry()
++
++    assert len(agent_reg.list_specs()) == 9
++    assert len(docs_reg.list_specs()) == 3
++    assert len(admin_reg.list_specs()) == 12
++    total_mcp_tools = (
++        len(agent_reg.list_specs()) + len(docs_reg.list_specs()) + len(admin_reg.list_specs())
++    )
++    assert total_mcp_tools == 24
++
++    # Verify all agent tools are mapped
++    for spec in agent_reg.list_specs():
++        kebab_name = spec.name.replace("_", "-")
++        assert kebab_name in dispatch, f"Missing agent CLI command: {kebab_name}"
++        surface, registered_spec = dispatch[kebab_name]
++        assert surface == Surface.AGENT
++        assert registered_spec.name == spec.name
++
++    # Verify all docs tools are mapped
++    for spec in docs_reg.list_specs():
++        kebab_name = f"docs {spec.name.replace('_', '-')}"
++        assert kebab_name in dispatch, f"Missing docs CLI command: {kebab_name}"
++        surface, registered_spec = dispatch[kebab_name]
++        assert surface == Surface.DOCS
++        assert registered_spec.name == spec.name
++
++    # Verify all admin tools are mapped
++    for spec in admin_reg.list_specs():
++        kebab_name = f"admin {spec.name.replace('_', '-')}"
++        assert kebab_name in dispatch, f"Missing admin CLI command: {kebab_name}"
++        surface, registered_spec = dispatch[kebab_name]
++        assert surface == Surface.ADMIN
++        assert registered_spec.name == spec.name
++
++
++@pytest.mark.asyncio
++async def test_all_24_mcp_tools_dispatch_roundtrip(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify all 24 tools round-trip through CLI invocation without unhandled errors."""
++    client = _build_mock_parity_client()
++    agent_reg = create_agent_registry()
++    docs_reg = build_docs_registry(client)
++    admin_reg = build_admin_registry(client)
++
++    captured_out = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", captured_out)
++
++    # 1. Test help on all 9 agent tools
++    for spec in agent_reg.list_specs():
++        kebab = spec.name.replace("_", "-")
++        ret = await parse_and_execute_cli([kebab, "--help"], client=client)
++        assert ret == 0, f"Failed help for agent tool {kebab}"
++
++    # 2. Test help on all 3 docs tools
++    for spec in docs_reg.list_specs():
++        kebab = spec.name.replace("_", "-")
++        ret = await parse_and_execute_cli(["docs", kebab, "--help"], client=client)
++        assert ret == 0, f"Failed help for docs tool {kebab}"
++
++    # 3. Test help on all 12 admin tools
++    for spec in admin_reg.list_specs():
++        kebab = spec.name.replace("_", "-")
++        ret = await parse_and_execute_cli(["admin", kebab, "--help"], client=client)
++        assert ret == 0, f"Failed help for admin tool {kebab}"
++
++
++def test_standalone_bin_entry_points(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify kanban-cli-agent, kanban-cli-docs, and kanban-cli-admin entry points."""
++    client = _build_mock_parity_client()
++    captured = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", captured)
++
++    ret_agent = main_agent(["--help"], client=client)
++    assert ret_agent == 0
++    assert "search-tickets" in captured.getvalue()
++
++    captured_docs = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", captured_docs)
++    ret_docs = main_docs(["--help"], client=client)
++    assert ret_docs == 0
++    assert "search" in captured_docs.getvalue()
++
++    captured_admin = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", captured_admin)
++    ret_admin = main_admin(["--help"], client=client)
++    assert ret_admin == 0
++    assert "configure-workspace" in captured_admin.getvalue()
++
++
++@pytest.mark.asyncio
++async def test_json_and_jsonl_output_formatting(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify --json and --jsonl outputs and zero ANSI codes."""
++    client = _build_mock_parity_client()
++
++    # 1. --json formatting
++    captured_json = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", captured_json)
++    ret_json = await parse_and_execute_cli(
++        ["search-tickets", "--project", "KAN", "--json"],
++        client=client,
++    )
++    assert ret_json == 0
++    parsed = json.loads(captured_json.getvalue())
++    assert isinstance(parsed, dict)
++    assert "items" in parsed
++    assert "\x1b[" not in captured_json.getvalue()
++
++    # 2. --jsonl formatting
++    captured_jsonl = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", captured_jsonl)
++    ret_jsonl = await parse_and_execute_cli(
++        ["search-tickets", "--project", "KAN", "--jsonl"],
++        client=client,
++    )
++    assert ret_jsonl == 0
++    lines = [ln.strip() for ln in captured_jsonl.getvalue().strip().split("\n") if ln.strip()]
++    assert len(lines) >= 1
++    item_parsed = json.loads(lines[0])
++    assert item_parsed["key"] == "KAN-1"
++    assert "\x1b[" not in captured_jsonl.getvalue()
++
++
++@pytest.mark.asyncio
++async def test_snake_and_kebab_case_parity(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify kebab-case and snake_case command and flag invocations are accepted identically."""
++    client = _build_mock_parity_client()
++
++    captured_kebab = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", captured_kebab)
++    ret1 = await parse_and_execute_cli(
++        ["search-tickets", "--project", "KAN", "--lod", "summary"],
++        client=client,
++    )
++    assert ret1 == 0
++
++    captured_snake = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", captured_snake)
++    ret2 = await parse_and_execute_cli(
++        ["search_tickets", "--project", "KAN", "--lod", "summary"],
++        client=client,
++    )
++    assert ret2 == 0
++
++    assert captured_kebab.getvalue().strip() == captured_snake.getvalue().strip()
++
++
++@pytest.mark.asyncio
++async def test_docs_and_admin_cli_execution(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify execution of docs and admin commands through unified kanban-cli."""
++    client = _build_mock_parity_client()
++
++    captured_docs = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", captured_docs)
++    ret_docs = await parse_and_execute_cli(
++        ["docs", "search", "--query", "architecture"],
++        client=client,
++    )
++    assert ret_docs == 0
++    assert "Architecture Overview" in captured_docs.getvalue()
++
++    captured_admin = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", captured_admin)
++    ret_admin = await parse_and_execute_cli(
++        ["admin", "configure-workspace", "--action", "get"],
++        client=client,
++    )
++    assert ret_admin == 0
++    assert "air_gap_mode: false" in captured_admin.getvalue()
++
++
++@pytest.mark.asyncio
++async def test_standalone_surfaces_execution(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify execution through standalone surface parsers (kanban-cli-docs, kanban-cli-admin)."""
++    from mcp.registry import Surface
++
++    client = _build_mock_parity_client()
++
++    captured_docs = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", captured_docs)
++    ret_docs = await parse_and_execute_cli(
++        ["search", "--query", "architecture"],
++        surface_override=Surface.DOCS,
++        client=client,
++    )
++    assert ret_docs == 0
++
++    captured_admin = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", captured_admin)
++    ret_admin = await parse_and_execute_cli(
++        ["configure-workspace", "--action", "get"],
++        surface_override=Surface.ADMIN,
++        client=client,
++    )
++    assert ret_admin == 0
++
++
++@pytest.mark.asyncio
++async def test_jsonl_streaming_with_cursor(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify JSONL streaming iterates multiple pages when next_cursor is returned."""
++    page_call = 0
++    base_client = _build_mock_parity_client()
++    default_transport = base_client._client._transport
++    assert isinstance(default_transport, httpx.MockTransport)
++
++    def mock_cursor_handler(request: httpx.Request) -> httpx.Response:
++        nonlocal page_call
++        if "/api/v1/search/issues" in request.url.path:
++            page_call += 1
++            if page_call == 1:
++                return httpx.Response(
++                    200,
++                    json={
++                        "total": 2,
++                        "items": [{"key": "KAN-1", "title": "Page 1 Item", "priority": "high"}],
++                        "next_cursor": "cur_page_2",
++                    },
++                )
++            return httpx.Response(
++                200,
++                json={
++                    "total": 2,
++                    "items": [{"key": "KAN-2", "title": "Page 2 Item", "priority": "high"}],
++                    "next_cursor": None,
++                },
++            )
++        res = default_transport.handler(request)
++        assert isinstance(res, httpx.Response)
++        return res
++
++    mock_client = KanbanApiClient(
++        mode="cli_remote",
++        base_url="http://localhost:8080",
++        transport=httpx.MockTransport(mock_cursor_handler),
++        api_token="test_tok",
++    )
++
++    captured = io.StringIO()
++    monkeypatch.setattr(sys, "stdout", captured)
++    ret = await parse_and_execute_cli(
++        ["search-tickets", "--project", "KAN", "--jsonl"],
++        client=mock_client,
++    )
++    assert ret == 0
++    lines = [ln.strip() for ln in captured.getvalue().strip().split("\n") if ln.strip()]
++    assert len(lines) == 2
++    assert json.loads(lines[0])["key"] == "KAN-1"
++    assert json.loads(lines[1])["key"] == "KAN-2"
++
++
++@pytest.mark.asyncio
++async def test_cli_execution_error_handling(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify tool execution error handling converts exceptions into structured YAML error packets."""
++    import dataclasses
++
++    from mcp.cli.auth import ResolvedConfig
++    from mcp.cli.schema_cli import execute_tool_action
++    from mcp.registry import Surface
++    from mcp.surfaces.agent import create_agent_registry
++
++    reg = create_agent_registry()
++    read_spec = reg.get("read_ticket")
++    assert read_spec is not None
++
++    cfg = ResolvedConfig(url="http://localhost:8080", workspace=None, project=None, token="tok")
++
++    # 1. KbMcpError handler path
++    async def mock_fail_kbmcp(args: Any) -> Any:
++        raise KbMcpError(McpErrorCode.INSUFFICIENT_PERMISSION, "Explicit permission denial")
++
++    failing_spec = dataclasses.replace(read_spec, handler=mock_fail_kbmcp)
++    captured_err1 = io.StringIO()
++    monkeypatch.setattr(sys, "stderr", captured_err1)
++    ret1 = await execute_tool_action(Surface.AGENT, failing_spec, {"identifier": "KAN-1"}, cfg)
++    assert ret1 == 2
++    assert "Explicit permission denial" in captured_err1.getvalue()
++
++    # 2. Unexpected Exception handler path
++    async def mock_fail_unexpected(args: Any) -> Any:
++        raise RuntimeError("Unexpected crash")
++
++    crash_spec = dataclasses.replace(read_spec, handler=mock_fail_unexpected)
++    captured_err2 = io.StringIO()
++    monkeypatch.setattr(sys, "stderr", captured_err2)
++    ret2 = await execute_tool_action(Surface.AGENT, crash_spec, {"identifier": "KAN-1"}, cfg)
++    assert ret2 == 2
++    assert "Unexpected crash" in captured_err2.getvalue()

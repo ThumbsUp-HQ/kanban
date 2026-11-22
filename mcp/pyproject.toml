@@ -18,6 +18,12 @@ dependencies = [
     "starlette>=0.40.0",
 ]
 
+[project.scripts]
+kanban-cli = "mcp.cli.main:main"
+kanban-cli-agent = "mcp.cli.main:main_agent"
+kanban-cli-docs = "mcp.cli.main:main_docs"
+kanban-cli-admin = "mcp.cli.main:main_admin"
+
 [tool.hatch.build.targets.wheel.sources]
 "" = "mcp"
 

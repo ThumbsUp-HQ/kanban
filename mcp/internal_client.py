@@ -3,8 +3,11 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
+import ipaddress
 import json
+import urllib.parse
 from typing import TYPE_CHECKING, Any, Final, Self
 
 import httpx
@@ -41,22 +44,35 @@ _HTTP_SERVER_ERROR_MIN: Final[int] = 500
 class KanbanApiClient:
     """Internal HTTP/2 mTLS client connecting MCP server to kanban-api."""
 
-    def __init__(
+    def __init__(  # noqa: C901, PLR0912, PLR0913, PLR0915
         self,
-        settings: McpSettings,
+        settings: McpSettings | Any = None,  # noqa: ANN401
         *,
         kanban_app: ASGIApp | None = None,
         transport: httpx.AsyncBaseTransport | None = None,
+        mode: str | None = None,
+        api_token: str | None = None,
+        base_url: str | None = None,
     ) -> None:
-        """Initialize client with mTLS certificates or in-process ASGI transport.
+        """Initialize client with mTLS, ASGI transport, or remote CLI bearer auth.
 
         Raises:
             ValueError: If plaintext http:// base URL is provided in mtls mode,
+                or if plaintext http:// base URL is used for non-loopback hosts,
                 or if kanban_app is omitted in standalone_inprocess mode.
 
         """
-        self.settings: Final[McpSettings] = settings
-        self.response_body_limit_bytes: Final[int] = settings.response_body_limit_bytes
+        active_mode = mode or (getattr(settings, "mode", None) if settings else None) or "mtls"
+        self.mode: Final[str] = active_mode
+        self.settings: Final[Any] = settings
+        self.api_token: Final[str | None] = api_token or (
+            getattr(settings, "api_token", None) if settings else None
+        )
+        self.response_body_limit_bytes: Final[int] = (
+            getattr(settings, "response_body_limit_bytes", _DEFAULT_BODY_LIMIT_BYTES)
+            if settings is not None
+            else _DEFAULT_BODY_LIMIT_BYTES
+        )
 
         timeout = httpx.Timeout(
             connect=_CONNECT_TIMEOUT_S,
@@ -65,7 +81,7 @@ class KanbanApiClient:
             pool=_POOL_TIMEOUT_S,
         )
 
-        if settings.mode == "standalone_inprocess":
+        if active_mode == "standalone_inprocess":
             if transport is not None:
                 active_transport = transport
             elif kanban_app is not None:
@@ -78,28 +94,94 @@ class KanbanApiClient:
                 base_url="http://localhost",
                 timeout=timeout,
             )
-        else:
-            # mTLS mode
-            if settings.kanban_api_base_url.startswith("http://"):
+        elif active_mode == "cli_remote":
+            raw_base_url = (
+                base_url
+                or (getattr(settings, "kanban_api_base_url", None) if settings else None)
+                or "http://localhost:8080"
+            )
+            parsed = urllib.parse.urlparse(raw_base_url)
+            if not parsed.scheme:
+                msg = f"Invalid base URL (missing scheme): '{raw_base_url}'"
+                raise ValueError(msg)
+            if parsed.scheme == "http":
+                host = parsed.hostname or ""
+                is_loopback = False
+                if host in ("localhost", "127.0.0.1", "::1", "[::1]"):
+                    is_loopback = True
+                else:
+                    try:
+                        ip = ipaddress.ip_address(host)
+                        if ip.is_loopback:
+                            is_loopback = True
+                    except ValueError:
+                        is_loopback = False
+                if not is_loopback:
+                    msg = (
+                        "Plaintext http:// base URL is strictly prohibited for remote hosts in "
+                        f"cli_remote mode: '{raw_base_url}' "
+                        "(only loopback localhost, 127.0.0.1, [::1] permitted)"
+                    )
+                    raise ValueError(msg)
+            elif parsed.scheme != "https":
                 msg = (
-                    f"Plaintext http:// base URL is strictly prohibited in mtls mode: "
-                    f"'{settings.kanban_api_base_url}'"
+                    f"Unsupported base URL scheme '{parsed.scheme}' in cli_remote mode: "
+                    f"'{raw_base_url}' (expected http:// for loopback or https:// for remote)"
                 )
                 raise ValueError(msg)
 
+            default_headers: dict[str, str] = {}
+            if self.api_token:
+                default_headers["Authorization"] = f"Bearer {self.api_token}"
+
+            if transport is not None:
+                self._client = httpx.AsyncClient(
+                    transport=transport,
+                    base_url=raw_base_url,
+                    timeout=timeout,
+                    follow_redirects=False,
+                    headers=default_headers,
+                )
+            elif kanban_app is not None:
+                self._client = httpx.AsyncClient(
+                    transport=httpx.ASGITransport(app=kanban_app),
+                    base_url=raw_base_url,
+                    timeout=timeout,
+                    follow_redirects=False,
+                    headers=default_headers,
+                )
+            else:
+                self._client = httpx.AsyncClient(
+                    base_url=raw_base_url,
+                    timeout=timeout,
+                    follow_redirects=False,
+                    headers=default_headers,
+                )
+        else:
+            # mTLS mode
+            api_url = (
+                getattr(settings, "kanban_api_base_url", None) if settings else None
+            ) or "https://127.0.0.1:8443"
+            if api_url.startswith("http://"):
+                msg = f"Plaintext http:// base URL is strictly prohibited in mtls mode: '{api_url}'"
+                raise ValueError(msg)
+
             verify: str | bool = (
-                str(settings.internal_ca_path) if settings.internal_ca_path else True
+                str(settings.internal_ca_path)
+                if getattr(settings, "internal_ca_path", None)
+                else True
             )
             cert = (
                 (str(settings.client_cert_path), str(settings.client_key_path))
-                if settings.client_cert_path and settings.client_key_path
+                if getattr(settings, "client_cert_path", None)
+                and getattr(settings, "client_key_path", None)
                 else None
             )
 
             if transport is not None:
                 self._client = httpx.AsyncClient(
                     transport=transport,
-                    base_url=settings.kanban_api_base_url,
+                    base_url=api_url,
                     timeout=timeout,
                 )
 
@@ -108,15 +190,26 @@ class KanbanApiClient:
                     http2=True,
                     verify=verify,
                     cert=cert,
-                    base_url=settings.kanban_api_base_url,
+                    base_url=api_url,
                     timeout=timeout,
                 )
 
         self._csrf_token: str | None = None
+        self._close_tasks: set[asyncio.Task[None]] = set()
 
     async def aclose(self) -> None:
         """Close the underlying HTTP client session and connections."""
         await self._client.aclose()
+
+    def close(self) -> None:
+        """Close the underlying HTTP client session synchronously."""
+        try:
+            loop = asyncio.get_running_loop()
+            task = loop.create_task(self.aclose())
+            self._close_tasks.add(task)
+            task.add_done_callback(self._close_tasks.discard)
+        except RuntimeError:
+            asyncio.run(self.aclose())
 
     async def __aenter__(self) -> Self:
         """Async context manager entry."""
@@ -135,6 +228,8 @@ class KanbanApiClient:
     async def _ensure_csrf_token(
         self, req_headers: dict[str, str], method: str, path: str = ""
     ) -> None:
+        if self.mode == "cli_remote":
+            return
         unsafe_methods = ("POST", "PUT", "PATCH", "DELETE")
         if (
             method.upper() not in unsafe_methods
@@ -170,6 +265,16 @@ class KanbanApiClient:
         req_headers = dict(headers or {})
         if subject_token:
             req_headers["X-KB-Subject-Token"] = subject_token
+            if self.mode == "cli_remote":
+                req_headers["Authorization"] = f"Bearer {subject_token}"
+        elif (
+            self.mode == "cli_remote"
+            and self.api_token
+            and "Authorization" not in req_headers
+            and "authorization" not in req_headers
+        ):
+            req_headers["Authorization"] = f"Bearer {self.api_token}"
+
         if mcp_session_id:
             req_headers["X-KB-MCP-Session"] = mcp_session_id
 
@@ -203,10 +308,7 @@ class KanbanApiClient:
                 params=params,
                 headers=req_headers,
             )
-            if (
-                self.settings.mode == "standalone_inprocess"
-                and "x-kb-internal-auth" not in req.headers
-            ):
+            if self.mode == "standalone_inprocess" and "x-kb-internal-auth" not in req.headers:
                 req.headers["X-KB-Internal-Auth"] = create_internal_service_auth_header(
                     principal="mcp-gateway",
                     method=req.method,
