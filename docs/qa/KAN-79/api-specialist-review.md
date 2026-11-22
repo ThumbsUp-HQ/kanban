@@ -3,8 +3,9 @@
 - **Ticket:** KAN-79 ([KB-FLOW-METRICS-01]) - Add Native Statistical Flow Telemetry Studio: CFD, Aging WIP, Cycle/Lead Time Percentiles & Monte Carlo Forecasting
 - **Reviewer:** API & Security Specialist Reviewer (`api-spec`)
 - **Review Date:** 2026-11-22
-- **Branch:** `feat/KAN-79-flow-telemetry-studio`
-- **Commit Under Audit:** `94965960` (`feat(analytics): native statistical flow telemetry studio (KAN-79)`)
+- **Branch:** `main` (merged from `feat/KAN-79-flow-telemetry-studio`)
+- **Commit Under Audit (`HEAD`):** `7f9e74d706a147d9e9c7d217dc7a55d06382d492` (`7f9e74d7`)
+- **Base Commit (`main`):** `c6d3d99b6b80a02a91199451423617a297e7c6f2` (`c6d3d99b`)
 - **Target Worktree:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan79-e66cdab7`
 - **Status:** APPROVED
 

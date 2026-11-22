@@ -2,9 +2,15 @@
 
 ## Executive Summary
 Ticket: `KAN-79` (`[KB-FLOW-METRICS-01] Add Native Statistical Flow Telemetry Studio: CFD, Aging WIP, Cycle/Lead Time Percentiles & Monte Carlo Forecasting`)
-Branch: `feat/KAN-79-flow-telemetry-studio`
-Pre-Ticket Base Commit (`main`): `366ff092239c9cb20598003a5de47cd6e80a1db1` (or latest merge head)
-Visual Browser Screenshots: Verified SVG charts with zero inline styles conforming to CSP Section 5.4, accessible screen-reader data table toggles, and Aging WIP card chip indicators.
+Branch: `main` (merged from `feat/KAN-79-flow-telemetry-studio`)
+Merged Commit (`HEAD`): `7f9e74d706a147d9e9c7d217dc7a55d06382d492` (`7f9e74d7`)
+Pre-Ticket Base Commit (`main`): `c6d3d99b6b80a02a91199451423617a297e7c6f2` (`c6d3d99b`)
+Visual Browser Screenshots (`docs/qa/KAN-79/screenshots/`):
+  - `docs/qa/KAN-79/screenshots/01-desktop-light-flow-analytics.png` (`1440x900` Light Mode)
+  - `docs/qa/KAN-79/screenshots/02-desktop-dark-flow-analytics.png` (`1440x900` Dark Mode)
+  - `docs/qa/KAN-79/screenshots/03-tablet-flow-analytics.png` (`768x1024`)
+  - `docs/qa/KAN-79/screenshots/04-mobile-portrait-flow-analytics.png` (`390x844`)
+  - `docs/qa/KAN-79/screenshots/05-mobile-landscape-flow-analytics.png` (`844x390`)
 Status: READY FOR SPECIALIST AND REALITY-CHECKER AUDIT
 
 All requirements outlined in ticket KAN-79 have been implemented, verified, and backed by automated unit and integration tests.
