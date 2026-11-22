@@ -2,8 +2,9 @@
 
 - **Reviewer Persona:** `ux-architect` / `ui-designer` (UI & UX Specialist Reviewer)
 - **Ticket:** `KAN-69` (`[KB-CONCURRENCY-01] Add Atomic Issue Claim Leases, Heartbeats, Monotonic fencing_token CAS & Multi-Worker Gate Claiming`)
-- **Audited Commit (`HEAD`):** `f64cb8b60128700d30a074f9d4a29aec606a4d4e` (`f64cb8b6`)
-- **Audited Branch:** `feat/KAN-69-issue-leases-fencing`
+- **Audited Commit (`HEAD`):** `b1b3d4654ee661168f2306a5afeb0a0973c437f5` (`b1b3d465`)
+- **Base Commit (`main`):** `fdf95ee9c7e1314cf59df4ac9499769fa192c930` (`fdf95ee9`)
+- **Audited Branch:** `main` (merged from `feat/KAN-69-issue-leases-fencing`)
 - **Reviewed Artifacts:**
   - `docs/qa/KAN-69/git-diff.patch`
   - `docs/qa/KAN-69/contract-sample.json`

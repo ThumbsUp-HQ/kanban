@@ -3,8 +3,11 @@
 ## Overview
 - Ticket ID: KAN-69
 - Spec: [KB-CONCURRENCY-01] Add Atomic Issue Claim Leases, Heartbeats, Monotonic fencing_token CAS & Multi-Worker Gate Claiming
-- Branch: `feat/KAN-69-issue-leases-fencing`
-- Workspace: `/home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan69-631e67fb`
+- Branch: `main` (merged from `feat/KAN-69-issue-leases-fencing`)
+- Merged Commit (`HEAD`): `b1b3d4654ee661168f2306a5afeb0a0973c437f5` (`b1b3d465`)
+- Pre-Ticket Base Commit (`main`): `fdf95ee9c7e1314cf59df4ac9499769fa192c930` (`fdf95ee9`)
+- Visual Browser Screenshots: `N/A - Non-UI Ticket`
+- Workspace: `/home/adamoutler/kanban`
 
 ## Forensic Summary of Solved Problems
 

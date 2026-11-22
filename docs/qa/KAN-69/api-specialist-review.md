@@ -3,8 +3,9 @@
 - **Ticket:** KAN-69 ([KB-CONCURRENCY-01]) - Add Atomic Issue Claim Leases, Heartbeats, Monotonic fencing_token CAS & Multi-Worker Gate Claiming
 - **Reviewer:** API & Security Specialist Reviewer (`api-spec`)
 - **Review Date:** 2026-11-22
-- **Branch:** `feat/KAN-69-issue-leases-fencing`
-- **Commit Under Audit:** `9b39a79e` (`feat(concurrency): implement atomic issue claim leases, heartbeats, monotonic fencing CAS and multi-worker gate claiming (KAN-69)`)
+- **Branch:** `main` (merged from `feat/KAN-69-issue-leases-fencing`)
+- **Commit Under Audit (`HEAD`):** `b1b3d4654ee661168f2306a5afeb0a0973c437f5` (`b1b3d465`)
+- **Base Commit (`main`):** `fdf95ee9c7e1314cf59df4ac9499769fa192c930` (`fdf95ee9`)
 - **Target Worktree:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan69-631e67fb`
 - **Status:** APPROVED
 
