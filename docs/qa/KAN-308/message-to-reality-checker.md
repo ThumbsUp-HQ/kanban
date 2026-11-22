@@ -2,9 +2,15 @@
 
 ## Architectural Context & Specialist Gate Applicability
 
+- **Merged `main` Commit SHA:** `4265838675b646953252b93d548b21636adf0aeb` (`42658386`, merging `feat/KAN-308-issues-state-filter` at `f50f76ddb9198d63643cd0dccf89baa30421b15b`)
 - **Pure Frontend UI Ticket:** `KAN-308` modifies only frontend TypeScript/React components, CSS tokens, and Vitest unit tests under `kanban/web/src/features/{views,list,table}/`.
 - **`api-specialist-review.md`:** **`N/A - Pure Frontend UI Ticket (Zero REST/MCP/DB Schema Changes)`**. No Python backend routes, OpenAPI schemas, MCP tools, or database migrations were added or modified.
-- **`ui-specialist-review.md` & Responsive Playwright Screenshots:** Audited by `@ui-spec` (`docs/qa/KAN-308/ui-specialist-review.md`) and captured against a real local hermetic container across Desktop (`1440x900` Light & Dark), Tablet (`768x1024`), Mobile Portrait (`390x844`), and Mobile Landscape (`844x390`) in `docs/qa/KAN-308/screenshots/*.png` by `@merge-ci`.
+- **`ui-specialist-review.md` & Responsive Playwright Screenshots:** Audited by `@ui-spec` (`docs/qa/KAN-308/ui-specialist-review.md`) and captured against a real local hermetic container (`kanban-liveqa-1` on `http://localhost:18961`) across Desktop (`1440x900` Light & Dark), Tablet (`768x1024`), Mobile Portrait (`390x844`), and Mobile Landscape (`844x390`) in `docs/qa/KAN-308/screenshots/`:
+  - `docs/qa/KAN-308/screenshots/01-desktop-light-state-filter-popover.png`
+  - `docs/qa/KAN-308/screenshots/02-desktop-dark-state-filter-popover.png`
+  - `docs/qa/KAN-308/screenshots/03-tablet-state-filter-popover.png`
+  - `docs/qa/KAN-308/screenshots/04-mobile-portrait-state-filter-popover.png`
+  - `docs/qa/KAN-308/screenshots/05-mobile-landscape-state-filter-popover.png`
 
 ---
 

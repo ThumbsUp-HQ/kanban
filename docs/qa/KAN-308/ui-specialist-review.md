@@ -2,12 +2,18 @@
 
 - **Reviewer Persona:** `ux-architect` / `ui-designer` (UI/UX Specialist Reviewer)
 - **Ticket:** `KAN-308` (`[KB-ISSUES-FILTER-01] Searchable State Checkboxes Filter with Cookie Persistence, Auto-Hide Completed/Cancelled via Search, and Default Actionable Updated-Desc Issues View`)
-- **Audited Commit (`HEAD`):** `f50f76ddb9198d63643cd0dccf89baa30421b15b` (`f50f76dd`)
-- **Audited Branch:** `feat/KAN-308-issues-state-filter`
+- **Audited Commit (`HEAD`):** `4265838675b646953252b93d548b21636adf0aeb` (`42658386`, merging `f50f76ddb9198d63643cd0dccf89baa30421b15b`)
+- **Audited Branch:** `main` (merged from `feat/KAN-308-issues-state-filter`)
 - **Reviewed Artifacts:**
+  - `docs/qa/KAN-308/git-diff.patch`
   - `docs/qa/KAN-308/message-to-reality-checker.md`
   - `docs/qa/KAN-308/unit-test-results.txt`
   - `docs/qa/KAN-308/build-check.txt`
+  - `docs/qa/KAN-308/screenshots/01-desktop-light-state-filter-popover.png`
+  - `docs/qa/KAN-308/screenshots/02-desktop-dark-state-filter-popover.png`
+  - `docs/qa/KAN-308/screenshots/03-tablet-state-filter-popover.png`
+  - `docs/qa/KAN-308/screenshots/04-mobile-portrait-state-filter-popover.png`
+  - `docs/qa/KAN-308/screenshots/05-mobile-landscape-state-filter-popover.png`
 - **Reviewed Frontend Components & Modules:**
   - `kanban/web/src/features/views/StateFilterPopover.tsx`
   - `kanban/web/src/features/views/StateFilterPopover.test.tsx`
