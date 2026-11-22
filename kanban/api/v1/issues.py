@@ -5,7 +5,7 @@ Covers CRUD, keyset listing, description ETag concurrency, and secret redaction 
 
 from __future__ import annotations
 
-from typing import Annotated
+from typing import Annotated, Literal
 
 from fastapi import APIRouter, Depends, Header, Query, Request, Response
 from sqlalchemy.ext.asyncio import AsyncSession  # Required by FastAPI at runtime
@@ -26,6 +26,7 @@ router = APIRouter(tags=["issues"])
 
 Caller = Annotated[PrincipalContext, Depends(get_principal)]
 Session = Annotated[AsyncSession, Depends(get_rls_session)]
+StateGroupFilter = Literal["backlog", "unstarted", "started", "completed", "cancelled"]
 
 
 @router.post(
@@ -141,6 +142,10 @@ async def list_issues(  # noqa: PLR0913
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
     include_archived: Annotated[bool, Query()] = False,
     only_archived: Annotated[bool, Query()] = False,
+    state_group: Annotated[
+        list[StateGroupFilter] | None,
+        Query(description="Optional workflow state_group filter"),
+    ] = None,
 ) -> IssueList:
     """List RLS-visible issues within a project using keyset pagination."""
     if not include_archived and only_archived:
@@ -159,6 +164,7 @@ async def list_issues(  # noqa: PLR0913
             limit=limit,
             include_archived=include_archived,
             only_archived=only_archived,
+            state_group=state_group,
         )
         await taint_recorder.record_project_ids([project_ref])
         return res

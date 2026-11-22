@@ -1205,6 +1205,7 @@ async def list_issues(  # noqa: PLR0913
     limit: int,
     include_archived: bool = False,
     only_archived: bool = False,
+    state_group: Sequence[str] | None = None,
 ) -> IssueList:
     """List RLS-visible issues within a project in descending sequence order."""
     project = await get_project_or_404(session, caller, project_ref)
@@ -1224,6 +1225,16 @@ async def list_issues(  # noqa: PLR0913
         stmt = stmt.where(ObjectRecord.archived_at.is_not(None))
     elif not include_archived:
         stmt = stmt.where(ObjectRecord.archived_at.is_(None))
+
+    if state_group:
+        stmt = stmt.where(
+            Issue.state_id.in_(
+                select(WorkflowState.id).where(
+                    WorkflowState.project_id == project.id,
+                    WorkflowState.state_group.in_(list(state_group)),
+                )
+            )
+        )
 
     if cursor is not None:
         last_seq = decode_issue_cursor(cursor)
