@@ -2,7 +2,7 @@
 // Apache-2.0 License. See LICENSE for details.
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router';
 import { McpAccessStudio } from '../McpAccessStudio';
@@ -962,6 +962,144 @@ describe('WorkloadFederationSection (KAN-74)', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
       expect(screen.getByText('GitHub Actions Main CI')).toBeDefined();
+    });
+  });
+
+  it('covers policy editing, disabled/empty-CIDR rendering, modal cancel/close, error banners, and AAL2 step-up replay across mutations', async () => {
+    const disabledPolicy: WorkloadIdentityPolicyItem = {
+      ...samplePolicy,
+      id: 'pol-disabled',
+      name: 'Disabled Runner',
+      description: null,
+      allowed_cidrs: [],
+      is_enabled: false,
+    };
+
+    let mode: 'normal' | 'aal2' | 'err' | 'str_err' = 'normal';
+    const apiSpy = vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      if (mode === 'aal2' && method !== 'GET') {
+        mode = 'normal';
+        throw new ApiProblem(403, { code: 'AAL2_STALE' });
+      }
+      if (mode === 'err' && method !== 'GET') {
+        throw new Error('Mutation failed');
+      }
+      if (mode === 'str_err' && method !== 'GET') {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw 'Non-Error rejection';
+      }
+      if (method === 'GET' && (path as string) === '/api/v1/admin/workload-identities') {
+        return [samplePolicy, disabledPolicy];
+      }
+      return { ...samplePolicy };
+    });
+
+    render(<WorkloadFederationSection isAdmin={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('policy-status-pol-disabled').textContent).toBe('Disabled');
+      expect(screen.getByText('Any')).toBeDefined();
+    });
+
+    // Open create modal, test field changes and cancel button
+    fireEvent.click(screen.getByTestId('add-workload-policy-btn'));
+    fireEvent.change(screen.getByTestId('policy-description-input'), { target: { value: 'Desc' } });
+    fireEvent.change(screen.getByTestId('policy-surface-select'), { target: { value: 'docs' } });
+    fireEvent.change(screen.getByTestId('policy-cap-mask-input'), { target: { value: '' } });
+    fireEvent.change(screen.getByTestId('policy-cidrs-input'), { target: { value: '10.0.0.0/8, 192.168.1.0/24' } });
+    fireEvent.change(screen.getByTestId('policy-ttl-input'), { target: { value: '' } });
+    fireEvent.click(screen.getByTestId('policy-cancel-btn'));
+    expect(screen.queryByTestId('workload-policy-modal')).toBeNull();
+
+    // Open edit modal on disabledPolicy (description is null -> '')
+    fireEvent.click(screen.getByTestId('edit-policy-btn-pol-disabled'));
+    expect(screen.getByText('Edit Workload Policy')).toBeDefined();
+    fireEvent.change(screen.getByTestId('policy-description-input'), { target: { value: 'Updated desc' } });
+
+    // Submit with AAL2_STALE challenge, then complete step-up
+    mode = 'aal2';
+    fireEvent.click(screen.getByTestId('policy-submit-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('mfa-success-btn'));
+    await waitFor(() => {
+      expect(apiSpy).toHaveBeenCalledWith(
+        'PATCH',
+        '/api/v1/admin/workload-identities/pol-disabled',
+        expect.any(Object),
+      );
+    });
+
+    // Submit error & non-Error branches
+    fireEvent.click(screen.getByTestId('edit-policy-btn-pol-1'));
+    mode = 'err';
+    fireEvent.click(screen.getByTestId('policy-submit-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('workload-error-banner').textContent).toContain('Mutation failed');
+    });
+    mode = 'str_err';
+    fireEvent.click(screen.getByTestId('policy-submit-btn'));
+    await waitFor(() => {
+      expect(screen.getByTestId('workload-error-banner').textContent).toContain('Failed to save workload policy');
+    });
+    // Close modal via 'x' button
+    fireEvent.click(within(screen.getByTestId('workload-policy-modal')).getByText('x'));
+
+    // Toggle with AAL2, Error, and non-Error
+    mode = 'aal2';
+    fireEvent.click(screen.getByTestId('toggle-policy-btn-pol-disabled'));
+    await waitFor(() => {
+      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+    });
+    fireEvent.click(screen.getByTestId('mfa-success-btn'));
+
+    mode = 'err';
+    fireEvent.click(screen.getByTestId('toggle-policy-btn-pol-disabled'));
+    await waitFor(() => {
+      expect(screen.getByTestId('workload-error-banner').textContent).toContain('Mutation failed');
+    });
+    mode = 'str_err';
+    fireEvent.click(screen.getByTestId('toggle-policy-btn-pol-disabled'));
+    await waitFor(() => {
+      expect(screen.getByTestId('workload-error-banner').textContent).toContain('Failed to toggle policy');
+    });
+
+    // Delete with AAL2, Error, and non-Error
+    mode = 'aal2';
+    fireEvent.click(screen.getByTestId('delete-policy-btn-pol-disabled'));
+    await waitFor(() => {
+      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+    });
+    // Close AAL2 modal via 'x' button
+    fireEvent.click(within(screen.getByTestId('aal2-modal-card')).getByText('x'));
+    expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
+
+    mode = 'err';
+    fireEvent.click(screen.getByTestId('delete-policy-btn-pol-disabled'));
+    await waitFor(() => {
+      expect(screen.getByTestId('workload-error-banner').textContent).toContain('Mutation failed');
+    });
+    mode = 'str_err';
+    fireEvent.click(screen.getByTestId('delete-policy-btn-pol-disabled'));
+    await waitFor(() => {
+      expect(screen.getByTestId('workload-error-banner').textContent).toContain('Failed to delete policy');
+    });
+  });
+
+  it('displays error banner when initial fetchPolicies fails', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockRejectedValueOnce(new Error('Load error'));
+    const { unmount } = render(<WorkloadFederationSection isAdmin={true} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('workload-error-banner').textContent).toContain('Load error');
+    });
+    unmount();
+
+    vi.spyOn(clientModule, 'apiFetch').mockRejectedValueOnce('String load error');
+    render(<WorkloadFederationSection isAdmin={true} />);
+    await waitFor(() => {
+      expect(screen.getByTestId('workload-error-banner').textContent).toContain('Failed to load workload policies');
     });
   });
 });

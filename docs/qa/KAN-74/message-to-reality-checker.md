@@ -48,7 +48,7 @@ Ticket KAN-74 implements headless Workload Identity Federation and RFC 8693 OAut
 
 | Definition of Done Requirement | Status | Primary Evidence File | Verification Details |
 | :--- | :---: | :--- | :--- |
-| **Alembic Migration & RLS Models** | PASS | `database/migrations/versions/p6_08_workload_identity_policies.py` | 68 migrations valid, single-head chain, RLS enabled and forced, foreign keys cascade. |
+| **Alembic Migration & RLS Models** | PASS | `database/migrations/versions/p6_08_workload_identity_policies.py` | 70 migrations valid, single-head chain, RLS enabled and forced, foreign keys cascade. |
 | **Workload JWT Validator** | PASS | `kanban/auth/oidc/workload.py` | 96% branch coverage, rejection of unsigned/HMAC, SSRF-safe discovery, JTI replay prevention. |
 | **RFC 8693 Token Exchange** | PASS | `kanban/api/v1/oauth.py` | Grant type supported, ES256 minted, CIDR enforced, ledger event logged. |
 | **Admin CRUD Endpoints** | PASS | `kanban/api/v1/admin/workload_identities.py` | Full CRUD operations, AAL2 requirement enforced via `require_admin_aal2`. |
@@ -68,3 +68,10 @@ Ticket KAN-74 implements headless Workload Identity Federation and RFC 8693 OAut
 3. **`build-check.txt`:** Verification logs of `make check` (ruff, mypy, lint-imports, check-migrations, check_no_dashes) and frontend typecheck, lint, and build.
 4. **`contract-sample.json`:** Canonical JSON samples of policy creation, RFC 8693 token exchange, replay rejection, and MCP CredentialBoundary.
 5. **`changed-files-manifest.txt`:** Cryptographic SHA-256 checksum manifest of all files touched in this ticket.
+
+## Live Zero-Mock Playwright Screenshots (Captured on main @ 6ce4a18a04a1a561335fa57f4ee28bd1051d0d92)
+- `docs/qa/KAN-74/screenshots/01-desktop-light-mcp-workload-studio.png` (1440x900 Light)
+- `docs/qa/KAN-74/screenshots/02-desktop-dark-mcp-workload-studio.png` (1440x900 Dark)
+- `docs/qa/KAN-74/screenshots/03-tablet-mcp-workload-studio.png` (768x1024 Tablet)
+- `docs/qa/KAN-74/screenshots/04-mobile-portrait-mcp-workload-studio.png` (390x844 Mobile Portrait)
+- `docs/qa/KAN-74/screenshots/05-mobile-landscape-mcp-workload-studio.png` (844x390 Mobile Landscape)

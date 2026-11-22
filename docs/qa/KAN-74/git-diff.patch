@@ -1,8 +1,158 @@
+diff --git a/database/migrations/sql/p6_08_workload_identity_policies.down.sql b/database/migrations/sql/p6_08_workload_identity_policies.down.sql
+new file mode 100644
+index 00000000..787c0bd4
+--- /dev/null
++++ b/database/migrations/sql/p6_08_workload_identity_policies.down.sql
+@@ -0,0 +1,5 @@
++-- Copyright 2026 Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++DROP TABLE IF EXISTS workload_jti_replays CASCADE;
++DROP TABLE IF EXISTS workload_identity_policies CASCADE;
+diff --git a/database/migrations/sql/p6_08_workload_identity_policies.up.sql b/database/migrations/sql/p6_08_workload_identity_policies.up.sql
+new file mode 100644
+index 00000000..df9a54d2
+--- /dev/null
++++ b/database/migrations/sql/p6_08_workload_identity_policies.up.sql
+@@ -0,0 +1,99 @@
++-- Copyright 2026 Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++-- 1. Create workload_identity_policies table
++CREATE TABLE IF NOT EXISTS workload_identity_policies (
++    id UUID PRIMARY KEY DEFAULT uuidv7(),
++    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
++    name TEXT NOT NULL CHECK (char_length(btrim(name)) BETWEEN 1 AND 120),
++    description TEXT,
++    issuer TEXT NOT NULL CHECK (char_length(btrim(issuer)) BETWEEN 1 AND 500),
++    client_id TEXT NOT NULL CHECK (char_length(btrim(client_id)) BETWEEN 1 AND 255),
++    subject_pattern TEXT NOT NULL CHECK (char_length(btrim(subject_pattern)) BETWEEN 1 AND 500),
++    required_claims_json JSONB NOT NULL DEFAULT '{}'::jsonb,
++    surface TEXT NOT NULL CHECK (surface IN ('agent', 'docs')),
++    scopes TEXT[] NOT NULL DEFAULT '{}'::text[],
++    allowed_project_ids UUID[] DEFAULT '{}'::uuid[],
++    capability_mask INTEGER NOT NULL DEFAULT 255 CHECK (capability_mask BETWEEN 0 AND 255),
++    allowed_cidrs TEXT[] DEFAULT '{}'::text[],
++    max_ttl_seconds INTEGER NOT NULL DEFAULT 3600 CHECK (max_ttl_seconds BETWEEN 60 AND 86400),
++    is_enabled BOOLEAN NOT NULL DEFAULT true,
++    created_by_id UUID REFERENCES principals(id) ON DELETE SET NULL,
++    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
++    updated_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp()
++);
++
++CREATE INDEX IF NOT EXISTS idx_workload_identity_policies_ws ON workload_identity_policies (workspace_id);
++CREATE INDEX IF NOT EXISTS idx_workload_identity_policies_issuer ON workload_identity_policies (issuer);
++
++ALTER TABLE workload_identity_policies ENABLE ROW LEVEL SECURITY;
++ALTER TABLE workload_identity_policies FORCE ROW LEVEL SECURITY;
++
++CREATE POLICY workload_identity_policies_select_rls ON workload_identity_policies
++    FOR SELECT USING (
++        app_current_workspace_id() IS NULL
++        OR workspace_id = app_current_workspace_id()
++    );
++
++CREATE POLICY workload_identity_policies_insert_rls ON workload_identity_policies
++    FOR INSERT WITH CHECK (
++        app_current_workspace_id() IS NULL
++        OR workspace_id = app_current_workspace_id()
++    );
++
++CREATE POLICY workload_identity_policies_update_rls ON workload_identity_policies
++    FOR UPDATE USING (
++        app_current_workspace_id() IS NULL
++        OR workspace_id = app_current_workspace_id()
++    ) WITH CHECK (
++        app_current_workspace_id() IS NULL
++        OR workspace_id = app_current_workspace_id()
++    );
++
++CREATE POLICY workload_identity_policies_delete_rls ON workload_identity_policies
++    FOR DELETE USING (
++        app_current_workspace_id() IS NULL
++        OR workspace_id = app_current_workspace_id()
++    );
++
++GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE workload_identity_policies TO kanban_app;
++GRANT SELECT ON TABLE workload_identity_policies TO app_rls_reader;
++ALTER TABLE workload_identity_policies OWNER TO kanban_migrator;
++
++-- 2. Create workload_jti_replays table
++CREATE TABLE IF NOT EXISTS workload_jti_replays (
++    id UUID PRIMARY KEY DEFAULT uuidv7(),
++    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,
++    policy_id UUID NOT NULL REFERENCES workload_identity_policies(id) ON DELETE CASCADE,
++    jti TEXT NOT NULL CHECK (char_length(btrim(jti)) BETWEEN 1 AND 500),
++    expires_at TIMESTAMPTZ NOT NULL,
++    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),
++    CONSTRAINT uq_workload_jti_replays_policy_jti UNIQUE (policy_id, jti)
++);
++
++CREATE INDEX IF NOT EXISTS idx_workload_jti_replays_expires_at ON workload_jti_replays (expires_at);
++
++ALTER TABLE workload_jti_replays ENABLE ROW LEVEL SECURITY;
++ALTER TABLE workload_jti_replays FORCE ROW LEVEL SECURITY;
++
++CREATE POLICY workload_jti_replays_select_rls ON workload_jti_replays
++    FOR SELECT USING (
++        app_current_workspace_id() IS NULL
++        OR workspace_id = app_current_workspace_id()
++    );
++
++CREATE POLICY workload_jti_replays_insert_rls ON workload_jti_replays
++    FOR INSERT WITH CHECK (
++        app_current_workspace_id() IS NULL
++        OR workspace_id = app_current_workspace_id()
++    );
++
++CREATE POLICY workload_jti_replays_delete_rls ON workload_jti_replays
++    FOR DELETE USING (
++        app_current_workspace_id() IS NULL
++        OR workspace_id = app_current_workspace_id()
++    );
++
++GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE workload_jti_replays TO kanban_app;
++GRANT SELECT ON TABLE workload_jti_replays TO app_rls_reader;
++ALTER TABLE workload_jti_replays OWNER TO kanban_migrator;
+diff --git a/database/migrations/versions/p6_08_workload_identity_policies.py b/database/migrations/versions/p6_08_workload_identity_policies.py
+new file mode 100644
+index 00000000..fd8b6dba
+--- /dev/null
++++ b/database/migrations/versions/p6_08_workload_identity_policies.py
+@@ -0,0 +1,28 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Workload identity policies and JTI replay prevention (KB-AUTH-OIDC-EXCHANGE-01, KAN-74).
++
++Revision ID: p6_08_workload_identity_policies
++Revises: p6_07_content_provenance_and_taint
++Create Date: 2026-11-22 21:00:00.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p6_08_workload_identity_policies"
++down_revision: str | None = "p6_07_content_provenance_and_taint"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply p6_08_workload_identity_policies migration."""
++    execute_sql_file("p6_08_workload_identity_policies.up.sql")
++
++
++def downgrade() -> None:
++    """Revert p6_08_workload_identity_policies migration."""
++    execute_sql_file("p6_08_workload_identity_policies.down.sql")
 diff --git a/database/models/__init__.py b/database/models/__init__.py
-index 3625f0b4..c4ba9ccd 100644
+index 4e24dcf0..d5b49235 100644
 --- a/database/models/__init__.py
 +++ b/database/models/__init__.py
-@@ -94,6 +94,10 @@ from database.models.workflow import (
+@@ -95,6 +95,10 @@ from database.models.workflow import (
      WorkflowTransitionExecution,
      WorkflowTransitionHook,
  )
@@ -13,7 +163,7 @@ index 3625f0b4..c4ba9ccd 100644
  from database.models.workspace_settings import WorkspaceSettings
  
  __all__ = [
-@@ -181,6 +185,8 @@ __all__ = [
+@@ -183,6 +187,8 @@ __all__ = [
      "WorkflowState",
      "WorkflowTransitionExecution",
      "WorkflowTransitionHook",
@@ -22,6 +172,426 @@ index 3625f0b4..c4ba9ccd 100644
      "Workspace",
      "WorkspaceSettings",
  ]
+diff --git a/database/models/workload_identity.py b/database/models/workload_identity.py
+new file mode 100644
+index 00000000..c64d83ca
+--- /dev/null
++++ b/database/models/workload_identity.py
+@@ -0,0 +1,173 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""SQLAlchemy models for workload identity policies and JTI replays.
++
++KB-AUTH-OIDC-EXCHANGE-01 (KAN-74).
++"""
++
++from __future__ import annotations
++
++import uuid
++from datetime import datetime  # noqa: TC003  # Runtime import required for SQLAlchemy Mapped[datetime]
++from typing import Any
++
++from sqlalchemy import (
++    Boolean,
++    DateTime,
++    ForeignKey,
++    Integer,
++    String,
++    Text,
++    UniqueConstraint,
++    func,
++    text,
++)
++from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
++from sqlalchemy.orm import Mapped, mapped_column, relationship
++
++from database.models.base import Base
++
++
++class WorkloadIdentityPolicy(Base):
++    """Workload identity federation policy mapping external OIDC claims to MCP boundaries."""
++
++    __tablename__ = "workload_identity_policies"
++
++    id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        primary_key=True,
++        default=uuid.uuid4,
++        server_default=func.uuidv7(),
++    )
++    workspace_id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("workspaces.id", ondelete="CASCADE"),
++        nullable=False,
++        index=True,
++    )
++    name: Mapped[str] = mapped_column(
++        String(120),
++        nullable=False,
++    )
++    description: Mapped[str | None] = mapped_column(
++        Text,
++        nullable=True,
++    )
++    issuer: Mapped[str] = mapped_column(
++        String(500),
++        nullable=False,
++        index=True,
++    )
++    client_id: Mapped[str] = mapped_column(
++        String(255),
++        nullable=False,
++    )
++    subject_pattern: Mapped[str] = mapped_column(
++        String(500),
++        nullable=False,
++    )
++    required_claims_json: Mapped[dict[str, Any]] = mapped_column(
++        JSONB,
++        nullable=False,
++        server_default=text("'{}'::jsonb"),
++    )
++    surface: Mapped[str] = mapped_column(
++        String(16),
++        nullable=False,
++    )
++    scopes: Mapped[list[str]] = mapped_column(
++        ARRAY(Text),
++        nullable=False,
++        server_default=text("'{}'::text[]"),
++    )
++    allowed_project_ids: Mapped[list[uuid.UUID] | None] = mapped_column(
++        ARRAY(UUID(as_uuid=True)),
++        nullable=True,
++        server_default=text("'{}'::uuid[]"),
++    )
++    capability_mask: Mapped[int] = mapped_column(
++        Integer,
++        nullable=False,
++        server_default="255",
++    )
++    allowed_cidrs: Mapped[list[str] | None] = mapped_column(
++        ARRAY(Text),
++        nullable=True,
++        server_default=text("'{}'::text[]"),
++    )
++    max_ttl_seconds: Mapped[int] = mapped_column(
++        Integer,
++        nullable=False,
++        server_default="3600",
++    )
++    is_enabled: Mapped[bool] = mapped_column(
++        Boolean,
++        nullable=False,
++        server_default=text("true"),
++    )
++    created_by_id: Mapped[uuid.UUID | None] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("principals.id", ondelete="SET NULL"),
++        nullable=True,
++    )
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True),
++        nullable=False,
++        server_default=text("clock_timestamp()"),
++    )
++    updated_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True),
++        nullable=False,
++        server_default=text("clock_timestamp()"),
++    )
++
++    replays: Mapped[list[WorkloadJtiReplay]] = relationship(
++        "WorkloadJtiReplay",
++        back_populates="policy",
++        cascade="all, delete-orphan",
++    )
++
++
++class WorkloadJtiReplay(Base):
++    """Replay prevention record for external OIDC JWT IDs."""
++
++    __tablename__ = "workload_jti_replays"
++    __table_args__ = (
++        UniqueConstraint("policy_id", "jti", name="uq_workload_jti_replays_policy_jti"),
++    )
++
++    id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        primary_key=True,
++        default=uuid.uuid4,
++        server_default=func.uuidv7(),
++    )
++    workspace_id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("workspaces.id", ondelete="CASCADE"),
++        nullable=False,
++    )
++    policy_id: Mapped[uuid.UUID] = mapped_column(
++        UUID(as_uuid=True),
++        ForeignKey("workload_identity_policies.id", ondelete="CASCADE"),
++        nullable=False,
++    )
++    jti: Mapped[str] = mapped_column(
++        String(500),
++        nullable=False,
++    )
++    expires_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True),
++        nullable=False,
++        index=True,
++    )
++    created_at: Mapped[datetime] = mapped_column(
++        DateTime(timezone=True),
++        nullable=False,
++        server_default=text("clock_timestamp()"),
++    )
++
++    policy: Mapped[WorkloadIdentityPolicy] = relationship(
++        "WorkloadIdentityPolicy",
++        back_populates="replays",
++    )
+diff --git a/kanban/api/v1/admin/workload_identities.py b/kanban/api/v1/admin/workload_identities.py
+new file mode 100644
+index 00000000..d89aed21
+--- /dev/null
++++ b/kanban/api/v1/admin/workload_identities.py
+@@ -0,0 +1,235 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""REST API router for Workload Identity Federation policies (KB-AUTH-OIDC-EXCHANGE-01, KAN-74)."""
++
++from __future__ import annotations
++
++import uuid  # noqa: TC003
++from datetime import datetime  # noqa: TC003
++from typing import Annotated, Any, Literal
++
++from fastapi import APIRouter, Depends, Query, Response, status
++from pydantic import BaseModel, ConfigDict, Field
++from sqlalchemy import select
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from database.models.workload_identity import WorkloadIdentityPolicy
++from kanban.api.deps import PrincipalContext, get_rls_session
++from kanban.api.problems import not_found
++from kanban.auth.mfa.policy import require_admin_aal2
++
++router = APIRouter(
++    prefix="/admin/workload-identities",
++    tags=["admin-workload-identities"],
++    dependencies=[Depends(require_admin_aal2)],
++)
++
++Caller = Annotated[PrincipalContext, Depends(require_admin_aal2)]
++Session = Annotated[AsyncSession, Depends(get_rls_session)]
++
++
++class WorkloadPolicyCreateRequest(BaseModel):
++    """Payload for creating a workload identity policy."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    name: str = Field(min_length=1, max_length=120)
++    description: str | None = None
++    issuer: str = Field(min_length=1, max_length=500)
++    client_id: str = Field(min_length=1, max_length=255)
++    subject_pattern: str = Field(min_length=1, max_length=500)
++    required_claims_json: dict[str, Any] = Field(default_factory=dict)
++    surface: Literal["agent", "docs"]
++    scopes: list[str] = Field(default_factory=list)
++    allowed_project_ids: list[uuid.UUID] | None = None
++    capability_mask: int = Field(default=255, ge=0, le=255)
++    allowed_cidrs: list[str] | None = None
++    max_ttl_seconds: int = Field(default=3600, ge=60, le=86400)
++    is_enabled: bool = True
++
++
++class WorkloadPolicyUpdateRequest(BaseModel):
++    """Payload for updating an existing workload identity policy."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    name: str | None = Field(default=None, min_length=1, max_length=120)
++    description: str | None = None
++    issuer: str | None = Field(default=None, min_length=1, max_length=500)
++    client_id: str | None = Field(default=None, min_length=1, max_length=255)
++    subject_pattern: str | None = Field(default=None, min_length=1, max_length=500)
++    required_claims_json: dict[str, Any] | None = None
++    surface: Literal["agent", "docs"] | None = None
++    scopes: list[str] | None = None
++    allowed_project_ids: list[uuid.UUID] | None = None
++    capability_mask: int | None = Field(default=None, ge=0, le=255)
++    allowed_cidrs: list[str] | None = None
++    max_ttl_seconds: int | None = Field(default=None, ge=60, le=86400)
++    is_enabled: bool | None = None
++
++
++class WorkloadPolicyResponse(BaseModel):
++    """Public representation of a workload identity policy."""
++
++    model_config = ConfigDict(extra="ignore")
++
++    id: uuid.UUID
++    workspace_id: uuid.UUID
++    name: str
++    description: str | None = None
++    issuer: str
++    client_id: str
++    subject_pattern: str
++    required_claims_json: dict[str, Any]
++    surface: str
++    scopes: list[str]
++    allowed_project_ids: list[uuid.UUID] | None = None
++    capability_mask: int
++    allowed_cidrs: list[str] | None = None
++    max_ttl_seconds: int
++    is_enabled: bool
++    created_by_id: uuid.UUID | None = None
++    created_at: datetime
++    updated_at: datetime
++
++
++def _to_response(policy: WorkloadIdentityPolicy) -> WorkloadPolicyResponse:
++    return WorkloadPolicyResponse(
++        id=policy.id,
++        workspace_id=policy.workspace_id,
++        name=policy.name,
++        description=policy.description,
++        issuer=policy.issuer,
++        client_id=policy.client_id,
++        subject_pattern=policy.subject_pattern,
++        required_claims_json=policy.required_claims_json or {},
++        surface=policy.surface,
++        scopes=policy.scopes or [],
++        allowed_project_ids=policy.allowed_project_ids,
++        capability_mask=policy.capability_mask,
++        allowed_cidrs=policy.allowed_cidrs,
++        max_ttl_seconds=policy.max_ttl_seconds,
++        is_enabled=policy.is_enabled,
++        created_by_id=policy.created_by_id,
++        created_at=policy.created_at,
++        updated_at=policy.updated_at,
++    )
++
++
++@router.get(
++    "",
++    response_model=list[WorkloadPolicyResponse],
++    summary="List workload identity federation policies",
++)
++async def list_workload_policies(
++    caller: Caller,
++    session: Session,
++    workspace_id: Annotated[uuid.UUID | None, Query()] = None,
++) -> list[WorkloadPolicyResponse]:
++    """Retrieve workload federation policies visible to administrator."""
++    ws = workspace_id or caller.workspace_id
++    stmt = select(WorkloadIdentityPolicy)
++    if ws is not None:
++        stmt = stmt.where(WorkloadIdentityPolicy.workspace_id == ws)
++    stmt = stmt.order_by(WorkloadIdentityPolicy.created_at.desc())
++
++    result = await session.execute(stmt)
++    policies = result.scalars().all()
++    return [_to_response(p) for p in policies]
++
++
++@router.post(
++    "",
++    response_model=WorkloadPolicyResponse,
++    status_code=status.HTTP_201_CREATED,
++    summary="Create workload identity federation policy",
++)
++async def create_workload_policy(
++    body: WorkloadPolicyCreateRequest,
++    caller: Caller,
++    session: Session,
++) -> WorkloadPolicyResponse:
++    """Create a new workload federation policy bound to caller's workspace."""
++    policy = WorkloadIdentityPolicy(
++        workspace_id=caller.workspace_id,
++        name=body.name,
++        description=body.description,
++        issuer=body.issuer,
++        client_id=body.client_id,
++        subject_pattern=body.subject_pattern,
++        required_claims_json=body.required_claims_json,
++        surface=body.surface,
++        scopes=body.scopes,
++        allowed_project_ids=body.allowed_project_ids,
++        capability_mask=body.capability_mask,
++        allowed_cidrs=body.allowed_cidrs,
++        max_ttl_seconds=body.max_ttl_seconds,
++        is_enabled=body.is_enabled,
++        created_by_id=caller.principal_id,
++    )
++    session.add(policy)
++    await session.commit()
++    await session.refresh(policy)
++    return _to_response(policy)
++
++
++@router.get(
++    "/{policy_id}",
++    response_model=WorkloadPolicyResponse,
++    summary="Get workload identity federation policy",
++)
++async def get_workload_policy(
++    policy_id: uuid.UUID,
++    session: Session,
++) -> WorkloadPolicyResponse:
++    """Retrieve single workload policy by ID."""
++    stmt = select(WorkloadIdentityPolicy).where(WorkloadIdentityPolicy.id == policy_id)
++    policy = (await session.execute(stmt)).scalar_one_or_none()
++    if policy is None:
++        raise not_found()
++    return _to_response(policy)
++
++
++@router.patch(
++    "/{policy_id}",
++    response_model=WorkloadPolicyResponse,
++    summary="Update workload identity federation policy",
++)
++async def update_workload_policy(
++    policy_id: uuid.UUID,
++    body: WorkloadPolicyUpdateRequest,
++    session: Session,
++) -> WorkloadPolicyResponse:
++    """Update fields on an existing workload federation policy."""
++    stmt = select(WorkloadIdentityPolicy).where(WorkloadIdentityPolicy.id == policy_id)
++    policy = (await session.execute(stmt)).scalar_one_or_none()
++    if policy is None:
++        raise not_found()
++
++    update_data = body.model_dump(exclude_unset=True)
++    for field, value in update_data.items():
++        setattr(policy, field, value)
++
++    await session.commit()
++    await session.refresh(policy)
++    return _to_response(policy)
++
++
++@router.delete(
++    "/{policy_id}",
++    status_code=status.HTTP_204_NO_CONTENT,
++    summary="Delete workload identity federation policy",
++)
++async def delete_workload_policy(
++    policy_id: uuid.UUID,
++    session: Session,
++) -> Response:
++    """Delete a workload federation policy and all associated replay records."""
++    stmt = select(WorkloadIdentityPolicy).where(WorkloadIdentityPolicy.id == policy_id)
++    policy = (await session.execute(stmt)).scalar_one_or_none()
++    if policy is None:
++        raise not_found()
++
++    await session.delete(policy)
++    await session.commit()
++    return Response(status_code=status.HTTP_204_NO_CONTENT)
 diff --git a/kanban/api/v1/oauth.py b/kanban/api/v1/oauth.py
 index d3bc6db2..4a7d7ff6 100644
 --- a/kanban/api/v1/oauth.py
@@ -225,31 +795,1738 @@ index d3bc6db2..4a7d7ff6 100644
      desc = f"Unsupported grant_type {eff_grant_type!r}"
      raise OAuth2Error(err, desc, 400)
 diff --git a/kanban/api/v1/router.py b/kanban/api/v1/router.py
-index febbab90..6ec1b1e6 100644
+index 14823fca..3c07dd71 100644
 --- a/kanban/api/v1/router.py
 +++ b/kanban/api/v1/router.py
-@@ -5,5 +5,6 @@
- from __future__ import annotations
+@@ -6,5 +6,12 @@ from __future__ import annotations
  
  from kanban.api.v1 import build_v1_router
-+from kanban.api.v1.admin.workload_identities import router as admin_workload_identities_router
+ from kanban.api.v1.admin.audit_shred import router as admin_audit_shred_router
++from kanban.api.v1.admin.workload_identities import (
++    router as admin_workload_identities_router,
++)
  
--__all__ = ["build_v1_router"]
-+__all__ = ["admin_workload_identities_router", "build_v1_router"]
+-__all__ = ["admin_audit_shred_router", "build_v1_router"]
++__all__ = [
++    "admin_audit_shred_router",
++    "admin_workload_identities_router",
++    "build_v1_router",
++]
+diff --git a/kanban/auth/oidc/workload.py b/kanban/auth/oidc/workload.py
+new file mode 100644
+index 00000000..40db4a46
+--- /dev/null
++++ b/kanban/auth/oidc/workload.py
+@@ -0,0 +1,244 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""SSRF-safe workload identity federation token validation (KB-AUTH-OIDC-EXCHANGE-01, KAN-74)."""
++
++from __future__ import annotations
++
++import base64
++import fnmatch
++import json
++import time
++from datetime import UTC, datetime
++from typing import TYPE_CHECKING, Any, Final
++
++import httpx  # noqa: TC002
++from joserfc import errors as joserfc_errors
++from joserfc import jwt
++from sqlalchemy.dialects.postgresql import insert as pg_insert
++
++from database.models.workload_identity import WorkloadIdentityPolicy, WorkloadJtiReplay
++from kanban.auth.oidc.discovery import JwksCache, OidcError, fetch_discovery
++from kanban.oauth.server import OAuth2Error
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++ALLOWED_SIGNING_ALGORITHMS: Final[frozenset[str]] = frozenset({"RS256", "PS256", "ES256", "EdDSA"})
++MAX_CLOCK_SKEW_OR_AGE_SECONDS: Final[float] = 600.0
++CLOCK_SKEW_LEEWAY_SECONDS: Final[float] = 60.0
++
++ERR_INVALID_GRANT: Final[str] = "invalid_grant"
++ERR_TOKEN_REPLAYED: Final[str] = "WORKLOAD_TOKEN_REPLAYED"  # noqa: S105
++ERR_JSON_ROOT_NOT_OBJECT: Final[str] = "JSON root must be an object"
++
++_workload_jwks_cache: JwksCache | None = None
++_test_workload_client: httpx.AsyncClient | None = None
++
++
++def get_workload_jwks_cache() -> JwksCache:
++    """Retrieve or construct the process-level workload JWKS cache."""
++    global _workload_jwks_cache  # noqa: PLW0603
++    if _workload_jwks_cache is None:
++        _workload_jwks_cache = JwksCache()
++    return _workload_jwks_cache
++
++
++def _extract_unverified_header_and_claims(raw_jwt: str) -> tuple[dict[str, Any], dict[str, Any]]:
++    """Extract header and claims dictionaries from raw JWT without signature verification."""
++    parts = raw_jwt.strip().split(".")
++    if len(parts) != 3:  # noqa: PLR2004
++        msg = "Malformed JWT: expected 3 dot-separated segments"
++        raise OAuth2Error(ERR_INVALID_GRANT, msg, 400)
++
++    def _b64_decode(segment: str) -> dict[str, Any]:
++        rem = len(segment) % 4
++        padded = segment + ("=" * (4 - rem) if rem else "")
++        try:
++            data = base64.urlsafe_b64decode(padded.encode("ascii"))
++            res = json.loads(data.decode("utf-8"))
++        except Exception as err:
++            msg = f"Failed to parse JWT segment: {err}"
++            raise OAuth2Error(ERR_INVALID_GRANT, msg, 400) from err
++        if not isinstance(res, dict):
++            msg = "Failed to parse JWT segment: JSON root must be an object"
++            raise OAuth2Error(ERR_INVALID_GRANT, msg, 400)
++        return res
++
++    header = _b64_decode(parts[0])
++    claims = _b64_decode(parts[1])
++    return header, claims
++
++
++async def validate_workload_jwt(  # noqa: C901, PLR0912, PLR0913, PLR0915
++    session: AsyncSession,
++    raw_jwt: str,
++    policy: WorkloadIdentityPolicy,
++    *,
++    client: httpx.AsyncClient | None = None,
++    jwks_cache: JwksCache | None = None,
++    now: float | None = None,
++) -> dict[str, Any]:
++    """Validate external OIDC JWT against a WorkloadIdentityPolicy.
++
++    Reuses fetch_discovery and JwksCache. Enforces:
++    - Allowed algorithms: RS256, PS256, ES256, EdDSA (none and HS* strictly forbidden).
++    - Signature verification via discovered JWKS keyset.
++    - Issuer exact byte-for-byte match against policy.issuer.
++    - Audience match against policy.client_id.
++    - Expiration (exp) and not-before (nbf) timing validity.
++    - Issued-at (iat) within <= 600 seconds clock skew / age.
++    - Subject (sub) glob or exact match against policy.subject_pattern.
++    - Required claims exact match against policy.required_claims_json.
++    - Atomic workload_jti_replays insertion with 401 WORKLOAD_TOKEN_REPLAYED on duplicate.
++    """
++    current_time = time.time() if now is None else now
++    header, _ = _extract_unverified_header_and_claims(raw_jwt)
++
++    alg = str(header.get("alg", ""))
++    if not alg or alg == "none" or alg.startswith("HS") or alg not in ALLOWED_SIGNING_ALGORITHMS:
++        msg = (
++            f"Forbidden or unsupported signing algorithm '{alg}'; "
++            f"allowed: {sorted(ALLOWED_SIGNING_ALGORITHMS)}"
++        )
++        raise OAuth2Error(ERR_INVALID_GRANT, msg, 400)
++
++    # 1. Fetch discovery and JWKS keyset
++    effective_client = client or _test_workload_client
++    cache = jwks_cache or get_workload_jwks_cache()
++    try:
++        discovery_doc = await fetch_discovery(policy.issuer, client=effective_client)
++        kid = header.get("kid")
++        keyset = await cache.get_keyset(
++            policy.id,
++            discovery_doc.jwks_uri,
++            kid=str(kid) if kid is not None else None,
++            client=effective_client,
++            now=current_time,
++        )
++    except OidcError as err:
++        msg = f"OIDC discovery/JWKS resolution failed: {err.message}"
++        raise OAuth2Error(ERR_INVALID_GRANT, msg, 400) from err
++
++    # 2. Cryptographic signature and envelope decoding
++    try:
++        token_obj = jwt.decode(
++            raw_jwt,
++            keyset,
++            algorithms=list(ALLOWED_SIGNING_ALGORITHMS),
++        )
++        claims = dict(token_obj.claims)
++    except (joserfc_errors.JoseError, ValueError) as err:
++        msg = f"JWT signature validation failed: {err}"
++        raise OAuth2Error(ERR_INVALID_GRANT, msg, 400) from err
++
++    # 3. Enforce iss match
++    token_iss = claims.get("iss")
++    configured_iss = policy.issuer.rstrip("/")
++    if token_iss is None or str(token_iss).rstrip("/") != configured_iss:
++        msg = f"Token issuer '{token_iss}' does not match policy issuer '{policy.issuer}'"
++        raise OAuth2Error(ERR_INVALID_GRANT, msg, 400)
++
++    # 4. Enforce aud match
++    token_aud = claims.get("aud")
++    if token_aud is None:
++        msg = "Token missing aud claim"
++        raise OAuth2Error(ERR_INVALID_GRANT, msg, 400)
++    if isinstance(token_aud, str):
++        aud_matched = token_aud == policy.client_id
++    elif isinstance(token_aud, list):
++        aud_matched = policy.client_id in [str(a) for a in token_aud]
++    else:
++        aud_matched = False
++    if not aud_matched:
++        msg = f"Token audience '{token_aud}' does not match policy client_id '{policy.client_id}'"
++        raise OAuth2Error(ERR_INVALID_GRANT, msg, 400)
++
++    # 5. Enforce exp
++    token_exp = claims.get("exp")
++    if token_exp is None or not isinstance(token_exp, (int, float)):
++        msg = "Token missing valid numeric exp claim"
++        raise OAuth2Error(ERR_INVALID_GRANT, msg, 400)
++    if current_time >= float(token_exp):
++        msg = "Token has expired"
++        raise OAuth2Error(ERR_INVALID_GRANT, msg, 400)
++
++    # 6. Enforce nbf if present
++    token_nbf = claims.get("nbf")
++    if (
++        token_nbf is not None
++        and isinstance(token_nbf, (int, float))
++        and current_time + CLOCK_SKEW_LEEWAY_SECONDS < float(token_nbf)
++    ):
++        msg = "Token not yet valid (nbf)"
++        raise OAuth2Error(ERR_INVALID_GRANT, msg, 400)
++
++    # 7. Enforce iat (<= 600s clock skew / age)
++    token_iat = claims.get("iat")
++    if token_iat is None or not isinstance(token_iat, (int, float)):
++        msg = "Token missing valid numeric iat claim"
++        raise OAuth2Error(ERR_INVALID_GRANT, msg, 400)
++    token_age = current_time - float(token_iat)
++    if token_age > MAX_CLOCK_SKEW_OR_AGE_SECONDS or token_age < -CLOCK_SKEW_LEEWAY_SECONDS:
++        msg = (
++            f"Token age/skew ({token_age:.1f}s) exceeds maximum allowed "
++            f"{MAX_CLOCK_SKEW_OR_AGE_SECONDS}s"
++        )
++        raise OAuth2Error(ERR_INVALID_GRANT, msg, 400)
++
++    # 8. Enforce sub pattern match
++    token_sub = claims.get("sub")
++    if not token_sub or not isinstance(token_sub, str):
++        msg = "Token missing valid string sub claim"
++        raise OAuth2Error(ERR_INVALID_GRANT, msg, 400)
++    pattern = policy.subject_pattern
++    if "*" in pattern or "?" in pattern:
++        sub_matched = fnmatch.fnmatchcase(token_sub, pattern)
++    else:
++        sub_matched = token_sub == pattern
++    if not sub_matched:
++        msg = f"Token subject '{token_sub}' does not match policy pattern '{pattern}'"
++        raise OAuth2Error(ERR_INVALID_GRANT, msg, 400)
++
++    # 9. Enforce required_claims_json
++    required_claims = policy.required_claims_json or {}
++    if isinstance(required_claims, dict):
++        for req_k, req_v in required_claims.items():
++            if req_k not in claims:
++                msg = f"Token missing required claim '{req_k}'"
++                raise OAuth2Error(ERR_INVALID_GRANT, msg, 400)
++            token_val = claims[req_k]
++            if isinstance(req_v, list) and isinstance(token_val, list):
++                if not set(req_v).issubset(set(token_val)):
++                    msg = (
++                        f"Claim '{req_k}' value mismatch: required subset "
++                        f"'{req_v}', got '{token_val}'"
++                    )
++                    raise OAuth2Error(ERR_INVALID_GRANT, msg, 400)
++            elif token_val != req_v:
++                msg = f"Claim '{req_k}' value mismatch: expected '{req_v}', got '{token_val}'"
++                raise OAuth2Error(ERR_INVALID_GRANT, msg, 400)
++
++    # 10. Enforce jti & atomic replay prevention
++    token_jti = claims.get("jti")
++    if not token_jti or not isinstance(token_jti, str):
++        msg = "Token missing valid string jti claim"
++        raise OAuth2Error(ERR_INVALID_GRANT, msg, 400)
++
++    stmt_replay = (
++        pg_insert(WorkloadJtiReplay)
++        .values(
++            workspace_id=policy.workspace_id,
++            policy_id=policy.id,
++            jti=token_jti,
++            expires_at=datetime.fromtimestamp(float(token_exp), tz=UTC),
++        )
++        .on_conflict_do_nothing(index_elements=["policy_id", "jti"])
++        .returning(WorkloadJtiReplay.id)
++    )
++    res_replay = (await session.execute(stmt_replay)).scalar_one_or_none()
++    if res_replay is None:
++        # Replay detected!
++        msg = f"Workload token JTI '{token_jti}' has already been exchanged"
++        raise OAuth2Error(ERR_TOKEN_REPLAYED, msg, 401)
++
++    return claims
+diff --git a/kanban/tests/auth/test_workload_oidc_exchange.py b/kanban/tests/auth/test_workload_oidc_exchange.py
+new file mode 100644
+index 00000000..5decae4c
+--- /dev/null
++++ b/kanban/tests/auth/test_workload_oidc_exchange.py
+@@ -0,0 +1,801 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Comprehensive unit and integration tests for Workload Identity Federation.
++
++RFC 8693 Token Exchange (KAN-74).
++"""
++
++from __future__ import annotations
++
++import base64
++import time
++import uuid
++from collections.abc import Iterator  # noqa: TC003
++from typing import TYPE_CHECKING
++from unittest.mock import AsyncMock, patch
++
++import httpx
++import pytest
++from joserfc import jwt
++from joserfc.jwk import KeySet, OctKey
++from sqlalchemy import text
++from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002
++
++import kanban.auth.oidc.workload as workload_module
++from database.models.workload_identity import WorkloadIdentityPolicy
++from kanban.api.deps import PrincipalContext
++from kanban.auth.oidc.discovery import JwksCache, OidcError
++from kanban.auth.oidc.workload import (
++    _extract_unverified_header_and_claims,
++    validate_workload_jwt,
++)
++from kanban.oauth.jwt import verify_access_token
++from kanban.oauth.server import OAuth2Error
++from kanban.tests.fixtures.fake_idp import FakeIdP
++from kanban.tests.security.helpers import create_user, create_workspace
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++
++pytestmark = pytest.mark.committed_db
++
++
++def _b64(b: bytes) -> str:
++    return base64.urlsafe_b64encode(b).decode("ascii").rstrip("=")
++
++
++@pytest.fixture(autouse=True)
++def setup_test_key_material(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Set up valid test key material in environment."""
++    monkeypatch.delenv("KANBAN_KEYRING_FILE", raising=False)
++    monkeypatch.setenv("KANBAN_MASTER_KEK", _b64(b"k" * 32))
++    monkeypatch.setenv("KANBAN_AUTH_PEPPER", _b64(b"p" * 32))
++    monkeypatch.setenv("KANBAN_SESSION_HMAC_KEY", _b64(b"s" * 32))
++    monkeypatch.setenv("KANBAN_MASTER_KEK_KID", "test-kid-1")
++
++
++@pytest.fixture
++def fake_idp() -> FakeIdP:
++    """Provide in-memory fake OIDC IdP."""
++    return FakeIdP(
++        issuer="https://token.actions.githubusercontent.com",
++        client_id="https://kanban.example.com",
++    )
++
++
++@pytest.fixture
++def idp_client(fake_idp: FakeIdP) -> Iterator[httpx.AsyncClient]:
++    """Provide AsyncClient routed to FakeIdP."""
++    client = httpx.AsyncClient(transport=fake_idp.as_transport(), base_url=fake_idp.issuer)
++    workload_module._test_workload_client = client  # noqa: SLF001
++    yield client
++    workload_module._test_workload_client = None  # noqa: SLF001
++
++
++async def _as_admin_aal2(api_env: ApiEnv, user: SeededUser) -> None:
++    """Enroll confirmed TOTP factor and elevate test client to AAL2 session."""
++    await api_env.seed.execute(
++        text("SELECT kb_auth.totp_enroll(:p_id, :blob, :dek, 'test-kid-1')"),
++        {
++            "p_id": user.id,
++            "blob": b"\x01" + b"\x00" * 28,
++            "dek": b"\x01" + b"\x00" * 44,
++        },
++    )
++    res = await api_env.seed.execute(
++        text("SELECT id FROM kb_auth.totp_get_pending(:p_id)"),
++        {"p_id": user.id},
++    )
++    p_row = res.mappings().first()
++    if p_row:
++        await api_env.seed.execute(
++            text("SELECT kb_auth.totp_confirm(:p_fid, 100)"),
++            {"p_fid": p_row["id"]},
++        )
++    await api_env.seed.commit()
++
++    api_env.resolver.principal = PrincipalContext(
++        principal_id=user.id,
++        workspace_id=user.workspace_id,
++        token_scopes=("session",),
++        aal_level=2,
++        is_server_admin=True,
++    )
++
++
++@pytest.mark.asyncio
++async def test_validate_workload_jwt_valid_rs256(
++    db_session: AsyncSession,
++    fake_idp: FakeIdP,
++    idp_client: httpx.AsyncClient,
++) -> None:
++    """Verify valid RS256 workload token succeeds and claims are returned."""
++    ws_id = await create_workspace(db_session, name="Workload WS")
++    p_id = await create_user(db_session, ws_id, handle="admin-user", display_name="Admin")
++    await db_session.flush()
++
++    policy = WorkloadIdentityPolicy(
++        workspace_id=ws_id,
++        name="GitHub Actions Main",
++        issuer="https://token.actions.githubusercontent.com",
++        client_id="https://kanban.example.com",
++        subject_pattern="repo:org/repo:ref:refs/heads/*",
++        required_claims_json={"repository_owner": "org"},
++        surface="agent",
++        scopes=["agent:read", "agent:write"],
++        capability_mask=255,
++        created_by_id=p_id,
++    )
++    db_session.add(policy)
++    await db_session.flush()
++
++    now = int(time.time())
++    token = fake_idp.create_id_token(
++        subject="repo:org/repo:ref:refs/heads/main",
++        issuer="https://token.actions.githubusercontent.com",
++        audience="https://kanban.example.com",
++        iat=now,
++        exp=now + 300,
++        custom_claims={"jti": str(uuid.uuid4()), "repository_owner": "org"},
++    )
++
++    claims = await validate_workload_jwt(
++        session=db_session,
++        raw_jwt=token,
++        policy=policy,
++        client=idp_client,
++        now=now,
++    )
++    assert claims["sub"] == "repo:org/repo:ref:refs/heads/main"
++    assert claims["repository_owner"] == "org"
++
++
++@pytest.mark.asyncio
++@pytest.mark.usefixtures("fake_idp")
++async def test_validate_workload_jwt_forbidden_algs(
++    db_session: AsyncSession,
++    idp_client: httpx.AsyncClient,
++) -> None:
++    """Verify alg='none' and symmetric HMAC algorithms (HS*) are rejected."""
++    ws_id = await create_workspace(db_session, name="Workload Alg WS")
++    policy = WorkloadIdentityPolicy(
++        workspace_id=ws_id,
++        name="Alg Policy",
++        issuer="https://token.actions.githubusercontent.com",
++        client_id="https://kanban.example.com",
++        subject_pattern="*",
++        surface="agent",
++    )
++    db_session.add(policy)
++    await db_session.flush()
++
++    # 1. Reject unsigned alg='none'
++    raw_none = (
++        "eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4gRG9lIn0."
++    )
++    with pytest.raises(OAuth2Error) as exc_none:
++        await validate_workload_jwt(
++            session=db_session,
++            raw_jwt=raw_none,
++            policy=policy,
++            client=idp_client,
++        )
++    assert "Forbidden or unsupported signing algorithm" in str(exc_none.value.description)
++
++    # 2. Reject HS256 symmetric token
++    oct_key = OctKey.import_key({"kty": "oct", "k": "c2VjcmV0LWtleS1mb3ItaHMtbW9jaw"})
++    raw_hs = jwt.encode({"alg": "HS256", "typ": "JWT"}, {"sub": "test"}, oct_key)
++    with pytest.raises(OAuth2Error) as exc_hs:
++        await validate_workload_jwt(
++            session=db_session,
++            raw_jwt=raw_hs,
++            policy=policy,
++            client=idp_client,
++        )
++    assert "Forbidden or unsupported signing algorithm" in str(exc_hs.value.description)
++
++
++@pytest.mark.asyncio
++async def test_validate_workload_jwt_claims_enforcement(
++    db_session: AsyncSession,
++    fake_idp: FakeIdP,
++    idp_client: httpx.AsyncClient,
++) -> None:
++    """Verify strict validation of iss, aud, exp, nbf, iat, sub, and required_claims."""
++    ws_id = await create_workspace(db_session, name="Workload Claims WS")
++    policy = WorkloadIdentityPolicy(
++        workspace_id=ws_id,
++        name="Strict Policy",
++        issuer="https://token.actions.githubusercontent.com",
++        client_id="https://kanban.example.com",
++        subject_pattern="repo:org/repo:env:prod",
++        required_claims_json={"environment": "production", "runner_environment": "github-hosted"},
++        surface="agent",
++    )
++    db_session.add(policy)
++    await db_session.flush()
++
++    now = int(time.time())
++
++    # 1. Issuer mismatch
++    t_bad_iss = fake_idp.create_id_token(
++        subject="repo:org/repo:env:prod",
++        issuer="https://evil.idp.com",
++        audience="https://kanban.example.com",
++        iat=now,
++        exp=now + 300,
++    )
++    with pytest.raises(OAuth2Error) as exc_iss:
++        await validate_workload_jwt(
++            session=db_session,
++            raw_jwt=t_bad_iss,
++            policy=policy,
++            client=idp_client,
++            now=now,
++        )
++    assert "does not match policy issuer" in str(exc_iss.value.description)
++
++    # 2. Audience mismatch
++    t_bad_aud = fake_idp.create_id_token(
++        subject="repo:org/repo:env:prod",
++        issuer="https://token.actions.githubusercontent.com",
++        audience="https://different.app.com",
++        iat=now,
++        exp=now + 300,
++    )
++    with pytest.raises(OAuth2Error) as exc_aud:
++        await validate_workload_jwt(
++            session=db_session,
++            raw_jwt=t_bad_aud,
++            policy=policy,
++            client=idp_client,
++            now=now,
++        )
++    assert "does not match policy client_id" in str(exc_aud.value.description)
++
++    # 3. Expired token
++    t_exp = fake_idp.create_id_token(
++        subject="repo:org/repo:env:prod",
++        issuer="https://token.actions.githubusercontent.com",
++        audience="https://kanban.example.com",
++        iat=now - 600,
++        exp=now - 10,
++    )
++    with pytest.raises(OAuth2Error) as exc_exp:
++        await validate_workload_jwt(
++            session=db_session,
++            raw_jwt=t_exp,
++            policy=policy,
++            client=idp_client,
++            now=now,
++        )
++    assert "expired" in str(exc_exp.value.description)
++
++    # 4. Token issued too far in past (iat > 600s old)
++    t_old_iat = fake_idp.create_id_token(
++        subject="repo:org/repo:env:prod",
++        issuer="https://token.actions.githubusercontent.com",
++        audience="https://kanban.example.com",
++        iat=now - 650,
++        exp=now + 300,
++    )
++    with pytest.raises(OAuth2Error) as exc_iat:
++        await validate_workload_jwt(
++            session=db_session,
++            raw_jwt=t_old_iat,
++            policy=policy,
++            client=idp_client,
++            now=now,
++        )
++    assert "exceeds maximum allowed" in str(exc_iat.value.description)
++
++    # 5. Subject mismatch
++    t_bad_sub = fake_idp.create_id_token(
++        subject="repo:org/other:env:prod",
++        issuer="https://token.actions.githubusercontent.com",
++        audience="https://kanban.example.com",
++        iat=now,
++        exp=now + 300,
++        custom_claims={"environment": "production", "runner_environment": "github-hosted"},
++    )
++    with pytest.raises(OAuth2Error) as exc_sub:
++        await validate_workload_jwt(
++            session=db_session,
++            raw_jwt=t_bad_sub,
++            policy=policy,
++            client=idp_client,
++            now=now,
++        )
++    assert "does not match policy pattern" in str(exc_sub.value.description)
++
++    # 6. Missing required claims
++    t_missing_claims = fake_idp.create_id_token(
++        subject="repo:org/repo:env:prod",
++        issuer="https://token.actions.githubusercontent.com",
++        audience="https://kanban.example.com",
++        iat=now,
++        exp=now + 300,
++        custom_claims={"environment": "staging"},
++    )
++    with pytest.raises(OAuth2Error) as exc_req:
++        await validate_workload_jwt(
++            session=db_session,
++            raw_jwt=t_missing_claims,
++            policy=policy,
++            client=idp_client,
++            now=now,
++        )
++    assert "value mismatch" in str(exc_req.value.description)
++
++
++@pytest.mark.asyncio
++async def test_validate_workload_jwt_atomic_jti_replay_defense(
++    db_session: AsyncSession,
++    fake_idp: FakeIdP,
++    idp_client: httpx.AsyncClient,
++) -> None:
++    """Verify duplicate JTI insertion raises 401 WORKLOAD_TOKEN_REPLAYED."""
++    ws_id = await create_workspace(db_session, name="Replay WS")
++    policy = WorkloadIdentityPolicy(
++        workspace_id=ws_id,
++        name="Replay Test Policy",
++        issuer="https://token.actions.githubusercontent.com",
++        client_id="https://kanban.example.com",
++        subject_pattern="*",
++        surface="agent",
++    )
++    db_session.add(policy)
++    await db_session.flush()
++
++    now = int(time.time())
++    token_jti = f"replay-jti-{uuid.uuid4()}"
++    token = fake_idp.create_id_token(
++        subject="repo:org/repo:ref:main",
++        issuer="https://token.actions.githubusercontent.com",
++        audience="https://kanban.example.com",
++        iat=now,
++        exp=now + 300,
++        custom_claims={"jti": token_jti},
++    )
++
++    # First exchange succeeds
++    claims1 = await validate_workload_jwt(
++        session=db_session,
++        raw_jwt=token,
++        policy=policy,
++        client=idp_client,
++        now=now,
++    )
++    assert claims1["jti"] == token_jti
++
++    # Second exchange with identical token/JTI must fail with 401 WORKLOAD_TOKEN_REPLAYED
++    with pytest.raises(OAuth2Error) as exc_replay:
++        await validate_workload_jwt(
++            session=db_session,
++            raw_jwt=token,
++            policy=policy,
++            client=idp_client,
++            now=now,
++        )
++    err = exc_replay.value
++    assert err.error == "WORKLOAD_TOKEN_REPLAYED"
++    assert err.status_code == 401
++
++
++@pytest.mark.asyncio
++@pytest.mark.usefixtures("idp_client")
++async def test_oauth_token_exchange_endpoint(
++    api_env: ApiEnv,
++    fake_idp: FakeIdP,
++) -> None:
++    """Verify POST /oauth/token token-exchange grant type and discovery metadata."""
++    ws_id = api_env.workspace_id
++    policy = WorkloadIdentityPolicy(
++        workspace_id=ws_id,
++        name="CI Policy",
++        issuer="https://token.actions.githubusercontent.com",
++        client_id="https://kanban.example.com",
++        subject_pattern="repo:org/*",
++        surface="agent",
++        scopes=["agent:read", "agent:write"],
++        capability_mask=15,
++        allowed_cidrs=["127.0.0.1/32", "192.168.1.0/24"],
++        max_ttl_seconds=1800,
++    )
++    api_env.seed.add(policy)
++    await api_env.seed.commit()
++
++    # 1. Verify discovery metadata includes token-exchange
++    res_meta = await api_env.client.get("/.well-known/oauth-authorization-server")
++    assert res_meta.status_code == 200
++    meta_json = res_meta.json()
++    assert "urn:ietf:params:oauth:grant-type:token-exchange" in meta_json["grant_types_supported"]
++    assert "token_exchange_token_types_supported" in meta_json
++
++    # 2. Test token exchange with FakeIdP mock
++    now = int(time.time())
++    id_token = fake_idp.create_id_token(
++        subject="repo:org/app:ref:main",
++        issuer="https://token.actions.githubusercontent.com",
++        audience="https://kanban.example.com",
++        iat=now,
++        exp=now + 300,
++        custom_claims={"jti": f"ci-{uuid.uuid4()}"},
++    )
++
++    mock_doc = AsyncMock()
++    mock_doc.jwks_uri = "https://token.actions.githubusercontent.com/.well-known/jwks.json"
++    keyset = KeySet.import_key_set({"keys": [fake_idp.jwk_public_dict]})
++
++    with (
++        patch("kanban.auth.oidc.workload.fetch_discovery", return_value=mock_doc),
++        patch.object(JwksCache, "get_keyset", return_value=keyset),
++    ):
++        # Successful exchange
++        res_ex = await api_env.client.post(
++            "/oauth/token",
++            data={
++                "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
++                "subject_token": id_token,
++                "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
++            },
++            headers={"X-Forwarded-For": "127.0.0.1"},
++        )
++        assert res_ex.status_code == 200, res_ex.text
++        data = res_ex.json()
++        assert "access_token" in data
++        assert data["token_type"] == "Bearer"
++        assert data["issued_token_type"] == "urn:ietf:params:oauth:token-type:access_token"
++        assert data["expires_in"] <= 1800
++        assert "refresh_token" not in data
++
++        # Verify minted access token claims
++        claims = verify_access_token(data["access_token"])
++        assert claims["token_kind"] == "workload"
++        assert claims["surface"] == "agent"
++        assert claims["capability_mask"] == 15
++        assert claims["workload_sub"] == "repo:org/app:ref:main"
++
++        # CIDR rejection (client IP outside allowed CIDRs)
++        id_token2 = fake_idp.create_id_token(
++            subject="repo:org/app:ref:main",
++            issuer="https://token.actions.githubusercontent.com",
++            audience="https://kanban.example.com",
++            iat=now,
++            exp=now + 300,
++            custom_claims={"jti": f"ci-{uuid.uuid4()}"},
++        )
++        res_cidr_blocked = await api_env.client.post(
++            "/oauth/token",
++            data={
++                "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
++                "subject_token": id_token2,
++                "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
++            },
++            headers={"X-Forwarded-For": "10.0.0.1"},
++        )
++        assert res_cidr_blocked.status_code == 403
++
++
++@pytest.mark.asyncio
++async def test_admin_workload_identities_crud(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++) -> None:
++    """Verify Depends(require_admin_aal2) CRUD routes for workload identities."""
++    admin = await make_user("admin_wl_user", workspace_role="WORKSPACE_ADMIN")
++    await _as_admin_aal2(api_env, admin)
++
++    # 1. Create policy
++    res_create = await api_env.client.post(
++        "/api/v1/admin/workload-identities",
++        json={
++            "name": "GitLab CI Runner",
++            "issuer": "https://gitlab.example.com",
++            "client_id": "kanban-mcp",
++            "subject_pattern": "project_path:group/project:*",
++            "required_claims_json": {"ref_type": "branch"},
++            "surface": "agent",
++            "scopes": ["agent:read", "agent:write"],
++            "capability_mask": 31,
++            "max_ttl_seconds": 3600,
++        },
++    )
++    assert res_create.status_code == 201, res_create.text
++    pol = res_create.json()
++    pol_id = pol["id"]
++    assert pol["name"] == "GitLab CI Runner"
++
++    # 2. List policies
++    res_list = await api_env.client.get("/api/v1/admin/workload-identities")
++    assert res_list.status_code == 200
++    assert len(res_list.json()) >= 1
++
++    # 3. Get single policy
++    res_get = await api_env.client.get(f"/api/v1/admin/workload-identities/{pol_id}")
++    assert res_get.status_code == 200
++    assert res_get.json()["id"] == pol_id
++
++    # 4. Patch policy
++    res_patch = await api_env.client.patch(
++        f"/api/v1/admin/workload-identities/{pol_id}",
++        json={"name": "GitLab CI Production", "capability_mask": 7},
++    )
++    assert res_patch.status_code == 200
++    assert res_patch.json()["name"] == "GitLab CI Production"
++    assert res_patch.json()["capability_mask"] == 7
++
++    # 5. Delete policy
++    res_del = await api_env.client.delete(f"/api/v1/admin/workload-identities/{pol_id}")
++    assert res_del.status_code == 204
++
++    # 6. Verify 404 after deletion
++    res_get404 = await api_env.client.get(f"/api/v1/admin/workload-identities/{pol_id}")
++    assert res_get404.status_code == 404
++
++
++@pytest.mark.asyncio
++async def test_validate_workload_jwt_edge_cases_and_coverage(  # noqa: PLR0915
++    db_session: AsyncSession,
++    fake_idp: FakeIdP,
++    idp_client: httpx.AsyncClient,
++) -> None:
++    """Verify all parser and validation error branches for complete coverage."""
++    ws_id = await create_workspace(db_session, name="Edge Cases WS")
++    policy = WorkloadIdentityPolicy(
++        workspace_id=ws_id,
++        name="Edge Policy",
++        issuer="https://token.actions.githubusercontent.com",
++        client_id="https://kanban.example.com",
++        subject_pattern="repo:org/exact-sub",
++        required_claims_json={"roles": ["reader", "deployer"], "flag": True},
++        surface="agent",
++    )
++    db_session.add(policy)
++    await db_session.flush()
++
++    now = int(time.time())
++
++    # 1. Malformed JWT segments
++    with pytest.raises(OAuth2Error) as exc_mal:
++        _extract_unverified_header_and_claims("only.two")
++    assert "dot-separated segments" in str(exc_mal.value.description)
++
++    with pytest.raises(OAuth2Error) as exc_b64:
++        _extract_unverified_header_and_claims("not-valid-b64.part2.part3")
++    assert "Failed to parse JWT segment" in str(exc_b64.value.description)
++
++    # Base64 encoded array instead of object
++    arr_b64 = base64.urlsafe_b64encode(b"[1, 2, 3]").decode("ascii")
++    with pytest.raises(OAuth2Error) as exc_arr:
++        _extract_unverified_header_and_claims(f"{arr_b64}.{arr_b64}.sig")
++    assert "JSON root must be an object" in str(exc_arr.value.description)
++
++    # 2. OIDC discovery / JWKS error
++    with patch("kanban.auth.oidc.workload.fetch_discovery", side_effect=OidcError("Net down")):
++        good_tok = fake_idp.create_id_token(
++            subject="repo:org/exact-sub",
++            issuer="https://token.actions.githubusercontent.com",
++            audience="https://kanban.example.com",
++            iat=now,
++            exp=now + 300,
++        )
++        with pytest.raises(OAuth2Error) as exc_oidc:
++            await validate_workload_jwt(
++                session=db_session,
++                raw_jwt=good_tok,
++                policy=policy,
++                client=idp_client,
++                now=now,
++            )
++        assert "OIDC discovery/JWKS resolution failed" in str(exc_oidc.value.description)
++
++    # 3. Signature validation failure (tampered token body)
++    parts = good_tok.split(".")
++    tampered_claims = base64.urlsafe_b64encode(b'{"sub":"hacked"}').decode("ascii")
++    tampered_token = f"{parts[0]}.{tampered_claims}.{parts[2]}"
++    with pytest.raises(OAuth2Error) as exc_sig:
++        await validate_workload_jwt(
++            session=db_session,
++            raw_jwt=tampered_token,
++            policy=policy,
++            client=idp_client,
++            now=now,
++        )
++    assert "JWT signature validation failed" in str(exc_sig.value.description)
++
++    # 4. Audience variants
++    # aud as matching list
++    token_aud_list = fake_idp.create_id_token(
++        subject="repo:org/exact-sub",
++        issuer="https://token.actions.githubusercontent.com",
++        audience="https://kanban.example.com",
++        iat=now,
++        exp=now + 300,
++        custom_claims={
++            "aud": ["https://kanban.example.com", "other-aud"],
++            "roles": ["reader", "deployer", "admin"],
++            "flag": True,
++            "jti": str(uuid.uuid4()),
++        },
++    )
++    res_aud_list = await validate_workload_jwt(
++        session=db_session,
++        raw_jwt=token_aud_list,
++        policy=policy,
++        client=idp_client,
++        now=now,
++    )
++    assert res_aud_list["sub"] == "repo:org/exact-sub"
++
++    # aud as non-matching list
++    token_bad_aud_list = fake_idp.create_id_token(
++        subject="repo:org/exact-sub",
++        issuer="https://token.actions.githubusercontent.com",
++        audience="https://kanban.example.com",
++        iat=now,
++        exp=now + 300,
++        custom_claims={"aud": ["other-aud"], "jti": str(uuid.uuid4())},
++    )
++    with pytest.raises(OAuth2Error) as exc_bad_aud_list:
++        await validate_workload_jwt(
++            session=db_session,
++            raw_jwt=token_bad_aud_list,
++            policy=policy,
++            client=idp_client,
++            now=now,
++        )
++    assert "does not match policy client_id" in str(exc_bad_aud_list.value.description)
++
++    # aud missing
++    token_no_aud = fake_idp.create_id_token(
++        subject="repo:org/exact-sub",
++        issuer="https://token.actions.githubusercontent.com",
++        audience="https://kanban.example.com",
++        iat=now,
++        exp=now + 300,
++        custom_claims={"aud": None, "jti": str(uuid.uuid4())},
++    )
++    with pytest.raises(OAuth2Error) as exc_no_aud:
++        await validate_workload_jwt(
++            session=db_session,
++            raw_jwt=token_no_aud,
++            policy=policy,
++            client=idp_client,
++            now=now,
++        )
++    assert "missing aud claim" in str(exc_no_aud.value.description)
++
++    # 5. Missing / non-numeric exp
++    token_bad_exp = fake_idp.create_id_token(
++        subject="repo:org/exact-sub",
++        issuer="https://token.actions.githubusercontent.com",
++        audience="https://kanban.example.com",
++        iat=now,
++        exp=now + 300,
++        custom_claims={"exp": "not-a-number", "jti": str(uuid.uuid4())},
++    )
++    with pytest.raises(OAuth2Error) as exc_bad_exp:
++        await validate_workload_jwt(
++            session=db_session,
++            raw_jwt=token_bad_exp,
++            policy=policy,
++            client=idp_client,
++            now=now,
++        )
++    assert "missing valid numeric exp claim" in str(exc_bad_exp.value.description)
++
++    # 6. nbf in future vs nbf in past
++    token_future_nbf = fake_idp.create_id_token(
++        subject="repo:org/exact-sub",
++        issuer="https://token.actions.githubusercontent.com",
++        audience="https://kanban.example.com",
++        iat=now,
++        exp=now + 300,
++        custom_claims={"nbf": now + 120, "jti": str(uuid.uuid4())},
++    )
++    with pytest.raises(OAuth2Error) as exc_nbf:
++        await validate_workload_jwt(
++            session=db_session,
++            raw_jwt=token_future_nbf,
++            policy=policy,
++            client=idp_client,
++            now=now,
++        )
++    assert "Token not yet valid (nbf)" in str(exc_nbf.value.description)
++
++    # 7. iat in future or non-numeric iat
++    token_future_iat = fake_idp.create_id_token(
++        subject="repo:org/exact-sub",
++        issuer="https://token.actions.githubusercontent.com",
++        audience="https://kanban.example.com",
++        iat=now + 200,
++        exp=now + 300,
++        custom_claims={"jti": str(uuid.uuid4())},
++    )
++    with pytest.raises(OAuth2Error) as exc_future_iat:
++        await validate_workload_jwt(
++            session=db_session,
++            raw_jwt=token_future_iat,
++            policy=policy,
++            client=idp_client,
++            now=now,
++        )
++    assert "exceeds maximum allowed" in str(exc_future_iat.value.description)
++
++    token_no_iat = fake_idp.create_id_token(
++        subject="repo:org/exact-sub",
++        issuer="https://token.actions.githubusercontent.com",
++        audience="https://kanban.example.com",
++        iat=now,
++        exp=now + 300,
++        custom_claims={"iat": "bad", "jti": str(uuid.uuid4())},
++    )
++    with pytest.raises(OAuth2Error) as exc_no_iat:
++        await validate_workload_jwt(
++            session=db_session,
++            raw_jwt=token_no_iat,
++            policy=policy,
++            client=idp_client,
++            now=now,
++        )
++    assert "missing valid numeric iat claim" in str(exc_no_iat.value.description)
++
++    # 8. sub non-string or missing
++    token_bad_sub = fake_idp.create_id_token(
++        subject="repo:org/exact-sub",
++        issuer="https://token.actions.githubusercontent.com",
++        audience="https://kanban.example.com",
++        iat=now,
++        exp=now + 300,
++        custom_claims={"sub": 12345, "jti": str(uuid.uuid4())},
++    )
++    with pytest.raises(OAuth2Error) as exc_no_sub:
++        await validate_workload_jwt(
++            session=db_session,
++            raw_jwt=token_bad_sub,
++            policy=policy,
++            client=idp_client,
++            now=now,
++        )
++    assert "missing valid string sub claim" in str(exc_no_sub.value.description)
++
++    # 9. required claims subset mismatch
++    token_subset_mismatch = fake_idp.create_id_token(
++        subject="repo:org/exact-sub",
++        issuer="https://token.actions.githubusercontent.com",
++        audience="https://kanban.example.com",
++        iat=now,
++        exp=now + 300,
++        custom_claims={"roles": ["reader"], "flag": True, "jti": str(uuid.uuid4())},
++    )
++    with pytest.raises(OAuth2Error) as exc_subset:
++        await validate_workload_jwt(
++            session=db_session,
++            raw_jwt=token_subset_mismatch,
++            policy=policy,
++            client=idp_client,
++            now=now,
++        )
++    assert "required subset" in str(exc_subset.value.description)
++
++    # 10. missing jti
++    token_no_jti = fake_idp.create_id_token(
++        subject="repo:org/exact-sub",
++        issuer="https://token.actions.githubusercontent.com",
++        audience="https://kanban.example.com",
++        iat=now,
++        exp=now + 300,
++        custom_claims={"roles": ["reader", "deployer"], "flag": True, "jti": None},
++    )
++    with pytest.raises(OAuth2Error) as exc_no_jti:
++        await validate_workload_jwt(
++            session=db_session,
++            raw_jwt=token_no_jti,
++            policy=policy,
++            client=idp_client,
++            now=now,
++        )
++    assert "missing valid string jti claim" in str(exc_no_jti.value.description)
 diff --git a/kanban/tests/security/test_admin_routes_protected.py b/kanban/tests/security/test_admin_routes_protected.py
-index b97843f2..172e2817 100644
+index 09f6fa36..3206af0a 100644
 --- a/kanban/tests/security/test_admin_routes_protected.py
 +++ b/kanban/tests/security/test_admin_routes_protected.py
-@@ -34,3 +34,4 @@ def test_multi_source_and_export_routes_registered() -> None:
-     assert "/api/v1/admin/imports/jira" in admin_paths
-     assert "/api/v1/admin/imports/github" in admin_paths
+@@ -36,3 +36,4 @@ def test_multi_source_and_export_routes_registered() -> None:
      assert "/api/v1/admin/imports/linear" in admin_paths
+     assert "/api/v1/admin/audit-ledger/request-shred" in admin_paths
+     assert "/api/v1/admin/audit-ledger/execute-shred" in admin_paths
 +    assert "/api/v1/admin/workload-identities" in admin_paths
+diff --git a/kanban/web/src/features/settings/McpUnifiedStudio.tsx b/kanban/web/src/features/settings/McpUnifiedStudio.tsx
+new file mode 100644
+index 00000000..a6f5a1f6
+--- /dev/null
++++ b/kanban/web/src/features/settings/McpUnifiedStudio.tsx
+@@ -0,0 +1,633 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React, { useState, useEffect, useCallback, type JSX } from 'react';
++import { apiFetch } from '../../api/client';
++import { ApiProblem } from '../../api/problem';
++import { SecondFactorStep } from '../auth/SecondFactorStep';
++import type { MfaMethod } from '../auth/authApi';
++import { McpAccessStudio } from './McpAccessStudio';
++import './McpAccessStudio.css';
++
++export interface WorkloadIdentityPolicyItem {
++  id: string;
++  workspace_id: string;
++  name: string;
++  description: string | null;
++  issuer: string;
++  client_id: string;
++  subject_pattern: string;
++  required_claims_json: Record<string, unknown>;
++  surface: 'agent' | 'docs';
++  scopes: string[];
++  allowed_project_ids: string[];
++  capability_mask: number;
++  allowed_cidrs: string[];
++  max_ttl_seconds: number;
++  is_enabled: boolean;
++  created_by_id: string | null;
++  created_at: string;
++  updated_at: string;
++}
++
++export interface WorkloadPolicyCreatePayload {
++  name: string;
++  description?: string | undefined;
++  issuer: string;
++  client_id: string;
++  subject_pattern: string;
++  required_claims_json?: Record<string, unknown> | undefined;
++  surface: 'agent' | 'docs';
++  scopes?: string[] | undefined;
++  allowed_project_ids?: string[] | undefined;
++  capability_mask?: number | undefined;
++  allowed_cidrs?: string[] | undefined;
++  max_ttl_seconds?: number | undefined;
++}
++
++export interface WorkloadPolicyUpdatePayload {
++  name?: string | undefined;
++  description?: string | undefined;
++  subject_pattern?: string | undefined;
++  required_claims_json?: Record<string, unknown> | undefined;
++  scopes?: string[] | undefined;
++  allowed_project_ids?: string[] | undefined;
++  capability_mask?: number | undefined;
++  allowed_cidrs?: string[] | undefined;
++  max_ttl_seconds?: number | undefined;
++  is_enabled?: boolean | undefined;
++}
++
++export interface WorkloadFederationSectionProps {
++  isAdmin?: boolean;
++}
++
++function extractAal2Challenge(err: unknown): { challengeId: string; methods: MfaMethod[] } | null {
++  if (err instanceof ApiProblem && (err.code === 'AAL2_REQUIRED' || err.code === 'AAL2_STALE')) {
++    const data = err.data as Record<string, unknown> | undefined;
++    const challengeId = typeof data?.challenge_id === 'string' ? data.challenge_id : 'aal2-stepup';
++    const methods = Array.isArray(data?.methods)
++      ? (data.methods as MfaMethod[])
++      : (['webauthn', 'totp'] as MfaMethod[]);
++    return { challengeId, methods };
++  }
++  return null;
++}
++
++export function WorkloadFederationSection({
++  isAdmin = false,
++}: WorkloadFederationSectionProps): JSX.Element {
++  const [policies, setPolicies] = useState<WorkloadIdentityPolicyItem[]>([]);
++  const [loading, setLoading] = useState(false);
++  const [error, setError] = useState<string | null>(null);
++
++  // Modal state
++  const [showModal, setShowModal] = useState(false);
++  const [editingPolicy, setEditingPolicy] = useState<WorkloadIdentityPolicyItem | null>(null);
++  const [formName, setFormName] = useState('');
++  const [formDesc, setFormDesc] = useState('');
++  const [formIssuer, setFormIssuer] = useState('');
++  const [formClientId, setFormClientId] = useState('');
++  const [formSubjectPattern, setFormSubjectPattern] = useState('');
++  const [formSurface, setFormSurface] = useState<'agent' | 'docs'>('agent');
++  const [formCapMask, setFormCapMask] = useState('255');
++  const [formCidrs, setFormCidrs] = useState('');
++  const [formTtl, setFormTtl] = useState('3600');
++  const [submitting, setSubmitting] = useState(false);
++
++  // AAL2 state
++  const [aal2Challenge, setAal2Challenge] = useState<{
++    challengeId: string;
++    methods: MfaMethod[];
++  } | null>(null);
++  const [pendingAction, setPendingAction] = useState<(() => Promise<void>) | null>(null);
++
++  const fetchPolicies = useCallback(async (): Promise<void> => {
++    if (!isAdmin) return;
++    setLoading(true);
++    setError(null);
++    try {
++      const data = (await apiFetch(
++        'GET',
++        '/api/v1/admin/workload-identities' as unknown as keyof import('../../api/schema.gen.ts').paths,
++      )) as WorkloadIdentityPolicyItem[];
++      setPolicies(data);
++    } catch (err) {
++      const challenge = extractAal2Challenge(err);
++      if (challenge) {
++        setAal2Challenge(challenge);
++        setPendingAction(() => async () => {
++          await fetchPolicies();
++        });
++      } else {
++        setError(err instanceof Error ? err.message : 'Failed to load workload policies');
++      }
++    } finally {
++      setLoading(false);
++    }
++  }, [isAdmin]);
++
++  useEffect(() => {
++    void fetchPolicies();
++  }, [fetchPolicies]);
++
++  const handleOpenCreate = (): void => {
++    setEditingPolicy(null);
++    setFormName('');
++    setFormDesc('');
++    setFormIssuer('');
++    setFormClientId('');
++    setFormSubjectPattern('*');
++    setFormSurface('agent');
++    setFormCapMask('255');
++    setFormCidrs('');
++    setFormTtl('3600');
++    setShowModal(true);
++  };
++
++  const handleOpenEdit = (pol: WorkloadIdentityPolicyItem): void => {
++    setEditingPolicy(pol);
++    setFormName(pol.name);
++    setFormDesc(pol.description ?? '');
++    setFormIssuer(pol.issuer);
++    setFormClientId(pol.client_id);
++    setFormSubjectPattern(pol.subject_pattern);
++    setFormSurface(pol.surface);
++    setFormCapMask(String(pol.capability_mask));
++    setFormCidrs(pol.allowed_cidrs.join(', '));
++    setFormTtl(String(pol.max_ttl_seconds));
++    setShowModal(true);
++  };
++
++  const handleSubmit = async (e: React.SyntheticEvent): Promise<void> => {
++    e.preventDefault();
++    setSubmitting(true);
++    setError(null);
++
++    const parsedCidrs = formCidrs
++      .split(',')
++      .map((c) => c.trim())
++      .filter(Boolean);
++    const parsedCapMask = parseInt(formCapMask, 10) || 255;
++    const parsedTtl = parseInt(formTtl, 10) || 3600;
++
++    const action = async (): Promise<void> => {
++      try {
++        if (editingPolicy) {
++          const payload: WorkloadPolicyUpdatePayload = {
++            name: formName.trim(),
++            description: formDesc.trim() || undefined,
++            subject_pattern: formSubjectPattern.trim(),
++            capability_mask: parsedCapMask,
++            allowed_cidrs: parsedCidrs,
++            max_ttl_seconds: parsedTtl,
++          };
++          await apiFetch(
++            'PATCH',
++            `/api/v1/admin/workload-identities/${editingPolicy.id}` as unknown as keyof import('../../api/schema.gen.ts').paths,
++            { body: payload },
++          );
++        } else {
++          const payload: WorkloadPolicyCreatePayload = {
++            name: formName.trim(),
++            description: formDesc.trim() || undefined,
++            issuer: formIssuer.trim(),
++            client_id: formClientId.trim(),
++            subject_pattern: formSubjectPattern.trim(),
++            surface: formSurface,
++            capability_mask: parsedCapMask,
++            allowed_cidrs: parsedCidrs,
++            max_ttl_seconds: parsedTtl,
++          };
++          await apiFetch(
++            'POST',
++            '/api/v1/admin/workload-identities' as unknown as keyof import('../../api/schema.gen.ts').paths,
++            { body: payload },
++          );
++        }
++        setShowModal(false);
++        await fetchPolicies();
++      } catch (err) {
++        const challenge = extractAal2Challenge(err);
++        if (challenge) {
++          setAal2Challenge(challenge);
++          setPendingAction(() => async () => {
++            await action();
++          });
++        } else {
++          setError(err instanceof Error ? err.message : 'Failed to save workload policy');
++        }
++      } finally {
++        setSubmitting(false);
++      }
++    };
++
++    await action();
++  };
++
++  const handleToggle = async (pol: WorkloadIdentityPolicyItem): Promise<void> => {
++    const action = async (): Promise<void> => {
++      try {
++        await apiFetch(
++          'PATCH',
++          `/api/v1/admin/workload-identities/${pol.id}` as unknown as keyof import('../../api/schema.gen.ts').paths,
++          { body: { is_enabled: !pol.is_enabled } },
++        );
++        await fetchPolicies();
++      } catch (err) {
++        const challenge = extractAal2Challenge(err);
++        if (challenge) {
++          setAal2Challenge(challenge);
++          setPendingAction(() => async () => {
++            await action();
++          });
++        } else {
++          setError(err instanceof Error ? err.message : 'Failed to toggle policy');
++        }
++      }
++    };
++    await action();
++  };
++
++  const handleDelete = async (policyId: string): Promise<void> => {
++    const action = async (): Promise<void> => {
++      try {
++        await apiFetch(
++          'DELETE',
++          `/api/v1/admin/workload-identities/${policyId}` as unknown as keyof import('../../api/schema.gen.ts').paths,
++        );
++        await fetchPolicies();
++      } catch (err) {
++        const challenge = extractAal2Challenge(err);
++        if (challenge) {
++          setAal2Challenge(challenge);
++          setPendingAction(() => async () => {
++            await action();
++          });
++        } else {
++          setError(err instanceof Error ? err.message : 'Failed to delete policy');
++        }
++      }
++    };
++    await action();
++  };
++
++  const handleAal2Success = async (): Promise<void> => {
++    const next = pendingAction;
++    setAal2Challenge(null);
++    setPendingAction(null);
++    if (next) {
++      await next();
++    }
++  };
++
++  if (!isAdmin) {
++    return <></>;
++  }
++
++  return (
++    <div className="kb-mcp-studio-section" data-testid="workload-federation-section">
++      <div className="kb-mcp-studio-header">
++        <div>
++          <h2 className="kb-mcp-section-title">
++            <span>Workload Identity Federation (RFC 8693)</span>
++          </h2>
++          <p className="kb-mcp-studio-subtitle">
++            Configure headless CI/CD runners (GitHub Actions, GitLab CI, Kubernetes) to exchange OIDC JWT tokens for scoped MCP credentials without long-lived static secrets.
++          </p>
++        </div>
++        <button
++          type="button"
++          className="kb-mcp-studio-mint-btn"
++          data-testid="add-workload-policy-btn"
++          onClick={handleOpenCreate}
++        >
++          + Add Workload Policy
++        </button>
++      </div>
++
++      {error && (
++        <div className="kb-mcp-error-banner" data-testid="workload-error-banner">
++          {error}
++        </div>
++      )}
++
++      {loading && <div data-testid="workload-loading">Loading policies...</div>}
++
++      {!loading && policies.length === 0 && (
++        <div className="kb-mcp-empty-state" data-testid="workload-empty-state">
++          No workload identity federation policies configured yet.
++        </div>
++      )}
++
++      {!loading && policies.length > 0 && (
++        <div className="kb-mcp-table-wrap">
++          <table className="kb-mcp-table" data-testid="workload-policies-table">
++            <thead>
++              <tr>
++                <th className="kb-mcp-th">Policy</th>
++                <th className="kb-mcp-th">Issuer & Audience</th>
++                <th className="kb-mcp-th">Subject Pattern</th>
++                <th className="kb-mcp-th">Surface / Cap</th>
++                <th className="kb-mcp-th">Allowed CIDRs</th>
++                <th className="kb-mcp-th">Status</th>
++                <th className="kb-mcp-th">Actions</th>
++              </tr>
++            </thead>
++            <tbody>
++              {policies.map((p) => (
++                <tr key={p.id} className="kb-mcp-tr" data-testid={`workload-row-${p.id}`}>
++                  <td className="kb-mcp-td">
++                    <strong>{p.name}</strong>
++                    {p.description && (
++                      <div className="kb-mcp-studio-subtitle">{p.description}</div>
++                    )}
++                  </td>
++                  <td className="kb-mcp-td">
++                    <div><code>{p.issuer}</code></div>
++                    <div className="kb-mcp-key-hint">{p.client_id}</div>
++                  </td>
++                  <td className="kb-mcp-td">
++                    <code>{p.subject_pattern}</code>
++                  </td>
++                  <td className="kb-mcp-td">
++                    <span className={`kb-mcp-tier-badge kb-mcp-tier-${p.surface}`}>
++                      {p.surface}
++                    </span>
++                    <span className="kb-mcp-key-hint">Cap: {p.capability_mask}</span>
++                  </td>
++                  <td className="kb-mcp-td">
++                    {p.allowed_cidrs.length > 0 ? (
++                      <code>{p.allowed_cidrs.join(', ')}</code>
++                    ) : (
++                      <span>Any</span>
++                    )}
++                  </td>
++                  <td className="kb-mcp-td">
++                    <span
++                      className={`kb-mcp-tier-badge ${
++                        p.is_enabled ? 'kb-mcp-tier-workspace' : 'kb-mcp-tier-personal'
++                      }`}
++                      data-testid={`policy-status-${p.id}`}
++                    >
++                      {p.is_enabled ? 'Active' : 'Disabled'}
++                    </span>
++                  </td>
++                  <td className="kb-mcp-td">
++                    <button
++                      type="button"
++                      className="kb-mcp-action-btn"
++                      data-testid={`toggle-policy-btn-${p.id}`}
++                      onClick={() => void handleToggle(p)}
++                    >
++                      {p.is_enabled ? 'Disable' : 'Enable'}
++                    </button>
++                    <button
++                      type="button"
++                      className="kb-mcp-action-btn"
++                      data-testid={`edit-policy-btn-${p.id}`}
++                      onClick={() => { handleOpenEdit(p); }}
++                    >
++                      Edit
++                    </button>
++                    <button
++                      type="button"
++                      className="kb-mcp-btn-danger"
++                      data-testid={`delete-policy-btn-${p.id}`}
++                      onClick={() => void handleDelete(p.id)}
++                    >
++                      Delete
++                    </button>
++                  </td>
++                </tr>
++              ))}
++            </tbody>
++          </table>
++        </div>
++      )}
++
++      {/* Create / Edit Modal */}
++      {showModal && (
++        <div className="kb-snippet-modal-backdrop" data-testid="workload-policy-modal">
++          <div
++            className="kb-snippet-modal-card"
++            role="dialog"
++            aria-modal="true"
++            aria-labelledby="workload-modal-title"
++          >
++            <div className="kb-snippet-modal-header">
++              <h2 id="workload-modal-title" className="kb-snippet-modal-title">
++                {editingPolicy ? 'Edit Workload Policy' : 'Create Workload Identity Policy'}
++              </h2>
++              <button
++                type="button"
++                className="kb-snippet-modal-close-btn"
++                onClick={() => { setShowModal(false); }}
++              >
++                x
++              </button>
++            </div>
++            <form onSubmit={(e) => void handleSubmit(e)}>
++              <div className="kb-mcp-form-group">
++                <label className="kb-mcp-label" htmlFor="wl-policy-name">Policy Name *</label>
++                <input
++                  id="wl-policy-name"
++                  type="text"
++                  className="kb-mcp-input"
++                  data-testid="policy-name-input"
++                  required
++                  value={formName}
++                  onChange={(e) => { setFormName(e.target.value); }}
++                />
++              </div>
++
++              <div className="kb-mcp-form-group">
++                <label className="kb-mcp-label" htmlFor="wl-policy-desc">Description</label>
++                <input
++                  id="wl-policy-desc"
++                  type="text"
++                  className="kb-mcp-input"
++                  data-testid="policy-description-input"
++                  value={formDesc}
++                  onChange={(e) => { setFormDesc(e.target.value); }}
++                />
++              </div>
++
++              {!editingPolicy && (
++                <>
++                  <div className="kb-mcp-form-group">
++                    <label className="kb-mcp-label" htmlFor="wl-policy-issuer">Issuer URL *</label>
++                    <input
++                      id="wl-policy-issuer"
++                      type="url"
++                      className="kb-mcp-input"
++                      data-testid="policy-issuer-input"
++                      required
++                      placeholder="https://token.actions.githubusercontent.com"
++                      value={formIssuer}
++                      onChange={(e) => { setFormIssuer(e.target.value); }}
++                    />
++                  </div>
++
++                  <div className="kb-mcp-form-group">
++                    <label className="kb-mcp-label" htmlFor="wl-policy-client-id">Client ID / Audience *</label>
++                    <input
++                      id="wl-policy-client-id"
++                      type="text"
++                      className="kb-mcp-input"
++                      data-testid="policy-client-id-input"
++                      required
++                      placeholder="https://kanban.example.com"
++                      value={formClientId}
++                      onChange={(e) => { setFormClientId(e.target.value); }}
++                    />
++                  </div>
++
++                  <div className="kb-mcp-form-group">
++                    <label className="kb-mcp-label" htmlFor="wl-policy-surface">Surface *</label>
++                    <select
++                      id="wl-policy-surface"
++                      className="kb-mcp-select"
++                      data-testid="policy-surface-select"
++                      value={formSurface}
++                      onChange={(e) => { setFormSurface(e.target.value as 'agent' | 'docs'); }}
++                    >
++                      <option value="agent">Agent (/mcp/agent)</option>
++                      <option value="docs">Docs (/mcp/docs)</option>
++                    </select>
++                  </div>
++                </>
++              )}
++
++              <div className="kb-mcp-form-group">
++                <label className="kb-mcp-label" htmlFor="wl-policy-subject-pattern">Subject Pattern *</label>
++                <input
++                  id="wl-policy-subject-pattern"
++                  type="text"
++                  className="kb-mcp-input"
++                  data-testid="policy-subject-pattern-input"
++                  required
++                  placeholder="repo:org/repo:ref:refs/heads/*"
++                  value={formSubjectPattern}
++                  onChange={(e) => { setFormSubjectPattern(e.target.value); }}
++                />
++              </div>
++
++              <div className="kb-mcp-form-group">
++                <label className="kb-mcp-label" htmlFor="wl-policy-cap-mask">Capability Mask (0-255)</label>
++                <input
++                  id="wl-policy-cap-mask"
++                  type="number"
++                  className="kb-mcp-input"
++                  data-testid="policy-cap-mask-input"
++                  min="0"
++                  max="255"
++                  value={formCapMask}
++                  onChange={(e) => { setFormCapMask(e.target.value); }}
++                />
++              </div>
++
++              <div className="kb-mcp-form-group">
++                <label className="kb-mcp-label" htmlFor="wl-policy-cidrs">Allowed CIDRs (comma-separated)</label>
++                <input
++                  id="wl-policy-cidrs"
++                  type="text"
++                  className="kb-mcp-input"
++                  data-testid="policy-cidrs-input"
++                  placeholder="192.168.1.0/24, 10.0.0.0/8"
++                  value={formCidrs}
++                  onChange={(e) => { setFormCidrs(e.target.value); }}
++                />
++              </div>
++
++              <div className="kb-mcp-form-group">
++                <label className="kb-mcp-label" htmlFor="wl-policy-ttl">Max TTL Seconds</label>
++                <input
++                  id="wl-policy-ttl"
++                  type="number"
++                  className="kb-mcp-input"
++                  data-testid="policy-ttl-input"
++                  min="60"
++                  max="86400"
++                  value={formTtl}
++                  onChange={(e) => { setFormTtl(e.target.value); }}
++                />
++              </div>
++
++              <div className="kb-mcp-form-actions">
++                <button
++                  type="button"
++                  className="kb-snippet-copy-btn"
++                  data-testid="policy-cancel-btn"
++                  onClick={() => { setShowModal(false); }}
++                >
++                  Cancel
++                </button>
++                <button
++                  type="submit"
++                  className="kb-snippet-done-btn"
++                  data-testid="policy-submit-btn"
++                  disabled={submitting}
++                >
++                  {submitting ? 'Saving...' : 'Save Policy'}
++                </button>
++              </div>
++            </form>
++          </div>
++        </div>
++      )}
++
++      {/* Step-Up Modal */}
++      {aal2Challenge && (
++        <div className="kb-snippet-modal-backdrop" data-testid="aal2-modal-backdrop">
++          <div
++            className="kb-snippet-modal-card"
++            role="dialog"
++            aria-modal="true"
++            aria-labelledby="aal2-modal-title"
++            data-testid="aal2-modal-card"
++          >
++            <div className="kb-snippet-modal-header">
++              <h2 id="aal2-modal-title" className="kb-snippet-modal-title">
++                Admin Verification Required (AAL2)
++              </h2>
++              <button
++                type="button"
++                className="kb-snippet-modal-close-btn"
++                onClick={() => {
++                  setAal2Challenge(null);
++                  setPendingAction(null);
++                }}
++              >
++                x
++              </button>
++            </div>
++            <div className="kb-mcp-studio-section">
++              <SecondFactorStep
++                challengeId={aal2Challenge.challengeId}
++                methods={aal2Challenge.methods}
++                onSuccess={() => {
++                  void handleAal2Success();
++                }}
++                onError={() => {
++                  // Handled inside SecondFactorStep
++                }}
++                onSessionExpired={() => {
++                  setAal2Challenge(null);
++                  setPendingAction(null);
++                }}
++                onCancel={() => {
++                  setAal2Challenge(null);
++                  setPendingAction(null);
++                }}
++              />
++            </div>
++          </div>
++        </div>
++      )}
++    </div>
++  );
++}
++
++export { McpAccessStudio as McpUnifiedStudio };
++export * from './McpAccessStudio';
 diff --git a/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx b/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx
-index d759757e..1a71be67 100644
+index d759757e..821b75c9 100644
 --- a/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx
 +++ b/kanban/web/src/features/settings/__tests__/McpUnifiedStudio.test.tsx
-@@ -6,6 +6,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+@@ -2,10 +2,11 @@
+ // Apache-2.0 License. See LICENSE for details.
+ 
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
  import React from 'react';
  import { MemoryRouter, Routes, Route, useLocation } from 'react-router';
  import { McpAccessStudio } from '../McpAccessStudio';
@@ -257,7 +2534,7 @@ index d759757e..1a71be67 100644
  import * as settingsApi from '../settingsApi';
  import * as clientModule from '../../../api/client';
  import { ApiProblem } from '../../../api/problem';
-@@ -784,3 +785,183 @@ describe('Unified MCP Studio (KAN-31)', () => {
+@@ -784,3 +785,321 @@ describe('Unified MCP Studio (KAN-31)', () => {
      );
    });
  });
@@ -440,6 +2717,144 @@ index d759757e..1a71be67 100644
 +      expect(screen.getByText('GitHub Actions Main CI')).toBeDefined();
 +    });
 +  });
++
++  it('covers policy editing, disabled/empty-CIDR rendering, modal cancel/close, error banners, and AAL2 step-up replay across mutations', async () => {
++    const disabledPolicy: WorkloadIdentityPolicyItem = {
++      ...samplePolicy,
++      id: 'pol-disabled',
++      name: 'Disabled Runner',
++      description: null,
++      allowed_cidrs: [],
++      is_enabled: false,
++    };
++
++    let mode: 'normal' | 'aal2' | 'err' | 'str_err' = 'normal';
++    const apiSpy = vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
++      await Promise.resolve();
++      if (mode === 'aal2' && method !== 'GET') {
++        mode = 'normal';
++        throw new ApiProblem(403, { code: 'AAL2_STALE' });
++      }
++      if (mode === 'err' && method !== 'GET') {
++        throw new Error('Mutation failed');
++      }
++      if (mode === 'str_err' && method !== 'GET') {
++        // eslint-disable-next-line @typescript-eslint/only-throw-error
++        throw 'Non-Error rejection';
++      }
++      if (method === 'GET' && (path as string) === '/api/v1/admin/workload-identities') {
++        return [samplePolicy, disabledPolicy];
++      }
++      return { ...samplePolicy };
++    });
++
++    render(<WorkloadFederationSection isAdmin={true} />);
++
++    await waitFor(() => {
++      expect(screen.getByTestId('policy-status-pol-disabled').textContent).toBe('Disabled');
++      expect(screen.getByText('Any')).toBeDefined();
++    });
++
++    // Open create modal, test field changes and cancel button
++    fireEvent.click(screen.getByTestId('add-workload-policy-btn'));
++    fireEvent.change(screen.getByTestId('policy-description-input'), { target: { value: 'Desc' } });
++    fireEvent.change(screen.getByTestId('policy-surface-select'), { target: { value: 'docs' } });
++    fireEvent.change(screen.getByTestId('policy-cap-mask-input'), { target: { value: '' } });
++    fireEvent.change(screen.getByTestId('policy-cidrs-input'), { target: { value: '10.0.0.0/8, 192.168.1.0/24' } });
++    fireEvent.change(screen.getByTestId('policy-ttl-input'), { target: { value: '' } });
++    fireEvent.click(screen.getByTestId('policy-cancel-btn'));
++    expect(screen.queryByTestId('workload-policy-modal')).toBeNull();
++
++    // Open edit modal on disabledPolicy (description is null -> '')
++    fireEvent.click(screen.getByTestId('edit-policy-btn-pol-disabled'));
++    expect(screen.getByText('Edit Workload Policy')).toBeDefined();
++    fireEvent.change(screen.getByTestId('policy-description-input'), { target: { value: 'Updated desc' } });
++
++    // Submit with AAL2_STALE challenge, then complete step-up
++    mode = 'aal2';
++    fireEvent.click(screen.getByTestId('policy-submit-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
++    });
++    fireEvent.click(screen.getByTestId('mfa-success-btn'));
++    await waitFor(() => {
++      expect(apiSpy).toHaveBeenCalledWith(
++        'PATCH',
++        '/api/v1/admin/workload-identities/pol-disabled',
++        expect.any(Object),
++      );
++    });
++
++    // Submit error & non-Error branches
++    fireEvent.click(screen.getByTestId('edit-policy-btn-pol-1'));
++    mode = 'err';
++    fireEvent.click(screen.getByTestId('policy-submit-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('workload-error-banner').textContent).toContain('Mutation failed');
++    });
++    mode = 'str_err';
++    fireEvent.click(screen.getByTestId('policy-submit-btn'));
++    await waitFor(() => {
++      expect(screen.getByTestId('workload-error-banner').textContent).toContain('Failed to save workload policy');
++    });
++    // Close modal via 'x' button
++    fireEvent.click(within(screen.getByTestId('workload-policy-modal')).getByText('x'));
++
++    // Toggle with AAL2, Error, and non-Error
++    mode = 'aal2';
++    fireEvent.click(screen.getByTestId('toggle-policy-btn-pol-disabled'));
++    await waitFor(() => {
++      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
++    });
++    fireEvent.click(screen.getByTestId('mfa-success-btn'));
++
++    mode = 'err';
++    fireEvent.click(screen.getByTestId('toggle-policy-btn-pol-disabled'));
++    await waitFor(() => {
++      expect(screen.getByTestId('workload-error-banner').textContent).toContain('Mutation failed');
++    });
++    mode = 'str_err';
++    fireEvent.click(screen.getByTestId('toggle-policy-btn-pol-disabled'));
++    await waitFor(() => {
++      expect(screen.getByTestId('workload-error-banner').textContent).toContain('Failed to toggle policy');
++    });
++
++    // Delete with AAL2, Error, and non-Error
++    mode = 'aal2';
++    fireEvent.click(screen.getByTestId('delete-policy-btn-pol-disabled'));
++    await waitFor(() => {
++      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
++    });
++    // Close AAL2 modal via 'x' button
++    fireEvent.click(within(screen.getByTestId('aal2-modal-card')).getByText('x'));
++    expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
++
++    mode = 'err';
++    fireEvent.click(screen.getByTestId('delete-policy-btn-pol-disabled'));
++    await waitFor(() => {
++      expect(screen.getByTestId('workload-error-banner').textContent).toContain('Mutation failed');
++    });
++    mode = 'str_err';
++    fireEvent.click(screen.getByTestId('delete-policy-btn-pol-disabled'));
++    await waitFor(() => {
++      expect(screen.getByTestId('workload-error-banner').textContent).toContain('Failed to delete policy');
++    });
++  });
++
++  it('displays error banner when initial fetchPolicies fails', async () => {
++    vi.spyOn(clientModule, 'apiFetch').mockRejectedValueOnce(new Error('Load error'));
++    const { unmount } = render(<WorkloadFederationSection isAdmin={true} />);
++    await waitFor(() => {
++      expect(screen.getByTestId('workload-error-banner').textContent).toContain('Load error');
++    });
++    unmount();
++
++    vi.spyOn(clientModule, 'apiFetch').mockRejectedValueOnce('String load error');
++    render(<WorkloadFederationSection isAdmin={true} />);
++    await waitFor(() => {
++      expect(screen.getByTestId('workload-error-banner').textContent).toContain('Failed to load workload policies');
++    });
++  });
 +});
 diff --git a/mcp/auth.py b/mcp/auth.py
 index 8f8e9755..29cea8f0 100644
@@ -603,3 +3018,450 @@ index 8f8e9755..29cea8f0 100644
          # Check positive introspection cache (bypassed for ephemeral tokens)
          intro_result = (
              None
+diff --git a/mcp/tests/test_workload_jwt_auth.py b/mcp/tests/test_workload_jwt_auth.py
+new file mode 100644
+index 00000000..bd58b5ce
+--- /dev/null
++++ b/mcp/tests/test_workload_jwt_auth.py
+@@ -0,0 +1,441 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unit and integration tests for MCP Workload Identity Federation JWT auth.
++
++KB-AUTH-OIDC-EXCHANGE-01.
++
++Validates:
++1. Fast-path authentication with ES256 workload JWT tokens on /mcp/agent and /mcp/docs.
++2. Rejection of surface mismatches (e.g. agent token presented to /mcp/docs or /mcp/admin).
++3. Client IP CIDR validation (direct peers and trusted proxy forwarded IPs).
++4. Credential boundary capability_mask enforcement during tool listing and dispatch.
++5. Rejection of expired or tampered JWT access tokens.
++6. Project scope intersection and containment enforcement.
++"""
++
++from __future__ import annotations
++
++import base64
++import time
++import uuid
++from typing import Any
++
++import httpx
++import pytest
++from joserfc import jwt
++
++from kanban.oauth.jwt import _get_signing_eckey
++from mcp.app import create_mcp_app
++from mcp.auth import McpAuthMiddleware
++from mcp.internal_client import KanbanApiClient
++from mcp.registry import Surface, ToolRegistry, ToolSpec
++from mcp.scoping import Capability
++from mcp.settings import McpSettings
++
++_DUMMY_SCHEMA: dict[str, Any] = {"type": "object"}
++
++
++def _b64(b: bytes) -> str:
++    return base64.urlsafe_b64encode(b).decode("ascii").rstrip("=")
++
++
++@pytest.fixture(autouse=True)
++def setup_test_key_material(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Set up valid test key material in environment."""
++    monkeypatch.delenv("KANBAN_KEYRING_FILE", raising=False)
++    monkeypatch.setenv("KANBAN_MASTER_KEK", _b64(b"k" * 32))
++    monkeypatch.setenv("KANBAN_AUTH_PEPPER", _b64(b"p" * 32))
++    monkeypatch.setenv("KANBAN_SESSION_HMAC_KEY", _b64(b"s" * 32))
++    monkeypatch.setenv("KANBAN_MASTER_KEK_KID", "test-kid-1")
++
++
++def _mint_test_workload_jwt(  # noqa: PLR0913
++    *,
++    surface: str = "agent",
++    scopes: list[str] | None = None,
++    capability_mask: int = 255,
++    allowed_cidrs: list[str] | None = None,
++    allowed_projects: list[str] | None = None,
++    ttl_seconds: int = 3600,
++    base_url: str = "http://test",
++    principal_id: str = "user-workload-svc",
++    workspace_id: str | None = None,
++    expired: bool = False,
++    token_kind: str = "workload",  # noqa: S107
++) -> str:
++    """Mint an ES256 workload JWT token for testing."""
++    eckey, kid = _get_signing_eckey()
++    header = {"alg": "ES256", "typ": "JWT", "kid": kid}
++    now = int(time.time())
++    exp = (now - 300) if expired else (now + ttl_seconds)
++    claims: dict[str, Any] = {
++        "iss": base_url,
++        "sub": principal_id,
++        "aud": f"{base_url}/mcp/{surface}",
++        "surface": surface,
++        "scope": " ".join(scopes or [f"{surface}:read", f"{surface}:write"]),
++        "client_id": "test-workload-client",
++        "policy_id": str(uuid.uuid4()),
++        "ws": workspace_id or str(uuid.uuid4()),
++        "jti": str(uuid.uuid4()),
++        "iat": now - 10,
++        "exp": exp,
++        "token_kind": token_kind,
++        "capability_mask": capability_mask,
++    }
++    if allowed_cidrs:
++        claims["allowed_cidrs"] = allowed_cidrs
++    if allowed_projects:
++        claims["allowed_project_ids"] = allowed_projects
++        claims["allowed_projects"] = allowed_projects
++    return jwt.encode(header, claims, eckey)
++
++
++def _build_test_mcp_app(
++    surface: Surface,
++) -> tuple[KanbanApiClient, ToolRegistry, McpAuthMiddleware]:
++    """Build an MCP application with sample tools for testing."""
++    reg = ToolRegistry(surface)
++
++    async def _read_handler(_args: dict[str, Any]) -> dict[str, str]:
++        return {"result": "read_ok"}
++
++    async def _create_handler(_args: dict[str, Any]) -> dict[str, str]:
++        return {"result": "create_ok"}
++
++    tool_name_read = "read_ticket" if surface == Surface.AGENT else "read_doc"
++    tool_name_write = "create_ticket" if surface == Surface.AGENT else "create_doc"
++
++    reg.register(
++        ToolSpec(
++            name=tool_name_read,
++            description="Read operation",
++            surface=surface,
++            input_schema=_DUMMY_SCHEMA,
++            handler=_read_handler,
++        )
++    )
++    reg.register(
++        ToolSpec(
++            name=tool_name_write,
++            description="Write operation",
++            surface=surface,
++            input_schema=_DUMMY_SCHEMA,
++            handler=_create_handler,
++        )
++    )
++
++    settings = McpSettings(mode="standalone_inprocess", auth_enabled=True)
++
++    def _dummy_transport(_req: httpx.Request) -> httpx.Response:
++        return httpx.Response(200, json={"active": True})
++
++    client = KanbanApiClient(settings, transport=httpx.MockTransport(_dummy_transport))
++
++    kwargs: dict[str, Any] = {"settings": settings, "kanban_app": None}
++    if surface == Surface.AGENT:
++        kwargs["agent_registry"] = reg
++    elif surface == Surface.DOCS:
++        kwargs["docs_registry"] = reg
++
++    base_app = create_mcp_app(**kwargs)
++    middleware = McpAuthMiddleware(
++        base_app,
++        surface=surface,
++        internal_client=client,
++        settings=settings,
++    )
++    return client, reg, middleware
++
++
++@pytest.mark.asyncio
++async def test_workload_jwt_valid_agent_request() -> None:
++    """Verify valid workload JWT passes through McpAuthMiddleware on agent surface."""
++    _client, _reg, app = _build_test_mcp_app(Surface.AGENT)
++    token = _mint_test_workload_jwt(surface="agent", capability_mask=255)
++
++    transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 12345))
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
++        init_resp = await c.post(
++            "/mcp/agent",
++            headers={
++                "Authorization": f"Bearer {token}",
++                "Content-Type": "application/json",
++            },
++            json={
++                "jsonrpc": "2.0",
++                "id": 1,
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": "2025-06-18",
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-client", "version": "1.0"},
++                },
++            },
++        )
++        assert init_resp.status_code == 200
++        session_id = init_resp.headers["mcp-session-id"]
++
++        list_resp = await c.post(
++            "/mcp/agent",
++            headers={
++                "Authorization": f"Bearer {token}",
++                "Mcp-Session-Id": session_id,
++                "Content-Type": "application/json",
++            },
++            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
++        )
++        assert list_resp.status_code == 200
++        data = list_resp.json()
++        assert "result" in data
++        tool_names = [t["name"] for t in data["result"]["tools"]]
++        assert "read_ticket" in tool_names
++        assert "create_ticket" in tool_names
++
++
++@pytest.mark.asyncio
++async def test_workload_jwt_valid_docs_request() -> None:
++    """Verify valid workload JWT passes through McpAuthMiddleware on docs surface."""
++    _client, _reg, app = _build_test_mcp_app(Surface.DOCS)
++    token = _mint_test_workload_jwt(surface="docs", capability_mask=255)
++
++    transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 12345))
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
++        init_resp = await c.post(
++            "/mcp/docs",
++            headers={
++                "Authorization": f"Bearer {token}",
++                "Content-Type": "application/json",
++            },
++            json={
++                "jsonrpc": "2.0",
++                "id": 1,
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": "2025-06-18",
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-client", "version": "1.0"},
++                },
++            },
++        )
++        assert init_resp.status_code == 200
++        session_id = init_resp.headers["mcp-session-id"]
++
++        list_resp = await c.post(
++            "/mcp/docs",
++            headers={
++                "Authorization": f"Bearer {token}",
++                "Mcp-Session-Id": session_id,
++                "Content-Type": "application/json",
++            },
++            json={"jsonrpc": "2.0", "id": 2, "method": "tools/list", "params": {}},
++        )
++        assert list_resp.status_code == 200
++        data = list_resp.json()
++        assert "result" in data
++        tool_names = [t["name"] for t in data["result"]["tools"]]
++        assert "read_doc" in tool_names
++        assert "create_doc" in tool_names
++
++
++@pytest.mark.asyncio
++async def test_workload_jwt_surface_mismatch_rejected() -> None:
++    """Verify token minted for agent surface is rejected on docs surface with 403."""
++    _client, _reg, docs_app = _build_test_mcp_app(Surface.DOCS)
++    agent_token = _mint_test_workload_jwt(surface="agent")
++
++    transport = httpx.ASGITransport(app=docs_app, client=("127.0.0.1", 12345))
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
++        resp = await c.post(
++            "/mcp/docs",
++            headers={"Authorization": f"Bearer {agent_token}"},
++            json={
++                "jsonrpc": "2.0",
++                "id": 3,
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": "2025-06-18",
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-client", "version": "1.0"},
++                },
++            },
++        )
++        assert resp.status_code == 403
++        data = resp.json()
++        assert data.get("error") == "SURFACE_KEY_MISMATCH"
++
++
++@pytest.mark.asyncio
++async def test_workload_jwt_cidr_allowed_and_denied() -> None:
++    """Verify client CIDR restrictions are enforced for workload JWTs."""
++    _client, _reg, app = _build_test_mcp_app(Surface.AGENT)
++    token = _mint_test_workload_jwt(
++        surface="agent",
++        allowed_cidrs=["192.168.1.0/24"],
++    )
++
++    # 1. Allowed IP: 192.168.1.50
++    transport_ok = httpx.ASGITransport(app=app, client=("192.168.1.50", 12345))
++    async with httpx.AsyncClient(transport=transport_ok, base_url="http://test") as c:
++        resp_ok = await c.post(
++            "/mcp/agent",
++            headers={"Authorization": f"Bearer {token}"},
++            json={
++                "jsonrpc": "2.0",
++                "id": 4,
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": "2025-06-18",
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-client", "version": "1.0"},
++                },
++            },
++        )
++        assert resp_ok.status_code == 200
++
++    # 2. Denied IP: 10.0.0.1
++    transport_denied = httpx.ASGITransport(app=app, client=("10.0.0.1", 12345))
++    async with httpx.AsyncClient(transport=transport_denied, base_url="http://test") as c:
++        resp_denied = await c.post(
++            "/mcp/agent",
++            headers={"Authorization": f"Bearer {token}"},
++            json={
++                "jsonrpc": "2.0",
++                "id": 5,
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": "2025-06-18",
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-client", "version": "1.0"},
++                },
++            },
++        )
++        assert resp_denied.status_code == 403
++        data = resp_denied.json()
++        assert data.get("error") == "KEY_CIDR_DENIED"
++
++
++@pytest.mark.asyncio
++async def test_workload_jwt_capability_mask_filtered_in_tools_list() -> None:
++    """Verify read-only capability_mask filters out mutating tools from tools/list."""
++    _client, _reg, app = _build_test_mcp_app(Surface.AGENT)
++    # capability_mask = 1 (VIEW only)
++    ro_token = _mint_test_workload_jwt(surface="agent", capability_mask=int(Capability.VIEW))
++
++    transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 12345))
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
++        init_resp = await c.post(
++            "/mcp/agent",
++            headers={"Authorization": f"Bearer {ro_token}"},
++            json={
++                "jsonrpc": "2.0",
++                "id": 6,
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": "2025-06-18",
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-client", "version": "1.0"},
++                },
++            },
++        )
++        assert init_resp.status_code == 200
++        session_id = init_resp.headers["mcp-session-id"]
++
++        list_resp = await c.post(
++            "/mcp/agent",
++            headers={
++                "Authorization": f"Bearer {ro_token}",
++                "Mcp-Session-Id": session_id,
++            },
++            json={"jsonrpc": "2.0", "id": 7, "method": "tools/list", "params": {}},
++        )
++        assert list_resp.status_code == 200
++        data = list_resp.json()
++        tool_names = [t["name"] for t in data["result"]["tools"]]
++        assert "read_ticket" in tool_names
++        assert "create_ticket" not in tool_names
++
++
++@pytest.mark.asyncio
++async def test_workload_jwt_expired_token_rejected() -> None:
++    """Verify expired workload JWT returns 401 Unauthorized."""
++    _client, _reg, app = _build_test_mcp_app(Surface.AGENT)
++    expired_token = _mint_test_workload_jwt(surface="agent", expired=True)
++
++    transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 12345))
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
++        resp = await c.post(
++            "/mcp/agent",
++            headers={"Authorization": f"Bearer {expired_token}"},
++            json={
++                "jsonrpc": "2.0",
++                "id": 8,
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": "2025-06-18",
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-client", "version": "1.0"},
++                },
++            },
++        )
++        assert resp.status_code == 401
++
++
++@pytest.mark.asyncio
++async def test_workload_jwt_project_scope_containment() -> None:
++    """Verify project scoping boundaries are checked against allowed_project_ids."""
++    _client, _reg, app = _build_test_mcp_app(Surface.AGENT)
++    ws_id = str(uuid.uuid4())
++    proj_a = "PRJ_A"
++    proj_b = "PRJ_B"
++    token = _mint_test_workload_jwt(
++        surface="agent",
++        workspace_id=ws_id,
++        allowed_projects=[proj_a],
++    )
++
++    # 1. Connection scope requesting allowed proj_a succeeds
++    transport = httpx.ASGITransport(app=app, client=("127.0.0.1", 12345))
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as c:
++        resp_ok = await c.post(
++            "/mcp/agent",
++            headers={
++                "Authorization": f"Bearer {token}",
++                "X-Workspace-Slug": ws_id,
++                "X-Project-Key": proj_a,
++            },
++            json={
++                "jsonrpc": "2.0",
++                "id": 9,
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": "2025-06-18",
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-client", "version": "1.0"},
++                },
++            },
++        )
++        assert resp_ok.status_code == 200
++
++        # 2. Connection scope requesting forbidden proj_b rejected with 403
++        resp_denied = await c.post(
++            "/mcp/agent",
++            headers={
++                "Authorization": f"Bearer {token}",
++                "X-Workspace-Slug": ws_id,
++                "X-Project-Key": proj_b,
++            },
++            json={
++                "jsonrpc": "2.0",
++                "id": 10,
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": "2025-06-18",
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-client", "version": "1.0"},
++                },
++            },
++        )
++        assert resp_denied.status_code == 403
++        data = resp_denied.json()
++        assert data.get("error") == "KEY_SCOPE_VIOLATION"

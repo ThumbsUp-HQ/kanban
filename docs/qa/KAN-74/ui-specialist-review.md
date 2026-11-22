@@ -5,7 +5,7 @@
 - **Review Date:** 2026-11-22
 - **Branch:** `feat/KAN-74-workload-oidc-exchange`
 - **Target Worktree:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan74-0d650313`
-- **Commit Under Audit:** `824f2edb` (`feat(auth): add headless workload identity federation and RFC 8693 token exchange for /mcp/* (KAN-74)`)
+- **Commit Under Audit:** `6ce4a18a04a1a561335fa57f4ee28bd1051d0d92 (6ce4a18a)` (`feat(auth): add headless workload identity federation and RFC 8693 token exchange for /mcp/* (KAN-74)`)
 - **Status:** APPROVED
 
 ---
@@ -68,3 +68,10 @@ Detailed audit of frontend ergonomics and UI implementation:
 
 - **STATUS:** APPROVED
 - **Next Step:** Ready for merge into `main` and finalization by `@merge-ci`.
+
+## Live Zero-Mock Playwright Screenshots (Captured on main @ 6ce4a18a04a1a561335fa57f4ee28bd1051d0d92)
+- `docs/qa/KAN-74/screenshots/01-desktop-light-mcp-workload-studio.png` (1440x900 Light)
+- `docs/qa/KAN-74/screenshots/02-desktop-dark-mcp-workload-studio.png` (1440x900 Dark)
+- `docs/qa/KAN-74/screenshots/03-tablet-mcp-workload-studio.png` (768x1024 Tablet)
+- `docs/qa/KAN-74/screenshots/04-mobile-portrait-mcp-workload-studio.png` (390x844 Mobile Portrait)
+- `docs/qa/KAN-74/screenshots/05-mobile-landscape-mcp-workload-studio.png` (844x390 Mobile Landscape)
