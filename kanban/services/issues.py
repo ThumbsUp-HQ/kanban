@@ -118,7 +118,7 @@ from kanban.security.permissions import (
     parse_token_scope_mask,
     require_capability,
 )
-from kanban.security.push_protection import enforce_secret_push_protection
+from kanban.security.push_protection import PushProtectionMode, enforce_secret_push_protection
 from kanban.security.scrubber import scrub_text
 from kanban.services.activity import ActivityEventType, JSONValue, record_activity
 from kanban.services.assignees import get_issue_assignees
@@ -1654,9 +1654,19 @@ async def create_issue(
     await require_capability(session, caller, project.id, Capability.EDIT)
 
     summary = _normalize_summary(body.summary)
-    summary = enforce_secret_push_protection(summary, field="summary") or ""
+    summary = (
+        enforce_secret_push_protection(
+            summary, field="summary", mode=PushProtectionMode.REDACT_ON_WRITE
+        )
+        or ""
+    )
     description = _normalize_description(body.description_markdown)
-    description = enforce_secret_push_protection(description, field="description_markdown") or ""
+    description = (
+        enforce_secret_push_protection(
+            description, field="description_markdown", mode=PushProtectionMode.REDACT_ON_WRITE
+        )
+        or ""
+    )
     _validate_dates(body.start_date, body.due_date)
 
     target_module_ids = await _resolve_modules(session, project, body.module_ids)
@@ -1886,7 +1896,12 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
                 field="summary",
             )
         new_summary = _normalize_summary(body.summary)
-        new_summary = enforce_secret_push_protection(new_summary, field="summary") or ""
+        new_summary = (
+            enforce_secret_push_protection(
+                new_summary, field="summary", mode=PushProtectionMode.REDACT_ON_WRITE
+            )
+            or ""
+        )
         if new_summary != issue.summary:
             update_vals["summary"] = new_summary
             field_changes.append(("summary", issue.summary, new_summary))
@@ -1895,7 +1910,12 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
     new_desc: str = ""
     if desc_in_patch:
         new_desc = _normalize_description(body.description_markdown or "")
-        new_desc = enforce_secret_push_protection(new_desc, field="description_markdown") or ""
+        new_desc = (
+            enforce_secret_push_protection(
+                new_desc, field="description_markdown", mode=PushProtectionMode.REDACT_ON_WRITE
+            )
+            or ""
+        )
         if new_desc != issue.description_markdown:
             update_vals["description_markdown"] = new_desc
             desc_changed = True

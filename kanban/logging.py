@@ -174,14 +174,14 @@ def scrub_log_secrets(text: str) -> str:
     # Redact setup tokens to explicit [REDACTED:SETUP_TOKEN]
     text = _RE_SETUP_TOKEN.sub("[REDACTED:SETUP_TOKEN]", text)
 
+    # Redact PostgreSQL DSN credentials before generic URI scrubber
+    text = _RE_DSN_PASSWORD.sub(r"\g<1>[REDACTED:PASSWORD]\g<3>", text)
+
     # Pass through primary secret scrubber (API keys, JWT, Bearer, kb_* keys, PEM)
     text = scrub_text(text)
 
     # Redact session cookies
     text = _RE_COOKIES.sub(r"\g<1>=[REDACTED:COOKIE]", text)
-
-    # Redact PostgreSQL DSN credentials
-    text = _RE_DSN_PASSWORD.sub(r"\g<1>[REDACTED:PASSWORD]\g<3>", text)
 
     # Redact key-value password and secret assignments
     return _RE_KV_SECRETS.sub(r"\g<1>\g<2>[REDACTED:SECRET]\g<4>", text)

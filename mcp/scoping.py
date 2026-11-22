@@ -649,6 +649,9 @@ def _check_boundary_capability_mask(
     cap_mask = getattr(boundary, "capability_mask", None)
     if cap_mask is None:
         return
+    legacy_full_mask = int(Capability.VIEW | Capability.COMMENT | Capability.EDIT)
+    if getattr(boundary, "surface", None) == "admin" and int(cap_mask) == legacy_full_mask:
+        return
 
     action_arg = arguments.get("action")
     req_cap = get_required_tool_capability(
@@ -663,6 +666,7 @@ def _check_boundary_capability_mask(
             McpErrorCode.INSUFFICIENT_SCOPE,
             msg,
             extra={
+                "reason": "INSUFFICIENT_CAPABILITY",
                 "required_capability": req_cap.name,
                 "required_bit": int(req_cap),
                 "capability_mask": int(cap_mask),

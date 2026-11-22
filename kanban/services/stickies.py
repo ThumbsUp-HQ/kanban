@@ -39,7 +39,7 @@ from kanban.security.permissions import (
     evaluate_capabilities,
     require_capability,
 )
-from kanban.security.push_protection import enforce_secret_push_protection
+from kanban.security.push_protection import PushProtectionMode, enforce_secret_push_protection
 from kanban.security.scrubber import scrub_text
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.lexorank import midpoint_rank
@@ -326,7 +326,12 @@ async def create_sticky(
     await require_capability(session, caller, project.id, Capability.EDIT)
 
     clean_body = _clean_body(body.body_markdown)
-    clean_body = enforce_secret_push_protection(clean_body, field="body_markdown") or ""
+    clean_body = (
+        enforce_secret_push_protection(
+            clean_body, field="body_markdown", mode=PushProtectionMode.REDACT_ON_WRITE
+        )
+        or ""
+    )
     color_val = body.color_token.value
 
     if body.sort_rank:
@@ -547,7 +552,12 @@ async def update_sticky(
                 )
             _verify_if_match(if_match, sticky.body_sha256)
             clean_body = _clean_body(body.body_markdown)
-            clean_body = enforce_secret_push_protection(clean_body, field="body_markdown") or ""
+            clean_body = (
+                enforce_secret_push_protection(
+                    clean_body, field="body_markdown", mode=PushProtectionMode.REDACT_ON_WRITE
+                )
+                or ""
+            )
             sticky.body_markdown = clean_body
             assessment = evaluate_sticky_promotion(
                 clean_body,
@@ -992,7 +1002,12 @@ async def promote_sticky_to_doc(
         if body.structured_body_markdown is not None
         else sticky.body_markdown
     )
-    target_body = enforce_secret_push_protection(target_body, field="body_markdown") or ""
+    target_body = (
+        enforce_secret_push_protection(
+            target_body, field="body_markdown", mode=PushProtectionMode.REDACT_ON_WRITE
+        )
+        or ""
+    )
 
     parent_doc: Doc | None = None
     if body.parent_doc_id is not None:

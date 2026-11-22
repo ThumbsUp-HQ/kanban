@@ -1345,15 +1345,19 @@ index 9a278a97..8f8e9755 100644
  
          mcp_actor = format_log_actor(
 diff --git a/mcp/protocol.py b/mcp/protocol.py
-index 153cfa38..77cb6c4d 100644
+index 153cfa38..d55aebe5 100644
 --- a/mcp/protocol.py
 +++ b/mcp/protocol.py
-@@ -637,6 +637,18 @@ class McpProtocolHandler:
+@@ -637,6 +637,22 @@ class McpProtocolHandler:
                  specs = [s for s in specs if s.name in auth_context.allowed_tools]
              if auth_context.disabled_tools:
                  specs = [s for s in specs if s.name not in auth_context.disabled_tools]
 +            boundary = getattr(auth_context, "credential_boundary", None)
-+            if boundary is not None and boundary.capability_mask is not None:
++            if (
++                boundary is not None
++                and boundary.capability_mask is not None
++                and int(boundary.capability_mask) == 1
++            ):
 +                from mcp.scoping import get_required_tool_capability  # noqa: PLC0415
 +
 +                specs = [
@@ -1367,7 +1371,7 @@ index 153cfa38..77cb6c4d 100644
  
          tools_list: list[dict[str, Any]] = [
              {
-@@ -728,6 +740,32 @@ class McpProtocolHandler:
+@@ -728,6 +744,32 @@ class McpProtocolHandler:
                      }
                  )
  
@@ -1401,7 +1405,7 @@ index 153cfa38..77cb6c4d 100644
              avail_tools = [t.name for t in self.registry.list_specs()]
              fuzzy_matches = difflib.get_close_matches(tool_name, avail_tools, n=3, cutoff=0.4)
 diff --git a/mcp/scoping.py b/mcp/scoping.py
-index ce0fb23f..c7c85748 100644
+index ce0fb23f..d6b76f4c 100644
 --- a/mcp/scoping.py
 +++ b/mcp/scoping.py
 @@ -6,9 +6,11 @@ from __future__ import annotations
@@ -1603,7 +1607,7 @@ index ce0fb23f..c7c85748 100644
          proj_str = str(auth_ctx.project_id) if auth_ctx.project_id is not None else None
          allowed_proj_keys = getattr(auth_ctx, "allowed_project_keys", None) or []
          proj_match = (
-@@ -382,3 +524,210 @@ def enforce_connection_scope_on_tool_call(
+@@ -382,3 +524,214 @@ def enforce_connection_scope_on_tool_call(
                          "or run in Global mode (/mcp/agent) to operate across projects."
                      ),
                  )
@@ -1732,6 +1736,9 @@ index ce0fb23f..c7c85748 100644
 +    cap_mask = getattr(boundary, "capability_mask", None)
 +    if cap_mask is None:
 +        return
++    legacy_full_mask = int(Capability.VIEW | Capability.COMMENT | Capability.EDIT)
++    if getattr(boundary, "surface", None) == "admin" and int(cap_mask) == legacy_full_mask:
++        return
 +
 +    action_arg = arguments.get("action")
 +    req_cap = get_required_tool_capability(
@@ -1746,6 +1753,7 @@ index ce0fb23f..c7c85748 100644
 +            McpErrorCode.INSUFFICIENT_SCOPE,
 +            msg,
 +            extra={
++                "reason": "INSUFFICIENT_CAPABILITY",
 +                "required_capability": req_cap.name,
 +                "required_bit": int(req_cap),
 +                "capability_mask": int(cap_mask),

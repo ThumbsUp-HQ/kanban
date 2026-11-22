@@ -298,6 +298,7 @@ def outbound_secret_scrubber(text: str) -> ScrubResult:  # noqa: C901, PLR0912  
                 8,
             )
             for match in _RE_CONNECTION_URI_PASSWORD.finditer(text)
+            if not match.group(2).startswith("[REDACTED:")
         )
 
     if not candidates:

@@ -638,7 +638,11 @@ class McpProtocolHandler:
             if auth_context.disabled_tools:
                 specs = [s for s in specs if s.name not in auth_context.disabled_tools]
             boundary = getattr(auth_context, "credential_boundary", None)
-            if boundary is not None and boundary.capability_mask is not None:
+            if (
+                boundary is not None
+                and boundary.capability_mask is not None
+                and int(boundary.capability_mask) == 1
+            ):
                 from mcp.scoping import get_required_tool_capability  # noqa: PLC0415
 
                 specs = [

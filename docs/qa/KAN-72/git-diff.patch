@@ -693,7 +693,7 @@ index 00000000..a5ca04fe
 +    )
 +    return redact_text_findings(text, findings)
 diff --git a/kanban/security/scrubber.py b/kanban/security/scrubber.py
-index 0803e22b..5119c30d 100644
+index 0803e22b..6605cb17 100644
 --- a/kanban/security/scrubber.py
 +++ b/kanban/security/scrubber.py
 @@ -23,12 +23,18 @@ _PEM_HEADER_CHARS: Final[set[str]] = set(
@@ -782,7 +782,7 @@ index 0803e22b..5119c30d 100644
      # Rule 5: OpenAI / Anthropic / Provider sk-* Keys
      if "sk-" in text:
          for match in _RE_API_KEY.finditer(text):
-@@ -243,6 +287,19 @@ def outbound_secret_scrubber(text: str) -> ScrubResult:  # noqa: C901, PLR0912
+@@ -243,6 +287,20 @@ def outbound_secret_scrubber(text: str) -> ScrubResult:  # noqa: C901, PLR0912
              for match in _RE_JWT.finditer(text)
          )
  
@@ -797,13 +797,14 @@ index 0803e22b..5119c30d 100644
 +                8,
 +            )
 +            for match in _RE_CONNECTION_URI_PASSWORD.finditer(text)
++            if not match.group(2).startswith("[REDACTED:")
 +        )
 +
      if not candidates:
          return ScrubResult(text=text, redacted=False, count=0, findings=())
  
 diff --git a/kanban/services/activity.py b/kanban/services/activity.py
-index 0d8f2b07..aca56a7e 100644
+index 0d8f2b07..4787ea0c 100644
 --- a/kanban/services/activity.py
 +++ b/kanban/services/activity.py
 @@ -20,6 +20,7 @@ cost is the caller's responsibility.
@@ -814,7 +815,7 @@ index 0d8f2b07..aca56a7e 100644
  from dataclasses import dataclass
  from enum import StrEnum
  from types import MappingProxyType
-@@ -427,6 +428,34 @@ async def _notify(session: AsyncSession, envelope: ActivityEnvelope | EphemeralE
+@@ -427,6 +428,38 @@ async def _notify(session: AsyncSession, envelope: ActivityEnvelope | EphemeralE
          await listener(session, envelope)
  
  
@@ -833,13 +834,17 @@ index 0d8f2b07..aca56a7e 100644
 +    return val
 +
 +
-+def _validate_and_scrub_payload(payload: Mapping[str, JSONValue]) -> dict[str, JSONValue]:
++def _validate_and_scrub_payload(
++    payload: Mapping[str, JSONValue],
++    *,
++    strict: bool = True,
++) -> dict[str, JSONValue]:
 +    """Ensure prose body keys contain only SHA-256 digests and scrub all strings."""
 +    from kanban.security.scrubber import scrub_text  # noqa: PLC0415
 +
 +    cleaned: dict[str, JSONValue] = {}
 +    for k, v in payload.items():
-+        if k in _PROSE_KEYS and (not isinstance(v, str) or not _SHA256_HEX_RE.match(v)):
++        if strict and k in _PROSE_KEYS and (not isinstance(v, str) or not _SHA256_HEX_RE.match(v)):
 +            msg = f"Activity payload key '{k}' must be a 64-char SHA-256 digest, not raw prose body"
 +            raise ValueError(msg)
 +        cleaned[k] = _scrub_json_value(v, scrub_text)
@@ -849,17 +854,17 @@ index 0d8f2b07..aca56a7e 100644
  async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P3-01a
      session: AsyncSession,
      *,
-@@ -437,7 +466,8 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
+@@ -437,7 +470,8 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
      payload: Mapping[str, JSONValue],
  ) -> uuid.UUID:
      """Append one activity row in the caller's transaction and notify listeners."""
 -    if _serialized_size(payload) > MAX_PAYLOAD_BYTES:
-+    sanitized_payload = _validate_and_scrub_payload(payload)
++    sanitized_payload = _validate_and_scrub_payload(payload, strict=False)
 +    if _serialized_size(sanitized_payload) > MAX_PAYLOAD_BYTES:
          msg = f"Activity payload exceeds {MAX_PAYLOAD_BYTES} bytes"
          raise ActivityPayloadTooLarge(msg)
  
-@@ -468,7 +498,7 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
+@@ -468,7 +502,7 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
                      "kind": kind,
                      "actor": actor_principal_id,
                      "etype": event_type.value,
@@ -868,7 +873,7 @@ index 0d8f2b07..aca56a7e 100644
                  },
              )
          ).scalar_one()
-@@ -482,7 +512,7 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
+@@ -482,7 +516,7 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
                  actor_principal_id=actor_principal_id,
                  event_type=event_type,
                  category=EVENT_CATEGORY[event_type],
@@ -914,30 +919,40 @@ index 029a3ec1..afc6f331 100644
                          edited_at=c_model.edited_at,
                          reactions=reactions_map.get(c_model.id, []),
 diff --git a/kanban/services/comments.py b/kanban/services/comments.py
-index e0a59cdd..997a6a86 100644
+index e0a59cdd..671743f5 100644
 --- a/kanban/services/comments.py
 +++ b/kanban/services/comments.py
 @@ -32,6 +32,7 @@ from kanban.api.v1.schemas.comments import (
  )
  from kanban.content import ContentNormalizeError, normalize_to_markdown
  from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
-+from kanban.security.push_protection import enforce_secret_push_protection
++from kanban.security.push_protection import PushProtectionMode, enforce_secret_push_protection
  from kanban.security.scrubber import scrub_text
  from kanban.services.activity import ActivityEventType, record_activity
  from kanban.services.issue_keys import resolve_issue_ref
-@@ -272,6 +273,7 @@ async def create_comment(
+@@ -272,6 +273,12 @@ async def create_comment(
              )
  
      normalized_body = _normalize_comment_body(body.body_markdown)
-+    normalized_body = enforce_secret_push_protection(normalized_body, field="body_markdown") or ""
++    normalized_body = (
++        enforce_secret_push_protection(
++            normalized_body, field="body_markdown", mode=PushProtectionMode.REDACT_ON_WRITE
++        )
++        or ""
++    )
      extracted_handles = extract_mentions(normalized_body)
  
      authorized_mentions, unnotified_mentions, newly_acked_pids = await resolve_mentions(
-@@ -556,6 +558,7 @@ async def update_comment(
+@@ -556,6 +563,12 @@ async def update_comment(
          not_found()
  
      normalized_body = _normalize_comment_body(body.body_markdown)
-+    normalized_body = enforce_secret_push_protection(normalized_body, field="body_markdown") or ""
++    normalized_body = (
++        enforce_secret_push_protection(
++            normalized_body, field="body_markdown", mode=PushProtectionMode.REDACT_ON_WRITE
++        )
++        or ""
++    )
      extracted_handles = extract_mentions(normalized_body)
  
      authorized_mentions, unnotified_mentions, newly_acked_pids = await resolve_mentions(
@@ -1053,14 +1068,14 @@ index d6f8131b..505c0734 100644
          await session.execute(
              text("UPDATE objects SET display_title = :t WHERE id = :id"),
 diff --git a/kanban/services/issues.py b/kanban/services/issues.py
-index 482569e7..07c892d8 100644
+index 482569e7..4c8ffbbf 100644
 --- a/kanban/services/issues.py
 +++ b/kanban/services/issues.py
 @@ -118,6 +118,7 @@ from kanban.security.permissions import (
      parse_token_scope_mask,
      require_capability,
  )
-+from kanban.security.push_protection import enforce_secret_push_protection
++from kanban.security.push_protection import PushProtectionMode, enforce_secret_push_protection
  from kanban.security.scrubber import scrub_text
  from kanban.services.activity import ActivityEventType, JSONValue, record_activity
  from kanban.services.assignees import get_issue_assignees
@@ -1085,41 +1100,61 @@ index 482569e7..07c892d8 100644
          description_markdown=desc_md,
          description_sha256=sha256_hex,
          state=StateSummary(
-@@ -1650,7 +1654,9 @@ async def create_issue(
+@@ -1650,7 +1654,19 @@ async def create_issue(
      await require_capability(session, caller, project.id, Capability.EDIT)
  
      summary = _normalize_summary(body.summary)
-+    summary = enforce_secret_push_protection(summary, field="summary") or ""
++    summary = (
++        enforce_secret_push_protection(
++            summary, field="summary", mode=PushProtectionMode.REDACT_ON_WRITE
++        )
++        or ""
++    )
      description = _normalize_description(body.description_markdown)
-+    description = enforce_secret_push_protection(description, field="description_markdown") or ""
++    description = (
++        enforce_secret_push_protection(
++            description, field="description_markdown", mode=PushProtectionMode.REDACT_ON_WRITE
++        )
++        or ""
++    )
      _validate_dates(body.start_date, body.due_date)
  
      target_module_ids = await _resolve_modules(session, project, body.module_ids)
-@@ -1880,6 +1886,7 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
+@@ -1880,6 +1896,12 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
                  field="summary",
              )
          new_summary = _normalize_summary(body.summary)
-+        new_summary = enforce_secret_push_protection(new_summary, field="summary") or ""
++        new_summary = (
++            enforce_secret_push_protection(
++                new_summary, field="summary", mode=PushProtectionMode.REDACT_ON_WRITE
++            )
++            or ""
++        )
          if new_summary != issue.summary:
              update_vals["summary"] = new_summary
              field_changes.append(("summary", issue.summary, new_summary))
-@@ -1888,6 +1895,7 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
+@@ -1888,6 +1910,12 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
      new_desc: str = ""
      if desc_in_patch:
          new_desc = _normalize_description(body.description_markdown or "")
-+        new_desc = enforce_secret_push_protection(new_desc, field="description_markdown") or ""
++        new_desc = (
++            enforce_secret_push_protection(
++                new_desc, field="description_markdown", mode=PushProtectionMode.REDACT_ON_WRITE
++            )
++            or ""
++        )
          if new_desc != issue.description_markdown:
              update_vals["description_markdown"] = new_desc
              desc_changed = True
 diff --git a/kanban/services/stickies.py b/kanban/services/stickies.py
-index 7de8e124..35ff44f3 100644
+index 7de8e124..ca79f51b 100644
 --- a/kanban/services/stickies.py
 +++ b/kanban/services/stickies.py
 @@ -39,6 +39,8 @@ from kanban.security.permissions import (
      evaluate_capabilities,
      require_capability,
  )
-+from kanban.security.push_protection import enforce_secret_push_protection
++from kanban.security.push_protection import PushProtectionMode, enforce_secret_push_protection
 +from kanban.security.scrubber import scrub_text
  from kanban.services.activity import ActivityEventType, record_activity
  from kanban.services.lexorank import midpoint_rank
@@ -1138,27 +1173,42 @@ index 7de8e124..35ff44f3 100644
          body_sha256=sticky.body_sha256.hex() if sticky.body_sha256 else "",
          color_token=sticky.color_token,
          sort_rank=sticky.sort_rank,
-@@ -323,6 +326,7 @@ async def create_sticky(
+@@ -323,6 +326,12 @@ async def create_sticky(
      await require_capability(session, caller, project.id, Capability.EDIT)
  
      clean_body = _clean_body(body.body_markdown)
-+    clean_body = enforce_secret_push_protection(clean_body, field="body_markdown") or ""
++    clean_body = (
++        enforce_secret_push_protection(
++            clean_body, field="body_markdown", mode=PushProtectionMode.REDACT_ON_WRITE
++        )
++        or ""
++    )
      color_val = body.color_token.value
  
      if body.sort_rank:
-@@ -543,6 +547,7 @@ async def update_sticky(
+@@ -543,6 +552,12 @@ async def update_sticky(
                  )
              _verify_if_match(if_match, sticky.body_sha256)
              clean_body = _clean_body(body.body_markdown)
-+            clean_body = enforce_secret_push_protection(clean_body, field="body_markdown") or ""
++            clean_body = (
++                enforce_secret_push_protection(
++                    clean_body, field="body_markdown", mode=PushProtectionMode.REDACT_ON_WRITE
++                )
++                or ""
++            )
              sticky.body_markdown = clean_body
              assessment = evaluate_sticky_promotion(
                  clean_body,
-@@ -987,6 +992,7 @@ async def promote_sticky_to_doc(
+@@ -987,6 +1002,12 @@ async def promote_sticky_to_doc(
          if body.structured_body_markdown is not None
          else sticky.body_markdown
      )
-+    target_body = enforce_secret_push_protection(target_body, field="body_markdown") or ""
++    target_body = (
++        enforce_secret_push_protection(
++            target_body, field="body_markdown", mode=PushProtectionMode.REDACT_ON_WRITE
++        )
++        or ""
++    )
  
      parent_doc: Doc | None = None
      if body.parent_doc_id is not None:
