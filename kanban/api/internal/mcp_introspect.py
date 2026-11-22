@@ -1,6 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""Internal MCP token introspection endpoint (KB-P4-02a, S11.1)."""
+"""Internal MCP token introspection endpoint (KB-P4-02a, KAN-63, S11.1)."""
 
 from __future__ import annotations
 
@@ -9,13 +9,13 @@ from typing import TYPE_CHECKING, Annotated
 
 from fastapi import APIRouter, Depends, Request
 from pydantic import BaseModel, ConfigDict
-from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002  # Runtime import required for FastAPI Depends
-
-from kanban.api.problems import ProblemException
-from kanban.security.mcp_keys import (
-    introspect_subject_token,
-    verify_internal_mcp_auth_header,
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
 )
+
+from kanban.security.mcp_keys import introspect_subject_token
+from kanban.security.service_auth import verify_internal_service_auth
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
@@ -66,29 +66,13 @@ class McpIntrospectResponse(BaseModel):
     allowed_cidrs: list[str] | None = None
 
 
-def verify_internal_auth(request: Request) -> None:
-    """Enforce internal gateway HMAC or mTLS client authentication."""
-    auth_header = request.headers.get("x-kb-internal-auth")
-    if verify_internal_mcp_auth_header(auth_header):
-        return
-
-    client_cert = request.headers.get("x-ssl-client-cert") or request.scope.get("client_cert")
-    if client_cert:
-        return
-
-    service_principal = (
-        request.headers.get("x-kb-service-principal")
-        or request.headers.get("x-client-cert-cn")
-        or request.headers.get("x-ssl-client-cn")
-    )
-    if service_principal in ("mcp-gateway", "agent-runtime", "kanban-api"):
-        return
-
-    raise ProblemException(
-        code="AUTHENTICATION_REQUIRED",
-        status=401,
-        title="Authentication Required",
-        detail="Internal gateway authentication header or client certificate required.",
+async def verify_internal_auth(request: Request) -> None:
+    """Enforce role-bound internal HMAC signature or verified mTLS client certificate."""
+    body_bytes = await request.body()
+    verify_internal_service_auth(
+        request,
+        allowed_principals=("mcp-gateway", "agent-runtime", "kanban-api"),
+        body_bytes=body_bytes,
     )
 
 
@@ -117,6 +101,7 @@ async def get_internal_session(request: Request) -> AsyncIterator[AsyncSession]:
     dependencies=[Depends(verify_internal_auth)],
 )
 async def introspect_token(
+    request: Request,
     body: McpIntrospectRequest,
     session: Annotated[AsyncSession, Depends(get_internal_session)],
 ) -> McpIntrospectResponse:
@@ -128,6 +113,12 @@ async def introspect_token(
         consume_call=body.consume_call,
         tool_name=body.tool_name,
     )
+    if body.consume_call:
+        sf = getattr(request.app.state, "session_factory", None)
+        engine = getattr(sf, "_engine", None) if sf is not None else None
+        if isinstance(engine, AsyncEngine):
+            await session.commit()
+
     expires_str = None
     if result.expires_at is not None:
         expires_str = (

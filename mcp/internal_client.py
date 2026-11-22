@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Final, Self
 
 import httpx
 
+from kanban.security.service_auth import create_internal_service_auth_header
 from mcp.errors import KbMcpError, McpErrorCode
 
 if TYPE_CHECKING:
@@ -75,7 +76,6 @@ class KanbanApiClient:
             self._client = httpx.AsyncClient(
                 transport=active_transport,
                 base_url="http://localhost",
-                headers={"X-KB-Service-Principal": "mcp-gateway"},
                 timeout=timeout,
             )
         else:
@@ -168,8 +168,6 @@ class KanbanApiClient:
     ) -> object:
         """Send authenticated internal request with identity forwarding and error mapping."""
         req_headers = dict(headers or {})
-        if self.settings.mode == "standalone_inprocess":
-            req_headers.setdefault("X-KB-Service-Principal", "mcp-gateway")
         if subject_token:
             req_headers["X-KB-Subject-Token"] = subject_token
         if mcp_session_id:
@@ -205,6 +203,16 @@ class KanbanApiClient:
                 params=params,
                 headers=req_headers,
             )
+            if (
+                self.settings.mode == "standalone_inprocess"
+                and "x-kb-internal-auth" not in req.headers
+            ):
+                req.headers["X-KB-Internal-Auth"] = create_internal_service_auth_header(
+                    principal="mcp-gateway",
+                    method=req.method,
+                    path=req.url.path,
+                    body_bytes=req.content,
+                )
             resp = await self._client.send(req, stream=True)
         except httpx.TransportError as exc:
             msg = f"Upstream communication failure: {exc}"

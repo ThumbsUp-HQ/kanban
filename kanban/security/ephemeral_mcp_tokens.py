@@ -14,6 +14,7 @@ from sqlalchemy import CursorResult, select, text
 from database.models.mcp_ephemeral_token import McpEphemeralToken
 from database.models.principals import Principal
 from database.models.projects import Project
+from database.models.workflow import WorkflowTransitionExecution
 from kanban.api.problems import ProblemException
 from kanban.security.mcp_keys import McpIntrospectionResult, hash_mcp_api_key
 
@@ -64,6 +65,103 @@ def generate_ephemeral_mcp_token() -> tuple[str, bytes]:
     token = f"{EPHEMERAL_TOKEN_PREFIX}{b64}"
     digest = hash_mcp_api_key(token)
     return token, digest
+
+
+async def _verify_active_execution_binding(  # noqa: PLR0913
+    session: AsyncSession,
+    *,
+    workspace_id: uuid.UUID,
+    execution_id: uuid.UUID,
+    invoking_principal_id: uuid.UUID,
+    agent_principal_id: uuid.UUID,
+    project_id: uuid.UUID,
+) -> None:
+    """Verify execution_id is active and bound to a hook whose agent_definition owns agent."""
+    execution = await session.get(WorkflowTransitionExecution, execution_id)
+    if execution is None:
+        raise ProblemException(
+            code="INVALID_EXECUTION",
+            status=422,
+            title="Invalid Execution",
+            detail="execution_id does not exist in workflow_transition_executions.",
+        )
+
+    if execution.status not in ("running_sync", "pending_async"):
+        raise ProblemException(
+            code="INACTIVE_EXECUTION",
+            status=422,
+            title="Inactive Execution",
+            detail=(
+                f"execution_id is in inactive status {execution.status!r}; "
+                "must be 'running_sync' or 'pending_async'."
+            ),
+        )
+
+    if (
+        execution.workspace_id != workspace_id
+        or execution.project_id != project_id
+        or execution.invoking_principal_id != invoking_principal_id
+    ):
+        raise ProblemException(
+            code="EXECUTION_SCOPE_MISMATCH",
+            status=403,
+            title="Execution Scope Mismatch",
+            detail=(
+                "execution_id tuple does not match "
+                "(workspace_id, invoking_principal_id, project_id)."
+            ),
+        )
+
+    hook_binding_stmt = text(
+        """
+        SELECT 1
+        FROM workflow_transition_hooks wth
+        JOIN agent_definitions ad ON ad.id = wth.agent_definition_id
+        WHERE wth.workspace_id = :ws_id
+          AND wth.project_id = :proj_id
+          AND ad.workspace_id = :ws_id
+          AND ad.principal_id = :agent_pid
+          AND (
+              (
+                  wth.is_enabled IS TRUE
+                  AND wth.to_state_id = :to_state_id
+                  AND (wth.from_state_id IS NULL OR wth.from_state_id = :from_state_id)
+              )
+              OR EXISTS (
+                  SELECT 1
+                  FROM workflow_hook_invocations whi
+                  WHERE whi.execution_id = :exec_id
+                    AND whi.hook_id = wth.id
+                    AND whi.workspace_id = :ws_id
+                    AND whi.status = 'running'
+              )
+          )
+        LIMIT 1
+        """
+    )
+    bound_hook = (
+        await session.execute(
+            hook_binding_stmt,
+            {
+                "ws_id": workspace_id,
+                "proj_id": project_id,
+                "agent_pid": agent_principal_id,
+                "to_state_id": execution.to_state_id,
+                "from_state_id": execution.from_state_id,
+                "exec_id": execution_id,
+            },
+        )
+    ).first()
+    if bound_hook is None:
+        raise ProblemException(
+            code="EXECUTION_AGENT_MISMATCH",
+            status=403,
+            title="Execution Agent Mismatch",
+            detail=(
+                "execution_id is not bound to an attached workflow hook whose "
+                "agent_definition_id owns agent_principal_id."
+            ),
+        )
 
 
 async def mint_ephemeral_token(  # noqa: PLR0913
@@ -129,6 +227,19 @@ async def mint_ephemeral_token(  # noqa: PLR0913
         dict.fromkeys("search_knowledge" if t == "search" else t for t in effective_tools)
     )
 
+    # Ensure transaction RLS context is bound when running under non-bypass kanban_app role
+    curr_ws = (
+        await session.execute(text("SELECT NULLIF(current_setting('app.workspace_id', true), '')"))
+    ).scalar_one_or_none()
+    if not curr_ws:
+        await session.execute(
+            text(
+                "SELECT set_config('app.workspace_id', :ws, true), "
+                "set_config('app.principal_id', :pid, true)"
+            ),
+            {"ws": str(workspace_id), "pid": str(invoking_principal_id)},
+        )
+
     # Validate agent principal
     agent_principal = await session.get(Principal, agent_principal_id)
     if (
@@ -167,6 +278,16 @@ async def mint_ephemeral_token(  # noqa: PLR0913
             title="Invalid Project",
             detail="project_id must refer to a project in the target workspace.",
         )
+
+    # Validate active workflow transition execution and hook-to-agent binding (KAN-63 / Action 3)
+    await _verify_active_execution_binding(
+        session,
+        workspace_id=workspace_id,
+        execution_id=execution_id,
+        invoking_principal_id=invoking_principal_id,
+        agent_principal_id=agent_principal_id,
+        project_id=project_id,
+    )
 
     token, token_sha256 = generate_ephemeral_mcp_token()
     now = datetime.now(UTC)

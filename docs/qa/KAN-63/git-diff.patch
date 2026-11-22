@@ -1,0 +1,4442 @@
+diff --git a/kanban/api/internal/mcp_ephemeral.py b/kanban/api/internal/mcp_ephemeral.py
+index 1028a77b..13586fb4 100644
+--- a/kanban/api/internal/mcp_ephemeral.py
++++ b/kanban/api/internal/mcp_ephemeral.py
+@@ -1,6 +1,6 @@
+ # Copyright 2026 Kanban Platform Contributors
+ # Apache-2.0 License. See LICENSE for details.
+-"""Internal ephemeral MCP token minting and revocation endpoints (KB-P4-13, S14.3)."""
++"""Internal ephemeral MCP token minting and revocation endpoints (KB-P4-13, KAN-63, S14.3)."""
+ 
+ from __future__ import annotations
+ 
+@@ -9,15 +9,17 @@ from typing import Annotated
+ 
+ from fastapi import APIRouter, Depends, Request, status
+ from pydantic import BaseModel, ConfigDict
+-from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002  # Runtime import required for FastAPI Depends
++from sqlalchemy.ext.asyncio import (
++    AsyncEngine,
++    AsyncSession,
++)
+ 
+ from kanban.api.internal.mcp_introspect import get_internal_session
+-from kanban.api.problems import ProblemException
+ from kanban.security.ephemeral_mcp_tokens import (
+     mint_ephemeral_token,
+     revoke_ephemeral_tokens_by_execution,
+ )
+-from kanban.security.mcp_keys import verify_internal_mcp_auth_header
++from kanban.security.service_auth import verify_internal_service_auth
+ 
+ router = APIRouter(tags=["internal-mcp-ephemeral"])
+ 
+@@ -56,72 +58,36 @@ class RevokeEphemeralTokenResponse(BaseModel):
+     revoked_count: int
+ 
+ 
+-def verify_mint_service_principal(request: Request) -> None:
+-    """Enforce that only agent-runtime or kanban-api can mint ephemeral tokens.
++async def verify_mint_service_principal(request: Request) -> None:
++    """Enforce that only cryptographically verified agent-runtime or kanban-api can mint tokens.
+ 
+     mcp-gateway is strictly forbidden (HTTP 403).
+-    Unauthenticated callers are rejected (HTTP 401).
++    Unauthenticated or header-spoofed callers are rejected (HTTP 401).
+     """
+-    service_principal = (
+-        request.headers.get("x-kb-service-principal")
+-        or request.headers.get("x-client-cert-cn")
+-        or request.headers.get("x-ssl-client-cn")
+-    )
+-    auth_header = request.headers.get("x-kb-internal-auth")
+-    client_cert = request.headers.get("x-ssl-client-cert") or request.scope.get("client_cert")
+-
+-    # If caller identifies as mcp-gateway or presents mcp-gateway HMAC header -> 403 Forbidden
+-    if (
+-        service_principal == "mcp-gateway"
+-        or (client_cert and "mcp-gateway" in str(client_cert))
+-        or verify_internal_mcp_auth_header(auth_header)
+-    ):
+-        raise ProblemException(
+-            code="FORBIDDEN",
+-            status=403,
+-            title="Forbidden",
+-            detail="mcp-gateway service principal is forbidden from minting ephemeral tokens.",
+-        )
+-
+-    # Require client certificate or valid agent-runtime / kanban-api principal
+-    if service_principal in ("agent-runtime", "kanban-api"):
+-        return
+-
+-    if client_cert:
+-        return
+-
+-    raise ProblemException(
+-        code="AUTHENTICATION_REQUIRED",
+-        status=401,
+-        title="Authentication Required",
+-        detail="Internal agent-runtime or kanban-api client certificate required.",
++    body_bytes = await request.body()
++    verify_internal_service_auth(
++        request,
++        allowed_principals=("agent-runtime", "kanban-api"),
++        body_bytes=body_bytes,
+     )
+ 
+ 
+-def verify_revoke_auth(request: Request) -> None:
+-    """Enforce internal authentication for token revocation."""
+-    auth_header = request.headers.get("x-kb-internal-auth")
+-    if verify_internal_mcp_auth_header(auth_header):
+-        return
++async def verify_revoke_auth(request: Request) -> None:
++    """Enforce verified internal service authentication for token revocation."""
++    body_bytes = await request.body()
++    verify_internal_service_auth(
++        request,
++        allowed_principals=("agent-runtime", "kanban-api", "mcp-gateway"),
++        body_bytes=body_bytes,
++    )
+ 
+-    client_cert = request.headers.get("x-ssl-client-cert") or request.scope.get("client_cert")
+-    if client_cert:
+-        return
+ 
+-    service_principal = (
+-        request.headers.get("x-kb-service-principal")
+-        or request.headers.get("x-client-cert-cn")
+-        or request.headers.get("x-ssl-client-cn")
+-    )
+-    if service_principal in ("agent-runtime", "kanban-api", "mcp-gateway"):
+-        return
+-
+-    raise ProblemException(
+-        code="AUTHENTICATION_REQUIRED",
+-        status=401,
+-        title="Authentication Required",
+-        detail="Internal authentication required to revoke ephemeral tokens.",
+-    )
++async def _commit_if_pooled_engine(request: Request, session: AsyncSession) -> None:
++    """Commit transaction when session_factory is backed by a pooled AsyncEngine."""
++    sf = getattr(request.app.state, "session_factory", None)
++    engine = getattr(sf, "_engine", None) if sf is not None else None
++    if isinstance(engine, AsyncEngine):
++        await session.commit()
+ 
+ 
+ @router.post(
+@@ -132,6 +98,7 @@ def verify_revoke_auth(request: Request) -> None:
+     dependencies=[Depends(verify_mint_service_principal)],
+ )
+ async def mint_token_endpoint(
++    request: Request,
+     body: MintEphemeralTokenRequest,
+     session: Annotated[AsyncSession, Depends(get_internal_session)],
+ ) -> MintEphemeralTokenResponse:
+@@ -147,6 +114,7 @@ async def mint_token_endpoint(
+         ttl_seconds=body.ttl_seconds,
+         max_calls=body.max_calls,
+     )
++    await _commit_if_pooled_engine(request, session)
+     return MintEphemeralTokenResponse(
+         token=plaintext,
+         expires_at=record.expires_at.isoformat(),
+@@ -162,9 +130,11 @@ async def mint_token_endpoint(
+     dependencies=[Depends(verify_revoke_auth)],
+ )
+ async def revoke_tokens_endpoint(
++    request: Request,
+     execution_id: uuid.UUID,
+     session: Annotated[AsyncSession, Depends(get_internal_session)],
+ ) -> RevokeEphemeralTokenResponse:
+     """Revoke all active tokens for the specified execution ID."""
+     count = await revoke_ephemeral_tokens_by_execution(session, execution_id=execution_id)
++    await _commit_if_pooled_engine(request, session)
+     return RevokeEphemeralTokenResponse(revoked_count=count)
+diff --git a/kanban/api/internal/mcp_introspect.py b/kanban/api/internal/mcp_introspect.py
+index 92ccd2b8..84802ba3 100644
+--- a/kanban/api/internal/mcp_introspect.py
++++ b/kanban/api/internal/mcp_introspect.py
+@@ -1,6 +1,6 @@
+ # Copyright 2026 Kanban Platform Contributors
+ # Apache-2.0 License. See LICENSE for details.
+-"""Internal MCP token introspection endpoint (KB-P4-02a, S11.1)."""
++"""Internal MCP token introspection endpoint (KB-P4-02a, KAN-63, S11.1)."""
+ 
+ from __future__ import annotations
+ 
+@@ -9,14 +9,14 @@ from typing import TYPE_CHECKING, Annotated
+ 
+ from fastapi import APIRouter, Depends, Request
+ from pydantic import BaseModel, ConfigDict
+-from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002  # Runtime import required for FastAPI Depends
+-
+-from kanban.api.problems import ProblemException
+-from kanban.security.mcp_keys import (
+-    introspect_subject_token,
+-    verify_internal_mcp_auth_header,
++from sqlalchemy.ext.asyncio import (
++    AsyncEngine,
++    AsyncSession,
+ )
+ 
++from kanban.security.mcp_keys import introspect_subject_token
++from kanban.security.service_auth import verify_internal_service_auth
++
+ if TYPE_CHECKING:
+     from collections.abc import AsyncIterator
+ 
+@@ -66,29 +66,13 @@ class McpIntrospectResponse(BaseModel):
+     allowed_cidrs: list[str] | None = None
+ 
+ 
+-def verify_internal_auth(request: Request) -> None:
+-    """Enforce internal gateway HMAC or mTLS client authentication."""
+-    auth_header = request.headers.get("x-kb-internal-auth")
+-    if verify_internal_mcp_auth_header(auth_header):
+-        return
+-
+-    client_cert = request.headers.get("x-ssl-client-cert") or request.scope.get("client_cert")
+-    if client_cert:
+-        return
+-
+-    service_principal = (
+-        request.headers.get("x-kb-service-principal")
+-        or request.headers.get("x-client-cert-cn")
+-        or request.headers.get("x-ssl-client-cn")
+-    )
+-    if service_principal in ("mcp-gateway", "agent-runtime", "kanban-api"):
+-        return
+-
+-    raise ProblemException(
+-        code="AUTHENTICATION_REQUIRED",
+-        status=401,
+-        title="Authentication Required",
+-        detail="Internal gateway authentication header or client certificate required.",
++async def verify_internal_auth(request: Request) -> None:
++    """Enforce role-bound internal HMAC signature or verified mTLS client certificate."""
++    body_bytes = await request.body()
++    verify_internal_service_auth(
++        request,
++        allowed_principals=("mcp-gateway", "agent-runtime", "kanban-api"),
++        body_bytes=body_bytes,
+     )
+ 
+ 
+@@ -117,6 +101,7 @@ async def get_internal_session(request: Request) -> AsyncIterator[AsyncSession]:
+     dependencies=[Depends(verify_internal_auth)],
+ )
+ async def introspect_token(
++    request: Request,
+     body: McpIntrospectRequest,
+     session: Annotated[AsyncSession, Depends(get_internal_session)],
+ ) -> McpIntrospectResponse:
+@@ -128,6 +113,12 @@ async def introspect_token(
+         consume_call=body.consume_call,
+         tool_name=body.tool_name,
+     )
++    if body.consume_call:
++        sf = getattr(request.app.state, "session_factory", None)
++        engine = getattr(sf, "_engine", None) if sf is not None else None
++        if isinstance(engine, AsyncEngine):
++            await session.commit()
++
+     expires_str = None
+     if result.expires_at is not None:
+         expires_str = (
+diff --git a/kanban/api/v1/__init__.py b/kanban/api/v1/__init__.py
+index 6173228a..2e5b27eb 100644
+--- a/kanban/api/v1/__init__.py
++++ b/kanban/api/v1/__init__.py
+@@ -4,8 +4,6 @@ from __future__ import annotations
+ 
+ from fastapi import APIRouter
+ 
+-from kanban.api.internal.mcp_ephemeral import router as mcp_ephemeral_router
+-from kanban.api.internal.mcp_introspect import router as mcp_introspect_router
+ from kanban.api.v1.activity import router as activity_router
+ from kanban.api.v1.admin.acl import router as admin_acl_router
+ from kanban.api.v1.admin.ai_providers import router as admin_ai_router
+@@ -142,8 +140,6 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
+     v1.include_router(admin_principals_router)
+     v1.include_router(admin_acl_router)
+     v1.include_router(oauth_v1_router)
+-    v1.include_router(mcp_introspect_router)
+-    v1.include_router(mcp_ephemeral_router)
+     v1.include_router(subscriptions_router)
+     v1.include_router(notifications_router)
+     v1.include_router(search_router)
+diff --git a/kanban/app.py b/kanban/app.py
+index 201d8266..d1f31b8c 100644
+--- a/kanban/app.py
++++ b/kanban/app.py
+@@ -362,8 +362,63 @@ async def lifespan(app: FastAPI) -> AsyncIterator[None]:
+             await owned_engine.dispose()
+ 
+ 
++def create_internal_app(owner_app: FastAPI | None = None) -> FastAPI:
++    """Create isolated internal ASGI FastAPI application for service-to-service MCP routes."""
++    internal_app = FastAPI(
++        title="👍kanban Internal Service API",
++        version=PLATFORM_VERSION,
++        docs_url=None,
++        redoc_url=None,
++        openapi_url=None,
++    )
++    if owner_app is not None:
++        internal_app.state = owner_app.state
++        owner_app.state.internal_app = internal_app
++    else:
++        internal_app.state.settings = Settings()
++        internal_app.state.session_factory = None
++
++    internal_app.add_exception_handler(ProblemException, problem_exception_handler)  # type: ignore[arg-type]
++    internal_app.add_exception_handler(RequestValidationError, validation_exception_handler)  # type: ignore[arg-type]
++    internal_app.add_exception_handler(StarletteHTTPException, starlette_http_exception_handler)  # type: ignore[arg-type]
++    internal_app.add_exception_handler(Exception, unhandled_exception_handler)
++
++    internal_app.include_router(mcp_introspect_router)
++    internal_app.include_router(mcp_ephemeral_router)
++
++    internal_app.add_middleware(RequestIdMiddleware)
++    internal_app.add_middleware(JsonLimitsMiddleware)
++
++    return internal_app
++
++
++def _build_internal_and_api_dispatcher(
++    public_app: FastAPI, target_internal_app: FastAPI
++) -> ASGIApp:
++    """Create composite ASGI dispatcher forwarding /internal/* to internal_app and /api/* to app."""
++
++    class _InternalAndApiDispatcher:
++        def __init__(self, pub: FastAPI, internal: FastAPI) -> None:
++            self._public_app = pub
++            self._internal_app = internal
++
++        async def __call__(self, scope: Scope, receive: Receive, send: Send) -> None:
++            if scope["type"] == "http":
++                path = scope.get("path", "")
++                if path == "/internal" or path.startswith("/internal/"):
++                    await self._internal_app(scope, receive, send)
++                    return
++            await self._public_app(scope, receive, send)
++
++    return _InternalAndApiDispatcher(public_app, target_internal_app)
++
++
+ def _mount_mcp_surfaces(app: FastAPI, mcp_settings: McpSettings | None = None) -> None:
+     """Mount live MCP surfaces and RFC 9728 protected-resource metadata endpoints."""
++    internal_app: FastAPI = getattr(app.state, "internal_app", None) or create_internal_app(app)
++    dispatcher = _build_internal_and_api_dispatcher(app, internal_app)
++    app.state.internal_dispatcher = dispatcher
++
+     mcp_app = getattr(app.state, "mcp_app", None)
+     if mcp_app is None:
+         try:
+@@ -377,7 +432,7 @@ def _mount_mcp_surfaces(app: FastAPI, mcp_settings: McpSettings | None = None) -
+                 if mcp_settings is not None
+                 else mcp_settings_cls(mode="standalone_inprocess", auth_enabled=True)
+             )
+-            mcp_app = create_mcp_app(active_settings, kanban_app=app)
++            mcp_app = create_mcp_app(active_settings, kanban_app=dispatcher)
+             app.state.mcp_app = mcp_app
+         except Exception:
+             logger.debug("Automatic live MCP application mounting skipped", exc_info=True)
+@@ -486,11 +541,10 @@ def create_app(  # noqa: PLR0915
+             headers=exc.headers,
+         )
+ 
+-    # Mount canonical /api/v1 router tree
++    # Mount canonical /api/v1 router tree and isolated internal app
+     app.include_router(build_v1_router(), prefix="/api/v1")
+-    app.include_router(mcp_introspect_router)
+-    app.include_router(mcp_ephemeral_router)
+     app.include_router(oauth_root_router)
++    create_internal_app(app)
+ 
+     # Register activity listeners for notifications and realtime domain outbox
+     register_notifications_listener()
+@@ -502,7 +556,7 @@ def create_app(  # noqa: PLR0915
+     # Mount agent sparkle FIM completion router if available
+     _mount_sparkle_router(app)
+ 
+-    # Fallback API router for legacy/subpath 404s
++    # Fallback API and /internal routers returning 404 on the public application surface
+     api_router = APIRouter(prefix="/api")
+ 
+     @api_router.api_route(
+@@ -524,6 +578,32 @@ def create_app(  # noqa: PLR0915
+ 
+     app.include_router(api_router)
+ 
++    internal_router = APIRouter(prefix="/internal")
++
++    @internal_router.api_route(
++        "",
++        methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
++        include_in_schema=False,
++    )
++    @internal_router.api_route(
++        "/{full_path:path}",
++        methods=["GET", "POST", "PUT", "DELETE", "PATCH", "HEAD", "OPTIONS"],
++        include_in_schema=False,
++    )
++    async def internal_not_found(full_path: str = "") -> JSONResponse:
++        del full_path
++        return JSONResponse(
++            status_code=404,
++            content={
++                "type": "about:blank",
++                "title": "Not Found",
++                "status": 404,
++            },
++            media_type="application/problem+json",
++        )
++
++    app.include_router(internal_router)
++
+     # Authenticated WebSocket realtime endpoint (/ws, /api/v1/ws)
+     @app.websocket("/api/v1/ws")
+     @app.websocket("/ws")
+diff --git a/kanban/security/ephemeral_mcp_tokens.py b/kanban/security/ephemeral_mcp_tokens.py
+index b892e6dd..f4b76a72 100644
+--- a/kanban/security/ephemeral_mcp_tokens.py
++++ b/kanban/security/ephemeral_mcp_tokens.py
+@@ -14,6 +14,7 @@ from sqlalchemy import CursorResult, select, text
+ from database.models.mcp_ephemeral_token import McpEphemeralToken
+ from database.models.principals import Principal
+ from database.models.projects import Project
++from database.models.workflow import WorkflowTransitionExecution
+ from kanban.api.problems import ProblemException
+ from kanban.security.mcp_keys import McpIntrospectionResult, hash_mcp_api_key
+ 
+@@ -66,6 +67,103 @@ def generate_ephemeral_mcp_token() -> tuple[str, bytes]:
+     return token, digest
+ 
+ 
++async def _verify_active_execution_binding(  # noqa: PLR0913
++    session: AsyncSession,
++    *,
++    workspace_id: uuid.UUID,
++    execution_id: uuid.UUID,
++    invoking_principal_id: uuid.UUID,
++    agent_principal_id: uuid.UUID,
++    project_id: uuid.UUID,
++) -> None:
++    """Verify execution_id is active and bound to a hook whose agent_definition owns agent."""
++    execution = await session.get(WorkflowTransitionExecution, execution_id)
++    if execution is None:
++        raise ProblemException(
++            code="INVALID_EXECUTION",
++            status=422,
++            title="Invalid Execution",
++            detail="execution_id does not exist in workflow_transition_executions.",
++        )
++
++    if execution.status not in ("running_sync", "pending_async"):
++        raise ProblemException(
++            code="INACTIVE_EXECUTION",
++            status=422,
++            title="Inactive Execution",
++            detail=(
++                f"execution_id is in inactive status {execution.status!r}; "
++                "must be 'running_sync' or 'pending_async'."
++            ),
++        )
++
++    if (
++        execution.workspace_id != workspace_id
++        or execution.project_id != project_id
++        or execution.invoking_principal_id != invoking_principal_id
++    ):
++        raise ProblemException(
++            code="EXECUTION_SCOPE_MISMATCH",
++            status=403,
++            title="Execution Scope Mismatch",
++            detail=(
++                "execution_id tuple does not match "
++                "(workspace_id, invoking_principal_id, project_id)."
++            ),
++        )
++
++    hook_binding_stmt = text(
++        """
++        SELECT 1
++        FROM workflow_transition_hooks wth
++        JOIN agent_definitions ad ON ad.id = wth.agent_definition_id
++        WHERE wth.workspace_id = :ws_id
++          AND wth.project_id = :proj_id
++          AND ad.workspace_id = :ws_id
++          AND ad.principal_id = :agent_pid
++          AND (
++              (
++                  wth.is_enabled IS TRUE
++                  AND wth.to_state_id = :to_state_id
++                  AND (wth.from_state_id IS NULL OR wth.from_state_id = :from_state_id)
++              )
++              OR EXISTS (
++                  SELECT 1
++                  FROM workflow_hook_invocations whi
++                  WHERE whi.execution_id = :exec_id
++                    AND whi.hook_id = wth.id
++                    AND whi.workspace_id = :ws_id
++                    AND whi.status = 'running'
++              )
++          )
++        LIMIT 1
++        """
++    )
++    bound_hook = (
++        await session.execute(
++            hook_binding_stmt,
++            {
++                "ws_id": workspace_id,
++                "proj_id": project_id,
++                "agent_pid": agent_principal_id,
++                "to_state_id": execution.to_state_id,
++                "from_state_id": execution.from_state_id,
++                "exec_id": execution_id,
++            },
++        )
++    ).first()
++    if bound_hook is None:
++        raise ProblemException(
++            code="EXECUTION_AGENT_MISMATCH",
++            status=403,
++            title="Execution Agent Mismatch",
++            detail=(
++                "execution_id is not bound to an attached workflow hook whose "
++                "agent_definition_id owns agent_principal_id."
++            ),
++        )
++
++
+ async def mint_ephemeral_token(  # noqa: PLR0913
+     session: AsyncSession,
+     *,
+@@ -129,6 +227,19 @@ async def mint_ephemeral_token(  # noqa: PLR0913
+         dict.fromkeys("search_knowledge" if t == "search" else t for t in effective_tools)
+     )
+ 
++    # Ensure transaction RLS context is bound when running under non-bypass kanban_app role
++    curr_ws = (
++        await session.execute(text("SELECT NULLIF(current_setting('app.workspace_id', true), '')"))
++    ).scalar_one_or_none()
++    if not curr_ws:
++        await session.execute(
++            text(
++                "SELECT set_config('app.workspace_id', :ws, true), "
++                "set_config('app.principal_id', :pid, true)"
++            ),
++            {"ws": str(workspace_id), "pid": str(invoking_principal_id)},
++        )
++
+     # Validate agent principal
+     agent_principal = await session.get(Principal, agent_principal_id)
+     if (
+@@ -168,6 +279,16 @@ async def mint_ephemeral_token(  # noqa: PLR0913
+             detail="project_id must refer to a project in the target workspace.",
+         )
+ 
++    # Validate active workflow transition execution and hook-to-agent binding (KAN-63 / Action 3)
++    await _verify_active_execution_binding(
++        session,
++        workspace_id=workspace_id,
++        execution_id=execution_id,
++        invoking_principal_id=invoking_principal_id,
++        agent_principal_id=agent_principal_id,
++        project_id=project_id,
++    )
++
+     token, token_sha256 = generate_ephemeral_mcp_token()
+     now = datetime.now(UTC)
+     expires_at = now + timedelta(seconds=ttl_seconds)
+diff --git a/kanban/security/read_taint.py b/kanban/security/read_taint.py
+index 2c43db0f..6757344a 100644
+--- a/kanban/security/read_taint.py
++++ b/kanban/security/read_taint.py
+@@ -17,6 +17,7 @@ from database.models.projects import Project
+ from database.session import RLSContext, RLSSessionFactory
+ from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
+ from kanban.api.problems import ProblemException
++from kanban.security.service_auth import KNOWN_SERVICE_PRINCIPALS, verify_internal_service_auth
+ from kanban.services.activity import ActivityEventType, record_activity
+ 
+ if TYPE_CHECKING:
+@@ -69,6 +70,19 @@ async def _resolve_project_uuid(
+     return (row[0], row[1]) if row is not None else None
+ 
+ 
++def _resolve_verified_service_principal(request: Request) -> str | None:
++    """Resolve verified service principal via HMAC header or ASGI TLS client_cert only."""
++    if (
++        request.headers.get("x-kb-internal-auth") is not None
++        or request.scope.get("client_cert") is not None
++    ):
++        return verify_internal_service_auth(
++            request,
++            allowed_principals=KNOWN_SERVICE_PRINCIPALS,
++        )
++    return None
++
++
+ class TaintRecorder:
+     """FastAPI dependency recording project read-taint for MCP sessions."""
+ 
+@@ -78,12 +92,12 @@ class TaintRecorder:
+         session: Annotated[AsyncSession, Depends(get_rls_session)],
+         caller: Annotated[PrincipalContext, Depends(get_principal)],
+     ) -> None:
+-        """Initialize TaintRecorder dependency and check service principal headers."""
++        """Initialize TaintRecorder dependency and verify internal service authentication."""
+         self.request: Final[Request] = request
+         self.session: Final[AsyncSession] = session
+         self.caller: Final[PrincipalContext] = caller
+         self.session_id: Final[str | None] = request.headers.get("x-kb-mcp-session")
+-        self.service_principal: Final[str | None] = request.headers.get("x-kb-service-principal")
++        self.service_principal: Final[str | None] = _resolve_verified_service_principal(request)
+ 
+         if self.service_principal == "mcp-gateway" and not self.session_id:
+             raise ProblemException(
+@@ -177,12 +191,12 @@ class TaintGuard:
+         session: Annotated[AsyncSession, Depends(get_rls_session)],
+         caller: Annotated[PrincipalContext, Depends(get_principal)],
+     ) -> None:
+-        """Initialize TaintRecorder dependency and check service principal headers."""
++        """Initialize TaintGuard dependency and verify internal service authentication."""
+         self.request: Final[Request] = request
+         self.session: Final[AsyncSession] = session
+         self.caller: Final[PrincipalContext] = caller
+         self.session_id: Final[str | None] = request.headers.get("x-kb-mcp-session")
+-        self.service_principal: Final[str | None] = request.headers.get("x-kb-service-principal")
++        self.service_principal: Final[str | None] = _resolve_verified_service_principal(request)
+ 
+         if self.service_principal == "mcp-gateway" and not self.session_id:
+             raise ProblemException(
+diff --git a/kanban/security/service_auth.py b/kanban/security/service_auth.py
+new file mode 100644
+index 00000000..3b72cfeb
+--- /dev/null
++++ b/kanban/security/service_auth.py
+@@ -0,0 +1,371 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Role-bound HKDF-HMAC internal service authentication and verified mTLS peer checks.
++
++Implements KB-SEC-CODEX-01 (KAN-63 / S11.1, S14.3):
++- Derives per-role HKDF-SHA256 subkeys from master_kek:
++  derive_subkey(km.master_kek, f"internal-service-v2/{principal}")
++- Signs and verifies canonical request envelopes:
++  ts + principal + method + path + sha256(body)
++- Enforces <= 300s clock drift tolerance and constant-time HMAC comparison
++- Supports verified ASGI TLS scope["client_cert"] X.509 CN/SAN extraction
++- Never trusts raw HTTP identity headers (X-KB-Service-Principal, X-SSL-Client-Cert, etc.)
++"""
++
++from __future__ import annotations
++
++import hashlib
++import hmac
++import os
++import secrets
++import time
++import urllib.parse
++from typing import TYPE_CHECKING, Final, cast
++
++from cryptography import x509
++from cryptography.x509.oid import ExtensionOID, NameOID
++
++from kanban.api.problems import ProblemException
++from kanban.security.keys import KeyMaterial, KeyMaterialError, derive_subkey, load_key_material
++
++if TYPE_CHECKING:
++    from collections.abc import Collection
++
++    from fastapi import Request
++
++__all__ = [
++    "INTERNAL_AUTH_DRIFT_SECONDS",
++    "INTERNAL_AUTH_HEADER",
++    "KNOWN_SERVICE_PRINCIPALS",
++    "create_internal_service_auth_header",
++    "derive_internal_service_key",
++    "verify_internal_service_auth",
++]
++
++KNOWN_SERVICE_PRINCIPALS: Final[frozenset[str]] = frozenset(
++    {"mcp-gateway", "agent-runtime", "kanban-api"}
++)
++INTERNAL_AUTH_HEADER: Final[str] = "X-KB-Internal-Auth"
++INTERNAL_AUTH_DRIFT_SECONDS: Final[int] = 300
++
++# Process-local CSPRNG fallback root key used only in in-process unit tests that do not
++# configure KANBAN_KEYRING_FILE or KANBAN_MASTER_KEK environment variables.
++_PROCESS_FALLBACK_KEK: Final[bytes] = secrets.token_bytes(32)
++
++
++def _resolve_root_kek(key_material: KeyMaterial | None = None) -> bytes:
++    """Resolve 32-byte root master_kek from explicit KeyMaterial, keyring/env, or test fallback."""
++    if key_material is not None:
++        return key_material.master_kek
++
++    has_configured_source = bool(
++        os.environ.get("KANBAN_KEYRING_FILE")
++        or os.environ.get("KANBAN_MASTER_KEK")
++        or os.environ.get("KB_MASTER_KEK_B64")
++    )
++    if has_configured_source:
++        return load_key_material().master_kek
++
++    try:
++        return load_key_material().master_kek
++    except KeyMaterialError:
++        return _PROCESS_FALLBACK_KEK
++
++
++def derive_internal_service_key(
++    principal: str,
++    *,
++    key_material: KeyMaterial | None = None,
++) -> bytes:
++    """Derive a role-bound HKDF-SHA256 subkey for the given internal service principal."""
++    if principal not in KNOWN_SERVICE_PRINCIPALS:
++        msg = (
++            f"Unknown internal service principal {principal!r}; "
++            f"allowed: {sorted(KNOWN_SERVICE_PRINCIPALS)}"
++        )
++        raise ValueError(msg)
++
++    root_kek = _resolve_root_kek(key_material)
++    return derive_subkey(root_kek, f"internal-service-v2/{principal}")
++
++
++def _normalize_method(method: str) -> str:
++    return method.upper().strip() or "GET"
++
++
++def _normalize_path(path: str) -> str:
++    parsed = urllib.parse.urlsplit(path.strip())
++    return parsed.path or "/"
++
++
++def _coerce_body_bytes(body_bytes: bytes | bytearray | memoryview | str | None) -> bytes:
++    if body_bytes is None:
++        return b""
++    if isinstance(body_bytes, str):
++        return body_bytes.encode("utf-8")
++    return bytes(body_bytes)
++
++
++def _build_canonical_message(
++    timestamp: int,
++    principal: str,
++    method: str,
++    path: str,
++    body_bytes: bytes,
++) -> bytes:
++    norm_method = _normalize_method(method)
++    norm_path = _normalize_path(path)
++    body_sha256 = hashlib.sha256(body_bytes).hexdigest()
++    return f"{timestamp}\n{principal}\n{norm_method}\n{norm_path}\n{body_sha256}".encode("ascii")
++
++
++def create_internal_service_auth_header(  # noqa: PLR0913
++    principal: str = "mcp-gateway",
++    method: str = "POST",
++    path: str = "/internal/v1/mcp/introspect",
++    body_bytes: bytes | bytearray | memoryview | str | None = b"",
++    *,
++    timestamp: float | None = None,
++    key_material: KeyMaterial | None = None,
++) -> str:
++    """Create a role-bound HKDF-HMAC X-KB-Internal-Auth header value.
++
++    Format: t=<unix_ts>,p=<principal>,v2=<hex_hmac_sha256>
++    """
++    key = derive_internal_service_key(principal, key_material=key_material)
++    ts = int(timestamp if timestamp is not None else time.time())
++    raw_body = _coerce_body_bytes(body_bytes)
++    msg = _build_canonical_message(ts, principal, method, path, raw_body)
++    sig = hmac.new(key, msg, hashlib.sha256).hexdigest()
++    return f"t={ts},p={principal},v2={sig}"
++
++
++def _match_candidate_principal(candidate: str) -> str | None:
++    """Match an X.509 CN or SAN value to a known internal service principal."""
++    val = candidate.strip().lower()
++    if not val:
++        return None
++    if val in KNOWN_SERVICE_PRINCIPALS:
++        return val
++    for known in KNOWN_SERVICE_PRINCIPALS:
++        if (
++            val == f"{known}.internal"
++            or val.startswith(f"{known}.")
++            or val.endswith((f"/sa/{known}", f":{known}", f"/{known}"))
++        ):
++            return known
++    return None
++
++
++def _extract_candidates_from_dict(cert_dict: dict[object, object]) -> list[str]:
++    """Extract CN and SAN candidate strings from a peer certificate dictionary."""
++    candidates: list[str] = [
++        raw_val
++        for direct_key in ("cn", "common_name", "commonName", "principal")
++        if isinstance((raw_val := cert_dict.get(direct_key)), str)
++    ]
++
++    raw_san = cert_dict.get("san") or cert_dict.get("subjectAltName")
++    if isinstance(raw_san, (list, tuple)):
++        for item in raw_san:
++            if isinstance(item, str):
++                candidates.append(item)
++            elif (
++                isinstance(item, tuple)
++                and len(item) == 2  # noqa: PLR2004
++                and isinstance(item[1], str)
++            ):
++                candidates.append(item[1])
++
++    raw_subject = cert_dict.get("subject")
++    if isinstance(raw_subject, (list, tuple)):
++        for rdn in raw_subject:
++            candidates.extend(
++                attr[1]
++                for attr in (rdn if isinstance(rdn, (list, tuple)) else ())
++                if (
++                    isinstance(attr, tuple)
++                    and len(attr) == 2  # noqa: PLR2004
++                    and attr[0] in ("commonName", "CN")
++                    and isinstance(attr[1], str)
++                )
++            )
++    return candidates
++
++
++def _extract_candidates_from_x509(cert: x509.Certificate) -> list[str]:
++    """Extract Subject CN and SAN DNS/URI entries from a cryptography.x509.Certificate."""
++    candidates: list[str] = [
++        str(attr.value) for attr in cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
++    ]
++    try:
++        san_ext = cert.extensions.get_extension_for_oid(ExtensionOID.SUBJECT_ALTERNATIVE_NAME)
++        san_val = cast("x509.SubjectAlternativeName", san_ext.value)
++        candidates.extend(san_val.get_values_for_type(x509.DNSName))
++        candidates.extend(san_val.get_values_for_type(x509.UniformResourceIdentifier))
++    except x509.ExtensionNotFound:
++        pass
++    return candidates
++
++
++def _extract_principal_from_client_cert(cert_obj: object) -> str | None:
++    """Extract a verified service principal from ASGI TLS scope['client_cert']."""
++    candidates: list[str] = []
++    if isinstance(cert_obj, dict):
++        candidates.extend(_extract_candidates_from_dict(cert_obj))
++    elif isinstance(cert_obj, x509.Certificate):
++        candidates.extend(_extract_candidates_from_x509(cert_obj))
++    elif isinstance(cert_obj, (bytes, str)):
++        pem_bytes = (
++            cert_obj.encode("ascii", errors="ignore") if isinstance(cert_obj, str) else cert_obj
++        )
++        if b"-----BEGIN CERTIFICATE-----" in pem_bytes:
++            try:
++                parsed_cert = x509.load_pem_x509_certificate(pem_bytes)
++            except ValueError:
++                return None
++            candidates.extend(_extract_candidates_from_x509(parsed_cert))
++
++    for candidate in candidates:
++        matched = _match_candidate_principal(candidate)
++        if matched is not None:
++            return matched
++    return None
++
++
++def _parse_and_verify_hmac_header(  # noqa: PLR0911, PLR0913
++    header_val: str,
++    *,
++    method: str,
++    path: str,
++    body_bytes: bytes,
++    max_drift_s: int,
++    key_material: KeyMaterial | None,
++) -> str | None:
++    """Parse X-KB-Internal-Auth header and verify role-bound HKDF-HMAC signature."""
++    parts: dict[str, str] = {}
++    for raw_part in header_val.split(","):
++        part = raw_part.strip()
++        if "=" not in part:
++            return None
++        k, v = part.split("=", 1)
++        k_clean = k.strip()
++        if not k_clean or k_clean in parts:
++            return None
++        parts[k_clean] = v.strip()
++
++    ts_str = parts.get("t")
++    principal = parts.get("p")
++    sig = parts.get("v2")
++    if not ts_str or not principal or not sig:
++        return None
++
++    if principal not in KNOWN_SERVICE_PRINCIPALS:
++        return None
++
++    try:
++        ts_float = float(ts_str)
++        ts_int = int(ts_str)
++    except ValueError:
++        return None
++
++    if abs(time.time() - ts_float) > max_drift_s:
++        return None
++
++    key = derive_internal_service_key(principal, key_material=key_material)
++    msg = _build_canonical_message(ts_int, principal, method, path, body_bytes)
++    expected_sig = hmac.new(key, msg, hashlib.sha256).hexdigest()
++    if not hmac.compare_digest(sig, expected_sig):
++        return None
++
++    return principal
++
++
++def verify_internal_service_auth(
++    request: Request,
++    allowed_principals: Collection[str] = KNOWN_SERVICE_PRINCIPALS,
++    *,
++    body_bytes: bytes | bytearray | memoryview | str | None = None,
++    max_drift_s: int = INTERNAL_AUTH_DRIFT_SECONDS,
++    key_material: KeyMaterial | None = None,
++) -> str:
++    """Verify request carries valid role-bound HMAC signature or verified ASGI mTLS client cert.
++
++    Raises:
++        ProblemException(401 AUTHENTICATION_REQUIRED): When missing, spoofed, expired, or invalid.
++        ProblemException(403 FORBIDDEN): When authenticated principal is not in allowed_principals.
++
++    """
++    if body_bytes is not None:
++        raw_body = _coerce_body_bytes(body_bytes)
++    else:
++        cached_body = getattr(request, "_body", None)
++        raw_body = bytes(cached_body) if isinstance(cached_body, (bytes, bytearray)) else b""
++
++    km = key_material
++    if km is None:
++        app_obj = request.scope.get("app")
++        app_state = getattr(app_obj, "state", None) if app_obj is not None else None
++        km = getattr(app_state, "key_material", None) if app_state is not None else None
++
++    auth_header = request.headers.get("x-kb-internal-auth")
++    client_cert = request.scope.get("client_cert")
++
++    verified_principal: str | None = None
++
++    if auth_header is not None:
++        hmac_principal = _parse_and_verify_hmac_header(
++            auth_header,
++            method=request.method,
++            path=request.url.path,
++            body_bytes=raw_body,
++            max_drift_s=max_drift_s,
++            key_material=km,
++        )
++        if hmac_principal is None:
++            raise ProblemException(
++                code="AUTHENTICATION_REQUIRED",
++                status=401,
++                title="Authentication Required",
++                detail="Invalid or expired internal service authentication signature.",
++            )
++        if client_cert is not None:
++            cert_principal = _extract_principal_from_client_cert(client_cert)
++            if cert_principal is None or cert_principal != hmac_principal:
++                raise ProblemException(
++                    code="AUTHENTICATION_REQUIRED",
++                    status=401,
++                    title="Authentication Required",
++                    detail="mTLS client certificate principal does not match HMAC principal.",
++                )
++        verified_principal = hmac_principal
++    elif client_cert is not None:
++        cert_principal = _extract_principal_from_client_cert(client_cert)
++        if cert_principal is None:
++            raise ProblemException(
++                code="AUTHENTICATION_REQUIRED",
++                status=401,
++                title="Authentication Required",
++                detail="Unverified or unrecognized mTLS client certificate principal.",
++            )
++        verified_principal = cert_principal
++    else:
++        raise ProblemException(
++            code="AUTHENTICATION_REQUIRED",
++            status=401,
++            title="Authentication Required",
++            detail="Internal service HMAC signature or verified mTLS client certificate required.",
++        )
++
++    if verified_principal not in allowed_principals:
++        raise ProblemException(
++            code="FORBIDDEN",
++            status=403,
++            title="Forbidden",
++            detail=(
++                f"{verified_principal} service principal is forbidden from accessing "
++                "this internal endpoint."
++            ),
++        )
++
++    return verified_principal
+diff --git a/kanban/tests/api/test_admin_mcp_keys_api.py b/kanban/tests/api/test_admin_mcp_keys_api.py
+index a1321a89..191e7544 100644
+--- a/kanban/tests/api/test_admin_mcp_keys_api.py
++++ b/kanban/tests/api/test_admin_mcp_keys_api.py
+@@ -5,15 +5,18 @@
+ from __future__ import annotations
+ 
+ import base64
++import json
+ from typing import TYPE_CHECKING
+ 
++import httpx
+ import pytest
+ from sqlalchemy import text
+ from starlette.requests import Request
+ 
+ from kanban.api.deps import PrincipalContext
+ from kanban.api.internal.mcp_introspect import get_internal_session
+-from kanban.security.mcp_keys import create_internal_mcp_auth_header
++from kanban.app import create_internal_app
++from kanban.security.service_auth import create_internal_service_auth_header
+ 
+ if TYPE_CHECKING:
+     from collections.abc import Awaitable, Callable
+@@ -159,51 +162,71 @@ async def test_admin_mcp_keys_endpoints_lifecycle(  # noqa: PLR0915
+     assert resp_list_docs.status_code == 200
+     assert not any(k["id"] == key_id for k in resp_list_docs.json())
+ 
+-    # 5. Internal introspection via POST /internal/v1/mcp/introspect
+-    # 5a. Missing internal auth header returns 401
+-    resp_intro_noauth = await client.post(
+-        "/internal/v1/mcp/introspect",
+-        json={"token": token, "surface": "agent"},
+-    )
+-    assert resp_intro_noauth.status_code == 401
++    # 5. Internal introspection via POST /internal/v1/mcp/introspect on internal_app
++    raw_app = getattr(client._transport, "app", None)  # noqa: SLF001
++    assert raw_app is not None
++    internal_app = create_internal_app(raw_app)
++    int_transport = httpx.ASGITransport(app=internal_app)
++    async with httpx.AsyncClient(
++        transport=int_transport, base_url="http://internal.test"
++    ) as int_client:
++        intro_path = "/internal/v1/mcp/introspect"
++        # 5a. Missing internal auth header returns 401
++        resp_intro_noauth = await int_client.post(
++            intro_path,
++            json={"token": token, "surface": "agent"},
++        )
++        assert resp_intro_noauth.status_code == 401
+ 
+-    # 5a2. Client certificate authentication bypasses HMAC header requirement
+-    resp_intro_cert = await client.post(
+-        "/internal/v1/mcp/introspect",
+-        headers={"X-Ssl-Client-Cert": "test-client-cert-content"},
+-        json={"token": token, "surface": "agent"},
+-    )
+-    assert resp_intro_cert.status_code == 200
+-    assert resp_intro_cert.json()["active"] is True
+-
+-    # 5b. Valid internal auth header returns active: true
+-    internal_auth = create_internal_mcp_auth_header()
+-    resp_intro = await client.post(
+-        "/internal/v1/mcp/introspect",
+-        headers={"X-KB-Internal-Auth": internal_auth},
+-        json={"token": token, "surface": "agent"},
+-    )
+-    assert resp_intro.status_code == 200
+-    contract_recorder.record("mcp_introspect_active_200", resp_intro.request, resp_intro)
+-    intro_data = resp_intro.json()
+-    assert intro_data["active"] is True
+-    assert intro_data["surface"] == "agent"
+-    assert intro_data["scopes"] == ["agent:read", "agent:write"]
+-
+-    # 5c. Surface mismatch via introspection returns active: false, reason: SURFACE_KEY_MISMATCH
+-    resp_intro_mismatch = await client.post(
+-        "/internal/v1/mcp/introspect",
+-        headers={"X-KB-Internal-Auth": internal_auth},
+-        json={"token": token, "surface": "admin"},
+-    )
+-    assert resp_intro_mismatch.status_code == 200
+-    contract_recorder.record(
+-        "mcp_introspect_surface_mismatch_200",
+-        resp_intro_mismatch.request,
+-        resp_intro_mismatch,
+-    )
+-    assert resp_intro_mismatch.json()["active"] is False
+-    assert resp_intro_mismatch.json()["reason"] == "SURFACE_KEY_MISMATCH"
++        # 5a2. Spoofed X-Ssl-Client-Cert HTTP header is rejected (401)
++        resp_intro_cert = await int_client.post(
++            intro_path,
++            headers={"X-Ssl-Client-Cert": "test-client-cert-content"},
++            json={"token": token, "surface": "agent"},
++        )
++        assert resp_intro_cert.status_code == 401
++
++        # 5b. Valid role-bound internal auth header returns active: true
++        body_agent = json.dumps({"token": token, "surface": "agent"}).encode("utf-8")
++        internal_auth = create_internal_service_auth_header(
++            principal="mcp-gateway",
++            method="POST",
++            path=intro_path,
++            body_bytes=body_agent,
++        )
++        resp_intro = await int_client.post(
++            intro_path,
++            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": internal_auth},
++            content=body_agent,
++        )
++        assert resp_intro.status_code == 200
++        contract_recorder.record("mcp_introspect_active_200", resp_intro.request, resp_intro)
++        intro_data = resp_intro.json()
++        assert intro_data["active"] is True
++        assert intro_data["surface"] == "agent"
++        assert intro_data["scopes"] == ["agent:read", "agent:write"]
++
++        # 5c. Surface mismatch via introspection returns active: false, reason: SURFACE_KEY_MISMATCH
++        body_admin = json.dumps({"token": token, "surface": "admin"}).encode("utf-8")
++        internal_auth_admin = create_internal_service_auth_header(
++            principal="mcp-gateway",
++            method="POST",
++            path=intro_path,
++            body_bytes=body_admin,
++        )
++        resp_intro_mismatch = await int_client.post(
++            intro_path,
++            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": internal_auth_admin},
++            content=body_admin,
++        )
++        assert resp_intro_mismatch.status_code == 200
++        contract_recorder.record(
++            "mcp_introspect_surface_mismatch_200",
++            resp_intro_mismatch.request,
++            resp_intro_mismatch,
++        )
++        assert resp_intro_mismatch.json()["active"] is False
++        assert resp_intro_mismatch.json()["reason"] == "SURFACE_KEY_MISMATCH"
+ 
+     # 6. Revoke key via DELETE /api/v1/admin/mcp-keys/{key_id} -> 204
+     resp_del = await client.delete(f"/api/v1/admin/mcp-keys/{key_id}")
+@@ -216,18 +239,21 @@ async def test_admin_mcp_keys_endpoints_lifecycle(  # noqa: PLR0915
+     assert resp_del_unknown.json()["code"] == "NOT_FOUND"
+ 
+     # 7. Introspection of revoked key returns active: false
+-    resp_intro_revoked = await client.post(
+-        "/internal/v1/mcp/introspect",
+-        headers={"X-KB-Internal-Auth": internal_auth},
+-        json={"token": token, "surface": "agent"},
+-    )
+-    assert resp_intro_revoked.status_code == 200
+-    contract_recorder.record(
+-        "mcp_introspect_revoked_200",
+-        resp_intro_revoked.request,
+-        resp_intro_revoked,
+-    )
+-    assert resp_intro_revoked.json()["active"] is False
++    async with httpx.AsyncClient(
++        transport=int_transport, base_url="http://internal.test"
++    ) as int_client:
++        resp_intro_revoked = await int_client.post(
++            intro_path,
++            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": internal_auth},
++            content=body_agent,
++        )
++        assert resp_intro_revoked.status_code == 200
++        contract_recorder.record(
++            "mcp_introspect_revoked_200",
++            resp_intro_revoked.request,
++            resp_intro_revoked,
++        )
++        assert resp_intro_revoked.json()["active"] is False
+ 
+ 
+ @pytest.mark.asyncio
+diff --git a/kanban/tests/security/test_ephemeral_mcp_tokens.py b/kanban/tests/security/test_ephemeral_mcp_tokens.py
+index 8789d0e9..47e4ef0e 100644
+--- a/kanban/tests/security/test_ephemeral_mcp_tokens.py
++++ b/kanban/tests/security/test_ephemeral_mcp_tokens.py
+@@ -8,6 +8,7 @@ from __future__ import annotations
+ 
+ import asyncio
+ import base64
++import json
+ import uuid
+ from typing import TYPE_CHECKING
+ 
+@@ -20,7 +21,7 @@ from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker
+ from database.session import RLSContext, RLSSessionFactory, bind_rls_context
+ from kanban.api.deps import PrincipalContext
+ from kanban.api.problems import ProblemException
+-from kanban.app import create_app
++from kanban.app import create_app, create_internal_app
+ from kanban.security.ephemeral_mcp_tokens import (
+     EPHEMERAL_TOKEN_PREFIX,
+     generate_ephemeral_mcp_token,
+@@ -30,7 +31,6 @@ from kanban.security.ephemeral_mcp_tokens import (
+ )
+ from kanban.security.mcp_keys import (
+     McpIntrospectionResult,
+-    create_internal_mcp_auth_header,
+     hash_mcp_api_key,
+ )
+ from kanban.security.permissions import (
+@@ -38,6 +38,7 @@ from kanban.security.permissions import (
+     evaluate_capabilities,
+     require_capability,
+ )
++from kanban.security.service_auth import create_internal_service_auth_header
+ from kanban.settings import Settings
+ from kanban.tests.security.helpers import (
+     add_acl_entry,
+@@ -48,6 +49,7 @@ from kanban.tests.security.helpers import (
+     create_workspace,
+     rebuild_era,
+ )
++from kanban.tests.security.test_internal_route_isolation import seed_bound_execution
+ 
+ if TYPE_CHECKING:
+     from sqlalchemy.ext.asyncio import AsyncSession
+@@ -74,7 +76,13 @@ async def test_case_1_positive_mint_and_token_format(db_session: AsyncSession) -
+     adam_id = await create_user(db_session, ws_id, handle="@adam", display_name="Adam")
+     agent_id = await create_agent(db_session, ws_id, display_name="agy-gate")
+     proj_id = await create_project(db_session, ws_id, identifier="KAN", name="Kanban")
+-    exec_id = uuid.uuid4()
++    exec_id = await seed_bound_execution(
++        db_session,
++        ws_id=ws_id,
++        proj_id=proj_id,
++        invoking_principal_id=adam_id,
++        agent_principal_id=agent_id,
++    )
+ 
+     record, token = await mint_ephemeral_token(
+         db_session,
+@@ -326,7 +334,13 @@ async def test_case_3_surface_isolation_and_revocation(db_session: AsyncSession)
+     user_id = await create_user(db_session, ws_id, handle="@user3", display_name="User 3")
+     agent_id = await create_agent(db_session, ws_id, display_name="agent-3")
+     proj_id = await create_project(db_session, ws_id, identifier="PRJ3", name="Project 3")
+-    exec_id = uuid.uuid4()
++    exec_id = await seed_bound_execution(
++        db_session,
++        ws_id=ws_id,
++        proj_id=proj_id,
++        invoking_principal_id=user_id,
++        agent_principal_id=agent_id,
++    )
+ 
+     _rec, token = await mint_ephemeral_token(
+         db_session,
+@@ -536,21 +550,29 @@ async def test_case_4_triple_intersection_and_project_pin(db_session: AsyncSessi
+ 
+ @pytest.mark.asyncio
+ async def test_case_5_internal_endpoints_and_mtls_boundary(db_session: AsyncSession) -> None:
+-    """Test Case 5: mTLS boundary for minting (mcp-gateway 403, agent-runtime 201)."""
++    """Test Case 5: Role-bound HMAC boundary for minting (mcp-gateway 403, agent-runtime 201)."""
+     ws_id = await create_workspace(db_session, name="WS-Eph-5")
+     user_id = await create_user(db_session, ws_id, handle="@user5", display_name="User 5")
+     agent_id = await create_agent(db_session, ws_id, display_name="agent-5")
+     proj_id = await create_project(db_session, ws_id, identifier="PRJ5", name="Project 5")
+-    exec_id = uuid.uuid4()
++    exec_id = await seed_bound_execution(
++        db_session,
++        ws_id=ws_id,
++        proj_id=proj_id,
++        invoking_principal_id=user_id,
++        agent_principal_id=agent_id,
++    )
+ 
+     settings = Settings()
+     app = create_app(settings)
+     app.state.session_factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
++    internal_app = create_internal_app(app)
+ 
+     await db_session.commit()
+ 
+-    transport = httpx.ASGITransport(app=app)
++    transport = httpx.ASGITransport(app=internal_app)
+     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
++        mint_path = "/internal/v1/mcp/ephemeral-tokens"
+         mint_payload = {
+             "workspace_id": str(ws_id),
+             "execution_id": str(exec_id),
+@@ -560,25 +582,38 @@ async def test_case_5_internal_endpoints_and_mtls_boundary(db_session: AsyncSess
+             "ttl_seconds": 60,
+             "max_calls": 10,
+         }
++        mint_body = json.dumps(mint_payload).encode("utf-8")
+ 
+         # 1. Unauthenticated request -> 401
+-        res_unauth = await client.post("/internal/v1/mcp/ephemeral-tokens", json=mint_payload)
++        res_unauth = await client.post(mint_path, json=mint_payload)
+         assert res_unauth.status_code == 401
+ 
+         # 2. mcp-gateway service principal -> 403 Forbidden
++        gw_hdr = create_internal_service_auth_header(
++            principal="mcp-gateway",
++            method="POST",
++            path=mint_path,
++            body_bytes=mint_body,
++        )
+         res_gw = await client.post(
+-            "/internal/v1/mcp/ephemeral-tokens",
+-            json=mint_payload,
+-            headers={"X-KB-Service-Principal": "mcp-gateway"},
++            mint_path,
++            content=mint_body,
++            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": gw_hdr},
+         )
+         assert res_gw.status_code == 403
+         assert res_gw.json()["code"] == "FORBIDDEN"
+ 
+         # 3. agent-runtime service principal -> 201 Created
++        agt_hdr = create_internal_service_auth_header(
++            principal="agent-runtime",
++            method="POST",
++            path=mint_path,
++            body_bytes=mint_body,
++        )
+         res_agent = await client.post(
+-            "/internal/v1/mcp/ephemeral-tokens",
+-            json=mint_payload,
+-            headers={"X-KB-Service-Principal": "agent-runtime"},
++            mint_path,
++            content=mint_body,
++            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": agt_hdr},
+         )
+         assert res_agent.status_code == 201
+         data = res_agent.json()
+@@ -588,10 +623,20 @@ async def test_case_5_internal_endpoints_and_mtls_boundary(db_session: AsyncSess
+         minted_token = data["token"]
+ 
+         # 4. Introspect through /internal/v1/mcp/introspect
++        intro_path = "/internal/v1/mcp/introspect"
++        intro_body = json.dumps(
++            {"token": minted_token, "surface": "agent", "consume_call": False}
++        ).encode("utf-8")
++        intro_hdr = create_internal_service_auth_header(
++            principal="mcp-gateway",
++            method="POST",
++            path=intro_path,
++            body_bytes=intro_body,
++        )
+         res_intro = await client.post(
+-            "/internal/v1/mcp/introspect",
+-            json={"token": minted_token, "surface": "agent", "consume_call": False},
+-            headers={"X-KB-Service-Principal": "mcp-gateway"},
++            intro_path,
++            content=intro_body,
++            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": intro_hdr},
+         )
+         assert res_intro.status_code == 200
+         intro_data = res_intro.json()
+@@ -600,18 +645,25 @@ async def test_case_5_internal_endpoints_and_mtls_boundary(db_session: AsyncSess
+         assert set(intro_data["allowed_tools"]) == {"search_tickets", "read_ticket"}
+ 
+         # 5. Revoke by execution ID
++        revoke_path = f"/internal/v1/mcp/ephemeral-tokens/by-execution/{exec_id}/revoke"
++        revoke_hdr = create_internal_service_auth_header(
++            principal="agent-runtime",
++            method="POST",
++            path=revoke_path,
++            body_bytes=b"",
++        )
+         res_revoke = await client.post(
+-            f"/internal/v1/mcp/ephemeral-tokens/by-execution/{exec_id}/revoke",
+-            headers={"X-KB-Service-Principal": "agent-runtime"},
++            revoke_path,
++            headers={"X-KB-Internal-Auth": revoke_hdr},
+         )
+         assert res_revoke.status_code == 200
+         assert res_revoke.json()["revoked_count"] == 1
+ 
+         # 6. Introspect post-revoke -> inactive
+         res_intro_revoked = await client.post(
+-            "/internal/v1/mcp/introspect",
+-            json={"token": minted_token, "surface": "agent", "consume_call": False},
+-            headers={"X-KB-Service-Principal": "mcp-gateway"},
++            intro_path,
++            content=intro_body,
++            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": intro_hdr},
+         )
+         assert res_intro_revoked.status_code == 200
+         assert res_intro_revoked.json()["active"] is False
+@@ -624,7 +676,13 @@ async def test_case_6_concurrent_budget_exhaustion(db_session: AsyncSession) ->
+     user_id = await create_user(db_session, ws_id, handle="@user6", display_name="User 6")
+     agent_id = await create_agent(db_session, ws_id, display_name="agent-6")
+     proj_id = await create_project(db_session, ws_id, identifier="PRJ6", name="Project 6")
+-    exec_id = uuid.uuid4()
++    exec_id = await seed_bound_execution(
++        db_session,
++        ws_id=ws_id,
++        proj_id=proj_id,
++        invoking_principal_id=user_id,
++        agent_principal_id=agent_id,
++    )
+ 
+     _record, token = await mint_ephemeral_token(
+         db_session,
+@@ -669,7 +727,13 @@ async def test_case_7_edge_cases_and_branch_coverage(db_session: AsyncSession) -
+     proj_id = await create_project(db_session, ws_id, identifier="PRJ7", name="Project 7")
+     other_ws_id = await create_workspace(db_session, name="WS-Eph-7-Other")
+     other_proj_id = await create_project(db_session, other_ws_id, identifier="OTH7", name="Other 7")
+-    exec_id = uuid.uuid4()
++    exec_id = await seed_bound_execution(
++        db_session,
++        ws_id=ws_id,
++        proj_id=proj_id,
++        invoking_principal_id=user_id,
++        agent_principal_id=agent_id,
++    )
+ 
+     # 1. Invalid invoking principal (non-existent)
+     with pytest.raises(ProblemException) as exc1:
+@@ -805,43 +869,67 @@ async def test_case_7_edge_cases_and_branch_coverage(db_session: AsyncSession) -
+     assert res_budget_nc.reason == "EPHEMERAL_CALL_BUDGET_EXCEEDED"
+ 
+     # 10. Internal endpoint auth checks
++    exec_id_2 = await seed_bound_execution(
++        db_session,
++        ws_id=ws_id,
++        proj_id=proj_id,
++        invoking_principal_id=user_id,
++        agent_principal_id=agent_id,
++    )
++    await db_session.commit()
++
+     settings = Settings()
+     app = create_app(settings)
+     app.state.session_factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
++    internal_app = create_internal_app(app)
+ 
+-    transport = httpx.ASGITransport(app=app)
++    transport = httpx.ASGITransport(app=internal_app)
+     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
++        revoke_path = f"/internal/v1/mcp/ephemeral-tokens/by-execution/{exec_id}/revoke"
+         # Revoke unauthenticated
+-        res_rev_unauth = await client.post(
+-            f"/internal/v1/mcp/ephemeral-tokens/by-execution/{exec_id}/revoke"
+-        )
++        res_rev_unauth = await client.post(revoke_path)
+         assert res_rev_unauth.status_code == 401
+ 
+-        # Revoke with client cert
++        # Revoke with unverified X-SSL-Client-Cert header is rejected (401)
+         res_rev_cert = await client.post(
+-            f"/internal/v1/mcp/ephemeral-tokens/by-execution/{exec_id}/revoke",
++            revoke_path,
+             headers={"X-SSL-Client-Cert": "test-cert"},
+         )
+-        assert res_rev_cert.status_code == 200
+-
+-        # Revoke with internal HMAC auth header
+-        hmac_header = create_internal_mcp_auth_header()
++        assert res_rev_cert.status_code == 401
++
++        # Revoke with role-bound internal HMAC auth header
++        hmac_header = create_internal_service_auth_header(
++            principal="mcp-gateway",
++            method="POST",
++            path=revoke_path,
++            body_bytes=b"",
++        )
+         res_rev_hmac = await client.post(
+-            f"/internal/v1/mcp/ephemeral-tokens/by-execution/{exec_id}/revoke",
++            revoke_path,
+             headers={"X-KB-Internal-Auth": hmac_header},
+         )
+         assert res_rev_hmac.status_code == 200
+ 
+-        # Mint with client cert (no service principal)
+-        res_mint_cert = await client.post(
+-            "/internal/v1/mcp/ephemeral-tokens",
+-            json={
++        # Mint with role-bound kanban-api HMAC signature
++        mint_path = "/internal/v1/mcp/ephemeral-tokens"
++        mint_body = json.dumps(
++            {
+                 "workspace_id": str(ws_id),
+-                "execution_id": str(uuid.uuid4()),
++                "execution_id": str(exec_id_2),
+                 "invoking_principal_id": str(user_id),
+                 "agent_principal_id": str(agent_id),
+                 "project_id": str(proj_id),
+-            },
+-            headers={"X-SSL-Client-Cert": "test-cert"},
++            }
++        ).encode("utf-8")
++        mint_hmac = create_internal_service_auth_header(
++            principal="kanban-api",
++            method="POST",
++            path=mint_path,
++            body_bytes=mint_body,
++        )
++        res_mint_cert = await client.post(
++            mint_path,
++            content=mint_body,
++            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": mint_hmac},
+         )
+         assert res_mint_cert.status_code == 201
+diff --git a/kanban/tests/security/test_internal_route_isolation.py b/kanban/tests/security/test_internal_route_isolation.py
+new file mode 100644
+index 00000000..4cdb4019
+--- /dev/null
++++ b/kanban/tests/security/test_internal_route_isolation.py
+@@ -0,0 +1,828 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Security unit and integration tests for internal MCP route isolation & service auth (KAN-63)."""
++
++from __future__ import annotations
++
++import base64
++import datetime as dt
++import hashlib
++import json
++import time
++import uuid
++from typing import TYPE_CHECKING, Any
++
++import httpx
++import pytest
++from cryptography import x509
++from cryptography.hazmat.primitives import hashes, serialization
++from cryptography.hazmat.primitives.asymmetric import ec
++from cryptography.x509.oid import NameOID
++from sqlalchemy import text
++from starlette.requests import Request
++
++from database.session import RLSSessionFactory
++from kanban.api.problems import ProblemException
++from kanban.app import create_app, create_internal_app
++from kanban.security.ephemeral_mcp_tokens import EPHEMERAL_TOKEN_PREFIX
++from kanban.security.keys import KeyMaterial
++from kanban.security.service_auth import (
++    create_internal_service_auth_header,
++    derive_internal_service_key,
++    verify_internal_service_auth,
++)
++from kanban.settings import Settings
++from kanban.tests.security.helpers import (
++    add_acl_entry,
++    create_agent,
++    create_project,
++    create_user,
++    create_workspace,
++    rebuild_era,
++)
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++
++def _b64(b: bytes) -> str:
++    return base64.urlsafe_b64encode(b).decode("ascii").rstrip("=")
++
++
++@pytest.fixture(autouse=True)
++def setup_test_key_material(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Set up valid test key material in environment."""
++    monkeypatch.delenv("KANBAN_KEYRING_FILE", raising=False)
++    monkeypatch.setenv("KANBAN_MASTER_KEK", _b64(b"k" * 32))
++    monkeypatch.setenv("KANBAN_AUTH_PEPPER", _b64(b"p" * 32))
++    monkeypatch.setenv("KANBAN_SESSION_HMAC_KEY", _b64(b"s" * 32))
++    monkeypatch.setenv("KANBAN_MASTER_KEK_KID", "test-kid-1")
++
++
++async def seed_bound_execution(  # noqa: PLR0913
++    session: AsyncSession,
++    *,
++    ws_id: uuid.UUID,
++    proj_id: uuid.UUID,
++    invoking_principal_id: uuid.UUID,
++    agent_principal_id: uuid.UUID,
++    status: str = "pending_async",
++    execution_id: uuid.UUID | None = None,
++    attach_hook: bool = True,
++) -> uuid.UUID:
++    """Seed an issue, agent_definition, workflow_transition_hook, and execution row."""
++    for pid in (invoking_principal_id, agent_principal_id):
++        await session.execute(
++            text(
++                "INSERT INTO resource_acl_entries ("
++                "  workspace_id, object_id, principal_id, effect, capability_mask"
++                ") VALUES (:ws_id, :obj_id, :p_id, 'ALLOW', 15) "
++                "ON CONFLICT (object_id, principal_id, effect) DO NOTHING"
++            ),
++            {"ws_id": ws_id, "obj_id": proj_id, "p_id": pid},
++        )
++
++    state_rows = (
++        await session.execute(
++            text("SELECT id FROM workflow_states WHERE project_id = :p LIMIT 2"),
++            {"p": proj_id},
++        )
++    ).fetchall()
++    from_state_id = state_rows[0][0]
++    to_state_id = state_rows[1][0] if len(state_rows) > 1 else state_rows[0][0]
++
++    pri_id = (
++        await session.execute(
++            text("SELECT id FROM project_priorities WHERE project_id = :p LIMIT 1"),
++            {"p": proj_id},
++        )
++    ).scalar_one()
++
++    proj_row = (
++        await session.execute(
++            text(
++                "UPDATE projects SET issue_seq_counter = issue_seq_counter + 1 "
++                "WHERE id = :p RETURNING identifier, issue_seq_counter"
++            ),
++            {"p": proj_id},
++        )
++    ).one()
++    proj_identifier, seq_num = str(proj_row[0]), int(proj_row[1])
++
++    issue_id = uuid.uuid4()
++    ckey = f"{proj_identifier}-{seq_num}"
++    await session.execute(
++        text(
++            "SELECT register_object("
++            "  'issue'::object_kind, :ws, :proj, :ckey, 'Test Issue', :cr, :id"
++            ")"
++        ),
++        {"ws": ws_id, "proj": proj_id, "ckey": ckey, "cr": invoking_principal_id, "id": issue_id},
++    )
++    await session.execute(
++        text(
++            "INSERT INTO issues ("
++            "  id, object_type, workspace_id, project_id, sequence_id, summary, "
++            "  description_markdown, state_id, priority_id, created_by_id, "
++            "  original_created_by_id, board_rank, ancestry_path"
++            ") VALUES ("
++            "  :id, 'issue', :ws, :proj, :seq, 'Test Issue', 'Body', :st, :pri, :cr, :cr, "
++            "  :rank, 'top'"
++            ")"
++        ),
++        {
++            "id": issue_id,
++            "ws": ws_id,
++            "proj": proj_id,
++            "seq": seq_num,
++            "st": from_state_id,
++            "pri": pri_id,
++            "cr": invoking_principal_id,
++            "rank": f"a{seq_num}",
++        },
++    )
++    await add_acl_entry(
++        session, ws_id, issue_id, invoking_principal_id, effect="ALLOW", capability_mask=15
++    )
++    await rebuild_era(session, ws_id)
++
++    if attach_hook:
++        agent_def_id = uuid.uuid4()
++        slug = f"agent-def-{uuid.uuid4().hex[:10]}"
++        await session.execute(
++            text(
++                "INSERT INTO agent_definitions ("
++                "  id, workspace_id, project_id, principal_id, slug, display_name, "
++                "  harness_kind, provider_kind, model_id"
++                ") VALUES ("
++                "  :id, :ws, :proj, :pid, :slug, 'Gate Agent', 'in_app_sdk', 'fixture', 'fixture-1'"
++                ")"
++            ),
++            {
++                "id": agent_def_id,
++                "ws": ws_id,
++                "proj": proj_id,
++                "pid": agent_principal_id,
++                "slug": slug,
++            },
++        )
++        hook_id = uuid.uuid4()
++        await session.execute(
++            text(
++                "INSERT INTO workflow_transition_hooks ("
++                "  id, workspace_id, project_id, name, from_state_id, to_state_id, "
++                "  hook_kind, sort_rank, is_enabled, agent_definition_id, manifest_sha256"
++                ") VALUES ("
++                "  :id, :ws, :proj, 'qa-gate', :fst, :tst, 'agent_interceptor', :rank, TRUE, "
++                "  :ad_id, :sha"
++                ")"
++            ),
++            {
++                "id": hook_id,
++                "ws": ws_id,
++                "proj": proj_id,
++                "fst": from_state_id,
++                "tst": to_state_id,
++                "rank": f"h{seq_num}",
++                "ad_id": agent_def_id,
++                "sha": hashlib.sha256(b"hook-manifest").digest(),
++            },
++        )
++
++    exec_id = execution_id or uuid.uuid4()
++    await session.execute(
++        text(
++            "INSERT INTO workflow_transition_executions ("
++            "  id, workspace_id, project_id, issue_id, invoking_principal_id, "
++            "  from_state_id, to_state_id, status, hop_depth, issue_body_sha256_snapshot"
++            ") VALUES ("
++            "  :id, :ws, :proj, :iss, :inv, :fst, :tst, :status, 0, :sha"
++            ")"
++        ),
++        {
++            "id": exec_id,
++            "ws": ws_id,
++            "proj": proj_id,
++            "iss": issue_id,
++            "inv": invoking_principal_id,
++            "fst": from_state_id,
++            "tst": to_state_id,
++            "status": status,
++            "sha": hashlib.sha256(b"Body").digest(),
++        },
++    )
++    return exec_id
++
++
++@pytest.mark.asyncio
++async def test_case_1_positive_verified_service_auth_and_bound_execution(
++    db_session: AsyncSession,
++) -> None:
++    """Case 1: Verified agent-runtime mints (201) for active execution; mcp-gateway introspects."""
++    ws_id = await create_workspace(db_session, name="WS-KAN63-1")
++    user_id = await create_user(db_session, ws_id, handle="@adam63", display_name="Adam 63")
++    agent_id = await create_agent(db_session, ws_id, display_name="agent-63")
++    proj_id = await create_project(
++        db_session, ws_id, identifier="K63A", name="KAN-63 Project A", created_by_id=user_id
++    )
++    exec_id = await seed_bound_execution(
++        db_session,
++        ws_id=ws_id,
++        proj_id=proj_id,
++        invoking_principal_id=user_id,
++        agent_principal_id=agent_id,
++        status="pending_async",
++    )
++    await db_session.commit()
++
++    app = create_app(Settings())
++    app.state.session_factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
++    internal_app = create_internal_app(app)
++
++    mint_path = "/internal/v1/mcp/ephemeral-tokens"
++    mint_payload = {
++        "workspace_id": str(ws_id),
++        "execution_id": str(exec_id),
++        "invoking_principal_id": str(user_id),
++        "agent_principal_id": str(agent_id),
++        "project_id": str(proj_id),
++        "ttl_seconds": 60,
++        "max_calls": 5,
++    }
++    mint_body = json.dumps(mint_payload).encode("utf-8")
++    mint_auth = create_internal_service_auth_header(
++        principal="agent-runtime",
++        method="POST",
++        path=mint_path,
++        body_bytes=mint_body,
++    )
++
++    transport = httpx.ASGITransport(app=internal_app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://internal.test") as client:
++        # 1. Valid agent-runtime signature mints ephemeral token (201)
++        res_mint = await client.post(
++            mint_path,
++            content=mint_body,
++            headers={
++                "Content-Type": "application/json",
++                "X-KB-Internal-Auth": mint_auth,
++            },
++        )
++        assert res_mint.status_code == 201
++        mint_data = res_mint.json()
++        token = mint_data["token"]
++        assert token.startswith(EPHEMERAL_TOKEN_PREFIX)
++
++        # 2. Valid mcp-gateway signature introspects token (200)
++        intro_path = "/internal/v1/mcp/introspect"
++        intro_body = json.dumps({"token": token, "surface": "agent", "consume_call": False}).encode(
++            "utf-8"
++        )
++        intro_auth = create_internal_service_auth_header(
++            principal="mcp-gateway",
++            method="POST",
++            path=intro_path,
++            body_bytes=intro_body,
++        )
++        res_intro = await client.post(
++            intro_path,
++            content=intro_body,
++            headers={
++                "Content-Type": "application/json",
++                "X-KB-Internal-Auth": intro_auth,
++            },
++        )
++        assert res_intro.status_code == 200
++        assert res_intro.json()["active"] is True
++        assert res_intro.json()["execution_id"] == str(exec_id)
++
++        # 3. Valid mcp-gateway signature revokes token by execution_id (200)
++        revoke_path = f"/internal/v1/mcp/ephemeral-tokens/by-execution/{exec_id}/revoke"
++        revoke_auth = create_internal_service_auth_header(
++            principal="mcp-gateway",
++            method="POST",
++            path=revoke_path,
++            body_bytes=b"",
++        )
++        res_revoke = await client.post(
++            revoke_path,
++            headers={"X-KB-Internal-Auth": revoke_auth},
++        )
++        assert res_revoke.status_code == 200
++        assert res_revoke.json()["revoked_count"] == 1
++
++
++@pytest.mark.asyncio
++async def test_case_2_negative_public_route_removal_and_spoofed_headers_rejected(
++    db_session: AsyncSession,
++) -> None:
++    """Case 2: /api/v1/internal/* and public /internal/* return 404; spoofed headers return 401."""
++    app = create_app(Settings())
++    app.state.session_factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
++    internal_app = create_internal_app(app)
++
++    exec_id = uuid.uuid4()
++    spoof_headers = {
++        "X-KB-Service-Principal": "agent-runtime",
++        "X-Client-Cert-CN": "agent-runtime",
++        "X-SSL-Client-CN": "agent-runtime",
++        "X-SSL-Client-Cert": "test-cert-agent-runtime",
++        "Authorization": "Bearer fake-token",
++    }
++
++    # Verify public OpenAPI schema contains zero /internal/ routes
++    schema_paths = list(app.openapi().get("paths", {}).keys())
++    assert not any("/internal" in p for p in schema_paths)
++
++    pub_transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(
++        transport=pub_transport, base_url="http://public.test"
++    ) as pub_client:
++        for path in (
++            "/api/v1/internal/v1/mcp/ephemeral-tokens",
++            f"/api/v1/internal/v1/mcp/ephemeral-tokens/by-execution/{exec_id}/revoke",
++            "/api/v1/internal/v1/mcp/introspect",
++            "/api/v1/internal/mcp/introspect",
++            "/internal/v1/mcp/ephemeral-tokens",
++            f"/internal/v1/mcp/ephemeral-tokens/by-execution/{exec_id}/revoke",
++            "/internal/v1/mcp/introspect",
++            "/internal/mcp/introspect",
++        ):
++            res_pub = await pub_client.post(path, json={"token": "x"}, headers=spoof_headers)
++            assert res_pub.status_code == 404, f"Expected 404 on public app for {path}"
++
++    # Verify internal_app rejects raw spoofed headers with 401 AUTHENTICATION_REQUIRED
++    int_transport = httpx.ASGITransport(app=internal_app)
++    async with httpx.AsyncClient(
++        transport=int_transport, base_url="http://internal.test"
++    ) as int_client:
++        for int_path in (
++            "/internal/v1/mcp/ephemeral-tokens",
++            f"/internal/v1/mcp/ephemeral-tokens/by-execution/{exec_id}/revoke",
++            "/internal/v1/mcp/introspect",
++            "/internal/mcp/introspect",
++        ):
++            res_spoof = await int_client.post(
++                int_path,
++                json={"token": "x"},
++                headers=spoof_headers,
++            )
++            assert res_spoof.status_code == 401
++            assert res_spoof.json()["code"] == "AUTHENTICATION_REQUIRED"
++
++
++@pytest.mark.asyncio
++async def test_case_3_edge_cross_role_escalation_tampering_and_fabricated_execution(  # noqa: PLR0915
++    db_session: AsyncSession,
++) -> None:
++    """Case 3: Cross-role 403, body/method/path/clock tampering 401, fabricated execution 403."""
++    ws_id = await create_workspace(db_session, name="WS-KAN63-3")
++    user_id = await create_user(db_session, ws_id, handle="@user63c", display_name="User 63C")
++    other_user_id = await create_user(db_session, ws_id, handle="@other63c", display_name="Other")
++    agent_id = await create_agent(db_session, ws_id, display_name="agent-63c")
++    unbound_agent_id = await create_agent(db_session, ws_id, display_name="unbound-agent-63c")
++    proj_id = await create_project(
++        db_session, ws_id, identifier="K63C", name="KAN-63 Project C", created_by_id=user_id
++    )
++    active_exec_id = await seed_bound_execution(
++        db_session,
++        ws_id=ws_id,
++        proj_id=proj_id,
++        invoking_principal_id=user_id,
++        agent_principal_id=agent_id,
++        status="running_sync",
++    )
++    completed_exec_id = await seed_bound_execution(
++        db_session,
++        ws_id=ws_id,
++        proj_id=proj_id,
++        invoking_principal_id=user_id,
++        agent_principal_id=agent_id,
++        status="approved",
++    )
++    await db_session.commit()
++
++    app = create_app(Settings())
++    app.state.session_factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
++    internal_app = create_internal_app(app)
++
++    mint_path = "/internal/v1/mcp/ephemeral-tokens"
++    base_payload: dict[str, Any] = {
++        "workspace_id": str(ws_id),
++        "execution_id": str(active_exec_id),
++        "invoking_principal_id": str(user_id),
++        "agent_principal_id": str(agent_id),
++        "project_id": str(proj_id),
++        "ttl_seconds": 60,
++        "max_calls": 5,
++    }
++    base_body = json.dumps(base_payload).encode("utf-8")
++
++    transport = httpx.ASGITransport(app=internal_app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://internal.test") as client:
++        # 1. Valid mcp-gateway signature calling /internal/v1/mcp/ephemeral-tokens -> 403 FORBIDDEN
++        gw_hdr = create_internal_service_auth_header(
++            principal="mcp-gateway",
++            method="POST",
++            path=mint_path,
++            body_bytes=base_body,
++        )
++        res_gw = await client.post(
++            mint_path,
++            content=base_body,
++            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": gw_hdr},
++        )
++        assert res_gw.status_code == 403
++        assert res_gw.json()["code"] == "FORBIDDEN"
++
++        # 2. Tampered JSON body with valid signature over original body -> 401
++        valid_agent_hdr = create_internal_service_auth_header(
++            principal="agent-runtime",
++            method="POST",
++            path=mint_path,
++            body_bytes=base_body,
++        )
++        tampered_body = json.dumps({**base_payload, "max_calls": 25}).encode("utf-8")
++        res_tampered_body = await client.post(
++            mint_path,
++            content=tampered_body,
++            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": valid_agent_hdr},
++        )
++        assert res_tampered_body.status_code == 401
++        assert res_tampered_body.json()["code"] == "AUTHENTICATION_REQUIRED"
++
++        # 3. Signature bound to wrong HTTP method or wrong path -> 401
++        wrong_method_hdr = create_internal_service_auth_header(
++            principal="agent-runtime",
++            method="GET",
++            path=mint_path,
++            body_bytes=base_body,
++        )
++        res_wrong_method = await client.post(
++            mint_path,
++            content=base_body,
++            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": wrong_method_hdr},
++        )
++        assert res_wrong_method.status_code == 401
++
++        wrong_path_hdr = create_internal_service_auth_header(
++            principal="agent-runtime",
++            method="POST",
++            path="/internal/v1/mcp/introspect",
++            body_bytes=base_body,
++        )
++        res_wrong_path = await client.post(
++            mint_path,
++            content=base_body,
++            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": wrong_path_hdr},
++        )
++        assert res_wrong_path.status_code == 401
++
++        # 4. Clock skew > 300s -> 401
++        expired_hdr = create_internal_service_auth_header(
++            principal="agent-runtime",
++            method="POST",
++            path=mint_path,
++            body_bytes=base_body,
++            timestamp=time.time() - 360,
++        )
++        res_expired = await client.post(
++            mint_path,
++            content=base_body,
++            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": expired_hdr},
++        )
++        assert res_expired.status_code == 401
++
++        # 5. Fabricated (non-existent) execution_id -> 422 INVALID_EXECUTION
++        fab_body = json.dumps({**base_payload, "execution_id": str(uuid.uuid4())}).encode("utf-8")
++        fab_hdr = create_internal_service_auth_header(
++            principal="agent-runtime",
++            method="POST",
++            path=mint_path,
++            body_bytes=fab_body,
++        )
++        res_fab = await client.post(
++            mint_path,
++            content=fab_body,
++            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": fab_hdr},
++        )
++        assert res_fab.status_code == 422
++        assert res_fab.json()["code"] == "INVALID_EXECUTION"
++
++        # 6. Completed execution_id -> 422 INACTIVE_EXECUTION
++        comp_body = json.dumps({**base_payload, "execution_id": str(completed_exec_id)}).encode(
++            "utf-8"
++        )
++        comp_hdr = create_internal_service_auth_header(
++            principal="agent-runtime",
++            method="POST",
++            path=mint_path,
++            body_bytes=comp_body,
++        )
++        res_comp = await client.post(
++            mint_path,
++            content=comp_body,
++            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": comp_hdr},
++        )
++        assert res_comp.status_code == 422
++        assert res_comp.json()["code"] == "INACTIVE_EXECUTION"
++
++        # 7. Mismatched invoking_principal_id tuple -> 403 EXECUTION_SCOPE_MISMATCH
++        mis_inv_body = json.dumps(
++            {**base_payload, "invoking_principal_id": str(other_user_id)}
++        ).encode("utf-8")
++        mis_inv_hdr = create_internal_service_auth_header(
++            principal="agent-runtime",
++            method="POST",
++            path=mint_path,
++            body_bytes=mis_inv_body,
++        )
++        res_mis_inv = await client.post(
++            mint_path,
++            content=mis_inv_body,
++            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": mis_inv_hdr},
++        )
++        assert res_mis_inv.status_code == 403
++        assert res_mis_inv.json()["code"] == "EXECUTION_SCOPE_MISMATCH"
++
++        # 8. Unbound agent_principal_id -> 403 EXECUTION_AGENT_MISMATCH
++        mis_agt_body = json.dumps(
++            {**base_payload, "agent_principal_id": str(unbound_agent_id)}
++        ).encode("utf-8")
++        mis_agt_hdr = create_internal_service_auth_header(
++            principal="agent-runtime",
++            method="POST",
++            path=mint_path,
++            body_bytes=mis_agt_body,
++        )
++        res_mis_agt = await client.post(
++            mint_path,
++            content=mis_agt_body,
++            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": mis_agt_hdr},
++        )
++        assert res_mis_agt.status_code == 403
++        assert res_mis_agt.json()["code"] == "EXECUTION_AGENT_MISMATCH"
++
++
++def _generate_x509_cert(cn: str, san_uri: str | None = None) -> x509.Certificate:
++    priv_key = ec.generate_private_key(ec.SECP256R1())
++    subject = issuer = x509.Name([x509.NameAttribute(NameOID.COMMON_NAME, cn)])
++    now = dt.datetime.now(dt.UTC)
++    builder = (
++        x509.CertificateBuilder()
++        .subject_name(subject)
++        .issuer_name(issuer)
++        .public_key(priv_key.public_key())
++        .serial_number(x509.random_serial_number())
++        .not_valid_before(now - dt.timedelta(minutes=5))
++        .not_valid_after(now + dt.timedelta(hours=1))
++    )
++    if san_uri:
++        builder = builder.add_extension(
++            x509.SubjectAlternativeName(
++                [
++                    x509.DNSName(f"{cn}.internal"),
++                    x509.UniformResourceIdentifier(san_uri),
++                ]
++            ),
++            critical=False,
++        )
++    return builder.sign(priv_key, hashes.SHA256())
++
++
++def test_case_4_service_auth_unit_and_x509_client_cert_branches(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Case 4: Direct unit tests for HKDF key derivation, X.509 CN/SAN parsing, and edge cases."""
++    # 1. Invalid principal rejected on key derivation
++    with pytest.raises(ValueError, match="Unknown internal service principal"):
++        derive_internal_service_key("malicious-principal")
++
++    # 2. Explicit KeyMaterial and fallback root key resolution
++    explicit_km = KeyMaterial(
++        master_kek=b"a" * 32,
++        auth_pepper=b"b" * 32,
++        session_hmac_key=b"c" * 32,
++    )
++    hdr = create_internal_service_auth_header(
++        principal="kanban-api",
++        method="POST",
++        path="/internal/v1/mcp/ephemeral-tokens",
++        body_bytes="{}",
++        key_material=explicit_km,
++    )
++    req_ok = Request(
++        {
++            "type": "http",
++            "method": "POST",
++            "path": "/internal/v1/mcp/ephemeral-tokens",
++            "headers": [(b"x-kb-internal-auth", hdr.encode("ascii"))],
++        }
++    )
++    assert (
++        verify_internal_service_auth(
++            req_ok,
++            allowed_principals=("kanban-api",),
++            body_bytes="{}",
++            key_material=explicit_km,
++        )
++        == "kanban-api"
++    )
++
++    # 3. Malformed header strings rejected with 401
++    for bad_hdr in (
++        "invalid",
++        "t=123,t=456,p=mcp-gateway,v2=abc",
++        "t=notanint,p=mcp-gateway,v2=abc",
++        "t=123,p=unknown-role,v2=abc",
++        "t=123,p=mcp-gateway",
++    ):
++        req_bad = Request(
++            {
++                "type": "http",
++                "method": "POST",
++                "path": "/internal/v1/mcp/introspect",
++                "headers": [(b"x-kb-internal-auth", bad_hdr.encode("ascii"))],
++            }
++        )
++        with pytest.raises(ProblemException) as exc_info:
++            verify_internal_service_auth(req_bad, allowed_principals=("mcp-gateway",))
++        assert exc_info.value.status == 401
++
++    # 4. Verified ASGI scope["client_cert"] X.509 Certificate object & PEM bytes
++    cert_obj = _generate_x509_cert(
++        "agent-runtime", san_uri="spiffe://kanban.internal/ns/default/sa/agent-runtime"
++    )
++    req_cert_obj = Request(
++        {
++            "type": "http",
++            "method": "POST",
++            "path": "/internal/v1/mcp/ephemeral-tokens",
++            "headers": [],
++            "client_cert": cert_obj,
++        }
++    )
++    assert (
++        verify_internal_service_auth(req_cert_obj, allowed_principals=("agent-runtime",))
++        == "agent-runtime"
++    )
++
++    pem_bytes = cert_obj.public_bytes(serialization.Encoding.PEM)
++    req_cert_pem = Request(
++        {
++            "type": "http",
++            "method": "POST",
++            "path": "/internal/v1/mcp/ephemeral-tokens",
++            "headers": [],
++            "client_cert": pem_bytes.decode("ascii"),
++        }
++    )
++    assert (
++        verify_internal_service_auth(req_cert_pem, allowed_principals=("agent-runtime",))
++        == "agent-runtime"
++    )
++
++    # 5. Peer cert dictionary format (ssl.getpeercert() style) & matching HMAC+cert
++    peer_dict = {
++        "subject": ((("commonName", "mcp-gateway.internal"),),),
++        "subjectAltName": (("DNS", "mcp-gateway.internal"), ("URI", "spiffe://k/sa/mcp-gateway")),
++    }
++    req_peer_dict = Request(
++        {
++            "type": "http",
++            "method": "POST",
++            "path": "/internal/v1/mcp/introspect",
++            "headers": [],
++            "client_cert": peer_dict,
++        }
++    )
++    assert (
++        verify_internal_service_auth(req_peer_dict, allowed_principals=("mcp-gateway",))
++        == "mcp-gateway"
++    )
++
++    # Matching HMAC and client_cert succeeds
++    req_match_both = Request(
++        {
++            "type": "http",
++            "method": "POST",
++            "path": "/internal/v1/mcp/ephemeral-tokens",
++            "headers": [(b"x-kb-internal-auth", hdr.encode("ascii"))],
++            "client_cert": {"cn": "kanban-api"},
++        }
++    )
++    assert (
++        verify_internal_service_auth(
++            req_match_both,
++            allowed_principals=("kanban-api",),
++            body_bytes="{}",
++            key_material=explicit_km,
++        )
++        == "kanban-api"
++    )
++
++    # X.509 cert without SAN extension and with body_bytes=None
++    cert_no_san = _generate_x509_cert("kanban-api", san_uri=None)
++    hdr_none_body = create_internal_service_auth_header(
++        principal="kanban-api",
++        method="POST",
++        path="/internal/v1/mcp/introspect",
++        body_bytes=None,
++    )
++    req_no_san = Request(
++        {
++            "type": "http",
++            "method": "POST",
++            "path": "/internal/v1/mcp/introspect",
++            "headers": [(b"x-kb-internal-auth", hdr_none_body.encode("ascii"))],
++            "client_cert": cert_no_san,
++        }
++    )
++    assert (
++        verify_internal_service_auth(req_no_san, allowed_principals=("kanban-api",)) == "kanban-api"
++    )
++
++    # Non-PEM string or empty candidate in scope["client_cert"] -> 401
++    for bad_cert_val in ("plain-non-pem-string", {"cn": "   "}):
++        req_non_pem = Request(
++            {
++                "type": "http",
++                "method": "POST",
++                "path": "/internal/v1/mcp/introspect",
++                "headers": [],
++                "client_cert": bad_cert_val,
++            }
++        )
++        with pytest.raises(ProblemException) as exc_non_pem:
++            verify_internal_service_auth(req_non_pem, allowed_principals=("mcp-gateway",))
++        assert exc_non_pem.value.status == 401
++
++    # 6. Mismatched HMAC principal vs client_cert principal -> 401
++    req_mismatch_cert = Request(
++        {
++            "type": "http",
++            "method": "POST",
++            "path": "/internal/v1/mcp/ephemeral-tokens",
++            "headers": [(b"x-kb-internal-auth", hdr.encode("ascii"))],
++            "client_cert": peer_dict,
++        }
++    )
++    with pytest.raises(ProblemException) as exc_mis:
++        verify_internal_service_auth(
++            req_mismatch_cert,
++            allowed_principals=("kanban-api", "mcp-gateway"),
++            body_bytes="{}",
++            key_material=explicit_km,
++        )
++    assert exc_mis.value.status == 401
++
++    # 7. Unrecognized client_cert -> 401
++    req_unknown_cert = Request(
++        {
++            "type": "http",
++            "method": "POST",
++            "path": "/internal/v1/mcp/introspect",
++            "headers": [],
++            "client_cert": {"cn": "untrusted-caller", "san": ["other.local"]},
++        }
++    )
++    with pytest.raises(ProblemException) as exc_unk:
++        verify_internal_service_auth(req_unknown_cert, allowed_principals=("mcp-gateway",))
++    assert exc_unk.value.status == 401
++
++    # 8. Corrupt PEM in scope["client_cert"] -> 401
++    req_bad_pem = Request(
++        {
++            "type": "http",
++            "method": "POST",
++            "path": "/internal/v1/mcp/introspect",
++            "headers": [],
++            "client_cert": "-----BEGIN CERTIFICATE-----\nnot-valid-der\n-----END CERTIFICATE-----",
++        }
++    )
++    with pytest.raises(ProblemException) as exc_pem:
++        verify_internal_service_auth(req_bad_pem, allowed_principals=("mcp-gateway",))
++    assert exc_pem.value.status == 401
++
++    # 9. Standalone create_internal_app() without owner_app
++    standalone_internal = create_internal_app()
++    assert standalone_internal.state.session_factory is None
++
++    # 10. Process fallback key when no environment variables are set
++    monkeypatch.delenv("KANBAN_MASTER_KEK", raising=False)
++    monkeypatch.delenv("KANBAN_AUTH_PEPPER", raising=False)
++    monkeypatch.delenv("KANBAN_SESSION_HMAC_KEY", raising=False)
++    fb_hdr = create_internal_service_auth_header(
++        "mcp-gateway", "POST", "/internal/v1/mcp/introspect"
++    )
++    req_fb = Request(
++        {
++            "type": "http",
++            "method": "POST",
++            "path": "/internal/v1/mcp/introspect",
++            "headers": [(b"x-kb-internal-auth", fb_hdr.encode("ascii"))],
++        }
++    )
++    assert (
++        verify_internal_service_auth(req_fb, allowed_principals=("mcp-gateway",)) == "mcp-gateway"
++    )
+diff --git a/kanban/tests/security/test_read_taint.py b/kanban/tests/security/test_read_taint.py
+index 090077e9..3ce7eee5 100644
+--- a/kanban/tests/security/test_read_taint.py
++++ b/kanban/tests/security/test_read_taint.py
+@@ -39,6 +39,7 @@ from kanban.auth.sessions.csrf import (
+     PRE_SESSION_ID,
+     generate_csrf_token,
+ )
++from kanban.security.service_auth import create_internal_service_auth_header
+ from kanban.tests.security.helpers import (
+     add_role_binding,
+     create_project,
+@@ -53,6 +54,23 @@ if TYPE_CHECKING:
+ pytestmark = pytest.mark.committed_db
+ 
+ 
++class _McpGatewaySigningTransport(httpx.AsyncBaseTransport):
++    """Wraps ASGITransport and signs requests bearing X-KB-Service-Principal: mcp-gateway."""
++
++    def __init__(self, inner: httpx.AsyncBaseTransport) -> None:
++        self._inner = inner
++
++    async def handle_async_request(self, request: httpx.Request) -> httpx.Response:
++        if request.headers.get("x-kb-service-principal") == "mcp-gateway":
++            request.headers["x-kb-internal-auth"] = create_internal_service_auth_header(
++                principal="mcp-gateway",
++                method=request.method,
++                path=request.url.path,
++                body_bytes=request.content,
++            )
++        return await self._inner.handle_async_request(request)
++
++
+ class _TestTokenResolver:
+     """Resolves PrincipalContext by checking X-KB-Subject-Token header or default."""
+ 
+@@ -250,7 +268,7 @@ async def taint_test_env(
+     app.state.principal_resolver = resolver
+ 
+     csrf_token = generate_csrf_token(PRE_SESSION_ID, b"\x00" * 32)
+-    transport = httpx.ASGITransport(app=app)
++    transport = _McpGatewaySigningTransport(httpx.ASGITransport(app=app))
+     async with httpx.AsyncClient(
+         transport=transport,
+         base_url="http://test",
+diff --git a/kanban/web/openapi.json b/kanban/web/openapi.json
+index 5ef2ba4e..4b99a84a 100644
+--- a/kanban/web/openapi.json
++++ b/kanban/web/openapi.json
+@@ -2,7 +2,7 @@
+   "components": {
+     "schemas": {
+       "AccessManifest": {
+-        "description": "Complete S3.4 access manifest powering the \ud83d\udee1\ufe0f access pill and inspector.",
++        "description": "Complete S3.4 access manifest powering the 🛡️ access pill and inspector.",
+         "properties": {
+           "agents": {
+             "description": "In-boundary active agents",
+@@ -9131,358 +9131,6 @@
+         "title": "McpApiKeyResponse",
+         "type": "object"
+       },
+-      "McpIntrospectRequest": {
+-        "description": "Payload for introspecting an MCP bearer token.",
+-        "properties": {
+-          "consume_call": {
+-            "default": false,
+-            "title": "Consume Call",
+-            "type": "boolean"
+-          },
+-          "surface": {
+-            "anyOf": [
+-              {
+-                "type": "string"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Surface"
+-          },
+-          "token": {
+-            "title": "Token",
+-            "type": "string"
+-          },
+-          "tool_name": {
+-            "anyOf": [
+-              {
+-                "type": "string"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Tool Name"
+-          }
+-        },
+-        "required": [
+-          "token"
+-        ],
+-        "title": "McpIntrospectRequest",
+-        "type": "object"
+-      },
+-      "McpIntrospectResponse": {
+-        "description": "Introspection result payload conforming to S11.1 and S14.3.",
+-        "properties": {
+-          "active": {
+-            "title": "Active",
+-            "type": "boolean"
+-          },
+-          "agent_principal_id": {
+-            "anyOf": [
+-              {
+-                "format": "uuid",
+-                "type": "string"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Agent Principal Id"
+-          },
+-          "allowed_cidrs": {
+-            "anyOf": [
+-              {
+-                "items": {
+-                  "type": "string"
+-                },
+-                "type": "array"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Allowed Cidrs"
+-          },
+-          "allowed_project_ids": {
+-            "anyOf": [
+-              {
+-                "items": {
+-                  "format": "uuid",
+-                  "type": "string"
+-                },
+-                "type": "array"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Allowed Project Ids"
+-          },
+-          "allowed_project_keys": {
+-            "anyOf": [
+-              {
+-                "items": {
+-                  "type": "string"
+-                },
+-                "type": "array"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Allowed Project Keys"
+-          },
+-          "allowed_projects": {
+-            "anyOf": [
+-              {
+-                "items": {
+-                  "format": "uuid",
+-                  "type": "string"
+-                },
+-                "type": "array"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Allowed Projects"
+-          },
+-          "allowed_tools": {
+-            "anyOf": [
+-              {
+-                "items": {
+-                  "type": "string"
+-                },
+-                "type": "array"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Allowed Tools"
+-          },
+-          "allowed_workspace_ids": {
+-            "anyOf": [
+-              {
+-                "items": {
+-                  "format": "uuid",
+-                  "type": "string"
+-                },
+-                "type": "array"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Allowed Workspace Ids"
+-          },
+-          "calls_used": {
+-            "anyOf": [
+-              {
+-                "type": "integer"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Calls Used"
+-          },
+-          "capability_mask": {
+-            "anyOf": [
+-              {
+-                "type": "integer"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Capability Mask"
+-          },
+-          "disabled_tools": {
+-            "anyOf": [
+-              {
+-                "items": {
+-                  "type": "string"
+-                },
+-                "type": "array"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Disabled Tools"
+-          },
+-          "execution_id": {
+-            "anyOf": [
+-              {
+-                "format": "uuid",
+-                "type": "string"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Execution Id"
+-          },
+-          "expires_at": {
+-            "anyOf": [
+-              {
+-                "type": "string"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Expires At"
+-          },
+-          "key_id": {
+-            "anyOf": [
+-              {
+-                "format": "uuid",
+-                "type": "string"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Key Id"
+-          },
+-          "max_calls": {
+-            "anyOf": [
+-              {
+-                "type": "integer"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Max Calls"
+-          },
+-          "owner_kind": {
+-            "anyOf": [
+-              {
+-                "type": "string"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Owner Kind"
+-          },
+-          "principal_id": {
+-            "anyOf": [
+-              {
+-                "format": "uuid",
+-                "type": "string"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Principal Id"
+-          },
+-          "project_id": {
+-            "anyOf": [
+-              {
+-                "format": "uuid",
+-                "type": "string"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Project Id"
+-          },
+-          "reason": {
+-            "anyOf": [
+-              {
+-                "type": "string"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Reason"
+-          },
+-          "scope_tier": {
+-            "anyOf": [
+-              {
+-                "type": "string"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Scope Tier"
+-          },
+-          "scopes": {
+-            "anyOf": [
+-              {
+-                "items": {
+-                  "type": "string"
+-                },
+-                "type": "array"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Scopes"
+-          },
+-          "surface": {
+-            "anyOf": [
+-              {
+-                "type": "string"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Surface"
+-          },
+-          "token_kind": {
+-            "anyOf": [
+-              {
+-                "type": "string"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Token Kind"
+-          },
+-          "workspace_id": {
+-            "anyOf": [
+-              {
+-                "format": "uuid",
+-                "type": "string"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Workspace Id"
+-          },
+-          "workspace_slug": {
+-            "anyOf": [
+-              {
+-                "type": "string"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Workspace Slug"
+-          }
+-        },
+-        "required": [
+-          "active"
+-        ],
+-        "title": "McpIntrospectResponse",
+-        "type": "object"
+-      },
+       "MentionSummary": {
+         "additionalProperties": false,
+         "description": "Mentioned user handle and capability status.",
+@@ -9561,101 +9209,6 @@
+         "title": "MintEnrollmentTokenRequest",
+         "type": "object"
+       },
+-      "MintEphemeralTokenRequest": {
+-        "description": "Payload for minting a short-lived ephemeral MCP token.",
+-        "properties": {
+-          "agent_principal_id": {
+-            "format": "uuid",
+-            "title": "Agent Principal Id",
+-            "type": "string"
+-          },
+-          "allowed_tools": {
+-            "anyOf": [
+-              {
+-                "items": {
+-                  "type": "string"
+-                },
+-                "type": "array"
+-              },
+-              {
+-                "type": "null"
+-              }
+-            ],
+-            "title": "Allowed Tools"
+-          },
+-          "execution_id": {
+-            "format": "uuid",
+-            "title": "Execution Id",
+-            "type": "string"
+-          },
+-          "invoking_principal_id": {
+-            "format": "uuid",
+-            "title": "Invoking Principal Id",
+-            "type": "string"
+-          },
+-          "max_calls": {
+-            "default": 25,
+-            "title": "Max Calls",
+-            "type": "integer"
+-          },
+-          "project_id": {
+-            "format": "uuid",
+-            "title": "Project Id",
+-            "type": "string"
+-          },
+-          "ttl_seconds": {
+-            "default": 120,
+-            "title": "Ttl Seconds",
+-            "type": "integer"
+-          },
+-          "workspace_id": {
+-            "format": "uuid",
+-            "title": "Workspace Id",
+-            "type": "string"
+-          }
+-        },
+-        "required": [
+-          "workspace_id",
+-          "execution_id",
+-          "invoking_principal_id",
+-          "agent_principal_id",
+-          "project_id"
+-        ],
+-        "title": "MintEphemeralTokenRequest",
+-        "type": "object"
+-      },
+-      "MintEphemeralTokenResponse": {
+-        "description": "Result returned after minting ephemeral token.",
+-        "properties": {
+-          "allowed_tools": {
+-            "items": {
+-              "type": "string"
+-            },
+-            "title": "Allowed Tools",
+-            "type": "array"
+-          },
+-          "expires_at": {
+-            "title": "Expires At",
+-            "type": "string"
+-          },
+-          "max_calls": {
+-            "title": "Max Calls",
+-            "type": "integer"
+-          },
+-          "token": {
+-            "title": "Token",
+-            "type": "string"
+-          }
+-        },
+-        "required": [
+-          "token",
+-          "expires_at",
+-          "max_calls",
+-          "allowed_tools"
+-        ],
+-        "title": "MintEphemeralTokenResponse",
+-        "type": "object"
+-      },
+       "ModuleCreate": {
+         "additionalProperties": false,
+         "description": "Request payload for creating a module within a project.",
+@@ -11699,7 +11252,7 @@
+             "description": "Pillar 4: Enterprise Whitespace & High-Ergonomics UI"
+           },
+           "platform": {
+-            "default": "\ud83d\udc4dkanban",
++            "default": "👍kanban",
+             "description": "Official platform brand name",
+             "title": "Platform",
+             "type": "string"
+@@ -13695,8 +13248,8 @@
+         "description": "Masked far endpoint details when unreadable under the caller's RLS session.",
+         "properties": {
+           "label": {
+-            "const": "\ud83d\udd12 Restricted Object",
+-            "default": "\ud83d\udd12 Restricted Object",
++            "const": "🔒 Restricted Object",
++            "default": "🔒 Restricted Object",
+             "description": "Static non-leaking label",
+             "title": "Label",
+             "type": "string"
+@@ -13717,7 +13270,7 @@
+         "description": "Masked representation of an unreadable parent issue (S7.2 8h).",
+         "properties": {
+           "label": {
+-            "default": "\ud83d\udd12 Restricted Parent Issue",
++            "default": "🔒 Restricted Parent Issue",
+             "description": "Masked placeholder label for parent issue outside caller visibility",
+             "title": "Label",
+             "type": "string"
+@@ -13780,20 +13333,6 @@
+         "title": "RevokeAclEntryRequest",
+         "type": "object"
+       },
+-      "RevokeEphemeralTokenResponse": {
+-        "description": "Result returned after revoking execution tokens.",
+-        "properties": {
+-          "revoked_count": {
+-            "title": "Revoked Count",
+-            "type": "integer"
+-          }
+-        },
+-        "required": [
+-          "revoked_count"
+-        ],
+-        "title": "RevokeEphemeralTokenResponse",
+-        "type": "object"
+-      },
+       "RoleBindingRequest": {
+         "description": "Schema for binding or unbinding an RBAC role.",
+         "properties": {
+@@ -15448,7 +14987,7 @@
+             "type": "string"
+           },
+           "platform": {
+-            "default": "\ud83d\udc4dkanban",
++            "default": "👍kanban",
+             "description": "Official brand name",
+             "title": "Platform",
+             "type": "string"
+@@ -18418,10 +17957,10 @@
+     }
+   },
+   "info": {
+-    "title": "\ud83d\udc4dkanban API",
++    "title": "👍kanban API",
+     "version": "2.0.0",
+-    "x-build-commit": "9f640629a0bc",
+-    "x-openapi-bundle-hash": "9097584815a9fb47c42aa9acc6da1afd9e0cab21095c97323f5d4ede512b8485"
++    "x-build-commit": "afa359979dff",
++    "x-openapi-bundle-hash": "3cfd6d217e9fbf889877ed98bf8afaefacb756ad6670a6d2177d51e0375045fc"
+   },
+   "openapi": "3.1.0",
+   "paths": {
+@@ -27905,286 +27444,101 @@
+             "BearerTokenAuth": []
+           }
+         ],
+-        "summary": "Create a page",
+-        "tags": [
+-          "docs"
+-        ]
+-      }
+-    },
+-    "/api/v1/docs/{doc_ref}/tree": {
+-      "get": {
+-        "description": "Retrieve full hierarchical page tree with restricted ancestor masking.",
+-        "operationId": "get_doc_tree_api_v1_docs__doc_ref__tree_get",
+-        "parameters": [
+-          {
+-            "in": "path",
+-            "name": "doc_ref",
+-            "required": true,
+-            "schema": {
+-              "title": "Doc Ref",
+-              "type": "string"
+-            }
+-          }
+-        ],
+-        "responses": {
+-          "200": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "items": {
+-                    "$ref": "#/components/schemas/PageTreeNode"
+-                  },
+-                  "title": "Response Get Doc Tree Api V1 Docs  Doc Ref  Tree Get",
+-                  "type": "array"
+-                }
+-              }
+-            },
+-            "description": "Successful Response"
+-          },
+-          "401": {
+-            "content": {
+-              "application/problem+json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/ProblemDetails"
+-                }
+-              }
+-            },
+-            "description": "Unauthorized - authentication required"
+-          },
+-          "422": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/HTTPValidationError"
+-                }
+-              }
+-            },
+-            "description": "Validation Error"
+-          }
+-        },
+-        "security": [
+-          {
+-            "SessionCookieAuth": []
+-          },
+-          {
+-            "BearerTokenAuth": []
+-          }
+-        ],
+-        "summary": "Get page tree",
+-        "tags": [
+-          "docs"
+-        ]
+-      }
+-    },
+-    "/api/v1/healthz": {
+-      "get": {
+-        "description": "Liveness probe with zero database access for orchestration monitoring.",
+-        "operationId": "healthz_api_v1_healthz_get",
+-        "responses": {
+-          "200": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "additionalProperties": {
+-                    "type": "string"
+-                  },
+-                  "title": "Response Healthz Api V1 Healthz Get",
+-                  "type": "object"
+-                }
+-              }
+-            },
+-            "description": "Successful Response"
+-          }
+-        },
+-        "security": [],
+-        "summary": "Liveness health check probe",
+-        "tags": [
+-          "health"
+-        ]
+-      }
+-    },
+-    "/api/v1/internal/v1/mcp/ephemeral-tokens": {
+-      "post": {
+-        "description": "Mint ephemeral token bound to execution_id and Invoker \u2229 Agent \u2229 Project.",
+-        "operationId": "mint_token_endpoint_api_v1_internal_v1_mcp_ephemeral_tokens_post",
+-        "requestBody": {
+-          "content": {
+-            "application/json": {
+-              "schema": {
+-                "$ref": "#/components/schemas/MintEphemeralTokenRequest"
+-              }
+-            }
+-          },
+-          "required": true
+-        },
+-        "responses": {
+-          "201": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/MintEphemeralTokenResponse"
+-                }
+-              }
+-            },
+-            "description": "Successful Response"
+-          },
+-          "401": {
+-            "content": {
+-              "application/problem+json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/ProblemDetails"
+-                }
+-              }
+-            },
+-            "description": "Unauthorized - authentication required"
+-          },
+-          "422": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/HTTPValidationError"
+-                }
+-              }
+-            },
+-            "description": "Validation Error"
+-          }
+-        },
+-        "security": [
+-          {
+-            "CsrfHeaderAuth": [],
+-            "SessionCookieAuth": []
+-          },
+-          {
+-            "BearerTokenAuth": []
+-          }
+-        ],
+-        "summary": "Mint short-lived ephemeral read-only MCP token",
+-        "tags": [
+-          "internal-mcp-ephemeral"
+-        ]
+-      }
+-    },
+-    "/api/v1/internal/v1/mcp/ephemeral-tokens/by-execution/{execution_id}/revoke": {
+-      "post": {
+-        "description": "Revoke all active tokens for the specified execution ID.",
+-        "operationId": "revoke_tokens_endpoint_api_v1_internal_v1_mcp_ephemeral_tokens_by_execution__execution_id__revoke_post",
+-        "parameters": [
+-          {
+-            "in": "path",
+-            "name": "execution_id",
+-            "required": true,
+-            "schema": {
+-              "format": "uuid",
+-              "title": "Execution Id",
+-              "type": "string"
+-            }
+-          }
+-        ],
+-        "responses": {
+-          "200": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/RevokeEphemeralTokenResponse"
+-                }
+-              }
+-            },
+-            "description": "Successful Response"
+-          },
+-          "401": {
+-            "content": {
+-              "application/problem+json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/ProblemDetails"
+-                }
+-              }
+-            },
+-            "description": "Unauthorized - authentication required"
+-          },
+-          "422": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/HTTPValidationError"
+-                }
+-              }
+-            },
+-            "description": "Validation Error"
+-          }
+-        },
+-        "security": [
+-          {
+-            "CsrfHeaderAuth": [],
+-            "SessionCookieAuth": []
+-          },
+-          {
+-            "BearerTokenAuth": []
+-          }
+-        ],
+-        "summary": "Revoke active ephemeral tokens by execution ID",
+-        "tags": [
+-          "internal-mcp-ephemeral"
+-        ]
+-      }
+-    },
+-    "/api/v1/internal/v1/mcp/introspect": {
+-      "post": {
+-        "description": "Introspect bearer token digest against database and return active state.",
+-        "operationId": "introspect_token_api_v1_internal_v1_mcp_introspect_post",
+-        "requestBody": {
+-          "content": {
+-            "application/json": {
+-              "schema": {
+-                "$ref": "#/components/schemas/McpIntrospectRequest"
+-              }
+-            }
+-          },
+-          "required": true
+-        },
+-        "responses": {
+-          "200": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/McpIntrospectResponse"
+-                }
+-              }
+-            },
+-            "description": "Successful Response"
+-          },
+-          "401": {
+-            "content": {
+-              "application/problem+json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/ProblemDetails"
+-                }
+-              }
+-            },
+-            "description": "Unauthorized - authentication required"
+-          },
+-          "422": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/HTTPValidationError"
+-                }
+-              }
+-            },
+-            "description": "Validation Error"
+-          }
+-        },
+-        "security": [
+-          {
+-            "CsrfHeaderAuth": [],
+-            "SessionCookieAuth": []
+-          },
+-          {
+-            "BearerTokenAuth": []
+-          }
+-        ],
+-        "summary": "Introspect MCP bearer token",
++        "summary": "Create a page",
++        "tags": [
++          "docs"
++        ]
++      }
++    },
++    "/api/v1/docs/{doc_ref}/tree": {
++      "get": {
++        "description": "Retrieve full hierarchical page tree with restricted ancestor masking.",
++        "operationId": "get_doc_tree_api_v1_docs__doc_ref__tree_get",
++        "parameters": [
++          {
++            "in": "path",
++            "name": "doc_ref",
++            "required": true,
++            "schema": {
++              "title": "Doc Ref",
++              "type": "string"
++            }
++          }
++        ],
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "items": {
++                    "$ref": "#/components/schemas/PageTreeNode"
++                  },
++                  "title": "Response Get Doc Tree Api V1 Docs  Doc Ref  Tree Get",
++                  "type": "array"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "401": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ProblemDetails"
++                }
++              }
++            },
++            "description": "Unauthorized - authentication required"
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/HTTPValidationError"
++                }
++              }
++            },
++            "description": "Validation Error"
++          }
++        },
++        "security": [
++          {
++            "SessionCookieAuth": []
++          },
++          {
++            "BearerTokenAuth": []
++          }
++        ],
++        "summary": "Get page tree",
+         "tags": [
+-          "internal-mcp"
++          "docs"
++        ]
++      }
++    },
++    "/api/v1/healthz": {
++      "get": {
++        "description": "Liveness probe with zero database access for orchestration monitoring.",
++        "operationId": "healthz_api_v1_healthz_get",
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "additionalProperties": {
++                    "type": "string"
++                  },
++                  "title": "Response Healthz Api V1 Healthz Get",
++                  "type": "object"
++                }
++              }
++            },
++            "description": "Successful Response"
++          }
++        },
++        "security": [],
++        "summary": "Liveness health check probe",
++        "tags": [
++          "health"
+         ]
+       }
+     },
+@@ -39401,191 +38755,6 @@
+         ]
+       }
+     },
+-    "/internal/v1/mcp/ephemeral-tokens": {
+-      "post": {
+-        "description": "Mint ephemeral token bound to execution_id and Invoker \u2229 Agent \u2229 Project.",
+-        "operationId": "mint_token_endpoint_internal_v1_mcp_ephemeral_tokens_post",
+-        "requestBody": {
+-          "content": {
+-            "application/json": {
+-              "schema": {
+-                "$ref": "#/components/schemas/MintEphemeralTokenRequest"
+-              }
+-            }
+-          },
+-          "required": true
+-        },
+-        "responses": {
+-          "201": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/MintEphemeralTokenResponse"
+-                }
+-              }
+-            },
+-            "description": "Successful Response"
+-          },
+-          "401": {
+-            "content": {
+-              "application/problem+json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/ProblemDetails"
+-                }
+-              }
+-            },
+-            "description": "Unauthorized - authentication required"
+-          },
+-          "422": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/HTTPValidationError"
+-                }
+-              }
+-            },
+-            "description": "Validation Error"
+-          }
+-        },
+-        "security": [
+-          {
+-            "CsrfHeaderAuth": [],
+-            "SessionCookieAuth": []
+-          },
+-          {
+-            "BearerTokenAuth": []
+-          }
+-        ],
+-        "summary": "Mint short-lived ephemeral read-only MCP token",
+-        "tags": [
+-          "internal-mcp-ephemeral"
+-        ]
+-      }
+-    },
+-    "/internal/v1/mcp/ephemeral-tokens/by-execution/{execution_id}/revoke": {
+-      "post": {
+-        "description": "Revoke all active tokens for the specified execution ID.",
+-        "operationId": "revoke_tokens_endpoint_internal_v1_mcp_ephemeral_tokens_by_execution__execution_id__revoke_post",
+-        "parameters": [
+-          {
+-            "in": "path",
+-            "name": "execution_id",
+-            "required": true,
+-            "schema": {
+-              "format": "uuid",
+-              "title": "Execution Id",
+-              "type": "string"
+-            }
+-          }
+-        ],
+-        "responses": {
+-          "200": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/RevokeEphemeralTokenResponse"
+-                }
+-              }
+-            },
+-            "description": "Successful Response"
+-          },
+-          "401": {
+-            "content": {
+-              "application/problem+json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/ProblemDetails"
+-                }
+-              }
+-            },
+-            "description": "Unauthorized - authentication required"
+-          },
+-          "422": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/HTTPValidationError"
+-                }
+-              }
+-            },
+-            "description": "Validation Error"
+-          }
+-        },
+-        "security": [
+-          {
+-            "CsrfHeaderAuth": [],
+-            "SessionCookieAuth": []
+-          },
+-          {
+-            "BearerTokenAuth": []
+-          }
+-        ],
+-        "summary": "Revoke active ephemeral tokens by execution ID",
+-        "tags": [
+-          "internal-mcp-ephemeral"
+-        ]
+-      }
+-    },
+-    "/internal/v1/mcp/introspect": {
+-      "post": {
+-        "description": "Introspect bearer token digest against database and return active state.",
+-        "operationId": "introspect_token_internal_v1_mcp_introspect_post",
+-        "requestBody": {
+-          "content": {
+-            "application/json": {
+-              "schema": {
+-                "$ref": "#/components/schemas/McpIntrospectRequest"
+-              }
+-            }
+-          },
+-          "required": true
+-        },
+-        "responses": {
+-          "200": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/McpIntrospectResponse"
+-                }
+-              }
+-            },
+-            "description": "Successful Response"
+-          },
+-          "401": {
+-            "content": {
+-              "application/problem+json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/ProblemDetails"
+-                }
+-              }
+-            },
+-            "description": "Unauthorized - authentication required"
+-          },
+-          "422": {
+-            "content": {
+-              "application/json": {
+-                "schema": {
+-                  "$ref": "#/components/schemas/HTTPValidationError"
+-                }
+-              }
+-            },
+-            "description": "Validation Error"
+-          }
+-        },
+-        "security": [
+-          {
+-            "CsrfHeaderAuth": [],
+-            "SessionCookieAuth": []
+-          },
+-          {
+-            "BearerTokenAuth": []
+-          }
+-        ],
+-        "summary": "Introspect MCP bearer token",
+-        "tags": [
+-          "internal-mcp"
+-        ]
+-      }
+-    },
+     "/oauth/authorize": {
+       "get": {
+         "description": "Render interactive consent screen for authorization code grant with PKCE S256.",
+diff --git a/kanban/web/src/api/schema.gen.ts b/kanban/web/src/api/schema.gen.ts
+index f74ad6af..c6866aa2 100644
+--- a/kanban/web/src/api/schema.gen.ts
++++ b/kanban/web/src/api/schema.gen.ts
+@@ -2573,66 +2573,6 @@ export interface paths {
+         patch?: never;
+         trace?: never;
+     };
+-    "/api/v1/internal/v1/mcp/ephemeral-tokens": {
+-        parameters: {
+-            query?: never;
+-            header?: never;
+-            path?: never;
+-            cookie?: never;
+-        };
+-        get?: never;
+-        put?: never;
+-        /**
+-         * Mint short-lived ephemeral read-only MCP token
+-         * @description Mint ephemeral token bound to execution_id and Invoker ∩ Agent ∩ Project.
+-         */
+-        post: operations["mint_token_endpoint_api_v1_internal_v1_mcp_ephemeral_tokens_post"];
+-        delete?: never;
+-        options?: never;
+-        head?: never;
+-        patch?: never;
+-        trace?: never;
+-    };
+-    "/api/v1/internal/v1/mcp/ephemeral-tokens/by-execution/{execution_id}/revoke": {
+-        parameters: {
+-            query?: never;
+-            header?: never;
+-            path?: never;
+-            cookie?: never;
+-        };
+-        get?: never;
+-        put?: never;
+-        /**
+-         * Revoke active ephemeral tokens by execution ID
+-         * @description Revoke all active tokens for the specified execution ID.
+-         */
+-        post: operations["revoke_tokens_endpoint_api_v1_internal_v1_mcp_ephemeral_tokens_by_execution__execution_id__revoke_post"];
+-        delete?: never;
+-        options?: never;
+-        head?: never;
+-        patch?: never;
+-        trace?: never;
+-    };
+-    "/api/v1/internal/v1/mcp/introspect": {
+-        parameters: {
+-            query?: never;
+-            header?: never;
+-            path?: never;
+-            cookie?: never;
+-        };
+-        get?: never;
+-        put?: never;
+-        /**
+-         * Introspect MCP bearer token
+-         * @description Introspect bearer token digest against database and return active state.
+-         */
+-        post: operations["introspect_token_api_v1_internal_v1_mcp_introspect_post"];
+-        delete?: never;
+-        options?: never;
+-        head?: never;
+-        patch?: never;
+-        trace?: never;
+-    };
+     "/api/v1/issues/{issue_key}": {
+         parameters: {
+             query?: never;
+@@ -5120,66 +5060,6 @@ export interface paths {
+         patch?: never;
+         trace?: never;
+     };
+-    "/internal/v1/mcp/ephemeral-tokens": {
+-        parameters: {
+-            query?: never;
+-            header?: never;
+-            path?: never;
+-            cookie?: never;
+-        };
+-        get?: never;
+-        put?: never;
+-        /**
+-         * Mint short-lived ephemeral read-only MCP token
+-         * @description Mint ephemeral token bound to execution_id and Invoker ∩ Agent ∩ Project.
+-         */
+-        post: operations["mint_token_endpoint_internal_v1_mcp_ephemeral_tokens_post"];
+-        delete?: never;
+-        options?: never;
+-        head?: never;
+-        patch?: never;
+-        trace?: never;
+-    };
+-    "/internal/v1/mcp/ephemeral-tokens/by-execution/{execution_id}/revoke": {
+-        parameters: {
+-            query?: never;
+-            header?: never;
+-            path?: never;
+-            cookie?: never;
+-        };
+-        get?: never;
+-        put?: never;
+-        /**
+-         * Revoke active ephemeral tokens by execution ID
+-         * @description Revoke all active tokens for the specified execution ID.
+-         */
+-        post: operations["revoke_tokens_endpoint_internal_v1_mcp_ephemeral_tokens_by_execution__execution_id__revoke_post"];
+-        delete?: never;
+-        options?: never;
+-        head?: never;
+-        patch?: never;
+-        trace?: never;
+-    };
+-    "/internal/v1/mcp/introspect": {
+-        parameters: {
+-            query?: never;
+-            header?: never;
+-            path?: never;
+-            cookie?: never;
+-        };
+-        get?: never;
+-        put?: never;
+-        /**
+-         * Introspect MCP bearer token
+-         * @description Introspect bearer token digest against database and return active state.
+-         */
+-        post: operations["introspect_token_internal_v1_mcp_introspect_post"];
+-        delete?: never;
+-        options?: never;
+-        head?: never;
+-        patch?: never;
+-        trace?: never;
+-    };
+     "/oauth/authorize": {
+         parameters: {
+             query?: never;
+@@ -9618,79 +9498,6 @@ export interface components {
+             /** Workspace Id */
+             workspace_id?: string | null;
+         };
+-        /**
+-         * McpIntrospectRequest
+-         * @description Payload for introspecting an MCP bearer token.
+-         */
+-        McpIntrospectRequest: {
+-            /**
+-             * Consume Call
+-             * @default false
+-             */
+-            consume_call: boolean;
+-            /** Surface */
+-            surface?: string | null;
+-            /** Token */
+-            token: string;
+-            /** Tool Name */
+-            tool_name?: string | null;
+-        };
+-        /**
+-         * McpIntrospectResponse
+-         * @description Introspection result payload conforming to S11.1 and S14.3.
+-         */
+-        McpIntrospectResponse: {
+-            /** Active */
+-            active: boolean;
+-            /** Agent Principal Id */
+-            agent_principal_id?: string | null;
+-            /** Allowed Cidrs */
+-            allowed_cidrs?: string[] | null;
+-            /** Allowed Project Ids */
+-            allowed_project_ids?: string[] | null;
+-            /** Allowed Project Keys */
+-            allowed_project_keys?: string[] | null;
+-            /** Allowed Projects */
+-            allowed_projects?: string[] | null;
+-            /** Allowed Tools */
+-            allowed_tools?: string[] | null;
+-            /** Allowed Workspace Ids */
+-            allowed_workspace_ids?: string[] | null;
+-            /** Calls Used */
+-            calls_used?: number | null;
+-            /** Capability Mask */
+-            capability_mask?: number | null;
+-            /** Disabled Tools */
+-            disabled_tools?: string[] | null;
+-            /** Execution Id */
+-            execution_id?: string | null;
+-            /** Expires At */
+-            expires_at?: string | null;
+-            /** Key Id */
+-            key_id?: string | null;
+-            /** Max Calls */
+-            max_calls?: number | null;
+-            /** Owner Kind */
+-            owner_kind?: string | null;
+-            /** Principal Id */
+-            principal_id?: string | null;
+-            /** Project Id */
+-            project_id?: string | null;
+-            /** Reason */
+-            reason?: string | null;
+-            /** Scope Tier */
+-            scope_tier?: string | null;
+-            /** Scopes */
+-            scopes?: string[] | null;
+-            /** Surface */
+-            surface?: string | null;
+-            /** Token Kind */
+-            token_kind?: string | null;
+-            /** Workspace Id */
+-            workspace_id?: string | null;
+-            /** Workspace Slug */
+-            workspace_slug?: string | null;
+-        };
+         /**
+          * MentionSummary
+          * @description Mentioned user handle and capability status.
+@@ -9743,63 +9550,6 @@ export interface components {
+              */
+             ttl_seconds: number;
+         };
+-        /**
+-         * MintEphemeralTokenRequest
+-         * @description Payload for minting a short-lived ephemeral MCP token.
+-         */
+-        MintEphemeralTokenRequest: {
+-            /**
+-             * Agent Principal Id
+-             * Format: uuid
+-             */
+-            agent_principal_id: string;
+-            /** Allowed Tools */
+-            allowed_tools?: string[] | null;
+-            /**
+-             * Execution Id
+-             * Format: uuid
+-             */
+-            execution_id: string;
+-            /**
+-             * Invoking Principal Id
+-             * Format: uuid
+-             */
+-            invoking_principal_id: string;
+-            /**
+-             * Max Calls
+-             * @default 25
+-             */
+-            max_calls: number;
+-            /**
+-             * Project Id
+-             * Format: uuid
+-             */
+-            project_id: string;
+-            /**
+-             * Ttl Seconds
+-             * @default 120
+-             */
+-            ttl_seconds: number;
+-            /**
+-             * Workspace Id
+-             * Format: uuid
+-             */
+-            workspace_id: string;
+-        };
+-        /**
+-         * MintEphemeralTokenResponse
+-         * @description Result returned after minting ephemeral token.
+-         */
+-        MintEphemeralTokenResponse: {
+-            /** Allowed Tools */
+-            allowed_tools: string[];
+-            /** Expires At */
+-            expires_at: string;
+-            /** Max Calls */
+-            max_calls: number;
+-            /** Token */
+-            token: string;
+-        };
+         /**
+          * ModuleCreate
+          * @description Request payload for creating a module within a project.
+@@ -11758,14 +11508,6 @@ export interface components {
+              */
+             principal_id: string;
+         };
+-        /**
+-         * RevokeEphemeralTokenResponse
+-         * @description Result returned after revoking execution tokens.
+-         */
+-        RevokeEphemeralTokenResponse: {
+-            /** Revoked Count */
+-            revoked_count: number;
+-        };
+         /**
+          * RoleBindingRequest
+          * @description Schema for binding or unbinding an RBAC role.
+@@ -20067,130 +19809,6 @@ export interface operations {
+             };
+         };
+     };
+-    mint_token_endpoint_api_v1_internal_v1_mcp_ephemeral_tokens_post: {
+-        parameters: {
+-            query?: never;
+-            header?: never;
+-            path?: never;
+-            cookie?: never;
+-        };
+-        requestBody: {
+-            content: {
+-                "application/json": components["schemas"]["MintEphemeralTokenRequest"];
+-            };
+-        };
+-        responses: {
+-            /** @description Successful Response */
+-            201: {
+-                headers: {
+-                    [name: string]: unknown;
+-                };
+-                content: {
+-                    "application/json": components["schemas"]["MintEphemeralTokenResponse"];
+-                };
+-            };
+-            /** @description Unauthorized - authentication required */
+-            401: {
+-                headers: {
+-                    [name: string]: unknown;
+-                };
+-                content: {
+-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+-                };
+-            };
+-            /** @description Validation Error */
+-            422: {
+-                headers: {
+-                    [name: string]: unknown;
+-                };
+-                content: {
+-                    "application/json": components["schemas"]["HTTPValidationError"];
+-                };
+-            };
+-        };
+-    };
+-    revoke_tokens_endpoint_api_v1_internal_v1_mcp_ephemeral_tokens_by_execution__execution_id__revoke_post: {
+-        parameters: {
+-            query?: never;
+-            header?: never;
+-            path: {
+-                execution_id: string;
+-            };
+-            cookie?: never;
+-        };
+-        requestBody?: never;
+-        responses: {
+-            /** @description Successful Response */
+-            200: {
+-                headers: {
+-                    [name: string]: unknown;
+-                };
+-                content: {
+-                    "application/json": components["schemas"]["RevokeEphemeralTokenResponse"];
+-                };
+-            };
+-            /** @description Unauthorized - authentication required */
+-            401: {
+-                headers: {
+-                    [name: string]: unknown;
+-                };
+-                content: {
+-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+-                };
+-            };
+-            /** @description Validation Error */
+-            422: {
+-                headers: {
+-                    [name: string]: unknown;
+-                };
+-                content: {
+-                    "application/json": components["schemas"]["HTTPValidationError"];
+-                };
+-            };
+-        };
+-    };
+-    introspect_token_api_v1_internal_v1_mcp_introspect_post: {
+-        parameters: {
+-            query?: never;
+-            header?: never;
+-            path?: never;
+-            cookie?: never;
+-        };
+-        requestBody: {
+-            content: {
+-                "application/json": components["schemas"]["McpIntrospectRequest"];
+-            };
+-        };
+-        responses: {
+-            /** @description Successful Response */
+-            200: {
+-                headers: {
+-                    [name: string]: unknown;
+-                };
+-                content: {
+-                    "application/json": components["schemas"]["McpIntrospectResponse"];
+-                };
+-            };
+-            /** @description Unauthorized - authentication required */
+-            401: {
+-                headers: {
+-                    [name: string]: unknown;
+-                };
+-                content: {
+-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+-                };
+-            };
+-            /** @description Validation Error */
+-            422: {
+-                headers: {
+-                    [name: string]: unknown;
+-                };
+-                content: {
+-                    "application/json": components["schemas"]["HTTPValidationError"];
+-                };
+-            };
+-        };
+-    };
+     get_issue_api_v1_issues__issue_key__get: {
+         parameters: {
+             query?: {
+@@ -26797,130 +26415,6 @@ export interface operations {
+             };
+         };
+     };
+-    mint_token_endpoint_internal_v1_mcp_ephemeral_tokens_post: {
+-        parameters: {
+-            query?: never;
+-            header?: never;
+-            path?: never;
+-            cookie?: never;
+-        };
+-        requestBody: {
+-            content: {
+-                "application/json": components["schemas"]["MintEphemeralTokenRequest"];
+-            };
+-        };
+-        responses: {
+-            /** @description Successful Response */
+-            201: {
+-                headers: {
+-                    [name: string]: unknown;
+-                };
+-                content: {
+-                    "application/json": components["schemas"]["MintEphemeralTokenResponse"];
+-                };
+-            };
+-            /** @description Unauthorized - authentication required */
+-            401: {
+-                headers: {
+-                    [name: string]: unknown;
+-                };
+-                content: {
+-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+-                };
+-            };
+-            /** @description Validation Error */
+-            422: {
+-                headers: {
+-                    [name: string]: unknown;
+-                };
+-                content: {
+-                    "application/json": components["schemas"]["HTTPValidationError"];
+-                };
+-            };
+-        };
+-    };
+-    revoke_tokens_endpoint_internal_v1_mcp_ephemeral_tokens_by_execution__execution_id__revoke_post: {
+-        parameters: {
+-            query?: never;
+-            header?: never;
+-            path: {
+-                execution_id: string;
+-            };
+-            cookie?: never;
+-        };
+-        requestBody?: never;
+-        responses: {
+-            /** @description Successful Response */
+-            200: {
+-                headers: {
+-                    [name: string]: unknown;
+-                };
+-                content: {
+-                    "application/json": components["schemas"]["RevokeEphemeralTokenResponse"];
+-                };
+-            };
+-            /** @description Unauthorized - authentication required */
+-            401: {
+-                headers: {
+-                    [name: string]: unknown;
+-                };
+-                content: {
+-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+-                };
+-            };
+-            /** @description Validation Error */
+-            422: {
+-                headers: {
+-                    [name: string]: unknown;
+-                };
+-                content: {
+-                    "application/json": components["schemas"]["HTTPValidationError"];
+-                };
+-            };
+-        };
+-    };
+-    introspect_token_internal_v1_mcp_introspect_post: {
+-        parameters: {
+-            query?: never;
+-            header?: never;
+-            path?: never;
+-            cookie?: never;
+-        };
+-        requestBody: {
+-            content: {
+-                "application/json": components["schemas"]["McpIntrospectRequest"];
+-            };
+-        };
+-        responses: {
+-            /** @description Successful Response */
+-            200: {
+-                headers: {
+-                    [name: string]: unknown;
+-                };
+-                content: {
+-                    "application/json": components["schemas"]["McpIntrospectResponse"];
+-                };
+-            };
+-            /** @description Unauthorized - authentication required */
+-            401: {
+-                headers: {
+-                    [name: string]: unknown;
+-                };
+-                content: {
+-                    "application/problem+json": components["schemas"]["ProblemDetails"];
+-                };
+-            };
+-            /** @description Validation Error */
+-            422: {
+-                headers: {
+-                    [name: string]: unknown;
+-                };
+-                content: {
+-                    "application/json": components["schemas"]["HTTPValidationError"];
+-                };
+-            };
+-        };
+-    };
+     oauth_authorize_oauth_authorize_get: {
+         parameters: {
+             query: {
+diff --git a/mcp/internal_client.py b/mcp/internal_client.py
+index 1ab8d125..e7ef8bc4 100644
+--- a/mcp/internal_client.py
++++ b/mcp/internal_client.py
+@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING, Any, Final, Self
+ 
+ import httpx
+ 
++from kanban.security.service_auth import create_internal_service_auth_header
+ from mcp.errors import KbMcpError, McpErrorCode
+ 
+ if TYPE_CHECKING:
+@@ -75,7 +76,6 @@ class KanbanApiClient:
+             self._client = httpx.AsyncClient(
+                 transport=active_transport,
+                 base_url="http://localhost",
+-                headers={"X-KB-Service-Principal": "mcp-gateway"},
+                 timeout=timeout,
+             )
+         else:
+@@ -168,8 +168,6 @@ class KanbanApiClient:
+     ) -> object:
+         """Send authenticated internal request with identity forwarding and error mapping."""
+         req_headers = dict(headers or {})
+-        if self.settings.mode == "standalone_inprocess":
+-            req_headers.setdefault("X-KB-Service-Principal", "mcp-gateway")
+         if subject_token:
+             req_headers["X-KB-Subject-Token"] = subject_token
+         if mcp_session_id:
+@@ -205,6 +203,16 @@ class KanbanApiClient:
+                 params=params,
+                 headers=req_headers,
+             )
++            if (
++                self.settings.mode == "standalone_inprocess"
++                and "x-kb-internal-auth" not in req.headers
++            ):
++                req.headers["X-KB-Internal-Auth"] = create_internal_service_auth_header(
++                    principal="mcp-gateway",
++                    method=req.method,
++                    path=req.url.path,
++                    body_bytes=req.content,
++                )
+             resp = await self._client.send(req, stream=True)
+         except httpx.TransportError as exc:
+             msg = f"Upstream communication failure: {exc}"
+diff --git a/mcp/tests/test_ephemeral_auth.py b/mcp/tests/test_ephemeral_auth.py
+index e8742484..d4ccc188 100644
+--- a/mcp/tests/test_ephemeral_auth.py
++++ b/mcp/tests/test_ephemeral_auth.py
+@@ -8,6 +8,7 @@ from __future__ import annotations
+ 
+ import asyncio
+ import base64
++import json
+ import os
+ import time
+ import uuid
+@@ -25,12 +26,13 @@ from starlette.routing import Route
+ 
+ from database.session import RLSSessionFactory
+ from kanban.api.deps import PrincipalContext
+-from kanban.app import create_app
++from kanban.app import create_app, create_internal_app
+ from kanban.security.ephemeral_mcp_tokens import (
+     EPHEMERAL_TOKEN_PREFIX,
+     introspect_and_consume_ephemeral_token,
+     mint_ephemeral_token,
+ )
++from kanban.security.service_auth import create_internal_service_auth_header
+ from kanban.settings import Settings
+ from kanban.tests.security.helpers import (
+     add_role_binding,
+@@ -40,8 +42,17 @@ from kanban.tests.security.helpers import (
+     create_workspace,
+     rebuild_era,
+ )
++from kanban.tests.security.test_internal_route_isolation import seed_bound_execution
+ from mcp.app import create_mcp_app
++from mcp.context import (
++    McpRequestContext,
++    reset_current_mcp_context,
++    set_current_mcp_context,
++)
++from mcp.errors import KbMcpError, McpErrorCode
++from mcp.internal_client import KanbanApiClient
+ from mcp.registry import Surface, ToolRegistry, ToolSpec
++from mcp.scoping import ConnectionScope, ScopeMode
+ from mcp.settings import McpSettings
+ from mcp.tests.test_auth import *  # noqa: F403
+ 
+@@ -806,7 +817,13 @@ async def test_case_4_triple_intersection_and_project_pin_confinement(
+     await rebuild_era(committed_db_session, ws_id)
+ 
+     # Mint ephemeral token pinned strictly to project KAN
+-    exec_id = uuid.uuid4()
++    exec_id = await seed_bound_execution(
++        committed_db_session,
++        ws_id=ws_id,
++        proj_id=proj_kan_id,
++        invoking_principal_id=adam_id,
++        agent_principal_id=agent_id,
++    )
+     _rec, eph_token = await mint_ephemeral_token(
+         committed_db_session,
+         workspace_id=ws_id,
+@@ -846,7 +863,7 @@ async def test_case_4_triple_intersection_and_project_pin_confinement(
+     )
+ 
+     mcp_settings = McpSettings(mode="standalone_inprocess", auth_enabled=True)
+-    mcp_app = create_mcp_app(mcp_settings, kanban_app=kanban_fastapi_app)
++    mcp_app = create_mcp_app(mcp_settings, kanban_app=kanban_fastapi_app.state.internal_dispatcher)
+ 
+     transport = httpx.ASGITransport(app=mcp_app)
+     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+@@ -889,21 +906,29 @@ async def test_case_4_triple_intersection_and_project_pin_confinement(
+ 
+ @pytest.mark.asyncio
+ async def test_case_5_mtls_mint_boundary(db_session: AsyncSession) -> None:
+-    """Test Case 5: mTLS mint boundary (mcp-gateway 403, agent-runtime 201)."""
++    """Test Case 5: Role-bound HMAC mint boundary (mcp-gateway 403, agent-runtime 201)."""
+     ws_id = await create_workspace(db_session, name="WS-Mint-Boundary")
+     user_id = await create_user(db_session, ws_id, handle="@user-mint", display_name="User Mint")
+     agent_id = await create_agent(db_session, ws_id, display_name="agent-mint")
+     proj_id = await create_project(db_session, ws_id, identifier="MNT", name="Mint Project")
+-    exec_id = uuid.uuid4()
++    exec_id = await seed_bound_execution(
++        db_session,
++        ws_id=ws_id,
++        proj_id=proj_id,
++        invoking_principal_id=user_id,
++        agent_principal_id=agent_id,
++    )
+ 
+     settings = Settings()
+     app = create_app(settings)
+     app.state.session_factory = RLSSessionFactory(db_session.bind)  # type: ignore[arg-type]
++    internal_app = create_internal_app(app)
+ 
+     await db_session.commit()
+ 
+-    transport = httpx.ASGITransport(app=app)
++    transport = httpx.ASGITransport(app=internal_app)
+     async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
++        mint_path = "/internal/v1/mcp/ephemeral-tokens"
+         payload = {
+             "workspace_id": str(ws_id),
+             "execution_id": str(exec_id),
+@@ -913,21 +938,34 @@ async def test_case_5_mtls_mint_boundary(db_session: AsyncSession) -> None:
+             "ttl_seconds": 60,
+             "max_calls": 5,
+         }
++        body_bytes = json.dumps(payload).encode("utf-8")
+ 
+         # 1. mcp-gateway service principal -> 403 Forbidden
++        gw_hdr = create_internal_service_auth_header(
++            principal="mcp-gateway",
++            method="POST",
++            path=mint_path,
++            body_bytes=body_bytes,
++        )
+         res_gw = await client.post(
+-            "/internal/v1/mcp/ephemeral-tokens",
+-            json=payload,
+-            headers={"X-KB-Service-Principal": "mcp-gateway"},
++            mint_path,
++            content=body_bytes,
++            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": gw_hdr},
+         )
+         assert res_gw.status_code == 403
+         assert res_gw.json()["code"] == "FORBIDDEN"
+ 
+         # 2. agent-runtime service principal -> 201 Created
++        agt_hdr = create_internal_service_auth_header(
++            principal="agent-runtime",
++            method="POST",
++            path=mint_path,
++            body_bytes=body_bytes,
++        )
+         res_agt = await client.post(
+-            "/internal/v1/mcp/ephemeral-tokens",
+-            json=payload,
+-            headers={"X-KB-Service-Principal": "agent-runtime"},
++            mint_path,
++            content=body_bytes,
++            headers={"Content-Type": "application/json", "X-KB-Internal-Auth": agt_hdr},
+         )
+         assert res_agt.status_code == 201
+         data = res_agt.json()
+@@ -958,11 +996,16 @@ async def test_case_6_kan18_ephemeral_docs_tools_and_security(
+     await add_role_binding(
+         committed_db_session, ws_id, adam_id, role="WORKSPACE_ADMIN", scope_type="workspace"
+     )
++    exec_id = await seed_bound_execution(
++        committed_db_session,
++        ws_id=ws_id,
++        proj_id=proj_id,
++        invoking_principal_id=adam_id,
++        agent_principal_id=agent_id,
++    )
+     await rebuild_era(committed_db_session, ws_id)
+     await committed_db_session.commit()
+ 
+-    exec_id = uuid.uuid4()
+-
+     # 1. Mint with allowed_tools=['search']
+     _rec1, tok_search = await mint_ephemeral_token(
+         committed_db_session,
+@@ -1151,3 +1194,182 @@ async def test_case_6_kan18_ephemeral_docs_tools_and_security(
+         assert c_update.status_code == 200
+         assert c_update.json()["result"]["isError"] is True
+         assert "EPHEMERAL_TOOL_FORBIDDEN" in c_update.json()["result"]["content"][0]["text"]
++
++
++@pytest.mark.asyncio
++async def test_case_7_internal_client_hmac_and_error_mapping_coverage(
++    tmp_path: Any,  # noqa: ANN401
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Test Case 7: Exercise KanbanApiClient HMAC signing, mTLS init, and error mapping."""
++    with pytest.raises(ValueError, match="kanban_app or transport is required"):
++        KanbanApiClient(McpSettings(mode="standalone_inprocess"))
++
++    with pytest.raises(ValueError, match="Plaintext http:// base URL is strictly prohibited"):
++        KanbanApiClient(McpSettings(mode="mtls", kanban_api_base_url="http://insecure.local"))
++
++    ca_file = tmp_path / "ca.pem"
++    cert_file = tmp_path / "cert.pem"
++    key_file = tmp_path / "key.pem"
++    for f in (ca_file, cert_file, key_file):
++        f.write_text("dummy", encoding="utf-8")
++
++    responses: dict[str, tuple[int, dict[str, Any] | bytes]] = {
++        "/api/v1/auth/session": (200, {"csrf_token": "csrf-tok-123"}),
++        "/api/empty": (204, b""),
++        "/api/text": (200, b"\xff\xfeinvalid-utf8"),
++        "/api/err-409": (
++            409,
++            {
++                "type": "urn:kanban:problem:etag-mismatch",
++                "detail": "Stale ETag",
++                "current_etag": "etag-99",
++                "layer": "optimistic_lock",
++                "candidates": [{"id": "1"}],
++                "blockers": ["KAN-2"],
++                "tainted_by": ["SEC"],
++                "unauthorized_mentions": ["@bob"],
++            },
++        ),
++        "/api/err-promoted": (
++            409,
++            {"code": "ALREADY_PROMOTED", "detail": "Promoted", "target_doc_key": "DOC-1"},
++        ),
++        "/api/err-transition": (
++            409,
++            {
++                "code": "INVALID_TRANSITION",
++                "detail": "Bad transition",
++                "valid_states": ["In Progress", "Done"],
++            },
++        ),
++        "/api/err-section": (
++            404,
++            {"code": "SECTION_NOT_FOUND", "detail": "No section", "doc_id": "DOC-9"},
++        ),
++        "/api/err-nf": (
++            404,
++            {"type": "urn:kanban:problem:not-found", "detail": "Missing", "key": "KAN-9"},
++        ),
++        "/api/err-503": (503, b"unavailable"),
++        "/api/err-429": (429, {"title": "Rate Limited"}),
++    }
++
++    def _mock_handler(req: httpx.Request) -> httpx.Response:
++        if req.url.path in responses:
++            code, payload = responses[req.url.path]
++            if isinstance(payload, bytes):
++                return httpx.Response(code, content=payload)
++            return httpx.Response(code, json=payload)
++        return httpx.Response(200, json={"signed": "x-kb-internal-auth" in req.headers})
++
++    mock_trans = httpx.MockTransport(_mock_handler)
++    mtls_settings = McpSettings(
++        mode="mtls",
++        kanban_api_base_url="https://127.0.0.1:8443",
++        internal_ca_path=ca_file,
++        client_cert_path=cert_file,
++        client_key_path=key_file,
++    )
++    async with KanbanApiClient(mtls_settings, transport=mock_trans) as mtls_client:
++        res_ok = await mtls_client.request("POST", "/api/ok", json_data={"a": 1})
++        assert res_ok == {"signed": False}
++
++    real_mtls_client = KanbanApiClient(
++        McpSettings(mode="mtls", kanban_api_base_url="https://127.0.0.1:8443")
++    )
++    await real_mtls_client.aclose()
++
++    inproc_settings = McpSettings(mode="standalone_inprocess", response_body_limit_bytes=4096)
++    ctx_tok = set_current_mcp_context(
++        McpRequestContext(
++            surface=Surface.AGENT,
++            caller_scopes=frozenset({"agent:read"}),
++            subject_token=f"kb_agt_{uuid.uuid4().hex}",
++            session_id="sess-ctx-1",
++            connection_scope=ConnectionScope(
++                mode=ScopeMode.GLOBAL,
++                workspace_slug="ws-slug",
++                project_key="KAN",
++            ),
++        )
++    )
++    try:
++        async with KanbanApiClient(inproc_settings, transport=mock_trans) as client:
++            assert await client.request("GET", "/api/empty") is None
++            assert isinstance(await client.request("POST", "/api/text"), str)
++
++            for err_path, expected_code in (
++                ("/api/err-409", McpErrorCode.CONFLICT_ETAG),
++                ("/api/err-promoted", McpErrorCode.ALREADY_PROMOTED),
++                ("/api/err-transition", McpErrorCode.INVALID_TRANSITION),
++                ("/api/err-section", McpErrorCode.SECTION_NOT_FOUND),
++                ("/api/err-nf", McpErrorCode.NOT_FOUND),
++                ("/api/err-503", McpErrorCode.UPSTREAM_UNAVAILABLE),
++                ("/api/err-429", McpErrorCode.RATE_LIMITED),
++            ):
++                with pytest.raises(KbMcpError) as exc_err:
++                    await client.request("POST", err_path)
++                assert exc_err.value.code == expected_code
++    finally:
++        reset_current_mcp_context(ctx_tok)
++
++    def _big_handler(_req: httpx.Request) -> httpx.Response:
++        return httpx.Response(200, content=b"x" * 64)
++
++    async with KanbanApiClient(
++        McpSettings(mode="standalone_inprocess", response_body_limit_bytes=16),
++        transport=httpx.MockTransport(_big_handler),
++    ) as c_big:
++        with pytest.raises(KbMcpError) as exc_big:
++            await c_big.request("GET", "/api/big")
++        assert exc_big.value.code == McpErrorCode.UPSTREAM_ERROR
++
++    def _err_handler(_req: httpx.Request) -> httpx.Response:
++        err_msg = "boom"
++        raise httpx.ConnectError(err_msg)
++
++    async with KanbanApiClient(
++        inproc_settings, transport=httpx.MockTransport(_err_handler)
++    ) as c_err:
++        with pytest.raises(KbMcpError) as exc_conn:
++            await c_err.request("GET", "/api/down")
++        assert exc_conn.value.code == McpErrorCode.UPSTREAM_UNAVAILABLE
++
++    assert (
++        KanbanApiClient._resolve_conflict_code(  # noqa: SLF001
++            "urn:problem:cross-scope-taint", ""
++        )
++        == McpErrorCode.CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED
++    )
++    assert (
++        KanbanApiClient._resolve_conflict_code(  # noqa: SLF001
++            "urn:problem:mention-access-warning", ""
++        )
++        == McpErrorCode.MENTION_ACCESS_WARNING
++    )
++    assert (
++        KanbanApiClient._resolve_conflict_code(  # noqa: SLF001
++            "urn:problem:state-in-use", ""
++        )
++        == McpErrorCode.STATE_IN_USE
++    )
++    assert (
++        KanbanApiClient._resolve_conflict_code(  # noqa: SLF001
++            "urn:problem:unknown-conflict", ""
++        )
++        == McpErrorCode.VALIDATION_FAILED
++    )
++    assert (
++        KanbanApiClient._resolve_error_code(  # noqa: SLF001
++            403, "urn:problem:aal2-required", ""
++        )
++        == McpErrorCode.AAL2_REQUIRED
++    )
++    assert (
++        KanbanApiClient._resolve_error_code(  # noqa: SLF001
++            418, "urn:problem:teapot", ""
++        )
++        == McpErrorCode.UPSTREAM_ERROR
++    )
++    monkeypatch.undo()

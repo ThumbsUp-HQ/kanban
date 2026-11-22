@@ -1,0 +1,184 @@
+{
+  "1_public_api_v1_internal_404": {
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/internal/v1/mcp/ephemeral-tokens",
+      "headers": {
+        "Authorization": "Bearer x",
+        "X-KB-Service-Principal": "agent-runtime",
+        "X-SSL-Client-Cert": "test-cert"
+      }
+    },
+    "response": {
+      "status": 404,
+      "body": {
+        "type": "about:blank",
+        "title": "Not Found",
+        "status": 404
+      }
+    }
+  },
+  "2_public_root_internal_404": {
+    "request": {
+      "method": "POST",
+      "path": "/internal/v1/mcp/ephemeral-tokens",
+      "headers": {
+        "Authorization": "Bearer x",
+        "X-KB-Service-Principal": "agent-runtime",
+        "X-SSL-Client-Cert": "test-cert"
+      }
+    },
+    "response": {
+      "status": 404,
+      "body": {
+        "type": "about:blank",
+        "title": "Not Found",
+        "status": 404
+      }
+    }
+  },
+  "3_internal_spoofed_headers_401": {
+    "request": {
+      "method": "POST",
+      "path": "/internal/v1/mcp/ephemeral-tokens",
+      "headers": {
+        "X-KB-Service-Principal": "agent-runtime",
+        "X-SSL-Client-Cert": "test-cert"
+      }
+    },
+    "response": {
+      "status": 401,
+      "body": {
+        "type": "urn:kanban:problem:AUTHENTICATION_REQUIRED",
+        "title": "Authentication Required",
+        "status": 401,
+        "code": "AUTHENTICATION_REQUIRED",
+        "detail": "Internal service HMAC signature or verified mTLS client certificate required.",
+        "request_id": "457fdd123c9c4586925df4c480468bcb"
+      }
+    }
+  },
+  "4_internal_mcp_gateway_mint_403": {
+    "request": {
+      "method": "POST",
+      "path": "/internal/v1/mcp/ephemeral-tokens",
+      "headers": {
+        "X-KB-Internal-Auth": "t=<ts>,p=mcp-gateway,v2=<redacted>"
+      }
+    },
+    "response": {
+      "status": 403,
+      "body": {
+        "type": "urn:kanban:problem:FORBIDDEN",
+        "title": "Forbidden",
+        "status": 403,
+        "code": "FORBIDDEN",
+        "detail": "mcp-gateway service principal is forbidden from accessing this internal endpoint.",
+        "request_id": "990c852308e24d7d9d56849739d3ae0a"
+      }
+    }
+  },
+  "5_internal_fabricated_execution_422": {
+    "request": {
+      "method": "POST",
+      "path": "/internal/v1/mcp/ephemeral-tokens",
+      "headers": {
+        "X-KB-Internal-Auth": "t=<ts>,p=agent-runtime,v2=<redacted>"
+      }
+    },
+    "response": {
+      "status": 422,
+      "body": {
+        "type": "urn:kanban:problem:INVALID_EXECUTION",
+        "title": "Invalid Execution",
+        "status": 422,
+        "code": "INVALID_EXECUTION",
+        "detail": "execution_id does not exist in workflow_transition_executions.",
+        "request_id": "9841941364c94ae6826e8f31169ce758"
+      }
+    }
+  },
+  "6_internal_agent_runtime_mint_201": {
+    "request": {
+      "method": "POST",
+      "path": "/internal/v1/mcp/ephemeral-tokens",
+      "headers": {
+        "X-KB-Internal-Auth": "t=<ts>,p=agent-runtime,v2=<redacted>"
+      }
+    },
+    "response": {
+      "status": 201,
+      "body": {
+        "token": "kb_agt_eph_xiSa***REDACTED***",
+        "expires_at": "2026-11-22T14:50:00.163642+00:00",
+        "max_calls": 5,
+        "allowed_tools": [
+          "read_doc",
+          "read_ticket",
+          "search_knowledge",
+          "search_tickets"
+        ]
+      }
+    }
+  },
+  "7_internal_mcp_gateway_introspect_200": {
+    "request": {
+      "method": "POST",
+      "path": "/internal/v1/mcp/introspect",
+      "headers": {
+        "X-KB-Internal-Auth": "t=<ts>,p=mcp-gateway,v2=<redacted>"
+      }
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "active": true,
+        "key_id": null,
+        "principal_id": "01a203bb-595a-776d-8e06-69c1d0c62650",
+        "agent_principal_id": "01a203bb-5965-7e35-8c31-0fc31ba5b9c2",
+        "workspace_id": "01a203bb-5957-7d7d-a42c-a3be90404308",
+        "workspace_slug": null,
+        "project_id": "01a203bb-5966-7ec1-972a-856c9f5409fb",
+        "execution_id": "8ce57ec8-7040-4a2b-8fcf-5aeea12eb6f8",
+        "surface": "agent",
+        "scopes": [
+          "agent:read",
+          "docs:read"
+        ],
+        "token_kind": "ephemeral",
+        "reason": null,
+        "allowed_projects": null,
+        "allowed_project_keys": null,
+        "allowed_tools": [
+          "read_ticket",
+          "search_tickets"
+        ],
+        "disabled_tools": null,
+        "calls_used": 0,
+        "max_calls": 5,
+        "expires_at": "2026-11-22T14:50:00.163642+00:00",
+        "owner_kind": null,
+        "scope_tier": null,
+        "allowed_workspace_ids": null,
+        "allowed_project_ids": null,
+        "capability_mask": null,
+        "allowed_cidrs": null
+      }
+    }
+  },
+  "8_internal_mcp_gateway_revoke_200": {
+    "request": {
+      "method": "POST",
+      "path": "/internal/v1/mcp/ephemeral-tokens/by-execution/8ce57ec8-7040-4a2b-8fcf-5aeea12eb6f8/revoke",
+      "headers": {
+        "X-KB-Internal-Auth": "t=<ts>,p=mcp-gateway,v2=<redacted>"
+      }
+    },
+    "response": {
+      "status": 200,
+      "body": {
+        "revoked_count": 1
+      }
+    }
+  }
+}

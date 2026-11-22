@@ -17,6 +17,7 @@ from database.models.projects import Project
 from database.session import RLSContext, RLSSessionFactory
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import ProblemException
+from kanban.security.service_auth import KNOWN_SERVICE_PRINCIPALS, verify_internal_service_auth
 from kanban.services.activity import ActivityEventType, record_activity
 
 if TYPE_CHECKING:
@@ -69,6 +70,19 @@ async def _resolve_project_uuid(
     return (row[0], row[1]) if row is not None else None
 
 
+def _resolve_verified_service_principal(request: Request) -> str | None:
+    """Resolve verified service principal via HMAC header or ASGI TLS client_cert only."""
+    if (
+        request.headers.get("x-kb-internal-auth") is not None
+        or request.scope.get("client_cert") is not None
+    ):
+        return verify_internal_service_auth(
+            request,
+            allowed_principals=KNOWN_SERVICE_PRINCIPALS,
+        )
+    return None
+
+
 class TaintRecorder:
     """FastAPI dependency recording project read-taint for MCP sessions."""
 
@@ -78,12 +92,12 @@ class TaintRecorder:
         session: Annotated[AsyncSession, Depends(get_rls_session)],
         caller: Annotated[PrincipalContext, Depends(get_principal)],
     ) -> None:
-        """Initialize TaintRecorder dependency and check service principal headers."""
+        """Initialize TaintRecorder dependency and verify internal service authentication."""
         self.request: Final[Request] = request
         self.session: Final[AsyncSession] = session
         self.caller: Final[PrincipalContext] = caller
         self.session_id: Final[str | None] = request.headers.get("x-kb-mcp-session")
-        self.service_principal: Final[str | None] = request.headers.get("x-kb-service-principal")
+        self.service_principal: Final[str | None] = _resolve_verified_service_principal(request)
 
         if self.service_principal == "mcp-gateway" and not self.session_id:
             raise ProblemException(
@@ -177,12 +191,12 @@ class TaintGuard:
         session: Annotated[AsyncSession, Depends(get_rls_session)],
         caller: Annotated[PrincipalContext, Depends(get_principal)],
     ) -> None:
-        """Initialize TaintRecorder dependency and check service principal headers."""
+        """Initialize TaintGuard dependency and verify internal service authentication."""
         self.request: Final[Request] = request
         self.session: Final[AsyncSession] = session
         self.caller: Final[PrincipalContext] = caller
         self.session_id: Final[str | None] = request.headers.get("x-kb-mcp-session")
-        self.service_principal: Final[str | None] = request.headers.get("x-kb-service-principal")
+        self.service_principal: Final[str | None] = _resolve_verified_service_principal(request)
 
         if self.service_principal == "mcp-gateway" and not self.session_id:
             raise ProblemException(
