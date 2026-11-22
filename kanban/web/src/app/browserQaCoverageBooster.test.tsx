@@ -687,6 +687,12 @@ describe('Browser QA Branch Coverage Booster', () => {
         expect(patchCount).toBeGreaterThan(0);
       });
 
+      // Unhide completed states after transitioning KAN-1 to Done so priority bulk action can select it
+      const showAllBtn = screen.queryByTestId('empty-show-all-states-btn');
+      if (showAllBtn) {
+        fireEvent.click(showAllBtn);
+      }
+
       // Select again and update priority
       const checkboxesAfter = screen.getAllByRole('checkbox');
       const lastCbAfter = checkboxesAfter[checkboxesAfter.length - 1];
