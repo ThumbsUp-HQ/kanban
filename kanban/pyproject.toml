@@ -32,7 +32,7 @@ kanban-ctl = "kanban.cli.ctl:main"
 "" = "kanban"
 
 [tool.hatch.build.targets.wheel]
-include = ["*.py", "**/*.py"]
+include = ["*.py", "**/*.py", "*.md", "**/*.md", "*.txt", "**/*.txt"]
 exclude = [
     "tests",
     "pyproject.toml",

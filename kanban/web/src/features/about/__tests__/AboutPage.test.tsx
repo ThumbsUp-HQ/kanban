@@ -319,4 +319,37 @@ describe('AboutPage', () => {
     // Should not throw or crash
     expect(screen.queryByText('Copied!')).toBeNull();
   });
+
+  it('renders Agent Instructions (/llms.txt) card and copies onboarding prompt', async () => {
+    vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValueOnce(mockAboutData);
+    renderPage();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('about-llms-txt-card')).toBeDefined();
+    });
+
+    const llmsCard = screen.getByTestId('about-llms-txt-card');
+    expect(llmsCard.textContent).toContain('Agent Instructions (/llms.txt)');
+    expect(screen.getByTestId('about-llms-txt-link').getAttribute('href')).toBe('/llms.txt');
+    expect(screen.getByTestId('about-llms-full-link').getAttribute('href')).toBe('/llms-full.txt');
+
+    const copyBtn = screen.getByTestId('copy-llms-onboarding-prompt-btn');
+    expect(copyBtn.textContent).toBe('Copy Onboarding Prompt');
+
+    fireEvent.click(copyBtn);
+    await waitFor(() => {
+      expect(screen.getByText('Copied Prompt!')).toBeDefined();
+    });
+    expect(writeTextMock).toHaveBeenCalledWith(
+      expect.stringContaining("/llms.txt, learn 👍kanban's ticket workflow"),
+    );
+
+    // Test copy error fallback without crashing
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: vi.fn().mockRejectedValueOnce(new Error('Copy failed')),
+      },
+    });
+    fireEvent.click(copyBtn);
+  });
 });

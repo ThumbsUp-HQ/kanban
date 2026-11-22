@@ -27,6 +27,7 @@ export function McpConfigSnippetModal({
   const [urlScope, setUrlScope] = useState<UrlScope>('project');
   const [keyCopied, setKeyCopied] = useState<boolean>(false);
   const [snippetCopied, setSnippetCopied] = useState<boolean>(false);
+  const [promptCopied, setPromptCopied] = useState<boolean>(false);
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent): void => {
@@ -166,6 +167,19 @@ agy mcp add kanban ${endpointUrl} --auth oauth`;
     }
   };
 
+  const handleCopyPrompt = async (): Promise<void> => {
+    const success = await copyToClipboard(
+      `Read ${origin}/llms.txt, learn 👍kanban's ticket workflow, interview me on Execution Mode (Single-Thread, Teamwork, or Swarm), Model/Quota Strategy (Quota-Sipping Flash 3.8, Hybrid, or Unconstrained Sol MAX / Claude Ultra), and QA Rigor, and save my preferences to .agents/skills/ and AGENTS.md.`,
+    );
+    if (success) {
+      setPromptCopied(true);
+      /* v8 ignore next 3 */
+      setTimeout(() => {
+        setPromptCopied(false);
+      }, 2000);
+    }
+  };
+
   return (
     <div
       className="kb-snippet-modal-backdrop"
@@ -224,6 +238,24 @@ agy mcp add kanban ${endpointUrl} --auth oauth`;
 
         <div className="kb-snippet-boundary-note" data-testid="credential-boundary-note">
           <strong>Monotonic Credential Boundary:</strong> Access through this key is monotonically bounded by your account effective permissions. Capability ceilings, allowed CIDRs, and disabled tools narrow access across <code>/mcp/*</code> and <code>/api/v1/*</code> without privilege escalation.
+        </div>
+
+        <div className="kb-snippet-llms-callout" data-testid="mcp-llms-txt-callout">
+          <div className="kb-snippet-llms-callout-text">
+            <span aria-hidden="true">🤖</span>{' '}
+            <strong>Recommended Agent Skills:</strong> Give your agent direct onboarding via{' '}
+            <a href="/llms.txt" target="_blank" rel="noopener noreferrer">/llms.txt</a>
+          </div>
+          <button
+            type="button"
+            className="kb-snippet-copy-prompt-btn"
+            data-testid="mcp-copy-llms-prompt-btn"
+            onClick={() => {
+              void handleCopyPrompt();
+            }}
+          >
+            {promptCopied ? 'Copied Prompt!' : 'Copy Agent Skill Prompt'}
+          </button>
         </div>
 
         <div className="kb-snippet-url-row">

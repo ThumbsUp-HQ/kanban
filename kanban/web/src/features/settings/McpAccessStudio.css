@@ -525,6 +525,53 @@
   gap: 8px;
 }
 
+/* Recommended Agent Skills & Onboarding Callout */
+.kb-mcp-llms-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border-subtle, #e2e8f0);
+  border-left: 4px solid var(--brand-primary, #1d4ed8);
+  border-radius: 6px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+}
+
+.kb-mcp-llms-callout-text {
+  font-size: 0.875rem;
+  color: var(--fg-secondary, #475569);
+  line-height: 1.4;
+}
+
+.kb-mcp-llms-callout-text a {
+  color: var(--brand-primary, #1d4ed8);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.kb-mcp-llms-callout-text a:hover {
+  text-decoration: underline;
+}
+
+.kb-mcp-copy-prompt-btn {
+  white-space: nowrap;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--brand-primary, #1d4ed8);
+  background: var(--bg-hover, #f1f5f9);
+  border: 1px solid var(--border-subtle, #cbd5e1);
+  border-radius: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+.kb-mcp-copy-prompt-btn:hover {
+  background: var(--bg-surface, #ffffff);
+  border-color: var(--brand-primary, #1d4ed8);
+}
+
 @media (max-width: 768px) {
   .kb-mcp-studio-container {
     padding: 16px 12px;

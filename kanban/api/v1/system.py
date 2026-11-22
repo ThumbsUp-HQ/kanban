@@ -12,6 +12,11 @@ from pydantic import BaseModel, ConfigDict, Field
 
 from kanban.api.deps import PrincipalContext, get_principal
 from kanban.ops.build_info import get_build_info, resolve_platform_version
+from kanban.ops.llms_txt import (
+    LlmsSkillDescriptor,
+    LlmsSkillsCatalogResponse,
+    get_llms_skills_catalog,
+)
 from kanban.ops.sbom import (
     PLATFORM_LICENSE_SPDX,
     PLATFORM_NAME,
@@ -30,6 +35,8 @@ __all__ = [
     "AgentFirstCapabilities",
     "EnterpriseUxCapabilities",
     "FrictionFreeDeploymentCapabilities",
+    "LlmsSkillDescriptor",
+    "LlmsSkillsCatalogResponse",
     "ParityMatrixCapabilities",
     "PlatformSummaryResponse",
     "SbomComponentModel",
@@ -410,3 +417,18 @@ def get_platform_summary_endpoint() -> PlatformSummaryResponse:
 def get_platform_summary_alias() -> PlatformSummaryResponse:
     """Alias for /system/platform-summary."""
     return get_platform_summary()
+
+
+@router.get(
+    "/skills",
+    response_model=LlmsSkillsCatalogResponse,
+    summary="Get recommended agent skills catalog and onboarding prompt",
+    description=(
+        "Returns public /llms.txt discovery metadata, skill descriptors, "
+        "and agent onboarding prompt."
+    ),
+)
+def get_system_skills_endpoint(request: Request) -> LlmsSkillsCatalogResponse:
+    """Retrieve recommended LLM skills catalog and agent onboarding prompt."""
+    origin = str(request.base_url).rstrip("/")
+    return get_llms_skills_catalog(origin=origin)

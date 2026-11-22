@@ -25,6 +25,7 @@ export function AboutPage(): JSX.Element {
   const [scopeFilter, setScopeFilter] = useState<'all' | 'runtime'>('runtime');
   const [activeLicenseTab, setActiveLicenseTab] = useState<'license' | 'notice'>('license');
   const [copiedLicense, setCopiedLicense] = useState(false);
+  const [copiedPrompt, setCopiedPrompt] = useState(false);
 
   const components = data?.components;
   const sbomSummary = data?.sbom_summary;
@@ -83,6 +84,20 @@ export function AboutPage(): JSX.Element {
       setCopiedLicense(true);
       setTimeout(() => {
         setCopiedLicense(false);
+      }, 2000);
+    } catch {
+      // Fallback if clipboard API unavailable
+    }
+  };
+
+  const handleCopyOnboardingPrompt = async (): Promise<void> => {
+    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://kanban.example.com';
+    const textToCopy = `Read ${origin}/llms.txt, learn 👍kanban's ticket workflow, interview me on Execution Mode (Single-Thread, Teamwork, or Swarm), Model/Quota Strategy (Quota-Sipping Flash 3.8, Hybrid, or Unconstrained Sol MAX / Claude Ultra), and QA Rigor, and save my preferences to .agents/skills/ and AGENTS.md.`;
+    try {
+      await navigator.clipboard.writeText(textToCopy);
+      setCopiedPrompt(true);
+      setTimeout(() => {
+        setCopiedPrompt(false);
       }, 2000);
     } catch {
       // Fallback if clipboard API unavailable
@@ -247,6 +262,52 @@ export function AboutPage(): JSX.Element {
               Machine-readable canonical OpenAPI 3.1.0 JSON specification for code generation and tooling.
             </div>
           </a>
+
+          <div
+            className="kb-about-api-card kb-about-llms-card"
+            data-testid="about-llms-txt-card"
+          >
+            <div className="kb-about-api-card-title">
+              <span aria-hidden="true">🤖</span>
+              Agent Instructions (/llms.txt)
+            </div>
+            <div className="kb-about-api-card-desc">
+              Standardized agent onboarding instructions and recommended skill catalog for Claude Code, OpenAI Codex, and Gemini CLI / Antigravity.
+            </div>
+            <div className="kb-about-llms-links">
+              <a
+                href="/llms.txt"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="kb-about-llms-link"
+                data-testid="about-llms-txt-link"
+              >
+                View /llms.txt
+              </a>
+              <span className="kb-about-llms-separator" aria-hidden="true">|</span>
+              <a
+                href="/llms-full.txt"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="kb-about-llms-link"
+                data-testid="about-llms-full-link"
+              >
+                View /llms-full.txt
+              </a>
+            </div>
+            <div className="kb-about-llms-actions">
+              <button
+                type="button"
+                className="kb-about-copy-prompt-btn"
+                data-testid="copy-llms-onboarding-prompt-btn"
+                onClick={() => {
+                  void handleCopyOnboardingPrompt();
+                }}
+              >
+                {copiedPrompt ? 'Copied Prompt!' : 'Copy Onboarding Prompt'}
+              </button>
+            </div>
+          </div>
         </div>
       </section>
 

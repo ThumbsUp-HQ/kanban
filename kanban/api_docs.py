@@ -725,6 +725,10 @@ def render_swagger_ui_html(openapi_schema: dict[str, Any]) -> str:
         ),
         '        <a href="/api/redoc" class="topbar-link">ReDoc</a>',
         '        <a href="/docs" class="topbar-link">Workspace Docs</a>',
+        (
+            '        <a href="/llms.txt" class="topbar-link" target="_blank" '
+            'rel="noopener">Agent /llms.txt</a>'
+        ),
         "      </div>",
         "    </div>",
         "  </header>",
@@ -744,6 +748,10 @@ def render_swagger_ui_html(openapi_schema: dict[str, Any]) -> str:
         ),
         '        | Alternative Viewer: <a href="/api/redoc">ReDoc Interface</a>',
         '        | Kanban Knowledge: <a href="/docs">/docs (SPA)</a>',
+        (
+            '        | Agent Instructions: <a href="/llms.txt" target="_blank" '
+            'rel="noopener">/llms.txt</a>'
+        ),
         "      </div>",
         "    </section>",
     ]
@@ -841,6 +849,7 @@ def render_redoc_html(openapi_schema: dict[str, Any]) -> str:
         '          <a href="/api/openapi.json" target="_blank" rel="noopener">OpenAPI Spec</a>',
         '          <a href="/api/docs">Swagger UI</a>',
         '          <a href="/docs">Workspace Docs</a>',
+        '          <a href="/llms.txt" target="_blank" rel="noopener">Agent /llms.txt</a>',
         "        </div>",
         "      </div>",
         '      <ul class="redoc-tag-list">',

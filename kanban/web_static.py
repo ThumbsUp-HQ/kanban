@@ -103,6 +103,9 @@ class PrecompressedSPAStaticApp:
             "/.well-known",
             "/oauth",
             "/internal",
+            "/llms.txt",
+            "/llms-full.txt",
+            "/llms-skills",
         )
         is_oauth_device_spa = (
             raw_path == "/oauth/device"

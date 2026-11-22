@@ -197,3 +197,48 @@
 .kb-snippet-done-btn:hover {
   background-color: #2ea043;
 }
+
+/* Recommended Agent Skills & Onboarding Callout */
+.kb-snippet-llms-callout {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: rgba(56, 139, 253, 0.1);
+  border: 1px solid rgba(56, 139, 253, 0.3);
+  border-radius: 6px;
+  padding: 10px 14px;
+  margin-top: 12px;
+  margin-bottom: 12px;
+}
+
+.kb-snippet-llms-callout-text {
+  font-size: 0.8125rem;
+  color: #c9d1d9;
+}
+
+.kb-snippet-llms-callout-text a {
+  color: #58a6ff;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.kb-snippet-llms-callout-text a:hover {
+  text-decoration: underline;
+}
+
+.kb-snippet-copy-prompt-btn {
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #58a6ff;
+  background: rgba(56, 139, 253, 0.15);
+  border: 1px solid rgba(56, 139, 253, 0.4);
+  border-radius: 4px;
+  padding: 4px 10px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.kb-snippet-copy-prompt-btn:hover {
+  background: rgba(56, 139, 253, 0.25);
+}

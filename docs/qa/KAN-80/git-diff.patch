@@ -1,0 +1,1542 @@
+diff --git a/deploy/caddy/Caddyfile b/deploy/caddy/Caddyfile
+index ec90cf4a..b1c9adee 100644
+--- a/deploy/caddy/Caddyfile
++++ b/deploy/caddy/Caddyfile
+@@ -21,6 +21,10 @@
+ 	@internal_routes path /internal/* /api/v1/internal/*
+ 	respond @internal_routes 404
+ 
++	handle /llms* {
++		reverse_proxy kanban-api:8000
++	}
++
+ 	handle /api/* {
+ 		reverse_proxy kanban-api:8000 {
+ 			header_up -X-Client-Cert-Pem
+diff --git a/kanban/api/v1/system.py b/kanban/api/v1/system.py
+index 3c931296..9dc65e56 100644
+--- a/kanban/api/v1/system.py
++++ b/kanban/api/v1/system.py
+@@ -12,6 +12,11 @@ from pydantic import BaseModel, ConfigDict, Field
+ 
+ from kanban.api.deps import PrincipalContext, get_principal
+ from kanban.ops.build_info import get_build_info, resolve_platform_version
++from kanban.ops.llms_txt import (
++    LlmsSkillDescriptor,
++    LlmsSkillsCatalogResponse,
++    get_llms_skills_catalog,
++)
+ from kanban.ops.sbom import (
+     PLATFORM_LICENSE_SPDX,
+     PLATFORM_NAME,
+@@ -30,6 +35,8 @@ __all__ = [
+     "AgentFirstCapabilities",
+     "EnterpriseUxCapabilities",
+     "FrictionFreeDeploymentCapabilities",
++    "LlmsSkillDescriptor",
++    "LlmsSkillsCatalogResponse",
+     "ParityMatrixCapabilities",
+     "PlatformSummaryResponse",
+     "SbomComponentModel",
+@@ -410,3 +417,18 @@ def get_platform_summary_endpoint() -> PlatformSummaryResponse:
+ def get_platform_summary_alias() -> PlatformSummaryResponse:
+     """Alias for /system/platform-summary."""
+     return get_platform_summary()
++
++
++@router.get(
++    "/skills",
++    response_model=LlmsSkillsCatalogResponse,
++    summary="Get recommended agent skills catalog and onboarding prompt",
++    description=(
++        "Returns public /llms.txt discovery metadata, skill descriptors, "
++        "and agent onboarding prompt."
++    ),
++)
++def get_system_skills_endpoint(request: Request) -> LlmsSkillsCatalogResponse:
++    """Retrieve recommended LLM skills catalog and agent onboarding prompt."""
++    origin = str(request.base_url).rstrip("/")
++    return get_llms_skills_catalog(origin=origin)
+diff --git a/kanban/api_docs.py b/kanban/api_docs.py
+index 15a94ce1..7121be32 100644
+--- a/kanban/api_docs.py
++++ b/kanban/api_docs.py
+@@ -725,6 +725,10 @@ def render_swagger_ui_html(openapi_schema: dict[str, Any]) -> str:
+         ),
+         '        <a href="/api/redoc" class="topbar-link">ReDoc</a>',
+         '        <a href="/docs" class="topbar-link">Workspace Docs</a>',
++        (
++            '        <a href="/llms.txt" class="topbar-link" target="_blank" '
++            'rel="noopener">Agent /llms.txt</a>'
++        ),
+         "      </div>",
+         "    </div>",
+         "  </header>",
+@@ -744,6 +748,10 @@ def render_swagger_ui_html(openapi_schema: dict[str, Any]) -> str:
+         ),
+         '        | Alternative Viewer: <a href="/api/redoc">ReDoc Interface</a>',
+         '        | Kanban Knowledge: <a href="/docs">/docs (SPA)</a>',
++        (
++            '        | Agent Instructions: <a href="/llms.txt" target="_blank" '
++            'rel="noopener">/llms.txt</a>'
++        ),
+         "      </div>",
+         "    </section>",
+     ]
+@@ -841,6 +849,7 @@ def render_redoc_html(openapi_schema: dict[str, Any]) -> str:
+         '          <a href="/api/openapi.json" target="_blank" rel="noopener">OpenAPI Spec</a>',
+         '          <a href="/api/docs">Swagger UI</a>',
+         '          <a href="/docs">Workspace Docs</a>',
++        '          <a href="/llms.txt" target="_blank" rel="noopener">Agent /llms.txt</a>',
+         "        </div>",
+         "      </div>",
+         '      <ul class="redoc-tag-list">',
+diff --git a/kanban/app.py b/kanban/app.py
+index d1f31b8c..314a4cc9 100644
+--- a/kanban/app.py
++++ b/kanban/app.py
+@@ -638,6 +638,11 @@ def create_app(  # noqa: PLR0915
+     # Mount live MCP surfaces and RFC 9728 metadata endpoints
+     _mount_mcp_surfaces(app, mcp_settings)
+ 
++    # Mount /llms.txt, /llms-full.txt, and /llms-skills routes (KB-LLMS-SKILLS-01)
++    from kanban.ops.llms_txt import mount_llms_routes  # noqa: PLC0415
++
++    mount_llms_routes(app)
++
+     # SPA Static assets mounted at root
+     app.mount("/", PrecompressedSPAStaticApp(dist_dir=settings.web_dist))
+ 
+diff --git a/kanban/ops/llms_txt.py b/kanban/ops/llms_txt.py
+new file mode 100644
+index 00000000..25d6df9e
+--- /dev/null
++++ b/kanban/ops/llms_txt.py
+@@ -0,0 +1,514 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++# ruff: noqa: E501
++"""LLM agent instructions (/llms.txt, /llms-full.txt), skill catalog, and onboarding interview.
++
++Provides zero-DB, in-memory cached, zero-Host-header-injection templates and HTTP endpoints
++for Claude Code, OpenAI Codex, Gemini CLI / Antigravity, and Cursor (KB-LLMS-SKILLS-01 / KAN-80).
++"""
++
++from __future__ import annotations
++
++import functools
++import hashlib
++from dataclasses import dataclass
++from typing import Final
++
++from fastapi import APIRouter, FastAPI, Request, Response
++from pydantic import BaseModel, ConfigDict, Field
++
++from kanban.api.problems import ProblemException
++
++__all__ = [
++    "ALLOWED_SKILL_SLUGS",
++    "MAX_LLMS_FULL_BYTES",
++    "MAX_LLMS_TXT_BYTES",
++    "MAX_SKILL_BYTES",
++    "ONBOARDING_PROMPT_TEMPLATE",
++    "LlmsSkillDescriptor",
++    "LlmsSkillsCatalogResponse",
++    "SkillAsset",
++    "get_llms_full_txt_content",
++    "get_llms_skills_catalog",
++    "get_llms_txt_content",
++    "get_skill_assets",
++    "mount_llms_routes",
++]
++
++MAX_LLMS_TXT_BYTES: Final[int] = 12 * 1024  # 12,288 bytes
++MAX_SKILL_BYTES: Final[int] = 24 * 1024  # 24,576 bytes
++MAX_LLMS_FULL_BYTES: Final[int] = 64 * 1024  # 65,536 bytes
++
++ALLOWED_SKILL_SLUGS: Final[frozenset[str]] = frozenset(
++    {
++        "kanban-workflow-setup",
++        "kanban-ticket",
++        "kanban-agent-manager",
++        "reality-checker",
++    }
++)
++
++ONBOARDING_PROMPT_TEMPLATE: Final[str] = (
++    "Read {origin}/llms.txt, learn 👍kanban's ticket workflow, "
++    "interview me on Execution Mode (Single-Thread, Teamwork, or Swarm), "
++    "Model/Quota Strategy (Quota-Sipping Flash 3.8, Hybrid, or Unconstrained Sol MAX / Claude Ultra), "
++    "and QA Rigor, and save my preferences to .agents/skills/ and AGENTS.md."
++)
++
++
++@dataclass(frozen=True)
++class SkillAsset:
++    """Immutable in-memory descriptor and canonical markdown content for an agent skill."""
++
++    slug: str
++    title: str
++    summary: str
++    install_path: str
++    content: str
++
++    @property
++    def bytes(self) -> int:
++        """Byte length of canonical markdown content."""
++        return len(self.content.encode("utf-8"))
++
++    @property
++    def sha256(self) -> str:
++        """SHA-256 fingerprint of canonical markdown content."""
++        return hashlib.sha256(self.content.encode("utf-8")).hexdigest()
++
++    @property
++    def estimated_tokens(self) -> int:
++        """Estimated token count (~4 characters per token)."""
++        return max(1, len(self.content) // 4)
++
++
++class LlmsSkillDescriptor(BaseModel):
++    """Public metadata model for a single recommended agent skill."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    slug: str = Field(description="Unique skill slug identifier")
++    title: str = Field(description="Human-readable skill title")
++    summary: str = Field(description="One-line functional summary")
++    install_path: str = Field(description="Recommended local workspace install path")
++    url: str = Field(description="HTTP endpoint serving canonical markdown")
++    sha256: str = Field(description="SHA-256 fingerprint of canonical markdown content")
++    bytes: int = Field(description="Exact byte size of canonical markdown content")
++    estimated_tokens: int = Field(description="Rough token count estimate (~4 chars per token)")
++
++
++class LlmsSkillsCatalogResponse(BaseModel):
++    """Public catalog response listing recommended skills and onboarding prompt."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    llms_txt_url: str = Field(default="/llms.txt", description="URL to compact /llms.txt map")
++    llms_full_url: str = Field(
++        default="/llms-full.txt", description="URL to bundled /llms-full.txt"
++    )
++    onboarding_prompt: str = Field(description="Canonical 1-click agent onboarding prompt")
++    skills: list[LlmsSkillDescriptor] = Field(description="List of recommended skill descriptors")
++
++
++_SKILL_WORKFLOW_SETUP_MD: Final[str] = """---
++name: kanban-workflow-setup
++description: System and workstation onboarding skill for connecting AI coding harnesses (Claude Code, OpenAI Codex, Gemini CLI / Antigravity) to 👍kanban, conducting an interactive 4-axis interview with explicit Pros and Cons, and persisting user preferences to .agents/skills/ and AGENTS.md.
++---
++
++# Kanban Workflow Setup Skill
++
++## Overview
++
++This skill guides any AI coding harness (Claude Code, OpenAI Codex / ChatGPT, or Gemini CLI / Antigravity) through onboarding a developer workstation or project with 👍kanban.
++
++## MANDATORY RULE: Interview Before Writing Skills
++
++NEVER apply configurations, modify dot-directories (~/.claude, ~/.codex, ~/.gemini, ~/.agents), install Git hooks, or create skills without completing Phases 1 and 2 first.
++
++### Phase 1: Read-Only Discovery
++Inspect current workstation state:
++1. Check which AI harnesses are present (~/.claude, ~/.codex, ~/.gemini, ~/.agents).
++2. Check existing workspace rules and skills (AGENTS.md, CLAUDE.md, .agents/skills/).
++3. Check available MCP endpoints (/mcp/agent, /mcp/docs, /mcp/admin).
++
++### Phase 2: Interactive 4-Axis Preference Interview
++Present the 4 preference axes to the user with explicit Pros, Cons, Speed, and Token-Cost tradeoffs:
++
++#### Axis 1 - Execution Topology
++- [1A] Single-Threaded Agent (Solo Execution): One agent executes the entire ticket sequentially (read -> design -> code -> test -> proof -> self/clean-room QA check). Pros: Zero orchestration overhead, simplest linear context, ideal for 1-file fixes or single-thread CLI sessions. Cons: Context window bloats on multi-file features, slower wall-clock on multi-ticket backlogs, higher confirmation bias without an independent QA sub-agent.
++- [1B] Teamwork (Coordinator + Specialized Sub-Agents) [Recommended]: Coordinator delegates discrete phases (specialist consultation -> implementation builder sub-agent -> passive read-only reality-checker sub-agent) and reuses persistent conversationIds (~1/100th cached input token cost). Pros: Clean coordinator context, independent clean-room QA, 2x-3x faster on multi-part tickets. Cons: Moderate handoff overhead via docs/qa/<TICKET_ID>/.
++- [1C] Multi-Agent Swarm (Parallel Worktree Builders + Persistent Roster): Coordinator acts purely as a state machine on the shared board with parallel worktree builders (b-<ticket>, workspace: "share"), persistent waiting reviewers (api-spec, ui-spec, merge-ci, monitor costing 0 tokens while asleep), reusable live full-stack verifiers, and clean-room reality-checker auditors. Pros: Maximum wave velocity across 5-50+ tickets, strict branch isolation. Cons: Highest coordination and merge-gate surface; overkill for a single small fix.
++
++#### Axis 2 - Token Budget & Model Tier Strategy
++- [2A] Quota-Sipping / Cost-Optimized Tier [Recommended]: Flagship Coordinator (Gemini Argon/Pro, Claude Opus/Sonnet, Codex) + fast/lightweight workers (Gemini 3.8 Flash, Claude Haiku, GPT-4o-mini / Codex fast tier) + persistent context-cached conversations. Pros: 2x-4x+ effective quota runway, fastest per-turn latency. Cons: Requires literal, tightly scoped kanban-ticket definitions.
++- [2B] Balanced Hybrid Tier: Mid/flagship coding models (Claude Sonnet, Gemini Argon/Hydrogen, GPT-4o) for architecture and complex implementation diffs + fast models (Flash, Haiku, Codex fast) for unit test expansion, linting, and reality-checker audits. Pros: Strong zero-shot depth on complex refactors while saving 50-70% of QA/test tokens. Cons: Moderate token burn on large implementation diffs.
++- [2C] Unconstrained / Max-Compute Tier ("Spare No Expense"): User has abundant token budget and wants frontier flagship models (OpenAI Sol MAX, Claude Ultra / Opus, or Gemini Carbon / Neon) to execute all planning, coding, testing, and verification end-to-end (either single-threaded or across every sub-agent/swarm worker). Pros: Maximum reasoning depth on novel cryptography, concurrency, or ambiguous greenfield architecture without model-tier handoffs. Cons: Highest token consumption (4x-5x+ vs. fast tier), slower per-turn generation latency, and faster rate-limit/quota depletion.
++
++#### Axis 3 - QA, Coverage & CI Rigor
++- [3A] Pragmatic Baseline (>=80% Unit Coverage + Lightweight QA Check): Feature unit tests (>=80% target) + single verification pass before complete_work.
++- [3B] Clean-Room Forensic reality-checker + Specialist Gates + >=95% Coverage [Recommended]: Mandatory UI Specialist Gate (ui-specialist-review.md), Dual API+UI Specialist Gate (api-specialist-review.md + ui-specialist-review.md), passive Clean-Room reality-checker Grade-A READY certification posted verbatim in complete_work, >=95% per-module unit coverage, zero-mock local container verification, and green Dash CI/CD verification.
++
++#### Axis 4 - Persistence Scope
++- [4A] Project Workspace Only (.agents/skills/ + AGENTS.md + CLAUDE.md -> AGENTS.md + .claude/skills -> ../.agents/skills)
++- [4B] Global User Workstation (~/.agents/skills/ linked into ~/.claude/skills/, ~/.codex/skills/, ~/.gemini/skills/, ~/.gemini/config/skills/)
++- [4C] Both Project & Global [Recommended]
++
++### Phase 3: Persistence After Confirmation
++Once the user confirms choices:
++1. Write chosen settings into AGENTS.md and .agents/skills/.
++2. Create cross-harness symlinks:
++   - Project: CLAUDE.md -> AGENTS.md, .claude/skills -> ../.agents/skills
++   - Global: ~/.agents/skills linked to active harness skill dirs.
++3. Verify with scripts.check_no_dashes (zero em-dashes or en-dashes).
++"""
++
++_SKILL_KANBAN_TICKET_MD: Final[str] = """---
++name: kanban-ticket
++description: System-level standard for authoring and refining tightly scoped Kanban tickets with mandatory feature unit testing, literal Definitions of Done, and passive forensic Verification Proof packets for reality-checker.
++---
++
++# Kanban Ticket Skill
++
++## Overview
++
++This skill defines the mandatory structure and scoping rules for creating and updating Kanban tickets across Claude Code, OpenAI Codex, and Gemini CLI / Antigravity. Every ticket must be atomic, tightly scoped, unit-tested, and forensically auditable by the reality-checker sub-agent running on a fast, lightweight model without requiring reality-checker to run commands, execute tests, or visit live websites.
++
++## Core Principles for Scoped Tickets
++
++0. Deduplicate & Consult Specialists Before Creating Tickets:
++   - Search First (search_tickets): Always search Backlog, Todo, and In Progress before creating a new ticket. If an existing ticket already covers the target area, update that ticket in-place (update_ticket).
++   - Consult Domain Specialists in Parallel: Consult relevant specialists (UX/Frontend, Backend, Security) on fast models before finalizing ticket specifications.
++   - Do Not Auto-Start Implementation: When asked to create or update tickets, stop once the tickets are created/updated and wait for explicit instruction before calling begin_work.
++1. Single-Ticket Boundary (No Cross-Ticket Bleed):
++   - A ticket's Definition of Done and Verification Proof must only test artifacts, files, and behaviors that exist after completing that specific ticket.
++2. Literal, Non-Rhetorical Specifications:
++   - Avoid figures of speech or ambiguous marketing adjectives. Specify exact file paths, functions, status codes, and byte limits.
++3. Mandatory Feature Unit Testing (>=95% Project Coverage Standard):
++   - Every feature or code ticket must require unit tests specifically exercising the new/modified logic introduced in that ticket, running against clean isolated database state per test (SAVEPOINT / template DB).
++4. Passive Forensic Verification Proof (docs/qa/<TICKET_ID>/):
++   - reality-checker does not run commands or visit URLs.
++   - The Verification Proof section must mandate a self-contained forensic proof directory at docs/qa/<TICKET_ID>/ containing raw outputs (diffs, test results, build checks, specialist sign-offs, and screenshots).
++5. State Machine Guard (begin_work Sort-Order Guard):
++   - If calling begin_work transitions a ticket to a custom state that has sort_order=0, immediately call transition_ticket to move it to "In Progress".
++6. Protected Pre-Production Instance Invariant:
++   - Never modify or treat k.hackedyour.info / 192.168.1.101 ("test kanban") as a destructive test bed. Only non-destructive validation is permitted.
++
++## Standard 5-Section Ticket Template
++
++1. User Story: As a <role>, I need <capability> so that <benefit>.
++2. Scoped Technical Actions: Exact target files, architectural boundaries, and implementation steps.
++3. Mandatory Feature Unit Tests: Required positive, negative, and boundary test cases.
++4. Scoped Definition of Done: Explicit checklist of completion criteria.
++5. Forensic Verification Proof: Mandatory proof artifact bundle in docs/qa/<TICKET_ID>/.
++"""
++
++_SKILL_AGENT_MANAGER_MD: Final[str] = """---
++name: kanban-agent-manager
++description: System-level Agent Manager workflow for orchestrating Kanban ticket execution across sub-agents, enforcing the reality-checker forensic QA gate on a fast model, managing ticket comments/states, delegating 95% unit test coverage, and opening tickets for discovered gaps.
++---
++
++# Kanban Agent Manager Skill
++
++## Overview
++
++This skill defines the Agent Manager orchestration workflow for coordinating ticket execution across sub-agents, managing ticket state lifecycles, and enforcing quality gates in 👍kanban.
++
++## Workflow Rules
++
++1. Ticket Ownership & In Progress State:
++   - The Agent Manager (or builder) marks the ticket In Progress via begin_work (or transition_ticket to In Progress if begin_work lands on sort_order=0).
++   - Post an initial execution plan comment to the ticket.
++2. Parallel Specialist Consultation:
++   - Consult domain specialists in parallel (UX/Frontend, Backend, Security) before writing implementation code.
++3. Sub-Agent Delegation & Context Isolation:
++   - Delegate implementation to builder sub-agents with dedicated workspace shares or branches.
++   - Maintain clean coordinator context; reuse conversationIds where supported.
++4. Passive Forensic Reality-Checker Gate:
++   - When implementation is complete and docs/qa/<TICKET_ID>/ is fully populated, invoke the reality-checker sub-agent on a fast model (Gemini 3.8 Flash, Claude Haiku, Codex fast).
++   - reality-checker operates strictly in Passive Forensic Verification Mode: zero test execution, zero shell commands, zero browser actions.
++   - Only a Grade-A READY certification permits closing the ticket.
++5. Closing Work (complete_work):
++   - Post the full reality-checker certification report and specialist sign-offs into ticket comments.
++   - Call complete_work to transition ticket to Done.
++6. Post-Completion Coverage & Gap Creation:
++   - Delegate >=95% unit test coverage verification to a fast tester sub-agent.
++   - Open atomic tickets for any gaps or edge cases discovered during execution.
++"""
++
++_SKILL_REALITY_CHECKER_MD: Final[str] = """---
++name: reality-checker
++description: Stops fantasy approvals, evidence-based certification - Default to "NEEDS WORK", requires overwhelming proof for production readiness.
++---
++
++# Integration Agent Personality & Forensic QA Auditor
++
++You are TestingRealityChecker, a senior integration specialist who stops fantasy approvals and requires overwhelming evidence before production certification.
++
++## Identity & Mission
++
++- Role: Final integration testing and realistic deployment readiness assessment.
++- Personality: Skeptical, thorough, evidence-obsessed, fantasy-immune.
++- Default Verdict: Default to "NEEDS WORK" status unless proven otherwise by overwhelming forensic evidence.
++
++## Passive Forensic Verification Mode
++
++When auditing a ticket, you MUST operate strictly in passive forensic mode:
++1. DO NOT run pytest, vitest, pnpm, or git commands.
++2. DO NOT start web servers or visit URLs.
++3. Verify docs/qa/<TICKET_ID>/changed-files-manifest.txt using sha256sum verification.
++4. Read and audit all proof files:
++   - git-diff.patch: Unified diff of all modifications.
++   - unit-test-results.txt: Complete stdout/stderr and exit code of test runner.
++   - build-or-typecheck.txt: Full static analysis, linter, and typecheck output.
++   - api-specialist-review.md: Verbatim API specialist audit and sign-off.
++   - ui-specialist-review.md: Verbatim UI specialist audit and sign-off.
++   - screenshots/*.png: Responsive screenshots (desktop 1440x900 light/dark, tablet 768x1024, mobile 390x844).
++5. Output verbatim "# Integration Agent Reality-Based Report" with grade (A, B, C, F) and verdict (READY or NEEDS WORK).
++"""
++
++_LLMS_TXT_TEMPLATE: Final[str] = """# 👍kanban - Agent-First, Security-First Kanban Platform
++
++> Open-source (Apache-2.0), Security-First (Priority #0), Agent-First (Priority #1) Kanban, Ticketing, and Knowledge Platform. Embedded PostgreSQL 16 with FORCE RLS, 24 low-token MCP tools across 3 isolated surfaces, canonical Markdown only, and zero SaaS AI paywalls.
++
++## 1. Platform & 3-Surface MCP Quick-Map
++
++Access 👍kanban programmatically via Model Context Protocol (MCP) or REST APIs:
++- Agent Surface (/mcp/agent): 9 tools for ticket workflow (ping_agent, search_tickets, read_ticket, create_ticket, update_ticket, begin_work, transition_ticket, complete_work, add_comment, link_objects).
++- Docs Surface (/mcp/docs): 3 knowledge tools (search_docs, read_doc, manage_stickies, promote_sticky_to_doc).
++- Admin Surface (/mcp/admin): 12 governance tools with 2-stage destructive confirmation.
++- Authentication: OAuth 2.1 with PKCE (S256) or scoped personal API tokens (kb_pat_* / kb_agt_*).
++- Level of Detail (LOD) Tiers: summary (strict 1,000-token cap), standard, and full.
++
++## 2. How to Create & Approach Tickets (kanban-ticket Rules)
++
++When authoring or executing tickets:
++1. Search First: Always call search_tickets to deduplicate before creating.
++2. Parallel Specialist Consultation: Consult UX, Backend, and Security specialists before drafting or coding.
++3. Stop After Creation: Do not auto-start begin_work when asked to create tickets. Wait for explicit instruction.
++4. Literal Specifications: Exact file paths, HTTP codes, byte budgets, and non-rhetorical criteria.
++5. Mandatory Feature Unit Tests: Unit tests specifically covering new logic with clean-DB isolation (>=95% target).
++6. 5-Section Ticket Template: User Story, Scoped Technical Actions, Mandatory Feature Unit Tests, Scoped Definition of Done, and Forensic Verification Proof in docs/qa/<TICKET_ID>/.
++7. State Machine Guard: If begin_work lands on a custom state with sort_order=0, transition ticket to "In Progress".
++8. Protected Instance Invariant: Never treat k.hackedyour.info / 192.168.1.101 as a destructive test bed.
++
++## 3. Mandatory Interactive Onboarding Directive ("Interview Before Writing Skills")
++
++Before writing any agent skills or changing project configs, you MUST complete:
++- Phase 1: Read-only inspection of ~/.claude, ~/.codex, ~/.gemini, ~/.agents, AGENTS.md, and .agents/skills/.
++- Phase 2: Interactive user interview across the 4 core preference axes:
++  - Axis 1 (Execution Topology): [1A] Single-Threaded Agent (Solo Execution), [1B] Teamwork (Coordinator + Sub-Agents) [Recommended], [1C] Multi-Agent Swarm (Parallel Worktree Builders).
++  - Axis 2 (Token Budget & Model Tier): [2A] Quota-Sipping Flash 3.8 / Haiku [Recommended], [2B] Balanced Hybrid (Sonnet / Argon + Flash / Haiku), [2C] Unconstrained Sol MAX / Claude Ultra / Gemini Carbon.
++  - Axis 3 (QA, Coverage & CI Rigor): [3A] Pragmatic Baseline (>=80%), [3B] Clean-Room Forensic reality-checker + >=95% Coverage [Recommended].
++  - Axis 4 (Persistence Scope): [4A] Project Workspace Only, [4B] Global User Workstation, [4C] Both Project & Global [Recommended].
++- Phase 3: Persist confirmed selections to .agents/skills/ and AGENTS.md with cross-harness symlinks.
++
++## 4. Recommended Skills Catalog
++
++Install the official 👍kanban skills:
++- Workflow Setup: /llms-skills/kanban-workflow-setup.md
++- Ticket Authoring: /llms-skills/kanban-ticket.md
++- Agent Manager: /llms-skills/kanban-agent-manager.md
++- Reality-Checker QA Gate: /llms-skills/reality-checker.md
++- Full Bundle: /llms-full.txt
++"""
++
++
++@functools.lru_cache(maxsize=1)
++def get_skill_assets() -> dict[str, SkillAsset]:
++    """Retrieve frozen map of all recommended agent skill assets."""
++    assets = {
++        "kanban-workflow-setup": SkillAsset(
++            slug="kanban-workflow-setup",
++            title="Kanban Workflow Setup & Interactive 4-Axis Agent Onboarding",
++            summary=(
++                "Workstation onboarding skill for connecting Claude Code, OpenAI Codex, and "
++                "Gemini CLI / Antigravity to 👍kanban via a 4-axis preference interview."
++            ),
++            install_path=".agents/skills/kanban-workflow-setup/SKILL.md",
++            content=_SKILL_WORKFLOW_SETUP_MD.strip() + "\n",
++        ),
++        "kanban-ticket": SkillAsset(
++            slug="kanban-ticket",
++            title="Kanban Ticket Authoring & Scoping Standard",
++            summary=(
++                "Standard for authoring atomic, tightly scoped Kanban tickets with mandatory "
++                "feature unit testing and passive forensic verification packets."
++            ),
++            install_path=".agents/skills/kanban-ticket/SKILL.md",
++            content=_SKILL_KANBAN_TICKET_MD.strip() + "\n",
++        ),
++        "kanban-agent-manager": SkillAsset(
++            slug="kanban-agent-manager",
++            title="Kanban Sub-Agent Manager & Fast-Model QA Orchestration",
++            summary=(
++                "Workflow for coordinating ticket execution across sub-agents and enforcing "
++                "the reality-checker forensic QA gate on a fast model."
++            ),
++            install_path=".agents/skills/kanban-agent-manager/SKILL.md",
++            content=_SKILL_AGENT_MANAGER_MD.strip() + "\n",
++        ),
++        "reality-checker": SkillAsset(
++            slug="reality-checker",
++            title="Reality-Checker Passive Forensic QA Gate Auditor",
++            summary=(
++                "Evidence-based passive forensic auditor personality that stops fantasy approvals "
++                "and requires overwhelming proof for production certification."
++            ),
++            install_path=".agents/skills/kanban-agent-manager/references/reality-checker.md",
++            content=_SKILL_REALITY_CHECKER_MD.strip() + "\n",
++        ),
++    }
++
++    # Invariant: Each individual skill markdown file must not exceed byte ceiling
++    for slug, asset in assets.items():
++        if asset.bytes > MAX_SKILL_BYTES:
++            msg = f"Skill asset '{slug}' exceeds {MAX_SKILL_BYTES} bytes ({asset.bytes} bytes)"
++            raise RuntimeError(msg)
++
++    return assets
++
++
++@functools.lru_cache(maxsize=1)
++def get_llms_txt_content() -> str:
++    """Retrieve in-memory cached content of /llms.txt."""
++    content = _LLMS_TXT_TEMPLATE.strip() + "\n"
++    content_bytes = len(content.encode("utf-8"))
++    if content_bytes > MAX_LLMS_TXT_BYTES:
++        msg = f"/llms.txt exceeds {MAX_LLMS_TXT_BYTES} bytes ({content_bytes} bytes)"
++        raise RuntimeError(msg)
++    return content
++
++
++@functools.lru_cache(maxsize=1)
++def get_llms_full_txt_content() -> str:
++    """Retrieve concatenated bundle of /llms.txt and all recommended skill markdowns."""
++    parts: list[str] = [get_llms_txt_content().rstrip(), ""]
++    skills = get_skill_assets()
++    for slug in sorted(skills.keys()):
++        asset = skills[slug]
++        parts.append(f"<!-- BEGIN SKILL: {slug} -->")
++        parts.append(asset.content.rstrip())
++        parts.append(f"<!-- END SKILL: {slug} -->")
++        parts.append("")
++    full_content = "\n".join(parts).strip() + "\n"
++    full_bytes = len(full_content.encode("utf-8"))
++    if full_bytes > MAX_LLMS_FULL_BYTES:
++        msg = f"/llms-full.txt exceeds {MAX_LLMS_FULL_BYTES} bytes ({full_bytes} bytes)"
++        raise RuntimeError(msg)
++    return full_content
++
++
++def get_llms_skills_catalog(
++    origin: str = "https://kanban.example.com",
++) -> LlmsSkillsCatalogResponse:
++    """Construct public metadata catalog response for /api/v1/system/skills."""
++    assets = get_skill_assets()
++    skills_list: list[LlmsSkillDescriptor] = []
++    for slug in sorted(assets.keys()):
++        asset = assets[slug]
++        skills_list.append(
++            LlmsSkillDescriptor(
++                slug=asset.slug,
++                title=asset.title,
++                summary=asset.summary,
++                install_path=asset.install_path,
++                url=f"/llms-skills/{asset.slug}.md",
++                sha256=asset.sha256,
++                bytes=asset.bytes,
++                estimated_tokens=asset.estimated_tokens,
++            )
++        )
++    clean_origin = origin.rstrip("/")
++    onboarding_prompt = ONBOARDING_PROMPT_TEMPLATE.format(origin=clean_origin)
++    return LlmsSkillsCatalogResponse(
++        llms_txt_url="/llms.txt",
++        llms_full_url="/llms-full.txt",
++        onboarding_prompt=onboarding_prompt,
++        skills=skills_list,
++    )
++
++
++def _check_host_header(request: Request) -> None:
++    """Reject hostile or malformed Host headers containing control characters."""
++    host = request.headers.get("host")
++    if host and any(c in host for c in ("\r", "\n", "\x00")):
++        raise ProblemException(
++            code="BAD_REQUEST",
++            status=400,
++            title="Bad Request",
++            detail="Host header contains invalid characters",
++        )
++
++
++def _serve_cached_text(
++    request: Request,
++    content_str: str,
++    media_type: str,
++) -> Response:
++    """Serve cached text content with deterministic ETag, 304 evaluation, and HEAD support."""
++    _check_host_header(request)
++    raw_bytes = content_str.encode("utf-8")
++    etag = f'"{hashlib.sha256(raw_bytes).hexdigest()}"'
++    headers: dict[str, str] = {
++        "ETag": etag,
++        "Cache-Control": "public, max-age=300, must-revalidate",
++        "X-Content-Type-Options": "nosniff",
++    }
++
++    if_none_match = request.headers.get("if-none-match")
++    if if_none_match and if_none_match.strip() == etag:
++        return Response(status_code=304, headers=headers)
++
++    if request.method == "HEAD":
++        headers["Content-Length"] = str(len(raw_bytes))
++        headers["Content-Type"] = media_type
++        return Response(status_code=200, headers=headers)
++
++    return Response(
++        content=raw_bytes,
++        media_type=media_type,
++        headers=headers,
++    )
++
++
++def mount_llms_routes(app: FastAPI) -> None:
++    """Mount /llms.txt, /llms-full.txt, and /llms-skills routes on FastAPI application."""
++    router = APIRouter()
++
++    @router.api_route("/llms.txt", methods=["GET", "HEAD"], include_in_schema=False)
++    async def llms_txt_endpoint(request: Request) -> Response:
++        return _serve_cached_text(
++            request,
++            get_llms_txt_content(),
++            "text/plain; charset=utf-8",
++        )
++
++    @router.api_route("/llms-full.txt", methods=["GET", "HEAD"], include_in_schema=False)
++    async def llms_full_txt_endpoint(request: Request) -> Response:
++        return _serve_cached_text(
++            request,
++            get_llms_full_txt_content(),
++            "text/plain; charset=utf-8",
++        )
++
++    @router.api_route(
++        "/llms-skills/{skill_slug:path}", methods=["GET", "HEAD"], include_in_schema=False
++    )
++    async def llms_skill_endpoint(request: Request, skill_slug: str) -> Response:
++        clean_slug = skill_slug.removesuffix(".md") if skill_slug.endswith(".md") else skill_slug
++        assets = get_skill_assets()
++        if clean_slug not in ALLOWED_SKILL_SLUGS or not skill_slug.endswith(".md"):
++            raise ProblemException(
++                code="NOT_FOUND",
++                status=404,
++                title="Not Found",
++                detail=f"Skill '{skill_slug}' not found",
++            )
++        asset = assets[clean_slug]
++        return _serve_cached_text(
++            request,
++            asset.content,
++            "text/markdown; charset=utf-8",
++        )
++
++    app.include_router(router)
+diff --git a/kanban/pyproject.toml b/kanban/pyproject.toml
+index 513393b9..04b847d1 100644
+--- a/kanban/pyproject.toml
++++ b/kanban/pyproject.toml
+@@ -32,7 +32,7 @@ kanban-ctl = "kanban.cli.ctl:main"
+ "" = "kanban"
+ 
+ [tool.hatch.build.targets.wheel]
+-include = ["*.py", "**/*.py"]
++include = ["*.py", "**/*.py", "*.md", "**/*.md", "*.txt", "**/*.txt"]
+ exclude = [
+     "tests",
+     "pyproject.toml",
+diff --git a/kanban/tests/api/test_llms_txt.py b/kanban/tests/api/test_llms_txt.py
+new file mode 100644
+index 00000000..fd664a0d
+--- /dev/null
++++ b/kanban/tests/api/test_llms_txt.py
+@@ -0,0 +1,365 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Integration and unit tests for /llms.txt, /llms-full.txt, and skills catalog (KAN-80)."""
++
++from __future__ import annotations
++
++import tomllib
++from pathlib import Path
++from typing import TYPE_CHECKING
++
++import httpx
++import pytest
++
++from kanban.app import create_app
++
++if TYPE_CHECKING:
++    from fastapi import FastAPI
++from kanban.ops.llms_txt import (
++    ALLOWED_SKILL_SLUGS,
++    MAX_LLMS_FULL_BYTES,
++    MAX_LLMS_TXT_BYTES,
++    MAX_SKILL_BYTES,
++    get_llms_full_txt_content,
++    get_llms_txt_content,
++    get_skill_assets,
++)
++from kanban.settings import Settings
++
++
++@pytest.fixture
++def app() -> FastAPI:
++    """Create test FastAPI application instance with all routes mounted."""
++    settings = Settings()
++    return create_app(settings)
++
++
++@pytest.mark.asyncio
++async def test_llms_txt_positive_get_and_head(app: FastAPI) -> None:  # noqa: PLR0915
++    """Verify GET and HEAD /llms.txt returns 200, text/plain, valid ETag, and required content."""
++    async with httpx.AsyncClient(
++        transport=httpx.ASGITransport(app=app),
++        base_url="http://testserver",
++    ) as client:
++        # 1. GET /llms.txt
++        res = await client.get("/llms.txt")
++        assert res.status_code == 200
++        assert "text/plain" in res.headers["content-type"]
++        assert "charset=utf-8" in res.headers["content-type"].lower()
++        assert res.headers.get("x-content-type-options") == "nosniff"
++        assert res.headers.get("cache-control") == "public, max-age=300, must-revalidate"
++        etag = res.headers.get("etag")
++        assert etag is not None
++        assert etag.startswith('"')
++        assert etag.endswith('"')
++
++        body_text = res.text
++        raw_bytes = res.content
++        assert len(raw_bytes) <= MAX_LLMS_TXT_BYTES
++
++        # Verify Platform & 3-Surface MCP Quick-Map
++        assert "Platform & 3-Surface MCP Quick-Map" in body_text
++        assert "/mcp/agent" in body_text
++        assert "/mcp/docs" in body_text
++        assert "/mcp/admin" in body_text
++        assert "OAuth 2.1" in body_text
++        assert "summary" in body_text
++        assert "1,000-token" in body_text
++
++        # Verify How to Create & Approach Tickets
++        assert "How to Create & Approach Tickets" in body_text
++        assert "Definition of Done" in body_text
++        assert "Verification Proof" in body_text
++        assert "reality-checker" in body_text
++
++        # Verify Recommended Skills Catalog (4 skills)
++        assert "Recommended Skills Catalog" in body_text
++        for slug in ALLOWED_SKILL_SLUGS:
++            assert f"/llms-skills/{slug}.md" in body_text
++
++        # Verify Mandatory Interactive Onboarding Directive & 4 preference axes
++        assert "Interview Before Writing Skills" in body_text
++        assert "Axis 1 (Execution Topology)" in body_text
++        assert "[1A] Single-Threaded" in body_text
++        assert "[1B] Teamwork" in body_text
++        assert "[1C] Multi-Agent Swarm" in body_text
++
++        assert "Axis 2 (Token Budget & Model Tier)" in body_text
++        assert "[2A] Quota-Sipping" in body_text
++        assert "Flash 3.8" in body_text
++        assert "[2B] Balanced Hybrid" in body_text
++        assert "[2C] Unconstrained" in body_text
++        assert "Sol MAX" in body_text
++        assert "Claude Ultra" in body_text
++        assert "Gemini Carbon" in body_text
++
++        assert "Axis 3 (QA, Coverage & CI Rigor)" in body_text
++        assert "[3A] Pragmatic" in body_text
++        assert "[3B] Clean-Room Forensic" in body_text
++        assert "reality-checker" in body_text
++
++        assert "Axis 4 (Persistence Scope)" in body_text
++        assert "[4A] Project" in body_text
++        assert "[4B] Global" in body_text
++        assert "[4C] Both" in body_text
++
++        # Verify /llms-full.txt reference
++        assert "/llms-full.txt" in body_text
++
++        # 2. HEAD /llms.txt
++        head_res = await client.head("/llms.txt")
++        assert head_res.status_code == 200
++        assert "text/plain" in head_res.headers["content-type"]
++        assert head_res.headers.get("etag") == etag
++        assert head_res.headers.get("content-length") == str(len(raw_bytes))
++        assert head_res.content == b""
++
++        # 3. Conditional GET with matching If-None-Match -> 304 Not Modified
++        not_mod_res = await client.get("/llms.txt", headers={"If-None-Match": etag})
++        assert not_mod_res.status_code == 304
++        assert not_mod_res.headers.get("etag") == etag
++        assert not_mod_res.content == b""
++
++        # 4. Conditional GET with stale If-None-Match -> 200 OK
++        stale_res = await client.get("/llms.txt", headers={"If-None-Match": '"stale-etag-value"'})
++        assert stale_res.status_code == 200
++        assert stale_res.text == body_text
++
++
++@pytest.mark.asyncio
++async def test_llms_full_txt_positive_get_and_head(app: FastAPI) -> None:
++    """Verify GET and HEAD /llms-full.txt returns 200, concatenated skill bundle with delimiters."""
++    async with httpx.AsyncClient(
++        transport=httpx.ASGITransport(app=app),
++        base_url="http://testserver",
++    ) as client:
++        # 1. GET /llms-full.txt
++        res = await client.get("/llms-full.txt")
++        assert res.status_code == 200
++        assert "text/plain" in res.headers["content-type"]
++        assert "charset=utf-8" in res.headers["content-type"].lower()
++        assert res.headers.get("x-content-type-options") == "nosniff"
++        etag = res.headers.get("etag")
++        assert etag is not None
++
++        body_text = res.text
++        raw_bytes = res.content
++        assert len(raw_bytes) <= MAX_LLMS_FULL_BYTES
++
++        # Verify standard /llms.txt header content is included
++        assert "Platform & 3-Surface MCP Quick-Map" in body_text
++        assert "Interview Before Writing Skills" in body_text
++
++        # Verify all 4 skills are concatenated with clear delimiters
++        for slug in ALLOWED_SKILL_SLUGS:
++            assert f"<!-- BEGIN SKILL: {slug} -->" in body_text
++            assert f"<!-- END SKILL: {slug} -->" in body_text
++
++        # 2. HEAD /llms-full.txt
++        head_res = await client.head("/llms-full.txt")
++        assert head_res.status_code == 200
++        assert head_res.headers.get("etag") == etag
++        assert head_res.headers.get("content-length") == str(len(raw_bytes))
++        assert head_res.content == b""
++
++        # 3. Conditional GET with matching If-None-Match -> 304 Not Modified
++        not_mod_res = await client.get("/llms-full.txt", headers={"If-None-Match": etag})
++        assert not_mod_res.status_code == 304
++        assert not_mod_res.content == b""
++
++
++@pytest.mark.asyncio
++async def test_llms_skills_endpoints_positive(app: FastAPI) -> None:
++    """Verify GET and HEAD /llms-skills/{skill_slug}.md for all allowed skills."""
++    async with httpx.AsyncClient(
++        transport=httpx.ASGITransport(app=app),
++        base_url="http://testserver",
++    ) as client:
++        assets = get_skill_assets()
++        for slug in ALLOWED_SKILL_SLUGS:
++            res = await client.get(f"/llms-skills/{slug}.md")
++            assert res.status_code == 200
++            assert "text/markdown" in res.headers["content-type"]
++            assert "charset=utf-8" in res.headers["content-type"].lower()
++            assert res.headers.get("x-content-type-options") == "nosniff"
++            assert res.headers.get("cache-control") == "public, max-age=300, must-revalidate"
++            etag = res.headers.get("etag")
++            assert etag is not None
++            assert len(res.content) <= MAX_SKILL_BYTES
++            assert res.text == assets[slug].content
++
++            # HEAD request
++            head_res = await client.head(f"/llms-skills/{slug}.md")
++            assert head_res.status_code == 200
++            assert head_res.headers.get("etag") == etag
++            assert head_res.headers.get("content-length") == str(len(res.content))
++            assert head_res.content == b""
++
++            # Conditional GET 304
++            not_mod = await client.get(
++                f"/llms-skills/{slug}.md",
++                headers={"If-None-Match": etag},
++            )
++            assert not_mod.status_code == 304
++            assert not_mod.content == b""
++
++
++@pytest.mark.asyncio
++async def test_system_skills_catalog_endpoint(app: FastAPI) -> None:
++    """Verify GET /api/v1/system/skills returns complete catalog and formatted onboarding prompt."""
++    async with httpx.AsyncClient(
++        transport=httpx.ASGITransport(app=app),
++        base_url="http://testserver",
++    ) as client:
++        res = await client.get("/api/v1/system/skills")
++        assert res.status_code == 200
++        data = res.json()
++
++        assert data["llms_txt_url"] == "/llms.txt"
++        assert data["llms_full_url"] == "/llms-full.txt"
++        assert "onboarding_prompt" in data
++        assert "interview me on Execution Mode" in data["onboarding_prompt"]
++
++        skills = data["skills"]
++        assert len(skills) == len(ALLOWED_SKILL_SLUGS)
++        assets = get_skill_assets()
++        for item in skills:
++            slug = item["slug"]
++            assert slug in ALLOWED_SKILL_SLUGS
++            assert item["url"] == f"/llms-skills/{slug}.md"
++            asset = assets[slug]
++            assert item["title"] == asset.title
++            assert item["summary"] == asset.summary
++            assert item["install_path"] == asset.install_path
++            assert item["bytes"] == asset.bytes
++            assert item["sha256"] == asset.sha256
++            assert item["estimated_tokens"] == asset.estimated_tokens
++            assert item["bytes"] > 0
++            assert item["estimated_tokens"] > 0
++
++
++@pytest.mark.asyncio
++async def test_negative_and_security_cases(app: FastAPI) -> None:
++    """Verify 404 ProblemDetails, 405 on disallowed methods, and security headers."""
++    async with httpx.AsyncClient(
++        transport=httpx.ASGITransport(app=app),
++        base_url="http://testserver",
++    ) as client:
++        # 1. Unknown skill slug -> 404 ProblemDetails
++        res404 = await client.get("/llms-skills/unknown-skill.md")
++        assert res404.status_code == 404
++        assert "application/problem+json" in res404.headers["content-type"]
++        problem = res404.json()
++        assert problem["title"] == "Not Found"
++        assert problem["status"] == 404
++
++        # 2. Path traversal slug attempt -> 404 ProblemDetails
++        res_trav = await client.get("/llms-skills/..%2Fetc%2Fpasswd.md")
++        assert res_trav.status_code == 404
++        assert "application/problem+json" in res_trav.headers["content-type"]
++
++        # 3. Missing .md suffix -> 404 ProblemDetails
++        res_no_ext = await client.get("/llms-skills/kanban-ticket")
++        assert res_no_ext.status_code == 404
++
++        # 4. Disallowed HTTP methods -> 405 Method Not Allowed
++        res_post_txt = await client.post("/llms.txt", content=b"attack")
++        assert res_post_txt.status_code == 405
++        assert "Allow" in res_post_txt.headers
++        assert "GET" in res_post_txt.headers["Allow"]
++        assert "HEAD" in res_post_txt.headers["Allow"]
++
++        res_post_full = await client.post("/llms-full.txt", content=b"attack")
++        assert res_post_full.status_code == 405
++        assert "Allow" in res_post_full.headers
++
++        res_post_skill = await client.post("/llms-skills/kanban-ticket.md", content=b"attack")
++        assert res_post_skill.status_code == 405
++        assert "Allow" in res_post_skill.headers
++
++        res_put = await client.put("/llms.txt", content=b"attack")
++        assert res_put.status_code == 405
++
++        res_del = await client.delete("/llms.txt")
++        assert res_del.status_code == 405
++
++        # 5. Host header control characters / CRLF rejection
++        res_crlf = await client.get("/llms.txt", headers={"Host": "localhost\r\nInjected: 1"})
++        assert res_crlf.status_code == 400
++        assert "application/problem+json" in res_crlf.headers["content-type"]
++
++        # 6. Hardened security headers enforced by SecurityHeadersMiddleware
++        get_res = await client.get("/llms.txt")
++        assert get_res.headers.get("x-frame-options") == "DENY"
++        assert get_res.headers.get("referrer-policy") == "no-referrer"
++        assert "default-src 'none'" in get_res.headers.get("content-security-policy", "")
++
++
++def test_content_invariants_and_byte_budgets() -> None:
++    """Verify byte budgets, zero UTF-16 surrogates, zero em/en-dashes, and caching invariants."""
++    # 1. Byte budgets
++    llms_txt = get_llms_txt_content()
++    assert len(llms_txt.encode("utf-8")) <= MAX_LLMS_TXT_BYTES
++
++    llms_full = get_llms_full_txt_content()
++    assert len(llms_full.encode("utf-8")) <= MAX_LLMS_FULL_BYTES
++
++    assets = get_skill_assets()
++    assert set(assets.keys()) == ALLOWED_SKILL_SLUGS
++    for slug, asset in assets.items():
++        assert asset.bytes <= MAX_SKILL_BYTES, f"Skill '{slug}' exceeds {MAX_SKILL_BYTES} bytes"
++
++    # 2. Zero non-ASCII em/en-dashes across all templates
++    all_texts = [llms_txt, llms_full] + [a.content for a in assets.values()]
++    for text in all_texts:
++        assert "\u2014" not in text, "Found forbidden em-dash U+2014"
++        assert "\u2013" not in text, "Found forbidden en-dash U+2013"
++
++    # 3. Zero UTF-16 lone surrogates
++    for text in all_texts:
++        for ch in text:
++            code = ord(ch)
++            assert not (0xD800 <= code <= 0xDFFF), f"Found UTF-16 surrogate U+{code:04X}"
++
++    # 4. In-memory caching identity check
++    assert get_llms_txt_content() is get_llms_txt_content()
++    assert get_llms_full_txt_content() is get_llms_full_txt_content()
++    assert get_skill_assets() is get_skill_assets()
++
++    # 5. Wheel package inclusion in kanban/pyproject.toml
++    pyproject_path = Path("kanban/pyproject.toml")
++    with pyproject_path.open("rb") as f:
++        data = tomllib.load(f)
++    hatch_build = data.get("tool", {}).get("hatch", {}).get("build", {})
++    wheel_include = hatch_build.get("targets", {}).get("wheel", {}).get("include", [])
++    assert "*.md" in wheel_include or "**/*.md" in wheel_include
++    assert "*.txt" in wheel_include or "**/*.txt" in wheel_include
++
++
++def test_byte_limit_exceeded_guards(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify RuntimeError is raised if byte limits are exceeded."""
++    get_llms_txt_content.cache_clear()
++    get_llms_full_txt_content.cache_clear()
++    get_skill_assets.cache_clear()
++
++    try:
++        monkeypatch.setattr("kanban.ops.llms_txt.MAX_LLMS_TXT_BYTES", 10)
++        with pytest.raises(RuntimeError, match="exceeds 10 bytes"):
++            get_llms_txt_content()
++        get_llms_txt_content.cache_clear()
++        monkeypatch.setattr("kanban.ops.llms_txt.MAX_LLMS_TXT_BYTES", MAX_LLMS_TXT_BYTES)
++
++        monkeypatch.setattr("kanban.ops.llms_txt.MAX_SKILL_BYTES", 10)
++        with pytest.raises(RuntimeError, match="exceeds 10 bytes"):
++            get_skill_assets()
++        get_skill_assets.cache_clear()
++        monkeypatch.setattr("kanban.ops.llms_txt.MAX_SKILL_BYTES", MAX_SKILL_BYTES)
++
++        monkeypatch.setattr("kanban.ops.llms_txt.MAX_LLMS_FULL_BYTES", 10)
++        with pytest.raises(RuntimeError, match="exceeds 10 bytes"):
++            get_llms_full_txt_content()
++        get_llms_full_txt_content.cache_clear()
++    finally:
++        get_llms_txt_content.cache_clear()
++        get_llms_full_txt_content.cache_clear()
++        get_skill_assets.cache_clear()
+diff --git a/kanban/web/src/features/about/AboutPage.css b/kanban/web/src/features/about/AboutPage.css
+index 349d6b56..cb75cc68 100644
+--- a/kanban/web/src/features/about/AboutPage.css
++++ b/kanban/web/src/features/about/AboutPage.css
+@@ -472,3 +472,56 @@
+   white-space: pre-wrap;
+   color: var(--fg-primary);
+ }
++
++/* Agent Instructions (/llms.txt) Card */
++.kb-about-llms-card {
++  display: flex;
++  flex-direction: column;
++  gap: var(--space-3);
++}
++
++.kb-about-llms-links {
++  display: flex;
++  align-items: center;
++  gap: var(--space-2);
++  font-size: var(--text-sm);
++}
++
++.kb-about-llms-link {
++  color: var(--brand-primary);
++  font-weight: 500;
++  text-decoration: none;
++}
++
++.kb-about-llms-link:hover {
++  text-decoration: underline;
++}
++
++.kb-about-llms-separator {
++  color: var(--border-subtle);
++}
++
++.kb-about-llms-actions {
++  margin-top: auto;
++  padding-top: var(--space-2);
++}
++
++.kb-about-copy-prompt-btn {
++  display: inline-flex;
++  align-items: center;
++  justify-content: center;
++  padding: var(--space-1) var(--space-3);
++  font-size: var(--text-xs);
++  font-weight: 600;
++  color: var(--brand-primary);
++  background: var(--bg-hover);
++  border: 1px solid var(--border-subtle);
++  border-radius: var(--radius-md);
++  cursor: pointer;
++  transition: all 0.15s ease;
++}
++
++.kb-about-copy-prompt-btn:hover {
++  background: var(--bg-surface);
++  border-color: var(--brand-primary);
++}
+diff --git a/kanban/web/src/features/about/AboutPage.tsx b/kanban/web/src/features/about/AboutPage.tsx
+index ae4acebf..78c02b8d 100644
+--- a/kanban/web/src/features/about/AboutPage.tsx
++++ b/kanban/web/src/features/about/AboutPage.tsx
+@@ -25,6 +25,7 @@ export function AboutPage(): JSX.Element {
+   const [scopeFilter, setScopeFilter] = useState<'all' | 'runtime'>('runtime');
+   const [activeLicenseTab, setActiveLicenseTab] = useState<'license' | 'notice'>('license');
+   const [copiedLicense, setCopiedLicense] = useState(false);
++  const [copiedPrompt, setCopiedPrompt] = useState(false);
+ 
+   const components = data?.components;
+   const sbomSummary = data?.sbom_summary;
+@@ -89,6 +90,20 @@ export function AboutPage(): JSX.Element {
+     }
+   };
+ 
++  const handleCopyOnboardingPrompt = async (): Promise<void> => {
++    const origin = typeof window !== 'undefined' ? window.location.origin : 'https://kanban.example.com';
++    const textToCopy = `Read ${origin}/llms.txt, learn 👍kanban's ticket workflow, interview me on Execution Mode (Single-Thread, Teamwork, or Swarm), Model/Quota Strategy (Quota-Sipping Flash 3.8, Hybrid, or Unconstrained Sol MAX / Claude Ultra), and QA Rigor, and save my preferences to .agents/skills/ and AGENTS.md.`;
++    try {
++      await navigator.clipboard.writeText(textToCopy);
++      setCopiedPrompt(true);
++      setTimeout(() => {
++        setCopiedPrompt(false);
++      }, 2000);
++    } catch {
++      // Fallback if clipboard API unavailable
++    }
++  };
++
+   if (isLoading) {
+     return (
+       <div className="kb-about-container">
+@@ -247,6 +262,52 @@ export function AboutPage(): JSX.Element {
+               Machine-readable canonical OpenAPI 3.1.0 JSON specification for code generation and tooling.
+             </div>
+           </a>
++
++          <div
++            className="kb-about-api-card kb-about-llms-card"
++            data-testid="about-llms-txt-card"
++          >
++            <div className="kb-about-api-card-title">
++              <span aria-hidden="true">🤖</span>
++              Agent Instructions (/llms.txt)
++            </div>
++            <div className="kb-about-api-card-desc">
++              Standardized agent onboarding instructions and recommended skill catalog for Claude Code, OpenAI Codex, and Gemini CLI / Antigravity.
++            </div>
++            <div className="kb-about-llms-links">
++              <a
++                href="/llms.txt"
++                target="_blank"
++                rel="noopener noreferrer"
++                className="kb-about-llms-link"
++                data-testid="about-llms-txt-link"
++              >
++                View /llms.txt
++              </a>
++              <span className="kb-about-llms-separator" aria-hidden="true">|</span>
++              <a
++                href="/llms-full.txt"
++                target="_blank"
++                rel="noopener noreferrer"
++                className="kb-about-llms-link"
++                data-testid="about-llms-full-link"
++              >
++                View /llms-full.txt
++              </a>
++            </div>
++            <div className="kb-about-llms-actions">
++              <button
++                type="button"
++                className="kb-about-copy-prompt-btn"
++                data-testid="copy-llms-onboarding-prompt-btn"
++                onClick={() => {
++                  void handleCopyOnboardingPrompt();
++                }}
++              >
++                {copiedPrompt ? 'Copied Prompt!' : 'Copy Onboarding Prompt'}
++              </button>
++            </div>
++          </div>
+         </div>
+       </section>
+ 
+diff --git a/kanban/web/src/features/about/__tests__/AboutPage.test.tsx b/kanban/web/src/features/about/__tests__/AboutPage.test.tsx
+index ca2bfed3..f23a34b9 100644
+--- a/kanban/web/src/features/about/__tests__/AboutPage.test.tsx
++++ b/kanban/web/src/features/about/__tests__/AboutPage.test.tsx
+@@ -319,4 +319,37 @@ describe('AboutPage', () => {
+     // Should not throw or crash
+     expect(screen.queryByText('Copied!')).toBeNull();
+   });
++
++  it('renders Agent Instructions (/llms.txt) card and copies onboarding prompt', async () => {
++    vi.mocked(aboutApi.fetchSystemAbout).mockResolvedValueOnce(mockAboutData);
++    renderPage();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('about-llms-txt-card')).toBeDefined();
++    });
++
++    const llmsCard = screen.getByTestId('about-llms-txt-card');
++    expect(llmsCard.textContent).toContain('Agent Instructions (/llms.txt)');
++    expect(screen.getByTestId('about-llms-txt-link').getAttribute('href')).toBe('/llms.txt');
++    expect(screen.getByTestId('about-llms-full-link').getAttribute('href')).toBe('/llms-full.txt');
++
++    const copyBtn = screen.getByTestId('copy-llms-onboarding-prompt-btn');
++    expect(copyBtn.textContent).toBe('Copy Onboarding Prompt');
++
++    fireEvent.click(copyBtn);
++    await waitFor(() => {
++      expect(screen.getByText('Copied Prompt!')).toBeDefined();
++    });
++    expect(writeTextMock).toHaveBeenCalledWith(
++      expect.stringContaining("/llms.txt, learn 👍kanban's ticket workflow"),
++    );
++
++    // Test copy error fallback without crashing
++    Object.assign(navigator, {
++      clipboard: {
++        writeText: vi.fn().mockRejectedValueOnce(new Error('Copy failed')),
++      },
++    });
++    fireEvent.click(copyBtn);
++  });
+ });
+diff --git a/kanban/web/src/features/docs-center/DocsCenterPage.css b/kanban/web/src/features/docs-center/DocsCenterPage.css
+index b1777637..52816b9b 100644
+--- a/kanban/web/src/features/docs-center/DocsCenterPage.css
++++ b/kanban/web/src/features/docs-center/DocsCenterPage.css
+@@ -59,6 +59,26 @@
+   white-space: nowrap;
+ }
+ 
++.kb-docs-llms-txt-link {
++  display: inline-flex;
++  align-items: center;
++  gap: 0.25rem;
++  font-size: 0.75rem;
++  font-weight: 600;
++  color: var(--brand-primary);
++  background: var(--bg-hover);
++  border: 1px solid var(--border-subtle);
++  padding: 0.125rem 0.5rem;
++  border-radius: 9999px;
++  text-decoration: none;
++  white-space: nowrap;
++}
++
++.kb-docs-llms-txt-link:hover {
++  text-decoration: underline;
++  background: var(--bg-surface);
++}
++
+ .kb-docs-mobile-chapters-btn {
+   display: none;
+   min-height: 44px;
+diff --git a/kanban/web/src/features/docs-center/DocsCenterPage.tsx b/kanban/web/src/features/docs-center/DocsCenterPage.tsx
+index e5c1b78f..470404ff 100644
+--- a/kanban/web/src/features/docs-center/DocsCenterPage.tsx
++++ b/kanban/web/src/features/docs-center/DocsCenterPage.tsx
+@@ -235,6 +235,15 @@ export function DocsCenterPage(): JSX.Element {
+               Kanban Docs
+             </Link>
+             <span className="kb-docs-badge">Offline Center</span>
++            <a
++              href="/llms.txt"
++              target="_blank"
++              rel="noopener noreferrer"
++              className="kb-docs-llms-txt-link"
++              data-testid="docs-llms-txt-link"
++            >
++              <span aria-hidden="true">🤖</span> /llms.txt
++            </a>
+           </div>
+ 
+           <button
+diff --git a/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx b/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
+index e2f95425..acd3a2cc 100644
+--- a/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
++++ b/kanban/web/src/features/docs-center/__tests__/DocsCenter.test.tsx
+@@ -518,6 +518,7 @@ Here is **bold text**, *italic text*, \`inline code\`, and a [TOC Anchor](#my-an
+       );
+ 
+       expect(screen.getByTestId('docs-center-page')).toBeDefined();
++      expect(screen.getByTestId('docs-llms-txt-link').getAttribute('href')).toBe('/llms.txt');
+     });
+ 
+     it('renders full-page layout with categories sidebar, chapter content, and TOC rail', () => {
+@@ -530,6 +531,7 @@ Here is **bold text**, *italic text*, \`inline code\`, and a [TOC Anchor](#my-an
+       );
+ 
+       expect(screen.getByTestId('docs-center-page')).toBeDefined();
++      expect(screen.getByTestId('docs-llms-txt-link').getAttribute('href')).toBe('/llms.txt');
+       expect(screen.getByTestId('docs-search-input')).toBeDefined();
+       expect(screen.getByTestId('docs-categories-sidebar')).toBeDefined();
+       expect(screen.getByTestId('docs-main-content')).toBeDefined();
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.css b/kanban/web/src/features/settings/McpAccessStudio.css
+index 1e5d28a0..ba654c5e 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.css
++++ b/kanban/web/src/features/settings/McpAccessStudio.css
+@@ -525,6 +525,53 @@
+   gap: 8px;
+ }
+ 
++/* Recommended Agent Skills & Onboarding Callout */
++.kb-mcp-llms-callout {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 16px;
++  background: var(--bg-surface, #ffffff);
++  border: 1px solid var(--border-subtle, #e2e8f0);
++  border-left: 4px solid var(--brand-primary, #1d4ed8);
++  border-radius: 6px;
++  padding: 12px 16px;
++  margin-bottom: 16px;
++}
++
++.kb-mcp-llms-callout-text {
++  font-size: 0.875rem;
++  color: var(--fg-secondary, #475569);
++  line-height: 1.4;
++}
++
++.kb-mcp-llms-callout-text a {
++  color: var(--brand-primary, #1d4ed8);
++  font-weight: 600;
++  text-decoration: none;
++}
++
++.kb-mcp-llms-callout-text a:hover {
++  text-decoration: underline;
++}
++
++.kb-mcp-copy-prompt-btn {
++  white-space: nowrap;
++  font-size: 0.8125rem;
++  font-weight: 600;
++  color: var(--brand-primary, #1d4ed8);
++  background: var(--bg-hover, #f1f5f9);
++  border: 1px solid var(--border-subtle, #cbd5e1);
++  border-radius: 4px;
++  padding: 6px 12px;
++  cursor: pointer;
++}
++
++.kb-mcp-copy-prompt-btn:hover {
++  background: var(--bg-surface, #ffffff);
++  border-color: var(--brand-primary, #1d4ed8);
++}
++
+ @media (max-width: 768px) {
+   .kb-mcp-studio-container {
+     padding: 16px 12px;
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.tsx b/kanban/web/src/features/settings/McpAccessStudio.tsx
+index f7e80774..6a3b14e2 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.tsx
++++ b/kanban/web/src/features/settings/McpAccessStudio.tsx
+@@ -28,6 +28,7 @@ import { apiFetch } from '../../api/client';
+ import { NotFoundView } from '../../app/routes';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
++import { copyToClipboard } from '../../utils/clipboard';
+ import './McpAccessStudio.css';
+ 
+ export const SURFACE_TOOLS: Record<'agent' | 'docs' | 'admin', readonly string[]> = {
+@@ -802,6 +803,29 @@ export function McpAccessStudio({
+         </div>
+       </div>
+ 
++      {/* Recommended Agent Skills & Onboarding Callout */}
++      <div className="kb-mcp-llms-callout" data-testid="mcp-llms-txt-callout">
++        <div className="kb-mcp-llms-callout-text">
++          <span aria-hidden="true">🤖</span>{' '}
++          <strong>Agent Onboarding &amp; Recommended Skills:</strong> Point your agent to{' '}
++          <a href="/llms.txt" target="_blank" rel="noopener noreferrer">/llms.txt</a>{' '}
++          to learn 👍kanban's ticket authoring rules, 3-surface MCP architecture, and start the 4-axis configuration interview.
++        </div>
++        <button
++          type="button"
++          className="kb-mcp-copy-prompt-btn"
++          data-testid="mcp-copy-llms-prompt-btn"
++          onClick={() => {
++            const origin = typeof window !== 'undefined' ? window.location.origin : 'https://kanban.example.com';
++            void copyToClipboard(
++              `Read ${origin}/llms.txt, learn 👍kanban's ticket workflow, interview me on Execution Mode (Single-Thread, Teamwork, or Swarm), Model/Quota Strategy (Quota-Sipping Flash 3.8, Hybrid, or Unconstrained Sol MAX / Claude Ultra), and QA Rigor, and save my preferences to .agents/skills/ and AGENTS.md.`
++            );
++          }}
++        >
++          Copy Agent Skill Prompt
++        </button>
++      </div>
++
+       {/* Scope Filter Pills & Project Selector */}
+       <div className="kb-mcp-filter-bar" data-testid="mcp-filter-bar">
+         <div className="kb-mcp-pills-group" data-testid="mcp-pills-group">
+diff --git a/kanban/web/src/features/settings/McpConfigSnippetModal.css b/kanban/web/src/features/settings/McpConfigSnippetModal.css
+index 5b7c7113..d089e5be 100644
+--- a/kanban/web/src/features/settings/McpConfigSnippetModal.css
++++ b/kanban/web/src/features/settings/McpConfigSnippetModal.css
+@@ -197,3 +197,48 @@
+ .kb-snippet-done-btn:hover {
+   background-color: #2ea043;
+ }
++
++/* Recommended Agent Skills & Onboarding Callout */
++.kb-snippet-llms-callout {
++  display: flex;
++  align-items: center;
++  justify-content: space-between;
++  gap: 12px;
++  background: rgba(56, 139, 253, 0.1);
++  border: 1px solid rgba(56, 139, 253, 0.3);
++  border-radius: 6px;
++  padding: 10px 14px;
++  margin-top: 12px;
++  margin-bottom: 12px;
++}
++
++.kb-snippet-llms-callout-text {
++  font-size: 0.8125rem;
++  color: #c9d1d9;
++}
++
++.kb-snippet-llms-callout-text a {
++  color: #58a6ff;
++  font-weight: 600;
++  text-decoration: none;
++}
++
++.kb-snippet-llms-callout-text a:hover {
++  text-decoration: underline;
++}
++
++.kb-snippet-copy-prompt-btn {
++  font-size: 0.75rem;
++  font-weight: 600;
++  color: #58a6ff;
++  background: rgba(56, 139, 253, 0.15);
++  border: 1px solid rgba(56, 139, 253, 0.4);
++  border-radius: 4px;
++  padding: 4px 10px;
++  cursor: pointer;
++  white-space: nowrap;
++}
++
++.kb-snippet-copy-prompt-btn:hover {
++  background: rgba(56, 139, 253, 0.25);
++}
+diff --git a/kanban/web/src/features/settings/McpConfigSnippetModal.tsx b/kanban/web/src/features/settings/McpConfigSnippetModal.tsx
+index 2040b0aa..fe536a61 100644
+--- a/kanban/web/src/features/settings/McpConfigSnippetModal.tsx
++++ b/kanban/web/src/features/settings/McpConfigSnippetModal.tsx
+@@ -27,6 +27,7 @@ export function McpConfigSnippetModal({
+   const [urlScope, setUrlScope] = useState<UrlScope>('project');
+   const [keyCopied, setKeyCopied] = useState<boolean>(false);
+   const [snippetCopied, setSnippetCopied] = useState<boolean>(false);
++  const [promptCopied, setPromptCopied] = useState<boolean>(false);
+ 
+   useEffect(() => {
+     const handleKeyDown = (e: KeyboardEvent): void => {
+@@ -166,6 +167,19 @@ agy mcp add kanban ${endpointUrl} --auth oauth`;
+     }
+   };
+ 
++  const handleCopyPrompt = async (): Promise<void> => {
++    const success = await copyToClipboard(
++      `Read ${origin}/llms.txt, learn 👍kanban's ticket workflow, interview me on Execution Mode (Single-Thread, Teamwork, or Swarm), Model/Quota Strategy (Quota-Sipping Flash 3.8, Hybrid, or Unconstrained Sol MAX / Claude Ultra), and QA Rigor, and save my preferences to .agents/skills/ and AGENTS.md.`,
++    );
++    if (success) {
++      setPromptCopied(true);
++      /* v8 ignore next 3 */
++      setTimeout(() => {
++        setPromptCopied(false);
++      }, 2000);
++    }
++  };
++
+   return (
+     <div
+       className="kb-snippet-modal-backdrop"
+@@ -226,6 +240,24 @@ agy mcp add kanban ${endpointUrl} --auth oauth`;
+           <strong>Monotonic Credential Boundary:</strong> Access through this key is monotonically bounded by your account effective permissions. Capability ceilings, allowed CIDRs, and disabled tools narrow access across <code>/mcp/*</code> and <code>/api/v1/*</code> without privilege escalation.
+         </div>
+ 
++        <div className="kb-snippet-llms-callout" data-testid="mcp-llms-txt-callout">
++          <div className="kb-snippet-llms-callout-text">
++            <span aria-hidden="true">🤖</span>{' '}
++            <strong>Recommended Agent Skills:</strong> Give your agent direct onboarding via{' '}
++            <a href="/llms.txt" target="_blank" rel="noopener noreferrer">/llms.txt</a>
++          </div>
++          <button
++            type="button"
++            className="kb-snippet-copy-prompt-btn"
++            data-testid="mcp-copy-llms-prompt-btn"
++            onClick={() => {
++              void handleCopyPrompt();
++            }}
++          >
++            {promptCopied ? 'Copied Prompt!' : 'Copy Agent Skill Prompt'}
++          </button>
++        </div>
++
+         <div className="kb-snippet-url-row">
+           <label htmlFor="url-scope-select" className="kb-snippet-url-label">
+             Target Scope URL:
+diff --git a/kanban/web/src/features/settings/__tests__/McpConfigSnippetModal.test.tsx b/kanban/web/src/features/settings/__tests__/McpConfigSnippetModal.test.tsx
+index 212c5ac8..e83440c2 100644
+--- a/kanban/web/src/features/settings/__tests__/McpConfigSnippetModal.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/McpConfigSnippetModal.test.tsx
+@@ -160,4 +160,40 @@ describe('McpConfigSnippetModal direct unit tests', () => {
+     expect(anonBox.textContent).not.toContain('KANBA');
+     expect(anonBox.textContent).toContain('/mcp/agent/w/engineering');
+   });
++
++  it('renders recommended agent skills callout and copies skill prompt', async () => {
++    const handleClose = vi.fn();
++    const writeTextMock = vi.fn().mockResolvedValue(undefined);
++    Object.assign(navigator, {
++      clipboard: {
++        writeText: writeTextMock,
++      },
++    });
++
++    render(
++      <McpConfigSnippetModal
++        surface="agent"
++        workspaceSlug="kanban"
++        projectKey="KANBA"
++        rawKey="kb_agt_test_key"
++        onClose={handleClose}
++      />,
++    );
++
++    const callout = screen.getByTestId('mcp-llms-txt-callout');
++    expect(callout).toBeDefined();
++    expect(callout.textContent).toContain('Recommended Agent Skills');
++    expect(callout.querySelector('a')?.getAttribute('href')).toBe('/llms.txt');
++
++    const copyPromptBtn = screen.getByTestId('mcp-copy-llms-prompt-btn');
++    expect(copyPromptBtn).toBeDefined();
++    fireEvent.click(copyPromptBtn);
++    await waitFor(() => {
++      expect(screen.getByText('Copied Prompt!')).toBeDefined();
++    });
++
++    expect(writeTextMock).toHaveBeenCalledWith(
++      expect.stringContaining("/llms.txt, learn 👍kanban's ticket workflow"),
++    );
++  });
+ });
+diff --git a/kanban/web_static.py b/kanban/web_static.py
+index 674271b5..17f6793b 100644
+--- a/kanban/web_static.py
++++ b/kanban/web_static.py
+@@ -103,6 +103,9 @@ class PrecompressedSPAStaticApp:
+             "/.well-known",
+             "/oauth",
+             "/internal",
++            "/llms.txt",
++            "/llms-full.txt",
++            "/llms-skills",
+         )
+         is_oauth_device_spa = (
+             raw_path == "/oauth/device"
