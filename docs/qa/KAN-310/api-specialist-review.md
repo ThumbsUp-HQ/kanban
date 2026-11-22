@@ -2,14 +2,19 @@
 
 - **Reviewer Persona:** `backend-architect` / `security-engineer` / `api-tester` (API & Security Specialist Reviewer)
 - **Ticket:** `KAN-310` (`[KB-NOTIF-WS-01] Deliver Recipient-Scoped Notifications Over WebSocket/SSE with Multi-Tab Read Sync and Transport-Gated Fallback Polling`)
-- **Audited Commit (`HEAD`):** `60228314089adeb693d2d7625220b67916ba52d7` (`60228314`)
-- **Audited Branch:** `feat/KAN-310-ws-notifications`
+- **Audited Commit (`HEAD`):** `9f3656d153b2e08af69a9c44547e17c25bb79c58` (`9f3656d1`, merging `60228314089adeb693d2d7625220b67916ba52d7`)
+- **Audited Branch:** `main` (merged from `feat/KAN-310-ws-notifications`)
 - **Reviewed Artifacts:**
   - `docs/qa/KAN-310/git-diff.patch`
   - `docs/qa/KAN-310/contract-sample.json`
   - `docs/qa/KAN-310/unit-test-results.txt`
   - `docs/qa/KAN-310/build-check.txt`
   - `docs/qa/KAN-310/message-to-reality-checker.md`
+  - `docs/qa/KAN-310/screenshots/01-desktop-light-notifications-tray.png`
+  - `docs/qa/KAN-310/screenshots/02-desktop-dark-notifications-tray.png`
+  - `docs/qa/KAN-310/screenshots/03-tablet-notifications-tray.png`
+  - `docs/qa/KAN-310/screenshots/04-mobile-portrait-notifications-tray.png`
+  - `docs/qa/KAN-310/screenshots/05-mobile-landscape-notifications-tray.png`
 - **Reviewed Source & Test Files:**
   - `kanban/realtime/hub.py`
   - `kanban/realtime/replay.py`

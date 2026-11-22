@@ -1,5 +1,14 @@
 # Forensic Verification Proof Summary - KAN-310
 
+## Audited Commit & Visual Proof Summary
+- **Merged `main` Commit SHA:** `9f3656d153b2e08af69a9c44547e17c25bb79c58` (`9f3656d1`, merging `feat/KAN-310-ws-notifications` at `60228314089adeb693d2d7625220b67916ba52d7`)
+- **Zero-Mock Live Container Playwright Screenshots (`docs/qa/KAN-310/screenshots/`, captured against local `kanban-liveqa-1` on `http://localhost:18961` with `data-realtime-state="open"` and `data-polling-active="false"`):**
+  - `docs/qa/KAN-310/screenshots/01-desktop-light-notifications-tray.png` (`1440x900` Light)
+  - `docs/qa/KAN-310/screenshots/02-desktop-dark-notifications-tray.png` (`1440x900` Dark)
+  - `docs/qa/KAN-310/screenshots/03-tablet-notifications-tray.png` (`768x1024` Tablet)
+  - `docs/qa/KAN-310/screenshots/04-mobile-portrait-notifications-tray.png` (`390x844` Mobile Portrait)
+  - `docs/qa/KAN-310/screenshots/05-mobile-landscape-notifications-tray.png` (`844x390` Mobile Landscape)
+
 ## Ticket Summary
 `[KB-NOTIF-WS-01] Deliver Recipient-Scoped Notifications Over WebSocket/SSE with Multi-Tab Read Sync and Transport-Gated Fallback Polling (4 Problems)`
 
