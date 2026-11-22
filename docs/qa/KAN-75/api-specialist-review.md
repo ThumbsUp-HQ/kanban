@@ -4,7 +4,7 @@
 - **Reviewer:** API & Security Specialist Reviewer (`api-spec`)
 - **Review Date:** 2026-11-22
 - **Branch:** `feat/KAN-75-ssrf-scm-webhook-bus`
-- **Commit Under Audit:** `05bda78a` (`feat(webhooks): extract shared SSRF transport, fix known_hosts mirror bug, add SCM inbound/outbound bus (KAN-75)`)
+- **Commit Under Audit:** `56c2a991f4b1bf4a94765d14396bdc0098815972 (56c2a991)` (`feat(webhooks): extract shared SSRF transport, fix known_hosts mirror bug, add SCM inbound/outbound bus (KAN-75)`)
 - **Target Worktree:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan75-f07352f0`
 - **Status:** APPROVED
 
