@@ -201,8 +201,10 @@ describe('IssueSurface split mode (KAN-52 Problem 3)', () => {
     expect(screen.getByTestId('split-section-links')).toBeDefined();
     expect(screen.getByTestId('split-section-activity')).toBeDefined();
 
-    // Sub-issues rendered
-    expect(screen.getByText('KAN-53')).toBeDefined();
+    // Sub-issues rendered once full detail query resolves past summary placeholderData
+    await waitFor(() => {
+      expect(screen.getByText('KAN-53')).toBeDefined();
+    });
     expect(screen.getByText('Subtask 1')).toBeDefined();
 
     // Right column sections

@@ -208,10 +208,10 @@ describe('KAN-84 multi-page cursor pagination integration (304-issue post-merge 
     });
 
     expect(calledUrls).toEqual([
-      '/api/v1/projects/KAN/issues?limit=100&sort_by=sequence_id&sort_dir=desc',
-      '/api/v1/projects/KAN/issues?cursor=offset-100&limit=100&sort_by=sequence_id&sort_dir=desc',
-      '/api/v1/projects/KAN/issues?cursor=offset-200&limit=100&sort_by=sequence_id&sort_dir=desc',
-      '/api/v1/projects/KAN/issues?cursor=offset-300&limit=100&sort_by=sequence_id&sort_dir=desc',
+      '/api/v1/projects/KAN/issues?limit=100&sort_by=sequence_id&sort_dir=desc&lod=summary',
+      '/api/v1/projects/KAN/issues?cursor=offset-100&limit=100&sort_by=sequence_id&sort_dir=desc&lod=summary',
+      '/api/v1/projects/KAN/issues?cursor=offset-200&limit=100&sort_by=sequence_id&sort_dir=desc&lod=summary',
+      '/api/v1/projects/KAN/issues?cursor=offset-300&limit=100&sort_by=sequence_id&sort_dir=desc&lod=summary',
     ]);
     expect(result.pagesFetched).toBe(4);
     expect(result.truncated).toBe(false);

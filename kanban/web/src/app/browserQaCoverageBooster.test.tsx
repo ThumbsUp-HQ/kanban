@@ -667,7 +667,7 @@ describe('Browser QA Branch Coverage Booster', () => {
       );
 
       await waitFor(() => {
-        expect(screen.getByText('Live issue 1')).not.toBeNull();
+        expect(screen.getAllByText('Live issue 1').length).toBeGreaterThan(0);
       });
 
       // Dispatch kb:create-issue
