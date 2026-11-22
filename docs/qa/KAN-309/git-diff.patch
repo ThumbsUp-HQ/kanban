@@ -1,0 +1,1629 @@
+diff --git a/kanban/api/v1/issues.py b/kanban/api/v1/issues.py
+index ca028d69..e5f359d3 100644
+--- a/kanban/api/v1/issues.py
++++ b/kanban/api/v1/issues.py
+@@ -64,6 +64,10 @@ async def get_issue(  # noqa: PLR0913, PLR0917
+     request: Request,
+     taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
+     workspace: Annotated[str | None, Query(description="Optional workspace slug or UUID")] = None,
++    lod: Annotated[
++        Literal["summary", "standard", "full"],
++        Query(description="Level of detail tier: summary, standard, or full"),
++    ] = "full",
+     if_none_match: Annotated[str | None, Header()] = None,
+ ) -> IssueResponse | Response:
+     """Return an issue, or 304 when If-None-Match matches current issue ETag."""
+@@ -71,7 +75,7 @@ async def get_issue(  # noqa: PLR0913, PLR0917
+     async with timing_floor(floor_ms=25.0):
+         issue = await svc.get_issue_or_404(session, caller, issue_key, workspace_ref=workspace_ref)
+         await taint_recorder.record_project_ids([issue.project_id])
+-        serialized = await svc.serialize_issue(session, caller, issue)
++        serialized = await svc.serialize_issue(session, caller, issue, lod=lod)
+         desc_sha = issue.description_sha256.hex() if issue.description_sha256 else ""
+         etag = serialized.etag or (f'"{desc_sha}"' if desc_sha else '""')
+         etag_hex = etag.strip('"')
+@@ -146,6 +150,10 @@ async def list_issues(  # noqa: PLR0913
+         list[StateGroupFilter] | None,
+         Query(description="Optional workflow state_group filter"),
+     ] = None,
++    lod: Annotated[
++        Literal["summary", "standard", "full"],
++        Query(description="Level of detail tier: summary, standard, or full"),
++    ] = "full",
+ ) -> IssueList:
+     """List RLS-visible issues within a project using keyset pagination."""
+     if not include_archived and only_archived:
+@@ -165,6 +173,7 @@ async def list_issues(  # noqa: PLR0913
+             include_archived=include_archived,
+             only_archived=only_archived,
+             state_group=state_group,
++            lod=lod,
+         )
+         await taint_recorder.record_project_ids([project_ref])
+         return res
+diff --git a/kanban/api/v1/schemas/issues.py b/kanban/api/v1/schemas/issues.py
+index cb1d26a6..fa215577 100644
+--- a/kanban/api/v1/schemas/issues.py
++++ b/kanban/api/v1/schemas/issues.py
+@@ -245,7 +245,9 @@ class IssueResponse(BaseModel):
+     )
+     key: str = Field(description="Canonical issue key (e.g. KAN-101)")
+     summary: str = Field(description="Issue summary title")
+-    description_markdown: str = Field(description="Canonical UTF-8 Markdown description body")
++    description_markdown: str | None = Field(
++        default=None, description="Canonical UTF-8 Markdown description body"
++    )
+     description_sha256: str = Field(
+         description="Hex-encoded SHA-256 digest of description_markdown for ETag concurrency"
+     )
+@@ -285,8 +287,9 @@ class IssueResponse(BaseModel):
+     provenance: IssueProvenance = Field(
+         description="Creator provenance and administrative override tracking"
+     )
+-    access_manifest: AccessManifest = Field(
+-        description="Anti-enumeration access manifest metadata (S3.4)"
++    access_manifest: AccessManifest | None = Field(
++        default=None,
++        description="Anti-enumeration access manifest metadata (S3.4)",
+     )
+     capabilities: list[str] = Field(
+         description="Effective capabilities held by the calling principal on this issue"
+diff --git a/kanban/services/issues.py b/kanban/services/issues.py
+index 07869cec..b43d2890 100644
+--- a/kanban/services/issues.py
++++ b/kanban/services/issues.py
+@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any, Final
+ 
+ from sqlalchemy import delete, distinct, func, select, text, update
+ from sqlalchemy.exc import DBAPIError, IntegrityError
++from sqlalchemy.orm import defer
+ 
+ from database.models import (
+     ActivityRecord,
+@@ -619,6 +620,11 @@ def compute_issue_etag(
+     module_ids_repr = ",".join(sorted(str(m) for m in (issue_resp.module_ids or [])))
+     labels_repr = ",".join(sorted(str(lbl.id) for lbl in issue_resp.labels))
+     parent_repr = getattr(issue_resp.parent, "key", "") if issue_resp.parent else ""
++    access_manifest_repr = (
++        f"{issue_resp.access_manifest.pill_label}:{issue_resp.access_manifest.explicit_grant_count}"
++        if issue_resp.access_manifest is not None
++        else ""
++    )
+     updated_at_str = (
+         updated_at.isoformat() if isinstance(updated_at, datetime) else str(updated_at or "")
+     )
+@@ -645,7 +651,7 @@ def compute_issue_etag(
+         module_ids_repr,
+         labels_repr,
+         parent_repr,
+-        f"{issue_resp.access_manifest.pill_label}:{issue_resp.access_manifest.explicit_grant_count}",
++        access_manifest_repr,
+         str(issue_resp.board_rank),
+         updated_at_str,
+         pending_gate_repr,
+@@ -657,7 +663,10 @@ def compute_issue_etag(
+ 
+ 
+ async def serialize_issue(
+-    session: AsyncSession, caller: PrincipalContext, issue: Issue
++    session: AsyncSession,
++    caller: PrincipalContext,
++    issue: Issue,
++    lod: Literal["summary", "standard", "full"] = "full",
+ ) -> IssueResponse:
+     """Assemble canonical IssueResponse model including access manifest and capabilities."""
+     project = await session.get(Project, issue.project_id)
+@@ -705,8 +714,19 @@ async def serialize_issue(
+         if cycle_obj is not None:
+             cycle_summary = CycleSummary(id=cycle_obj.id, name=cycle_obj.name)
+ 
+-    manifest = await build_access_manifest(session, caller, issue.id)
+-    caps = await evaluate_capabilities(session, caller, issue.id)
++    if lod == "summary":
++        manifest = None
++        caps_names = ["VIEW"]
++        desc_md = None
++    else:
++        manifest = await build_access_manifest(session, caller, issue.id)
++        caps = await evaluate_capabilities(session, caller, issue.id)
++        caps_names = capabilities_to_names(caps)
++        desc_md = (
++            scrub_text(issue.description_markdown)
++            if issue.description_markdown
++            else issue.description_markdown
++        )
+     assignee_items = await get_issue_assignees(session, issue.id)
+     provenance = await build_issue_provenance(session, issue)
+ 
+@@ -727,11 +747,7 @@ async def serialize_issue(
+         object_id=issue.id,
+         key=f"{project.identifier}-{issue.sequence_id}",
+         summary=issue.summary,
+-        description_markdown=(
+-            scrub_text(issue.description_markdown)
+-            if issue.description_markdown
+-            else issue.description_markdown
+-        ),
++        description_markdown=desc_md,
+         description_sha256=sha256_hex,
+         state=StateSummary(
+             id=state.id,
+@@ -755,7 +771,7 @@ async def serialize_issue(
+         created_by_id=issue.created_by_id,
+         provenance=provenance,
+         access_manifest=manifest,
+-        capabilities=capabilities_to_names(caps),
++        capabilities=caps_names,
+         created_at=issue_created_at,
+         updated_at=issue_updated_at,
+         archived_at=archived_at,
+@@ -1027,6 +1043,7 @@ async def _hydrate_batch_issue_context(  # noqa: C901, PLR0912, PLR0915
+     session: AsyncSession,
+     caller: PrincipalContext,
+     issues: Sequence[Issue],
++    lod: Literal["summary", "standard", "full"] = "full",
+ ) -> _BatchIssueHydrationContext:
+     """Execute batched IN (...) queries to hydrate all related entities for issues."""
+     issue_ids = [i.id for i in issues]
+@@ -1167,117 +1184,155 @@ async def _hydrate_batch_issue_context(  # noqa: C901, PLR0912, PLR0915
+         iid: [] for iid in issue_ids
+     }
+     principals_by_id: dict[uuid.UUID, Principal] = {}
+-    era_stmt = (
+-        select(EffectiveResourceAccess, Principal)
+-        .join(Principal, Principal.id == EffectiveResourceAccess.principal_id)
+-        .where(EffectiveResourceAccess.object_id.in_(issue_ids))
++    direct_acls_by_issue: dict[uuid.UUID, list[ResourceAclEntry]] = {iid: [] for iid in issue_ids}
++    project_roles_by_project: dict[uuid.UUID, dict[uuid.UUID, str]] = {
++        pid: {} for pid in project_ids
++    }
++    workspace_roles_by_ws: dict[uuid.UUID, dict[uuid.UUID, str]] = {}
++    groups_by_id: dict[uuid.UUID, Group] = {}
++    group_member_counts: dict[uuid.UUID, int] = {}
++    human_all_pids = {caller.principal_id}
++    agent_all_pids = (
++        {caller.agent_principal_id}
++        if caller.agent_principal_id is not None
++        else set()
+     )
+-    for era_row, princ_row in (await session.execute(era_stmt)).all():
+-        era_by_issue[era_row.object_id].append((era_row, princ_row))
+-        principals_by_id[princ_row.id] = princ_row
++    effective_token_mask = parse_token_scope_mask(caller.token_scopes)
+ 
+-    direct_acls_by_issue: dict[uuid.UUID, list[ResourceAclEntry]] = {iid: [] for iid in issue_ids}
+-    all_direct_acls = list(
+-        (
+-            await session.execute(
+-                select(ResourceAclEntry).where(ResourceAclEntry.object_id.in_(issue_ids))
++    if lod != "summary":
++        era_stmt = (
++            select(EffectiveResourceAccess, Principal)
++            .join(Principal, Principal.id == EffectiveResourceAccess.principal_id)
++            .where(EffectiveResourceAccess.object_id.in_(issue_ids))
++        )
++        for era_row, princ_row in (await session.execute(era_stmt)).all():
++            era_by_issue[era_row.object_id].append((era_row, princ_row))
++            principals_by_id[princ_row.id] = princ_row
++
++        all_direct_acls = list(
++            (
++                await session.execute(
++                    select(ResourceAclEntry).where(ResourceAclEntry.object_id.in_(issue_ids))
++                )
+             )
++            .scalars()
++            .all()
+         )
+-        .scalars()
+-        .all()
+-    )
+-    for acl in all_direct_acls:
+-        direct_acls_by_issue[acl.object_id].append(acl)
++        for acl in all_direct_acls:
++            direct_acls_by_issue[acl.object_id].append(acl)
+ 
+-    workspace_ids = list({p.workspace_id for p in projects_by_id.values()} | {caller.workspace_id})
+-    all_rbs = list(
+-        (
+-            await session.execute(
+-                select(RoleBinding).where(
+-                    (RoleBinding.project_id.in_(project_ids))
+-                    | (
+-                        (RoleBinding.workspace_id.in_(workspace_ids))
+-                        & (RoleBinding.scope_type == "workspace")
++        workspace_ids = list({p.workspace_id for p in projects_by_id.values()} | {caller.workspace_id})
++        all_rbs = list(
++            (
++                await session.execute(
++                    select(RoleBinding).where(
++                        (RoleBinding.project_id.in_(project_ids))
++                        | (
++                            (RoleBinding.workspace_id.in_(workspace_ids))
++                            & (RoleBinding.scope_type == "workspace")
++                        )
+                     )
+                 )
+             )
++            .scalars()
++            .all()
+         )
+-        .scalars()
+-        .all()
+-    )
+ 
+-    caller_pids: list[uuid.UUID] = [caller.principal_id]
+-    if caller.agent_principal_id is not None:
+-        caller_pids.append(caller.agent_principal_id)
++        caller_pids: list[uuid.UUID] = [caller.principal_id]
++        if caller.agent_principal_id is not None:
++            caller_pids.append(caller.agent_principal_id)
+ 
+-    rb_and_acl_pids = list(
+-        {rb.principal_id for rb in all_rbs} | {acl.principal_id for acl in all_direct_acls}
+-    )
+-    ancestors_by_member: dict[uuid.UUID, set[uuid.UUID]] = {}
+-    members_by_ancestor: dict[uuid.UUID, list[uuid.UUID]] = {}
+-    closure_cond = (
+-        (PrincipalGroupClosure.member_id.in_(caller_pids))
+-        | (PrincipalGroupClosure.ancestor_group_id.in_(rb_and_acl_pids))
+-        if rb_and_acl_pids
+-        else PrincipalGroupClosure.member_id.in_(caller_pids)
+-    )
+-    closure_stmt = select(
+-        PrincipalGroupClosure.member_id,
+-        PrincipalGroupClosure.ancestor_group_id,
+-    ).where(closure_cond)
+-    for m_id, anc_id in (await session.execute(closure_stmt)).all():
+-        ancestors_by_member.setdefault(m_id, set()).add(anc_id)
+-        members_by_ancestor.setdefault(anc_id, []).append(m_id)
++        rb_and_acl_pids = list(
++            {rb.principal_id for rb in all_rbs} | {acl.principal_id for acl in all_direct_acls}
++        )
++        ancestors_by_member: dict[uuid.UUID, set[uuid.UUID]] = {}
++        members_by_ancestor: dict[uuid.UUID, list[uuid.UUID]] = {}
++        closure_cond = (
++            (PrincipalGroupClosure.member_id.in_(caller_pids))
++            | (PrincipalGroupClosure.ancestor_group_id.in_(rb_and_acl_pids))
++            if rb_and_acl_pids
++            else PrincipalGroupClosure.member_id.in_(caller_pids)
++        )
++        closure_stmt = select(
++            PrincipalGroupClosure.member_id,
++            PrincipalGroupClosure.ancestor_group_id,
++        ).where(closure_cond)
++        for m_id, anc_id in (await session.execute(closure_stmt)).all():
++            ancestors_by_member.setdefault(m_id, set()).add(anc_id)
++            members_by_ancestor.setdefault(anc_id, []).append(m_id)
++
++        workspace_roles_by_ws = {wid: {} for wid in workspace_ids}
++        for rb in all_rbs:
++            r_val = str(rb.role.value if hasattr(rb.role, "value") else rb.role)
++            if rb.project_id is not None and rb.project_id in project_roles_by_project:
++                p_roles = project_roles_by_project[rb.project_id]
++                p_roles[rb.principal_id] = r_val
++                for mid in members_by_ancestor.get(rb.principal_id, []):
++                    if mid not in p_roles:  # pragma: no branch
++                        p_roles[mid] = r_val
++            if rb.scope_type == "workspace" and rb.workspace_id in workspace_roles_by_ws:
++                workspace_roles_by_ws[rb.workspace_id][rb.principal_id] = r_val
++
++        needed_pids = (
++            set(caller_pids)
++            | {acl.principal_id for acl in all_direct_acls}
++            | {pid for pr in project_roles_by_project.values() for pid in pr}
++            | {pid for wr in workspace_roles_by_ws.values() for pid in wr}
++        )
++        missing_pids = list(needed_pids - set(principals_by_id.keys()))
++        if missing_pids:
++            for p_row in (
++                (await session.execute(select(Principal).where(Principal.id.in_(missing_pids))))
++                .scalars()
++                .all()
++            ):
++                principals_by_id[p_row.id] = p_row
++
++        human_p = principals_by_id.get(caller.principal_id)
++        human_active = human_p is not None and human_p.status == "ACTIVE"
++        agent_active = True
++        if caller.agent_principal_id is not None:
++            agent_p = principals_by_id.get(caller.agent_principal_id)
++            agent_active = agent_p is not None and agent_p.status == "ACTIVE"
++        effective_token_mask = (
++            parse_token_scope_mask(caller.token_scopes)
++            if (human_active and agent_active)
++            else Capability.NONE
++        )
++        human_all_pids = {caller.principal_id} | ancestors_by_member.get(caller.principal_id, set())
++        agent_all_pids = (
++            {caller.agent_principal_id} | ancestors_by_member.get(caller.agent_principal_id, set())
++            if caller.agent_principal_id is not None
++            else set()
++        )
+ 
+-    project_roles_by_project: dict[uuid.UUID, dict[uuid.UUID, str]] = {
+-        pid: {} for pid in project_ids
+-    }
+-    workspace_roles_by_ws: dict[uuid.UUID, dict[uuid.UUID, str]] = {
+-        wid: {} for wid in workspace_ids
+-    }
+-    for rb in all_rbs:
+-        r_val = str(rb.role.value if hasattr(rb.role, "value") else rb.role)
+-        if rb.project_id is not None and rb.project_id in project_roles_by_project:
+-            p_roles = project_roles_by_project[rb.project_id]
+-            p_roles[rb.principal_id] = r_val
+-            for mid in members_by_ancestor.get(rb.principal_id, []):
+-                if mid not in p_roles:  # pragma: no branch
+-                    p_roles[mid] = r_val
+-        if rb.scope_type == "workspace" and rb.workspace_id in workspace_roles_by_ws:
+-            workspace_roles_by_ws[rb.workspace_id][rb.principal_id] = r_val
+-
+-    needed_pids = (
+-        set(caller_pids)
+-        | {acl.principal_id for acl in all_direct_acls}
+-        | {pid for pr in project_roles_by_project.values() for pid in pr}
+-        | {pid for wr in workspace_roles_by_ws.values() for pid in wr}
+-    )
+-    missing_pids = list(needed_pids - set(principals_by_id.keys()))
+-    if missing_pids:
+-        for p_row in (
+-            (await session.execute(select(Principal).where(Principal.id.in_(missing_pids))))
+-            .scalars()
+-            .all()
+-        ):
+-            principals_by_id[p_row.id] = p_row
+-
+-    human_p = principals_by_id.get(caller.principal_id)
+-    human_active = human_p is not None and human_p.status == "ACTIVE"
+-    agent_active = True
+-    if caller.agent_principal_id is not None:
+-        agent_p = principals_by_id.get(caller.agent_principal_id)
+-        agent_active = agent_p is not None and agent_p.status == "ACTIVE"
+-    effective_token_mask = (
+-        parse_token_scope_mask(caller.token_scopes)
+-        if (human_active and agent_active)
+-        else Capability.NONE
+-    )
+-    human_all_pids = {caller.principal_id} | ancestors_by_member.get(caller.principal_id, set())
+-    agent_all_pids = (
+-        {caller.agent_principal_id} | ancestors_by_member.get(caller.agent_principal_id, set())
+-        if caller.agent_principal_id is not None
+-        else set()
+-    )
++        group_pids = [
++            p.id
++            for p in principals_by_id.values()
++            if p.principal_type == "GROUP" and p.status == "ACTIVE"
++        ]
++        if group_pids:
++            groups_by_id = {
++                g.id: g
++                for g in (await session.execute(select(Group).where(Group.id.in_(group_pids))))
++                .scalars()
++                .all()
++            }
++            edge_rows = (
++                await session.execute(
++                    select(
++                        PrincipalGroupEdge.group_id,
++                        func.count(distinct(PrincipalGroupEdge.member_id)),
++                    )
++                    .where(PrincipalGroupEdge.group_id.in_(group_pids))
++                    .group_by(PrincipalGroupEdge.group_id)
++                )
++            ).all()
++            edge_counts = {gid: int(cnt or 0) for gid, cnt in edge_rows}
++            for gid in group_pids:
++                group_member_counts[gid] = edge_counts.get(gid, 0) or len(
++                    set(members_by_ancestor.get(gid, []))
++                )
+ 
+     creator_pids: set[uuid.UUID] = set()
+     overridden_issue_ids: list[uuid.UUID] = []
+@@ -1306,36 +1361,6 @@ async def _hydrate_batch_issue_context(  # noqa: C901, PLR0912, PLR0915
+         objects_by_id[o_rec.id] = o_rec
+         workspace_names_by_id[o_rec.workspace_id] = ws_name
+ 
+-    group_pids = [
+-        p.id
+-        for p in principals_by_id.values()
+-        if p.principal_type == "GROUP" and p.status == "ACTIVE"
+-    ]
+-    groups_by_id: dict[uuid.UUID, Group] = {}
+-    group_member_counts: dict[uuid.UUID, int] = {}
+-    if group_pids:
+-        groups_by_id = {
+-            g.id: g
+-            for g in (await session.execute(select(Group).where(Group.id.in_(group_pids))))
+-            .scalars()
+-            .all()
+-        }
+-        edge_rows = (
+-            await session.execute(
+-                select(
+-                    PrincipalGroupEdge.group_id,
+-                    func.count(distinct(PrincipalGroupEdge.member_id)),
+-                )
+-                .where(PrincipalGroupEdge.group_id.in_(group_pids))
+-                .group_by(PrincipalGroupEdge.group_id)
+-            )
+-        ).all()
+-        edge_counts = {gid: int(cnt or 0) for gid, cnt in edge_rows}
+-        for gid in group_pids:
+-            group_member_counts[gid] = edge_counts.get(gid, 0) or len(
+-                set(members_by_ancestor.get(gid, []))
+-            )
+-
+     candidate_archive_ids = [
+         i.id
+         for i in issues
+@@ -1431,7 +1456,7 @@ async def _hydrate_batch_issue_context(  # noqa: C901, PLR0912, PLR0915
+             )
+ 
+     override_reasons_by_issue: dict[uuid.UUID, str | None] = {}
+-    if overridden_issue_ids:
++    if overridden_issue_ids and lod != "summary":
+         act_stmt = (
+             select(ActivityRecord.object_id, ActivityRecord.payload)
+             .where(
+@@ -1503,13 +1528,16 @@ def _batch_resolve_archive_eligibility(
+ 
+ 
+ async def serialize_issues_batch(
+-    session: AsyncSession, caller: PrincipalContext, issues: Sequence[Issue]
++    session: AsyncSession,
++    caller: PrincipalContext,
++    issues: Sequence[Issue],
++    lod: Literal["summary", "standard", "full"] = "full",
+ ) -> list[IssueResponse]:
+     """Batch-assemble canonical IssueResponse models eliminating per-row N+1 queries."""
+     if not issues:
+         return []
+ 
+-    ctx = await _hydrate_batch_issue_context(session, caller, issues)
++    ctx = await _hydrate_batch_issue_context(session, caller, issues, lod=lod)
+     now_utc = datetime.now(UTC)
+     results: list[IssueResponse] = []
+ 
+@@ -1540,8 +1568,6 @@ async def serialize_issues_batch(
+             CycleSummary(id=cycle_obj.id, name=cycle_obj.name) if cycle_obj is not None else None
+         )
+ 
+-        caps = _batch_evaluate_capabilities(caller, issue, ctx)
+-        manifest = await _batch_build_access_manifest(session, caller, issue.id, caps, ctx)
+         provenance = _batch_build_provenance(issue, ctx)
+         sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
+ 
+@@ -1559,16 +1585,26 @@ async def serialize_issues_batch(
+         )
+         latest_gate_verdict = ctx.latest_verdicts_by_issue.get(issue.id)
+ 
++        if lod == "summary":
++            desc_md = None
++            manifest = None
++            caps_list = ["VIEW"]
++        else:
++            desc_md = (
++                scrub_text(issue.description_markdown)
++                if issue.description_markdown
++                else issue.description_markdown
++            )
++            caps = _batch_evaluate_capabilities(caller, issue, ctx)
++            manifest = await _batch_build_access_manifest(session, caller, issue.id, caps, ctx)
++            caps_list = capabilities_to_names(caps)
++
+         res = IssueResponse(
+             id=issue.id,
+             object_id=issue.id,
+             key=f"{project.identifier}-{issue.sequence_id}",
+             summary=issue.summary,
+-            description_markdown=(
+-                scrub_text(issue.description_markdown)
+-                if issue.description_markdown
+-                else issue.description_markdown
+-            ),
++            description_markdown=desc_md,
+             description_sha256=sha256_hex,
+             state=StateSummary(
+                 id=state.id,
+@@ -1594,7 +1630,7 @@ async def serialize_issues_batch(
+             created_by_id=issue.created_by_id,
+             provenance=provenance,
+             access_manifest=manifest,
+-            capabilities=capabilities_to_names(caps),
++            capabilities=caps_list,
+             created_at=issue_created_at,
+             updated_at=issue_updated_at,
+             archived_at=archived_at,
+@@ -2091,6 +2127,7 @@ async def list_issues(  # noqa: PLR0913
+     include_archived: bool = False,
+     only_archived: bool = False,
+     state_group: Sequence[str] | None = None,
++    lod: Literal["summary", "standard", "full"] = "full",
+ ) -> IssueList:
+     """List RLS-visible issues within a project in descending sequence order."""
+     project = await get_project_or_404(session, caller, project_ref)
+@@ -2106,6 +2143,9 @@ async def list_issues(  # noqa: PLR0913
+         )
+     )
+ 
++    if lod == "summary":
++        stmt = stmt.options(defer(Issue.description_markdown))
++
+     if only_archived:
+         stmt = stmt.where(ObjectRecord.archived_at.is_not(None))
+     elif not include_archived:
+@@ -2131,5 +2171,5 @@ async def list_issues(  # noqa: PLR0913
+     page = list(rows[:limit])
+     next_cursor = encode_issue_cursor(page[-1].sequence_id) if len(rows) > limit else None
+ 
+-    items = await serialize_issues_batch(session, caller, page)
++    items = await serialize_issues_batch(session, caller, page, lod=lod)
+     return IssueList(items=items, next_cursor=next_cursor)
+diff --git a/kanban/tests/api/test_issues.py b/kanban/tests/api/test_issues.py
+index 0c820275..589bade1 100644
+--- a/kanban/tests/api/test_issues.py
++++ b/kanban/tests/api/test_issues.py
+@@ -1857,3 +1857,106 @@ async def test_kan85_rls_restricted_parent_and_capability_parity_under_force_rls
+         single_get = await member_client.get(f"/api/v1/issues/{it['key']}")
+         assert single_get.status_code == 200
+         assert it == single_get.json()
++
++
++@pytest.mark.asyncio
++async def test_kan309_list_issues_lod_summary_defers_description_and_omits_access_manifest(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify KAN-309 Problem 1: lod=summary defers description_markdown and access_manifest while preserving row metadata."""
++    admin = await make_user("ttfd_admin", workspace_role="WORKSPACE_ADMIN")
++    admin_client = as_principal(admin)
++    p_resp = await admin_client.post(
++        "/api/v1/projects",
++        json={"name": "TTFD Staged Project", "identifier": "TTFD"},
++    )
++    assert p_resp.status_code == 201
++
++    long_description = "## Detailed Architectural Description\n\n- Point 1\n- Point 2\n- Confidential info"
++    create_resp = await admin_client.post(
++        "/api/v1/projects/TTFD/issues",
++        json={
++            "summary": "High TTFD Ticket",
++            "description_markdown": long_description,
++            "priority": "high",
++        },
++    )
++    assert create_resp.status_code == 201
++    created_issue = create_resp.json()
++    issue_key = created_issue["key"]
++
++    # 1. GET /api/v1/projects/TTFD/issues?lod=summary
++    sum_resp = await admin_client.get("/api/v1/projects/TTFD/issues?lod=summary")
++    assert sum_resp.status_code == 200
++    sum_data = sum_resp.json()
++    assert len(sum_data["items"]) == 1
++    sum_item = sum_data["items"][0]
++
++    assert sum_item["key"] == issue_key
++    assert sum_item["summary"] == "High TTFD Ticket"
++    assert sum_item["description_markdown"] is None
++    assert sum_item["access_manifest"] is None
++    assert sum_item["description_sha256"]
++    assert sum_item["etag"]
++    assert sum_item["state"]["name"]
++    assert sum_item["priority"]["slug"] == "high"
++    assert sum_item["board_rank"]
++    assert sum_item["created_at"]
++    assert sum_item["updated_at"]
++
++    # 2. GET /api/v1/projects/TTFD/issues (default lod=full) and explicit lod=full
++    full_resp = await admin_client.get("/api/v1/projects/TTFD/issues")
++    assert full_resp.status_code == 200
++    full_data = full_resp.json()
++    assert len(full_data["items"]) == 1
++    full_item = full_data["items"][0]
++
++    assert full_item["key"] == issue_key
++    assert full_item["description_markdown"] == long_description
++    assert full_item["access_manifest"] is not None
++    assert full_item["access_manifest"]["pill_label"]
++
++    full_explicit = await admin_client.get("/api/v1/projects/TTFD/issues?lod=full")
++    assert full_explicit.status_code == 200
++    assert full_explicit.json() == full_data
++
++    # 3. GET /api/v1/issues/{issue_key}?lod=summary vs lod=full
++    get_sum = await admin_client.get(f"/api/v1/issues/{issue_key}?lod=summary")
++    assert get_sum.status_code == 200
++    assert get_sum.json()["description_markdown"] is None
++    assert get_sum.json()["access_manifest"] is None
++
++    get_full = await admin_client.get(f"/api/v1/issues/{issue_key}?lod=full")
++    assert get_full.status_code == 200
++    assert get_full.json()["description_markdown"] == long_description
++    assert get_full.json()["access_manifest"] is not None
++
++    # 4. Keyset pagination with lod="summary"
++    create_resp2 = await admin_client.post(
++        "/api/v1/projects/TTFD/issues",
++        json={
++            "summary": "Second TTFD Ticket",
++            "description_markdown": "Second description",
++            "priority": "medium",
++        },
++    )
++    assert create_resp2.status_code == 201
++    paged_resp = await admin_client.get("/api/v1/projects/TTFD/issues?limit=1&lod=summary")
++    assert paged_resp.status_code == 200
++    paged_data = paged_resp.json()
++    assert len(paged_data["items"]) == 1
++    assert paged_data["items"][0]["description_markdown"] is None
++    assert paged_data["items"][0]["access_manifest"] is None
++    assert paged_data["next_cursor"] is not None
++
++    next_page_resp = await admin_client.get(
++        f"/api/v1/projects/TTFD/issues?cursor={paged_data['next_cursor']}&lod=summary"
++    )
++    assert next_page_resp.status_code == 200
++    next_page_data = next_page_resp.json()
++    assert len(next_page_data["items"]) == 1
++    assert next_page_data["items"][0]["description_markdown"] is None
++    assert next_page_data["items"][0]["access_manifest"] is None
++
+diff --git a/kanban/web/openapi.json b/kanban/web/openapi.json
+index 4b99a84a..96cf1f98 100644
+--- a/kanban/web/openapi.json
++++ b/kanban/web/openapi.json
+@@ -6594,7 +6594,14 @@
+         "description": "Canonical issue representation returned by all issue endpoints.",
+         "properties": {
+           "access_manifest": {
+-            "$ref": "#/components/schemas/AccessManifest",
++            "anyOf": [
++              {
++                "$ref": "#/components/schemas/AccessManifest"
++              },
++              {
++                "type": "null"
++              }
++            ],
+             "description": "Anti-enumeration access manifest metadata (S3.4)"
+           },
+           "archive_eligibility": {
+@@ -6686,9 +6693,16 @@
+             "title": "Cycle Id"
+           },
+           "description_markdown": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
+             "description": "Canonical UTF-8 Markdown description body",
+-            "title": "Description Markdown",
+-            "type": "string"
++            "title": "Description Markdown"
+           },
+           "description_sha256": {
+             "description": "Hex-encoded SHA-256 digest of description_markdown for ETag concurrency",
+@@ -6860,14 +6874,12 @@
+           "object_id",
+           "key",
+           "summary",
+-          "description_markdown",
+           "description_sha256",
+           "state",
+           "priority",
+           "board_rank",
+           "created_by_id",
+           "provenance",
+-          "access_manifest",
+           "capabilities",
+           "created_at",
+           "updated_at",
+@@ -17959,8 +17971,8 @@
+   "info": {
+     "title": "👍kanban API",
+     "version": "2.0.0",
+-    "x-build-commit": "afa359979dff",
+-    "x-openapi-bundle-hash": "3cfd6d217e9fbf889877ed98bf8afaefacb756ad6670a6d2177d51e0375045fc"
++    "x-build-commit": "aef08a3f731b",
++    "x-openapi-bundle-hash": "65a536326d8a71ec6c3e20a18baf107f1eaa96c8d77cae598641727ec15fa5dc"
+   },
+   "openapi": "3.1.0",
+   "paths": {
+@@ -27574,6 +27586,23 @@
+               "title": "Workspace"
+             }
+           },
++          {
++            "description": "Level of detail tier: summary, standard, or full",
++            "in": "query",
++            "name": "lod",
++            "required": false,
++            "schema": {
++              "default": "full",
++              "description": "Level of detail tier: summary, standard, or full",
++              "enum": [
++                "summary",
++                "standard",
++                "full"
++              ],
++              "title": "Lod",
++              "type": "string"
++            }
++          },
+           {
+             "in": "header",
+             "name": "if-none-match",
+@@ -32836,6 +32865,23 @@
+               "description": "Optional workflow state_group filter",
+               "title": "State Group"
+             }
++          },
++          {
++            "description": "Level of detail tier: summary, standard, or full",
++            "in": "query",
++            "name": "lod",
++            "required": false,
++            "schema": {
++              "default": "full",
++              "description": "Level of detail tier: summary, standard, or full",
++              "enum": [
++                "summary",
++                "standard",
++                "full"
++              ],
++              "title": "Lod",
++              "type": "string"
++            }
+           }
+         ],
+         "responses": {
+diff --git a/kanban/web/src/api/schema.gen.ts b/kanban/web/src/api/schema.gen.ts
+index c6866aa2..0e466558 100644
+--- a/kanban/web/src/api/schema.gen.ts
++++ b/kanban/web/src/api/schema.gen.ts
+@@ -8384,7 +8384,7 @@ export interface components {
+          */
+         IssueResponse: {
+             /** @description Anti-enumeration access manifest metadata (S3.4) */
+-            access_manifest: components["schemas"]["AccessManifest"];
++            access_manifest?: components["schemas"]["AccessManifest"] | null;
+             /** @description Archiving eligibility status and reason */
+             archive_eligibility: components["schemas"]["ArchiveEligibility"];
+             /**
+@@ -8430,7 +8430,7 @@ export interface components {
+              * Description Markdown
+              * @description Canonical UTF-8 Markdown description body
+              */
+-            description_markdown: string;
++            description_markdown?: string | null;
+             /**
+              * Description Sha256
+              * @description Hex-encoded SHA-256 digest of description_markdown for ETag concurrency
+@@ -19814,6 +19814,8 @@ export interface operations {
+             query?: {
+                 /** @description Optional workspace slug or UUID */
+                 workspace?: string | null;
++                /** @description Level of detail tier: summary, standard, or full */
++                lod?: "summary" | "standard" | "full";
+             };
+             header?: {
+                 "if-none-match"?: string | null;
+@@ -22872,6 +22874,8 @@ export interface operations {
+                 only_archived?: boolean;
+                 /** @description Optional workflow state_group filter */
+                 state_group?: ("backlog" | "unstarted" | "started" | "completed" | "cancelled")[] | null;
++                /** @description Level of detail tier: summary, standard, or full */
++                lod?: "summary" | "standard" | "full";
+             };
+             header?: never;
+             path: {
+diff --git a/kanban/web/src/features/board/BoardView.tsx b/kanban/web/src/features/board/BoardView.tsx
+index 78382c6b..c943926d 100644
+--- a/kanban/web/src/features/board/BoardView.tsx
++++ b/kanban/web/src/features/board/BoardView.tsx
+@@ -84,6 +84,7 @@ export function BoardView({
+       return data;
+     },
+     enabled: propStates === undefined,
++    staleTime: 60_000,
+   });
+ 
+   const resolvedProjectId =
+@@ -145,7 +146,7 @@ export function BoardView({
+     queryKey: qk.issues(projectKey, {}),
+     queryFn: async ({ signal }): Promise<BoardIssue[]> =>
+       fetchAllBoardIssues(projectKey, { signal }),
+-    enabled: propIssues === undefined,
++    enabled: propIssues === undefined && Boolean(projectKey),
+     initialData: propIssues,
+   });
+ 
+diff --git a/kanban/web/src/features/board/boardApi.ts b/kanban/web/src/features/board/boardApi.ts
+index e538a8d7..21e8cbe9 100644
+--- a/kanban/web/src/features/board/boardApi.ts
++++ b/kanban/web/src/features/board/boardApi.ts
+@@ -69,6 +69,7 @@ export interface BoardWorkflowState {
+ export interface FetchAllBoardIssuesOptions {
+   pageSize?: number | undefined;
+   maxPages?: number | undefined;
++  lod?: 'summary' | 'standard' | 'full' | undefined;
+   signal?: AbortSignal | undefined;
+ }
+ 
+@@ -89,6 +90,7 @@ export async function fetchAllBoardIssues(
+   const seenKeys = new Set<string>();
+   const seenCursors = new Set<string>();
+   let cursor: string | null = null;
++  const lod = options.lod ?? 'summary';
+ 
+   for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
+     if (options.signal?.aborted) {
+@@ -101,7 +103,7 @@ export async function fetchAllBoardIssues(
+ 
+     const data: unknown = await apiFetch('GET', '/api/v1/projects/{project_ref}/issues', {
+       params: { project_ref: projectKey },
+-      query: { limit, ...(cursor ? { cursor } : {}) },
++      query: { limit, lod, ...(cursor ? { cursor } : {}) },
+       ...(options.signal ? { signal: options.signal } : {}),
+     });
+ 
+diff --git a/kanban/web/src/features/drawer/IssueSurface.test.tsx b/kanban/web/src/features/drawer/IssueSurface.test.tsx
+index 470e7068..a90a674c 100644
+--- a/kanban/web/src/features/drawer/IssueSurface.test.tsx
++++ b/kanban/web/src/features/drawer/IssueSurface.test.tsx
+@@ -13,6 +13,7 @@ import * as breakpoints from '../../styles/breakpoints';
+ import * as autoConvertPasteMod from '../../editor/clipboard/autoConvertPaste';
+ import * as hiddenDomPrunerMod from '../../editor/clipboard/hiddenDomPruner';
+ import * as viewsApi from '../views/viewsApi';
++import type { IssueItem } from '../views/viewsApi';
+ import * as railApi from '../drawer-rail/railApi';
+ import * as clipboardUtils from '../../utils/clipboard';
+ 
+@@ -2393,5 +2394,150 @@ describe('IssueSurface', () => {
+ 
+       unmount();
+     });
++
++    it('KAN-309: seeds placeholderData from summary items for immediate header/state/priority display and shows issue-description-skeleton during lazy lod=full hydration', async () => {
++      const summaryItem: IssueItem = {
++        id: '01931234-5678-7000-8000-000000000309',
++        key: 'KAN-309',
++        summary: 'Instant Summary Title from Staged Load',
++        state: { id: 's-in-prog', name: 'In Progress', group: 'started' },
++        priority: { slug: 'urgent', label: 'Urgent', emoji: '🔥' },
++        assignees: [
++          {
++            id: 'asg-309',
++            kind: 'principal',
++            principal: { id: 'u-309', handle: 'architect', display_name: 'Lead Architect', type: 'USER' },
++          },
++        ],
++      };
++
++      const fullItem: IssueDetail = {
++        id: summaryItem.id,
++        key: summaryItem.key,
++        object_id: summaryItem.id,
++        project_key: 'KAN',
++        summary: summaryItem.summary,
++        state: summaryItem.state,
++        priority: { slug: 'urgent', label: 'Urgent', emoji: '🔥' },
++        etag: '"etag-309-full"',
++        description_markdown: '### Detailed Specification Hydrated via lod=full\n\nAll lazy data loaded.',
++        capabilities: ['EDIT', 'TRANSITION', 'COMMENT'],
++      };
++
++      let resolveFullIssue!: (val: unknown) => void;
++      const fullPromise = new Promise((resolve) => {
++        resolveFullIssue = resolve;
++      });
++
++      const getSpy = vi.spyOn(apiClient, 'get').mockImplementation((path: string, options?: unknown) => {
++        if (typeof path === 'string' && path.includes('issues/')) {
++          const opts = options as { query?: { lod?: string } } | undefined;
++          expect(opts?.query?.lod).toBe('full');
++          return fullPromise.then(() => fullItem);
++        }
++        return Promise.resolve({});
++      });
++
++      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      const { unmount } = render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
++            <IssueSurfaceRoot
++              mode="drawer"
++              issueKey="KAN-309"
++              projectKey="KAN"
++              issuesList={[summaryItem]}
++            />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      // Instant hydration from placeholderData: header, summary title, state, priority, assignees exist immediately
++      expect(screen.getByText('Instant Summary Title from Staged Load')).toBeDefined();
++      expect(screen.getByText('Lead Architect')).toBeDefined();
++      expect(screen.getByText('Urgent')).toBeDefined();
++
++      // Description skeleton is shown while lod=full request is in-flight
++      expect(screen.getByTestId('issue-description-skeleton')).toBeDefined();
++      expect(screen.queryByText('Detailed Specification Hydrated via lod=full')).toBeNull();
++
++      // Resolve full issue
++      resolveFullIssue(null);
++
++      // Skeleton replaced by rendered markdown description
++      await waitFor(() => {
++        expect(screen.queryByTestId('issue-description-skeleton')).toBeNull();
++      });
++      expect(screen.getByText('Detailed Specification Hydrated via lod=full')).toBeDefined();
++
++      getSpy.mockRestore();
++      unmount();
++    });
++
++    it('KAN-309: renders issue-description-skeleton in split mode while description loads', async () => {
++      const summaryItem: IssueItem = {
++        id: '01931234-5678-7000-8000-000000000310',
++        key: 'KAN-310',
++        summary: 'Split Mode Summary Title',
++        state: { id: 's-todo', name: 'Todo', group: 'unstarted' },
++        priority: { slug: 'low', label: 'Low', emoji: '☕' },
++      };
++
++      const fullItem: IssueDetail = {
++        id: summaryItem.id,
++        key: summaryItem.key,
++        object_id: summaryItem.id,
++        project_key: 'KAN',
++        summary: summaryItem.summary,
++        state: summaryItem.state,
++        priority: { slug: 'low', label: 'Low', emoji: '☕' },
++        etag: '"etag-310-full"',
++        description_markdown: '### Split Mode Markdown Body',
++        capabilities: ['EDIT', 'TRANSITION'],
++      };
++
++      let resolveFull!: (val: unknown) => void;
++      const fullPromise = new Promise((resolve) => {
++        resolveFull = resolve;
++      });
++
++      const getSpy = vi.spyOn(apiClient, 'get').mockImplementation((path: string) => {
++        if (typeof path === 'string' && path.includes('issues/')) {
++          return fullPromise.then(() => fullItem);
++        }
++        return Promise.resolve({});
++      });
++
++      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
++      const { unmount } = render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KAN-310']}>
++            <IssueSurfaceRoot
++              mode="split"
++              issueKey="KAN-310"
++              projectKey="KAN"
++              issuesList={[summaryItem]}
++            />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      // Instant title rendered
++      expect(screen.getByText('Split Mode Summary Title')).toBeDefined();
++
++      // Skeleton visible in split mode
++      expect(screen.getByTestId('issue-description-skeleton')).toBeDefined();
++
++      // Resolve full issue
++      resolveFull(null);
++
++      await waitFor(() => {
++        expect(screen.queryByTestId('issue-description-skeleton')).toBeNull();
++      });
++      expect(screen.getByText('Split Mode Markdown Body')).toBeDefined();
++
++      getSpy.mockRestore();
++      unmount();
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/drawer/IssueSurface.tsx b/kanban/web/src/features/drawer/IssueSurface.tsx
+index e27fb915..f7c94fa5 100644
+--- a/kanban/web/src/features/drawer/IssueSurface.tsx
++++ b/kanban/web/src/features/drawer/IssueSurface.tsx
+@@ -327,16 +327,49 @@ function IssueSurfaceContent({
+     data: issue,
+     error,
+     isLoading,
++    isPlaceholderData,
+     refetch,
+   } = useQuery<IssueDetail>({
+     queryKey: qk.issue(issueKey),
+     queryFn: async () => {
+       const raw = (await apiClient.get(
+         '/api/v1/issues/{issue_key}',
+-        { params: { issue_key: issueKey } },
++        {
++          params: { issue_key: issueKey },
++          query: { lod: 'full' },
++        },
+       )) as unknown as IssueDetail;
+       return normalizeIssueDetail(raw, projectKey);
+     },
++    placeholderData: () => {
++      if (issuesList && issuesList.length > 0) {
++        const found = issuesList.find((it) => it.key === issueKey || it.id === issueKey);
++        if (found) {
++          return normalizeIssueDetail(found as unknown as IssueDetail, projectKey);
++        }
++      }
++      const cachedQueries = queryClient.getQueriesData({
++        queryKey: ['issues'],
++      });
++      for (const [, queryData] of cachedQueries) {
++        if (!queryData) continue;
++        let items: IssueItem[] = [];
++        if (Array.isArray(queryData)) {
++          items = queryData as IssueItem[];
++        } else if (
++          typeof queryData === 'object' &&
++          'items' in queryData &&
++          Array.isArray((queryData as { items?: unknown }).items)
++        ) {
++          items = (queryData as { items: IssueItem[] }).items;
++        }
++        const match = items.find((it) => it.key === issueKey || it.id === issueKey);
++        if (match) {
++          return normalizeIssueDetail(match as unknown as IssueDetail, projectKey);
++        }
++      }
++      return undefined;
++    },
+     staleTime: 60_000,
+   });
+ 
+@@ -1237,6 +1270,15 @@ function IssueSurfaceContent({
+               </button>
+             </div>
+           </div>
++        ) : (isPlaceholderData || currentIssue.description_markdown === undefined || currentIssue.description_markdown === null) ? (
++          <div
++            data-testid="issue-description-skeleton"
++            className="surface__description-skeleton surface__skeleton"
++            aria-busy="true"
++            aria-label="Loading description..."
++          >
++            <div className="surface__skeleton-line surface__skeleton-line--body" />
++          </div>
+         ) : (
+           <div className="surface__description-wrap">
+             <div
+@@ -1806,6 +1848,15 @@ function IssueSurfaceContent({
+                             </button>
+                           </div>
+                         </div>
++                      ) : (isPlaceholderData || currentIssue.description_markdown === undefined || currentIssue.description_markdown === null) ? (
++                        <div
++                          data-testid="issue-description-skeleton"
++                          className="surface__description-skeleton surface__skeleton"
++                          aria-busy="true"
++                          aria-label="Loading description..."
++                        >
++                          <div className="surface__skeleton-line surface__skeleton-line--body" />
++                        </div>
+                       ) : (
+                         <div className="surface__description-wrap">
+                           <div
+diff --git a/kanban/web/src/features/views/viewRegistry.test.tsx b/kanban/web/src/features/views/viewRegistry.test.tsx
+index dfe57be6..f81ebe8c 100644
+--- a/kanban/web/src/features/views/viewRegistry.test.tsx
++++ b/kanban/web/src/features/views/viewRegistry.test.tsx
+@@ -2786,7 +2786,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+           queryClient={qcEmpty}
+         />,
+       );
+-      expect(screen.getByText('Missing id and group in state')).toBeDefined();
++      expect(screen.getAllByText('Missing id and group in state').length).toBeGreaterThan(0);
+ 
+       // Trigger priority and state change on issue without prevPriority/prevState when patch fails
+       fireEvent.keyDown(window, { key: 'j' });
+@@ -2923,5 +2923,100 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+       expect(screen.queryByTestId('issue-list-card-KAN-303')).toBeNull();
+       unmount2();
+     });
++
++    it('KAN-309: renders Phase 1 issues immediately, shows staged loading indicator during Phase 2, and completes single-flight hydration', async () => {
++      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
++      document.cookie = 'kb_csrf=test-csrf-staged; path=/';
++
++      const liveStates = [
++        { id: 's-todo', name: 'Todo', group: 'unstarted', sort_order: 10 },
++        { id: 's-done', name: 'Done', group: 'completed', sort_order: 20 },
++      ];
++
++      const page1Issues = [
++        {
++          id: '01931234-5678-7000-8000-000000000201',
++          key: 'KAN-201',
++          summary: 'Phase 1 First Issue',
++          state: { id: 's-todo', name: 'Todo', group: 'unstarted' },
++          priority: { slug: 'high', label: 'High' },
++        },
++      ];
++
++      const page2Issues = [
++        {
++          id: '01931234-5678-7000-8000-000000000202',
++          key: 'KAN-202',
++          summary: 'Phase 2 Second Issue',
++          state: { id: 's-todo', name: 'Todo', group: 'unstarted' },
++          priority: { slug: 'medium', label: 'Medium' },
++        },
++      ];
++
++      let issueRequestCount = 0;
++      let resolvePage2!: (val: unknown) => void;
++      const page2Promise = new Promise((resolve) => {
++        resolvePage2 = resolve;
++      });
++
++      globalThis.fetch = vi.fn().mockImplementation((input: string | URL | Request) => {
++        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
++        if (url.endsWith('/states')) {
++          return Promise.resolve({
++            ok: true,
++            json: () => Promise.resolve({ items: liveStates }),
++          });
++        }
++        if (url.includes('/issues')) {
++          issueRequestCount += 1;
++          if (issueRequestCount === 1) {
++            return Promise.resolve({
++              ok: true,
++              json: () => Promise.resolve({
++                items: page1Issues,
++                next_cursor: 'cursor-p2',
++                total: 2,
++              }),
++            });
++          }
++          return page2Promise.then(() => ({
++            ok: true,
++            json: () => Promise.resolve({
++              items: page2Issues,
++              next_cursor: null,
++              total: 2,
++            }),
++          }));
++        }
++        return Promise.resolve({
++          ok: true,
++          json: () => Promise.resolve({}),
++        });
++      });
++
++      const { unmount } = render(
++        <IssuesWorkspaceRoute projectKey="KAN" initialLayout="list" />,
++      );
++
++      // Phase 1 renders immediately
++      await waitFor(() => {
++        expect(screen.getByTestId('issue-list-card-KAN-201')).toBeDefined();
++      });
++
++      // Indicator is displayed while Phase 2 is pending
++      expect(screen.getByTestId('issues-staged-loading-indicator')).toBeDefined();
++      expect(screen.queryByTestId('issue-list-card-KAN-202')).toBeNull();
++
++      // Resolve Phase 2
++      resolvePage2(null);
++
++      // Both issues are rendered and staged loading indicator is removed
++      await waitFor(() => {
++        expect(screen.getByTestId('issue-list-card-KAN-202')).toBeDefined();
++      });
++      expect(screen.queryByTestId('issues-staged-loading-indicator')).toBeNull();
++
++      unmount();
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
+index 3e4eb716..04c5576a 100644
+--- a/kanban/web/src/features/views/viewRegistry.tsx
++++ b/kanban/web/src/features/views/viewRegistry.tsx
+@@ -35,6 +35,7 @@ import { useIssueKeyboardMap } from './useIssueKeyboardMap';
+ import { announce } from '../../realtime';
+ import {
+   fetchAllProjectIssues,
++  fetchStagedProjectIssues,
+   fetchProjectStates,
+   fetchProjectSavedViews,
+   createProjectIssue,
+@@ -301,14 +302,17 @@ export function IssuesWorkspaceRoute({
+     return 0;
+   });
+ 
++  const [isStagedLoading, setIsStagedLoading] = useState<boolean>(false);
++  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(isLiveMode);
++
+   const issuesQuery = useQuery(
+     {
+       queryKey: qk.issues(projectKey, {}),
+       queryFn: async ({ signal }) => {
+-        const res = await fetchAllProjectIssues(projectKey, { signal });
++        const res = await fetchAllProjectIssues(projectKey, { signal, lod: 'summary' });
+         return res.items;
+       },
+-      enabled: Boolean(projectKey) && isLiveMode,
++      enabled: false,
+       initialData: initialIssues,
+     },
+     queryClient,
+@@ -383,19 +387,36 @@ export function IssuesWorkspaceRoute({
+       currentController?.abort();
+       const controller = new AbortController();
+       currentController = controller;
++      setIsInitialLoading(true);
+       void Promise.all([
+-        fetchAllProjectIssues(projectKey, { signal: controller.signal }),
++        fetchStagedProjectIssues(projectKey, {
++          signal: controller.signal,
++          lod: 'summary',
++          onPhase1: (phase1Items, hasMore) => {
++            if (!active || controller.signal.aborted) return;
++            setIssues(phase1Items);
++            setIsInitialLoading(false);
++            if (hasMore) {
++              setIsStagedLoading(true);
++            }
++          },
++        }),
+         fetchProjectStates(projectKey).catch((): StateSummary[] => []),
+       ])
+         .then(([issuesRes, statesRes]) => {
+           if (!active || controller.signal.aborted) return;
+           setIssues(issuesRes.items);
++          setIsStagedLoading(false);
++          setIsInitialLoading(false);
+           if (statesRes.length > 0) {
+             setProjectStates(statesRes);
+           }
+         })
+         .catch(() => {
+-          // Preserve existing state on offline/transient/abort error
++          if (active && !controller.signal.aborted) {
++            setIsStagedLoading(false);
++            setIsInitialLoading(false);
++          }
+         });
+     };
+     refreshLive();
+@@ -1206,6 +1227,16 @@ export function IssuesWorkspaceRoute({
+         data-testid="issues-workspace"
+         data-layout={layout}
+       >
++        {isStagedLoading && (
++          <div
++            data-testid="issues-staged-loading-indicator"
++            className="issues-staged-loading-indicator"
++            role="status"
++            aria-live="polite"
++          >
++            Loading additional issues...
++          </div>
++        )}
+         {/* 1. Filter and Display Bar */}
+       {layout === 'list' ? (
+         <IssueNavigatorBar
+@@ -1297,7 +1328,7 @@ export function IssuesWorkspaceRoute({
+           <div className="kb-split-list-pane">
+             <ListView
+               issues={sortedRailIssues}
+-              isLoading={issuesQuery.isLoading}
++              isLoading={isInitialLoading || issuesQuery.isLoading}
+               projectKey={projectKey}
+               projectStates={projectStates}
+               modulesEnabled={modulesEnabled}
+diff --git a/kanban/web/src/features/views/viewsApi.test.ts b/kanban/web/src/features/views/viewsApi.test.ts
+index b493b228..abb6adce 100644
+--- a/kanban/web/src/features/views/viewsApi.test.ts
++++ b/kanban/web/src/features/views/viewsApi.test.ts
+@@ -1,6 +1,8 @@
+ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+ import {
+   fetchProjectIssues,
++  fetchAllProjectIssues,
++  fetchStagedProjectIssues,
+   fetchProjectStates,
+   createProjectIssue,
+   patchProjectIssue,
+@@ -421,4 +423,113 @@ describe('viewsApi', () => {
+     globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, status: 204 });
+     await deleteProjectIssue('KAN-99');
+   });
++
++  describe('KAN-309: single-flight staged loading and lod=summary support', () => {
++    it('fetchProjectIssues appends lod query parameter to request URL', async () => {
++      let requestedUrl = '';
++      globalThis.fetch = vi.fn().mockImplementation((input: string | URL | Request) => {
++        requestedUrl = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
++        return Promise.resolve({
++          ok: true,
++          json: () => Promise.resolve({ items: [], next_cursor: null }),
++        });
++      });
++
++      await fetchProjectIssues('KAN', { lod: 'summary', limit: 50 });
++      expect(requestedUrl).toContain('lod=summary');
++      expect(requestedUrl).toContain('limit=50');
++
++      await fetchProjectIssues('KAN', { lod: 'full' });
++      expect(requestedUrl).toContain('lod=full');
++    });
++
++    it('fetchAllProjectIssues defaults to lod=summary and traverses pages', async () => {
++      const urls: string[] = [];
++      globalThis.fetch = vi.fn().mockImplementation((input: string | URL | Request) => {
++        const u = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
++        urls.push(u);
++        if (urls.length === 1) {
++          return Promise.resolve({
++            ok: true,
++            json: () => Promise.resolve({
++              items: [{ id: '1', key: 'KAN-1', summary: 'Item 1' }],
++              next_cursor: 'cursor-2',
++            }),
++          });
++        }
++        return Promise.resolve({
++          ok: true,
++          json: () => Promise.resolve({
++            items: [{ id: '2', key: 'KAN-2', summary: 'Item 2' }],
++            next_cursor: null,
++          }),
++        });
++      });
++
++      const res = await fetchAllProjectIssues('KAN');
++      expect(res.items).toHaveLength(2);
++      expect(res.pagesFetched).toBe(2);
++      expect(urls[0]).toContain('lod=summary');
++      expect(urls[1]).toContain('lod=summary');
++    });
++
++    it('fetchStagedProjectIssues executes Phase 1 onPhase1 callback immediately and hydrates remaining pages in Phase 2', async () => {
++      const phase1Callbacks: { itemsCount: number; hasMore: boolean }[] = [];
++      const urls: string[] = [];
++
++      globalThis.fetch = vi.fn().mockImplementation((input: string | URL | Request) => {
++        const u = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
++        urls.push(u);
++        if (urls.length === 1) {
++          return Promise.resolve({
++            ok: true,
++            json: () => Promise.resolve({
++              items: [
++                { id: '1', key: 'KAN-1', summary: 'Page 1 Item 1' },
++                { id: '2', key: 'KAN-2', summary: 'Page 1 Item 2' },
++              ],
++              next_cursor: 'cursor-phase2',
++            }),
++          });
++        }
++        return Promise.resolve({
++          ok: true,
++          json: () => Promise.resolve({
++            items: [
++              { id: '3', key: 'KAN-3', summary: 'Page 2 Item 3' },
++            ],
++            next_cursor: null,
++          }),
++        });
++      });
++
++      const res = await fetchStagedProjectIssues('KAN', {
++        onPhase1: (items, hasMore) => {
++          phase1Callbacks.push({ itemsCount: items.length, hasMore });
++        },
++      });
++
++      expect(phase1Callbacks).toEqual([
++        { itemsCount: 2, hasMore: true },
++      ]);
++      expect(res.items).toHaveLength(3);
++      expect(res.pagesFetched).toBe(2);
++      expect(urls[0]).toContain('lod=summary');
++    });
++
++    it('fetchStagedProjectIssues aborts cleanly when signal is aborted', async () => {
++      const controller = new AbortController();
++      controller.abort();
++
++      await expect(
++        fetchStagedProjectIssues('KAN', { signal: controller.signal }),
++      ).rejects.toThrow();
++    });
++
++    it('fetchStagedProjectIssues returns empty for blank projectKey', async () => {
++      const res = await fetchStagedProjectIssues('');
++      expect(res.items).toEqual([]);
++      expect(res.pagesFetched).toBe(0);
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/views/viewsApi.ts b/kanban/web/src/features/views/viewsApi.ts
+index 73c410c3..bbd5bcd7 100644
+--- a/kanban/web/src/features/views/viewsApi.ts
++++ b/kanban/web/src/features/views/viewsApi.ts
+@@ -160,6 +160,7 @@ export interface IssueQueryParams {
+   sort_dir?: SortDirection;
+   cursor?: string | null;
+   limit?: number;
++  lod?: 'summary' | 'standard' | 'full';
+   signal?: AbortSignal | undefined;
+ }
+ 
+@@ -168,9 +169,14 @@ export interface FetchAllProjectIssuesOptions {
+   maxPages?: number | undefined;
+   sort_by?: string | undefined;
+   sort_dir?: SortDirection | undefined;
++  lod?: 'summary' | 'standard' | 'full' | undefined;
+   signal?: AbortSignal | undefined;
+ }
+ 
++export interface FetchStagedProjectIssuesOptions extends FetchAllProjectIssuesOptions {
++  onPhase1?: ((items: IssueItem[], hasMore: boolean) => void) | undefined;
++}
++
+ export interface FetchAllProjectIssuesResult {
+   items: IssueItem[];
+   pagesFetched: number;
+@@ -303,6 +309,7 @@ export async function fetchProjectIssues(
+   if (params.limit) searchParams.set('limit', String(params.limit));
+   if (params.sort_by) searchParams.set('sort_by', params.sort_by);
+   if (params.sort_dir && params.sort_dir !== 'none') searchParams.set('sort_dir', params.sort_dir);
++  if (params.lod) searchParams.set('lod', params.lod);
+ 
+   const queryStr = searchParams.toString();
+   const url = `/api/v1/projects/${encodeURIComponent(projectKey)}/issues${queryStr ? `?${queryStr}` : ''}`;
+@@ -359,6 +366,7 @@ export async function fetchAllProjectIssues(
+   const seenCursors = new Set<string>();
+   let cursor: string | null = null;
+   let pagesFetched = 0;
++  const lod = options.lod ?? 'summary';
+ 
+   for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
+     if (options.signal?.aborted) {
+@@ -371,6 +379,7 @@ export async function fetchAllProjectIssues(
+ 
+     const page = await fetchProjectIssues(projectKey, {
+       limit,
++      lod,
+       ...(cursor ? { cursor } : {}),
+       ...(options.sort_by ? { sort_by: options.sort_by } : {}),
+       ...(options.sort_dir ? { sort_dir: options.sort_dir } : {}),
+@@ -405,6 +414,113 @@ export async function fetchAllProjectIssues(
+   return { items, pagesFetched, truncated: cursor !== null };
+ }
+ 
++/**
++ * Single-flight two-phase staged loading for project issues (KB-ISSUES-TTFD-01).
++ * Phase 1 fetches page 1 with lod=summary and renders immediately via onPhase1 callback.
++ * Phase 2 traverses any remaining pages in the background with signal cancellation.
++ */
++export async function fetchStagedProjectIssues(
++  projectKey: string,
++  options: FetchStagedProjectIssuesOptions = {},
++): Promise<FetchAllProjectIssuesResult> {
++  if (!projectKey || projectKey === 'undefined') {
++    return { items: [], pagesFetched: 0, truncated: false };
++  }
++
++  const maxPages = Math.max(options.maxPages ?? DEFAULT_MAX_ISSUE_PAGES, 1);
++  const limit = Math.min(Math.max(options.pageSize ?? DEFAULT_ISSUES_PAGE_SIZE, 1), 100);
++  const items: IssueItem[] = [];
++  const seenKeys = new Set<string>();
++  const seenCursors = new Set<string>();
++  let cursor: string | null = null;
++  let pagesFetched = 0;
++  const lod = options.lod ?? 'summary';
++
++  // Phase 1: Fetch first page
++  if (options.signal?.aborted) {
++    const reason: unknown = options.signal.reason;
++    if (reason instanceof Error || reason instanceof DOMException) {
++      throw reason;
++    }
++    throw new DOMException('Aborted', 'AbortError');
++  }
++
++  const page1 = await fetchProjectIssues(projectKey, {
++    limit,
++    lod,
++    ...(options.sort_by ? { sort_by: options.sort_by } : {}),
++    ...(options.sort_dir ? { sort_dir: options.sort_dir } : {}),
++    ...(options.signal ? { signal: options.signal } : {}),
++  });
++
++  for (const item of page1.items) {
++    const dedupKey = item.key || item.id;
++    if (dedupKey) {
++      if (seenKeys.has(dedupKey)) continue;
++      seenKeys.add(dedupKey);
++    }
++    items.push(item);
++  }
++  pagesFetched += 1;
++
++  const hasMore = Boolean(page1.next_cursor && page1.items.length > 0 && maxPages > 1);
++  if (options.onPhase1) {
++    options.onPhase1([...items], hasMore);
++  }
++
++  if (!hasMore) {
++    return { items, pagesFetched, truncated: false };
++  }
++
++  cursor = page1.next_cursor;
++  if (cursor) {
++    seenCursors.add(cursor);
++  }
++
++  // Phase 2: Traverse remaining pages in background
++  for (let pageIndex = 1; pageIndex < maxPages; pageIndex += 1) {
++    if (options.signal?.aborted) {
++      const reason: unknown = options.signal.reason;
++      if (reason instanceof Error || reason instanceof DOMException) {
++        throw reason;
++      }
++      throw new DOMException('Aborted', 'AbortError');
++    }
++
++    const page = await fetchProjectIssues(projectKey, {
++      limit,
++      lod,
++      cursor,
++      ...(options.sort_by ? { sort_by: options.sort_by } : {}),
++      ...(options.sort_dir ? { sort_dir: options.sort_dir } : {}),
++      ...(options.signal ? { signal: options.signal } : {}),
++    });
++
++    for (const item of page.items) {
++      const dedupKey = item.key || item.id;
++      if (dedupKey) {
++        if (seenKeys.has(dedupKey)) continue;
++        seenKeys.add(dedupKey);
++      }
++      items.push(item);
++    }
++    pagesFetched += 1;
++
++    if (!page.next_cursor || page.items.length === 0) {
++      return { items, pagesFetched, truncated: false };
++    }
++
++    if (seenCursors.has(page.next_cursor)) {
++      return { items, pagesFetched, truncated: true };
++    }
++
++    seenCursors.add(page.next_cursor);
++    cursor = page.next_cursor;
++  }
++
++  return { items, pagesFetched, truncated: cursor !== null };
++}
++
+ /**
+  * Fetch workflow states for a project from GET /api/v1/projects/:projectKey/states.
+  */

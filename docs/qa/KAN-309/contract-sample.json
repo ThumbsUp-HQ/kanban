@@ -1,0 +1,124 @@
+{
+  "summary_lod_sample": {
+    "endpoint": "GET /api/v1/projects/KAN/issues?lod=summary&limit=100",
+    "description": "Level-of-detail summary payload: description_markdown deferred/null, access_manifest omitted/null, fast single-tier capabilities, preserving all card and row display metadata",
+    "item": {
+      "id": "01931234-5678-7000-8000-000000000309",
+      "key": "KAN-309",
+      "summary": "Cut Issues View Time-to-First-Display on 300+ Tickets via Single-Flight Staged Loading, Batched lod=summary API, and Lazy Issue Detail Hydration",
+      "state_id": "01931234-5678-7000-8000-000000000003",
+      "state": {
+        "id": "01931234-5678-7000-8000-000000000003",
+        "name": "In Progress",
+        "group": "started",
+        "color_hex": "#3b82f6",
+        "sort_order": 30
+      },
+      "priority": {
+        "slug": "urgent",
+        "label": "Urgent",
+        "emoji": "🔥",
+        "sort_order": 1
+      },
+      "assignees": [
+        {
+          "id": "01931234-5678-7000-8000-000000000010",
+          "kind": "principal",
+          "principal": {
+            "id": "01931234-5678-7000-8000-000000000010",
+            "handle": "b-kan309",
+            "display_name": "Performance Specialist",
+            "type": "USER"
+          }
+        }
+      ],
+      "labels": [
+        {
+          "id": "01931234-5678-7000-8000-000000000050",
+          "name": "performance",
+          "color_hex": "#10b981"
+        }
+      ],
+      "cycle_id": null,
+      "cycle": null,
+      "module_ids": [],
+      "modules": [],
+      "board_rank": "0|hzzzzz:",
+      "gate_status": null,
+      "pending_gate": null,
+      "latest_gate_verdict": null,
+      "has_explicit_acl": false,
+      "description_markdown": null,
+      "description_sha256": "3a7b9c1d8e2f0a4b6c8d1e3f5a7b9c1d8e2f0a4b6c8d1e3f5a7b9c1d8e2f0a4b",
+      "capabilities": ["VIEW"],
+      "access_manifest": null,
+      "etag": "\"3a7b9c1d8e2f0a4b6c8d1e3f5a7b9c1d8e2f0a4b6c8d1e3f5a7b9c1d8e2f0a4b\"",
+      "created_at": "2026-11-22T10:00:00Z",
+      "updated_at": "2026-11-22T11:00:00Z"
+    }
+  },
+  "full_lod_sample": {
+    "endpoint": "GET /api/v1/issues/KAN-309?lod=full",
+    "description": "Level-of-detail full payload: lazy hydrated issue surface payload including complete description_markdown, full access_manifest permissions, comments, and audit provenance",
+    "item": {
+      "id": "01931234-5678-7000-8000-000000000309",
+      "object_id": "01931234-5678-7000-8000-000000000309",
+      "key": "KAN-309",
+      "project_key": "KAN",
+      "summary": "Cut Issues View Time-to-First-Display on 300+ Tickets via Single-Flight Staged Loading, Batched lod=summary API, and Lazy Issue Detail Hydration",
+      "state_id": "01931234-5678-7000-8000-000000000003",
+      "state": {
+        "id": "01931234-5678-7000-8000-000000000003",
+        "name": "In Progress",
+        "group": "started",
+        "color_hex": "#3b82f6",
+        "sort_order": 30
+      },
+      "priority": {
+        "slug": "urgent",
+        "label": "Urgent",
+        "emoji": "🔥",
+        "sort_order": 1
+      },
+      "assignees": [
+        {
+          "id": "01931234-5678-7000-8000-000000000010",
+          "kind": "principal",
+          "principal": {
+            "id": "01931234-5678-7000-8000-000000000010",
+            "handle": "b-kan309",
+            "display_name": "Performance Specialist",
+            "type": "USER"
+          }
+        }
+      ],
+      "labels": [
+        {
+          "id": "01931234-5678-7000-8000-000000000050",
+          "name": "performance",
+          "color_hex": "#10b981"
+        }
+      ],
+      "cycle_id": null,
+      "cycle": null,
+      "module_ids": [],
+      "modules": [],
+      "board_rank": "0|hzzzzz:",
+      "gate_status": null,
+      "pending_gate": null,
+      "latest_gate_verdict": null,
+      "has_explicit_acl": false,
+      "description_markdown": "### Technical Implementation Overview\n\n1. Single-Flight two-phase staged loading in viewsApi.\n2. Defer description_markdown when lod=summary.\n3. Lazy drawer hydration with skeleton placeholder.",
+      "description_sha256": "3a7b9c1d8e2f0a4b6c8d1e3f5a7b9c1d8e2f0a4b6c8d1e3f5a7b9c1d8e2f0a4b",
+      "capabilities": ["VIEW", "EDIT", "TRANSITION", "COMMENT", "MANAGE_ATTACHMENTS"],
+      "access_manifest": {
+        "explicit_grant_count": 0,
+        "role_bindings": [],
+        "effective_roles": ["PROJECT_MEMBER"]
+      },
+      "etag": "\"3a7b9c1d8e2f0a4b6c8d1e3f5a7b9c1d8e2f0a4b6c8d1e3f5a7b9c1d8e2f0a4b\"",
+      "created_at": "2026-11-22T10:00:00Z",
+      "updated_at": "2026-11-22T11:00:00Z"
+    }
+  }
+}

@@ -2786,7 +2786,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
           queryClient={qcEmpty}
         />,
       );
-      expect(screen.getByText('Missing id and group in state')).toBeDefined();
+      expect(screen.getAllByText('Missing id and group in state').length).toBeGreaterThan(0);
 
       // Trigger priority and state change on issue without prevPriority/prevState when patch fails
       fireEvent.keyDown(window, { key: 'j' });
@@ -2922,6 +2922,101 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
       expect(screen.getByTestId('issue-list-card-KAN-302')).toBeDefined();
       expect(screen.queryByTestId('issue-list-card-KAN-303')).toBeNull();
       unmount2();
+    });
+
+    it('KAN-309: renders Phase 1 issues immediately, shows staged loading indicator during Phase 2, and completes single-flight hydration', async () => {
+      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
+      document.cookie = 'kb_csrf=test-csrf-staged; path=/';
+
+      const liveStates = [
+        { id: 's-todo', name: 'Todo', group: 'unstarted', sort_order: 10 },
+        { id: 's-done', name: 'Done', group: 'completed', sort_order: 20 },
+      ];
+
+      const page1Issues = [
+        {
+          id: '01931234-5678-7000-8000-000000000201',
+          key: 'KAN-201',
+          summary: 'Phase 1 First Issue',
+          state: { id: 's-todo', name: 'Todo', group: 'unstarted' },
+          priority: { slug: 'high', label: 'High' },
+        },
+      ];
+
+      const page2Issues = [
+        {
+          id: '01931234-5678-7000-8000-000000000202',
+          key: 'KAN-202',
+          summary: 'Phase 2 Second Issue',
+          state: { id: 's-todo', name: 'Todo', group: 'unstarted' },
+          priority: { slug: 'medium', label: 'Medium' },
+        },
+      ];
+
+      let issueRequestCount = 0;
+      let resolvePage2!: (val: unknown) => void;
+      const page2Promise = new Promise((resolve) => {
+        resolvePage2 = resolve;
+      });
+
+      globalThis.fetch = vi.fn().mockImplementation((input: string | URL | Request) => {
+        const url = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        if (url.endsWith('/states')) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({ items: liveStates }),
+          });
+        }
+        if (url.includes('/issues')) {
+          issueRequestCount += 1;
+          if (issueRequestCount === 1) {
+            return Promise.resolve({
+              ok: true,
+              json: () => Promise.resolve({
+                items: page1Issues,
+                next_cursor: 'cursor-p2',
+                total: 2,
+              }),
+            });
+          }
+          return page2Promise.then(() => ({
+            ok: true,
+            json: () => Promise.resolve({
+              items: page2Issues,
+              next_cursor: null,
+              total: 2,
+            }),
+          }));
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({}),
+        });
+      });
+
+      const { unmount } = render(
+        <IssuesWorkspaceRoute projectKey="KAN" initialLayout="list" />,
+      );
+
+      // Phase 1 renders immediately
+      await waitFor(() => {
+        expect(screen.getByTestId('issue-list-card-KAN-201')).toBeDefined();
+      });
+
+      // Indicator is displayed while Phase 2 is pending
+      expect(screen.getByTestId('issues-staged-loading-indicator')).toBeDefined();
+      expect(screen.queryByTestId('issue-list-card-KAN-202')).toBeNull();
+
+      // Resolve Phase 2
+      resolvePage2(null);
+
+      // Both issues are rendered and staged loading indicator is removed
+      await waitFor(() => {
+        expect(screen.getByTestId('issue-list-card-KAN-202')).toBeDefined();
+      });
+      expect(screen.queryByTestId('issues-staged-loading-indicator')).toBeNull();
+
+      unmount();
     });
   });
 });

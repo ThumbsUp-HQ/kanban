@@ -245,7 +245,9 @@ class IssueResponse(BaseModel):
     )
     key: str = Field(description="Canonical issue key (e.g. KAN-101)")
     summary: str = Field(description="Issue summary title")
-    description_markdown: str = Field(description="Canonical UTF-8 Markdown description body")
+    description_markdown: str | None = Field(
+        default=None, description="Canonical UTF-8 Markdown description body"
+    )
     description_sha256: str = Field(
         description="Hex-encoded SHA-256 digest of description_markdown for ETag concurrency"
     )
@@ -285,8 +287,9 @@ class IssueResponse(BaseModel):
     provenance: IssueProvenance = Field(
         description="Creator provenance and administrative override tracking"
     )
-    access_manifest: AccessManifest = Field(
-        description="Anti-enumeration access manifest metadata (S3.4)"
+    access_manifest: AccessManifest | None = Field(
+        default=None,
+        description="Anti-enumeration access manifest metadata (S3.4)",
     )
     capabilities: list[str] = Field(
         description="Effective capabilities held by the calling principal on this issue"
