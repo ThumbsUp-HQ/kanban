@@ -89,6 +89,12 @@ from database.models.spine import (
     Workspace,
 )
 from database.models.wasm_module import ApprovedWasmModule
+from database.models.webhooks import (
+    ScmArtifact,
+    ScmWebhookDelivery,
+    WebhookDelivery,
+    WebhookSubscription,
+)
 from database.models.workflow import (
     WorkflowHookInvocation,
     WorkflowTransitionExecution,
@@ -166,6 +172,8 @@ __all__ = [
     "RemoteRunnerEnrollmentToken",
     "ResourceAclEntry",
     "RoleBinding",
+    "ScmArtifact",
+    "ScmWebhookDelivery",
     "SetupClaimToken",
     "Sticky",
     "TotpFactor",
@@ -177,6 +185,8 @@ __all__ = [
     "ViewLayout",
     "WebauthnChallenge",
     "WebauthnCredential",
+    "WebhookDelivery",
+    "WebhookSubscription",
     "WorkflowHookInvocation",
     "WorkflowState",
     "WorkflowTransitionExecution",

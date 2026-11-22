@@ -361,6 +361,12 @@ class MirrorManager:
 
                         known_hosts_file = Path(tmp_dir) / "known_hosts"
                         known_hosts_file.touch(mode=0o600)
+                        admin_known_hosts = getattr(binding, "ssh_known_hosts", None)
+                        if isinstance(admin_known_hosts, str) and admin_known_hosts.strip():
+                            known_hosts_file.write_text(
+                                admin_known_hosts.strip() + "\n",
+                                encoding="utf-8",
+                            )
                         known_hosts_file.chmod(0o600)
 
                         ssh_cmd = (

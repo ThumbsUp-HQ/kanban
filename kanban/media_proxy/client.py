@@ -4,10 +4,14 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
-import ssl
-from typing import TYPE_CHECKING, Final, Protocol
+from typing import TYPE_CHECKING, Final
 
 from kanban.api.problems import ProblemException
+from kanban.security.ssrf import (
+    DefaultPinnedConnectionTransport,
+    PinnedConnectionTransport,
+    validate_not_redirect,
+)
 
 if TYPE_CHECKING:
     from ipaddress import IPv4Address, IPv6Address
@@ -89,14 +93,12 @@ def _parse_status_code(status_line_bytes: bytes, original_host: str) -> int:
             detail=msg,
         ) from None
 
-    if _HTTP_REDIRECT_MIN <= status_code <= _HTTP_REDIRECT_MAX:
-        msg = f"Upstream host '{original_host}' attempted redirect with status {status_code}"
-        raise ProblemException(
-            code="MEDIA_REDIRECT_BLOCKED",
-            status=502,
-            title="Media Redirect Blocked",
-            detail=msg,
-        )
+    validate_not_redirect(
+        status_code,
+        original_host,
+        error_code="MEDIA_REDIRECT_BLOCKED",
+        error_title="Media Redirect Blocked",
+    )
 
     if status_code != _HTTP_OK:
         msg = f"Upstream media host '{original_host}' returned HTTP {status_code}"
@@ -162,44 +164,12 @@ def _validate_content_type_and_length(raw_headers: dict[str, str]) -> str:
     return content_type
 
 
-class PinnedConnectionTransport(Protocol):
-    """Protocol for opening a direct IP TLS connection to an external host."""
-
-    async def open_connection(
-        self,
-        ip: str,
-        port: int,
-        server_hostname: str,
-        connect_timeout: float,
-    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
-        """Open TLS connection directly to ip literal verifying server_hostname."""
-        ...
-
-
-class DefaultPinnedConnectionTransport:
-    """Default transport establishing TLS socket directly to pinned IP."""
-
-    async def open_connection(
-        self,
-        ip: str,
-        port: int,
-        server_hostname: str,
-        connect_timeout: float,
-    ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
-        """Connect TCP to pinned IP with TLS verification against server_hostname."""
-        ssl_ctx = ssl.create_default_context()
-        ssl_ctx.minimum_version = ssl.TLSVersion.TLSv1_2
-        ssl_ctx.verify_mode = ssl.CERT_REQUIRED
-        ssl_ctx.check_hostname = True
-        return await asyncio.wait_for(
-            asyncio.open_connection(
-                host=ip,
-                port=port,
-                ssl=ssl_ctx,
-                server_hostname=server_hostname,
-            ),
-            timeout=connect_timeout,
-        )
+__all__ = [
+    "MAX_PROXY_BYTES",
+    "DefaultPinnedConnectionTransport",
+    "PinnedConnectionTransport",
+    "PinnedTlsMediaClient",
+]
 
 
 class PinnedTlsMediaClient:

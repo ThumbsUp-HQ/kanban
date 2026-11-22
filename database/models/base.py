@@ -64,6 +64,7 @@ class ObjectKind(StrEnum):
     MODULE = "module"
     VIEW = "view"
     PAGE = "page"
+    SCM_ARTIFACT = "scm_artifact"
 
 
 class LinkKind(StrEnum):
@@ -82,6 +83,9 @@ class LinkKind(StrEnum):
     DERIVED_FROM_STICKY = "DERIVED_FROM_STICKY"
     EMBEDS_OBJECT = "EMBEDS_OBJECT"
     GOVERNED_BY_VIEW = "GOVERNED_BY_VIEW"
+    IMPLEMENTED_IN_PR = "IMPLEMENTED_IN_PR"
+    REFERENCED_BY_COMMIT = "REFERENCED_BY_COMMIT"
+    TRACKED_ON_BRANCH = "TRACKED_ON_BRANCH"
 
 
 class ViewLayout(StrEnum):
