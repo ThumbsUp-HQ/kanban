@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from pydantic import BaseModel, Field
 
 from database.models import LinkKind
-from kanban.content.normalize import normalize_to_markdown
+from kanban.content.normalize import normalize_plain_text, normalize_to_markdown
 
 if TYPE_CHECKING:
     import uuid
@@ -68,6 +68,17 @@ def compute_source_sha256(data: BaseModel | dict[str, Any]) -> bytes:
     raw_dict = data.model_dump() if isinstance(data, BaseModel) else data
     serialized = json.dumps(raw_dict, sort_keys=True, separators=(",", ":"), default=str)
     return hashlib.sha256(serialized.encode("utf-8")).digest()
+
+
+def normalize_state_key(name: str | None) -> str:
+    """Normalize a workflow state name for separator-insensitive matching."""
+    if not name:
+        return ""
+    cleaned = normalize_plain_text(name)[:500].strip().lower()
+    collapsed = re.sub(r"[\s_-]+", "", cleaned)
+    if collapsed == "canceled":
+        return "cancelled"
+    return collapsed
 
 
 class _DagState:

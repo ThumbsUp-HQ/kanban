@@ -48,6 +48,7 @@ from kanban.importer.plane_mapper import (
     ImportDiffReport,
     PlaneMapper,
     compute_source_sha256,
+    normalize_state_key,
 )
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.board_rank import allocate_initial_board_rank
@@ -371,6 +372,7 @@ class PlaneImporter:
             .all()
         )
         states_by_name = {s.name.lower(): s for s in existing_states}
+        states_by_norm = {norm: s for s in existing_states if (norm := normalize_state_key(s.name))}
         states_by_group = {s.state_group.lower(): s for s in existing_states}
 
         for s in bundle.states:
@@ -392,18 +394,22 @@ class PlaneImporter:
             else:
                 clean_state_name = (normalize_plain_text(s.name)[:500] if s.name else "") or "State"
                 s_name_lower = clean_state_name.lower()
+                s_norm = normalize_state_key(clean_state_name)
                 mapped_group = STATE_GROUP_MAP.get(s.group.lower(), "unstarted")
 
                 if s_name_lower in states_by_name:
                     st_id = states_by_name[s_name_lower].id
                     report.unchanged += 1
-                elif mapped_group in states_by_group and s.name in (
-                    "Backlog",
-                    "Todo",
-                    "In Progress",
-                    "Done",
-                    "Cancelled",
-                ):
+                elif s_norm and s_norm in states_by_norm:
+                    st_id = states_by_norm[s_norm].id
+                    report.unchanged += 1
+                elif mapped_group in states_by_group and s_norm in {
+                    "backlog",
+                    "todo",
+                    "inprogress",
+                    "done",
+                    "cancelled",
+                }:
                     st_id = states_by_group[mapped_group].id
                     report.unchanged += 1
                 else:
@@ -419,6 +425,8 @@ class PlaneImporter:
                     await self.session.flush()
                     st_id = new_state.id
                     states_by_name[s_name_lower] = new_state
+                    if s_norm:
+                        states_by_norm[s_norm] = new_state
                     report.to_create += 1
 
                 new_mapping = ImportEntityMapping(
@@ -910,6 +918,9 @@ class PlaneImporter:
         )
         states_by_id = {s.id: s for s in all_states}
         states_by_proj_and_name = {(s.project_id, s.name.lower()): s.id for s in all_states}
+        states_by_proj_and_norm = {
+            (s.project_id, norm): s.id for s in all_states if (norm := normalize_state_key(s.name))
+        }
         states_by_proj_and_group = {(s.project_id, s.state_group.lower()): s.id for s in all_states}
         states_by_proj_default = {s.project_id: s.id for s in all_states if s.is_default}
 
@@ -1033,9 +1044,11 @@ class PlaneImporter:
                     target_state_id = mapped_st_id
                 elif raw_st_ref in plane_states_by_id:
                     pst = plane_states_by_id[raw_st_ref]
-                    target_state_id = states_by_proj_and_name.get(
-                        (issue_proj, pst.name.lower())
-                    ) or states_by_proj_and_group.get((issue_proj, pst.group.lower()))
+                    target_state_id = (
+                        states_by_proj_and_name.get((issue_proj, pst.name.lower()))
+                        or states_by_proj_and_norm.get((issue_proj, normalize_state_key(pst.name)))
+                        or states_by_proj_and_group.get((issue_proj, pst.group.lower()))
+                    )
 
                 if not target_state_id:
                     target_state_id = states_by_proj_default.get(issue_proj) or next(
