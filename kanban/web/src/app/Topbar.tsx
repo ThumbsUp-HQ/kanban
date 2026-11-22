@@ -488,9 +488,9 @@ export function Topbar({
                   >
                     <span>
                       <span aria-hidden="true" className="kb-avatar-menu-icon">
-                        🕸️
+                        🩺
                       </span>
-                      Invalid Link Auditor
+                      Diagnostics & Link Inspector
                     </span>
                   </Link>
                 )}

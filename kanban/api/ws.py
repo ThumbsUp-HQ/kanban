@@ -8,7 +8,7 @@ import json
 import logging
 import uuid
 from datetime import UTC, datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING, Any, Literal
 from urllib.parse import urlsplit
 
 from fastapi import WebSocket, WebSocketDisconnect
@@ -40,12 +40,23 @@ logger = logging.getLogger("kanban.api.ws")
 __all__ = [
     "WS_CLOSE_FRAME_TOO_LARGE",
     "WS_CLOSE_UNAUTHENTICATED",
+    "PingFrame",
     "PongFrame",
     "SubscribeFrame",
     "UnsubscribeFrame",
     "handle_ws_connection",
     "is_origin_allowed",
 ]
+
+
+class PingFrame(BaseModel):
+    """Client frame requesting server ping/pong probe."""
+
+    model_config = ConfigDict(extra="ignore")
+
+    op: Literal["ping"]
+    req_id: str | None = None
+    client_ts: float | int | str | None = None
 
 
 class SubscribeFrame(BaseModel):
@@ -290,6 +301,22 @@ async def handle_ws_connection(websocket: WebSocket) -> None:  # noqa: C901, PLR
                     continue
 
                 await hub.handle_unsubscribe(conn, unsub_frame.req_id, unsub_frame.channels)
+            elif op == "ping":
+                req_id = data.get("req_id")
+                client_ts = data.get("client_ts")
+                now_utc = datetime.now(UTC)
+                server_time_ms = int(now_utc.timestamp() * 1000)
+                pong_data: dict[str, Any] = {
+                    "type": "pong",
+                    "op": "pong",
+                    "server_time": server_time_ms,
+                    "server_ts": now_utc.isoformat(),
+                }
+                if req_id is not None:
+                    pong_data["req_id"] = str(req_id)
+                if client_ts is not None:
+                    pong_data["client_ts"] = client_ts
+                await conn.send_json(pong_data)
             elif op == "pong":
                 try:
                     PongFrame.model_validate(data)

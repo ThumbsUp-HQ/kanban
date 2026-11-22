@@ -8,7 +8,7 @@ import logging
 import os
 import signal
 import sys
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
 import asyncpg  # type: ignore[import-untyped]
@@ -47,6 +47,44 @@ class OutboxRelay:
         self._batch_size = batch_size
         self._poll_interval_s = poll_interval_s
         self._max_attempts = max_attempts
+        self._running = False
+
+    @property
+    def is_running(self) -> bool:
+        """Whether the relay worker is actively running."""
+        return self._running
+
+    async def get_diagnostics_snapshot(self) -> dict[str, Any]:
+        """Return diagnostic status of outbox relay worker and pending event queue."""
+        pending_count = 0
+        dead_letter_count = 0
+        try:
+            async with self._engine.begin() as conn:
+                res = await conn.execute(
+                    text("SELECT status, count(*) as cnt FROM outbox_events GROUP BY status")
+                )
+                for row in res.mappings().all():
+                    s = str(row["status"]).lower()
+                    cnt = int(row["cnt"])
+                    if s in ("pending", "processing"):
+                        pending_count += cnt
+                    elif s in ("failed", "dead_letter", "dead_lettered"):
+                        dead_letter_count += cnt
+        except Exception:
+            logger.debug("Could not count outbox events", exc_info=True)
+
+        return {
+            "outbox_relay_running": self._running,
+            "batch_size": self._batch_size,
+            "poll_interval_s": self._poll_interval_s,
+            "max_attempts": self._max_attempts,
+            "outbox_pending_count": pending_count,
+            "outbox_dead_letter_count": dead_letter_count,
+        }
+
+    async def get_status(self) -> dict[str, Any]:
+        """Alias for get_diagnostics_snapshot."""
+        return await self.get_diagnostics_snapshot()
 
     async def drain_once(self) -> int:
         """Claim a batch of pending events, publish to broker, and update database state."""
@@ -127,6 +165,7 @@ class OutboxRelay:
             wakeup_event.set()
 
         listener_conn: asyncpg.Connection | None = None
+        self._running = True
         try:
             listener_conn = await asyncpg.connect(self._listen_dsn)
             await listener_conn.add_listener("outbox_wakeup", on_wakeup)
@@ -141,6 +180,7 @@ class OutboxRelay:
                 with contextlib.suppress(asyncio.TimeoutError):
                     await asyncio.wait_for(wakeup_event.wait(), timeout=self._poll_interval_s)
         finally:
+            self._running = False
             if listener_conn is not None and not listener_conn.is_closed():
                 try:
                     await listener_conn.remove_listener("outbox_wakeup", on_wakeup)

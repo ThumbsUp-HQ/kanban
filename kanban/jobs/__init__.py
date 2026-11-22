@@ -118,6 +118,30 @@ class JobScheduler:
                 await task
         self._tasks.clear()
 
+    def get_diagnostics_snapshot(self) -> dict[str, Any]:
+        """Return diagnostic status of registered background jobs and task liveness."""
+        task_status: dict[str, bool] = {}
+        for task in self._tasks:
+            name = task.get_name()
+            task_status[name] = not task.done()
+        return {
+            "running": self._running,
+            "total_jobs": len(self._registry.all_jobs()),
+            "active_tasks": len([t for t in self._tasks if not t.done()]),
+            "jobs": [
+                {
+                    "name": job.name,
+                    "interval_seconds": job.interval_seconds,
+                    "alive": task_status.get(f"job-{job.name}", False),
+                }
+                for job in self._registry.all_jobs()
+            ],
+        }
+
+    def get_status(self) -> dict[str, Any]:
+        """Alias for get_diagnostics_snapshot."""
+        return self.get_diagnostics_snapshot()
+
     async def _run_job_loop(self, job: JobDefinition, session_target: Any) -> None:  # noqa: ANN401
         """Run single job continuously on its interval."""
         while self._running:
@@ -156,6 +180,7 @@ __all__ = [
     "AutoArchiveReport",
     "JobDefinition",
     "JobRegistry",
+    "JobRunner",
     "JobScheduler",
     "PurgeReport",
     "lifespan",
@@ -166,3 +191,5 @@ __all__ = [
     "run_trash_purge",
     "run_trash_purge_pass",
 ]
+
+JobRunner = JobScheduler

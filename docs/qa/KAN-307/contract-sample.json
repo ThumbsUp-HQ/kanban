@@ -1,0 +1,1003 @@
+{
+  "ticket": "KAN-307",
+  "endpoint": "GET /api/v1/admin/diagnostics",
+  "probe_endpoint": "POST /api/v1/admin/diagnostics/probes/realtime",
+  "ws_endpoint": "WS /ws (ping/pong)",
+  "server_admin_diagnostics_sample": {
+    "status": "healthy",
+    "runtime_and_container": {
+      "deployment_mode": "production",
+      "in_container": false,
+      "container_runtime": "bare_metal",
+      "container_id_short": null,
+      "os_platform": "Linux-7.0.0-43-generic-x86_64-with-glibc2.43",
+      "python_version": "3.12.7",
+      "process_uid": 1000,
+      "process_gid": 126,
+      "is_non_root": true,
+      "uptime_seconds": 3.8,
+      "cgroup_version": "v2",
+      "memory_limit_bytes": null,
+      "memory_current_bytes": null,
+      "cpu_quota": null,
+      "pids_limit": null,
+      "pids_current": null
+    },
+    "storage": {
+      "persistent_volume": true,
+      "data_mount_point": "/var/lib/kanban/data",
+      "data_mount_fstype": "ext4",
+      "attachments_backend": "local",
+      "sri_manifest_present": true,
+      "directories": [
+        {
+          "name": "attachments",
+          "path": "/var/lib/kanban/data/attachments",
+          "exists": false,
+          "writable": false,
+          "free_bytes": 0,
+          "total_bytes": 0
+        },
+        {
+          "name": "backups",
+          "path": "/var/lib/kanban/data/backups",
+          "exists": false,
+          "writable": false,
+          "free_bytes": 0,
+          "total_bytes": 0
+        },
+        {
+          "name": "git_mirrors",
+          "path": "/var/lib/kanban/data/git_mirrors",
+          "exists": false,
+          "writable": false,
+          "free_bytes": 0,
+          "total_bytes": 0
+        },
+        {
+          "name": "imports",
+          "path": "/var/lib/kanban/data/imports",
+          "exists": false,
+          "writable": false,
+          "free_bytes": 0,
+          "total_bytes": 0
+        },
+        {
+          "name": "web_dist",
+          "path": "/var/lib/kanban/web_dist",
+          "exists": false,
+          "writable": false,
+          "free_bytes": 0,
+          "total_bytes": 0
+        }
+      ]
+    },
+    "database": {
+      "connected": true,
+      "latency_ms": 1.02,
+      "server_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg12+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit",
+      "active_role_non_bypass": false,
+      "force_rls_verified": true,
+      "alembic_head_current": true,
+      "code_heads": [
+        "p6_03_multi_source_imports_and_aliases"
+      ],
+      "db_heads": [
+        "p6_03_multi_source_imports_and_aliases"
+      ],
+      "pool": {
+        "size": 2,
+        "checked_in": 0,
+        "checked_out": 1,
+        "overflow": -1
+      },
+      "sanitized_dsn_target": {
+        "dialect": "postgresql+asyncpg",
+        "host": null,
+        "port": null,
+        "database": "kanban_test_master",
+        "is_unix_socket": false
+      }
+    },
+    "realtime": {
+      "ws_enabled": true,
+      "ws_paths": [
+        "/ws",
+        "/api/v1/ws"
+      ],
+      "sse_enabled": true,
+      "sse_path": "/sse",
+      "hub_running": true,
+      "hub_draining": false,
+      "broker_kind": "pg_notify",
+      "broker_listener_connected": true,
+      "broker_publisher_connected": true,
+      "outbox_relay_running": false,
+      "outbox_pending_count": 0,
+      "outbox_dead_letter_count": 0,
+      "active_connections_total": 0,
+      "workspace_connections": {},
+      "ws_connections": 0,
+      "sse_connections": 0,
+      "heartbeat_interval_s": 25.0,
+      "session_recheck_interval_s": 60.0,
+      "replay_retention_minutes": 60,
+      "background_tasks": {
+        "listener_alive": false,
+        "ping_alive": true,
+        "session_check_alive": true
+      }
+    },
+    "request_proxy_check": {
+      "detected_scheme": "http",
+      "is_https": false,
+      "resolved_client_ip": "127.0.0.1",
+      "forwarded_proto_present": false,
+      "forwarded_host": null,
+      "origin_header": null,
+      "origin_allowed_for_ws": true,
+      "trusted_proxies_configured": false,
+      "csp_connect_src_allows_wss": true,
+      "warnings": [
+        "Connection is not using HTTPS; WebSocket upgrades will use insecure ws://"
+      ]
+    },
+    "sandbox": {
+      "tier_a_wasm": {
+        "available": true,
+        "engine": "wasmtime",
+        "max_fuel": 50000000,
+        "max_memory_bytes": 33554432,
+        "timeout_ms": 500,
+        "cached_modules": 0
+      },
+      "tier_b_nsjail": {
+        "available": false,
+        "binary_exists": false,
+        "binary_owned_by_root": false,
+        "permissions_safe": false,
+        "userns_probe_ok": false,
+        "error_code": "SANDBOX_UNAVAILABLE_IN_STANDALONE",
+        "reason": "nsjail binary not found at /usr/bin/nsjail",
+        "seccomp_profile_present": false
+      }
+    },
+    "services": {
+      "rate_limiter_backend": "pg",
+      "valkey_configured": false,
+      "background_jobs": [
+        {
+          "name": "cleanup_tokens",
+          "interval_seconds": 60
+        }
+      ],
+      "mcp_mounted": true,
+      "mcp_surfaces": [
+        "/mcp/agent",
+        "/mcp/docs",
+        "/mcp/admin"
+      ],
+      "ai_providers": {
+        "total": 1,
+        "enabled": 1,
+        "kinds": [
+          "fixture"
+        ]
+      },
+      "auth_cards": {
+        "total": 1,
+        "enabled": 1,
+        "kinds": [
+          "LOCAL_ADMIN"
+        ]
+      },
+      "remote_runners": {
+        "connected_count": 0
+      },
+      "keyring": {
+        "configured": true,
+        "source": "generated_local",
+        "master_kek_kid": "kek-active-01"
+      }
+    },
+    "config": [
+      {
+        "key": "session_idle_timeout_minutes",
+        "subsystem": "Auth & AAL2",
+        "value": 60,
+        "source": "default",
+        "redacted": false,
+        "notes": "Idle timeout window for user sessions"
+      },
+      {
+        "key": "session_absolute_timeout_hours",
+        "subsystem": "Auth & AAL2",
+        "value": 24,
+        "source": "default",
+        "redacted": false,
+        "notes": "Absolute session lifetime"
+      },
+      {
+        "key": "mfa_enforced",
+        "subsystem": "Auth & AAL2",
+        "value": false,
+        "source": "default",
+        "redacted": false,
+        "notes": "AAL2 MFA enforcement policy"
+      },
+      {
+        "key": "auth_pepper",
+        "subsystem": "Auth & AAL2",
+        "value": "[REDACTED]",
+        "source": "default",
+        "redacted": true,
+        "notes": "Server-side password hashing pepper"
+      },
+      {
+        "key": "database_url",
+        "subsystem": "Database & RLS",
+        "value": "[REDACTED]",
+        "source": "default",
+        "redacted": true,
+        "notes": "PostgreSQL target connection string"
+      },
+      {
+        "key": "database_pool_size",
+        "subsystem": "Database & RLS",
+        "value": 10,
+        "source": "default",
+        "redacted": false,
+        "notes": "Active connection pool capacity"
+      },
+      {
+        "key": "database_max_overflow",
+        "subsystem": "Database & RLS",
+        "value": 20,
+        "source": "default",
+        "redacted": false,
+        "notes": "Connection pool overflow ceiling"
+      },
+      {
+        "key": "realtime_enabled",
+        "subsystem": "Realtime & WS",
+        "value": true,
+        "source": "default",
+        "redacted": false,
+        "notes": "WebSocket and SSE streaming hub"
+      },
+      {
+        "key": "public_base_url",
+        "subsystem": "Realtime & WS",
+        "value": "https://kanban.example",
+        "source": "default",
+        "redacted": false,
+        "notes": "Canonical origin for WebSocket connection validation"
+      },
+      {
+        "key": "data_dir",
+        "subsystem": "Storage & Backups",
+        "value": "/var/lib/kanban/data",
+        "source": "default",
+        "redacted": false,
+        "notes": "Base storage root directory"
+      },
+      {
+        "key": "attachments_storage_backend",
+        "subsystem": "Storage & Backups",
+        "value": "local",
+        "source": "default",
+        "redacted": false,
+        "notes": "File attachments storage engine"
+      },
+      {
+        "key": "mcp_enabled",
+        "subsystem": "MCP & OAuth",
+        "value": true,
+        "source": "default",
+        "redacted": false,
+        "notes": "Multi-surface Model Context Protocol server"
+      },
+      {
+        "key": "disable_unlimited_mcp_keys",
+        "subsystem": "MCP & OAuth",
+        "value": false,
+        "source": "default",
+        "redacted": false,
+        "notes": "MCP API key quota restriction"
+      },
+      {
+        "key": "air_gap_mode",
+        "subsystem": "AI & Agents",
+        "value": false,
+        "source": "default",
+        "redacted": false,
+        "notes": "Air-gap restriction blocking outbound AI endpoints"
+      },
+      {
+        "key": "content_security_policy_enforced",
+        "subsystem": "Security & CSP",
+        "value": true,
+        "source": "default",
+        "redacted": false,
+        "notes": "Browser Content-Security-Policy header enforcement"
+      },
+      {
+        "key": "master_kek",
+        "subsystem": "Security & CSP",
+        "value": "[REDACTED]",
+        "source": "default",
+        "redacted": true,
+        "notes": "Master Key Encryption Key for envelope encryption"
+      }
+    ],
+    "build": {
+      "version": "2.0.0",
+      "git_commit": "aef08a3f731b",
+      "build_timestamp": null,
+      "openapi_version": "2.0.0",
+      "openapi_bundle_hash": "a865cc740c90bf5e05b115abd252a36186e24f2d33551801a9ddb1a14856bb85",
+      "frontend_bundle_hash": "c8e862bbfbea286fee4d38bd883165d339c34955a7f54f54d01cc95540e3b4b9"
+    },
+    "subsystems": {
+      "postgresql_rls": {
+        "subsystem": "postgresql_rls",
+        "name": "PostgreSQL & RLS Enforcement",
+        "status": "healthy",
+        "description": "Row-Level Security isolation, migration consistency, and connection pool status",
+        "details": {
+          "latency_ms": 1.02,
+          "server_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg12+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit",
+          "active_role_non_bypass": false,
+          "force_rls_verified": true,
+          "alembic_head_current": true
+        }
+      },
+      "realtime_hub_outbox": {
+        "subsystem": "realtime_hub_outbox",
+        "name": "Realtime Hub & Outbox Relay",
+        "status": "healthy",
+        "description": "WebSocket/SSE fanout hub, transactional outbox worker, and pub/sub broker",
+        "details": {
+          "hub_running": true,
+          "broker_kind": "pg_notify",
+          "active_connections": 0,
+          "outbox_pending": 0
+        }
+      },
+      "job_worker_pool": {
+        "subsystem": "job_worker_pool",
+        "name": "Background Job Worker Pool",
+        "status": "healthy",
+        "description": "Periodic maintenance task scheduler for backups, auto-archive, and purge",
+        "details": {
+          "running": [],
+          "total_jobs": 1
+        }
+      },
+      "wasm_script_sandbox": {
+        "subsystem": "wasm_script_sandbox",
+        "name": "Wasm Script Sandbox",
+        "status": "healthy",
+        "description": "Fuel-metered Tier A WebAssembly runtime and Tier B container isolation",
+        "details": {
+          "tier_a_wasm_available": true,
+          "tier_b_nsjail_available": false
+        }
+      },
+      "agent_runtime_providers": {
+        "subsystem": "agent_runtime_providers",
+        "name": "Agent Runtime & AI Providers",
+        "status": "healthy",
+        "description": "LLM provider adapters, model parameter allowlists, and execution budgets",
+        "details": {
+          "total_providers": 1,
+          "enabled_providers": 1,
+          "air_gap_mode": false
+        }
+      },
+      "remote_runner_fleet": {
+        "subsystem": "remote_runner_fleet",
+        "name": "Remote Runner Fleet",
+        "status": "healthy",
+        "description": "Outbound mTLS WebSocket control plane and isolated repo runners",
+        "details": {
+          "connected_runners": 0,
+          "mtls_ready": true
+        }
+      },
+      "rate_limiter": {
+        "subsystem": "rate_limiter",
+        "name": "Sliding Window Rate Limiter",
+        "status": "healthy",
+        "description": "Token bucket and sliding window rate limiting engine",
+        "details": {
+          "backend": "pg",
+          "valkey_configured": false
+        }
+      }
+    },
+    "postgresql_rls": {
+      "subsystem": "postgresql_rls",
+      "name": "PostgreSQL & RLS Enforcement",
+      "status": "healthy",
+      "description": "Row-Level Security isolation, migration consistency, and connection pool status",
+      "details": {
+        "latency_ms": 1.02,
+        "server_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg12+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit",
+        "active_role_non_bypass": false,
+        "force_rls_verified": true,
+        "alembic_head_current": true
+      }
+    },
+    "realtime_hub_outbox": {
+      "subsystem": "realtime_hub_outbox",
+      "name": "Realtime Hub & Outbox Relay",
+      "status": "healthy",
+      "description": "WebSocket/SSE fanout hub, transactional outbox worker, and pub/sub broker",
+      "details": {
+        "hub_running": true,
+        "broker_kind": "pg_notify",
+        "active_connections": 0,
+        "outbox_pending": 0
+      }
+    },
+    "job_worker_pool": {
+      "subsystem": "job_worker_pool",
+      "name": "Background Job Worker Pool",
+      "status": "healthy",
+      "description": "Periodic maintenance task scheduler for backups, auto-archive, and purge",
+      "details": {
+        "running": [],
+        "total_jobs": 1
+      }
+    },
+    "wasm_script_sandbox": {
+      "subsystem": "wasm_script_sandbox",
+      "name": "Wasm Script Sandbox",
+      "status": "healthy",
+      "description": "Fuel-metered Tier A WebAssembly runtime and Tier B container isolation",
+      "details": {
+        "tier_a_wasm_available": true,
+        "tier_b_nsjail_available": false
+      }
+    },
+    "agent_runtime_providers": {
+      "subsystem": "agent_runtime_providers",
+      "name": "Agent Runtime & AI Providers",
+      "status": "healthy",
+      "description": "LLM provider adapters, model parameter allowlists, and execution budgets",
+      "details": {
+        "total_providers": 1,
+        "enabled_providers": 1,
+        "air_gap_mode": false
+      }
+    },
+    "remote_runner_fleet": {
+      "subsystem": "remote_runner_fleet",
+      "name": "Remote Runner Fleet",
+      "status": "healthy",
+      "description": "Outbound mTLS WebSocket control plane and isolated repo runners",
+      "details": {
+        "connected_runners": 0,
+        "mtls_ready": true
+      }
+    },
+    "rate_limiter": {
+      "subsystem": "rate_limiter",
+      "name": "Sliding Window Rate Limiter",
+      "status": "healthy",
+      "description": "Token bucket and sliding window rate limiting engine",
+      "details": {
+        "backend": "pg",
+        "valkey_configured": false
+      }
+    }
+  },
+  "workspace_admin_diagnostics_sample": {
+    "status": "healthy",
+    "runtime_and_container": {
+      "deployment_mode": "production",
+      "in_container": false,
+      "container_runtime": "bare_metal",
+      "container_id_short": null,
+      "os_platform": "Linux-7.0.0-43-generic-x86_64-with-glibc2.43",
+      "python_version": "3.12.7",
+      "process_uid": 1000,
+      "process_gid": 126,
+      "is_non_root": true,
+      "uptime_seconds": 8.6,
+      "cgroup_version": "v2",
+      "memory_limit_bytes": null,
+      "memory_current_bytes": null,
+      "cpu_quota": null,
+      "pids_limit": null,
+      "pids_current": null
+    },
+    "storage": {
+      "persistent_volume": true,
+      "data_mount_point": null,
+      "data_mount_fstype": null,
+      "attachments_backend": "local",
+      "sri_manifest_present": true,
+      "directories": [
+        {
+          "name": "attachments",
+          "path": "[REDACTED]/attachments",
+          "exists": false,
+          "writable": false,
+          "free_bytes": 0,
+          "total_bytes": 0
+        },
+        {
+          "name": "backups",
+          "path": "[REDACTED]/backups",
+          "exists": false,
+          "writable": false,
+          "free_bytes": 0,
+          "total_bytes": 0
+        },
+        {
+          "name": "git_mirrors",
+          "path": "[REDACTED]/git_mirrors",
+          "exists": false,
+          "writable": false,
+          "free_bytes": 0,
+          "total_bytes": 0
+        },
+        {
+          "name": "imports",
+          "path": "[REDACTED]/imports",
+          "exists": false,
+          "writable": false,
+          "free_bytes": 0,
+          "total_bytes": 0
+        },
+        {
+          "name": "web_dist",
+          "path": "[REDACTED]/web_dist",
+          "exists": false,
+          "writable": false,
+          "free_bytes": 0,
+          "total_bytes": 0
+        }
+      ]
+    },
+    "database": {
+      "connected": true,
+      "latency_ms": 0.39,
+      "server_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg12+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit",
+      "active_role_non_bypass": false,
+      "force_rls_verified": true,
+      "alembic_head_current": true,
+      "code_heads": [
+        "p6_03_multi_source_imports_and_aliases"
+      ],
+      "db_heads": [
+        "p6_03_multi_source_imports_and_aliases"
+      ],
+      "pool": {
+        "size": 2,
+        "checked_in": 0,
+        "checked_out": 1,
+        "overflow": -1
+      },
+      "sanitized_dsn_target": null
+    },
+    "realtime": {
+      "ws_enabled": true,
+      "ws_paths": [
+        "/ws",
+        "/api/v1/ws"
+      ],
+      "sse_enabled": true,
+      "sse_path": "/sse",
+      "hub_running": true,
+      "hub_draining": false,
+      "broker_kind": "pg_notify",
+      "broker_listener_connected": true,
+      "broker_publisher_connected": true,
+      "outbox_relay_running": false,
+      "outbox_pending_count": 0,
+      "outbox_dead_letter_count": 0,
+      "active_connections_total": 0,
+      "workspace_connections": {},
+      "ws_connections": 0,
+      "sse_connections": 0,
+      "heartbeat_interval_s": 25.0,
+      "session_recheck_interval_s": 60.0,
+      "replay_retention_minutes": 60,
+      "background_tasks": {
+        "listener_alive": false,
+        "ping_alive": true,
+        "session_check_alive": true
+      }
+    },
+    "request_proxy_check": {
+      "detected_scheme": "http",
+      "is_https": false,
+      "resolved_client_ip": "127.0.0.1",
+      "forwarded_proto_present": false,
+      "forwarded_host": null,
+      "origin_header": null,
+      "origin_allowed_for_ws": true,
+      "trusted_proxies_configured": false,
+      "csp_connect_src_allows_wss": true,
+      "warnings": [
+        "Connection is not using HTTPS; WebSocket upgrades will use insecure ws://"
+      ]
+    },
+    "sandbox": {
+      "tier_a_wasm": {
+        "available": true,
+        "engine": "wasmtime",
+        "max_fuel": 50000000,
+        "max_memory_bytes": 33554432,
+        "timeout_ms": 500,
+        "cached_modules": 0
+      },
+      "tier_b_nsjail": {
+        "available": false,
+        "binary_exists": false,
+        "binary_owned_by_root": false,
+        "permissions_safe": false,
+        "userns_probe_ok": false,
+        "error_code": "SANDBOX_UNAVAILABLE_IN_STANDALONE",
+        "reason": "nsjail binary not found at /usr/bin/nsjail",
+        "seccomp_profile_present": false
+      }
+    },
+    "services": {
+      "rate_limiter_backend": "pg",
+      "valkey_configured": false,
+      "background_jobs": [
+        {
+          "name": "cleanup_tokens",
+          "interval_seconds": 60
+        }
+      ],
+      "mcp_mounted": true,
+      "mcp_surfaces": [
+        "/mcp/agent",
+        "/mcp/docs",
+        "/mcp/admin"
+      ],
+      "ai_providers": {
+        "total": 1,
+        "enabled": 1,
+        "kinds": [
+          "fixture"
+        ]
+      },
+      "auth_cards": {
+        "total": 1,
+        "enabled": 1,
+        "kinds": [
+          "LOCAL_ADMIN"
+        ]
+      },
+      "remote_runners": {
+        "connected_count": 0
+      },
+      "keyring": {
+        "configured": true,
+        "source": "generated_local",
+        "master_kek_kid": "kek-active-01"
+      }
+    },
+    "config": [
+      {
+        "key": "session_idle_timeout_minutes",
+        "subsystem": "Auth & AAL2",
+        "value": 60,
+        "source": "default",
+        "redacted": false,
+        "notes": "Idle timeout window for user sessions"
+      },
+      {
+        "key": "session_absolute_timeout_hours",
+        "subsystem": "Auth & AAL2",
+        "value": 24,
+        "source": "default",
+        "redacted": false,
+        "notes": "Absolute session lifetime"
+      },
+      {
+        "key": "mfa_enforced",
+        "subsystem": "Auth & AAL2",
+        "value": false,
+        "source": "default",
+        "redacted": false,
+        "notes": "AAL2 MFA enforcement policy"
+      },
+      {
+        "key": "auth_pepper",
+        "subsystem": "Auth & AAL2",
+        "value": "[REDACTED]",
+        "source": "default",
+        "redacted": true,
+        "notes": "Server-side password hashing pepper"
+      },
+      {
+        "key": "database_url",
+        "subsystem": "Database & RLS",
+        "value": "[REDACTED]",
+        "source": "default",
+        "redacted": true,
+        "notes": "PostgreSQL target connection string"
+      },
+      {
+        "key": "database_pool_size",
+        "subsystem": "Database & RLS",
+        "value": 10,
+        "source": "default",
+        "redacted": false,
+        "notes": "Active connection pool capacity"
+      },
+      {
+        "key": "database_max_overflow",
+        "subsystem": "Database & RLS",
+        "value": 20,
+        "source": "default",
+        "redacted": false,
+        "notes": "Connection pool overflow ceiling"
+      },
+      {
+        "key": "realtime_enabled",
+        "subsystem": "Realtime & WS",
+        "value": true,
+        "source": "default",
+        "redacted": false,
+        "notes": "WebSocket and SSE streaming hub"
+      },
+      {
+        "key": "public_base_url",
+        "subsystem": "Realtime & WS",
+        "value": "https://kanban.example",
+        "source": "default",
+        "redacted": false,
+        "notes": "Canonical origin for WebSocket connection validation"
+      },
+      {
+        "key": "data_dir",
+        "subsystem": "Storage & Backups",
+        "value": "[REDACTED]",
+        "source": "default",
+        "redacted": true,
+        "notes": "Base storage root directory"
+      },
+      {
+        "key": "attachments_storage_backend",
+        "subsystem": "Storage & Backups",
+        "value": "local",
+        "source": "default",
+        "redacted": false,
+        "notes": "File attachments storage engine"
+      },
+      {
+        "key": "mcp_enabled",
+        "subsystem": "MCP & OAuth",
+        "value": true,
+        "source": "default",
+        "redacted": false,
+        "notes": "Multi-surface Model Context Protocol server"
+      },
+      {
+        "key": "disable_unlimited_mcp_keys",
+        "subsystem": "MCP & OAuth",
+        "value": false,
+        "source": "default",
+        "redacted": false,
+        "notes": "MCP API key quota restriction"
+      },
+      {
+        "key": "air_gap_mode",
+        "subsystem": "AI & Agents",
+        "value": false,
+        "source": "default",
+        "redacted": false,
+        "notes": "Air-gap restriction blocking outbound AI endpoints"
+      },
+      {
+        "key": "content_security_policy_enforced",
+        "subsystem": "Security & CSP",
+        "value": true,
+        "source": "default",
+        "redacted": false,
+        "notes": "Browser Content-Security-Policy header enforcement"
+      },
+      {
+        "key": "master_kek",
+        "subsystem": "Security & CSP",
+        "value": "[REDACTED]",
+        "source": "default",
+        "redacted": true,
+        "notes": "Master Key Encryption Key for envelope encryption"
+      }
+    ],
+    "build": {
+      "version": "2.0.0",
+      "git_commit": "aef08a3f731b",
+      "build_timestamp": null,
+      "openapi_version": "2.0.0",
+      "openapi_bundle_hash": "a865cc740c90bf5e05b115abd252a36186e24f2d33551801a9ddb1a14856bb85",
+      "frontend_bundle_hash": "c8e862bbfbea286fee4d38bd883165d339c34955a7f54f54d01cc95540e3b4b9"
+    },
+    "subsystems": {
+      "postgresql_rls": {
+        "subsystem": "postgresql_rls",
+        "name": "PostgreSQL & RLS Enforcement",
+        "status": "healthy",
+        "description": "Row-Level Security isolation, migration consistency, and connection pool status",
+        "details": {
+          "latency_ms": 0.39,
+          "server_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg12+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit",
+          "active_role_non_bypass": false,
+          "force_rls_verified": true,
+          "alembic_head_current": true
+        }
+      },
+      "realtime_hub_outbox": {
+        "subsystem": "realtime_hub_outbox",
+        "name": "Realtime Hub & Outbox Relay",
+        "status": "healthy",
+        "description": "WebSocket/SSE fanout hub, transactional outbox worker, and pub/sub broker",
+        "details": {
+          "hub_running": true,
+          "broker_kind": "pg_notify",
+          "active_connections": 0,
+          "outbox_pending": 0
+        }
+      },
+      "job_worker_pool": {
+        "subsystem": "job_worker_pool",
+        "name": "Background Job Worker Pool",
+        "status": "healthy",
+        "description": "Periodic maintenance task scheduler for backups, auto-archive, and purge",
+        "details": {
+          "running": [],
+          "total_jobs": 1
+        }
+      },
+      "wasm_script_sandbox": {
+        "subsystem": "wasm_script_sandbox",
+        "name": "Wasm Script Sandbox",
+        "status": "healthy",
+        "description": "Fuel-metered Tier A WebAssembly runtime and Tier B container isolation",
+        "details": {
+          "tier_a_wasm_available": true,
+          "tier_b_nsjail_available": false
+        }
+      },
+      "agent_runtime_providers": {
+        "subsystem": "agent_runtime_providers",
+        "name": "Agent Runtime & AI Providers",
+        "status": "healthy",
+        "description": "LLM provider adapters, model parameter allowlists, and execution budgets",
+        "details": {
+          "total_providers": 1,
+          "enabled_providers": 1,
+          "air_gap_mode": false
+        }
+      },
+      "remote_runner_fleet": {
+        "subsystem": "remote_runner_fleet",
+        "name": "Remote Runner Fleet",
+        "status": "healthy",
+        "description": "Outbound mTLS WebSocket control plane and isolated repo runners",
+        "details": {
+          "connected_runners": 0,
+          "mtls_ready": true
+        }
+      },
+      "rate_limiter": {
+        "subsystem": "rate_limiter",
+        "name": "Sliding Window Rate Limiter",
+        "status": "healthy",
+        "description": "Token bucket and sliding window rate limiting engine",
+        "details": {
+          "backend": "pg",
+          "valkey_configured": false
+        }
+      }
+    },
+    "postgresql_rls": {
+      "subsystem": "postgresql_rls",
+      "name": "PostgreSQL & RLS Enforcement",
+      "status": "healthy",
+      "description": "Row-Level Security isolation, migration consistency, and connection pool status",
+      "details": {
+        "latency_ms": 0.39,
+        "server_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg12+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit",
+        "active_role_non_bypass": false,
+        "force_rls_verified": true,
+        "alembic_head_current": true
+      }
+    },
+    "realtime_hub_outbox": {
+      "subsystem": "realtime_hub_outbox",
+      "name": "Realtime Hub & Outbox Relay",
+      "status": "healthy",
+      "description": "WebSocket/SSE fanout hub, transactional outbox worker, and pub/sub broker",
+      "details": {
+        "hub_running": true,
+        "broker_kind": "pg_notify",
+        "active_connections": 0,
+        "outbox_pending": 0
+      }
+    },
+    "job_worker_pool": {
+      "subsystem": "job_worker_pool",
+      "name": "Background Job Worker Pool",
+      "status": "healthy",
+      "description": "Periodic maintenance task scheduler for backups, auto-archive, and purge",
+      "details": {
+        "running": [],
+        "total_jobs": 1
+      }
+    },
+    "wasm_script_sandbox": {
+      "subsystem": "wasm_script_sandbox",
+      "name": "Wasm Script Sandbox",
+      "status": "healthy",
+      "description": "Fuel-metered Tier A WebAssembly runtime and Tier B container isolation",
+      "details": {
+        "tier_a_wasm_available": true,
+        "tier_b_nsjail_available": false
+      }
+    },
+    "agent_runtime_providers": {
+      "subsystem": "agent_runtime_providers",
+      "name": "Agent Runtime & AI Providers",
+      "status": "healthy",
+      "description": "LLM provider adapters, model parameter allowlists, and execution budgets",
+      "details": {
+        "total_providers": 1,
+        "enabled_providers": 1,
+        "air_gap_mode": false
+      }
+    },
+    "remote_runner_fleet": {
+      "subsystem": "remote_runner_fleet",
+      "name": "Remote Runner Fleet",
+      "status": "healthy",
+      "description": "Outbound mTLS WebSocket control plane and isolated repo runners",
+      "details": {
+        "connected_runners": 0,
+        "mtls_ready": true
+      }
+    },
+    "rate_limiter": {
+      "subsystem": "rate_limiter",
+      "name": "Sliding Window Rate Limiter",
+      "status": "healthy",
+      "description": "Token bucket and sliding window rate limiting engine",
+      "details": {
+        "backend": "pg",
+        "valkey_configured": false
+      }
+    }
+  },
+  "realtime_probe_sample": {
+    "success": true,
+    "db_latency_ms": 0.39,
+    "notify_rtt_ms": 0.85,
+    "channel": "kb_diag_1768cc8851b4",
+    "message": "LISTEN/NOTIFY roundtrip successful on kb_diag_1768cc8851b4 (RTT: 0.85ms)"
+  },
+  "ws_ping_pong_frame_sample": {
+    "inbound_client_frame": {
+      "op": "ping",
+      "client_ts": 1732274400000,
+      "req_id": "req-ping-01"
+    },
+    "outbound_server_pong": {
+      "type": "pong",
+      "op": "pong",
+      "client_ts": 1732274400000,
+      "server_time": 1732274400025,
+      "server_ts": "2026-11-22T11:20:00.025000+00:00",
+      "req_id": "req-ping-01"
+    }
+  },
+  "zero_secret_leakage_verified": true
+}

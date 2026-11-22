@@ -5,7 +5,7 @@ from __future__ import annotations
 import asyncio
 import contextlib
 import logging
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 import asyncpg  # type: ignore[import-untyped]
 
@@ -32,6 +32,25 @@ class PgNotifyBroker(RealtimeBroker):
         self._subscribers: dict[asyncio.Queue[OutboxEnvelope | None], str] = {}
         self._lock = asyncio.Lock()
         self._closed = False
+
+    def get_diagnostics_snapshot(self) -> dict[str, Any]:
+        """Return diagnostic status of PostgreSQL LISTEN/NOTIFY connections and subscribers."""
+        listener_connected = self._listener_conn is not None and not self._listener_conn.is_closed()
+        publisher_connected = (
+            self._publisher_conn is not None and not self._publisher_conn.is_closed()
+        )
+        return {
+            "broker_kind": "pg_notify",
+            "channel": self._channel,
+            "listener_connected": listener_connected,
+            "publisher_connected": publisher_connected,
+            "subscribers_count": len(self._subscribers),
+            "closed": self._closed,
+        }
+
+    def get_status(self) -> dict[str, Any]:
+        """Alias for get_diagnostics_snapshot."""
+        return self.get_diagnostics_snapshot()
 
     async def _ensure_listener(self) -> asyncpg.Connection:
         async with self._lock:

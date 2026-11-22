@@ -1,0 +1,39 @@
+=== Backend Unit & Integration Tests (pytest) ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan307-c116ba38/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan307-c116ba38
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 11 items
+
+kanban/tests/api/test_admin_diagnostics.py::test_admin_diagnostics_security_and_redaction PASSED [  9%]
+kanban/tests/api/test_admin_diagnostics.py::test_websocket_ping_pong_frame PASSED [ 18%]
+kanban/tests/api/test_admin_diagnostics.py::test_telemetry_getters_unit PASSED [ 27%]
+kanban/tests/api/test_admin_diagnostics.py::test_container_runtime_inspection PASSED [ 36%]
+kanban/tests/api/test_admin_diagnostics.py::test_overall_status_and_request_warnings PASSED [ 45%]
+kanban/tests/api/test_admin_diagnostics.py::test_cgroup_inspection PASSED [ 54%]
+kanban/tests/api/test_admin_diagnostics.py::test_storage_inspection PASSED [ 63%]
+kanban/tests/api/test_admin_diagnostics.py::test_sanitized_config_builder PASSED [ 72%]
+kanban/tests/api/test_admin_diagnostics.py::test_require_workspace_or_server_admin_insufficient PASSED [ 81%]
+kanban/tests/api/test_admin_diagnostics.py::test_alembic_heads_inspection PASSED [ 90%]
+kanban/tests/api/test_admin_diagnostics.py::test_realtime_probe_with_pg_url PASSED [100%]
+
+============================== 11 passed in 7.58s ==============================
+Name                                 Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------------
+kanban/api/v1/admin/diagnostics.py     536     11     64     11    96%   524->532, 534->539, 768, 866-867, 908->915, 954, 957->962, 1022->1026, 1035->1037, 1038-1039, 1051->1053, 1054-1055, 1220-1221, 1223
+--------------------------------------------------------------------------------
+TOTAL                                  536     11     64     11    96%
+
+=== Frontend Unit & Integration Tests (vitest) ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan307-c116ba38/kanban/web
+
+ ✓ src/features/admin/AdminDiagnosticsStudio.test.tsx (5 tests) 237ms
+
+ Test Files  1 passed (1)
+      Tests  5 passed (5)
+   Start at  11:41:32
+   Duration  2.24s (environment 36%, import 33%, transform 19%, tests 12%, worker 1%)
+
