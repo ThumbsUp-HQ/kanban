@@ -129,6 +129,7 @@ def enroll_runner(  # noqa: PLR0913
         raise RuntimeError(msg)
 
     data = resp.json()
+    runner_id = data.get("runner_id")
     client_cert_pem = data["client_cert_pem"]
     ca_cert_pem = data["ca_cert_pem"]
     wss_url = data["wss_url"]
@@ -136,16 +137,35 @@ def enroll_runner(  # noqa: PLR0913
     cert_path = state_dir / "client.crt"
     _write_secure_file(cert_path, client_cert_pem, mode=0o644)
 
-    ca_path = state_dir / "ca.crt"
-    _write_secure_file(ca_path, ca_cert_pem, mode=0o644)
+    # Persist ca_cert_pem to ca.pem with strict 0o600 permissions per KAN-64
+    ca_pem_path = state_dir / "ca.pem"
+    _write_secure_file(ca_pem_path, ca_cert_pem, mode=0o600)
 
-    # Generate initial config.yaml
+    # Also persist ca.crt (0o644) for backwards compatibility
+    ca_crt_path = state_dir / "ca.crt"
+    _write_secure_file(ca_crt_path, ca_cert_pem, mode=0o644)
+
+    # Generate runner.toml with required fields per KAN-64 Action 4
+    toml_lines = [
+        f'runner_id = "{runner_id}"',
+        f'server_url = "{server_url}"',
+        f'cert_path = "{cert_path}"',
+        f'key_path = "{key_path}"',
+        f'ca_cert_path = "{ca_pem_path}"',
+        "allowed_repos = []",
+        f'pool_slug = "{pool_slug}"',
+    ]
+    toml_content = "\n".join(toml_lines) + "\n"
+    runner_toml_path = state_dir / "runner.toml"
+    _write_secure_file(runner_toml_path, toml_content, mode=0o600)
+
+    # Also generate config.yaml for backwards compatibility
     config_dict = {
         "server_url": server_url,
         "pool_slug": pool_slug,
         "client_cert_path": str(cert_path),
         "client_key_path": str(key_path),
-        "ca_cert_path": str(ca_path),
+        "ca_cert_path": str(ca_pem_path),
         "wss_url": wss_url,
         "state_dir": str(state_dir),
         "max_concurrency": 1,
@@ -154,13 +174,16 @@ def enroll_runner(  # noqa: PLR0913
     }
     config_path = state_dir / "config.yaml"
     _write_secure_file(config_path, yaml.safe_dump(config_dict), mode=0o600)
-    return config_path
+
+    return runner_toml_path
 
 
 def run_daemon(config_path: Path) -> int:
     """Run RunnerDaemon from config file, handling graceful shutdown."""
     config = load_runner_config(config_path)
-    validate_key_permissions(config.client_key_path)
+    key_path = config.client_key_path or config.key_path
+    if key_path is not None:
+        validate_key_permissions(key_path)
 
     daemon = RunnerDaemon(config)
     loop = asyncio.new_event_loop()

@@ -1,0 +1,28 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan64-3a3ba821
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 53 items
+
+kanban/tests/runners/test_pki_and_enrollment.py ........                 [ 15%]
+kanban/tests/runners/test_remote_runners.py ........                     [ 30%]
+kanban/tests/runners/test_wss_hub.py ..........                          [ 49%]
+agent/tests/remote_runner/test_config_and_enroll.py ..........           [ 67%]
+agent/tests/remote_runner/test_daemon_e2e.py ........                    [ 83%]
+agent/tests/remote_runner/test_executor.py .....                         [ 92%]
+agent/tests/test_remote_runner.py ....                                   [100%]
+
+=============================== warnings summary ===============================
+kanban/tests/runners/test_pki_and_enrollment.py::test_case_2_security_single_use_expiry_and_bad_csr
+kanban/tests/runners/test_pki_and_enrollment.py::test_case_4_admin_list_and_revoke_routes
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan64-3a3ba821/.venv/lib/python3.12/site-packages/fastapi/routing.py:372: StarletteDeprecationWarning: 'HTTP_422_UNPROCESSABLE_ENTITY' is deprecated. Use 'HTTP_422_UNPROCESSABLE_CONTENT' instead.
+    return await dependant.call(**values)
+
+agent/tests/remote_runner/test_daemon_e2e.py::test_daemon_server_revocation_4003_halts_with_exit_code_78
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan64-3a3ba821/.venv/lib/python3.12/site-packages/websockets/exceptions.py:139: DeprecationWarning: ConnectionClosed.code is deprecated; use Protocol.close_code or ConnectionClosed.rcvd.code
+    warnings.warn(  # deprecated in 13.1 - 2024-09-21
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+======================== 53 passed, 3 warnings in 6.44s ========================

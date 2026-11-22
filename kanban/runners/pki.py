@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Final
 
 from cryptography import x509
+from cryptography.exceptions import InvalidSignature
 from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec, ed25519, rsa
 from cryptography.x509.oid import ExtendedKeyUsageOID, ExtensionOID, NameOID
@@ -21,11 +22,13 @@ if TYPE_CHECKING:
     from kanban.security.keys import KeyMaterial
 
 __all__ = [
+    "CertVerificationError",
     "CsrValidationError",
     "IssuedCertificate",
     "compute_cert_fingerprint",
     "derive_runner_ca",
     "validate_and_sign_csr",
+    "verify_runner_client_cert_chain",
 ]
 
 _MIN_RSA_KEY_SIZE: Final[int] = 3072
@@ -39,6 +42,17 @@ _ALLOWED_EC_CURVES: Final[tuple[type[ec.EllipticCurve], ...]] = (
     ec.SECP384R1,
     ec.SECP521R1,
 )
+
+
+class CertVerificationError(ValueError):
+    """Raised when a client certificate chain fails cryptographic or policy verification."""
+
+    def __init__(self, code: str, detail: str) -> None:
+        """Initialize with machine-readable error code and human description."""
+        super().__init__(f"{code}: {detail}")
+        self.code = code
+        self.detail = detail
+        self.status = 401
 
 
 class CsrValidationError(ValueError):
@@ -212,7 +226,7 @@ def validate_and_sign_csr(
         .subject_name(
             x509.Name(
                 [
-                    x509.NameAttribute(NameOID.COMMON_NAME, f"runner-{runner_id}"),
+                    x509.NameAttribute(NameOID.COMMON_NAME, f"runner:{runner_id}"),
                     x509.NameAttribute(NameOID.ORGANIZATION_NAME, "👍kanban Remote Runners"),
                 ]
             )
@@ -270,3 +284,156 @@ def validate_and_sign_csr(
         client_cert_sha256=client_cert_sha256,
         cert_expires_at=cert_expires_at,
     )
+
+
+def _load_x509_cert(cert_data: str | bytes) -> x509.Certificate:
+    """Parse an X.509 certificate from PEM string/bytes or DER bytes."""
+    if isinstance(cert_data, str):
+        cleaned = cert_data.strip()
+        if cleaned.startswith("-----BEGIN"):
+            try:
+                return x509.load_pem_x509_certificate(cleaned.encode("utf-8"))
+            except Exception as exc:
+                msg = f"Failed to parse certificate PEM text: {exc}"
+                msg_0 = "CERT_PARSE_ERROR"
+                raise CertVerificationError(msg_0, msg) from exc
+        try:
+            raw = base64.b64decode(cleaned)
+            return x509.load_der_x509_certificate(raw)
+        except Exception as exc:
+            msg = f"Failed to parse certificate PEM/base64: {exc}"
+            msg_0 = "CERT_PARSE_ERROR"
+            raise CertVerificationError(msg_0, msg) from exc
+
+    if cert_data.strip().startswith(b"-----BEGIN"):
+        try:
+            return x509.load_pem_x509_certificate(cert_data)
+        except Exception as exc:
+            msg = f"Failed to parse certificate PEM bytes: {exc}"
+            msg_0 = "CERT_PARSE_ERROR"
+            raise CertVerificationError(msg_0, msg) from exc
+
+    try:
+        return x509.load_der_x509_certificate(cert_data)
+    except Exception as exc:
+        msg = f"Failed to parse certificate DER bytes: {exc}"
+        msg_0 = "CERT_PARSE_ERROR"
+        raise CertVerificationError(msg_0, msg) from exc
+
+
+def verify_runner_client_cert_chain(  # noqa: C901, PLR0912, PLR0913, PLR0915
+    leaf_pem_or_der: str | bytes,
+    *,
+    active_ca_cert_pem: str | bytes,
+    previous_ca_cert_pem: str | bytes | None = None,
+    expected_runner_id: uuid.UUID | str,
+    expected_fingerprint_sha256: bytes | str,
+    now: datetime | None = None,
+) -> x509.Certificate:
+    """Cryptographically verify leaf certificate against CA, constraints, CN, and fingerprint."""
+    leaf_cert = _load_x509_cert(leaf_pem_or_der)
+
+    # 1. SHA-256 DER fingerprint match
+    actual_fp = leaf_cert.fingerprint(hashes.SHA256())
+    if isinstance(expected_fingerprint_sha256, str):
+        clean_fp = expected_fingerprint_sha256.strip()
+        if len(clean_fp) == _HEX_FINGERPRINT_LEN:
+            target_fp = bytes.fromhex(clean_fp)
+        else:
+            target_fp = base64.b64decode(clean_fp)
+    else:
+        target_fp = bytes(expected_fingerprint_sha256)
+
+    if actual_fp != target_fp:
+        msg = f"Fingerprint mismatch: actual {actual_fp.hex()} != expected {target_fp.hex()}"
+        msg_0 = "FINGERPRINT_MISMATCH"
+        raise CertVerificationError(msg_0, msg)
+
+    # 2. Subject CN == runner:{expected_runner_id} (or runner-{expected_runner_id})
+    cn_attrs = leaf_cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
+    if not cn_attrs:
+        msg = "Subject Common Name is missing from leaf certificate"
+        msg_0 = "SUBJECT_MISMATCH"
+        raise CertVerificationError(msg_0, msg)
+    actual_cn = str(cn_attrs[0].value)
+    expected_id_str = str(expected_runner_id)
+    if actual_cn not in (f"runner:{expected_id_str}", f"runner-{expected_id_str}"):
+        msg = f"Subject CN '{actual_cn}' does not match expected 'runner:{expected_id_str}'"
+        msg_0 = "SUBJECT_MISMATCH"
+        raise CertVerificationError(msg_0, msg)
+
+    # 3. BasicConstraints(ca=False)
+    try:
+        bc_ext = leaf_cert.extensions.get_extension_for_oid(ExtensionOID.BASIC_CONSTRAINTS)
+        bc_val = bc_ext.value
+        if not isinstance(bc_val, x509.BasicConstraints) or bc_val.ca is not False:
+            msg = "Leaf certificate must have BasicConstraints with ca=False"
+            msg_0 = "BASIC_CONSTRAINTS_INVALID"
+            raise CertVerificationError(msg_0, msg)
+    except x509.ExtensionNotFound as exc:
+        msg = "BasicConstraints extension is missing from leaf certificate"
+        msg_0 = "BASIC_CONSTRAINTS_MISSING"
+        raise CertVerificationError(msg_0, msg) from exc
+
+    # 4. ExtendedKeyUsage(CLIENT_AUTH)
+    try:
+        eku_ext = leaf_cert.extensions.get_extension_for_oid(ExtensionOID.EXTENDED_KEY_USAGE)
+        eku_val = eku_ext.value
+        if (
+            not isinstance(eku_val, x509.ExtendedKeyUsage)
+            or ExtendedKeyUsageOID.CLIENT_AUTH not in eku_val
+        ):
+            msg = "ExtendedKeyUsage does not permit client authentication (CLIENT_AUTH)"
+            msg_0 = "EXTENDED_KEY_USAGE_INVALID"
+            raise CertVerificationError(msg_0, msg)
+    except x509.ExtensionNotFound as exc:
+        msg = "ExtendedKeyUsage extension is missing from leaf certificate"
+        msg_0 = "EXTENDED_KEY_USAGE_MISSING"
+        raise CertVerificationError(msg_0, msg) from exc
+
+    # 5. Validity window (not_valid_before_utc <= now <= not_valid_after_utc)
+    check_time = now if now is not None else datetime.now(UTC)
+    if check_time.tzinfo is None:
+        check_time = check_time.replace(tzinfo=UTC)
+
+    not_before = (
+        leaf_cert.not_valid_before_utc
+        if hasattr(leaf_cert, "not_valid_before_utc")
+        else leaf_cert.not_valid_before.replace(tzinfo=UTC)
+    )
+    not_after = (
+        leaf_cert.not_valid_after_utc
+        if hasattr(leaf_cert, "not_valid_after_utc")
+        else leaf_cert.not_valid_after.replace(tzinfo=UTC)
+    )
+    if check_time < not_before:
+        msg = f"Certificate not yet valid (valid from {not_before.isoformat()})"
+        msg_0 = "CERT_NOT_YET_VALID"
+        raise CertVerificationError(msg_0, msg)
+    if check_time > not_after:
+        msg = f"Certificate has expired (expired at {not_after.isoformat()})"
+        msg_0 = "CERT_EXPIRED"
+        raise CertVerificationError(msg_0, msg)
+
+    # 6. Cryptographic issuer signature against active or previous (grace) CA
+    ca_candidates: list[str | bytes] = [active_ca_cert_pem]
+    if previous_ca_cert_pem is not None:
+        ca_candidates.append(previous_ca_cert_pem)
+
+    verified = False
+    last_err: Exception | None = None
+    for ca_raw in ca_candidates:
+        try:
+            ca_cert = _load_x509_cert(ca_raw)
+            leaf_cert.verify_directly_issued_by(ca_cert)
+            verified = True
+            break
+        except (ValueError, TypeError, InvalidSignature) as exc:
+            last_err = exc
+
+    if not verified:
+        msg = f"Leaf certificate issuer signature verification failed against CA chain: {last_err}"
+        msg_0 = "ISSUER_SIGNATURE_INVALID"
+        raise CertVerificationError(msg_0, msg)
+
+    return leaf_cert

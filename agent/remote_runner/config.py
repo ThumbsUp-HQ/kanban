@@ -5,12 +5,13 @@
 from __future__ import annotations
 
 import re
+import tomllib
 import uuid  # noqa: TC003
 from pathlib import Path
 from typing import Any, Final
 
 import yaml
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 __all__ = [
     "KeyPermissionsError",
@@ -47,10 +48,14 @@ class RunnerConfig(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     server_url: str
-    pool_slug: str
-    client_cert_path: Path
-    client_key_path: Path
-    ca_cert_path: Path
+    pool_slug: str = "default"
+    client_cert_path: Path | None = None
+    client_key_path: Path | None = None
+    ca_cert_path: Path | None = None
+
+    cert_path: Path | None = None
+    key_path: Path | None = None
+    allowed_repos: list[str] = Field(default_factory=list)
 
     runner_id: uuid.UUID | None = None
     wss_url: str | None = None
@@ -61,6 +66,27 @@ class RunnerConfig(BaseModel):
     https_proxy: str | None = None
     heartbeat_interval_s: float = Field(default=15.0, ge=1.0, le=60.0)
     nsjail_bin: Path = Path("/usr/bin/nsjail")
+
+    @model_validator(mode="after")
+    def _sync_paths(self) -> RunnerConfig:
+        if self.client_cert_path is None and self.cert_path is not None:
+            self.client_cert_path = self.cert_path
+        elif self.cert_path is None and self.client_cert_path is not None:
+            self.cert_path = self.client_cert_path
+
+        if self.client_key_path is None and self.key_path is not None:
+            self.client_key_path = self.key_path
+        elif self.key_path is None and self.client_key_path is not None:
+            self.key_path = self.client_key_path
+
+        if (
+            self.client_cert_path is None
+            or self.client_key_path is None
+            or self.ca_cert_path is None
+        ):
+            msg = "Missing required certificate or key paths"
+            raise ValueError(msg)
+        return self
 
     @field_validator("pool_slug")
     @classmethod
@@ -87,16 +113,21 @@ class RunnerConfig(BaseModel):
 
 def validate_runner_config(config: RunnerConfig) -> None:
     """Validate key permissions and configuration paths."""
-    validate_key_permissions(config.client_key_path)
+    key_path = config.client_key_path or config.key_path
+    if key_path is not None:
+        validate_key_permissions(key_path)
 
 
 def load_runner_config(config_path: Path) -> RunnerConfig:
-    """Load, parse, and validate RunnerConfig from YAML file."""
+    """Load, parse, and validate RunnerConfig from YAML or TOML file."""
     if not config_path.is_file():
         msg = f"Runner config file not found: {config_path}"
         raise FileNotFoundError(msg)
     raw_content = config_path.read_text(encoding="utf-8")
-    data = yaml.safe_load(raw_content) or {}
+    if config_path.suffix.lower() == ".toml":
+        data = tomllib.loads(raw_content)
+    else:
+        data = yaml.safe_load(raw_content) or {}
     config = RunnerConfig.model_validate(data)
     validate_runner_config(config)
     return config

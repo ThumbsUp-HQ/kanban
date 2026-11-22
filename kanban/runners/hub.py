@@ -22,6 +22,8 @@ if TYPE_CHECKING:
 
 __all__ = [
     "MAX_FRAME_BYTES",
+    "ChallengeHelloFrame",
+    "ChallengeResponseFrame",
     "ConnectedRunner",
     "HeartbeatFrame",
     "HelloAckFrame",
@@ -35,6 +37,7 @@ __all__ = [
     "RemoteRunnerExecutionError",
     "RemoteRunnerRevokedError",
     "RemoteRunnerUnavailableError",
+    "RunnerAlreadyConnectedError",
     "RunnerWssHub",
     "get_global_hub",
 ]
@@ -69,6 +72,14 @@ class RemoteRunnerRevokedError(RemoteRunnerError):
     """Raised when runner certificate is revoked during job execution."""
 
 
+class RunnerAlreadyConnectedError(RemoteRunnerError):
+    """Raised when registering a runner slot that is already actively connected."""
+
+    def __init__(self, code: str = "ALREADY_CONNECTED", detail: str = "") -> None:
+        """Initialize with error code ALREADY_CONNECTED and descriptive detail."""
+        super().__init__(code, detail or "Runner is already connected")
+
+
 class RemoteRunnerExecutionError(RemoteRunnerError):
     """Raised when runner returns an error status payload."""
 
@@ -87,6 +98,25 @@ class RemoteRunnerExecutionError(RemoteRunnerError):
 
 
 # --- Typed Protocol Frames (extra="forbid") ---
+
+
+class ChallengeHelloFrame(BaseModel):
+    """Pre-registration Proof-of-Possession challenge hello from server to runner."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["challenge_hello"] = "challenge_hello"
+    nonce: str
+    runner_id: uuid.UUID
+
+
+class ChallengeResponseFrame(BaseModel):
+    """Proof-of-Possession challenge response from runner to server."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    type: Literal["challenge_response"] = "challenge_response"
+    signature_b64: str
 
 
 class HelloFrame(BaseModel):
@@ -205,6 +235,11 @@ class RunnerWssHub:
         """Override clock source for deterministic timeout testing."""
         self._time_func = time_func
 
+    @property
+    def _connections(self) -> dict[uuid.UUID, ConnectedRunner]:
+        """Expose active runner connections dictionary."""
+        return self._runners
+
     def register_runner(  # noqa: PLR0913, PLR0917
         self,
         runner_id: uuid.UUID,
@@ -216,6 +251,13 @@ class RunnerWssHub:
         capabilities: dict[str, Any] | None = None,
     ) -> ConnectedRunner:
         """Register newly connected runner socket."""
+        if runner_id in self._connections:
+            existing = self._connections[runner_id]
+            if existing.status == "online":
+                msg = f"Runner {runner_id} already has an active live connection slot"
+                err_code = "ALREADY_CONNECTED"
+                raise RunnerAlreadyConnectedError(err_code, msg)
+
         runner = ConnectedRunner(
             runner_id=runner_id,
             workspace_id=workspace_id,
@@ -229,6 +271,8 @@ class RunnerWssHub:
         )
         self._runners[runner_id] = runner
         return runner
+
+    register = register_runner
 
     def unregister_runner(self, runner_id: uuid.UUID, reason: str = "disconnected") -> None:
         """Unregister runner socket and fail any in-flight jobs."""

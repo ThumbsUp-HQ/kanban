@@ -1,0 +1,35 @@
+{
+  "ticket": "KAN-64",
+  "challenge_hello_frame": {
+    "type": "challenge_hello",
+    "nonce": "c4d3b2a190817263544536271809facec4d3b2a190817263544536271809face",
+    "runner_id": "0196ed40-7b2a-7000-8000-112233445566"
+  },
+  "challenge_response_frame": {
+    "type": "challenge_response",
+    "signature_b64": "MEUCIQDK9s7Yl3p1f8a8x7u2j9m1...=="
+  },
+  "challenge_pop_payload_template": "kb-runner-pop-v1:{runner_id}:{nonce}:{cert_fingerprint_sha256}",
+  "anti_hijacking_rejection": {
+    "close_code": 4409,
+    "close_reason": "ALREADY_CONNECTED",
+    "error_type": "RunnerAlreadyConnectedError"
+  },
+  "runner_toml_sample": {
+    "runner_id": "0196ed40-7b2a-7000-8000-112233445566",
+    "server_url": "https://kanban.example.com",
+    "cert_path": "/var/lib/kanban-runner/client.crt",
+    "key_path": "/var/lib/kanban-runner/client.key",
+    "ca_cert_path": "/var/lib/kanban-runner/ca.pem",
+    "allowed_repos": [
+      "org/repo-alpha",
+      "org/repo-beta"
+    ],
+    "pool_slug": "default"
+  },
+  "file_permission_invariants": {
+    "ca_pem": "0o600",
+    "runner_toml": "0o600",
+    "client_key": "0o600"
+  }
+}
