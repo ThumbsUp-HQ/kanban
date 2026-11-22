@@ -8,11 +8,12 @@ import hashlib
 import re
 import secrets
 from dataclasses import dataclass
-from typing import TYPE_CHECKING, Any, Final, Literal
+from typing import TYPE_CHECKING, Any, Final, Literal, cast
 
 import yaml
 from pydantic import BaseModel, ConfigDict, Field, PrivateAttr
 
+from database.models.prose import UNTRUSTED_PROVENANCE_TIERS
 from kanban.security.scrubber import scrub_text
 
 if TYPE_CHECKING:
@@ -112,6 +113,21 @@ class TicketSnapshot(BaseModel):
     priority: str
     labels: list[str] = Field(default_factory=list)
     description_markdown: str
+    actor: str | None = None
+    comments: list[dict[str, Any]] | None = None
+
+    @classmethod
+    def __get_pydantic_json_schema__(
+        cls,
+        core_schema: Any,  # noqa: ANN401
+        handler: Any,  # noqa: ANN401
+    ) -> dict[str, Any]:
+        """Preserve canonical v1 schema export for backwards compatibility."""
+        json_schema = handler(core_schema)
+        props = json_schema.get("properties", {})
+        props.pop("actor", None)
+        props.pop("comments", None)
+        return cast("dict[str, Any]", json_schema)
 
 
 class TransitionContextModel(BaseModel):
@@ -191,6 +207,7 @@ def build_transition_context(  # noqa: C901, PLR0912, PLR0913, PLR0915
     *,
     rng: random.Random | None = None,
     ephemeral_token: bytes | bytearray | str | None = None,
+    spotlight_all: bool | None = None,
 ) -> RenderedContext:
     """Construct deterministic, spotlighted, and sanitized transition context YAML."""
     # Extract execution identifiers
@@ -282,8 +299,53 @@ def build_transition_context(  # noqa: C901, PLR0912, PLR0913, PLR0915
     if trunc_bytes > 0:
         truncated_desc = f"{truncated_desc}\n[TRUNCATED {trunc_bytes} bytes]"
 
-    # Delimiter generation with collision detection
-    fields_to_check = [summary, priority, " ".join(labels), truncated_desc, actor]
+    # Extract comments
+    raw_comments = (
+        getattr(issue, "comments", None)
+        or (issue.get("comments") if isinstance(issue, dict) else None)
+        or getattr(execution, "comments", None)
+        or (execution.get("comments") if isinstance(execution, dict) else None)
+        or []
+    )
+
+    has_untrusted_provenance = bool(
+        getattr(issue, "is_untrusted_content", False)
+        or (issue.get("is_untrusted_content") if isinstance(issue, dict) else False)
+        or getattr(issue, "provenance_tier", "") in UNTRUSTED_PROVENANCE_TIERS
+        or (issue.get("provenance_tier") if isinstance(issue, dict) else "")
+        in UNTRUSTED_PROVENANCE_TIERS
+        or any(
+            (
+                c.get("is_untrusted_content")
+                if isinstance(c, dict)
+                else getattr(c, "is_untrusted_content", False)
+            )
+            or (
+                c.get("provenance_tier")
+                if isinstance(c, dict)
+                else getattr(c, "provenance_tier", "")
+            )
+            in UNTRUSTED_PROVENANCE_TIERS
+            for c in raw_comments
+        )
+    )
+    should_spotlight = spotlight_all if spotlight_all is not None else has_untrusted_provenance
+
+    # Delimiter generation with collision detection across all fields including comments
+    comment_texts: list[str] = []
+    for c in raw_comments:
+        if isinstance(c, dict):
+            c_body = str(c.get("body") or c.get("content") or c.get("body_markdown") or "")
+        else:
+            c_body = str(
+                getattr(c, "body", "")
+                or getattr(c, "content", "")
+                or getattr(c, "body_markdown", "")
+                or c
+            )
+        comment_texts.append(_sanitize_untrusted_text(c_body))
+
+    fields_to_check = [summary, priority, " ".join(labels), truncated_desc, actor, *comment_texts]
     delimiter: str | None = None
     for _ in range(MAX_DELIMITER_ATTEMPTS):
         if rng is not None:
@@ -364,13 +426,62 @@ def build_transition_context(  # noqa: C901, PLR0912, PLR0913, PLR0915
         "ephemeral_bearer_env": "KANBAN_EPHEMERAL_MCP_TOKEN",
     }
 
-    context_dict["ticket_snapshot"] = {
+    if should_spotlight:
+        wrapped_summary = f"{delimiter}\n{summary}\n{delimiter}\n"
+        wrapped_priority = f"{delimiter}\n{priority}\n{delimiter}\n"
+        wrapped_labels = [f"{delimiter}\n{lbl}\n{delimiter}\n" for lbl in labels]
+        wrapped_actor = f"{delimiter}\n{actor}\n{delimiter}\n"
+    else:
+        wrapped_summary = summary
+        wrapped_priority = priority
+        wrapped_labels = labels
+        wrapped_actor = actor
+
+    formatted_comments: list[dict[str, Any]] = []
+    for c in raw_comments:
+        if isinstance(c, dict):
+            c_body = _sanitize_untrusted_text(
+                str(c.get("body") or c.get("content") or c.get("body_markdown") or "")
+            )
+            c_tier = str(c.get("provenance_tier") or "trusted_member")
+            c_author = _sanitize_untrusted_text(str(c.get("author") or c.get("actor") or ""))
+        else:
+            c_body = _sanitize_untrusted_text(
+                str(
+                    getattr(c, "body", "")
+                    or getattr(c, "content", "")
+                    or getattr(c, "body_markdown", "")
+                    or c
+                )
+            )
+            c_tier = str(getattr(c, "provenance_tier", "trusted_member"))
+            c_author = _sanitize_untrusted_text(
+                str(getattr(c, "author", "") or getattr(c, "actor", ""))
+            )
+
+        entry: dict[str, Any] = {
+            "provenance_tier": c_tier,
+            "body": f"{delimiter}\n{c_body}\n{delimiter}\n" if should_spotlight else c_body,
+        }
+        if c_author:
+            entry["author"] = (
+                f"{delimiter}\n{c_author}\n{delimiter}\n" if should_spotlight else c_author
+            )
+        formatted_comments.append(entry)
+
+    snapshot_dict: dict[str, Any] = {
         "delimiter": delimiter,
-        "summary": summary,
-        "priority": priority,
-        "labels": labels,
+        "summary": wrapped_summary,
+        "priority": wrapped_priority,
+        "labels": wrapped_labels,
         "description_markdown": block_description,
     }
+    if should_spotlight or raw_comments:
+        snapshot_dict["actor"] = wrapped_actor
+    if formatted_comments:
+        snapshot_dict["comments"] = formatted_comments
+
+    context_dict["ticket_snapshot"] = snapshot_dict
 
     yaml_text = yaml.dump(
         context_dict,

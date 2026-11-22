@@ -8,6 +8,7 @@ import uuid  # noqa: TC003
 from datetime import datetime  # noqa: TC003
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -41,3 +42,7 @@ class McpReadTaint(Base):
         DateTime(timezone=True), nullable=False, server_default=text("clock_timestamp()")
     )
     expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
+    untrusted_source_object_id: Mapped[uuid.UUID | None] = mapped_column(nullable=True)
+    contains_untrusted_content: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, server_default=text("false")
+    )

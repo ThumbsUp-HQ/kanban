@@ -86,6 +86,19 @@ class Issue(Base):
     board_rank: Mapped[str] = mapped_column(String, nullable=False)
     fencing_token: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
     row_version: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("1"))
+    provenance_tier: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("'trusted_member'")
+    )
+    is_untrusted_content: Mapped[bool | None] = mapped_column(
+        Boolean,
+        Computed(
+            "provenance_tier IN ("
+            "'imported', 'external_webhook', 'public_reporter', 'untrusted_intake'"
+            ")",
+            persisted=True,
+        ),
+        nullable=True,
+    )
     search_tsv: Mapped[str | None] = mapped_column(
         TSVECTOR,
         Computed(
@@ -204,6 +217,19 @@ class IssueComment(Base):
     body_sha256: Mapped[bytes | None] = mapped_column(
         LargeBinary,
         Computed("digest(body_markdown, 'sha256'::text)", persisted=True),
+        nullable=True,
+    )
+    provenance_tier: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("'trusted_member'")
+    )
+    is_untrusted_content: Mapped[bool | None] = mapped_column(
+        Boolean,
+        Computed(
+            "provenance_tier IN ("
+            "'imported', 'external_webhook', 'public_reporter', 'untrusted_intake'"
+            ")",
+            persisted=True,
+        ),
         nullable=True,
     )
     created_at: Mapped[datetime] = mapped_column(

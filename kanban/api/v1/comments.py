@@ -7,11 +7,13 @@ from __future__ import annotations
 import uuid  # noqa: TC003  # Runtime import required for FastAPI path parameter parsing
 from typing import Annotated, Final
 
-from fastapi import APIRouter, Depends, Header, Query, Response, status
+from fastapi import APIRouter, Depends, Header, Query, Request, Response, status
+from sqlalchemy import text
 from sqlalchemy.ext.asyncio import AsyncSession  # noqa: TC002  # Runtime dependency for FastAPI
 
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.timing import timing_floor
+from kanban.api.v1.issues import _derive_provenance_tier
 from kanban.api.v1.schemas.comments import (
     CommentCreate,
     CommentList,
@@ -46,6 +48,7 @@ async def list_issue_comments(  # noqa: PLR0913, PLR0917
     issue_ref: str,
     caller: Annotated[PrincipalContext, Depends(get_principal)],
     session: Annotated[AsyncSession, Depends(get_rls_session)],
+    response: Response,
     taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
     cursor: Annotated[str | None, Query(max_length=128)] = None,
     limit: Annotated[int, Query(ge=1, le=100)] = 50,
@@ -53,7 +56,30 @@ async def list_issue_comments(  # noqa: PLR0913, PLR0917
     """Return top-level comments ordered created_at ASC with up to 200 inlined replies."""
     async with timing_floor(floor_ms=25.0):
         issue = await resolve_issue_ref(session, caller, issue_ref)
-        await taint_recorder.record_project_ids([issue.project_id])
+        is_untrusted = bool(getattr(issue, "is_untrusted_content", False))
+        untrusted_id = issue.id if is_untrusted else None
+
+        if not is_untrusted:
+            comment_untrusted_q = await session.execute(
+                text(
+                    "SELECT id FROM issue_comments "
+                    "WHERE issue_id = :iid AND is_untrusted_content = TRUE LIMIT 1"
+                ),
+                {"iid": issue.id},
+            )
+            comment_untrusted_row = comment_untrusted_q.first()
+            if comment_untrusted_row is not None:
+                is_untrusted = True
+                untrusted_id = comment_untrusted_row[0]
+
+        if is_untrusted:
+            response.headers["X-Kanban-Untrusted-Taint"] = "1"
+            await taint_recorder.record_untrusted_read(
+                issue.project_id, untrusted_source_object_id=untrusted_id
+            )
+        else:
+            await taint_recorder.record_project_ids([issue.project_id])
+
         return await svc.list_comments(
             session=session,
             caller=caller,
@@ -75,18 +101,25 @@ async def create_issue_comment(  # noqa: PLR0913, PLR0917
     caller: Annotated[PrincipalContext, Depends(get_principal)],
     session: Annotated[AsyncSession, Depends(get_rls_session)],
     response: Response,
+    request: Request,
     taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
 ) -> CommentResponse:
     """Create comment after normalization, check mention access, and emit activity."""
     async with timing_floor(floor_ms=25.0):
         issue = await resolve_issue_ref(session, caller, issue_ref)
         await taint_guard.check_write(issue.project_id, tool_name="add_comment")
+        derived_tier = _derive_provenance_tier(request, caller)
         result, etag = await svc.create_comment(
             session=session,
             caller=caller,
             issue_ref=issue_ref,
             body=body,
         )
+        if derived_tier != "trusted_member":
+            await session.execute(
+                text("UPDATE issue_comments SET provenance_tier = :pt WHERE id = :id"),
+                {"pt": derived_tier, "id": result.id},
+            )
         response.headers["Location"] = result.permalink
         response.headers["ETag"] = etag
         await session.commit()

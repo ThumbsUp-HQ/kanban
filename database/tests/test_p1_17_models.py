@@ -236,6 +236,8 @@ async def test_orm_round_trip_issues_and_knowledge(db_session: AsyncSession) -> 
     assert fetched_issue.search_tsv is not None
     assert fetched_issue.fencing_token == 0
     assert fetched_issue.row_version == 1
+    assert fetched_issue.provenance_tier == "trusted_member"
+    assert fetched_issue.is_untrusted_content is False
 
     # 1b. IssueLease round-trip
     from datetime import UTC, datetime, timedelta  # noqa: PLC0415

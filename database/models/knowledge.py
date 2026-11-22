@@ -51,6 +51,19 @@ class Doc(Base):
     )
     hierarchy_path: Mapped[str] = mapped_column(LtreeType, nullable=False)
     version_seq: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    provenance_tier: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("'trusted_member'")
+    )
+    is_untrusted_content: Mapped[bool | None] = mapped_column(
+        Boolean,
+        Computed(
+            "provenance_tier IN ("
+            "'imported', 'external_webhook', 'public_reporter', 'untrusted_intake'"
+            ")",
+            persisted=True,
+        ),
+        nullable=True,
+    )
     search_tsv: Mapped[str | None] = mapped_column(
         TSVECTOR,
         Computed(
@@ -97,6 +110,19 @@ class Page(Base):
     )
     hierarchy_path: Mapped[str] = mapped_column(LtreeType, nullable=False)
     version_seq: Mapped[int] = mapped_column(Integer, nullable=False, server_default=text("1"))
+    provenance_tier: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("'trusted_member'")
+    )
+    is_untrusted_content: Mapped[bool | None] = mapped_column(
+        Boolean,
+        Computed(
+            "provenance_tier IN ("
+            "'imported', 'external_webhook', 'public_reporter', 'untrusted_intake'"
+            ")",
+            persisted=True,
+        ),
+        nullable=True,
+    )
     search_tsv: Mapped[str | None] = mapped_column(
         TSVECTOR,
         Computed(
@@ -174,6 +200,19 @@ class Sticky(Base):
         ForeignKey("docs.id", ondelete="SET NULL"), nullable=True
     )
     sort_rank: Mapped[str] = mapped_column(String, nullable=False, server_default=text("'a0'"))
+    provenance_tier: Mapped[str] = mapped_column(
+        String, nullable=False, server_default=text("'trusted_member'")
+    )
+    is_untrusted_content: Mapped[bool | None] = mapped_column(
+        Boolean,
+        Computed(
+            "provenance_tier IN ("
+            "'imported', 'external_webhook', 'public_reporter', 'untrusted_intake'"
+            ")",
+            persisted=True,
+        ),
+        nullable=True,
+    )
     search_tsv: Mapped[str | None] = mapped_column(
         TSVECTOR,
         Computed(
