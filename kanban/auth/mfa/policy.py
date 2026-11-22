@@ -122,12 +122,14 @@ def require_aal2(max_age_seconds: int | None = None) -> _RequireAal2:
     return _RequireAal2(max_age_seconds=max_age_seconds)
 
 
-async def require_admin_aal2(  # noqa: C901
+async def require_admin_aal2(  # noqa: C901, PLR0912
     request: Request,
     principal: Annotated[PrincipalContext, Depends(get_principal)],
 ) -> PrincipalContext:
-    """Enforce AAL2 MFA policy on administrative routes (KB-P2-05a).
+    """Enforce AAL2 MFA policy on administrative routes (KB-P2-05a, KB-SEC-04).
 
+    - Headless API key / ephemeral Bearer requests without surface == "admin" and verified
+      AAL2 provenance: raises 403 AAL2_REQUIRED.
     - Principal with SERVER_ADMIN or PROJECT_ADMIN and no enrolled confirmed factor:
       raises 403 MFA_ENROLLMENT_REQUIRED.
     - Principal with factor enrolled but AAL1 session:
@@ -135,6 +137,25 @@ async def require_admin_aal2(  # noqa: C901
     - Non-admin principal:
       raises 403 FORBIDDEN.
     """
+    # Enforce Action 4: Reject headless API key / ephemeral Bearer requests unless
+    # credential boundary explicitly carries surface == "admin" AND verified AAL2 provenance
+    if principal.is_mcp_credential or principal.credential_boundary is not None:
+        boundary = principal.credential_boundary
+        if (
+            boundary is None
+            or boundary.surface != "admin"
+            or not getattr(boundary, "has_aal2_provenance", False)
+        ):
+            raise ProblemException(
+                code="AAL2_REQUIRED",
+                status=403,
+                title="AAL2 Authentication Required",
+                detail=(
+                    "Administrative routes require multi-factor authentication (AAL2) "
+                    "or an admin API key with verified provenance."
+                ),
+            )
+
     session_factory = getattr(request.app.state, "session_factory", None)
     if session_factory is None:
         msg = "Session factory is not configured on app.state.session_factory"
@@ -148,14 +169,6 @@ async def require_admin_aal2(  # noqa: C901
     )
 
     async with session_factory.session(rls_ctx) as db_session:
-        admin_res = await db_session.execute(
-            text(
-                "SELECT 1 FROM role_bindings "
-                "WHERE principal_id = :p_id "
-                "  AND role IN ('SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN')"
-            ),
-            {"p_id": principal.principal_id},
-        )
         admin_res = await db_session.execute(
             text(
                 "SELECT 1 FROM role_bindings "
@@ -188,12 +201,20 @@ async def require_admin_aal2(  # noqa: C901
         )
 
         if not has_active_totp and unused_codes == 0 and not has_webauthn:
-            raise ProblemException(
-                code="MFA_ENROLLMENT_REQUIRED",
-                status=403,
-                title="MFA Enrollment Required",
-                detail="Administrators must enroll and confirm a second authentication factor.",
+            # Headless admin credentials with verified AAL2 provenance bypass interactive TOTP
+            is_verified_admin_key = bool(
+                principal.is_mcp_credential
+                and principal.credential_boundary is not None
+                and principal.credential_boundary.surface == "admin"
+                and getattr(principal.credential_boundary, "has_aal2_provenance", False)
             )
+            if not is_verified_admin_key:
+                raise ProblemException(
+                    code="MFA_ENROLLMENT_REQUIRED",
+                    status=403,
+                    title="MFA Enrollment Required",
+                    detail="Administrators must enroll and confirm a second authentication factor.",
+                )
 
     admin_methods: list[str] = []
     if has_webauthn:

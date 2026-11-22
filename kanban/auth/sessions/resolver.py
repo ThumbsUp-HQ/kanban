@@ -19,6 +19,7 @@ from kanban.auth.sessions.cookies import (
     hash_session_token,
     parse_session_cookie,
 )
+from kanban.security.boundary import CredentialBoundary
 
 if TYPE_CHECKING:
     from database.session import RLSSessionFactory
@@ -154,11 +155,17 @@ class SessionCookieResolver:
                 ).scalar_one_or_none()
                 ws_id = def_ws if def_ws is not None else uuid.UUID(int=0)
 
-        is_ephemeral = intro.token_kind == "ephemeral" or raw_token.startswith("kb_agt_eph_")  # noqa: S105
+        is_ephemeral = (
+            intro.token_kind == "ephemeral"  # noqa: S105
+            or raw_token.startswith(("kb_agt_eph_", "kb_eat_"))
+        )
         owner_kind = intro.owner_kind or (
             "agent" if intro.agent_principal_id or is_ephemeral else "user"
         )
         principal_type = owner_kind.upper()
+        boundary = getattr(
+            intro, "credential_boundary", None
+        ) or CredentialBoundary.from_introspection(intro)
         ctx = PrincipalContext(
             principal_id=intro.principal_id,
             workspace_id=ws_id,
@@ -171,6 +178,7 @@ class SessionCookieResolver:
             scoped_project_id=intro.project_id,
             principal_type=principal_type,
             is_mcp_credential=True,
+            credential_boundary=boundary,
         )
         request.state.principal = ctx
         bind_request_log_user(

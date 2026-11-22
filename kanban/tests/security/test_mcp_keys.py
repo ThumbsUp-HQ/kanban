@@ -574,3 +574,48 @@ async def test_mint_and_revoke_edge_cases(db_session: AsyncSession) -> None:
     )
     assert intro_forged.active is False
     assert intro_forged.reason == "SURFACE_KEY_MISMATCH"
+
+
+@pytest.mark.asyncio
+async def test_case_9_credential_boundary_introspection(db_session: AsyncSession) -> None:
+    """Test Case 9: McpIntrospectionResult attaches immutable CredentialBoundary (KAN-66)."""
+    ws_id = await create_workspace(db_session, name="WS-Boundary-Test")
+    admin_id = await create_user(
+        db_session, ws_id, handle="@boundaryadm", display_name="Boundary Admin"
+    )
+    await add_role_binding(
+        db_session, ws_id, admin_id, role="WORKSPACE_ADMIN", scope_type="workspace"
+    )
+
+    ctx = RLSContext(
+        principal_id=admin_id,
+        workspace_id=ws_id,
+        token_scopes=("session",),
+        aal_level=2,
+    )
+    await bind_rls_context(db_session, ctx)
+
+    _key_rec, token = await mint_mcp_api_key(
+        db_session,
+        workspace_id=ws_id,
+        principal_id=admin_id,
+        surface="agent",
+        scopes=["agent:read", "agent:write"],
+        created_by_id=admin_id,
+        allowed_cidrs=["10.0.0.0/16"],
+        capability_mask=15,
+    )
+
+    intro = await introspect_subject_token(db_session, token, surface="agent")
+    assert intro.active is True
+    assert intro.credential_boundary is not None
+    boundary = intro.credential_boundary
+    assert boundary.surface == "agent"
+    assert boundary.scope_tier == "workspace"
+    assert boundary.workspace_allowlist == frozenset({ws_id})
+    assert boundary.capability_mask == 15
+    assert boundary.allowed_cidrs == ("10.0.0.0/16",)
+    assert boundary.allows_workspace(ws_id) is True
+    assert boundary.allows_workspace(uuid.uuid4()) is False
+    assert boundary.allows_ip("10.0.1.5") is True
+    assert boundary.allows_ip("192.168.1.1") is False

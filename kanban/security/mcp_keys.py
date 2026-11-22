@@ -117,6 +117,7 @@ class McpIntrospectionResult:
     allowed_project_ids: list[uuid.UUID] | None = None
     capability_mask: int | None = None
     allowed_cidrs: list[str] | None = None
+    credential_boundary: Any | None = None
 
     def to_dict(self) -> dict[str, Any]:  # noqa: C901, PLR0912
         """Convert introspection result to API JSON payload."""
@@ -715,18 +716,25 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
     tool_name: str | None = None,
 ) -> McpIntrospectionResult:
     """Introspect bearer token digest against database and verify active state."""
-    if token.startswith("kb_agt_eph_"):
+    if token.startswith(("kb_agt_eph_", "kb_eat_")):
         from kanban.security.ephemeral_mcp_tokens import (  # noqa: PLC0415
             introspect_and_consume_ephemeral_token,
         )
 
-        return await introspect_and_consume_ephemeral_token(
+        eph_res = await introspect_and_consume_ephemeral_token(
             session=session,
             token=token,
             surface=surface,
             consume_call=consume_call,
             tool_name=tool_name,
         )
+        if eph_res.active and eph_res.credential_boundary is None:
+            from kanban.security.boundary import CredentialBoundary  # noqa: PLC0415
+
+            object.__setattr__(
+                eph_res, "credential_boundary", CredentialBoundary.from_introspection(eph_res)
+            )
+        return eph_res
 
     if token.startswith("eyJ"):
         # JWT OAuth 2.1 access token path
@@ -830,7 +838,7 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
             if keys_res:
                 oauth_proj_keys = [str(pk) for pk in keys_res]
 
-        return McpIntrospectionResult(
+        oauth_res = McpIntrospectionResult(
             active=True,
             principal_id=principal_uuid,
             workspace_id=ws_uuid,
@@ -842,6 +850,12 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
             allowed_project_ids=allowed_projects,
             allowed_project_keys=oauth_proj_keys or None,
         )
+        from kanban.security.boundary import CredentialBoundary  # noqa: PLC0415
+
+        object.__setattr__(
+            oauth_res, "credential_boundary", CredentialBoundary.from_introspection(oauth_res)
+        )
+        return oauth_res
 
     digest = hash_mcp_api_key(token)
 
@@ -966,6 +980,28 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
                         if str(k) not in resolved_proj_keys:
                             resolved_proj_keys.append(str(k))
 
+    from kanban.security.boundary import CredentialBoundary  # noqa: PLC0415
+
+    raw_tier = scope_tier if scope_tier in ("global", "workspace", "project") else "workspace"
+    raw_surf = key_surface if key_surface in ("agent", "docs", "admin") else "agent"
+    ws_set = set(allowed_workspace_ids or [])
+    if workspace_id and raw_tier in ("workspace", "project"):
+        ws_set.add(workspace_id)
+    proj_set = set(allowed_project_ids or [])
+    if project_id:
+        proj_set.add(project_id)
+
+    boundary = CredentialBoundary(
+        scope_tier=raw_tier,
+        surface=raw_surf,
+        workspace_allowlist=frozenset(ws_set),
+        project_allowlist=frozenset(proj_set),
+        capability_mask=capability_mask if capability_mask is not None else 7,
+        allowed_tools=frozenset(allowed_tools) if allowed_tools is not None else None,
+        allowed_cidrs=tuple(str(c) for c in (allowed_cidrs or ())),
+        has_aal2_provenance=(raw_surf == "admin"),
+    )
+
     return McpIntrospectionResult(
         active=True,
         key_id=_key_id,
@@ -987,6 +1023,7 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
         disabled_tools=list(disabled_tools) if disabled_tools is not None else [],
         allowed_cidrs=[str(c) for c in allowed_cidrs] if allowed_cidrs else None,
         expires_at=expires_at,
+        credential_boundary=boundary,
     )
 
 

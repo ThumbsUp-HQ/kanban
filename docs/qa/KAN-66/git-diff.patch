@@ -1,0 +1,1552 @@
+diff --git a/kanban/api/deps.py b/kanban/api/deps.py
+index acaa23af..eb1c680e 100644
+--- a/kanban/api/deps.py
++++ b/kanban/api/deps.py
+@@ -22,6 +22,7 @@ if TYPE_CHECKING:
+     from sqlalchemy.ext.asyncio import AsyncSession
+ 
+     from database.session import RLSSessionFactory
++    from kanban.security.boundary import CredentialBoundary
+ 
+ 
+ @dataclass(frozen=True, slots=True)
+@@ -44,6 +45,7 @@ class PrincipalContext:
+     is_server_admin: bool = False
+     principal_type: str | None = None
+     is_mcp_credential: bool = False
++    credential_boundary: CredentialBoundary | None = None
+ 
+     def __post_init__(self) -> None:
+         """Enforce AAL level bounds."""
+@@ -141,6 +143,9 @@ async def get_principal(request: Request) -> PrincipalContext:
+             detail="Session requires second-factor verification before accessing this resource.",
+         )
+ 
++    if principal.credential_boundary is not None:
++        principal.credential_boundary.validate_request(request, principal.workspace_id)
++
+     return principal
+ 
+ 
+@@ -183,6 +188,17 @@ async def get_rls_session(
+                 if res_ws:
+                     target_ws_id = res_ws
+ 
++    if (
++        principal.credential_boundary is not None
++        and not principal.credential_boundary.allows_workspace(target_ws_id)
++    ):
++        raise ProblemException(
++            code="CREDENTIAL_SCOPE_VIOLATION",
++            status=403,
++            title="Credential Scope Violation",
++            detail=f"Workspace '{target_ws_id}' is outside allowed workspaces.",
++        )
++
+     user_access_hash = principal.user_access_hash
+     if user_access_hash is None:
+         scopes_str = ",".join(sorted(principal.token_scopes))
+@@ -210,3 +226,7 @@ def get_settings(request: Request) -> Settings:
+     if isinstance(settings, Settings):
+         return settings
+     return Settings()
++
++
++# Alias for backwards compatibility and clarity across dependencies
++get_current_principal = get_principal
+diff --git a/kanban/auth/mfa/policy.py b/kanban/auth/mfa/policy.py
+index dd818e35..cd503b39 100644
+--- a/kanban/auth/mfa/policy.py
++++ b/kanban/auth/mfa/policy.py
+@@ -122,12 +122,14 @@ def require_aal2(max_age_seconds: int | None = None) -> _RequireAal2:
+     return _RequireAal2(max_age_seconds=max_age_seconds)
+ 
+ 
+-async def require_admin_aal2(  # noqa: C901
++async def require_admin_aal2(  # noqa: C901, PLR0912
+     request: Request,
+     principal: Annotated[PrincipalContext, Depends(get_principal)],
+ ) -> PrincipalContext:
+-    """Enforce AAL2 MFA policy on administrative routes (KB-P2-05a).
++    """Enforce AAL2 MFA policy on administrative routes (KB-P2-05a, KB-SEC-04).
+ 
++    - Headless API key / ephemeral Bearer requests without surface == "admin" and verified
++      AAL2 provenance: raises 403 AAL2_REQUIRED.
+     - Principal with SERVER_ADMIN or PROJECT_ADMIN and no enrolled confirmed factor:
+       raises 403 MFA_ENROLLMENT_REQUIRED.
+     - Principal with factor enrolled but AAL1 session:
+@@ -135,6 +137,25 @@ async def require_admin_aal2(  # noqa: C901
+     - Non-admin principal:
+       raises 403 FORBIDDEN.
+     """
++    # Enforce Action 4: Reject headless API key / ephemeral Bearer requests unless
++    # credential boundary explicitly carries surface == "admin" AND verified AAL2 provenance
++    if principal.is_mcp_credential or principal.credential_boundary is not None:
++        boundary = principal.credential_boundary
++        if (
++            boundary is None
++            or boundary.surface != "admin"
++            or not getattr(boundary, "has_aal2_provenance", False)
++        ):
++            raise ProblemException(
++                code="AAL2_REQUIRED",
++                status=403,
++                title="AAL2 Authentication Required",
++                detail=(
++                    "Administrative routes require multi-factor authentication (AAL2) "
++                    "or an admin API key with verified provenance."
++                ),
++            )
++
+     session_factory = getattr(request.app.state, "session_factory", None)
+     if session_factory is None:
+         msg = "Session factory is not configured on app.state.session_factory"
+@@ -148,14 +169,6 @@ async def require_admin_aal2(  # noqa: C901
+     )
+ 
+     async with session_factory.session(rls_ctx) as db_session:
+-        admin_res = await db_session.execute(
+-            text(
+-                "SELECT 1 FROM role_bindings "
+-                "WHERE principal_id = :p_id "
+-                "  AND role IN ('SERVER_ADMIN', 'WORKSPACE_ADMIN', 'PROJECT_ADMIN')"
+-            ),
+-            {"p_id": principal.principal_id},
+-        )
+         admin_res = await db_session.execute(
+             text(
+                 "SELECT 1 FROM role_bindings "
+@@ -188,12 +201,20 @@ async def require_admin_aal2(  # noqa: C901
+         )
+ 
+         if not has_active_totp and unused_codes == 0 and not has_webauthn:
+-            raise ProblemException(
+-                code="MFA_ENROLLMENT_REQUIRED",
+-                status=403,
+-                title="MFA Enrollment Required",
+-                detail="Administrators must enroll and confirm a second authentication factor.",
++            # Headless admin credentials with verified AAL2 provenance bypass interactive TOTP
++            is_verified_admin_key = bool(
++                principal.is_mcp_credential
++                and principal.credential_boundary is not None
++                and principal.credential_boundary.surface == "admin"
++                and getattr(principal.credential_boundary, "has_aal2_provenance", False)
+             )
++            if not is_verified_admin_key:
++                raise ProblemException(
++                    code="MFA_ENROLLMENT_REQUIRED",
++                    status=403,
++                    title="MFA Enrollment Required",
++                    detail="Administrators must enroll and confirm a second authentication factor.",
++                )
+ 
+     admin_methods: list[str] = []
+     if has_webauthn:
+diff --git a/kanban/auth/sessions/resolver.py b/kanban/auth/sessions/resolver.py
+index 6ffe5c64..79bf8e34 100644
+--- a/kanban/auth/sessions/resolver.py
++++ b/kanban/auth/sessions/resolver.py
+@@ -19,6 +19,7 @@ from kanban.auth.sessions.cookies import (
+     hash_session_token,
+     parse_session_cookie,
+ )
++from kanban.security.boundary import CredentialBoundary
+ 
+ if TYPE_CHECKING:
+     from database.session import RLSSessionFactory
+@@ -154,11 +155,17 @@ class SessionCookieResolver:
+                 ).scalar_one_or_none()
+                 ws_id = def_ws if def_ws is not None else uuid.UUID(int=0)
+ 
+-        is_ephemeral = intro.token_kind == "ephemeral" or raw_token.startswith("kb_agt_eph_")  # noqa: S105
++        is_ephemeral = (
++            intro.token_kind == "ephemeral"  # noqa: S105
++            or raw_token.startswith(("kb_agt_eph_", "kb_eat_"))
++        )
+         owner_kind = intro.owner_kind or (
+             "agent" if intro.agent_principal_id or is_ephemeral else "user"
+         )
+         principal_type = owner_kind.upper()
++        boundary = getattr(
++            intro, "credential_boundary", None
++        ) or CredentialBoundary.from_introspection(intro)
+         ctx = PrincipalContext(
+             principal_id=intro.principal_id,
+             workspace_id=ws_id,
+@@ -171,6 +178,7 @@ class SessionCookieResolver:
+             scoped_project_id=intro.project_id,
+             principal_type=principal_type,
+             is_mcp_credential=True,
++            credential_boundary=boundary,
+         )
+         request.state.principal = ctx
+         bind_request_log_user(
+diff --git a/kanban/security/boundary.py b/kanban/security/boundary.py
+new file mode 100644
+index 00000000..aeeb4b55
+--- /dev/null
++++ b/kanban/security/boundary.py
+@@ -0,0 +1,249 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Immutable CredentialBoundary across REST Bearer auth (KB-SEC-04).
++
++Enforces workspace/project allowlists, CIDR, capability mask, and tool scope.
++"""
++
++from __future__ import annotations
++
++import ipaddress
++import uuid
++from dataclasses import dataclass
++from typing import TYPE_CHECKING, Any, Literal, cast
++
++from kanban.api.problems import ProblemException
++
++if TYPE_CHECKING:
++    from starlette.requests import Request
++
++    from kanban.security.mcp_keys import McpIntrospectionResult
++
++
++class EmptyCapabilitySet(frozenset[Any]):
++    """Empty capability set that compares equal to frozenset() and Capability.NONE (0)."""
++
++    def __hash__(self) -> int:
++        """Hash representation matches frozenset."""
++        return super().__hash__()
++
++    def __eq__(self, other: object) -> bool:
++        """Compare equal to 0, Capability.NONE, or empty sets."""
++        from kanban.security.permissions import Capability  # noqa: PLC0415
++
++        if other is Capability.NONE:
++            return True
++        if other == 0:
++            return True
++        return super().__eq__(other)
++
++    def __int__(self) -> int:
++        """Integer representation is 0."""
++        return 0
++
++
++@dataclass(frozen=True, slots=True)
++class CredentialBoundary:
++    """Immutable boundary enforcing scoping, surface, CIDR, and capability invariants."""
++
++    scope_tier: str = "workspace"
++    surface: str = "agent"
++    workspace_allowlist: frozenset[uuid.UUID] | Any = frozenset()
++    project_allowlist: frozenset[uuid.UUID] | Any = frozenset()
++    capability_mask: int = 255
++    allowed_tools: frozenset[str] | Any = None
++    allowed_cidrs: tuple[str, ...] | Any = ()
++    execution_id: uuid.UUID | None = None
++    has_aal2_provenance: bool = False
++
++    def __post_init__(self) -> None:
++        """Normalize attributes upon construction."""
++        # Normalize scope_tier
++        if self.scope_tier == "server":
++            object.__setattr__(self, "scope_tier", "global")
++
++        # Normalize workspace_allowlist
++        if not isinstance(self.workspace_allowlist, frozenset):
++            ws_set = frozenset(
++                uuid.UUID(str(w)) if not isinstance(w, uuid.UUID) else w
++                for w in (self.workspace_allowlist or ())
++            )
++            object.__setattr__(self, "workspace_allowlist", ws_set)
++
++        # Normalize project_allowlist
++        if not isinstance(self.project_allowlist, frozenset):
++            proj_set = frozenset(
++                uuid.UUID(str(p)) if not isinstance(p, uuid.UUID) else p
++                for p in (self.project_allowlist or ())
++            )
++            object.__setattr__(self, "project_allowlist", proj_set)
++
++        # Normalize allowed_tools
++        if self.allowed_tools is not None and not isinstance(self.allowed_tools, frozenset):
++            object.__setattr__(self, "allowed_tools", frozenset(self.allowed_tools))
++
++        # Normalize allowed_cidrs
++        if not isinstance(self.allowed_cidrs, tuple):
++            object.__setattr__(
++                self, "allowed_cidrs", tuple(str(c) for c in (self.allowed_cidrs or ()))
++            )
++
++    @classmethod
++    def from_introspection(cls, intro: McpIntrospectionResult) -> CredentialBoundary:
++        """Construct an immutable CredentialBoundary from an active introspection result."""
++        scope_tier = intro.scope_tier or "workspace"
++        if scope_tier == "server":
++            scope_tier = "global"
++
++        ws_set: set[uuid.UUID] = set()
++        if intro.allowed_workspace_ids:
++            ws_set.update(uuid.UUID(str(w)) for w in intro.allowed_workspace_ids)
++        if intro.workspace_id and scope_tier in ("workspace", "project"):
++            ws_set.add(uuid.UUID(str(intro.workspace_id)))
++        workspace_allowlist = frozenset(ws_set)
++
++        proj_set: set[uuid.UUID] = set()
++        if intro.allowed_project_ids:
++            proj_set.update(uuid.UUID(str(p)) for p in intro.allowed_project_ids)
++        elif intro.allowed_projects:
++            proj_set.update(uuid.UUID(str(p)) for p in intro.allowed_projects)
++        if intro.project_id:
++            proj_set.add(uuid.UUID(str(intro.project_id)))
++        project_allowlist = frozenset(proj_set)
++
++        cap_mask = intro.capability_mask if intro.capability_mask is not None else 255
++        allowed_tools = frozenset(intro.allowed_tools) if intro.allowed_tools is not None else None
++        allowed_cidrs = tuple(str(c) for c in (intro.allowed_cidrs or ()))
++
++        # Verified AAL2 provenance: strictly for admin API keys
++        has_aal2_provenance = (
++            intro.surface == "admin" and intro.token_kind == "api_key"  # noqa: S105
++        )
++
++        raw_surface = intro.surface or "agent"
++        surface_val: Literal["agent", "docs", "admin"] = (
++            cast("Literal['agent', 'docs', 'admin']", raw_surface)
++            if raw_surface in ("agent", "docs", "admin")
++            else "agent"
++        )
++        tier_val: Literal["global", "workspace", "project"] = (
++            cast("Literal['global', 'workspace', 'project']", scope_tier)
++            if scope_tier in ("global", "workspace", "project")
++            else "workspace"
++        )
++
++        return cls(
++            scope_tier=tier_val,
++            surface=surface_val,
++            workspace_allowlist=workspace_allowlist,
++            project_allowlist=project_allowlist,
++            capability_mask=cap_mask,
++            allowed_tools=allowed_tools,
++            allowed_cidrs=allowed_cidrs,
++            execution_id=intro.execution_id,
++            has_aal2_provenance=has_aal2_provenance,
++        )
++
++    def allows_workspace(self, workspace_id: uuid.UUID | str | None) -> bool:
++        """Check whether the workspace is permitted under this credential boundary."""
++        if workspace_id is None:
++            return True
++        target = (
++            uuid.UUID(str(workspace_id))
++            if not isinstance(workspace_id, uuid.UUID)
++            else workspace_id
++        )
++        if self.workspace_allowlist:
++            return target in self.workspace_allowlist
++        return self.scope_tier == "global"
++
++    def allows_project(self, project_id: uuid.UUID | str | None) -> bool:
++        """Check whether the project is permitted under this credential boundary."""
++        if project_id is None:
++            return True
++        target = uuid.UUID(str(project_id)) if not isinstance(project_id, uuid.UUID) else project_id
++        if self.project_allowlist:
++            return target in self.project_allowlist
++        return self.scope_tier != "project"
++
++    def allows_ip(self, client_ip: str | None) -> bool:
++        """Check whether the client IP address is allowed under the CIDR allowlist."""
++        if not self.allowed_cidrs or not client_ip:
++            return True
++        try:
++            ip = ipaddress.ip_address(client_ip)
++            return any(
++                ip in ipaddress.ip_network(cidr, strict=False) for cidr in self.allowed_cidrs
++            )
++        except ValueError:
++            return False
++
++    def effective_capabilities(self, rbac_caps: object) -> object:
++        """Intersect RBAC capabilities with this boundary's capability mask."""
++        from kanban.security.permissions import Capability, capabilities_to_names  # noqa: PLC0415
++
++        if isinstance(rbac_caps, (Capability, int)):
++            return Capability(int(rbac_caps) & self.capability_mask)
++
++        if isinstance(rbac_caps, (set, frozenset, list, tuple)):
++            items = list(rbac_caps)
++            if not items:
++                return frozenset()
++            if isinstance(items[0], Capability):
++                return frozenset(c for c in items if (int(c) & self.capability_mask) == int(c))
++            allowed_names = set(capabilities_to_names(Capability(self.capability_mask)))
++            return frozenset(str(c).upper() for c in items if str(c).upper() in allowed_names)
++
++        return rbac_caps
++
++    def validate_request(self, request: Request, workspace_id: uuid.UUID | None = None) -> None:
++        """Validate request client IP, workspace, and surface restrictions."""
++        # 1. CIDR validation
++        if self.allowed_cidrs:
++            from kanban.security.client_ip import resolve_client_ip  # noqa: PLC0415
++
++            client_ip = resolve_client_ip(request.scope)
++            if not self.allows_ip(client_ip):
++                raise ProblemException(
++                    code="CIDR_NOT_ALLOWED",
++                    status=403,
++                    title="CIDR Not Allowed",
++                    detail=f"Client IP '{client_ip}' is outside allowed CIDRs.",
++                )
++
++        # 2. Workspace validation
++        if workspace_id is not None and not self.allows_workspace(workspace_id):
++            raise ProblemException(
++                code="CREDENTIAL_SCOPE_VIOLATION",
++                status=403,
++                title="Credential Scope Violation",
++                detail=f"Workspace '{workspace_id}' is outside allowed workspaces.",
++            )
++
++        # 3. Surface restrictions
++        path = request.url.path
++        method = request.method.upper()
++
++        if path.startswith("/api/v1/admin") and self.surface != "admin":
++            raise ProblemException(
++                code="AAL2_REQUIRED",
++                status=403,
++                title="AAL2 Authentication Required",
++                detail=(
++                    f"Credential with surface '{self.surface}' cannot invoke "
++                    "administrative endpoints."
++                ),
++            )
++
++        if self.surface == "docs" and method in ("POST", "PUT", "PATCH", "DELETE"):
++            is_doc_path = path.startswith(("/api/v1/docs", "/api/v1/pages", "/api/v1/stickies"))
++            if not is_doc_path:
++                raise ProblemException(
++                    code="INSUFFICIENT_SCOPE",
++                    status=403,
++                    title="Insufficient Scope",
++                    detail=(
++                        f"Docs surface credential cannot invoke mutation endpoints "
++                        f"on non-doc resources ({path})."
++                    ),
++                )
+diff --git a/kanban/security/mcp_keys.py b/kanban/security/mcp_keys.py
+index 80583783..2cb317c2 100644
+--- a/kanban/security/mcp_keys.py
++++ b/kanban/security/mcp_keys.py
+@@ -117,6 +117,7 @@ class McpIntrospectionResult:
+     allowed_project_ids: list[uuid.UUID] | None = None
+     capability_mask: int | None = None
+     allowed_cidrs: list[str] | None = None
++    credential_boundary: Any | None = None
+ 
+     def to_dict(self) -> dict[str, Any]:  # noqa: C901, PLR0912
+         """Convert introspection result to API JSON payload."""
+@@ -715,18 +716,25 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
+     tool_name: str | None = None,
+ ) -> McpIntrospectionResult:
+     """Introspect bearer token digest against database and verify active state."""
+-    if token.startswith("kb_agt_eph_"):
++    if token.startswith(("kb_agt_eph_", "kb_eat_")):
+         from kanban.security.ephemeral_mcp_tokens import (  # noqa: PLC0415
+             introspect_and_consume_ephemeral_token,
+         )
+ 
+-        return await introspect_and_consume_ephemeral_token(
++        eph_res = await introspect_and_consume_ephemeral_token(
+             session=session,
+             token=token,
+             surface=surface,
+             consume_call=consume_call,
+             tool_name=tool_name,
+         )
++        if eph_res.active and eph_res.credential_boundary is None:
++            from kanban.security.boundary import CredentialBoundary  # noqa: PLC0415
++
++            object.__setattr__(
++                eph_res, "credential_boundary", CredentialBoundary.from_introspection(eph_res)
++            )
++        return eph_res
+ 
+     if token.startswith("eyJ"):
+         # JWT OAuth 2.1 access token path
+@@ -830,7 +838,7 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
+             if keys_res:
+                 oauth_proj_keys = [str(pk) for pk in keys_res]
+ 
+-        return McpIntrospectionResult(
++        oauth_res = McpIntrospectionResult(
+             active=True,
+             principal_id=principal_uuid,
+             workspace_id=ws_uuid,
+@@ -842,6 +850,12 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
+             allowed_project_ids=allowed_projects,
+             allowed_project_keys=oauth_proj_keys or None,
+         )
++        from kanban.security.boundary import CredentialBoundary  # noqa: PLC0415
++
++        object.__setattr__(
++            oauth_res, "credential_boundary", CredentialBoundary.from_introspection(oauth_res)
++        )
++        return oauth_res
+ 
+     digest = hash_mcp_api_key(token)
+ 
+@@ -966,6 +980,28 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
+                         if str(k) not in resolved_proj_keys:
+                             resolved_proj_keys.append(str(k))
+ 
++    from kanban.security.boundary import CredentialBoundary  # noqa: PLC0415
++
++    raw_tier = scope_tier if scope_tier in ("global", "workspace", "project") else "workspace"
++    raw_surf = key_surface if key_surface in ("agent", "docs", "admin") else "agent"
++    ws_set = set(allowed_workspace_ids or [])
++    if workspace_id and raw_tier in ("workspace", "project"):
++        ws_set.add(workspace_id)
++    proj_set = set(allowed_project_ids or [])
++    if project_id:
++        proj_set.add(project_id)
++
++    boundary = CredentialBoundary(
++        scope_tier=raw_tier,
++        surface=raw_surf,
++        workspace_allowlist=frozenset(ws_set),
++        project_allowlist=frozenset(proj_set),
++        capability_mask=capability_mask if capability_mask is not None else 7,
++        allowed_tools=frozenset(allowed_tools) if allowed_tools is not None else None,
++        allowed_cidrs=tuple(str(c) for c in (allowed_cidrs or ())),
++        has_aal2_provenance=(raw_surf == "admin"),
++    )
++
+     return McpIntrospectionResult(
+         active=True,
+         key_id=_key_id,
+@@ -987,6 +1023,7 @@ async def introspect_subject_token(  # noqa: C901, PLR0911, PLR0912, PLR0915
+         disabled_tools=list(disabled_tools) if disabled_tools is not None else [],
+         allowed_cidrs=[str(c) for c in allowed_cidrs] if allowed_cidrs else None,
+         expires_at=expires_at,
++        credential_boundary=boundary,
+     )
+ 
+ 
+diff --git a/kanban/security/permissions.py b/kanban/security/permissions.py
+index dbdb9c8c..de8f04c7 100644
+--- a/kanban/security/permissions.py
++++ b/kanban/security/permissions.py
+@@ -3,7 +3,7 @@
+ from __future__ import annotations
+ 
+ from enum import IntFlag
+-from typing import TYPE_CHECKING
++from typing import TYPE_CHECKING, Any
+ 
+ from sqlalchemy import func, select, text
+ 
+@@ -95,6 +95,39 @@ def capabilities_to_names(caps: Capability) -> list[str]:
+     return [name for cap, name in _ORDERED_CAPABILITIES if cap in caps]
+ 
+ 
++def compute_effective_capabilities(
++    rbac_caps: object,
++    caller: PrincipalContext | None = None,
++    project_id: uuid.UUID | str | None = None,
++) -> object:
++    """Compute effective capabilities enforcing CredentialBoundary.
++
++    When caller.credential_boundary is present:
++    - If project_id is checked and not boundary.allows_project(project_id), return frozenset()
++      (deny all access to projects outside project_allowlist).
++    - Otherwise intersect the resolved RBAC capabilities with
++      boundary.effective_capabilities(rbac_caps).
++    """
++    actual_caller: Any = caller
++    actual_caps = rbac_caps
++    if hasattr(rbac_caps, "credential_boundary") and not hasattr(caller, "credential_boundary"):
++        actual_caller = rbac_caps
++        actual_caps = caller
++
++    boundary = getattr(actual_caller, "credential_boundary", None) if actual_caller else None
++    if boundary is None:
++        if isinstance(actual_caps, (set, frozenset, list, tuple)):
++            return frozenset(actual_caps)
++        return actual_caps
++
++    if project_id is not None and not boundary.allows_project(project_id):
++        from kanban.security.boundary import EmptyCapabilitySet  # noqa: PLC0415
++
++        return EmptyCapabilitySet()
++
++    return boundary.effective_capabilities(actual_caps)
++
++
+ async def _check_ephemeral_confinement(
+     session: AsyncSession,
+     ephemeral_project_id: uuid.UUID,
+@@ -113,6 +146,29 @@ async def _check_ephemeral_confinement(
+     return bool(proj_id == ephemeral_project_id)
+ 
+ 
++async def _check_boundary_project_allowlist(
++    session: AsyncSession,
++    boundary: object,
++    object_id: uuid.UUID,
++) -> bool:
++    """Verify that the object is permitted under the boundary's project allowlist."""
++    obj_stmt = select(ObjectRecord.project_id, ObjectRecord.object_type).where(
++        ObjectRecord.id == object_id
++    )
++    obj_row = (await session.execute(obj_stmt)).first()
++    if obj_row is not None:
++        proj_id, obj_type = obj_row[0], obj_row[1]
++        target_proj_id = object_id if str(obj_type) == "project" else proj_id
++        allows_project_fn = getattr(boundary, "allows_project", None)
++        if (
++            target_proj_id is not None
++            and callable(allows_project_fn)
++            and not allows_project_fn(target_proj_id)
++        ):
++            return False
++    return True
++
++
+ async def _is_principal_active(session: AsyncSession, principal_id: uuid.UUID) -> bool:
+     """Check whether a principal exists and has ACTIVE status."""
+     stmt = select(Principal.status).where(Principal.id == principal_id)
+@@ -120,7 +176,7 @@ async def _is_principal_active(session: AsyncSession, principal_id: uuid.UUID) -
+     return status == "ACTIVE"
+ 
+ 
+-async def evaluate_capabilities(
++async def evaluate_capabilities(  # noqa: PLR0911
+     session: AsyncSession,
+     principal_ctx: PrincipalContext,
+     object_id: uuid.UUID,
+@@ -141,6 +197,15 @@ async def evaluate_capabilities(
+     ):
+         return Capability.NONE
+ 
++    # 0b. Enforce CredentialBoundary project allowlist
++    if (
++        principal_ctx.credential_boundary is not None
++        and not await _check_boundary_project_allowlist(
++            session, principal_ctx.credential_boundary, object_id
++        )
++    ):
++        return Capability.NONE
++
+     # 1. Verify human principal exists and is ACTIVE
+     if not await _is_principal_active(session, principal_ctx.principal_id):
+         return Capability.NONE
+@@ -179,10 +244,14 @@ async def evaluate_capabilities(
+     human_mask = await _principal_mask(principal_ctx.principal_id)
+ 
+     if principal_ctx.agent_principal_id is None:
+-        return Capability(human_mask & token_mask)
+-
+-    agent_mask = await _principal_mask(principal_ctx.agent_principal_id)
+-    return Capability(human_mask & agent_mask & token_mask)
++        base_caps = Capability(human_mask & token_mask)
++    else:
++        agent_mask = await _principal_mask(principal_ctx.agent_principal_id)
++        base_caps = Capability(human_mask & agent_mask & token_mask)
++
++    if principal_ctx.credential_boundary is not None:
++        return Capability(base_caps & principal_ctx.credential_boundary.capability_mask)
++    return base_caps
+ 
+ 
+ async def require_capability(
+diff --git a/kanban/tests/security/test_credential_boundary_rest.py b/kanban/tests/security/test_credential_boundary_rest.py
+new file mode 100644
+index 00000000..181b14fa
+--- /dev/null
++++ b/kanban/tests/security/test_credential_boundary_rest.py
+@@ -0,0 +1,829 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Security unit and integration tests for CredentialBoundary across REST Bearer auth (KAN-66).
++
++Enforces KB-SEC-04 Actions 1-4:
++- Action 1: PrincipalContext.credential_boundary immutability & attachment for MCP keys and tokens.
++- Action 2: Client IP CIDR allowlist, workspace allowlist, and REST surface restrictions.
++- Action 3: compute_effective_capabilities and evaluate_capabilities project & mask enforcement.
++- Action 4: require_admin_aal2 rejection of headless agent/docs tokens minted by admins.
++"""
++
++from __future__ import annotations
++
++import base64
++import uuid
++from dataclasses import FrozenInstanceError
++from typing import TYPE_CHECKING, Annotated, Any, cast
++
++import httpx
++import pytest
++from fastapi import Depends, FastAPI
++from starlette.requests import Request
++from starlette.responses import JSONResponse
++
++from database.session import RLSContext, bind_rls_context
++from kanban.api.deps import PrincipalContext, get_current_principal, get_principal
++from kanban.api.problems import ProblemException, problem_exception_handler
++from kanban.auth.mfa.policy import require_admin_aal2
++from kanban.auth.sessions.resolver import SessionCookieResolver
++from kanban.auth.sessions.service import SessionService
++from kanban.security.boundary import CredentialBoundary, EmptyCapabilitySet
++from kanban.security.mcp_keys import (
++    McpIntrospectionResult,
++    mint_mcp_api_key,
++)
++from kanban.security.permissions import (
++    Capability,
++    compute_effective_capabilities,
++    evaluate_capabilities,
++    require_capability,
++)
++from kanban.tests.security.helpers import (
++    add_acl_entry,
++    add_role_binding,
++    create_project,
++    create_registered_object,
++    create_user,
++    create_workspace,
++    rebuild_era,
++)
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++
++def _b64(b: bytes) -> str:
++    return base64.urlsafe_b64encode(b).decode("ascii").rstrip("=")
++
++
++@pytest.fixture(autouse=True)
++def setup_test_key_material(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Set up valid test key material in environment."""
++    monkeypatch.delenv("KANBAN_KEYRING_FILE", raising=False)
++    monkeypatch.setenv("KANBAN_MASTER_KEK", _b64(b"k" * 32))
++    monkeypatch.setenv("KANBAN_AUTH_PEPPER", _b64(b"p" * 32))
++    monkeypatch.setenv("KANBAN_SESSION_HMAC_KEY", _b64(b"s" * 32))
++    monkeypatch.setenv("KANBAN_MASTER_KEK_KID", "test-kid-1")
++
++
++# ==============================================================================
++# Action 1: Model Invariants, Immutability & Attachment
++# ==============================================================================
++
++
++def test_action_1_boundary_model_immutability_and_defaults() -> None:
++    """Verify CredentialBoundary is frozen, immutable, and normalizes inputs."""
++    ws_1 = uuid.uuid4()
++    proj_1 = uuid.uuid4()
++
++    boundary = CredentialBoundary(
++        scope_tier="server",  # Normalized to "global"
++        surface="agent",
++        workspace_allowlist=[str(ws_1)],  # Normalized to frozenset[uuid.UUID]
++        project_allowlist=[proj_1],  # Normalized to frozenset[uuid.UUID]
++        capability_mask=15,
++        allowed_tools=["read_ticket", "search_tickets"],  # Normalized to frozenset[str]
++        allowed_cidrs=["192.168.1.0/24"],  # Normalized to tuple
++        has_aal2_provenance=False,
++    )
++
++    # Immutability
++    with pytest.raises(FrozenInstanceError):
++        boundary.surface = "admin"  # type: ignore[misc]
++
++    with pytest.raises(FrozenInstanceError):
++        boundary.capability_mask = 255  # type: ignore[misc]
++
++    # Normalization checks
++    assert boundary.scope_tier == "global"
++    assert boundary.surface == "agent"
++    assert boundary.workspace_allowlist == frozenset({ws_1})
++    assert boundary.project_allowlist == frozenset({proj_1})
++    assert boundary.capability_mask == 15
++    assert boundary.allowed_tools == frozenset({"read_ticket", "search_tickets"})
++    assert boundary.allowed_cidrs == ("192.168.1.0/24",)
++    assert boundary.has_aal2_provenance is False
++
++    # Attachment to PrincipalContext
++    ctx = PrincipalContext(
++        principal_id=uuid.uuid4(),
++        workspace_id=ws_1,
++        credential_boundary=boundary,
++    )
++    assert ctx.credential_boundary is boundary
++    assert ctx.credential_boundary.allows_workspace(ws_1) is True
++    assert ctx.credential_boundary.allows_workspace(uuid.uuid4()) is False
++
++
++def test_action_1_from_introspection_mapping() -> None:
++    """Verify CredentialBoundary.from_introspection correctly maps McpIntrospectionResult."""
++    ws_id = uuid.uuid4()
++    proj_id = uuid.uuid4()
++    exec_id = uuid.uuid4()
++
++    # Case A: Admin API key with verified provenance
++    intro_admin = McpIntrospectionResult(
++        active=True,
++        principal_id=uuid.uuid4(),
++        workspace_id=ws_id,
++        surface="admin",
++        scope_tier="workspace",
++        project_id=proj_id,
++        allowed_workspace_ids=[ws_id],
++        allowed_project_ids=[proj_id],
++        capability_mask=63,
++        allowed_tools=["manage_users"],
++        allowed_cidrs=["10.0.0.0/8"],
++        execution_id=exec_id,
++        token_kind="api_key",  # noqa: S106
++    )
++    boundary_admin = CredentialBoundary.from_introspection(intro_admin)
++    assert boundary_admin.surface == "admin"
++    assert boundary_admin.scope_tier == "workspace"
++    assert boundary_admin.workspace_allowlist == frozenset({ws_id})
++    assert boundary_admin.project_allowlist == frozenset({proj_id})
++    assert boundary_admin.capability_mask == 63
++    assert boundary_admin.allowed_tools == frozenset({"manage_users"})
++    assert boundary_admin.allowed_cidrs == ("10.0.0.0/8",)
++    assert boundary_admin.execution_id == exec_id
++    assert boundary_admin.has_aal2_provenance is True
++
++    # Case B: Ephemeral token has no AAL2 provenance
++    intro_eph = McpIntrospectionResult(
++        active=True,
++        principal_id=uuid.uuid4(),
++        workspace_id=ws_id,
++        surface="agent",
++        scope_tier="project",
++        project_id=proj_id,
++        token_kind="ephemeral",  # noqa: S106
++    )
++    boundary_eph = CredentialBoundary.from_introspection(intro_eph)
++    assert boundary_eph.surface == "agent"
++    assert boundary_eph.scope_tier == "project"
++    assert boundary_eph.has_aal2_provenance is False
++
++
++@pytest.mark.asyncio
++async def test_action_1_session_resolver_attaches_boundary(db_session: AsyncSession) -> None:
++    """Verify SessionCookieResolver constructs and attaches CredentialBoundary upon Bearer auth."""
++    ws_id = await create_workspace(db_session, name="WS-Boundary-Mint")
++    user_id = await create_user(db_session, ws_id, handle="@bounduser", display_name="Bound User")
++    await add_role_binding(
++        db_session, ws_id, user_id, role="WORKSPACE_ADMIN", scope_type="workspace"
++    )
++
++    ctx = RLSContext(
++        principal_id=user_id,
++        workspace_id=ws_id,
++        token_scopes=("session",),
++        aal_level=2,
++    )
++    await bind_rls_context(db_session, ctx)
++
++    _key_record, plaintext = await mint_mcp_api_key(
++        db_session,
++        workspace_id=ws_id,
++        principal_id=user_id,
++        surface="agent",
++        scopes=["agent:read", "agent:write"],
++        created_by_id=user_id,
++        allowed_cidrs=["127.0.0.1/32"],
++        capability_mask=31,
++    )
++
++    # Set up resolver with a fake session factory returning db_session
++    class _FakeFactory:
++        def session(self, _ctx: object) -> object:
++            class _CtxMgr:
++                async def __aenter__(self) -> AsyncSession:
++                    return db_session
++
++                async def __aexit__(self, *args: object) -> None:
++                    pass
++
++            return _CtxMgr()
++
++    resolver = SessionCookieResolver(
++        SessionService(b"s" * 32),
++        _FakeFactory(),  # type: ignore[arg-type]
++    )
++
++    # Create dummy Starlette request with Bearer token
++    scope = {
++        "type": "http",
++        "method": "GET",
++        "path": "/api/v1/issues",
++        "headers": [(b"authorization", f"Bearer {plaintext}".encode())],
++    }
++    req = Request(scope)
++
++    resolved_ctx = await resolver.resolve(req)
++    assert resolved_ctx is not None
++    assert resolved_ctx.is_mcp_credential is True
++    assert resolved_ctx.credential_boundary is not None
++    boundary = resolved_ctx.credential_boundary
++    assert boundary.surface == "agent"
++    assert boundary.scope_tier == "workspace"
++    assert boundary.workspace_allowlist == frozenset({ws_id})
++    assert boundary.capability_mask == 31
++    assert boundary.allowed_cidrs == ("127.0.0.1/32",)
++    assert boundary.has_aal2_provenance is False
++
++
++# ==============================================================================
++# Action 2: REST Bearer Validation (CIDR, Workspace Scope, Surface Restrictions)
++# ==============================================================================
++
++
++@pytest.mark.asyncio
++async def test_action_2_rest_bearer_cidr_allowlist_validation(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Verify client IP validation raises 403 CIDR_NOT_ALLOWED if outside allowlist."""
++    monkeypatch.setenv("KANBAN_TRUSTED_PROXIES", "127.0.0.1/32")
++    app = FastAPI()
++    app.add_exception_handler(ProblemException, problem_exception_handler)  # type: ignore[arg-type]
++
++    @app.get("/api/v1/test/cidr")
++    async def sample_endpoint(
++        principal: Annotated[PrincipalContext, Depends(get_current_principal)],
++    ) -> JSONResponse:
++        return JSONResponse({"status": "ok", "user": str(principal.principal_id)})
++
++    # Mock resolver returning a principal with CIDR restriction
++    allowed_net = "192.168.1.0/24"
++    boundary = CredentialBoundary(
++        scope_tier="global",
++        surface="agent",
++        allowed_cidrs=(allowed_net,),
++    )
++
++    class _MockResolver:
++        async def resolve(self, _request: Request) -> PrincipalContext:
++            return PrincipalContext(
++                principal_id=uuid.uuid4(),
++                workspace_id=uuid.uuid4(),
++                credential_boundary=boundary,
++            )
++
++    app.state.principal_resolver = _MockResolver()
++
++    transport = httpx.ASGITransport(app=app)
++
++    # 1. Request from allowed IP (192.168.1.42)
++    async with httpx.AsyncClient(
++        transport=transport,
++        base_url="http://test",
++        headers={"x-forwarded-for": "192.168.1.42"},
++    ) as client:
++        res = await client.get("/api/v1/test/cidr")
++        assert res.status_code == 200
++        assert res.json()["status"] == "ok"
++
++    # 2. Request from disallowed IP (10.0.0.50)
++    async with httpx.AsyncClient(
++        transport=transport,
++        base_url="http://test",
++        headers={"x-forwarded-for": "10.0.0.50"},
++    ) as client:
++        res = await client.get("/api/v1/test/cidr")
++        assert res.status_code == 403
++        data = res.json()
++        assert data["code"] == "CIDR_NOT_ALLOWED"
++        assert "outside allowed CIDRs" in data["detail"]
++
++
++@pytest.mark.asyncio
++async def test_action_2_rest_bearer_workspace_allowlist_validation() -> None:
++    """Verify workspace validation raises 403 CREDENTIAL_SCOPE_VIOLATION if outside allowlist."""
++    app = FastAPI()
++    app.add_exception_handler(ProblemException, problem_exception_handler)  # type: ignore[arg-type]
++
++    ws_allowed = uuid.uuid4()
++    ws_forbidden = uuid.uuid4()
++
++    boundary = CredentialBoundary(
++        scope_tier="workspace",
++        surface="agent",
++        workspace_allowlist=frozenset({ws_allowed}),
++    )
++
++    # Endpoint with get_principal
++    @app.get("/api/v1/test/ws")
++    async def sample_endpoint(
++        principal: Annotated[PrincipalContext, Depends(get_principal)],
++    ) -> JSONResponse:
++        return JSONResponse({"status": "ok", "workspace": str(principal.workspace_id)})
++
++    # Case A: Principal belongs to allowed workspace -> 200 OK
++    class _AllowedWsResolver:
++        async def resolve(self, _request: Request) -> PrincipalContext:
++            return PrincipalContext(
++                principal_id=uuid.uuid4(),
++                workspace_id=ws_allowed,
++                credential_boundary=boundary,
++            )
++
++    app.state.principal_resolver = _AllowedWsResolver()
++    transport = httpx.ASGITransport(app=app)
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
++        res = await client.get("/api/v1/test/ws")
++        assert res.status_code == 200
++        assert res.json()["workspace"] == str(ws_allowed)
++
++    # Case B: Principal belongs to forbidden workspace -> 403 CREDENTIAL_SCOPE_VIOLATION
++    class _ForbiddenWsResolver:
++        async def resolve(self, _request: Request) -> PrincipalContext:
++            return PrincipalContext(
++                principal_id=uuid.uuid4(),
++                workspace_id=ws_forbidden,
++                credential_boundary=boundary,
++            )
++
++    app.state.principal_resolver = _ForbiddenWsResolver()
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
++        res = await client.get("/api/v1/test/ws")
++        assert res.status_code == 403
++        data = res.json()
++        assert data["code"] == "CREDENTIAL_SCOPE_VIOLATION"
++
++
++@pytest.mark.asyncio
++async def test_action_2_rest_bearer_surface_restrictions() -> None:
++    """Verify surface restrictions for docs and admin endpoints."""
++    app = FastAPI()
++    app.add_exception_handler(ProblemException, problem_exception_handler)  # type: ignore[arg-type]
++
++    # Setup routes representing various REST endpoints
++    @app.post("/api/v1/issues")
++    async def create_issue_endpoint(
++        _principal: Annotated[PrincipalContext, Depends(get_principal)],
++    ) -> JSONResponse:
++        return JSONResponse({"created": "issue"})
++
++    @app.patch("/api/v1/issues/{issue_id}")
++    async def update_issue_endpoint(
++        issue_id: str,
++        _principal: Annotated[PrincipalContext, Depends(get_principal)],
++    ) -> JSONResponse:
++        return JSONResponse({"updated": issue_id})
++
++    @app.delete("/api/v1/issues/{issue_id}")
++    async def delete_issue_endpoint(
++        issue_id: str,
++        _principal: Annotated[PrincipalContext, Depends(get_principal)],
++    ) -> JSONResponse:
++        return JSONResponse({"deleted": issue_id})
++
++    @app.get("/api/v1/issues")
++    async def list_issues_endpoint(
++        _principal: Annotated[PrincipalContext, Depends(get_principal)],
++    ) -> JSONResponse:
++        return JSONResponse({"issues": []})
++
++    @app.post("/api/v1/docs")
++    async def create_doc_endpoint(
++        _principal: Annotated[PrincipalContext, Depends(get_principal)],
++    ) -> JSONResponse:
++        return JSONResponse({"created": "doc"})
++
++    @app.put("/api/v1/docs/{doc_id}")
++    async def update_doc_endpoint(
++        doc_id: str,
++        _principal: Annotated[PrincipalContext, Depends(get_principal)],
++    ) -> JSONResponse:
++        return JSONResponse({"updated": doc_id})
++
++    @app.get("/api/v1/admin/server/settings")
++    async def admin_settings_endpoint(
++        _principal: Annotated[PrincipalContext, Depends(get_principal)],
++    ) -> JSONResponse:
++        return JSONResponse({"admin": "settings"})
++
++    transport = httpx.ASGITransport(app=app)
++
++    # 1. Test DOCS surface credential
++    docs_boundary = CredentialBoundary(scope_tier="global", surface="docs")
++
++    class _DocsResolver:
++        async def resolve(self, _request: Request) -> PrincipalContext:
++            return PrincipalContext(
++                principal_id=uuid.uuid4(),
++                workspace_id=uuid.uuid4(),
++                credential_boundary=docs_boundary,
++            )
++
++    app.state.principal_resolver = _DocsResolver()
++
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
++        # Docs surface mutating issues -> 403 INSUFFICIENT_SCOPE
++        res_post_issue = await client.post("/api/v1/issues", json={"title": "test"})
++        assert res_post_issue.status_code == 403
++        assert res_post_issue.json()["code"] == "INSUFFICIENT_SCOPE"
++
++        res_patch_issue = await client.patch("/api/v1/issues/123", json={"title": "new"})
++        assert res_patch_issue.status_code == 403
++        assert res_patch_issue.json()["code"] == "INSUFFICIENT_SCOPE"
++
++        res_del_issue = await client.delete("/api/v1/issues/123")
++        assert res_del_issue.status_code == 403
++        assert res_del_issue.json()["code"] == "INSUFFICIENT_SCOPE"
++
++        # Docs surface reading issues -> 200 OK
++        res_get_issues = await client.get("/api/v1/issues")
++        assert res_get_issues.status_code == 200
++
++        # Docs surface mutating docs -> 200 OK
++        res_post_doc = await client.post("/api/v1/docs", json={"title": "Design"})
++        assert res_post_doc.status_code == 200
++
++        res_put_doc = await client.put("/api/v1/docs/456", json={"title": "Updated"})
++        assert res_put_doc.status_code == 200
++
++        # Docs surface accessing /api/v1/admin/* -> 403 AAL2_REQUIRED
++        res_admin = await client.get("/api/v1/admin/server/settings")
++        assert res_admin.status_code == 403
++        assert res_admin.json()["code"] == "AAL2_REQUIRED"
++
++    # 2. Test AGENT surface credential
++    agent_boundary = CredentialBoundary(scope_tier="global", surface="agent")
++
++    class _AgentResolver:
++        async def resolve(self, _request: Request) -> PrincipalContext:
++            return PrincipalContext(
++                principal_id=uuid.uuid4(),
++                workspace_id=uuid.uuid4(),
++                credential_boundary=agent_boundary,
++            )
++
++    app.state.principal_resolver = _AgentResolver()
++
++    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
++        # Agent surface mutating issues -> 200 OK
++        res_agent_post = await client.post("/api/v1/issues", json={"title": "agent issue"})
++        assert res_agent_post.status_code == 200
++
++        # Agent surface calling /api/v1/admin/* -> 403 AAL2_REQUIRED
++        res_agent_admin = await client.get("/api/v1/admin/server/settings")
++        assert res_agent_admin.status_code == 403
++        assert res_agent_admin.json()["code"] == "AAL2_REQUIRED"
++
++
++# ==============================================================================
++# Action 3: Project Allowlists, Capability Mask & compute_effective_capabilities
++# ==============================================================================
++
++
++def test_action_3_compute_effective_capabilities_matrix() -> None:
++    """Verify compute_effective_capabilities enforces project allowlists and capability masks."""
++    proj_allowed = uuid.uuid4()
++    proj_denied = uuid.uuid4()
++
++    # Boundary allowing only proj_allowed with capability_mask=5 (VIEW(1) | EDIT(4))
++    boundary = CredentialBoundary(
++        scope_tier="project",
++        surface="agent",
++        project_allowlist=frozenset({proj_allowed}),
++        capability_mask=int(Capability.VIEW | Capability.EDIT),
++    )
++    caller = PrincipalContext(
++        principal_id=uuid.uuid4(),
++        workspace_id=uuid.uuid4(),
++        credential_boundary=boundary,
++    )
++
++    # 1. Outside project_allowlist -> returns frozenset() / EmptyCapabilitySet
++    denied_res = compute_effective_capabilities(
++        Capability.ALL, caller=caller, project_id=proj_denied
++    )
++    assert denied_res == frozenset()
++    assert not bool(denied_res)
++    assert cast("Any", denied_res) == Capability.NONE
++
++    denied_str_res = compute_effective_capabilities(
++        {"VIEW", "EDIT", "DELETE"}, caller=caller, project_id=proj_denied
++    )
++    assert denied_str_res == frozenset()
++
++    # 2. Inside project_allowlist -> intersects RBAC with capability_mask
++    allowed_cap = cast(
++        "Capability",
++        compute_effective_capabilities(Capability.ALL, caller=caller, project_id=proj_allowed),
++    )
++    assert allowed_cap == (Capability.VIEW | Capability.EDIT)
++    assert Capability.DELETE not in allowed_cap
++    assert Capability.ADMIN not in allowed_cap
++
++    # 3. String sets intersection
++    allowed_str = compute_effective_capabilities(
++        {"VIEW", "EDIT", "DELETE", "ADMIN"}, caller=caller, project_id=proj_allowed
++    )
++    assert allowed_str == frozenset({"VIEW", "EDIT"})
++
++    # 4. Caller without boundary returns full RBAC capabilities
++    unbounded_caller = PrincipalContext(
++        principal_id=uuid.uuid4(),
++        workspace_id=uuid.uuid4(),
++        credential_boundary=None,
++    )
++    unbounded_cap = compute_effective_capabilities(
++        Capability.ALL, caller=unbounded_caller, project_id=proj_denied
++    )
++    assert unbounded_cap == Capability.ALL
++
++    unbounded_str = compute_effective_capabilities(
++        {"VIEW", "EDIT"}, caller=unbounded_caller, project_id=proj_denied
++    )
++    assert unbounded_str == frozenset({"VIEW", "EDIT"})
++
++
++@pytest.mark.asyncio
++async def test_action_3_evaluate_capabilities_and_require_capability(
++    db_session: AsyncSession,
++) -> None:
++    """Verify evaluate_capabilities enforces CredentialBoundary project allowlist and mask."""
++    ws_id = await create_workspace(db_session, name="WS-Proj-Eval")
++    admin_id = await create_user(db_session, ws_id, handle="@evaladmin", display_name="Eval Admin")
++    await add_role_binding(
++        db_session, ws_id, admin_id, role="WORKSPACE_ADMIN", scope_type="workspace"
++    )
++
++    proj_1 = await create_project(db_session, ws_id, identifier="PRJA", name="Project One")
++    proj_2 = await create_project(db_session, ws_id, identifier="PRJB", name="Project Two")
++
++    issue_1 = await create_registered_object(
++        db_session, ws_id, kind="issue", key="PRJA-1", title="Issue in P1", project_id=proj_1
++    )
++    issue_2 = await create_registered_object(
++        db_session, ws_id, kind="issue", key="PRJB-1", title="Issue in P2", project_id=proj_2
++    )
++
++    # Give admin full access to both issues via ERA
++    await add_acl_entry(db_session, ws_id, issue_1, admin_id, capability_mask=int(Capability.ALL))
++    await add_acl_entry(db_session, ws_id, issue_2, admin_id, capability_mask=int(Capability.ALL))
++    await rebuild_era(db_session, ws_id)
++
++    # Boundary restricted strictly to proj_1 with capability_mask=VIEW (1)
++    boundary = CredentialBoundary(
++        scope_tier="project",
++        surface="agent",
++        project_allowlist=frozenset({proj_1}),
++        capability_mask=int(Capability.VIEW),
++    )
++    caller = PrincipalContext(
++        principal_id=admin_id,
++        workspace_id=ws_id,
++        token_scopes=("agent:read", "agent:write"),
++        credential_boundary=boundary,
++    )
++
++    # 1. Object in allowed project (issue_1 in proj_1) -> has VIEW, lacks EDIT
++    caps_1 = await evaluate_capabilities(db_session, caller, issue_1)
++    assert Capability.VIEW in caps_1
++    assert Capability.EDIT not in caps_1
++
++    # require_capability VIEW passes
++    req_pass = await require_capability(db_session, caller, issue_1, Capability.VIEW)
++    assert req_pass == caps_1
++
++    # require_capability EDIT raises 403 INSUFFICIENT_CAPABILITY
++    with pytest.raises(ProblemException) as exc_info:
++        await require_capability(db_session, caller, issue_1, Capability.EDIT)
++    assert exc_info.value.status == 403
++    assert exc_info.value.code == "INSUFFICIENT_CAPABILITY"
++
++    # 2. Object in disallowed project (issue_2 in proj_2) -> returns Capability.NONE
++    caps_2 = await evaluate_capabilities(db_session, caller, issue_2)
++    assert caps_2 == Capability.NONE
++
++    # S3.4 Anti-enumeration: require_capability VIEW raises 404 NOT_FOUND!
++    with pytest.raises(ProblemException) as exc_info_404:
++        await require_capability(db_session, caller, issue_2, Capability.VIEW)
++    assert exc_info_404.value.status == 404
++    assert exc_info_404.value.code == "NOT_FOUND"
++
++
++# ==============================================================================
++# Action 4: require_admin_aal2 Headless Token Rejection
++# ==============================================================================
++
++
++@pytest.mark.asyncio
++async def test_action_4_require_admin_aal2_headless_rejection(db_session: AsyncSession) -> None:
++    """Verify require_admin_aal2 rejects headless agent/docs tokens minted by admins."""
++    ws_id = await create_workspace(db_session, name="WS-AAL2-Policy")
++    admin_id = await create_user(
++        db_session, ws_id, handle="@serveradm", display_name="Server Administrator"
++    )
++    # Grant SERVER_ADMIN role
++    await add_role_binding(db_session, ws_id, admin_id, role="SERVER_ADMIN", scope_type="server")
++
++    # Set up dummy session factory for require_admin_aal2
++    class _Factory:
++        def session(self, _ctx: object) -> object:
++            class _CtxMgr:
++                async def __aenter__(self) -> AsyncSession:
++                    return db_session
++
++                async def __aexit__(self, *args: object) -> None:
++                    pass
++
++            return _CtxMgr()
++
++    app = FastAPI()
++    app.state.session_factory = _Factory()
++
++    req = Request(
++        {
++            "type": "http",
++            "method": "GET",
++            "path": "/api/v1/admin/server/settings",
++            "app": app,
++        }
++    )
++
++    # 1. Agent token minted by this SERVER_ADMIN (surface="agent") -> 403 AAL2_REQUIRED
++    agent_boundary = CredentialBoundary(
++        scope_tier="global",
++        surface="agent",
++        has_aal2_provenance=False,
++    )
++    agent_caller = PrincipalContext(
++        principal_id=admin_id,
++        workspace_id=ws_id,
++        aal_level=1,
++        is_mcp_credential=True,
++        credential_boundary=agent_boundary,
++    )
++
++    with pytest.raises(ProblemException) as exc_agent:
++        await require_admin_aal2(req, agent_caller)
++    assert exc_agent.value.status == 403
++    assert exc_agent.value.code == "AAL2_REQUIRED"
++    assert exc_agent.value.detail is not None
++    assert "Administrative routes require multi-factor authentication" in exc_agent.value.detail
++
++    # 2. Docs token minted by this SERVER_ADMIN (surface="docs") -> 403 AAL2_REQUIRED
++    docs_boundary = CredentialBoundary(
++        scope_tier="global",
++        surface="docs",
++        has_aal2_provenance=False,
++    )
++    docs_caller = PrincipalContext(
++        principal_id=admin_id,
++        workspace_id=ws_id,
++        aal_level=1,
++        is_mcp_credential=True,
++        credential_boundary=docs_boundary,
++    )
++
++    with pytest.raises(ProblemException) as exc_docs:
++        await require_admin_aal2(req, docs_caller)
++    assert exc_docs.value.status == 403
++    assert exc_docs.value.code == "AAL2_REQUIRED"
++
++    # 3. Admin token with verified AAL2 provenance -> passes!
++    admin_boundary = CredentialBoundary(
++        scope_tier="global",
++        surface="admin",
++        has_aal2_provenance=True,
++    )
++    admin_caller = PrincipalContext(
++        principal_id=admin_id,
++        workspace_id=ws_id,
++        aal_level=2,
++        is_mcp_credential=True,
++        credential_boundary=admin_boundary,
++    )
++
++    passed_ctx = await require_admin_aal2(req, admin_caller)
++    assert passed_ctx is admin_caller
++
++
++# ==============================================================================
++# Additional Exhaustive Tests for 100% Boundary Coverage
++# ==============================================================================
++
++
++def test_boundary_model_and_introspection_edge_cases() -> None:
++    """Exercise EmptyCapabilitySet and from_introspection edge cases."""
++    # 1. EmptyCapabilitySet
++    empty_cap = EmptyCapabilitySet()
++    assert empty_cap == Capability.NONE
++    assert empty_cap == 0
++    assert empty_cap == frozenset()
++    assert empty_cap != {"VIEW"}
++    assert int(empty_cap) == 0
++    assert not bool(empty_cap)
++    assert isinstance(hash(empty_cap), int)
++
++    # 2. Normalization & immutability
++    ws_id = uuid.uuid4()
++    proj_id = uuid.uuid4()
++    b_norm = CredentialBoundary(
++        scope_tier="server",
++        workspace_allowlist=frozenset({ws_id}),
++        project_allowlist=frozenset({proj_id}),
++        allowed_tools=frozenset({"tool1"}),
++        allowed_cidrs=("10.0.0.0/8",),
++    )
++    assert b_norm.scope_tier == "global"
++    assert b_norm.workspace_allowlist == frozenset({ws_id})
++    assert b_norm.project_allowlist == frozenset({proj_id})
++    assert b_norm.allowed_tools == frozenset({"tool1"})
++    assert b_norm.allowed_cidrs == ("10.0.0.0/8",)
++
++    # 3. from_introspection branch coverage
++    # 3a. server scope tier & legacy allowed_projects list
++    intro_server = McpIntrospectionResult(
++        active=True,
++        principal_id=uuid.uuid4(),
++        workspace_id=None,
++        surface="custom_surface",  # fallback to "agent"
++        scope_tier="server",  # maps to "global"
++        allowed_projects=[proj_id],  # legacy field
++        project_id=None,
++        capability_mask=None,  # defaults to 255
++        allowed_tools=None,
++        allowed_cidrs=None,
++    )
++    b_server = CredentialBoundary.from_introspection(intro_server)
++    assert b_server.scope_tier == "global"
++    assert b_server.surface == "agent"
++    assert b_server.project_allowlist == frozenset({proj_id})
++    assert b_server.capability_mask == 255
++    assert b_server.allowed_tools is None
++    assert b_server.allowed_cidrs == ()
++
++    # 3b. fallback tier
++    intro_fallback = McpIntrospectionResult(
++        active=True,
++        principal_id=uuid.uuid4(),
++        scope_tier="unknown_tier",  # fallback to "workspace"
++        surface=None,
++    )
++    b_fallback = CredentialBoundary.from_introspection(intro_fallback)
++    assert b_fallback.scope_tier == "workspace"
++    assert b_fallback.surface == "agent"
++
++
++def test_boundary_scoping_and_capabilities_edge_cases() -> None:
++    """Exercise allows_workspace, allows_project, allows_ip, and effective_capabilities."""
++    ws_id = uuid.uuid4()
++    proj_id = uuid.uuid4()
++    b_norm = CredentialBoundary(
++        scope_tier="global",
++        workspace_allowlist=frozenset({ws_id}),
++        project_allowlist=frozenset({proj_id}),
++    )
++
++    # 1. allows_workspace
++    assert b_norm.allows_workspace(None) is True
++    assert b_norm.allows_workspace(ws_id) is True
++    assert b_norm.allows_workspace(str(ws_id)) is True
++    assert b_norm.allows_workspace(uuid.uuid4()) is False
++
++    b_empty_ws_global = CredentialBoundary(scope_tier="global", workspace_allowlist=frozenset())
++    assert b_empty_ws_global.allows_workspace(uuid.uuid4()) is True
++
++    b_empty_ws_scoped = CredentialBoundary(scope_tier="workspace", workspace_allowlist=frozenset())
++    assert b_empty_ws_scoped.allows_workspace(uuid.uuid4()) is False
++
++    # 2. allows_project
++    assert b_norm.allows_project(None) is True
++    assert b_norm.allows_project(proj_id) is True
++    assert b_norm.allows_project(str(proj_id)) is True
++    assert b_norm.allows_project(uuid.uuid4()) is False
++
++    b_empty_proj_tier = CredentialBoundary(scope_tier="project", project_allowlist=frozenset())
++    assert b_empty_proj_tier.allows_project(uuid.uuid4()) is False
++
++    b_empty_proj_ws = CredentialBoundary(scope_tier="workspace", project_allowlist=frozenset())
++    assert b_empty_proj_ws.allows_project(uuid.uuid4()) is True
++
++    # 3. allows_ip
++    b_no_cidr = CredentialBoundary(allowed_cidrs=())
++    assert b_no_cidr.allows_ip("192.168.1.1") is True
++
++    b_cidr = CredentialBoundary(allowed_cidrs=("10.0.0.0/8", "192.168.1.0/24"))
++    assert b_cidr.allows_ip(None) is True
++    assert b_cidr.allows_ip("") is True
++    assert b_cidr.allows_ip("10.5.6.7") is True
++    assert b_cidr.allows_ip("192.168.1.100") is True
++    assert b_cidr.allows_ip("172.16.0.1") is False
++    assert b_cidr.allows_ip("not-a-valid-ip") is False
++
++    # 4. effective_capabilities
++    b_mask = CredentialBoundary(capability_mask=int(Capability.VIEW))
++    assert b_mask.effective_capabilities(Capability.ALL) == Capability.VIEW
++    assert b_mask.effective_capabilities(int(Capability.ALL)) == Capability.VIEW
++    assert b_mask.effective_capabilities([]) == frozenset()
++    assert b_mask.effective_capabilities(set()) == frozenset()
++    assert b_mask.effective_capabilities([Capability.VIEW, Capability.EDIT]) == frozenset(
++        {Capability.VIEW}
++    )
++    assert b_mask.effective_capabilities({"VIEW", "EDIT"}) == frozenset({"VIEW"})
++    assert b_mask.effective_capabilities(None) is None
++    assert b_mask.effective_capabilities("passthrough") == "passthrough"
+diff --git a/kanban/tests/security/test_mcp_keys.py b/kanban/tests/security/test_mcp_keys.py
+index 4a7875fb..febdb54a 100644
+--- a/kanban/tests/security/test_mcp_keys.py
++++ b/kanban/tests/security/test_mcp_keys.py
+@@ -574,3 +574,48 @@ async def test_mint_and_revoke_edge_cases(db_session: AsyncSession) -> None:
+     )
+     assert intro_forged.active is False
+     assert intro_forged.reason == "SURFACE_KEY_MISMATCH"
++
++
++@pytest.mark.asyncio
++async def test_case_9_credential_boundary_introspection(db_session: AsyncSession) -> None:
++    """Test Case 9: McpIntrospectionResult attaches immutable CredentialBoundary (KAN-66)."""
++    ws_id = await create_workspace(db_session, name="WS-Boundary-Test")
++    admin_id = await create_user(
++        db_session, ws_id, handle="@boundaryadm", display_name="Boundary Admin"
++    )
++    await add_role_binding(
++        db_session, ws_id, admin_id, role="WORKSPACE_ADMIN", scope_type="workspace"
++    )
++
++    ctx = RLSContext(
++        principal_id=admin_id,
++        workspace_id=ws_id,
++        token_scopes=("session",),
++        aal_level=2,
++    )
++    await bind_rls_context(db_session, ctx)
++
++    _key_rec, token = await mint_mcp_api_key(
++        db_session,
++        workspace_id=ws_id,
++        principal_id=admin_id,
++        surface="agent",
++        scopes=["agent:read", "agent:write"],
++        created_by_id=admin_id,
++        allowed_cidrs=["10.0.0.0/16"],
++        capability_mask=15,
++    )
++
++    intro = await introspect_subject_token(db_session, token, surface="agent")
++    assert intro.active is True
++    assert intro.credential_boundary is not None
++    boundary = intro.credential_boundary
++    assert boundary.surface == "agent"
++    assert boundary.scope_tier == "workspace"
++    assert boundary.workspace_allowlist == frozenset({ws_id})
++    assert boundary.capability_mask == 15
++    assert boundary.allowed_cidrs == ("10.0.0.0/16",)
++    assert boundary.allows_workspace(ws_id) is True
++    assert boundary.allows_workspace(uuid.uuid4()) is False
++    assert boundary.allows_ip("10.0.1.5") is True
++    assert boundary.allows_ip("192.168.1.1") is False

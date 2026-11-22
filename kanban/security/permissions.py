@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from enum import IntFlag
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import func, select, text
 
@@ -95,6 +95,39 @@ def capabilities_to_names(caps: Capability) -> list[str]:
     return [name for cap, name in _ORDERED_CAPABILITIES if cap in caps]
 
 
+def compute_effective_capabilities(
+    rbac_caps: object,
+    caller: PrincipalContext | None = None,
+    project_id: uuid.UUID | str | None = None,
+) -> object:
+    """Compute effective capabilities enforcing CredentialBoundary.
+
+    When caller.credential_boundary is present:
+    - If project_id is checked and not boundary.allows_project(project_id), return frozenset()
+      (deny all access to projects outside project_allowlist).
+    - Otherwise intersect the resolved RBAC capabilities with
+      boundary.effective_capabilities(rbac_caps).
+    """
+    actual_caller: Any = caller
+    actual_caps = rbac_caps
+    if hasattr(rbac_caps, "credential_boundary") and not hasattr(caller, "credential_boundary"):
+        actual_caller = rbac_caps
+        actual_caps = caller
+
+    boundary = getattr(actual_caller, "credential_boundary", None) if actual_caller else None
+    if boundary is None:
+        if isinstance(actual_caps, (set, frozenset, list, tuple)):
+            return frozenset(actual_caps)
+        return actual_caps
+
+    if project_id is not None and not boundary.allows_project(project_id):
+        from kanban.security.boundary import EmptyCapabilitySet  # noqa: PLC0415
+
+        return EmptyCapabilitySet()
+
+    return boundary.effective_capabilities(actual_caps)
+
+
 async def _check_ephemeral_confinement(
     session: AsyncSession,
     ephemeral_project_id: uuid.UUID,
@@ -113,6 +146,29 @@ async def _check_ephemeral_confinement(
     return bool(proj_id == ephemeral_project_id)
 
 
+async def _check_boundary_project_allowlist(
+    session: AsyncSession,
+    boundary: object,
+    object_id: uuid.UUID,
+) -> bool:
+    """Verify that the object is permitted under the boundary's project allowlist."""
+    obj_stmt = select(ObjectRecord.project_id, ObjectRecord.object_type).where(
+        ObjectRecord.id == object_id
+    )
+    obj_row = (await session.execute(obj_stmt)).first()
+    if obj_row is not None:
+        proj_id, obj_type = obj_row[0], obj_row[1]
+        target_proj_id = object_id if str(obj_type) == "project" else proj_id
+        allows_project_fn = getattr(boundary, "allows_project", None)
+        if (
+            target_proj_id is not None
+            and callable(allows_project_fn)
+            and not allows_project_fn(target_proj_id)
+        ):
+            return False
+    return True
+
+
 async def _is_principal_active(session: AsyncSession, principal_id: uuid.UUID) -> bool:
     """Check whether a principal exists and has ACTIVE status."""
     stmt = select(Principal.status).where(Principal.id == principal_id)
@@ -120,7 +176,7 @@ async def _is_principal_active(session: AsyncSession, principal_id: uuid.UUID) -
     return status == "ACTIVE"
 
 
-async def evaluate_capabilities(
+async def evaluate_capabilities(  # noqa: PLR0911
     session: AsyncSession,
     principal_ctx: PrincipalContext,
     object_id: uuid.UUID,
@@ -138,6 +194,15 @@ async def evaluate_capabilities(
     # 0. Enforce ephemeral project confinement if ephemeral_project_id is set
     if principal_ctx.ephemeral_project_id is not None and not await _check_ephemeral_confinement(
         session, principal_ctx.ephemeral_project_id, object_id
+    ):
+        return Capability.NONE
+
+    # 0b. Enforce CredentialBoundary project allowlist
+    if (
+        principal_ctx.credential_boundary is not None
+        and not await _check_boundary_project_allowlist(
+            session, principal_ctx.credential_boundary, object_id
+        )
     ):
         return Capability.NONE
 
@@ -179,10 +244,14 @@ async def evaluate_capabilities(
     human_mask = await _principal_mask(principal_ctx.principal_id)
 
     if principal_ctx.agent_principal_id is None:
-        return Capability(human_mask & token_mask)
+        base_caps = Capability(human_mask & token_mask)
+    else:
+        agent_mask = await _principal_mask(principal_ctx.agent_principal_id)
+        base_caps = Capability(human_mask & agent_mask & token_mask)
 
-    agent_mask = await _principal_mask(principal_ctx.agent_principal_id)
-    return Capability(human_mask & agent_mask & token_mask)
+    if principal_ctx.credential_boundary is not None:
+        return Capability(base_caps & principal_ctx.credential_boundary.capability_mask)
+    return base_caps
 
 
 async def require_capability(

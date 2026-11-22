@@ -1,0 +1,23 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan66-2b84dffc
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 20 items
+
+kanban/tests/security/test_credential_boundary_rest.py ...........       [ 55%]
+kanban/tests/security/test_mcp_keys.py .........                         [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                               Stmts   Miss Branch BrPart  Cover   Missing
+------------------------------------------------------------------------------
+kanban/auth/mfa/policy.py            124     75     64     10    32%   34-58, 74-117, 142->159, 161-162, 183, 203->219, 212, 221, 223, 225, 230, 240-258, 272-275, 283-299
+kanban/auth/sessions/resolver.py      88     40     26      7    48%   57-107, 112->116, 114->116, 117, 132, 135-148, 153-156, 200-213
+kanban/security/boundary.py          120      0     56      0   100%
+kanban/security/permissions.py       111     21     44     11    75%   88->87, 114-115, 137-146, 159->169, 198, 211, 217, 242, 249-250, 254, 280, 287-293
+------------------------------------------------------------------------------
+TOTAL                                443    136    190     28    65%
+============================== 20 passed in 0.93s ==============================
