@@ -1,0 +1,2942 @@
+diff --git a/kanban/api/v1/issues.py b/kanban/api/v1/issues.py
+index 265fcd58..ca028d69 100644
+--- a/kanban/api/v1/issues.py
++++ b/kanban/api/v1/issues.py
+@@ -5,7 +5,7 @@ Covers CRUD, keyset listing, description ETag concurrency, and secret redaction
+ 
+ from __future__ import annotations
+ 
+-from typing import Annotated
++from typing import Annotated, Literal
+ 
+ from fastapi import APIRouter, Depends, Header, Query, Request, Response
+ from sqlalchemy.ext.asyncio import AsyncSession  # Required by FastAPI at runtime
+@@ -26,6 +26,7 @@ router = APIRouter(tags=["issues"])
+ 
+ Caller = Annotated[PrincipalContext, Depends(get_principal)]
+ Session = Annotated[AsyncSession, Depends(get_rls_session)]
++StateGroupFilter = Literal["backlog", "unstarted", "started", "completed", "cancelled"]
+ 
+ 
+ @router.post(
+@@ -141,6 +142,10 @@ async def list_issues(  # noqa: PLR0913
+     limit: Annotated[int, Query(ge=1, le=100)] = 50,
+     include_archived: Annotated[bool, Query()] = False,
+     only_archived: Annotated[bool, Query()] = False,
++    state_group: Annotated[
++        list[StateGroupFilter] | None,
++        Query(description="Optional workflow state_group filter"),
++    ] = None,
+ ) -> IssueList:
+     """List RLS-visible issues within a project using keyset pagination."""
+     if not include_archived and only_archived:
+@@ -159,6 +164,7 @@ async def list_issues(  # noqa: PLR0913
+             limit=limit,
+             include_archived=include_archived,
+             only_archived=only_archived,
++            state_group=state_group,
+         )
+         await taint_recorder.record_project_ids([project_ref])
+         return res
+diff --git a/kanban/importer/plane_importer.py b/kanban/importer/plane_importer.py
+index 3878b307..993d22f1 100644
+--- a/kanban/importer/plane_importer.py
++++ b/kanban/importer/plane_importer.py
+@@ -48,6 +48,7 @@ from kanban.importer.plane_mapper import (
+     ImportDiffReport,
+     PlaneMapper,
+     compute_source_sha256,
++    normalize_state_key,
+ )
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.board_rank import allocate_initial_board_rank
+@@ -371,6 +372,7 @@ class PlaneImporter:
+             .all()
+         )
+         states_by_name = {s.name.lower(): s for s in existing_states}
++        states_by_norm = {norm: s for s in existing_states if (norm := normalize_state_key(s.name))}
+         states_by_group = {s.state_group.lower(): s for s in existing_states}
+ 
+         for s in bundle.states:
+@@ -392,18 +394,22 @@ class PlaneImporter:
+             else:
+                 clean_state_name = (normalize_plain_text(s.name)[:500] if s.name else "") or "State"
+                 s_name_lower = clean_state_name.lower()
++                s_norm = normalize_state_key(clean_state_name)
+                 mapped_group = STATE_GROUP_MAP.get(s.group.lower(), "unstarted")
+ 
+                 if s_name_lower in states_by_name:
+                     st_id = states_by_name[s_name_lower].id
+                     report.unchanged += 1
+-                elif mapped_group in states_by_group and s.name in (
+-                    "Backlog",
+-                    "Todo",
+-                    "In Progress",
+-                    "Done",
+-                    "Cancelled",
+-                ):
++                elif s_norm and s_norm in states_by_norm:
++                    st_id = states_by_norm[s_norm].id
++                    report.unchanged += 1
++                elif mapped_group in states_by_group and s_norm in {
++                    "backlog",
++                    "todo",
++                    "inprogress",
++                    "done",
++                    "cancelled",
++                }:
+                     st_id = states_by_group[mapped_group].id
+                     report.unchanged += 1
+                 else:
+@@ -419,6 +425,8 @@ class PlaneImporter:
+                     await self.session.flush()
+                     st_id = new_state.id
+                     states_by_name[s_name_lower] = new_state
++                    if s_norm:
++                        states_by_norm[s_norm] = new_state
+                     report.to_create += 1
+ 
+                 new_mapping = ImportEntityMapping(
+@@ -910,6 +918,9 @@ class PlaneImporter:
+         )
+         states_by_id = {s.id: s for s in all_states}
+         states_by_proj_and_name = {(s.project_id, s.name.lower()): s.id for s in all_states}
++        states_by_proj_and_norm = {
++            (s.project_id, norm): s.id for s in all_states if (norm := normalize_state_key(s.name))
++        }
+         states_by_proj_and_group = {(s.project_id, s.state_group.lower()): s.id for s in all_states}
+         states_by_proj_default = {s.project_id: s.id for s in all_states if s.is_default}
+ 
+@@ -1033,9 +1044,11 @@ class PlaneImporter:
+                     target_state_id = mapped_st_id
+                 elif raw_st_ref in plane_states_by_id:
+                     pst = plane_states_by_id[raw_st_ref]
+-                    target_state_id = states_by_proj_and_name.get(
+-                        (issue_proj, pst.name.lower())
+-                    ) or states_by_proj_and_group.get((issue_proj, pst.group.lower()))
++                    target_state_id = (
++                        states_by_proj_and_name.get((issue_proj, pst.name.lower()))
++                        or states_by_proj_and_norm.get((issue_proj, normalize_state_key(pst.name)))
++                        or states_by_proj_and_group.get((issue_proj, pst.group.lower()))
++                    )
+ 
+                 if not target_state_id:
+                     target_state_id = states_by_proj_default.get(issue_proj) or next(
+diff --git a/kanban/importer/plane_mapper.py b/kanban/importer/plane_mapper.py
+index 3c5ff411..42dce150 100644
+--- a/kanban/importer/plane_mapper.py
++++ b/kanban/importer/plane_mapper.py
+@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
+ from pydantic import BaseModel, Field
+ 
+ from database.models import LinkKind
+-from kanban.content.normalize import normalize_to_markdown
++from kanban.content.normalize import normalize_plain_text, normalize_to_markdown
+ 
+ if TYPE_CHECKING:
+     import uuid
+@@ -70,6 +70,17 @@ def compute_source_sha256(data: BaseModel | dict[str, Any]) -> bytes:
+     return hashlib.sha256(serialized.encode("utf-8")).digest()
+ 
+ 
++def normalize_state_key(name: str | None) -> str:
++    """Normalize a workflow state name for separator-insensitive matching."""
++    if not name:
++        return ""
++    cleaned = normalize_plain_text(name)[:500].strip().lower()
++    collapsed = re.sub(r"[\s_-]+", "", cleaned)
++    if collapsed == "canceled":
++        return "cancelled"
++    return collapsed
++
++
+ class _DagState:
+     def __init__(self, children_map: dict[str | None, list[PlaneIssue]]) -> None:
+         self.children_map = children_map
+diff --git a/kanban/services/issues.py b/kanban/services/issues.py
+index 83f6c609..e3fc425b 100644
+--- a/kanban/services/issues.py
++++ b/kanban/services/issues.py
+@@ -1205,6 +1205,7 @@ async def list_issues(  # noqa: PLR0913
+     limit: int,
+     include_archived: bool = False,
+     only_archived: bool = False,
++    state_group: Sequence[str] | None = None,
+ ) -> IssueList:
+     """List RLS-visible issues within a project in descending sequence order."""
+     project = await get_project_or_404(session, caller, project_ref)
+@@ -1225,6 +1226,16 @@ async def list_issues(  # noqa: PLR0913
+     elif not include_archived:
+         stmt = stmt.where(ObjectRecord.archived_at.is_(None))
+ 
++    if state_group:
++        stmt = stmt.where(
++            Issue.state_id.in_(
++                select(WorkflowState.id).where(
++                    WorkflowState.project_id == project.id,
++                    WorkflowState.state_group.in_(list(state_group)),
++                )
++            )
++        )
++
+     if cursor is not None:
+         last_seq = decode_issue_cursor(cursor)
+         stmt = stmt.where(Issue.sequence_id < last_seq)
+diff --git a/kanban/tests/importer/test_merge_into_existing_project_realistic.py b/kanban/tests/importer/test_merge_into_existing_project_realistic.py
+new file mode 100644
+index 00000000..338a5b87
+--- /dev/null
++++ b/kanban/tests/importer/test_merge_into_existing_project_realistic.py
+@@ -0,0 +1,748 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Realistic 304-issue Plane merge, non-clobber immutability, state mapping, and pagination tests (KAN-84)."""
++
++# ruff: noqa: E501, PLR0915
++
++from __future__ import annotations
++
++import datetime as dt
++import json
++from typing import TYPE_CHECKING, Any
++
++import pytest
++from sqlalchemy import func, select, text
++
++from database.models import (
++    Issue,
++    IssueComment,
++    IssueLabel,
++    IssueModule,
++    Module,
++    ObjectRecord,
++    Project,
++    ProjectLabel,
++    ProjectPriority,
++    WorkflowState,
++)
++from kanban.api.deps import PrincipalContext
++from kanban.importer.cutover_verifier import verify_cutover
++from kanban.importer.plane_client import (
++    PlaneBundle,
++    PlaneComment,
++    PlaneCycle,
++    PlaneIssue,
++    PlaneLabel,
++    PlaneModule,
++    PlaneProject,
++    PlaneState,
++)
++from kanban.importer.plane_importer import PlaneImporter
++from kanban.importer.plane_mapper import normalize_state_key
++from kanban.services.board_rank import allocate_initial_board_rank
++from kanban.tests.security.helpers import rebuild_era
++
++if TYPE_CHECKING:
++    import uuid
++    from collections.abc import Awaitable, Callable
++    from pathlib import Path
++
++    import httpx
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++
++pytestmark = pytest.mark.committed_db
++
++TINY_PNG = (
++    b"\x89PNG\r\n\x1a\n\x00\x00\x00\rIHDR\x00\x00\x00\x01\x00\x00\x00\x01"
++    b"\x08\x02\x00\x00\x00\x90wS\xde\x00\x00\x00\x0cIDATx\x9cc\xf8\xcf\xc0"
++    b"\x00\x00\x03\x01\x01\x00\xc9\xfe\x92\xef\x00\x00\x00\x00IEND\xaeB`\x82"
++)
++
++
++def _dump_bundle_dir(bundle: PlaneBundle, bundle_dir: Path) -> None:
++    bundle_dir.mkdir(parents=True, exist_ok=True)
++    (bundle_dir / "projects.json").write_text(
++        json.dumps([p.model_dump() for p in bundle.projects]), encoding="utf-8"
++    )
++    (bundle_dir / "states.json").write_text(
++        json.dumps([s.model_dump() for s in bundle.states]), encoding="utf-8"
++    )
++    (bundle_dir / "labels.json").write_text(
++        json.dumps([lbl.model_dump() for lbl in bundle.labels]), encoding="utf-8"
++    )
++    (bundle_dir / "cycles.json").write_text(
++        json.dumps([c.model_dump() for c in bundle.cycles]), encoding="utf-8"
++    )
++    (bundle_dir / "modules.json").write_text(
++        json.dumps([m.model_dump() for m in bundle.modules]), encoding="utf-8"
++    )
++    (bundle_dir / "issues.json").write_text(
++        json.dumps([i.model_dump() for i in bundle.issues]), encoding="utf-8"
++    )
++    (bundle_dir / "comments.json").write_text(
++        json.dumps([c.model_dump() for c in bundle.comments]), encoding="utf-8"
++    )
++    (bundle_dir / "relations.json").write_text(
++        json.dumps([r.model_dump() for r in bundle.relations]), encoding="utf-8"
++    )
++    (bundle_dir / "members.json").write_text(
++        json.dumps([m.model_dump() for m in bundle.members]), encoding="utf-8"
++    )
++
++
++async def _ensure_kan_six_states(env: ApiEnv, project_id: uuid.UUID) -> dict[str, WorkflowState]:
++    """Ensure target project has the exact 6 workflow states including Crazy_Ideas (sort_order=0)."""
++    existing = (
++        (
++            await env.seed.execute(
++                select(WorkflowState).where(WorkflowState.project_id == project_id)
++            )
++        )
++        .scalars()
++        .all()
++    )
++    by_name = {s.name: s for s in existing}
++    if "Crazy_Ideas" not in by_name:
++        crazy = WorkflowState(
++            workspace_id=env.workspace_id,
++            project_id=project_id,
++            name="Crazy_Ideas",
++            state_group="started",
++            color_hex="#A855F7",
++            sort_order=0,
++            is_default=False,
++        )
++        env.seed.add(crazy)
++        await env.seed.flush()
++        by_name["Crazy_Ideas"] = crazy
++
++    expected_names = {"Backlog", "Todo", "Crazy_Ideas", "In Progress", "Done", "Cancelled"}
++    assert set(by_name.keys()) == expected_names
++    return by_name
++
++
++def _state_for_existing_seq(seq: int, states_by_name: dict[str, WorkflowState]) -> WorkflowState:
++    """Return the workflow state matching the live 83-issue distribution."""
++    if seq <= 54:
++        return states_by_name["Done"]
++    if seq <= 75:
++        return states_by_name["Todo"]
++    if seq <= 82:
++        return states_by_name["Crazy_Ideas"]
++    return states_by_name["Backlog"]
++
++
++async def _seed_83_existing_kan_issues(
++    api_env: ApiEnv,
++    kan_id: uuid.UUID,
++    admin_id: uuid.UUID,
++    states_by_name: dict[str, WorkflowState],
++) -> None:
++    """Seed KAN-1..83 matching the live board (54 Done, 21 Todo, 7 Crazy_Ideas, 1 Backlog)."""
++    default_prio = (
++        await api_env.seed.execute(
++            select(ProjectPriority).where(
++                ProjectPriority.project_id == kan_id,
++                ProjectPriority.is_default.is_(True),
++            )
++        )
++    ).scalar_one()
++
++    core_label = ProjectLabel(
++        workspace_id=api_env.workspace_id,
++        project_id=kan_id,
++        name="Core",
++        color_hex="#EF4444",
++    )
++    api_env.seed.add(core_label)
++    await api_env.seed.flush()
++
++    core_mod_id = (
++        await api_env.seed.execute(
++            text(
++                "SELECT register_object("
++                "  CAST('module' AS object_kind), :ws, :proj, :ckey, :title, :creator"
++                ")"
++            ),
++            {
++                "ws": api_env.workspace_id,
++                "proj": kan_id,
++                "ckey": "mod-core-01",
++                "title": "Core Module",
++                "creator": admin_id,
++            },
++        )
++    ).scalar_one()
++    core_mod = Module(
++        id=core_mod_id,
++        workspace_id=api_env.workspace_id,
++        project_id=kan_id,
++        name="Core Module",
++        status="in_progress",
++    )
++    api_env.seed.add(core_mod)
++    await api_env.seed.flush()
++
++    await api_env.seed.execute(
++        text("UPDATE projects SET issue_seq_counter = 83 WHERE id = :pid"),
++        {"pid": kan_id},
++    )
++    for seq in range(1, 84):
++        st = _state_for_existing_seq(seq, states_by_name)
++        summary = f"Existing KAN issue {seq}"
++        iss_id = (
++            await api_env.seed.execute(
++                text(
++                    "SELECT register_object("
++                    "  CAST('issue' AS object_kind), :ws, :proj, :key, :title, :creator"
++                    ")"
++                ),
++                {
++                    "ws": api_env.workspace_id,
++                    "proj": kan_id,
++                    "key": f"KAN-{seq}",
++                    "title": summary,
++                    "creator": admin_id,
++                },
++            )
++        ).scalar_one()
++
++        api_env.seed.add(
++            Issue(
++                id=iss_id,
++                workspace_id=api_env.workspace_id,
++                project_id=kan_id,
++                sequence_id=seq,
++                summary=summary,
++                description_markdown=f"Pre-existing issue body for KAN-{seq}.",
++                state_id=st.id,
++                priority_id=default_prio.id,
++                board_rank=allocate_initial_board_rank(seq),
++                created_by_id=admin_id,
++                original_created_by_id=admin_id,
++                ancestry_path=iss_id.hex,
++            )
++        )
++        await api_env.seed.flush()
++
++        if seq in (1, 55, 76):
++            api_env.seed.add(
++                IssueLabel(
++                    issue_id=iss_id,
++                    label_id=core_label.id,
++                    workspace_id=api_env.workspace_id,
++                )
++            )
++        if seq in (1, 83):
++            api_env.seed.add(
++                IssueModule(
++                    issue_id=iss_id,
++                    module_id=core_mod.id,
++                    workspace_id=api_env.workspace_id,
++                )
++            )
++        if seq in (1, 55, 76, 83):
++            api_env.seed.add(
++                IssueComment(
++                    workspace_id=api_env.workspace_id,
++                    issue_id=iss_id,
++                    author_id=admin_id,
++                    body_markdown=f"Pre-existing comment on KAN-{seq}",
++                )
++            )
++
++    await rebuild_era(api_env.seed, api_env.workspace_id)
++    await api_env.seed.commit()
++
++
++def _build_realistic_221_kanba_bundle() -> PlaneBundle:
++    """Build a 221-issue KANBA PlaneBundle (seq 1..233 with 12 gaps) plus excluded TEST project."""
++    deleted_seqs = {10, 22, 35, 48, 61, 74, 87, 100, 113, 126, 139, 152}
++    kanba_seqs = [s for s in range(1, 234) if s not in deleted_seqs]
++    assert len(kanba_seqs) == 221
++
++    special_specs: dict[int, tuple[str, list[str], str | None, str | None]] = {
++        1: (
++            "<p>Root historical issue KANBA-1 and docs/qa/KANBA-1/unit-test-results.txt</p>",
++            ["p-lbl-core"],
++            "p-mod-core",
++            "p-cyc-1",
++        ),
++        2: (
++            "<p>Depends on KANBA-1 and docs/qa/KANBA-1/unit-test-results.txt</p>",
++            [],
++            None,
++            None,
++        ),
++        4: (
++            "<p>See attached <a href='/api/assets/spec.md'>spec.md</a> and <img src='/api/assets/data.png' /></p>",
++            ["p-lbl-core"],
++            "p-mod-core",
++            None,
++        ),
++    }
++    parent_map = {2: "i-kanba-5", 20: "i-kanba-15"}
++
++    plane_issues: list[PlaneIssue] = []
++    for idx, seq in enumerate(kanba_seqs):
++        state_ref = "p-st-cancelled" if idx >= 216 else "p-st-done"
++        desc_html, labels, mod_id, cycle_id = special_specs.get(
++            seq,
++            (f"<p>Historical KANBA issue {seq} migrated cleanly.</p>", [], None, None),
++        )
++        ts = dt.datetime(2026, 2, 1, 10, 0, tzinfo=dt.UTC) + dt.timedelta(minutes=seq)
++        plane_issues.append(
++            PlaneIssue(
++                id=f"i-kanba-{seq}",
++                sequence_id=seq,
++                name=f"Imported KANBA Issue {seq}",
++                description_html=desc_html,
++                state_id=state_ref,
++                parent_id=parent_map.get(seq),
++                project="p-kanba",
++                labels=labels,
++                module_id=mod_id,
++                cycle_id=cycle_id,
++                created_at=ts.isoformat(),
++                updated_at=(ts + dt.timedelta(seconds=30)).isoformat(),
++            )
++        )
++
++    plane_issues.extend(
++        PlaneIssue(
++            id=f"i-test-{t_seq}",
++            sequence_id=t_seq,
++            name=f"Excluded TEST Issue {t_seq}",
++            description_html="<p>Must be excluded</p>",
++            state_id="p-st-test-done",
++            project="p-test",
++            created_at="2026-02-01T08:00:00Z",
++        )
++        for t_seq in range(1, 4)
++    )
++
++    return PlaneBundle(
++        projects=[
++            PlaneProject(id="p-kanba", identifier="KANBA", name="Kanba Legacy"),
++            PlaneProject(id="p-test", identifier="TEST", name="Excluded Test Project"),
++        ],
++        states=[
++            PlaneState(id="p-st-backlog", name="Backlog", group="backlog", project="p-kanba"),
++            PlaneState(id="p-st-todo", name="Todo", group="unstarted", project="p-kanba"),
++            PlaneState(id="p-st-inprog", name="In Progress", group="started", project="p-kanba"),
++            PlaneState(
++                id="p-st-crazy", name="Crazy Ideas", group="started", sequence=0, project="p-kanba"
++            ),
++            PlaneState(id="p-st-done", name="Done", group="completed", project="p-kanba"),
++            PlaneState(id="p-st-cancelled", name="Cancelled", group="cancelled", project="p-kanba"),
++            PlaneState(id="p-st-test-done", name="Done", group="completed", project="p-test"),
++        ],
++        labels=[PlaneLabel(id="p-lbl-core", name="Core", color="#FF0000", project="p-kanba")],
++        cycles=[
++            PlaneCycle(
++                id="p-cyc-1",
++                name="Sprint 1",
++                start_date="2026-02-01",
++                end_date="2026-02-14",
++                status="completed",
++                project="p-kanba",
++            )
++        ],
++        modules=[PlaneModule(id="p-mod-core", name="Core Module", project="p-kanba")],
++        issues=plane_issues,
++        comments=[
++            PlaneComment(
++                id="p-comm-3",
++                issue_id="i-kanba-3",
++                comment_html="<p>Comment referencing KANBA-1</p>",
++                created_at="2026-02-02T09:00:00Z",
++            ),
++            PlaneComment(
++                id="p-comm-test",
++                issue_id="i-test-1",
++                comment_html="<p>Excluded test comment</p>",
++                created_at="2026-02-02T09:05:00Z",
++            ),
++        ],
++        attachments={
++            "data.png": TINY_PNG,
++            "spec.md": b"# Imported Spec\n\nDetailed specification.",
++        },
++    )
++
++
++async def _assert_http_pagination_and_filtering(client: httpx.AsyncClient) -> None:
++    """Exercise real HTTP calls under kanban_app FORCE RLS for alias, pagination, and state_group."""
++    alias_resp = await client.get("/api/v1/issues/KANBA-1")
++    assert alias_resp.status_code == 200
++    assert alias_resp.json()["key"] == "KAN-84"
++    assert alias_resp.headers["X-Kanban-Canonical-Key"] == "KAN-84"
++
++    # Single-page default GET /api/v1/projects/KAN/issues returns KAN-304..KAN-255 + next_cursor
++    r_default = await client.get("/api/v1/projects/KAN/issues")
++    assert r_default.status_code == 200
++    default_body = r_default.json()
++    assert len(default_body["items"]) == 50
++    assert [item["key"] for item in default_body["items"]] == [
++        f"KAN-{seq}" for seq in range(304, 254, -1)
++    ]
++    assert all(
++        item["state"]["group"] in {"completed", "cancelled"} for item in default_body["items"]
++    )
++    assert default_body["next_cursor"] is not None
++
++    # Traverse all pages with limit=100 -> 4 pages (100 + 100 + 100 + 4 = 304 unique keys)
++    all_items: list[dict[str, Any]] = []
++    page_sizes: list[int] = []
++    cursor: str | None = None
++    while True:
++        params: dict[str, Any] = {"limit": 100}
++        if cursor is not None:
++            params["cursor"] = cursor
++        page_resp = await client.get("/api/v1/projects/KAN/issues", params=params)
++        assert page_resp.status_code == 200
++        page_body = page_resp.json()
++        page_items = page_body["items"]
++        page_sizes.append(len(page_items))
++        all_items.extend(page_items)
++        cursor = page_body["next_cursor"]
++        if cursor is None:
++            break
++
++    assert page_sizes == [100, 100, 100, 4]
++    all_keys = [item["key"] for item in all_items]
++    assert len(all_keys) == 304
++    assert len(set(all_keys)) == 304
++    assert all_keys == [f"KAN-{seq}" for seq in range(304, 0, -1)]
++
++    open_items_via_pages = [
++        item for item in all_items if item["state"]["group"] in {"backlog", "unstarted", "started"}
++    ]
++    assert len(open_items_via_pages) == 29
++
++    # Filtered query returns all 29 open KAN-55..KAN-83 issues on page 1
++    r_open = await client.get(
++        "/api/v1/projects/KAN/issues",
++        params=[
++            ("state_group", "backlog"),
++            ("state_group", "unstarted"),
++            ("state_group", "started"),
++            ("limit", "100"),
++        ],
++    )
++    assert r_open.status_code == 200
++    open_body = r_open.json()
++    assert len(open_body["items"]) == 29
++    assert open_body["next_cursor"] is None
++    assert [item["key"] for item in open_body["items"]] == [
++        f"KAN-{seq}" for seq in range(83, 54, -1)
++    ]
++
++    r_invalid = await client.get(
++        "/api/v1/projects/KAN/issues", params={"state_group": "invalid_group"}
++    )
++    assert r_invalid.status_code == 422
++
++
++async def test_realistic_304_issue_merge_preserves_83_existing_and_paginates_all_open_issues(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    tmp_path: Path,
++) -> None:
++    """Merge 221 KANBA issues into 83 existing KAN issues, preserving KAN-1..83 and paginating all 29 open."""
++    admin = await make_user("admin", workspace_role="WORKSPACE_ADMIN")
++    kan_id = await make_project(
++        "KAN", created_by=admin, roles={admin: "PROJECT_ADMIN"}, modules_enabled=True
++    )
++    states_by_name = await _ensure_kan_six_states(api_env, kan_id)
++    await _seed_83_existing_kan_issues(api_env, kan_id, admin.id, states_by_name)
++
++    # Capture complete pre-merge forensic snapshot of KAN-1..KAN-83
++    snap_rows = (
++        await api_env.seed.execute(
++            select(Issue, ObjectRecord)
++            .join(ObjectRecord, ObjectRecord.id == Issue.id)
++            .where(Issue.project_id == kan_id)
++            .order_by(Issue.sequence_id.asc())
++        )
++    ).all()
++    assert len(snap_rows) == 83
++
++    pre_snapshot = {
++        iss_row.sequence_id: {
++            "id": iss_row.id,
++            "sequence_id": iss_row.sequence_id,
++            "canonical_key": obj_row.canonical_key,
++            "summary": iss_row.summary,
++            "description_markdown": iss_row.description_markdown,
++            "description_sha256": iss_row.description_sha256,
++            "state_id": iss_row.state_id,
++            "priority_id": iss_row.priority_id,
++            "board_rank": iss_row.board_rank,
++            "created_at": obj_row.created_at,
++            "updated_at": obj_row.updated_at,
++            "archived_at": obj_row.archived_at,
++        }
++        for iss_row, obj_row in snap_rows
++    }
++    pre_comment_count = int(
++        (
++            await api_env.seed.execute(
++                select(func.count())
++                .select_from(IssueComment)
++                .join(Issue, Issue.id == IssueComment.issue_id)
++                .where(Issue.project_id == kan_id)
++            )
++        ).scalar_one()
++    )
++    assert pre_comment_count == 4
++
++    bundle = _build_realistic_221_kanba_bundle()
++
++    await api_env.seed.execute(
++        text(
++            "SELECT set_config('app.current_workspace_id', :ws, true), "
++            "set_config('app.current_principal_id', :pid, true), "
++            "set_config('app.aal_level', '2', true)"
++        ),
++        {"ws": str(api_env.workspace_id), "pid": str(admin.id)},
++    )
++    caller = PrincipalContext(principal_id=admin.id, workspace_id=api_env.workspace_id, aal_level=2)
++    importer = PlaneImporter(
++        session=api_env.seed,
++        caller=caller,
++        blob_store_root=tmp_path / "blobs",
++        target_project_identifier="KAN",
++        exclude_project_identifiers={"TEST"},
++    )
++    report = await importer.run_import(bundle, dry_run=False)
++    await rebuild_era(api_env.seed, api_env.workspace_id)
++    await api_env.seed.commit()
++
++    assert len(report.key_remap_manifest) == 221
++    assert report.key_remap_manifest["KANBA-1"] == "KAN-84"
++    assert report.key_remap_manifest["KANBA-233"] == "KAN-304"
++
++    ws_slug = (
++        await api_env.seed.execute(
++            text("SELECT slug FROM workspaces WHERE id = :ws"), {"ws": api_env.workspace_id}
++        )
++    ).scalar_one()
++    bundle_dir = tmp_path / "bundle"
++    _dump_bundle_dir(bundle, bundle_dir)
++
++    qa_root = tmp_path / "qa"
++    kanba1_qa = qa_root / "KANBA-1"
++    kanba1_qa.mkdir(parents=True, exist_ok=True)
++    (kanba1_qa / "git-diff.patch").write_text("diff --git a/x b/x\n", encoding="utf-8")
++    (kanba1_qa / "unit-test-results.txt").write_text("1 passed\n", encoding="utf-8")
++    (kanba1_qa / "build-check.txt").write_text("ok\n", encoding="utf-8")
++
++    cutover_report = await verify_cutover(
++        session=api_env.seed,
++        bundle_dir=bundle_dir,
++        workspace_slug=ws_slug,
++        project_identifier="KAN",
++        source_project_identifier="KANBA",
++        qa_root=qa_root,
++        pre_cutover_exempt_keys={f"KAN-{i}" for i in range(1, 305) if i != 84},
++    )
++    assert cutover_report.overall_passed is True, cutover_report.model_dump()
++    assert len(cutover_report.checks) == 6
++
++    post_rows = (
++        await api_env.seed.execute(
++            select(Issue, ObjectRecord)
++            .join(ObjectRecord, ObjectRecord.id == Issue.id)
++            .where(Issue.project_id == kan_id)
++            .order_by(Issue.sequence_id.asc())
++        )
++    ).all()
++    assert len(post_rows) == 304
++
++    kan_proj = (
++        await api_env.seed.execute(select(Project).where(Project.id == kan_id))
++    ).scalar_one()
++    assert kan_proj.issue_seq_counter == 304
++
++    for iss_row, obj_row in post_rows[:83]:
++        snap = pre_snapshot[iss_row.sequence_id]
++        assert iss_row.id == snap["id"]
++        assert iss_row.sequence_id == snap["sequence_id"]
++        assert obj_row.canonical_key == snap["canonical_key"]
++        assert iss_row.summary == snap["summary"]
++        assert iss_row.description_markdown == snap["description_markdown"]
++        assert iss_row.description_sha256 == snap["description_sha256"]
++        assert iss_row.state_id == snap["state_id"]
++        assert iss_row.priority_id == snap["priority_id"]
++        assert iss_row.board_rank == snap["board_rank"]
++        assert obj_row.created_at == snap["created_at"]
++        assert obj_row.updated_at == snap["updated_at"]
++        assert obj_row.archived_at == snap["archived_at"]
++
++    assert [r[0].sequence_id for r in post_rows[83:]] == list(range(84, 305))
++
++    test_leaked = (
++        (
++            await api_env.seed.execute(
++                select(Issue).where(
++                    Issue.project_id == kan_id,
++                    Issue.summary.like("Excluded TEST Issue%"),
++                )
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert len(test_leaked) == 0
++
++    kan_states = (
++        (
++            await api_env.seed.execute(
++                select(WorkflowState).where(WorkflowState.project_id == kan_id)
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert len(kan_states) == 6
++
++    await _assert_http_pagination_and_filtering(as_principal(admin))
++
++    # Idempotent re-import allocates 0 new entities
++    await api_env.seed.execute(
++        text(
++            "SELECT set_config('app.current_workspace_id', :ws, true), "
++            "set_config('app.current_principal_id', :pid, true), "
++            "set_config('app.aal_level', '2', true)"
++        ),
++        {"ws": str(api_env.workspace_id), "pid": str(admin.id)},
++    )
++    importer2 = PlaneImporter(
++        session=api_env.seed,
++        caller=caller,
++        blob_store_root=tmp_path / "blobs",
++        target_project_identifier="KAN",
++        exclude_project_identifiers={"TEST"},
++    )
++    report2 = await importer2.run_import(bundle, dry_run=False)
++    await api_env.seed.commit()
++    assert report2.to_create == 0
++
++    total_after_reimport = int(
++        (
++            await api_env.seed.execute(
++                select(func.count()).select_from(Issue).where(Issue.project_id == kan_id)
++            )
++        ).scalar_one()
++    )
++    assert total_after_reimport == 304
++
++
++async def test_normalize_state_key_and_crazy_ideas_issue_landing(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    tmp_path: Path,
++) -> None:
++    """Verify normalize_state_key edge cases and landing 'Crazy Ideas' issues in 'Crazy_Ideas'."""
++    assert normalize_state_key(None) == ""
++    assert normalize_state_key("") == ""
++    assert normalize_state_key("Crazy Ideas") == "crazyideas"
++    assert normalize_state_key("Crazy_Ideas") == "crazyideas"
++    assert normalize_state_key("crazy-ideas") == "crazyideas"
++    assert normalize_state_key("Canceled") == "cancelled"
++    assert normalize_state_key("In Progress") == "inprogress"
++
++    admin = await make_user("admin_ci", workspace_role="WORKSPACE_ADMIN")
++    kan_id = await make_project(
++        "KAN", created_by=admin, roles={admin: "PROJECT_ADMIN"}, modules_enabled=True
++    )
++    states_by_name = await _ensure_kan_six_states(api_env, kan_id)
++    crazy_ideas_id = states_by_name["Crazy_Ideas"].id
++    cancelled_id = states_by_name["Cancelled"].id
++    await api_env.seed.commit()
++
++    bundle = PlaneBundle(
++        projects=[PlaneProject(id="p-src", identifier="SRC", name="Source")],
++        states=[
++            PlaneState(
++                id="st-crazy-space",
++                name="Crazy Ideas",
++                group="started",
++                sequence=0,
++                project="p-src",
++            ),
++            PlaneState(
++                id="st-canceled-us",
++                name="Canceled",
++                group="cancelled",
++                sequence=5,
++                project="p-src",
++            ),
++        ],
++        issues=[
++            PlaneIssue(
++                id="iss-crazy",
++                sequence_id=1,
++                name="Brainstorm idea",
++                description_html="<p>Land in Crazy_Ideas</p>",
++                state_id="st-crazy-space",
++                project="p-src",
++            ),
++            PlaneIssue(
++                id="iss-canceled",
++                sequence_id=2,
++                name="Canceled idea",
++                description_html="<p>Land in Cancelled</p>",
++                state_id="st-canceled-us",
++                project="p-src",
++            ),
++        ],
++    )
++
++    await api_env.seed.execute(
++        text(
++            "SELECT set_config('app.current_workspace_id', :ws, true), "
++            "set_config('app.current_principal_id', :pid, true), "
++            "set_config('app.aal_level', '2', true)"
++        ),
++        {"ws": str(api_env.workspace_id), "pid": str(admin.id)},
++    )
++    caller = PrincipalContext(principal_id=admin.id, workspace_id=api_env.workspace_id, aal_level=2)
++    importer = PlaneImporter(
++        session=api_env.seed,
++        caller=caller,
++        blob_store_root=tmp_path / "blobs",
++        target_project_identifier="KAN",
++    )
++    await importer.run_import(bundle, dry_run=False)
++    await api_env.seed.commit()
++
++    all_states = (
++        (
++            await api_env.seed.execute(
++                select(WorkflowState).where(WorkflowState.project_id == kan_id)
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert len(all_states) == 6
++
++    imported_crazy = (
++        await api_env.seed.execute(
++            select(Issue).where(Issue.project_id == kan_id, Issue.sequence_id == 1)
++        )
++    ).scalar_one()
++    assert imported_crazy.state_id == crazy_ideas_id
++
++    imported_canceled = (
++        await api_env.seed.execute(
++            select(Issue).where(Issue.project_id == kan_id, Issue.sequence_id == 2)
++        )
++    ).scalar_one()
++    assert imported_canceled.state_id == cancelled_id
+diff --git a/kanban/web/openapi.json b/kanban/web/openapi.json
+index fb9a90d4..5ef2ba4e 100644
+--- a/kanban/web/openapi.json
++++ b/kanban/web/openapi.json
+@@ -421,6 +421,73 @@
+         "title": "AdHocQueryRequest",
+         "type": "object"
+       },
++      "AdminGenericImportRequest": {
++        "description": "Payload requesting execution or preview of Jira, GitHub, or Linear imports.",
++        "properties": {
++          "bundle_data": {
++            "anyOf": [
++              {},
++              {
++                "type": "null"
++              }
++            ],
++            "description": "Direct JSON or CSV data payload for upload/paste import",
++            "title": "Bundle Data"
++          },
++          "bundle_name": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "description": "Bundle file or folder name in imports storage",
++            "title": "Bundle Name"
++          },
++          "dry_run": {
++            "default": false,
++            "description": "Simulate import and return diff report without persisting database changes",
++            "title": "Dry Run",
++            "type": "boolean"
++          },
++          "project_key": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "description": "Target project key (e.g. JIRA, GH, LIN)",
++            "title": "Project Key"
++          },
++          "user_map": {
++            "additionalProperties": {
++              "type": "string"
++            },
++            "description": "Mapping from source user identifiers to Kanban handles",
++            "title": "User Map",
++            "type": "object"
++          },
++          "workspace_slug": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "description": "Target workspace slug (defaults to caller active workspace)",
++            "title": "Workspace Slug"
++          }
++        },
++        "title": "AdminGenericImportRequest",
++        "type": "object"
++      },
+       "AdminOAuthClientCreateRequest": {
+         "additionalProperties": false,
+         "description": "Payload for administrative registration of an OAuth 2.1 client (AAL2).",
+@@ -549,6 +616,31 @@
+         "title": "AdminPlaneImportRequest",
+         "type": "object"
+       },
++      "AdminPortableExportRequest": {
++        "description": "Payload requesting portable deterministic workspace bundle export.",
++        "properties": {
++          "scrub": {
++            "default": false,
++            "description": "Scrub secrets and sensitive tokens from markdown and text fields",
++            "title": "Scrub",
++            "type": "boolean"
++          },
++          "workspace_slug": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "description": "Target workspace slug (defaults to caller's active workspace)",
++            "title": "Workspace Slug"
++          }
++        },
++        "title": "AdminPortableExportRequest",
++        "type": "object"
++      },
+       "AgentDefinitionCreate": {
+         "additionalProperties": false,
+         "description": "Request payload for POST /api/v1/workspaces/{workspace}/agent-definitions.",
+@@ -1177,6 +1269,57 @@
+         "title": "AssigneeSuggestionsResponse",
+         "type": "object"
+       },
++      "AttachmentMetaResponse": {
++        "description": "Lightweight metadata response for an attachment.",
++        "properties": {
++          "blob_sha256": {
++            "description": "Hex-encoded SHA-256 digest",
++            "title": "Blob Sha256",
++            "type": "string"
++          },
++          "byte_size": {
++            "description": "Payload byte size",
++            "title": "Byte Size",
++            "type": "integer"
++          },
++          "content_type": {
++            "description": "MIME media type",
++            "title": "Content Type",
++            "type": "string"
++          },
++          "id": {
++            "format": "uuid",
++            "title": "Id",
++            "type": "string"
++          },
++          "original_filename": {
++            "description": "Original filename",
++            "title": "Original Filename",
++            "type": "string"
++          },
++          "page_count": {
++            "anyOf": [
++              {
++                "type": "integer"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "description": "Document page count",
++            "title": "Page Count"
++          }
++        },
++        "required": [
++          "id",
++          "original_filename",
++          "content_type",
++          "byte_size",
++          "blob_sha256"
++        ],
++        "title": "AttachmentMetaResponse",
++        "type": "object"
++      },
+       "AttachmentResponse": {
+         "description": "Response returned upon successful attachment upload.",
+         "properties": {
+@@ -1208,6 +1351,18 @@
+             "title": "Markdown Uri",
+             "type": "string"
+           },
++          "page_count": {
++            "anyOf": [
++              {
++                "type": "integer"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "description": "Document page count for paginated media",
++            "title": "Page Count"
++          },
+           "pixel_height": {
+             "anyOf": [
+               {
+@@ -5589,6 +5744,13 @@
+             "title": "Invalid Link Count",
+             "type": "integer"
+           },
++          "key_remap_manifest": {
++            "additionalProperties": {
++              "type": "string"
++            },
++            "title": "Key Remap Manifest",
++            "type": "object"
++          },
+           "rewritten_attachments": {
+             "default": 0,
+             "title": "Rewritten Attachments",
+@@ -13473,6 +13635,18 @@
+       "ResolvedRefResponse": {
+         "description": "Canonical JSON response representing a resolved entity reference.",
+         "properties": {
++          "canonical_key": {
++            "anyOf": [
++              {
++                "type": "string"
++              },
++              {
++                "type": "null"
++              }
++            ],
++            "description": "Canonical issue key when resolved via legacy alias",
++            "title": "Canonical Key"
++          },
+           "id": {
+             "description": "Unique entity identifier (UUIDv7)",
+             "format": "uuid",
+@@ -18246,8 +18420,8 @@
+   "info": {
+     "title": "\ud83d\udc4dkanban API",
+     "version": "2.0.0",
+-    "x-build-commit": "9d5577ad9b50",
+-    "x-openapi-bundle-hash": "98656c3ca40eae675f7d5cb5f7363fcddef82f3f756aef316febe37606bfaf19"
++    "x-build-commit": "9f640629a0bc",
++    "x-openapi-bundle-hash": "9097584815a9fb47c42aa9acc6da1afd9e0cab21095c97323f5d4ede512b8485"
+   },
+   "openapi": "3.1.0",
+   "paths": {
+@@ -20970,6 +21144,63 @@
+         ]
+       }
+     },
++    "/api/v1/admin/exports/portable": {
++      "post": {
++        "description": "Generate and return a deterministic .tar.gz portable bundle for the workspace.",
++        "operationId": "export_portable_workspace_api_v1_admin_exports_portable_post",
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/AdminPortableExportRequest"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "200": {
++            "content": {
++              "application/gzip": {}
++            },
++            "description": "Deterministic .tar.gz workspace archive with manifest.json SHA-256 digests"
++          },
++          "401": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ProblemDetails"
++                }
++              }
++            },
++            "description": "Unauthorized - authentication required"
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/HTTPValidationError"
++                }
++              }
++            },
++            "description": "Validation Error"
++          }
++        },
++        "security": [
++          {
++            "CsrfHeaderAuth": [],
++            "SessionCookieAuth": []
++          },
++          {
++            "BearerTokenAuth": []
++          }
++        ],
++        "summary": "Export deterministic portable workspace bundle (Server Admin + AAL2)",
++        "tags": [
++          "Admin Exports"
++        ]
++      }
++    },
+     "/api/v1/admin/groups/{group_id}/members": {
+       "get": {
+         "description": "List direct member principals (users, groups, agents) of the group.",
+@@ -21185,6 +21416,189 @@
+         ]
+       }
+     },
++    "/api/v1/admin/imports/github": {
++      "post": {
++        "description": "Import a validated GitHub issues JSON export into the workspace.",
++        "operationId": "import_github_bundle_api_v1_admin_imports_github_post",
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/AdminGenericImportRequest"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ImportDiffReport"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "401": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ProblemDetails"
++                }
++              }
++            },
++            "description": "Unauthorized - authentication required"
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/HTTPValidationError"
++                }
++              }
++            },
++            "description": "Validation Error"
++          }
++        },
++        "security": [
++          {
++            "CsrfHeaderAuth": [],
++            "SessionCookieAuth": []
++          },
++          {
++            "BearerTokenAuth": []
++          }
++        ],
++        "summary": "Import or preview GitHub issues bundle (Server Admin + AAL2)",
++        "tags": [
++          "Admin Imports"
++        ]
++      }
++    },
++    "/api/v1/admin/imports/jira": {
++      "post": {
++        "description": "Import a validated Jira JSON export into the workspace.",
++        "operationId": "import_jira_bundle_api_v1_admin_imports_jira_post",
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/AdminGenericImportRequest"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ImportDiffReport"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "401": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ProblemDetails"
++                }
++              }
++            },
++            "description": "Unauthorized - authentication required"
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/HTTPValidationError"
++                }
++              }
++            },
++            "description": "Validation Error"
++          }
++        },
++        "security": [
++          {
++            "CsrfHeaderAuth": [],
++            "SessionCookieAuth": []
++          },
++          {
++            "BearerTokenAuth": []
++          }
++        ],
++        "summary": "Import or preview Jira export bundle (Server Admin + AAL2)",
++        "tags": [
++          "Admin Imports"
++        ]
++      }
++    },
++    "/api/v1/admin/imports/linear": {
++      "post": {
++        "description": "Import a validated Linear JSON or CSV export into the workspace.",
++        "operationId": "import_linear_bundle_api_v1_admin_imports_linear_post",
++        "requestBody": {
++          "content": {
++            "application/json": {
++              "schema": {
++                "$ref": "#/components/schemas/AdminGenericImportRequest"
++              }
++            }
++          },
++          "required": true
++        },
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ImportDiffReport"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "401": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ProblemDetails"
++                }
++              }
++            },
++            "description": "Unauthorized - authentication required"
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/HTTPValidationError"
++                }
++              }
++            },
++            "description": "Validation Error"
++          }
++        },
++        "security": [
++          {
++            "CsrfHeaderAuth": [],
++            "SessionCookieAuth": []
++          },
++          {
++            "BearerTokenAuth": []
++          }
++        ],
++        "summary": "Import or preview Linear JSON/CSV export bundle (Server Admin + AAL2)",
++        "tags": [
++          "Admin Imports"
++        ]
++      }
++    },
+     "/api/v1/admin/imports/plane": {
+       "post": {
+         "description": "Import a validated Plane bundle into the workspace with sequence continuity.",
+@@ -23819,6 +24233,78 @@
+         ]
+       }
+     },
++    "/api/v1/attachments/{attachment_id}/meta": {
++      "get": {
++        "description": "Retrieve attachment metadata enforcing caller VIEW capability.",
++        "operationId": "get_attachment_meta_api_v1_attachments__attachment_id__meta_get",
++        "parameters": [
++          {
++            "in": "path",
++            "name": "attachment_id",
++            "required": true,
++            "schema": {
++              "format": "uuid",
++              "title": "Attachment Id",
++              "type": "string"
++            }
++          }
++        ],
++        "responses": {
++          "200": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/AttachmentMetaResponse"
++                }
++              }
++            },
++            "description": "Successful Response"
++          },
++          "401": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ProblemDetails"
++                }
++              }
++            },
++            "description": "Unauthorized - authentication required"
++          },
++          "422": {
++            "content": {
++              "application/json": {
++                "schema": {
++                  "$ref": "#/components/schemas/HTTPValidationError"
++                }
++              }
++            },
++            "description": "Validation Error"
++          },
++          "429": {
++            "content": {
++              "application/problem+json": {
++                "schema": {
++                  "$ref": "#/components/schemas/ProblemDetails"
++                }
++              }
++            },
++            "description": "Too Many Requests - rate limit exceeded"
++          }
++        },
++        "security": [
++          {
++            "SessionCookieAuth": []
++          },
++          {
++            "BearerTokenAuth": []
++          }
++        ],
++        "summary": "Retrieve attachment metadata",
++        "tags": [
++          "attachments"
++        ]
++      }
++    },
+     "/api/v1/attachments/{attachment_id}/signed-url": {
+       "post": {
+         "description": "Verify Capability.VIEW on owning resource and mint 300s signed URL.",
+@@ -32968,6 +33454,34 @@
+               "title": "Only Archived",
+               "type": "boolean"
+             }
++          },
++          {
++            "description": "Optional workflow state_group filter",
++            "in": "query",
++            "name": "state_group",
++            "required": false,
++            "schema": {
++              "anyOf": [
++                {
++                  "items": {
++                    "enum": [
++                      "backlog",
++                      "unstarted",
++                      "started",
++                      "completed",
++                      "cancelled"
++                    ],
++                    "type": "string"
++                  },
++                  "type": "array"
++                },
++                {
++                  "type": "null"
++                }
++              ],
++              "description": "Optional workflow state_group filter",
++              "title": "State Group"
++            }
+           }
+         ],
+         "responses": {
+diff --git a/kanban/web/src/api/schema.gen.ts b/kanban/web/src/api/schema.gen.ts
+index f4945181..f74ad6af 100644
+--- a/kanban/web/src/api/schema.gen.ts
++++ b/kanban/web/src/api/schema.gen.ts
+@@ -691,6 +691,26 @@ export interface paths {
+         patch?: never;
+         trace?: never;
+     };
++    "/api/v1/admin/exports/portable": {
++        parameters: {
++            query?: never;
++            header?: never;
++            path?: never;
++            cookie?: never;
++        };
++        get?: never;
++        put?: never;
++        /**
++         * Export deterministic portable workspace bundle (Server Admin + AAL2)
++         * @description Generate and return a deterministic .tar.gz portable bundle for the workspace.
++         */
++        post: operations["export_portable_workspace_api_v1_admin_exports_portable_post"];
++        delete?: never;
++        options?: never;
++        head?: never;
++        patch?: never;
++        trace?: never;
++    };
+     "/api/v1/admin/groups/{group_id}/members": {
+         parameters: {
+             query?: never;
+@@ -735,6 +755,66 @@ export interface paths {
+         patch?: never;
+         trace?: never;
+     };
++    "/api/v1/admin/imports/github": {
++        parameters: {
++            query?: never;
++            header?: never;
++            path?: never;
++            cookie?: never;
++        };
++        get?: never;
++        put?: never;
++        /**
++         * Import or preview GitHub issues bundle (Server Admin + AAL2)
++         * @description Import a validated GitHub issues JSON export into the workspace.
++         */
++        post: operations["import_github_bundle_api_v1_admin_imports_github_post"];
++        delete?: never;
++        options?: never;
++        head?: never;
++        patch?: never;
++        trace?: never;
++    };
++    "/api/v1/admin/imports/jira": {
++        parameters: {
++            query?: never;
++            header?: never;
++            path?: never;
++            cookie?: never;
++        };
++        get?: never;
++        put?: never;
++        /**
++         * Import or preview Jira export bundle (Server Admin + AAL2)
++         * @description Import a validated Jira JSON export into the workspace.
++         */
++        post: operations["import_jira_bundle_api_v1_admin_imports_jira_post"];
++        delete?: never;
++        options?: never;
++        head?: never;
++        patch?: never;
++        trace?: never;
++    };
++    "/api/v1/admin/imports/linear": {
++        parameters: {
++            query?: never;
++            header?: never;
++            path?: never;
++            cookie?: never;
++        };
++        get?: never;
++        put?: never;
++        /**
++         * Import or preview Linear JSON/CSV export bundle (Server Admin + AAL2)
++         * @description Import a validated Linear JSON or CSV export into the workspace.
++         */
++        post: operations["import_linear_bundle_api_v1_admin_imports_linear_post"];
++        delete?: never;
++        options?: never;
++        head?: never;
++        patch?: never;
++        trace?: never;
++    };
+     "/api/v1/admin/imports/plane": {
+         parameters: {
+             query?: never;
+@@ -1420,6 +1500,26 @@ export interface paths {
+         patch?: never;
+         trace?: never;
+     };
++    "/api/v1/attachments/{attachment_id}/meta": {
++        parameters: {
++            query?: never;
++            header?: never;
++            path?: never;
++            cookie?: never;
++        };
++        /**
++         * Retrieve attachment metadata
++         * @description Retrieve attachment metadata enforcing caller VIEW capability.
++         */
++        get: operations["get_attachment_meta_api_v1_attachments__attachment_id__meta_get"];
++        put?: never;
++        post?: never;
++        delete?: never;
++        options?: never;
++        head?: never;
++        patch?: never;
++        trace?: never;
++    };
+     "/api/v1/attachments/{attachment_id}/signed-url": {
+         parameters: {
+             query?: never;
+@@ -5482,6 +5582,45 @@ export interface components {
+                 [key: string]: unknown;
+             };
+         };
++        /**
++         * AdminGenericImportRequest
++         * @description Payload requesting execution or preview of Jira, GitHub, or Linear imports.
++         */
++        AdminGenericImportRequest: {
++            /**
++             * Bundle Data
++             * @description Direct JSON or CSV data payload for upload/paste import
++             */
++            bundle_data?: unknown | null;
++            /**
++             * Bundle Name
++             * @description Bundle file or folder name in imports storage
++             */
++            bundle_name?: string | null;
++            /**
++             * Dry Run
++             * @description Simulate import and return diff report without persisting database changes
++             * @default false
++             */
++            dry_run: boolean;
++            /**
++             * Project Key
++             * @description Target project key (e.g. JIRA, GH, LIN)
++             */
++            project_key?: string | null;
++            /**
++             * User Map
++             * @description Mapping from source user identifiers to Kanban handles
++             */
++            user_map?: {
++                [key: string]: string;
++            };
++            /**
++             * Workspace Slug
++             * @description Target workspace slug (defaults to caller active workspace)
++             */
++            workspace_slug?: string | null;
++        };
+         /**
+          * AdminOAuthClientCreateRequest
+          * @description Payload for administrative registration of an OAuth 2.1 client (AAL2).
+@@ -5557,6 +5696,23 @@ export interface components {
+              */
+             workspace_slug?: string | null;
+         };
++        /**
++         * AdminPortableExportRequest
++         * @description Payload requesting portable deterministic workspace bundle export.
++         */
++        AdminPortableExportRequest: {
++            /**
++             * Scrub
++             * @description Scrub secrets and sensitive tokens from markdown and text fields
++             * @default false
++             */
++            scrub: boolean;
++            /**
++             * Workspace Slug
++             * @description Target workspace slug (defaults to caller's active workspace)
++             */
++            workspace_slug?: string | null;
++        };
+         /**
+          * AgentDefinitionCreate
+          * @description Request payload for POST /api/v1/workspaces/{workspace}/agent-definitions.
+@@ -5789,6 +5945,42 @@ export interface components {
+             /** Items */
+             items: components["schemas"]["AssigneeSuggestionItem"][];
+         };
++        /**
++         * AttachmentMetaResponse
++         * @description Lightweight metadata response for an attachment.
++         */
++        AttachmentMetaResponse: {
++            /**
++             * Blob Sha256
++             * @description Hex-encoded SHA-256 digest
++             */
++            blob_sha256: string;
++            /**
++             * Byte Size
++             * @description Payload byte size
++             */
++            byte_size: number;
++            /**
++             * Content Type
++             * @description MIME media type
++             */
++            content_type: string;
++            /**
++             * Id
++             * Format: uuid
++             */
++            id: string;
++            /**
++             * Original Filename
++             * @description Original filename
++             */
++            original_filename: string;
++            /**
++             * Page Count
++             * @description Document page count
++             */
++            page_count?: number | null;
++        };
+         /**
+          * AttachmentResponse
+          * @description Response returned upon successful attachment upload.
+@@ -5820,6 +6012,11 @@ export interface components {
+              * @description Canonical attachment URI for markdown embedding (attachment://att_<id>)
+              */
+             markdown_uri: string;
++            /**
++             * Page Count
++             * @description Document page count for paginated media
++             */
++            page_count?: number | null;
+             /**
+              * Pixel Height
+              * @description Raster height in pixels
+@@ -7872,6 +8069,10 @@ export interface components {
+              * @default 0
+              */
+             invalid_link_count: number;
++            /** Key Remap Manifest */
++            key_remap_manifest?: {
++                [key: string]: string;
++            };
+             /**
+              * Rewritten Attachments
+              * @default 0
+@@ -11465,6 +11666,11 @@ export interface components {
+          * @description Canonical JSON response representing a resolved entity reference.
+          */
+         ResolvedRefResponse: {
++            /**
++             * Canonical Key
++             * @description Canonical issue key when resolved via legacy alias
++             */
++            canonical_key?: string | null;
+             /**
+              * Id
+              * Format: uuid
+@@ -15397,6 +15603,48 @@ export interface operations {
+             };
+         };
+     };
++    export_portable_workspace_api_v1_admin_exports_portable_post: {
++        parameters: {
++            query?: never;
++            header?: never;
++            path?: never;
++            cookie?: never;
++        };
++        requestBody: {
++            content: {
++                "application/json": components["schemas"]["AdminPortableExportRequest"];
++            };
++        };
++        responses: {
++            /** @description Deterministic .tar.gz workspace archive with manifest.json SHA-256 digests */
++            200: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/gzip": unknown;
++                };
++            };
++            /** @description Unauthorized - authentication required */
++            401: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/problem+json": components["schemas"]["ProblemDetails"];
++                };
++            };
++            /** @description Validation Error */
++            422: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["HTTPValidationError"];
++                };
++            };
++        };
++    };
+     list_group_members_endpoint_api_v1_admin_groups__group_id__members_get: {
+         parameters: {
+             query?: never;
+@@ -15525,6 +15773,132 @@ export interface operations {
+             };
+         };
+     };
++    import_github_bundle_api_v1_admin_imports_github_post: {
++        parameters: {
++            query?: never;
++            header?: never;
++            path?: never;
++            cookie?: never;
++        };
++        requestBody: {
++            content: {
++                "application/json": components["schemas"]["AdminGenericImportRequest"];
++            };
++        };
++        responses: {
++            /** @description Successful Response */
++            200: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["ImportDiffReport"];
++                };
++            };
++            /** @description Unauthorized - authentication required */
++            401: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/problem+json": components["schemas"]["ProblemDetails"];
++                };
++            };
++            /** @description Validation Error */
++            422: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["HTTPValidationError"];
++                };
++            };
++        };
++    };
++    import_jira_bundle_api_v1_admin_imports_jira_post: {
++        parameters: {
++            query?: never;
++            header?: never;
++            path?: never;
++            cookie?: never;
++        };
++        requestBody: {
++            content: {
++                "application/json": components["schemas"]["AdminGenericImportRequest"];
++            };
++        };
++        responses: {
++            /** @description Successful Response */
++            200: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["ImportDiffReport"];
++                };
++            };
++            /** @description Unauthorized - authentication required */
++            401: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/problem+json": components["schemas"]["ProblemDetails"];
++                };
++            };
++            /** @description Validation Error */
++            422: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["HTTPValidationError"];
++                };
++            };
++        };
++    };
++    import_linear_bundle_api_v1_admin_imports_linear_post: {
++        parameters: {
++            query?: never;
++            header?: never;
++            path?: never;
++            cookie?: never;
++        };
++        requestBody: {
++            content: {
++                "application/json": components["schemas"]["AdminGenericImportRequest"];
++            };
++        };
++        responses: {
++            /** @description Successful Response */
++            200: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["ImportDiffReport"];
++                };
++            };
++            /** @description Unauthorized - authentication required */
++            401: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/problem+json": components["schemas"]["ProblemDetails"];
++                };
++            };
++            /** @description Validation Error */
++            422: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["HTTPValidationError"];
++                };
++            };
++        };
++    };
+     import_plane_bundle_api_v1_admin_imports_plane_post: {
+         parameters: {
+             query?: never;
+@@ -17228,6 +17602,55 @@ export interface operations {
+             };
+         };
+     };
++    get_attachment_meta_api_v1_attachments__attachment_id__meta_get: {
++        parameters: {
++            query?: never;
++            header?: never;
++            path: {
++                attachment_id: string;
++            };
++            cookie?: never;
++        };
++        requestBody?: never;
++        responses: {
++            /** @description Successful Response */
++            200: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["AttachmentMetaResponse"];
++                };
++            };
++            /** @description Unauthorized - authentication required */
++            401: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/problem+json": components["schemas"]["ProblemDetails"];
++                };
++            };
++            /** @description Validation Error */
++            422: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/json": components["schemas"]["HTTPValidationError"];
++                };
++            };
++            /** @description Too Many Requests - rate limit exceeded */
++            429: {
++                headers: {
++                    [name: string]: unknown;
++                };
++                content: {
++                    "application/problem+json": components["schemas"]["ProblemDetails"];
++                };
++            };
++        };
++    };
+     create_signed_url_api_v1_attachments__attachment_id__signed_url_post: {
+         parameters: {
+             query?: never;
+@@ -22829,6 +23252,8 @@ export interface operations {
+                 limit?: number;
+                 include_archived?: boolean;
+                 only_archived?: boolean;
++                /** @description Optional workflow state_group filter */
++                state_group?: ("backlog" | "unstarted" | "started" | "completed" | "cancelled")[] | null;
+             };
+             header?: never;
+             path: {
+diff --git a/kanban/web/src/features/board/BoardView.tsx b/kanban/web/src/features/board/BoardView.tsx
+index 9103cf28..78382c6b 100644
+--- a/kanban/web/src/features/board/BoardView.tsx
++++ b/kanban/web/src/features/board/BoardView.tsx
+@@ -12,6 +12,7 @@ import { BoardColumn } from './BoardColumn.tsx';
+ import { HardWipOverrideModal } from './HardWipOverrideModal.tsx';
+ import {
+   applyOptimisticMove,
++  fetchAllBoardIssues,
+   moveIssueApi,
+   type BoardIssue,
+   type BoardWorkflowState,
+@@ -142,23 +143,8 @@ export function BoardView({
+   // Fetch issues if propIssues is not provided
+   const issuesQuery = useQuery({
+     queryKey: qk.issues(projectKey, {}),
+-    queryFn: async (): Promise<BoardIssue[]> => {
+-      const data: unknown = await apiFetch('GET', '/api/v1/projects/{project_ref}/issues', {
+-        params: { project_ref: projectKey },
+-      });
+-      if (Array.isArray(data)) {
+-        return data as BoardIssue[];
+-      }
+-      if (
+-        data !== null &&
+-        typeof data === 'object' &&
+-        'items' in data &&
+-        Array.isArray(data.items)
+-      ) {
+-        return data.items as BoardIssue[];
+-      }
+-      return [];
+-    },
++    queryFn: async ({ signal }): Promise<BoardIssue[]> =>
++      fetchAllBoardIssues(projectKey, { signal }),
+     enabled: propIssues === undefined,
+     initialData: propIssues,
+   });
+diff --git a/kanban/web/src/features/board/boardApi.ts b/kanban/web/src/features/board/boardApi.ts
+index e2b6d204..e538a8d7 100644
+--- a/kanban/web/src/features/board/boardApi.ts
++++ b/kanban/web/src/features/board/boardApi.ts
+@@ -66,6 +66,100 @@ export interface BoardWorkflowState {
+   color_hex?: string | null;
+ }
+ 
++export interface FetchAllBoardIssuesOptions {
++  pageSize?: number | undefined;
++  maxPages?: number | undefined;
++  signal?: AbortSignal | undefined;
++}
++
++/**
++ * Traverse keyset cursor pagination via apiFetch to load all board issues for a project.
++ */
++export async function fetchAllBoardIssues(
++  projectKey: string,
++  options: FetchAllBoardIssuesOptions = {},
++): Promise<BoardIssue[]> {
++  if (!projectKey || projectKey === 'undefined') {
++    return [];
++  }
++
++  const maxPages = Math.max(options.maxPages ?? 100, 1);
++  const limit = Math.min(Math.max(options.pageSize ?? 100, 1), 100);
++  const items: BoardIssue[] = [];
++  const seenKeys = new Set<string>();
++  const seenCursors = new Set<string>();
++  let cursor: string | null = null;
++
++  for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
++    if (options.signal?.aborted) {
++      const reason: unknown = options.signal.reason;
++      if (reason instanceof Error || reason instanceof DOMException) {
++        throw reason;
++      }
++      throw new DOMException('Aborted', 'AbortError');
++    }
++
++    const data: unknown = await apiFetch('GET', '/api/v1/projects/{project_ref}/issues', {
++      params: { project_ref: projectKey },
++      query: { limit, ...(cursor ? { cursor } : {}) },
++      ...(options.signal ? { signal: options.signal } : {}),
++    });
++
++    if (Array.isArray(data)) {
++      for (const rawItem of data as BoardIssue[]) {
++        const dedupKey = rawItem.key || rawItem.id;
++        if (dedupKey) {
++          if (seenKeys.has(dedupKey)) {
++            continue;
++          }
++          seenKeys.add(dedupKey);
++        }
++        items.push(rawItem);
++      }
++      break;
++    }
++
++    if (
++      data !== null &&
++      typeof data === 'object' &&
++      'items' in data &&
++      Array.isArray(data.items)
++    ) {
++      const pageItems = data.items as BoardIssue[];
++      for (const rawItem of pageItems) {
++        const dedupKey = rawItem.key || rawItem.id;
++        if (dedupKey) {
++          if (seenKeys.has(dedupKey)) {
++            continue;
++          }
++          seenKeys.add(dedupKey);
++        }
++        items.push(rawItem);
++      }
++
++      const rawNextCursor =
++        'next_cursor' in data
++          ? (data as { next_cursor?: unknown }).next_cursor
++          : null;
++      const nextCursor =
++        typeof rawNextCursor === 'string' && rawNextCursor.length > 0
++          ? rawNextCursor
++          : null;
++
++      if (!nextCursor || pageItems.length === 0 || seenCursors.has(nextCursor)) {
++        break;
++      }
++
++      seenCursors.add(nextCursor);
++      cursor = nextCursor;
++    } else {
++      break;
++    }
++  }
++
++  return items;
++}
++
+ export interface IssueMoveParams {
+   projectKey: string;
+   issueKey: string;
+diff --git a/kanban/web/src/features/views/paginationMergeIntegration.test.tsx b/kanban/web/src/features/views/paginationMergeIntegration.test.tsx
+new file mode 100644
+index 00000000..e64e105f
+--- /dev/null
++++ b/kanban/web/src/features/views/paginationMergeIntegration.test.tsx
+@@ -0,0 +1,551 @@
++import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
++import { render, screen, waitFor, act, fireEvent } from '@testing-library/react';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import React from 'react';
++
++vi.mock('../drawer-rail/railApi', async () => {
++  const actual = await vi.importActual<Record<string, unknown>>('../drawer-rail/railApi');
++  return {
++    ...actual,
++    fetchAssigneeSuggestions: vi.fn().mockImplementation(() => new Promise(() => {
++      /* pending */
++    })),
++    fetchProjectLabels: vi.fn().mockImplementation(() => new Promise(() => {
++      /* pending */
++    })),
++    fetchProjectCycles: vi.fn().mockImplementation(() => new Promise(() => {
++      /* pending */
++    })),
++    fetchProjectModules: vi.fn().mockImplementation(() => new Promise(() => {
++      /* pending */
++    })),
++  };
++});
++
++import * as clientModule from '../../api/client.ts';
++import { fetchAllProjectIssues, type StateSummary } from './viewsApi';
++import { IssuesWorkspaceRoute, defaultQueryClient } from './viewRegistry';
++import { BoardView } from '../board/BoardView.tsx';
++import { fetchAllBoardIssues, type BoardIssue, type BoardWorkflowState } from '../board/boardApi.ts';
++
++const WORKFLOW_STATES: BoardWorkflowState[] = [
++  { id: 'state-backlog', name: 'Backlog', group: 'backlog', sort_order: 1 },
++  { id: 'state-todo', name: 'Todo', group: 'unstarted', sort_order: 2 },
++  { id: 'state-crazy-ideas', name: 'Crazy_Ideas', group: 'started', sort_order: 3 },
++  { id: 'state-done', name: 'Done', group: 'completed', sort_order: 4 },
++  { id: 'state-cancelled', name: 'Cancelled', group: 'cancelled', sort_order: 5 },
++];
++
++const VIEW_STATES: StateSummary[] = WORKFLOW_STATES.map((st) => ({
++  id: st.id,
++  name: st.name,
++  group: st.group,
++  sort_order: st.sort_order,
++}));
++
++interface DatasetRecord {
++  id: string;
++  key: string;
++  summary: string;
++  state_id: string;
++  state: { id: string; name: string; group: BoardWorkflowState['group'] };
++  priority: { id: string; slug: string; label: string; emoji: string };
++  board_rank: string;
++}
++
++/**
++ * Build deterministic 304-issue descending sequence_id dataset matching post-merge KAN:
++ * - KAN-304..KAN-89 (216): Done
++ * - KAN-88..KAN-84 (5): Cancelled
++ * - KAN-83 (1): Backlog
++ * - KAN-82..KAN-76 (7): Crazy_Ideas
++ * - KAN-75..KAN-55 (21): Todo
++ * - KAN-54..KAN-1 (54): Done
++ * Pages 1 and 2 (KAN-304..KAN-105) contain 100% Done issues, so open items only
++ * appear starting on page 3 (offset 200).
++ */
++function buildRealistic304Dataset(): DatasetRecord[] {
++  const records: DatasetRecord[] = [];
++  for (let seq = 304; seq >= 1; seq -= 1) {
++    let state = WORKFLOW_STATES[3]; // Done
++    let summary = `Completed Issue KAN-${String(seq)}`;
++
++    if (seq >= 84 && seq <= 88) {
++      state = WORKFLOW_STATES[4]; // Cancelled
++      summary = `Cancelled Issue KAN-${String(seq)}`;
++    } else if (seq === 83) {
++      state = WORKFLOW_STATES[0]; // Backlog
++      summary = 'KAN-83 Active Backlog Guardrail';
++    } else if (seq >= 76 && seq <= 82) {
++      state = WORKFLOW_STATES[2]; // Crazy_Ideas
++      summary =
++        seq === 82
++          ? 'KAN-82 Crazy Idea Prototype'
++          : `Crazy Idea KAN-${String(seq)}`;
++    } else if (seq >= 55 && seq <= 75) {
++      state = WORKFLOW_STATES[1]; // Todo
++      summary =
++        seq === 75
++          ? 'KAN-75 Active Todo Feature'
++          : `Todo Issue KAN-${String(seq)}`;
++    }
++
++    if (!state) {
++      throw new Error('Missing workflow state fixture');
++    }
++
++    records.push({
++      id: `01931234-0000-7000-8000-${String(seq).padStart(12, '0')}`,
++      key: `KAN-${String(seq)}`,
++      summary,
++      state_id: state.id,
++      state: {
++        id: state.id,
++        name: state.name,
++        group: state.group,
++      },
++      priority: {
++        id: 'medium',
++        slug: 'medium',
++        label: 'Medium',
++        emoji: '🔹',
++      },
++      board_rank: String(305 - seq).padStart(6, '0'),
++    });
++  }
++  return records;
++}
++
++function sliceCursorPage(
++  dataset: DatasetRecord[],
++  cursorParam: string | null | undefined,
++  limitParam: number | string | null | undefined,
++): { items: DatasetRecord[]; next_cursor: string | null; total: number } {
++  const parsedLimit = Number(limitParam ?? 50);
++  const limit = Number.isFinite(parsedLimit) && parsedLimit > 0 ? Math.min(parsedLimit, 100) : 50;
++  let offset = 0;
++  if (typeof cursorParam === 'string' && cursorParam.startsWith('offset-')) {
++    const parsedOffset = Number(cursorParam.slice('offset-'.length));
++    if (Number.isFinite(parsedOffset) && parsedOffset >= 0) {
++      offset = parsedOffset;
++    }
++  }
++  const items = dataset.slice(offset, offset + limit);
++  const nextOffset = offset + items.length;
++  const next_cursor =
++    items.length > 0 && nextOffset < dataset.length ? `offset-${String(nextOffset)}` : null;
++  return {
++    items,
++    next_cursor,
++    total: dataset.length,
++  };
++}
++
++describe('KAN-84 multi-page cursor pagination integration (304-issue post-merge project)', () => {
++  const originalFetch = globalThis.fetch;
++
++  beforeEach(() => {
++    vi.restoreAllMocks();
++    defaultQueryClient.clear();
++    window.innerWidth = 1280;
++    window.history.pushState({}, '', '/projects/KAN/issues');
++
++    Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
++      configurable: true,
++      value: 1400,
++    });
++    Object.defineProperty(HTMLElement.prototype, 'offsetHeight', {
++      configurable: true,
++      value: 124,
++    });
++    Object.defineProperty(HTMLElement.prototype, 'getBoundingClientRect', {
++      configurable: true,
++      value: () => ({
++        top: 0,
++        left: 0,
++        bottom: 1400,
++        right: 324,
++        width: 324,
++        height: 1400,
++        x: 0,
++        y: 0,
++        toJSON: () => {
++          /* no-op */
++        },
++      }),
++    });
++  });
++
++  afterEach(async () => {
++    globalThis.fetch = originalFetch;
++    await act(async () => {
++      await new Promise((r) => setTimeout(r, 0));
++    });
++  });
++
++  it('fetchAllProjectIssues traverses all 4 cursor pages (100+100+100+4=304) and preserves all 29 open issues', async () => {
++    const dataset = buildRealistic304Dataset();
++    const calledUrls: string[] = [];
++
++    globalThis.fetch = vi.fn().mockImplementation((input: string | URL | Request) => {
++      const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
++      calledUrls.push(urlStr);
++      const parsed = new URL(urlStr, 'http://localhost');
++      const page = sliceCursorPage(
++        dataset,
++        parsed.searchParams.get('cursor'),
++        parsed.searchParams.get('limit'),
++      );
++      return Promise.resolve({
++        ok: true,
++        json: () => Promise.resolve(page),
++      });
++    });
++
++    const result = await fetchAllProjectIssues('KAN', {
++      sort_by: 'sequence_id',
++      sort_dir: 'desc',
++    });
++
++    expect(calledUrls).toEqual([
++      '/api/v1/projects/KAN/issues?limit=100&sort_by=sequence_id&sort_dir=desc',
++      '/api/v1/projects/KAN/issues?cursor=offset-100&limit=100&sort_by=sequence_id&sort_dir=desc',
++      '/api/v1/projects/KAN/issues?cursor=offset-200&limit=100&sort_by=sequence_id&sort_dir=desc',
++      '/api/v1/projects/KAN/issues?cursor=offset-300&limit=100&sort_by=sequence_id&sort_dir=desc',
++    ]);
++    expect(result.pagesFetched).toBe(4);
++    expect(result.truncated).toBe(false);
++    expect(result.items).toHaveLength(304);
++    expect(new Set(result.items.map((item) => item.key)).size).toBe(304);
++
++    const openIssues = result.items.filter((item) =>
++      ['backlog', 'unstarted', 'started'].includes(item.state.group),
++    );
++    expect(openIssues).toHaveLength(29);
++    expect(openIssues.filter((i) => i.state.name === 'Backlog')).toHaveLength(1);
++    expect(openIssues.filter((i) => i.state.name === 'Crazy_Ideas')).toHaveLength(7);
++    expect(openIssues.filter((i) => i.state.name === 'Todo')).toHaveLength(21);
++    expect(openIssues.find((i) => i.key === 'KAN-83')?.summary).toBe('KAN-83 Active Backlog Guardrail');
++    expect(openIssues.find((i) => i.key === 'KAN-82')?.summary).toBe('KAN-82 Crazy Idea Prototype');
++    expect(openIssues.find((i) => i.key === 'KAN-75')?.summary).toBe('KAN-75 Active Todo Feature');
++  });
++
++  it('fetchAllProjectIssues guards against cursor cycles, maxPages bounds, empty/undefined projectKey, deduplication, and AbortSignal cancellation', async () => {
++    const fetchSpy = vi.fn();
++    globalThis.fetch = fetchSpy;
++
++    // 1. Empty / 'undefined' projectKey short-circuit
++    expect(await fetchAllProjectIssues('')).toEqual({
++      items: [],
++      pagesFetched: 0,
++      truncated: false,
++    });
++    expect(await fetchAllProjectIssues('undefined')).toEqual({
++      items: [],
++      pagesFetched: 0,
++      truncated: false,
++    });
++    expect(fetchSpy).not.toHaveBeenCalled();
++
++    // 2. Cursor cycle guard + deduplication (including empty key/id item)
++    const dataset = buildRealistic304Dataset();
++    const row83 = dataset.find((d) => d.key === 'KAN-83');
++    const row82 = dataset.find((d) => d.key === 'KAN-82');
++    if (!row83 || !row82) throw new Error('Missing rows');
++
++    let cycleCall = 0;
++    globalThis.fetch = vi.fn().mockImplementation(() => {
++      cycleCall += 1;
++      return Promise.resolve({
++        ok: true,
++        json: () =>
++          Promise.resolve({
++            items:
++              cycleCall === 1
++                ? [row83, row82, { summary: 'No key or id' }]
++                : [row82, row83],
++            next_cursor: 'loop-cursor-1',
++          }),
++      });
++    });
++
++    const cycleRes = await fetchAllProjectIssues('KAN');
++    expect(cycleRes.pagesFetched).toBe(2);
++    expect(cycleRes.truncated).toBe(true);
++    expect(cycleRes.items.map((i) => i.key)).toEqual(['KAN-83', 'KAN-82', '']);
++
++    // 3. maxPages bound
++    globalThis.fetch = vi.fn().mockImplementation((input: string | URL | Request) => {
++      const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
++      const parsed = new URL(urlStr, 'http://localhost');
++      return Promise.resolve({
++        ok: true,
++        json: () =>
++          Promise.resolve(
++            sliceCursorPage(dataset, parsed.searchParams.get('cursor'), parsed.searchParams.get('limit')),
++          ),
++      });
++    });
++
++    const boundedRes = await fetchAllProjectIssues('KAN', { maxPages: 2 });
++    expect(boundedRes.pagesFetched).toBe(2);
++    expect(boundedRes.items).toHaveLength(200);
++    expect(boundedRes.truncated).toBe(true);
++
++    // 4. Pre-aborted signal with default reason and custom non-Error reason
++    const controllerPre = new AbortController();
++    controllerPre.abort();
++    const preErr = await fetchAllProjectIssues('KAN', { signal: controllerPre.signal }).catch(
++      (err: unknown) => err,
++    );
++    expect((preErr as { name?: string }).name).toBe('AbortError');
++
++    const controllerStr = new AbortController();
++    controllerStr.abort('cancelled-by-user');
++    const strErr = await fetchAllProjectIssues('KAN', { signal: controllerStr.signal }).catch(
++      (err: unknown) => err,
++    );
++    expect((strErr as { name?: string }).name).toBe('AbortError');
++
++    // 5. Aborted mid-pagination after page 1
++    const controllerMid = new AbortController();
++    globalThis.fetch = vi.fn().mockImplementation(() => {
++      controllerMid.abort(new DOMException('Mid-pagination abort', 'AbortError'));
++      return Promise.resolve({
++        ok: true,
++        json: () => Promise.resolve({ items: [row83], next_cursor: 'cursor-2' }),
++      });
++    });
++    const midErr = await fetchAllProjectIssues('KAN', { signal: controllerMid.signal }).catch(
++      (err: unknown) => err,
++    );
++    expect((midErr as { name?: string }).name).toBe('AbortError');
++    expect((midErr as { message?: string }).message).toBe('Mid-pagination abort');
++  });
++
++  it('IssuesWorkspaceRoute (layout=board & kb:issue-updated live refresh) loads all 304 issues across 4 pages and never regresses to 50 items', async () => {
++    window.history.pushState({}, '', '/projects/KAN/issues?layout=board');
++    const dataset = buildRealistic304Dataset();
++    let issueFetchCount = 0;
++
++    globalThis.fetch = vi.fn().mockImplementation((input: string | URL | Request) => {
++      const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
++      if (urlStr.endsWith('/states')) {
++        return Promise.resolve({
++          ok: true,
++          json: () => Promise.resolve({ items: VIEW_STATES }),
++        });
++      }
++      if (urlStr.endsWith('/views')) {
++        return Promise.resolve({
++          ok: true,
++          json: () => Promise.resolve({ items: [] }),
++        });
++      }
++      if (urlStr.includes('/issues')) {
++        issueFetchCount += 1;
++        const parsed = new URL(urlStr, 'http://localhost');
++        return Promise.resolve({
++          ok: true,
++          json: () =>
++            Promise.resolve(
++              sliceCursorPage(dataset, parsed.searchParams.get('cursor'), parsed.searchParams.get('limit')),
++            ),
++        });
++      }
++      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
++    });
++
++    const localClient = new QueryClient({
++      defaultOptions: { queries: { retry: false } },
++    });
++
++    render(<IssuesWorkspaceRoute projectKey="KAN" initialLayout="board" queryClient={localClient} />);
++
++    await waitFor(() => {
++      expect(screen.getByLabelText('Backlog lane, 1 issues')).toBeDefined();
++      expect(screen.getByLabelText('Crazy_Ideas lane, 7 issues')).toBeDefined();
++      expect(screen.getByLabelText('Todo lane, 21 issues')).toBeDefined();
++      expect(screen.getByLabelText('Done lane, 270 issues')).toBeDefined();
++      expect(screen.getByLabelText('Cancelled lane, 5 issues')).toBeDefined();
++    });
++
++    expect(screen.getByText('KAN-83 Active Backlog Guardrail')).toBeDefined();
++    expect(screen.getByText('KAN-82 Crazy Idea Prototype')).toBeDefined();
++    expect(screen.getByText('KAN-75 Active Todo Feature')).toBeDefined();
++
++    const fetchesAfterMount = issueFetchCount;
++    expect(fetchesAfterMount).toBeGreaterThanOrEqual(4);
++
++    // Trigger live refresh event and verify multi-page loader runs again without 50-item truncation
++    act(() => {
++      fireEvent(window, new CustomEvent('kb:issue-updated'));
++    });
++
++    await waitFor(() => {
++      expect(issueFetchCount).toBeGreaterThanOrEqual(fetchesAfterMount + 4);
++    });
++
++    expect(screen.getByLabelText('Backlog lane, 1 issues')).toBeDefined();
++    expect(screen.getByLabelText('Crazy_Ideas lane, 7 issues')).toBeDefined();
++    expect(screen.getByLabelText('Todo lane, 21 issues')).toBeDefined();
++    expect(screen.getByLabelText('Done lane, 270 issues')).toBeDefined();
++    expect(screen.getByText('KAN-83 Active Backlog Guardrail')).toBeDefined();
++    expect(screen.getByText('KAN-82 Crazy Idea Prototype')).toBeDefined();
++    expect(screen.getByText('KAN-75 Active Todo Feature')).toBeDefined();
++  });
++
++  it('IssuesWorkspaceRoute (layout=list) loads all 304 issues and displays open KAN-83, KAN-82, and KAN-75 issues when filtering active states', async () => {
++    window.history.pushState({}, '', '/projects/KAN/issues?layout=list&filter_state=active');
++    const dataset = buildRealistic304Dataset();
++
++    globalThis.fetch = vi.fn().mockImplementation((input: string | URL | Request) => {
++      const urlStr = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
++      if (urlStr.endsWith('/states')) {
++        return Promise.resolve({
++          ok: true,
++          json: () => Promise.resolve({ items: VIEW_STATES }),
++        });
++      }
++      if (urlStr.endsWith('/views')) {
++        return Promise.resolve({
++          ok: true,
++          json: () => Promise.resolve({ items: [] }),
++        });
++      }
++      if (urlStr.includes('/issues')) {
++        const parsed = new URL(urlStr, 'http://localhost');
++        return Promise.resolve({
++          ok: true,
++          json: () =>
++            Promise.resolve(
++              sliceCursorPage(dataset, parsed.searchParams.get('cursor'), parsed.searchParams.get('limit')),
++            ),
++        });
++      }
++      return Promise.resolve({ ok: true, json: () => Promise.resolve({}) });
++    });
++
++    const localClient = new QueryClient({
++      defaultOptions: { queries: { retry: false } },
++    });
++
++    render(<IssuesWorkspaceRoute projectKey="KAN" initialLayout="list" queryClient={localClient} />);
++
++    await waitFor(() => {
++      expect(screen.getAllByText('KAN-83').length).toBeGreaterThan(0);
++      expect(screen.getAllByText('KAN-82').length).toBeGreaterThan(0);
++      expect(screen.getAllByText('KAN-75').length).toBeGreaterThan(0);
++    });
++
++    // Completed Done issues must be filtered out when filter_state=active is set
++    expect(screen.queryByText('KAN-304')).toBeNull();
++    expect(screen.queryByText('KAN-1')).toBeNull();
++  });
++
++  it('Standalone BoardView traverses all 4 apiFetch cursor pages via fetchAllBoardIssues and renders open columns alongside 270 Done issues', async () => {
++    const dataset = buildRealistic304Dataset();
++    const issueQueryCalls: { cursor?: unknown; limit?: unknown }[] = [];
++
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation((_method, path, opts) => {
++      if (path === '/api/v1/projects/{project_ref}') {
++        return Promise.resolve({
++          id: 'proj-kan-1',
++          states: WORKFLOW_STATES,
++          capabilities: ['VIEW', 'EDIT'],
++        });
++      }
++      if (path === '/api/v1/projects/{project_ref}/issues') {
++        const query = opts?.query as { cursor?: string; limit?: number } | undefined;
++        issueQueryCalls.push({ cursor: query?.cursor, limit: query?.limit });
++        return Promise.resolve(sliceCursorPage(dataset, query?.cursor, query?.limit));
++      }
++      return Promise.resolve({});
++    });
++
++    const localClient = new QueryClient({
++      defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
++    });
++
++    render(
++      <QueryClientProvider client={localClient}>
++        <BoardView projectKey="KAN" />
++      </QueryClientProvider>,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByLabelText('Backlog lane, 1 issues')).toBeDefined();
++      expect(screen.getByLabelText('Crazy_Ideas lane, 7 issues')).toBeDefined();
++      expect(screen.getByLabelText('Todo lane, 21 issues')).toBeDefined();
++      expect(screen.getByLabelText('Done lane, 270 issues')).toBeDefined();
++      expect(screen.getByLabelText('Cancelled lane, 5 issues')).toBeDefined();
++    });
++
++    expect(issueQueryCalls).toEqual([
++      { cursor: undefined, limit: 100 },
++      { cursor: 'offset-100', limit: 100 },
++      { cursor: 'offset-200', limit: 100 },
++      { cursor: 'offset-300', limit: 100 },
++    ]);
++    expect(screen.getByText('KAN-83 Active Backlog Guardrail')).toBeDefined();
++    expect(screen.getByText('KAN-82 Crazy Idea Prototype')).toBeDefined();
++    expect(screen.getByText('KAN-75 Active Todo Feature')).toBeDefined();
++  });
++
++  it('fetchAllBoardIssues covers empty projectKey, cycle protection, deduplication, array fallback, maxPages, and abort', async () => {
++    const apiSpy = vi.spyOn(clientModule, 'apiFetch');
++
++    // Empty / 'undefined' projectKey
++    expect(await fetchAllBoardIssues('')).toEqual([]);
++    expect(await fetchAllBoardIssues('undefined')).toEqual([]);
++    expect(apiSpy).not.toHaveBeenCalled();
++
++    // Array response with duplicate keys and keyless fallback
++    const issueA: BoardIssue = {
++      id: 'id-a',
++      key: 'KAN-A',
++      summary: 'A',
++      state_id: 'state-todo',
++      board_rank: '000001',
++    };
++    const issueNoKey: BoardIssue = {
++      id: '',
++      key: '',
++      summary: 'NoKey',
++      state_id: 'state-todo',
++      board_rank: '000002',
++    };
++    apiSpy.mockResolvedValueOnce([issueA, issueA, issueNoKey] as never);
++    const arrayRes = await fetchAllBoardIssues('KAN');
++    expect(arrayRes).toHaveLength(2);
++
++    // Cycle guard + deduplication across pages
++    let pageCall = 0;
++    apiSpy.mockImplementation(() => {
++      pageCall += 1;
++      return Promise.resolve({
++        items: pageCall === 1 ? [issueA, issueNoKey] : [issueA],
++        next_cursor: 'repeat-cur',
++      });
++    });
++    const cycleRes = await fetchAllBoardIssues('KAN');
++    expect(cycleRes).toHaveLength(2);
++    expect(pageCall).toBe(2);
++
++    // AbortSignal pre-aborted & non-Error reason
++    const abortCtrl = new AbortController();
++    abortCtrl.abort('board-abort');
++    const boardAbortErr = await fetchAllBoardIssues('KAN', { signal: abortCtrl.signal }).catch(
++      (err: unknown) => err,
++    );
++    expect((boardAbortErr as { name?: string }).name).toBe('AbortError');
++
++    const abortErrCtrl = new AbortController();
++    abortErrCtrl.abort(new DOMException('Board cancelled', 'AbortError'));
++    const boardDomErr = await fetchAllBoardIssues('KAN', { signal: abortErrCtrl.signal }).catch(
++      (err: unknown) => err,
++    );
++    expect((boardDomErr as { name?: string }).name).toBe('AbortError');
++    expect((boardDomErr as { message?: string }).message).toBe('Board cancelled');
++  });
++});
+diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
+index 4e0cdeac..31768bc0 100644
+--- a/kanban/web/src/features/views/viewRegistry.tsx
++++ b/kanban/web/src/features/views/viewRegistry.tsx
+@@ -18,7 +18,7 @@ import { QuickFieldPopover, type QuickFieldType } from './QuickFieldPopover';
+ import { useIssueKeyboardMap } from './useIssueKeyboardMap';
+ import { announce } from '../../realtime';
+ import {
+-  fetchProjectIssues,
++  fetchAllProjectIssues,
+   fetchProjectStates,
+   fetchProjectSavedViews,
+   createProjectIssue,
+@@ -283,8 +283,8 @@ export function IssuesWorkspaceRoute({
+   const issuesQuery = useQuery(
+     {
+       queryKey: qk.issues(projectKey, {}),
+-      queryFn: async () => {
+-        const res = await fetchProjectIssues(projectKey);
++      queryFn: async ({ signal }) => {
++        const res = await fetchAllProjectIssues(projectKey, { signal });
+         return res.items;
+       },
+       enabled: Boolean(projectKey) && isLiveMode,
+@@ -357,26 +357,31 @@ export function IssuesWorkspaceRoute({
+       return;
+     }
+     let active = true;
++    let currentController: AbortController | null = null;
+     const refreshLive = (): void => {
++      currentController?.abort();
++      const controller = new AbortController();
++      currentController = controller;
+       void Promise.all([
+-        fetchProjectIssues(projectKey),
++        fetchAllProjectIssues(projectKey, { signal: controller.signal }),
+         fetchProjectStates(projectKey).catch((): StateSummary[] => []),
+       ])
+         .then(([issuesRes, statesRes]) => {
+-          if (!active) return;
++          if (!active || controller.signal.aborted) return;
+           setIssues(issuesRes.items);
+           if (statesRes.length > 0) {
+             setProjectStates(statesRes);
+           }
+         })
+         .catch(() => {
+-          // Preserve existing state on offline/transient error
++          // Preserve existing state on offline/transient/abort error
+         });
+     };
+     refreshLive();
+     window.addEventListener('kb:issue-updated', refreshLive);
+     return () => {
+       active = false;
++      currentController?.abort();
+       window.removeEventListener('kb:issue-updated', refreshLive);
+     };
+   }, [isLiveMode, projectKey, setIssues, setProjectStates]);
+diff --git a/kanban/web/src/features/views/viewsApi.ts b/kanban/web/src/features/views/viewsApi.ts
+index 6ec172fc..20b23368 100644
+--- a/kanban/web/src/features/views/viewsApi.ts
++++ b/kanban/web/src/features/views/viewsApi.ts
+@@ -153,8 +153,26 @@ export interface IssueQueryParams {
+   sort_dir?: SortDirection;
+   cursor?: string | null;
+   limit?: number;
++  signal?: AbortSignal | undefined;
+ }
+ 
++export interface FetchAllProjectIssuesOptions {
++  pageSize?: number | undefined;
++  maxPages?: number | undefined;
++  sort_by?: string | undefined;
++  sort_dir?: SortDirection | undefined;
++  signal?: AbortSignal | undefined;
++}
++
++export interface FetchAllProjectIssuesResult {
++  items: IssueItem[];
++  pagesFetched: number;
++  truncated: boolean;
++}
++
++export const DEFAULT_ISSUES_PAGE_SIZE = 100;
++export const DEFAULT_MAX_ISSUE_PAGES = 100;
++
+ const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+ 
+ export function isUuidString(value: string | null | undefined): boolean {
+@@ -286,6 +304,7 @@ export async function fetchProjectIssues(
+     headers: {
+       Accept: 'application/json',
+     },
++    ...(params.signal ? { signal: params.signal } : {}),
+   });
+ 
+   if (!response.ok) {
+@@ -298,9 +317,12 @@ export async function fetchProjectIssues(
+     : (rawData && typeof rawData === 'object' && Array.isArray((rawData as { items?: unknown[] }).items))
+     ? (rawData as { items: unknown[] }).items
+     : [];
+-  const nextCursor = (rawData && typeof rawData === 'object' && 'next_cursor' in rawData)
+-    ? (rawData as { next_cursor: string | null }).next_cursor
+-    : null;
++  const rawNextCursor =
++    rawData && typeof rawData === 'object' && 'next_cursor' in rawData
++      ? (rawData as { next_cursor?: unknown }).next_cursor
++      : null;
++  const nextCursor =
++    typeof rawNextCursor === 'string' && rawNextCursor.length > 0 ? rawNextCursor : null;
+   const total = (rawData && typeof rawData === 'object' && 'total' in rawData)
+     ? (rawData as { total?: number }).total
+     : undefined;
+@@ -312,6 +334,70 @@ export async function fetchProjectIssues(
+   };
+ }
+ 
++/**
++ * Traverse keyset cursor pagination to load all issues for a project without 50-item truncation.
++ */
++export async function fetchAllProjectIssues(
++  projectKey: string,
++  options: FetchAllProjectIssuesOptions = {},
++): Promise<FetchAllProjectIssuesResult> {
++  if (!projectKey || projectKey === 'undefined') {
++    return { items: [], pagesFetched: 0, truncated: false };
++  }
++
++  const maxPages = Math.max(options.maxPages ?? DEFAULT_MAX_ISSUE_PAGES, 1);
++  const limit = Math.min(Math.max(options.pageSize ?? DEFAULT_ISSUES_PAGE_SIZE, 1), 100);
++  const items: IssueItem[] = [];
++  const seenKeys = new Set<string>();
++  const seenCursors = new Set<string>();
++  let cursor: string | null = null;
++  let pagesFetched = 0;
++
++  for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
++    if (options.signal?.aborted) {
++      const reason: unknown = options.signal.reason;
++      if (reason instanceof Error || reason instanceof DOMException) {
++        throw reason;
++      }
++      throw new DOMException('Aborted', 'AbortError');
++    }
++
++    const page = await fetchProjectIssues(projectKey, {
++      limit,
++      ...(cursor ? { cursor } : {}),
++      ...(options.sort_by ? { sort_by: options.sort_by } : {}),
++      ...(options.sort_dir ? { sort_dir: options.sort_dir } : {}),
++      ...(options.signal ? { signal: options.signal } : {}),
++    });
++
++    for (const item of page.items) {
++      const dedupKey = item.key || item.id;
++      if (dedupKey) {
++        if (seenKeys.has(dedupKey)) {
++          continue;
++        }
++        seenKeys.add(dedupKey);
++      }
++      items.push(item);
++    }
++
++    pagesFetched += 1;
++
++    if (!page.next_cursor || page.items.length === 0) {
++      return { items, pagesFetched, truncated: false };
++    }
++
++    if (seenCursors.has(page.next_cursor)) {
++      return { items, pagesFetched, truncated: true };
++    }
++
++    seenCursors.add(page.next_cursor);
++    cursor = page.next_cursor;
++  }
++
++  return { items, pagesFetched, truncated: cursor !== null };
++}
++
+ /**
+  * Fetch workflow states for a project from GET /api/v1/projects/:projectKey/states.
+  */

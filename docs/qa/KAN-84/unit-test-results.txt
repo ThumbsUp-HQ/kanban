@@ -1,0 +1,75 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/kanban
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 91 items
+
+kanban/tests/importer/test_merge_into_existing_project_realistic.py ..   [  2%]
+kanban/tests/importer/test_plane_merge_into_project.py ...               [  5%]
+kanban/tests/importer/test_plane_mapper.py .....                         [ 10%]
+kanban/tests/importer/test_plane_importer.py ..............              [ 26%]
+kanban/tests/importer/test_plane_merge_mode.py ........                  [ 35%]
+kanban/tests/importer/test_multi_source_importers.py ..................  [ 54%]
+kanban/tests/importer/test_cutover_verifier.py ...................       [ 75%]
+kanban/tests/api/test_issues.py ................                         [ 93%]
+kanban/tests/api/test_issue_archive.py ...                               [ 96%]
+kanban/tests/api/test_issue_patch_etag_parity.py ..                      [ 98%]
+kanban/tests/resolve/test_legacy_key_aliases.py .                        [100%]
+
+======================== 91 passed in 61.20s (0:01:01) =========================
+PYTEST_EXIT=0
+Name                                Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------------------
+kanban/api/v1/issues.py                69      1     14      1    98%   87
+kanban/importer/plane_importer.py     548     14    192     17    96%   192, 286-287, 413-414, 428->430, 474, 525, 646, 697, 706, 711, 746, 944->942, 1032->1036, 1085->1088, 1119->1117, 1222, 1264
+kanban/importer/plane_mapper.py       144      3     62      2    97%   103->99, 149-151, 205->199
+kanban/services/issues.py             465     11    188      8    97%   320-324, 427, 661->664, 782, 851, 903, 1004, 1051->1054, 1144, 1188->1190
+-------------------------------------------------------------------------------
+TOTAL                                1226     29    456     28    96%
+COV_REPORT_EXIT=0
+
+
+ RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/board/boardApi.test.ts (8 tests) 14ms
+ ✓ src/features/views/viewsApi.test.ts (12 tests) 43ms
+ ✓ src/features/board/BoardView.test.tsx (22 tests) 1376ms
+ ✓ src/features/views/paginationMergeIntegration.test.tsx (6 tests) 1053ms
+   ✓ KAN-84 multi-page cursor pagination integration (304-issue post-merge project) (6)
+     ✓ IssuesWorkspaceRoute (layout=board & kb:issue-updated live refresh) loads all 304 issues across 4 pages and never regresses to 50 items 598ms
+ ✓ src/features/views/viewRegistry.test.tsx (57 tests) 14803ms
+   ✓ viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2) (57)
+     ✓ renders TableView when layout is table 301ms
+     ✓ IssuesWorkspaceRoute: creates a new issue via QuickCreateIssueModal and updates state/priority via field popover 822ms
+     ✓ IssuesWorkspaceRoute: handles multi-select, batch archive, and batch delete in BulkActionBar 604ms
+     ✓ IssuesWorkspaceRoute: filters by Priority, Assignee (unassigned and alice), Cycle, Module, Due Date 2269ms
+     ✓ IssuesWorkspaceRoute: tests state filter Active preset, alice assignee, and select-all 775ms
+     ✓ IssuesWorkspaceRoute: tests field popovers for high/low priority and in-progress/backlog state, and / shortcut 313ms
+     ✓ IssuesWorkspaceRoute: covers handleToggleSelect 100 cap and unassigned I shortcut 2782ms
+     ✓ Live Mode API Wiring & Board State Normalization (KANBA-164) (21)
+       ✓ creates, updates, and bulk-operates on issues in live mode via REST endpoints 554ms
+       ✓ covers opening, cancelling, and saving custom view via SaveViewModal in IssuesWorkspaceRoute 753ms
+       ✓ covers BulkActionBar batch delete and archive in table layout 567ms
+     ✓ KAN-44 Mobile & Touch View Routing Tests (16)
+       ✓ exercises Swimlane with groupBy=priority, live mode transitions, WIP override, and batch update 559ms
+
+ Test Files  5 passed (5)
+      Tests  105 passed (105)
+   Start at  23:26:29
+   Duration  16.74s (tests 74%, environment 17%, import 6%, transform 2%, worker 1%)
+
+ % Coverage report from v8
+----------------|---------|----------|---------|---------|-------------------
+File            | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+----------------|---------|----------|---------|---------|-------------------
+All files       |     100 |    97.62 |     100 |     100 |                   
+ board          |     100 |    96.72 |     100 |     100 |                   
+  BoardView.tsx |     100 |    96.37 |     100 |     100 | 248,259-267,366   
+  boardApi.ts   |     100 |    97.16 |     100 |     100 | 281,299,315       
+ views          |     100 |    98.87 |     100 |     100 |                   
+  viewsApi.ts   |     100 |    98.87 |     100 |     100 | 208,227           
+----------------|---------|----------|---------|---------|-------------------
+VITEST_EXIT=0

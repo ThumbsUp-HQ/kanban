@@ -1,0 +1,138 @@
+{
+  "target_base_url": "http://127.0.0.1:18984",
+  "project_key": "KAN",
+  "states_endpoint": {
+    "path": "/api/v1/projects/KAN/states",
+    "status": 200,
+    "count": 6,
+    "duplicate_crazy_ideas_count": 1,
+    "states": [
+      {
+        "name": "Backlog",
+        "group": "backlog",
+        "sort_order": 0
+      },
+      {
+        "name": "Crazy_Ideas",
+        "group": "started",
+        "sort_order": 0
+      },
+      {
+        "name": "Todo",
+        "group": "unstarted",
+        "sort_order": 1
+      },
+      {
+        "name": "In Progress",
+        "group": "started",
+        "sort_order": 2
+      },
+      {
+        "name": "Done",
+        "group": "completed",
+        "sort_order": 3
+      },
+      {
+        "name": "Cancelled",
+        "group": "cancelled",
+        "sort_order": 4
+      }
+    ]
+  },
+  "pagination_all_issues": {
+    "path": "/api/v1/projects/KAN/issues?limit=100",
+    "page_sizes": [
+      100,
+      100,
+      100,
+      4
+    ],
+    "pages": [
+      {
+        "page": 1,
+        "status": 200,
+        "count": 100,
+        "first_key": "KAN-304",
+        "last_key": "KAN-205",
+        "next_cursor_present": true
+      },
+      {
+        "page": 2,
+        "status": 200,
+        "count": 100,
+        "first_key": "KAN-204",
+        "last_key": "KAN-105",
+        "next_cursor_present": true
+      },
+      {
+        "page": 3,
+        "status": 200,
+        "count": 100,
+        "first_key": "KAN-104",
+        "last_key": "KAN-5",
+        "next_cursor_present": true
+      },
+      {
+        "page": 4,
+        "status": 200,
+        "count": 4,
+        "first_key": "KAN-4",
+        "last_key": "KAN-1",
+        "next_cursor_present": false
+      }
+    ],
+    "total_items": 304,
+    "unique_key_count": 304,
+    "open_issue_count": 29
+  },
+  "filtered_open_issues": {
+    "path": "/api/v1/projects/KAN/issues?state_group=backlog&state_group=unstarted&state_group=started&limit=100",
+    "status": 200,
+    "count": 29,
+    "next_cursor": null,
+    "keys": [
+      "KAN-83",
+      "KAN-82",
+      "KAN-81",
+      "KAN-80",
+      "KAN-79",
+      "KAN-78",
+      "KAN-77",
+      "KAN-76",
+      "KAN-75",
+      "KAN-74",
+      "KAN-73",
+      "KAN-72",
+      "KAN-71",
+      "KAN-70",
+      "KAN-69",
+      "KAN-68",
+      "KAN-67",
+      "KAN-66",
+      "KAN-65",
+      "KAN-64",
+      "KAN-63",
+      "KAN-62",
+      "KAN-61",
+      "KAN-60",
+      "KAN-59",
+      "KAN-58",
+      "KAN-57",
+      "KAN-56",
+      "KAN-55"
+    ]
+  },
+  "alias_resolution": {
+    "path": "/api/v1/issues/KANBA-1",
+    "status": 200,
+    "x_kanban_canonical_key": "KAN-84",
+    "canonical_key": "KAN-84",
+    "summary": "Imported KANBA Issue 1",
+    "state": {
+      "id": "01a20183-d748-7f86-a806-bbf3bdc6d19c",
+      "name": "Done",
+      "group": "completed",
+      "color_hex": "#16A34A"
+    }
+  }
+}

@@ -1,0 +1,65 @@
+=== KAN-84 ([KB-MIGRATION-MERGE-QA-01]) Live Full-Stack Proof ===
+Target Container: kanban-kan84-qa (ephemeral standalone Docker build of commit a29cd88b)
+Bind Address: http://127.0.0.1:18984 (strictly loopback; container removed after verification)
+Zero-Mock Policy: Confirmed (0 page.route or context.route calls; all API and UI assets served live)
+
+1. Container Bootstrap & 304-Issue Merge Execution
+- Health Check: GET /api/v1/healthz -> 200 OK {"status":"ok"}
+- Setup Claim & MFA: POST /api/v1/setup/claim (workspace=kanban, project=KAN) + TOTP enroll/confirm -> AAL2 session
+- Pre-existing Seeded Issues: 83 issues (KAN-1..KAN-83):
+  * Done: 54 (KAN-1..KAN-54)
+  * Todo: 21 (KAN-55..KAN-75)
+  * Crazy_Ideas: 7 (KAN-76..KAN-82)
+  * Backlog: 1 (KAN-83)
+  * Total Open: 29 (KAN-55..KAN-83)
+- PlaneImporter Merge Run (221 KANBA issues, target_project_identifier="KAN", exclude_project_identifiers={"TEST"}):
+  * Remapped 221 issues: KANBA-1 -> KAN-84 .. KANBA-233 -> KAN-304
+  * Merged states: 216 Done + 5 Cancelled (total Done = 270, Cancelled = 5)
+  * Normalized "Crazy Ideas" -> "Crazy_Ideas" (0 duplicate workflow states; 6 states total)
+  * Total Issues in KAN: 304
+
+2. Live HTTP Contract Verification & Latencies (http://127.0.0.1:18984)
+- GET /api/v1/projects/KAN/states -> 200 OK (39.2 ms)
+  * 6 workflow states: Backlog (backlog), Crazy_Ideas (started), Todo (unstarted), In Progress (started), Done (completed), Cancelled (cancelled)
+  * Duplicate "Crazy Ideas" count: 0 (1 normalized "Crazy_Ideas" entry)
+- GET /api/v1/projects/KAN/issues?limit=100 (4 cursor pages) -> 200 OK (3224.9 ms total across 4 sequential pages)
+  * Page 1: 100 items (KAN-304..KAN-205, next_cursor present) -> 1119.5 ms
+  * Page 2: 100 items (KAN-204..KAN-105, next_cursor present) -> 1049.3 ms
+  * Page 3: 100 items (KAN-104..KAN-5, next_cursor present) -> 1006.5 ms
+  * Page 4: 4 items (KAN-4..KAN-1, next_cursor null) -> 49.1 ms
+  * Unique keys: 304; Open issues across pages: 29
+- GET /api/v1/projects/KAN/issues?state_group=backlog&state_group=unstarted&state_group=started&limit=100 -> 200 OK (283.1 ms)
+  * Count: 29 open issues (KAN-83..KAN-55), next_cursor: null
+- GET /api/v1/issues/KANBA-1 -> 200 OK (29.0 ms)
+  * X-Kanban-Canonical-Key: KAN-84
+  * Canonical key in JSON body: KAN-84
+
+3. Live Zero-Mock Playwright DOM Assertions & Timings
+- Document navigation timing (1440x900): domInteractive=25 ms, domComplete=32 ms, loadEventEnd=32 ms
+- Board column shell mount: 338 ms (< 3000 ms)
+- Full 304-card hydration (all 4 cursor pages across Board + Workspace views): 5125 ms (cold networkidle capture: 7223 ms - 8653 ms)
+- Console errors: 0 across all 6 captures
+- Page errors: 0 across all 6 captures
+- Column counts verified in DOM across all 5 board viewports:
+  * Backlog: 1 (KAN-83 visible)
+  * Crazy_Ideas: 7 (KAN-76..KAN-82)
+  * Todo: 21 (KAN-55..KAN-75)
+  * In Progress: 0
+  * Done: 270
+  * Cancelled: 5
+- List View Filter Verification (03-desktop-list-304.png):
+  * Loaded rows before filter: 304
+  * Selected state filter "Todo" in IssueNavigatorBar -> filtered to 21 rows (KAN-75..KAN-55, #KAN-75 1 of 21 in detail pane)
+
+4. Visual Inspection of Screenshots (docs/qa/KAN-84/screenshots/)
+- 01-desktop-light-board-304.png (1440x900 light): Verified Backlog 1 (KAN-83), Crazy_Ideas 7 (KAN-76..80), Todo 21 (KAN-55..59), In Progress column, zero clipping.
+- 02-desktop-dark-board-304.png (1440x900 dark): Verified dark theme contrast, Backlog 1, Crazy_Ideas 7, Todo 21, real rendered cards.
+- 03-desktop-list-304.png (1440x900 list): Verified IssueNavigatorBar with active Todo filter across 304 loaded items, 21 matching rows, KAN-75 detail pane rendered.
+- 04-tablet-board-304.png (768x1024 tablet): Verified responsive column layout with Backlog 1 and Crazy_Ideas 7 cards cleanly framed.
+- 05-mobile-portrait-board-304.png (390x844 mobile portrait): Verified responsive header and Backlog 1 (KAN-83) card without horizontal overflow.
+- 06-mobile-landscape-board-304.png (844x390 mobile landscape): Verified compact header and Backlog 1, Crazy_Ideas 7, Todo columns cleanly rendered.
+
+5. Hygiene, Secret Scan & Cleanup Checks
+- Em/en-dash check: uv run python -m scripts.check_no_dashes --all -> exit 0 (0 em/en-dashes)
+- Secret scan on docs/qa/KAN-84/: 0 leaked tokens, passwords, private keys, or session secrets
+- Ephemeral container cleanup: docker rm -f kanban-kan84-qa completed; container removed
