@@ -73,3 +73,11 @@
   - No dashes check (`scripts.check_no_dashes --all`): 0 errors
 - Git Diff Patch: `docs/qa/KAN-80/git-diff.patch`
 - Manifest: `docs/qa/KAN-80/changed-files-manifest.txt`
+
+## Live Zero-Mock Playwright Screenshots (Captured on main @ 425082a1e5e0b3d6b48d2e1955ae864c14abdc1b)
+- `docs/qa/KAN-80/screenshots/01-desktop-light-about-llms-txt.png` (1440x900 Light)
+- `docs/qa/KAN-80/screenshots/02-desktop-dark-about-llms-txt.png` (1440x900 Dark)
+- `docs/qa/KAN-80/screenshots/03-tablet-about-llms-txt.png` (768x1024 Tablet)
+- `docs/qa/KAN-80/screenshots/04-mobile-portrait-about-llms-txt.png` (390x844 Mobile Portrait)
+- `docs/qa/KAN-80/screenshots/05-mobile-landscape-about-llms-txt.png` (844x390 Mobile Landscape)
+- `docs/qa/KAN-80/contract-sample.json` (Live `/llms.txt` and `/api/v1/system/skills` wire capture)

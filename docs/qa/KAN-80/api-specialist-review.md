@@ -4,7 +4,7 @@
 - **Reviewer:** API & Security Specialist Reviewer (`api-spec`)
 - **Review Date:** 2026-11-22
 - **Branch:** `feat/KAN-80-llms-skills-catalog`
-- **Commit Under Audit:** `2d8be180` (`feat(llms): [KB-LLMS-SKILLS-01] Add /llms.txt & /llms-skills/*.md Recommended Skills Catalog with Interactive 4-Axis Agent Onboarding Interview (KAN-80)`)
+- **Commit Under Audit:** `425082a1e5e0b3d6b48d2e1955ae864c14abdc1b (425082a1)` (`feat(llms): [KB-LLMS-SKILLS-01] Add /llms.txt & /llms-skills/*.md Recommended Skills Catalog with Interactive 4-Axis Agent Onboarding Interview (KAN-80)`)
 - **Target Worktree:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan80-e9d49b1d`
 - **Status:** APPROVED
 
@@ -72,3 +72,11 @@ Audited security, transport, and wire invariants:
 
 - **Result:** APPROVED.
 - **Handoff:** Handing off directly to `@ui-spec` for UI Specialist review and routing to `@merge-ci`.
+
+## Live Zero-Mock Playwright Screenshots (Captured on main @ 425082a1e5e0b3d6b48d2e1955ae864c14abdc1b)
+- `docs/qa/KAN-80/screenshots/01-desktop-light-about-llms-txt.png` (1440x900 Light)
+- `docs/qa/KAN-80/screenshots/02-desktop-dark-about-llms-txt.png` (1440x900 Dark)
+- `docs/qa/KAN-80/screenshots/03-tablet-about-llms-txt.png` (768x1024 Tablet)
+- `docs/qa/KAN-80/screenshots/04-mobile-portrait-about-llms-txt.png` (390x844 Mobile Portrait)
+- `docs/qa/KAN-80/screenshots/05-mobile-landscape-about-llms-txt.png` (844x390 Mobile Landscape)
+- `docs/qa/KAN-80/contract-sample.json` (Live `/llms.txt` and `/api/v1/system/skills` wire capture)

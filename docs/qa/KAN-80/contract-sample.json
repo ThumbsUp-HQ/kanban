@@ -1,0 +1,53 @@
+{
+  "llms_txt_status": 200,
+  "llms_txt_bytes": 3508,
+  "llms_txt_etag": "\"9f80ea9666e0988f40b36c08a34cff52fd2ba887ab0e3325cc3bff5a49944945\"",
+  "llms_txt_preview": "# \ud83d\udc4dkanban - Agent-First, Security-First Kanban Platform\n\n> Open-source (Apache-2.0), Security-First (Priority #0), Agent-First (Priority #1) Kanban, Ticketing, and Knowledge Platform. Embedded PostgreSQL 16 with FORCE RLS, 24 low-token MCP tools across 3 isolated surfaces, canonical Markdown only, and zero SaaS AI paywalls.\n\n## 1. Platform & 3-Surface MCP Quick-Map\n\nAccess \ud83d\udc4dkanban programmatically via Model Context Protocol (MCP) or REST APIs:\n- Agent Surface (/mcp/agent): 9 tools for ticket workflow (ping_agent, search_tickets, read_ticket, create_ticket, update_ticket, begin_work, transition",
+  "system_skills_catalog": {
+    "llms_txt_url": "/llms.txt",
+    "llms_full_url": "/llms-full.txt",
+    "onboarding_prompt": "Read http://127.0.0.1:18961/llms.txt, learn \ud83d\udc4dkanban's ticket workflow, interview me on Execution Mode (Single-Thread, Teamwork, or Swarm), Model/Quota Strategy (Quota-Sipping Flash 3.8, Hybrid, or Unconstrained Sol MAX / Claude Ultra), and QA Rigor, and save my preferences to .agents/skills/ and AGENTS.md.",
+    "skills": [
+      {
+        "slug": "kanban-agent-manager",
+        "title": "Kanban Sub-Agent Manager & Fast-Model QA Orchestration",
+        "summary": "Workflow for coordinating ticket execution across sub-agents and enforcing the reality-checker forensic QA gate on a fast model.",
+        "install_path": ".agents/skills/kanban-agent-manager/SKILL.md",
+        "url": "/llms-skills/kanban-agent-manager.md",
+        "sha256": "d670d3b3ee16a3b5fa6910be57e6661766e0088ab6b3e9d27494c24531d4d14f",
+        "bytes": 2026,
+        "estimated_tokens": 505
+      },
+      {
+        "slug": "kanban-ticket",
+        "title": "Kanban Ticket Authoring & Scoping Standard",
+        "summary": "Standard for authoring atomic, tightly scoped Kanban tickets with mandatory feature unit testing and passive forensic verification packets.",
+        "install_path": ".agents/skills/kanban-ticket/SKILL.md",
+        "url": "/llms-skills/kanban-ticket.md",
+        "sha256": "eff76a7059917043c28f7617c28760b3c910f1465869dcef24f888a6be9ce731",
+        "bytes": 3221,
+        "estimated_tokens": 805
+      },
+      {
+        "slug": "kanban-workflow-setup",
+        "title": "Kanban Workflow Setup & Interactive 4-Axis Agent Onboarding",
+        "summary": "Workstation onboarding skill for connecting Claude Code, OpenAI Codex, and Gemini CLI / Antigravity to \ud83d\udc4dkanban via a 4-axis preference interview.",
+        "install_path": ".agents/skills/kanban-workflow-setup/SKILL.md",
+        "url": "/llms-skills/kanban-workflow-setup.md",
+        "sha256": "33ee1ead1664a13e620cb18da7c421c9c70fc77f61c5a4df773f0216c70809b0",
+        "bytes": 5488,
+        "estimated_tokens": 1370
+      },
+      {
+        "slug": "reality-checker",
+        "title": "Reality-Checker Passive Forensic QA Gate Auditor",
+        "summary": "Evidence-based passive forensic auditor personality that stops fantasy approvals and requires overwhelming proof for production certification.",
+        "install_path": ".agents/skills/kanban-agent-manager/references/reality-checker.md",
+        "url": "/llms-skills/reality-checker.md",
+        "sha256": "8642c4248db6881d6ac98dd84a655695fe0f484f50ec47fd873102b9922171cd",
+        "bytes": 1610,
+        "estimated_tokens": 402
+      }
+    ]
+  }
+}
