@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import contextlib
 import json
 import logging
@@ -17,6 +18,9 @@ import uuid
 from typing import TYPE_CHECKING, Any, Final
 
 import websockets
+from cryptography import x509
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.asymmetric import ec, ed25519, padding, rsa
 
 from agent.remote_runner.config import (
     RunnerConfig,
@@ -24,6 +28,8 @@ from agent.remote_runner.config import (
 )
 from agent.remote_runner.executor import RunnerJobExecutor
 from kanban.runners.hub import (
+    ChallengeHelloFrame,
+    ChallengeResponseFrame,
     HeartbeatFrame,
     HelloAckFrame,
     HelloFrame,
@@ -39,6 +45,7 @@ if TYPE_CHECKING:
 __all__ = [
     "CLOSE_CODE_REVOKED",
     "EXIT_CODE_REVOKED",
+    "RemoteRunnerDaemon",
     "RunnerDaemon",
     "RunnerRevokedError",
 ]
@@ -74,7 +81,9 @@ class RunnerDaemon:
         sleep_func: Callable[[float], Any] | None = None,
     ) -> None:
         """Initialize daemon with config, executor and optional test overrides."""
-        validate_key_permissions(config.client_key_path)
+        key_path = config.client_key_path or config.key_path
+        if key_path is not None:
+            validate_key_permissions(key_path)
         self.config = config
         self.executor = executor or RunnerJobExecutor(config)
         self.ws_connector = ws_connector or websockets.connect
@@ -97,12 +106,21 @@ class RunnerDaemon:
         ctx.verify_mode = ssl.CERT_REQUIRED
         ctx.check_hostname = True
 
-        if self.config.ca_cert_path.exists():
-            ctx.load_verify_locations(cafile=str(self.config.ca_cert_path))
-        if self.config.client_cert_path.exists() and self.config.client_key_path.exists():
+        ca_path = self.config.ca_cert_path
+        cert_path = self.config.client_cert_path or self.config.cert_path
+        key_path = self.config.client_key_path or self.config.key_path
+
+        if ca_path is not None and ca_path.exists():
+            ctx.load_verify_locations(cafile=str(ca_path))
+        if (
+            cert_path is not None
+            and cert_path.exists()
+            and key_path is not None
+            and key_path.exists()
+        ):
             ctx.load_cert_chain(
-                certfile=str(self.config.client_cert_path),
-                keyfile=str(self.config.client_key_path),
+                certfile=str(cert_path),
+                keyfile=str(key_path),
             )
         return ctx
 
@@ -126,7 +144,9 @@ class RunnerDaemon:
 
     async def run_forever(self) -> None:
         """Run outbound daemon loop with auto-reconnect until stopped or revoked."""
-        validate_key_permissions(self.config.client_key_path)
+        key_path = self.config.client_key_path or self.config.key_path
+        if key_path is not None:
+            validate_key_permissions(key_path)
         ssl_ctx = self.build_ssl_context()
         wss_url = self.config.resolve_wss_url()
 
@@ -160,6 +180,39 @@ class RunnerDaemon:
                 )
                 await self.sleep_func(backoff)
 
+    def _sign_challenge(self, nonce: str, runner_id: str | uuid.UUID) -> str:
+        """Sign Proof-of-Possession challenge using leaf certificate's private key."""
+        cert_path = self.config.client_cert_path or self.config.cert_path
+        key_path = self.config.client_key_path or self.config.key_path
+        if cert_path is None or key_path is None:
+            msg = "Missing client certificate or key path for challenge signing"
+            raise ValueError(msg)
+
+        cert = x509.load_pem_x509_certificate(cert_path.read_bytes())
+        cert_fp = cert.fingerprint(hashes.SHA256()).hex()
+        payload = f"kb-runner-pop-v1:{runner_id}:{nonce}:{cert_fp}".encode()
+
+        key_bytes = key_path.read_bytes()
+        priv_key = serialization.load_pem_private_key(key_bytes, password=None)
+        if isinstance(priv_key, ec.EllipticCurvePrivateKey):
+            sig = priv_key.sign(payload, ec.ECDSA(hashes.SHA256()))
+        elif isinstance(priv_key, ed25519.Ed25519PrivateKey):
+            sig = priv_key.sign(payload)
+        elif isinstance(priv_key, rsa.RSAPrivateKey):
+            sig = priv_key.sign(
+                payload,
+                padding.PSS(
+                    mgf=padding.MGF1(hashes.SHA256()),
+                    salt_length=padding.PSS.MAX_LENGTH,
+                ),
+                hashes.SHA256(),
+            )
+        else:
+            msg = f"Unsupported key type for signing: {type(priv_key).__name__}"
+            raise TypeError(msg)
+
+        return base64.b64encode(sig).decode("ascii")
+
     async def _connect_and_run(self, wss_url: str, ssl_ctx: ssl.SSLContext) -> None:
         """Establish mTLS WSS connection and handle messages until disconnected."""
         async with self.ws_connector(
@@ -178,11 +231,23 @@ class RunnerDaemon:
             )
             await ws.send(hello.model_dump_json(by_alias=True))
 
-            raw_ack = await ws.recv()
-            if isinstance(raw_ack, bytes):
-                raw_ack = raw_ack.decode("utf-8")
-            data_ack = json.loads(raw_ack)
-            HelloAckFrame.model_validate(data_ack)
+            raw_msg = await ws.recv()
+            if isinstance(raw_msg, bytes):
+                raw_msg = raw_msg.decode("utf-8")
+            data = json.loads(raw_msg)
+
+            if data.get("type") == "challenge_hello":
+                ch_frame = ChallengeHelloFrame.model_validate(data)
+                sig_b64 = self._sign_challenge(ch_frame.nonce, ch_frame.runner_id)
+                pop_resp = ChallengeResponseFrame(signature_b64=sig_b64)
+                await ws.send(pop_resp.model_dump_json())
+
+                raw_msg = await ws.recv()
+                if isinstance(raw_msg, bytes):
+                    raw_msg = raw_msg.decode("utf-8")
+                data = json.loads(raw_msg)
+
+            HelloAckFrame.model_validate(data)
 
             # 2. Launch background heartbeat task
             heartbeat_task = asyncio.create_task(self._heartbeat_loop(ws))
@@ -195,7 +260,12 @@ class RunnerDaemon:
                     msg_dict = json.loads(msg_text)
                     msg_type = msg_dict.get("type")
 
-                    if msg_type == "job.dispatch":
+                    if msg_type == "challenge_hello":
+                        ch_frame = ChallengeHelloFrame.model_validate(msg_dict)
+                        sig_b64 = self._sign_challenge(ch_frame.nonce, ch_frame.runner_id)
+                        pop_resp = ChallengeResponseFrame(signature_b64=sig_b64)
+                        await ws.send(pop_resp.model_dump_json())
+                    elif msg_type == "job.dispatch":
                         dispatch = JobDispatchFrame.model_validate(msg_dict)
                         self._spawn_job(dispatch)
                     elif msg_type == "job.cancel":
@@ -266,3 +336,6 @@ class RunnerDaemon:
                 await ws.send(hb.model_dump_json())
             except Exception:
                 break
+
+
+RemoteRunnerDaemon = RunnerDaemon

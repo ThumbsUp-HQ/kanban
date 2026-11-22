@@ -1,0 +1,910 @@
+diff --git a/agent/remote_runner/cli.py b/agent/remote_runner/cli.py
+index 362b81d6..1be88cbc 100644
+--- a/agent/remote_runner/cli.py
++++ b/agent/remote_runner/cli.py
+@@ -129,6 +129,7 @@ def enroll_runner(  # noqa: PLR0913
+         raise RuntimeError(msg)
+ 
+     data = resp.json()
++    runner_id = data.get("runner_id")
+     client_cert_pem = data["client_cert_pem"]
+     ca_cert_pem = data["ca_cert_pem"]
+     wss_url = data["wss_url"]
+@@ -136,16 +137,35 @@ def enroll_runner(  # noqa: PLR0913
+     cert_path = state_dir / "client.crt"
+     _write_secure_file(cert_path, client_cert_pem, mode=0o644)
+ 
+-    ca_path = state_dir / "ca.crt"
+-    _write_secure_file(ca_path, ca_cert_pem, mode=0o644)
+-
+-    # Generate initial config.yaml
++    # Persist ca_cert_pem to ca.pem with strict 0o600 permissions per KAN-64
++    ca_pem_path = state_dir / "ca.pem"
++    _write_secure_file(ca_pem_path, ca_cert_pem, mode=0o600)
++
++    # Also persist ca.crt (0o644) for backwards compatibility
++    ca_crt_path = state_dir / "ca.crt"
++    _write_secure_file(ca_crt_path, ca_cert_pem, mode=0o644)
++
++    # Generate runner.toml with required fields per KAN-64 Action 4
++    toml_lines = [
++        f'runner_id = "{runner_id}"',
++        f'server_url = "{server_url}"',
++        f'cert_path = "{cert_path}"',
++        f'key_path = "{key_path}"',
++        f'ca_cert_path = "{ca_pem_path}"',
++        "allowed_repos = []",
++        f'pool_slug = "{pool_slug}"',
++    ]
++    toml_content = "\n".join(toml_lines) + "\n"
++    runner_toml_path = state_dir / "runner.toml"
++    _write_secure_file(runner_toml_path, toml_content, mode=0o600)
++
++    # Also generate config.yaml for backwards compatibility
+     config_dict = {
+         "server_url": server_url,
+         "pool_slug": pool_slug,
+         "client_cert_path": str(cert_path),
+         "client_key_path": str(key_path),
+-        "ca_cert_path": str(ca_path),
++        "ca_cert_path": str(ca_pem_path),
+         "wss_url": wss_url,
+         "state_dir": str(state_dir),
+         "max_concurrency": 1,
+@@ -154,13 +174,16 @@ def enroll_runner(  # noqa: PLR0913
+     }
+     config_path = state_dir / "config.yaml"
+     _write_secure_file(config_path, yaml.safe_dump(config_dict), mode=0o600)
+-    return config_path
++
++    return runner_toml_path
+ 
+ 
+ def run_daemon(config_path: Path) -> int:
+     """Run RunnerDaemon from config file, handling graceful shutdown."""
+     config = load_runner_config(config_path)
+-    validate_key_permissions(config.client_key_path)
++    key_path = config.client_key_path or config.key_path
++    if key_path is not None:
++        validate_key_permissions(key_path)
+ 
+     daemon = RunnerDaemon(config)
+     loop = asyncio.new_event_loop()
+diff --git a/agent/remote_runner/config.py b/agent/remote_runner/config.py
+index 265a6c46..06588b7e 100644
+--- a/agent/remote_runner/config.py
++++ b/agent/remote_runner/config.py
+@@ -5,12 +5,13 @@
+ from __future__ import annotations
+ 
+ import re
++import tomllib
+ import uuid  # noqa: TC003
+ from pathlib import Path
+ from typing import Any, Final
+ 
+ import yaml
+-from pydantic import BaseModel, ConfigDict, Field, field_validator
++from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
+ 
+ __all__ = [
+     "KeyPermissionsError",
+@@ -47,10 +48,14 @@ class RunnerConfig(BaseModel):
+     model_config = ConfigDict(extra="forbid")
+ 
+     server_url: str
+-    pool_slug: str
+-    client_cert_path: Path
+-    client_key_path: Path
+-    ca_cert_path: Path
++    pool_slug: str = "default"
++    client_cert_path: Path | None = None
++    client_key_path: Path | None = None
++    ca_cert_path: Path | None = None
++
++    cert_path: Path | None = None
++    key_path: Path | None = None
++    allowed_repos: list[str] = Field(default_factory=list)
+ 
+     runner_id: uuid.UUID | None = None
+     wss_url: str | None = None
+@@ -62,6 +67,27 @@ class RunnerConfig(BaseModel):
+     heartbeat_interval_s: float = Field(default=15.0, ge=1.0, le=60.0)
+     nsjail_bin: Path = Path("/usr/bin/nsjail")
+ 
++    @model_validator(mode="after")
++    def _sync_paths(self) -> RunnerConfig:
++        if self.client_cert_path is None and self.cert_path is not None:
++            self.client_cert_path = self.cert_path
++        elif self.cert_path is None and self.client_cert_path is not None:
++            self.cert_path = self.client_cert_path
++
++        if self.client_key_path is None and self.key_path is not None:
++            self.client_key_path = self.key_path
++        elif self.key_path is None and self.client_key_path is not None:
++            self.key_path = self.client_key_path
++
++        if (
++            self.client_cert_path is None
++            or self.client_key_path is None
++            or self.ca_cert_path is None
++        ):
++            msg = "Missing required certificate or key paths"
++            raise ValueError(msg)
++        return self
++
+     @field_validator("pool_slug")
+     @classmethod
+     def validate_pool_slug(cls, v: str) -> str:
+@@ -87,16 +113,21 @@ class RunnerConfig(BaseModel):
+ 
+ def validate_runner_config(config: RunnerConfig) -> None:
+     """Validate key permissions and configuration paths."""
+-    validate_key_permissions(config.client_key_path)
++    key_path = config.client_key_path or config.key_path
++    if key_path is not None:
++        validate_key_permissions(key_path)
+ 
+ 
+ def load_runner_config(config_path: Path) -> RunnerConfig:
+-    """Load, parse, and validate RunnerConfig from YAML file."""
++    """Load, parse, and validate RunnerConfig from YAML or TOML file."""
+     if not config_path.is_file():
+         msg = f"Runner config file not found: {config_path}"
+         raise FileNotFoundError(msg)
+     raw_content = config_path.read_text(encoding="utf-8")
+-    data = yaml.safe_load(raw_content) or {}
++    if config_path.suffix.lower() == ".toml":
++        data = tomllib.loads(raw_content)
++    else:
++        data = yaml.safe_load(raw_content) or {}
+     config = RunnerConfig.model_validate(data)
+     validate_runner_config(config)
+     return config
+diff --git a/agent/remote_runner/daemon.py b/agent/remote_runner/daemon.py
+index 78f61c7b..f59c89d9 100644
+--- a/agent/remote_runner/daemon.py
++++ b/agent/remote_runner/daemon.py
+@@ -6,6 +6,7 @@
+ from __future__ import annotations
+ 
+ import asyncio
++import base64
+ import contextlib
+ import json
+ import logging
+@@ -17,6 +18,9 @@ import uuid
+ from typing import TYPE_CHECKING, Any, Final
+ 
+ import websockets
++from cryptography import x509
++from cryptography.hazmat.primitives import hashes, serialization
++from cryptography.hazmat.primitives.asymmetric import ec, ed25519, padding, rsa
+ 
+ from agent.remote_runner.config import (
+     RunnerConfig,
+@@ -24,6 +28,8 @@ from agent.remote_runner.config import (
+ )
+ from agent.remote_runner.executor import RunnerJobExecutor
+ from kanban.runners.hub import (
++    ChallengeHelloFrame,
++    ChallengeResponseFrame,
+     HeartbeatFrame,
+     HelloAckFrame,
+     HelloFrame,
+@@ -39,6 +45,7 @@ if TYPE_CHECKING:
+ __all__ = [
+     "CLOSE_CODE_REVOKED",
+     "EXIT_CODE_REVOKED",
++    "RemoteRunnerDaemon",
+     "RunnerDaemon",
+     "RunnerRevokedError",
+ ]
+@@ -74,7 +81,9 @@ class RunnerDaemon:
+         sleep_func: Callable[[float], Any] | None = None,
+     ) -> None:
+         """Initialize daemon with config, executor and optional test overrides."""
+-        validate_key_permissions(config.client_key_path)
++        key_path = config.client_key_path or config.key_path
++        if key_path is not None:
++            validate_key_permissions(key_path)
+         self.config = config
+         self.executor = executor or RunnerJobExecutor(config)
+         self.ws_connector = ws_connector or websockets.connect
+@@ -97,12 +106,21 @@ class RunnerDaemon:
+         ctx.verify_mode = ssl.CERT_REQUIRED
+         ctx.check_hostname = True
+ 
+-        if self.config.ca_cert_path.exists():
+-            ctx.load_verify_locations(cafile=str(self.config.ca_cert_path))
+-        if self.config.client_cert_path.exists() and self.config.client_key_path.exists():
++        ca_path = self.config.ca_cert_path
++        cert_path = self.config.client_cert_path or self.config.cert_path
++        key_path = self.config.client_key_path or self.config.key_path
++
++        if ca_path is not None and ca_path.exists():
++            ctx.load_verify_locations(cafile=str(ca_path))
++        if (
++            cert_path is not None
++            and cert_path.exists()
++            and key_path is not None
++            and key_path.exists()
++        ):
+             ctx.load_cert_chain(
+-                certfile=str(self.config.client_cert_path),
+-                keyfile=str(self.config.client_key_path),
++                certfile=str(cert_path),
++                keyfile=str(key_path),
+             )
+         return ctx
+ 
+@@ -126,7 +144,9 @@ class RunnerDaemon:
+ 
+     async def run_forever(self) -> None:
+         """Run outbound daemon loop with auto-reconnect until stopped or revoked."""
+-        validate_key_permissions(self.config.client_key_path)
++        key_path = self.config.client_key_path or self.config.key_path
++        if key_path is not None:
++            validate_key_permissions(key_path)
+         ssl_ctx = self.build_ssl_context()
+         wss_url = self.config.resolve_wss_url()
+ 
+@@ -160,6 +180,39 @@ class RunnerDaemon:
+                 )
+                 await self.sleep_func(backoff)
+ 
++    def _sign_challenge(self, nonce: str, runner_id: str | uuid.UUID) -> str:
++        """Sign Proof-of-Possession challenge using leaf certificate's private key."""
++        cert_path = self.config.client_cert_path or self.config.cert_path
++        key_path = self.config.client_key_path or self.config.key_path
++        if cert_path is None or key_path is None:
++            msg = "Missing client certificate or key path for challenge signing"
++            raise ValueError(msg)
++
++        cert = x509.load_pem_x509_certificate(cert_path.read_bytes())
++        cert_fp = cert.fingerprint(hashes.SHA256()).hex()
++        payload = f"kb-runner-pop-v1:{runner_id}:{nonce}:{cert_fp}".encode()
++
++        key_bytes = key_path.read_bytes()
++        priv_key = serialization.load_pem_private_key(key_bytes, password=None)
++        if isinstance(priv_key, ec.EllipticCurvePrivateKey):
++            sig = priv_key.sign(payload, ec.ECDSA(hashes.SHA256()))
++        elif isinstance(priv_key, ed25519.Ed25519PrivateKey):
++            sig = priv_key.sign(payload)
++        elif isinstance(priv_key, rsa.RSAPrivateKey):
++            sig = priv_key.sign(
++                payload,
++                padding.PSS(
++                    mgf=padding.MGF1(hashes.SHA256()),
++                    salt_length=padding.PSS.MAX_LENGTH,
++                ),
++                hashes.SHA256(),
++            )
++        else:
++            msg = f"Unsupported key type for signing: {type(priv_key).__name__}"
++            raise TypeError(msg)
++
++        return base64.b64encode(sig).decode("ascii")
++
+     async def _connect_and_run(self, wss_url: str, ssl_ctx: ssl.SSLContext) -> None:
+         """Establish mTLS WSS connection and handle messages until disconnected."""
+         async with self.ws_connector(
+@@ -178,11 +231,23 @@ class RunnerDaemon:
+             )
+             await ws.send(hello.model_dump_json(by_alias=True))
+ 
+-            raw_ack = await ws.recv()
+-            if isinstance(raw_ack, bytes):
+-                raw_ack = raw_ack.decode("utf-8")
+-            data_ack = json.loads(raw_ack)
+-            HelloAckFrame.model_validate(data_ack)
++            raw_msg = await ws.recv()
++            if isinstance(raw_msg, bytes):
++                raw_msg = raw_msg.decode("utf-8")
++            data = json.loads(raw_msg)
++
++            if data.get("type") == "challenge_hello":
++                ch_frame = ChallengeHelloFrame.model_validate(data)
++                sig_b64 = self._sign_challenge(ch_frame.nonce, ch_frame.runner_id)
++                pop_resp = ChallengeResponseFrame(signature_b64=sig_b64)
++                await ws.send(pop_resp.model_dump_json())
++
++                raw_msg = await ws.recv()
++                if isinstance(raw_msg, bytes):
++                    raw_msg = raw_msg.decode("utf-8")
++                data = json.loads(raw_msg)
++
++            HelloAckFrame.model_validate(data)
+ 
+             # 2. Launch background heartbeat task
+             heartbeat_task = asyncio.create_task(self._heartbeat_loop(ws))
+@@ -195,7 +260,12 @@ class RunnerDaemon:
+                     msg_dict = json.loads(msg_text)
+                     msg_type = msg_dict.get("type")
+ 
+-                    if msg_type == "job.dispatch":
++                    if msg_type == "challenge_hello":
++                        ch_frame = ChallengeHelloFrame.model_validate(msg_dict)
++                        sig_b64 = self._sign_challenge(ch_frame.nonce, ch_frame.runner_id)
++                        pop_resp = ChallengeResponseFrame(signature_b64=sig_b64)
++                        await ws.send(pop_resp.model_dump_json())
++                    elif msg_type == "job.dispatch":
+                         dispatch = JobDispatchFrame.model_validate(msg_dict)
+                         self._spawn_job(dispatch)
+                     elif msg_type == "job.cancel":
+@@ -266,3 +336,6 @@ class RunnerDaemon:
+                 await ws.send(hb.model_dump_json())
+             except Exception:
+                 break
++
++
++RemoteRunnerDaemon = RunnerDaemon
+diff --git a/kanban/api/v1/remote_runners.py b/kanban/api/v1/remote_runners.py
+index b1e58a7a..ec2fad89 100644
+--- a/kanban/api/v1/remote_runners.py
++++ b/kanban/api/v1/remote_runners.py
+@@ -4,16 +4,22 @@
+ 
+ from __future__ import annotations
+ 
++import asyncio
++import base64
+ import contextlib
+ import hashlib
+ import json
+ import logging
+ import re
+ import secrets
++import urllib.parse
+ import uuid
+ from datetime import UTC, datetime, timedelta
+ from typing import Annotated, Any, Final
+ 
++from cryptography.exceptions import InvalidSignature
++from cryptography.hazmat.primitives import hashes, serialization
++from cryptography.hazmat.primitives.asymmetric import ec, ed25519, padding, rsa
+ from fastapi import APIRouter, Depends, Query, Request, status
+ from pydantic import BaseModel, ConfigDict, Field
+ from sqlalchemy import select, text
+@@ -27,14 +33,20 @@ from kanban.api.problems import ProblemException, not_found
+ from kanban.auth.mfa.policy import require_admin_aal2
+ from kanban.runners.hub import (
+     MAX_FRAME_BYTES,
++    ChallengeHelloFrame,
++    ChallengeResponseFrame,
+     HelloAckFrame,
+     HelloFrame,
++    RunnerAlreadyConnectedError,
+     get_global_hub,
+ )
+ from kanban.runners.pki import (
++    CertVerificationError,
+     CsrValidationError,
+     compute_cert_fingerprint,
++    derive_runner_ca,
+     validate_and_sign_csr,
++    verify_runner_client_cert_chain,
+ )
+ from kanban.security.keys import KeyMaterial, load_key_material
+ 
+@@ -337,8 +349,40 @@ async def enroll_remote_runner_endpoint(
+     )
+ 
+ 
+-def _extract_peer_cert_fingerprint(websocket: WebSocket) -> bytes | None:
+-    """Extract SHA-256 certificate fingerprint from verified proxy headers or TLS scope."""
++def _extract_peer_cert_and_fingerprint(
++    websocket: WebSocket,
++) -> tuple[str | bytes | None, bytes | None]:
++    """Extract raw peer certificate bytes/PEM and SHA-256 fingerprint from headers or scope."""
++    for header in (
++        "x-client-cert-pem",
++        "x-client-cert",
++        "ssl-client-cert",
++        "x-ssl-cert",
++        "x-forwarded-tls-client-cert",
++    ):
++        val = websocket.headers.get(header)
++        if val:
++            if "%" in val:
++                val = urllib.parse.unquote(val)
++            with contextlib.suppress(Exception):
++                fp = compute_cert_fingerprint(val)
++                return val, fp
++
++    client_cert = websocket.scope.get("client_cert") or websocket.scope.get("tls_client_cert")
++    if client_cert:
++        with contextlib.suppress(Exception):
++            fp = compute_cert_fingerprint(client_cert)
++            return client_cert, fp
++
++    transport = websocket.scope.get("transport")
++    if transport is not None:
++        ssl_obj = getattr(transport, "get_extra_info", lambda _: None)("ssl_object")
++        if ssl_obj is not None:
++            with contextlib.suppress(Exception):
++                der = ssl_obj.getpeercert(binary_form=True)
++                if der:
++                    return der, compute_cert_fingerprint(der)
++
+     for header in (
+         "x-client-cert-sha256",
+         "ssl-client-cert-sha256",
+@@ -348,14 +392,43 @@ def _extract_peer_cert_fingerprint(websocket: WebSocket) -> bytes | None:
+         val = websocket.headers.get(header)
+         if val:
+             with contextlib.suppress(Exception):
+-                return compute_cert_fingerprint(val)
++                return None, compute_cert_fingerprint(val)
++
++    return None, None
++
++
++def _extract_peer_cert_fingerprint(websocket: WebSocket) -> bytes | None:
++    """Extract SHA-256 certificate fingerprint from verified proxy headers or TLS scope."""
++    _, fp = _extract_peer_cert_and_fingerprint(websocket)
++    return fp
+ 
+-    client_cert = websocket.scope.get("client_cert") or websocket.scope.get("tls_client_cert")
+-    if client_cert:
+-        with contextlib.suppress(Exception):
+-            return compute_cert_fingerprint(client_cert)
+ 
+-    return None
++def _verify_pop_signature(
++    pubkey: object,
++    signature: bytes,
++    message: bytes,
++) -> None:
++    """Verify Proof-of-Possession signature against ECDSA, Ed25519, or RSA public key."""
++    if isinstance(pubkey, ec.EllipticCurvePublicKey):
++        pubkey.verify(signature, message, ec.ECDSA(hashes.SHA256()))
++    elif isinstance(pubkey, ed25519.Ed25519PublicKey):
++        pubkey.verify(signature, message)
++    elif isinstance(pubkey, rsa.RSAPublicKey):
++        try:
++            pubkey.verify(
++                signature,
++                message,
++                padding.PSS(
++                    mgf=padding.MGF1(hashes.SHA256()),
++                    salt_length=padding.PSS.MAX_LENGTH,
++                ),
++                hashes.SHA256(),
++            )
++        except (InvalidSignature, ValueError):
++            pubkey.verify(signature, message, padding.PKCS1v15(), hashes.SHA256())
++    else:
++        msg = f"Unsupported public key type: {type(pubkey).__name__}"
++        raise TypeError(msg)
+ 
+ 
+ @router.websocket("/agent-runners/ws")
+@@ -363,7 +436,7 @@ async def remote_runner_websocket_endpoint(  # noqa: C901, PLR0911, PLR0912, PLR
+     websocket: WebSocket,
+ ) -> None:
+     """WebSocket control hub connection endpoint authenticated via mTLS peer certificate."""
+-    cert_sha256 = _extract_peer_cert_fingerprint(websocket)
++    raw_cert, cert_sha256 = _extract_peer_cert_and_fingerprint(websocket)
+     if cert_sha256 is None:
+         await websocket.close(code=4401, reason="peer certificate required")
+         return
+@@ -407,12 +480,71 @@ async def remote_runner_websocket_endpoint(  # noqa: C901, PLR0911, PLR0912, PLR
+         await websocket.close(code=4401, reason="certificate expired")
+         return
+ 
++    leaf_cert = None
++    if raw_cert is not None:
++        key_material: KeyMaterial | None = getattr(websocket.app.state, "key_material", None)
++        if key_material is None:
++            key_material = load_key_material()
++        ca_cert, _ = derive_runner_ca(key_material, workspace_id)
++        active_ca_pem = ca_cert.public_bytes(serialization.Encoding.PEM).decode("ascii")
++
++        try:
++            leaf_cert = verify_runner_client_cert_chain(
++                raw_cert,
++                active_ca_cert_pem=active_ca_pem,
++                expected_runner_id=runner_id,
++                expected_fingerprint_sha256=cert_sha256,
++            )
++        except CertVerificationError as exc:
++            await websocket.close(code=4401, reason=f"certificate verification failed: {exc.code}")
++            return
++
+     await websocket.accept()
+ 
+-    try:
+-        raw_hello = await websocket.receive_text()
+-    except WebSocketDisconnect:
+-        return
++    stashed_hello: str | None = None
++    if leaf_cert is not None:
++        nonce = secrets.token_hex(32)
++        challenge = ChallengeHelloFrame(nonce=nonce, runner_id=runner_id)
++        await websocket.send_text(challenge.model_dump_json())
++
++        try:
++            async with asyncio.timeout(5.0):
++                while True:
++                    incoming = await websocket.receive_text()
++                    if len(incoming.encode("utf-8")) > MAX_FRAME_BYTES:
++                        await websocket.close(code=1009, reason="frame too large")
++                        return
++                    data = json.loads(incoming)
++                    msg_type = data.get("type")
++                    if msg_type == "challenge_response":
++                        pop_resp = ChallengeResponseFrame.model_validate(data)
++                        sig_bytes = base64.b64decode(pop_resp.signature_b64)
++                        expected_msg = (
++                            f"kb-runner-pop-v1:{runner_id}:{nonce}:{cert_sha256.hex()}".encode()
++                        )
++                        _verify_pop_signature(leaf_cert.public_key(), sig_bytes, expected_msg)
++                        break
++                    if msg_type == "hello":
++                        stashed_hello = incoming
++                    else:
++                        await websocket.close(code=4401, reason="unexpected frame during challenge")
++                        return
++        except TimeoutError:
++            await websocket.close(code=4408, reason="challenge response timeout")
++            return
++        except WebSocketDisconnect:
++            return
++        except Exception:  # noqa: BLE001
++            await websocket.close(code=4401, reason="proof of possession failed")
++            return
++
++    if stashed_hello is not None:
++        raw_hello = stashed_hello
++    else:
++        try:
++            raw_hello = await websocket.receive_text()
++        except WebSocketDisconnect:
++            return
+ 
+     if len(raw_hello.encode("utf-8")) > MAX_FRAME_BYTES:
+         await websocket.close(code=1009, reason="frame too large")
+@@ -429,20 +561,24 @@ async def remote_runner_websocket_endpoint(  # noqa: C901, PLR0911, PLR0912, PLR
+         await websocket.close(code=4401, reason="runner_id mismatch")
+         return
+ 
++    hub = get_global_hub()
++    try:
++        hub.register_runner(
++            runner_id=runner_id,
++            workspace_id=workspace_id,
++            pool_slug=pool_slug,
++            hostname=hostname,
++            websocket=websocket,
++            max_concurrency=hello.max_concurrency,
++            capabilities=capabilities,
++        )
++    except RunnerAlreadyConnectedError:
++        await websocket.close(code=4409, reason="ALREADY_CONNECTED")
++        return
++
+     ack = HelloAckFrame()
+     await websocket.send_text(ack.model_dump_json())
+ 
+-    hub = get_global_hub()
+-    hub.register_runner(
+-        runner_id=runner_id,
+-        workspace_id=workspace_id,
+-        pool_slug=pool_slug,
+-        hostname=hostname,
+-        websocket=websocket,
+-        max_concurrency=hello.max_concurrency,
+-        capabilities=capabilities,
+-    )
+-
+     with contextlib.suppress(Exception):
+         async with session_factory.session(anon_ctx) as session:
+             await session.execute(
+diff --git a/kanban/runners/hub.py b/kanban/runners/hub.py
+index 067d7a4f..09ba7b26 100644
+--- a/kanban/runners/hub.py
++++ b/kanban/runners/hub.py
+@@ -22,6 +22,8 @@ if TYPE_CHECKING:
+ 
+ __all__ = [
+     "MAX_FRAME_BYTES",
++    "ChallengeHelloFrame",
++    "ChallengeResponseFrame",
+     "ConnectedRunner",
+     "HeartbeatFrame",
+     "HelloAckFrame",
+@@ -35,6 +37,7 @@ __all__ = [
+     "RemoteRunnerExecutionError",
+     "RemoteRunnerRevokedError",
+     "RemoteRunnerUnavailableError",
++    "RunnerAlreadyConnectedError",
+     "RunnerWssHub",
+     "get_global_hub",
+ ]
+@@ -69,6 +72,14 @@ class RemoteRunnerRevokedError(RemoteRunnerError):
+     """Raised when runner certificate is revoked during job execution."""
+ 
+ 
++class RunnerAlreadyConnectedError(RemoteRunnerError):
++    """Raised when registering a runner slot that is already actively connected."""
++
++    def __init__(self, code: str = "ALREADY_CONNECTED", detail: str = "") -> None:
++        """Initialize with error code ALREADY_CONNECTED and descriptive detail."""
++        super().__init__(code, detail or "Runner is already connected")
++
++
+ class RemoteRunnerExecutionError(RemoteRunnerError):
+     """Raised when runner returns an error status payload."""
+ 
+@@ -89,6 +100,25 @@ class RemoteRunnerExecutionError(RemoteRunnerError):
+ # --- Typed Protocol Frames (extra="forbid") ---
+ 
+ 
++class ChallengeHelloFrame(BaseModel):
++    """Pre-registration Proof-of-Possession challenge hello from server to runner."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    type: Literal["challenge_hello"] = "challenge_hello"
++    nonce: str
++    runner_id: uuid.UUID
++
++
++class ChallengeResponseFrame(BaseModel):
++    """Proof-of-Possession challenge response from runner to server."""
++
++    model_config = ConfigDict(extra="forbid")
++
++    type: Literal["challenge_response"] = "challenge_response"
++    signature_b64: str
++
++
+ class HelloFrame(BaseModel):
+     """Inbound handshake frame from runner to server."""
+ 
+@@ -205,6 +235,11 @@ class RunnerWssHub:
+         """Override clock source for deterministic timeout testing."""
+         self._time_func = time_func
+ 
++    @property
++    def _connections(self) -> dict[uuid.UUID, ConnectedRunner]:
++        """Expose active runner connections dictionary."""
++        return self._runners
++
+     def register_runner(  # noqa: PLR0913, PLR0917
+         self,
+         runner_id: uuid.UUID,
+@@ -216,6 +251,13 @@ class RunnerWssHub:
+         capabilities: dict[str, Any] | None = None,
+     ) -> ConnectedRunner:
+         """Register newly connected runner socket."""
++        if runner_id in self._connections:
++            existing = self._connections[runner_id]
++            if existing.status == "online":
++                msg = f"Runner {runner_id} already has an active live connection slot"
++                err_code = "ALREADY_CONNECTED"
++                raise RunnerAlreadyConnectedError(err_code, msg)
++
+         runner = ConnectedRunner(
+             runner_id=runner_id,
+             workspace_id=workspace_id,
+@@ -230,6 +272,8 @@ class RunnerWssHub:
+         self._runners[runner_id] = runner
+         return runner
+ 
++    register = register_runner
++
+     def unregister_runner(self, runner_id: uuid.UUID, reason: str = "disconnected") -> None:
+         """Unregister runner socket and fail any in-flight jobs."""
+         runner = self._runners.pop(runner_id, None)
+diff --git a/kanban/runners/pki.py b/kanban/runners/pki.py
+index 737cf9aa..a6f8fd26 100644
+--- a/kanban/runners/pki.py
++++ b/kanban/runners/pki.py
+@@ -11,6 +11,7 @@ from datetime import UTC, datetime, timedelta
+ from typing import TYPE_CHECKING, Final
+ 
+ from cryptography import x509
++from cryptography.exceptions import InvalidSignature
+ from cryptography.hazmat.primitives import hashes, serialization
+ from cryptography.hazmat.primitives.asymmetric import ec, ed25519, rsa
+ from cryptography.x509.oid import ExtendedKeyUsageOID, ExtensionOID, NameOID
+@@ -21,11 +22,13 @@ if TYPE_CHECKING:
+     from kanban.security.keys import KeyMaterial
+ 
+ __all__ = [
++    "CertVerificationError",
+     "CsrValidationError",
+     "IssuedCertificate",
+     "compute_cert_fingerprint",
+     "derive_runner_ca",
+     "validate_and_sign_csr",
++    "verify_runner_client_cert_chain",
+ ]
+ 
+ _MIN_RSA_KEY_SIZE: Final[int] = 3072
+@@ -41,6 +44,17 @@ _ALLOWED_EC_CURVES: Final[tuple[type[ec.EllipticCurve], ...]] = (
+ )
+ 
+ 
++class CertVerificationError(ValueError):
++    """Raised when a client certificate chain fails cryptographic or policy verification."""
++
++    def __init__(self, code: str, detail: str) -> None:
++        """Initialize with machine-readable error code and human description."""
++        super().__init__(f"{code}: {detail}")
++        self.code = code
++        self.detail = detail
++        self.status = 401
++
++
+ class CsrValidationError(ValueError):
+     """Raised when a PKCS#10 Certificate Signing Request fails validation."""
+ 
+@@ -212,7 +226,7 @@ def validate_and_sign_csr(
+         .subject_name(
+             x509.Name(
+                 [
+-                    x509.NameAttribute(NameOID.COMMON_NAME, f"runner-{runner_id}"),
++                    x509.NameAttribute(NameOID.COMMON_NAME, f"runner:{runner_id}"),
+                     x509.NameAttribute(NameOID.ORGANIZATION_NAME, "👍kanban Remote Runners"),
+                 ]
+             )
+@@ -270,3 +284,156 @@ def validate_and_sign_csr(
+         client_cert_sha256=client_cert_sha256,
+         cert_expires_at=cert_expires_at,
+     )
++
++
++def _load_x509_cert(cert_data: str | bytes) -> x509.Certificate:
++    """Parse an X.509 certificate from PEM string/bytes or DER bytes."""
++    if isinstance(cert_data, str):
++        cleaned = cert_data.strip()
++        if cleaned.startswith("-----BEGIN"):
++            try:
++                return x509.load_pem_x509_certificate(cleaned.encode("utf-8"))
++            except Exception as exc:
++                msg = f"Failed to parse certificate PEM text: {exc}"
++                msg_0 = "CERT_PARSE_ERROR"
++                raise CertVerificationError(msg_0, msg) from exc
++        try:
++            raw = base64.b64decode(cleaned)
++            return x509.load_der_x509_certificate(raw)
++        except Exception as exc:
++            msg = f"Failed to parse certificate PEM/base64: {exc}"
++            msg_0 = "CERT_PARSE_ERROR"
++            raise CertVerificationError(msg_0, msg) from exc
++
++    if cert_data.strip().startswith(b"-----BEGIN"):
++        try:
++            return x509.load_pem_x509_certificate(cert_data)
++        except Exception as exc:
++            msg = f"Failed to parse certificate PEM bytes: {exc}"
++            msg_0 = "CERT_PARSE_ERROR"
++            raise CertVerificationError(msg_0, msg) from exc
++
++    try:
++        return x509.load_der_x509_certificate(cert_data)
++    except Exception as exc:
++        msg = f"Failed to parse certificate DER bytes: {exc}"
++        msg_0 = "CERT_PARSE_ERROR"
++        raise CertVerificationError(msg_0, msg) from exc
++
++
++def verify_runner_client_cert_chain(  # noqa: C901, PLR0912, PLR0913, PLR0915
++    leaf_pem_or_der: str | bytes,
++    *,
++    active_ca_cert_pem: str | bytes,
++    previous_ca_cert_pem: str | bytes | None = None,
++    expected_runner_id: uuid.UUID | str,
++    expected_fingerprint_sha256: bytes | str,
++    now: datetime | None = None,
++) -> x509.Certificate:
++    """Cryptographically verify leaf certificate against CA, constraints, CN, and fingerprint."""
++    leaf_cert = _load_x509_cert(leaf_pem_or_der)
++
++    # 1. SHA-256 DER fingerprint match
++    actual_fp = leaf_cert.fingerprint(hashes.SHA256())
++    if isinstance(expected_fingerprint_sha256, str):
++        clean_fp = expected_fingerprint_sha256.strip()
++        if len(clean_fp) == _HEX_FINGERPRINT_LEN:
++            target_fp = bytes.fromhex(clean_fp)
++        else:
++            target_fp = base64.b64decode(clean_fp)
++    else:
++        target_fp = bytes(expected_fingerprint_sha256)
++
++    if actual_fp != target_fp:
++        msg = f"Fingerprint mismatch: actual {actual_fp.hex()} != expected {target_fp.hex()}"
++        msg_0 = "FINGERPRINT_MISMATCH"
++        raise CertVerificationError(msg_0, msg)
++
++    # 2. Subject CN == runner:{expected_runner_id} (or runner-{expected_runner_id})
++    cn_attrs = leaf_cert.subject.get_attributes_for_oid(NameOID.COMMON_NAME)
++    if not cn_attrs:
++        msg = "Subject Common Name is missing from leaf certificate"
++        msg_0 = "SUBJECT_MISMATCH"
++        raise CertVerificationError(msg_0, msg)
++    actual_cn = str(cn_attrs[0].value)
++    expected_id_str = str(expected_runner_id)
++    if actual_cn not in (f"runner:{expected_id_str}", f"runner-{expected_id_str}"):
++        msg = f"Subject CN '{actual_cn}' does not match expected 'runner:{expected_id_str}'"
++        msg_0 = "SUBJECT_MISMATCH"
++        raise CertVerificationError(msg_0, msg)
++
++    # 3. BasicConstraints(ca=False)
++    try:
++        bc_ext = leaf_cert.extensions.get_extension_for_oid(ExtensionOID.BASIC_CONSTRAINTS)
++        bc_val = bc_ext.value
++        if not isinstance(bc_val, x509.BasicConstraints) or bc_val.ca is not False:
++            msg = "Leaf certificate must have BasicConstraints with ca=False"
++            msg_0 = "BASIC_CONSTRAINTS_INVALID"
++            raise CertVerificationError(msg_0, msg)
++    except x509.ExtensionNotFound as exc:
++        msg = "BasicConstraints extension is missing from leaf certificate"
++        msg_0 = "BASIC_CONSTRAINTS_MISSING"
++        raise CertVerificationError(msg_0, msg) from exc
++
++    # 4. ExtendedKeyUsage(CLIENT_AUTH)
++    try:
++        eku_ext = leaf_cert.extensions.get_extension_for_oid(ExtensionOID.EXTENDED_KEY_USAGE)
++        eku_val = eku_ext.value
++        if (
++            not isinstance(eku_val, x509.ExtendedKeyUsage)
++            or ExtendedKeyUsageOID.CLIENT_AUTH not in eku_val
++        ):
++            msg = "ExtendedKeyUsage does not permit client authentication (CLIENT_AUTH)"
++            msg_0 = "EXTENDED_KEY_USAGE_INVALID"
++            raise CertVerificationError(msg_0, msg)
++    except x509.ExtensionNotFound as exc:
++        msg = "ExtendedKeyUsage extension is missing from leaf certificate"
++        msg_0 = "EXTENDED_KEY_USAGE_MISSING"
++        raise CertVerificationError(msg_0, msg) from exc
++
++    # 5. Validity window (not_valid_before_utc <= now <= not_valid_after_utc)
++    check_time = now if now is not None else datetime.now(UTC)
++    if check_time.tzinfo is None:
++        check_time = check_time.replace(tzinfo=UTC)
++
++    not_before = (
++        leaf_cert.not_valid_before_utc
++        if hasattr(leaf_cert, "not_valid_before_utc")
++        else leaf_cert.not_valid_before.replace(tzinfo=UTC)
++    )
++    not_after = (
++        leaf_cert.not_valid_after_utc
++        if hasattr(leaf_cert, "not_valid_after_utc")
++        else leaf_cert.not_valid_after.replace(tzinfo=UTC)
++    )
++    if check_time < not_before:
++        msg = f"Certificate not yet valid (valid from {not_before.isoformat()})"
++        msg_0 = "CERT_NOT_YET_VALID"
++        raise CertVerificationError(msg_0, msg)
++    if check_time > not_after:
++        msg = f"Certificate has expired (expired at {not_after.isoformat()})"
++        msg_0 = "CERT_EXPIRED"
++        raise CertVerificationError(msg_0, msg)
++
++    # 6. Cryptographic issuer signature against active or previous (grace) CA
++    ca_candidates: list[str | bytes] = [active_ca_cert_pem]
++    if previous_ca_cert_pem is not None:
++        ca_candidates.append(previous_ca_cert_pem)
++
++    verified = False
++    last_err: Exception | None = None
++    for ca_raw in ca_candidates:
++        try:
++            ca_cert = _load_x509_cert(ca_raw)
++            leaf_cert.verify_directly_issued_by(ca_cert)
++            verified = True
++            break
++        except (ValueError, TypeError, InvalidSignature) as exc:
++            last_err = exc
++
++    if not verified:
++        msg = f"Leaf certificate issuer signature verification failed against CA chain: {last_err}"
++        msg_0 = "ISSUER_SIGNATURE_INVALID"
++        raise CertVerificationError(msg_0, msg)
++
++    return leaf_cert
