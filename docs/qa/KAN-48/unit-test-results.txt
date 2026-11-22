@@ -1,0 +1,82 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan48-fb1ff863/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan48-fb1ff863
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 52 items
+
+mcp/tests/cli/test_kanban_cli_auth_and_io.py::test_config_precedence PASSED [  1%]
+mcp/tests/cli/test_kanban_cli_auth_and_io.py::test_credentials_file_security_permissions PASSED [  3%]
+mcp/tests/cli/test_kanban_cli_auth_and_io.py::test_auth_commands_flow PASSED [  5%]
+mcp/tests/cli/test_kanban_cli_auth_and_io.py::test_cli_remote_security_loopback_and_https PASSED [  7%]
+mcp/tests/cli/test_kanban_cli_auth_and_io.py::test_utf16_lone_surrogate_rejection PASSED [  9%]
+mcp/tests/cli/test_kanban_cli_auth_and_io.py::test_shell_completions_generation PASSED [ 11%]
+mcp/tests/cli/test_kanban_cli_auth_and_io.py::test_cli_prose_file_and_structured_flags PASSED [ 13%]
+mcp/tests/cli/test_kanban_cli_auth_and_io.py::test_cli_filter_predicate_delegation PASSED [ 15%]
+mcp/tests/cli/test_kanban_cli_auth_and_io.py::test_auth_login_device_flow PASSED [ 17%]
+mcp/tests/cli/test_kanban_cli_auth_and_io.py::test_auth_login_pkce_flow PASSED [ 19%]
+mcp/tests/cli/test_kanban_cli_auth_and_io.py::test_auth_status_variants PASSED [ 21%]
+mcp/tests/cli/test_kanban_cli_auth_and_io.py::test_auth_credentials_corrupt_and_save_types PASSED [ 23%]
+mcp/tests/cli/test_kanban_cli_auth_and_io.py::test_main_entry_points_and_interrupt PASSED [ 25%]
+mcp/tests/cli/test_kanban_cli_auth_and_io.py::test_cli_subparsers_and_error_routing PASSED [ 26%]
+mcp/tests/cli/test_kanban_cli_auth_and_io.py::test_array_and_stdin_and_null_arg_normalization PASSED [ 28%]
+mcp/tests/cli/test_kanban_cli_auth_and_io.py::test_auth_edge_cases PASSED [ 30%]
+mcp/tests/cli/test_kanban_cli_auth_and_io.py::test_schema_cli_io_and_filter_branches PASSED [ 32%]
+mcp/tests/cli/test_kanban_cli_auth_and_io.py::test_schema_cli_full_branches PASSED [ 34%]
+mcp/tests/cli/test_kanban_cli_parity.py::test_positive_1_to_1_mcp_tool_execution_parity PASSED [ 36%]
+mcp/tests/cli/test_kanban_cli_parity.py::test_negative_self_correcting_error_parity PASSED [ 38%]
+mcp/tests/cli/test_kanban_cli_parity.py::test_100_percent_tool_coverage_inventory PASSED [ 40%]
+mcp/tests/cli/test_kanban_cli_parity.py::test_all_24_mcp_tools_dispatch_roundtrip PASSED [ 42%]
+mcp/tests/cli/test_kanban_cli_parity.py::test_standalone_bin_entry_points PASSED [ 44%]
+mcp/tests/cli/test_kanban_cli_parity.py::test_json_and_jsonl_output_formatting PASSED [ 46%]
+mcp/tests/cli/test_kanban_cli_parity.py::test_snake_and_kebab_case_parity PASSED [ 48%]
+mcp/tests/cli/test_kanban_cli_parity.py::test_docs_and_admin_cli_execution PASSED [ 50%]
+mcp/tests/cli/test_kanban_cli_parity.py::test_standalone_surfaces_execution PASSED [ 51%]
+mcp/tests/cli/test_kanban_cli_parity.py::test_jsonl_streaming_with_cursor PASSED [ 53%]
+mcp/tests/cli/test_kanban_cli_parity.py::test_cli_execution_error_handling PASSED [ 55%]
+kanban/tests/auth/test_csrf_bearer_exemption.py::test_stateless_bearer_bypasses_csrf PASSED [ 57%]
+kanban/tests/auth/test_csrf_bearer_exemption.py::test_cookie_authenticated_request_requires_csrf PASSED [ 59%]
+kanban/tests/auth/test_csrf_bearer_exemption.py::test_empty_or_malformed_bearer_does_not_bypass PASSED [ 61%]
+kanban/tests/auth/test_csrf_bearer_exemption.py::test_safe_get_with_cookie_always_allowed PASSED [ 63%]
+kanban/tests/auth/test_csrf.py::test_csrf_token_generation_and_validation PASSED [ 65%]
+kanban/tests/auth/test_csrf.py::test_csrf_cookie_headers PASSED          [ 67%]
+kanban/tests/auth/test_csrf.py::test_case_8_security_csrf_protections PASSED [ 69%]
+kanban/tests/auth/test_csrf.py::test_csrf_referer_validation PASSED      [ 71%]
+kanban/tests/auth/test_csrf.py::test_csrf_exempt_paths PASSED            [ 73%]
+kanban/tests/auth/test_csrf.py::test_csrf_token_validation_error_branches PASSED [ 75%]
+kanban/tests/auth/test_csrf.py::test_csrf_middleware_edge_cases PASSED   [ 76%]
+kanban/tests/auth/test_csrf.py::test_csrf_fallback_cookie_and_scope_branches PASSED [ 78%]
+kanban/tests/auth/test_csrf.py::test_csrf_token_bypass_and_login_branches PASSED [ 80%]
+kanban/tests/auth/test_csrf.py::test_csrf_middleware_dead_session_clears_cookies[asyncio] PASSED [ 82%]
+kanban/tests/auth/test_csrf.py::test_verify_same_origin_request_origin_null_referrer_policy PASSED [ 84%]
+mcp/tests/test_internal_client.py::test_case_5_upstream_problem_status_mapping PASSED [ 86%]
+mcp/tests/test_internal_client.py::test_case_5_plaintext_http_rejected_in_mtls_mode PASSED [ 88%]
+mcp/tests/test_internal_client.py::test_standalone_inprocess_missing_app_raises PASSED [ 90%]
+mcp/tests/test_internal_client.py::test_case_5_oversized_response_stream_aborts PASSED [ 92%]
+mcp/tests/test_internal_client.py::test_successful_request_and_context_manager PASSED [ 94%]
+mcp/tests/test_internal_client.py::test_network_transport_error_maps_to_upstream_unavailable PASSED [ 96%]
+mcp/tests/test_internal_client.py::test_mtls_client_initialization PASSED [ 98%]
+mcp/tests/test_internal_client.py::test_upstream_fallback_error_mapping PASSED [100%]
+
+=============================== warnings summary ===============================
+mcp/tests/cli/test_kanban_cli_auth_and_io.py::test_schema_cli_full_branches
+  <frozen runpy>:128: RuntimeWarning: 'mcp.cli.main' found in sys.modules after import of package 'mcp.cli', but prior to execution of 'mcp.cli.main'; this may result in unpredictable behaviour
+
+kanban/tests/auth/test_csrf.py: 18 warnings
+  /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan48-fb1ff863/.venv/lib/python3.12/site-packages/httpx/_client.py:1859: DeprecationWarning: Setting per-request cookies=<...> is being deprecated, because the expected behaviour on cookie persistence is ambiguous. Set cookies directly on the client instance instead.
+    return await self.request(
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                    Stmts   Miss Branch BrPart  Cover   Missing
+-------------------------------------------------------------------
+mcp/cli/__init__.py         3      0      0      0   100%
+mcp/cli/auth.py           201      7     50      4    96%   128->123, 233->242, 251-252, 268-269, 295-296, 299
+mcp/cli/main.py            24      0      2      0   100%
+mcp/cli/schema_cli.py     543     17    264     27    94%   141, 298->304, 338->345, 345->352, 352->exit, 401, 410, 423->405, 425->405, 428->430, 430->432, 432->434, 434->436, 436->exit, 492, 499->505, 506->505, 534, 610->602, 617->623, 633-635, 647->641, 929-931, 939, 997, 1054-1060, 1080
+-------------------------------------------------------------------
+TOTAL                     771     24    316     31    95%
+======================= 52 passed, 19 warnings in 7.87s ========================

@@ -1,0 +1,349 @@
+=== 1. kanban-cli --help ===
+usage: kanban-cli [-h] [--url URL] [--workspace WORKSPACE] [--project PROJECT]
+                  [--token TOKEN] [--lod LOD] [--filter FILTER] [--json]
+                  [--jsonl] [--no-color]
+                  {search-tickets,search_tickets,read-ticket,read_ticket,create-ticket,create_ticket,update-ticket,update_ticket,begin-work,begin_work,transition-ticket,transition_ticket,complete-work,complete_work,add-comment,add_comment,link-objects,link_objects,issue
+                  list,docs,admin,auth,completions} ...
+
+Kanban CLI with 1:1 MCP Tool Parity, Auth, and Deterministic Unix Output
+
+options:
+  -h, --help            show this help message and exit
+  --url URL             Kanban API server base URL
+  --workspace WORKSPACE
+                        Workspace slug
+  --project PROJECT     Project key
+  --token TOKEN, --api-key TOKEN
+                        Authentication token
+  --lod LOD             Level of detail: summary | standard | full
+  --filter FILTER       Predicate DSL search filter
+  --json                Output response formatted as JSON
+  --jsonl               Stream response items as JSON Lines
+  --no-color            Disable ANSI color codes
+
+Commands:
+  {search-tickets,search_tickets,read-ticket,read_ticket,create-ticket,create_ticket,update-ticket,update_ticket,begin-work,begin_work,transition-ticket,transition_ticket,complete-work,complete_work,add-comment,add_comment,link-objects,link_objects,issue list,docs,admin,auth,completions}
+    search-tickets      Search tickets.
+    search_tickets      ==SUPPRESS==
+    read-ticket         Read ticket.
+    read_ticket         ==SUPPRESS==
+    create-ticket       Create ticket or atomic child tree (max 50 nodes,
+                        depth <=6; omit project and parent inside children).
+    create_ticket       ==SUPPRESS==
+    update-ticket       Update ticket.
+    update_ticket       ==SUPPRESS==
+    begin-work          Begin work.
+    begin_work          ==SUPPRESS==
+    transition-ticket   Transition ticket.
+    transition_ticket   ==SUPPRESS==
+    complete-work       Complete work.
+    complete_work       ==SUPPRESS==
+    add-comment         Add comment.
+    add_comment         ==SUPPRESS==
+    link-objects        Link objects.
+    link_objects        ==SUPPRESS==
+    issue list          Alias for search-tickets
+    docs                Documentation and knowledge management tools
+    admin               Administrative and configuration tools
+    auth                Authentication and session management
+    completions         Generate shell completions
+
+=== 2. kanban-cli create-ticket --help ===
+usage: kanban-cli create-ticket [-h] [--project PROJECT] [--clear-project]
+                                [--summary SUMMARY] [--clear-summary]
+                                [--description-markdown DESCRIPTION_MARKDOWN]
+                                [--description-markdown-file DESCRIPTION_MARKDOWN_FILE]
+                                [--description-file DESCRIPTION_MARKDOWN_FILE]
+                                [--clear-description-markdown] [--state STATE]
+                                [--clear-state] [--priority PRIORITY]
+                                [--clear-priority] [--assignees ASSIGNEES]
+                                [--assignees-file ASSIGNEES_FILE]
+                                [--labels LABELS] [--labels-file LABELS_FILE]
+                                [--cycle CYCLE] [--clear-cycle]
+                                [--modules MODULES]
+                                [--modules-file MODULES_FILE]
+                                [--parent PARENT] [--clear-parent]
+                                [--start-date START_DATE] [--clear-start-date]
+                                [--due-date DUE_DATE] [--clear-due-date]
+                                [--children CHILDREN]
+                                [--children-file CHILDREN_FILE]
+
+options:
+  -h, --help            show this help message and exit
+  --project PROJECT     Project ref (root only; inherited by children)
+  --clear-project       Explicitly set project to null
+  --summary SUMMARY     Summary
+  --clear-summary       Explicitly set summary to null
+  --description-markdown DESCRIPTION_MARKDOWN
+                        Description
+  --description-markdown-file DESCRIPTION_MARKDOWN_FILE
+                        Path to file containing description_markdown (or - for
+                        stdin)
+  --description-file DESCRIPTION_MARKDOWN_FILE
+                        Alias for --description-markdown-file
+  --clear-description-markdown
+                        Explicitly set description_markdown to null
+  --state STATE         State name or UUID
+  --clear-state         Explicitly set state to null
+  --priority PRIORITY   Priority slug
+  --clear-priority      Explicitly set priority to null
+  --assignees ASSIGNEES
+                        Assignees (repeatable or comma-separated/JSON list)
+  --assignees-file ASSIGNEES_FILE
+                        File containing JSON/YAML list for assignees
+  --labels LABELS       Labels (repeatable or comma-separated/JSON list)
+  --labels-file LABELS_FILE
+                        File containing JSON/YAML list for labels
+  --cycle CYCLE         Cycle
+  --clear-cycle         Explicitly set cycle to null
+  --modules MODULES     Modules (repeatable or comma-separated/JSON list)
+  --modules-file MODULES_FILE
+                        File containing JSON/YAML list for modules
+  --parent PARENT       Parent issue ref (root only; omit in children)
+  --clear-parent        Explicitly set parent to null
+  --start-date START_DATE
+                        Start date
+  --clear-start-date    Explicitly set start_date to null
+  --due-date DUE_DATE   Due date
+  --clear-due-date      Explicitly set due_date to null
+  --children CHILDREN   Child sub-issues (inherit root project and enclosing
+                        parent; omit project and parent) (repeatable or comma-
+                        separated/JSON list)
+  --children-file CHILDREN_FILE
+                        File containing JSON/YAML list for children
+
+=== 3. kanban-cli read-ticket --help ===
+usage: kanban-cli read-ticket [-h] [--identifier IDENTIFIER]
+                              [--clear-identifier] [--workspace WORKSPACE]
+                              [--clear-workspace] [--lod LOD] [--clear-lod]
+                              [--comments-limit COMMENTS_LIMIT]
+
+options:
+  -h, --help            show this help message and exit
+  --identifier IDENTIFIER
+                        Issue ref
+  --clear-identifier    Explicitly set identifier to null
+  --workspace WORKSPACE
+                        Workspace
+  --clear-workspace     Explicitly set workspace to null
+  --lod LOD             LOD tier
+  --clear-lod           Explicitly set lod to null
+  --comments-limit COMMENTS_LIMIT
+                        Max comments
+
+=== 4. kanban-cli search-tickets --help ===
+usage: kanban-cli search-tickets [-h] [--query QUERY] [--clear-query]
+                                 [--workspace WORKSPACE] [--clear-workspace]
+                                 [--project PROJECT] [--clear-project]
+                                 [--states STATES] [--states-file STATES_FILE]
+                                 [--assignees ASSIGNEES]
+                                 [--assignees-file ASSIGNEES_FILE]
+                                 [--cycle CYCLE] [--clear-cycle]
+                                 [--modules MODULES]
+                                 [--modules-file MODULES_FILE]
+                                 [--labels LABELS] [--labels-file LABELS_FILE]
+                                 [--blocked | --no-blocked]
+                                 [--gate-status GATE_STATUS]
+                                 [--clear-gate-status] [--mode MODE]
+                                 [--clear-mode] [--lod LOD] [--clear-lod]
+                                 [--limit LIMIT] [--cursor CURSOR]
+                                 [--clear-cursor]
+
+options:
+  -h, --help            show this help message and exit
+  --query QUERY         Search query
+  --clear-query         Explicitly set query to null
+  --workspace WORKSPACE
+                        Workspace slug
+  --clear-workspace     Explicitly set workspace to null
+  --project PROJECT     Project ref
+  --clear-project       Explicitly set project to null
+  --states STATES       State filters (repeatable or comma-separated/JSON
+                        list)
+  --states-file STATES_FILE
+                        File containing JSON/YAML list for states
+  --assignees ASSIGNEES
+                        Assignee filters (repeatable or comma-separated/JSON
+                        list)
+  --assignees-file ASSIGNEES_FILE
+                        File containing JSON/YAML list for assignees
+  --cycle CYCLE         Cycle filter
+  --clear-cycle         Explicitly set cycle to null
+  --modules MODULES     Module filters (repeatable or comma-separated/JSON
+                        list)
+  --modules-file MODULES_FILE
+                        File containing JSON/YAML list for modules
+  --labels LABELS       Label filters (repeatable or comma-separated/JSON
+                        list)
+  --labels-file LABELS_FILE
+                        File containing JSON/YAML list for labels
+  --blocked, --no-blocked
+                        Blocked filter
+  --gate-status GATE_STATUS
+                        Gate status filter
+  --clear-gate-status   Explicitly set gate_status to null
+  --mode MODE           Search mode
+  --clear-mode          Explicitly set mode to null
+  --lod LOD             LOD tier
+  --clear-lod           Explicitly set lod to null
+  --limit LIMIT         Max results
+  --cursor CURSOR       Cursor
+  --clear-cursor        Explicitly set cursor to null
+
+=== 5. kanban-cli transition-ticket --help ===
+usage: kanban-cli transition-ticket [-h] [--identifier IDENTIFIER]
+                                    [--clear-identifier] [--to-state TO_STATE]
+                                    [--clear-to-state]
+                                    [--comment-markdown COMMENT_MARKDOWN]
+                                    [--comment-markdown-file COMMENT_MARKDOWN_FILE]
+                                    [--comment-file COMMENT_MARKDOWN_FILE]
+                                    [--clear-comment-markdown]
+                                    [--verification-proof VERIFICATION_PROOF]
+                                    [--verification-proof-file VERIFICATION_PROOF_FILE]
+
+options:
+  -h, --help            show this help message and exit
+  --identifier IDENTIFIER
+                        Issue ref
+  --clear-identifier    Explicitly set identifier to null
+  --to-state TO_STATE   Target state
+  --clear-to-state      Explicitly set to_state to null
+  --comment-markdown COMMENT_MARKDOWN
+                        Comment
+  --comment-markdown-file COMMENT_MARKDOWN_FILE
+                        Path to file containing comment_markdown (or - for
+                        stdin)
+  --comment-file COMMENT_MARKDOWN_FILE
+                        Alias for --comment-markdown-file
+  --clear-comment-markdown
+                        Explicitly set comment_markdown to null
+  --verification-proof VERIFICATION_PROOF
+                        Proof packet (JSON/YAML string or @path.json)
+  --verification-proof-file VERIFICATION_PROOF_FILE
+                        File containing JSON/YAML object for
+                        verification_proof
+
+=== 6. kanban-cli docs --help ===
+usage: kanban-cli docs [-h] {search,create,update} ...
+
+options:
+  -h, --help            show this help message and exit
+
+Docs Commands:
+  {search,create,update}
+    search              Read by id (or id='help'), list project docs/stickies,
+                        or run hybrid knowledge search.
+    create              Create a Doc, child Page under parent, or Sticky note,
+                        optionally attaching typed object links inline.
+    update              Update Doc, Page, or Sticky with surgical diff-
+                        patching, inline links, or type='DOC' auto-promotion.
+
+=== 7. kanban-cli admin --help ===
+usage: kanban-cli admin [-h]
+                        {configure-workspace,configure_workspace,manage-auth-cards,manage_auth_cards,manage-principals-and-groups,manage_principals_and_groups,manage-access-policies,manage_access_policies,architect-project,architect_project,manage-cycles-and-modules,manage_cycles_and_modules,manage-custom-fields-and-scripts,manage_custom_fields_and_scripts,manage-workflow-interceptors,manage_workflow_interceptors,manage-ai-and-agent-runners,manage_ai_and_agent_runners,override-ticket-provenance,override_ticket_provenance,audit-and-purge-object-links,audit_and_purge_object_links,destructive-lifecycle,destructive_lifecycle}
+                        ...
+
+options:
+  -h, --help            show this help message and exit
+
+Admin Commands:
+  {configure-workspace,configure_workspace,manage-auth-cards,manage_auth_cards,manage-principals-and-groups,manage_principals_and_groups,manage-access-policies,manage_access_policies,architect-project,architect_project,manage-cycles-and-modules,manage_cycles_and_modules,manage-custom-fields-and-scripts,manage_custom_fields_and_scripts,manage-workflow-interceptors,manage_workflow_interceptors,manage-ai-and-agent-runners,manage_ai_and_agent_runners,override-ticket-provenance,override_ticket_provenance,audit-and-purge-object-links,audit_and_purge_object_links,destructive-lifecycle,destructive_lifecycle}
+    configure-workspace
+                        Read and update workspace branding, security defaults,
+                        retention windows, and air_gap_mode.
+    configure_workspace
+                        ==SUPPRESS==
+    manage-auth-cards   Manage authentication provider cards, ordering,
+                        health, and anti-lockout safeguards.
+    manage_auth_cards   ==SUPPRESS==
+    manage-principals-and-groups
+                        Provision and deactivate users, groups, and service
+                        agents; manage group memberships and RBAC role
+                        bindings.
+    manage_principals_and_groups
+                        ==SUPPRESS==
+    manage-access-policies
+                        Inspect an object's access_manifest and grant or
+                        revoke ALLOW/DENY capability entries.
+    manage_access_policies
+                        ==SUPPRESS==
+    architect-project   Declarative project blueprint engine: read current
+                        configuration, compute reviewable diff plans, and
+                        apply configurations atomically.
+    architect_project   ==SUPPRESS==
+    manage-cycles-and-modules
+                        Manage project cycles, iteration rollover, project
+                        modules, and saved views.
+    manage_cycles_and_modules
+                        ==SUPPRESS==
+    manage-custom-fields-and-scripts
+                        Manage admin-defined custom fields, WebAssembly
+                        modules, cryptographic escalation approvals, and
+                        execution (S11.4 Tool 7).
+    manage_custom_fields_and_scripts
+                        ==SUPPRESS==
+    manage-workflow-interceptors
+                        Manage, order, attach, detach, and dry-run workflow
+                        transition hooks (Tier A sync validators/mutators and
+                        Tier B agent interceptors) on transitions.
+    manage_workflow_interceptors
+                        ==SUPPRESS==
+    manage-ai-and-agent-runners
+                        Manage AI providers, envelope-encrypted API keys,
+                        token budgets, agent execution definitions, and remote
+                        agent runner infrastructure.
+    manage_ai_and_agent_runners
+                        ==SUPPRESS==
+    override-ticket-provenance
+                        Perform audited 'Created by' overrides, Hard WIP limit
+                        overrides, and unarchivals with a mandatory
+                        justification under PROJECT_ADMIN or SERVER_ADMIN.
+    override_ticket_provenance
+                        ==SUPPRESS==
+    audit-and-purge-object-links
+                        Execute the 6-class Universal Object Graph Auditor,
+                        inspect flagged link snapshots, and purge audited
+                        entries with an immutable activity ledger record.
+    audit_and_purge_object_links
+                        ==SUPPRESS==
+    destructive-lifecycle
+                        Two-stage destructive confirmation gate for soft-
+                        trashing, permanent purging, and restoring Universal
+                        Object Graph entities (issues, projects, docs, pages,
+                        stickies, cycles, modules, views).
+    destructive_lifecycle
+                        ==SUPPRESS==
+
+=== 8. kanban-cli auth status ===
+=== Kanban CLI Status ===
+URL:       http://localhost:8080
+Workspace: (not configured)
+Project:   (not configured)
+Auth Token: configured (plane_...)
+
+=== 9. kanban-cli completions bash ===
+# bash completion for kanban-cli
+_kanban_cli_completions() {
+    local cur prev words cword
+    _init_completion || return
+
+    local top_commands="search-tickets read-ticket create-ticket update-ticket begin-work transition-ticket complete-work add-comment link-objects docs admin auth completions"
+    local docs_commands="search create update"
+    local admin_commands="configure-workspace manage-auth-cards manage-principals-and-groups manage-access-policies architect-project manage-cycles-and-modules manage-custom-fields-and-scripts manage-workflow-interceptors manage-ai-and-agent-runners override-ticket-provenance audit-and-purge-object-links destructive-lifecycle"
+    local auth_commands="login status logout"
+
+    if [[ $cword -eq 1 ]]; then
+        COMPREPLY=( $(compgen -W "$top_commands --url --workspace --project --token --json --jsonl --help" -- "$cur") )
+        return 0
+    fi
+
+    case "${words[1]}" in
+        docs)
+            COMPREPLY=( $(compgen -W "$docs_commands" -- "$cur") )
+            return 0
+            ;;
+        admin)
+            COMPREPLY=( $(compgen -W "$admin_commands" -- "$cur") )
+            return 0
+            ;;
+        auth)

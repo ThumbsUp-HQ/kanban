@@ -351,12 +351,14 @@ class CsrfMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         # Internal service or token-authenticated requests bypass ambient cookie CSRF
+        cookie_header = request.headers.get("cookie")
+        has_session_cookie = bool(extract_session_cookie(cookie_header))
         auth_hdr = request.headers.get("authorization") or ""
         has_bearer_token = auth_hdr.lower().startswith("bearer ") and bool(auth_hdr[7:].strip())
         if (
             request.headers.get("x-kb-subject-token")
             or request.headers.get("x-kb-internal-auth")
-            or has_bearer_token
+            or (has_bearer_token and not has_session_cookie)
         ):
             return await call_next(request)
 
@@ -367,8 +369,6 @@ class CsrfMiddleware(BaseHTTPMiddleware):
 
         # Double-submit token check against resolved session id
         session_id = await self._resolve_session_id(request)
-        cookie_header = request.headers.get("cookie")
-        has_session_cookie = bool(extract_session_cookie(cookie_header))
         is_dead_session = has_session_cookie and session_id == PRE_SESSION_ID
 
         # Defense-in-depth: Sec-Fetch-Site and Origin verification

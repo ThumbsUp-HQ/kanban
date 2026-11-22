@@ -44,6 +44,8 @@ __all__ = [
     "McpProtocolHandler",
     "Session",
     "SessionStore",
+    "format_cli_example",
+    "validate_tool_arguments_schema",
 ]
 
 PROTOCOL_VERSION: Final[str] = "2025-06-18"
@@ -1413,3 +1415,14 @@ class McpProtocolHandler:
                             fix_hint=fix_hint,
                             cli_example=cli_example,
                         )
+
+
+def validate_tool_arguments_schema(
+    spec: ToolSpec,
+    arguments: dict[str, Any],
+    surface: Surface = Surface.AGENT,
+) -> None:
+    """Validate arguments against schema with progressive self-correction."""
+    handler = McpProtocolHandler.__new__(McpProtocolHandler)
+    object.__setattr__(handler, "surface", surface)
+    handler._validate_tool_arguments_schema(spec, arguments)  # noqa: SLF001
