@@ -66,6 +66,100 @@ export interface BoardWorkflowState {
   color_hex?: string | null;
 }
 
+export interface FetchAllBoardIssuesOptions {
+  pageSize?: number | undefined;
+  maxPages?: number | undefined;
+  signal?: AbortSignal | undefined;
+}
+
+/**
+ * Traverse keyset cursor pagination via apiFetch to load all board issues for a project.
+ */
+export async function fetchAllBoardIssues(
+  projectKey: string,
+  options: FetchAllBoardIssuesOptions = {},
+): Promise<BoardIssue[]> {
+  if (!projectKey || projectKey === 'undefined') {
+    return [];
+  }
+
+  const maxPages = Math.max(options.maxPages ?? 100, 1);
+  const limit = Math.min(Math.max(options.pageSize ?? 100, 1), 100);
+  const items: BoardIssue[] = [];
+  const seenKeys = new Set<string>();
+  const seenCursors = new Set<string>();
+  let cursor: string | null = null;
+
+  for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
+    if (options.signal?.aborted) {
+      const reason: unknown = options.signal.reason;
+      if (reason instanceof Error || reason instanceof DOMException) {
+        throw reason;
+      }
+      throw new DOMException('Aborted', 'AbortError');
+    }
+
+    const data: unknown = await apiFetch('GET', '/api/v1/projects/{project_ref}/issues', {
+      params: { project_ref: projectKey },
+      query: { limit, ...(cursor ? { cursor } : {}) },
+      ...(options.signal ? { signal: options.signal } : {}),
+    });
+
+    if (Array.isArray(data)) {
+      for (const rawItem of data as BoardIssue[]) {
+        const dedupKey = rawItem.key || rawItem.id;
+        if (dedupKey) {
+          if (seenKeys.has(dedupKey)) {
+            continue;
+          }
+          seenKeys.add(dedupKey);
+        }
+        items.push(rawItem);
+      }
+      break;
+    }
+
+    if (
+      data !== null &&
+      typeof data === 'object' &&
+      'items' in data &&
+      Array.isArray(data.items)
+    ) {
+      const pageItems = data.items as BoardIssue[];
+      for (const rawItem of pageItems) {
+        const dedupKey = rawItem.key || rawItem.id;
+        if (dedupKey) {
+          if (seenKeys.has(dedupKey)) {
+            continue;
+          }
+          seenKeys.add(dedupKey);
+        }
+        items.push(rawItem);
+      }
+
+      const rawNextCursor =
+        'next_cursor' in data
+          ? (data as { next_cursor?: unknown }).next_cursor
+          : null;
+      const nextCursor =
+        typeof rawNextCursor === 'string' && rawNextCursor.length > 0
+          ? rawNextCursor
+          : null;
+
+      if (!nextCursor || pageItems.length === 0 || seenCursors.has(nextCursor)) {
+        break;
+      }
+
+      seenCursors.add(nextCursor);
+      cursor = nextCursor;
+    } else {
+      break;
+    }
+  }
+
+  return items;
+}
+
 export interface IssueMoveParams {
   projectKey: string;
   issueKey: string;
