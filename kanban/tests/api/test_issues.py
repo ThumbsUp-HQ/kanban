@@ -14,14 +14,25 @@ Covers all 8 mandatory feature test cases:
 from __future__ import annotations
 
 import hashlib
+import time
 import uuid
-from typing import TYPE_CHECKING, Any
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
-from sqlalchemy import text
+from sqlalchemy import event, select, text
 
-from database.models import Project, ProjectLabel
+from database.models import (
+    AgentDefinition,
+    Issue,
+    Project,
+    ProjectLabel,
+    WorkflowHookInvocation,
+    WorkflowTransitionExecution,
+    WorkflowTransitionHook,
+)
+from kanban.api.deps import PrincipalContext
 from kanban.api.problems import ProblemException
 from kanban.api.v1.schemas.issues import IssueCreate, IssuePatch, IssueResponse
 from kanban.content import ContentNormalizeError
@@ -37,12 +48,17 @@ from kanban.services.issues import (
     decode_issue_cursor,
     encode_issue_cursor,
     initial_board_rank,
+    serialize_issue,
+    serialize_issues_batch,
     to_base62,
     update_issue,
 )
 from kanban.tests.security.helpers import (
     add_acl_entry,
+    add_group_member,
     add_role_binding,
+    create_agent,
+    create_group,
     create_registered_object,
     rebuild_era,
 )
@@ -1275,3 +1291,569 @@ def test_issue_schema_dedupe_and_json_schema() -> None:
     # OpenAPI schema branch
     schema = IssueResponse.model_json_schema()
     assert "description" in schema
+
+
+async def test_kan85_serialize_issues_batch_byte_for_byte_payload_and_etag_parity(  # noqa: PLR0915
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+    make_module: Callable[..., Awaitable[uuid.UUID]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """KAN-85 (1): Byte-for-byte payload and ETag parity between batch and per-row serializer."""
+    admin = await make_user("batch_admin", workspace_role="WORKSPACE_ADMIN")
+    member = await make_user("batch_member")
+    guest = await make_user("batch_guest", workspace_role="WORKSPACE_GUEST")
+    proj_id = await make_project(
+        "BPAR",
+        created_by=admin,
+        roles={admin: "PROJECT_ADMIN", member: "MEMBER"},
+        modules_enabled=True,
+    )
+    client = as_principal(admin)
+
+    # Empty batch check
+    assert api_env.resolver.principal is not None
+    assert await serialize_issues_batch(api_env.seed, api_env.resolver.principal, []) == []
+
+    # Seed cycle, module, label, group, agent
+    mod_id = await make_module(proj_id, "CoreEngine", created_by=admin)
+    cyc_id = await create_registered_object(
+        api_env.seed,
+        api_env.workspace_id,
+        kind="cycle",
+        key=f"cyc-bpar-{uuid.uuid4().hex[:6]}",
+        title="Sprint Batch",
+        project_id=proj_id,
+        created_by_id=admin.id,
+    )
+    await api_env.seed.execute(
+        text(
+            "INSERT INTO cycles (id, workspace_id, project_id, name) "
+            "VALUES (:id, :ws, :proj, 'Sprint Batch')"
+        ),
+        {"id": cyc_id, "ws": api_env.workspace_id, "proj": proj_id},
+    )
+    lbl_id = uuid.uuid4()
+    api_env.seed.add(
+        ProjectLabel(
+            id=lbl_id,
+            workspace_id=api_env.workspace_id,
+            project_id=proj_id,
+            name="perf:batch",
+            color_hex="#2563EB",
+            exclusive_group=None,
+        )
+    )
+    grp_id = await create_group(api_env.seed, api_env.workspace_id, "PlatformTeam")
+    await add_group_member(api_env.seed, api_env.workspace_id, grp_id, member.id)
+    await add_role_binding(
+        api_env.seed,
+        api_env.workspace_id,
+        grp_id,
+        role="MEMBER",
+        scope_type="project",
+        project_id=proj_id,
+    )
+    agent_id = await create_agent(
+        api_env.seed, api_env.workspace_id, "GateRunner (openai)", principal_type="AGENT"
+    )
+    await add_role_binding(
+        api_env.seed,
+        api_env.workspace_id,
+        agent_id,
+        role="VIEWER",
+        scope_type="project",
+        project_id=proj_id,
+    )
+    await rebuild_era(api_env.seed, api_env.workspace_id)
+    await api_env.seed.commit()
+
+    states = {
+        row[1]: row[0]
+        for row in (
+            await api_env.seed.execute(
+                text(
+                    "SELECT id, state_group FROM workflow_states "
+                    "WHERE project_id = :p ORDER BY sort_order"
+                ),
+                {"p": proj_id},
+            )
+        ).all()
+    }
+
+    # Issue 1: Root completed issue (with open child -> cannot archive due to open sub-issues)
+    r1 = await client.post(
+        "/api/v1/projects/BPAR/issues",
+        json={
+            "summary": "Root Completed With Open Child",
+            "description_markdown": "Token ghp_1234567890abcdefghijklmnopqrstuvwxyz12",
+            "priority": "high",
+            "state_id": str(states["completed"]),
+            "cycle_id": str(cyc_id),
+            "label_ids": [str(lbl_id)],
+            "module_ids": [str(mod_id)],
+            "start_date": "2026-11-01",
+            "due_date": "2026-11-15",
+        },
+    )
+    assert r1.status_code == 201
+
+    # Assign principal and free-text to Issue 1
+    r_a1 = await client.post(
+        "/api/v1/issues/BPAR-1/assignees",
+        json={"principal": str(member.id)},
+    )
+    assert r_a1.status_code == 201
+    r_a2 = await client.post(
+        "/api/v1/issues/BPAR-1/assignees",
+        json={"free_text": "External Vendor Team"},
+    )
+    assert r_a2.status_code == 201
+
+    # Issue 2: Open child of Issue 1
+    r2 = await client.post(
+        "/api/v1/projects/BPAR/issues",
+        json={
+            "summary": "Open Child Issue",
+            "description_markdown": "Child description",
+            "priority": "urgent",
+            "parent": "BPAR-1",
+        },
+    )
+    assert r2.status_code == 201
+    iss2_id = uuid.UUID(r2.json()["id"])
+
+    # Issue 3: Standalone completed issue eligible for archiving + direct ACL ALLOW & DENY
+    r3 = await client.post(
+        "/api/v1/projects/BPAR/issues",
+        json={
+            "summary": "Standalone Completed Eligible For Archive",
+            "priority": "low",
+            "state_id": str(states["completed"]),
+        },
+    )
+    assert r3.status_code == 201
+    iss3_id = uuid.UUID(r3.json()["id"])
+
+    # Issue 4: Already archived issue + overridden provenance + gate verdict & pending gate
+    r4 = await client.post(
+        "/api/v1/projects/BPAR/issues",
+        json={
+            "summary": "Archived & Gate Verdict Issue",
+            "priority": "none",
+            "state_id": str(states["cancelled"]),
+        },
+    )
+    assert r4.status_code == 201
+    iss4_id = uuid.UUID(r4.json()["id"])
+
+    await add_acl_entry(
+        api_env.seed,
+        api_env.workspace_id,
+        iss3_id,
+        guest.id,
+        effect="ALLOW",
+        capability_mask=1,
+    )
+    await add_acl_entry(
+        api_env.seed,
+        api_env.workspace_id,
+        iss3_id,
+        member.id,
+        effect="DENY",
+        capability_mask=4,
+    )
+    await add_acl_entry(
+        api_env.seed,
+        api_env.workspace_id,
+        iss3_id,
+        guest.id,
+        effect="DENY",
+        capability_mask=8,
+    )
+
+    # Mark Issue 4 creator-overridden and archived, plus seed gate execution rows
+    now_dt = datetime.now(UTC)
+    await api_env.seed.execute(
+        text(
+            "SELECT set_config('app.principal_id', :pid, true), "
+            "set_config('app.workspace_id', :ws, true), "
+            "set_config('app.token_scopes', 'session', true), "
+            "set_config('app.aal_level', '2', true), "
+            "set_config('app.override_reason', 'Audit provenance parity check', true)"
+        ),
+        {"pid": str(admin.id), "ws": str(api_env.workspace_id)},
+    )
+    await api_env.seed.execute(
+        text("UPDATE issues SET created_by_id = :new_c WHERE id = :id"),
+        {"new_c": member.id, "id": iss4_id},
+    )
+    await api_env.seed.execute(
+        text("UPDATE objects SET archived_at = :ts WHERE id = :id"),
+        {"ts": now_dt, "id": iss4_id},
+    )
+
+    agent_def = AgentDefinition(
+        workspace_id=api_env.workspace_id,
+        project_id=proj_id,
+        principal_id=agent_id,
+        slug="qa-gate-agent",
+        display_name="QA Gate Agent",
+        harness_kind="in_app_sdk",
+        provider_kind="openai",
+        model_id="gpt-4o",
+        system_instructions_md="Verify transition",
+        timeout_ms=30000,
+    )
+    api_env.seed.add(agent_def)
+    await api_env.seed.flush()
+
+    hook = WorkflowTransitionHook(
+        workspace_id=api_env.workspace_id,
+        project_id=proj_id,
+        name="reality-gate",
+        from_state_id=states["backlog"],
+        to_state_id=states["completed"],
+        hook_kind="agent_interceptor",
+        sort_rank="a000001",
+        agent_definition_id=agent_def.id,
+        manifest_sha256=b"\x01" * 32,
+    )
+    api_env.seed.add(hook)
+    await api_env.seed.flush()
+
+    verdict_exec = WorkflowTransitionExecution(
+        workspace_id=api_env.workspace_id,
+        project_id=proj_id,
+        issue_id=iss4_id,
+        from_state_id=states["backlog"],
+        to_state_id=states["cancelled"],
+        invoking_principal_id=admin.id,
+        issue_body_sha256_snapshot=b"\x02" * 32,
+        status="approved",
+        verdict_json={
+            "decision": "approved",
+            "hook_name": "reality-gate",
+            "latency_ms": 42,
+            "verdict_sha256": "deadbeef" * 8,
+        },
+        completed_at=now_dt,
+    )
+    pending_exec = WorkflowTransitionExecution(
+        workspace_id=api_env.workspace_id,
+        project_id=proj_id,
+        issue_id=iss2_id,
+        from_state_id=states["backlog"],
+        to_state_id=states["completed"],
+        invoking_principal_id=admin.id,
+        issue_body_sha256_snapshot=b"\x03" * 32,
+        status="pending_async",
+    )
+    api_env.seed.add_all([verdict_exec, pending_exec])
+    await api_env.seed.flush()
+
+    inv = WorkflowHookInvocation(
+        workspace_id=api_env.workspace_id,
+        execution_id=pending_exec.id,
+        hook_id=hook.id,
+        hook_kind="agent_interceptor",
+        status="running",
+        started_at=now_dt,
+    )
+    api_env.seed.add(inv)
+    await api_env.seed.flush()
+    await api_env.seed.execute(
+        text("UPDATE issues SET pending_transition_exec_id = :pe WHERE id = :id"),
+        {"pe": pending_exec.id, "id": iss2_id},
+    )
+    await rebuild_era(api_env.seed, api_env.workspace_id)
+    await api_env.seed.commit()
+
+    # Fetch the 4 issues in descending sequence order under RLS
+    await api_env.seed.execute(
+        text(
+            "SELECT set_config('app.principal_id', :pid, true), "
+            "set_config('app.workspace_id', :ws, true), "
+            "set_config('app.token_scopes', 'session', true), "
+            "set_config('app.aal_level', '2', true)"
+        ),
+        {"pid": str(admin.id), "ws": str(api_env.workspace_id)},
+    )
+    rows = list(
+        (
+            await api_env.seed.execute(
+                select(Issue).where(Issue.project_id == proj_id).order_by(Issue.sequence_id.desc())
+            )
+        )
+        .scalars()
+        .all()
+    )
+    assert len(rows) == 4
+    caller = PrincipalContext(
+        principal_id=admin.id,
+        workspace_id=api_env.workspace_id,
+        token_scopes=("session",),
+        aal_level=2,
+    )
+
+    per_row = [await serialize_issue(api_env.seed, caller, item) for item in rows]
+    batched = await serialize_issues_batch(api_env.seed, caller, rows)
+
+    assert len(batched) == len(per_row) == 4
+    for single_item, batch_item in zip(per_row, batched, strict=True):
+        assert batch_item.etag == single_item.etag
+        assert batch_item.model_dump(mode="json") == single_item.model_dump(mode="json")
+        assert batch_item.model_dump_json() == single_item.model_dump_json()
+
+    # Also verify OBO agent_principal_id, ephemeral_project_id, and empty-scope capability parity
+    obo_caller = PrincipalContext(
+        principal_id=admin.id,
+        workspace_id=api_env.workspace_id,
+        token_scopes=("agent:read",),
+        aal_level=1,
+        agent_principal_id=agent_id,
+        ephemeral_project_id=proj_id,
+    )
+    per_row_obo = [await serialize_issue(api_env.seed, obo_caller, item) for item in rows]
+    batched_obo = await serialize_issues_batch(api_env.seed, obo_caller, rows)
+    for single_item, batch_item in zip(per_row_obo, batched_obo, strict=True):
+        assert batch_item.etag == single_item.etag
+        assert batch_item.model_dump_json() == single_item.model_dump_json()
+
+
+async def test_kan85_list_issues_100_items_query_count_bound(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+    make_module: Callable[..., Awaitable[uuid.UUID]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """KAN-85 (2): GET /api/v1/projects/{project_ref}/issues?limit=100 executes <= 20 queries."""
+    admin = await make_user("qbound_admin", workspace_role="WORKSPACE_ADMIN")
+    proj_id = await make_project(
+        "QBND", created_by=admin, roles={admin: "PROJECT_ADMIN"}, modules_enabled=True
+    )
+    mod_id = await make_module(proj_id, "PerfMod", created_by=admin)
+    lbl_id = uuid.uuid4()
+    api_env.seed.add(
+        ProjectLabel(
+            id=lbl_id,
+            workspace_id=api_env.workspace_id,
+            project_id=proj_id,
+            name="perf",
+            color_hex="#10B981",
+            exclusive_group=None,
+        )
+    )
+    await api_env.seed.commit()
+
+    states = (
+        (
+            await api_env.seed.execute(
+                text("SELECT id FROM workflow_states WHERE project_id = :p ORDER BY sort_order"),
+                {"p": proj_id},
+            )
+        )
+        .scalars()
+        .all()
+    )
+    prios = (
+        (
+            await api_env.seed.execute(
+                text("SELECT id FROM project_priorities WHERE project_id = :p ORDER BY sort_order"),
+                {"p": proj_id},
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+    await api_env.seed.execute(
+        text("UPDATE projects SET issue_seq_counter = 100 WHERE id = :p"),
+        {"p": proj_id},
+    )
+    root_issue_id: uuid.UUID | None = None
+    for seq in range(1, 101):
+        iss_id = (
+            await api_env.seed.execute(
+                text(
+                    "SELECT register_object("
+                    "  CAST('issue' AS object_kind), :ws, :proj, :key, :title, :creator"
+                    ")"
+                ),
+                {
+                    "ws": api_env.workspace_id,
+                    "proj": proj_id,
+                    "key": f"QBND-{seq}",
+                    "title": f"Perf Issue {seq}",
+                    "creator": admin.id,
+                },
+            )
+        ).scalar_one()
+        if seq == 1:
+            root_issue_id = iss_id
+        parent_id = root_issue_id if (seq > 1 and seq % 5 == 0) else None
+        api_env.seed.add(
+            Issue(
+                id=iss_id,
+                workspace_id=api_env.workspace_id,
+                project_id=proj_id,
+                sequence_id=seq,
+                summary=f"Perf Issue {seq}",
+                description_markdown=f"Body for QBND-{seq}",
+                state_id=states[seq % len(states)],
+                priority_id=prios[seq % len(prios)],
+                created_by_id=admin.id,
+                original_created_by_id=admin.id,
+                parent_issue_id=parent_id,
+                board_rank=initial_board_rank(seq),
+                ancestry_path=(
+                    f"{root_issue_id.hex}.{iss_id.hex}"
+                    if parent_id and root_issue_id
+                    else iss_id.hex
+                ),
+            )
+        )
+        await api_env.seed.flush()
+        if seq % 2 == 0:
+            await api_env.seed.execute(
+                text(
+                    "INSERT INTO issue_labels (issue_id, label_id, workspace_id) "
+                    "VALUES (:i, :l, :ws)"
+                ),
+                {"i": iss_id, "l": lbl_id, "ws": api_env.workspace_id},
+            )
+        if seq % 3 == 0:
+            await api_env.seed.execute(
+                text(
+                    "INSERT INTO issue_modules (issue_id, module_id, workspace_id) "
+                    "VALUES (:i, :m, :ws)"
+                ),
+                {"i": iss_id, "m": mod_id, "ws": api_env.workspace_id},
+            )
+    await rebuild_era(api_env.seed, api_env.workspace_id)
+    await api_env.seed.commit()
+
+    client = as_principal(admin)
+    executed_sql: list[str] = []
+
+    def _on_before_cursor_execute(
+        _conn: object,
+        _cursor: object,
+        statement: str,
+        _parameters: object,
+        _context: object,
+        _executemany: object,
+    ) -> None:
+        executed_sql.append(statement)
+
+    app_transport = cast("Any", api_env.client._transport)  # noqa: SLF001
+    sync_engine = app_transport.app.state.session_factory.engine.sync_engine
+    event.listen(sync_engine, "before_cursor_execute", _on_before_cursor_execute)
+    try:
+        t0 = time.perf_counter()
+        resp = await client.get("/api/v1/projects/QBND/issues?limit=100")
+        elapsed_ms = (time.perf_counter() - t0) * 1000.0
+    finally:
+        event.remove(sync_engine, "before_cursor_execute", _on_before_cursor_execute)
+
+    assert resp.status_code == 200
+    payload = resp.json()
+    assert len(payload["items"]) == 100
+    assert payload["items"][0]["key"] == "QBND-100"
+    assert payload["items"][-1]["key"] == "QBND-1"
+    assert len(executed_sql) <= 20, (
+        f"Expected <= 20 SQL statements for 100-item list_issues, got {len(executed_sql)} "
+        f"(elapsed={elapsed_ms:.1f}ms)"
+    )
+
+
+async def test_kan85_rls_restricted_parent_and_capability_parity_under_force_rls(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    make_project: Callable[..., Awaitable[uuid.UUID]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """KAN-85 (3): RLS restricted parent masking and capability parity under FORCE RLS."""
+    admin = await make_user("rls_admin", workspace_role="WORKSPACE_ADMIN")
+    viewer = await make_user("rls_viewer")
+    member = await make_user("rls_member")
+    await make_project(
+        "RLSB",
+        created_by=admin,
+        roles={admin: "PROJECT_ADMIN", viewer: "VIEWER", member: "MEMBER"},
+    )
+
+    admin_client = as_principal(admin)
+    r_parent = await admin_client.post(
+        "/api/v1/projects/RLSB/issues",
+        json={"summary": "Classified Parent Epic"},
+    )
+    assert r_parent.status_code == 201
+    parent_id = uuid.UUID(r_parent.json()["id"])
+
+    r_child1 = await admin_client.post(
+        "/api/v1/projects/RLSB/issues",
+        json={"summary": "Visible Child 1", "parent": "RLSB-1"},
+    )
+    assert r_child1.status_code == 201
+    child1_id = uuid.UUID(r_child1.json()["id"])
+
+    r_child2 = await admin_client.post(
+        "/api/v1/projects/RLSB/issues",
+        json={"summary": "Visible Child 2", "parent": "RLSB-1"},
+    )
+    assert r_child2.status_code == 201
+    child2_id = uuid.UUID(r_child2.json()["id"])
+
+    # Deny VIEW on parent_id for viewer; Deny EDIT on child2_id for member
+    await add_acl_entry(
+        api_env.seed,
+        api_env.workspace_id,
+        parent_id,
+        viewer.id,
+        effect="DENY",
+        capability_mask=1,
+    )
+    await add_acl_entry(
+        api_env.seed,
+        api_env.workspace_id,
+        child2_id,
+        member.id,
+        effect="DENY",
+        capability_mask=4,
+    )
+    await rebuild_era(api_env.seed, api_env.workspace_id)
+    await api_env.seed.commit()
+
+    # 1. Viewer lists issues under kanban_app FORCE RLS: sees RLSB-3 and RLSB-2 masked
+    viewer_client = as_principal(viewer)
+    list_viewer = await viewer_client.get("/api/v1/projects/RLSB/issues?limit=100")
+    assert list_viewer.status_code == 200
+    viewer_items = list_viewer.json()["items"]
+    assert [it["key"] for it in viewer_items] == ["RLSB-3", "RLSB-2"]
+    for it in viewer_items:
+        assert it["parent"] == {
+            "restricted": True,
+            "label": "🔒 Restricted Parent Issue",
+        }
+        assert it["capabilities"] == ["VIEW", "COMMENT"]
+        single_get = await viewer_client.get(f"/api/v1/issues/{it['key']}")
+        assert single_get.status_code == 200
+        assert it == single_get.json()
+
+    # 2. Member lists issues under kanban_app FORCE RLS: sees RLSB-3 (no EDIT), RLSB-2, RLSB-1
+    member_client = as_principal(member)
+    list_member = await member_client.get("/api/v1/projects/RLSB/issues?limit=100")
+    assert list_member.status_code == 200
+    member_items = list_member.json()["items"]
+    assert [it["key"] for it in member_items] == ["RLSB-3", "RLSB-2", "RLSB-1"]
+    assert member_items[0]["parent"] == {"key": "RLSB-1", "summary": "Classified Parent Epic"}
+    assert "EDIT" not in member_items[0]["capabilities"]
+    assert "EDIT" in member_items[1]["capabilities"]
+    assert str(child1_id) == member_items[1]["id"]
+    for it in member_items:
+        single_get = await member_client.get(f"/api/v1/issues/{it['key']}")
+        assert single_get.status_code == 200
+        assert it == single_get.json()
