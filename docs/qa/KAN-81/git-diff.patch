@@ -1,3 +1,61 @@
+diff --git a/database/migrations/sql/p6_02_pdf_attachments.down.sql b/database/migrations/sql/p6_02_pdf_attachments.down.sql
+new file mode 100644
+index 00000000..961d7ace
+--- /dev/null
++++ b/database/migrations/sql/p6_02_pdf_attachments.down.sql
+@@ -0,0 +1,20 @@
++-- Copyright 2026 Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++-- Drop page_count check constraint and column
++ALTER TABLE attachments DROP CONSTRAINT IF EXISTS attachments_page_count_check;
++ALTER TABLE attachments DROP COLUMN IF EXISTS page_count;
++
++-- Restore original attachments_content_type_check
++ALTER TABLE attachments DROP CONSTRAINT IF EXISTS attachments_content_type_check;
++
++ALTER TABLE attachments ADD CONSTRAINT attachments_content_type_check CHECK (
++    content_type IN (
++        'image/png',
++        'image/jpeg',
++        'image/webp',
++        'image/avif',
++        'image/gif',
++        'image/svg+xml'
++    )
++);
+diff --git a/database/migrations/sql/p6_02_pdf_attachments.up.sql b/database/migrations/sql/p6_02_pdf_attachments.up.sql
+new file mode 100644
+index 00000000..daf02ed7
+--- /dev/null
++++ b/database/migrations/sql/p6_02_pdf_attachments.up.sql
+@@ -0,0 +1,26 @@
++-- Copyright 2026 Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++-- Widen content_type check constraint to include application/pdf
++ALTER TABLE attachments DROP CONSTRAINT IF EXISTS attachments_content_type_check;
++
++ALTER TABLE attachments ADD CONSTRAINT attachments_content_type_check CHECK (
++    content_type IN (
++        'image/png',
++        'image/jpeg',
++        'image/webp',
++        'image/avif',
++        'image/gif',
++        'image/svg+xml',
++        'application/pdf'
++    )
++);
++
++-- Add nullable page_count column with positive integer check
++ALTER TABLE attachments ADD COLUMN IF NOT EXISTS page_count INTEGER;
++
++ALTER TABLE attachments DROP CONSTRAINT IF EXISTS attachments_page_count_check;
++
++ALTER TABLE attachments ADD CONSTRAINT attachments_page_count_check CHECK (
++    page_count IS NULL OR page_count > 0
++);
 diff --git a/database/migrations/versions/p6_02_pdf_attachments.py b/database/migrations/versions/p6_02_pdf_attachments.py
 new file mode 100644
 index 00000000..4557037e
@@ -32,6 +90,41 @@ index 00000000..4557037e
 +def downgrade() -> None:
 +    """Revert p6_02_pdf_attachments migration."""
 +    execute_sql_file("p6_02_pdf_attachments.down.sql")
+diff --git a/database/models/attachments.py b/database/models/attachments.py
+index 7564091f..c4eed47e 100644
+--- a/database/models/attachments.py
++++ b/database/models/attachments.py
+@@ -29,7 +29,7 @@ class Attachment(Base):
+         ),
+         CheckConstraint(
+             "content_type IN ("
+-            "'image/png','image/jpeg','image/webp','image/avif','image/gif','image/svg+xml'"
++            "'image/png','image/jpeg','image/webp','image/avif','image/gif','image/svg+xml','application/pdf'"
+             ")",
+             name="attachments_content_type_check",
+         ),
+@@ -45,6 +45,10 @@ class Attachment(Base):
+             "pixel_height IS NULL OR pixel_height > 0",
+             name="attachments_pixel_height_check",
+         ),
++        CheckConstraint(
++            "page_count IS NULL OR page_count > 0",
++            name="attachments_page_count_check",
++        ),
+         CheckConstraint(
+             "octet_length(blob_sha256) = 32",
+             name="attachments_blob_sha256_check",
+@@ -100,6 +104,10 @@ class Attachment(Base):
+         Integer,
+         nullable=True,
+     )
++    page_count: Mapped[int | None] = mapped_column(
++        Integer,
++        nullable=True,
++    )
+     blob_sha256: Mapped[bytes] = mapped_column(
+         LargeBinary,
+         nullable=False,
 diff --git a/database/tests/migrations/test_p6_02_pdf_attachments_migration.py b/database/tests/migrations/test_p6_02_pdf_attachments_migration.py
 new file mode 100644
 index 00000000..5327fc8b
@@ -422,12 +515,42 @@ index 8768675d..c600dacf 100644
      else:
          headers["Content-Disposition"] = f'inline; filename="{safe_filename}"'
  
+diff --git a/kanban/api/v1/schemas/attachments.py b/kanban/api/v1/schemas/attachments.py
+index d201769f..0210d104 100644
+--- a/kanban/api/v1/schemas/attachments.py
++++ b/kanban/api/v1/schemas/attachments.py
+@@ -22,6 +22,10 @@ class AttachmentResponse(BaseModel):
+     byte_size: Annotated[int, Field(ge=1, le=26_214_400, description="Payload byte size")]
+     pixel_width: Annotated[int | None, Field(default=None, description="Raster width in pixels")]
+     pixel_height: Annotated[int | None, Field(default=None, description="Raster height in pixels")]
++    page_count: Annotated[
++        int | None,
++        Field(default=None, description="Document page count for paginated media"),
++    ]
+     signed_url: Annotated[str, Field(description="HMAC-SHA256 signed content retrieval URL")]
+     expires_in: Annotated[int, Field(default=300, description="TTL in seconds for signed URL")]
+ 
+@@ -31,3 +35,14 @@ class SignedUrlResponse(BaseModel):
+ 
+     signed_url: Annotated[str, Field(description="HMAC-SHA256 signed content retrieval URL")]
+     expires_in: Annotated[int, Field(default=300, description="TTL in seconds for signed URL")]
++
++
++class AttachmentMetaResponse(BaseModel):
++    """Lightweight metadata response for an attachment."""
++
++    id: uuid.UUID
++    original_filename: Annotated[str, Field(description="Original filename")]
++    content_type: Annotated[str, Field(description="MIME media type")]
++    byte_size: Annotated[int, Field(description="Payload byte size")]
++    page_count: Annotated[int | None, Field(default=None, description="Document page count")]
++    blob_sha256: Annotated[str, Field(description="Hex-encoded SHA-256 digest")]
 diff --git a/kanban/attachments/pdf.py b/kanban/attachments/pdf.py
 new file mode 100644
-index 00000000..a839183c
+index 00000000..6427cacc
 --- /dev/null
 +++ b/kanban/attachments/pdf.py
-@@ -0,0 +1,656 @@
+@@ -0,0 +1,658 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Deterministic PDF validation and active-content rejection engine (KAN-81).
@@ -775,7 +898,9 @@ index 00000000..a839183c
 +
 +    for dict_header, stream_data in stream_blocks:
 +        decoded_header = decode_pdf_name(dict_header)
-+        is_flate = rb"/FlateDecode" in decoded_header or rb"/Fl\b" in decoded_header
++        is_flate = (
++            rb"/FlateDecode" in decoded_header or re.search(rb"/Fl\b", decoded_header) is not None
++        )
 +        if is_flate and stream_data:
 +            total_decompressed = _decompress_and_scan_single_flate_stream(
 +                stream_data, total_decompressed
@@ -1084,6 +1209,182 @@ index 00000000..a839183c
 +
 +if __name__ == "__main__":
 +    _run_subprocess_worker()
+diff --git a/kanban/attachments/service.py b/kanban/attachments/service.py
+index 7a9e51e3..88fb8e24 100644
+--- a/kanban/attachments/service.py
++++ b/kanban/attachments/service.py
+@@ -8,6 +8,7 @@ from sqlalchemy import select
+ 
+ from database.models import Attachment
+ from kanban.api.problems import not_found
++from kanban.attachments.pdf import sanitize_and_validate_pdf
+ from kanban.attachments.raster import sanitize_and_reencode_raster
+ from kanban.attachments.signing import sign_attachment_url
+ from kanban.attachments.sniff import (
+@@ -56,11 +57,26 @@ class AttachmentService:
+             raw_filename,
+         )
+ 
+-        # 2. Decompression-bomb inspection and raster pixel re-encoding
+-        processed = await sanitize_and_reencode_raster(raw_bytes, detected_type)
++        # 2. Decompression-bomb inspection and content-specific validation/re-encoding
++        page_count: int | None = None
++        if detected_type == "application/pdf":
++            pdf_result = await sanitize_and_validate_pdf(raw_bytes)
++            clean_bytes = pdf_result.clean_bytes
++            blob_sha256 = pdf_result.blob_sha256
++            byte_size = pdf_result.byte_size
++            pixel_width = None
++            pixel_height = None
++            page_count = pdf_result.page_count
++        else:
++            processed = await sanitize_and_reencode_raster(raw_bytes, detected_type)
++            clean_bytes = processed.clean_bytes
++            blob_sha256 = processed.blob_sha256
++            byte_size = processed.byte_size
++            pixel_width = processed.pixel_width
++            pixel_height = processed.pixel_height
+ 
+         # 3. Content-addressed atomic filesystem storage
+-        storage_key, _ = self.blob_store.store(processed.clean_bytes)
++        storage_key, _ = self.blob_store.store(clean_bytes)
+ 
+         # 4. Safe filename handling for metadata row
+         safe_db_filename = sanitize_original_filename(raw_filename)
+@@ -72,11 +88,12 @@ class AttachmentService:
+             issue_id=issue_id,
+             uploaded_by_id=caller.principal_id,
+             original_filename=safe_db_filename,
+-            content_type=processed.content_type,
+-            byte_size=processed.byte_size,
+-            pixel_width=processed.pixel_width,
+-            pixel_height=processed.pixel_height,
+-            blob_sha256=processed.blob_sha256,
++            content_type=detected_type,
++            byte_size=byte_size,
++            pixel_width=pixel_width,
++            pixel_height=pixel_height,
++            page_count=page_count,
++            blob_sha256=blob_sha256,
+             storage_key=storage_key,
+         )
+         session.add(attachment)
+@@ -114,6 +131,7 @@ class AttachmentService:
+             "byte_size": attachment.byte_size,
+             "pixel_width": attachment.pixel_width,
+             "pixel_height": attachment.pixel_height,
++            "page_count": attachment.page_count,
+             "signed_url": signed_url,
+             "expires_in": 300,
+         }
+diff --git a/kanban/attachments/sniff.py b/kanban/attachments/sniff.py
+index 7038580c..c4641492 100644
+--- a/kanban/attachments/sniff.py
++++ b/kanban/attachments/sniff.py
+@@ -11,6 +11,7 @@ from kanban.api.problems import ProblemException
+ MAX_ATTACHMENT_BYTES: Final[int] = 26_214_400  # 25 MiB exact
+ _SVG_LEN: Final[int] = 4
+ _MIN_BOX_HEADER: Final[int] = 12
++_MIN_PDF_HEADER: Final[int] = 8
+ 
+ ALLOWED_MEDIA_TYPES: Final[frozenset[str]] = frozenset(
+     {
+@@ -20,6 +21,7 @@ ALLOWED_MEDIA_TYPES: Final[frozenset[str]] = frozenset(
+         "image/avif",
+         "image/gif",
+         "image/svg+xml",
++        "application/pdf",
+     }
+ )
+ 
+@@ -31,6 +33,7 @@ EXTENSION_TO_MEDIA_TYPE: Final[dict[str, str]] = {
+     ".gif": "image/gif",
+     ".avif": "image/avif",
+     ".svg": "image/svg+xml",
++    ".pdf": "application/pdf",
+ }
+ 
+ MEDIA_TYPE_TO_DEFAULT_EXT: Final[dict[str, str]] = {
+@@ -40,6 +43,7 @@ MEDIA_TYPE_TO_DEFAULT_EXT: Final[dict[str, str]] = {
+     "image/gif": ".gif",
+     "image/avif": ".avif",
+     "image/svg+xml": ".svg",
++    "application/pdf": ".pdf",
+ }
+ 
+ 
+@@ -92,6 +96,39 @@ def _sniff_svg(header: bytes) -> str | None:
+     return None
+ 
+ 
++def _sniff_pdf(header: bytes) -> str | None:
++    """Detect PDF document from magic bytes strictly at offset 0."""
++    if len(header) >= _MIN_PDF_HEADER and header.startswith((b"%PDF-1.", b"%PDF-2.")):
++        return "application/pdf"
++    return None
++
++
++def _check_special_type_hints(
++    detected: str,
++    filename: str,
++    declared_content_type: str | None,
++) -> None:
++    """Verify SVG or PDF has corresponding extension or declared Content-Type."""
++    if detected in ("image/svg+xml", "application/pdf"):
++        expected_ext = ".svg" if detected == "image/svg+xml" else ".pdf"
++        lower_fn = filename.lower()
++        has_ext = lower_fn.endswith(expected_ext)
++        decl_match = (
++            declared_content_type is not None
++            and declared_content_type.strip().lower().split(";")[0] == detected
++        )
++        if not (has_ext or decl_match):
++            label = "SVG" if detected == "image/svg+xml" else "PDF"
++            raise ProblemException(
++                code="MIME_MISMATCH_OR_UNSUPPORTED",
++                status=415,
++                title="Unsupported Media Type",
++                detail=(
++                    f"{label} content must have {expected_ext} extension or {detected} Content-Type"
++                ),
++            )
++
++
+ def sniff_media_type(
+     header_bytes: bytes,
+     declared_content_type: str | None,
+@@ -104,7 +141,7 @@ def sniff_media_type(
+             If magic bytes are unknown, or conflict with declared Content-Type or extension.
+ 
+     """
+-    detected = _sniff_raster(header_bytes) or _sniff_svg(header_bytes)
++    detected = _sniff_raster(header_bytes) or _sniff_svg(header_bytes) or _sniff_pdf(header_bytes)
+     if detected is None or detected not in ALLOWED_MEDIA_TYPES:
+         raise ProblemException(
+             code="MIME_MISMATCH_OR_UNSUPPORTED",
+@@ -113,21 +150,7 @@ def sniff_media_type(
+             detail="File content does not match any supported media type",
+         )
+ 
+-    # For SVG: additionally verify filename extension or declared type
+-    if detected == "image/svg+xml":
+-        lower_fn = filename.lower()
+-        has_svg_ext = lower_fn.endswith(".svg")
+-        decl_is_svg = (
+-            declared_content_type is not None
+-            and declared_content_type.strip().lower().split(";")[0] == "image/svg+xml"
+-        )
+-        if not (has_svg_ext or decl_is_svg):
+-            raise ProblemException(
+-                code="MIME_MISMATCH_OR_UNSUPPORTED",
+-                status=415,
+-                title="Unsupported Media Type",
+-                detail="SVG content must have .svg extension or image/svg+xml Content-Type",
+-            )
++    _check_special_type_hints(detected, filename, declared_content_type)
+ 
+     # Verify declared Content-Type consistency if provided
+     if declared_content_type:
 diff --git a/kanban/tests/api/test_attachments_pdf.py b/kanban/tests/api/test_attachments_pdf.py
 new file mode 100644
 index 00000000..19df75b7
@@ -1388,10 +1689,10 @@ index 00000000..19df75b7
 +    assert len(stored_files) == 0
 diff --git a/kanban/tests/attachments/test_pdf_validation.py b/kanban/tests/attachments/test_pdf_validation.py
 new file mode 100644
-index 00000000..19140d36
+index 00000000..e08f6cdd
 --- /dev/null
 +++ b/kanban/tests/attachments/test_pdf_validation.py
-@@ -0,0 +1,730 @@
+@@ -0,0 +1,746 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Unit and forensic tests for PDF attachment validation and active-content rejection (KAN-81)."""
@@ -1666,6 +1967,22 @@ index 00000000..19140d36
 +    with pytest.raises(ProblemException) as exc_inproc:
 +        scan_and_validate_pdf_in_process(doc_hidden_js)
 +    assert exc_inproc.value.status == 422
++
++    # 3. Abbreviated /Fl filter name decompresses and catches active content
++    doc_abbrev_fl = (
++        b"%PDF-1.5\n"
++        b"4 0 obj\n"
++        b"<< /Type /ObjStm /Filter /Fl /Length "
++        + str(len(compressed_js)).encode()
++        + b" >>\nstream\n"
++        + compressed_js
++        + b"\nendstream\nendobj\n"
++        + SAMPLE_VALID_PDF[9:]
++    )
++    with pytest.raises(ProblemException) as exc_fl:
++        scan_and_validate_pdf_in_process(doc_abbrev_fl)
++    assert exc_fl.value.status == 422
++    assert "/JS" in str(exc_fl.value.detail)
 +
 +
 +@pytest.mark.asyncio
@@ -2122,6 +2439,107 @@ index 00000000..19140d36
 +        assert exc_crash.value.status == 422
 +        assert exc_crash.value.code == "UNSAFE_PDF_CONTENT"
 +        assert "Subprocess terminated unexpectedly" in str(exc_crash.value.detail)
+diff --git a/kanban/tests/ops/test_sbom.py b/kanban/tests/ops/test_sbom.py
+index caa74fcb..fab9f17e 100644
+--- a/kanban/tests/ops/test_sbom.py
++++ b/kanban/tests/ops/test_sbom.py
+@@ -583,3 +583,15 @@ def test_parse_web_package_json_with_node_modules_and_allowlist(tmp_path: Path)
+     allowlisted = next(c for c in comps if c.name == "allowlisted-dep")
+     assert allowlisted.license_verdict == "ALLOWLISTED"
+     assert allowlisted.license == "EPL-2.0"
++
++
++def test_live_workspace_sbom_verdicts_zero_deny_and_unknown() -> None:
++    """Verify live workspace SBOM generation yields 0 DENY and 0 UNKNOWN license verdicts."""
++    clear_sbom_cache()
++    components = get_live_components()
++    summary = calculate_sbom_summary(components)
++    assert summary.total_components > 0
++    deny_comps = [c for c in components if c.license_verdict == "DENY"]
++    assert summary.deny_count == 0, f"Found DENY components: {deny_comps}"
++    unknown_comps = [c for c in components if c.license_verdict == "UNKNOWN"]
++    assert summary.unknown_count == 0, f"Found UNKNOWN components: {unknown_comps}"
+diff --git a/kanban/web/src/components/attachments/PdfAttachmentCard.css b/kanban/web/src/components/attachments/PdfAttachmentCard.css
+new file mode 100644
+index 00000000..de22a631
+--- /dev/null
++++ b/kanban/web/src/components/attachments/PdfAttachmentCard.css
+@@ -0,0 +1,75 @@
++.kb-pdf-card {
++  display: inline-flex;
++  align-items: center;
++  gap: 12px;
++  padding: 10px 14px;
++  background: var(--bg-secondary, rgba(255, 255, 255, 0.05));
++  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.1));
++  border-radius: 8px;
++  margin: 6px 0;
++  max-width: 100%;
++  box-sizing: border-box;
++  flex-wrap: wrap;
++  min-width: 0;
++}
++
++.kb-pdf-card__icon {
++  font-size: 24px;
++  line-height: 1;
++  display: flex;
++  align-items: center;
++  justify-content: center;
++  flex-shrink: 0;
++}
++
++.kb-pdf-card__details {
++  display: flex;
++  flex-direction: column;
++  gap: 4px;
++  overflow: hidden;
++  min-width: 0;
++  flex: 1 1 auto;
++}
++
++.kb-pdf-card__filename {
++  font-weight: 600;
++  font-size: 0.9rem;
++  color: var(--text-primary, inherit);
++  white-space: nowrap;
++  overflow: hidden;
++  text-overflow: ellipsis;
++  max-width: 280px;
++}
++
++.kb-pdf-card__meta {
++  display: flex;
++  align-items: center;
++  gap: 6px;
++  flex-wrap: wrap;
++}
++
++.kb-pdf-card__badge {
++  font-size: 0.75rem;
++  padding: 2px 6px;
++  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
++  border-radius: 4px;
++  color: var(--text-secondary, rgba(255, 255, 255, 0.7));
++  font-family: monospace;
++}
++
++.kb-pdf-card__download {
++  font-size: 0.82rem;
++  font-weight: 500;
++  color: var(--accent-primary, #1d4ed8);
++  text-decoration: none;
++  padding: 4px 10px;
++  border-radius: 6px;
++  border: 1px solid var(--accent-primary, #1d4ed8);
++  transition: background 0.15s ease;
++  white-space: nowrap;
++}
++
++.kb-pdf-card__download:hover {
++  background: var(--bg-accent-subtle, rgba(59, 130, 246, 0.1));
++  text-decoration: underline;
++}
 diff --git a/kanban/web/src/components/attachments/PdfAttachmentCard.tsx b/kanban/web/src/components/attachments/PdfAttachmentCard.tsx
 new file mode 100644
 index 00000000..88d7cfba
@@ -2400,6 +2818,235 @@ index 00000000..54299aa2
 +    expect(screen.getByText('sha256:abcdef12')).toBeDefined();
 +  });
 +});
+diff --git a/kanban/web/src/editor/MarkdownEditor.tsx b/kanban/web/src/editor/MarkdownEditor.tsx
+index b9a1e8a6..082ea47e 100644
+--- a/kanban/web/src/editor/MarkdownEditor.tsx
++++ b/kanban/web/src/editor/MarkdownEditor.tsx
+@@ -423,20 +423,35 @@ export function MarkdownEditor({
+       onAnnounceRef.current?.(msg);
+       return;
+     }
++    const isPdf =
++      file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+     try {
+       const result = await defaultUploadAttachment(file, projectId);
+       const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
+-      if (isRawMode) {
+-        insertTextInRaw(`![${file.name}](${targetUri})`, '', '');
++      if (isPdf) {
++        if (isRawMode) {
++          insertTextInRaw(`[${file.name}](${targetUri})`, '', '');
++        } else {
++          /* v8 ignore next */
++          if (!viewRef.current) return;
++          const linkMark = editorSchema.marks.link.create({ href: targetUri });
++          const textNode = editorSchema.text(file.name, [linkMark]);
++          viewRef.current.dispatch(viewRef.current.state.tr.replaceSelectionWith(textNode));
++          viewRef.current.focus();
++        }
+       } else {
+-        /* v8 ignore next */
+-        if (!viewRef.current) return;
+-        const imgNode = editorSchema.nodes.image.create({
+-          src: targetUri,
+-          alt: file.name,
+-        });
+-        viewRef.current.dispatch(viewRef.current.state.tr.replaceSelectionWith(imgNode));
+-        viewRef.current.focus();
++        if (isRawMode) {
++          insertTextInRaw(`![${file.name}](${targetUri})`, '', '');
++        } else {
++          /* v8 ignore next */
++          if (!viewRef.current) return;
++          const imgNode = editorSchema.nodes.image.create({
++            src: targetUri,
++            alt: file.name,
++          });
++          viewRef.current.dispatch(viewRef.current.state.tr.replaceSelectionWith(imgNode));
++          viewRef.current.focus();
++        }
+       }
+     } catch {
+       const msg = 'Attachment upload failed';
+@@ -487,24 +502,35 @@ export function MarkdownEditor({
+   const handleRawPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>): void => {
+     const clipboardData = e.clipboardData;
+ 
+-    // Check image/svg files first
++    // Check image/svg/pdf files first
+     const files = Array.from(clipboardData.files);
+     if (files.length > 0) {
+-      const imageFile = files.find(
+-        (f) => ALLOWED_IMAGE_MIME_TYPES.has(f.type) || f.name.toLowerCase().endsWith('.svg'),
++      const uploadableFile = files.find(
++        (f) =>
++          ALLOWED_IMAGE_MIME_TYPES.has(f.type) ||
++          f.name.toLowerCase().endsWith('.svg') ||
++          f.type === 'application/pdf' ||
++          f.name.toLowerCase().endsWith('.pdf'),
+       );
+-      if (imageFile) {
++      if (uploadableFile) {
+         e.preventDefault();
+-        if (imageFile.size > MAX_ATTACHMENT_BYTES) {
++        if (uploadableFile.size > MAX_ATTACHMENT_BYTES) {
+           const msg = 'Attachment exceeds 25 MB limit';
+           setLiveAnnouncement(msg);
+           onAnnounceRef.current?.(msg);
+           return;
+         }
+-        void defaultUploadAttachment(imageFile, projectId)
++        void defaultUploadAttachment(uploadableFile, projectId)
+           .then((result) => {
+-            const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
+-            insertTextInRaw(`![${imageFile.name}](${targetUri})`, '', '');
++            const isPdf =
++              uploadableFile.type === 'application/pdf' ||
++              uploadableFile.name.toLowerCase().endsWith('.pdf');
++            const targetUri =
++              result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
++            const markup = isPdf
++              ? `[${uploadableFile.name}](${targetUri})`
++              : `![${uploadableFile.name}](${targetUri})`;
++            insertTextInRaw(markup, '', '');
+           })
+           .catch(() => {
+             const msg = 'Attachment upload failed';
+@@ -605,7 +631,7 @@ export function MarkdownEditor({
+           type="button"
+           className="kb-editor__tool-btn"
+           aria-label="Attach media or SVG"
+-          title="Attach media or SVG (<=25MB)"
++          title="Attach media, SVG, or PDF (<=25MB)"
+           onClick={handleTriggerMediaUpload}
+           data-testid={`${testId}-tool-media`}
+         >
+@@ -614,7 +640,7 @@ export function MarkdownEditor({
+         <input
+           ref={fileInputRef}
+           type="file"
+-          accept="image/*,.svg"
++          accept="image/*,.svg,.pdf,application/pdf"
+           tabIndex={-1}
+           aria-hidden="true"
+           className="kb-editor__file-input"
+diff --git a/kanban/web/src/features/activity/CommentComposer.test.tsx b/kanban/web/src/features/activity/CommentComposer.test.tsx
+index f2c9805e..33c8d4da 100644
+--- a/kanban/web/src/features/activity/CommentComposer.test.tsx
++++ b/kanban/web/src/features/activity/CommentComposer.test.tsx
+@@ -371,9 +371,10 @@ describe('CommentComposer', () => {
+       expect(textarea.value).toContain('[link text](https://example.com)');
+ 
+       // Click Media button
+-      const mediaBtn = screen.getByRole('button', { name: 'Attach media or SVG' });
++      const mediaBtn = screen.getByRole('button', { name: 'Attach media, SVG, or PDF' });
+       fireEvent.click(mediaBtn);
+-      expect(textarea.value).toContain('![alt text](https://example.com/media.png)');
++      // Fixed premature placeholder: clicking media button triggers file picker without inserting premature template
++      expect(textarea.value).not.toContain('![alt text](https://example.com/media.png)');
+     });
+ 
+     it('handles generic non-ApiProblem errors on submit', async () => {
+diff --git a/kanban/web/src/features/activity/CommentComposer.tsx b/kanban/web/src/features/activity/CommentComposer.tsx
+index 476fca3a..6dfe8c7f 100644
+--- a/kanban/web/src/features/activity/CommentComposer.tsx
++++ b/kanban/web/src/features/activity/CommentComposer.tsx
+@@ -300,10 +300,15 @@ export function CommentComposer({
+       setErrorText('Attachment exceeds 25 MB limit');
+       return;
+     }
++    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+     try {
+       const result = await defaultUploadAttachment(file, projectKey);
+       const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
+-      insertTextAtCursor(`![${file.name}](${targetUri})`, '', '');
++      if (isPdf) {
++        insertTextAtCursor(`[${file.name}](${targetUri})`, '', '');
++      } else {
++        insertTextAtCursor(`![${file.name}](${targetUri})`, '', '');
++      }
+     } catch {
+       setErrorText('Attachment upload failed');
+     } finally {
+@@ -316,17 +321,26 @@ export function CommentComposer({
+     const files = Array.from(e.dataTransfer.files);
+     if (files.length === 0) return;
+     const file = files.find(
+-      (f) => ALLOWED_IMAGE_MIME_TYPES.has(f.type) || f.name.toLowerCase().endsWith('.svg'),
++      (f) =>
++        ALLOWED_IMAGE_MIME_TYPES.has(f.type) ||
++        f.name.toLowerCase().endsWith('.svg') ||
++        f.type === 'application/pdf' ||
++        f.name.toLowerCase().endsWith('.pdf'),
+     );
+     if (!file) return;
+     if (file.size > MAX_ATTACHMENT_BYTES) {
+       setErrorText('Attachment exceeds 25 MB limit');
+       return;
+     }
++    const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+     void defaultUploadAttachment(file, projectKey)
+       .then((result) => {
+         const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
+-        insertTextAtCursor(`![${file.name}](${targetUri})`, '', '');
++        if (isPdf) {
++          insertTextAtCursor(`[${file.name}](${targetUri})`, '', '');
++        } else {
++          insertTextAtCursor(`![${file.name}](${targetUri})`, '', '');
++        }
+       })
+       .catch(() => {
+         setErrorText('Attachment upload failed');
+@@ -340,7 +354,11 @@ export function CommentComposer({
+     const files = Array.from(clipboardData.files);
+     if (files.length > 0) {
+       const file = files.find(
+-        (f) => ALLOWED_IMAGE_MIME_TYPES.has(f.type) || f.name.toLowerCase().endsWith('.svg'),
++        (f) =>
++          ALLOWED_IMAGE_MIME_TYPES.has(f.type) ||
++          f.name.toLowerCase().endsWith('.svg') ||
++          f.type === 'application/pdf' ||
++          f.name.toLowerCase().endsWith('.pdf'),
+       );
+       if (file) {
+         e.preventDefault();
+@@ -348,10 +366,15 @@ export function CommentComposer({
+           setErrorText('Attachment exceeds 25 MB limit');
+           return;
+         }
++        const isPdf = file.type === 'application/pdf' || file.name.toLowerCase().endsWith('.pdf');
+         void defaultUploadAttachment(file, projectKey)
+           .then((result) => {
+             const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
+-            insertTextAtCursor(`![${file.name}](${targetUri})`, '', '');
++            if (isPdf) {
++              insertTextAtCursor(`[${file.name}](${targetUri})`, '', '');
++            } else {
++              insertTextAtCursor(`![${file.name}](${targetUri})`, '', '');
++            }
+           })
+           .catch(() => {
+             setErrorText('Attachment upload failed');
+@@ -471,9 +494,8 @@ export function CommentComposer({
+         <button
+           type="button"
+           className="composer-tool-btn"
+-          aria-label="Attach media or SVG"
++          aria-label="Attach media, SVG, or PDF"
+           onClick={() => {
+-            insertTextAtCursor('![', '](https://example.com/media.png)', 'alt text');
+             fileInputRef.current?.click();
+           }}
+         >
+@@ -482,7 +504,7 @@ export function CommentComposer({
+         <input
+           ref={fileInputRef}
+           type="file"
+-          accept="image/*,.svg"
++          accept="image/*,.svg,.pdf,application/pdf"
+           tabIndex={-1}
+           aria-hidden="true"
+           className="comment-composer__file-input"
 diff --git a/kanban/web/src/features/activity/SafeMarkdownPreview.test.tsx b/kanban/web/src/features/activity/SafeMarkdownPreview.test.tsx
 index 6bc5f7a2..b9ae16fc 100644
 --- a/kanban/web/src/features/activity/SafeMarkdownPreview.test.tsx

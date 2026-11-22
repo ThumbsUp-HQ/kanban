@@ -3,9 +3,9 @@
 ## Executive Summary
 This packet provides passive forensic verification evidence for ticket `KAN-77` (`[KB-IMPORT-MULTI-01]`): Multi-Source Importers (Jira, GitHub Issues, Linear), Portable Bundle Export Determinism, and Legacy Key Alias Routing (`IssueKeyAlias`).
 
-- **Target Commit SHA**: `7465d80ed87a`
+- **Target Commit SHA**: `ee0eeb353803`
 - **Branch**: `main`
-- **Review Status**: Round-2 Clean-Room Remediation Complete
+- **Review Status**: Round-3 Clean-Room Remediation Complete
 
 ## Round-2 Remediation & Forensic Verification Details
 1. **Database Migration & Models**: Single head migration `p6_03_multi_source_imports_and_aliases` (`down_revision = "p6_02_pdf_attachments"`) introduces `issue_key_aliases` table with RLS policies, indexing, and foreign key constraints. `database/models/issue_alias.py` (`IssueKeyAlias`) and `database/models/__init__.py` maintain exact schema parity.
@@ -38,12 +38,13 @@ This packet provides passive forensic verification evidence for ticket `KAN-77` 
 - `unit-test-results.txt`: Concatenated output of Python pytest (-v) and frontend Vitest unit test suites.
 - `live-fullstack-proof.txt`: Real live container curl outputs, response headers, and portable export archive contents.
 - `contract-sample.json`: Real schema and response payload sample for legacy key alias and portable export.
-- `screenshots/`: 5 Playwright responsive screenshots against `kanban-local-import`:
+- `screenshots/`: 6 Playwright responsive screenshots against `kanban-local-import`:
   - `1440x900-desktop-light.png`
   - `1440x900-desktop-dark.png`
+  - `1440x900-portable-export-card.png`
   - `768x1024-tablet.png`
   - `390x844-mobile-portrait.png`
   - `844x390-mobile-landscape.png`
-- `api-specialist-review.md`: Verbatim API specialist audit stamped with target SHA `7465d80ed87a`.
-- `ui-specialist-review.md`: Verbatim UI specialist audit stamped with target SHA `7465d80ed87a`.
+- `api-specialist-review.md`: Verbatim API specialist audit stamped with target SHA `ee0eeb353803`.
+- `ui-specialist-review.md`: Verbatim UI specialist audit stamped with target SHA `ee0eeb353803`.
 - `changed-files-manifest.txt`: Cryptographic SHA-256 manifest over all packet files.

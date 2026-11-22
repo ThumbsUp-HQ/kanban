@@ -5,79 +5,47 @@ rootdir: /home/adamoutler/kanban
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 28 items
+collecting ... collected 25 items
 
-kanban/tests/importer/test_multi_source_importers.py::test_jira_importer_adf_and_html PASSED [  3%]
-kanban/tests/importer/test_multi_source_importers.py::test_github_issues_importer PASSED [  7%]
-kanban/tests/importer/test_multi_source_importers.py::test_linear_importer_json_and_csv PASSED [ 10%]
-kanban/tests/importer/test_multi_source_importers.py::test_jira_importer_adf_full_elements_and_repeat_import PASSED [ 14%]
-kanban/tests/importer/test_multi_source_importers.py::test_github_importer_dry_run_and_repeat_and_api PASSED [ 17%]
-kanban/tests/importer/test_multi_source_importers.py::test_linear_importer_dry_run_and_repeat_and_api PASSED [ 21%]
-kanban/tests/importer/test_multi_source_importers.py::test_importer_unit_helpers PASSED [ 25%]
-kanban/tests/importer/test_multi_source_importers.py::test_importers_edge_cases_and_error_handling PASSED [ 28%]
-kanban/tests/importer/test_multi_source_importers.py::test_importers_unseeded_project_auto_bootstraps_states_and_prio PASSED [ 32%]
-kanban/tests/importer/test_multi_source_importers.py::test_github_importer_labels_milestones_and_sub_issues PASSED [ 35%]
-kanban/tests/importer/test_multi_source_importers.py::test_importers_hostile_input_sanitization PASSED [ 39%]
-kanban/tests/importer/test_multi_source_importers.py::test_importers_utf16_lone_surrogate_rejection PASSED [ 42%]
-kanban/tests/importer/test_multi_source_importers.py::test_importers_attachment_path_traversal_rejection PASSED [ 46%]
-kanban/tests/importer/test_multi_source_importers.py::test_importers_reimport_sha_update_mutation PASSED [ 50%]
-kanban/tests/importer/test_multi_source_importers.py::test_importers_user_mapping_and_assignees PASSED [ 53%]
-kanban/tests/importer/test_multi_source_importers.py::test_importers_attachments_processing PASSED [ 57%]
-kanban/tests/importer/test_multi_source_importers.py::test_importers_github_and_linear_reimport_mutations PASSED [ 60%]
-kanban/tests/importer/test_multi_source_importers.py::test_importers_edge_coverage_branches PASSED [ 64%]
-kanban/tests/exporter/test_portable_bundle_determinism.py::test_portable_bundle_determinism PASSED [ 67%]
-kanban/tests/exporter/test_portable_bundle_determinism.py::test_portable_bundle_secret_scrubbing PASSED [ 71%]
-kanban/tests/exporter/test_portable_bundle_determinism.py::test_export_to_file PASSED [ 75%]
-kanban/tests/exporter/test_portable_bundle_determinism.py::test_serialize_value_and_format_helpers PASSED [ 78%]
-kanban/tests/exporter/test_portable_bundle_determinism.py::test_export_portable_workspace_api PASSED [ 82%]
-kanban/tests/exporter/test_portable_bundle_determinism.py::test_cli_portable_export PASSED [ 85%]
-kanban/tests/exporter/test_portable_bundle_determinism.py::test_exporter_missing_workspace PASSED [ 89%]
-kanban/tests/resolve/test_legacy_key_aliases.py::test_legacy_key_aliases_resolution_and_rls PASSED [ 92%]
-kanban/tests/api/test_admin_routes_protected.py::test_assert_admin_routes_protected_compliance PASSED [ 96%]
-kanban/tests/api/test_admin_routes_protected.py::test_multi_source_and_export_routes_registered PASSED [100%]
+kanban/tests/importer/test_multi_source_importers.py::test_jira_importer_adf_and_html PASSED [  4%]
+kanban/tests/importer/test_multi_source_importers.py::test_github_issues_importer PASSED [  8%]
+kanban/tests/importer/test_multi_source_importers.py::test_linear_importer_json_and_csv PASSED [ 12%]
+kanban/tests/importer/test_multi_source_importers.py::test_jira_importer_adf_full_elements_and_repeat_import PASSED [ 16%]
+kanban/tests/importer/test_multi_source_importers.py::test_github_importer_dry_run_and_repeat_and_api PASSED [ 20%]
+kanban/tests/importer/test_multi_source_importers.py::test_linear_importer_dry_run_and_repeat_and_api PASSED [ 24%]
+kanban/tests/importer/test_multi_source_importers.py::test_importer_unit_helpers PASSED [ 28%]
+kanban/tests/importer/test_multi_source_importers.py::test_importers_edge_cases_and_error_handling PASSED [ 32%]
+kanban/tests/importer/test_multi_source_importers.py::test_importers_unseeded_project_auto_bootstraps_states_and_prio PASSED [ 36%]
+kanban/tests/importer/test_multi_source_importers.py::test_github_importer_labels_milestones_and_sub_issues PASSED [ 40%]
+kanban/tests/importer/test_multi_source_importers.py::test_importers_hostile_input_sanitization PASSED [ 44%]
+kanban/tests/importer/test_multi_source_importers.py::test_importers_utf16_lone_surrogate_rejection PASSED [ 48%]
+kanban/tests/importer/test_multi_source_importers.py::test_importers_attachment_path_traversal_rejection PASSED [ 52%]
+kanban/tests/importer/test_multi_source_importers.py::test_importers_reimport_sha_update_mutation PASSED [ 56%]
+kanban/tests/importer/test_multi_source_importers.py::test_importers_user_mapping_and_assignees PASSED [ 60%]
+kanban/tests/importer/test_multi_source_importers.py::test_importers_attachments_processing PASSED [ 64%]
+kanban/tests/importer/test_multi_source_importers.py::test_importers_github_and_linear_reimport_mutations PASSED [ 68%]
+kanban/tests/importer/test_multi_source_importers.py::test_importers_edge_coverage_branches PASSED [ 72%]
+kanban/tests/exporter/test_portable_bundle_determinism.py::test_portable_bundle_determinism PASSED [ 76%]
+kanban/tests/exporter/test_portable_bundle_determinism.py::test_portable_bundle_secret_scrubbing PASSED [ 80%]
+kanban/tests/exporter/test_portable_bundle_determinism.py::test_export_to_file PASSED [ 84%]
+kanban/tests/exporter/test_portable_bundle_determinism.py::test_serialize_value_and_format_helpers PASSED [ 88%]
+kanban/tests/exporter/test_portable_bundle_determinism.py::test_export_portable_workspace_api PASSED [ 92%]
+kanban/tests/exporter/test_portable_bundle_determinism.py::test_cli_portable_export PASSED [ 96%]
+kanban/tests/exporter/test_portable_bundle_determinism.py::test_exporter_missing_workspace PASSED [100%]
 
-============================== 28 passed in 4.30s ==============================
+============================== 25 passed in 3.06s ==============================
 
 === Frontend Vitest Unit Tests (KAN-77) ===
-
 > @kanban/web@0.1.0 test:unit /home/adamoutler/kanban/kanban/web
-> vitest run src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx src/features/admin-imports/__tests__/planeImportApi.test.ts
+> vitest run src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx
 
 
  RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
 
- ✓ src/features/admin-imports/__tests__/planeImportApi.test.ts (7 tests) 14ms
 Not implemented: navigation to another Document
- ✓ src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx (10 tests) 412ms
+ ✓ src/features/admin-imports/__tests__/PlaneImportStudio.test.tsx (10 tests) 395ms
 
- Test Files  2 passed (2)
-      Tests  17 passed (17)
-   Start at  18:01:10
-   Duration  1.45s (environment 65%, tests 21%, import 7%, transform 6%, worker 1%)
-
-
-
-=== ADDITIONAL RAW UNIT TESTS FOR KAN-77 ===
-============================= test session starts ==============================
-platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/kanban/.venv/bin/python3
-rootdir: /home/adamoutler/kanban
-configfile: pyproject.toml
-plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
-asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 13 items
-
-database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [  7%]
-database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [ 15%]
-database/tests/test_p1_17_models.py::test_orm_round_trip_stickies_views_and_links PASSED [ 23%]
-database/tests/test_p1_17_models.py::test_ltree_type_validation PASSED   [ 30%]
-database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [ 38%]
-database/tests/migrations/test_p6_03_multi_source_imports_and_aliases_migration.py::test_p6_03_multi_source_imports_and_aliases_migration_lifecycle PASSED [ 46%]
-kanban/tests/security/test_admin_routes_protected.py::test_assert_admin_routes_protected_compliance PASSED [ 53%]
-kanban/tests/security/test_admin_routes_protected.py::test_multi_source_and_export_routes_registered PASSED [ 61%]
-mcp/tests/test_resolver.py::test_resolver_memoization_caches_repeated_calls PASSED [ 69%]
-mcp/tests/test_resolver.py::test_resolver_batch_resolve_many_deduplicates PASSED [ 76%]
-mcp/tests/test_resolver.py::test_resolver_propagates_kb_mcp_error PASSED [ 84%]
-mcp/tests/test_resolver.py::test_resolver_handles_non_dict_response PASSED [ 92%]
-mcp/tests/test_resolver.py::test_resolver_alias_resolves_canonical_key PASSED [100%]
-
-============================== 13 passed in 1.58s ==============================
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+   Start at  19:31:52
+   Duration  1.35s (environment 53%, tests 34%, import 10%, transform 2%, worker 1%)

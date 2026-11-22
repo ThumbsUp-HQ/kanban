@@ -42,8 +42,9 @@ const TARGETS = [
       await page.evaluate(() => {
         const main = document.querySelector("main.kb-main-canvas");
         if (main) {
-          main.scrollTop = 310;
+          main.scrollTop = 0;
         }
+        window.scrollTo(0, 0);
       });
       await page.waitForTimeout(500);
     },

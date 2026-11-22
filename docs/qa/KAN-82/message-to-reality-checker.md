@@ -3,9 +3,9 @@
 ## Executive Summary
 This packet provides passive forensic verification evidence for ticket `KAN-82` (`[KB-MIGRATION-PLANE-DB-01]`): Plane DB Export/Import Pipeline, Merge Mode into Existing Projects (`--target-project`), and Cutover Verification Gate (`kanban-ctl cutover verify`).
 
-- **Target Commit SHA**: `7465d80ed87a`
+- **Target Commit SHA**: `ee0eeb353803`
 - **Branch**: `main`
-- **Review Status**: Round-2 Clean-Room Remediation Complete
+- **Review Status**: Round-3 Clean-Room Remediation Complete
 
 ## Round-2 Remediation & Forensic Verification Details
 1. **Read-Only Plane Exporter**: `kanban/importer/plane_db_exporter.py` performs safe, read-only extraction from PostgreSQL (`plane-db`) and MinIO (`plane-minio`), sanitizing paths and preserving attachments (including `.md` files, images, and `AI_Engineer_MCP-resume.pdf`).
@@ -40,6 +40,6 @@ This packet provides passive forensic verification evidence for ticket `KAN-82` 
   - `768x1024-tablet.png`
   - `390x844-mobile-portrait.png`
   - `844x390-mobile-landscape.png`
-- `api-specialist-review.md`: Verbatim API specialist audit stamped with target SHA `7465d80ed87a`.
-- `ui-specialist-review.md`: Verbatim UI specialist audit stamped with target SHA `7465d80ed87a`.
+- `api-specialist-review.md`: Verbatim API specialist audit stamped with target SHA `ee0eeb353803`.
+- `ui-specialist-review.md`: Verbatim UI specialist audit stamped with target SHA `ee0eeb353803`.
 - `changed-files-manifest.txt`: Cryptographic SHA-256 manifest over all packet files.

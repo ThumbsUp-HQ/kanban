@@ -1,5 +1,5 @@
 diff --git a/deploy/standalone/entrypoint.py b/deploy/standalone/entrypoint.py
-index ac93ca3c..06b353dd 100644
+index ac93ca3c..5e43e069 100644
 --- a/deploy/standalone/entrypoint.py
 +++ b/deploy/standalone/entrypoint.py
 @@ -410,6 +410,7 @@ _PASSTHROUGH_ENV_VARS: tuple[str, ...] = (
@@ -20,7 +20,27 @@ index ac93ca3c..06b353dd 100644
      }
  
      for var_name in _PASSTHROUGH_ENV_VARS:
-@@ -551,11 +555,13 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR
+@@ -450,6 +454,19 @@ def build_child_env(
+     return env
+ 
+ 
++def ensure_attachments_dir(data_dir: Path) -> Path:
++    """Ensure attachments directory exists with 65532:65532 ownership and 0750 permissions."""
++    attachments_dir = Path(os.environ.get("KANBAN_ATTACHMENT_DIR", str(data_dir / "attachments")))
++    attachments_dir.mkdir(parents=True, exist_ok=True)
++    if os.getuid() == 0:
++        try:
++            shutil.chown(str(attachments_dir), user=65532, group=65532)
++            attachments_dir.chmod(0o750)
++        except OSError as exc:
++            log_phase("init_dirs", f"Warning: chown/chmod attachments_dir failed: {exc}")
++    return attachments_dir
++
++
+ def supervisor_loop(
+     uvicorn_proc: subprocess.Popen[str],
+     pgdata: Path,
+@@ -551,11 +568,12 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR
      run_dir = os.environ.get("KB_RUN_DIR", DEFAULT_RUN_DIR)
      alembic_ini = Path(os.environ.get("KB_ALEMBIC_INI", str(DEFAULT_ALEMBIC_INI)))
  
@@ -30,22 +50,192 @@ index ac93ca3c..06b353dd 100644
      data_dir.mkdir(parents=True, exist_ok=True)
      backups_dir = data_dir / "backups"
      backups_dir.mkdir(parents=True, exist_ok=True)
-+    attachments_dir = Path(os.environ.get("KANBAN_ATTACHMENT_DIR", str(data_dir / "attachments")))
-+    attachments_dir.mkdir(parents=True, exist_ok=True)
++    ensure_attachments_dir(data_dir)
      run_kanban_dir = Path("/run/kanban")
      try:
          run_kanban_dir.mkdir(parents=True, exist_ok=True)
-@@ -566,8 +572,10 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR
-         try:
-             shutil.chown(str(data_dir), user=65532, group=65532)
-             shutil.chown(str(backups_dir), user=65532, group=65532)
-+            shutil.chown(str(attachments_dir), user=65532, group=65532)
-             data_dir.chmod(0o775)
-             backups_dir.chmod(0o775)
-+            attachments_dir.chmod(0o750)
-             if run_kanban_dir.is_dir():
-                 shutil.chown(str(run_kanban_dir), user=65532, group=65532)
-                 run_kanban_dir.chmod(0o775)
+diff --git a/kanban/cli/ctl.py b/kanban/cli/ctl.py
+index e8ae39c6..b0e038c1 100644
+--- a/kanban/cli/ctl.py
++++ b/kanban/cli/ctl.py
+@@ -12,6 +12,7 @@ from typing import TYPE_CHECKING
+ 
+ from kanban.cli.auth import register_auth_subparsers
+ from kanban.cli.db import register_db_subparsers
++from kanban.cli.export import register_export_subparsers
+ from kanban.cli.import_plane import register_import_subparsers
+ from kanban.cli.jobs import register_jobs_subparsers
+ from kanban.cli.ops import (
+@@ -43,6 +44,7 @@ def main(argv: Sequence[str] | None = None) -> int:
+     register_ops_subparsers(subparsers)
+     register_jobs_subparsers(subparsers)
+     register_auth_subparsers(subparsers)
++    register_export_subparsers(subparsers)
+     register_import_subparsers(subparsers)
+     register_cutover_subparsers(subparsers)
+     register_db_subparsers(subparsers)
+diff --git a/kanban/cli/export.py b/kanban/cli/export.py
+new file mode 100644
+index 00000000..9bba0a7b
+--- /dev/null
++++ b/kanban/cli/export.py
+@@ -0,0 +1,156 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""CLI commands for workspace export (KB-P6-03)."""
++# ruff: noqa: E501, TC003, ASYNC240, BLE001
++
++from __future__ import annotations
++
++import argparse
++import asyncio
++import logging
++import os
++import sys
++import uuid
++from collections.abc import AsyncIterator
++from contextlib import asynccontextmanager
++from pathlib import Path
++from typing import Any
++
++from sqlalchemy import text
++from sqlalchemy.ext.asyncio import AsyncSession, async_sessionmaker, create_async_engine
++
++from kanban.api.deps import PrincipalContext
++from kanban.exporter.portable_bundle import PortableWorkspaceExporter
++
++logger = logging.getLogger(__name__)
++
++
++def _get_admin_dsn() -> str:
++    """Resolve administrative database connection DSN from environment."""
++    dsn = (
++        os.environ.get("KANBAN_ADMIN_DATABASE_URL")
++        or os.environ.get("KANBAN_DATABASE_URL")
++        or os.environ.get("DATABASE_URL")
++    )
++    if dsn:
++        return dsn
++
++    socket_dir = os.environ.get("KB_TEST_PGHOST", "/tmp/kb-pgsock")  # noqa: S108
++    user = os.environ.get("KB_ADMIN_PGUSER", "kanban_migrator")
++    dbname = os.environ.get("PGDATABASE", "kanban")
++    return f"postgresql+asyncpg://{user}@/{dbname}?host={socket_dir}"
++
++
++def register_export_subparsers(
++    subparsers: argparse._SubParsersAction[argparse.ArgumentParser],
++) -> None:
++    """Register 'export' root subcommand and portable export utilities."""
++    export_parser = subparsers.add_parser(
++        "export",
++        help="Workspace export utilities",
++        description="Deterministic workspace and graph export utilities",
++    )
++    export_subparsers = export_parser.add_subparsers(dest="export_subcommand", required=True)
++
++    portable_parser = export_subparsers.add_parser(
++        "portable",
++        help="Export deterministic portable workspace bundle (.tar.gz)",
++        description="Lossless deterministic portable workspace exporter with manifest SHA-256 digests",
++    )
++    portable_parser.add_argument(
++        "--workspace",
++        required=True,
++        help="Target workspace slug to export",
++    )
++    portable_parser.add_argument(
++        "--out",
++        required=True,
++        help="Destination path for output .tar.gz bundle archive",
++    )
++    portable_parser.add_argument(
++        "--scrub",
++        action="store_true",
++        default=False,
++        help="Scrub credentials and secrets from exported text and markdown",
++    )
++    portable_parser.set_defaults(func=_run_portable_export)
++
++
++def _run_portable_export(args: argparse.Namespace) -> int:
++    """Execute portable workspace bundle export."""
++    return asyncio.run(_execute_portable_export(args))
++
++
++async def _execute_portable_export(
++    args: argparse.Namespace,
++    session: AsyncSession | None = None,
++) -> int:
++    engine = None
++    try:
++        ctx: Any
++        if session is not None:
++
++            @asynccontextmanager
++            async def _scoped_session() -> AsyncIterator[AsyncSession]:
++                yield session
++
++            ctx = _scoped_session()
++        else:
++            dsn = _get_admin_dsn()
++            engine = create_async_engine(dsn, isolation_level="READ COMMITTED")
++            session_maker = async_sessionmaker(engine, expire_on_commit=False, class_=AsyncSession)
++            ctx = session_maker()
++
++        async with ctx as active_session:
++            ws_res = await active_session.execute(
++                text("SELECT id, slug FROM workspaces WHERE slug = :slug"),
++                {"slug": args.workspace},
++            )
++            row = ws_res.mappings().one_or_none()
++            if not row:
++                sys.stderr.write(f"Error: Workspace slug '{args.workspace}' not found.\n")
++                return 2
++
++            ws_id = row["id"]
++            principal_res = await active_session.execute(
++                text(
++                    "SELECT principal_id FROM role_bindings "
++                    "WHERE workspace_id = :ws "
++                    "AND role::text IN ('WORKSPACE_ADMIN', 'SERVER_ADMIN') "
++                    "LIMIT 1"
++                ),
++                {"ws": ws_id},
++            )
++            principal_id = principal_res.scalar_one_or_none() or uuid.uuid4()
++
++            await active_session.execute(
++                text(
++                    "SELECT set_config('app.principal_id', :pid, true), "
++                    "set_config('app.workspace_id', :ws, true), "
++                    "set_config('app.aal_level', '2', true)"
++                ),
++                {"pid": str(principal_id), "ws": str(ws_id)},
++            )
++
++            caller = PrincipalContext(
++                principal_id=principal_id,
++                workspace_id=ws_id,
++                aal_level=2,
++            )
++
++            exporter = PortableWorkspaceExporter(
++                session=active_session,
++                workspace_id=ws_id,
++                caller=caller,
++            )
++
++            out_path = Path(args.out).resolve()
++            await exporter.export_to_file(out_path, scrub=args.scrub)
++            sys.stdout.write(f"Exported portable workspace bundle to {out_path}\n")
++            return 0
++    except Exception as exc:
++        sys.stderr.write(f"Export Error: {exc}\n")
++        return 1
++    finally:
++        if engine is not None:
++            await engine.dispose()
 diff --git a/kanban/cli/import_plane.py b/kanban/cli/import_plane.py
 index 9777ce41..08e6217d 100644
 --- a/kanban/cli/import_plane.py
@@ -715,7 +905,7 @@ index fa2772dd..434bf843 100644
      out_path.parent.mkdir(parents=True, exist_ok=True)
      out_path.write_text(json.dumps(report.model_dump(), indent=2), encoding="utf-8")
 diff --git a/kanban/importer/cutover_verifier.py b/kanban/importer/cutover_verifier.py
-index 2fa02776..a2cd228d 100644
+index 2fa02776..1acb2b15 100644
 --- a/kanban/importer/cutover_verifier.py
 +++ b/kanban/importer/cutover_verifier.py
 @@ -1,6 +1,7 @@
@@ -747,7 +937,13 @@ index 2fa02776..a2cd228d 100644
              if match:
                  findings.append(match.group(0))
      return findings
-@@ -96,8 +99,9 @@ async def _check_key_parity(
+@@ -91,13 +94,14 @@ class CutoverAuditReport(BaseModel):
+     )
+ 
+ 
+-async def _check_key_parity(
++async def _check_key_parity(  # noqa: C901, PLR0912
+     session: AsyncSession,
      bundle_dir: Path,
      workspace_slug: str,
      project_identifier: str,
@@ -794,12 +990,12 @@ index 2fa02776..a2cd228d 100644
  
      st_count_res = await session.execute(
          text("SELECT count(*) FROM workflow_states WHERE project_id = :pid"),
-@@ -206,6 +216,76 @@ async def _check_key_parity(
+@@ -206,6 +216,100 @@ async def _check_key_parity(
      )
      db_comments_count = comm_count_res.scalar_one()
  
 +    if is_merge_mode:
-+        # Merge mode: Verify entity mappings from snapshot issues to target project
++        # Merge mode: Verify entity mappings and issue key aliases from snapshot issues to target project
 +        mappings_res = await session.execute(
 +            text(
 +                "SELECT m.source_id, m.target_id, i.sequence_id "
@@ -812,10 +1008,29 @@ index 2fa02776..a2cd228d 100644
 +        )
 +        mapped_rows = mappings_res.mappings().all()
 +        mapped_source_ids = {r["source_id"] for r in mapped_rows}
++        mapping_by_source_id = {r["source_id"]: r["target_id"] for r in mapped_rows}
 +        bundle_issue_ids = {iss.id for iss in proj_bundle_issues}
 +
 +        missing_mapped = bundle_issue_ids - mapped_source_ids
 +        max_db_seq = max((r["sequence_id"] for r in db_issues), default=0)
++
++        # Query issue_key_aliases to verify legacy keys point to target issues
++        aliases_res = await session.execute(
++            text("SELECT legacy_key, issue_id FROM issue_key_aliases WHERE workspace_id = :ws"),
++            {"ws": ws_id},
++        )
++        alias_map = {r["legacy_key"]: r["issue_id"] for r in aliases_res.mappings().all()}
++        source_ident = source_project_identifier or (
++            target_plane_proj.identifier if target_plane_proj else project_identifier
++        )
++        missing_aliases: list[str] = []
++        for iss in proj_bundle_issues:
++            target_id = mapping_by_source_id.get(iss.id)
++            if target_id is None:
++                continue
++            expected_alias = f"{source_ident}-{iss.sequence_id}"
++            if alias_map.get(expected_alias) != target_id:
++                missing_aliases.append(expected_alias)
 +
 +        if missing_mapped:
 +            c1_passed = False
@@ -823,6 +1038,10 @@ index 2fa02776..a2cd228d 100644
 +            c1_detail = (
 +                f"Missing {len(missing_mapped)} issues from snapshot in target project mappings."
 +            )
++        elif missing_aliases:
++            c1_passed = False
++            c1_err = "KEY_ALIAS_PARITY_MISMATCH"
++            c1_detail = f"Missing {len(missing_aliases)} issue key aliases in target project (e.g. {missing_aliases[:3]})."
 +        elif issue_seq_counter < max_db_seq:
 +            c1_passed = False
 +            c1_err = "KEY_PARITY_MISMATCH"
@@ -835,7 +1054,8 @@ index 2fa02776..a2cd228d 100644
 +            c1_err = None
 +            c1_detail = (
 +                f"Verified merge-mode entity parity across {len(bundle_issue_ids)} snapshot issues "
-+                f"mapped to target project {project_identifier} (total {len(db_issues)} issues in project). "
++                f"and {len(mapped_rows)} key aliases mapped to target project {project_identifier} "
++                f"(total {len(db_issues)} issues in project). "
 +                f"Sequence counter at {issue_seq_counter} >= max sequence {max_db_seq}."
 +            )
 +
@@ -871,7 +1091,7 @@ index 2fa02776..a2cd228d 100644
      c1_passed = True
      c1_err = None
      c1_detail = (
-@@ -244,6 +324,7 @@ async def _check_key_parity(
+@@ -244,6 +348,7 @@ async def _check_key_parity(
              "cycles_count": db_cycles_count,
              "modules_count": db_modules_count,
              "comments_count": db_comments_count,
@@ -879,7 +1099,7 @@ index 2fa02776..a2cd228d 100644
          },
      )
      return result, ws_id, proj_id
-@@ -461,14 +542,29 @@ def _verify_single_proof_bundle(bundle_path: Path) -> list[str]:
+@@ -461,14 +566,29 @@ def _verify_single_proof_bundle(bundle_path: Path) -> list[str]:
      """Verify required files exist and are non-empty in a proof directory."""
      if not bundle_path.is_dir():
          return [f"directory missing: {bundle_path}"]
@@ -916,7 +1136,7 @@ index 2fa02776..a2cd228d 100644
      return missing_for_key
  
  
-@@ -476,8 +572,8 @@ async def _find_qa_proof_target_keys(
+@@ -476,8 +596,8 @@ async def _find_qa_proof_target_keys(
      session: AsyncSession,
      proj_id: uuid.UUID,
      project_identifier: str,
@@ -927,7 +1147,7 @@ index 2fa02776..a2cd228d 100644
      completed_res = await session.execute(
          text(
              "SELECT i.sequence_id, ws.state_group, i.description_markdown "
-@@ -489,28 +585,56 @@ async def _find_qa_proof_target_keys(
+@@ -489,28 +609,56 @@ async def _find_qa_proof_target_keys(
      )
      completed_rows = completed_res.mappings().all()
  
@@ -991,7 +1211,7 @@ index 2fa02776..a2cd228d 100644
  async def _check_qa_proofs(
      session: AsyncSession,
      proj_id: uuid.UUID | None,
-@@ -518,7 +642,7 @@ async def _check_qa_proofs(
+@@ -518,7 +666,7 @@ async def _check_qa_proofs(
      qa_root: Path,
      exempt_keys: set[str],
  ) -> CheckResult:
@@ -1000,7 +1220,7 @@ index 2fa02776..a2cd228d 100644
      c5_name = "qa_proof_bundle_continuity"
      if not proj_id:
          return CheckResult(
-@@ -527,6 +651,13 @@ async def _check_qa_proofs(
+@@ -527,6 +675,13 @@ async def _check_qa_proofs(
              error_code="PROJECT_NOT_RESOLVED",
              detail="Cannot verify QA proof bundles without valid project context.",
          )
@@ -1014,7 +1234,7 @@ index 2fa02776..a2cd228d 100644
      try:
          target_keys = await _find_qa_proof_target_keys(session, proj_id, project_identifier)
  
-@@ -534,16 +665,20 @@ async def _check_qa_proofs(
+@@ -534,16 +689,20 @@ async def _check_qa_proofs(
          verified_bundles: list[str] = []
          exempted_in_audit: list[str] = []
  
@@ -1041,7 +1261,7 @@ index 2fa02776..a2cd228d 100644
  
          c5_passed = len(missing_bundle_files) == 0
          c5_err = None if c5_passed else "MISSING_QA_PROOF_BUNDLE"
-@@ -666,6 +801,7 @@ async def verify_cutover(  # noqa: PLR0913
+@@ -666,6 +825,7 @@ async def verify_cutover(  # noqa: PLR0913
      project_identifier: str,
      qa_root: Path,
      pre_cutover_exempt_keys: list[str] | set[str] | None = None,
@@ -1049,7 +1269,7 @@ index 2fa02776..a2cd228d 100644
  ) -> CutoverAuditReport:
      """Execute all 6 non-bypassable cutover checks and return a structured report."""
      checks: list[CheckResult] = []
-@@ -673,7 +809,11 @@ async def verify_cutover(  # noqa: PLR0913
+@@ -673,7 +833,11 @@ async def verify_cutover(  # noqa: PLR0913
  
      # Check 1: entity_count_and_key_parity
      c1_res, ws_id, proj_id = await _check_key_parity(
@@ -5076,12 +5296,226 @@ index e3cd1985..2729b577 100644
 +    )
 +    report = await importer.run_import(bundle, dry_run=False)
 +    assert report.to_create >= 2
+diff --git a/kanban/tests/importer/test_plane_mapper.py b/kanban/tests/importer/test_plane_mapper.py
+new file mode 100644
+index 00000000..86ab9cf1
+--- /dev/null
++++ b/kanban/tests/importer/test_plane_mapper.py
+@@ -0,0 +1,208 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Comprehensive unit tests for PlaneMapper (KB-MIGRATION-PLANE-DB-01)."""
++
++from __future__ import annotations
++
++import uuid
++
++import pytest
++
++from kanban.importer.plane_client import PlaneBundle, PlaneIssue, PlaneMember
++from kanban.importer.plane_mapper import PlaneMapper, _DagState, compute_source_sha256
++
++
++def test_rewrite_issue_references_context_aware() -> None:
++    """Verify rewrite_issue_references skips code fences, inline spans, and docs/qa/ paths."""
++    mapper = PlaneMapper()
++    remap = {
++        "KANBA-1": "KAN-101",
++        "KANBA-2": "KAN-102",
++        "KANBA-3": "KAN-103",
++    }
++
++    # Empty inputs
++    assert mapper.rewrite_issue_references("", remap) == ""
++    assert mapper.rewrite_issue_references("Prose with KANBA-1", {}) == "Prose with KANBA-1"
++
++    input_text = """
++Here is normal prose mentioning KANBA-1 and KANBA-2.
++Also check docs/qa/KANBA-1/test-results.txt for proof.
++Do not rewrite inline code: `KANBA-1` or `KANBA-3`.
++
++```python
++# Fenced code block with ```
++def test_issue():
++    key = "KANBA-1"
++    other = "KANBA-2"
++```
++
++~~~bash
++# Fenced code block with ~~~
++cat docs/qa/KANBA-2/patch.diff
++echo KANBA-3
++~~~
++
++Final prose mentioning KANBA-3 as well.
++"""
++
++    expected = """
++Here is normal prose mentioning KAN-101 and KAN-102.
++Also check docs/qa/KANBA-1/test-results.txt for proof.
++Do not rewrite inline code: `KANBA-1` or `KANBA-3`.
++
++```python
++# Fenced code block with ```
++def test_issue():
++    key = "KANBA-1"
++    other = "KANBA-2"
++```
++
++~~~bash
++# Fenced code block with ~~~
++cat docs/qa/KANBA-2/patch.diff
++echo KANBA-3
++~~~
++
++Final prose mentioning KAN-103 as well.
++"""
++
++    result = mapper.rewrite_issue_references(input_text, remap)
++    assert result == expected
++
++
++def test_normalize_content_and_rewrite_attachments_coverage() -> None:
++    """Verify attachment rewriting, post-normalization pass, and .md attachments."""
++    mapper = PlaneMapper()
++
++    # None / empty input
++    assert mapper.normalize_content_and_rewrite_attachments(None, {}) == ("", 0)
++    assert mapper.normalize_content_and_rewrite_attachments("", {}) == ("", 0)
++
++    att_id = uuid.uuid4()
++    url_map = {"https://minio.internal/bucket/image.png": att_id}
++
++    # Pre-rewrite in HTML
++    html_input = '<p>Image: <img src="https://minio.internal/bucket/image.png" /></p>'
++    out_md, count = mapper.normalize_content_and_rewrite_attachments(html_input, url_map)
++    assert f"/api/v1/attachments/{att_id}" in out_md
++    assert count == 1
++
++    # Post-normalization pass: when HTML contains entity-encoded URL that decodes in markdown
++    entity_url = "https://minio.internal/bucket/doc.pdf?v=1&w=2"
++    url_map_entity = {
++        entity_url: att_id,
++        "https://minio.internal/unmatched.png": uuid.uuid4(),  # exercises unmatched branch
++    }
++    raw_entity_html = (
++        '<p>Doc: <a href="https://minio.internal/bucket/doc.pdf?v=1&amp;w=2">Link</a></p>'
++    )
++    out_entity, count_entity = mapper.normalize_content_and_rewrite_attachments(
++        raw_entity_html, url_map_entity
++    )
++    assert f"/api/v1/attachments/{att_id}" in out_entity
++    assert count_entity >= 1
++
++    # .md attachment ingestion
++    md_att = {
++        "notes.md": "# Release Notes\nAll good.",
++        "unused.md": "# Unused",  # exercises unused attachment branch
++    }
++    md_input = "<p>Refer to notes.md for details.</p>"
++    out_md3, _ = mapper.normalize_content_and_rewrite_attachments(
++        md_input, {}, md_attachments=md_att
++    )
++    assert "<details>" in out_md3
++    assert "<summary>Attachment: notes.md</summary>" in out_md3
++    assert "# Release Notes" in out_md3
++
++
++def test_sort_issues_topologically_cycle_and_unvisited() -> None:
++    """Verify topological sorting handles valid hierarchy, cycle detection, and depth limits."""
++    mapper = PlaneMapper()
++
++    # 1. Valid hierarchy: root -> child -> grandchild
++    i0 = PlaneIssue(id="i0", parent=None, sequence_id=0, name="Root")
++    i1 = PlaneIssue(id="i1", parent="i0", sequence_id=1, name="Child")
++    i2 = PlaneIssue(id="i2", parent="i1", sequence_id=2, name="Grandchild")
++
++    sorted_issues, warnings = mapper.sort_issues_topologically([i2, i0, i1])
++    sorted_ids = [iss.id for iss in sorted_issues]
++    assert sorted_ids == ["i0", "i1", "i2"]
++    assert len(warnings) == 0
++
++    # 2. Cycle detection: i1 -> i2 -> i1
++    cyc1 = PlaneIssue(id="c1", parent="c2", sequence_id=10, name="Cyc 1")
++    cyc2 = PlaneIssue(id="c2", parent="c1", sequence_id=11, name="Cyc 2")
++
++    with pytest.raises(ValueError, match="Parent-child cycle detected"):
++        mapper.sort_issues_topologically([cyc1, cyc2])
++
++    # 3. Depth limit > 6
++    chain = [
++        PlaneIssue(id=f"d{i}", parent=f"d{i - 1}" if i > 0 else None, sequence_id=i, name=f"D{i}")
++        for i in range(8)
++    ]
++    with pytest.raises(ValueError, match="Parent hierarchy depth"):
++        mapper.sort_issues_topologically(chain)
++
++    # 4. Missing parent reference warning
++    orphan = PlaneIssue(id="orphan", parent="nonexistent_parent", sequence_id=99, name="Orphan")
++    _, warnings2 = mapper.sort_issues_topologically([orphan])
++    assert len(warnings2) == 1
++    assert "references missing parent nonexistent_parent" in warnings2[0]
++
++    # 5. _DagState unvisited leaf coverage
++    dag = _DagState({"root": [i1]})
++    dag.traverse("leaf_without_children", 0)
++    assert "leaf_without_children" not in dag.visited
++
++
++def test_compute_source_sha256() -> None:
++    """Verify compute_source_sha256 works on dict and BaseModel instances."""
++    d1 = {"a": 1, "b": "hello"}
++    h1 = compute_source_sha256(d1)
++    assert len(h1) == 32
++    i1 = PlaneIssue(id="i1", sequence_id=1, name="Test")
++    h2 = compute_source_sha256(i1)
++    assert len(h2) == 32
++
++
++def test_resolve_user_handle_fallbacks() -> None:
++    """Verify resolve_user_handle covers user map, bundle member lookup, and unmapped fallbacks."""
++    mapper = PlaneMapper(
++        user_map={"u-plane-1": "@john_doe"},
++        unmapped_assignees_as_free_text=True,
++    )
++
++    bundle = PlaneBundle(
++        members=[
++            PlaneMember(id="u-plane-2", email="jane@example.com", display_name="Jane Doe"),
++            PlaneMember(id="u-no-email", email=None, display_name="No Email"),
++        ],
++    )
++
++    # 1. Empty uid
++    h0, unmapped0 = mapper.resolve_user_handle(None, bundle)
++    assert h0 == "system"
++    assert unmapped0 is False
++
++    # 2. User map hit
++    h1, unmapped1 = mapper.resolve_user_handle("u-plane-1", bundle)
++    assert h1 == "john_doe"
++    assert unmapped1 is False
++
++    # 3. Bundle member/user hit with email
++    h2, unmapped2 = mapper.resolve_user_handle("u-plane-2", bundle)
++    assert h2 == "plane-import-jane"
++    assert unmapped2 is True
++
++    # 4. Bundle member with no email (break statement)
++    h_no_email, unmapped_no_email = mapper.resolve_user_handle("u-no-email", bundle)
++    assert h_no_email == "plane-import-u-no-ema"
++    assert unmapped_no_email is True
++
++    # 5. Unknown user fallback to short ID
++    h3, unmapped3 = mapper.resolve_user_handle("u-unknown-12345", bundle)
++    assert h3 == "plane-import-u-unknow"
++    assert unmapped3 is True
 diff --git a/kanban/tests/importer/test_plane_merge_into_project.py b/kanban/tests/importer/test_plane_merge_into_project.py
 new file mode 100644
-index 00000000..0c2c207e
+index 00000000..d565daac
 --- /dev/null
 +++ b/kanban/tests/importer/test_plane_merge_into_project.py
-@@ -0,0 +1,669 @@
+@@ -0,0 +1,719 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Comprehensive unit and integration tests for merging Plane into existing project (KAN-82)."""
@@ -5115,6 +5549,7 @@ index 00000000..0c2c207e
 +from database.tests.conftest import bootstrap_workspace_admin
 +from kanban.api.deps import PrincipalContext
 +from kanban.content.normalize import ContentNormalizeError
++from kanban.importer.cutover_verifier import verify_cutover
 +from kanban.importer.plane_client import (
 +    PlaneBundle,
 +    PlaneComment,
@@ -5301,6 +5736,7 @@ index 00000000..0c2c207e
 +@pytest.mark.asyncio
 +async def test_plane_merge_into_project_full_lifecycle(
 +    setup_merge_into_project_env: tuple[AsyncSession, PrincipalContext, Path, Project],
++    tmp_path: Path,
 +) -> None:
 +    """Verify merge of KANBA-1..5 into pre-populated KAN-1..10 with parent-child topological sort and security gates."""
 +    session, caller, blob_dir, target_proj = setup_merge_into_project_env
@@ -5650,6 +6086,54 @@ index 00000000..0c2c207e
 +    await session.refresh(target_proj)
 +    assert target_proj.issue_seq_counter == 15
 +
++    # 15. Verify cutover audit passes 6/6
++    bundle_dir = tmp_path / "bundle"
++    bundle_dir.mkdir(parents=True, exist_ok=True)
++    import json
++
++    (bundle_dir / "projects.json").write_text(
++        json.dumps([p.model_dump() for p in bundle.projects]), encoding="utf-8"
++    )
++    (bundle_dir / "states.json").write_text(
++        json.dumps([s.model_dump() for s in bundle.states]), encoding="utf-8"
++    )
++    (bundle_dir / "labels.json").write_text(
++        json.dumps([lbl.model_dump() for lbl in bundle.labels]), encoding="utf-8"
++    )
++    (bundle_dir / "cycles.json").write_text(
++        json.dumps([c.model_dump() for c in bundle.cycles]), encoding="utf-8"
++    )
++    (bundle_dir / "modules.json").write_text(
++        json.dumps([m.model_dump() for m in bundle.modules]), encoding="utf-8"
++    )
++    (bundle_dir / "issues.json").write_text(
++        json.dumps([i.model_dump() for i in bundle.issues]), encoding="utf-8"
++    )
++    (bundle_dir / "comments.json").write_text(
++        json.dumps([c.model_dump() for c in bundle.comments]), encoding="utf-8"
++    )
++    (bundle_dir / "relations.json").write_text(
++        json.dumps([r.model_dump() for r in bundle.relations]), encoding="utf-8"
++    )
++    (bundle_dir / "members.json").write_text(
++        json.dumps([m.model_dump() for m in bundle.members]), encoding="utf-8"
++    )
++
++    qa_root = tmp_path / "qa"
++    qa_root.mkdir(parents=True, exist_ok=True)
++
++    cutover_report = await verify_cutover(
++        session=session,
++        bundle_dir=bundle_dir,
++        workspace_slug="kanban",
++        project_identifier="KAN",
++        source_project_identifier="KANBA",
++        qa_root=qa_root,
++        pre_cutover_exempt_keys={f"KAN-{i}" for i in range(1, 16)},
++    )
++    assert cutover_report.overall_passed is True
++    assert len(cutover_report.checks) == 6
++
 +
 +@pytest.mark.asyncio
 +async def test_plane_merge_rejects_utf16_surrogate_in_issue_name(
@@ -5751,12 +6235,596 @@ index 00000000..0c2c207e
 +    )
 +    with pytest.raises(ContentNormalizeError, match="INVALID_UTF8_SURROGATE"):
 +        await importer2.run_import(bundle_surrogate, dry_run=False)
+diff --git a/kanban/tests/importer/test_plane_merge_mode.py b/kanban/tests/importer/test_plane_merge_mode.py
+new file mode 100644
+index 00000000..27ce7ab7
+--- /dev/null
++++ b/kanban/tests/importer/test_plane_merge_mode.py
+@@ -0,0 +1,569 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Comprehensive unit and integration tests for Plane import merge mode (KB-MIGRATION-PLANE-DB-01)."""
++
++# ruff: noqa: E501, PLC0415, ANN401, TC002, ICN001
++
++from __future__ import annotations
++
++import datetime
++from pathlib import Path
++from typing import Any
++
++import pytest
++from sqlalchemy import select, text
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from database.models import (
++    Attachment,
++    ImportEntityMapping,
++    Issue,
++    IssueAssignee,
++    IssueKeyAlias,
++    Module,
++    Project,
++)
++from database.tests.conftest import bootstrap_workspace_admin
++from kanban.api.deps import PrincipalContext
++from kanban.importer.cutover_verifier import verify_cutover
++from kanban.importer.plane_client import PlaneBundle, PlaneClient
++from kanban.importer.plane_importer import ImportIntegrityError, PlaneImporter
++
++FIXTURE_DIR = Path("tests/fixtures/plane_export_kanba").resolve()
++
++
++@pytest.fixture
++async def setup_merge_env(
++    db_session: AsyncSession, tmp_path: Path
++) -> tuple[AsyncSession, PrincipalContext, Path, Project]:
++    """Provision workspace, admin caller, temporary blob store, and target project 'KAN'."""
++    ws_id, admin_id = await bootstrap_workspace_admin(db_session, slug="kanban")
++
++    await db_session.execute(
++        text(
++            "SELECT set_config('app.current_workspace_id', :ws, true), "
++            "set_config('app.current_principal_id', :pid, true), "
++            "set_config('app.aal_level', '2', true)"
++        ),
++        {"ws": str(ws_id), "pid": str(admin_id)},
++    )
++
++    caller = PrincipalContext(
++        principal_id=admin_id,
++        workspace_id=ws_id,
++        aal_level=2,
++    )
++    blob_dir = tmp_path / "blobs"
++    blob_dir.mkdir(parents=True, exist_ok=True)
++
++    # Provision target project 'KAN'
++    kan_id_res = await db_session.execute(
++        text(
++            "SELECT register_object("
++            "  CAST('project' AS object_kind), :ws, NULL, "
++            "  :ident, :name, :creator"
++            ")"
++        ),
++        {
++            "ws": ws_id,
++            "ident": "KAN",
++            "name": "Platform Core Target",
++            "creator": admin_id,
++        },
++    )
++    kan_id = kan_id_res.scalar_one()
++
++    target_proj = Project(
++        id=kan_id,
++        workspace_id=ws_id,
++        identifier="KAN",
++        name="Platform Core Target",
++        description_markdown="Target project for merge",
++        issue_seq_counter=0,
++    )
++    db_session.add(target_proj)
++    await db_session.flush()
++
++    return db_session, caller, blob_dir, target_proj
++
++
++@pytest.mark.asyncio
++async def test_merge_mode_target_project_missing(
++    setup_merge_env: tuple[AsyncSession, PrincipalContext, Path, Project],
++) -> None:
++    """Verify ImportIntegrityError is raised when --target-project does not exist."""
++    session, caller, blob_dir, _ = setup_merge_env
++    client = PlaneClient()
++    bundle = client.load_bundle_from_dir(FIXTURE_DIR)
++
++    importer = PlaneImporter(
++        session=session,
++        caller=caller,
++        blob_store_root=blob_dir,
++        target_project_identifier="NONEXISTENT",
++    )
++
++    with pytest.raises(ImportIntegrityError, match="Target project 'NONEXISTENT' not found"):
++        await importer.run_import(bundle, dry_run=False)
++
++
++@pytest.mark.asyncio
++async def test_merge_mode_successful_import_and_remap(
++    setup_merge_env: tuple[AsyncSession, PrincipalContext, Path, Project],
++) -> None:
++    """Verify merging KANBA into KAN allocates sequences, records provenance, and creates links."""
++    session, caller, blob_dir, target_proj = setup_merge_env
++    client = PlaneClient()
++    bundle = client.load_bundle_from_dir(FIXTURE_DIR)
++
++    importer = PlaneImporter(
++        session=session,
++        caller=caller,
++        blob_store_root=blob_dir,
++        target_project_identifier="KAN",
++        exclude_project_identifiers="TEST",
++    )
++
++    # 1. Run live import in merge mode
++    report1 = await importer.run_import(bundle, dry_run=False)
++    assert report1.to_create > 0
++    assert report1.sequence_high_water_mark > 0
++
++    # 2. Verify all issues created belong to project KAN
++    issues = (
++        (
++            await session.execute(
++                select(Issue).where(
++                    Issue.workspace_id == caller.workspace_id,
++                    Issue.project_id == target_proj.id,
++                )
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert len(issues) > 0
++    for iss in issues:
++        assert iss.project_id == target_proj.id
++        # Verify provenance header
++        assert "> Imported from `" in iss.description_markdown
++    assert any("> Imported from `KANBA-" in iss.description_markdown for iss in issues)
++
++    # 3. Check legacy aliases recorded
++    aliases = (
++        (
++            await session.execute(
++                select(IssueKeyAlias).where(
++                    IssueKeyAlias.workspace_id == caller.workspace_id,
++                )
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert len(aliases) > 0
++    assert any(a.legacy_key.startswith("KANBA-") and a.source_system == "plane" for a in aliases)
++
++    # 4. Check sequence counter updated
++    await session.refresh(target_proj)
++    assert target_proj.issue_seq_counter >= len(issues)
++
++    # 5. Idempotency on rerun
++    report2 = await importer.run_import(bundle, dry_run=False)
++    assert report2.to_create == 0
++    assert report2.unchanged > 0
++
++
++@pytest.mark.asyncio
++async def test_merge_mode_pdf_attachment_ingestion(
++    setup_merge_env: tuple[AsyncSession, PrincipalContext, Path, Project],
++) -> None:
++    """Verify PDF attachments during Plane import are validated via sanitize_and_validate_pdf and record page_count."""
++    session, caller, blob_dir, target_proj = setup_merge_env
++    client = PlaneClient()
++    bundle = client.load_bundle_from_dir(FIXTURE_DIR)
++
++    # Minimal 1-page valid PDF
++    pdf_bytes = (
++        b"%PDF-1.4\n"
++        b"1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n"
++        b"2 0 obj\n<< /Type /Pages /Count 1 /Kids [3 0 R] >>\nendobj\n"
++        b"3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] >>\nendobj\n"
++        b"xref\n0 4\n0000000000 65535 f \n"
++        b"0000000010 00000 n \n0000000060 00000 n \n0000000117 00000 n \n"
++        b"trailer\n<< /Size 4 /Root 1 0 R >>\nstartxref\n187\n%%EOF\n"
++    )
++    bundle.attachments["sample_document.pdf"] = pdf_bytes
++
++    importer = PlaneImporter(
++        session=session,
++        caller=caller,
++        blob_store_root=blob_dir,
++        target_project_identifier="KAN",
++        exclude_project_identifiers="TEST",
++    )
++
++    report = await importer.run_import(bundle, dry_run=False)
++    assert report.to_create > 0
++
++    att = (
++        (
++            await session.execute(
++                select(Attachment).where(
++                    Attachment.workspace_id == caller.workspace_id,
++                    Attachment.original_filename == "sample_document.pdf",
++                )
++            )
++        )
++        .scalars()
++        .first()
++    )
++    assert att is not None
++    assert att.content_type == "application/pdf"
++    assert att.page_count == 1
++    assert att.project_id == target_proj.id
++
++
++@pytest.mark.asyncio
++async def test_merge_mode_module_deduplication(
++    setup_merge_env: tuple[AsyncSession, PrincipalContext, Path, Project],
++) -> None:
++    """Verify modules with identical names in target project are deduplicated without key collisions."""
++    session, caller, blob_dir, target_proj = setup_merge_env
++    client = PlaneClient()
++    bundle = client.load_bundle_from_dir(FIXTURE_DIR)
++
++    # Pre-create a module in target project with same name as bundle module ("Auth Engine")
++    mod_id_res = await session.execute(
++        text(
++            "SELECT register_object("
++            "  CAST('module' AS object_kind), :ws, :proj, :ckey, :title, :creator"
++            ")"
++        ),
++        {
++            "ws": caller.workspace_id,
++            "proj": target_proj.id,
++            "ckey": "mod-preexisting",
++            "title": "Auth Engine",
++            "creator": caller.principal_id,
++        },
++    )
++    mod_id = mod_id_res.scalar_one()
++
++    pre_mod = Module(
++        id=mod_id,
++        workspace_id=caller.workspace_id,
++        project_id=target_proj.id,
++        name="Auth Engine",
++        status="planned",
++    )
++    session.add(pre_mod)
++    await session.flush()
++
++    importer = PlaneImporter(
++        session=session,
++        caller=caller,
++        blob_store_root=blob_dir,
++        target_project_identifier="KAN",
++    )
++
++    # Importing should succeed and deduplicate without violating modules_project_id_name_key
++    report = await importer.run_import(bundle, dry_run=False)
++    assert report.to_create > 0
++
++    mods = (
++        (
++            await session.execute(
++                select(Module).where(
++                    Module.project_id == target_proj.id,
++                    Module.name == "Auth Engine",
++                )
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert len(mods) == 1
++
++
++@pytest.mark.asyncio
++async def test_merge_mode_cutover_verifier(
++    setup_merge_env: tuple[AsyncSession, PrincipalContext, Path, Project],
++    tmp_path: Path,
++) -> None:
++    """Verify cutover_verifier in merge mode verifies parity with source project aliases."""
++    session, caller, blob_dir, target_proj = setup_merge_env
++    client = PlaneClient()
++    bundle = client.load_bundle_from_dir(FIXTURE_DIR)
++
++    importer = PlaneImporter(
++        session=session,
++        caller=caller,
++        blob_store_root=blob_dir,
++        target_project_identifier="KAN",
++        exclude_project_identifiers="TEST",
++    )
++    await importer.run_import(bundle, dry_run=False)
++
++    qa_root = tmp_path / "docs_qa"
++    qa_root.mkdir(parents=True, exist_ok=True)
++    # Populate QA bundle under source key KANBA-19
++    (qa_root / "KANBA-19").mkdir(parents=True, exist_ok=True)
++    (qa_root / "KANBA-19" / "git-diff.patch").write_text("diff --git a/a b/b\n", encoding="utf-8")
++    (qa_root / "KANBA-19" / "unit-test-results.txt").write_text("passed\n", encoding="utf-8")
++    (qa_root / "KANBA-19" / "build-check.txt").write_text("ok\n", encoding="utf-8")
++
++    report = await verify_cutover(
++        session=session,
++        bundle_dir=FIXTURE_DIR,
++        workspace_slug="kanban",
++        project_identifier="KAN",
++        source_project_identifier="KANBA",
++        qa_root=qa_root,
++        pre_cutover_exempt_keys=["KANBA-1", "KANBA-2", "KANBA-3", "KANBA-5"],
++    )
++
++    # Key parity check should pass
++    key_parity_chk = next(
++        (c for c in report.checks if c.name == "entity_count_and_key_parity"), None
++    )
++    assert key_parity_chk is not None
++    assert key_parity_chk.passed is True
++
++    # Test merge-mode key parity mismatch when sequence counter < max_db_seq
++    from unittest.mock import MagicMock, patch
++
++    orig_execute = session.execute
++
++    async def mock_execute_low_seq(statement: Any, *args: Any, **kwargs: Any) -> Any:
++        if "issue_seq_counter" in str(statement):
++            mock_res = MagicMock()
++            mock_mapping = MagicMock()
++            mock_mapping.one_or_none.return_value = {
++                "id": target_proj.id,
++                "issue_seq_counter": 0,
++                "modules_enabled": True,
++            }
++            mock_res.mappings.return_value = mock_mapping
++            return mock_res
++        return await orig_execute(statement, *args, **kwargs)
++
++    with patch.object(session, "execute", side_effect=mock_execute_low_seq):
++        report_bad_seq = await verify_cutover(
++            session=session,
++            bundle_dir=FIXTURE_DIR,
++            workspace_slug="kanban",
++            project_identifier="KAN",
++            source_project_identifier="KANBA",
++            qa_root=qa_root,
++            pre_cutover_exempt_keys=["KANBA-1", "KANBA-2", "KANBA-3", "KANBA-5"],
++        )
++        chk_bad_seq = next(
++            c for c in report_bad_seq.checks if c.name == "entity_count_and_key_parity"
++        )
++        assert chk_bad_seq.passed is False
++        assert "less than max database sequence ID" in (chk_bad_seq.detail or "")
++
++    # Test merge-mode key parity mismatch when mapping is missing
++    one_mapping = (
++        (
++            await session.execute(
++                select(ImportEntityMapping).where(ImportEntityMapping.source_kind == "issue")
++            )
++        )
++        .scalars()
++        .first()
++    )
++    assert one_mapping is not None
++    await session.delete(one_mapping)
++    await session.flush()
++
++    report_missing = await verify_cutover(
++        session=session,
++        bundle_dir=FIXTURE_DIR,
++        workspace_slug="kanban",
++        project_identifier="KAN",
++        source_project_identifier="KANBA",
++        qa_root=qa_root,
++        pre_cutover_exempt_keys=["KANBA-1", "KANBA-2", "KANBA-3", "KANBA-5"],
++    )
++    chk_missing = next(c for c in report_missing.checks if c.name == "entity_count_and_key_parity")
++    assert chk_missing.passed is False
++    assert chk_missing.error_code == "KEY_PARITY_MISMATCH"
++
++
++@pytest.mark.asyncio
++async def test_merge_mode_markdown_attachment(
++    setup_merge_env: tuple[AsyncSession, PrincipalContext, Path, Project],
++) -> None:
++    """Verify .md attachments are converted to Markdown blocks without media sniffer error."""
++    session, caller, blob_dir, target_proj = setup_merge_env
++    from kanban.importer.plane_client import PlaneIssue, PlaneProject
++
++    bundle = PlaneBundle(
++        projects=[PlaneProject(id="p-1", identifier="KANBA", name="Kanba Project")],
++        issues=[
++            PlaneIssue(
++                id="i-md-1",
++                sequence_id=10,
++                name="MD Attachment Issue",
++                description_html="<p>See attached <a href='/api/assets/spec.md'>spec.md</a></p>",
++                project="p-1",
++            )
++        ],
++        attachments={"spec.md": b"# Feature Spec\n\nSome important notes."},
++    )
++
++    importer = PlaneImporter(
++        session=session,
++        caller=caller,
++        blob_store_root=blob_dir,
++        target_project_identifier="KAN",
++    )
++    report = await importer.run_import(bundle, dry_run=False)
++    assert report.to_create > 0
++
++    iss = (
++        await session.execute(
++            select(Issue).where(
++                Issue.project_id == target_proj.id,
++                Issue.sequence_id == 1,
++            )
++        )
++    ).scalar_one()
++    assert "spec.md" in iss.description_markdown
++
++
++def test_parse_iso_datetime_helper() -> None:
++    """Verify _parse_iso_datetime handles None, invalid, naive, and aware timestamps."""
++    from kanban.importer.plane_importer import _parse_iso_datetime
++
++    assert _parse_iso_datetime(None) is None
++    assert _parse_iso_datetime("invalid-iso-string") is None
++    dt_naive = _parse_iso_datetime("2026-05-01T12:00:00")
++    assert dt_naive is not None
++    assert dt_naive.tzinfo == datetime.UTC
++    dt_aware = _parse_iso_datetime("2026-05-01T12:00:00+00:00")
++    assert dt_aware is not None
++
++
++@pytest.mark.asyncio
++async def test_merge_mode_user_mapping_and_updates(
++    setup_merge_env: tuple[AsyncSession, PrincipalContext, Path, Project],
++) -> None:
++    """Verify user mapping, exclude_project_identifiers list, and entity updates when SHA changes."""
++    session, caller, blob_dir, target_proj = setup_merge_env
++    from kanban.importer.plane_client import PlaneComment, PlaneIssue, PlaneProject, PlaneState
++
++    user_map = {"u-plane-1": "@Admin User"}
++
++    bundle = PlaneBundle(
++        projects=[
++            PlaneProject(id="p-k", identifier="KANBA", name="Kanba Project"),
++            PlaneProject(id="p-ex", identifier="EXCLUDED", name="Excluded Project"),
++        ],
++        states=[
++            PlaneState(id="s-backlog", project="p-k", name="Backlog", group="backlog", sequence=10),
++            PlaneState(
++                id="s-custom", project="p-k", name="Custom Review", group="unstarted", sequence=20
++            ),
++        ],
++        issues=[
++            PlaneIssue(
++                id="i-user-1",
++                sequence_id=1,
++                name="First Issue",
++                description_html="<p>Testing user map</p>",
++                project="p-k",
++                created_by="u-plane-1",
++                assignees=["u-plane-1"],
++                archived_at="2026-05-01T12:00:00Z",
++                state="s-backlog",
++            )
++        ],
++        comments=[
++            PlaneComment(
++                id="c-1",
++                issue_id="i-user-1",
++                comment_html="<p>First comment</p>",
++                actor="u-plane-1",
++            )
++        ],
++    )
++
++    importer = PlaneImporter(
++        session=session,
++        caller=caller,
++        blob_store_root=blob_dir,
++        user_map=user_map,
++        target_project_identifier="KAN",
++        exclude_project_identifiers=["EXCLUDED"],
++    )
++
++    report1 = await importer.run_import(bundle, dry_run=False)
++    assert report1.to_create > 0
++
++    # Verify issue creator and assignee were resolved to caller.principal_id (admin)
++    iss = (
++        await session.execute(
++            select(Issue).where(
++                Issue.project_id == target_proj.id,
++                Issue.sequence_id == 1,
++            )
++        )
++    ).scalar_one()
++    assignee_row = (
++        await session.execute(
++            select(IssueAssignee).where(
++                IssueAssignee.issue_id == iss.id,
++            )
++        )
++    ).scalar_one_or_none()
++    assert assignee_row is not None
++    assert assignee_row.principal_id == caller.principal_id
++
++    # Now simulate an updated bundle where issue and comment content SHA changes
++    updated_bundle = PlaneBundle(
++        projects=[PlaneProject(id="p-k", identifier="KANBA", name="Kanba Project")],
++        states=[
++            PlaneState(id="s-backlog", project="p-k", name="Backlog", group="backlog", sequence=10),
++            PlaneState(
++                id="s-custom",
++                project="p-k",
++                name="Custom Review Renamed",
++                group="unstarted",
++                sequence=20,
++            ),
++        ],
++        issues=[
++            PlaneIssue(
++                id="i-user-1",
++                sequence_id=1,
++                name="First Issue Modified Title",
++                description_html="<p>Testing user map modified</p>",
++                project="p-k",
++                created_by="u-plane-1",
++                assignees=["u-plane-1"],
++                archived_at="2026-05-01T12:00:00Z",
++                state="s-backlog",
++            )
++        ],
++        comments=[
++            PlaneComment(
++                id="c-1",
++                issue_id="i-user-1",
++                comment_html="<p>First comment modified</p>",
++                actor="u-plane-1",
++            )
++        ],
++    )
++
++    importer2 = PlaneImporter(
++        session=session,
++        caller=caller,
++        blob_store_root=blob_dir,
++        user_map=user_map,
++        target_project_identifier="KAN",
++    )
++    report2 = await importer2.run_import(updated_bundle, dry_run=False)
++    assert report2.to_update >= 1
+diff --git a/kanban/tests/standalone/__init__.py b/kanban/tests/standalone/__init__.py
+new file mode 100644
+index 00000000..4d930019
+--- /dev/null
++++ b/kanban/tests/standalone/__init__.py
+@@ -0,0 +1,3 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Standalone test package."""
 diff --git a/kanban/tests/standalone/test_entrypoint_env.py b/kanban/tests/standalone/test_entrypoint_env.py
 new file mode 100644
-index 00000000..2ce888dd
+index 00000000..fec1b2e2
 --- /dev/null
 +++ b/kanban/tests/standalone/test_entrypoint_env.py
-@@ -0,0 +1,85 @@
+@@ -0,0 +1,69 @@
 +# Copyright 2026 Kanban Platform Contributors
 +# Apache-2.0 License. See LICENSE for details.
 +"""Unit tests for standalone entrypoint environment, attachments directory, and ownership (KB-MIGRATION-PLANE-DB-01, KAN-82)."""
@@ -5765,8 +6833,6 @@ index 00000000..2ce888dd
 +
 +from __future__ import annotations
 +
-+import os
-+import shutil
 +from pathlib import Path
 +from unittest.mock import patch
 +
@@ -5775,6 +6841,7 @@ index 00000000..2ce888dd
 +from deploy.standalone.entrypoint import (
 +    _PASSTHROUGH_ENV_VARS,
 +    build_child_env,
++    ensure_attachments_dir,
 +)
 +
 +
@@ -5822,26 +6889,50 @@ index 00000000..2ce888dd
 +        patch("shutil.chown", side_effect=fake_chown),
 +        patch.object(Path, "chmod", fake_chmod),
 +    ):
-+        # Simulate directory initialization section of entrypoint.py
-+        data_dir.mkdir(parents=True, exist_ok=True)
-+        backups_dir = data_dir / "backups"
-+        backups_dir.mkdir(parents=True, exist_ok=True)
-+        attachments_dir = Path(
-+            os.environ.get("KANBAN_ATTACHMENT_DIR", str(data_dir / "attachments"))
-+        )
-+        attachments_dir.mkdir(parents=True, exist_ok=True)
-+
-+        if os.getuid() == 0:
-+            shutil.chown(str(data_dir), user=65532, group=65532)
-+            shutil.chown(str(backups_dir), user=65532, group=65532)
-+            shutil.chown(str(attachments_dir), user=65532, group=65532)
-+            data_dir.chmod(0o775)
-+            backups_dir.chmod(0o775)
-+            attachments_dir.chmod(0o750)
++        attachments_dir = ensure_attachments_dir(data_dir)
 +
 +    assert (str(custom_att_dir), 65532, 65532) in chown_calls
 +    assert (str(custom_att_dir), 0o750) in chmod_calls
 +    assert attachments_dir.is_dir()
+diff --git a/kanban/tests/test_standalone_entrypoint.py b/kanban/tests/test_standalone_entrypoint.py
+new file mode 100644
+index 00000000..642b255d
+--- /dev/null
++++ b/kanban/tests/test_standalone_entrypoint.py
+@@ -0,0 +1,33 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unit tests for standalone entrypoint environment and directory configuration (KB-MIGRATION-PLANE-DB-01)."""
++
++# ruff: noqa: E501, TC002
++
++from __future__ import annotations
++
++import pytest
++
++from deploy.standalone.entrypoint import (
++    _PASSTHROUGH_ENV_VARS,
++    build_child_env,
++)
++
++
++def test_passthrough_env_vars_includes_attachment_dir() -> None:
++    """Verify KANBAN_ATTACHMENT_DIR is explicitly in _PASSTHROUGH_ENV_VARS allowlist."""
++    assert "KANBAN_ATTACHMENT_DIR" in _PASSTHROUGH_ENV_VARS
++
++
++def test_build_child_env_attachment_dir_default(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify build_child_env defaults KANBAN_ATTACHMENT_DIR to /var/lib/kanban/data/attachments."""
++    monkeypatch.delenv("KANBAN_ATTACHMENT_DIR", raising=False)
++    env = build_child_env(db_url="postgresql+asyncpg://app@/kanban")
++    assert env["KANBAN_ATTACHMENT_DIR"] == "/var/lib/kanban/data/attachments"
++
++
++def test_build_child_env_attachment_dir_override(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify build_child_env respects KANBAN_ATTACHMENT_DIR from environment."""
++    monkeypatch.setenv("KANBAN_ATTACHMENT_DIR", "/custom/data/attachments")
++    env = build_child_env(db_url="postgresql+asyncpg://app@/kanban")
++    assert env["KANBAN_ATTACHMENT_DIR"] == "/custom/data/attachments"
 diff --git a/kanban/web/src/features/drawer/__tests__/useIssueSurfaceRoute.test.ts b/kanban/web/src/features/drawer/__tests__/useIssueSurfaceRoute.test.ts
 new file mode 100644
 index 00000000..5cf70434
@@ -6102,6 +7193,80 @@ index 00000000..5cf70434
 +  }, [loc, onLocation]);
 +  return null;
 +}
+diff --git a/kanban/web/src/features/drawer/useIssueSurfaceRoute.test.ts b/kanban/web/src/features/drawer/useIssueSurfaceRoute.test.ts
+index 632ba001..a46e591f 100644
+--- a/kanban/web/src/features/drawer/useIssueSurfaceRoute.test.ts
++++ b/kanban/web/src/features/drawer/useIssueSurfaceRoute.test.ts
+@@ -16,11 +16,12 @@ describe('useIssueSurfaceRoute', () => {
+   });
+ 
+   describe('isValidIssueKey', () => {
+-    it('validates keys against regex and projectKey prefix strictly', () => {
++    it('validates keys against regex and allows cross-prefix alias keys', () => {
+       expect(isValidIssueKey('KAN-142', 'KAN')).toBe(true);
+       expect(isValidIssueKey('PROJ-1', 'PROJ')).toBe(true);
++      expect(isValidIssueKey('KANBA-119', 'KAN')).toBe(true); // cross-prefix alias admitted
++      expect(isValidIssueKey('KAN-142', 'OTHER')).toBe(true); // cross-prefix alias admitted
+       expect(isValidIssueKey('KAN-0', 'KAN')).toBe(false); // cannot be 0
+-      expect(isValidIssueKey('KAN-142', 'OTHER')).toBe(false); // prefix mismatch
+       expect(isValidIssueKey('javascript:alert(1)', 'KAN')).toBe(false);
+       expect(isValidIssueKey('<img src=x>', 'KAN')).toBe(false);
+       expect(isValidIssueKey('../../admin', 'KAN')).toBe(false);
+@@ -68,7 +69,7 @@ describe('useIssueSurfaceRoute', () => {
+       'javascript:alert(1)',
+       '<img src=x>',
+       '../../admin',
+-      'OTHER-1',
++      'KAN-0',
+       'A'.repeat(10000),
+     ];
+ 
+@@ -135,6 +136,36 @@ describe('useIssueSurfaceRoute', () => {
+       expect(result.current.projectKey).toBe('KAN');
+     });
+ 
++    it('returns mode: "drawer" when cross-prefix alias peek is present on project path', () => {
++      const wrapper = ({ children }: { children?: React.ReactNode }) =>
++        React.createElement(
++          MemoryRouter,
++          { initialEntries: ['/projects/KAN/issues?peek=KANBA-119'] },
++          children,
++        );
++
++      const { result } = renderHook(() => useIssueSurfaceRoute(), { wrapper });
++
++      expect(result.current.mode).toBe('drawer');
++      expect(result.current.issueKey).toBe('KANBA-119');
++      expect(result.current.projectKey).toBe('KAN');
++    });
++
++    it('returns mode: "full" when cross-prefix alias issue is in full-screen path', () => {
++      const wrapper = ({ children }: { children?: React.ReactNode }) =>
++        React.createElement(
++          MemoryRouter,
++          { initialEntries: ['/projects/KAN/issues/KANBA-119'] },
++          children,
++        );
++
++      const { result } = renderHook(() => useIssueSurfaceRoute(), { wrapper });
++
++      expect(result.current.mode).toBe('full');
++      expect(result.current.issueKey).toBe('KANBA-119');
++      expect(result.current.projectKey).toBe('KAN');
++    });
++
+     it('returns mode: null when neither peek nor issue detail route is active', () => {
+       const wrapper = ({ children }: { children?: React.ReactNode }) =>
+         React.createElement(
+@@ -205,7 +236,7 @@ describe('useIssueSurfaceRoute', () => {
+       expect(isValidIssueKey(null, 'KAN')).toBe(false);
+       expect(isValidIssueKey('KAN-1', null)).toBe(false);
+       expect(isValidIssueKey('invalid', 'KAN')).toBe(false);
+-      expect(isValidIssueKey('KAN-1', 'OTHER')).toBe(false);
++      expect(isValidIssueKey('KAN-1', 'OTHER')).toBe(true);
+     });
+   });
+ });
 diff --git a/kanban/web/src/features/drawer/useIssueSurfaceRoute.ts b/kanban/web/src/features/drawer/useIssueSurfaceRoute.ts
 index 53631cdc..4d9c2498 100644
 --- a/kanban/web/src/features/drawer/useIssueSurfaceRoute.ts

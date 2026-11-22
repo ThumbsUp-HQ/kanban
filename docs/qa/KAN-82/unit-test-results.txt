@@ -5,7 +5,7 @@ rootdir: /home/adamoutler/kanban
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 59 items
+collecting ... collected 60 items
 
 kanban/tests/importer/test_plane_db_exporter.py::test_check_forbidden_exporter_args PASSED [  1%]
 kanban/tests/importer/test_plane_db_exporter.py::test_read_secret_source_env PASSED [  3%]
@@ -19,72 +19,70 @@ kanban/tests/importer/test_plane_db_exporter.py::test_plane_db_exporter_transact
 kanban/tests/importer/test_plane_db_exporter.py::test_read_secret_source_missing_file PASSED [ 16%]
 kanban/tests/importer/test_plane_db_exporter.py::test_read_secret_source_env_file_pointer PASSED [ 18%]
 kanban/tests/importer/test_plane_db_exporter.py::test_minio_download_object_variations PASSED [ 20%]
-kanban/tests/importer/test_plane_db_exporter.py::test_plane_db_exporter_attachments_with_manifest PASSED [ 22%]
+kanban/tests/importer/test_plane_db_exporter.py::test_plane_db_exporter_attachments_with_manifest PASSED [ 21%]
 kanban/tests/importer/test_plane_db_exporter.py::test_plane_db_exporter_no_active_workspaces PASSED [ 23%]
 kanban/tests/importer/test_plane_db_exporter.py::test_read_secret_source_direct_string_and_env_file PASSED [ 25%]
-kanban/tests/importer/test_plane_db_exporter.py::test_minio_sigv4_headers_no_keys PASSED [ 27%]
+kanban/tests/importer/test_plane_db_exporter.py::test_minio_sigv4_headers_no_keys PASSED [ 26%]
 kanban/tests/importer/test_plane_db_exporter.py::test_minio_stream_object_error_status PASSED [ 28%]
 kanban/tests/importer/test_plane_db_exporter.py::test_plane_db_exporter_rollback_on_error PASSED [ 30%]
-kanban/tests/importer/test_plane_db_exporter.py::test_plane_db_exporter_empty_issues_and_collision PASSED [ 32%]
+kanban/tests/importer/test_plane_db_exporter.py::test_plane_db_exporter_empty_issues_and_collision PASSED [ 31%]
 kanban/tests/importer/test_plane_db_exporter.py::test_plane_db_exporter_cycles_and_attachment_collision PASSED [ 33%]
 kanban/tests/importer/test_plane_importer.py::test_case_01_positive_lossless_import_and_idempotency PASSED [ 35%]
-kanban/tests/importer/test_plane_importer.py::test_case_02_dry_run_isolation PASSED [ 37%]
+kanban/tests/importer/test_plane_importer.py::test_case_02_dry_run_isolation PASSED [ 36%]
 kanban/tests/importer/test_plane_importer.py::test_case_03_hostile_payload_sanitization PASSED [ 38%]
 kanban/tests/importer/test_plane_importer.py::test_case_05_integrity_rollback_on_tree_depth_violation PASSED [ 40%]
-kanban/tests/importer/test_plane_importer.py::test_plane_mapper_topological_sort_and_cycle PASSED [ 42%]
-kanban/tests/importer/test_plane_importer.py::test_plane_mapper_user_handle_resolution PASSED [ 44%]
+kanban/tests/importer/test_plane_importer.py::test_plane_mapper_topological_sort_and_cycle PASSED [ 41%]
+kanban/tests/importer/test_plane_importer.py::test_plane_mapper_user_handle_resolution PASSED [ 43%]
 kanban/tests/importer/test_plane_importer.py::test_import_empty_bundle_fallback_to_existing_project PASSED [ 45%]
-kanban/tests/importer/test_plane_importer.py::test_import_empty_bundle_no_projects_raises_integrity_error PASSED [ 47%]
-kanban/tests/importer/test_plane_importer.py::test_import_with_custom_state_dates_and_relations PASSED [ 49%]
+kanban/tests/importer/test_plane_importer.py::test_import_empty_bundle_no_projects_raises_integrity_error PASSED [ 46%]
+kanban/tests/importer/test_plane_importer.py::test_import_with_custom_state_dates_and_relations PASSED [ 48%]
 kanban/tests/importer/test_plane_importer.py::test_import_entity_updates_and_invalid_links_gate PASSED [ 50%]
-kanban/tests/importer/test_plane_importer.py::test_parse_iso_date_helpers PASSED [ 52%]
-kanban/tests/importer/test_plane_importer.py::test_plane_importer_pdf_attachment_positive PASSED [ 54%]
+kanban/tests/importer/test_plane_importer.py::test_parse_iso_date_helpers PASSED [ 51%]
+kanban/tests/importer/test_plane_importer.py::test_plane_importer_pdf_attachment_positive PASSED [ 53%]
 kanban/tests/importer/test_plane_importer.py::test_plane_importer_non_pdf_extension_with_pdf_magic_bytes_rejected PASSED [ 55%]
-kanban/tests/importer/test_plane_importer.py::test_plane_importer_cycle_date_normalization_and_overlap PASSED [ 57%]
-kanban/tests/importer/test_plane_merge_into_project.py::test_plane_merge_into_project_full_lifecycle PASSED [ 59%]
-kanban/tests/importer/test_plane_merge_into_project.py::test_plane_merge_rejects_utf16_surrogate_in_issue_name PASSED [ 61%]
-kanban/tests/importer/test_cutover_verifier.py::test_case_01_positive_cutover_verification PASSED [ 62%]
-kanban/tests/importer/test_cutover_verifier.py::test_case_02_parity_failure_detection PASSED [ 64%]
+kanban/tests/importer/test_plane_importer.py::test_plane_importer_cycle_date_normalization_and_overlap PASSED [ 56%]
+kanban/tests/importer/test_plane_merge_into_project.py::test_plane_merge_into_project_full_lifecycle PASSED [ 58%]
+kanban/tests/importer/test_plane_merge_into_project.py::test_plane_merge_rejects_utf16_surrogate_in_issue_name PASSED [ 60%]
+kanban/tests/importer/test_plane_merge_into_project.py::test_plane_merge_md_attachment_script_stripping_and_surrogate_rejection PASSED [ 61%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_01_positive_cutover_verification PASSED [ 63%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_02_parity_failure_detection PASSED [ 65%]
 kanban/tests/importer/test_cutover_verifier.py::test_case_03_invalid_link_detection PASSED [ 66%]
-kanban/tests/importer/test_cutover_verifier.py::test_case_04_qa_proof_bundle_check PASSED [ 67%]
-kanban/tests/importer/test_cutover_verifier.py::test_case_05_markdown_purity_check PASSED [ 69%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_04_qa_proof_bundle_check PASSED [ 68%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_05_markdown_purity_check PASSED [ 70%]
 kanban/tests/importer/test_cutover_verifier.py::test_edge_cases_workspace_and_project_not_found PASSED [ 71%]
-kanban/tests/importer/test_cutover_verifier.py::test_case_sequence_counter_lower_than_max PASSED [ 72%]
-kanban/tests/importer/test_cutover_verifier.py::test_case_forbidden_html_columns_in_catalog PASSED [ 74%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_sequence_counter_lower_than_max PASSED [ 73%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_forbidden_html_columns_in_catalog PASSED [ 75%]
 kanban/tests/importer/test_cutover_verifier.py::test_case_corrupted_bundle_dir PASSED [ 76%]
-kanban/tests/importer/test_cutover_verifier.py::test_case_cli_execute_verify PASSED [ 77%]
-kanban/tests/importer/test_cutover_verifier.py::test_verifier_branch_coverage PASSED [ 79%]
+kanban/tests/importer/test_cutover_verifier.py::test_case_cli_execute_verify PASSED [ 78%]
+kanban/tests/importer/test_cutover_verifier.py::test_verifier_branch_coverage PASSED [ 80%]
 kanban/tests/importer/test_cutover_verifier.py::test_cli_subparsers_registration PASSED [ 81%]
 kanban/tests/importer/test_cutover_verifier.py::test_cli_runner_success PASSED [ 83%]
-kanban/tests/importer/test_cutover_verifier.py::test_cli_runner_exception_handling PASSED [ 84%]
+kanban/tests/importer/test_cutover_verifier.py::test_cli_runner_exception_handling PASSED [ 85%]
 kanban/tests/importer/test_cutover_verifier.py::test_scan_markdown_for_html_residue_inline_code_spans PASSED [ 86%]
 kanban/tests/importer/test_cutover_verifier.py::test_resolve_and_verify_bundle_with_build_or_typecheck PASSED [ 88%]
-kanban/tests/importer/test_cutover_verifier.py::test_check_qa_proofs_external_project PASSED [ 89%]
+kanban/tests/importer/test_cutover_verifier.py::test_check_qa_proofs_external_project PASSED [ 90%]
 kanban/tests/importer/test_cutover_verifier.py::test_verify_single_proof_bundle_edge_cases PASSED [ 91%]
 kanban/tests/importer/test_cutover_verifier.py::test_check_qa_proofs_missing_proj_id PASSED [ 93%]
-kanban/tests/standalone/test_entrypoint_env.py::test_passthrough_env_vars_includes_attachment_dir PASSED [ 94%]
+kanban/tests/standalone/test_entrypoint_env.py::test_passthrough_env_vars_includes_attachment_dir PASSED [ 95%]
 kanban/tests/standalone/test_entrypoint_env.py::test_build_child_env_attachment_dir_default PASSED [ 96%]
 kanban/tests/standalone/test_entrypoint_env.py::test_build_child_env_attachment_dir_override PASSED [ 98%]
 kanban/tests/standalone/test_entrypoint_env.py::test_attachments_directory_permissions_and_ownership PASSED [100%]
 
-============================== 59 passed in 2.60s ==============================
+============================== 60 passed in 2.41s ==============================
 
 === Frontend Vitest Unit Tests (KAN-82) ===
-
 > @kanban/web@0.1.0 test:unit /home/adamoutler/kanban/kanban/web
 > vitest run src/features/drawer/__tests__/useIssueSurfaceRoute.test.ts
 
 
  RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
 
- ✓ src/features/drawer/__tests__/useIssueSurfaceRoute.test.ts (18 tests) 55ms
+ ✓ src/features/drawer/__tests__/useIssueSurfaceRoute.test.ts (18 tests) 58ms
 
  Test Files  1 passed (1)
       Tests  18 passed (18)
-   Start at  18:01:17
-   Duration  998ms (environment 74%, import 13%, tests 7%, transform 5%, worker 1%)
-
-
+   Start at  19:31:59
+   Duration  1.04s (environment 76%, import 15%, tests 7%, transform 2%, worker 1%)
 
 === ADDITIONAL RAW UNIT TESTS FOR KAN-82 ===
 ============================= test session starts ==============================
@@ -93,29 +91,26 @@ rootdir: /home/adamoutler/kanban
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 22 items
+collecting ... collected 19 items
 
-kanban/tests/importer/test_plane_merge_into_project.py::test_plane_merge_into_project_full_lifecycle PASSED [  4%]
-kanban/tests/importer/test_plane_merge_into_project.py::test_plane_merge_rejects_utf16_surrogate_in_issue_name PASSED [  9%]
-kanban/tests/importer/test_plane_merge_into_project.py::test_plane_merge_md_attachment_script_stripping_and_surrogate_rejection PASSED [ 13%]
-kanban/tests/cli/test_import_plane_cli.py::test_ctl_help_and_subparsers PASSED [ 18%]
-kanban/tests/cli/test_import_plane_cli.py::test_run_fetch_snapshot_success PASSED [ 22%]
-kanban/tests/cli/test_import_plane_cli.py::test_run_fetch_snapshot_security_error PASSED [ 27%]
-kanban/tests/cli/test_import_plane_cli.py::test_run_fetch_snapshot_unexpected_error PASSED [ 31%]
-kanban/tests/cli/test_import_plane_cli.py::test_run_plane_import_validation_errors PASSED [ 36%]
-kanban/tests/cli/test_import_plane_cli.py::test_run_plane_import_delegates_to_asyncio PASSED [ 40%]
-kanban/tests/cli/test_import_plane_cli.py::test_execute_import_db_target_project_and_attachment_dir_passthrough PASSED [ 45%]
-kanban/tests/cli/test_import_plane_cli.py::test_run_plane_import_db_execution PASSED [ 50%]
-kanban/tests/cli/test_import_plane_cli.py::test_get_admin_dsn_fallback PASSED [ 54%]
-kanban/tests/cli/test_import_plane_cli.py::test_cli_fallback_principal_resolution PASSED [ 59%]
-kanban/tests/cli/test_import_plane_cli.py::test_run_plane_import_user_map_loading PASSED [ 63%]
-kanban/tests/cli/test_import_plane_cli.py::test_run_dump_db_forbidden_args PASSED [ 68%]
-kanban/tests/cli/test_import_plane_cli.py::test_run_dump_db_missing_config PASSED [ 72%]
-kanban/tests/cli/test_import_plane_cli.py::test_run_dump_db_success PASSED [ 77%]
-kanban/tests/cli/test_import_plane_cli.py::test_run_dump_db_exception_branches PASSED [ 81%]
-kanban/tests/cli/test_import_plane_cli.py::test_get_admin_dsn_socket_paths PASSED [ 86%]
-kanban/tests/cli/test_import_plane_cli.py::test_run_generic_import_input_validation PASSED [ 90%]
-kanban/tests/cli/test_import_plane_cli.py::test_run_generic_import_dispatch_and_execution PASSED [ 95%]
+kanban/tests/cli/test_import_plane_cli.py::test_ctl_help_and_subparsers PASSED [  5%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_fetch_snapshot_success PASSED [ 10%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_fetch_snapshot_security_error PASSED [ 15%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_fetch_snapshot_unexpected_error PASSED [ 21%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_plane_import_validation_errors PASSED [ 26%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_plane_import_delegates_to_asyncio PASSED [ 31%]
+kanban/tests/cli/test_import_plane_cli.py::test_execute_import_db_target_project_and_attachment_dir_passthrough PASSED [ 36%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_plane_import_db_execution PASSED [ 42%]
+kanban/tests/cli/test_import_plane_cli.py::test_get_admin_dsn_fallback PASSED [ 47%]
+kanban/tests/cli/test_import_plane_cli.py::test_cli_fallback_principal_resolution PASSED [ 52%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_plane_import_user_map_loading PASSED [ 57%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_dump_db_forbidden_args PASSED [ 63%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_dump_db_missing_config PASSED [ 68%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_dump_db_success PASSED [ 73%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_dump_db_exception_branches PASSED [ 78%]
+kanban/tests/cli/test_import_plane_cli.py::test_get_admin_dsn_socket_paths PASSED [ 84%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_generic_import_input_validation PASSED [ 89%]
+kanban/tests/cli/test_import_plane_cli.py::test_run_generic_import_dispatch_and_execution PASSED [ 94%]
 kanban/tests/cli/test_import_plane_cli.py::test_execute_generic_import_db_branches PASSED [100%]
 
-============================== 22 passed in 1.29s ==============================
+============================== 19 passed in 1.08s ==============================

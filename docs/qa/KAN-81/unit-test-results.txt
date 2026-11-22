@@ -44,26 +44,23 @@ kanban/tests/api/test_attachments_pdf.py::test_pdf_upload_rejects_objstm_openact
 kanban/tests/api/test_attachments_pdf.py::test_pdf_upload_rejects_smb_unc_uri_destinations PASSED [ 97%]
 kanban/tests/api/test_attachments_pdf.py::test_pdf_upload_rejects_encrypt_dictionary PASSED [100%]
 
-============================= 36 passed in 28.74s ==============================
+============================= 36 passed in 28.49s ==============================
 
 === Frontend Vitest Unit Tests (KAN-81) ===
-
 > @kanban/web@0.1.0 test:unit /home/adamoutler/kanban/kanban/web
 > vitest run src/components/attachments/__tests__/PdfAttachmentCard.test.tsx src/features/activity/SafeMarkdownPreview.test.tsx src/features/drawer/IssueSurface.test.tsx
 
 
  RUN  v5.1.0 /home/adamoutler/kanban/kanban/web
 
- ✓ src/components/attachments/__tests__/PdfAttachmentCard.test.tsx (7 tests) 222ms
- ✓ src/features/activity/SafeMarkdownPreview.test.tsx (14 tests) 229ms
- ✓ src/features/drawer/IssueSurface.test.tsx (53 tests) 2264ms
+ ✓ src/components/attachments/__tests__/PdfAttachmentCard.test.tsx (7 tests) 191ms
+ ✓ src/features/activity/SafeMarkdownPreview.test.tsx (14 tests) 212ms
+ ✓ src/features/drawer/IssueSurface.test.tsx (53 tests) 2228ms
 
  Test Files  3 passed (3)
       Tests  74 passed (74)
-   Start at  18:00:58
-   Duration  3.53s (tests 50%, environment 35%, import 12%, transform 2%, worker 1%)
-
-
+   Start at  19:31:37
+   Duration  3.52s (tests 49%, environment 37%, import 12%, transform 2%)
 
 === ADDITIONAL RAW UNIT TESTS FOR KAN-81 ===
 ============================= test session starts ==============================
@@ -72,49 +69,50 @@ rootdir: /home/adamoutler/kanban
 configfile: pyproject.toml
 plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
 asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
-collecting ... collected 42 items
+collecting ... collected 43 items
 
 database/tests/migrations/test_p6_02_pdf_attachments_migration.py::test_p6_02_pdf_attachments_migration_lifecycle PASSED [  2%]
 database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [  4%]
-database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [  7%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [  6%]
 database/tests/test_p1_17_models.py::test_orm_round_trip_stickies_views_and_links PASSED [  9%]
 database/tests/test_p1_17_models.py::test_ltree_type_validation PASSED   [ 11%]
-database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [ 14%]
+database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [ 13%]
 kanban/tests/ops/test_sbom.py::test_platform_metadata_constants PASSED   [ 16%]
-kanban/tests/ops/test_sbom.py::test_is_workspace_package PASSED          [ 19%]
-kanban/tests/ops/test_sbom.py::test_normalize_license_atom PASSED        [ 21%]
+kanban/tests/ops/test_sbom.py::test_is_workspace_package PASSED          [ 18%]
+kanban/tests/ops/test_sbom.py::test_normalize_license_atom PASSED        [ 20%]
 kanban/tests/ops/test_sbom.py::test_classify_license_atomic_and_compounds PASSED [ 23%]
-kanban/tests/ops/test_sbom.py::test_resolve_file_path PASSED             [ 26%]
-kanban/tests/ops/test_sbom.py::test_load_allowlist PASSED                [ 28%]
+kanban/tests/ops/test_sbom.py::test_resolve_file_path PASSED             [ 25%]
+kanban/tests/ops/test_sbom.py::test_load_allowlist PASSED                [ 27%]
 kanban/tests/ops/test_sbom.py::test_find_allowlist_match PASSED          [ 30%]
-kanban/tests/ops/test_sbom.py::test_extract_python_license PASSED        [ 33%]
-kanban/tests/ops/test_sbom.py::test_collect_python_components PASSED     [ 35%]
-kanban/tests/ops/test_sbom.py::test_format_npm_purl PASSED               [ 38%]
-kanban/tests/ops/test_sbom.py::test_collect_web_components PASSED        [ 40%]
-kanban/tests/ops/test_sbom.py::test_get_live_components_and_clear_cache PASSED [ 42%]
-kanban/tests/ops/test_sbom.py::test_calculate_sbom_summary PASSED        [ 45%]
-kanban/tests/ops/test_sbom.py::test_get_license_texts PASSED             [ 47%]
-kanban/tests/ops/test_sbom.py::test_generate_cyclonedx_1_5 PASSED        [ 50%]
-kanban/tests/ops/test_sbom.py::test_load_allowlist_invalid_items PASSED  [ 52%]
-kanban/tests/ops/test_sbom.py::test_extract_python_license_edge_cases PASSED [ 54%]
-kanban/tests/ops/test_sbom.py::test_collect_python_components_exception_handling PASSED [ 57%]
-kanban/tests/ops/test_sbom.py::test_collect_web_components_edge_cases PASSED [ 59%]
-kanban/tests/ops/test_sbom.py::test_get_license_texts_io_errors PASSED   [ 61%]
-kanban/tests/ops/test_sbom.py::test_get_license_texts_missing_files PASSED [ 64%]
-kanban/tests/ops/test_sbom.py::test_parse_web_package_json_with_node_modules_and_allowlist PASSED [ 66%]
+kanban/tests/ops/test_sbom.py::test_extract_python_license PASSED        [ 32%]
+kanban/tests/ops/test_sbom.py::test_collect_python_components PASSED     [ 34%]
+kanban/tests/ops/test_sbom.py::test_format_npm_purl PASSED               [ 37%]
+kanban/tests/ops/test_sbom.py::test_collect_web_components PASSED        [ 39%]
+kanban/tests/ops/test_sbom.py::test_get_live_components_and_clear_cache PASSED [ 41%]
+kanban/tests/ops/test_sbom.py::test_calculate_sbom_summary PASSED        [ 44%]
+kanban/tests/ops/test_sbom.py::test_get_license_texts PASSED             [ 46%]
+kanban/tests/ops/test_sbom.py::test_generate_cyclonedx_1_5 PASSED        [ 48%]
+kanban/tests/ops/test_sbom.py::test_load_allowlist_invalid_items PASSED  [ 51%]
+kanban/tests/ops/test_sbom.py::test_extract_python_license_edge_cases PASSED [ 53%]
+kanban/tests/ops/test_sbom.py::test_collect_python_components_exception_handling PASSED [ 55%]
+kanban/tests/ops/test_sbom.py::test_collect_web_components_edge_cases PASSED [ 58%]
+kanban/tests/ops/test_sbom.py::test_get_license_texts_io_errors PASSED   [ 60%]
+kanban/tests/ops/test_sbom.py::test_get_license_texts_missing_files PASSED [ 62%]
+kanban/tests/ops/test_sbom.py::test_parse_web_package_json_with_node_modules_and_allowlist PASSED [ 65%]
+kanban/tests/ops/test_sbom.py::test_live_workspace_sbom_verdicts_zero_deny_and_unknown PASSED [ 67%]
 kanban/tests/importer/test_plane_importer.py::test_case_01_positive_lossless_import_and_idempotency PASSED [ 69%]
-kanban/tests/importer/test_plane_importer.py::test_case_02_dry_run_isolation PASSED [ 71%]
-kanban/tests/importer/test_plane_importer.py::test_case_03_hostile_payload_sanitization PASSED [ 73%]
+kanban/tests/importer/test_plane_importer.py::test_case_02_dry_run_isolation PASSED [ 72%]
+kanban/tests/importer/test_plane_importer.py::test_case_03_hostile_payload_sanitization PASSED [ 74%]
 kanban/tests/importer/test_plane_importer.py::test_case_05_integrity_rollback_on_tree_depth_violation PASSED [ 76%]
-kanban/tests/importer/test_plane_importer.py::test_plane_mapper_topological_sort_and_cycle PASSED [ 78%]
-kanban/tests/importer/test_plane_importer.py::test_plane_mapper_user_handle_resolution PASSED [ 80%]
+kanban/tests/importer/test_plane_importer.py::test_plane_mapper_topological_sort_and_cycle PASSED [ 79%]
+kanban/tests/importer/test_plane_importer.py::test_plane_mapper_user_handle_resolution PASSED [ 81%]
 kanban/tests/importer/test_plane_importer.py::test_import_empty_bundle_fallback_to_existing_project PASSED [ 83%]
-kanban/tests/importer/test_plane_importer.py::test_import_empty_bundle_no_projects_raises_integrity_error PASSED [ 85%]
+kanban/tests/importer/test_plane_importer.py::test_import_empty_bundle_no_projects_raises_integrity_error PASSED [ 86%]
 kanban/tests/importer/test_plane_importer.py::test_import_with_custom_state_dates_and_relations PASSED [ 88%]
 kanban/tests/importer/test_plane_importer.py::test_import_entity_updates_and_invalid_links_gate PASSED [ 90%]
-kanban/tests/importer/test_plane_importer.py::test_parse_iso_date_helpers PASSED [ 92%]
+kanban/tests/importer/test_plane_importer.py::test_parse_iso_date_helpers PASSED [ 93%]
 kanban/tests/importer/test_plane_importer.py::test_plane_importer_pdf_attachment_positive PASSED [ 95%]
 kanban/tests/importer/test_plane_importer.py::test_plane_importer_non_pdf_extension_with_pdf_magic_bytes_rejected PASSED [ 97%]
 kanban/tests/importer/test_plane_importer.py::test_plane_importer_cycle_date_normalization_and_overlap PASSED [100%]
 
-============================== 42 passed in 2.11s ==============================
+============================== 43 passed in 2.27s ==============================
