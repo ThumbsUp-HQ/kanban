@@ -2,8 +2,9 @@
 
 - **Reviewer Persona:** `ux-architect` / `ui-designer` (UI & UX Specialist Reviewer)
 - **Ticket:** `KAN-68` (`[KB-SEC-CODEX-06] Expose capability_mask & allowed_cidrs in MCP Access Studio, Align Runner Enrollment/Rotation UX, & Sync Security Wiki`)
-- **Audited Commit (`HEAD`):** `f07dd8af92689a55f409cd77df3730e8c63b183f` (`f07dd8af`)
-- **Audited Branch:** `feat/KAN-68-mcp-runner-studio-ux`
+- **Audited Commit (`HEAD`):** `86c2da2d6f4ff9558b6e3cbc84950c6fc09c0604` (`86c2da2d`)
+- **Base Commit (`main`):** `22d88335b81e61216d97121145ee644ba8ea5641` (`22d88335`)
+- **Audited Branch:** `main` (merged from `feat/KAN-68-mcp-runner-studio-ux`)
 - **Reviewed Artifacts:**
   - `docs/qa/KAN-68/git-diff.patch`
   - `docs/qa/KAN-68/unit-test-results.txt`

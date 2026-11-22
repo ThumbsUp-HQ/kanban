@@ -2,8 +2,10 @@
 
 ## Executive Summary
 - Ticket: `KAN-68` ([KB-SEC-CODEX-06] Expose capability_mask & allowed_cidrs in MCP Access Studio, Align Runner Enrollment/Rotation UX, & Sync Security Wiki)
-- Branch: `feat/KAN-68-mcp-runner-studio-ux`
-- Workspace: `/home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan68-1d9a754f`
+- Branch: `main` (merged from `feat/KAN-68-mcp-runner-studio-ux`)
+- Merged Commit (`HEAD`): `86c2da2d6f4ff9558b6e3cbc84950c6fc09c0604` (`86c2da2d`)
+- Pre-Ticket Base Commit (`main`): `22d88335b81e61216d97121145ee644ba8ea5641` (`22d88335`)
+- Workspace: `/home/adamoutler/kanban`
 - Status: READY FOR SPECIALIST AND REALITY-CHECKER AUDIT
 
 All three core actions specified in ticket KAN-68 have been implemented, tested with >=95% branch coverage, validated with visual browser screenshots, and synced with the documentation wiki with zero em-dashes or en-dashes.
