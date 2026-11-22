@@ -7,7 +7,7 @@ from __future__ import annotations
 import hashlib
 import uuid
 from datetime import UTC, datetime, timedelta
-from typing import TYPE_CHECKING, Annotated, Final, Literal, cast
+from typing import TYPE_CHECKING, Annotated, Any, Final, Literal, cast
 
 from fastapi import Depends, Request
 from sqlalchemy import select, text
@@ -109,7 +109,13 @@ class TaintRecorder:
                 ),
             )
 
-    async def record_project_ids(self, project_refs: Iterable[uuid.UUID | str]) -> None:
+    async def record_project_ids(
+        self,
+        project_refs: Iterable[uuid.UUID | str],
+        *,
+        untrusted_source_object_id: uuid.UUID | str | None = None,
+        contains_untrusted_content: bool = False,
+    ) -> None:
         """Record read-taint for all distinct project IDs returned in a response."""
         if not self.session_id or self.caller.read_only:
             return
@@ -128,16 +134,37 @@ class TaintRecorder:
         session_expires = now + timedelta(seconds=SESSION_TAINT_TTL_SECONDS)
         cred_expires = now + timedelta(hours=CREDENTIAL_TAINT_TTL_HOURS)
 
+        parsed_source_obj_id: uuid.UUID | None = None
+        if untrusted_source_object_id is not None:
+            if isinstance(untrusted_source_object_id, uuid.UUID):
+                parsed_source_obj_id = untrusted_source_object_id
+            else:
+                try:
+                    parsed_source_obj_id = uuid.UUID(str(untrusted_source_object_id))
+                except (ValueError, TypeError):
+                    parsed_source_obj_id = None
+
         upsert_sql = text(
             """
             INSERT INTO mcp_read_taint (
-                workspace_id, taint_key, key_kind, project_id, first_read_at, expires_at
+                workspace_id, taint_key, key_kind, project_id, first_read_at, expires_at,
+                untrusted_source_object_id, contains_untrusted_content
             )
             VALUES (
-                :ws_id, :taint_key, :key_kind, :proj_id, :now, :expires_at
+                :ws_id, :taint_key, :key_kind, :proj_id, :now, :expires_at,
+                :untrusted_source_object_id, :contains_untrusted_content
             )
             ON CONFLICT (taint_key, project_id)
-            DO UPDATE SET expires_at = EXCLUDED.expires_at;
+            DO UPDATE SET
+                expires_at = EXCLUDED.expires_at,
+                contains_untrusted_content = (
+                    mcp_read_taint.contains_untrusted_content
+                    OR EXCLUDED.contains_untrusted_content
+                ),
+                untrusted_source_object_id = COALESCE(
+                    EXCLUDED.untrusted_source_object_id,
+                    mcp_read_taint.untrusted_source_object_id
+                );
             """
         )
 
@@ -161,6 +188,8 @@ class TaintRecorder:
                     "proj_id": proj_id,
                     "now": now,
                     "expires_at": session_expires,
+                    "untrusted_source_object_id": parsed_source_obj_id,
+                    "contains_untrusted_content": contains_untrusted_content,
                 },
             )
 
@@ -175,11 +204,25 @@ class TaintRecorder:
                         "proj_id": proj_id,
                         "now": now,
                         "expires_at": cred_expires,
+                        "untrusted_source_object_id": parsed_source_obj_id,
+                        "contains_untrusted_content": contains_untrusted_content,
                     },
                 )
 
         if seen_projects:
             await self.session.flush()
+
+    async def record_untrusted_read(
+        self,
+        project_ref: uuid.UUID | str,
+        untrusted_source_object_id: uuid.UUID | str | None = None,
+    ) -> None:
+        """Record untrusted content read-taint for a project and source object."""
+        await self.record_project_ids(
+            [project_ref],
+            untrusted_source_object_id=untrusted_source_object_id,
+            contains_untrusted_content=True,
+        )
 
 
 class TaintGuard:
@@ -208,10 +251,71 @@ class TaintGuard:
                 ),
             )
 
+    async def _emit_blocked_activity(
+        self,
+        source_proj_id: uuid.UUID,
+        target_proj_id: uuid.UUID,
+        effective_tool: str,
+        session_key: bytes,
+        untrusted_source_object_id: uuid.UUID | None = None,
+    ) -> None:
+        """Emit MCP_TAINT_BLOCKED activity event to the immutable ledger."""
+        session_key_hash = hashlib.sha256(session_key).hexdigest()
+        payload: dict[str, Any] = {
+            "session_key_hash": session_key_hash,
+            "source_project_id": str(source_proj_id),
+            "target_project_id": str(target_proj_id),
+            "tool_name": effective_tool,
+            "tool": effective_tool,
+        }
+        if untrusted_source_object_id is not None:
+            payload["untrusted_source_object_id"] = str(untrusted_source_object_id)
+
+        session_factory: RLSSessionFactory | None = getattr(
+            self.request.app.state, "session_factory", None
+        )
+        if session_factory is not None:
+            user_access_hash = self.caller.user_access_hash
+            if user_access_hash is None:
+                caller = self.caller
+                scopes_str = ",".join(sorted(caller.token_scopes))
+                raw = f"{caller.workspace_id}:{caller.principal_id}:{scopes_str}".encode()
+                user_access_hash = hashlib.sha256(raw).digest()
+            audit_ctx = RLSContext(
+                principal_id=self.caller.principal_id,
+                workspace_id=self.caller.workspace_id,
+                token_scopes=self.caller.token_scopes,
+                aal_level=cast("Literal[1, 2]", self.caller.aal_level),
+                agent_principal_id=self.caller.agent_principal_id,
+                ephemeral_project_id=self.caller.ephemeral_project_id,
+                read_only=False,
+                user_access_hash=user_access_hash,
+            )
+            async with session_factory.session(audit_ctx) as audit_session:
+                await record_activity(
+                    session=audit_session,
+                    workspace_id=self.caller.workspace_id,
+                    object_id=target_proj_id,
+                    actor_principal_id=self.caller.principal_id,
+                    event_type=ActivityEventType.MCP_TAINT_BLOCKED,
+                    payload=payload,
+                )
+        else:
+            await record_activity(
+                session=self.session,
+                workspace_id=self.caller.workspace_id,
+                object_id=target_proj_id,
+                actor_principal_id=self.caller.principal_id,
+                event_type=ActivityEventType.MCP_TAINT_BLOCKED,
+                payload=payload,
+            )
+            await self.session.flush()
+
     async def check_write(
         self,
         target_projects: uuid.UUID | str | Sequence[uuid.UUID | str],
         tool_name: str | None = None,
+        confirmation_token: str | None = None,
     ) -> None:
         """Assert write target project(s) audience is not broader than any tainted project."""
         if not self.session_id:
@@ -233,6 +337,85 @@ class TaintGuard:
             else list(target_projects)
         )
 
+        query_token: str | None = None
+        req_scope = getattr(self.request, "scope", None)
+        if isinstance(req_scope, dict) and "query_string" in req_scope:
+            query_token = self.request.query_params.get("confirmation_token")
+
+        has_confirmation = bool(
+            (confirmation_token and str(confirmation_token).strip())
+            or self.request.headers.get("x-kb-confirmation-token", "").strip()
+            or (query_token and str(query_token).strip())
+        )
+        effective_tool = tool_name or self.request.headers.get("x-kb-mcp-tool") or "unknown"
+
+        # Problem 2: Same-project & cross-project untrusted prompt-injection taint block
+        if not has_confirmation:
+            untrusted_query = text(
+                """
+                SELECT t.project_id, p.identifier AS project_key, t.untrusted_source_object_id
+                FROM mcp_read_taint t
+                JOIN projects p ON p.id = t.project_id
+                WHERE t.taint_key = ANY(:taint_keys)
+                  AND t.expires_at > :now
+                  AND t.contains_untrusted_content = TRUE
+                LIMIT 1;
+                """
+            )
+            untrusted_row = (
+                await self.session.execute(
+                    untrusted_query,
+                    {
+                        "taint_keys": taint_keys,
+                        "now": now,
+                    },
+                )
+            ).first()
+
+            if untrusted_row is not None:
+                source_proj_id, source_proj_key, untrusted_source_id = (
+                    untrusted_row[0],
+                    untrusted_row[1],
+                    untrusted_row[2],
+                )
+                target_ref = targets[0] if targets else "unknown"
+                resolved = await _resolve_project_uuid(
+                    self.session, self.caller.workspace_id, target_ref
+                )
+                target_proj_id = resolved[0] if resolved else source_proj_id
+                target_proj_key = resolved[1] if resolved else source_proj_key
+
+                await self._emit_blocked_activity(
+                    source_proj_id=source_proj_id,
+                    target_proj_id=target_proj_id,
+                    effective_tool=effective_tool,
+                    session_key=session_key,
+                    untrusted_source_object_id=untrusted_source_id,
+                )
+
+                raise ProblemException(
+                    code="UNTRUSTED_CONTENT_TAINT_ACTIVE",
+                    status=409,
+                    title="Untrusted Content Taint Active",
+                    type_uri="urn:kanban:problem:untrusted-content-taint",
+                    detail=(
+                        f"Mutating operation '{effective_tool}' blocked across project "
+                        f"'{target_proj_key}' due to active untrusted content read-taint "
+                        f"from '{source_proj_key}'."
+                    ),
+                    extra={
+                        "tainted_by": [source_proj_key],
+                        "untrusted_source_object_id": (
+                            str(untrusted_source_id) if untrusted_source_id is not None else None
+                        ),
+                        "hint": (
+                            "Ask a human to confirm or execute this mutating operation "
+                            "in the web UI."
+                        ),
+                    },
+                )
+
+        # Cross-project broader-ACL exfiltration guard for trusted content
         query = text(
             """
             SELECT t.project_id, p.identifier AS project_key
@@ -277,57 +460,12 @@ class TaintGuard:
 
             if result is not None:
                 source_proj_id, source_proj_key = result[0], result[1]
-                effective_tool = tool_name or self.request.headers.get("x-kb-mcp-tool") or "unknown"
-
-                # Emit MCP_TAINT_BLOCKED activity
-                session_key_hash = hashlib.sha256(session_key).hexdigest()
-                payload = {
-                    "session_key_hash": session_key_hash,
-                    "source_project_id": str(source_proj_id),
-                    "target_project_id": str(target_proj_id),
-                    "tool_name": effective_tool,
-                    "tool": effective_tool,
-                }
-
-                session_factory: RLSSessionFactory | None = getattr(
-                    self.request.app.state, "session_factory", None
+                await self._emit_blocked_activity(
+                    source_proj_id=source_proj_id,
+                    target_proj_id=target_proj_id,
+                    effective_tool=effective_tool,
+                    session_key=session_key,
                 )
-                if session_factory is not None:
-                    user_access_hash = self.caller.user_access_hash
-                    if user_access_hash is None:
-                        caller = self.caller
-                        scopes_str = ",".join(sorted(caller.token_scopes))
-                        raw = f"{caller.workspace_id}:{caller.principal_id}:{scopes_str}".encode()
-                        user_access_hash = hashlib.sha256(raw).digest()
-                    audit_ctx = RLSContext(
-                        principal_id=self.caller.principal_id,
-                        workspace_id=self.caller.workspace_id,
-                        token_scopes=self.caller.token_scopes,
-                        aal_level=cast("Literal[1, 2]", self.caller.aal_level),
-                        agent_principal_id=self.caller.agent_principal_id,
-                        ephemeral_project_id=self.caller.ephemeral_project_id,
-                        read_only=False,
-                        user_access_hash=user_access_hash,
-                    )
-                    async with session_factory.session(audit_ctx) as audit_session:
-                        await record_activity(
-                            session=audit_session,
-                            workspace_id=self.caller.workspace_id,
-                            object_id=target_proj_id,
-                            actor_principal_id=self.caller.principal_id,
-                            event_type=ActivityEventType.MCP_TAINT_BLOCKED,
-                            payload=payload,
-                        )
-                else:
-                    await record_activity(
-                        session=self.session,
-                        workspace_id=self.caller.workspace_id,
-                        object_id=target_proj_id,
-                        actor_principal_id=self.caller.principal_id,
-                        event_type=ActivityEventType.MCP_TAINT_BLOCKED,
-                        payload=payload,
-                    )
-                    await self.session.flush()
 
                 raise ProblemException(
                     code="CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED",

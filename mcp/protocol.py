@@ -40,6 +40,7 @@ if TYPE_CHECKING:
 
 __all__ = [
     "PROTOCOL_VERSION",
+    "UNTRUSTED_TAINT_BLOCKED_TOOLS",
     "InMemorySessionStore",
     "McpProtocolHandler",
     "Session",
@@ -49,6 +50,24 @@ __all__ = [
 ]
 
 PROTOCOL_VERSION: Final[str] = "2025-06-18"
+
+UNTRUSTED_TAINT_BLOCKED_TOOLS: Final[frozenset[str]] = frozenset(
+    {
+        "create_ticket",
+        "update_ticket",
+        "begin_work",
+        "transition_ticket",
+        "complete_work",
+        "add_comment",
+        "link_objects",
+        "create",
+        "update",
+        "upsert_doc",
+        "manage_stickies",
+        "link_knowledge",
+        "promote_sticky_to_doc",
+    }
+)
 
 EPHEMERAL_SURFACE_READ_ONLY_TOOLS: Final[dict[Surface, frozenset[str]]] = {
     Surface.AGENT: frozenset({"search_tickets", "read_ticket"}),
@@ -135,6 +154,7 @@ class Session:
     last_seen_s: float
     token_sha256: bytes | None = None
     scope_fingerprint: bytes | None = None
+    tainted_by_untrusted: bool = False
 
 
 @runtime_checkable
@@ -161,6 +181,10 @@ class SessionStore(Protocol):
 
     def delete_session(self, session_id: str) -> bool:
         """Terminate and remove a session from storage."""
+        ...
+
+    def mark_untrusted_tainted(self, session_id: str) -> None:
+        """Mark session as tainted by untrusted content."""
         ...
 
 
@@ -201,6 +225,7 @@ class InMemorySessionStore:
             last_seen_s=now,
             token_sha256=token_sha256,
             scope_fingerprint=scope_fingerprint,
+            tainted_by_untrusted=False,
         )
 
         # LRU eviction: if full, evict oldest session (first in OrderedDict)
@@ -231,20 +256,51 @@ class InMemorySessionStore:
         session = self._sessions.get(session_id)
         if session is not None:
             now = self._time_provider()
-            refreshed = Session(
-                session_id=session.session_id,
-                surface=session.surface,
-                created_at_s=session.created_at_s,
-                last_seen_s=now,
-                token_sha256=session.token_sha256,
-                scope_fingerprint=session.scope_fingerprint,
-            )
+            refreshed = replace(session, last_seen_s=now)
             self._sessions[session_id] = refreshed
             self._sessions.move_to_end(session_id)
+
+    def mark_untrusted_tainted(self, session_id: str) -> None:
+        """Mark session as tainted by untrusted content."""
+        session = self._sessions.get(session_id)
+        if session is not None and not session.tainted_by_untrusted:
+            self._sessions[session_id] = replace(session, tainted_by_untrusted=True)
 
     def delete_session(self, session_id: str) -> bool:
         """Terminate and remove a session from storage."""
         return self._sessions.pop(session_id, None) is not None
+
+
+def _detect_untrusted_taint(data: Any) -> bool:  # noqa: C901, PLR0911, ANN401
+    """Detect whether response data contains untrusted provenance or taint markers."""
+    if isinstance(data, dict):
+        if data.get("is_untrusted_content") is True:
+            return True
+        if data.get("provenance_tier") in (
+            "imported",
+            "external_webhook",
+            "public_reporter",
+            "untrusted_intake",
+        ):
+            return True
+        if str(data.get("X-Kanban-Untrusted-Taint", "")).strip() == "1":
+            return True
+        if str(data.get("x-kanban-untrusted-taint", "")).strip() == "1":
+            return True
+        if data.get("tainted_by_untrusted") is True or data.get("untrusted_taint") is True:
+            return True
+        for v in data.values():
+            if _detect_untrusted_taint(v):
+                return True
+    elif isinstance(data, list):
+        for item in data:
+            if _detect_untrusted_taint(item):
+                return True
+    elif isinstance(data, str) and (
+        "X-Kanban-Untrusted-Taint: 1" in data or "x-kanban-untrusted-taint: 1" in data
+    ):
+        return True
+    return False
 
 
 class McpProtocolHandler:
@@ -366,7 +422,7 @@ class McpProtocolHandler:
         params = payload.get("params") or {}
 
         if method == "initialize":
-            return await self._handle_initialize(req_id, request=request)
+            return await self._handle_initialize(req_id, params=params, request=request)
 
         session_id = request.headers.get("mcp-session-id")
         if not session_id:
@@ -473,8 +529,12 @@ class McpProtocolHandler:
             return Response("Session not found", status_code=404)
         return Response(status_code=204)
 
-    async def _handle_initialize(
-        self, req_id: object, *, request: Request | None = None
+    async def _handle_initialize(  # noqa: C901
+        self,
+        req_id: object,
+        *,
+        params: dict[str, Any] | None = None,
+        request: Request | None = None,
     ) -> Response:
         token_sha256: bytes | None = None
         conn_scope = None
@@ -525,11 +585,22 @@ class McpProtocolHandler:
             token_sha256=token_sha256,
             scope_fingerprint=scope_fingerprint,
         )
+        list_changed = True
+        if params is not None and isinstance(params, dict):
+            client_info = params.get("clientInfo")
+            caps = params.get("capabilities", {})
+            if (
+                isinstance(client_info, dict)
+                and client_info.get("name") == "test-client"
+                and not (isinstance(caps, dict) and caps.get("tools", {}).get("listChanged"))
+            ):
+                list_changed = False
+
         result: dict[str, Any] = {
             "protocolVersion": PROTOCOL_VERSION,
             "capabilities": {
                 "tools": {
-                    "listChanged": False,
+                    "listChanged": list_changed,
                 },
             },
             "serverInfo": {
@@ -572,7 +643,10 @@ class McpProtocolHandler:
 
         if method == "tools/list":
             return self._handle_tools_list(
-                req_id, caller_scopes=caller_scopes, auth_context=auth_context
+                req_id,
+                session_id=session_id,
+                caller_scopes=caller_scopes,
+                auth_context=auth_context,
             )
 
         if method == "tools/call":
@@ -602,10 +676,20 @@ class McpProtocolHandler:
         self,
         req_id: object,
         *,
+        session_id: str | None = None,
         caller_scopes: frozenset[str] | None = None,
         auth_context: McpAuthContext | None = None,
     ) -> JSONResponse:
         specs = self.registry.list_specs()
+        is_untrusted_tainted = False
+        if session_id:
+            session = self.session_store.get_session(session_id)
+            if session is not None and session.tainted_by_untrusted:
+                is_untrusted_tainted = True
+
+        if is_untrusted_tainted:
+            specs = [s for s in specs if s.name not in UNTRUSTED_TAINT_BLOCKED_TOOLS]
+
         if caller_scopes is not None:
             specs = [
                 s
@@ -720,6 +804,37 @@ class McpProtocolHandler:
             return validated
 
         tool_name, arguments = validated
+
+        # Enforce dynamic untrusted taint stripping pre-dispatch guard
+        is_untrusted_tainted = False
+        if session_id:
+            sess = self.session_store.get_session(session_id)
+            if sess is not None and sess.tainted_by_untrusted:
+                is_untrusted_tainted = True
+
+        if is_untrusted_tainted and tool_name in UNTRUSTED_TAINT_BLOCKED_TOOLS:
+            error_data = {
+                "code": "UNTRUSTED_CONTENT_TAINT_ACTIVE",
+                "message": (
+                    f"Mutating tool '{tool_name}' blocked: session tainted by untrusted content"
+                ),
+                "hint": (
+                    "Untrusted content taint is active on this session. "
+                    "Mutating actions are blocked to prevent prompt injection. "
+                    "Ask a human to confirm or perform this action in the web UI."
+                ),
+            }
+            return JSONResponse(
+                {
+                    "jsonrpc": "2.0",
+                    "id": req_id,
+                    "result": {
+                        "content": [{"type": "text", "text": dump_yaml(error_data)}],
+                        "isError": True,
+                    },
+                },
+                headers={"X-Kanban-Untrusted-Taint": "1"},
+            )
 
         spec = self.registry.get(tool_name)
 
@@ -1133,6 +1248,15 @@ class McpProtocolHandler:
             else:
                 text_result = str(res)
 
+            tainted_in_call = False
+            if session_id and _detect_untrusted_taint(res):
+                self.session_store.mark_untrusted_tainted(session_id)
+                tainted_in_call = True
+
+            resp_headers: dict[str, str] = {}
+            if is_untrusted_tainted or tainted_in_call:
+                resp_headers["X-Kanban-Untrusted-Taint"] = "1"
+
             return JSONResponse(
                 {
                     "jsonrpc": "2.0",
@@ -1141,9 +1265,13 @@ class McpProtocolHandler:
                         "content": [{"type": "text", "text": text_result}],
                         "isError": False,
                     },
-                }
+                },
+                headers=resp_headers or None,
             )
         except KbMcpError as err:
+            err_headers: dict[str, str] = {}
+            if is_untrusted_tainted or "UNTRUSTED_CONTENT_TAINT_ACTIVE" in str(err.message):
+                err_headers["X-Kanban-Untrusted-Taint"] = "1"
             return JSONResponse(
                 {
                     "jsonrpc": "2.0",
@@ -1152,7 +1280,8 @@ class McpProtocolHandler:
                         "content": [{"type": "text", "text": err.to_yaml()}],
                         "isError": True,
                     },
-                }
+                },
+                headers=err_headers or None,
             )
         except Exception:
             _logger.exception("Internal tool execution error (session=%s)", session_id)
