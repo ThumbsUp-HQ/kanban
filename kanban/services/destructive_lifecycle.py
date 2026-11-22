@@ -1115,6 +1115,29 @@ async def execute_delete(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
             )
             await session.execute(delete(Project).where(Project.id == target_obj.id))
 
+        # Automatically crypto-shred activity_record_keys for purged object_ids (KB-SEC-SHRED-01)
+        if mode == "permanent_purge":
+            from kanban.services.crypto_shred import crypto_shred_keys_for_objects  # noqa: PLC0415
+
+            purged_ids: list[uuid.UUID] = [target_obj.id, *live_blast.descendant_ids]
+            if target_kind == "project":
+                purged_ids.extend(proj_issue_ids)
+                purged_ids.extend(proj_doc_ids)
+                purged_ids.extend(proj_page_ids)
+                purged_ids.extend(proj_sticky_ids)
+                purged_ids.extend(proj_cycle_ids)
+                purged_ids.extend(proj_mod_ids)
+                purged_ids.extend(proj_view_ids)
+            elif target_kind == "doc":
+                purged_ids.extend(doc_page_ids)
+            await crypto_shred_keys_for_objects(
+                session,
+                caller.workspace_id,
+                purged_ids,
+                caller.principal_id,
+                reason=f"Permanent purge of {target_kind} {target_obj.id}",
+            )
+
         # Record activity before deleting from objects spine
         await record_activity(
             session=session,

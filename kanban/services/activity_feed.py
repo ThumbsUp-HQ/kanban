@@ -16,6 +16,7 @@ from typing import TYPE_CHECKING, Any, Final
 from sqlalchemy import func, select
 
 from database.models.activity import ActivityRecord
+from database.models.activity_key import ActivityRecordKey
 from database.models.issues import CommentReaction, Issue, IssueComment
 from database.models.principals import EffectiveResourceAccess, Principal, RoleBinding
 from database.models.projects import Project
@@ -318,15 +319,24 @@ async def _enrich_creator_override_payload(
                 payload[target_field] = actor_summary.label
 
 
-async def _sanitize_payload(
+async def _sanitize_payload(  # noqa: C901, PLR0913, PLR0917
     session: AsyncSession,
     caller: PrincipalContext,
     record: ActivityRecord,
     actors_map: dict[uuid.UUID, NormalActorSummary | RedactedActorSummary],
     project_id: uuid.UUID | None = None,
+    key_record: ActivityRecordKey | None = None,
 ) -> dict[str, Any]:
     """Sanitize referenced principals, mask unreadable linked objects, and strip deleted bodies."""
-    payload = dict(record.payload)
+    if getattr(record, "encryption_ver", 0) == 1:
+        from kanban.services.crypto_shred import unwrap_activity_payload  # noqa: PLC0415
+
+        unwrapped = unwrap_activity_payload(record, key_record)
+        if unwrapped.get("redacted") is True:
+            return unwrapped
+        payload = dict(unwrapped)
+    else:
+        payload = dict(record.payload)
 
     # 1. Redact out-of-boundary referenced principals
     principal_ref_keys = [
@@ -471,6 +481,17 @@ async def get_issue_activity(  # noqa: C901, PLR0912, PLR0913, PLR0915
     actor_ids = {r.actor_id for r in page_records if r.actor_id is not None}
     actors_map = await _resolve_actors(session, caller, actor_ids, issue.project_id)
 
+    # Batch resolve keys for encrypted records
+    encrypted_act_ids = [r.id for r in page_records if getattr(r, "encryption_ver", 0) == 1]
+    keys_map: dict[uuid.UUID, ActivityRecordKey] = {}
+    if encrypted_act_ids:
+        k_stmt = select(ActivityRecordKey).where(
+            ActivityRecordKey.workspace_id == caller.workspace_id,
+            ActivityRecordKey.activity_id.in_(encrypted_act_ids),
+        )
+        k_rows = list((await session.execute(k_stmt)).scalars().all())
+        keys_map = {k.activity_id: k for k in k_rows}
+
     # Batch resolve comments
     comment_ids: set[uuid.UUID] = set()
     for r in page_records:
@@ -479,7 +500,13 @@ async def get_issue_activity(  # noqa: C901, PLR0912, PLR0913, PLR0915
             ActivityEventType.COMMENT_EDITED.value,
             ActivityEventType.COMMENT_DELETED.value,
         ):
-            cid_val = r.payload.get("comment_id")
+            if getattr(r, "encryption_ver", 0) == 1:
+                from kanban.services.crypto_shred import unwrap_activity_payload  # noqa: PLC0415
+
+                eff_p = unwrap_activity_payload(r, keys_map.get(r.id))
+                cid_val = eff_p.get("comment_id")
+            else:
+                cid_val = r.payload.get("comment_id")
             if cid_val is not None:
                 with contextlib.suppress(ValueError, TypeError):
                     comment_ids.add(uuid.UUID(str(cid_val)))
@@ -496,12 +523,13 @@ async def get_issue_activity(  # noqa: C901, PLR0912, PLR0913, PLR0915
     items: list[ActivityItemResponse] = []
     for r in page_records:
         actor_summary = actors_map.get(r.actor_id) if r.actor_id else None
+        key_rec = keys_map.get(r.id)
         sanitized_payload = await _sanitize_payload(
-            session, caller, r, actors_map, issue.project_id
+            session, caller, r, actors_map, issue.project_id, key_record=key_rec
         )
 
         comment_obj: ActiveCommentSummary | SoftDeletedCommentSummary | None = None
-        cid_val = r.payload.get("comment_id")
+        cid_val = sanitized_payload.get("comment_id")
         if cid_val is not None:
             with contextlib.suppress(ValueError, TypeError):
                 cid = uuid.UUID(str(cid_val))
@@ -667,6 +695,17 @@ async def get_project_activity(  # noqa: C901, PLR0912, PLR0913, PLR0915
     actor_ids = {r.actor_id for r in page_records if r.actor_id is not None}
     actors_map = await _resolve_actors(session, caller, actor_ids, project.id)
 
+    # Batch resolve keys for encrypted records
+    encrypted_act_ids = [r.id for r in page_records if getattr(r, "encryption_ver", 0) == 1]
+    keys_map: dict[uuid.UUID, ActivityRecordKey] = {}
+    if encrypted_act_ids:
+        k_stmt = select(ActivityRecordKey).where(
+            ActivityRecordKey.workspace_id == caller.workspace_id,
+            ActivityRecordKey.activity_id.in_(encrypted_act_ids),
+        )
+        k_rows = list((await session.execute(k_stmt)).scalars().all())
+        keys_map = {k.activity_id: k for k in k_rows}
+
     # Batch resolve comments
     comment_ids: set[uuid.UUID] = set()
     for r in page_records:
@@ -675,7 +714,13 @@ async def get_project_activity(  # noqa: C901, PLR0912, PLR0913, PLR0915
             ActivityEventType.COMMENT_EDITED.value,
             ActivityEventType.COMMENT_DELETED.value,
         ):
-            cid_val = r.payload.get("comment_id")
+            if getattr(r, "encryption_ver", 0) == 1:
+                from kanban.services.crypto_shred import unwrap_activity_payload  # noqa: PLC0415
+
+                eff_p = unwrap_activity_payload(r, keys_map.get(r.id))
+                cid_val = eff_p.get("comment_id")
+            else:
+                cid_val = r.payload.get("comment_id")
             if cid_val is not None:
                 with contextlib.suppress(ValueError, TypeError):
                     comment_ids.add(uuid.UUID(str(cid_val)))
@@ -698,10 +743,13 @@ async def get_project_activity(  # noqa: C901, PLR0912, PLR0913, PLR0915
     items: list[ActivityItemResponse] = []
     for r in page_records:
         actor_summary = actors_map.get(r.actor_id) if r.actor_id else None
-        sanitized_payload = await _sanitize_payload(session, caller, r, actors_map, project.id)
+        key_rec = keys_map.get(r.id)
+        sanitized_payload = await _sanitize_payload(
+            session, caller, r, actors_map, project.id, key_record=key_rec
+        )
 
         comment_obj: ActiveCommentSummary | SoftDeletedCommentSummary | None = None
-        cid_val = r.payload.get("comment_id")
+        cid_val = sanitized_payload.get("comment_id")
         if cid_val is not None:
             with contextlib.suppress(ValueError, TypeError):
                 cid = uuid.UUID(str(cid_val))

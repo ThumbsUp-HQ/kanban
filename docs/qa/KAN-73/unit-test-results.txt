@@ -1,0 +1,30 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan73-ff2d6362/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan73-ff2d6362
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 20 items
+
+database/tests/test_crypto_shred_activity_chain.py::test_mixed_v0_v1_activity_chain_and_crypto_shred PASSED [  5%]
+database/tests/test_crypto_shred_activity_chain.py::test_activity_ledger_immutability_and_tamper_detection PASSED [ 10%]
+database/tests/test_crypto_shred_activity_chain.py::test_tamper_nonce_and_aad_detection PASSED [ 15%]
+kanban/tests/security/test_audit_crypto_shred.py::test_case_1_two_stage_crypto_shred_by_activity_id PASSED [ 20%]
+kanban/tests/security/test_audit_crypto_shred.py::test_case_2_object_level_crypto_shred PASSED [ 25%]
+kanban/tests/security/test_audit_crypto_shred.py::test_case_3_negative_security_rejections PASSED [ 30%]
+kanban/tests/security/test_audit_crypto_shred.py::test_case_4_permanent_purge_cascades_key_shredding PASSED [ 35%]
+kanban/tests/security/test_admin_routes_protected.py::test_assert_admin_routes_protected_compliance PASSED [ 40%]
+kanban/tests/security/test_admin_routes_protected.py::test_multi_source_and_export_routes_registered PASSED [ 45%]
+database/tests/test_p1_17_models.py::test_orm_schema_parity PASSED       [ 50%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_issues_and_knowledge PASSED [ 55%]
+database/tests/test_p1_17_models.py::test_orm_round_trip_stickies_views_and_links PASSED [ 60%]
+database/tests/test_p1_17_models.py::test_ltree_type_validation PASSED   [ 65%]
+database/tests/test_p1_17_models.py::test_supply_chain_checks PASSED     [ 70%]
+kanban/tests/api/test_activity_feed.py::test_case_1_positive_4_tab_filtering_and_counts PASSED [ 75%]
+kanban/tests/api/test_activity_feed.py::test_case_2_deleted_comment_and_redaction_security PASSED [ 80%]
+kanban/tests/api/test_activity_feed.py::test_case_3_project_scoped_rls_filtering PASSED [ 85%]
+kanban/tests/api/test_activity_feed.py::test_case_4_hash_chain_exposure PASSED [ 90%]
+kanban/tests/api/test_activity_feed.py::test_case_5_boundary_and_pagination PASSED [ 95%]
+kanban/tests/api/test_activity_feed.py::test_case_6_edge_cases_and_branch_coverage PASSED [100%]
+
+============================== 20 passed in 7.02s ==============================

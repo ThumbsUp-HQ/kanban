@@ -21,18 +21,20 @@ from __future__ import annotations
 
 import json
 import re
+import uuid
 from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
-from typing import TYPE_CHECKING, Final, cast
+from typing import TYPE_CHECKING, Final
 
 from sqlalchemy import text
 
 if TYPE_CHECKING:
-    import uuid
     from collections.abc import Awaitable, Callable, Mapping, Sequence
 
     from sqlalchemy.ext.asyncio import AsyncSession
+
+    from kanban.security.envelope import KekProvider
 
 type JSONValue = str | int | float | bool | Sequence[JSONValue] | Mapping[str, JSONValue] | None
 
@@ -209,6 +211,7 @@ class ActivityEventType(StrEnum):
     ACL_ENTRY_GRANTED = "ACL_ENTRY_GRANTED"
     ACL_ENTRY_REVOKED = "ACL_ENTRY_REVOKED"
     DESTRUCTIVE_LIFECYCLE_EXECUTED = "DESTRUCTIVE_LIFECYCLE_EXECUTED"
+    CRYPTO_SHRED_EXECUTED = "CRYPTO_SHRED_EXECUTED"
     MCP_TAINT_BLOCKED = "MCP_TAINT_BLOCKED"
     SEQUENCE_SKIPPED = "SEQUENCE_SKIPPED"
 
@@ -340,6 +343,7 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.STANDALONE_BACKUP_EXPORTED: ActivityCategory.SYSTEM,
         ActivityEventType.PLANE_IMPORT_COMPLETED: ActivityCategory.SYSTEM,
         ActivityEventType.DESTRUCTIVE_LIFECYCLE_EXECUTED: ActivityCategory.HISTORY,
+        ActivityEventType.CRYPTO_SHRED_EXECUTED: ActivityCategory.SYSTEM,
         ActivityEventType.WORK_COMPLETED: ActivityCategory.HISTORY,
         ActivityEventType.CUSTOM_FIELD_APPROVAL_REQUESTED: ActivityCategory.HISTORY,
         ActivityEventType.CUSTOM_FIELD_APPROVED_PRIMARY: ActivityCategory.HISTORY,
@@ -460,6 +464,17 @@ def _validate_and_scrub_payload(
     return cleaned
 
 
+_UNENCRYPTED_EVENT_TYPES: Final[frozenset[str]] = frozenset(
+    {
+        "ISSUE_TRASHED",
+        "ISSUE_PURGED",
+        "DESTRUCTIVE_LIFECYCLE_EXECUTED",
+        "INVALID_OBJECT_LINK_PURGED",
+        "CRYPTO_SHRED_EXECUTED",
+    }
+)
+
+
 async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P3-01a
     session: AsyncSession,
     *,
@@ -468,12 +483,20 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
     actor_principal_id: uuid.UUID | None = None,
     event_type: ActivityEventType,
     payload: Mapping[str, JSONValue],
+    encrypt_payload: bool | None = None,
+    kek_provider: KekProvider | None = None,
 ) -> uuid.UUID:
     """Append one activity row in the caller's transaction and notify listeners."""
     sanitized_payload = _validate_and_scrub_payload(payload, strict=False)
     if _serialized_size(sanitized_payload) > MAX_PAYLOAD_BYTES:
         msg = f"Activity payload exceeds {MAX_PAYLOAD_BYTES} bytes"
         raise ActivityPayloadTooLarge(msg)
+
+    should_encrypt = (
+        encrypt_payload
+        if encrypt_payload is not None
+        else (event_type.value not in _UNENCRYPTED_EVENT_TYPES)
+    )
 
     async with session.begin_nested():
         kind: str | None = None
@@ -488,12 +511,46 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
                 msg = "Activity object is not visible"
                 raise ActivityObjectNotFound(msg)
 
-        activity_id = (
+        activity_id = uuid.uuid4()
+        if should_encrypt:
+            from database.models.activity_key import ActivityRecordKey  # noqa: PLC0415
+            from kanban.services.crypto_shred import seal_activity_payload  # noqa: PLC0415
+
+            payload_bytes = json.dumps(dict(sanitized_payload), ensure_ascii=False).encode("utf-8")
+            (
+                enc_ver,
+                ct,
+                nonce,
+                aad_sha,
+                wrapped_dek,
+                dek_nonce,
+                dek_kid,
+            ) = seal_activity_payload(
+                payload_bytes,
+                workspace_id=workspace_id,
+                activity_id=activity_id,
+                event_type=event_type.value,
+                kek_provider=kek_provider,
+            )
+
+            key_record = ActivityRecordKey(
+                workspace_id=workspace_id,
+                activity_id=activity_id,
+                object_id=object_id,
+                actor_id=actor_principal_id,
+                wrapped_dek=wrapped_dek,
+                dek_nonce=dek_nonce,
+                dek_kid=dek_kid,
+            )
+            session.add(key_record)
+
+            persisted_payload_str = json.dumps({"encrypted": True, "v": 1})
             await session.execute(
                 text(
                     "SELECT append_activity("
                     "  :ws, :oid, CAST(:kind AS object_kind), :actor, :etype,"
-                    "  CAST(:payload AS jsonb)"
+                    "  CAST(:payload AS jsonb), CAST(:enc_ver AS smallint),"
+                    "  :ct, :nonce, :aad_sha, :act_id"
                     ")"
                 ),
                 {
@@ -502,10 +559,39 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
                     "kind": kind,
                     "actor": actor_principal_id,
                     "etype": event_type.value,
-                    "payload": json.dumps(dict(sanitized_payload), ensure_ascii=False),
+                    "payload": persisted_payload_str,
+                    "enc_ver": enc_ver,
+                    "ct": ct,
+                    "nonce": nonce,
+                    "aad_sha": aad_sha,
+                    "act_id": activity_id,
                 },
             )
-        ).scalar_one()
+        else:
+            activity_id = (
+                await session.execute(
+                    text(
+                        "SELECT append_activity("
+                        "  :ws, :oid, CAST(:kind AS object_kind), :actor, :etype,"
+                        "  CAST(:payload AS jsonb), CAST(:enc_ver AS smallint),"
+                        "  :ct, :nonce, :aad_sha, :act_id"
+                        ")"
+                    ),
+                    {
+                        "ws": workspace_id,
+                        "oid": object_id,
+                        "kind": kind,
+                        "actor": actor_principal_id,
+                        "etype": event_type.value,
+                        "payload": json.dumps(dict(sanitized_payload), ensure_ascii=False),
+                        "enc_ver": 0,
+                        "ct": None,
+                        "nonce": None,
+                        "aad_sha": None,
+                        "act_id": activity_id,
+                    },
+                )
+            ).scalar_one()
 
         await _notify(
             session,
@@ -519,7 +605,7 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
                 payload=sanitized_payload,
             ),
         )
-    return cast("uuid.UUID", activity_id)
+    return activity_id
 
 
 async def emit_ephemeral_event(session: AsyncSession, envelope: EphemeralEnvelope) -> None:

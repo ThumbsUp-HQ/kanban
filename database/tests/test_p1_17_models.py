@@ -12,6 +12,7 @@ from sqlalchemy.engine.default import DefaultDialect
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from database.models import (
+    ActivityRecordKey,
     Base,
     Doc,
     EffectiveResourceAccess,
@@ -439,6 +440,26 @@ async def test_orm_round_trip_stickies_views_and_links(db_session: AsyncSession)
     fetched_era = await db_session.get(EffectiveResourceAccess, (stk_id, u_id))
     assert fetched_era is not None
     assert fetched_era.effective_mask == (7 & ~2)
+
+    # 4. ActivityRecordKey model persistence
+    act_id = uuid.uuid4()
+    act_key = ActivityRecordKey(
+        workspace_id=ws_id,
+        activity_id=act_id,
+        object_id=stk_id,
+        actor_id=u_id,
+        wrapped_dek=b"wrapped_dek_bytes_12345",
+        dek_nonce=b"nonce_123456",
+        dek_kid="kek-v1",
+    )
+    db_session.add(act_key)
+    await db_session.flush()
+
+    fetched_act_key = await db_session.get(ActivityRecordKey, (ws_id, act_id))
+    assert fetched_act_key is not None
+    assert fetched_act_key.dek_kid == "kek-v1"
+    assert fetched_act_key.wrapped_dek == b"wrapped_dek_bytes_12345"
+    assert fetched_act_key.shredded_at is None
 
 
 def test_ltree_type_validation() -> None:
