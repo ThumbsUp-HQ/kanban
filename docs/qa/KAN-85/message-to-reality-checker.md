@@ -2,6 +2,7 @@
 
 ## Ticket Scope & Browser Screenshot Classification
 - **Ticket:** `KAN-85` - `[KB-ISSUES-LIST-BATCH-01] Batch Issue Serialization Queries in svc.list_issues to Eliminate Per-Row N+1 Hydration on 100-Item Pages`
+- **Merged `main` Commit SHA:** `823701c1385283a90e685c3cc7cc809bf702f6ec` (`823701c1`, merging `feat/KAN-85-batch-list-issues` at `6d42a6b84e96c6cf00f3d0d3451e8a3fee31236d`)
 - **Browser Screenshots:** `N/A - Non-UI Backend Optimization Ticket`
 - **Owned Slice Modified:**
   - `kanban/services/issues.py`
