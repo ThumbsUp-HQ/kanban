@@ -276,6 +276,11 @@ BEGIN
 END;
 $$;
 
+ALTER TABLE scm_artifacts OWNER TO kanban_migrator;
+ALTER TABLE scm_webhook_deliveries OWNER TO kanban_migrator;
+ALTER TABLE webhook_subscriptions OWNER TO kanban_migrator;
+ALTER TABLE webhook_deliveries OWNER TO kanban_migrator;
+
 ALTER FUNCTION get_repo_binding_for_webhook(UUID) OWNER TO kanban_migrator;
 ALTER FUNCTION find_repo_binding_by_url_for_webhook(TEXT) OWNER TO kanban_migrator;
 

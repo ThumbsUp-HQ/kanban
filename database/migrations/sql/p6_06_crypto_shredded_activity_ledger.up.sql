@@ -326,4 +326,8 @@ BEGIN
     RETURN v_id;
 END $$;
 
+ALTER FUNCTION compute_activity_row_hash(bytea, uuid, bigint, uuid, uuid, object_kind, uuid, text, timestamptz, jsonb, smallint, bytea, bytea, bytea) OWNER TO kanban_migrator;
+ALTER FUNCTION activity_records_chain_bi() OWNER TO kanban_migrator;
+ALTER FUNCTION verify_activity_chain(uuid) OWNER TO kanban_migrator;
+ALTER FUNCTION append_activity(uuid, uuid, object_kind, uuid, text, jsonb, smallint, bytea, bytea, bytea, uuid) OWNER TO kanban_migrator;
 GRANT EXECUTE ON FUNCTION append_activity(uuid, uuid, object_kind, uuid, text, jsonb, smallint, bytea, bytea, bytea, uuid) TO kanban_app, kb_auth_owner;

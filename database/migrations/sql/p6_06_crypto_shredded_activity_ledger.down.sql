@@ -25,6 +25,7 @@ BEGIN
     RETURN v_id;
 END $$;
 
+ALTER FUNCTION append_activity(uuid, uuid, object_kind, uuid, text, jsonb) OWNER TO kanban_migrator;
 GRANT EXECUTE ON FUNCTION append_activity(uuid, uuid, object_kind, uuid, text, jsonb) TO kanban_app, kb_auth_owner;
 
 -- 2. Restore verify_activity_chain function
