@@ -11,7 +11,7 @@ import logging
 import uuid
 from typing import TYPE_CHECKING, Any, Literal
 
-from sqlalchemy import select, text
+from sqlalchemy import or_, select, text
 
 from agent.gates.worker import GateWorker, HarnessRegistry
 from database.models.agent_definition import AgentDefinition
@@ -40,13 +40,14 @@ __all__ = [
 class GateWorkerRunner:
     """Consumes pending transition gate invocations and coordinates asynchronous decisions."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913, PLR0917
         self,
         session_factory: RLSSessionFactory | None = None,
         harness_registry: HarnessRegistry | None = None,
         poll_interval_s: float = 1.0,
         workspace_id: uuid.UUID | None = None,
         admin_principal_id: uuid.UUID | None = None,
+        worker_id: str | None = None,
     ) -> None:
         """Initialize runner with session factory, harness registry, and poll interval."""
         self.session_factory = session_factory
@@ -54,6 +55,7 @@ class GateWorkerRunner:
         self.poll_interval_s = poll_interval_s
         self.workspace_id = workspace_id
         self.admin_principal_id = admin_principal_id
+        self.worker_id = worker_id or f"worker-{uuid.uuid4().hex[:8]}"
         self.worker = GateWorker(
             registry=self.registry,
             coordinator=self,
@@ -470,16 +472,29 @@ class GateWorkerRunner:
 
         async with self.session_factory.session(admin_ctx) as session:
             # Query ONLY valid status 'running' and hook_kind 'agent_interceptor'
+            # via FOR UPDATE SKIP LOCKED
             sweep_stmt = (
                 select(WorkflowHookInvocation)
                 .where(
                     WorkflowHookInvocation.status == "running",
                     WorkflowHookInvocation.hook_kind == "agent_interceptor",
+                    or_(
+                        WorkflowHookInvocation.claim_expires_at.is_(None),
+                        WorkflowHookInvocation.claim_expires_at <= now,
+                        WorkflowHookInvocation.claimed_by_worker == self.worker_id,
+                    ),
                 )
                 .order_by(WorkflowHookInvocation.started_at)
                 .limit(50)
+                .with_for_update(skip_locked=True)
             )
             raw_candidates = list((await session.execute(sweep_stmt)).scalars().all())
+
+            for inv in raw_candidates:
+                inv.claimed_by_worker = self.worker_id
+                inv.claim_expires_at = now + dt.timedelta(seconds=60)
+            if hasattr(session, "flush"):
+                await session.flush()
 
             for inv in raw_candidates:
                 agent_pid = None

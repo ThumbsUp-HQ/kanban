@@ -183,6 +183,10 @@ class WorkflowHookInvocation(Base):
     error_code: Mapped[str | None] = mapped_column(Text, nullable=True)
     output_json: Mapped[dict[str, Any] | None] = mapped_column(JSONB, nullable=True)
     duration_us: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    claimed_by_worker: Mapped[str | None] = mapped_column(Text, nullable=True)
+    claim_expires_at: Mapped[datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     started_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         nullable=False,

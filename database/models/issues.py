@@ -84,6 +84,8 @@ class Issue(Base):
     )
     ancestry_path: Mapped[str] = mapped_column(LtreeType, nullable=False)
     board_rank: Mapped[str] = mapped_column(String, nullable=False)
+    fencing_token: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("0"))
+    row_version: Mapped[int] = mapped_column(BigInteger, nullable=False, server_default=text("1"))
     search_tsv: Mapped[str | None] = mapped_column(
         TSVECTOR,
         Computed(

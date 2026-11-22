@@ -22,17 +22,29 @@ __all__ = [
 
 _MAX_IDENTIFIER_LEN: Final[int] = 200
 _MAX_PLAN_BYTES: Final[int] = 65536
+_MIN_TTL_SECONDS: Final[int] = 60
+_MAX_TTL_SECONDS: Final[int] = 7200
 
 BEGIN_WORK_SCHEMA: Final[dict[str, Any]] = {
     "type": "object",
     "properties": {
         "identifier": {
             "type": "string",
-            "description": "Issue ref",
         },
         "plan_markdown": {
             "type": "string",
-            "description": "Plan markdown",
+        },
+        "ttl_seconds": {
+            "type": "integer",
+            "minimum": 60,
+            "maximum": 7200,
+        },
+        "fencing_token": {
+            "type": "integer",
+        },
+        "lease_action": {
+            "type": "string",
+            "enum": ["acquire", "renew"],
         },
     },
     "required": ["identifier", "plan_markdown"],
@@ -40,7 +52,7 @@ BEGIN_WORK_SCHEMA: Final[dict[str, Any]] = {
 }
 
 
-def _validate_begin_work_arguments(arguments: dict[str, Any]) -> None:
+def _validate_begin_work_arguments(arguments: dict[str, Any]) -> None:  # noqa: C901, PLR0912
     """Validate begin_work arguments against schema constraints."""
     if "identifier" not in arguments:
         msg = "Missing required argument 'identifier'"
@@ -72,8 +84,33 @@ def _validate_begin_work_arguments(arguments: dict[str, Any]) -> None:
         msg = f"Argument 'plan_markdown' must be 1..{_MAX_PLAN_BYTES} bytes"
         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
 
+    if "ttl_seconds" in arguments and arguments["ttl_seconds"] is not None:
+        ttl = arguments["ttl_seconds"]
+        if (
+            not isinstance(ttl, int)
+            or isinstance(ttl, bool)
+            or ttl < _MIN_TTL_SECONDS
+            or ttl > _MAX_TTL_SECONDS
+        ):
+            msg = (
+                f"Argument 'ttl_seconds' must be between {_MIN_TTL_SECONDS} and {_MAX_TTL_SECONDS}"
+            )
+            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
 
-async def begin_work(
+    if "fencing_token" in arguments and arguments["fencing_token"] is not None:
+        ft = arguments["fencing_token"]
+        if not isinstance(ft, int) or isinstance(ft, bool):
+            msg = "Argument 'fencing_token' must be an integer"
+            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+
+    if "lease_action" in arguments and arguments["lease_action"] is not None:
+        la = arguments["lease_action"]
+        if la not in ("acquire", "renew"):
+            msg = "Argument 'lease_action' must be 'acquire' or 'renew'"
+            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+
+
+async def begin_work(  # noqa: C901, PLR0912, PLR0915
     arguments: dict[str, Any],
     *,
     client: KanbanApiClient | None = None,
@@ -100,7 +137,13 @@ async def begin_work(
         )
 
     plan_markdown = arguments["plan_markdown"]
-    payload = {"plan_markdown": plan_markdown}
+    payload: dict[str, Any] = {"plan_markdown": plan_markdown}
+    if arguments.get("ttl_seconds") is not None:
+        payload["ttl_seconds"] = arguments["ttl_seconds"]
+    if arguments.get("fencing_token") is not None:
+        payload["fencing_token"] = arguments["fencing_token"]
+    if arguments.get("lease_action") is not None:
+        payload["lease_action"] = arguments["lease_action"]
 
     resp_data = await active_client.request(
         "POST",
@@ -123,7 +166,7 @@ async def begin_work(
         from_str = from_val.get("name", "") if isinstance(from_val, dict) else str(from_val or "")
         to_val = resp_data.get("to_state")
         to_str = to_val.get("name", "") if isinstance(to_val, dict) else str(to_val or "")
-        return {
+        pending_res: dict[str, Any] = {
             "status": "pending_agent_gate",
             "key": key,
             "issue_key": key,
@@ -134,6 +177,13 @@ async def begin_work(
             "active_agent": str(resp_data.get("active_agent", "")),
             "hint": "transition is held; poll read_ticket for the gate verdict",
         }
+        if resp_data.get("lease_id"):
+            pending_res["lease_id"] = str(resp_data["lease_id"])
+        if resp_data.get("fencing_token") is not None:
+            pending_res["fencing_token"] = resp_data["fencing_token"]
+        if resp_data.get("lease_expires_at"):
+            pending_res["lease_expires_at"] = str(resp_data["lease_expires_at"])
+        return pending_res
 
     state_val = resp_data.get("state")
     state_str = (
@@ -150,6 +200,13 @@ async def begin_work(
         "state": state_str,
         "assignees": assignees,
     }
+
+    if resp_data.get("lease_id"):
+        result["lease_id"] = str(resp_data["lease_id"])
+    if resp_data.get("fencing_token") is not None:
+        result["fencing_token"] = resp_data["fencing_token"]
+    if resp_data.get("lease_expires_at"):
+        result["lease_expires_at"] = str(resp_data["lease_expires_at"])
 
     cycle_val = resp_data.get("cycle")
     if isinstance(cycle_val, dict) and cycle_val.get("name"):

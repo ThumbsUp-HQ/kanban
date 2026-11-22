@@ -11,11 +11,19 @@ from typing import TYPE_CHECKING, Any, Final, Protocol, runtime_checkable
 from pydantic import ValidationError
 from sqlalchemy import or_, select, text
 
+from database.models.issue_lease import IssueLease  # noqa: TC001
 from database.models.issues import Issue, IssueAssignee, IssueComment
 from database.models.projects import Cycle, Project, WorkflowState
 from database.models.workflow import WorkflowTransitionHook
 from kanban.api.problems import ProblemException
 from kanban.content import normalize_to_markdown
+from kanban.issues.lease_service import (
+    DEFAULT_LEASE_TTL_SECONDS,
+    acquire_or_renew_issue_lease,
+    heartbeat_issue_lease,
+    release_issue_lease,
+    validate_caller_lease_and_fencing,
+)
 from kanban.issues.proof import (
     VerificationProof,
     validate_proof_ticket_key,
@@ -136,7 +144,7 @@ async def _check_if_match_etag(
     session: AsyncSession | None = None,
     caller: PrincipalContext | None = None,
 ) -> None:
-    """Validate optional If-Match ETag against composite issue ETag or description SHA-256."""
+    """Validate optional If-Match ETag against composite issue ETag, SHA-256, or row_version."""
     if not if_match:
         return
     raw_etag = if_match.strip()
@@ -144,7 +152,7 @@ async def _check_if_match_etag(
         raw_etag = raw_etag[2:].strip()
     clean_match = raw_etag.strip('"')
     current_sha = issue.description_sha256.hex() if issue.description_sha256 else ""
-    valid_etags = [current_sha.lower()]
+    valid_etags = [current_sha.lower(), str(issue.row_version).lower()]
 
     if session is not None and caller is not None:
         from kanban.services.issues import serialize_issue  # noqa: PLC0415
@@ -213,15 +221,22 @@ async def _resolve_state_by_ref(
     )
 
 
-async def begin_work(
+async def begin_work(  # noqa: C901, PLR0913, PLR0915, PLR0917
     session: AsyncSession,
     caller: PrincipalContext,
     issue_ref: str,
     plan_markdown: str,
     if_match: str | None = None,
-) -> tuple[Issue, WorkflowState, WorkflowState, str, GateHoldResult | None]:
+    ttl_seconds: int = DEFAULT_LEASE_TTL_SECONDS,
+    fencing_token: int | None = None,
+) -> tuple[Issue, WorkflowState, WorkflowState, str, GateHoldResult | None, IssueLease]:
     """Execute atomic begin_work operation on an issue in a single transaction."""
     issue = await resolve_issue_ref(session, caller, issue_ref)
+    stmt_lock = select(Issue).where(Issue.id == issue.id).with_for_update()
+    locked_issue = (await session.execute(stmt_lock)).scalar_one_or_none()
+    if locked_issue is not None:
+        issue = locked_issue
+
     await require_capability(
         session,
         caller,
@@ -230,6 +245,19 @@ async def begin_work(
     )
 
     await _check_if_match_etag(issue, if_match, session=session, caller=caller)
+
+    if fencing_token is not None and fencing_token < issue.fencing_token:
+        raise ProblemException(
+            code="FENCING_TOKEN_STALE",
+            status=409,
+            title="Fencing Token Stale",
+            detail=(
+                f"Supplied fencing_token {fencing_token} is older than current issue "
+                f"fencing_token {issue.fencing_token}"
+            ),
+        )
+
+    lease = await acquire_or_renew_issue_lease(session, caller, issue, ttl_seconds=ttl_seconds)
 
     if issue.pending_transition_exec_id is not None:
         raise ProblemException(
@@ -384,7 +412,7 @@ async def begin_work(
 
     await session.flush()
     await session.refresh(issue)
-    return issue, from_state, started_state, comment_ref, gate_hold
+    return issue, from_state, started_state, comment_ref, gate_hold, lease
 
 
 async def transition_ticket(  # noqa: PLR0913, PLR0917
@@ -395,10 +423,19 @@ async def transition_ticket(  # noqa: PLR0913, PLR0917
     comment_markdown: str | None = None,
     verification_proof: dict[str, Any] | None = None,
     if_match: str | None = None,
+    fencing_token: int | None = None,
+    lease_action: str | None = None,
 ) -> tuple[Issue, WorkflowState, WorkflowState, GateHoldResult | None]:
     """Execute intermediate state transition on an issue."""
     issue = await resolve_issue_ref(session, caller, issue_ref)
     await require_capability(session, caller, issue.id, Capability.TRANSITION)
+
+    await validate_caller_lease_and_fencing(session, caller, issue, fencing_token=fencing_token)
+
+    if lease_action in ("renew", "heartbeat"):
+        await heartbeat_issue_lease(session, caller, str(issue.id), fencing_token=fencing_token)
+    elif lease_action == "release":
+        await release_issue_lease(session, caller, str(issue.id), fencing_token=fencing_token)
 
     await _check_if_match_etag(issue, if_match, session=session, caller=caller)
 
@@ -598,10 +635,15 @@ async def complete_work(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     verification_proof: dict[str, Any],
     to_state_ref: str | None = None,
     if_match: str | None = None,
+    fencing_token: int | None = None,
+    lease_action: str | None = None,
 ) -> tuple[Issue, WorkflowState, WorkflowState, dict[str, Any], str, GateHoldResult | None]:
     """Execute complete_work workflow: blocker audit, QA gate verification, and transition."""
+    del lease_action  # auto-released on completion
     issue = await resolve_issue_ref(session, caller, issue_ref)
     await require_capability(session, caller, issue.id, Capability.TRANSITION)
+
+    await validate_caller_lease_and_fencing(session, caller, issue, fencing_token=fencing_token)
 
     await _check_if_match_etag(issue, if_match, session=session, caller=caller)
 
@@ -850,6 +892,10 @@ async def complete_work(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     proj = await session.get(Project, issue.project_id)
     p_ident = proj.identifier if proj else "ISSUE"
     comment_ref = f"{p_ident}-{issue.sequence_id}#c-{str(comment.id)[:8]}"
+
+    if gate_hold is None:
+        # Auto-release active caller lease upon completion
+        await release_issue_lease(session, caller, str(issue.id), fencing_token=fencing_token)
 
     await session.flush()
     await session.refresh(issue)

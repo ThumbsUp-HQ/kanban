@@ -16,6 +16,7 @@ from database.models import (
     Doc,
     EffectiveResourceAccess,
     Issue,
+    IssueLease,
     LinkKind,
     LtreeType,
     ObjectKind,
@@ -189,7 +190,7 @@ async def _setup_test_project_spine(
 
 
 @pytest.mark.asyncio
-async def test_orm_round_trip_issues_and_knowledge(db_session: AsyncSession) -> None:
+async def test_orm_round_trip_issues_and_knowledge(db_session: AsyncSession) -> None:  # noqa: PLR0915
     """Verify round-trip ORM INSERT + SELECT on Issue, Doc, and Page with Computed SHA-256."""
     ws_id, u_id, p_id, state, priority = await _setup_test_project_spine(db_session)
 
@@ -232,6 +233,28 @@ async def test_orm_round_trip_issues_and_knowledge(db_session: AsyncSession) -> 
     assert fetched_issue is not None
     assert fetched_issue.description_sha256 == expected_desc_hash
     assert fetched_issue.search_tsv is not None
+    assert fetched_issue.fencing_token == 0
+    assert fetched_issue.row_version == 1
+
+    # 1b. IssueLease round-trip
+    from datetime import UTC, datetime, timedelta  # noqa: PLC0415
+
+    now_utc = datetime.now(UTC)
+    lease = IssueLease(
+        workspace_id=ws_id,
+        issue_id=iss_id,
+        principal_id=u_id,
+        fencing_token=1,
+        expires_at=now_utc + timedelta(seconds=900),
+    )
+    db_session.add(lease)
+    await db_session.flush()
+
+    fetched_lease = await db_session.get(IssueLease, lease.id)
+    assert fetched_lease is not None
+    assert fetched_lease.fencing_token == 1
+    assert fetched_lease.issue_id == iss_id
+    assert fetched_lease.principal_id == u_id
 
     # 2. Doc and Page with computed body_sha256
     doc_text = "# Spec Document\nDetailed specification."

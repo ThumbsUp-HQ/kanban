@@ -1,0 +1,88 @@
+{
+  "api_begin_work_response": {
+    "status": 200,
+    "body": {
+      "issue_id": "0194e82b-cf01-7000-8000-000000000001",
+      "project_key": "KANBA",
+      "sequence_id": 69,
+      "state_id": "0194e82b-cf01-7000-8000-000000000002",
+      "state_name": "In Progress",
+      "started_at": "2026-11-22T20:00:00Z",
+      "lease_id": "0194e82b-cf01-7000-8000-000000000003",
+      "fencing_token": 1,
+      "lease_expires_at": "2026-11-22T20:15:00Z"
+    }
+  },
+  "api_heartbeat_request": {
+    "method": "POST",
+    "path": "/api/v1/issues/KANBA-69/lease/heartbeat",
+    "body": {
+      "ttl_seconds": 600,
+      "fencing_token": 1
+    }
+  },
+  "api_heartbeat_response": {
+    "status": 200,
+    "body": {
+      "lease_id": "0194e82b-cf01-7000-8000-000000000003",
+      "issue_id": "0194e82b-cf01-7000-8000-000000000001",
+      "principal_id": "0194e82b-cf01-7000-8000-000000000010",
+      "fencing_token": 1,
+      "expires_at": "2026-11-22T20:25:00Z",
+      "renewed_at": "2026-11-22T20:15:00Z"
+    }
+  },
+  "api_release_request": {
+    "method": "DELETE",
+    "path": "/api/v1/issues/KANBA-69/lease",
+    "body": {
+      "fencing_token": 1
+    }
+  },
+  "api_release_response": {
+    "status": 200,
+    "body": {
+      "released": true,
+      "issue_id": "0194e82b-cf01-7000-8000-000000000001"
+    }
+  },
+  "error_lease_held_409": {
+    "status": 409,
+    "code": "LEASE_HELD",
+    "title": "Lease Held",
+    "detail": "Issue is leased by another principal until 2026-11-22T20:15:00Z"
+  },
+  "error_fencing_token_stale_409": {
+    "status": 409,
+    "code": "FENCING_TOKEN_STALE",
+    "title": "Fencing Token Stale",
+    "detail": "Supplied fencing_token 1 is older than current issue fencing_token 2"
+  },
+  "mcp_tool_begin_work_args": {
+    "identifier": "KANBA-69",
+    "lease_ttl_seconds": 900
+  },
+  "mcp_tool_update_ticket_args": {
+    "identifier": "KANBA-69",
+    "fencing_token": 1,
+    "title": "Updated title with valid lease"
+  },
+  "mcp_tool_transition_ticket_args": {
+    "identifier": "KANBA-69",
+    "state": "Review",
+    "fencing_token": 1,
+    "lease_action": "renew"
+  },
+  "mcp_tool_complete_work_args": {
+    "identifier": "KANBA-69",
+    "fencing_token": 1,
+    "verification_proof": {
+      "reality_checker_verdict": "READY",
+      "reality_checker_run_at": "2026-11-22T20:00:00Z",
+      "evidence_collector_run_at": "2026-11-22T19:55:00Z",
+      "git_diff_stat": "docs/qa/KAN-69/git-diff.patch",
+      "unit_test_log": "docs/qa/KAN-69/unit-test-results.txt",
+      "build_check_log": "docs/qa/KAN-69/build-check.txt"
+    }
+  }
+}
