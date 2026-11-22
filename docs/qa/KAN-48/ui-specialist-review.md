@@ -2,8 +2,9 @@
 
 - **Reviewer Persona:** `ux-architect` / `ui-designer` (UI & UX Specialist Reviewer)
 - **Ticket:** `KAN-48` (`[KB-MCP-CLI] Build Schema-Driven kanban-cli with 1:1 MCP Tool Parity, --filter Predicate DSL, & Deterministic --json/--jsonl Unix Output`)
-- **Audited Commit (`HEAD`):** `7b8d040b756e09f6b3d5f78d332dc5737f7108fe` (`7b8d040b`)
-- **Audited Branch:** `feat/KAN-48-kanban-cli-parity`
+- **Audited Commit (`HEAD`):** `366ff092239c9cb20598003a5de47cd6e80a1db1` (`366ff092`)
+- **Base Commit (`main`):** `e0c66d93172e1bcf1e707c4714ef5bfc76294603` (`e0c66d93`)
+- **Audited Branch:** `main` (merged from `feat/KAN-48-kanban-cli-parity`)
 - **Reviewed Artifacts:**
   - `docs/qa/KAN-48/git-diff.patch`
   - `docs/qa/KAN-48/unit-test-results.txt`

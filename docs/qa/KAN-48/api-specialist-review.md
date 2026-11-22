@@ -3,8 +3,9 @@
 - **Ticket:** KAN-48 ([KB-MCP-CLI]) - Build Schema-Driven kanban-cli with 1:1 MCP Tool Parity, --filter Predicate DSL, & Deterministic --json/--jsonl Unix Output
 - **Reviewer:** API & Security Specialist Reviewer (`api-spec`)
 - **Review Date:** 2026-11-22
-- **Branch:** `feat/KAN-48-kanban-cli-parity`
-- **Commit Under Audit:** `8a3f8e4a` (`feat(mcp): implement schema-driven kanban-cli with 1:1 tool parity and auth (KAN-48)`)
+- **Branch:** `main` (merged from `feat/KAN-48-kanban-cli-parity`)
+- **Commit Under Audit (`HEAD`):** `366ff092239c9cb20598003a5de47cd6e80a1db1` (`366ff092`)
+- **Base Commit (`main`):** `e0c66d93172e1bcf1e707c4714ef5bfc76294603` (`e0c66d93`)
 - **Target Worktree:** `/home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan48-fb1ff863`
 - **Status:** APPROVED
 

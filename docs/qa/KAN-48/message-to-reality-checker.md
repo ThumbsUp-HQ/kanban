@@ -2,6 +2,10 @@
 
 ## Overview & User Story
 - **Ticket ID:** KAN-48 ([KB-MCP-CLI] Build Schema-Driven kanban-cli with 1:1 MCP Tool Parity, --filter Predicate DSL, & Deterministic --json/--jsonl Unix Output)
+- **Branch:** `main` (merged from `feat/KAN-48-kanban-cli-parity`)
+- **Merged Commit (`HEAD`):** `366ff092239c9cb20598003a5de47cd6e80a1db1` (`366ff092`)
+- **Pre-Ticket Base Commit (`main`):** `e0c66d93172e1bcf1e707c4714ef5bfc76294603` (`e0c66d93`)
+- **Visual Browser Screenshots:** `N/A - Non-UI Ticket`
 - **User Story:** As an autonomous agent, developer, or CI automation pipeline, I require a lightweight, Unix-composable `kanban-cli` that provides 1:1 parity with all 24 MCP tools, supports headless authentication, integrates `--filter` predicate query parsing, and provides deterministic YAML, JSON, and JSONL streaming outputs with zero ANSI pollution when piped.
 
 ---
