@@ -135,7 +135,7 @@ const mockRepoBindings = [
     workspace_id: 'ws-default',
     project_id: 'proj-kan-1',
     slug: 'kanban-core',
-    remote_url: 'https://github.com/adamoutler/kanban.git',
+    remote_url: 'https://github.com/ThumbsUp-HQ/kanban.git',
     default_ref: 'main',
     access_mode: 'ro_vfs_mount',
     last_fetched_commit: '92d31f66098dd8194837346df091aace6d7db8ef',

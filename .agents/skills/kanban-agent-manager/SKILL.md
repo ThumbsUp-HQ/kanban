@@ -124,7 +124,7 @@ Before launching a Clean-Room `reality-checker` sub-agent on `docs/qa/<KEY>/`, v
          "grade": "A",
          "report_path": "docs/qa/<KEY>/reality-checker-report.md"
        },
-       "ci_run_url": "https://git.adamoutler.com/AI/thumbs-up-kanban/actions/runs/<RUN_ID>/jobs/0/attempt/1"
+       "ci_run_url": "https://github.com/ThumbsUp-HQ/kanban/actions/runs/<RUN_ID>"
      }
      ```
 

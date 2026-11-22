@@ -485,7 +485,7 @@ export async function fetchRepoBindings(projectKey: string): Promise<RepoBinding
       {
         id: 'repo-1',
         slug: 'kanban-main',
-        remote_url: 'https://github.com/adamoutler/kanban.git',
+        remote_url: 'https://github.com/ThumbsUp-HQ/kanban.git',
         default_ref: 'main',
         access_mode: 'ro_vfs_mount',
       },

@@ -4,7 +4,7 @@
 
 This repository implements **`👍kanban`** (`thumbs-up-kanban`), an open-source, **Security-First (Priority #0), Agent-First (Priority #1)** Kanban, Ticketing, and Knowledge Platform designed to eliminate SaaS AI paywalls and CRUD-wrapper MCP context bloat.
 
-- **Public Brand & Namespace Convention:** User-facing surfaces, HTML document titles (`<title>👍kanban</title>`), OpenAPI specifications (`title="👍kanban API"`), and WebAuthn Relying Party display strings (`rp.name = "👍kanban"`, paired with strict ASCII FQDN `rp.id`) use **`👍kanban`**. Upstream repository and container image slugs use `thumbs-up-kanban` (`thumbs-up-kanban:latest`), while internal Python workspace root packages remain `kanban` (`@kanban/web` for frontend).
+- **Public Brand & Namespace Convention:** User-facing surfaces, HTML document titles (`<title>👍kanban</title>`), OpenAPI specifications (`title="👍kanban API"`), and WebAuthn Relying Party display strings (`rp.name = "👍kanban"`, paired with strict ASCII FQDN `rp.id`) use **`👍kanban`**. Upstream repository is `ThumbsUp-HQ/kanban` (`https://github.com/ThumbsUp-HQ/kanban`) and container image slugs use `thumbs-up-kanban` (`thumbs-up-kanban:latest`), while internal Python workspace root packages remain `kanban` (`@kanban/web` for frontend).
 - **License:** `Apache-2.0` (Strictly permissive; zero `GPL`, `AGPL`, `LGPL`, or `SSPL` runtime dependencies permitted)
 - **Initial Tracking Board:** `https://kanban.hackedyour.info/kanban/` (`workspace: kanban`, `project: KANBA`, accessed via the `kanban` / `thekanban` MCP servers)
 - **Protected Pre-Production `👍kanban` Instance (Do Not Treat as a Test Bed):**

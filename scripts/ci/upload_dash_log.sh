@@ -39,7 +39,7 @@ if [ "${#logs[@]}" -eq 0 ]; then
 fi
 
 dash_url="$DASH_ENDPOINT"
-query="provider=forgejo&owner=AI&repo=thumbs-up-kanban"
+query="provider=forgejo&owner=ThumbsUp-HQ&repo=kanban"
 if [ -n "${GITHUB_SHA:-}" ]; then
   query="$query&sha=${GITHUB_SHA}"
 fi

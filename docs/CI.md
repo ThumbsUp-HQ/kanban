@@ -36,7 +36,7 @@ Both pipelines enforce `contents: read` token permissions, bounded timeouts (`<=
 For Forgejo runs, `scripts/ci/run_and_log.sh <logname> -- <command...>` runs the command as an argv vector (no `eval`), tees combined stdout and stderr, and exits with the command's exit code. Log names must match `^[a-z0-9-]+$` (otherwise exit `64`, nothing written). Per wrapped step it writes under `ci-logs/<job-id>/`: `<logname>.log` (output) and `<logname>.exit` (exit code).
 
 Every Forgejo job ends with two `if: always()` steps:
-1. `scripts/ci/upload_dash_log.sh <job-id>` POSTs the job's logs to Dash (`/api/logs?provider=forgejo&owner=AI&repo=thumbs-up-kanban&sha=<sha>`), prefixing any log already stored for that SHA. A missing `DASH_TOKEN` or a Dash outage never fails the job.
+1. `scripts/ci/upload_dash_log.sh <job-id>` POSTs the job's logs to Dash (`/api/logs?provider=forgejo&owner=ThumbsUp-HQ&repo=kanban&sha=<sha>`), prefixing any log already stored for that SHA. A missing `DASH_TOKEN` or a Dash outage never fails the job.
 2. `actions/upload-artifact` uploads `ci-logs/` as `ci-logs-<job-id>` (14 days). `python-tests` also uploads `reports/` (`coverage.xml`, `pytest.xml`) as `ci-reports-python-tests`.
 
 Artifact names: `ci-logs-lint-type`, `ci-logs-python-tests`, `ci-logs-stride-security-gate`, `ci-logs-web-tests`, `ci-logs-license-gate`, `ci-logs-docker-build`, `ci-logs-perf-budgets`, `ci-logs-docker-push`, `ci-reports-python-tests`.

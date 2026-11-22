@@ -12,7 +12,7 @@
 
 See the complete 46-feature technical evaluation matrix comparing `👍kanban` against Jira, Plane, GitHub, Vibe Kanban, OpenAI Symphony, Businessmap, and Codebeamer across Security/Identity/Audit, Agentic MCP/AI Workflows, Issue Tracking, Docs/Stickies/Markdown, and Orchestration/Provenance/Day-2 Operations:
 - **Repository Specification (46-Feature Matrix & Intentional Non-Goals):** [`docs/FEATURE_COMPARISON.md`](./docs/FEATURE_COMPARISON.md)
-- **Project Wiki:** [Feature Comparison Matrix](https://git.adamoutler.com/AI/thumbs-up-kanban/wiki/Feature-Comparison)
+- **Project Wiki:** [Feature Comparison Matrix](https://github.com/ThumbsUp-HQ/kanban/wiki/Feature-Comparison)
 
 ---
 
@@ -94,7 +94,7 @@ uv run kanban-agent validate-qa-packet --help
 
 ## Authoritative Documentation
 
-- **Feature Comparison Matrix (46 Capabilities):** [`docs/FEATURE_COMPARISON.md`](./docs/FEATURE_COMPARISON.md) ([Wiki](https://git.adamoutler.com/AI/thumbs-up-kanban/wiki/Feature-Comparison))
+- **Feature Comparison Matrix (46 Capabilities):** [`docs/FEATURE_COMPARISON.md`](./docs/FEATURE_COMPARISON.md) ([Wiki](https://github.com/ThumbsUp-HQ/kanban/wiki/Feature-Comparison))
 - **Architecture & Product Specification (v2):** [`docs/ARCHITECTURE_AND_PRODUCT_SPEC.md`](./docs/ARCHITECTURE_AND_PRODUCT_SPEC.md)
 - **Production Promotion & Encrypted Backup Runbook (`KBBAK1`):** [`docs/PROMOTION_AND_BACKUP.md`](./docs/PROMOTION_AND_BACKUP.md)
 - **Topological Ticket Index & Execution Waves:** [`docs/tickets/INDEX.md`](./docs/tickets/INDEX.md)

@@ -11,6 +11,11 @@ dependencies = [
     "wasmtime==50.0.1",
 ]
 
+[project.urls]
+Homepage = "https://github.com/ThumbsUp-HQ/kanban"
+Repository = "https://github.com/ThumbsUp-HQ/kanban"
+Issues = "https://github.com/ThumbsUp-HQ/kanban/issues"
+
 [tool.uv.workspace]
 members = ["database", "kanban", "mcp", "agent"]
 

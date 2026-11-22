@@ -148,7 +148,7 @@ async function setupWorkflowMocks(page: Page, handlers: MockHandlers = {}): Prom
         {
           id: 'repo-1',
           slug: 'kanban-main',
-          remote_url: 'https://github.com/adamoutler/kanban.git',
+          remote_url: 'https://github.com/ThumbsUp-HQ/kanban.git',
           access_mode: 'ro_vfs_mount',
         },
       ],
