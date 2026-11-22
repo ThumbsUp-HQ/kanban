@@ -3,6 +3,7 @@
 ## Ticket Summary
 `[KB-SEC-CODEX-01] De-Expose Public /api/v1/internal MCP Routes, Enforce Role-Bound HMAC Service Auth, & Bind Ephemeral Minting to Active Executions (CWE-290/345/862)`
 
+- **Merged `main` Commit SHA:** `882b800923188414a984939148f63902b30beeff` (`882b8009`, merging `feat/KAN-63-internal-service-auth` at `fb3b87ae996bc49b57b2faa7321074321dfb7b93`)
 - **Visual Browser Screenshots:** `N/A - Non-UI Ticket` (internal service authentication and router isolation; HTTP wire transcripts in `docs/qa/KAN-63/contract-sample.json` replace browser screenshots).
 
 ---

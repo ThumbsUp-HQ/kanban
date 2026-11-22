@@ -2,8 +2,8 @@
 
 - **Reviewer Persona:** `ux-architect` / `ui-designer` (UI/UX Specialist Reviewer)
 - **Ticket:** `KAN-63` (`[KB-SEC-CODEX-01] De-Expose Public /api/v1/internal MCP Routes, Enforce Role-Bound HMAC Service Auth, & Bind Ephemeral Minting to Active Executions (CWE-290/345/862)`)
-- **Audited Commit (`HEAD`):** `fb3b87ae996bc49b57b2faa7321074321dfb7b93` (`fb3b87ae`)
-- **Audited Branch:** `feat/KAN-63-internal-service-auth`
+- **Audited Commit (`HEAD`):** `882b800923188414a984939148f63902b30beeff` (`882b8009`, merging `fb3b87ae996bc49b57b2faa7321074321dfb7b93`)
+- **Audited Branch:** `main` (merged from `feat/KAN-63-internal-service-auth`)
 - **Reviewed Artifacts:**
   - `docs/qa/KAN-63/git-diff.patch`
   - `docs/qa/KAN-63/contract-sample.json`
