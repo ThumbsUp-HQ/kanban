@@ -2,8 +2,8 @@
 
 - **Reviewer Persona:** `security-engineer` / `backend-architect` / `api-tester` (API & Security Specialist Reviewer)
 - **Ticket:** `KAN-64` (`[KB-SEC-02] Enforce Cryptographic X.509 CA Chain + Challenge-Response PoP on Runner WebSocket, Block Slot Hijacking, & Fix Enrollment Config`)
-- **Audited Commit (`HEAD`):** `9608688ec98aa2aa4a8f93a105ae330548d7c2a7` (`9608688e`)
-- **Audited Branch:** `feat/KAN-64-runner-mtls-pop`
+- **Audited Commit (`HEAD`):** `4780e67294defaa9e7e82087fb175defba650aab` (`4780e672`, merging `9608688ec98aa2aa4a8f93a105ae330548d7c2a7`)
+- **Audited Branch:** `main` (merged from `feat/KAN-64-runner-mtls-pop`)
 - **Reviewed Artifacts:**
   - `docs/qa/KAN-64/git-diff.patch`
   - `docs/qa/KAN-64/contract-sample.json`

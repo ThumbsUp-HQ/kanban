@@ -3,7 +3,9 @@
 ## Ticket Summary
 - **Ticket ID:** KAN-64
 - **Title:** [KB-SEC-02] Enforce Cryptographic X.509 CA Chain + Challenge-Response PoP on Runner WebSocket, Block Slot Hijacking, & Fix Enrollment Config
-- **Branch:** `feat/KAN-64-runner-mtls-pop`
+- **Branch:** `main` (merged from `feat/KAN-64-runner-mtls-pop`)
+- **Merged `main` Commit SHA:** `4780e67294defaa9e7e82087fb175defba650aab` (`4780e672`, merging `9608688ec98aa2aa4a8f93a105ae330548d7c2a7`)
+- **Browser Screenshots:** `N/A - Non-UI Runner mTLS PKI & WebSocket PoP Security Ticket`
 - **Component Scope:** `kanban/runners/pki.py`, `kanban/runners/hub.py`, `kanban/api/v1/remote_runners.py`, `agent/remote_runner/daemon.py`, `agent/remote_runner/cli.py`, `agent/remote_runner/config.py`
 - **Test Scope:** `kanban/tests/runners/test_remote_runners.py`, `agent/tests/test_remote_runner.py`
 
