@@ -1,0 +1,94 @@
+{
+  "workload_policy_create_request": {
+    "name": "GitHub Actions Main CI",
+    "description": "Production build runner for main branch CI/CD pipeline",
+    "issuer": "https://token.actions.githubusercontent.com",
+    "client_id": "https://kanban.example.com",
+    "subject_pattern": "repo:my-org/my-repo:ref:refs/heads/main",
+    "required_claims_json": {
+      "repository_owner": "my-org",
+      "environment": "production"
+    },
+    "surface": "agent",
+    "scopes": [
+      "agent:read",
+      "agent:write"
+    ],
+    "allowed_project_ids": [
+      "0193309a-4e20-71a2-9a05-5ec213600001"
+    ],
+    "capability_mask": 255,
+    "allowed_cidrs": [
+      "192.168.1.0/24",
+      "10.0.0.0/8"
+    ],
+    "max_ttl_seconds": 3600
+  },
+  "workload_policy_response": {
+    "id": "0193309b-1234-7890-a000-000000000001",
+    "workspace_id": "0193309a-4e20-71a2-9a05-5ec213600000",
+    "name": "GitHub Actions Main CI",
+    "description": "Production build runner for main branch CI/CD pipeline",
+    "issuer": "https://token.actions.githubusercontent.com",
+    "client_id": "https://kanban.example.com",
+    "subject_pattern": "repo:my-org/my-repo:ref:refs/heads/main",
+    "required_claims_json": {
+      "repository_owner": "my-org",
+      "environment": "production"
+    },
+    "surface": "agent",
+    "scopes": [
+      "agent:read",
+      "agent:write"
+    ],
+    "allowed_project_ids": [
+      "0193309a-4e20-71a2-9a05-5ec213600001"
+    ],
+    "capability_mask": 255,
+    "allowed_cidrs": [
+      "192.168.1.0/24",
+      "10.0.0.0/8"
+    ],
+    "max_ttl_seconds": 3600,
+    "is_enabled": true,
+    "created_by_id": "0193309a-4e20-71a2-9a05-5ec213600002",
+    "created_at": "2026-11-22T21:00:00Z",
+    "updated_at": "2026-11-22T21:00:00Z"
+  },
+  "token_exchange_request": {
+    "grant_type": "urn:ietf:params:oauth:grant-type:token-exchange",
+    "subject_token_type": "urn:ietf:params:oauth:token-type:jwt",
+    "subject_token": "eyJhbGciOiJSUzI1NiIsImtpZCI6InRlc3Qta2lkIn0.eyJpc3MiOiJodHRwczovL3Rva2VuLmFjdGlvbnMuZ2l0aHVidXNlcmNvbnRlbnQuY29tIiwiYXVkIjoiaHR0cHM6Ly9rYW5iYW4uZXhhbXBsZS5jb20iLCJzdWIiOiJyZXBvOm15LW9yZy9teS1yZXBvOnJlZjpyZWZzL2hlYWRzL21haW4iLCJqdGkiOiJjaS0wMTkzMzA5Yi1qdGktcmVwbGF5LWNoZWNrIiwiaWF0IjoxNzg0ODQxNjAwLCJleHAiOjE3ODQ4NDE5MDB9.sample_signature",
+    "audience": "https://kanban.example.com",
+    "resource": "/mcp/agent"
+  },
+  "token_exchange_success_response": {
+    "access_token": "eyJhbGciOiJFUzI1NiIsImtpZCI6InRlc3Qta2lkLTEifQ.eyJzdWIiOiJyZXBvOm15LW9yZy9teS1yZXBvOnJlZjpyZWZzL2hlYWRzL21haW4iLCJpc3MiOiJodHRwczovL2thbmJhbi5leGFtcGxlLmNvbSIsImF1ZCI6Imh0dHBzOi8va2FuYmFuLmV4YW1wbGUuY29tIiwid3MiOiIwMTkzMzA5YS00ZTIwLTcxYTItOWEwNS01ZWMyMTM2MDAwMDAiLCJzdXJmYWNlIjoiYWdlbnQiLCJzY29wZSI6ImFnZW50OnJlYWQgYWdlbnQ6d3JpdGUiLCJhbGxvd2VkX3Byb2plY3RfaWRzIjpbIjAxOTMzMDlhLTRlMjAtNzFhMi05YTA1LTVlYzIxMzYwMDAwMSJdLCJjYXBhYmlsaXR5X21hc2siOjI1NSwidG9rZW5fa2luZCI6Indvcmtsb2FkIiwiaWF0IjoxNzg0ODQxNjAwLCJleHAiOjE3ODQ4NDUyMDB9.signature",
+    "token_type": "Bearer",
+    "expires_in": 3600,
+    "scope": "agent:read agent:write",
+    "issued_token_type": "urn:ietf:params:oauth:token-type:access_token"
+  },
+  "replay_rejection_error_response": {
+    "error": "WORKLOAD_TOKEN_REPLAYED",
+    "error_description": "Workload token JTI 'ci-0193309b-jti-replay-check' has already been exchanged",
+    "status_code": 401
+  },
+  "mcp_credential_boundary_sample": {
+    "token_kind": "workload",
+    "scope_tier": "project",
+    "surface": "agent",
+    "capability_mask": 255,
+    "workspace_allowlist": [
+      "0193309a-4e20-71a2-9a05-5ec213600000"
+    ],
+    "project_allowlist": [
+      "0193309a-4e20-71a2-9a05-5ec213600001"
+    ],
+    "allowed_cidrs": [
+      "192.168.1.0/24",
+      "10.0.0.0/8"
+    ],
+    "has_aal2_provenance": false
+  }
+}

@@ -86,6 +86,12 @@ oauth_v1_router = APIRouter(
     dependencies=[Depends(_check_no_token_in_query)],
 )
 
+from kanban.api.v1.admin.workload_identities import (  # noqa: E402
+    router as admin_workload_identities_router,
+)
+
+oauth_v1_router.include_router(admin_workload_identities_router)
+
 __all__ = [
     "OAuth2Error",
     "oauth_root_router",
@@ -310,6 +316,11 @@ async def oauth_as_metadata(request: Request, subpath: str | None = None) -> JSO
                 "authorization_code",
                 "refresh_token",
                 "urn:ietf:params:oauth:grant-type:device_code",
+                "urn:ietf:params:oauth:grant-type:token-exchange",
+            ],
+            "token_exchange_token_types_supported": [
+                "urn:ietf:params:oauth:token-type:jwt",
+                "urn:ietf:params:oauth:token-type:id_token",
             ],
             "response_types_supported": ["code"],
             "token_endpoint_auth_methods_supported": ["none", "private_key_jwt"],
@@ -1086,6 +1097,172 @@ async def oauth_token_endpoint(  # noqa: C901, PLR0912, PLR0915
                 "expires_in": ACCESS_TOKEN_TTL_SECONDS,
                 "refresh_token": rt_raw,
                 "scope": " ".join(grant.scopes),
+            },
+            headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
+        )
+
+    # 4. RFC 8693 OAuth 2.0 Token Exchange (KB-AUTH-OIDC-EXCHANGE-01, KAN-74)
+    if eff_grant_type == "urn:ietf:params:oauth:grant-type:token-exchange":
+        eff_subj_token = form.get("subject_token")
+        if not eff_subj_token or not isinstance(eff_subj_token, str):
+            err = "invalid_request"
+            desc = "subject_token parameter required"
+            raise OAuth2Error(err, desc, 400)
+
+        eff_subj_type = form.get("subject_token_type")
+        allowed_token_types = {
+            "urn:ietf:params:oauth:token-type:jwt",
+            "urn:ietf:params:oauth:token-type:id_token",
+            "id_token",
+        }
+        if not eff_subj_type or str(eff_subj_type) not in allowed_token_types:
+            err = "invalid_request"
+            desc = f"Unsupported subject_token_type {eff_subj_type!r}"
+            raise OAuth2Error(err, desc, 400)
+
+        from database.models.workload_identity import WorkloadIdentityPolicy  # noqa: PLC0415
+        from kanban.auth.oidc.workload import (  # noqa: PLC0415
+            _extract_unverified_header_and_claims,
+            validate_workload_jwt,
+        )
+
+        _, unverified_claims = _extract_unverified_header_and_claims(eff_subj_token)
+        unverified_iss = str(unverified_claims.get("iss", "")).rstrip("/")
+        if not unverified_iss:
+            err = "invalid_grant"
+            desc = "subject_token missing iss claim"
+            raise OAuth2Error(err, desc, 400)
+
+        stmt_pol = select(WorkloadIdentityPolicy).where(WorkloadIdentityPolicy.is_enabled.is_(True))
+        eff_policy_id = form.get("policy_id")
+        if eff_policy_id:
+            with contextlib.suppress(ValueError):
+                pol_uuid = uuid.UUID(str(eff_policy_id))
+                stmt_pol = stmt_pol.where(WorkloadIdentityPolicy.id == pol_uuid)
+        if eff_client_id:
+            stmt_pol = stmt_pol.where(WorkloadIdentityPolicy.client_id == eff_client_id)
+
+        all_policies = (await session.execute(stmt_pol)).scalars().all()
+        matched_policy: WorkloadIdentityPolicy | None = None
+        for pol in all_policies:
+            if pol.issuer.rstrip("/") == unverified_iss:
+                matched_policy = pol
+                break
+
+        if matched_policy is None:
+            err = "invalid_grant"
+            desc = f"No active workload identity policy found for issuer {unverified_iss!r}"
+            raise OAuth2Error(err, desc, 400)
+
+        if matched_policy.allowed_cidrs:
+            import ipaddress  # noqa: PLC0415
+
+            from kanban.security.client_ip import resolve_client_ip  # noqa: PLC0415
+
+            trusted_proxies = (
+                os.environ.get("KANBAN_TRUSTED_PROXIES")
+                or os.environ.get("KB_TRUSTED_PROXIES")
+                or "127.0.0.1/32,::1/128"
+            )
+            client_ip = resolve_client_ip(request.scope, trusted_proxies=trusted_proxies)
+            if not client_ip:
+                err = "invalid_grant"
+                desc = "Could not resolve client IP for policy CIDR enforcement"
+                raise OAuth2Error(err, desc, 403)
+
+            clean_ip = client_ip.split("/")[0] if "/" in client_ip else client_ip
+            try:
+                ip_obj = ipaddress.ip_address(clean_ip)
+                cidr_allowed = any(
+                    ip_obj in ipaddress.ip_network(str(c), strict=False)
+                    for c in matched_policy.allowed_cidrs
+                )
+            except ValueError:
+                cidr_allowed = False
+
+            if not cidr_allowed:
+                err = "invalid_grant"
+                desc = (
+                    f"Client IP {client_ip!r} is not permitted by workload policy CIDR restrictions"
+                )
+                raise OAuth2Error(err, desc, 403)
+
+        validated_claims = await validate_workload_jwt(
+            session=session,
+            raw_jwt=eff_subj_token,
+            policy=matched_policy,
+        )
+
+        from joserfc import jwt  # noqa: PLC0415
+
+        from kanban.oauth.jwt import _get_signing_eckey  # noqa: PLC0415
+
+        token_ttl = min(matched_policy.max_ttl_seconds, ACCESS_TOKEN_TTL_SECONDS)
+        current_ts = int(time.time())
+        eckey, kid = _get_signing_eckey()
+        jwt_header = {"alg": "ES256", "typ": "JWT", "kid": kid}
+        jwt_jti = str(uuid.uuid4())
+        surface_url = f"{base_url}/mcp/{matched_policy.surface}"
+
+        sub_principal = str(matched_policy.created_by_id or matched_policy.id)
+        claims_out: dict[str, Any] = {
+            "iss": base_url,
+            "sub": sub_principal,
+            "aud": surface_url,
+            "surface": matched_policy.surface,
+            "scope": " ".join(matched_policy.scopes),
+            "client_id": matched_policy.client_id,
+            "policy_id": str(matched_policy.id),
+            "ws": str(matched_policy.workspace_id),
+            "jti": jwt_jti,
+            "iat": current_ts,
+            "exp": current_ts + token_ttl,
+            "token_kind": "workload",
+            "capability_mask": matched_policy.capability_mask,
+            "workload_sub": validated_claims.get("sub"),
+        }
+        if matched_policy.allowed_project_ids:
+            claims_out["allowed_project_ids"] = [str(p) for p in matched_policy.allowed_project_ids]
+            claims_out["allowed_projects"] = [str(p) for p in matched_policy.allowed_project_ids]
+        if matched_policy.allowed_cidrs:
+            claims_out["allowed_cidrs"] = list(matched_policy.allowed_cidrs)
+
+        access_token = jwt.encode(jwt_header, claims_out, eckey)
+
+        import json  # noqa: PLC0415
+
+        await session.execute(
+            text(
+                "SELECT append_activity("
+                "  :ws, NULL, NULL, :actor, 'WORKLOAD_TOKEN_EXCHANGED',"
+                "  CAST(:payload AS jsonb)"
+                ")"
+            ),
+            {
+                "ws": matched_policy.workspace_id,
+                "actor": matched_policy.created_by_id,
+                "payload": json.dumps(
+                    {
+                        "policy_id": str(matched_policy.id),
+                        "policy_name": matched_policy.name,
+                        "issuer": matched_policy.issuer,
+                        "subject": validated_claims.get("sub"),
+                        "surface": matched_policy.surface,
+                        "scopes": matched_policy.scopes,
+                        "jti": jwt_jti,
+                    }
+                ),
+            },
+        )
+        await session.commit()
+
+        return JSONResponse(
+            {
+                "access_token": access_token,
+                "issued_token_type": "urn:ietf:params:oauth:token-type:access_token",
+                "token_type": "Bearer",
+                "expires_in": token_ttl,
+                "scope": " ".join(matched_policy.scopes),
             },
             headers={"Cache-Control": "no-store", "Pragma": "no-cache"},
         )

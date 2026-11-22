@@ -6,6 +6,7 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import React from 'react';
 import { MemoryRouter, Routes, Route, useLocation } from 'react-router';
 import { McpAccessStudio } from '../McpAccessStudio';
+import { WorkloadFederationSection, type WorkloadIdentityPolicyItem } from '../McpUnifiedStudio';
 import * as settingsApi from '../settingsApi';
 import * as clientModule from '../../../api/client';
 import { ApiProblem } from '../../../api/problem';
@@ -782,5 +783,185 @@ describe('Unified MCP Studio (KAN-31)', () => {
     expect(screen.getByTestId('resolved-location').textContent).toBe(
       '/settings/mcp?scope=server',
     );
+  });
+});
+
+describe('WorkloadFederationSection (KAN-74)', () => {
+  const samplePolicy: WorkloadIdentityPolicyItem = {
+    id: 'pol-1',
+    workspace_id: 'ws-1',
+    name: 'GitHub Actions Main CI',
+    description: 'Production build runner',
+    issuer: 'https://token.actions.githubusercontent.com',
+    client_id: 'https://kanban.example.com',
+    subject_pattern: 'repo:my-org/my-repo:ref:refs/heads/main',
+    required_claims_json: {},
+    surface: 'agent',
+    scopes: ['agent:read', 'agent:write'],
+    allowed_project_ids: [],
+    capability_mask: 255,
+    allowed_cidrs: ['10.0.0.0/8'],
+    max_ttl_seconds: 3600,
+    is_enabled: true,
+    created_by_id: 'usr-1',
+    created_at: new Date().toISOString(),
+    updated_at: new Date().toISOString(),
+  };
+
+  it('renders nothing when isAdmin is false', () => {
+    const { container } = render(<WorkloadFederationSection isAdmin={false} />);
+    expect(container.firstChild).toBeNull();
+  });
+
+  it('renders policies table when isAdmin is true and policies exist', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (_method, path) => {
+      await Promise.resolve();
+      if ((path as string) === '/api/v1/admin/workload-identities') {
+        return [samplePolicy];
+      }
+      return undefined;
+    });
+
+    render(<WorkloadFederationSection isAdmin={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('workload-federation-section')).toBeDefined();
+      expect(screen.getByText('GitHub Actions Main CI')).toBeDefined();
+      expect(screen.getByText('https://token.actions.githubusercontent.com')).toBeDefined();
+      expect(screen.getByTestId('policy-status-pol-1').textContent).toBe('Active');
+    });
+  });
+
+  it('renders empty state when no policies exist', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (_method, path) => {
+      await Promise.resolve();
+      if ((path as string) === '/api/v1/admin/workload-identities') {
+        return [];
+      }
+      return undefined;
+    });
+
+    render(<WorkloadFederationSection isAdmin={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('workload-empty-state')).toBeDefined();
+    });
+  });
+
+  it('opens create modal, creates a policy, and closes modal', async () => {
+    const apiSpy = vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      if (method === 'GET' && (path as string) === '/api/v1/admin/workload-identities') {
+        return [];
+      }
+      if (method === 'POST' && (path as string) === '/api/v1/admin/workload-identities') {
+        return { ...samplePolicy, id: 'pol-new', name: 'New CI Runner' };
+      }
+      return undefined;
+    });
+
+    render(<WorkloadFederationSection isAdmin={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('add-workload-policy-btn')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('add-workload-policy-btn'));
+    expect(screen.getByTestId('workload-policy-modal')).toBeDefined();
+
+    fireEvent.change(screen.getByTestId('policy-name-input'), { target: { value: 'New CI Runner' } });
+    fireEvent.change(screen.getByTestId('policy-issuer-input'), {
+      target: { value: 'https://token.actions.githubusercontent.com' },
+    });
+    fireEvent.change(screen.getByTestId('policy-client-id-input'), {
+      target: { value: 'https://kanban.example.com' },
+    });
+    fireEvent.change(screen.getByTestId('policy-subject-pattern-input'), {
+      target: { value: 'repo:org/repo:*' },
+    });
+
+    fireEvent.click(screen.getByTestId('policy-submit-btn'));
+
+    await waitFor(() => {
+      const calls = apiSpy.mock.calls;
+      const postCall = calls.find(
+        (c) => c[0] === 'POST' && (c[1] as string) === '/api/v1/admin/workload-identities',
+      );
+      expect(postCall).toBeDefined();
+      const opts = postCall?.[2] as { body?: { name?: string; issuer?: string } } | undefined;
+      expect(opts?.body?.name).toBe('New CI Runner');
+      expect(opts?.body?.issuer).toBe('https://token.actions.githubusercontent.com');
+    });
+  });
+
+  it('handles toggle and delete actions', async () => {
+    const apiSpy = vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      if (method === 'GET' && (path as string) === '/api/v1/admin/workload-identities') {
+        return [samplePolicy];
+      }
+      if (method === 'PATCH' && (path as string) === '/api/v1/admin/workload-identities/pol-1') {
+        return { ...samplePolicy, is_enabled: false };
+      }
+      if (method === 'DELETE' && (path as string) === '/api/v1/admin/workload-identities/pol-1') {
+        return undefined;
+      }
+      return undefined;
+    });
+
+    render(<WorkloadFederationSection isAdmin={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('toggle-policy-btn-pol-1')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('toggle-policy-btn-pol-1'));
+    await waitFor(() => {
+      expect(apiSpy).toHaveBeenCalledWith(
+        'PATCH',
+        '/api/v1/admin/workload-identities/pol-1',
+        { body: { is_enabled: false } },
+      );
+    });
+
+    fireEvent.click(screen.getByTestId('delete-policy-btn-pol-1'));
+    await waitFor(() => {
+      expect(apiSpy).toHaveBeenCalledWith(
+        'DELETE',
+        '/api/v1/admin/workload-identities/pol-1',
+      );
+    });
+  });
+
+  it('triggers AAL2 step-up when API requires second factor', async () => {
+    let callCount = 0;
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (_method, path) => {
+      await Promise.resolve();
+      if ((path as string) === '/api/v1/admin/workload-identities') {
+        callCount++;
+        if (callCount === 1) {
+          throw new ApiProblem(403, {
+            code: 'AAL2_REQUIRED',
+            challenge_id: 'challenge-123',
+            methods: ['totp'],
+          });
+        }
+        return [samplePolicy];
+      }
+      return undefined;
+    });
+
+    render(<WorkloadFederationSection isAdmin={true} />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('aal2-modal-card')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByTestId('mfa-success-btn'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('aal2-modal-card')).toBeNull();
+      expect(screen.getByText('GitHub Actions Main CI')).toBeDefined();
+    });
   });
 });

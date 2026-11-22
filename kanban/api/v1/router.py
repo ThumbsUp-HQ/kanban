@@ -5,5 +5,6 @@
 from __future__ import annotations
 
 from kanban.api.v1 import build_v1_router
+from kanban.api.v1.admin.workload_identities import router as admin_workload_identities_router
 
-__all__ = ["build_v1_router"]
+__all__ = ["admin_workload_identities_router", "build_v1_router"]

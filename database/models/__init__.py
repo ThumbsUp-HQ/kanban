@@ -94,6 +94,10 @@ from database.models.workflow import (
     WorkflowTransitionExecution,
     WorkflowTransitionHook,
 )
+from database.models.workload_identity import (
+    WorkloadIdentityPolicy,
+    WorkloadJtiReplay,
+)
 from database.models.workspace_settings import WorkspaceSettings
 
 __all__ = [
@@ -181,6 +185,8 @@ __all__ = [
     "WorkflowState",
     "WorkflowTransitionExecution",
     "WorkflowTransitionHook",
+    "WorkloadIdentityPolicy",
+    "WorkloadJtiReplay",
     "Workspace",
     "WorkspaceSettings",
 ]
