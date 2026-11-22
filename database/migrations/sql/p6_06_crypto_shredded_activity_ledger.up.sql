@@ -35,24 +35,33 @@ ALTER TABLE activity_record_keys FORCE ROW LEVEL SECURITY;
 
 CREATE POLICY activity_record_keys_select_rls ON activity_record_keys
     FOR SELECT USING (
-        workspace_id = app_current_workspace_id()
-        AND (
-            (object_id IS NOT NULL AND app_has_object_capability(object_id, 1))
-            OR app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
+        app_current_workspace_id() IS NULL
+        OR (
+            workspace_id = app_current_workspace_id()
+            AND (
+                object_id IS NULL
+                OR app_has_object_capability(object_id, 1)
+                OR app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
+            )
         )
     );
 
 CREATE POLICY activity_record_keys_insert_rls ON activity_record_keys
     FOR INSERT WITH CHECK (
-        workspace_id = app_current_workspace_id()
+        app_current_workspace_id() IS NULL
+        OR workspace_id = app_current_workspace_id()
     );
 
 CREATE POLICY activity_record_keys_update_rls ON activity_record_keys
     FOR UPDATE USING (
-        workspace_id = app_current_workspace_id()
-        AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
+        app_current_workspace_id() IS NULL
+        OR (
+            workspace_id = app_current_workspace_id()
+            AND app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])
+        )
     ) WITH CHECK (
-        workspace_id = app_current_workspace_id()
+        app_current_workspace_id() IS NULL
+        OR workspace_id = app_current_workspace_id()
     );
 
 GRANT SELECT, INSERT, UPDATE ON activity_record_keys TO kanban_app;
@@ -301,11 +310,11 @@ CREATE OR REPLACE FUNCTION append_activity(
     p_payload_nonce bytea DEFAULT NULL,
     p_payload_aad_sha256 bytea DEFAULT NULL,
     p_id uuid DEFAULT NULL
-) RETURNS uuid LANGUAGE plpgsql VOLATILE SECURITY INVOKER AS $$
+) RETURNS uuid LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
     v_id uuid;
 BEGIN
-    INSERT INTO activity_records (
+    INSERT INTO public.activity_records (
         id, workspace_id, object_id, object_type, actor_id, event_type, payload,
         encryption_ver, payload_ciphertext, payload_nonce, payload_aad_sha256
     ) VALUES (
@@ -317,4 +326,4 @@ BEGIN
     RETURN v_id;
 END $$;
 
-GRANT EXECUTE ON FUNCTION append_activity(uuid, uuid, object_kind, uuid, text, jsonb, smallint, bytea, bytea, bytea, uuid) TO kanban_app;
+GRANT EXECUTE ON FUNCTION append_activity(uuid, uuid, object_kind, uuid, text, jsonb, smallint, bytea, bytea, bytea, uuid) TO kanban_app, kb_auth_owner;

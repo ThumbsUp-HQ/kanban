@@ -492,11 +492,7 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
         msg = f"Activity payload exceeds {MAX_PAYLOAD_BYTES} bytes"
         raise ActivityPayloadTooLarge(msg)
 
-    should_encrypt = (
-        encrypt_payload
-        if encrypt_payload is not None
-        else (event_type.value not in _UNENCRYPTED_EVENT_TYPES)
-    )
+    should_encrypt = bool(encrypt_payload) and (event_type.value not in _UNENCRYPTED_EVENT_TYPES)
 
     async with session.begin_nested():
         kind: str | None = None

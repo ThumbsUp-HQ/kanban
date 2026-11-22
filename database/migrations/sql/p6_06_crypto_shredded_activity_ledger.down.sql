@@ -12,11 +12,11 @@ CREATE OR REPLACE FUNCTION append_activity(
     p_actor_id uuid,
     p_event_type text,
     p_payload jsonb DEFAULT '{}'::jsonb
-) RETURNS uuid LANGUAGE plpgsql VOLATILE SECURITY INVOKER AS $$
+) RETURNS uuid LANGUAGE plpgsql VOLATILE SECURITY DEFINER SET search_path = pg_catalog, public AS $$
 DECLARE
     v_id uuid;
 BEGIN
-    INSERT INTO activity_records (
+    INSERT INTO public.activity_records (
         workspace_id, object_id, object_type, actor_id, event_type, payload
     ) VALUES (
         p_workspace_id, p_object_id, p_object_type, p_actor_id, p_event_type, COALESCE(p_payload, '{}'::jsonb)
@@ -25,7 +25,7 @@ BEGIN
     RETURN v_id;
 END $$;
 
-GRANT EXECUTE ON FUNCTION append_activity(uuid, uuid, object_kind, uuid, text, jsonb) TO kanban_app;
+GRANT EXECUTE ON FUNCTION append_activity(uuid, uuid, object_kind, uuid, text, jsonb) TO kanban_app, kb_auth_owner;
 
 -- 2. Restore verify_activity_chain function
 CREATE OR REPLACE FUNCTION verify_activity_chain(p_workspace_id uuid)
