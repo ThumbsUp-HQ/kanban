@@ -41,6 +41,7 @@ describe('settingsApi', () => {
         scope_tier: 'personal_user',
         scopes: [],
         allowed_projects: null,
+        allowed_cidrs: null,
         created_at: '',
         expires_at: null,
         disabled_tools: [],
