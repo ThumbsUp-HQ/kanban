@@ -1,0 +1,254 @@
+{
+  "ticket": "KAN-85",
+  "endpoint": "GET /api/v1/projects/KAN/issues?limit=100",
+  "page_size": 100,
+  "rls_role": "kanban_app (FORCE ROW LEVEL SECURITY)",
+  "before_per_row_serialize_issue": {
+    "sql_statement_count": 2662,
+    "latency_ms": 1259.05
+  },
+  "after_batch_serialize_issues_batch": {
+    "sql_statement_count": 18,
+    "max_allowed_sql_statements": 20,
+    "latency_ms": 293.87,
+    "query_reduction_factor": 147.9,
+    "speedup_factor": 4.3
+  },
+  "byte_for_byte_payload_parity": true,
+  "byte_for_byte_etag_parity": true,
+  "sample_first_item": {
+    "id": "01a203b0-b908-7446-b3ab-43be5a415ff1",
+    "object_id": "01a203b0-b908-7446-b3ab-43be5a415ff1",
+    "key": "KAN-100",
+    "summary": "Issue 100",
+    "description_markdown": "Description for KAN-100",
+    "description_sha256": "190ce8f065f8ed21b93b02097ba856a122a7964a12755c01587539b7564f7098",
+    "etag": "\"6f788d32d0b16d4a838b39706fa7ccce0801d0b2ad77b5f41059d04b16c06a70\"",
+    "state": {
+      "id": "01a203b0-b797-77d4-b343-ff988e5f7bba",
+      "name": "Backlog",
+      "group": "backlog",
+      "color_hex": "#A3A3A3"
+    },
+    "priority": {
+      "slug": "urgent",
+      "label": "Urgent",
+      "emoji": "\ud83d\udd25"
+    },
+    "start_date": null,
+    "due_date": null,
+    "cycle_id": null,
+    "cycle": null,
+    "parent": {
+      "key": "KAN-1",
+      "summary": "Issue 1"
+    },
+    "labels": [
+      {
+        "id": "975562d4-24fc-4b14-8b4e-e8ac7a5924f6",
+        "name": "perf",
+        "color_hex": "#10B981"
+      }
+    ],
+    "module_ids": [],
+    "modules": [],
+    "assignees": [],
+    "board_rank": "a00001c",
+    "created_by_id": "01a203b0-b786-7425-9b6d-9f7d87f1dcdd",
+    "provenance": {
+      "created_by": {
+        "id": "01a203b0-b786-7425-9b6d-9f7d87f1dcdd",
+        "handle": "bench_admin"
+      },
+      "original_created_by": {
+        "id": "01a203b0-b786-7425-9b6d-9f7d87f1dcdd",
+        "handle": "bench_admin"
+      },
+      "overridden": false,
+      "creator_modified_by": null,
+      "creator_modified_at": null,
+      "reason": null
+    },
+    "access_manifest": {
+      "pill_label": "Project",
+      "explicit_grant_count": 0,
+      "inherited_scope": {
+        "kind": "project",
+        "scope_label": "Project: KAN",
+        "workspace_id": "01a203b0-b784-74b3-8b58-6a29272e30a1",
+        "workspace_name": "BenchWorkspace",
+        "project_id": "01a203b0-b794-770c-b6a8-c328d6362886",
+        "project_key": "KAN",
+        "project_name": "Kanban Bench"
+      },
+      "users": [
+        {
+          "principal_id": "01a203b0-b786-7425-9b6d-9f7d87f1dcdd",
+          "handle": "@bench_admin",
+          "display_name": "Bench Admin",
+          "capabilities": [
+            "VIEW",
+            "COMMENT",
+            "EDIT",
+            "TRANSITION",
+            "LINK",
+            "SHARE",
+            "ADMIN",
+            "DELETE"
+          ],
+          "grant_source": "project_owner"
+        }
+      ],
+      "groups": [],
+      "agents": [],
+      "deny_overrides": [],
+      "redacted_entries": [],
+      "redacted_count": 0,
+      "caller_capabilities": [
+        "VIEW",
+        "COMMENT",
+        "EDIT",
+        "TRANSITION",
+        "LINK",
+        "SHARE",
+        "ADMIN",
+        "DELETE"
+      ],
+      "canonical_key": "KAN-100",
+      "object_type": "issue"
+    },
+    "capabilities": [
+      "VIEW",
+      "COMMENT",
+      "EDIT",
+      "TRANSITION",
+      "LINK",
+      "SHARE",
+      "ADMIN",
+      "DELETE"
+    ],
+    "created_at": "2026-11-22T14:37:23.081019Z",
+    "updated_at": "2026-11-22T14:37:23.081019Z",
+    "archived_at": null,
+    "archive_eligibility": {
+      "allowed": false,
+      "reason": "Only completed or canceled work items can be archived"
+    },
+    "note": null,
+    "pending_gate": null,
+    "latest_gate_verdict": null
+  },
+  "sample_last_item": {
+    "id": "01a203b0-b7cb-7a44-b837-a58a2fb7530a",
+    "object_id": "01a203b0-b7cb-7a44-b837-a58a2fb7530a",
+    "key": "KAN-1",
+    "summary": "Issue 1",
+    "description_markdown": "Description for KAN-1",
+    "description_sha256": "84a01bc83ff4195bd5551b72daf841c0a55f8a84abad2e7b501b0a97ad7c87a7",
+    "etag": "\"454b2c7766d16b800fcdf48d16fa2996523a910083c99d488e80639928fcfc5c\"",
+    "state": {
+      "id": "01a203b0-b797-734e-9efe-fe0ecdf3c50a",
+      "name": "Todo",
+      "group": "unstarted",
+      "color_hex": "#3B82F6"
+    },
+    "priority": {
+      "slug": "high",
+      "label": "High",
+      "emoji": "\u26a1"
+    },
+    "start_date": null,
+    "due_date": null,
+    "cycle_id": null,
+    "cycle": null,
+    "parent": null,
+    "labels": [],
+    "module_ids": [],
+    "modules": [],
+    "assignees": [],
+    "board_rank": "a000001",
+    "created_by_id": "01a203b0-b786-7425-9b6d-9f7d87f1dcdd",
+    "provenance": {
+      "created_by": {
+        "id": "01a203b0-b786-7425-9b6d-9f7d87f1dcdd",
+        "handle": "bench_admin"
+      },
+      "original_created_by": {
+        "id": "01a203b0-b786-7425-9b6d-9f7d87f1dcdd",
+        "handle": "bench_admin"
+      },
+      "overridden": false,
+      "creator_modified_by": null,
+      "creator_modified_at": null,
+      "reason": null
+    },
+    "access_manifest": {
+      "pill_label": "Project",
+      "explicit_grant_count": 0,
+      "inherited_scope": {
+        "kind": "project",
+        "scope_label": "Project: KAN",
+        "workspace_id": "01a203b0-b784-74b3-8b58-6a29272e30a1",
+        "workspace_name": "BenchWorkspace",
+        "project_id": "01a203b0-b794-770c-b6a8-c328d6362886",
+        "project_key": "KAN",
+        "project_name": "Kanban Bench"
+      },
+      "users": [
+        {
+          "principal_id": "01a203b0-b786-7425-9b6d-9f7d87f1dcdd",
+          "handle": "@bench_admin",
+          "display_name": "Bench Admin",
+          "capabilities": [
+            "VIEW",
+            "COMMENT",
+            "EDIT",
+            "TRANSITION",
+            "LINK",
+            "SHARE",
+            "ADMIN",
+            "DELETE"
+          ],
+          "grant_source": "project_owner"
+        }
+      ],
+      "groups": [],
+      "agents": [],
+      "deny_overrides": [],
+      "redacted_entries": [],
+      "redacted_count": 0,
+      "caller_capabilities": [
+        "VIEW",
+        "COMMENT",
+        "EDIT",
+        "TRANSITION",
+        "LINK",
+        "SHARE",
+        "ADMIN",
+        "DELETE"
+      ],
+      "canonical_key": "KAN-1",
+      "object_type": "issue"
+    },
+    "capabilities": [
+      "VIEW",
+      "COMMENT",
+      "EDIT",
+      "TRANSITION",
+      "LINK",
+      "SHARE",
+      "ADMIN",
+      "DELETE"
+    ],
+    "created_at": "2026-11-22T14:37:22.763524Z",
+    "updated_at": "2026-11-22T14:37:22.763525Z",
+    "archived_at": null,
+    "archive_eligibility": {
+      "allowed": false,
+      "reason": "Only completed or canceled work items can be archived"
+    },
+    "note": null,
+    "pending_gate": null,
+    "latest_gate_verdict": null
+  }
+}
