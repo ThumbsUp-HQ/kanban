@@ -94,7 +94,7 @@ class CutoverAuditReport(BaseModel):
     )
 
 
-async def _check_key_parity(
+async def _check_key_parity(  # noqa: C901, PLR0912
     session: AsyncSession,
     bundle_dir: Path,
     workspace_slug: str,
@@ -217,7 +217,7 @@ async def _check_key_parity(
     db_comments_count = comm_count_res.scalar_one()
 
     if is_merge_mode:
-        # Merge mode: Verify entity mappings from snapshot issues to target project
+        # Merge mode: Verify entity mappings and issue key aliases from snapshot issues to target project
         mappings_res = await session.execute(
             text(
                 "SELECT m.source_id, m.target_id, i.sequence_id "
@@ -230,10 +230,29 @@ async def _check_key_parity(
         )
         mapped_rows = mappings_res.mappings().all()
         mapped_source_ids = {r["source_id"] for r in mapped_rows}
+        mapping_by_source_id = {r["source_id"]: r["target_id"] for r in mapped_rows}
         bundle_issue_ids = {iss.id for iss in proj_bundle_issues}
 
         missing_mapped = bundle_issue_ids - mapped_source_ids
         max_db_seq = max((r["sequence_id"] for r in db_issues), default=0)
+
+        # Query issue_key_aliases to verify legacy keys point to target issues
+        aliases_res = await session.execute(
+            text("SELECT legacy_key, issue_id FROM issue_key_aliases WHERE workspace_id = :ws"),
+            {"ws": ws_id},
+        )
+        alias_map = {r["legacy_key"]: r["issue_id"] for r in aliases_res.mappings().all()}
+        source_ident = source_project_identifier or (
+            target_plane_proj.identifier if target_plane_proj else project_identifier
+        )
+        missing_aliases: list[str] = []
+        for iss in proj_bundle_issues:
+            target_id = mapping_by_source_id.get(iss.id)
+            if target_id is None:
+                continue
+            expected_alias = f"{source_ident}-{iss.sequence_id}"
+            if alias_map.get(expected_alias) != target_id:
+                missing_aliases.append(expected_alias)
 
         if missing_mapped:
             c1_passed = False
@@ -241,6 +260,10 @@ async def _check_key_parity(
             c1_detail = (
                 f"Missing {len(missing_mapped)} issues from snapshot in target project mappings."
             )
+        elif missing_aliases:
+            c1_passed = False
+            c1_err = "KEY_ALIAS_PARITY_MISMATCH"
+            c1_detail = f"Missing {len(missing_aliases)} issue key aliases in target project (e.g. {missing_aliases[:3]})."
         elif issue_seq_counter < max_db_seq:
             c1_passed = False
             c1_err = "KEY_PARITY_MISMATCH"
@@ -253,7 +276,8 @@ async def _check_key_parity(
             c1_err = None
             c1_detail = (
                 f"Verified merge-mode entity parity across {len(bundle_issue_ids)} snapshot issues "
-                f"mapped to target project {project_identifier} (total {len(db_issues)} issues in project). "
+                f"and {len(mapped_rows)} key aliases mapped to target project {project_identifier} "
+                f"(total {len(db_issues)} issues in project). "
                 f"Sequence counter at {issue_seq_counter} >= max sequence {max_db_seq}."
             )
 

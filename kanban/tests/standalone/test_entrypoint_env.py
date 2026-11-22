@@ -6,8 +6,6 @@
 
 from __future__ import annotations
 
-import os
-import shutil
 from pathlib import Path
 from unittest.mock import patch
 
@@ -16,6 +14,7 @@ import pytest
 from deploy.standalone.entrypoint import (
     _PASSTHROUGH_ENV_VARS,
     build_child_env,
+    ensure_attachments_dir,
 )
 
 
@@ -63,22 +62,7 @@ def test_attachments_directory_permissions_and_ownership(
         patch("shutil.chown", side_effect=fake_chown),
         patch.object(Path, "chmod", fake_chmod),
     ):
-        # Simulate directory initialization section of entrypoint.py
-        data_dir.mkdir(parents=True, exist_ok=True)
-        backups_dir = data_dir / "backups"
-        backups_dir.mkdir(parents=True, exist_ok=True)
-        attachments_dir = Path(
-            os.environ.get("KANBAN_ATTACHMENT_DIR", str(data_dir / "attachments"))
-        )
-        attachments_dir.mkdir(parents=True, exist_ok=True)
-
-        if os.getuid() == 0:
-            shutil.chown(str(data_dir), user=65532, group=65532)
-            shutil.chown(str(backups_dir), user=65532, group=65532)
-            shutil.chown(str(attachments_dir), user=65532, group=65532)
-            data_dir.chmod(0o775)
-            backups_dir.chmod(0o775)
-            attachments_dir.chmod(0o750)
+        attachments_dir = ensure_attachments_dir(data_dir)
 
     assert (str(custom_att_dir), 65532, 65532) in chown_calls
     assert (str(custom_att_dir), 0o750) in chmod_calls

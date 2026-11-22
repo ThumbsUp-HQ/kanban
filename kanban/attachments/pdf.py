@@ -345,7 +345,9 @@ def extract_and_scan_streams(pdf_bytes: bytes) -> int:
 
     for dict_header, stream_data in stream_blocks:
         decoded_header = decode_pdf_name(dict_header)
-        is_flate = rb"/FlateDecode" in decoded_header or rb"/Fl\b" in decoded_header
+        is_flate = (
+            rb"/FlateDecode" in decoded_header or re.search(rb"/Fl\b", decoded_header) is not None
+        )
         if is_flate and stream_data:
             total_decompressed = _decompress_and_scan_single_flate_stream(
                 stream_data, total_decompressed

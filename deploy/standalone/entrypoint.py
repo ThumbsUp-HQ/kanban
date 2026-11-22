@@ -454,6 +454,19 @@ def build_child_env(
     return env
 
 
+def ensure_attachments_dir(data_dir: Path) -> Path:
+    """Ensure attachments directory exists with 65532:65532 ownership and 0750 permissions."""
+    attachments_dir = Path(os.environ.get("KANBAN_ATTACHMENT_DIR", str(data_dir / "attachments")))
+    attachments_dir.mkdir(parents=True, exist_ok=True)
+    if os.getuid() == 0:
+        try:
+            shutil.chown(str(attachments_dir), user=65532, group=65532)
+            attachments_dir.chmod(0o750)
+        except OSError as exc:
+            log_phase("init_dirs", f"Warning: chown/chmod attachments_dir failed: {exc}")
+    return attachments_dir
+
+
 def supervisor_loop(
     uvicorn_proc: subprocess.Popen[str],
     pgdata: Path,
@@ -560,8 +573,7 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR
     data_dir.mkdir(parents=True, exist_ok=True)
     backups_dir = data_dir / "backups"
     backups_dir.mkdir(parents=True, exist_ok=True)
-    attachments_dir = Path(os.environ.get("KANBAN_ATTACHMENT_DIR", str(data_dir / "attachments")))
-    attachments_dir.mkdir(parents=True, exist_ok=True)
+    ensure_attachments_dir(data_dir)
     run_kanban_dir = Path("/run/kanban")
     try:
         run_kanban_dir.mkdir(parents=True, exist_ok=True)
@@ -572,10 +584,8 @@ def main(_argv: Sequence[str] | None = None) -> int:  # noqa: C901, PLR0912, PLR
         try:
             shutil.chown(str(data_dir), user=65532, group=65532)
             shutil.chown(str(backups_dir), user=65532, group=65532)
-            shutil.chown(str(attachments_dir), user=65532, group=65532)
             data_dir.chmod(0o775)
             backups_dir.chmod(0o775)
-            attachments_dir.chmod(0o750)
             if run_kanban_dir.is_dir():
                 shutil.chown(str(run_kanban_dir), user=65532, group=65532)
                 run_kanban_dir.chmod(0o775)

@@ -273,6 +273,22 @@ async def test_flate_stream_and_objstm_decompression() -> None:
         scan_and_validate_pdf_in_process(doc_hidden_js)
     assert exc_inproc.value.status == 422
 
+    # 3. Abbreviated /Fl filter name decompresses and catches active content
+    doc_abbrev_fl = (
+        b"%PDF-1.5\n"
+        b"4 0 obj\n"
+        b"<< /Type /ObjStm /Filter /Fl /Length "
+        + str(len(compressed_js)).encode()
+        + b" >>\nstream\n"
+        + compressed_js
+        + b"\nendstream\nendobj\n"
+        + SAMPLE_VALID_PDF[9:]
+    )
+    with pytest.raises(ProblemException) as exc_fl:
+        scan_and_validate_pdf_in_process(doc_abbrev_fl)
+    assert exc_fl.value.status == 422
+    assert "/JS" in str(exc_fl.value.detail)
+
 
 @pytest.mark.asyncio
 async def test_flate_decompression_bomb_ratio_defense() -> None:

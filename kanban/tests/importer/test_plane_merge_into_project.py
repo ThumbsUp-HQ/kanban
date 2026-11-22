@@ -31,6 +31,7 @@ from database.models import (
 from database.tests.conftest import bootstrap_workspace_admin
 from kanban.api.deps import PrincipalContext
 from kanban.content.normalize import ContentNormalizeError
+from kanban.importer.cutover_verifier import verify_cutover
 from kanban.importer.plane_client import (
     PlaneBundle,
     PlaneComment,
@@ -217,6 +218,7 @@ async def setup_merge_into_project_env(
 @pytest.mark.asyncio
 async def test_plane_merge_into_project_full_lifecycle(
     setup_merge_into_project_env: tuple[AsyncSession, PrincipalContext, Path, Project],
+    tmp_path: Path,
 ) -> None:
     """Verify merge of KANBA-1..5 into pre-populated KAN-1..10 with parent-child topological sort and security gates."""
     session, caller, blob_dir, target_proj = setup_merge_into_project_env
@@ -565,6 +567,54 @@ async def test_plane_merge_into_project_full_lifecycle(
     assert report2.unchanged > 0
     await session.refresh(target_proj)
     assert target_proj.issue_seq_counter == 15
+
+    # 15. Verify cutover audit passes 6/6
+    bundle_dir = tmp_path / "bundle"
+    bundle_dir.mkdir(parents=True, exist_ok=True)
+    import json
+
+    (bundle_dir / "projects.json").write_text(
+        json.dumps([p.model_dump() for p in bundle.projects]), encoding="utf-8"
+    )
+    (bundle_dir / "states.json").write_text(
+        json.dumps([s.model_dump() for s in bundle.states]), encoding="utf-8"
+    )
+    (bundle_dir / "labels.json").write_text(
+        json.dumps([lbl.model_dump() for lbl in bundle.labels]), encoding="utf-8"
+    )
+    (bundle_dir / "cycles.json").write_text(
+        json.dumps([c.model_dump() for c in bundle.cycles]), encoding="utf-8"
+    )
+    (bundle_dir / "modules.json").write_text(
+        json.dumps([m.model_dump() for m in bundle.modules]), encoding="utf-8"
+    )
+    (bundle_dir / "issues.json").write_text(
+        json.dumps([i.model_dump() for i in bundle.issues]), encoding="utf-8"
+    )
+    (bundle_dir / "comments.json").write_text(
+        json.dumps([c.model_dump() for c in bundle.comments]), encoding="utf-8"
+    )
+    (bundle_dir / "relations.json").write_text(
+        json.dumps([r.model_dump() for r in bundle.relations]), encoding="utf-8"
+    )
+    (bundle_dir / "members.json").write_text(
+        json.dumps([m.model_dump() for m in bundle.members]), encoding="utf-8"
+    )
+
+    qa_root = tmp_path / "qa"
+    qa_root.mkdir(parents=True, exist_ok=True)
+
+    cutover_report = await verify_cutover(
+        session=session,
+        bundle_dir=bundle_dir,
+        workspace_slug="kanban",
+        project_identifier="KAN",
+        source_project_identifier="KANBA",
+        qa_root=qa_root,
+        pre_cutover_exempt_keys={f"KAN-{i}" for i in range(1, 16)},
+    )
+    assert cutover_report.overall_passed is True
+    assert len(cutover_report.checks) == 6
 
 
 @pytest.mark.asyncio

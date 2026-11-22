@@ -267,12 +267,12 @@ export function PlaneImportStudio(): JSX.Element {
       const a = document.createElement('a');
       a.href = url;
       const targetSlug = exportWorkspaceSlug.trim() || 'workspace';
-      a.download = `${targetSlug}-export.tar.gz`;
+      a.download = `kanban-${targetSlug}-portable.tar.gz`;
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       window.URL.revokeObjectURL(url);
-      setExportSuccess(`Successfully downloaded ${targetSlug}-export.tar.gz`);
+      setExportSuccess(`Successfully downloaded kanban-${targetSlug}-portable.tar.gz`);
     } catch (err: unknown) {
       if (err instanceof Error) {
         setExportError(err.message);

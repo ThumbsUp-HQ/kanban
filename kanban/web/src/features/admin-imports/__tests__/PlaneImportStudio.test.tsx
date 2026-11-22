@@ -387,7 +387,7 @@ describe('PlaneImportStudio & extractEntityCounts', () => {
         scrub_text: true,
       });
       expect(screen.getByTestId('export-success-alert').textContent).toContain(
-        'Successfully downloaded acme-corp-export.tar.gz',
+        'Successfully downloaded kanban-acme-corp-portable.tar.gz',
       );
     });
   });

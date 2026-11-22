@@ -502,24 +502,35 @@ export function MarkdownEditor({
   const handleRawPaste = (e: React.ClipboardEvent<HTMLTextAreaElement>): void => {
     const clipboardData = e.clipboardData;
 
-    // Check image/svg files first
+    // Check image/svg/pdf files first
     const files = Array.from(clipboardData.files);
     if (files.length > 0) {
-      const imageFile = files.find(
-        (f) => ALLOWED_IMAGE_MIME_TYPES.has(f.type) || f.name.toLowerCase().endsWith('.svg'),
+      const uploadableFile = files.find(
+        (f) =>
+          ALLOWED_IMAGE_MIME_TYPES.has(f.type) ||
+          f.name.toLowerCase().endsWith('.svg') ||
+          f.type === 'application/pdf' ||
+          f.name.toLowerCase().endsWith('.pdf'),
       );
-      if (imageFile) {
+      if (uploadableFile) {
         e.preventDefault();
-        if (imageFile.size > MAX_ATTACHMENT_BYTES) {
+        if (uploadableFile.size > MAX_ATTACHMENT_BYTES) {
           const msg = 'Attachment exceeds 25 MB limit';
           setLiveAnnouncement(msg);
           onAnnounceRef.current?.(msg);
           return;
         }
-        void defaultUploadAttachment(imageFile, projectId)
+        void defaultUploadAttachment(uploadableFile, projectId)
           .then((result) => {
-            const targetUri = result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
-            insertTextInRaw(`![${imageFile.name}](${targetUri})`, '', '');
+            const isPdf =
+              uploadableFile.type === 'application/pdf' ||
+              uploadableFile.name.toLowerCase().endsWith('.pdf');
+            const targetUri =
+              result.markdownUri !== '' ? result.markdownUri : `attachment://${result.id}`;
+            const markup = isPdf
+              ? `[${uploadableFile.name}](${targetUri})`
+              : `![${uploadableFile.name}](${targetUri})`;
+            insertTextInRaw(markup, '', '');
           })
           .catch(() => {
             const msg = 'Attachment upload failed';

@@ -302,7 +302,9 @@ class GitHubIssuesImporter:
         }
 
         # Local blob store for attachments
-        att_env = os.environ.get("KANBAN_ATTACHMENTS_DIR")
+        att_env = os.environ.get("KANBAN_ATTACHMENT_DIR") or os.environ.get(
+            "KANBAN_ATTACHMENTS_DIR"
+        )
         attachments_dir = (
             Path(att_env).resolve() if att_env else Path("/tmp/kanban/attachments").resolve()
         )

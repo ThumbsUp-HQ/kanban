@@ -583,3 +583,15 @@ def test_parse_web_package_json_with_node_modules_and_allowlist(tmp_path: Path) 
     allowlisted = next(c for c in comps if c.name == "allowlisted-dep")
     assert allowlisted.license_verdict == "ALLOWLISTED"
     assert allowlisted.license == "EPL-2.0"
+
+
+def test_live_workspace_sbom_verdicts_zero_deny_and_unknown() -> None:
+    """Verify live workspace SBOM generation yields 0 DENY and 0 UNKNOWN license verdicts."""
+    clear_sbom_cache()
+    components = get_live_components()
+    summary = calculate_sbom_summary(components)
+    assert summary.total_components > 0
+    deny_comps = [c for c in components if c.license_verdict == "DENY"]
+    assert summary.deny_count == 0, f"Found DENY components: {deny_comps}"
+    unknown_comps = [c for c in components if c.license_verdict == "UNKNOWN"]
+    assert summary.unknown_count == 0, f"Found UNKNOWN components: {unknown_comps}"
