@@ -1,6 +1,7 @@
 """Universal Object Graph SQLAlchemy 2.0 ORM models for kanban-database."""
 
 from database.models.activity import ActivityChainHead, ActivityRecord
+from database.models.activity_key import ActivityRecordKey
 from database.models.agent_definition import AgentDefinition
 from database.models.ai import AIProviderConfig, AITokenLedger
 from database.models.attachments import Attachment
@@ -101,6 +102,7 @@ __all__ = [
     "AITokenLedger",
     "ActivityChainHead",
     "ActivityRecord",
+    "ActivityRecordKey",
     "AgentDefinition",
     "ApprovedWasmModule",
     "Attachment",

@@ -9,6 +9,7 @@ from sqlalchemy import (
     DateTime,
     ForeignKey,
     LargeBinary,
+    SmallInteger,
     String,
     text,
 )
@@ -57,3 +58,9 @@ class ActivityRecord(Base):
     )
     prev_hash: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
     row_hash: Mapped[bytes] = mapped_column(LargeBinary, nullable=False)
+    encryption_ver: Mapped[int] = mapped_column(
+        SmallInteger, nullable=False, server_default=text("0")
+    )
+    payload_ciphertext: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    payload_nonce: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
+    payload_aad_sha256: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)

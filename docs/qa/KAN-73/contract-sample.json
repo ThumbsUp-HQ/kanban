@@ -1,0 +1,122 @@
+{
+  "ticket": "KAN-73",
+  "feature": "Envelope-Encrypted activity_records Payloads & AAL2 Two-Stage Crypto-Shredding Without Chain Breakage",
+  "samples": {
+    "activity_record_row": {
+      "id": "01a20537-fdfe-7bbb-8edc-02c2457f6137",
+      "workspace_id": "01a20537-1d0c-72dc-beba-8a6f902fb411",
+      "sequence": 42,
+      "event_type": "ISSUE_FIELD_CHANGED",
+      "payload": {
+        "encrypted": true,
+        "v": 1
+      },
+      "encryption_ver": 1,
+      "payload_ciphertext_b64": "vG958b/K8j2sZz90NlYw...",
+      "payload_nonce_b64": "Gq8d3k9L1pA=",
+      "payload_aad_sha256_hex": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "row_hash": "a1b2c3d4e5f60718293a4b5c6d7e8f90123456789abcdef0123456789abcdef0"
+    },
+    "activity_record_key_initial": {
+      "workspace_id": "01a20537-1d0c-72dc-beba-8a6f902fb411",
+      "activity_id": "01a20537-fdfe-7bbb-8edc-02c2457f6137",
+      "object_id": "01a20537-e011-73dc-af8c-98e3b78f6542",
+      "actor_id": "01a20537-1d12-70df-acb8-c046460ff541",
+      "wrapped_dek_b64": "AeV2AQuhPoTjqfmRkCh5qvcvfeQ0YFOitv6tppH4ByY/r7b5IZaeuZZi2UAYcVUYMgIXQKIkZJMGmhtoRg==",
+      "dek_nonce_b64": "Xk9a2Lb1Qc0=",
+      "dek_kid": "kek-v1",
+      "shredded_at": null,
+      "shred_reason": null
+    },
+    "stage_1_request_shred": {
+      "endpoint": "POST /api/v1/admin/audit-ledger/request-shred",
+      "request_body": {
+        "activity_id": "01a20537-fdfe-7bbb-8edc-02c2457f6137",
+        "reason": "Authorized GDPR Article 17 Erasure for leaked credential"
+      },
+      "response_status": 200,
+      "response_body": {
+        "stage": "confirmation_required",
+        "target_type": "activity_id",
+        "target_id": "01a20537-fdfe-7bbb-8edc-02c2457f6137",
+        "records_matched": 1,
+        "records_to_shred": 1,
+        "blast_hash": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945",
+        "confirmation_token": "kb_shred_X7k9LmNpQrStUvWxYz0123456789AbCdEfGhIjKlMnOp",
+        "confirm_phrase": "SHRED ACTIVITY_ID 01a20537-fdfe-7bbb-8edc-02c2457f6137",
+        "expires_in_sec": 300
+      }
+    },
+    "stage_2_execute_shred": {
+      "endpoint": "POST /api/v1/admin/audit-ledger/execute-shred",
+      "request_body": {
+        "confirmation_token": "kb_shred_X7k9LmNpQrStUvWxYz0123456789AbCdEfGhIjKlMnOp",
+        "confirm_phrase": "SHRED ACTIVITY_ID 01a20537-fdfe-7bbb-8edc-02c2457f6137",
+        "reason": "Authorized GDPR Article 17 Erasure for leaked credential"
+      },
+      "response_status": 200,
+      "response_body": {
+        "status": "shredded",
+        "target_type": "activity_id",
+        "target_id": "01a20537-fdfe-7bbb-8edc-02c2457f6137",
+        "records_shredded": 1,
+        "shredded_at": "2026-11-22T21:43:30.123456+00:00",
+        "shred_audit_id": "01a20537-fff0-7aaa-9123-556677889900"
+      }
+    },
+    "activity_record_key_after_shred": {
+      "workspace_id": "01a20537-1d0c-72dc-beba-8a6f902fb411",
+      "activity_id": "01a20537-fdfe-7bbb-8edc-02c2457f6137",
+      "object_id": "01a20537-e011-73dc-af8c-98e3b78f6542",
+      "actor_id": "01a20537-1d12-70df-acb8-c046460ff541",
+      "wrapped_dek": null,
+      "dek_nonce": null,
+      "dek_kid": "kek-v1",
+      "shredded_at": "2026-11-22T21:43:30.123456+00:00",
+      "shredded_by_id": "01a20537-1d12-70df-acb8-c046460ff541",
+      "shred_reason": "Authorized GDPR Article 17 Erasure for leaked credential"
+    },
+    "activity_feed_tombstone": {
+      "id": "01a20537-fdfe-7bbb-8edc-02c2457f6137",
+      "event_type": "ISSUE_FIELD_CHANGED",
+      "actor": {
+        "id": "01a20537-1d12-70df-acb8-c046460ff541",
+        "handle": "@shred_admin_1",
+        "display_name": "Shred Admin 1"
+      },
+      "payload": {
+        "redacted": true,
+        "reason": "CRYPTO_SHREDDED",
+        "shredded_at": "2026-11-22T21:43:30.123456+00:00"
+      }
+    },
+    "hash_chain_verification_before_shred": {
+      "query": "SELECT is_valid, checked_rows, first_broken_seq, failure_reason FROM verify_activity_chain(:workspace_id)",
+      "result": {
+        "is_valid": true,
+        "checked_rows": 5,
+        "first_broken_seq": null,
+        "failure_reason": null
+      }
+    },
+    "hash_chain_verification_after_shred": {
+      "query": "SELECT is_valid, checked_rows, first_broken_seq, failure_reason FROM verify_activity_chain(:workspace_id)",
+      "result": {
+        "is_valid": true,
+        "checked_rows": 5,
+        "first_broken_seq": null,
+        "failure_reason": null
+      }
+    },
+    "hash_chain_tamper_detection": {
+      "simulated_action": "UPDATE activity_records SET payload_ciphertext = decode('badbeef...', 'hex')",
+      "query": "SELECT is_valid, checked_rows, first_broken_seq, failure_reason FROM verify_activity_chain(:workspace_id)",
+      "result": {
+        "is_valid": false,
+        "checked_rows": 5,
+        "first_broken_seq": 3,
+        "failure_reason": "ROW_HASH_MISMATCH"
+      }
+    }
+  }
+}
