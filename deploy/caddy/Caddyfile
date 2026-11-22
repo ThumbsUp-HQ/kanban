@@ -21,6 +21,10 @@
 	@internal_routes path /internal/* /api/v1/internal/*
 	respond @internal_routes 404
 
+	handle /llms* {
+		reverse_proxy kanban-api:8000
+	}
+
 	handle /api/* {
 		reverse_proxy kanban-api:8000 {
 			header_up -X-Client-Cert-Pem

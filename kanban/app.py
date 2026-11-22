@@ -638,6 +638,11 @@ def create_app(  # noqa: PLR0915
     # Mount live MCP surfaces and RFC 9728 metadata endpoints
     _mount_mcp_surfaces(app, mcp_settings)
 
+    # Mount /llms.txt, /llms-full.txt, and /llms-skills routes (KB-LLMS-SKILLS-01)
+    from kanban.ops.llms_txt import mount_llms_routes  # noqa: PLC0415
+
+    mount_llms_routes(app)
+
     # SPA Static assets mounted at root
     app.mount("/", PrecompressedSPAStaticApp(dist_dir=settings.web_dist))
 

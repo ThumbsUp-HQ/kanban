@@ -160,4 +160,40 @@ describe('McpConfigSnippetModal direct unit tests', () => {
     expect(anonBox.textContent).not.toContain('KANBA');
     expect(anonBox.textContent).toContain('/mcp/agent/w/engineering');
   });
+
+  it('renders recommended agent skills callout and copies skill prompt', async () => {
+    const handleClose = vi.fn();
+    const writeTextMock = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, {
+      clipboard: {
+        writeText: writeTextMock,
+      },
+    });
+
+    render(
+      <McpConfigSnippetModal
+        surface="agent"
+        workspaceSlug="kanban"
+        projectKey="KANBA"
+        rawKey="kb_agt_test_key"
+        onClose={handleClose}
+      />,
+    );
+
+    const callout = screen.getByTestId('mcp-llms-txt-callout');
+    expect(callout).toBeDefined();
+    expect(callout.textContent).toContain('Recommended Agent Skills');
+    expect(callout.querySelector('a')?.getAttribute('href')).toBe('/llms.txt');
+
+    const copyPromptBtn = screen.getByTestId('mcp-copy-llms-prompt-btn');
+    expect(copyPromptBtn).toBeDefined();
+    fireEvent.click(copyPromptBtn);
+    await waitFor(() => {
+      expect(screen.getByText('Copied Prompt!')).toBeDefined();
+    });
+
+    expect(writeTextMock).toHaveBeenCalledWith(
+      expect.stringContaining("/llms.txt, learn 👍kanban's ticket workflow"),
+    );
+  });
 });

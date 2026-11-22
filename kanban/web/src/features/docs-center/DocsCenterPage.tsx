@@ -235,6 +235,15 @@ export function DocsCenterPage(): JSX.Element {
               Kanban Docs
             </Link>
             <span className="kb-docs-badge">Offline Center</span>
+            <a
+              href="/llms.txt"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="kb-docs-llms-txt-link"
+              data-testid="docs-llms-txt-link"
+            >
+              <span aria-hidden="true">🤖</span> /llms.txt
+            </a>
           </div>
 
           <button

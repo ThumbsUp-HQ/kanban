@@ -518,6 +518,7 @@ Here is **bold text**, *italic text*, \`inline code\`, and a [TOC Anchor](#my-an
       );
 
       expect(screen.getByTestId('docs-center-page')).toBeDefined();
+      expect(screen.getByTestId('docs-llms-txt-link').getAttribute('href')).toBe('/llms.txt');
     });
 
     it('renders full-page layout with categories sidebar, chapter content, and TOC rail', () => {
@@ -530,6 +531,7 @@ Here is **bold text**, *italic text*, \`inline code\`, and a [TOC Anchor](#my-an
       );
 
       expect(screen.getByTestId('docs-center-page')).toBeDefined();
+      expect(screen.getByTestId('docs-llms-txt-link').getAttribute('href')).toBe('/llms.txt');
       expect(screen.getByTestId('docs-search-input')).toBeDefined();
       expect(screen.getByTestId('docs-categories-sidebar')).toBeDefined();
       expect(screen.getByTestId('docs-main-content')).toBeDefined();

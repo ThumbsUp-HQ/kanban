@@ -28,6 +28,7 @@ import { apiFetch } from '../../api/client';
 import { NotFoundView } from '../../app/routes';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { copyToClipboard } from '../../utils/clipboard';
 import './McpAccessStudio.css';
 
 export const SURFACE_TOOLS: Record<'agent' | 'docs' | 'admin', readonly string[]> = {
@@ -800,6 +801,29 @@ export function McpAccessStudio({
         <div className="kb-mcp-explainer-item" data-testid="mcp-credential-boundary-explainer">
           <strong>Monotonic Credential Boundary:</strong> Keys enforce downward capability narrowing via capability ceilings and allowed source CIDRs without privilege escalation. PostgreSQL FORCE RLS guarantees access constraints are enforced equally across /mcp/* and /api/v1/*.
         </div>
+      </div>
+
+      {/* Recommended Agent Skills & Onboarding Callout */}
+      <div className="kb-mcp-llms-callout" data-testid="mcp-llms-txt-callout">
+        <div className="kb-mcp-llms-callout-text">
+          <span aria-hidden="true">🤖</span>{' '}
+          <strong>Agent Onboarding &amp; Recommended Skills:</strong> Point your agent to{' '}
+          <a href="/llms.txt" target="_blank" rel="noopener noreferrer">/llms.txt</a>{' '}
+          to learn 👍kanban's ticket authoring rules, 3-surface MCP architecture, and start the 4-axis configuration interview.
+        </div>
+        <button
+          type="button"
+          className="kb-mcp-copy-prompt-btn"
+          data-testid="mcp-copy-llms-prompt-btn"
+          onClick={() => {
+            const origin = typeof window !== 'undefined' ? window.location.origin : 'https://kanban.example.com';
+            void copyToClipboard(
+              `Read ${origin}/llms.txt, learn 👍kanban's ticket workflow, interview me on Execution Mode (Single-Thread, Teamwork, or Swarm), Model/Quota Strategy (Quota-Sipping Flash 3.8, Hybrid, or Unconstrained Sol MAX / Claude Ultra), and QA Rigor, and save my preferences to .agents/skills/ and AGENTS.md.`
+            );
+          }}
+        >
+          Copy Agent Skill Prompt
+        </button>
       </div>
 
       {/* Scope Filter Pills & Project Selector */}
