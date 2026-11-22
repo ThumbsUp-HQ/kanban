@@ -134,7 +134,9 @@ async def enqueue_outbox_event(  # noqa: PLR0913
 
     event_id = uuid.uuid4()
     await session.execute(
-        insert(OutboxEvent).values(
+        insert(OutboxEvent)
+        .inline()
+        .values(
             id=event_id,
             workspace_id=workspace_id,
             project_id=project_id,

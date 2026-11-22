@@ -415,10 +415,12 @@ async def _deliver_notifications(
         session.add(notif)
 
         # Transactional outbox event (payload contains ids only, zero issue summary/body text).
-        # Use Core insert() without RETURNING so non-admin MEMBER callers satisfy
+        # Use Core insert() with .inline() without RETURNING so non-admin MEMBER callers satisfy
         # outbox_events_insert_rls without requiring outbox_events_select_rls (admin-only).
         await session.execute(
-            insert(OutboxEvent).values(
+            insert(OutboxEvent)
+            .inline()
+            .values(
                 workspace_id=envelope.workspace_id,
                 project_id=project_id,
                 object_id=issue_id,

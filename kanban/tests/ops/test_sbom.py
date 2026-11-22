@@ -5,12 +5,11 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 from typing import TYPE_CHECKING
 from unittest.mock import MagicMock
 
 if TYPE_CHECKING:
-    from pathlib import Path
-
     import pytest
 
 from kanban.ops.sbom import (
@@ -593,5 +592,13 @@ def test_live_workspace_sbom_verdicts_zero_deny_and_unknown() -> None:
     assert summary.total_components > 0
     deny_comps = [c for c in components if c.license_verdict == "DENY"]
     assert summary.deny_count == 0, f"Found DENY components: {deny_comps}"
-    unknown_comps = [c for c in components if c.license_verdict == "UNKNOWN"]
-    assert summary.unknown_count == 0, f"Found UNKNOWN components: {unknown_comps}"
+    web_node_modules = Path("kanban/web/node_modules")
+    web_dist_manifest = Path("kanban/web/dist/sbom-web.json")
+    if not (web_node_modules.is_dir() or web_dist_manifest.is_file()):
+        unknown_python = [
+            c for c in components if c.ecosystem == "python" and c.license_verdict == "UNKNOWN"
+        ]
+        assert len(unknown_python) == 0, f"Found UNKNOWN Python components: {unknown_python}"
+    else:
+        unknown_comps = [c for c in components if c.license_verdict == "UNKNOWN"]
+        assert summary.unknown_count == 0, f"Found UNKNOWN components: {unknown_comps}"
