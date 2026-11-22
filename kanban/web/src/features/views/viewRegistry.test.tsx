@@ -43,6 +43,7 @@ import { apiClient } from '../../api/client';
 describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () => {
   beforeEach(() => {
     defaultQueryClient.clear();
+    document.cookie = 'kb_issue_state_filter=; Path=/; Max-Age=0';
     window.innerWidth = 1024;
     window.history.pushState({}, '', '/projects/KAN/issues');
   });
@@ -265,6 +266,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
   });
 
   it('IssuesWorkspaceRoute: handles multi-select, batch archive, and batch delete in BulkActionBar', async () => {
+    window.history.pushState({}, '', '/projects/KAN/issues?filter_state=all');
     render(
       <IssuesWorkspaceRoute
         projectKey="KAN"
@@ -471,6 +473,9 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
         initialIssues={completedIssues}
       />
     );
+
+    // Default actionable filter hides completed/cancelled -> click Show all states
+    fireEvent.click(screen.getByTestId('empty-show-all-states-btn'));
 
     // Select first issue via 'J' then 'X'
     fireEvent.keyDown(window, { key: 'j' });
@@ -756,7 +761,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
     });
 
     it('creates, updates, and bulk-operates on issues in live mode via REST endpoints', async () => {
-      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
+      window.history.pushState({}, '', '/projects/KAN/issues?layout=list&filter_state=all');
       document.cookie = 'kb_csrf=test-csrf-live; path=/';
 
       const liveStates = [
@@ -1398,7 +1403,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
         });
       });
 
-      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
+      window.history.pushState({}, '', '/projects/KAN/issues?layout=list&filter_state=all');
       render(<IssuesWorkspaceRoute projectKey="KAN" initialLayout="list" />);
 
       await waitFor(() => {
@@ -1809,6 +1814,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
           capabilities={['VIEW', 'EDIT']}
         />,
       );
+      fireEvent.click(screen.getByTestId('empty-show-all-states-btn'));
       const checkbox = screen.getAllByRole('checkbox')[1];
       if (checkbox) fireEvent.click(checkbox);
       const bulkBar = screen.queryByRole('toolbar', { name: /bulk actions/i });
@@ -2278,9 +2284,9 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
         window.dispatchEvent(new CustomEvent('kb:favorites-changed'));
       });
 
-      // Rail now has zero favorites matching
+      // Rail now has zero favorites matching -> renders empty-state-filtered
       await waitFor(() => {
-        expect(screen.getByText('No work items found')).toBeDefined();
+        expect(screen.getByTestId('empty-state-filtered')).toBeDefined();
       });
     });
 
@@ -2375,6 +2381,10 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
           layout: 'board',
           group_by: 'priority',
           sub_group_by: 'assignee',
+          filters: {
+            state_ids: ['state-todo', 'state-in-progress'],
+            search_query: 'Evaluate',
+          },
         },
       ];
       const fetchSpy = vi.spyOn(globalThis, 'fetch').mockImplementation((input: RequestInfo | URL) => {
@@ -2735,7 +2745,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
           priority: { slug: 'low', label: 'Low', emoji: '🟢' },
         },
       ];
-      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
+      window.history.pushState({}, '', '/projects/KAN/issues?layout=list&filter_state=all');
       const { unmount: unmount3 } = render(
         <IssuesWorkspaceRoute
           projectKey="KAN"
@@ -2805,6 +2815,113 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
 
       unmount();
       window.history.pushState({}, '', '/');
+    });
+
+    it('KAN-308: hides completed/cancelled by default in list & table, keeps Crazy_Ideas visible, persists StateFilterPopover cookie, shows hidden-completed-banner on search, syncs Basic <-> Query, and resets empty states', () => {
+      window.history.pushState({}, '', '/projects/KAN/issues?layout=list');
+      const customIssues: IssueItem[] = [
+        {
+          id: 'k308-1',
+          key: 'KAN-301',
+          summary: 'Older Active Todo',
+          state: { id: 'state-todo', name: 'Todo', group: 'unstarted' },
+          priority: { slug: 'medium', label: 'Medium' },
+          updated_at: '2026-11-20T10:00:00Z',
+        },
+        {
+          id: 'k308-2',
+          key: 'KAN-302',
+          summary: 'Newest Crazy Idea Item',
+          state: { id: 'state-crazy', name: 'Crazy_Ideas', group: 'unstarted' },
+          priority: { slug: 'high', label: 'High' },
+          updated_at: '2026-11-21T12:00:00Z',
+        },
+        {
+          id: 'k308-3',
+          key: 'KAN-303',
+          summary: 'Completed Rover Telemetry',
+          state: { id: 'state-done', name: 'Done', group: 'completed' },
+          priority: { slug: 'low', label: 'Low' },
+          updated_at: '2026-11-22T09:00:00Z',
+        },
+        {
+          id: 'k308-4',
+          key: 'KAN-304',
+          summary: 'Cancelled Old Feature',
+          state: { id: 'state-cancelled', name: 'Cancelled', group: 'cancelled' },
+          priority: { slug: 'none', label: 'None' },
+          updated_at: '2026-11-19T08:00:00Z',
+        },
+      ];
+
+      const { unmount } = render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialLayout="list"
+          initialIssues={customIssues}
+        />,
+      );
+
+      // 1. Completed (KAN-303) and Cancelled (KAN-304) are hidden by default; Crazy_Ideas (KAN-302) is visible and ordered first by updated_at desc
+      const rows = screen.getAllByRole('row');
+      expect(rows.map((r) => r.getAttribute('data-issue-key'))).toEqual(['KAN-302', 'KAN-301']);
+      expect(screen.queryByTestId('issue-list-card-KAN-303')).toBeNull();
+      expect(screen.queryByTestId('issue-list-card-KAN-304')).toBeNull();
+
+      // 2. Searching for "KAN-303" in Basic mode auto-hides KAN-303, renders hidden-completed-banner with exact key match and empty-state-hidden-terminal
+      const searchInput = screen.getByTestId('navigator-search-input');
+      fireEvent.change(searchInput, { target: { value: 'KAN-303' } });
+      expect(screen.getByTestId('hidden-completed-banner').textContent).toContain(
+        'KAN-303 is hidden (Done)',
+      );
+      expect(screen.getByTestId('empty-state-hidden-terminal')).toBeDefined();
+
+      // Clear search and test Basic -> Query -> Basic mode sync
+      fireEvent.change(searchInput, { target: { value: '' } });
+      fireEvent.click(screen.getByTestId('mode-query-btn'));
+
+      const queryInput = screen.getByTestId<HTMLInputElement>('navigator-query-input');
+      expect(queryInput.value).toBe('-state:completed -state:cancelled');
+
+      // Explicit Query Mode state predicate `state:completed` overrides hidden checkboxes
+      fireEvent.change(queryInput, { target: { value: 'state:completed' } });
+      expect(screen.getByTestId('issue-list-card-KAN-303')).toBeDefined();
+      expect(screen.queryByTestId('issue-list-card-KAN-301')).toBeNull();
+
+      // Switch Query -> Basic syncs state tokens back without overwriting cookie
+      fireEvent.change(queryInput, { target: { value: '-state:completed -state:cancelled' } });
+      fireEvent.click(screen.getByTestId('mode-basic-btn'));
+
+      // 3. Open StateFilterPopover, search "done", check Done, and verify cookie persistence across remount
+      fireEvent.click(screen.getByTestId('navigator-filter-state'));
+      const stateSearch = screen.getByTestId('state-filter-search-input');
+      fireEvent.change(stateSearch, { target: { value: 'done' } });
+      fireEvent.click(screen.getByTestId('state-checkbox-state-done'));
+
+      expect(screen.getByTestId('issue-list-card-KAN-303')).toBeDefined();
+      expect(document.cookie).toContain('kb_issue_state_filter=');
+
+      unmount();
+
+      // Remount fresh route -> reads kb_issue_state_filter cookie and keeps KAN-303 visible
+      const { unmount: unmount2 } = render(
+        <IssuesWorkspaceRoute
+          projectKey="KAN"
+          initialLayout="list"
+          initialIssues={customIssues}
+        />,
+      );
+      expect(screen.getByTestId('issue-list-card-KAN-303')).toBeDefined();
+
+      // Search with 0 matches renders empty-state-filtered and Reset to default filters restores default actionable view
+      fireEvent.change(screen.getByTestId('navigator-search-input'), {
+        target: { value: 'NO_SUCH_ISSUE_99999' },
+      });
+      expect(screen.getByTestId('empty-state-filtered')).toBeDefined();
+      fireEvent.click(screen.getByTestId('empty-reset-filters-btn'));
+      expect(screen.getByTestId('issue-list-card-KAN-302')).toBeDefined();
+      expect(screen.queryByTestId('issue-list-card-KAN-303')).toBeNull();
+      unmount2();
     });
   });
 });

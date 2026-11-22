@@ -580,4 +580,90 @@ describe('ListView (KAN-52 Left Master Rail)', () => {
     render(<ListView issues={[]} isLoading={true} />);
     expect(screen.getByTestId('list-view-loading')).toBeDefined();
   });
+
+  it('KAN-308 Problem 4: sorts updated and created using numeric Date.parse across timezone offsets with deterministic key tie-breaking', () => {
+    const tzIssues: IssueItem[] = [
+      {
+        id: 'tz-1',
+        key: 'KAN-20',
+        summary: 'Offset +02:00 (13:30 UTC)',
+        state: { id: 's-1', name: 'Todo', group: 'unstarted' },
+        priority: { slug: 'medium', label: 'Medium' },
+        updated_at: '2026-11-20T15:30:00+02:00',
+      },
+      {
+        id: 'tz-2',
+        key: 'KAN-10',
+        summary: 'UTC Z (14:00 UTC, newer than 15:30+02:00)',
+        state: { id: 's-1', name: 'Todo', group: 'unstarted' },
+        priority: { slug: 'medium', label: 'Medium' },
+        updated_at: '2026-11-20T14:00:00.500Z',
+      },
+      {
+        id: 'tz-3',
+        key: 'KAN-5',
+        summary: 'Same instant as KAN-20 (13:30 UTC), lower issue number',
+        state: { id: 's-1', name: 'Todo', group: 'unstarted' },
+        priority: { slug: 'medium', label: 'Medium' },
+        updated_at: '2026-11-20T13:30:00Z',
+      },
+      {
+        id: 'tz-4',
+        key: 'KAN-30',
+        summary: 'Fallback to created_at (13:45 UTC)',
+        state: { id: 's-1', name: 'Todo', group: 'unstarted' },
+        priority: { slug: 'medium', label: 'Medium' },
+        created_at: '2026-11-20T13:45:00Z',
+      },
+    ];
+
+    const desc = sortIssuesList(tzIssues, 'updated', 'desc');
+    expect(desc.map((i) => i.key)).toEqual(['KAN-10', 'KAN-30', 'KAN-5', 'KAN-20']);
+
+    const baseTz = tzIssues[0];
+    if (!baseTz) throw new Error('missing baseTz');
+    const createdTies = sortIssuesList(
+      [
+        { ...baseTz, key: 'KAN-20', created_at: '2026-11-20T13:30:00Z' },
+        { ...baseTz, key: 'KAN-5', created_at: '2026-11-20T15:30:00+02:00' },
+        { ...baseTz, key: 'ALPHA-5', created_at: '2026-11-20T13:30:00Z' },
+      ],
+      'created',
+      'desc',
+    );
+    expect(createdTies.map((i) => i.key)).toEqual(['ALPHA-5', 'KAN-5', 'KAN-20']);
+  });
+
+  it('KAN-308 Problem 4: renders empty-state-hidden-terminal and empty-state-filtered when totalProjectIssueCount > 0', () => {
+    const onShowAllStates = vi.fn();
+    const onResetFilters = vi.fn();
+
+    const { rerender } = render(
+      <ListView
+        issues={[]}
+        totalProjectIssueCount={4}
+        hiddenByStateCount={4}
+        onShowAllStates={onShowAllStates}
+      />,
+    );
+
+    expect(screen.getByTestId('empty-state-hidden-terminal')).toBeDefined();
+    expect(screen.getByText('No actionable work items')).toBeDefined();
+    fireEvent.click(screen.getByTestId('empty-show-all-states-btn'));
+    expect(onShowAllStates).toHaveBeenCalledTimes(1);
+
+    rerender(
+      <ListView
+        issues={[]}
+        totalProjectIssueCount={4}
+        hiddenByStateCount={0}
+        onResetFilters={onResetFilters}
+      />,
+    );
+
+    expect(screen.getByTestId('empty-state-filtered')).toBeDefined();
+    expect(screen.getByText('No matching work items')).toBeDefined();
+    fireEvent.click(screen.getByTestId('empty-reset-filters-btn'));
+    expect(onResetFilters).toHaveBeenCalledTimes(1);
+  });
 });

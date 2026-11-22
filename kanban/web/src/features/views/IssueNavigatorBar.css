@@ -1,6 +1,6 @@
 /**
- * Issue Navigator Bar styling (KAN-52).
- * Replaces double-stacked FilterDisplayBar + Filter & Group bars in list layout.
+ * Issue Navigator Bar & Searchable State Checkboxes Popover styling (KAN-52, KAN-308).
+ * Strict CSP Invariant: 100% tokens.css variables, zero inline styles.
  */
 
 .issue-navigator-bar {
@@ -178,6 +178,266 @@
   background: var(--bg-hover, #2c313a);
   color: var(--text-warning, #fbbf24);
   border-color: var(--border-warning, #fbbf24);
+}
+
+/* ==========================================================================
+   Searchable Multi-Select State Filter Popover (KAN-308 Problem 2)
+   ========================================================================== */
+
+.state-filter-popover-wrap {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.navigator-state-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  background: var(--bg-surface, #1e2025);
+  border: 1px solid var(--border-subtle, #333842);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--fg-secondary, #cbd5e1);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color 120ms ease, background-color 120ms ease, color 120ms ease;
+}
+
+.navigator-state-trigger:hover,
+.navigator-state-trigger--open {
+  background: var(--bg-hover, #2c313a);
+  color: var(--fg-primary, #f8fafc);
+  border-color: var(--accent-primary);
+}
+
+.navigator-state-trigger:focus-visible {
+  outline: 2px solid var(--focus-ring, #3b82f6);
+  outline-offset: 2px;
+}
+
+.navigator-state-trigger-chevron {
+  font-size: 10px;
+  color: var(--fg-muted, #94a3b8);
+}
+
+.navigator-state-popover {
+  position: absolute;
+  top: calc(100% + 6px);
+  left: 0;
+  z-index: 40;
+  width: 288px;
+  max-width: calc(100vw - 32px);
+  background: var(--bg-surface, #1e2025);
+  border: 1px solid var(--border-strong, #4b5263);
+  border-radius: var(--radius-md, 8px);
+  box-shadow: 0 12px 28px -6px rgba(0, 0, 0, 0.32), 0 4px 12px -2px rgba(0, 0, 0, 0.2);
+  padding: var(--space-3, 12px);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  box-sizing: border-box;
+}
+
+.state-filter-presets {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: var(--bg-surface-raised, #24272f);
+  border: 1px solid var(--border-subtle, #333842);
+  border-radius: var(--radius-sm, 4px);
+  padding: 2px;
+}
+
+.state-filter-preset-btn {
+  flex: 1 1 0;
+  height: 26px;
+  background: transparent;
+  color: var(--fg-secondary, #cbd5e1);
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.state-filter-preset-btn:hover {
+  background: var(--bg-hover, #2c313a);
+  color: var(--fg-primary, #f8fafc);
+}
+
+.state-filter-preset-btn--active {
+  background: var(--accent-primary);
+  color: var(--accent-primary-fg, #ffffff);
+  font-weight: 600;
+}
+
+.state-filter-search-wrap {
+  display: flex;
+  width: 100%;
+}
+
+.state-filter-search-input {
+  width: 100%;
+  height: 30px;
+  padding: 0 var(--space-2, 8px);
+  background: var(--bg-surface-raised, #24272f);
+  border: 1px solid var(--border-subtle, #333842);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--fg-primary, #f8fafc);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  outline: none;
+  box-sizing: border-box;
+}
+
+.state-filter-search-input:focus {
+  border-color: var(--accent-primary);
+}
+
+.state-filter-groups {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  max-height: 280px;
+  overflow-y: auto;
+}
+
+.state-filter-group {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.state-filter-group-header {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--fg-muted, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 4px 6px 2px;
+}
+
+.state-filter-group-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.state-filter-option {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2, 8px);
+  min-height: 32px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm, 4px);
+  cursor: pointer;
+  user-select: none;
+  box-sizing: border-box;
+  transition: background-color 100ms ease;
+}
+
+.state-filter-option:hover {
+  background: var(--bg-hover, #2c313a);
+}
+
+.state-filter-option-left {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  min-width: 0;
+}
+
+.state-filter-checkbox {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  cursor: pointer;
+  accent-color: var(--accent-primary);
+  flex-shrink: 0;
+}
+
+.state-filter-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--fg-muted, #94a3b8);
+  background: var(--bg-surface-raised, #24272f);
+  padding: 1px 6px;
+  border-radius: 9999px;
+  flex-shrink: 0;
+}
+
+.state-filter-empty {
+  padding: var(--space-3, 12px) var(--space-2, 8px);
+  text-align: center;
+  font-size: 12px;
+  color: var(--fg-muted, #94a3b8);
+}
+
+/* ==========================================================================
+   Hidden Completed / Cancelled Matches Banner (KAN-308 Problem 2)
+   ========================================================================== */
+
+.navigator-hidden-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3, 12px);
+  padding: 6px 10px;
+  background: var(--bg-surface, #1e2025);
+  border: 1px dashed var(--border-subtle, #4b5263);
+  border-radius: var(--radius-sm, 4px);
+  font-size: 12px;
+  color: var(--fg-secondary, #cbd5e1);
+}
+
+.navigator-hidden-banner-text {
+  font-weight: 500;
+}
+
+.navigator-hidden-show-all-btn {
+  background: transparent;
+  border: 1px solid var(--accent-primary);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--accent-primary);
+  padding: 2px 10px;
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.navigator-hidden-show-all-btn:hover {
+  background: var(--accent-primary);
+  color: var(--accent-primary-fg, #ffffff);
+}
+
+/* Responsive touch targets on mobile portrait (<= 767px) and bounded height on landscape (<= 540px) */
+@media (max-width: 767px) {
+  .state-filter-option {
+    min-height: 40px;
+    padding: 6px 10px;
+  }
+
+  .navigator-state-trigger {
+    min-height: 36px;
+  }
+}
+
+@media (max-height: 540px) {
+  .state-filter-groups {
+    max-height: 168px;
+  }
 }
 
 .navigator-saved-views-strip {

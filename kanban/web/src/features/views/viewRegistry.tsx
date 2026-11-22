@@ -9,7 +9,23 @@ import { CalendarView } from '../calendar/CalendarView';
 import { TimelineView } from '../timeline/TimelineView';
 import { FilterDisplayBar, type ActiveFilters } from './FilterDisplayBar';
 import { IssueNavigatorBar } from './IssueNavigatorBar';
-import { matchesIssueQuery } from './predicateParser';
+import {
+  createActionableStateFilterPreference,
+  createAllStatesFilterPreference,
+  isIssueStateVisible,
+  parseUrlFilterStateParam,
+  resolveInitialStateFilter,
+  resolveSavedViewStateFilter,
+  writeProjectStateFilterCookie,
+  type ProjectStateFilterPreference,
+} from './issueFilterCookie';
+import {
+  buildStateQueryTokens,
+  hasExplicitStatePredicate,
+  matchesIssueQuery,
+  parseStateFilterFromQuery,
+} from './predicateParser';
+import { StateFilterPopover } from './StateFilterPopover';
 import { SwimlaneBoardGrid } from './SwimlaneBoardGrid';
 import { BulkActionBar } from './BulkActionBar';
 import { QuickCreateIssueModal } from './QuickCreateIssueModal';
@@ -34,7 +50,7 @@ import {
 import { IssueSurfaceRoot } from '../drawer/IssueSurface';
 import './filterBulk.css';
 
-// Export all KB-P3-40 components per Scoped Definition of Done
+// Export all KB-P3-40 and KAN-308 components per Scoped Definition of Done
 export {
   FilterDisplayBar,
   SwimlaneBoardGrid,
@@ -42,6 +58,7 @@ export {
   QuickCreateIssueModal,
   SaveViewModal,
   QuickFieldPopover,
+  StateFilterPopover,
   useIssueKeyboardMap,
 };
 
@@ -101,6 +118,10 @@ export interface ViewComponentProps {
   focusedKey?: string | null | undefined;
   onOpenPeek?: ((issueKey: string) => void) | undefined;
   capabilities?: string[] | undefined;
+  totalProjectIssueCount?: number | undefined;
+  hiddenByStateCount?: number | undefined;
+  onShowAllStates?: (() => void) | undefined;
+  onResetFilters?: (() => void) | undefined;
 }
 
 export type ViewComponent = ComponentType<ViewComponentProps>;
@@ -388,8 +409,11 @@ export function IssuesWorkspaceRoute({
   const [activeFilters, setActiveFilters] = useState<ActiveFilters>(() => {
     const filters: ActiveFilters = {};
     const stateParam = searchParams.get('filter_state');
-    if (stateParam) {
-      filters.state = [stateParam];
+    if (stateParam && parseUrlFilterStateParam(stateParam, projectStates) !== null) {
+      filters.state = stateParam
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean);
     }
     const priorityParam = searchParams.get('filter_priority');
     if (priorityParam) {
@@ -405,6 +429,24 @@ export function IssuesWorkspaceRoute({
     }
     return filters;
   });
+
+  const [stateFilterPref, setStateFilterPref] = useState<ProjectStateFilterPreference>(() => {
+    return resolveInitialStateFilter({
+      projectKey,
+      urlSearch: typeof window !== 'undefined' ? window.location.search : '',
+      projectStates,
+    }).preference;
+  });
+
+  const handleUserStateFilterChange = useCallback(
+    (nextPref: ProjectStateFilterPreference) => {
+      setStateFilterPref(nextPref);
+      writeProjectStateFilterCookie(projectKey, nextPref);
+    },
+    [projectKey],
+  );
+
+  const [isStatePopoverOpen, setIsStatePopoverOpen] = useState(false);
 
   const [favoritesOnly, setFavoritesOnly] = useState(false);
   const [favVersion, setFavVersion] = useState(0);
@@ -423,6 +465,30 @@ export function IssuesWorkspaceRoute({
   const [savedViews, setSavedViews] = useState<SavedView[]>([]);
   const [activeViewId, setActiveViewId] = useState<string | null>(() => searchParams.get('view'));
 
+  const handleQueryModeChange = useCallback(
+    (nextMode: 'basic' | 'query') => {
+      if (nextMode === queryMode) return;
+      if (nextMode === 'query') {
+        if (searchQuery.trim().length === 0) {
+          const prefill = buildStateQueryTokens(stateFilterPref, projectStates);
+          if (prefill) {
+            setSearchQuery(prefill);
+          }
+        }
+        setQueryMode('query');
+        return;
+      }
+      // Switching Query -> Basic: sync state predicates back into checkbox preference without overwriting cookie
+      const parsed = parseStateFilterFromQuery(searchQuery, projectStates);
+      if (parsed.hasStatePredicate) {
+        setStateFilterPref(parsed.preference);
+        setSearchQuery(parsed.remainingQuery);
+      }
+      setQueryMode('basic');
+    },
+    [queryMode, searchQuery, stateFilterPref, projectStates],
+  );
+
   useEffect(() => {
     if (!projectKey) return;
     let active = true;
@@ -430,13 +496,24 @@ export function IssuesWorkspaceRoute({
       .then((views) => {
         if (active && Array.isArray(views)) {
           setSavedViews(views);
-          const viewParam = new URLSearchParams(window.location.search).get('view');
+          const currentParams = new URLSearchParams(window.location.search);
+          const viewParam = currentParams.get('view');
           if (viewParam) {
             const matched = views.find((v) => v.id === viewParam);
             if (matched) {
               setActiveViewId(viewParam);
               setGroupBy(matched.group_by);
               setSubGroupBy(matched.sub_group_by);
+              const urlFilterState = currentParams.get('filter_state');
+              if (!urlFilterState || parseUrlFilterStateParam(urlFilterState, projectStates) === null) {
+                const viewPref = resolveSavedViewStateFilter(matched, projectStates);
+                if (viewPref) {
+                  setStateFilterPref(viewPref);
+                }
+              }
+              if (matched.filters?.search_query) {
+                setSearchQuery(matched.filters.search_query);
+              }
             }
           }
         }
@@ -447,19 +524,29 @@ export function IssuesWorkspaceRoute({
     return () => {
       active = false;
     };
-  }, [projectKey]);
+  }, [projectKey, projectStates]);
 
-  const handleSelectSavedView = useCallback((viewId: string) => {
-    setActiveViewId(viewId);
-    const view = savedViews.find((v) => v.id === viewId);
-    if (view) {
-      setGroupBy(view.group_by);
-      setSubGroupBy(view.sub_group_by);
-    }
-    const url = new URL(window.location.href);
-    url.searchParams.set('view', viewId);
-    window.history.pushState({}, '', url.toString());
-  }, [savedViews]);
+  const handleSelectSavedView = useCallback(
+    (viewId: string) => {
+      setActiveViewId(viewId);
+      const view = savedViews.find((v) => v.id === viewId);
+      if (view) {
+        setGroupBy(view.group_by);
+        setSubGroupBy(view.sub_group_by);
+        const viewPref = resolveSavedViewStateFilter(view, projectStates);
+        if (viewPref) {
+          setStateFilterPref(viewPref);
+        }
+        if (view.filters?.search_query !== undefined && view.filters.search_query !== null) {
+          setSearchQuery(view.filters.search_query);
+        }
+      }
+      const url = new URL(window.location.href);
+      url.searchParams.set('view', viewId);
+      window.history.pushState({}, '', url.toString());
+    },
+    [savedViews, projectStates],
+  );
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSaveViewModalOpen, setIsSaveViewModalOpen] = useState(false);
@@ -488,9 +575,16 @@ export function IssuesWorkspaceRoute({
     anchorRect: null,
   });
 
-  // Filter issues based on activeFilters
-  const filteredIssues = useMemo(() => {
-    return issues.filter((issue) => {
+  // Evaluate non-state filters + text/query search first so we can distinguish state-hidden items
+  const { filteredIssues, hiddenByStateIssues } = useMemo(() => {
+    const isIssuesView = layout === 'list' || layout === 'table';
+    const queryHasExplicitState =
+      queryMode === 'query' && hasExplicitStatePredicate(searchQuery);
+
+    const visible: IssueItem[] = [];
+    const hiddenByState: IssueItem[] = [];
+
+    for (const issue of issues) {
       const explicitStateId = (issue as { state_id?: string }).state_id;
       const resolvedState = resolveIssueStateSummary(issue, projectStates);
 
@@ -498,28 +592,14 @@ export function IssuesWorkspaceRoute({
       const stateName = resolvedState?.name ?? '';
       const stateId = resolvedState?.id ?? explicitStateId ?? '';
 
-      // 1. State filter
-      if (activeFilters.state && activeFilters.state.length > 0) {
-        const matchesActive =
-          activeFilters.state.includes('active') &&
-          ['backlog', 'unstarted', 'started'].includes(stateGroup);
-        const matchesSpecific = activeFilters.state.some(
-          (s) =>
-            s === stateGroup ||
-            (stateName ? s.toLowerCase() === stateName.toLowerCase() : false) ||
-            s === stateId
-        );
-        if (!matchesActive && !matchesSpecific) return false;
-      }
-
-      // 2. Priority filter
+      // 1. Priority filter
       if (activeFilters.priority && activeFilters.priority.length > 0) {
         const rawPriority = (issue as { priority?: { slug?: string } }).priority;
         const pSlug = rawPriority?.slug ? rawPriority.slug.toLowerCase() : 'none';
-        if (!activeFilters.priority.includes(pSlug)) return false;
+        if (!activeFilters.priority.includes(pSlug)) continue;
       }
 
-      // 3. Assignee filter
+      // 2. Assignee filter
       if (activeFilters.assignee && activeFilters.assignee.length > 0) {
         const hasUnassigned = activeFilters.assignee.includes('unassigned');
         const issueAssignees = issue.assignees ?? [];
@@ -533,50 +613,50 @@ export function IssuesWorkspaceRoute({
               return activeFilters.assignee?.some(
                 (a) =>
                   a === asg.principal.id ||
-                  a.toLowerCase() === asg.principal.handle.toLowerCase()
+                  a.toLowerCase() === asg.principal.handle.toLowerCase(),
               );
             }
             return false;
           });
-          if (!matchesPrincipal) return false;
+          if (!matchesPrincipal) continue;
         }
       }
 
-      // 4. Label filter
+      // 3. Label filter
       if (activeFilters.label && activeFilters.label.length > 0) {
         const issueLabels = issue.labels ?? [];
         const matchesLabel = issueLabels.some((lbl) =>
           activeFilters.label?.some(
             (l) =>
               l.toLowerCase() === lbl.name.toLowerCase() ||
-              l === lbl.id
-          )
+              l === lbl.id,
+          ),
         );
-        if (!matchesLabel) return false;
+        if (!matchesLabel) continue;
       }
 
-      // 5. Cycle filter
+      // 4. Cycle filter
       if (activeFilters.cycle && activeFilters.cycle.length > 0) {
         if (!issue.cycle_id || !activeFilters.cycle.includes(issue.cycle_id)) {
-          return false;
+          continue;
         }
       }
 
-      // 6. Module filter (only if modulesEnabled is true)
+      // 5. Module filter (only if modulesEnabled is true)
       if (modulesEnabled && activeFilters.module && activeFilters.module.length > 0) {
         const issueMods = issue.module_ids ?? [];
         const matchesMod = issueMods.some((m) => activeFilters.module?.includes(m));
-        if (!matchesMod) return false;
+        if (!matchesMod) continue;
       }
 
-      // 7. Gate status filter
+      // 6. Gate status filter
       if (activeFilters.gate_status && activeFilters.gate_status.length > 0) {
         if (!issue.gate_status || !activeFilters.gate_status.includes(issue.gate_status)) {
-          return false;
+          continue;
         }
       }
 
-      // 8. Due date filter
+      // 7. Due date filter
       if (activeFilters.due_date && activeFilters.due_date.length > 0) {
         const today = new Date().toISOString().slice(0, 10);
         const isOverdue =
@@ -584,40 +664,122 @@ export function IssuesWorkspaceRoute({
           issue.due_date < today &&
           stateGroup !== 'completed' &&
           stateGroup !== 'cancelled';
-        if (activeFilters.due_date.includes('overdue') && !isOverdue) return false;
-        if (activeFilters.due_date.includes('no_due_date') && issue.due_date) return false;
+        if (activeFilters.due_date.includes('overdue') && !isOverdue) continue;
+        if (activeFilters.due_date.includes('no_due_date') && issue.due_date) continue;
       }
 
-      // 9. Favorites-only filter
+      // 8. Favorites-only filter
       if (favoritesOnly) {
-        if (favVersion < 0) return false;
+        if (favVersion < 0) continue;
         try {
           const raw = typeof window !== 'undefined' ? localStorage.getItem('kb_favorite_issues') : null;
           const parsed: unknown = raw ? JSON.parse(raw) : [];
           const favs = Array.isArray(parsed)
             ? (parsed as unknown[]).filter((x): x is string => typeof x === 'string')
             : [];
-          if (!favs.includes(issue.key)) return false;
+          if (!favs.includes(issue.key)) continue;
         } catch {
           // ignore
         }
       }
 
-      // 10. Text / Query search filter
+      // 9. Text / Query search filter
       if (searchQuery.trim().length > 0) {
         if (queryMode === 'query') {
-          if (!matchesIssueQuery(searchQuery, issue, projectKey)) return false;
+          if (!matchesIssueQuery(searchQuery, issue, projectKey)) continue;
         } else {
-          const lower = searchQuery.toLowerCase();
+          const lower = searchQuery.trim().toLowerCase();
           const matchesKey = issue.key.toLowerCase().includes(lower);
           const matchesSummary = issue.summary.toLowerCase().includes(lower);
-          if (!matchesKey && !matchesSummary) return false;
+          const matchesDesc = (issue.description_markdown ?? '').toLowerCase().includes(lower);
+          if (!matchesKey && !matchesSummary && !matchesDesc) continue;
         }
       }
 
-      return true;
+      // 10. State visibility evaluation
+      const hasExplicitFilterBarState = Boolean(
+        activeFilters.state && activeFilters.state.length > 0 && (!isIssuesView || layout === 'table'),
+      );
+      let isStateVisible = true;
+      if (queryHasExplicitState) {
+        // Explicit Query Mode state predicate overrides checkbox hiding
+        isStateVisible = true;
+      } else if (hasExplicitFilterBarState && activeFilters.state) {
+        const matchesAll = activeFilters.state.includes('all');
+        const matchesActive =
+          (activeFilters.state.includes('active') ||
+            activeFilters.state.includes('actionable')) &&
+          stateGroup !== 'completed' &&
+          stateGroup !== 'cancelled';
+        const matchesSpecific = activeFilters.state.some(
+          (s) =>
+            s === stateGroup ||
+            (stateName ? normalizeStateKey(s) === normalizeStateKey(stateName) : false) ||
+            s === stateId,
+        );
+        isStateVisible = matchesAll || matchesActive || matchesSpecific;
+      } else if (isIssuesView) {
+        isStateVisible = isIssueStateVisible(
+          { id: stateId, name: stateName, group: stateGroup },
+          stateFilterPref,
+        );
+      }
+
+      if (isStateVisible) {
+        visible.push(issue);
+      } else {
+        hiddenByState.push(issue);
+      }
+    }
+
+    return { filteredIssues: visible, hiddenByStateIssues: hiddenByState };
+  }, [
+    issues,
+    layout,
+    activeFilters,
+    stateFilterPref,
+    modulesEnabled,
+    projectStates,
+    favoritesOnly,
+    searchQuery,
+    queryMode,
+    projectKey,
+    favVersion,
+  ]);
+
+  const hiddenByStateCount = hiddenByStateIssues.length;
+
+  const hiddenExactSearchMatch = useMemo(() => {
+    const trimmed = searchQuery.trim().toLowerCase();
+    if (!trimmed || hiddenByStateIssues.length === 0) return null;
+    const exact = hiddenByStateIssues.find((i) => i.key.toLowerCase() === trimmed);
+    if (!exact) return null;
+    const resolvedState = resolveIssueStateSummary(exact, projectStates);
+    return {
+      key: exact.key,
+      stateName: resolvedState?.name ?? resolvedState?.group ?? 'Closed',
+    };
+  }, [searchQuery, hiddenByStateIssues, projectStates]);
+
+  const handleShowAllStates = useCallback(() => {
+    const allPref = createAllStatesFilterPreference();
+    setStateFilterPref(allPref);
+    writeProjectStateFilterCookie(projectKey, allPref);
+    setActiveFilters((prev) => {
+      const next = { ...prev };
+      delete next.state;
+      return next;
     });
-  }, [issues, activeFilters, modulesEnabled, projectStates, favoritesOnly, searchQuery, queryMode, projectKey, favVersion]);
+  }, [projectKey]);
+
+  const handleResetFilters = useCallback(() => {
+    const actionablePref = createActionableStateFilterPreference();
+    setStateFilterPref(actionablePref);
+    writeProjectStateFilterCookie(projectKey, actionablePref);
+    setActiveFilters({});
+    setSearchQuery('');
+    setFavoritesOnly(false);
+  }, [projectKey]);
 
   // Normalize board workflow states and issues so "Todo" and "To Do" match seamlessly (KANBA-164)
   const boardStates: [BoardWorkflowState, ...BoardWorkflowState[]] = useMemo(() => {
@@ -708,7 +870,8 @@ export function IssuesWorkspaceRoute({
         })
       );
     },
-    isPopoverOrModalOpen: isCreateModalOpen || isSaveViewModalOpen || popoverState.isOpen,
+    isPopoverOrModalOpen:
+      isCreateModalOpen || isSaveViewModalOpen || popoverState.isOpen || isStatePopoverOpen,
   });
 
   const handleToggleSelect = (key: string, selected: boolean) => {
@@ -1052,13 +1215,24 @@ export function IssuesWorkspaceRoute({
           modulesEnabled={modulesEnabled}
           activeFilters={activeFilters}
           onFiltersChange={setActiveFilters}
+          stateFilter={stateFilterPref}
+          onStateFilterChange={handleUserStateFilterChange}
+          onStatePopoverOpenChange={setIsStatePopoverOpen}
+          hiddenCompletedCount={
+            searchQuery.trim().length > 0 &&
+            !(queryMode === 'query' && hasExplicitStatePredicate(searchQuery))
+              ? hiddenByStateCount
+              : 0
+          }
+          hiddenExactMatch={hiddenExactSearchMatch}
+          onShowAllStates={handleShowAllStates}
           searchQuery={searchQuery}
           onSearchQueryChange={setSearchQuery}
           onSearchSubmit={() => {
             setActiveFilters((prev) => ({ ...prev }));
           }}
           queryMode={queryMode}
-          onQueryModeChange={setQueryMode}
+          onQueryModeChange={handleQueryModeChange}
           favoritesOnly={favoritesOnly}
           onToggleFavoritesOnly={() => {
             setFavoritesOnly((prev) => !prev);
@@ -1139,6 +1313,10 @@ export function IssuesWorkspaceRoute({
               onSortByChange={setRailSortBy}
               sortDir={railSortDir}
               onSortDirChange={setRailSortDir}
+              totalProjectIssueCount={issues.length}
+              hiddenByStateCount={hiddenByStateCount}
+              onShowAllStates={handleShowAllStates}
+              onResetFilters={handleResetFilters}
               onOpenFieldPopover={(field, issue, rect) => {
                 setPopoverState({
                   isOpen: true,
@@ -1169,7 +1347,7 @@ export function IssuesWorkspaceRoute({
       ) : (
         <ViewHost
           layout={layout}
-          issues={filteredIssues}
+          issues={sortedRailIssues}
           projectKey={projectKey}
           projectStates={projectStates}
           modulesEnabled={modulesEnabled}
@@ -1180,6 +1358,10 @@ export function IssuesWorkspaceRoute({
           onCreateIssue={canEdit ? handleOpenCreateModal : undefined}
           focusedKey={focusedKey}
           capabilities={effectiveCaps}
+          totalProjectIssueCount={issues.length}
+          hiddenByStateCount={hiddenByStateCount}
+          onShowAllStates={handleShowAllStates}
+          onResetFilters={handleResetFilters}
         />
       )}
 

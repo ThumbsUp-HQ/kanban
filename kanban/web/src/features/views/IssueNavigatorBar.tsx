@@ -1,9 +1,28 @@
 /**
- * Unified Top Issue Navigator Bar (KAN-52).
- * Replaces double-stacked FilterDisplayBar and ListView Filter & Group bars.
+ * Unified Top Issue Navigator Bar (KAN-52, KAN-308 Problems 2 & 3).
+ * Replaces single-select state dropdown with searchable multi-select StateFilterPopover
+ * and renders non-intrusive hidden-completed-banner during search.
  */
 
-import React, { useMemo, useCallback, type JSX } from 'react';
+import React, { useMemo, useCallback, useState, type JSX } from 'react';
+import {
+  buildPreferenceFromExplicitStateTokens,
+  classifyStateFilterPreset,
+  createActionableStateFilterPreference,
+  createAllStatesFilterPreference,
+  isIssueStateVisible,
+  readProjectStateFilterCookie,
+  writeProjectStateFilterCookie,
+  type ProjectStateFilterPreference,
+} from './issueFilterCookie';
+import {
+  hasExplicitStatePredicate,
+  matchesIssueQuery,
+} from './predicateParser';
+import {
+  StateFilterPopover,
+  resolveEffectiveProjectStates,
+} from './StateFilterPopover';
 import type { IssueItem, SavedView, StateSummary } from './viewsApi';
 import type { ActiveFilters } from './FilterDisplayBar';
 import './IssueNavigatorBar.css';
@@ -15,6 +34,13 @@ export interface IssueNavigatorBarProps {
   modulesEnabled?: boolean;
   activeFilters?: ActiveFilters;
   onFiltersChange?: (filters: ActiveFilters) => void;
+  stateFilter?: ProjectStateFilterPreference | undefined;
+  onStateFilterChange?: ((pref: ProjectStateFilterPreference) => void) | undefined;
+  onStatePopoverOpenChange?: ((open: boolean) => void) | undefined;
+  hiddenCompletedCount?: number | undefined;
+  hiddenExactMatch?: { key: string; stateName: string } | null | undefined;
+  onShowAllStates?: (() => void) | undefined;
+  workspaceScope?: string | undefined;
   searchQuery?: string;
   onSearchQueryChange?: (q: string) => void;
   queryMode?: 'basic' | 'query';
@@ -29,11 +55,19 @@ export interface IssueNavigatorBarProps {
 }
 
 export function IssueNavigatorBar({
+  projectKey,
   issues = [],
   projectStates = [],
   modulesEnabled = true,
   activeFilters = {},
   onFiltersChange,
+  stateFilter: controlledStateFilter,
+  onStateFilterChange,
+  onStatePopoverOpenChange,
+  hiddenCompletedCount: propHiddenCompletedCount,
+  hiddenExactMatch: propHiddenExactMatch,
+  onShowAllStates,
+  workspaceScope,
   searchQuery = '',
   onSearchQueryChange,
   queryMode = 'basic',
@@ -46,6 +80,118 @@ export function IssueNavigatorBar({
   onSearchSubmit,
   className = '',
 }: IssueNavigatorBarProps): JSX.Element {
+  const effectiveStates = useMemo(
+    () => resolveEffectiveProjectStates(projectStates),
+    [projectStates],
+  );
+
+  const [internalStateFilter, setInternalStateFilter] = useState<ProjectStateFilterPreference>(() => {
+    if (controlledStateFilter) {
+      return controlledStateFilter;
+    }
+    if (activeFilters.state && activeFilters.state.length > 0) {
+      return buildPreferenceFromExplicitStateTokens(activeFilters.state, effectiveStates);
+    }
+    return (
+      readProjectStateFilterCookie(projectKey, { workspaceScope }) ??
+      createActionableStateFilterPreference()
+    );
+  });
+
+  const effectiveStateFilter = controlledStateFilter ?? internalStateFilter;
+
+  const handleStateFilterUpdate = useCallback(
+    (nextPref: ProjectStateFilterPreference) => {
+      setInternalStateFilter(nextPref);
+      writeProjectStateFilterCookie(projectKey, nextPref, { workspaceScope });
+      onStateFilterChange?.(nextPref);
+
+      if (onFiltersChange) {
+        const classification = classifyStateFilterPreset(nextPref, effectiveStates);
+        if (classification.preset === 'all') {
+          const nextFilters: ActiveFilters = Object.fromEntries(
+            Object.entries(activeFilters).filter(([k]) => k !== 'state'),
+          );
+          onFiltersChange(nextFilters);
+        } else if (classification.preset === 'actionable') {
+          onFiltersChange({
+            ...activeFilters,
+            state: ['active'],
+          });
+        } else {
+          onFiltersChange({
+            ...activeFilters,
+            state: classification.selectedStates.map((s) => s.id),
+          });
+        }
+      }
+    },
+    [
+      projectKey,
+      workspaceScope,
+      onStateFilterChange,
+      onFiltersChange,
+      effectiveStates,
+      activeFilters,
+    ],
+  );
+
+  // Compute hidden completed/cancelled matches during search when props are not explicitly provided
+  const computedHiddenMatches = useMemo(() => {
+    const trimmed = searchQuery.trim();
+    if (!trimmed) {
+      return { count: 0, exactMatch: null as { key: string; stateName: string } | null };
+    }
+    if (queryMode === 'query' && hasExplicitStatePredicate(trimmed)) {
+      return { count: 0, exactMatch: null as { key: string; stateName: string } | null };
+    }
+
+    const lowerQuery = trimmed.toLowerCase();
+    const hiddenMatching: IssueItem[] = [];
+
+    for (const issue of issues) {
+      const iState = (issue as { state?: StateSummary }).state;
+      if (isIssueStateVisible(iState, effectiveStateFilter)) {
+        continue;
+      }
+
+      const matchesSearch =
+        queryMode === 'query'
+          ? matchesIssueQuery(trimmed, issue, projectKey)
+          : issue.key.toLowerCase().includes(lowerQuery) ||
+            issue.summary.toLowerCase().includes(lowerQuery) ||
+            (issue.description_markdown ?? '').toLowerCase().includes(lowerQuery);
+
+      if (matchesSearch) {
+        hiddenMatching.push(issue);
+      }
+    }
+
+    const exact =
+      hiddenMatching.find((i) => i.key.toLowerCase() === lowerQuery) ?? null;
+
+    return {
+      count: hiddenMatching.length,
+      exactMatch: exact
+        ? { key: exact.key, stateName: exact.state.name || exact.state.group }
+        : null,
+    };
+  }, [issues, searchQuery, queryMode, effectiveStateFilter, projectKey]);
+
+  const hiddenCount = propHiddenCompletedCount ?? computedHiddenMatches.count;
+  const hiddenExact =
+    propHiddenExactMatch !== undefined
+      ? propHiddenExactMatch
+      : computedHiddenMatches.exactMatch;
+
+  const handleShowAllHidden = useCallback(() => {
+    if (onShowAllStates) {
+      onShowAllStates();
+      return;
+    }
+    handleStateFilterUpdate(createAllStatesFilterPreference());
+  }, [onShowAllStates, handleStateFilterUpdate]);
+
   // Extract distinct filter values from issues
   const distinctAssignees = useMemo(() => {
     const map = new Map<string, string>();
@@ -114,7 +260,6 @@ export function IssueNavigatorBar({
     [activeFilters, onFiltersChange],
   );
 
-  const currentState = activeFilters.state?.[0] ?? 'all';
   const currentPriority = activeFilters.priority?.[0] ?? 'all';
   const currentAssignee = activeFilters.assignee?.[0] ?? 'all';
   const currentLabel = activeFilters.label?.[0] ?? 'all';
@@ -153,7 +298,7 @@ export function IssueNavigatorBar({
               type="text"
               className="navigator-query-input"
               data-testid="navigator-query-input"
-              placeholder='e.g. project = "KAN" AND status = "Todo" or state:started priority:high "mars"'
+              placeholder='e.g. project = "KAN" AND status = "Todo" or -state:completed priority:high'
               aria-label="Structured query search"
               value={searchQuery}
               onChange={(e) => {
@@ -226,34 +371,14 @@ export function IssueNavigatorBar({
           className={`navigator-filters-row ${filtersExpanded ? 'navigator-filters-row--expanded' : ''}`}
           data-testid="navigator-filters-row"
         >
-          {/* State */}
-          <select
-            className="navigator-filter-select"
-            data-testid="navigator-filter-state"
-            aria-label="Filter by state"
-            value={currentState}
-            onChange={(e) => {
-              handleFilterChange('state', e.target.value);
-            }}
-          >
-            <option value="all">All States</option>
-            {projectStates.length > 0 ? (
-              projectStates.map((st) => (
-                <option key={st.id} value={st.id}>
-                  {st.name}
-                </option>
-              ))
-            ) : (
-              <>
-                <option value="backlog">Backlog</option>
-                <option value="todo">Todo</option>
-                <option value="in-progress">In Progress</option>
-                <option value="in-review">In Review</option>
-                <option value="done">Done</option>
-                <option value="cancelled">Cancelled</option>
-              </>
-            )}
-          </select>
+          {/* Multi-Select Searchable State Checkboxes Popover */}
+          <StateFilterPopover
+            projectStates={projectStates}
+            issues={issues}
+            value={effectiveStateFilter}
+            onChange={handleStateFilterUpdate}
+            onOpenChange={onStatePopoverOpenChange}
+          />
 
           {/* Priority */}
           <select
@@ -357,6 +482,30 @@ export function IssueNavigatorBar({
             onClick={onToggleFavoritesOnly}
           >
             <span>{favoritesOnly ? '⭐ Favorites only' : '☆ Favorites only'}</span>
+          </button>
+        </div>
+      )}
+
+      {/* Hidden Completed / Cancelled Matches Banner */}
+      {hiddenCount > 0 && (
+        <div
+          className="navigator-hidden-banner"
+          data-testid="hidden-completed-banner"
+          role="status"
+          aria-live="polite"
+        >
+          <span className="navigator-hidden-banner-text">
+            {hiddenExact
+              ? `${hiddenExact.key} is hidden (${hiddenExact.stateName}) - ${String(hiddenCount)} completed/cancelled issue(s) hidden`
+              : `${String(hiddenCount)} completed/cancelled issue(s) hidden`}
+          </span>
+          <button
+            type="button"
+            className="navigator-hidden-show-all-btn"
+            data-testid="hidden-completed-show-all-btn"
+            onClick={handleShowAllHidden}
+          >
+            Show all
           </button>
         </div>
       )}

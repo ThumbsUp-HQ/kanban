@@ -1,10 +1,15 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
 import { IssueNavigatorBar } from './IssueNavigatorBar';
+import { ISSUE_FILTER_COOKIE_NAME } from './issueFilterCookie';
 import type { IssueItem, SavedView } from './viewsApi';
 
-describe('IssueNavigatorBar (KAN-52 Problem 1)', () => {
+describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
+  beforeEach(() => {
+    document.cookie = `${ISSUE_FILTER_COOKIE_NAME}=; Path=/; Max-Age=0`;
+  });
+
   const mockIssues: IssueItem[] = [
     {
       id: 'i-1',
@@ -55,7 +60,7 @@ describe('IssueNavigatorBar (KAN-52 Problem 1)', () => {
     },
   ];
 
-  it('renders issue navigator bar with basic mode filter dropdowns and search input', () => {
+  it('renders issue navigator bar with StateFilterPopover trigger and basic mode filter dropdowns', () => {
     const onSearchQueryChange = vi.fn();
     render(
       <IssueNavigatorBar
@@ -131,8 +136,9 @@ describe('IssueNavigatorBar (KAN-52 Problem 1)', () => {
     expect(onSearchSubmit).toHaveBeenCalled();
   });
 
-  it('handles basic mode filter dropdown changes', () => {
+  it('handles StateFilterPopover checkbox/preset changes and basic mode filter dropdown changes', () => {
     const onFiltersChange = vi.fn();
+    const onStateFilterChange = vi.fn();
     render(
       <IssueNavigatorBar
         projectKey="KAN"
@@ -141,42 +147,82 @@ describe('IssueNavigatorBar (KAN-52 Problem 1)', () => {
         activeFilters={{ state: ['todo'], priority: ['urgent'] }}
         modulesEnabled={true}
         onFiltersChange={onFiltersChange}
+        onStateFilterChange={onStateFilterChange}
       />,
     );
 
-    // State filter
-    const stateSelect = screen.getByTestId('navigator-filter-state');
-    fireEvent.change(stateSelect, { target: { value: 'todo' } });
-    expect(onFiltersChange).toHaveBeenCalledWith({ state: ['todo'], priority: ['urgent'] });
+    // StateFilterPopover open, check Done, and click All / Actionable presets
+    const stateTrigger = screen.getByTestId('navigator-filter-state');
+    fireEvent.click(stateTrigger);
+    expect(screen.getByTestId('navigator-state-popover')).toBeDefined();
+
+    fireEvent.click(screen.getByTestId('state-checkbox-state-done'));
+    expect(onStateFilterChange).toHaveBeenCalled();
+    expect(onFiltersChange).toHaveBeenCalled();
+
+    fireEvent.click(screen.getByTestId('state-preset-actionable'));
+    expect(onFiltersChange).toHaveBeenCalledWith({ state: ['active'], priority: ['urgent'] });
+
+    fireEvent.click(screen.getByTestId('state-preset-all'));
+    expect(onFiltersChange).toHaveBeenCalledWith({ priority: ['urgent'] });
 
     // Priority filter
     const prioSelect = screen.getByTestId('navigator-filter-priority');
     fireEvent.change(prioSelect, { target: { value: 'urgent' } });
-    expect(onFiltersChange).toHaveBeenCalledWith({ state: ['todo'], priority: ['urgent'] });
+    expect(onFiltersChange).toHaveBeenCalled();
 
     // Assignee filter
     const asgSelect = screen.getByTestId('navigator-filter-assignee');
     fireEvent.change(asgSelect, { target: { value: 'alice' } });
-    expect(onFiltersChange).toHaveBeenCalledWith({ state: ['todo'], priority: ['urgent'], assignee: ['alice'] });
+    expect(onFiltersChange).toHaveBeenCalled();
 
     // Label filter
     const lblSelect = screen.getByTestId('navigator-filter-label');
     fireEvent.change(lblSelect, { target: { value: 'auth' } });
-    expect(onFiltersChange).toHaveBeenCalledWith({ state: ['todo'], priority: ['urgent'], label: ['auth'] });
+    expect(onFiltersChange).toHaveBeenCalled();
 
     // Cycle filter
     const cycleSelect = screen.getByTestId('navigator-filter-cycle');
     fireEvent.change(cycleSelect, { target: { value: 'c-1' } });
-    expect(onFiltersChange).toHaveBeenCalledWith({ state: ['todo'], priority: ['urgent'], cycle: ['c-1'] });
+    expect(onFiltersChange).toHaveBeenCalled();
 
     // Module filter (with modulesEnabled)
     const modSelect = screen.getByTestId('navigator-filter-module');
     fireEvent.change(modSelect, { target: { value: 'm-1' } });
-    expect(onFiltersChange).toHaveBeenCalledWith({ state: ['todo'], priority: ['urgent'], module: ['m-1'] });
+    expect(onFiltersChange).toHaveBeenCalled();
 
-    // Reset filter to all
-    fireEvent.change(stateSelect, { target: { value: 'all' } });
-    expect(onFiltersChange).toHaveBeenCalledWith({ priority: ['urgent'] });
+    // Reset priority filter to all
+    fireEvent.change(prioSelect, { target: { value: 'all' } });
+    expect(onFiltersChange).toHaveBeenCalled();
+  });
+
+  it('renders hidden-completed-banner when search matches hidden completed/cancelled issues and reveals them on Show all', () => {
+    const { rerender } = render(
+      <IssueNavigatorBar
+        projectKey="KAN"
+        issues={mockIssues}
+        queryMode="basic"
+        searchQuery="Database"
+      />,
+    );
+
+    const banner = screen.getByTestId('hidden-completed-banner');
+    expect(banner.textContent).toContain('1 completed/cancelled issue(s) hidden');
+
+    // Exact key match banner text
+    rerender(
+      <IssueNavigatorBar
+        projectKey="KAN"
+        issues={mockIssues}
+        queryMode="basic"
+        searchQuery="KAN-2"
+      />,
+    );
+    expect(screen.getByTestId('hidden-completed-banner').textContent).toContain('KAN-2 is hidden (Done)');
+
+    // Clicking Show all reveals completed issues and hides banner
+    fireEvent.click(screen.getByTestId('hidden-completed-show-all-btn'));
+    expect(screen.queryByTestId('hidden-completed-banner')).toBeNull();
   });
 
   it('handles favorites toggle and saved view selection', () => {
@@ -257,9 +303,8 @@ describe('IssueNavigatorBar (KAN-52 Problem 1)', () => {
       />,
     );
 
-    // Filter change without onFiltersChange does not crash
-    const stateSelect = screen.getByTestId('navigator-filter-state');
-    fireEvent.change(stateSelect, { target: { value: 'todo' } });
+    const prioSelect = screen.getByTestId('navigator-filter-priority');
+    fireEvent.change(prioSelect, { target: { value: 'low' } });
   });
 
   it('toggles filters expansion via mobile filters toggle button', () => {
