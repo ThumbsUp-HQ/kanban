@@ -1860,12 +1860,11 @@ async def test_kan85_rls_restricted_parent_and_capability_parity_under_force_rls
 
 
 @pytest.mark.asyncio
-async def test_kan309_list_issues_lod_summary_defers_description_and_omits_access_manifest(
-    api_env: ApiEnv,
+async def test_kan309_list_issues_lod_summary_defers_description_and_omits_access_manifest(  # noqa: PLR0915
     make_user: Callable[..., Awaitable[SeededUser]],
     as_principal: Callable[..., httpx.AsyncClient],
 ) -> None:
-    """Verify KAN-309 Problem 1: lod=summary defers description_markdown and access_manifest while preserving row metadata."""
+    """Verify KAN-309 Problem 1: lod=summary defers description_markdown and access_manifest."""
     admin = await make_user("ttfd_admin", workspace_role="WORKSPACE_ADMIN")
     admin_client = as_principal(admin)
     p_resp = await admin_client.post(
@@ -1874,7 +1873,9 @@ async def test_kan309_list_issues_lod_summary_defers_description_and_omits_acces
     )
     assert p_resp.status_code == 201
 
-    long_description = "## Detailed Architectural Description\n\n- Point 1\n- Point 2\n- Confidential info"
+    long_description = (
+        "## Detailed Architectural Description\n\n- Point 1\n- Point 2\n- Confidential info"
+    )
     create_resp = await admin_client.post(
         "/api/v1/projects/TTFD/issues",
         json={
@@ -1959,4 +1960,3 @@ async def test_kan309_list_issues_lod_summary_defers_description_and_omits_acces
     assert len(next_page_data["items"]) == 1
     assert next_page_data["items"][0]["description_markdown"] is None
     assert next_page_data["items"][0]["access_manifest"] is None
-

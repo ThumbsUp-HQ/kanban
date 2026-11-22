@@ -29,7 +29,7 @@ import hashlib
 import uuid
 from dataclasses import dataclass
 from datetime import UTC, date, datetime, timedelta
-from typing import TYPE_CHECKING, Any, Final
+from typing import TYPE_CHECKING, Any, Final, Literal
 
 from sqlalchemy import delete, distinct, func, select, text, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
@@ -1192,11 +1192,7 @@ async def _hydrate_batch_issue_context(  # noqa: C901, PLR0912, PLR0915
     groups_by_id: dict[uuid.UUID, Group] = {}
     group_member_counts: dict[uuid.UUID, int] = {}
     human_all_pids = {caller.principal_id}
-    agent_all_pids = (
-        {caller.agent_principal_id}
-        if caller.agent_principal_id is not None
-        else set()
-    )
+    agent_all_pids = {caller.agent_principal_id} if caller.agent_principal_id is not None else set()
     effective_token_mask = parse_token_scope_mask(caller.token_scopes)
 
     if lod != "summary":
@@ -1221,7 +1217,9 @@ async def _hydrate_batch_issue_context(  # noqa: C901, PLR0912, PLR0915
         for acl in all_direct_acls:
             direct_acls_by_issue[acl.object_id].append(acl)
 
-        workspace_ids = list({p.workspace_id for p in projects_by_id.values()} | {caller.workspace_id})
+        workspace_ids = list(
+            {p.workspace_id for p in projects_by_id.values()} | {caller.workspace_id}
+        )
         all_rbs = list(
             (
                 await session.execute(

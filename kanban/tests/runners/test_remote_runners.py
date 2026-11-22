@@ -81,7 +81,11 @@ class AsyncWsTestClient:
         self.outbound: asyncio.Queue[dict[str, Any]] = asyncio.Queue()
         from starlette.websockets import WebSocket
 
-        self.ws = WebSocket(self.scope, receive=self.inbound.get, send=self.outbound.put)
+        self.ws = WebSocket(
+            self.scope,
+            receive=self.inbound.get,
+            send=self.outbound.put,  # type: ignore[arg-type]
+        )
 
     async def send_text(self, text: str) -> None:
         await self.inbound.put({"type": "websocket.receive", "text": text})
