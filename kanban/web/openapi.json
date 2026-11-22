@@ -2,7 +2,7 @@
   "components": {
     "schemas": {
       "AccessManifest": {
-        "description": "Complete S3.4 access manifest powering the 🛡️ access pill and inspector.",
+        "description": "Complete S3.4 access manifest powering the \ud83d\udee1\ufe0f access pill and inspector.",
         "properties": {
           "agents": {
             "description": "In-boundary active agents",
@@ -419,6 +419,100 @@
           }
         },
         "title": "AdHocQueryRequest",
+        "type": "object"
+      },
+      "AdminDiagnosticsResponse": {
+        "additionalProperties": false,
+        "description": "Consolidated administrative diagnostics response covering all 7 subsystems.",
+        "properties": {
+          "agent_runtime_providers": {
+            "$ref": "#/components/schemas/SubsystemHealthItem"
+          },
+          "build": {
+            "$ref": "#/components/schemas/BuildDiagnosticsInfo"
+          },
+          "config": {
+            "items": {
+              "$ref": "#/components/schemas/ConfigSettingItem"
+            },
+            "title": "Config",
+            "type": "array"
+          },
+          "database": {
+            "$ref": "#/components/schemas/DatabaseDiagnosticsInfo"
+          },
+          "job_worker_pool": {
+            "$ref": "#/components/schemas/SubsystemHealthItem"
+          },
+          "postgresql_rls": {
+            "$ref": "#/components/schemas/SubsystemHealthItem"
+          },
+          "rate_limiter": {
+            "$ref": "#/components/schemas/SubsystemHealthItem"
+          },
+          "realtime": {
+            "$ref": "#/components/schemas/RealtimeDiagnosticsInfo"
+          },
+          "realtime_hub_outbox": {
+            "$ref": "#/components/schemas/SubsystemHealthItem"
+          },
+          "remote_runner_fleet": {
+            "$ref": "#/components/schemas/SubsystemHealthItem"
+          },
+          "request_proxy_check": {
+            "$ref": "#/components/schemas/RequestProxyCheckInfo"
+          },
+          "runtime_and_container": {
+            "$ref": "#/components/schemas/RuntimeAndContainerInfo"
+          },
+          "sandbox": {
+            "$ref": "#/components/schemas/SandboxDiagnosticsInfo"
+          },
+          "services": {
+            "$ref": "#/components/schemas/ServicesDiagnosticsInfo"
+          },
+          "status": {
+            "enum": [
+              "healthy",
+              "degraded",
+              "unhealthy"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "storage": {
+            "$ref": "#/components/schemas/StorageInfo"
+          },
+          "subsystems": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/SubsystemHealthItem"
+            },
+            "title": "Subsystems",
+            "type": "object"
+          },
+          "wasm_script_sandbox": {
+            "$ref": "#/components/schemas/SubsystemHealthItem"
+          }
+        },
+        "required": [
+          "status",
+          "runtime_and_container",
+          "storage",
+          "database",
+          "realtime",
+          "request_proxy_check",
+          "sandbox",
+          "services",
+          "build",
+          "postgresql_rls",
+          "realtime_hub_outbox",
+          "job_worker_pool",
+          "wasm_script_sandbox",
+          "agent_runtime_providers",
+          "remote_runner_fleet",
+          "rate_limiter"
+        ],
+        "title": "AdminDiagnosticsResponse",
         "type": "object"
       },
       "AdminGenericImportRequest": {
@@ -1158,6 +1252,126 @@
         "title": "AgentValidationResponse",
         "type": "object"
       },
+      "AgingWipIssue": {
+        "additionalProperties": false,
+        "description": "Active WIP item and aging telemetry.",
+        "properties": {
+          "age_in_current_state_hours": {
+            "title": "Age In Current State Hours",
+            "type": "number"
+          },
+          "first_started_at": {
+            "title": "First Started At",
+            "type": "string"
+          },
+          "issue_id": {
+            "format": "uuid",
+            "title": "Issue Id",
+            "type": "string"
+          },
+          "issue_key": {
+            "title": "Issue Key",
+            "type": "string"
+          },
+          "state_color_hex": {
+            "title": "State Color Hex",
+            "type": "string"
+          },
+          "state_entered_at": {
+            "title": "State Entered At",
+            "type": "string"
+          },
+          "state_id": {
+            "format": "uuid",
+            "title": "State Id",
+            "type": "string"
+          },
+          "state_name": {
+            "title": "State Name",
+            "type": "string"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          },
+          "total_wip_hours": {
+            "title": "Total Wip Hours",
+            "type": "number"
+          }
+        },
+        "required": [
+          "issue_id",
+          "issue_key",
+          "title",
+          "state_id",
+          "state_name",
+          "state_color_hex",
+          "age_in_current_state_hours",
+          "total_wip_hours",
+          "state_entered_at",
+          "first_started_at"
+        ],
+        "title": "AgingWipIssue",
+        "type": "object"
+      },
+      "AgingWipMetrics": {
+        "additionalProperties": false,
+        "description": "Aging WIP active items and column threshold guides.",
+        "properties": {
+          "active_issues": {
+            "items": {
+              "$ref": "#/components/schemas/AgingWipIssue"
+            },
+            "title": "Active Issues",
+            "type": "array"
+          },
+          "column_thresholds": {
+            "additionalProperties": {
+              "$ref": "#/components/schemas/ColumnAgingThresholds"
+            },
+            "title": "Column Thresholds",
+            "type": "object"
+          },
+          "total_active_wip": {
+            "title": "Total Active Wip",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "active_issues",
+          "column_thresholds",
+          "total_active_wip"
+        ],
+        "title": "AgingWipMetrics",
+        "type": "object"
+      },
+      "AiProvidersSummary": {
+        "additionalProperties": false,
+        "description": "Configured AI model providers.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "integer"
+          },
+          "kinds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Kinds",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "enabled"
+        ],
+        "title": "AiProvidersSummary",
+        "type": "object"
+      },
       "ArchiveEligibility": {
         "additionalProperties": false,
         "description": "Eligibility status and explanatory reason for archiving (S7.2 8p).",
@@ -1884,6 +2098,33 @@
         "title": "AuthCardUpdate",
         "type": "object"
       },
+      "AuthCardsSummary": {
+        "additionalProperties": false,
+        "description": "Configured authentication identity cards.",
+        "properties": {
+          "enabled": {
+            "title": "Enabled",
+            "type": "integer"
+          },
+          "kinds": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Kinds",
+            "type": "array"
+          },
+          "total": {
+            "title": "Total",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "total",
+          "enabled"
+        ],
+        "title": "AuthCardsSummary",
+        "type": "object"
+      },
       "AuthorSummary": {
         "additionalProperties": false,
         "description": "Comment author display metadata.",
@@ -1929,6 +2170,31 @@
           "display_name"
         ],
         "title": "AuthorSummary",
+        "type": "object"
+      },
+      "BackgroundTasksInfo": {
+        "additionalProperties": false,
+        "description": "Liveness indicators for realtime background task workers.",
+        "properties": {
+          "listener_alive": {
+            "title": "Listener Alive",
+            "type": "boolean"
+          },
+          "ping_alive": {
+            "title": "Ping Alive",
+            "type": "boolean"
+          },
+          "session_check_alive": {
+            "title": "Session Check Alive",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "listener_alive",
+          "ping_alive",
+          "session_check_alive"
+        ],
+        "title": "BackgroundTasksInfo",
         "type": "object"
       },
       "BackupFileItem": {
@@ -2526,6 +2792,76 @@
         "title": "BudgetSetRequest",
         "type": "object"
       },
+      "BuildDiagnosticsInfo": {
+        "additionalProperties": false,
+        "description": "Application build metadata, commit SHA, and schema bundle hashes.",
+        "properties": {
+          "build_timestamp": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Build Timestamp"
+          },
+          "frontend_bundle_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Frontend Bundle Hash"
+          },
+          "git_commit": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Git Commit"
+          },
+          "openapi_bundle_hash": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openapi Bundle Hash"
+          },
+          "openapi_version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Openapi Version"
+          },
+          "version": {
+            "title": "Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "version"
+        ],
+        "title": "BuildDiagnosticsInfo",
+        "type": "object"
+      },
       "BurndownIdealPoint": {
         "additionalProperties": false,
         "description": "Linear target progression for cycle completion.",
@@ -2653,6 +2989,134 @@
         "title": "CanonicalUrlResponse",
         "type": "object"
       },
+      "CfdPoint": {
+        "additionalProperties": false,
+        "description": "Daily cumulative flow diagram metrics point.",
+        "properties": {
+          "backlog": {
+            "default": 0,
+            "title": "Backlog",
+            "type": "integer"
+          },
+          "cancelled": {
+            "default": 0,
+            "title": "Cancelled",
+            "type": "integer"
+          },
+          "completed": {
+            "default": 0,
+            "title": "Completed",
+            "type": "integer"
+          },
+          "counts_by_state": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Counts By State",
+            "type": "object"
+          },
+          "date": {
+            "title": "Date",
+            "type": "string"
+          },
+          "started": {
+            "default": 0,
+            "title": "Started",
+            "type": "integer"
+          },
+          "total": {
+            "default": 0,
+            "title": "Total",
+            "type": "integer"
+          },
+          "unstarted": {
+            "default": 0,
+            "title": "Unstarted",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "date"
+        ],
+        "title": "CfdPoint",
+        "type": "object"
+      },
+      "CfdSeries": {
+        "additionalProperties": false,
+        "description": "CFD data series and metadata.",
+        "properties": {
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/CfdPoint"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "state_groups": {
+            "default": [
+              "backlog",
+              "unstarted",
+              "started",
+              "completed",
+              "cancelled"
+            ],
+            "items": {
+              "type": "string"
+            },
+            "title": "State Groups",
+            "type": "array"
+          },
+          "states": {
+            "items": {
+              "$ref": "#/components/schemas/CfdStateMeta"
+            },
+            "title": "States",
+            "type": "array"
+          }
+        },
+        "required": [
+          "points",
+          "states"
+        ],
+        "title": "CfdSeries",
+        "type": "object"
+      },
+      "CfdStateMeta": {
+        "additionalProperties": false,
+        "description": "Metadata for a project workflow state in the CFD.",
+        "properties": {
+          "color_hex": {
+            "title": "Color Hex",
+            "type": "string"
+          },
+          "id": {
+            "format": "uuid",
+            "title": "Id",
+            "type": "string"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "sort_order": {
+            "title": "Sort Order",
+            "type": "integer"
+          },
+          "state_group": {
+            "title": "State Group",
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "state_group",
+          "color_hex",
+          "sort_order"
+        ],
+        "title": "CfdStateMeta",
+        "type": "object"
+      },
       "ChangePasswordRequest": {
         "description": "Payload for updating personal local login password.",
         "properties": {
@@ -2679,6 +3143,42 @@
           "new_password"
         ],
         "title": "ChangePasswordRequest",
+        "type": "object"
+      },
+      "ColumnAgingThresholds": {
+        "additionalProperties": false,
+        "description": "Historical duration percentiles for a workflow column.",
+        "properties": {
+          "p50_hours": {
+            "title": "P50 Hours",
+            "type": "number"
+          },
+          "p85_hours": {
+            "title": "P85 Hours",
+            "type": "number"
+          },
+          "p95_hours": {
+            "title": "P95 Hours",
+            "type": "number"
+          },
+          "state_id": {
+            "format": "uuid",
+            "title": "State Id",
+            "type": "string"
+          },
+          "state_name": {
+            "title": "State Name",
+            "type": "string"
+          }
+        },
+        "required": [
+          "state_id",
+          "state_name",
+          "p50_hours",
+          "p85_hours",
+          "p95_hours"
+        ],
+        "title": "ColumnAgingThresholds",
         "type": "object"
       },
       "CommentCreate": {
@@ -2998,6 +3498,49 @@
           "migration_steps_markdown"
         ],
         "title": "ComposeExportResponse",
+        "type": "object"
+      },
+      "ConfigSettingItem": {
+        "additionalProperties": false,
+        "description": "Strictly allowlisted configuration setting with server-side secret redaction.",
+        "properties": {
+          "key": {
+            "title": "Key",
+            "type": "string"
+          },
+          "notes": {
+            "title": "Notes",
+            "type": "string"
+          },
+          "redacted": {
+            "title": "Redacted",
+            "type": "boolean"
+          },
+          "source": {
+            "enum": [
+              "env",
+              "default"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "subsystem": {
+            "title": "Subsystem",
+            "type": "string"
+          },
+          "value": {
+            "title": "Value"
+          }
+        },
+        "required": [
+          "key",
+          "subsystem",
+          "value",
+          "source",
+          "redacted",
+          "notes"
+        ],
+        "title": "ConfigSettingItem",
         "type": "object"
       },
       "CopiedSubIssueSummary": {
@@ -4011,6 +4554,78 @@
         "title": "CycleCreate",
         "type": "object"
       },
+      "CycleLeadTimeMetrics": {
+        "additionalProperties": false,
+        "description": "Scatterplot data and percentiles for cycle time and lead time.",
+        "properties": {
+          "cycle_time_percentiles": {
+            "$ref": "#/components/schemas/PercentileValues"
+          },
+          "lead_time_percentiles": {
+            "$ref": "#/components/schemas/PercentileValues"
+          },
+          "points": {
+            "items": {
+              "$ref": "#/components/schemas/CycleLeadTimePoint"
+            },
+            "title": "Points",
+            "type": "array"
+          },
+          "total_completed_in_window": {
+            "title": "Total Completed In Window",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "points",
+          "cycle_time_percentiles",
+          "lead_time_percentiles",
+          "total_completed_in_window"
+        ],
+        "title": "CycleLeadTimeMetrics",
+        "type": "object"
+      },
+      "CycleLeadTimePoint": {
+        "additionalProperties": false,
+        "description": "Cycle time and lead time measurement point for a completed work item.",
+        "properties": {
+          "completed_at": {
+            "title": "Completed At",
+            "type": "string"
+          },
+          "cycle_time_days": {
+            "title": "Cycle Time Days",
+            "type": "number"
+          },
+          "issue_id": {
+            "format": "uuid",
+            "title": "Issue Id",
+            "type": "string"
+          },
+          "issue_key": {
+            "title": "Issue Key",
+            "type": "string"
+          },
+          "lead_time_days": {
+            "title": "Lead Time Days",
+            "type": "number"
+          },
+          "title": {
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "issue_id",
+          "issue_key",
+          "title",
+          "completed_at",
+          "cycle_time_days",
+          "lead_time_days"
+        ],
+        "title": "CycleLeadTimePoint",
+        "type": "object"
+      },
       "CyclePatch": {
         "additionalProperties": false,
         "description": "Payload to update an existing upcoming or active cycle.",
@@ -4194,6 +4809,104 @@
           "name"
         ],
         "title": "CycleSummary",
+        "type": "object"
+      },
+      "DatabaseDiagnosticsInfo": {
+        "additionalProperties": false,
+        "description": "PostgreSQL RLS enforcement, connection health, and Alembic migration state.",
+        "properties": {
+          "active_role_non_bypass": {
+            "title": "Active Role Non Bypass",
+            "type": "boolean"
+          },
+          "alembic_head_current": {
+            "title": "Alembic Head Current",
+            "type": "boolean"
+          },
+          "code_heads": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Code Heads",
+            "type": "array"
+          },
+          "connected": {
+            "title": "Connected",
+            "type": "boolean"
+          },
+          "db_heads": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Db Heads",
+            "type": "array"
+          },
+          "force_rls_verified": {
+            "title": "Force Rls Verified",
+            "type": "boolean"
+          },
+          "latency_ms": {
+            "title": "Latency Ms",
+            "type": "number"
+          },
+          "pool": {
+            "$ref": "#/components/schemas/DatabasePoolInfo"
+          },
+          "sanitized_dsn_target": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/SanitizedDsnInfo"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
+          "server_version": {
+            "title": "Server Version",
+            "type": "string"
+          }
+        },
+        "required": [
+          "connected",
+          "latency_ms",
+          "server_version",
+          "active_role_non_bypass",
+          "force_rls_verified",
+          "alembic_head_current",
+          "pool"
+        ],
+        "title": "DatabaseDiagnosticsInfo",
+        "type": "object"
+      },
+      "DatabasePoolInfo": {
+        "additionalProperties": false,
+        "description": "SQLAlchemy connection pool metrics.",
+        "properties": {
+          "checked_in": {
+            "title": "Checked In",
+            "type": "integer"
+          },
+          "checked_out": {
+            "title": "Checked Out",
+            "type": "integer"
+          },
+          "overflow": {
+            "title": "Overflow",
+            "type": "integer"
+          },
+          "size": {
+            "title": "Size",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "size",
+          "checked_in",
+          "checked_out",
+          "overflow"
+        ],
+        "title": "DatabasePoolInfo",
         "type": "object"
       },
       "DestructiveExecuteIn": {
@@ -4557,6 +5270,46 @@
           "link_type"
         ],
         "title": "DirectLinkCreateRequest",
+        "type": "object"
+      },
+      "DirectoryStorageInfo": {
+        "additionalProperties": false,
+        "description": "Persistent storage directory status and disk capacity.",
+        "properties": {
+          "exists": {
+            "title": "Exists",
+            "type": "boolean"
+          },
+          "free_bytes": {
+            "title": "Free Bytes",
+            "type": "integer"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "path": {
+            "title": "Path",
+            "type": "string"
+          },
+          "total_bytes": {
+            "title": "Total Bytes",
+            "type": "integer"
+          },
+          "writable": {
+            "title": "Writable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "name",
+          "path",
+          "exists",
+          "writable",
+          "free_bytes",
+          "total_bytes"
+        ],
+        "title": "DirectoryStorageInfo",
         "type": "object"
       },
       "DocCreate": {
@@ -7434,6 +8187,37 @@
         "title": "IssueUnarchiveRequest",
         "type": "object"
       },
+      "KeyringSummary": {
+        "additionalProperties": false,
+        "description": "Cryptographic master KEK configuration descriptor without secret material.",
+        "properties": {
+          "configured": {
+            "title": "Configured",
+            "type": "boolean"
+          },
+          "master_kek_kid": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Master Kek Kid"
+          },
+          "source": {
+            "title": "Source",
+            "type": "string"
+          }
+        },
+        "required": [
+          "configured",
+          "source"
+        ],
+        "title": "KeyringSummary",
+        "type": "object"
+      },
       "KnowledgeSearchItem": {
         "additionalProperties": false,
         "description": "Single doc, page, or sticky match returned by knowledge search endpoint.",
@@ -9527,6 +10311,175 @@
         "title": "ModuleSummary",
         "type": "object"
       },
+      "MonteCarloForecast": {
+        "additionalProperties": false,
+        "description": "10,000-trial Monte Carlo throughput forecast simulation results.",
+        "properties": {
+          "average_daily_throughput": {
+            "title": "Average Daily Throughput",
+            "type": "number"
+          },
+          "historical_daily_throughput": {
+            "items": {
+              "type": "integer"
+            },
+            "title": "Historical Daily Throughput",
+            "type": "array"
+          },
+          "how_many": {
+            "$ref": "#/components/schemas/MonteCarloHowMany"
+          },
+          "trials": {
+            "title": "Trials",
+            "type": "integer"
+          },
+          "when": {
+            "$ref": "#/components/schemas/MonteCarloWhen"
+          }
+        },
+        "required": [
+          "trials",
+          "historical_daily_throughput",
+          "average_daily_throughput",
+          "how_many",
+          "when"
+        ],
+        "title": "MonteCarloForecast",
+        "type": "object"
+      },
+      "MonteCarloHowMany": {
+        "additionalProperties": false,
+        "description": "Monte Carlo throughput forecast for 'How Many items in horizon_days?'.",
+        "properties": {
+          "distribution": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Distribution",
+            "type": "object"
+          },
+          "horizon_days": {
+            "title": "Horizon Days",
+            "type": "integer"
+          },
+          "p50": {
+            "title": "P50",
+            "type": "integer"
+          },
+          "p85": {
+            "title": "P85",
+            "type": "integer"
+          },
+          "p95": {
+            "title": "P95",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "horizon_days",
+          "p50",
+          "p85",
+          "p95",
+          "distribution"
+        ],
+        "title": "MonteCarloHowMany",
+        "type": "object"
+      },
+      "MonteCarloWhen": {
+        "additionalProperties": false,
+        "description": "Monte Carlo throughput forecast for 'When will target_items be done?'.",
+        "properties": {
+          "distribution": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Distribution",
+            "type": "object"
+          },
+          "p50_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P50 Date"
+          },
+          "p50_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P50 Days"
+          },
+          "p85_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P85 Date"
+          },
+          "p85_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P85 Days"
+          },
+          "p95_date": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P95 Date"
+          },
+          "p95_days": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "P95 Days"
+          },
+          "target_items": {
+            "title": "Target Items",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "target_items",
+          "p50_days",
+          "p85_days",
+          "p95_days",
+          "p50_date",
+          "p85_date",
+          "p95_date",
+          "distribution"
+        ],
+        "title": "MonteCarloWhen",
+        "type": "object"
+      },
       "NormalActorSummary": {
         "additionalProperties": false,
         "description": "Visible in-boundary principal metadata for activity actors.",
@@ -10673,6 +11626,31 @@
         "title": "PendingGateSummary",
         "type": "object"
       },
+      "PercentileValues": {
+        "additionalProperties": false,
+        "description": "Percentile thresholds (p50, p85, p95).",
+        "properties": {
+          "p50": {
+            "title": "P50",
+            "type": "number"
+          },
+          "p85": {
+            "title": "P85",
+            "type": "number"
+          },
+          "p95": {
+            "title": "P95",
+            "type": "number"
+          }
+        },
+        "required": [
+          "p50",
+          "p85",
+          "p95"
+        ],
+        "title": "PercentileValues",
+        "type": "object"
+      },
       "PersonalMcpKeyItem": {
         "description": "Metadata for an existing personal MCP API key.",
         "properties": {
@@ -11264,7 +12242,7 @@
             "description": "Pillar 4: Enterprise Whitespace & High-Ergonomics UI"
           },
           "platform": {
-            "default": "👍kanban",
+            "default": "\ud83d\udc4dkanban",
             "description": "Official platform brand name",
             "title": "Platform",
             "type": "string"
@@ -11276,7 +12254,6 @@
             "type": "string"
           },
           "version": {
-            "default": "2.0.0",
             "description": "Platform architecture release version",
             "title": "Version",
             "type": "string"
@@ -11957,6 +12934,48 @@
           "name"
         ],
         "title": "ProjectCreate",
+        "type": "object"
+      },
+      "ProjectFlowMetricsResponse": {
+        "additionalProperties": false,
+        "description": "Comprehensive flow telemetry studio response for a project.",
+        "properties": {
+          "aging_wip": {
+            "$ref": "#/components/schemas/AgingWipMetrics"
+          },
+          "cfd": {
+            "$ref": "#/components/schemas/CfdSeries"
+          },
+          "cycle_lead_time": {
+            "$ref": "#/components/schemas/CycleLeadTimeMetrics"
+          },
+          "monte_carlo": {
+            "$ref": "#/components/schemas/MonteCarloForecast"
+          },
+          "project_id": {
+            "format": "uuid",
+            "title": "Project Id",
+            "type": "string"
+          },
+          "project_key": {
+            "title": "Project Key",
+            "type": "string"
+          },
+          "window_days": {
+            "title": "Window Days",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "project_id",
+          "project_key",
+          "window_days",
+          "cfd",
+          "cycle_lead_time",
+          "aging_wip",
+          "monte_carlo"
+        ],
+        "title": "ProjectFlowMetricsResponse",
         "type": "object"
       },
       "ProjectList": {
@@ -12907,6 +13926,166 @@
         "title": "ReactionSummary",
         "type": "object"
       },
+      "RealtimeDiagnosticsInfo": {
+        "additionalProperties": false,
+        "description": "WebSocket/SSE transport, outbox relay backlog, and broker connectivity.",
+        "properties": {
+          "active_connections_total": {
+            "title": "Active Connections Total",
+            "type": "integer"
+          },
+          "background_tasks": {
+            "$ref": "#/components/schemas/BackgroundTasksInfo"
+          },
+          "broker_kind": {
+            "enum": [
+              "pg_notify",
+              "valkey",
+              "none",
+              "mock"
+            ],
+            "title": "Broker Kind",
+            "type": "string"
+          },
+          "broker_listener_connected": {
+            "title": "Broker Listener Connected",
+            "type": "boolean"
+          },
+          "broker_publisher_connected": {
+            "title": "Broker Publisher Connected",
+            "type": "boolean"
+          },
+          "heartbeat_interval_s": {
+            "title": "Heartbeat Interval S",
+            "type": "number"
+          },
+          "hub_draining": {
+            "title": "Hub Draining",
+            "type": "boolean"
+          },
+          "hub_running": {
+            "title": "Hub Running",
+            "type": "boolean"
+          },
+          "outbox_dead_letter_count": {
+            "title": "Outbox Dead Letter Count",
+            "type": "integer"
+          },
+          "outbox_pending_count": {
+            "title": "Outbox Pending Count",
+            "type": "integer"
+          },
+          "outbox_relay_running": {
+            "title": "Outbox Relay Running",
+            "type": "boolean"
+          },
+          "replay_retention_minutes": {
+            "title": "Replay Retention Minutes",
+            "type": "integer"
+          },
+          "session_recheck_interval_s": {
+            "title": "Session Recheck Interval S",
+            "type": "number"
+          },
+          "sse_connections": {
+            "title": "Sse Connections",
+            "type": "integer"
+          },
+          "sse_enabled": {
+            "title": "Sse Enabled",
+            "type": "boolean"
+          },
+          "sse_path": {
+            "default": "/sse",
+            "title": "Sse Path",
+            "type": "string"
+          },
+          "workspace_connections": {
+            "additionalProperties": {
+              "type": "integer"
+            },
+            "title": "Workspace Connections",
+            "type": "object"
+          },
+          "ws_connections": {
+            "title": "Ws Connections",
+            "type": "integer"
+          },
+          "ws_enabled": {
+            "title": "Ws Enabled",
+            "type": "boolean"
+          },
+          "ws_paths": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Ws Paths",
+            "type": "array"
+          }
+        },
+        "required": [
+          "ws_enabled",
+          "sse_enabled",
+          "hub_running",
+          "hub_draining",
+          "broker_kind",
+          "broker_listener_connected",
+          "broker_publisher_connected",
+          "outbox_relay_running",
+          "outbox_pending_count",
+          "outbox_dead_letter_count",
+          "active_connections_total",
+          "ws_connections",
+          "sse_connections",
+          "heartbeat_interval_s",
+          "session_recheck_interval_s",
+          "replay_retention_minutes",
+          "background_tasks"
+        ],
+        "title": "RealtimeDiagnosticsInfo",
+        "type": "object"
+      },
+      "RealtimeProbeResponse": {
+        "additionalProperties": false,
+        "description": "PostgreSQL LISTEN/NOTIFY and database latency verification probe result.",
+        "properties": {
+          "channel": {
+            "title": "Channel",
+            "type": "string"
+          },
+          "db_latency_ms": {
+            "title": "Db Latency Ms",
+            "type": "number"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "notify_rtt_ms": {
+            "anyOf": [
+              {
+                "type": "number"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Notify Rtt Ms"
+          },
+          "success": {
+            "title": "Success",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "success",
+          "db_latency_ms",
+          "channel",
+          "message"
+        ],
+        "title": "RealtimeProbeResponse",
+        "type": "object"
+      },
       "RedactedActorSummary": {
         "additionalProperties": false,
         "description": "Anonymized placeholder for out-of-boundary principals.",
@@ -13032,6 +14211,21 @@
           "created_at"
         ],
         "title": "RemoteRunnerResponse",
+        "type": "object"
+      },
+      "RemoteRunnersSummary": {
+        "additionalProperties": false,
+        "description": "Connected remote code execution runners.",
+        "properties": {
+          "connected_count": {
+            "title": "Connected Count",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "connected_count"
+        ],
+        "title": "RemoteRunnersSummary",
         "type": "object"
       },
       "RepoBindingCreateRequest": {
@@ -13179,6 +14373,86 @@
         "title": "RepoBindingResponse",
         "type": "object"
       },
+      "RequestProxyCheckInfo": {
+        "additionalProperties": false,
+        "description": "Reverse-proxy inspection for WebSocket upgrade and scheme preservation.",
+        "properties": {
+          "csp_connect_src_allows_wss": {
+            "title": "Csp Connect Src Allows Wss",
+            "type": "boolean"
+          },
+          "detected_scheme": {
+            "title": "Detected Scheme",
+            "type": "string"
+          },
+          "forwarded_host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Forwarded Host"
+          },
+          "forwarded_proto_present": {
+            "title": "Forwarded Proto Present",
+            "type": "boolean"
+          },
+          "is_https": {
+            "title": "Is Https",
+            "type": "boolean"
+          },
+          "origin_allowed_for_ws": {
+            "title": "Origin Allowed For Ws",
+            "type": "boolean"
+          },
+          "origin_header": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Origin Header"
+          },
+          "resolved_client_ip": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Resolved Client Ip"
+          },
+          "trusted_proxies_configured": {
+            "title": "Trusted Proxies Configured",
+            "type": "boolean"
+          },
+          "warnings": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Warnings",
+            "type": "array"
+          }
+        },
+        "required": [
+          "detected_scheme",
+          "is_https",
+          "forwarded_proto_present",
+          "origin_allowed_for_ws",
+          "trusted_proxies_configured",
+          "csp_connect_src_allows_wss"
+        ],
+        "title": "RequestProxyCheckInfo",
+        "type": "object"
+      },
       "ResetPasswordRequest": {
         "additionalProperties": false,
         "description": "Schema for resetting user password credentials.",
@@ -13260,8 +14534,8 @@
         "description": "Masked far endpoint details when unreadable under the caller's RLS session.",
         "properties": {
           "label": {
-            "const": "🔒 Restricted Object",
-            "default": "🔒 Restricted Object",
+            "const": "\ud83d\udd12 Restricted Object",
+            "default": "\ud83d\udd12 Restricted Object",
             "description": "Static non-leaking label",
             "title": "Label",
             "type": "string"
@@ -13282,7 +14556,7 @@
         "description": "Masked representation of an unreadable parent issue (S7.2 8h).",
         "properties": {
           "label": {
-            "default": "🔒 Restricted Parent Issue",
+            "default": "\ud83d\udd12 Restricted Parent Issue",
             "description": "Masked placeholder label for parent issue outside caller visibility",
             "title": "Label",
             "type": "string"
@@ -13407,6 +14681,221 @@
           "scope_type"
         ],
         "title": "RoleBindingRequest",
+        "type": "object"
+      },
+      "RuntimeAndContainerInfo": {
+        "additionalProperties": false,
+        "description": "Host container, cgroup limits, and process isolation metrics.",
+        "properties": {
+          "cgroup_version": {
+            "title": "Cgroup Version",
+            "type": "string"
+          },
+          "container_id_short": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Container Id Short"
+          },
+          "container_runtime": {
+            "enum": [
+              "docker",
+              "podman",
+              "kubernetes",
+              "bare_metal"
+            ],
+            "title": "Container Runtime",
+            "type": "string"
+          },
+          "cpu_quota": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cpu Quota"
+          },
+          "deployment_mode": {
+            "title": "Deployment Mode",
+            "type": "string"
+          },
+          "in_container": {
+            "title": "In Container",
+            "type": "boolean"
+          },
+          "is_non_root": {
+            "title": "Is Non Root",
+            "type": "boolean"
+          },
+          "memory_current_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Current Bytes"
+          },
+          "memory_limit_bytes": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Memory Limit Bytes"
+          },
+          "os_platform": {
+            "title": "Os Platform",
+            "type": "string"
+          },
+          "pids_current": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pids Current"
+          },
+          "pids_limit": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Pids Limit"
+          },
+          "process_gid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Process Gid"
+          },
+          "process_uid": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Process Uid"
+          },
+          "python_version": {
+            "title": "Python Version",
+            "type": "string"
+          },
+          "uptime_seconds": {
+            "title": "Uptime Seconds",
+            "type": "number"
+          }
+        },
+        "required": [
+          "deployment_mode",
+          "in_container",
+          "container_runtime",
+          "os_platform",
+          "python_version",
+          "is_non_root",
+          "uptime_seconds",
+          "cgroup_version"
+        ],
+        "title": "RuntimeAndContainerInfo",
+        "type": "object"
+      },
+      "SandboxDiagnosticsInfo": {
+        "additionalProperties": false,
+        "description": "Script sandbox engines and security boundaries.",
+        "properties": {
+          "tier_a_wasm": {
+            "$ref": "#/components/schemas/TierAWasmInfo"
+          },
+          "tier_b_nsjail": {
+            "$ref": "#/components/schemas/TierBNsjailInfo"
+          }
+        },
+        "required": [
+          "tier_a_wasm",
+          "tier_b_nsjail"
+        ],
+        "title": "SandboxDiagnosticsInfo",
+        "type": "object"
+      },
+      "SanitizedDsnInfo": {
+        "additionalProperties": false,
+        "description": "Host-level PostgreSQL connection target with stripped credentials.",
+        "properties": {
+          "database": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Database"
+          },
+          "dialect": {
+            "title": "Dialect",
+            "type": "string"
+          },
+          "host": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Host"
+          },
+          "is_unix_socket": {
+            "default": false,
+            "title": "Is Unix Socket",
+            "type": "boolean"
+          },
+          "port": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Port"
+          }
+        },
+        "required": [
+          "dialect"
+        ],
+        "title": "SanitizedDsnInfo",
         "type": "object"
       },
       "SavedProviderProbeRequest": {
@@ -13768,6 +15257,66 @@
           }
         },
         "title": "SecurityFirstCapabilities",
+        "type": "object"
+      },
+      "ServicesDiagnosticsInfo": {
+        "additionalProperties": false,
+        "description": "Subsystem services, background workers, and provider registries.",
+        "properties": {
+          "ai_providers": {
+            "$ref": "#/components/schemas/AiProvidersSummary"
+          },
+          "auth_cards": {
+            "$ref": "#/components/schemas/AuthCardsSummary"
+          },
+          "background_jobs": {
+            "items": {
+              "additionalProperties": true,
+              "type": "object"
+            },
+            "title": "Background Jobs",
+            "type": "array"
+          },
+          "keyring": {
+            "$ref": "#/components/schemas/KeyringSummary"
+          },
+          "mcp_mounted": {
+            "title": "Mcp Mounted",
+            "type": "boolean"
+          },
+          "mcp_surfaces": {
+            "items": {
+              "type": "string"
+            },
+            "title": "Mcp Surfaces",
+            "type": "array"
+          },
+          "rate_limiter_backend": {
+            "enum": [
+              "pg",
+              "valkey"
+            ],
+            "title": "Rate Limiter Backend",
+            "type": "string"
+          },
+          "remote_runners": {
+            "$ref": "#/components/schemas/RemoteRunnersSummary"
+          },
+          "valkey_configured": {
+            "title": "Valkey Configured",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "rate_limiter_backend",
+          "valkey_configured",
+          "mcp_mounted",
+          "ai_providers",
+          "auth_cards",
+          "remote_runners",
+          "keyring"
+        ],
+        "title": "ServicesDiagnosticsInfo",
         "type": "object"
       },
       "SetupClaimRequest": {
@@ -14732,6 +16281,60 @@
         "title": "StickyUpdate",
         "type": "object"
       },
+      "StorageInfo": {
+        "additionalProperties": false,
+        "description": "Storage layout, persistence mode, and directory volume allocations.",
+        "properties": {
+          "attachments_backend": {
+            "title": "Attachments Backend",
+            "type": "string"
+          },
+          "data_mount_fstype": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Mount Fstype"
+          },
+          "data_mount_point": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Data Mount Point"
+          },
+          "directories": {
+            "items": {
+              "$ref": "#/components/schemas/DirectoryStorageInfo"
+            },
+            "title": "Directories",
+            "type": "array"
+          },
+          "persistent_volume": {
+            "title": "Persistent Volume",
+            "type": "boolean"
+          },
+          "sri_manifest_present": {
+            "title": "Sri Manifest Present",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "persistent_volume",
+          "attachments_backend",
+          "sri_manifest_present"
+        ],
+        "title": "StorageInfo",
+        "type": "object"
+      },
       "SubGroupResult": {
         "additionalProperties": false,
         "description": "A sub-group cell along the secondary grouping axis.",
@@ -14856,6 +16459,46 @@
           "subscribed"
         ],
         "title": "SubscriptionResponse",
+        "type": "object"
+      },
+      "SubsystemHealthItem": {
+        "additionalProperties": false,
+        "description": "Subsystem operational health indicator and telemetry.",
+        "properties": {
+          "description": {
+            "title": "Description",
+            "type": "string"
+          },
+          "details": {
+            "additionalProperties": true,
+            "title": "Details",
+            "type": "object"
+          },
+          "name": {
+            "title": "Name",
+            "type": "string"
+          },
+          "status": {
+            "enum": [
+              "healthy",
+              "degraded",
+              "unhealthy"
+            ],
+            "title": "Status",
+            "type": "string"
+          },
+          "subsystem": {
+            "title": "Subsystem",
+            "type": "string"
+          }
+        },
+        "required": [
+          "subsystem",
+          "name",
+          "status",
+          "description"
+        ],
+        "title": "SubsystemHealthItem",
         "type": "object"
       },
       "SwitchWorkspaceResponse": {
@@ -14993,13 +16636,12 @@
             "title": "Openapi Bundle Hash"
           },
           "openapi_version": {
-            "default": "2.0.0",
             "description": "OpenAPI specification version",
             "title": "Openapi Version",
             "type": "string"
           },
           "platform": {
-            "default": "👍kanban",
+            "default": "\ud83d\udc4dkanban",
             "description": "Official brand name",
             "title": "Platform",
             "type": "string"
@@ -15021,7 +16663,6 @@
             "type": "string"
           },
           "version": {
-            "default": "2.0.0",
             "description": "Platform release version",
             "title": "Version",
             "type": "string"
@@ -15143,7 +16784,6 @@
                 "type": "null"
               }
             ],
-            "default": "2.0.0",
             "title": "Openapi Version"
           },
           "persistent_volume": {
@@ -15171,6 +16811,17 @@
           "tier_b_sandbox_available": {
             "title": "Tier B Sandbox Available",
             "type": "boolean"
+          },
+          "version": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Version"
           }
         },
         "required": [
@@ -15181,6 +16832,108 @@
           "is_server_admin"
         ],
         "title": "SystemStatusResponse",
+        "type": "object"
+      },
+      "TierAWasmInfo": {
+        "additionalProperties": false,
+        "description": "Tier A Wasmtime deterministic sandbox metrics.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "cached_modules": {
+            "title": "Cached Modules",
+            "type": "integer"
+          },
+          "engine": {
+            "title": "Engine",
+            "type": "string"
+          },
+          "max_fuel": {
+            "title": "Max Fuel",
+            "type": "integer"
+          },
+          "max_memory_bytes": {
+            "title": "Max Memory Bytes",
+            "type": "integer"
+          },
+          "timeout_ms": {
+            "title": "Timeout Ms",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "available",
+          "engine",
+          "max_fuel",
+          "max_memory_bytes",
+          "timeout_ms",
+          "cached_modules"
+        ],
+        "title": "TierAWasmInfo",
+        "type": "object"
+      },
+      "TierBNsjailInfo": {
+        "additionalProperties": false,
+        "description": "Tier B nsjail container sandbox isolation probe status.",
+        "properties": {
+          "available": {
+            "title": "Available",
+            "type": "boolean"
+          },
+          "binary_exists": {
+            "title": "Binary Exists",
+            "type": "boolean"
+          },
+          "binary_owned_by_root": {
+            "title": "Binary Owned By Root",
+            "type": "boolean"
+          },
+          "error_code": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Error Code"
+          },
+          "permissions_safe": {
+            "title": "Permissions Safe",
+            "type": "boolean"
+          },
+          "reason": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Reason"
+          },
+          "seccomp_profile_present": {
+            "title": "Seccomp Profile Present",
+            "type": "boolean"
+          },
+          "userns_probe_ok": {
+            "title": "Userns Probe Ok",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "available",
+          "binary_exists",
+          "binary_owned_by_root",
+          "permissions_safe",
+          "userns_probe_ok",
+          "seccomp_profile_present"
+        ],
+        "title": "TierBNsjailInfo",
         "type": "object"
       },
       "TimelineLink": {
@@ -17969,10 +19722,10 @@
     }
   },
   "info": {
-    "title": "👍kanban API",
-    "version": "2.0.0",
-    "x-build-commit": "aef08a3f731b",
-    "x-openapi-bundle-hash": "65a536326d8a71ec6c3e20a18baf107f1eaa96c8d77cae598641727ec15fa5dc"
+    "title": "\ud83d\udc4dkanban API",
+    "version": "0.2.1205",
+    "x-build-commit": "e0c66d93172e",
+    "x-openapi-bundle-hash": "2ff94bea07d7228d9acc7042cbaa310f1f3e24721904392f2f68e0edfc2104e8"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -20692,6 +22445,87 @@
         "summary": "Restore a soft-deleted object from trash",
         "tags": [
           "admin-destructive"
+        ]
+      }
+    },
+    "/api/v1/admin/diagnostics": {
+      "get": {
+        "description": "Retrieve unified administrative diagnostics with server-side secret redaction.",
+        "operationId": "get_admin_diagnostics_endpoint_api_v1_admin_diagnostics_get",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/AdminDiagnosticsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          }
+        },
+        "security": [
+          {
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Get consolidated system diagnostics and runtime health across all 7 subsystems",
+        "tags": [
+          "admin-diagnostics"
+        ]
+      }
+    },
+    "/api/v1/admin/diagnostics/probes/realtime": {
+      "post": {
+        "description": "Test PostgreSQL LISTEN/NOTIFY roundtrip latency and pub/sub broker health.",
+        "operationId": "test_realtime_probe_endpoint_api_v1_admin_diagnostics_probes_realtime_post",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/RealtimeProbeResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          }
+        },
+        "security": [
+          {
+            "CsrfHeaderAuth": [],
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Execute end-to-end PostgreSQL LISTEN/NOTIFY and database latency self-test",
+        "tags": [
+          "admin-diagnostics"
         ]
       }
     },
@@ -32249,6 +34083,127 @@
         "summary": "List activity feed items across a project with RLS filtering",
         "tags": [
           "activity"
+        ]
+      }
+    },
+    "/api/v1/projects/{project_ref}/analytics/flow": {
+      "get": {
+        "description": "Compute native statistical flow telemetry metrics including Cumulative Flow Diagram (CFD), Cycle Time / Lead Time scatterplot with p50/p85/p95 percentiles, Aging WIP active items with column thresholds, and 10,000-trial Monte Carlo throughput forecasting.",
+        "operationId": "get_project_flow_metrics_api_v1_projects__project_ref__analytics_flow_get",
+        "parameters": [
+          {
+            "in": "path",
+            "name": "project_ref",
+            "required": true,
+            "schema": {
+              "title": "Project Ref",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Analysis window in calendar days (1 to 366)",
+            "in": "query",
+            "name": "window_days",
+            "required": false,
+            "schema": {
+              "default": 90,
+              "description": "Analysis window in calendar days (1 to 366)",
+              "maximum": 366,
+              "minimum": 1,
+              "title": "Window Days",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Forecasting horizon for 'How Many?' Monte Carlo simulation in days (1 to 366)",
+            "in": "query",
+            "name": "horizon_days",
+            "required": false,
+            "schema": {
+              "default": 14,
+              "description": "Forecasting horizon for 'How Many?' Monte Carlo simulation in days (1 to 366)",
+              "maximum": 366,
+              "minimum": 1,
+              "title": "Horizon Days",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Remaining items count for 'When?' Monte Carlo simulation (1 to 10000)",
+            "in": "query",
+            "name": "target_items",
+            "required": false,
+            "schema": {
+              "default": 20,
+              "description": "Remaining items count for 'When?' Monte Carlo simulation (1 to 10000)",
+              "maximum": 10000,
+              "minimum": 1,
+              "title": "Target Items",
+              "type": "integer"
+            }
+          },
+          {
+            "description": "Optional random seed for deterministic simulation and reproducibility",
+            "in": "query",
+            "name": "seed",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Optional random seed for deterministic simulation and reproducibility",
+              "title": "Seed"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProjectFlowMetricsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "content": {
+              "application/problem+json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ProblemDetails"
+                }
+              }
+            },
+            "description": "Unauthorized - authentication required"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "SessionCookieAuth": []
+          },
+          {
+            "BearerTokenAuth": []
+          }
+        ],
+        "summary": "Compute project flow telemetry metrics",
+        "tags": [
+          "analytics"
         ]
       }
     },

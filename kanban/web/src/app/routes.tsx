@@ -74,6 +74,8 @@ import { useSessionGuard } from '../features/auth/useSessionGuard';
 import { useDrafts, deleteDraft, type IssueDraft } from '../features/drafts/draftsStore';
 import { fetchProjectStates } from '../features/views/viewsApi';
 import { fetchProjectModules } from '../features/drawer-rail/railApi';
+import { FlowAnalyticsPage } from '../features/analytics/FlowAnalyticsPage';
+import { CycleBurndownChart, type BurndownResponse } from '../features/analytics/charts/CycleBurndownChart';
 
 export { IssuesWorkspaceRoute, type IssuesWorkspaceRouteProps };
 
@@ -748,6 +750,20 @@ function ProjectCyclesViewInner({
   const [rolloverTargetId, setRolloverTargetId] = useState('');
   const [completeErrorMsg, setCompleteErrorMsg] = useState<string | null>(null);
 
+  // Active burndown cycle toggle
+  const [activeBurndownCycleId, setActiveBurndownCycleId] = useState<string | null>(null);
+
+  const { data: cycleBurndownData, isLoading: isCycleBurndownLoading } = useQuery<BurndownResponse>({
+    queryKey: ['cycles', activeBurndownCycleId, 'burndown'],
+    queryFn: async () => {
+      const res = await apiFetch('GET', '/api/v1/cycles/{cycle_id}/burndown' as never, {
+        params: { cycle_id: activeBurndownCycleId ?? '' },
+      });
+      return res as BurndownResponse;
+    },
+    enabled: Boolean(activeBurndownCycleId),
+  });
+
   const { data: projectData } = useQuery<{ capabilities?: string[] }>({
     queryKey: ['projects', key, 'detail'],
     queryFn: async () => {
@@ -921,6 +937,15 @@ function ProjectCyclesViewInner({
       <div className="kb-workspace-section-header">
         <h1>Cycles ({key})</h1>
         <p>Time-boxed sprint cycles for grouping and tracking project velocity.</p>
+        <div className="kb-chart-actions">
+          <Link
+            to={`/projects/${key}/analytics`}
+            className="kb-btn-secondary"
+            data-testid="cycles-flow-analytics-link"
+          >
+            📊 View Flow Analytics Studio &rarr;
+          </Link>
+        </div>
       </div>
 
       {canCreate && (
@@ -1129,6 +1154,16 @@ function ProjectCyclesViewInner({
                   <Link to={`/projects/${key}/issues?cycle=${cyc.id}`} style={{ marginRight: 8, fontSize: 13 }}>
                     Filter work items &rarr;
                   </Link>
+                  <button
+                    type="button"
+                    className="kb-btn-secondary"
+                    data-testid={`view-burndown-btn-${cyc.id}`}
+                    onClick={() => {
+                      setActiveBurndownCycleId((prev) => (prev === cyc.id ? null : cyc.id));
+                    }}
+                  >
+                    {activeBurndownCycleId === cyc.id ? 'Hide Burndown' : 'Burndown'}
+                  </button>
                   {canCreate && (
                     <button
                       type="button"
@@ -1161,6 +1196,18 @@ function ProjectCyclesViewInner({
                     </button>
                   )}
                 </div>
+                {activeBurndownCycleId === cyc.id && (
+                  <div
+                    className="kb-cycle-burndown-container"
+                    data-testid={`cycle-burndown-container-${cyc.id}`}
+                  >
+                    {isCycleBurndownLoading ? (
+                      <p className="kb-flow-empty">Loading cycle burndown...</p>
+                    ) : (
+                      <CycleBurndownChart burndown={cycleBurndownData} cycleName={cyc.name} />
+                    )}
+                  </div>
+                )}
               </li>
             );
           })}
@@ -1962,6 +2009,10 @@ const projectRouteChildren: RouteObject[] = [
   {
     path: 'cycles',
     element: <ProjectCyclesView />,
+  },
+  {
+    path: 'analytics',
+    element: <FlowAnalyticsPage />,
   },
   {
     path: 'modules',

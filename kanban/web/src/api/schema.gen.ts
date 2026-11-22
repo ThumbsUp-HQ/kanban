@@ -691,6 +691,46 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/admin/diagnostics": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Get consolidated system diagnostics and runtime health across all 7 subsystems
+         * @description Retrieve unified administrative diagnostics with server-side secret redaction.
+         */
+        get: operations["get_admin_diagnostics_endpoint_api_v1_admin_diagnostics_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/v1/admin/diagnostics/probes/realtime": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Execute end-to-end PostgreSQL LISTEN/NOTIFY and database latency self-test
+         * @description Test PostgreSQL LISTEN/NOTIFY roundtrip latency and pub/sub broker health.
+         */
+        post: operations["test_realtime_probe_endpoint_api_v1_admin_diagnostics_probes_realtime_post"];
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/admin/exports/portable": {
         parameters: {
             query?: never;
@@ -3600,6 +3640,26 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/v1/projects/{project_ref}/analytics/flow": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Compute project flow telemetry metrics
+         * @description Compute native statistical flow telemetry metrics including Cumulative Flow Diagram (CFD), Cycle Time / Lead Time scatterplot with p50/p85/p95 percentiles, Aging WIP active items with column thresholds, and 10,000-trial Monte Carlo throughput forecasting.
+         */
+        get: operations["get_project_flow_metrics_api_v1_projects__project_ref__analytics_flow_get"];
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/v1/projects/{project_ref}/assignee-suggestions": {
         parameters: {
             query?: never;
@@ -5463,6 +5523,38 @@ export interface components {
             };
         };
         /**
+         * AdminDiagnosticsResponse
+         * @description Consolidated administrative diagnostics response covering all 7 subsystems.
+         */
+        AdminDiagnosticsResponse: {
+            agent_runtime_providers: components["schemas"]["SubsystemHealthItem"];
+            build: components["schemas"]["BuildDiagnosticsInfo"];
+            /** Config */
+            config?: components["schemas"]["ConfigSettingItem"][];
+            database: components["schemas"]["DatabaseDiagnosticsInfo"];
+            job_worker_pool: components["schemas"]["SubsystemHealthItem"];
+            postgresql_rls: components["schemas"]["SubsystemHealthItem"];
+            rate_limiter: components["schemas"]["SubsystemHealthItem"];
+            realtime: components["schemas"]["RealtimeDiagnosticsInfo"];
+            realtime_hub_outbox: components["schemas"]["SubsystemHealthItem"];
+            remote_runner_fleet: components["schemas"]["SubsystemHealthItem"];
+            request_proxy_check: components["schemas"]["RequestProxyCheckInfo"];
+            runtime_and_container: components["schemas"]["RuntimeAndContainerInfo"];
+            sandbox: components["schemas"]["SandboxDiagnosticsInfo"];
+            services: components["schemas"]["ServicesDiagnosticsInfo"];
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "healthy" | "degraded" | "unhealthy";
+            storage: components["schemas"]["StorageInfo"];
+            /** Subsystems */
+            subsystems?: {
+                [key: string]: components["schemas"]["SubsystemHealthItem"];
+            };
+            wasm_script_sandbox: components["schemas"]["SubsystemHealthItem"];
+        };
+        /**
          * AdminGenericImportRequest
          * @description Payload requesting execution or preview of Jira, GitHub, or Linear imports.
          */
@@ -5773,6 +5865,64 @@ export interface components {
             tool_trace: string;
             /** Valid */
             valid: boolean;
+        };
+        /**
+         * AgingWipIssue
+         * @description Active WIP item and aging telemetry.
+         */
+        AgingWipIssue: {
+            /** Age In Current State Hours */
+            age_in_current_state_hours: number;
+            /** First Started At */
+            first_started_at: string;
+            /**
+             * Issue Id
+             * Format: uuid
+             */
+            issue_id: string;
+            /** Issue Key */
+            issue_key: string;
+            /** State Color Hex */
+            state_color_hex: string;
+            /** State Entered At */
+            state_entered_at: string;
+            /**
+             * State Id
+             * Format: uuid
+             */
+            state_id: string;
+            /** State Name */
+            state_name: string;
+            /** Title */
+            title: string;
+            /** Total Wip Hours */
+            total_wip_hours: number;
+        };
+        /**
+         * AgingWipMetrics
+         * @description Aging WIP active items and column threshold guides.
+         */
+        AgingWipMetrics: {
+            /** Active Issues */
+            active_issues: components["schemas"]["AgingWipIssue"][];
+            /** Column Thresholds */
+            column_thresholds: {
+                [key: string]: components["schemas"]["ColumnAgingThresholds"];
+            };
+            /** Total Active Wip */
+            total_active_wip: number;
+        };
+        /**
+         * AiProvidersSummary
+         * @description Configured AI model providers.
+         */
+        AiProvidersSummary: {
+            /** Enabled */
+            enabled: number;
+            /** Kinds */
+            kinds?: string[];
+            /** Total */
+            total: number;
         };
         /**
          * ArchiveEligibility
@@ -6110,6 +6260,18 @@ export interface components {
             secret?: string | null;
         };
         /**
+         * AuthCardsSummary
+         * @description Configured authentication identity cards.
+         */
+        AuthCardsSummary: {
+            /** Enabled */
+            enabled: number;
+            /** Kinds */
+            kinds?: string[];
+            /** Total */
+            total: number;
+        };
+        /**
          * AuthorSummary
          * @description Comment author display metadata.
          */
@@ -6142,6 +6304,18 @@ export interface components {
              * @default false
              */
             redacted: boolean;
+        };
+        /**
+         * BackgroundTasksInfo
+         * @description Liveness indicators for realtime background task workers.
+         */
+        BackgroundTasksInfo: {
+            /** Listener Alive */
+            listener_alive: boolean;
+            /** Ping Alive */
+            ping_alive: boolean;
+            /** Session Check Alive */
+            session_check_alive: boolean;
         };
         /**
          * BackupFileItem
@@ -6433,6 +6607,24 @@ export interface components {
             token_cap: number;
         };
         /**
+         * BuildDiagnosticsInfo
+         * @description Application build metadata, commit SHA, and schema bundle hashes.
+         */
+        BuildDiagnosticsInfo: {
+            /** Build Timestamp */
+            build_timestamp?: string | null;
+            /** Frontend Bundle Hash */
+            frontend_bundle_hash?: string | null;
+            /** Git Commit */
+            git_commit?: string | null;
+            /** Openapi Bundle Hash */
+            openapi_bundle_hash?: string | null;
+            /** Openapi Version */
+            openapi_version?: string | null;
+            /** Version */
+            version: string;
+        };
+        /**
          * BurndownIdealPoint
          * @description Linear target progression for cycle completion.
          */
@@ -6502,6 +6694,88 @@ export interface components {
             url: string;
         };
         /**
+         * CfdPoint
+         * @description Daily cumulative flow diagram metrics point.
+         */
+        CfdPoint: {
+            /**
+             * Backlog
+             * @default 0
+             */
+            backlog: number;
+            /**
+             * Cancelled
+             * @default 0
+             */
+            cancelled: number;
+            /**
+             * Completed
+             * @default 0
+             */
+            completed: number;
+            /** Counts By State */
+            counts_by_state?: {
+                [key: string]: number;
+            };
+            /** Date */
+            date: string;
+            /**
+             * Started
+             * @default 0
+             */
+            started: number;
+            /**
+             * Total
+             * @default 0
+             */
+            total: number;
+            /**
+             * Unstarted
+             * @default 0
+             */
+            unstarted: number;
+        };
+        /**
+         * CfdSeries
+         * @description CFD data series and metadata.
+         */
+        CfdSeries: {
+            /** Points */
+            points: components["schemas"]["CfdPoint"][];
+            /**
+             * State Groups
+             * @default [
+             *       "backlog",
+             *       "unstarted",
+             *       "started",
+             *       "completed",
+             *       "cancelled"
+             *     ]
+             */
+            state_groups: string[];
+            /** States */
+            states: components["schemas"]["CfdStateMeta"][];
+        };
+        /**
+         * CfdStateMeta
+         * @description Metadata for a project workflow state in the CFD.
+         */
+        CfdStateMeta: {
+            /** Color Hex */
+            color_hex: string;
+            /**
+             * Id
+             * Format: uuid
+             */
+            id: string;
+            /** Name */
+            name: string;
+            /** Sort Order */
+            sort_order: number;
+            /** State Group */
+            state_group: string;
+        };
+        /**
          * ChangePasswordRequest
          * @description Payload for updating personal local login password.
          */
@@ -6516,6 +6790,25 @@ export interface components {
              * @description New local password (>=14 for admins, >=12 for standard)
              */
             new_password: string;
+        };
+        /**
+         * ColumnAgingThresholds
+         * @description Historical duration percentiles for a workflow column.
+         */
+        ColumnAgingThresholds: {
+            /** P50 Hours */
+            p50_hours: number;
+            /** P85 Hours */
+            p85_hours: number;
+            /** P95 Hours */
+            p95_hours: number;
+            /**
+             * State Id
+             * Format: uuid
+             */
+            state_id: string;
+            /** State Name */
+            state_name: string;
         };
         /**
          * CommentCreate
@@ -6687,6 +6980,27 @@ export interface components {
             migration_steps_markdown: string;
             /** Single Container Compose Yaml */
             single_container_compose_yaml?: string | null;
+        };
+        /**
+         * ConfigSettingItem
+         * @description Strictly allowlisted configuration setting with server-side secret redaction.
+         */
+        ConfigSettingItem: {
+            /** Key */
+            key: string;
+            /** Notes */
+            notes: string;
+            /** Redacted */
+            redacted: boolean;
+            /**
+             * Source
+             * @enum {string}
+             */
+            source: "env" | "default";
+            /** Subsystem */
+            subsystem: string;
+            /** Value */
+            value: unknown;
         };
         /**
          * CopiedSubIssueSummary
@@ -7110,6 +7424,39 @@ export interface components {
             start_date?: string | null;
         };
         /**
+         * CycleLeadTimeMetrics
+         * @description Scatterplot data and percentiles for cycle time and lead time.
+         */
+        CycleLeadTimeMetrics: {
+            cycle_time_percentiles: components["schemas"]["PercentileValues"];
+            lead_time_percentiles: components["schemas"]["PercentileValues"];
+            /** Points */
+            points: components["schemas"]["CycleLeadTimePoint"][];
+            /** Total Completed In Window */
+            total_completed_in_window: number;
+        };
+        /**
+         * CycleLeadTimePoint
+         * @description Cycle time and lead time measurement point for a completed work item.
+         */
+        CycleLeadTimePoint: {
+            /** Completed At */
+            completed_at: string;
+            /** Cycle Time Days */
+            cycle_time_days: number;
+            /**
+             * Issue Id
+             * Format: uuid
+             */
+            issue_id: string;
+            /** Issue Key */
+            issue_key: string;
+            /** Lead Time Days */
+            lead_time_days: number;
+            /** Title */
+            title: string;
+        };
+        /**
          * CyclePatch
          * @description Payload to update an existing upcoming or active cycle.
          */
@@ -7202,6 +7549,44 @@ export interface components {
              * @description Cycle name
              */
             name: string;
+        };
+        /**
+         * DatabaseDiagnosticsInfo
+         * @description PostgreSQL RLS enforcement, connection health, and Alembic migration state.
+         */
+        DatabaseDiagnosticsInfo: {
+            /** Active Role Non Bypass */
+            active_role_non_bypass: boolean;
+            /** Alembic Head Current */
+            alembic_head_current: boolean;
+            /** Code Heads */
+            code_heads?: string[];
+            /** Connected */
+            connected: boolean;
+            /** Db Heads */
+            db_heads?: string[];
+            /** Force Rls Verified */
+            force_rls_verified: boolean;
+            /** Latency Ms */
+            latency_ms: number;
+            pool: components["schemas"]["DatabasePoolInfo"];
+            sanitized_dsn_target?: components["schemas"]["SanitizedDsnInfo"] | null;
+            /** Server Version */
+            server_version: string;
+        };
+        /**
+         * DatabasePoolInfo
+         * @description SQLAlchemy connection pool metrics.
+         */
+        DatabasePoolInfo: {
+            /** Checked In */
+            checked_in: number;
+            /** Checked Out */
+            checked_out: number;
+            /** Overflow */
+            overflow: number;
+            /** Size */
+            size: number;
         };
         /**
          * DestructiveExecuteIn
@@ -7369,6 +7754,24 @@ export interface components {
              * @description Target object reference (UUID, canonical key, or project identifier)
              */
             target_id: string;
+        };
+        /**
+         * DirectoryStorageInfo
+         * @description Persistent storage directory status and disk capacity.
+         */
+        DirectoryStorageInfo: {
+            /** Exists */
+            exists: boolean;
+            /** Free Bytes */
+            free_bytes: number;
+            /** Name */
+            name: string;
+            /** Path */
+            path: string;
+            /** Total Bytes */
+            total_bytes: number;
+            /** Writable */
+            writable: boolean;
         };
         /**
          * DocCreate
@@ -8710,6 +9113,18 @@ export interface components {
             reason?: string | null;
         };
         /**
+         * KeyringSummary
+         * @description Cryptographic master KEK configuration descriptor without secret material.
+         */
+        KeyringSummary: {
+            /** Configured */
+            configured: boolean;
+            /** Master Kek Kid */
+            master_kek_kid?: string | null;
+            /** Source */
+            source: string;
+        };
+        /**
          * KnowledgeSearchItem
          * @description Single doc, page, or sticky match returned by knowledge search endpoint.
          */
@@ -9677,6 +10092,62 @@ export interface components {
             name: string;
         };
         /**
+         * MonteCarloForecast
+         * @description 10,000-trial Monte Carlo throughput forecast simulation results.
+         */
+        MonteCarloForecast: {
+            /** Average Daily Throughput */
+            average_daily_throughput: number;
+            /** Historical Daily Throughput */
+            historical_daily_throughput: number[];
+            how_many: components["schemas"]["MonteCarloHowMany"];
+            /** Trials */
+            trials: number;
+            when: components["schemas"]["MonteCarloWhen"];
+        };
+        /**
+         * MonteCarloHowMany
+         * @description Monte Carlo throughput forecast for 'How Many items in horizon_days?'.
+         */
+        MonteCarloHowMany: {
+            /** Distribution */
+            distribution: {
+                [key: string]: number;
+            };
+            /** Horizon Days */
+            horizon_days: number;
+            /** P50 */
+            p50: number;
+            /** P85 */
+            p85: number;
+            /** P95 */
+            p95: number;
+        };
+        /**
+         * MonteCarloWhen
+         * @description Monte Carlo throughput forecast for 'When will target_items be done?'.
+         */
+        MonteCarloWhen: {
+            /** Distribution */
+            distribution: {
+                [key: string]: number;
+            };
+            /** P50 Date */
+            p50_date: string | null;
+            /** P50 Days */
+            p50_days: number | null;
+            /** P85 Date */
+            p85_date: string | null;
+            /** P85 Days */
+            p85_days: number | null;
+            /** P95 Date */
+            p95_date: string | null;
+            /** P95 Days */
+            p95_days: number | null;
+            /** Target Items */
+            target_items: number;
+        };
+        /**
          * NormalActorSummary
          * @description Visible in-boundary principal metadata for activity actors.
          */
@@ -10162,6 +10633,18 @@ export interface components {
             started_at: string;
         };
         /**
+         * PercentileValues
+         * @description Percentile thresholds (p50, p85, p95).
+         */
+        PercentileValues: {
+            /** P50 */
+            p50: number;
+            /** P85 */
+            p85: number;
+            /** P95 */
+            p95: number;
+        };
+        /**
          * PersonalMcpKeyItem
          * @description Metadata for an existing personal MCP API key.
          */
@@ -10386,9 +10869,8 @@ export interface components {
             /**
              * Version
              * @description Platform architecture release version
-             * @default 2.0.0
              */
-            version: string;
+            version?: string;
         };
         /**
          * PrincipalAssigneeResponse
@@ -10711,6 +11193,25 @@ export interface components {
              * @description Whether to skip culturally loaded sequence numbers (defaults to workspace setting if omitted)
              */
             skip_loaded_sequence_numbers?: boolean | null;
+        };
+        /**
+         * ProjectFlowMetricsResponse
+         * @description Comprehensive flow telemetry studio response for a project.
+         */
+        ProjectFlowMetricsResponse: {
+            aging_wip: components["schemas"]["AgingWipMetrics"];
+            cfd: components["schemas"]["CfdSeries"];
+            cycle_lead_time: components["schemas"]["CycleLeadTimeMetrics"];
+            monte_carlo: components["schemas"]["MonteCarloForecast"];
+            /**
+             * Project Id
+             * Format: uuid
+             */
+            project_id: string;
+            /** Project Key */
+            project_key: string;
+            /** Window Days */
+            window_days: number;
         };
         /**
          * ProjectList
@@ -11243,6 +11744,75 @@ export interface components {
             reacted_by_me: boolean;
         };
         /**
+         * RealtimeDiagnosticsInfo
+         * @description WebSocket/SSE transport, outbox relay backlog, and broker connectivity.
+         */
+        RealtimeDiagnosticsInfo: {
+            /** Active Connections Total */
+            active_connections_total: number;
+            background_tasks: components["schemas"]["BackgroundTasksInfo"];
+            /**
+             * Broker Kind
+             * @enum {string}
+             */
+            broker_kind: "pg_notify" | "valkey" | "none" | "mock";
+            /** Broker Listener Connected */
+            broker_listener_connected: boolean;
+            /** Broker Publisher Connected */
+            broker_publisher_connected: boolean;
+            /** Heartbeat Interval S */
+            heartbeat_interval_s: number;
+            /** Hub Draining */
+            hub_draining: boolean;
+            /** Hub Running */
+            hub_running: boolean;
+            /** Outbox Dead Letter Count */
+            outbox_dead_letter_count: number;
+            /** Outbox Pending Count */
+            outbox_pending_count: number;
+            /** Outbox Relay Running */
+            outbox_relay_running: boolean;
+            /** Replay Retention Minutes */
+            replay_retention_minutes: number;
+            /** Session Recheck Interval S */
+            session_recheck_interval_s: number;
+            /** Sse Connections */
+            sse_connections: number;
+            /** Sse Enabled */
+            sse_enabled: boolean;
+            /**
+             * Sse Path
+             * @default /sse
+             */
+            sse_path: string;
+            /** Workspace Connections */
+            workspace_connections?: {
+                [key: string]: number;
+            };
+            /** Ws Connections */
+            ws_connections: number;
+            /** Ws Enabled */
+            ws_enabled: boolean;
+            /** Ws Paths */
+            ws_paths?: string[];
+        };
+        /**
+         * RealtimeProbeResponse
+         * @description PostgreSQL LISTEN/NOTIFY and database latency verification probe result.
+         */
+        RealtimeProbeResponse: {
+            /** Channel */
+            channel: string;
+            /** Db Latency Ms */
+            db_latency_ms: number;
+            /** Message */
+            message: string;
+            /** Notify Rtt Ms */
+            notify_rtt_ms?: number | null;
+            /** Success */
+            success: boolean;
+        };
+        /**
          * RedactedActorSummary
          * @description Anonymized placeholder for out-of-boundary principals.
          */
@@ -11323,6 +11893,14 @@ export interface components {
             workspace_id: string;
         };
         /**
+         * RemoteRunnersSummary
+         * @description Connected remote code execution runners.
+         */
+        RemoteRunnersSummary: {
+            /** Connected Count */
+            connected_count: number;
+        };
+        /**
          * RepoBindingCreateRequest
          * @description Payload for creating a project repository binding.
          */
@@ -11399,6 +11977,32 @@ export interface components {
              * Format: uuid
              */
             workspace_id: string;
+        };
+        /**
+         * RequestProxyCheckInfo
+         * @description Reverse-proxy inspection for WebSocket upgrade and scheme preservation.
+         */
+        RequestProxyCheckInfo: {
+            /** Csp Connect Src Allows Wss */
+            csp_connect_src_allows_wss: boolean;
+            /** Detected Scheme */
+            detected_scheme: string;
+            /** Forwarded Host */
+            forwarded_host?: string | null;
+            /** Forwarded Proto Present */
+            forwarded_proto_present: boolean;
+            /** Is Https */
+            is_https: boolean;
+            /** Origin Allowed For Ws */
+            origin_allowed_for_ws: boolean;
+            /** Origin Header */
+            origin_header?: string | null;
+            /** Resolved Client Ip */
+            resolved_client_ip?: string | null;
+            /** Trusted Proxies Configured */
+            trusted_proxies_configured: boolean;
+            /** Warnings */
+            warnings?: string[];
         };
         /**
          * ResetPasswordRequest
@@ -11540,6 +12144,74 @@ export interface components {
              * @enum {string}
              */
             scope_type: "server" | "workspace" | "project";
+        };
+        /**
+         * RuntimeAndContainerInfo
+         * @description Host container, cgroup limits, and process isolation metrics.
+         */
+        RuntimeAndContainerInfo: {
+            /** Cgroup Version */
+            cgroup_version: string;
+            /** Container Id Short */
+            container_id_short?: string | null;
+            /**
+             * Container Runtime
+             * @enum {string}
+             */
+            container_runtime: "docker" | "podman" | "kubernetes" | "bare_metal";
+            /** Cpu Quota */
+            cpu_quota?: string | null;
+            /** Deployment Mode */
+            deployment_mode: string;
+            /** In Container */
+            in_container: boolean;
+            /** Is Non Root */
+            is_non_root: boolean;
+            /** Memory Current Bytes */
+            memory_current_bytes?: number | null;
+            /** Memory Limit Bytes */
+            memory_limit_bytes?: number | null;
+            /** Os Platform */
+            os_platform: string;
+            /** Pids Current */
+            pids_current?: number | null;
+            /** Pids Limit */
+            pids_limit?: number | null;
+            /** Process Gid */
+            process_gid?: number | null;
+            /** Process Uid */
+            process_uid?: number | null;
+            /** Python Version */
+            python_version: string;
+            /** Uptime Seconds */
+            uptime_seconds: number;
+        };
+        /**
+         * SandboxDiagnosticsInfo
+         * @description Script sandbox engines and security boundaries.
+         */
+        SandboxDiagnosticsInfo: {
+            tier_a_wasm: components["schemas"]["TierAWasmInfo"];
+            tier_b_nsjail: components["schemas"]["TierBNsjailInfo"];
+        };
+        /**
+         * SanitizedDsnInfo
+         * @description Host-level PostgreSQL connection target with stripped credentials.
+         */
+        SanitizedDsnInfo: {
+            /** Database */
+            database?: string | null;
+            /** Dialect */
+            dialect: string;
+            /** Host */
+            host?: string | null;
+            /**
+             * Is Unix Socket
+             * @default false
+             */
+            is_unix_socket: boolean;
+            /** Port */
+            port?: number | null;
         };
         /**
          * SavedProviderProbeRequest
@@ -11751,6 +12423,31 @@ export interface components {
              * @default true
              */
             zero_plaintext_secrets: boolean;
+        };
+        /**
+         * ServicesDiagnosticsInfo
+         * @description Subsystem services, background workers, and provider registries.
+         */
+        ServicesDiagnosticsInfo: {
+            ai_providers: components["schemas"]["AiProvidersSummary"];
+            auth_cards: components["schemas"]["AuthCardsSummary"];
+            /** Background Jobs */
+            background_jobs?: {
+                [key: string]: unknown;
+            }[];
+            keyring: components["schemas"]["KeyringSummary"];
+            /** Mcp Mounted */
+            mcp_mounted: boolean;
+            /** Mcp Surfaces */
+            mcp_surfaces?: string[];
+            /**
+             * Rate Limiter Backend
+             * @enum {string}
+             */
+            rate_limiter_backend: "pg" | "valkey";
+            remote_runners: components["schemas"]["RemoteRunnersSummary"];
+            /** Valkey Configured */
+            valkey_configured: boolean;
         };
         /**
          * SetupClaimRequest
@@ -12266,6 +12963,24 @@ export interface components {
             sort_rank?: string | null;
         };
         /**
+         * StorageInfo
+         * @description Storage layout, persistence mode, and directory volume allocations.
+         */
+        StorageInfo: {
+            /** Attachments Backend */
+            attachments_backend: string;
+            /** Data Mount Fstype */
+            data_mount_fstype?: string | null;
+            /** Data Mount Point */
+            data_mount_point?: string | null;
+            /** Directories */
+            directories?: components["schemas"]["DirectoryStorageInfo"][];
+            /** Persistent Volume */
+            persistent_volume: boolean;
+            /** Sri Manifest Present */
+            sri_manifest_present: boolean;
+        };
+        /**
          * SubGroupResult
          * @description A sub-group cell along the secondary grouping axis.
          */
@@ -12325,6 +13040,27 @@ export interface components {
              * @description Whether the user is currently subscribed
              */
             subscribed: boolean;
+        };
+        /**
+         * SubsystemHealthItem
+         * @description Subsystem operational health indicator and telemetry.
+         */
+        SubsystemHealthItem: {
+            /** Description */
+            description: string;
+            /** Details */
+            details?: {
+                [key: string]: unknown;
+            };
+            /** Name */
+            name: string;
+            /**
+             * Status
+             * @enum {string}
+             */
+            status: "healthy" | "degraded" | "unhealthy";
+            /** Subsystem */
+            subsystem: string;
         };
         /**
          * SwitchWorkspaceResponse
@@ -12411,9 +13147,8 @@ export interface components {
             /**
              * Openapi Version
              * @description OpenAPI specification version
-             * @default 2.0.0
              */
-            openapi_version: string;
+            openapi_version?: string;
             /**
              * Platform
              * @description Official brand name
@@ -12437,9 +13172,8 @@ export interface components {
             /**
              * Version
              * @description Platform release version
-             * @default 2.0.0
              */
-            version: string;
+            version?: string;
         };
         /**
          * SystemStatusResponse
@@ -12471,11 +13205,8 @@ export interface components {
             local_llm_endpoint_host?: string | null;
             /** Openapi Bundle Hash */
             openapi_bundle_hash?: string | null;
-            /**
-             * Openapi Version
-             * @default 2.0.0
-             */
-            openapi_version: string | null;
+            /** Openapi Version */
+            openapi_version?: string | null;
             /** Persistent Volume */
             persistent_volume: boolean;
             /** Sandbox Unavailable Reason */
@@ -12484,6 +13215,48 @@ export interface components {
             supported_custom_field_tiers?: string[];
             /** Tier B Sandbox Available */
             tier_b_sandbox_available: boolean;
+            /** Version */
+            version?: string | null;
+        };
+        /**
+         * TierAWasmInfo
+         * @description Tier A Wasmtime deterministic sandbox metrics.
+         */
+        TierAWasmInfo: {
+            /** Available */
+            available: boolean;
+            /** Cached Modules */
+            cached_modules: number;
+            /** Engine */
+            engine: string;
+            /** Max Fuel */
+            max_fuel: number;
+            /** Max Memory Bytes */
+            max_memory_bytes: number;
+            /** Timeout Ms */
+            timeout_ms: number;
+        };
+        /**
+         * TierBNsjailInfo
+         * @description Tier B nsjail container sandbox isolation probe status.
+         */
+        TierBNsjailInfo: {
+            /** Available */
+            available: boolean;
+            /** Binary Exists */
+            binary_exists: boolean;
+            /** Binary Owned By Root */
+            binary_owned_by_root: boolean;
+            /** Error Code */
+            error_code?: string | null;
+            /** Permissions Safe */
+            permissions_safe: boolean;
+            /** Reason */
+            reason?: string | null;
+            /** Seccomp Profile Present */
+            seccomp_profile_present: boolean;
+            /** Userns Probe Ok */
+            userns_probe_ok: boolean;
         };
         /**
          * TimelineLink
@@ -15341,6 +16114,64 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_admin_diagnostics_endpoint_api_v1_admin_diagnostics_get: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["AdminDiagnosticsResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+        };
+    };
+    test_realtime_probe_endpoint_api_v1_admin_diagnostics_probes_realtime_post: {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["RealtimeProbeResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
                 };
             };
         };
@@ -22534,6 +23365,55 @@ export interface operations {
                 };
                 content: {
                     "application/json": components["schemas"]["ActivityFeedResponse"];
+                };
+            };
+            /** @description Unauthorized - authentication required */
+            401: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/problem+json": components["schemas"]["ProblemDetails"];
+                };
+            };
+            /** @description Validation Error */
+            422: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["HTTPValidationError"];
+                };
+            };
+        };
+    };
+    get_project_flow_metrics_api_v1_projects__project_ref__analytics_flow_get: {
+        parameters: {
+            query?: {
+                /** @description Analysis window in calendar days (1 to 366) */
+                window_days?: number;
+                /** @description Forecasting horizon for 'How Many?' Monte Carlo simulation in days (1 to 366) */
+                horizon_days?: number;
+                /** @description Remaining items count for 'When?' Monte Carlo simulation (1 to 10000) */
+                target_items?: number;
+                /** @description Optional random seed for deterministic simulation and reproducibility */
+                seed?: number | null;
+            };
+            header?: never;
+            path: {
+                project_ref: string;
+            };
+            cookie?: never;
+        };
+        requestBody?: never;
+        responses: {
+            /** @description Successful Response */
+            200: {
+                headers: {
+                    [name: string]: unknown;
+                };
+                content: {
+                    "application/json": components["schemas"]["ProjectFlowMetricsResponse"];
                 };
             };
             /** @description Unauthorized - authentication required */

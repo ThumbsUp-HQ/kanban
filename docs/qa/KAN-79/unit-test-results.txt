@@ -1,0 +1,42 @@
+==================== PYTHON PYTEST SUITE ====================
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan79-e66cdab7/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan79-e66cdab7
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 9 items
+
+kanban/tests/services/test_flow_metrics.py::test_percentile_math PASSED  [ 11%]
+kanban/tests/services/test_flow_metrics.py::test_monte_carlo_speed_and_determinism PASSED [ 22%]
+kanban/tests/services/test_flow_metrics.py::test_flow_metrics_parameter_validation PASSED [ 33%]
+kanban/tests/services/test_flow_metrics.py::test_empty_project_flow_metrics PASSED [ 44%]
+kanban/tests/services/test_flow_metrics.py::test_full_flow_telemetry_simulation_and_replay PASSED [ 55%]
+kanban/tests/services/test_flow_metrics.py::test_flow_metrics_replay_edge_cases PASSED [ 66%]
+kanban/tests/api/test_flow_metrics_api.py::test_get_flow_metrics_success_and_contract PASSED [ 77%]
+kanban/tests/api/test_flow_metrics_api.py::test_get_flow_metrics_validation_errors PASSED [ 88%]
+kanban/tests/api/test_flow_metrics_api.py::test_get_flow_metrics_security_and_rls PASSED [100%]
+
+============================== 9 passed in 3.80s ===============================
+
+==================== WEB VITEST SUITE ====================
+
+> @kanban/web@0.1.0 test /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan79-e66cdab7/kanban/web
+> vitest run run src/features/analytics/__tests__/FlowAnalyticsPage.test.tsx
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan79-e66cdab7/kanban/web
+
+ ✓ src/editor/clipboard/hiddenDomPruner.test.ts (13 tests) 177ms
+ ✓ src/features/workflows/__tests__/DryRunDrawer.test.tsx (5 tests) 425ms
+ ✓ src/features/analytics/__tests__/FlowAnalyticsPage.test.tsx (9 tests) 432ms
+ ✓ src/features/admin-runners/__tests__/RunnerStudioPage.test.tsx (16 tests) 2510ms
+   ✓ RunnerStudioPage & Components (KANBA-219) (16)
+     ✓ MintEnrollmentTokenModal component (9)
+       ✓ resets copied state after 2 seconds 2120ms
+
+ Test Files  4 passed (4)
+      Tests  43 passed (43)
+   Start at  15:19:18
+   Duration  3.80s (tests 45%, environment 44%, import 9%, transform 2%)
+
