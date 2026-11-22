@@ -33,6 +33,7 @@ from database.models.destructive_token import DestructiveConfirmationToken
 from database.models.embeddings import ObjectEmbedding
 from database.models.import_mapping import ImportEntityMapping
 from database.models.issue_alias import IssueKeyAlias
+from database.models.issue_lease import IssueLease
 from database.models.issues import (
     CommentReaction,
     Issue,
@@ -123,6 +124,7 @@ __all__ = [
     "IssueComment",
     "IssueKeyAlias",
     "IssueLabel",
+    "IssueLease",
     "IssueModule",
     "IssueSubscription",
     "LdapGroupMapping",

@@ -1816,15 +1816,20 @@ async def get_issue_or_404(
     return await resolve_issue_ref(session, caller, issue_ref, workspace_ref=workspace_ref)
 
 
-async def update_issue(  # noqa: C901, PLR0912, PLR0915
+async def update_issue(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     session: AsyncSession,
     caller: PrincipalContext,
     issue_ref: str,
     body: IssuePatch,
     if_match: str | None,
+    fencing_token: int | None = None,
 ) -> tuple[IssueResponse, str]:
     """Patch issue fields under description ETag concurrency check and emit activity."""
     issue = await resolve_issue_ref(session, caller, issue_ref)
+    from kanban.issues.lease_service import validate_caller_lease_and_fencing  # noqa: PLC0415
+
+    await validate_caller_lease_and_fencing(session, caller, issue, fencing_token=fencing_token)
+
     obj = await session.get(ObjectRecord, issue.id, populate_existing=True)
     if obj is not None and obj.archived_at is not None:
         raise _problem(
@@ -1874,7 +1879,12 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
         if raw_etag.startswith("W/"):
             raw_etag = raw_etag[2:].strip()
         client_hex = raw_etag.strip('"')
-        if client_hex.lower() not in (current_etag_hex.lower(), current_sha256_hex.lower()):
+        valid_matches = {
+            current_etag_hex.lower(),
+            current_sha256_hex.lower(),
+            str(issue.row_version).lower(),
+        }
+        if client_hex.lower() not in valid_matches:
             raise _problem(
                 code="PRECONDITION_FAILED",
                 status=412,
@@ -2028,11 +2038,20 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
     try:
         async with session.begin_nested():
             if update_vals:
-                update_stmt = update(Issue).where(Issue.id == issue_id)
+                update_stmt = (
+                    update(Issue)
+                    .where(Issue.id == issue_id)
+                    .where(Issue.row_version == issue.row_version)
+                )
                 if if_match is not None and issue.description_sha256 is not None:
-                    update_stmt = update_stmt.where(
-                        Issue.description_sha256 == issue.description_sha256
-                    )
+                    raw_etag = if_match.strip()
+                    if raw_etag.startswith("W/"):
+                        raw_etag = raw_etag[2:].strip()
+                    client_hex = raw_etag.strip('"')
+                    if client_hex.lower() in (current_sha256_hex.lower(), current_etag_hex.lower()):
+                        update_stmt = update_stmt.where(
+                            Issue.description_sha256 == issue.description_sha256
+                        )
                 update_stmt = update_stmt.values(**update_vals)
                 res = await session.execute(update_stmt)
                 if res.rowcount == 0:
@@ -2048,6 +2067,21 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
                         title="Precondition Failed",
                         detail="Concurrent modification detected",
                         current_etag=f'"{fresh_hex}"',
+                    )
+            elif labels_changed or modules_changed:
+                touch_stmt = (
+                    update(Issue)
+                    .where(Issue.id == issue_id)
+                    .where(Issue.row_version == issue.row_version)
+                    .values(summary=issue.summary)
+                )
+                res = await session.execute(touch_stmt)
+                if res.rowcount == 0:
+                    raise _problem(
+                        code="PRECONDITION_FAILED",
+                        status=412,
+                        title="Precondition Failed",
+                        detail="Concurrent modification detected",
                     )
 
             if "summary" in update_vals:

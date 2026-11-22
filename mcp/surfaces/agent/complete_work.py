@@ -37,16 +37,20 @@ COMPLETE_WORK_SCHEMA: Final[dict[str, Any]] = {
     "properties": {
         "identifier": {
             "type": "string",
-            "description": "Issue ref",
         },
         "summary_markdown": {
             "type": "string",
-            "description": "Summary",
         },
         "verification_proof": VERIFICATION_PROOF_SCHEMA,
         "to_state": {
             "type": "string",
-            "description": "Target state",
+        },
+        "fencing_token": {
+            "type": "integer",
+        },
+        "lease_action": {
+            "type": "string",
+            "enum": ["release", "keep", "renew"],
         },
     },
     "required": ["identifier", "summary_markdown", "verification_proof"],
@@ -140,6 +144,18 @@ def _validate_complete_work_arguments(  # noqa: C901, PLR0912, PLR0915
             msg = f"Argument 'to_state' exceeds maximum length of {_MAX_STATE_LEN}"
             raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
 
+    if "fencing_token" in arguments and arguments["fencing_token"] is not None:
+        token = arguments["fencing_token"]
+        if not isinstance(token, int) or isinstance(token, bool):
+            msg = "Argument 'fencing_token' must be an integer"
+            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+
+    if "lease_action" in arguments and arguments["lease_action"] is not None:
+        act = arguments["lease_action"]
+        if act not in ("release", "keep", "renew"):
+            msg = "Argument 'lease_action' must be one of: release, keep, renew"
+            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+
     return proof
 
 
@@ -176,6 +192,10 @@ async def complete_work(
     }
     if arguments.get("to_state"):
         payload["to_state"] = arguments["to_state"].strip()
+    if arguments.get("fencing_token") is not None:
+        payload["fencing_token"] = arguments["fencing_token"]
+    if arguments.get("lease_action") is not None:
+        payload["lease_action"] = arguments["lease_action"]
 
     resp_data = await active_client.request(
         "POST",

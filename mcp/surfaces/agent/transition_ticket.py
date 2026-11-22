@@ -35,17 +35,21 @@ TRANSITION_TICKET_SCHEMA: Final[dict[str, Any]] = {
     "properties": {
         "identifier": {
             "type": "string",
-            "description": "Issue ref",
         },
         "to_state": {
             "type": "string",
-            "description": "Target state",
         },
         "comment_markdown": {
             "type": "string",
-            "description": "Comment",
         },
         "verification_proof": VERIFICATION_PROOF_SCHEMA,
+        "fencing_token": {
+            "type": "integer",
+        },
+        "lease_action": {
+            "type": "string",
+            "enum": ["renew", "release", "keep"],
+        },
     },
     "required": ["identifier", "to_state"],
     "additionalProperties": False,
@@ -103,8 +107,20 @@ def _validate_transition_arguments(arguments: dict[str, Any]) -> None:  # noqa: 
         except (ValidationError, ValueError) as err:
             raise KbMcpError(McpErrorCode.VALIDATION_FAILED, str(err)) from err
 
+    if "fencing_token" in arguments and arguments["fencing_token"] is not None:
+        token = arguments["fencing_token"]
+        if not isinstance(token, int) or isinstance(token, bool):
+            msg = "Argument 'fencing_token' must be an integer"
+            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
 
-async def transition_ticket(
+    if "lease_action" in arguments and arguments["lease_action"] is not None:
+        act = arguments["lease_action"]
+        if act not in ("renew", "release", "keep"):
+            msg = "Argument 'lease_action' must be one of: renew, release, keep"
+            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+
+
+async def transition_ticket(  # noqa: C901
     arguments: dict[str, Any],
     *,
     client: KanbanApiClient | None = None,
@@ -136,6 +152,10 @@ async def transition_ticket(
         payload["comment_markdown"] = arguments["comment_markdown"]
     if arguments.get("verification_proof") is not None:
         payload["verification_proof"] = arguments["verification_proof"]
+    if arguments.get("fencing_token") is not None:
+        payload["fencing_token"] = arguments["fencing_token"]
+    if arguments.get("lease_action") is not None:
+        payload["lease_action"] = arguments["lease_action"]
 
     try:
         resp_data = await active_client.request(

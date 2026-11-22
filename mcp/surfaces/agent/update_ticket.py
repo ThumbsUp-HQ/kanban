@@ -31,88 +31,79 @@ UPDATE_TICKET_SCHEMA: Final[dict[str, Any]] = {
     "properties": {
         "identifier": {
             "type": "string",
-            "description": "Issue ref",
         },
         "if_match": {
             "type": "string",
             "pattern": "^[0-9a-f]{64}$",
-            "description": (
-                "64-char SHA-256 hex ETag (required when description_markdown is provided)"
-            ),
+            "description": "ETag for description_markdown",
         },
         "summary": {
             "type": "string",
             "minLength": 1,
             "maxLength": 500,
-            "description": "New summary",
         },
         "description_markdown": {
             "type": "string",
-            "description": "Description (requires if_match)",
+            "description": "Markdown (if_match)",
         },
         "description_mode": {
             "type": "string",
             "enum": ["append", "replace"],
             "default": "append",
-            "description": "append or replace",
         },
         "assignees_add": {
             "type": "array",
             "items": {"type": "string"},
             "maxItems": 20,
-            "description": "Assignees to add",
         },
         "assignees_remove": {
             "type": "array",
             "items": {"type": "string"},
             "maxItems": 20,
-            "description": "Assignees to remove",
         },
         "priority": {
             "type": "string",
-            "description": "Priority slug",
         },
         "start_date": {
             "type": ["string", "null"],
             "format": "date",
-            "description": "Start date",
         },
         "due_date": {
             "type": ["string", "null"],
             "format": "date",
-            "description": "Due date",
         },
         "cycle": {
             "type": ["string", "null"],
-            "description": "Cycle",
         },
         "modules_add": {
             "type": "array",
             "items": {"type": "string"},
             "maxItems": 20,
-            "description": "Modules to add",
         },
         "modules_remove": {
             "type": "array",
             "items": {"type": "string"},
             "maxItems": 20,
-            "description": "Modules to remove",
         },
         "labels_add": {
             "type": "array",
             "items": {"type": "string"},
             "maxItems": 20,
-            "description": "Labels to add",
         },
         "labels_remove": {
             "type": "array",
             "items": {"type": "string"},
             "maxItems": 20,
-            "description": "Labels to remove",
         },
         "parent": {
             "type": ["string", "null"],
-            "description": "Parent issue ref",
+        },
+        "fencing_token": {
+            "type": "integer",
+        },
+        "lease_action": {
+            "type": "string",
+            "enum": ["renew", "release", "keep"],
         },
     },
     "required": ["identifier"],
@@ -207,6 +198,19 @@ async def update_ticket(arguments: dict[str, Any]) -> dict[str, Any]:  # noqa: C
             "if_match header is required when description_markdown is present",
             hint="provide 64-character SHA-256 hex ETag",
         )
+
+    if "fencing_token" in arguments and arguments["fencing_token"] is not None:
+        ft = arguments["fencing_token"]
+        if not isinstance(ft, int) or isinstance(ft, bool):
+            raise KbMcpError(McpErrorCode.VALIDATION_FAILED, "fencing_token must be an integer")
+
+    if "lease_action" in arguments and arguments["lease_action"] is not None:
+        la = arguments["lease_action"]
+        if la not in ("renew", "release", "keep"):
+            raise KbMcpError(
+                McpErrorCode.VALIDATION_FAILED,
+                "lease_action must be 'renew', 'release', or 'keep'",
+            )
 
     # 3. Fetch existing ticket
     safe_identifier = identifier.replace('"', '\\"')
@@ -409,6 +413,8 @@ async def update_ticket(arguments: dict[str, Any]) -> dict[str, Any]:  # noqa: C
     patch_headers: dict[str, str] = {}
     if if_match is not None:
         patch_headers["If-Match"] = f'"{if_match.strip()}"'
+    if "fencing_token" in arguments and arguments["fencing_token"] is not None:
+        patch_headers["X-Fencing-Token"] = str(arguments["fencing_token"])
 
     patched_issue: dict[str, Any] = curr_issue
     if patch_body:
@@ -573,6 +579,31 @@ async def update_ticket(arguments: dict[str, Any]) -> dict[str, Any]:  # noqa: C
         )
         if isinstance(final_issue, dict):
             patched_issue = final_issue
+
+    # Handle lease_action
+    lease_action = arguments.get("lease_action")
+    if lease_action == "renew":
+        hb_body: dict[str, Any] = {}
+        if "fencing_token" in arguments and arguments["fencing_token"] is not None:
+            hb_body["fencing_token"] = arguments["fencing_token"]
+        await ctx.client.request(
+            "POST",
+            f"/api/v1/issues/{issue_key}/lease/heartbeat",
+            json_data=hb_body,
+            subject_token=ctx.subject_token,
+            mcp_session_id=ctx.session_id,
+        )
+    elif lease_action == "release":
+        del_params: dict[str, Any] = {}
+        if "fencing_token" in arguments and arguments["fencing_token"] is not None:
+            del_params["fencing_token"] = arguments["fencing_token"]
+        await ctx.client.request(
+            "DELETE",
+            f"/api/v1/issues/{issue_key}/lease",
+            params=del_params,
+            subject_token=ctx.subject_token,
+            mcp_session_id=ctx.session_id,
+        )
 
     # 15. Format return summary LOD
     state_val = patched_issue.get("state")
