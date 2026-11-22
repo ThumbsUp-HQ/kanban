@@ -69,6 +69,7 @@ export interface BoardWorkflowState {
 export interface FetchAllBoardIssuesOptions {
   pageSize?: number | undefined;
   maxPages?: number | undefined;
+  lod?: 'summary' | 'standard' | 'full' | undefined;
   signal?: AbortSignal | undefined;
 }
 
@@ -89,6 +90,7 @@ export async function fetchAllBoardIssues(
   const seenKeys = new Set<string>();
   const seenCursors = new Set<string>();
   let cursor: string | null = null;
+  const lod = options.lod ?? 'summary';
 
   for (let pageIndex = 0; pageIndex < maxPages; pageIndex += 1) {
     if (options.signal?.aborted) {
@@ -101,7 +103,7 @@ export async function fetchAllBoardIssues(
 
     const data: unknown = await apiFetch('GET', '/api/v1/projects/{project_ref}/issues', {
       params: { project_ref: projectKey },
-      query: { limit, ...(cursor ? { cursor } : {}) },
+      query: { limit, lod, ...(cursor ? { cursor } : {}) },
       ...(options.signal ? { signal: options.signal } : {}),
     });
 

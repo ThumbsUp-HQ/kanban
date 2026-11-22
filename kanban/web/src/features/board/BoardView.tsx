@@ -84,6 +84,7 @@ export function BoardView({
       return data;
     },
     enabled: propStates === undefined,
+    staleTime: 60_000,
   });
 
   const resolvedProjectId =
@@ -145,7 +146,7 @@ export function BoardView({
     queryKey: qk.issues(projectKey, {}),
     queryFn: async ({ signal }): Promise<BoardIssue[]> =>
       fetchAllBoardIssues(projectKey, { signal }),
-    enabled: propIssues === undefined,
+    enabled: propIssues === undefined && Boolean(projectKey),
     initialData: propIssues,
   });
 

@@ -33,6 +33,7 @@ from typing import TYPE_CHECKING, Any, Final
 
 from sqlalchemy import delete, distinct, func, select, text, update
 from sqlalchemy.exc import DBAPIError, IntegrityError
+from sqlalchemy.orm import defer
 
 from database.models import (
     ActivityRecord,
@@ -619,6 +620,11 @@ def compute_issue_etag(
     module_ids_repr = ",".join(sorted(str(m) for m in (issue_resp.module_ids or [])))
     labels_repr = ",".join(sorted(str(lbl.id) for lbl in issue_resp.labels))
     parent_repr = getattr(issue_resp.parent, "key", "") if issue_resp.parent else ""
+    access_manifest_repr = (
+        f"{issue_resp.access_manifest.pill_label}:{issue_resp.access_manifest.explicit_grant_count}"
+        if issue_resp.access_manifest is not None
+        else ""
+    )
     updated_at_str = (
         updated_at.isoformat() if isinstance(updated_at, datetime) else str(updated_at or "")
     )
@@ -645,7 +651,7 @@ def compute_issue_etag(
         module_ids_repr,
         labels_repr,
         parent_repr,
-        f"{issue_resp.access_manifest.pill_label}:{issue_resp.access_manifest.explicit_grant_count}",
+        access_manifest_repr,
         str(issue_resp.board_rank),
         updated_at_str,
         pending_gate_repr,
@@ -657,7 +663,10 @@ def compute_issue_etag(
 
 
 async def serialize_issue(
-    session: AsyncSession, caller: PrincipalContext, issue: Issue
+    session: AsyncSession,
+    caller: PrincipalContext,
+    issue: Issue,
+    lod: Literal["summary", "standard", "full"] = "full",
 ) -> IssueResponse:
     """Assemble canonical IssueResponse model including access manifest and capabilities."""
     project = await session.get(Project, issue.project_id)
@@ -705,8 +714,19 @@ async def serialize_issue(
         if cycle_obj is not None:
             cycle_summary = CycleSummary(id=cycle_obj.id, name=cycle_obj.name)
 
-    manifest = await build_access_manifest(session, caller, issue.id)
-    caps = await evaluate_capabilities(session, caller, issue.id)
+    if lod == "summary":
+        manifest = None
+        caps_names = ["VIEW"]
+        desc_md = None
+    else:
+        manifest = await build_access_manifest(session, caller, issue.id)
+        caps = await evaluate_capabilities(session, caller, issue.id)
+        caps_names = capabilities_to_names(caps)
+        desc_md = (
+            scrub_text(issue.description_markdown)
+            if issue.description_markdown
+            else issue.description_markdown
+        )
     assignee_items = await get_issue_assignees(session, issue.id)
     provenance = await build_issue_provenance(session, issue)
 
@@ -727,11 +747,7 @@ async def serialize_issue(
         object_id=issue.id,
         key=f"{project.identifier}-{issue.sequence_id}",
         summary=issue.summary,
-        description_markdown=(
-            scrub_text(issue.description_markdown)
-            if issue.description_markdown
-            else issue.description_markdown
-        ),
+        description_markdown=desc_md,
         description_sha256=sha256_hex,
         state=StateSummary(
             id=state.id,
@@ -755,7 +771,7 @@ async def serialize_issue(
         created_by_id=issue.created_by_id,
         provenance=provenance,
         access_manifest=manifest,
-        capabilities=capabilities_to_names(caps),
+        capabilities=caps_names,
         created_at=issue_created_at,
         updated_at=issue_updated_at,
         archived_at=archived_at,
@@ -1027,6 +1043,7 @@ async def _hydrate_batch_issue_context(  # noqa: C901, PLR0912, PLR0915
     session: AsyncSession,
     caller: PrincipalContext,
     issues: Sequence[Issue],
+    lod: Literal["summary", "standard", "full"] = "full",
 ) -> _BatchIssueHydrationContext:
     """Execute batched IN (...) queries to hydrate all related entities for issues."""
     issue_ids = [i.id for i in issues]
@@ -1167,117 +1184,155 @@ async def _hydrate_batch_issue_context(  # noqa: C901, PLR0912, PLR0915
         iid: [] for iid in issue_ids
     }
     principals_by_id: dict[uuid.UUID, Principal] = {}
-    era_stmt = (
-        select(EffectiveResourceAccess, Principal)
-        .join(Principal, Principal.id == EffectiveResourceAccess.principal_id)
-        .where(EffectiveResourceAccess.object_id.in_(issue_ids))
-    )
-    for era_row, princ_row in (await session.execute(era_stmt)).all():
-        era_by_issue[era_row.object_id].append((era_row, princ_row))
-        principals_by_id[princ_row.id] = princ_row
-
     direct_acls_by_issue: dict[uuid.UUID, list[ResourceAclEntry]] = {iid: [] for iid in issue_ids}
-    all_direct_acls = list(
-        (
-            await session.execute(
-                select(ResourceAclEntry).where(ResourceAclEntry.object_id.in_(issue_ids))
-            )
-        )
-        .scalars()
-        .all()
-    )
-    for acl in all_direct_acls:
-        direct_acls_by_issue[acl.object_id].append(acl)
-
-    workspace_ids = list({p.workspace_id for p in projects_by_id.values()} | {caller.workspace_id})
-    all_rbs = list(
-        (
-            await session.execute(
-                select(RoleBinding).where(
-                    (RoleBinding.project_id.in_(project_ids))
-                    | (
-                        (RoleBinding.workspace_id.in_(workspace_ids))
-                        & (RoleBinding.scope_type == "workspace")
-                    )
-                )
-            )
-        )
-        .scalars()
-        .all()
-    )
-
-    caller_pids: list[uuid.UUID] = [caller.principal_id]
-    if caller.agent_principal_id is not None:
-        caller_pids.append(caller.agent_principal_id)
-
-    rb_and_acl_pids = list(
-        {rb.principal_id for rb in all_rbs} | {acl.principal_id for acl in all_direct_acls}
-    )
-    ancestors_by_member: dict[uuid.UUID, set[uuid.UUID]] = {}
-    members_by_ancestor: dict[uuid.UUID, list[uuid.UUID]] = {}
-    closure_cond = (
-        (PrincipalGroupClosure.member_id.in_(caller_pids))
-        | (PrincipalGroupClosure.ancestor_group_id.in_(rb_and_acl_pids))
-        if rb_and_acl_pids
-        else PrincipalGroupClosure.member_id.in_(caller_pids)
-    )
-    closure_stmt = select(
-        PrincipalGroupClosure.member_id,
-        PrincipalGroupClosure.ancestor_group_id,
-    ).where(closure_cond)
-    for m_id, anc_id in (await session.execute(closure_stmt)).all():
-        ancestors_by_member.setdefault(m_id, set()).add(anc_id)
-        members_by_ancestor.setdefault(anc_id, []).append(m_id)
-
     project_roles_by_project: dict[uuid.UUID, dict[uuid.UUID, str]] = {
         pid: {} for pid in project_ids
     }
-    workspace_roles_by_ws: dict[uuid.UUID, dict[uuid.UUID, str]] = {
-        wid: {} for wid in workspace_ids
-    }
-    for rb in all_rbs:
-        r_val = str(rb.role.value if hasattr(rb.role, "value") else rb.role)
-        if rb.project_id is not None and rb.project_id in project_roles_by_project:
-            p_roles = project_roles_by_project[rb.project_id]
-            p_roles[rb.principal_id] = r_val
-            for mid in members_by_ancestor.get(rb.principal_id, []):
-                if mid not in p_roles:  # pragma: no branch
-                    p_roles[mid] = r_val
-        if rb.scope_type == "workspace" and rb.workspace_id in workspace_roles_by_ws:
-            workspace_roles_by_ws[rb.workspace_id][rb.principal_id] = r_val
-
-    needed_pids = (
-        set(caller_pids)
-        | {acl.principal_id for acl in all_direct_acls}
-        | {pid for pr in project_roles_by_project.values() for pid in pr}
-        | {pid for wr in workspace_roles_by_ws.values() for pid in wr}
-    )
-    missing_pids = list(needed_pids - set(principals_by_id.keys()))
-    if missing_pids:
-        for p_row in (
-            (await session.execute(select(Principal).where(Principal.id.in_(missing_pids))))
-            .scalars()
-            .all()
-        ):
-            principals_by_id[p_row.id] = p_row
-
-    human_p = principals_by_id.get(caller.principal_id)
-    human_active = human_p is not None and human_p.status == "ACTIVE"
-    agent_active = True
-    if caller.agent_principal_id is not None:
-        agent_p = principals_by_id.get(caller.agent_principal_id)
-        agent_active = agent_p is not None and agent_p.status == "ACTIVE"
-    effective_token_mask = (
-        parse_token_scope_mask(caller.token_scopes)
-        if (human_active and agent_active)
-        else Capability.NONE
-    )
-    human_all_pids = {caller.principal_id} | ancestors_by_member.get(caller.principal_id, set())
+    workspace_roles_by_ws: dict[uuid.UUID, dict[uuid.UUID, str]] = {}
+    groups_by_id: dict[uuid.UUID, Group] = {}
+    group_member_counts: dict[uuid.UUID, int] = {}
+    human_all_pids = {caller.principal_id}
     agent_all_pids = (
-        {caller.agent_principal_id} | ancestors_by_member.get(caller.agent_principal_id, set())
+        {caller.agent_principal_id}
         if caller.agent_principal_id is not None
         else set()
     )
+    effective_token_mask = parse_token_scope_mask(caller.token_scopes)
+
+    if lod != "summary":
+        era_stmt = (
+            select(EffectiveResourceAccess, Principal)
+            .join(Principal, Principal.id == EffectiveResourceAccess.principal_id)
+            .where(EffectiveResourceAccess.object_id.in_(issue_ids))
+        )
+        for era_row, princ_row in (await session.execute(era_stmt)).all():
+            era_by_issue[era_row.object_id].append((era_row, princ_row))
+            principals_by_id[princ_row.id] = princ_row
+
+        all_direct_acls = list(
+            (
+                await session.execute(
+                    select(ResourceAclEntry).where(ResourceAclEntry.object_id.in_(issue_ids))
+                )
+            )
+            .scalars()
+            .all()
+        )
+        for acl in all_direct_acls:
+            direct_acls_by_issue[acl.object_id].append(acl)
+
+        workspace_ids = list({p.workspace_id for p in projects_by_id.values()} | {caller.workspace_id})
+        all_rbs = list(
+            (
+                await session.execute(
+                    select(RoleBinding).where(
+                        (RoleBinding.project_id.in_(project_ids))
+                        | (
+                            (RoleBinding.workspace_id.in_(workspace_ids))
+                            & (RoleBinding.scope_type == "workspace")
+                        )
+                    )
+                )
+            )
+            .scalars()
+            .all()
+        )
+
+        caller_pids: list[uuid.UUID] = [caller.principal_id]
+        if caller.agent_principal_id is not None:
+            caller_pids.append(caller.agent_principal_id)
+
+        rb_and_acl_pids = list(
+            {rb.principal_id for rb in all_rbs} | {acl.principal_id for acl in all_direct_acls}
+        )
+        ancestors_by_member: dict[uuid.UUID, set[uuid.UUID]] = {}
+        members_by_ancestor: dict[uuid.UUID, list[uuid.UUID]] = {}
+        closure_cond = (
+            (PrincipalGroupClosure.member_id.in_(caller_pids))
+            | (PrincipalGroupClosure.ancestor_group_id.in_(rb_and_acl_pids))
+            if rb_and_acl_pids
+            else PrincipalGroupClosure.member_id.in_(caller_pids)
+        )
+        closure_stmt = select(
+            PrincipalGroupClosure.member_id,
+            PrincipalGroupClosure.ancestor_group_id,
+        ).where(closure_cond)
+        for m_id, anc_id in (await session.execute(closure_stmt)).all():
+            ancestors_by_member.setdefault(m_id, set()).add(anc_id)
+            members_by_ancestor.setdefault(anc_id, []).append(m_id)
+
+        workspace_roles_by_ws = {wid: {} for wid in workspace_ids}
+        for rb in all_rbs:
+            r_val = str(rb.role.value if hasattr(rb.role, "value") else rb.role)
+            if rb.project_id is not None and rb.project_id in project_roles_by_project:
+                p_roles = project_roles_by_project[rb.project_id]
+                p_roles[rb.principal_id] = r_val
+                for mid in members_by_ancestor.get(rb.principal_id, []):
+                    if mid not in p_roles:  # pragma: no branch
+                        p_roles[mid] = r_val
+            if rb.scope_type == "workspace" and rb.workspace_id in workspace_roles_by_ws:
+                workspace_roles_by_ws[rb.workspace_id][rb.principal_id] = r_val
+
+        needed_pids = (
+            set(caller_pids)
+            | {acl.principal_id for acl in all_direct_acls}
+            | {pid for pr in project_roles_by_project.values() for pid in pr}
+            | {pid for wr in workspace_roles_by_ws.values() for pid in wr}
+        )
+        missing_pids = list(needed_pids - set(principals_by_id.keys()))
+        if missing_pids:
+            for p_row in (
+                (await session.execute(select(Principal).where(Principal.id.in_(missing_pids))))
+                .scalars()
+                .all()
+            ):
+                principals_by_id[p_row.id] = p_row
+
+        human_p = principals_by_id.get(caller.principal_id)
+        human_active = human_p is not None and human_p.status == "ACTIVE"
+        agent_active = True
+        if caller.agent_principal_id is not None:
+            agent_p = principals_by_id.get(caller.agent_principal_id)
+            agent_active = agent_p is not None and agent_p.status == "ACTIVE"
+        effective_token_mask = (
+            parse_token_scope_mask(caller.token_scopes)
+            if (human_active and agent_active)
+            else Capability.NONE
+        )
+        human_all_pids = {caller.principal_id} | ancestors_by_member.get(caller.principal_id, set())
+        agent_all_pids = (
+            {caller.agent_principal_id} | ancestors_by_member.get(caller.agent_principal_id, set())
+            if caller.agent_principal_id is not None
+            else set()
+        )
+
+        group_pids = [
+            p.id
+            for p in principals_by_id.values()
+            if p.principal_type == "GROUP" and p.status == "ACTIVE"
+        ]
+        if group_pids:
+            groups_by_id = {
+                g.id: g
+                for g in (await session.execute(select(Group).where(Group.id.in_(group_pids))))
+                .scalars()
+                .all()
+            }
+            edge_rows = (
+                await session.execute(
+                    select(
+                        PrincipalGroupEdge.group_id,
+                        func.count(distinct(PrincipalGroupEdge.member_id)),
+                    )
+                    .where(PrincipalGroupEdge.group_id.in_(group_pids))
+                    .group_by(PrincipalGroupEdge.group_id)
+                )
+            ).all()
+            edge_counts = {gid: int(cnt or 0) for gid, cnt in edge_rows}
+            for gid in group_pids:
+                group_member_counts[gid] = edge_counts.get(gid, 0) or len(
+                    set(members_by_ancestor.get(gid, []))
+                )
 
     creator_pids: set[uuid.UUID] = set()
     overridden_issue_ids: list[uuid.UUID] = []
@@ -1305,36 +1360,6 @@ async def _hydrate_batch_issue_context(  # noqa: C901, PLR0912, PLR0915
     for o_rec, ws_name in (await session.execute(obj_ws_stmt)).all():
         objects_by_id[o_rec.id] = o_rec
         workspace_names_by_id[o_rec.workspace_id] = ws_name
-
-    group_pids = [
-        p.id
-        for p in principals_by_id.values()
-        if p.principal_type == "GROUP" and p.status == "ACTIVE"
-    ]
-    groups_by_id: dict[uuid.UUID, Group] = {}
-    group_member_counts: dict[uuid.UUID, int] = {}
-    if group_pids:
-        groups_by_id = {
-            g.id: g
-            for g in (await session.execute(select(Group).where(Group.id.in_(group_pids))))
-            .scalars()
-            .all()
-        }
-        edge_rows = (
-            await session.execute(
-                select(
-                    PrincipalGroupEdge.group_id,
-                    func.count(distinct(PrincipalGroupEdge.member_id)),
-                )
-                .where(PrincipalGroupEdge.group_id.in_(group_pids))
-                .group_by(PrincipalGroupEdge.group_id)
-            )
-        ).all()
-        edge_counts = {gid: int(cnt or 0) for gid, cnt in edge_rows}
-        for gid in group_pids:
-            group_member_counts[gid] = edge_counts.get(gid, 0) or len(
-                set(members_by_ancestor.get(gid, []))
-            )
 
     candidate_archive_ids = [
         i.id
@@ -1431,7 +1456,7 @@ async def _hydrate_batch_issue_context(  # noqa: C901, PLR0912, PLR0915
             )
 
     override_reasons_by_issue: dict[uuid.UUID, str | None] = {}
-    if overridden_issue_ids:
+    if overridden_issue_ids and lod != "summary":
         act_stmt = (
             select(ActivityRecord.object_id, ActivityRecord.payload)
             .where(
@@ -1503,13 +1528,16 @@ def _batch_resolve_archive_eligibility(
 
 
 async def serialize_issues_batch(
-    session: AsyncSession, caller: PrincipalContext, issues: Sequence[Issue]
+    session: AsyncSession,
+    caller: PrincipalContext,
+    issues: Sequence[Issue],
+    lod: Literal["summary", "standard", "full"] = "full",
 ) -> list[IssueResponse]:
     """Batch-assemble canonical IssueResponse models eliminating per-row N+1 queries."""
     if not issues:
         return []
 
-    ctx = await _hydrate_batch_issue_context(session, caller, issues)
+    ctx = await _hydrate_batch_issue_context(session, caller, issues, lod=lod)
     now_utc = datetime.now(UTC)
     results: list[IssueResponse] = []
 
@@ -1540,8 +1568,6 @@ async def serialize_issues_batch(
             CycleSummary(id=cycle_obj.id, name=cycle_obj.name) if cycle_obj is not None else None
         )
 
-        caps = _batch_evaluate_capabilities(caller, issue, ctx)
-        manifest = await _batch_build_access_manifest(session, caller, issue.id, caps, ctx)
         provenance = _batch_build_provenance(issue, ctx)
         sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
 
@@ -1559,16 +1585,26 @@ async def serialize_issues_batch(
         )
         latest_gate_verdict = ctx.latest_verdicts_by_issue.get(issue.id)
 
+        if lod == "summary":
+            desc_md = None
+            manifest = None
+            caps_list = ["VIEW"]
+        else:
+            desc_md = (
+                scrub_text(issue.description_markdown)
+                if issue.description_markdown
+                else issue.description_markdown
+            )
+            caps = _batch_evaluate_capabilities(caller, issue, ctx)
+            manifest = await _batch_build_access_manifest(session, caller, issue.id, caps, ctx)
+            caps_list = capabilities_to_names(caps)
+
         res = IssueResponse(
             id=issue.id,
             object_id=issue.id,
             key=f"{project.identifier}-{issue.sequence_id}",
             summary=issue.summary,
-            description_markdown=(
-                scrub_text(issue.description_markdown)
-                if issue.description_markdown
-                else issue.description_markdown
-            ),
+            description_markdown=desc_md,
             description_sha256=sha256_hex,
             state=StateSummary(
                 id=state.id,
@@ -1594,7 +1630,7 @@ async def serialize_issues_batch(
             created_by_id=issue.created_by_id,
             provenance=provenance,
             access_manifest=manifest,
-            capabilities=capabilities_to_names(caps),
+            capabilities=caps_list,
             created_at=issue_created_at,
             updated_at=issue_updated_at,
             archived_at=archived_at,
@@ -2091,6 +2127,7 @@ async def list_issues(  # noqa: PLR0913
     include_archived: bool = False,
     only_archived: bool = False,
     state_group: Sequence[str] | None = None,
+    lod: Literal["summary", "standard", "full"] = "full",
 ) -> IssueList:
     """List RLS-visible issues within a project in descending sequence order."""
     project = await get_project_or_404(session, caller, project_ref)
@@ -2105,6 +2142,9 @@ async def list_issues(  # noqa: PLR0913
             ObjectRecord.deleted_at.is_(None),
         )
     )
+
+    if lod == "summary":
+        stmt = stmt.options(defer(Issue.description_markdown))
 
     if only_archived:
         stmt = stmt.where(ObjectRecord.archived_at.is_not(None))
@@ -2131,5 +2171,5 @@ async def list_issues(  # noqa: PLR0913
     page = list(rows[:limit])
     next_cursor = encode_issue_cursor(page[-1].sequence_id) if len(rows) > limit else None
 
-    items = await serialize_issues_batch(session, caller, page)
+    items = await serialize_issues_batch(session, caller, page, lod=lod)
     return IssueList(items=items, next_cursor=next_cursor)

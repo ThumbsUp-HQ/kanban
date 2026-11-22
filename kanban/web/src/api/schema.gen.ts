@@ -8384,7 +8384,7 @@ export interface components {
          */
         IssueResponse: {
             /** @description Anti-enumeration access manifest metadata (S3.4) */
-            access_manifest: components["schemas"]["AccessManifest"];
+            access_manifest?: components["schemas"]["AccessManifest"] | null;
             /** @description Archiving eligibility status and reason */
             archive_eligibility: components["schemas"]["ArchiveEligibility"];
             /**
@@ -8430,7 +8430,7 @@ export interface components {
              * Description Markdown
              * @description Canonical UTF-8 Markdown description body
              */
-            description_markdown: string;
+            description_markdown?: string | null;
             /**
              * Description Sha256
              * @description Hex-encoded SHA-256 digest of description_markdown for ETag concurrency
@@ -19814,6 +19814,8 @@ export interface operations {
             query?: {
                 /** @description Optional workspace slug or UUID */
                 workspace?: string | null;
+                /** @description Level of detail tier: summary, standard, or full */
+                lod?: "summary" | "standard" | "full";
             };
             header?: {
                 "if-none-match"?: string | null;
@@ -22872,6 +22874,8 @@ export interface operations {
                 only_archived?: boolean;
                 /** @description Optional workflow state_group filter */
                 state_group?: ("backlog" | "unstarted" | "started" | "completed" | "cancelled")[] | null;
+                /** @description Level of detail tier: summary, standard, or full */
+                lod?: "summary" | "standard" | "full";
             };
             header?: never;
             path: {

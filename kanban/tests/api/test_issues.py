@@ -1857,3 +1857,106 @@ async def test_kan85_rls_restricted_parent_and_capability_parity_under_force_rls
         single_get = await member_client.get(f"/api/v1/issues/{it['key']}")
         assert single_get.status_code == 200
         assert it == single_get.json()
+
+
+@pytest.mark.asyncio
+async def test_kan309_list_issues_lod_summary_defers_description_and_omits_access_manifest(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Verify KAN-309 Problem 1: lod=summary defers description_markdown and access_manifest while preserving row metadata."""
+    admin = await make_user("ttfd_admin", workspace_role="WORKSPACE_ADMIN")
+    admin_client = as_principal(admin)
+    p_resp = await admin_client.post(
+        "/api/v1/projects",
+        json={"name": "TTFD Staged Project", "identifier": "TTFD"},
+    )
+    assert p_resp.status_code == 201
+
+    long_description = "## Detailed Architectural Description\n\n- Point 1\n- Point 2\n- Confidential info"
+    create_resp = await admin_client.post(
+        "/api/v1/projects/TTFD/issues",
+        json={
+            "summary": "High TTFD Ticket",
+            "description_markdown": long_description,
+            "priority": "high",
+        },
+    )
+    assert create_resp.status_code == 201
+    created_issue = create_resp.json()
+    issue_key = created_issue["key"]
+
+    # 1. GET /api/v1/projects/TTFD/issues?lod=summary
+    sum_resp = await admin_client.get("/api/v1/projects/TTFD/issues?lod=summary")
+    assert sum_resp.status_code == 200
+    sum_data = sum_resp.json()
+    assert len(sum_data["items"]) == 1
+    sum_item = sum_data["items"][0]
+
+    assert sum_item["key"] == issue_key
+    assert sum_item["summary"] == "High TTFD Ticket"
+    assert sum_item["description_markdown"] is None
+    assert sum_item["access_manifest"] is None
+    assert sum_item["description_sha256"]
+    assert sum_item["etag"]
+    assert sum_item["state"]["name"]
+    assert sum_item["priority"]["slug"] == "high"
+    assert sum_item["board_rank"]
+    assert sum_item["created_at"]
+    assert sum_item["updated_at"]
+
+    # 2. GET /api/v1/projects/TTFD/issues (default lod=full) and explicit lod=full
+    full_resp = await admin_client.get("/api/v1/projects/TTFD/issues")
+    assert full_resp.status_code == 200
+    full_data = full_resp.json()
+    assert len(full_data["items"]) == 1
+    full_item = full_data["items"][0]
+
+    assert full_item["key"] == issue_key
+    assert full_item["description_markdown"] == long_description
+    assert full_item["access_manifest"] is not None
+    assert full_item["access_manifest"]["pill_label"]
+
+    full_explicit = await admin_client.get("/api/v1/projects/TTFD/issues?lod=full")
+    assert full_explicit.status_code == 200
+    assert full_explicit.json() == full_data
+
+    # 3. GET /api/v1/issues/{issue_key}?lod=summary vs lod=full
+    get_sum = await admin_client.get(f"/api/v1/issues/{issue_key}?lod=summary")
+    assert get_sum.status_code == 200
+    assert get_sum.json()["description_markdown"] is None
+    assert get_sum.json()["access_manifest"] is None
+
+    get_full = await admin_client.get(f"/api/v1/issues/{issue_key}?lod=full")
+    assert get_full.status_code == 200
+    assert get_full.json()["description_markdown"] == long_description
+    assert get_full.json()["access_manifest"] is not None
+
+    # 4. Keyset pagination with lod="summary"
+    create_resp2 = await admin_client.post(
+        "/api/v1/projects/TTFD/issues",
+        json={
+            "summary": "Second TTFD Ticket",
+            "description_markdown": "Second description",
+            "priority": "medium",
+        },
+    )
+    assert create_resp2.status_code == 201
+    paged_resp = await admin_client.get("/api/v1/projects/TTFD/issues?limit=1&lod=summary")
+    assert paged_resp.status_code == 200
+    paged_data = paged_resp.json()
+    assert len(paged_data["items"]) == 1
+    assert paged_data["items"][0]["description_markdown"] is None
+    assert paged_data["items"][0]["access_manifest"] is None
+    assert paged_data["next_cursor"] is not None
+
+    next_page_resp = await admin_client.get(
+        f"/api/v1/projects/TTFD/issues?cursor={paged_data['next_cursor']}&lod=summary"
+    )
+    assert next_page_resp.status_code == 200
+    next_page_data = next_page_resp.json()
+    assert len(next_page_data["items"]) == 1
+    assert next_page_data["items"][0]["description_markdown"] is None
+    assert next_page_data["items"][0]["access_manifest"] is None
+

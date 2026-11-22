@@ -35,6 +35,7 @@ import { useIssueKeyboardMap } from './useIssueKeyboardMap';
 import { announce } from '../../realtime';
 import {
   fetchAllProjectIssues,
+  fetchStagedProjectIssues,
   fetchProjectStates,
   fetchProjectSavedViews,
   createProjectIssue,
@@ -301,14 +302,17 @@ export function IssuesWorkspaceRoute({
     return 0;
   });
 
+  const [isStagedLoading, setIsStagedLoading] = useState<boolean>(false);
+  const [isInitialLoading, setIsInitialLoading] = useState<boolean>(isLiveMode);
+
   const issuesQuery = useQuery(
     {
       queryKey: qk.issues(projectKey, {}),
       queryFn: async ({ signal }) => {
-        const res = await fetchAllProjectIssues(projectKey, { signal });
+        const res = await fetchAllProjectIssues(projectKey, { signal, lod: 'summary' });
         return res.items;
       },
-      enabled: Boolean(projectKey) && isLiveMode,
+      enabled: false,
       initialData: initialIssues,
     },
     queryClient,
@@ -383,19 +387,36 @@ export function IssuesWorkspaceRoute({
       currentController?.abort();
       const controller = new AbortController();
       currentController = controller;
+      setIsInitialLoading(true);
       void Promise.all([
-        fetchAllProjectIssues(projectKey, { signal: controller.signal }),
+        fetchStagedProjectIssues(projectKey, {
+          signal: controller.signal,
+          lod: 'summary',
+          onPhase1: (phase1Items, hasMore) => {
+            if (!active || controller.signal.aborted) return;
+            setIssues(phase1Items);
+            setIsInitialLoading(false);
+            if (hasMore) {
+              setIsStagedLoading(true);
+            }
+          },
+        }),
         fetchProjectStates(projectKey).catch((): StateSummary[] => []),
       ])
         .then(([issuesRes, statesRes]) => {
           if (!active || controller.signal.aborted) return;
           setIssues(issuesRes.items);
+          setIsStagedLoading(false);
+          setIsInitialLoading(false);
           if (statesRes.length > 0) {
             setProjectStates(statesRes);
           }
         })
         .catch(() => {
-          // Preserve existing state on offline/transient/abort error
+          if (active && !controller.signal.aborted) {
+            setIsStagedLoading(false);
+            setIsInitialLoading(false);
+          }
         });
     };
     refreshLive();
@@ -1206,6 +1227,16 @@ export function IssuesWorkspaceRoute({
         data-testid="issues-workspace"
         data-layout={layout}
       >
+        {isStagedLoading && (
+          <div
+            data-testid="issues-staged-loading-indicator"
+            className="issues-staged-loading-indicator"
+            role="status"
+            aria-live="polite"
+          >
+            Loading additional issues...
+          </div>
+        )}
         {/* 1. Filter and Display Bar */}
       {layout === 'list' ? (
         <IssueNavigatorBar
@@ -1297,7 +1328,7 @@ export function IssuesWorkspaceRoute({
           <div className="kb-split-list-pane">
             <ListView
               issues={sortedRailIssues}
-              isLoading={issuesQuery.isLoading}
+              isLoading={isInitialLoading || issuesQuery.isLoading}
               projectKey={projectKey}
               projectStates={projectStates}
               modulesEnabled={modulesEnabled}

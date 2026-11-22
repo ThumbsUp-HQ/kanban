@@ -1,6 +1,8 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import {
   fetchProjectIssues,
+  fetchAllProjectIssues,
+  fetchStagedProjectIssues,
   fetchProjectStates,
   createProjectIssue,
   patchProjectIssue,
@@ -420,5 +422,114 @@ describe('viewsApi', () => {
 
     globalThis.fetch = vi.fn().mockResolvedValue({ ok: true, status: 204 });
     await deleteProjectIssue('KAN-99');
+  });
+
+  describe('KAN-309: single-flight staged loading and lod=summary support', () => {
+    it('fetchProjectIssues appends lod query parameter to request URL', async () => {
+      let requestedUrl = '';
+      globalThis.fetch = vi.fn().mockImplementation((input: string | URL | Request) => {
+        requestedUrl = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({ items: [], next_cursor: null }),
+        });
+      });
+
+      await fetchProjectIssues('KAN', { lod: 'summary', limit: 50 });
+      expect(requestedUrl).toContain('lod=summary');
+      expect(requestedUrl).toContain('limit=50');
+
+      await fetchProjectIssues('KAN', { lod: 'full' });
+      expect(requestedUrl).toContain('lod=full');
+    });
+
+    it('fetchAllProjectIssues defaults to lod=summary and traverses pages', async () => {
+      const urls: string[] = [];
+      globalThis.fetch = vi.fn().mockImplementation((input: string | URL | Request) => {
+        const u = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        urls.push(u);
+        if (urls.length === 1) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({
+              items: [{ id: '1', key: 'KAN-1', summary: 'Item 1' }],
+              next_cursor: 'cursor-2',
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            items: [{ id: '2', key: 'KAN-2', summary: 'Item 2' }],
+            next_cursor: null,
+          }),
+        });
+      });
+
+      const res = await fetchAllProjectIssues('KAN');
+      expect(res.items).toHaveLength(2);
+      expect(res.pagesFetched).toBe(2);
+      expect(urls[0]).toContain('lod=summary');
+      expect(urls[1]).toContain('lod=summary');
+    });
+
+    it('fetchStagedProjectIssues executes Phase 1 onPhase1 callback immediately and hydrates remaining pages in Phase 2', async () => {
+      const phase1Callbacks: { itemsCount: number; hasMore: boolean }[] = [];
+      const urls: string[] = [];
+
+      globalThis.fetch = vi.fn().mockImplementation((input: string | URL | Request) => {
+        const u = typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url;
+        urls.push(u);
+        if (urls.length === 1) {
+          return Promise.resolve({
+            ok: true,
+            json: () => Promise.resolve({
+              items: [
+                { id: '1', key: 'KAN-1', summary: 'Page 1 Item 1' },
+                { id: '2', key: 'KAN-2', summary: 'Page 1 Item 2' },
+              ],
+              next_cursor: 'cursor-phase2',
+            }),
+          });
+        }
+        return Promise.resolve({
+          ok: true,
+          json: () => Promise.resolve({
+            items: [
+              { id: '3', key: 'KAN-3', summary: 'Page 2 Item 3' },
+            ],
+            next_cursor: null,
+          }),
+        });
+      });
+
+      const res = await fetchStagedProjectIssues('KAN', {
+        onPhase1: (items, hasMore) => {
+          phase1Callbacks.push({ itemsCount: items.length, hasMore });
+        },
+      });
+
+      expect(phase1Callbacks).toEqual([
+        { itemsCount: 2, hasMore: true },
+      ]);
+      expect(res.items).toHaveLength(3);
+      expect(res.pagesFetched).toBe(2);
+      expect(urls[0]).toContain('lod=summary');
+    });
+
+    it('fetchStagedProjectIssues aborts cleanly when signal is aborted', async () => {
+      const controller = new AbortController();
+      controller.abort();
+
+      await expect(
+        fetchStagedProjectIssues('KAN', { signal: controller.signal }),
+      ).rejects.toThrow();
+    });
+
+    it('fetchStagedProjectIssues returns empty for blank projectKey', async () => {
+      const res = await fetchStagedProjectIssues('');
+      expect(res.items).toEqual([]);
+      expect(res.pagesFetched).toBe(0);
+    });
   });
 });

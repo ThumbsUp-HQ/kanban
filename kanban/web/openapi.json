@@ -6594,7 +6594,14 @@
         "description": "Canonical issue representation returned by all issue endpoints.",
         "properties": {
           "access_manifest": {
-            "$ref": "#/components/schemas/AccessManifest",
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/AccessManifest"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "description": "Anti-enumeration access manifest metadata (S3.4)"
           },
           "archive_eligibility": {
@@ -6686,9 +6693,16 @@
             "title": "Cycle Id"
           },
           "description_markdown": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
             "description": "Canonical UTF-8 Markdown description body",
-            "title": "Description Markdown",
-            "type": "string"
+            "title": "Description Markdown"
           },
           "description_sha256": {
             "description": "Hex-encoded SHA-256 digest of description_markdown for ETag concurrency",
@@ -6860,14 +6874,12 @@
           "object_id",
           "key",
           "summary",
-          "description_markdown",
           "description_sha256",
           "state",
           "priority",
           "board_rank",
           "created_by_id",
           "provenance",
-          "access_manifest",
           "capabilities",
           "created_at",
           "updated_at",
@@ -17959,8 +17971,8 @@
   "info": {
     "title": "👍kanban API",
     "version": "2.0.0",
-    "x-build-commit": "afa359979dff",
-    "x-openapi-bundle-hash": "3cfd6d217e9fbf889877ed98bf8afaefacb756ad6670a6d2177d51e0375045fc"
+    "x-build-commit": "aef08a3f731b",
+    "x-openapi-bundle-hash": "65a536326d8a71ec6c3e20a18baf107f1eaa96c8d77cae598641727ec15fa5dc"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -27575,6 +27587,23 @@
             }
           },
           {
+            "description": "Level of detail tier: summary, standard, or full",
+            "in": "query",
+            "name": "lod",
+            "required": false,
+            "schema": {
+              "default": "full",
+              "description": "Level of detail tier: summary, standard, or full",
+              "enum": [
+                "summary",
+                "standard",
+                "full"
+              ],
+              "title": "Lod",
+              "type": "string"
+            }
+          },
+          {
             "in": "header",
             "name": "if-none-match",
             "required": false,
@@ -32835,6 +32864,23 @@
               ],
               "description": "Optional workflow state_group filter",
               "title": "State Group"
+            }
+          },
+          {
+            "description": "Level of detail tier: summary, standard, or full",
+            "in": "query",
+            "name": "lod",
+            "required": false,
+            "schema": {
+              "default": "full",
+              "description": "Level of detail tier: summary, standard, or full",
+              "enum": [
+                "summary",
+                "standard",
+                "full"
+              ],
+              "title": "Lod",
+              "type": "string"
             }
           }
         ],

@@ -64,6 +64,10 @@ async def get_issue(  # noqa: PLR0913, PLR0917
     request: Request,
     taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
     workspace: Annotated[str | None, Query(description="Optional workspace slug or UUID")] = None,
+    lod: Annotated[
+        Literal["summary", "standard", "full"],
+        Query(description="Level of detail tier: summary, standard, or full"),
+    ] = "full",
     if_none_match: Annotated[str | None, Header()] = None,
 ) -> IssueResponse | Response:
     """Return an issue, or 304 when If-None-Match matches current issue ETag."""
@@ -71,7 +75,7 @@ async def get_issue(  # noqa: PLR0913, PLR0917
     async with timing_floor(floor_ms=25.0):
         issue = await svc.get_issue_or_404(session, caller, issue_key, workspace_ref=workspace_ref)
         await taint_recorder.record_project_ids([issue.project_id])
-        serialized = await svc.serialize_issue(session, caller, issue)
+        serialized = await svc.serialize_issue(session, caller, issue, lod=lod)
         desc_sha = issue.description_sha256.hex() if issue.description_sha256 else ""
         etag = serialized.etag or (f'"{desc_sha}"' if desc_sha else '""')
         etag_hex = etag.strip('"')
@@ -146,6 +150,10 @@ async def list_issues(  # noqa: PLR0913
         list[StateGroupFilter] | None,
         Query(description="Optional workflow state_group filter"),
     ] = None,
+    lod: Annotated[
+        Literal["summary", "standard", "full"],
+        Query(description="Level of detail tier: summary, standard, or full"),
+    ] = "full",
 ) -> IssueList:
     """List RLS-visible issues within a project using keyset pagination."""
     if not include_archived and only_archived:
@@ -165,6 +173,7 @@ async def list_issues(  # noqa: PLR0913
             include_archived=include_archived,
             only_archived=only_archived,
             state_group=state_group,
+            lod=lod,
         )
         await taint_recorder.record_project_ids([project_ref])
         return res

@@ -327,15 +327,48 @@ function IssueSurfaceContent({
     data: issue,
     error,
     isLoading,
+    isPlaceholderData,
     refetch,
   } = useQuery<IssueDetail>({
     queryKey: qk.issue(issueKey),
     queryFn: async () => {
       const raw = (await apiClient.get(
         '/api/v1/issues/{issue_key}',
-        { params: { issue_key: issueKey } },
+        {
+          params: { issue_key: issueKey },
+          query: { lod: 'full' },
+        },
       )) as unknown as IssueDetail;
       return normalizeIssueDetail(raw, projectKey);
+    },
+    placeholderData: () => {
+      if (issuesList && issuesList.length > 0) {
+        const found = issuesList.find((it) => it.key === issueKey || it.id === issueKey);
+        if (found) {
+          return normalizeIssueDetail(found as unknown as IssueDetail, projectKey);
+        }
+      }
+      const cachedQueries = queryClient.getQueriesData({
+        queryKey: ['issues'],
+      });
+      for (const [, queryData] of cachedQueries) {
+        if (!queryData) continue;
+        let items: IssueItem[] = [];
+        if (Array.isArray(queryData)) {
+          items = queryData as IssueItem[];
+        } else if (
+          typeof queryData === 'object' &&
+          'items' in queryData &&
+          Array.isArray((queryData as { items?: unknown }).items)
+        ) {
+          items = (queryData as { items: IssueItem[] }).items;
+        }
+        const match = items.find((it) => it.key === issueKey || it.id === issueKey);
+        if (match) {
+          return normalizeIssueDetail(match as unknown as IssueDetail, projectKey);
+        }
+      }
+      return undefined;
     },
     staleTime: 60_000,
   });
@@ -1237,6 +1270,15 @@ function IssueSurfaceContent({
               </button>
             </div>
           </div>
+        ) : (isPlaceholderData || currentIssue.description_markdown === undefined || currentIssue.description_markdown === null) ? (
+          <div
+            data-testid="issue-description-skeleton"
+            className="surface__description-skeleton surface__skeleton"
+            aria-busy="true"
+            aria-label="Loading description..."
+          >
+            <div className="surface__skeleton-line surface__skeleton-line--body" />
+          </div>
         ) : (
           <div className="surface__description-wrap">
             <div
@@ -1805,6 +1847,15 @@ function IssueSurfaceContent({
                               Cancel
                             </button>
                           </div>
+                        </div>
+                      ) : (isPlaceholderData || currentIssue.description_markdown === undefined || currentIssue.description_markdown === null) ? (
+                        <div
+                          data-testid="issue-description-skeleton"
+                          className="surface__description-skeleton surface__skeleton"
+                          aria-busy="true"
+                          aria-label="Loading description..."
+                        >
+                          <div className="surface__skeleton-line surface__skeleton-line--body" />
                         </div>
                       ) : (
                         <div className="surface__description-wrap">

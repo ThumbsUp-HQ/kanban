@@ -13,6 +13,7 @@ import * as breakpoints from '../../styles/breakpoints';
 import * as autoConvertPasteMod from '../../editor/clipboard/autoConvertPaste';
 import * as hiddenDomPrunerMod from '../../editor/clipboard/hiddenDomPruner';
 import * as viewsApi from '../views/viewsApi';
+import type { IssueItem } from '../views/viewsApi';
 import * as railApi from '../drawer-rail/railApi';
 import * as clipboardUtils from '../../utils/clipboard';
 
@@ -2391,6 +2392,151 @@ describe('IssueSurface', () => {
       });
       expect(downloadLink.getAttribute('href')).toContain('/api/v1/attachments/pdf_1?download=1');
 
+      unmount();
+    });
+
+    it('KAN-309: seeds placeholderData from summary items for immediate header/state/priority display and shows issue-description-skeleton during lazy lod=full hydration', async () => {
+      const summaryItem: IssueItem = {
+        id: '01931234-5678-7000-8000-000000000309',
+        key: 'KAN-309',
+        summary: 'Instant Summary Title from Staged Load',
+        state: { id: 's-in-prog', name: 'In Progress', group: 'started' },
+        priority: { slug: 'urgent', label: 'Urgent', emoji: '🔥' },
+        assignees: [
+          {
+            id: 'asg-309',
+            kind: 'principal',
+            principal: { id: 'u-309', handle: 'architect', display_name: 'Lead Architect', type: 'USER' },
+          },
+        ],
+      };
+
+      const fullItem: IssueDetail = {
+        id: summaryItem.id,
+        key: summaryItem.key,
+        object_id: summaryItem.id,
+        project_key: 'KAN',
+        summary: summaryItem.summary,
+        state: summaryItem.state,
+        priority: { slug: 'urgent', label: 'Urgent', emoji: '🔥' },
+        etag: '"etag-309-full"',
+        description_markdown: '### Detailed Specification Hydrated via lod=full\n\nAll lazy data loaded.',
+        capabilities: ['EDIT', 'TRANSITION', 'COMMENT'],
+      };
+
+      let resolveFullIssue!: (val: unknown) => void;
+      const fullPromise = new Promise((resolve) => {
+        resolveFullIssue = resolve;
+      });
+
+      const getSpy = vi.spyOn(apiClient, 'get').mockImplementation((path: string, options?: unknown) => {
+        if (typeof path === 'string' && path.includes('issues/')) {
+          const opts = options as { query?: { lod?: string } } | undefined;
+          expect(opts?.query?.lod).toBe('full');
+          return fullPromise.then(() => fullItem);
+        }
+        return Promise.resolve({});
+      });
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const { unmount } = render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+            <IssueSurfaceRoot
+              mode="drawer"
+              issueKey="KAN-309"
+              projectKey="KAN"
+              issuesList={[summaryItem]}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      // Instant hydration from placeholderData: header, summary title, state, priority, assignees exist immediately
+      expect(screen.getByText('Instant Summary Title from Staged Load')).toBeDefined();
+      expect(screen.getByText('Lead Architect')).toBeDefined();
+      expect(screen.getByText('Urgent')).toBeDefined();
+
+      // Description skeleton is shown while lod=full request is in-flight
+      expect(screen.getByTestId('issue-description-skeleton')).toBeDefined();
+      expect(screen.queryByText('Detailed Specification Hydrated via lod=full')).toBeNull();
+
+      // Resolve full issue
+      resolveFullIssue(null);
+
+      // Skeleton replaced by rendered markdown description
+      await waitFor(() => {
+        expect(screen.queryByTestId('issue-description-skeleton')).toBeNull();
+      });
+      expect(screen.getByText('Detailed Specification Hydrated via lod=full')).toBeDefined();
+
+      getSpy.mockRestore();
+      unmount();
+    });
+
+    it('KAN-309: renders issue-description-skeleton in split mode while description loads', async () => {
+      const summaryItem: IssueItem = {
+        id: '01931234-5678-7000-8000-000000000310',
+        key: 'KAN-310',
+        summary: 'Split Mode Summary Title',
+        state: { id: 's-todo', name: 'Todo', group: 'unstarted' },
+        priority: { slug: 'low', label: 'Low', emoji: '☕' },
+      };
+
+      const fullItem: IssueDetail = {
+        id: summaryItem.id,
+        key: summaryItem.key,
+        object_id: summaryItem.id,
+        project_key: 'KAN',
+        summary: summaryItem.summary,
+        state: summaryItem.state,
+        priority: { slug: 'low', label: 'Low', emoji: '☕' },
+        etag: '"etag-310-full"',
+        description_markdown: '### Split Mode Markdown Body',
+        capabilities: ['EDIT', 'TRANSITION'],
+      };
+
+      let resolveFull!: (val: unknown) => void;
+      const fullPromise = new Promise((resolve) => {
+        resolveFull = resolve;
+      });
+
+      const getSpy = vi.spyOn(apiClient, 'get').mockImplementation((path: string) => {
+        if (typeof path === 'string' && path.includes('issues/')) {
+          return fullPromise.then(() => fullItem);
+        }
+        return Promise.resolve({});
+      });
+
+      const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const { unmount } = render(
+        <QueryClientProvider client={queryClient}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues?peek=KAN-310']}>
+            <IssueSurfaceRoot
+              mode="split"
+              issueKey="KAN-310"
+              projectKey="KAN"
+              issuesList={[summaryItem]}
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      // Instant title rendered
+      expect(screen.getByText('Split Mode Summary Title')).toBeDefined();
+
+      // Skeleton visible in split mode
+      expect(screen.getByTestId('issue-description-skeleton')).toBeDefined();
+
+      // Resolve full issue
+      resolveFull(null);
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('issue-description-skeleton')).toBeNull();
+      });
+      expect(screen.getByText('Split Mode Markdown Body')).toBeDefined();
+
+      getSpy.mockRestore();
       unmount();
     });
   });
