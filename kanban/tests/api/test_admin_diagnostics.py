@@ -39,6 +39,7 @@ from kanban.auth.sessions.csrf import (
 from kanban.auth.sessions.resolver import SessionCookieResolver
 from kanban.auth.sessions.service import SessionService
 from kanban.jobs import JobRegistry, JobRunner, JobScheduler
+from kanban.ops.build_info import resolve_platform_version
 from kanban.realtime.hub import RealtimeHub
 from kanban.sandbox.wasm_runner import TierAWasmRunner, WasmScriptRunner
 from kanban.security.keys import KeyMaterial
@@ -350,6 +351,10 @@ async def test_admin_diagnostics_security_and_redaction(
             assert sub in data_sa["subsystems"]
             assert sub in data_sa
             assert data_sa["subsystems"][sub]["status"] in ("healthy", "degraded", "unhealthy")
+
+        assert "build" in data_sa
+        assert data_sa["build"]["version"] == resolve_platform_version()
+        assert data_sa["build"]["openapi_version"] == resolve_platform_version()
 
         # Verify zero secret leakage
         raw_text = res_sa.text

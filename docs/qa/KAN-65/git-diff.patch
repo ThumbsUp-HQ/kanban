@@ -1,0 +1,1729 @@
+diff --git a/deploy/caddy/Caddyfile b/deploy/caddy/Caddyfile
+index 45110525..ec90cf4a 100644
+--- a/deploy/caddy/Caddyfile
++++ b/deploy/caddy/Caddyfile
+@@ -18,25 +18,61 @@
+ 		-Server
+ 	}
+ 
++	@internal_routes path /internal/* /api/v1/internal/*
++	respond @internal_routes 404
++
+ 	handle /api/* {
+-		reverse_proxy kanban-api:8000
++		reverse_proxy kanban-api:8000 {
++			header_up -X-Client-Cert-Pem
++			header_up -X-Client-Cert-Der-B64
++			header_up -X-Client-Cert-CN
++			header_up -X-SSL-Client-Cert
++			header_up -X-KB-Service-Principal
++			header_up -X-KB-Internal-Auth
++			header_up -X-KB-Internal-Timestamp
++			header_up -X-KB-Internal-Signature
++		}
+ 	}
+ 
+ 	handle /ws {
+ 		reverse_proxy kanban-api:8000 {
+ 			flush_interval -1
++			header_up -X-Client-Cert-Pem
++			header_up -X-Client-Cert-Der-B64
++			header_up -X-Client-Cert-CN
++			header_up -X-SSL-Client-Cert
++			header_up -X-KB-Service-Principal
++			header_up -X-KB-Internal-Auth
++			header_up -X-KB-Internal-Timestamp
++			header_up -X-KB-Internal-Signature
+ 		}
+ 	}
+ 
+ 	handle /sse* {
+ 		reverse_proxy kanban-api:8000 {
+ 			flush_interval -1
++			header_up -X-Client-Cert-Pem
++			header_up -X-Client-Cert-Der-B64
++			header_up -X-Client-Cert-CN
++			header_up -X-SSL-Client-Cert
++			header_up -X-KB-Service-Principal
++			header_up -X-KB-Internal-Auth
++			header_up -X-KB-Internal-Timestamp
++			header_up -X-KB-Internal-Signature
+ 		}
+ 	}
+ 
+ 	handle /mcp/* {
+ 		reverse_proxy mcp-server:8000 {
+ 			flush_interval -1
++			header_up -X-Client-Cert-Pem
++			header_up -X-Client-Cert-Der-B64
++			header_up -X-Client-Cert-CN
++			header_up -X-SSL-Client-Cert
++			header_up -X-KB-Service-Principal
++			header_up -X-KB-Internal-Auth
++			header_up -X-KB-Internal-Timestamp
++			header_up -X-KB-Internal-Signature
+ 		}
+ 	}
+ 
+@@ -52,3 +88,27 @@
+ 		header @html Cache-Control "no-cache"
+ 	}
+ }
++
++:8444 {
++	tls {
++		protocols tls1.3
++		client_auth {
++			mode require
++		}
++	}
++
++	@runner_ws path /api/v1/runners/ws /api/v1/runners/ws/*
++	handle @runner_ws {
++		reverse_proxy kanban-api:8000 {
++			flush_interval -1
++			header_up X-Client-Cert-Pem {http.request.tls.client.certificate_pem}
++			header_up X-Client-Cert-Der-B64 {http.request.tls.client.certificate_der_base64}
++			header_up -X-KB-Service-Principal
++			header_up -X-KB-Internal-Auth
++			header_up -X-KB-Internal-Timestamp
++			header_up -X-KB-Internal-Signature
++		}
++	}
++
++	respond 404
++}
+diff --git a/deploy/compose/docker-compose.yml b/deploy/compose/docker-compose.yml
+new file mode 100644
+index 00000000..abb7d229
+--- /dev/null
++++ b/deploy/compose/docker-compose.yml
+@@ -0,0 +1,246 @@
++services:
++  reverse-proxy:
++    image: caddy:2.8-alpine@sha256:af32e97399febea808609119bb21544d0265c58a02836576e32a2d082c262c17
++    restart: unless-stopped
++    read_only: true
++    cap_drop:
++      - ALL
++    cap_add:
++      - NET_BIND_SERVICE
++    security_opt:
++      - "no-new-privileges:true"
++    pids_limit: 100
++    mem_limit: 256m
++    tmpfs:
++      - /tmp
++      - /var/run
++    ports:
++      - "80:80"
++      - "443:443"
++      - "443:443/udp"
++      - "8444:8444"
++    networks:
++      - edge_net
++      - app_net
++    volumes:
++      - caddy_data:/data
++      - caddy_config:/config
++      - web_dist:/srv/www:ro
++      - ../caddy/Caddyfile:/etc/caddy/Caddyfile:ro
++    environment:
++      KB_DOMAIN: "${KB_DOMAIN:-localhost}"
++
++  kanban-api:
++    build:
++      context: ../..
++      target: runtime-slim
++    image: kanban:runtime-slim
++    restart: unless-stopped
++    read_only: true
++    user: "65532:65532"
++    cap_drop:
++      - ALL
++    security_opt:
++      - "no-new-privileges:true"
++    pids_limit: 200
++    mem_limit: 512m
++    tmpfs:
++      - /tmp
++    command:
++      - "uvicorn"
++      - "kanban.app:create_app"
++      - "--factory"
++      - "--host"
++      - "0.0.0.0"
++      - "--port"
++      - "8000"
++      - "--proxy-headers"
++      - "--forwarded-allow-ips=*"
++    networks:
++      - app_net
++      - data_net
++    depends_on:
++      postgres:
++        condition: service_healthy
++      kanban-migrate:
++        condition: service_completed_successfully
++    environment:
++      KB_TRUSTED_PROXIES: "${KB_TRUSTED_PROXIES:-172.28.0.0/16,127.0.0.1/32}"
++    secrets:
++      - postgres_password
++      - master_kek
++
++  kanban-migrate:
++    image: kanban:runtime-slim
++    restart: "no"
++    read_only: true
++    user: "65532:65532"
++    cap_drop:
++      - ALL
++    security_opt:
++      - "no-new-privileges:true"
++    pids_limit: 100
++    mem_limit: 256m
++    tmpfs:
++      - /tmp
++    command: ["alembic", "upgrade", "head"]
++    networks:
++      - data_net
++    depends_on:
++      postgres:
++        condition: service_healthy
++    secrets:
++      - postgres_password
++
++  mcp-server:
++    image: kanban:runtime-slim
++    restart: unless-stopped
++    read_only: true
++    user: "65532:65532"
++    cap_drop:
++      - ALL
++    security_opt:
++      - "no-new-privileges:true"
++    pids_limit: 100
++    mem_limit: 512m
++    tmpfs:
++      - /tmp
++    command: ["python", "-m", "kanban.mcp_placeholder"]
++    networks:
++      - app_net
++
++  agent-runtime:
++    image: kanban:runtime-slim
++    restart: unless-stopped
++    read_only: true
++    user: "65532:65532"
++    cap_drop:
++      - ALL
++    security_opt:
++      - "no-new-privileges:true"
++    pids_limit: 100
++    mem_limit: 1024m
++    tmpfs:
++      - /tmp
++    command: ["python", "-m", "kanban.agent_placeholder"]
++    networks:
++      - app_net
++      - egress_llm_net
++
++  script-sandbox:
++    image: kanban:sandbox
++    profiles:
++      - sandbox
++    restart: unless-stopped
++    read_only: true
++    cap_drop:
++      - ALL
++    security_opt:
++      - "no-new-privileges:true"
++    pids_limit: 50
++    mem_limit: 256m
++    tmpfs:
++      - /tmp
++    networks:
++      - sandbox_net
++
++  outbox-relay:
++    image: kanban:runtime-slim
++    restart: unless-stopped
++    read_only: true
++    user: "65532:65532"
++    cap_drop:
++      - ALL
++    security_opt:
++      - "no-new-privileges:true"
++    pids_limit: 100
++    mem_limit: 256m
++    tmpfs:
++      - /tmp
++    command: ["python", "-m", "database.outbox.relay"]
++    networks:
++      - data_net
++    depends_on:
++      kanban-migrate:
++        condition: service_completed_successfully
++    secrets:
++      - postgres_password
++
++  postgres:
++    image: pgvector/pgvector:pg16@sha256:0dd3149a06e4579a0d70d8fef9945636cd514005e7237deb27f9b67886f8dc4f
++    restart: unless-stopped
++    read_only: true
++    cap_drop:
++      - ALL
++    security_opt:
++      - "no-new-privileges:true"
++    pids_limit: 200
++    mem_limit: 1024m
++    tmpfs:
++      - /tmp
++      - /var/run/postgresql
++    volumes:
++      - pgdata:/var/lib/postgresql/data
++    environment:
++      POSTGRES_DB: "kanban"
++      POSTGRES_USER: "postgres"
++      POSTGRES_PASSWORD_FILE: "/run/secrets/postgres_password"
++    networks:
++      - data_net
++    secrets:
++      - postgres_password
++    healthcheck:
++      test: ["CMD-SHELL", "pg_isready -U postgres"]
++      interval: 5s
++      timeout: 5s
++      retries: 5
++
++  valkey:
++    image: valkey/valkey:8.0-alpine@sha256:19f0b3d350f5e6de618086d79ecdc9c474ab159bebb16ed95a92e4211562fee5
++    restart: unless-stopped
++    read_only: true
++    cap_drop:
++      - ALL
++    security_opt:
++      - "no-new-privileges:true"
++    pids_limit: 100
++    mem_limit: 256m
++    tmpfs:
++      - /tmp
++    volumes:
++      - valkeydata:/data
++    networks:
++      - data_net
++    healthcheck:
++      test: ["CMD", "valkey-cli", "ping"]
++      interval: 5s
++      timeout: 5s
++      retries: 5
++
++networks:
++  edge_net:
++    driver: bridge
++  app_net:
++    internal: true
++    ipam:
++      config:
++        - subnet: 172.28.0.0/16
++  data_net:
++    internal: true
++  sandbox_net:
++    internal: true
++  egress_llm_net:
++    driver: bridge
++
++secrets:
++  postgres_password:
++    file: ../secrets/postgres_password.txt
++  master_kek:
++    file: ../secrets/master_kek.txt
++
++volumes:
++  caddy_data:
++  caddy_config:
++  web_dist:
++  pgdata:
++  valkeydata:
+diff --git a/kanban/security/headers.py b/kanban/security/headers.py
+index 8f52e6ee..843c7a42 100644
+--- a/kanban/security/headers.py
++++ b/kanban/security/headers.py
+@@ -2,18 +2,26 @@
+ 
+ Implements the hardened production HTTP response headers mandated by Section 5.4,
+ including the strict Content-Security-Policy, anti-framing, nosniff, and
+-standalone cleartext loopback protections.
++standalone cleartext loopback protections, as well as spoof-resistant client IP
++resolution with trusted proxy traversal.
+ """
+ 
+ from __future__ import annotations
+ 
+ import contextlib
++import ipaddress
+ import json
+-from typing import TYPE_CHECKING, Final
++import os
++from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network
++from typing import TYPE_CHECKING, Any, Final
+ 
+ from starlette.datastructures import Headers
+ 
++from kanban.settings import get_settings
++
+ if TYPE_CHECKING:
++    from collections.abc import Mapping, Sequence
++
+     from starlette.types import ASGIApp, Message, Receive, Scope, Send
+ 
+     from kanban.settings import Settings
+@@ -118,6 +126,181 @@ def _is_host_allowed(host_name: str, allowed_hosts: frozenset[str] | set[str]) -
+     return False
+ 
+ 
++def _get_raw_trusted_proxies() -> str:
++    """Retrieve raw trusted proxies string from environment or application settings."""
++    raw_env = os.environ.get("KB_TRUSTED_PROXIES") or os.environ.get("KANBAN_TRUSTED_PROXIES", "")
++    if not raw_env.strip():
++        try:
++            raw_env = get_settings().trusted_proxies
++        except (RuntimeError, ValueError):
++            return ""
++    return raw_env
++
++
++def _parse_trusted_networks(
++    trusted: Sequence[IPv4Network | IPv6Network | str] | str | None,
++) -> tuple[IPv4Network | IPv6Network, ...]:
++    """Parse trusted proxy CIDR entries from sequence, string, or environment."""
++    if trusted is None:
++        raw_str = _get_raw_trusted_proxies()
++        entries: Sequence[IPv4Network | IPv6Network | str] = [
++            item.strip() for item in raw_str.replace(" ", ",").split(",") if item.strip()
++        ]
++    elif isinstance(trusted, str):
++        entries = [item.strip() for item in trusted.replace(" ", ",").split(",") if item.strip()]
++    else:
++        entries = trusted
++
++    parsed_list: list[IPv4Network | IPv6Network] = []
++    for item in entries:
++        if isinstance(item, (IPv4Network, IPv6Network)):
++            parsed_list.append(item)
++            continue
++        token = item.strip()
++        if not token:
++            continue
++        try:
++            parsed_list.append(ipaddress.ip_network(token, strict=False))
++        except ValueError:
++            continue
++    return tuple(parsed_list)
++
++
++def _is_trusted(
++    ip: IPv4Address | IPv6Address,
++    trusted_networks: Sequence[IPv4Network | IPv6Network],
++) -> bool:
++    """Determine whether an IP address falls within configured trusted proxy CIDRs."""
++    return any(ip in net for net in trusted_networks)
++
++
++def _format_ip(ip: IPv4Address | IPv6Address) -> str:
++    """Format IP address normalizing IPv4-mapped IPv6 and bucketing IPv6 by /64."""
++    if isinstance(ip, IPv6Address):
++        if ip.ipv4_mapped is not None:
++            return str(ip.ipv4_mapped)
++        network = IPv6Network(f"{ip}/64", strict=False)
++        return f"{network.network_address}/64"
++    return str(ip)
++
++
++def _extract_direct_peer(scope: Mapping[str, Any]) -> IPv4Address | IPv6Address | str:
++    """Extract and normalize the direct peer IP from the ASGI connection scope."""
++    if hasattr(scope, "scope"):
++        scope = scope.scope
++    client_info = scope.get("client")
++    direct_peer_str: str = ""
++    if client_info and len(client_info) > 0 and client_info[0]:
++        direct_peer_str = str(client_info[0]).strip().strip("[]")
++
++    if not direct_peer_str:
++        return ipaddress.ip_address("127.0.0.1")
++
++    try:
++        ip = ipaddress.ip_address(direct_peer_str)
++    except ValueError:
++        return direct_peer_str
++    if isinstance(ip, IPv6Address) and ip.ipv4_mapped is not None:
++        return ip.ipv4_mapped
++    return ip
++
++
++def _extract_header_val(scope: Mapping[str, Any], header_name_bytes: bytes) -> str | None:
++    """Extract decoded header string from ASGI headers if present."""
++    headers: Sequence[tuple[bytes, bytes]] = scope.get("headers", ())
++    for key, value in headers:
++        if key.lower() == header_name_bytes:
++            try:
++                decoded = value.decode("utf-8").strip()
++            except UnicodeDecodeError:
++                return None
++            return decoded or None
++    return None
++
++
++def _resolve_from_xff(
++    xff_str: str,
++    trusted_nets: Sequence[IPv4Network | IPv6Network],
++    direct_ip: IPv4Address | IPv6Address,
++) -> IPv4Address | IPv6Address:
++    """Walk X-Forwarded-For entries right-to-left and return first untrusted address."""
++    entries = [elem.strip().strip("[]") for elem in xff_str.split(",") if elem.strip()]
++    if not entries:
++        return direct_ip
++
++    leftmost: IPv4Address | IPv6Address | None = None
++    for entry in reversed(entries):
++        try:
++            candidate = ipaddress.ip_address(entry)
++        except ValueError:
++            return direct_ip
++
++        if isinstance(candidate, IPv6Address) and candidate.ipv4_mapped is not None:
++            candidate = candidate.ipv4_mapped
++
++        leftmost = candidate
++        if not _is_trusted(candidate, trusted_nets):
++            return candidate
++
++    return leftmost or direct_ip
++
++
++def _resolve_from_real_ip(
++    real_ip_str: str,
++    direct_ip: IPv4Address | IPv6Address,
++) -> IPv4Address | IPv6Address:
++    """Parse X-Real-IP candidate returning normalized address or direct peer fallback."""
++    candidate_str = real_ip_str.strip().strip("[]")
++    try:
++        candidate = ipaddress.ip_address(candidate_str)
++    except ValueError:
++        return direct_ip
++    else:
++        if isinstance(candidate, IPv6Address) and candidate.ipv4_mapped is not None:
++            return candidate.ipv4_mapped
++        return candidate
++
++
++def resolve_client_ip(
++    scope: Mapping[str, Any],
++    trusted_proxies: Sequence[IPv4Network | IPv6Network | str] | str | None = None,
++) -> str:
++    """Resolve spoof-resistant client IP address from ASGI connection scope.
++
++    Uses scope['client'][0] as the direct peer. X-Forwarded-For and X-Real-IP headers
++    are inspected ONLY if the direct peer is inside trusted_proxies (or KB_TRUSTED_PROXIES /
++    KANBAN_TRUSTED_PROXIES).
++    Untrusted peers have their direct peer IP returned immediately, ignoring all spoofed headers.
++    When the direct peer is trusted, X-Forwarded-For is traversed right-to-left. If absent,
++    X-Real-IP is inspected. Malformed entries immediately fall back to the direct peer.
++    IPv4-mapped IPv6 addresses are normalized to IPv4. IPv6 clients are bucketed by /64 prefix.
++    """
++    if hasattr(scope, "scope"):
++        scope = scope.scope
++    peer = _extract_direct_peer(scope)
++    if isinstance(peer, str):
++        return peer
++
++    trusted_nets = _parse_trusted_networks(trusted_proxies)
++    if not trusted_nets or not _is_trusted(peer, trusted_nets):
++        return _format_ip(peer)
++
++    # 1. Check X-Forwarded-For
++    xff_str = _extract_header_val(scope, b"x-forwarded-for")
++    if xff_str:
++        candidate = _resolve_from_xff(xff_str, trusted_nets, peer)
++        if candidate != peer or not _is_trusted(candidate, trusted_nets):
++            return _format_ip(candidate)
++
++    # 2. Fall back to X-Real-IP if X-Forwarded-For is absent
++    x_real_ip = _extract_header_val(scope, b"x-real-ip")
++    if x_real_ip:
++        candidate = _resolve_from_real_ip(x_real_ip, peer)
++        return _format_ip(candidate)
++
++    return _format_ip(peer)
++
++
+ class SecurityHeadersMiddleware:
+     """Pure ASGI middleware enforcing hardening headers and standalone Host rules."""
+ 
+diff --git a/kanban/standalone/compose_export.py b/kanban/standalone/compose_export.py
+new file mode 100644
+index 00000000..98a47c6c
+--- /dev/null
++++ b/kanban/standalone/compose_export.py
+@@ -0,0 +1,496 @@
++"""Standalone to production Compose bundle exporter.
++
++Emits hardened 5-network docker-compose.yml, Caddyfile, and .env.production
++carrying over MASTER_KEK and KB_AUTH_PEPPER while configuring trusted proxies,
++runner mTLS listeners, and header stripping.
++"""
++
++from __future__ import annotations
++
++import base64
++import json
++import logging
++import os
++from dataclasses import dataclass
++from typing import TYPE_CHECKING, Any, Final
++
++if TYPE_CHECKING:
++    from pathlib import Path
++
++logger = logging.getLogger("kanban.standalone.compose_export")
++
++ENV_FILE_MODE: Final[int] = 0o600
++
++POSTGRES_IMAGE: Final[str] = (
++    "pgvector/pgvector:pg16@sha256:0dd3149a06e4579a0d70d8fef9945636cd514005e7237deb27f9b67886f8dc4f"
++)
++VALKEY_IMAGE: Final[str] = (
++    "valkey/valkey:8.0-alpine@sha256:19f0b3d350f5e6de618086d79ecdc9c474ab159bebb16ed95a92e4211562fee5"
++)
++CADDY_IMAGE: Final[str] = (
++    "caddy:2.8-alpine@sha256:af32e97399febea808609119bb21544d0265c58a02836576e32a2d082c262c17"
++)
++
++CSP_VALUE: Final[str] = (
++    "default-src 'none'; script-src 'self'; worker-src 'self'; style-src 'self'; "
++    "img-src 'self' blob: data:image/png data:image/webp; font-src 'self'; "
++    "connect-src 'self' wss:; media-src 'self'; object-src 'none'; base-uri 'none'; "
++    "form-action 'self'; frame-ancestors 'none'; require-trusted-types-for 'script'; "
++    "trusted-types kanban-sanitizer dompurify;"
++)
++
++
++def _get_compose_template() -> str:
++    """Return formatted docker-compose.yml content enforcing 5-network isolation."""
++    return f"""services:
++  reverse-proxy:
++    image: {CADDY_IMAGE}
++    restart: unless-stopped
++    read_only: true
++    cap_drop:
++      - ALL
++    cap_add:
++      - NET_BIND_SERVICE
++    security_opt:
++      - "no-new-privileges:true"
++    pids_limit: 100
++    mem_limit: 256m
++    tmpfs:
++      - /tmp
++      - /var/run
++    ports:
++      - "80:80"
++      - "443:443"
++      - "443:443/udp"
++      - "8444:8444"
++    networks:
++      - edge_net
++      - app_net
++    volumes:
++      - caddy_data:/data
++      - caddy_config:/config
++      - web_dist:/srv/www:ro
++      - ./Caddyfile:/etc/caddy/Caddyfile:ro
++    environment:
++      KB_DOMAIN: "${{KB_DOMAIN}}"
++
++  kanban-api:
++    image: kanban:runtime-slim
++    restart: unless-stopped
++    read_only: true
++    user: "65532:65532"
++    cap_drop:
++      - ALL
++    security_opt:
++      - "no-new-privileges:true"
++    pids_limit: 200
++    mem_limit: 512m
++    tmpfs:
++      - /tmp
++    command:
++      - "uvicorn"
++      - "kanban.app:create_app"
++      - "--factory"
++      - "--host"
++      - "0.0.0.0"
++      - "--port"
++      - "8000"
++      - "--proxy-headers"
++      - "--forwarded-allow-ips=*"
++    networks:
++      - app_net
++      - data_net
++    depends_on:
++      postgres:
++        condition: service_healthy
++      kanban-migrate:
++        condition: service_completed_successfully
++    environment:
++      KB_TRUSTED_PROXIES: "${{KB_TRUSTED_PROXIES:-172.28.0.0/16,127.0.0.1/32}}"
++    env_file:
++      - .env.production
++
++  kanban-migrate:
++    image: kanban:runtime-slim
++    restart: "no"
++    read_only: true
++    user: "65532:65532"
++    cap_drop:
++      - ALL
++    security_opt:
++      - "no-new-privileges:true"
++    pids_limit: 100
++    mem_limit: 256m
++    tmpfs:
++      - /tmp
++    command: ["alembic", "upgrade", "head"]
++    networks:
++      - data_net
++    depends_on:
++      postgres:
++        condition: service_healthy
++    env_file:
++      - .env.production
++
++  mcp-server:
++    image: kanban:runtime-slim
++    restart: unless-stopped
++    read_only: true
++    user: "65532:65532"
++    cap_drop:
++      - ALL
++    security_opt:
++      - "no-new-privileges:true"
++    pids_limit: 100
++    mem_limit: 512m
++    tmpfs:
++      - /tmp
++    command: ["python", "-m", "kanban.mcp_placeholder"]
++    networks:
++      - app_net
++
++  agent-runtime:
++    image: kanban:runtime-slim
++    restart: unless-stopped
++    read_only: true
++    user: "65532:65532"
++    cap_drop:
++      - ALL
++    security_opt:
++      - "no-new-privileges:true"
++    pids_limit: 100
++    mem_limit: 1024m
++    tmpfs:
++      - /tmp
++    command: ["python", "-m", "kanban.agent_placeholder"]
++    networks:
++      - app_net
++      - egress_llm_net
++
++  script-sandbox:
++    image: kanban:sandbox
++    profiles:
++      - sandbox
++    restart: unless-stopped
++    read_only: true
++    cap_drop:
++      - ALL
++    security_opt:
++      - "no-new-privileges:true"
++    pids_limit: 50
++    mem_limit: 256m
++    tmpfs:
++      - /tmp
++    networks:
++      - sandbox_net
++
++  outbox-relay:
++    image: kanban:runtime-slim
++    restart: unless-stopped
++    read_only: true
++    user: "65532:65532"
++    cap_drop:
++      - ALL
++    security_opt:
++      - "no-new-privileges:true"
++    pids_limit: 100
++    mem_limit: 256m
++    tmpfs:
++      - /tmp
++    command: ["python", "-m", "database.outbox.relay"]
++    networks:
++      - data_net
++    depends_on:
++      kanban-migrate:
++        condition: service_completed_successfully
++    env_file:
++      - .env.production
++
++  postgres:
++    image: {POSTGRES_IMAGE}
++    restart: unless-stopped
++    read_only: true
++    cap_drop:
++      - ALL
++    security_opt:
++      - "no-new-privileges:true"
++    pids_limit: 200
++    mem_limit: 1024m
++    tmpfs:
++      - /tmp
++      - /var/run/postgresql
++    volumes:
++      - pgdata:/var/lib/postgresql/data
++    environment:
++      POSTGRES_DB: "${{POSTGRES_DB:-kanban}}"
++      POSTGRES_USER: "${{POSTGRES_USER:-postgres}}"
++      POSTGRES_PASSWORD: "${{POSTGRES_PASSWORD}}"
++    networks:
++      - data_net
++    healthcheck:
++      test: ["CMD-SHELL", "pg_isready -U ${{POSTGRES_USER:-postgres}}"]
++      interval: 5s
++      timeout: 5s
++      retries: 5
++
++  valkey:
++    image: {VALKEY_IMAGE}
++    restart: unless-stopped
++    read_only: true
++    cap_drop:
++      - ALL
++    security_opt:
++      - "no-new-privileges:true"
++    pids_limit: 100
++    mem_limit: 256m
++    tmpfs:
++      - /tmp
++    volumes:
++      - valkeydata:/data
++    networks:
++      - data_net
++    healthcheck:
++      test: ["CMD", "valkey-cli", "ping"]
++      interval: 5s
++      timeout: 5s
++      retries: 5
++
++networks:
++  edge_net:
++    driver: bridge
++  app_net:
++    internal: true
++    ipam:
++      config:
++        - subnet: 172.28.0.0/16
++  data_net:
++    internal: true
++  sandbox_net:
++    internal: true
++  egress_llm_net:
++    driver: bridge
++
++volumes:
++  caddy_data:
++  caddy_config:
++  web_dist:
++  pgdata:
++  valkeydata:
++"""
++
++
++def _get_caddyfile_content(domain: str) -> str:
++    """Return formatted Caddyfile for domain terminating TLS 1.3."""
++    return f"""{{
++	servers {{
++		protocols h1 h2 h3
++	}}
++}}
++
++{domain} {{
++	tls {{
++		protocols tls1.3
++	}}
++
++	header {{
++		Content-Security-Policy "{CSP_VALUE}"
++		Strict-Transport-Security "max-age=63072000; includeSubDomains"
++		X-Content-Type-Options "nosniff"
++		Referrer-Policy "no-referrer"
++		X-Frame-Options "DENY"
++		-Server
++	}}
++
++	@internal_routes path /internal/* /api/v1/internal/*
++	respond @internal_routes 404
++
++	handle /api/* {{
++		reverse_proxy kanban-api:8000 {{
++			header_up -X-Client-Cert-Pem
++			header_up -X-Client-Cert-Der-B64
++			header_up -X-Client-Cert-CN
++			header_up -X-SSL-Client-Cert
++			header_up -X-KB-Service-Principal
++			header_up -X-KB-Internal-Auth
++			header_up -X-KB-Internal-Timestamp
++			header_up -X-KB-Internal-Signature
++		}}
++	}}
++
++	handle /ws {{
++		reverse_proxy kanban-api:8000 {{
++			flush_interval -1
++			header_up -X-Client-Cert-Pem
++			header_up -X-Client-Cert-Der-B64
++			header_up -X-Client-Cert-CN
++			header_up -X-SSL-Client-Cert
++			header_up -X-KB-Service-Principal
++			header_up -X-KB-Internal-Auth
++			header_up -X-KB-Internal-Timestamp
++			header_up -X-KB-Internal-Signature
++		}}
++	}}
++
++	handle /sse* {{
++		reverse_proxy kanban-api:8000 {{
++			flush_interval -1
++			header_up -X-Client-Cert-Pem
++			header_up -X-Client-Cert-Der-B64
++			header_up -X-Client-Cert-CN
++			header_up -X-SSL-Client-Cert
++			header_up -X-KB-Service-Principal
++			header_up -X-KB-Internal-Auth
++			header_up -X-KB-Internal-Timestamp
++			header_up -X-KB-Internal-Signature
++		}}
++	}}
++
++	handle /mcp/* {{
++		reverse_proxy mcp-server:8000 {{
++			flush_interval -1
++			header_up -X-Client-Cert-Pem
++			header_up -X-Client-Cert-Der-B64
++			header_up -X-Client-Cert-CN
++			header_up -X-SSL-Client-Cert
++			header_up -X-KB-Service-Principal
++			header_up -X-KB-Internal-Auth
++			header_up -X-KB-Internal-Timestamp
++			header_up -X-KB-Internal-Signature
++		}}
++	}}
++
++	handle {{
++		root * /srv/www
++		try_files {{path}} /index.html
++		file_server {{
++			precompressed br gzip
++		}}
++		@assets path /assets/*
++		header @assets Cache-Control "public, max-age=31536000, immutable"
++		@html path / /index.html
++		header @html Cache-Control "no-cache"
++	}}
++}}
++
++:8444 {{
++	tls {{
++		protocols tls1.3
++		client_auth {{
++			mode require
++		}}
++	}}
++
++	@runner_ws path /api/v1/runners/ws /api/v1/runners/ws/*
++	handle @runner_ws {{
++		reverse_proxy kanban-api:8000 {{
++			flush_interval -1
++			header_up X-Client-Cert-Pem {{http.request.tls.client.certificate_pem}}
++			header_up X-Client-Cert-Der-B64 {{http.request.tls.client.certificate_der_base64}}
++			header_up -X-KB-Service-Principal
++			header_up -X-KB-Internal-Auth
++			header_up -X-KB-Internal-Timestamp
++			header_up -X-KB-Internal-Signature
++		}}
++	}}
++
++	respond 404
++}}
++"""
++
++
++@dataclass(frozen=True)
++class ComposeExportSummary:
++    """Summary of exported standalone to production bundle."""
++
++    out_dir: Path
++    compose_path: Path
++    caddyfile_path: Path
++    env_path: Path
++    carried_over_secrets: bool
++    domain: str
++
++
++def _generate_secret_b64url() -> str:
++    """Generate 256-bit CSPRNG secret encoded as unpadded base64url string."""
++    return base64.urlsafe_b64encode(os.urandom(32)).decode("ascii").rstrip("=")
++
++
++def _load_standalone_keyring(keyring_path: Path) -> dict[str, Any] | None:
++    """Read and validate standalone keyring.json file if present."""
++    if not keyring_path.is_file():
++        return None
++    try:
++        content = keyring_path.read_text(encoding="utf-8")
++        data = json.loads(content)
++        if isinstance(data, dict):
++            return data
++    except (OSError, json.JSONDecodeError, KeyError, ValueError) as err:
++        logger.warning("Could not read standalone keyring at %s: %s", keyring_path, err)
++    return None
++
++
++def export_production_bundle(
++    out_dir: Path,
++    *,
++    keyring_path: Path | None = None,
++    domain: str = "localhost",
++) -> ComposeExportSummary:
++    """Export hardened 5-network multi-container production bundle."""
++    out_dir.mkdir(parents=True, exist_ok=True)
++
++    compose_path = out_dir / "docker-compose.yml"
++    compose_path.write_text(_get_compose_template(), encoding="utf-8")
++
++    caddyfile_path = out_dir / "Caddyfile"
++    caddyfile_path.write_text(_get_caddyfile_content(domain), encoding="utf-8")
++
++    carried_over = False
++    master_kek_b64 = ""
++    pepper_b64 = ""
++
++    if keyring_path is not None:
++        keyring_data = _load_standalone_keyring(keyring_path)
++        if keyring_data:
++            master_kek_b64 = str(keyring_data.get("MASTER_KEK", ""))
++            pepper_b64 = str(keyring_data.get("KB_AUTH_PEPPER", ""))
++            if master_kek_b64 and pepper_b64:
++                carried_over = True
++
++    if not master_kek_b64:
++        master_kek_b64 = _generate_secret_b64url()
++    if not pepper_b64:
++        pepper_b64 = _generate_secret_b64url()
++
++    fresh_session_key_b64 = _generate_secret_b64url()
++    fresh_pg_password = _generate_secret_b64url()
++    fresh_app_password = _generate_secret_b64url()
++    fresh_migrator_password = _generate_secret_b64url()
++    fresh_valkey_password = _generate_secret_b64url()
++
++    env_lines = [
++        f"KB_DOMAIN={domain}",
++        f"KB_MASTER_KEK_B64={master_kek_b64}",
++        f"KB_AUTH_PEPPER_B64={pepper_b64}",
++        f"KB_SESSION_HMAC_KEY_B64={fresh_session_key_b64}",
++        "KB_TRUSTED_PROXIES=172.28.0.0/16",
++        "POSTGRES_DB=kanban",
++        "POSTGRES_USER=postgres",
++        f"POSTGRES_PASSWORD={fresh_pg_password}",
++        f"KANBAN_APP_PASSWORD={fresh_app_password}",
++        f"KANBAN_MIGRATOR_PASSWORD={fresh_migrator_password}",
++        f"VALKEY_PASSWORD={fresh_valkey_password}",
++    ]
++    env_content = "\n".join(env_lines) + "\n"
++
++    env_path = out_dir / ".env.production"
++    env_path.write_text(env_content, encoding="utf-8")
++    env_path.chmod(ENV_FILE_MODE)
++
++    return ComposeExportSummary(
++        out_dir=out_dir,
++        compose_path=compose_path,
++        caddyfile_path=caddyfile_path,
++        env_path=env_path,
++        carried_over_secrets=carried_over,
++        domain=domain,
++    )
+diff --git a/kanban/tests/security/test_caddy_and_trusted_proxies.py b/kanban/tests/security/test_caddy_and_trusted_proxies.py
+new file mode 100644
+index 00000000..503bfba7
+--- /dev/null
++++ b/kanban/tests/security/test_caddy_and_trusted_proxies.py
+@@ -0,0 +1,434 @@
++"""Tests for Caddyfile hardening, runner mTLS listener, and trusted proxy traversal."""
++
++from __future__ import annotations
++
++import ipaddress
++import re
++from pathlib import Path
++from typing import TYPE_CHECKING, Any
++
++import yaml
++from starlette.datastructures import Headers
++
++from kanban.security.headers import (
++    _format_ip,
++    _get_raw_trusted_proxies,
++    _has_forwarded_https_proto,
++    _is_host_allowed,
++    _is_https_request,
++    _normalize_host_idna,
++    _parse_trusted_networks,
++    resolve_client_ip,
++)
++
++if TYPE_CHECKING:
++    import pytest
++
++REPO_ROOT = Path(__file__).resolve().parent.parent.parent.parent
++CADDYFILE_PATH = REPO_ROOT / "deploy" / "caddy" / "Caddyfile"
++COMPOSE_PATH = REPO_ROOT / "deploy" / "compose" / "docker-compose.yml"
++
++
++# ============================================================================
++# Caddyfile Edge Hardening & Dedicated :8444 Runner mTLS Tests
++# ============================================================================
++
++
++def test_caddyfile_blocks_internal_routes_with_404() -> None:
++    """Action 1: Verify /internal/* and /api/v1/internal/* are blocked with 404 at edge."""
++    assert CADDYFILE_PATH.is_file(), f"Missing Caddyfile at {CADDYFILE_PATH}"
++    content = CADDYFILE_PATH.read_text(encoding="utf-8")
++
++    # Verify named matcher and response
++    matcher_pattern = re.compile(
++        r"@internal_routes\s+path\s+/internal/\*\s+/api/v1/internal/\*",
++        re.MULTILINE,
++    )
++    assert matcher_pattern.search(content), "Missing @internal_routes matcher for /internal/*"
++
++    respond_pattern = re.compile(r"respond\s+@internal_routes\s+404", re.MULTILINE)
++    assert respond_pattern.search(content), "Missing respond @internal_routes 404 directive"
++
++
++def test_caddyfile_strips_spoofable_headers_on_public_listener() -> None:
++    """Action 1: Verify client-supplied internal and cert headers are stripped."""
++    content = CADDYFILE_PATH.read_text(encoding="utf-8")
++
++    spoofed_headers = [
++        "-X-Client-Cert-Pem",
++        "-X-Client-Cert-Der-B64",
++        "-X-Client-Cert-CN",
++        "-X-SSL-Client-Cert",
++        "-X-KB-Service-Principal",
++        "-X-KB-Internal-Auth",
++        "-X-KB-Internal-Timestamp",
++        "-X-KB-Internal-Signature",
++    ]
++
++    for header in spoofed_headers:
++        assert f"header_up {header}" in content, (
++            f"Missing header_up {header} directive in public reverse_proxy"
++        )
++
++
++def test_caddyfile_dedicated_8444_runner_mtls_listener() -> None:
++    """Action 2: Verify dedicated :8444 runner mTLS block requiring client auth."""
++    content = CADDYFILE_PATH.read_text(encoding="utf-8")
++
++    # Match :8444 listener block
++    assert ":8444 {" in content, "Missing :8444 site block in Caddyfile"
++
++    # Verify TLS client authentication required
++    assert "mode require" in content, "Missing mode require in client_auth"
++
++    # Verify route restriction: forwards /api/v1/runners/ws
++    assert "@runner_ws path /api/v1/runners/ws /api/v1/runners/ws/*" in content
++
++    # Verify reverse_proxy to kanban-api:8000 with client cert headers
++    assert "reverse_proxy kanban-api:8000" in content
++    assert "header_up X-Client-Cert-Pem {http.request.tls.client.certificate_pem}" in content
++    assert "header_up X-Client-Cert-Der-B64 {http.request.tls.client.certificate_der_base64}" in (
++        content
++    )
++
++    # Verify fallthrough 404 for non-runner routes on :8444
++    mtls_block = content.split(":8444 {")[1]
++    assert "respond 404" in mtls_block, "Missing respond 404 fallback on :8444 listener"
++
++
++# ============================================================================
++# Docker Compose & Network Configuration Tests
++# ============================================================================
++
++
++def test_docker_compose_trusted_proxies_and_runner_mtls_port() -> None:
++    """Action 3: Verify KB_TRUSTED_PROXIES and port 8444 in deploy/compose/docker-compose.yml."""
++    assert COMPOSE_PATH.is_file(), f"Missing docker-compose.yml at {COMPOSE_PATH}"
++    compose_data = yaml.safe_load(COMPOSE_PATH.read_text(encoding="utf-8"))
++
++    services = compose_data["services"]
++    networks = compose_data["networks"]
++
++    # 1. Verify reverse-proxy publishes 8444 for runner mTLS
++    assert "reverse-proxy" in services
++    proxy_ports = services["reverse-proxy"]["ports"]
++    assert "8444:8444" in proxy_ports
++
++    # 2. Verify kanban-api configures KB_TRUSTED_PROXIES for internal Caddy network
++    assert "kanban-api" in services
++    api_env = services["kanban-api"]["environment"]
++    trusted_proxies_cfg = api_env.get("KB_TRUSTED_PROXIES", "")
++    assert "172.28.0.0/16" in trusted_proxies_cfg
++
++    # 3. Verify app_net is internal and specifies subnet 172.28.0.0/16
++    assert "app_net" in networks
++    assert networks["app_net"].get("internal") is True
++    ipam_config = networks["app_net"]["ipam"]["config"]
++    subnets = [cfg.get("subnet") for cfg in ipam_config]
++    assert "172.28.0.0/16" in subnets
++
++
++# ============================================================================
++# Spoof-Resistant resolve_client_ip Tests (kanban.security.headers)
++# ============================================================================
++
++
++def test_resolve_client_ip_untrusted_peer_ignores_spoofed_headers() -> None:
++    """Verify that an untrusted direct peer cannot spoof X-Forwarded-For or X-Real-IP."""
++    trusted = "10.0.0.0/8"
++    untrusted_peer_ip = "203.0.113.9"
++
++    scope: dict[str, Any] = {
++        "type": "http",
++        "client": (untrusted_peer_ip, 54321),
++        "headers": [
++            (b"x-forwarded-for", b"198.51.100.7, 10.0.0.2"),
++            (b"x-real-ip", b"198.51.100.8"),
++        ],
++    }
++
++    # Must ignore all headers and return untrusted direct peer IP
++    resolved = resolve_client_ip(scope, trusted)
++    assert resolved == untrusted_peer_ip
++
++
++def test_resolve_client_ip_trusted_peer_traverses_xff() -> None:
++    """Verify right-to-left traversal of X-Forwarded-For through trusted proxies."""
++    trusted = "10.0.0.0/8, 172.28.0.0/16"
++    proxy_peer_ip = "172.28.0.2"
++
++    scope: dict[str, Any] = {
++        "type": "http",
++        "client": (proxy_peer_ip, 45123),
++        "headers": [
++            (b"x-forwarded-for", b"198.51.100.12, 10.0.0.5"),
++        ],
++    }
++
++    # Direct peer 172.28.0.2 is trusted; intermediate 10.0.0.5 is trusted; client is 198.51.100.12
++    resolved = resolve_client_ip(scope, trusted)
++    assert resolved == "198.51.100.12"
++
++
++def test_resolve_client_ip_trusted_peer_uses_x_real_ip_when_xff_absent() -> None:
++    """Action 3: Verify X-Real-IP is trusted when immediate peer is within trusted_proxies."""
++    trusted = ["172.28.0.0/16"]
++    proxy_peer_ip = "172.28.0.10"
++
++    scope: dict[str, Any] = {
++        "type": "http",
++        "client": (proxy_peer_ip, 45123),
++        "headers": [
++            (b"x-real-ip", b"203.0.113.45"),
++        ],
++    }
++
++    resolved = resolve_client_ip(scope, trusted)
++    assert resolved == "203.0.113.45"
++
++
++def test_resolve_client_ip_xff_takes_precedence_over_x_real_ip() -> None:
++    """Verify X-Forwarded-For takes precedence when both XFF and X-Real-IP are present."""
++    trusted = "172.28.0.0/16"
++    proxy_peer_ip = "172.28.0.10"
++
++    scope: dict[str, Any] = {
++        "type": "http",
++        "client": (proxy_peer_ip, 45123),
++        "headers": [
++            (b"x-forwarded-for", b"198.51.100.77"),
++            (b"x-real-ip", b"203.0.113.45"),
++        ],
++    }
++
++    resolved = resolve_client_ip(scope, trusted)
++    assert resolved == "198.51.100.77"
++
++
++def test_resolve_client_ip_malformed_xff_falls_back_to_direct_peer() -> None:
++    """Verify that malformed IP strings in X-Forwarded-For safely fall back to peer."""
++    trusted = "10.0.0.0/8"
++    proxy_peer_ip = "10.0.0.2"
++
++    scope: dict[str, Any] = {
++        "type": "http",
++        "client": (proxy_peer_ip, 45123),
++        "headers": [
++            (b"x-forwarded-for", b"not-a-valid-ip, 10.0.0.3"),
++        ],
++    }
++
++    resolved = resolve_client_ip(scope, trusted)
++    assert resolved == proxy_peer_ip
++
++
++def test_resolve_client_ip_malformed_x_real_ip_falls_back_to_direct_peer() -> None:
++    """Verify that malformed IP strings in X-Real-IP safely fall back to direct peer."""
++    trusted = "10.0.0.0/8"
++    proxy_peer_ip = "10.0.0.2"
++
++    scope: dict[str, Any] = {
++        "type": "http",
++        "client": (proxy_peer_ip, 45123),
++        "headers": [
++            (b"x-real-ip", b"invalid-ip-string"),
++        ],
++    }
++
++    resolved = resolve_client_ip(scope, trusted)
++    assert resolved == proxy_peer_ip
++
++
++def test_resolve_client_ip_ipv4_mapped_ipv6_normalization() -> None:
++    """Verify that IPv4-mapped IPv6 addresses are normalized to pure IPv4."""
++    trusted = "10.0.0.0/8"
++    proxy_peer_ip = "10.0.0.2"
++
++    # 1. In X-Forwarded-For
++    scope_xff: dict[str, Any] = {
++        "type": "http",
++        "client": (proxy_peer_ip, 45123),
++        "headers": [(b"x-forwarded-for", b"::ffff:198.51.100.22")],
++    }
++    assert resolve_client_ip(scope_xff, trusted) == "198.51.100.22"
++
++    # 2. In X-Real-IP
++    scope_real_ip: dict[str, Any] = {
++        "type": "http",
++        "client": (proxy_peer_ip, 45123),
++        "headers": [(b"x-real-ip", b"::ffff:198.51.100.33")],
++    }
++    assert resolve_client_ip(scope_real_ip, trusted) == "198.51.100.33"
++
++    # 3. In direct peer
++    scope_peer: dict[str, Any] = {
++        "type": "http",
++        "client": ("::ffff:198.51.100.44", 45123),
++        "headers": [],
++    }
++    assert resolve_client_ip(scope_peer, trusted) == "198.51.100.44"
++
++
++def test_resolve_client_ip_ipv6_subnet_bucketing() -> None:
++    """Verify that IPv6 addresses are bucketed into their /64 subnet."""
++    trusted = "10.0.0.0/8"
++    proxy_peer_ip = "10.0.0.2"
++
++    scope_real_ip: dict[str, Any] = {
++        "type": "http",
++        "client": (proxy_peer_ip, 45123),
++        "headers": [(b"x-real-ip", b"2001:0db8:85a3:0000:0000:8a2e:0370:7334")],
++    }
++    assert resolve_client_ip(scope_real_ip, trusted) == "2001:db8:85a3::/64"
++
++
++def test_resolve_client_ip_environment_variable_configuration(
++    monkeypatch: pytest.MonkeyPatch,
++) -> None:
++    """Verify that KB_TRUSTED_PROXIES and KANBAN_TRUSTED_PROXIES are parsed from env."""
++    proxy_peer_ip = "172.28.0.5"
++    client_ip = "203.0.113.88"
++
++    scope: dict[str, Any] = {
++        "type": "http",
++        "client": (proxy_peer_ip, 50000),
++        "headers": [(b"x-real-ip", client_ip.encode("ascii"))],
++    }
++
++    # 1. With KB_TRUSTED_PROXIES
++    monkeypatch.setenv("KB_TRUSTED_PROXIES", "172.28.0.0/16")
++    monkeypatch.delenv("KANBAN_TRUSTED_PROXIES", raising=False)
++    assert resolve_client_ip(scope) == client_ip
++
++    # 2. With KANBAN_TRUSTED_PROXIES fallback
++    monkeypatch.delenv("KB_TRUSTED_PROXIES", raising=False)
++    monkeypatch.setenv("KANBAN_TRUSTED_PROXIES", "172.28.0.0/16")
++    assert resolve_client_ip(scope) == client_ip
++
++    # 3. Without any trusted proxies env var -> untrusted peer, returns direct peer
++    monkeypatch.delenv("KB_TRUSTED_PROXIES", raising=False)
++    monkeypatch.delenv("KANBAN_TRUSTED_PROXIES", raising=False)
++    assert resolve_client_ip(scope) == proxy_peer_ip
++
++
++def test_resolve_client_ip_edge_scopes() -> None:
++    """Verify edge cases: missing client info, unix domain sockets, and Request wrappers."""
++    # Empty scope defaults to 127.0.0.1
++    assert resolve_client_ip({}) == "127.0.0.1"
++
++    # Unix domain socket returned as-is
++    unix_scope: dict[str, Any] = {
++        "type": "http",
++        "client": ("unix:/run/app.sock", 0),
++    }
++    assert resolve_client_ip(unix_scope) == "unix:/run/app.sock"
++
++    # Object with .scope attribute (like starlette.requests.Request)
++    class DummyRequest:
++        def __init__(self, inner_scope: dict[str, Any]) -> None:
++            self.scope = inner_scope
++
++    dummy = DummyRequest(
++        {
++            "type": "http",
++            "client": ("10.0.0.2", 12345),
++            "headers": [(b"x-real-ip", b"198.51.100.99")],
++        }
++    )
++    assert resolve_client_ip(dummy, "10.0.0.0/8") == "198.51.100.99"  # type: ignore[arg-type]
++
++
++def test_resolve_client_ip_typed_networks_and_empty_xff() -> None:
++    """Verify Sequence[IPv4Network] argument and empty X-Forwarded-For fallback."""
++    net = ipaddress.ip_network("10.0.0.0/8")
++    scope: dict[str, Any] = {
++        "type": "http",
++        "client": ("10.0.0.2", 12345),
++        "headers": [(b"x-forwarded-for", b"   ")],
++    }
++    assert resolve_client_ip(scope, [net]) == "10.0.0.2"
++
++
++def test_resolve_client_ip_all_trusted_returns_leftmost() -> None:
++    """Verify that when all XFF addresses are trusted, leftmost address is returned."""
++    trusted = "10.0.0.0/8, 172.28.0.0/16"
++    proxy_peer_ip = "172.28.0.2"
++
++    scope: dict[str, Any] = {
++        "type": "http",
++        "client": (proxy_peer_ip, 45123),
++        "headers": [
++            (b"x-forwarded-for", b"10.0.0.5, 10.0.0.2"),
++        ],
++    }
++
++    assert resolve_client_ip(scope, trusted) == "10.0.0.5"
++
++
++def test_resolve_client_ip_non_utf8_header_bytes() -> None:
++    """Verify that non-UTF-8 header bytes are safely handled without crash."""
++    trusted = "10.0.0.0/8"
++    proxy_peer_ip = "10.0.0.2"
++
++    scope: dict[str, Any] = {
++        "type": "http",
++        "client": (proxy_peer_ip, 45123),
++        "headers": [
++            (b"x-forwarded-for", b"\xff\xfe\xfd"),
++            (b"x-real-ip", b"\x80\x81"),
++        ],
++    }
++
++    assert resolve_client_ip(scope, trusted) == proxy_peer_ip
++
++
++def test_headers_helpers_coverage(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify helper branch coverage in kanban.security.headers."""
++    # 1. Forwarded proto check
++    assert _has_forwarded_https_proto("for=192.0.2.1;proto=https;by=203.0.113.1")
++    assert not _has_forwarded_https_proto("for=192.0.2.1;proto=http;by=203.0.113.1")
++    assert not _has_forwarded_https_proto("garbage_header_without_equals")
++
++    # 2. _is_https_request with scheme and forwarded headers
++    scope_https = {"scheme": "https"}
++    assert _is_https_request(scope_https, Headers({}))
++
++    scope_http = {"scheme": "http"}
++    h_scheme = Headers({"x-forwarded-scheme": "https"})
++    assert _is_https_request(scope_http, h_scheme)
++
++    h_forwarded = Headers({"forwarded": "proto=https"})
++    assert _is_https_request(scope_http, h_forwarded)
++
++    # 3. Host IDNA normalization
++    candidates = _normalize_host_idna("xn--bcher-kva.example")
++    assert "xn--bcher-kva.example" in candidates
++
++    # 4. Host allowed checking with Punycode conversion
++    assert _is_host_allowed("localhost", frozenset({"localhost"}))
++    assert not _is_host_allowed("evil.corp", frozenset({"localhost"}))
++    assert _is_host_allowed("xn--bcher-kva.example", frozenset({"bücher.example"}))
++
++    # 5. _parse_trusted_networks with sequence of networks and invalid tokens
++    nets = _parse_trusted_networks(
++        [
++            ipaddress.ip_network("10.0.0.0/8"),
++            "172.28.0.0/16",
++            "   ",
++            "invalid_cidr_token",
++        ]
++    )
++    assert len(nets) == 2
++
++    # 6. _format_ip with mapped IPv6
++    mapped_ip = ipaddress.ip_address("::ffff:192.0.2.1")
++    assert _format_ip(mapped_ip) == "192.0.2.1"
++
++    # 7. _get_raw_trusted_proxies exception handling
++    monkeypatch.delenv("KB_TRUSTED_PROXIES", raising=False)
++    monkeypatch.delenv("KANBAN_TRUSTED_PROXIES", raising=False)
++    monkeypatch.setattr(
++        "kanban.security.headers.get_settings",
++        lambda: (_ for _ in ()).throw(RuntimeError("settings unavailable")),
++    )
++    assert _get_raw_trusted_proxies() == ""
+diff --git a/kanban/tests/standalone/test_compose_export.py b/kanban/tests/standalone/test_compose_export.py
+new file mode 100644
+index 00000000..5896db01
+--- /dev/null
++++ b/kanban/tests/standalone/test_compose_export.py
+@@ -0,0 +1,219 @@
++"""Unit tests for standalone to production Compose bundle exporter."""
++
++from __future__ import annotations
++
++import json
++import stat
++from typing import TYPE_CHECKING
++
++import yaml
++
++from kanban.standalone.compose_export import export_production_bundle
++
++if TYPE_CHECKING:
++    from pathlib import Path
++
++
++def test_compose_export_with_keyring_carryover(tmp_path: Path) -> None:  # noqa: PLR0915
++    """Test exporting compose bundle carrying over MASTER_KEK and KB_AUTH_PEPPER."""
++    # Create synthetic standalone keyring.json
++    keyring_dir = tmp_path / "secrets"
++    keyring_dir.mkdir(parents=True)
++    keyring_file = keyring_dir / "keyring.json"
++
++    master_kek = "k4zX9_EXAMPLE_MASTER_KEK_BASE64URL_32B_KEY123"
++    auth_pepper = "p8wY2_EXAMPLE_AUTH_PEPPER_BASE64URL_32B_KEY45"
++    old_session_key = "s1aB3_OLD_SESSION_KEY_TO_BE_ROTATED_AWAY123"
++
++    keyring_file.write_text(
++        json.dumps(
++            {
++                "version": 1,
++                "created_at": "2026-11-11T00:00:00Z",
++                "MASTER_KEK": master_kek,
++                "KB_AUTH_PEPPER": auth_pepper,
++                "SESSION_HMAC_KEY": old_session_key,
++                "db_roles": {
++                    "kanban_app": "app_pw_123",
++                    "kanban_migrator": "mig_pw_123",
++                },
++            }
++        ),
++        encoding="utf-8",
++    )
++
++    out_dir = tmp_path / "prod_bundle"
++    domain = "kanban.production.corp"
++
++    summary = export_production_bundle(
++        out_dir=out_dir,
++        keyring_path=keyring_file,
++        domain=domain,
++    )
++
++    assert summary.carried_over_secrets is True
++    assert summary.domain == domain
++
++    # 1. Verify docker-compose.yml structure and network isolation
++    assert summary.compose_path.is_file()
++    compose_content = summary.compose_path.read_text(encoding="utf-8")
++    compose_data = yaml.safe_load(compose_content)
++
++    assert "services" in compose_data
++    assert "networks" in compose_data
++
++    # Networks check
++    networks = compose_data["networks"]
++    assert "edge_net" in networks
++    assert networks["app_net"].get("internal") is True
++    assert networks["data_net"].get("internal") is True
++    assert networks["sandbox_net"].get("internal") is True
++    assert "egress_llm_net" in networks
++
++    # Services check
++    services = compose_data["services"]
++    assert "reverse-proxy" in services
++    assert set(services["reverse-proxy"]["networks"]) == {"edge_net", "app_net"}
++    # Verify port 8444 is exposed on reverse-proxy
++    assert "8444:8444" in services["reverse-proxy"]["ports"]
++
++    assert "kanban-api" in services
++    assert set(services["kanban-api"]["networks"]) == {"app_net", "data_net"}
++    # Verify KB_TRUSTED_PROXIES environment variable configured for app_net
++    api_env = services["kanban-api"].get("environment", {})
++    assert "KB_TRUSTED_PROXIES" in api_env
++
++    # CRITICAL: mcp-server must strictly NOT be on data_net
++    assert "mcp-server" in services
++    assert set(services["mcp-server"]["networks"]) == {"app_net"}
++    assert "data_net" not in services["mcp-server"]["networks"]
++
++    assert "agent-runtime" in services
++    assert set(services["agent-runtime"]["networks"]) == {"app_net", "egress_llm_net"}
++
++    assert "script-sandbox" in services
++    assert set(services["script-sandbox"]["networks"]) == {"sandbox_net"}
++
++    assert "postgres" in services
++    assert set(services["postgres"]["networks"]) == {"data_net"}
++
++    assert "valkey" in services
++    assert set(services["valkey"]["networks"]) == {"data_net"}
++
++    # 2. Verify Caddyfile content
++    assert summary.caddyfile_path.is_file()
++    caddy_content = summary.caddyfile_path.read_text(encoding="utf-8")
++    assert domain in caddy_content
++    assert "protocols tls1.3" in caddy_content
++    assert "Content-Security-Policy" in caddy_content
++    assert "reverse_proxy kanban-api:8000" in caddy_content
++    assert "reverse_proxy mcp-server:8000" in caddy_content
++
++    # Action 1: Stripped spoofable headers and blocked internal routes
++    assert "@internal_routes path /internal/* /api/v1/internal/*" in caddy_content
++    assert "respond @internal_routes 404" in caddy_content
++    assert "header_up -X-Client-Cert-Pem" in caddy_content
++    assert "header_up -X-KB-Service-Principal" in caddy_content
++    assert "header_up -X-KB-Internal-Auth" in caddy_content
++
++    # Action 2: Dedicated :8444 runner mTLS block
++    assert ":8444 {" in caddy_content
++    assert "mode require" in caddy_content
++    assert "@runner_ws path /api/v1/runners/ws /api/v1/runners/ws/*" in caddy_content
++    assert "X-Client-Cert-Pem {http.request.tls.client.certificate_pem}" in caddy_content
++    assert "X-Client-Cert-Der-B64 {http.request.tls.client.certificate_der_base64}" in caddy_content
++
++    # 3. Verify .env.production permissions and secret carryover / rotation
++    assert summary.env_path.is_file()
++    mode = stat.S_IMODE(summary.env_path.stat().st_mode)
++    assert mode == 0o600
++
++    env_content = summary.env_path.read_text(encoding="utf-8")
++    env_vars: dict[str, str] = {}
++    for line in env_content.splitlines():
++        if "=" in line:
++            k, v = line.split("=", 1)
++            env_vars[k.strip()] = v.strip()
++
++    assert env_vars["KB_DOMAIN"] == domain
++    # Preserved secrets
++    assert env_vars["KB_MASTER_KEK_B64"] == master_kek
++    assert env_vars["KB_AUTH_PEPPER_B64"] == auth_pepper
++    assert env_vars["KB_TRUSTED_PROXIES"] == "172.28.0.0/16"
++
++    # Rotated session key: MUST be distinct from old_session_key!
++    assert "KB_SESSION_HMAC_KEY_B64" in env_vars
++    assert env_vars["KB_SESSION_HMAC_KEY_B64"] != old_session_key
++    assert len(env_vars["KB_SESSION_HMAC_KEY_B64"]) >= 32
++
++    # Freshly generated database passwords
++    assert "POSTGRES_PASSWORD" in env_vars
++    assert "KANBAN_APP_PASSWORD" in env_vars
++    assert "KANBAN_MIGRATOR_PASSWORD" in env_vars
++    assert "VALKEY_PASSWORD" in env_vars
++
++
++def test_compose_export_without_keyring(tmp_path: Path) -> None:
++    """Test exporting compose bundle when no standalone keyring exists."""
++    out_dir = tmp_path / "fresh_prod"
++    summary = export_production_bundle(
++        out_dir=out_dir,
++        keyring_path=None,
++        domain="fresh.kanban.local",
++    )
++
++    assert summary.carried_over_secrets is False
++    assert summary.env_path.is_file()
++    mode = stat.S_IMODE(summary.env_path.stat().st_mode)
++    assert mode == 0o600
++
++    env_content = summary.env_path.read_text(encoding="utf-8")
++    assert "KB_MASTER_KEK_B64=" in env_content
++    assert "KB_AUTH_PEPPER_B64=" in env_content
++    assert "KB_SESSION_HMAC_KEY_B64=" in env_content
++    assert "KB_TRUSTED_PROXIES=172.28.0.0/16" in env_content
++
++
++def test_compose_export_nonexistent_or_corrupt_keyring(tmp_path: Path) -> None:
++    """Test edge cases with nonexistent, invalid JSON, and non-dict keyring files."""
++    # 1. Non-existent path
++    out_dir1 = tmp_path / "nonexistent_keyring"
++    summary1 = export_production_bundle(
++        out_dir=out_dir1,
++        keyring_path=tmp_path / "does_not_exist.json",
++        domain="localhost",
++    )
++    assert summary1.carried_over_secrets is False
++
++    # 2. Corrupt JSON
++    corrupt_file = tmp_path / "corrupt.json"
++    corrupt_file.write_text("NOT_VALID_JSON{", encoding="utf-8")
++    out_dir2 = tmp_path / "corrupt_keyring"
++    summary2 = export_production_bundle(
++        out_dir=out_dir2,
++        keyring_path=corrupt_file,
++        domain="localhost",
++    )
++    assert summary2.carried_over_secrets is False
++
++    # 3. Valid JSON but not a dict (e.g., JSON list)
++    list_file = tmp_path / "list_keyring.json"
++    list_file.write_text("[1, 2, 3]", encoding="utf-8")
++    out_dir3 = tmp_path / "list_keyring"
++    summary3 = export_production_bundle(
++        out_dir=out_dir3,
++        keyring_path=list_file,
++        domain="localhost",
++    )
++    assert summary3.carried_over_secrets is False
++
++    # 4. Partial keyring (only MASTER_KEK, missing pepper)
++    partial_file = tmp_path / "partial.json"
++    partial_file.write_text(json.dumps({"MASTER_KEK": "partial_kek"}), encoding="utf-8")
++    out_dir4 = tmp_path / "partial_keyring"
++    summary4 = export_production_bundle(
++        out_dir=out_dir4,
++        keyring_path=partial_file,
++        domain="localhost",
++    )
++    assert summary4.carried_over_secrets is False

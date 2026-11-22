@@ -8,6 +8,7 @@ import contextlib
 import re
 from typing import TYPE_CHECKING, Any, Final
 
+from kanban.security.push_protection import scan_text_for_secrets
 from mcp.context import get_current_mcp_context
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.help import build_help
@@ -273,6 +274,21 @@ async def update_ticket(arguments: dict[str, Any]) -> dict[str, Any]:  # noqa: C
                 f"summary length ({len(new_summary.strip())}) exceeds maximum of {_MAX_SUMMARY_LEN}"
             )
             raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+        summary_findings = scan_text_for_secrets(new_summary)
+        if summary_findings:
+            f = summary_findings[0]
+            raise KbMcpError(
+                McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
+                f"Secret material detected in field 'summary' at line {f.line}",
+                hint="Remove sensitive credentials, tokens, or private keys before submission.",
+                field="summary",
+                extra={
+                    "rule_id": f.rule_id,
+                    "secret_kind": f.kind.value,
+                    "line": f.line,
+                    "fingerprint": f.fingerprint,
+                },
+            )
         patch_body["summary"] = new_summary
         changed_fields.append("summary")
 
@@ -295,6 +311,21 @@ async def update_ticket(arguments: dict[str, Any]) -> dict[str, Any]:  # noqa: C
             raise KbMcpError(
                 McpErrorCode.VALIDATION_FAILED,
                 f"resulting description exceeds maximum of {_MAX_DESCRIPTION_BYTES} bytes",
+            )
+        desc_findings = scan_text_for_secrets(combined_desc)
+        if desc_findings:
+            f = desc_findings[0]
+            raise KbMcpError(
+                McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
+                f"Secret material detected in field 'description_markdown' at line {f.line}",
+                hint="Remove sensitive credentials, tokens, or private keys before submission.",
+                field="description_markdown",
+                extra={
+                    "rule_id": f.rule_id,
+                    "secret_kind": f.kind.value,
+                    "line": f.line,
+                    "fingerprint": f.fingerprint,
+                },
             )
 
         patch_body["description_markdown"] = combined_desc

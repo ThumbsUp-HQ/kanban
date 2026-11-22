@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Final
 
+from kanban.security.push_protection import scan_text_for_secrets
 from mcp.context import get_current_mcp_context
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.help import build_help
@@ -182,7 +183,7 @@ def _compute_tree_height(node: dict[str, Any]) -> int:
     return 1 + max(child_heights) if child_heights else 1
 
 
-def _validate_node_scalars(node: dict[str, Any]) -> None:
+def _validate_node_scalars(node: dict[str, Any]) -> None:  # noqa: C901
     """Validate summary, description, and date scalar properties."""
     if "summary" not in node:
         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, "Missing required parameter 'summary'")
@@ -196,6 +197,22 @@ def _validate_node_scalars(node: dict[str, Any]) -> None:
         msg = f"summary length ({len(summary.strip())}) exceeds maximum of {_MAX_SUMMARY_LEN}"
         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
 
+    summary_findings = scan_text_for_secrets(summary)
+    if summary_findings:
+        f = summary_findings[0]
+        raise KbMcpError(
+            McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
+            f"Secret material detected in field 'summary' at line {f.line}",
+            hint="Remove sensitive credentials, tokens, or private keys before submission.",
+            field="summary",
+            extra={
+                "rule_id": f.rule_id,
+                "secret_kind": f.kind.value,
+                "line": f.line,
+                "fingerprint": f.fingerprint,
+            },
+        )
+
     desc = node.get("description_markdown")
     if desc is not None:
         if not isinstance(desc, str):
@@ -208,6 +225,21 @@ def _validate_node_scalars(node: dict[str, Any]) -> None:
             raise KbMcpError(
                 McpErrorCode.VALIDATION_FAILED,
                 f"description_markdown exceeds maximum of {_MAX_DESCRIPTION_BYTES} bytes",
+            )
+        desc_findings = scan_text_for_secrets(desc)
+        if desc_findings:
+            f = desc_findings[0]
+            raise KbMcpError(
+                McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
+                f"Secret material detected in field 'description_markdown' at line {f.line}",
+                hint="Remove sensitive credentials, tokens, or private keys before submission.",
+                field="description_markdown",
+                extra={
+                    "rule_id": f.rule_id,
+                    "secret_kind": f.kind.value,
+                    "line": f.line,
+                    "fingerprint": f.fingerprint,
+                },
             )
 
     start_date = node.get("start_date")

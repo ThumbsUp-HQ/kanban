@@ -18,7 +18,7 @@ describe('aboutApi', () => {
       platform: '👍kanban',
       slug: 'thumbs-up-kanban',
       tagline: 'The difference between a swarm and an Agile team is a kanban.',
-      version: '2.0.0',
+      version: '0.2.1205',
       license_spdx: 'Apache-2.0',
       api_docs_urls: {
         swagger_ui: '/api/docs',

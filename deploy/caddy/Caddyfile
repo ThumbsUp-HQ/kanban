@@ -18,25 +18,61 @@
 		-Server
 	}
 
+	@internal_routes path /internal/* /api/v1/internal/*
+	respond @internal_routes 404
+
 	handle /api/* {
-		reverse_proxy kanban-api:8000
+		reverse_proxy kanban-api:8000 {
+			header_up -X-Client-Cert-Pem
+			header_up -X-Client-Cert-Der-B64
+			header_up -X-Client-Cert-CN
+			header_up -X-SSL-Client-Cert
+			header_up -X-KB-Service-Principal
+			header_up -X-KB-Internal-Auth
+			header_up -X-KB-Internal-Timestamp
+			header_up -X-KB-Internal-Signature
+		}
 	}
 
 	handle /ws {
 		reverse_proxy kanban-api:8000 {
 			flush_interval -1
+			header_up -X-Client-Cert-Pem
+			header_up -X-Client-Cert-Der-B64
+			header_up -X-Client-Cert-CN
+			header_up -X-SSL-Client-Cert
+			header_up -X-KB-Service-Principal
+			header_up -X-KB-Internal-Auth
+			header_up -X-KB-Internal-Timestamp
+			header_up -X-KB-Internal-Signature
 		}
 	}
 
 	handle /sse* {
 		reverse_proxy kanban-api:8000 {
 			flush_interval -1
+			header_up -X-Client-Cert-Pem
+			header_up -X-Client-Cert-Der-B64
+			header_up -X-Client-Cert-CN
+			header_up -X-SSL-Client-Cert
+			header_up -X-KB-Service-Principal
+			header_up -X-KB-Internal-Auth
+			header_up -X-KB-Internal-Timestamp
+			header_up -X-KB-Internal-Signature
 		}
 	}
 
 	handle /mcp/* {
 		reverse_proxy mcp-server:8000 {
 			flush_interval -1
+			header_up -X-Client-Cert-Pem
+			header_up -X-Client-Cert-Der-B64
+			header_up -X-Client-Cert-CN
+			header_up -X-SSL-Client-Cert
+			header_up -X-KB-Service-Principal
+			header_up -X-KB-Internal-Auth
+			header_up -X-KB-Internal-Timestamp
+			header_up -X-KB-Internal-Signature
 		}
 	}
 
@@ -51,4 +87,28 @@
 		@html path / /index.html
 		header @html Cache-Control "no-cache"
 	}
+}
+
+:8444 {
+	tls {
+		protocols tls1.3
+		client_auth {
+			mode require
+		}
+	}
+
+	@runner_ws path /api/v1/runners/ws /api/v1/runners/ws/*
+	handle @runner_ws {
+		reverse_proxy kanban-api:8000 {
+			flush_interval -1
+			header_up X-Client-Cert-Pem {http.request.tls.client.certificate_pem}
+			header_up X-Client-Cert-Der-B64 {http.request.tls.client.certificate_der_base64}
+			header_up -X-KB-Service-Principal
+			header_up -X-KB-Internal-Auth
+			header_up -X-KB-Internal-Timestamp
+			header_up -X-KB-Internal-Signature
+		}
+	}
+
+	respond 404
 }

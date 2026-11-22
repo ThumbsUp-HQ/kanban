@@ -1,0 +1,33 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan78-884371fc/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan78-884371fc
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 23 items
+
+kanban/tests/services/test_predicate_compiler_fts_hnsw.py::test_sanitize_query_string_bounds_and_control_chars PASSED [  4%]
+kanban/tests/services/test_predicate_compiler_fts_hnsw.py::test_split_query_clauses_and_clause_budget PASSED [  8%]
+kanban/tests/services/test_predicate_compiler_fts_hnsw.py::test_parse_comparison_clause PASSED [ 13%]
+kanban/tests/services/test_predicate_compiler_fts_hnsw.py::test_tokenize_predicate_string_and_token_budget PASSED [ 17%]
+kanban/tests/services/test_predicate_compiler_fts_hnsw.py::test_adversarial_redos_resistance PASSED [ 21%]
+kanban/tests/services/test_predicate_compiler_fts_hnsw.py::test_compile_predicate_all_fields_structure PASSED [ 26%]
+kanban/tests/services/test_predicate_compiler_fts_hnsw.py::test_predicate_compiler_execution_against_database PASSED [ 30%]
+kanban/tests/services/test_predicate_compiler_fts_hnsw.py::test_english_fts_stemming_consistency_vs_simple PASSED [ 34%]
+kanban/tests/services/test_predicate_compiler_fts_hnsw.py::test_hnsw_iterative_scan_and_fallback PASSED [ 39%]
+kanban/tests/services/test_predicate_compiler_fts_hnsw.py::test_search_candidates_hnsw_iterative_scan_fallback_unit PASSED [ 43%]
+kanban/tests/services/test_predicate_compiler_fts_hnsw.py::test_predicate_compiler_edge_cases_and_branches PASSED [ 47%]
+kanban/tests/services/test_predicate_compiler_fts_hnsw.py::test_view_dsl_filter_predicates_and_branches PASSED [ 52%]
+kanban/tests/services/test_query_engine.py::test_validate_group_axes PASSED [ 56%]
+kanban/tests/services/test_query_engine.py::test_cursor_encoding_and_tampering PASSED [ 60%]
+kanban/tests/services/test_query_engine.py::test_compile_filter_predicates_coverage PASSED [ 65%]
+kanban/tests/services/test_query_engine.py::test_execute_view_query_2d_and_wip PASSED [ 69%]
+kanban/tests/services/test_query_engine.py::test_2d_groups_all_axes PASSED [ 73%]
+agent/tests/sparkle/test_retrieval.py::test_is_timeout_error_detection PASSED [ 78%]
+agent/tests/sparkle/test_retrieval.py::test_retrieve_context_none_factory PASSED [ 82%]
+agent/tests/sparkle/test_retrieval.py::test_retrieve_context_session_factory_flavors PASSED [ 86%]
+agent/tests/sparkle/test_retrieval.py::test_retrieve_context_all_object_types_and_scrubbing PASSED [ 91%]
+agent/tests/sparkle/test_retrieval.py::test_retrieve_context_skips_unknown_types_and_missing_rows PASSED [ 95%]
+agent/tests/sparkle/test_retrieval.py::test_retrieve_context_statement_timeout_and_db_error PASSED [100%]
+
+============================== 23 passed in 1.54s ==============================

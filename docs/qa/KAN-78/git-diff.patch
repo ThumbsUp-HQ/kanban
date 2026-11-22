@@ -1,0 +1,1670 @@
+diff --git a/agent/sparkle/retrieval.py b/agent/sparkle/retrieval.py
+index e411815f..a6f258b7 100644
+--- a/agent/sparkle/retrieval.py
++++ b/agent/sparkle/retrieval.py
+@@ -135,6 +135,13 @@ async def retrieve_context(  # noqa: C901, PLR0912, PLR0915  # Database transact
+             finally:
+                 session.info.pop("_binding_in_progress", None)
+ 
++            # Enable hnsw.iterative_scan for pgvector RLS recall with safe fallback
++            try:
++                async with session.begin_nested():
++                    await session.execute(text("SET LOCAL hnsw.iterative_scan = 'relaxed_order'"))
++            except Exception:  # noqa: BLE001, S110
++                pass
++
+             # Query nearest embeddings in same project
+             q_literal = _format_vector_literal(query_vector)
+             knn_stmt = text(
+diff --git a/kanban/services/predicate_compiler.py b/kanban/services/predicate_compiler.py
+new file mode 100644
+index 00000000..3a4ccc4c
+--- /dev/null
++++ b/kanban/services/predicate_compiler.py
+@@ -0,0 +1,730 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Server-side filter predicate compiler for saved views, search, and queries (S6.4, S3.4, KAN-78).
++
++Translates bounded DSL filter expressions into parameterized SQLAlchemy WHERE clauses.
++Complexity bounds:
++- MAX_QUERY_LENGTH = 512 characters
++- MAX_CLAUSES = 32 clauses
++- MAX_TOKENS = 32 tokens
++"""
++
++from __future__ import annotations
++
++import re
++import uuid
++from dataclasses import dataclass
++from typing import Any, Final
++
++from sqlalchemy import ColumnElement, exists, func, literal, or_, select
++
++from database.models import (
++    Cycle,
++    Issue,
++    IssueAssignee,
++    IssueLabel,
++    IssueModule,
++    Module,
++    Principal,
++    Project,
++    ProjectLabel,
++    ProjectPriority,
++    User,
++    WorkflowState,
++)
++from kanban.api.problems import ProblemException
++
++__all__ = [
++    "MAX_CLAUSES",
++    "MAX_QUERY_LENGTH",
++    "MAX_TOKENS",
++    "ParsedComparisonClause",
++    "ParsedToken",
++    "compile_predicate_string",
++    "parse_comparison_clause",
++    "sanitize_query_string",
++    "split_query_clauses",
++    "tokenize_predicate_string",
++]
++
++MAX_QUERY_LENGTH: Final[int] = 512
++MAX_CLAUSES: Final[int] = 32
++MAX_TOKENS: Final[int] = 32
++
++SURROGATE_MIN: Final[int] = 0xD800
++SURROGATE_MAX: Final[int] = 0xDFFF
++ASCII_CTRL_MAX: Final[int] = 32
++ASCII_DEL: Final[int] = 127
++MIN_STRIP_LEN: Final[int] = 2
++
++_UUID_RE: Final[re.Pattern[str]] = re.compile(
++    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
++)
++_ISSUE_KEY_RE: Final[re.Pattern[str]] = re.compile(r"^([A-Za-z][A-Za-z0-9]{1,9})-(\d+)$")
++_IDENT_RE: Final[re.Pattern[str]] = re.compile(r"^[a-zA-Z0-9_]+$")
++
++
++@dataclass(frozen=True, slots=True)
++class ParsedToken:
++    """Token extracted from a predicate query string."""
++
++    field: str | None
++    value: str
++    negated: bool = False
++
++
++@dataclass(frozen=True, slots=True)
++class ParsedComparisonClause:
++    """Structured comparison clause with explicit operator."""
++
++    field: str
++    operator: str  # '=' or '!='
++    value: str
++    negated: bool = False
++
++
++def sanitize_query_string(raw_query: str, max_length: int = MAX_QUERY_LENGTH) -> str:
++    """Sanitize and validate DSL query string input.
++
++    Strips ASCII control characters and lone UTF-16 surrogates. Enforces max length bound.
++    """
++    if not raw_query or not isinstance(raw_query, str):
++        return ""
++
++    if len(raw_query) > max_length:
++        raise ProblemException(
++            code="FILTER_TOO_COMPLEX",
++            status=422,
++            title="Filter Too Complex",
++            detail=(
++                f"Filter query length ({len(raw_query)}) exceeds maximum of {max_length} characters"
++            ),
++        )
++
++    cleaned_chars: list[str] = []
++    for ch in raw_query:
++        code = ord(ch)
++        if SURROGATE_MIN <= code <= SURROGATE_MAX:
++            continue
++        if 0 <= code < ASCII_CTRL_MAX and ch not in ("\t", "\n", "\r"):
++            cleaned_chars.append(" ")
++        elif code == ASCII_DEL:
++            continue
++        else:
++            cleaned_chars.append(ch)
++
++    return "".join(cleaned_chars).strip()
++
++
++def _strip_quotes(s: str) -> str:
++    t = s.strip()
++    if len(t) >= MIN_STRIP_LEN:
++        first, last = t[0], t[-1]
++        if (first == '"' and last == '"') or (first == "'" and last == "'"):
++            return t[1:-1]
++    return t
++
++
++def split_query_clauses(  # noqa: C901
++    query: str, max_clauses: int = MAX_CLAUSES
++) -> list[str]:
++    """Split query on top-level AND outside quotes, capped at max_clauses.
++
++    Raises ProblemException if clauses count exceeds max_clauses.
++    """
++    clauses: list[str] = []
++    in_quote: str | None = None
++    start = 0
++    length = len(query)
++    i = 0
++
++    def is_ws(c: str) -> bool:
++        return c in (" ", "\t", "\n", "\r")
++
++    while i < length:
++        ch = query[i]
++
++        if in_quote is not None:
++            if ch == in_quote:
++                in_quote = None
++            i += 1
++            continue
++
++        if ch in ('"', "'"):
++            in_quote = ch
++            i += 1
++            continue
++
++        # Match top-level whitespace + AND + whitespace
++        if (
++            is_ws(ch)
++            and i + 4 < length
++            and query[i + 1 : i + 4].upper() == "AND"
++            and is_ws(query[i + 4])
++        ):
++            piece = query[start:i].strip()
++            if piece:
++                clauses.append(piece)
++                if len(clauses) > max_clauses:
++                    raise ProblemException(
++                        code="FILTER_TOO_COMPLEX",
++                        status=422,
++                        title="Filter Too Complex",
++                        detail=f"Filter clauses count exceeds maximum of {max_clauses}",
++                    )
++            i += 5
++            while i < length and is_ws(query[i]):
++                i += 1
++            start = i
++            continue
++
++        i += 1
++
++    tail = query[start:].strip()
++    if tail:
++        clauses.append(tail)
++        if len(clauses) > max_clauses:
++            raise ProblemException(
++                code="FILTER_TOO_COMPLEX",
++                status=422,
++                title="Filter Too Complex",
++                detail=f"Filter clauses count exceeds maximum of {max_clauses}",
++            )
++
++    return clauses
++
++
++def parse_comparison_clause(  # noqa: C901
++    raw_clause: str,
++) -> ParsedComparisonClause | None:
++    """Parse a single clause into comparison operator if present."""
++    clause = raw_clause.strip()
++    negated = False
++    if clause.upper().startswith("NOT "):
++        negated = True
++        clause = clause[4:].strip()
++
++    in_quote: str | None = None
++    neq_idx = -1
++    eq_idx = -1
++    length = len(clause)
++    i = 0
++    while i < length:
++        ch = clause[i]
++        if in_quote is not None:
++            if ch == in_quote:
++                in_quote = None
++            i += 1
++            continue
++        if ch in ('"', "'"):
++            in_quote = ch
++            i += 1
++            continue
++        if ch == "!" and i + 1 < length and clause[i + 1] == "=":
++            if neq_idx == -1:
++                neq_idx = i
++            i += 2
++            continue
++        if ch == "=":
++            if eq_idx == -1:
++                eq_idx = i
++            i += 1
++            continue
++        i += 1
++
++    if neq_idx == -1 and eq_idx == -1:
++        return None
++
++    op = "="
++    split_idx = eq_idx
++    if neq_idx != -1 and (eq_idx == -1 or neq_idx < eq_idx):
++        op = "!="
++        split_idx = neq_idx
++
++    raw_field = clause[:split_idx].strip()
++    if not raw_field or not _IDENT_RE.match(raw_field):
++        return None
++
++    raw_val = _strip_quotes(clause[split_idx + len(op) :].strip())
++    return ParsedComparisonClause(
++        field=raw_field.lower(),
++        operator=op,
++        value=raw_val,
++        negated=negated,
++    )
++
++
++def tokenize_predicate_string(  # noqa: C901, PLR0912, PLR0915
++    token_string: str, max_tokens: int = MAX_TOKENS
++) -> list[ParsedToken]:
++    """Tokenize a predicate string into field:value, negated tokens, and free-text words."""
++    tokens: list[ParsedToken] = []
++    length = len(token_string)
++    i = 0
++    pending_not = False
++
++    def is_ws(c: str) -> bool:
++        return c in (" ", "\t", "\n", "\r")
++
++    def is_field_char(c: str) -> bool:
++        return c.isalnum() or c == "_"
++
++    while i < length:
++        # Skip leading whitespace
++        while i < length and is_ws(token_string[i]):
++            i += 1
++        if i >= length:
++            break
++
++        negated = False
++        if token_string[i] in ("-", "!"):
++            negated = True
++            i += 1
++            while i < length and is_ws(token_string[i]):
++                i += 1
++            if i >= length:
++                break
++        elif pending_not:
++            negated = True
++            pending_not = False
++
++        # Quoted free-text token
++        if i < length and token_string[i] in ('"', "'"):
++            q_char = token_string[i]
++            i += 1
++            start = i
++            while i < length and token_string[i] != q_char:
++                i += 1
++            val = token_string[start:i]
++            if i < length and token_string[i] == q_char:
++                i += 1
++            tokens.append(ParsedToken(field=None, value=val, negated=negated))
++            if len(tokens) > max_tokens:
++                raise ProblemException(
++                    code="FILTER_TOO_COMPLEX",
++                    status=422,
++                    title="Filter Too Complex",
++                    detail=f"Filter tokens count exceeds maximum of {max_tokens}",
++                )
++            continue
++
++        # Scan identifier or word up to whitespace or colon
++        start = i
++        while i < length and not is_ws(token_string[i]) and token_string[i] not in (":", '"', "'"):
++            i += 1
++        word = token_string[start:i]
++
++        # Check if this is a field: prefix
++        if word and i < length and token_string[i] == ":" and all(is_field_char(c) for c in word):
++            i += 1  # skip ':'
++            val = ""
++            if i < length and token_string[i] in ('"', "'"):
++                q_char = token_string[i]
++                i += 1
++                v_start = i
++                while i < length and token_string[i] != q_char:
++                    i += 1
++                val = token_string[v_start:i]
++                if i < length and token_string[i] == q_char:
++                    i += 1
++            else:
++                v_start = i
++                while i < length and not is_ws(token_string[i]):
++                    i += 1
++                val = _strip_quotes(token_string[v_start:i])
++
++            tokens.append(ParsedToken(field=word.lower(), value=val, negated=negated))
++            if len(tokens) > max_tokens:
++                raise ProblemException(
++                    code="FILTER_TOO_COMPLEX",
++                    status=422,
++                    title="Filter Too Complex",
++                    detail=f"Filter tokens count exceeds maximum of {max_tokens}",
++                )
++            continue
++
++        # Remainder of word if any
++        while i < length and not is_ws(token_string[i]):
++            i += 1
++        full_word = _strip_quotes(token_string[start:i])
++        if not negated and full_word.upper() == "NOT":
++            pending_not = True
++            continue
++        if full_word:
++            tokens.append(ParsedToken(field=None, value=full_word, negated=negated))
++            if len(tokens) > max_tokens:
++                raise ProblemException(
++                    code="FILTER_TOO_COMPLEX",
++                    status=422,
++                    title="Filter Too Complex",
++                    detail=f"Filter tokens count exceeds maximum of {max_tokens}",
++                )
++
++    return tokens
++
++
++def _split_values(val: str) -> list[str]:
++    """Split comma-separated values unless empty."""
++    if "," not in val:
++        return [val.strip()]
++    return [v.strip() for v in val.split(",") if v.strip()]
++
++
++def _compile_field_predicate(  # noqa: C901, PLR0911, PLR0912, PLR0915
++    field: str,
++    val_str: str,
++    *,
++    negated: bool,
++    project_id: uuid.UUID | None,
++    caller_principal_id: uuid.UUID | None,
++) -> ColumnElement[bool]:
++    """Compile a single field filter into an injection-safe SQLAlchemy expression."""
++    clean_field = field.lower().strip()
++    cond: ColumnElement[bool]
++
++    # 1. State / Status
++    if clean_field in ("state", "status"):
++        vals = _split_values(val_str)
++        lower_vals = [v.lower() for v in vals]
++        if any(v in ("actionable", "active") for v in lower_vals):
++            subq = select(WorkflowState.id).where(
++                WorkflowState.state_group.notin_(["completed", "cancelled"])
++            )
++            if project_id:
++                subq = subq.where(WorkflowState.project_id == project_id)
++            cond = Issue.state_id.in_(subq)
++            return ~cond if negated else cond
++
++        if any(v in ("closed", "terminal") for v in lower_vals):
++            subq = select(WorkflowState.id).where(
++                WorkflowState.state_group.in_(["completed", "cancelled"])
++            )
++            if project_id:
++                subq = subq.where(WorkflowState.project_id == project_id)
++            cond = Issue.state_id.in_(subq)
++            return ~cond if negated else cond
++
++        if any(v in ("all", "*") for v in lower_vals):
++            return literal(value=False) if negated else literal(value=True)
++
++        or_clauses: list[Any] = []
++        uuid_matches: list[uuid.UUID] = []
++        text_matches: list[str] = []
++        for v in vals:
++            if _UUID_RE.match(v):
++                try:
++                    uuid_matches.append(uuid.UUID(v))
++                except ValueError:
++                    text_matches.append(v.lower())
++            else:
++                text_matches.append(v.lower())
++
++        if uuid_matches:
++            or_clauses.append(WorkflowState.id.in_(uuid_matches))
++        if text_matches:
++            or_clauses.append(func.lower(WorkflowState.name).in_(text_matches))
++            or_clauses.append(func.lower(WorkflowState.state_group).in_(text_matches))
++
++        subq = select(WorkflowState.id).where(
++            or_(*or_clauses) if or_clauses else literal(value=False)
++        )
++        if project_id:
++            subq = subq.where(WorkflowState.project_id == project_id)
++        cond = Issue.state_id.in_(subq)
++        return ~cond if negated else cond
++
++    # 2. State Group / Group
++    if clean_field in ("state_group", "group"):
++        vals = [v.lower() for v in _split_values(val_str)]
++        if any(v in ("actionable", "active") for v in vals):
++            subq = select(WorkflowState.id).where(
++                WorkflowState.state_group.notin_(["completed", "cancelled"])
++            )
++        elif any(v in ("all", "*") for v in vals):
++            return literal(value=False) if negated else literal(value=True)
++        else:
++            subq = select(WorkflowState.id).where(func.lower(WorkflowState.state_group).in_(vals))
++        if project_id:
++            subq = subq.where(WorkflowState.project_id == project_id)
++        cond = Issue.state_id.in_(subq)
++        return ~cond if negated else cond
++
++    # 3. Priority
++    if clean_field == "priority":
++        vals = _split_values(val_str)
++        uuid_matches = []
++        text_matches = []
++        for v in vals:
++            if _UUID_RE.match(v):
++                try:
++                    uuid_matches.append(uuid.UUID(v))
++                except ValueError:
++                    text_matches.append(v.lower())
++            else:
++                text_matches.append(v.lower())
++
++        prio_or: list[Any] = []
++        if uuid_matches:
++            prio_or.append(ProjectPriority.id.in_(uuid_matches))
++        if text_matches:
++            prio_or.append(func.lower(ProjectPriority.slug).in_(text_matches))
++            prio_or.append(func.lower(ProjectPriority.label).in_(text_matches))
++
++        subq = select(ProjectPriority.id).where(or_(*prio_or) if prio_or else literal(value=False))
++        if project_id:
++            subq = subq.where(ProjectPriority.project_id == project_id)
++        cond = Issue.priority_id.in_(subq)
++        return ~cond if negated else cond
++
++    # 4. Assignee
++    if clean_field == "assignee":
++        vals = _split_values(val_str)
++        asg_clauses: list[Any] = []
++        for raw_v in vals:
++            clean = raw_v.strip().lower()
++            if clean in ("@me", "me"):
++                if caller_principal_id is not None:
++                    asg_clauses.append(
++                        exists().where(
++                            IssueAssignee.issue_id == Issue.id,
++                            IssueAssignee.principal_id == caller_principal_id,
++                        )
++                    )
++                else:
++                    asg_clauses.append(literal(value=False))
++            elif clean in ("unassigned", "none"):
++                asg_clauses.append(~exists().where(IssueAssignee.issue_id == Issue.id))
++            else:
++                clean_handle = clean.lstrip("@").lower()
++                compact_handle = clean_handle.replace(" ", "")
++                conds: list[Any] = [
++                    func.lower(IssueAssignee.free_text_assignee) == clean,
++                    exists().where(
++                        Principal.id == IssueAssignee.principal_id,
++                        or_(
++                            func.lower(Principal.display_name) == clean,
++                            func.lower(func.replace(Principal.display_name, " ", ""))
++                            == compact_handle,
++                            exists().where(
++                                User.id == Principal.id,
++                                func.lower(User.email) == clean,
++                            ),
++                        ),
++                    ),
++                ]
++                if _UUID_RE.match(raw_v):
++                    try:
++                        p_uuid = uuid.UUID(raw_v)
++                        conds.append(IssueAssignee.principal_id == p_uuid)
++                    except ValueError:
++                        pass
++                asg_clauses.append(
++                    exists().where(
++                        IssueAssignee.issue_id == Issue.id,
++                        or_(*conds),
++                    )
++                )
++
++        cond = or_(*asg_clauses) if asg_clauses else literal(value=False)
++        return ~cond if negated else cond
++
++    # 5. Label
++    if clean_field == "label":
++        vals = [v.lower() for v in _split_values(val_str)]
++        uuid_matches = []
++        text_matches = []
++        for v in vals:
++            if _UUID_RE.match(v):
++                try:
++                    uuid_matches.append(uuid.UUID(v))
++                except ValueError:
++                    text_matches.append(v)
++            else:
++                text_matches.append(v)
++
++        lbl_or: list[Any] = []
++        if uuid_matches:
++            lbl_or.append(IssueLabel.label_id.in_(uuid_matches))
++        if text_matches:
++            lbl_or.append(
++                exists().where(
++                    ProjectLabel.id == IssueLabel.label_id,
++                    func.lower(ProjectLabel.name).in_(text_matches),
++                )
++            )
++        cond = exists().where(
++            IssueLabel.issue_id == Issue.id,
++            or_(*lbl_or) if lbl_or else literal(value=False),
++        )
++        return ~cond if negated else cond
++
++    # 6. Cycle
++    if clean_field == "cycle":
++        vals = [v.lower() for v in _split_values(val_str)]
++        cycle_clauses: list[Any] = []
++        for clean in vals:
++            if clean in ("none", "no-cycle"):
++                cycle_clauses.append(Issue.cycle_id.is_(None))
++            elif clean in ("current", "active"):
++                cycle_subq = select(Cycle.id).where(Cycle.status == "active")
++                if project_id:
++                    cycle_subq = cycle_subq.where(Cycle.project_id == project_id)
++                cycle_clauses.append(Issue.cycle_id.in_(cycle_subq))
++            elif _UUID_RE.match(clean):
++                try:
++                    c_uuid = uuid.UUID(clean)
++                    cycle_clauses.append(Issue.cycle_id == c_uuid)
++                except ValueError:
++                    pass
++            else:
++                cycle_subq = select(Cycle.id).where(func.lower(Cycle.name) == clean)
++                if project_id:
++                    cycle_subq = cycle_subq.where(Cycle.project_id == project_id)
++                cycle_clauses.append(Issue.cycle_id.in_(cycle_subq))
++        cond = or_(*cycle_clauses) if cycle_clauses else literal(value=False)
++        return ~cond if negated else cond
++
++    # 7. Module
++    if clean_field == "module":
++        vals = [v.lower() for v in _split_values(val_str)]
++        mod_clauses: list[Any] = []
++        for clean in vals:
++            if clean == "none":
++                mod_clauses.append(~exists().where(IssueModule.issue_id == Issue.id))
++            elif _UUID_RE.match(clean):
++                try:
++                    m_uuid = uuid.UUID(clean)
++                    mod_clauses.append(
++                        exists().where(
++                            IssueModule.issue_id == Issue.id,
++                            IssueModule.module_id == m_uuid,
++                        )
++                    )
++                except ValueError:
++                    pass
++            else:
++                mod_subq = select(Module.id).where(func.lower(Module.name) == clean)
++                if project_id:
++                    mod_subq = mod_subq.where(Module.project_id == project_id)
++                mod_clauses.append(
++                    exists().where(
++                        IssueModule.issue_id == Issue.id,
++                        IssueModule.module_id.in_(mod_subq),
++                    )
++                )
++        cond = or_(*mod_clauses) if mod_clauses else literal(value=False)
++        return ~cond if negated else cond
++
++    # 8. Project
++    if clean_field == "project":
++        vals = [v.upper() for v in _split_values(val_str)]
++        cond = exists().where(
++            Project.id == Issue.project_id,
++            func.upper(Project.identifier).in_(vals),
++        )
++        return ~cond if negated else cond
++
++    # 9. Key
++    if clean_field == "key":
++        vals = _split_values(val_str)
++        key_clauses: list[Any] = []
++        for raw_k in vals:
++            m = _ISSUE_KEY_RE.match(raw_k.strip())
++            if m:
++                p_ident = m.group(1).upper()
++                seq = int(m.group(2))
++                key_clauses.append(
++                    exists().where(
++                        Project.id == Issue.project_id,
++                        func.upper(Project.identifier) == p_ident,
++                        Issue.sequence_id == seq,
++                    )
++                )
++            elif _UUID_RE.match(raw_k.strip()):
++                try:
++                    iss_uuid = uuid.UUID(raw_k.strip())
++                    key_clauses.append(Issue.id == iss_uuid)
++                except ValueError:
++                    pass
++        cond = or_(*key_clauses) if key_clauses else literal(value=False)
++        return ~cond if negated else cond
++
++    # Fallback for unrecognized field: treat as text search on summary/description
++    text_cond = Issue.search_tsv.op("@@")(func.websearch_to_tsquery("english", val_str))
++    return ~text_cond if negated else text_cond
++
++
++def _compile_free_text_predicate(term: str, *, negated: bool) -> ColumnElement[bool]:
++    """Compile a free-text search term using English stemming tsquery."""
++    clean = term.strip()
++    if not clean:
++        return literal(value=True)
++    cond = Issue.search_tsv.op("@@")(func.websearch_to_tsquery("english", clean))
++    return ~cond if negated else cond
++
++
++def compile_predicate_string(  # noqa: C901
++    query_str: str,
++    project: Project | uuid.UUID | None = None,
++    caller_principal_id: uuid.UUID | str | None = None,
++) -> list[ColumnElement[bool]]:
++    """Compile a filter DSL query string into parameterized SQLAlchemy WHERE expressions.
++
++    Enforces bounds:
++    - MAX_QUERY_LENGTH = 512
++    - MAX_CLAUSES = 32
++    - MAX_TOKENS = 32
++    """
++    clean_query = sanitize_query_string(query_str, max_length=MAX_QUERY_LENGTH)
++    if not clean_query:
++        return []
++
++    project_id: uuid.UUID | None = None
++    if isinstance(project, Project):
++        project_id = project.id
++    elif isinstance(project, uuid.UUID):
++        project_id = project
++
++    caller_id: uuid.UUID | None = None
++    if isinstance(caller_principal_id, uuid.UUID):
++        caller_id = caller_principal_id
++    elif isinstance(caller_principal_id, str) and _UUID_RE.match(caller_principal_id.strip()):
++        try:
++            caller_id = uuid.UUID(caller_principal_id.strip())
++        except ValueError:
++            caller_id = None
++
++    clauses = split_query_clauses(clean_query, max_clauses=MAX_CLAUSES)
++    predicates: list[ColumnElement[bool]] = []
++
++    for clause in clauses:
++        cmp = parse_comparison_clause(clause)
++        if cmp is not None:
++            is_neg = (cmp.operator == "!=") ^ cmp.negated
++            predicates.append(
++                _compile_field_predicate(
++                    field=cmp.field,
++                    val_str=cmp.value,
++                    negated=is_neg,
++                    project_id=project_id,
++                    caller_principal_id=caller_id,
++                )
++            )
++            continue
++
++        tokens = tokenize_predicate_string(clause, max_tokens=MAX_TOKENS)
++        for tok in tokens:
++            if tok.field:
++                predicates.append(
++                    _compile_field_predicate(
++                        field=tok.field,
++                        val_str=tok.value,
++                        negated=tok.negated,
++                        project_id=project_id,
++                        caller_principal_id=caller_id,
++                    )
++                )
++            else:
++                predicates.append(_compile_free_text_predicate(tok.value, negated=tok.negated))
++
++    return predicates
+diff --git a/kanban/services/search.py b/kanban/services/search.py
+index 08234dcd..4464a1f7 100644
+--- a/kanban/services/search.py
++++ b/kanban/services/search.py
+@@ -524,6 +524,11 @@ async def _query_vector_candidates(  # noqa: PLR0913, PLR0917
+     try:
+         async with session.begin_nested():
+             await session.execute(text("SET LOCAL statement_timeout = '25ms'"))
++            try:
++                async with session.begin_nested():
++                    await session.execute(text("SET LOCAL hnsw.iterative_scan = 'relaxed_order'"))
++            except Exception:  # noqa: BLE001, S110
++                pass
+             q_literal = "[" + ",".join(str(float(x)) for x in query_vector) + "]"
+             where_clauses = [
+                 "oe.workspace_id = :ws_id",
+diff --git a/kanban/services/view_dsl.py b/kanban/services/view_dsl.py
+index 8e55e6a4..e4950ee9 100644
+--- a/kanban/services/view_dsl.py
++++ b/kanban/services/view_dsl.py
+@@ -22,10 +22,37 @@ from database.models import (
+ )
+ from kanban.api.problems import ProblemException
+ from kanban.api.v1.schemas.views import FilterSpec, GateStatus, GroupAxis, LabelMatch
++from kanban.services.predicate_compiler import (
++    MAX_CLAUSES,
++    MAX_QUERY_LENGTH,
++    MAX_TOKENS,
++    ParsedComparisonClause,
++    ParsedToken,
++    compile_predicate_string,
++    parse_comparison_clause,
++    sanitize_query_string,
++    split_query_clauses,
++    tokenize_predicate_string,
++)
+ 
+ if TYPE_CHECKING:
+     from sqlalchemy.ext.asyncio import AsyncSession
+ 
++__all__ = [
++    "MAX_CLAUSES",
++    "MAX_QUERY_LENGTH",
++    "MAX_TOKENS",
++    "ParsedComparisonClause",
++    "ParsedToken",
++    "compile_issue_filter_predicates",
++    "compile_predicate_string",
++    "parse_comparison_clause",
++    "sanitize_query_string",
++    "split_query_clauses",
++    "tokenize_predicate_string",
++    "validate_group_axes",
++]
++
+ _UUID_RE = re.compile(
+     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
+ )
+@@ -285,7 +312,7 @@ def _compile_search_gate_predicates(filters: FilterSpec) -> list[Any]:
+         clean_q = filters.search_query.strip()
+         if clean_q:
+             predicates.append(
+-                text("issues.search_tsv @@ websearch_to_tsquery('simple', :q)").bindparams(
++                text("issues.search_tsv @@ websearch_to_tsquery('english', :q)").bindparams(
+                     q=clean_q
+                 )
+             )
+diff --git a/kanban/tests/services/test_predicate_compiler_fts_hnsw.py b/kanban/tests/services/test_predicate_compiler_fts_hnsw.py
+new file mode 100644
+index 00000000..dce07a0a
+--- /dev/null
++++ b/kanban/tests/services/test_predicate_compiler_fts_hnsw.py
+@@ -0,0 +1,843 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++# ruff: noqa: E501, PLR0915, ANN401, ARG002, PYI036, BLE001, S110
++"""Comprehensive unit and integration tests for predicate compiler, FTS stemming, and HNSW (KAN-78).
++
++Validates:
++1. Bounded DSL filter predicate compiler (MAX_QUERY_LENGTH=512, MAX_CLAUSES=32, MAX_TOKENS=32)
++   parsing state, priority, assignee, label, cycle, module, project, key, and free-text terms.
++2. Injection safety, ReDoS resistance (< 10ms), and error contracts (FILTER_TOO_COMPLEX 422).
++3. English FTS stemming consistency: websearch_to_tsquery('english', ...) matching inflections.
++4. HNSW iterative scan (SET LOCAL hnsw.iterative_scan = 'relaxed_order') and safe fallback.
++"""
++
++from __future__ import annotations
++
++import time
++import uuid
++from typing import Any, Self
++from unittest.mock import MagicMock
++
++import pytest
++from sqlalchemy import select, text
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from database.models import (
++    Issue,
++    IssueAssignee,
++    IssueLabel,
++    Project,
++    ProjectLabel,
++)
++from kanban.api.problems import ProblemException
++from kanban.api.v1.schemas.views import FilterSpec, GroupAxis
++from kanban.services.predicate_compiler import (
++    MAX_CLAUSES,
++    MAX_QUERY_LENGTH,
++    MAX_TOKENS,
++    ParsedComparisonClause,
++    ParsedToken,
++    compile_predicate_string,
++    parse_comparison_clause,
++    sanitize_query_string,
++    split_query_clauses,
++    tokenize_predicate_string,
++)
++from kanban.services.search import _query_vector_candidates
++from kanban.services.view_dsl import (
++    compile_issue_filter_predicates,
++    validate_group_axes,
++)
++from kanban.tests.security.helpers import (
++    add_role_binding,
++    create_project,
++    create_user,
++    create_workspace,
++    rebuild_era,
++)
++
++# ============================================================================
++# Section 1: Predicate Compiler Sanitization, Tokenization, and Complexity
++# ============================================================================
++
++
++def test_sanitize_query_string_bounds_and_control_chars() -> None:
++    """Verify input sanitization strips control chars, surrogates, and enforces max length."""
++    # Empty / non-string
++    assert sanitize_query_string("") == ""
++    assert sanitize_query_string(None) == ""  # type: ignore[arg-type]
++
++    # Strips control chars and lone surrogates
++    raw = "state:todo\x00\x1f\x7f \ud800priority:high"
++    cleaned = sanitize_query_string(raw)
++    assert "\x00" not in cleaned
++    assert "\x1f" not in cleaned
++    assert "\x7f" not in cleaned
++    assert "\ud800" not in cleaned
++    assert "state:todo" in cleaned
++    assert "priority:high" in cleaned
++
++    # Rejects oversized queries exceeding MAX_QUERY_LENGTH
++    oversized = "state:todo AND " * 40  # > 512 chars
++    assert len(oversized) > MAX_QUERY_LENGTH
++    with pytest.raises(ProblemException) as exc_info:
++        sanitize_query_string(oversized)
++    assert exc_info.value.code == "FILTER_TOO_COMPLEX"
++    assert exc_info.value.status == 422
++
++
++def test_split_query_clauses_and_clause_budget() -> None:
++    """Verify clause splitting handles AND keywords outside quotes and enforces clause limit."""
++    # Single clause
++    assert split_query_clauses("state:todo") == ["state:todo"]
++
++    # Multiple AND clauses
++    query = 'status = "Todo" AND priority = "high" And cycle = "Sprint 1" and label = "bug"'
++    clauses = split_query_clauses(query)
++    assert len(clauses) == 4
++    assert clauses[0] == 'status = "Todo"'
++    assert clauses[1] == 'priority = "high"'
++    assert clauses[2] == 'cycle = "Sprint 1"'
++    assert clauses[3] == 'label = "bug"'
++
++    # AND inside quotes must NOT split
++    quoted = 'summary = "cats AND dogs" AND state:todo'
++    q_clauses = split_query_clauses(quoted)
++    assert len(q_clauses) == 2
++    assert q_clauses[0] == 'summary = "cats AND dogs"'
++    assert q_clauses[1] == "state:todo"
++
++    # Exceeding MAX_CLAUSES (32) raises FILTER_TOO_COMPLEX
++    trimmed_many = " AND ".join(f"s:{i}" for i in range(35))
++    with pytest.raises(ProblemException) as exc_info:
++        split_query_clauses(trimmed_many, max_clauses=MAX_CLAUSES)
++    assert exc_info.value.code == "FILTER_TOO_COMPLEX"
++    assert exc_info.value.status == 422
++
++
++def test_parse_comparison_clause() -> None:
++    """Verify comparison clause parser extracts field, operator (=, !=), and value."""
++    # Equality
++    c1 = parse_comparison_clause('status = "In Progress"')
++    assert c1 == ParsedComparisonClause(
++        field="status", operator="=", value="In Progress", negated=False
++    )
++
++    # Inequality
++    c2 = parse_comparison_clause("priority != urgent")
++    assert c2 == ParsedComparisonClause(
++        field="priority", operator="!=", value="urgent", negated=False
++    )
++
++    # NOT prefix
++    c3 = parse_comparison_clause('NOT state = "Done"')
++    assert c3 == ParsedComparisonClause(field="state", operator="=", value="Done", negated=True)
++
++    # Single quotes
++    c4 = parse_comparison_clause("project = 'KAN'")
++    assert c4 == ParsedComparisonClause(field="project", operator="=", value="KAN", negated=False)
++
++    # Non-comparison clause returns None
++    assert parse_comparison_clause("state:todo priority:high") is None
++    assert parse_comparison_clause('summary = "quoted" with extra') is not None
++    assert parse_comparison_clause('invalid-field!@# = "test"') is None
++
++
++def test_tokenize_predicate_string_and_token_budget() -> None:
++    """Verify tokenizer extracts field:value, negated tokens, quotes, and enforces token limit."""
++    s = '-state:completed !priority:low "mars rover" telemetry NOT "jupiter" label:\'sec\''
++    tokens = tokenize_predicate_string(s)
++    assert len(tokens) == 6
++    assert tokens[0] == ParsedToken(field="state", value="completed", negated=True)
++    assert tokens[1] == ParsedToken(field="priority", value="low", negated=True)
++    assert tokens[2] == ParsedToken(field=None, value="mars rover", negated=False)
++    assert tokens[3] == ParsedToken(field=None, value="telemetry", negated=False)
++    assert tokens[4] == ParsedToken(field=None, value="jupiter", negated=True)
++    assert tokens[5] == ParsedToken(field="label", value="sec", negated=False)
++
++    # Standalone single-quoted string
++    s_single = "'hardware failure' cycle:active"
++    toks_single = tokenize_predicate_string(s_single)
++    assert toks_single[0] == ParsedToken(field=None, value="hardware failure", negated=False)
++    assert toks_single[1] == ParsedToken(field="cycle", value="active", negated=False)
++
++    # Exceeding MAX_TOKENS (32) raises FILTER_TOO_COMPLEX
++    many_tokens = " ".join(f"t{i}" for i in range(35))
++    with pytest.raises(ProblemException) as exc_info:
++        tokenize_predicate_string(many_tokens, max_tokens=MAX_TOKENS)
++    assert exc_info.value.code == "FILTER_TOO_COMPLEX"
++    assert exc_info.value.status == 422
++
++
++def test_adversarial_redos_resistance() -> None:
++    """Verify adversarial unclosed quotes and repeated patterns evaluate in < 10ms."""
++    t0 = time.perf_counter()
++    res = compile_predicate_string('a:"' * 50)
++    elapsed = (time.perf_counter() - t0) * 1000.0
++    assert elapsed < 10.0
++    assert isinstance(res, list)
++
++
++# ============================================================================
++# Section 2: Predicate Compilation Unit Assertions Across All DSL Fields
++# ============================================================================
++
++
++def test_compile_predicate_all_fields_structure() -> None:
++    """Verify compile_predicate_string handles all required filter fields without errors."""
++    proj_id = uuid.uuid4()
++    user_id = uuid.uuid4()
++
++    # Empty query
++    assert compile_predicate_string("", project=proj_id, caller_principal_id=user_id) == []
++    assert compile_predicate_string("   ", project=proj_id) == []
++
++    # 1. State / Status expressions
++    p_state = compile_predicate_string(
++        "state:todo state!=done -state:cancelled !status:closed state:actionable status:active state:all state:*"
++    )
++    assert len(p_state) == 8
++
++    # Comma-separated state and state UUID
++    uid_st = str(uuid.uuid4())
++    p_state_multi = compile_predicate_string(f"state:todo,in_progress state:{uid_st}")
++    assert len(p_state_multi) == 2
++
++    # 2. State Group expressions
++    p_group = compile_predicate_string(
++        "state_group:started group:unstarted state_group!=completed group:actionable group:all"
++    )
++    assert len(p_group) == 5
++
++    # 3. Priority expressions
++    uid_pr = str(uuid.uuid4())
++    p_prio = compile_predicate_string(
++        f"priority:high,urgent priority:low priority!=low -priority:low priority:{uid_pr}"
++    )
++    assert len(p_prio) == 5
++
++    # 4. Assignee expressions
++    uid_asg = str(uuid.uuid4())
++    p_asg = compile_predicate_string(
++        f"assignee:@me assignee:me assignee:unassigned assignee:none -assignee:unassigned assignee:alice assignee:@bob assignee:{uid_asg}",
++        caller_principal_id=user_id,
++    )
++    assert len(p_asg) == 8
++
++    # Assignee @me without caller_principal_id yields false condition
++    p_asg_no_caller = compile_predicate_string("assignee:@me", caller_principal_id=None)
++    assert len(p_asg_no_caller) == 1
++
++    # 5. Label expressions
++    uid_lbl = str(uuid.uuid4())
++    p_lbl = compile_predicate_string(
++        f"label:security label:bug,enhancement -label:wontfix label:{uid_lbl}"
++    )
++    assert len(p_lbl) == 4
++
++    # 6. Cycle expressions
++    uid_cyc = str(uuid.uuid4())
++    p_cyc = compile_predicate_string(
++        f"cycle:current cycle:active cycle:none cycle:no-cycle cycle:Sprint1 cycle:{uid_cyc}"
++    )
++    assert len(p_cyc) == 6
++
++    # 7. Module expressions
++    uid_mod = str(uuid.uuid4())
++    p_mod = compile_predicate_string(f"module:none module:Rover module:{uid_mod} -module:Rover")
++    assert len(p_mod) == 4
++
++    # 8. Project expressions
++    p_proj = compile_predicate_string('project:KAN AND project = "ENG" AND project!=KAN')
++    assert len(p_proj) == 3
++
++    # 9. Key expressions
++    uid_key = str(uuid.uuid4())
++    p_key = compile_predicate_string(f"key:KAN-101 AND key={uid_key} AND -key:KAN-102")
++    assert len(p_key) == 3
++
++    # 10. Free-text terms
++    p_text = compile_predicate_string('"mars rover" telemetry -jupiter NOT "venus"')
++    assert len(p_text) == 4
++
++    # 11. Comparison clauses with = and !=
++    p_cmp = compile_predicate_string(
++        'status = "In Progress" AND priority != "low" AND NOT state = "Cancelled"'
++    )
++    assert len(p_cmp) == 3
++
++    # 12. Unrecognized field falls back to text search
++    p_unknown = compile_predicate_string('custom_attribute:foo AND custom_other = "bar"')
++    assert len(p_unknown) == 2
++
++
++# ============================================================================
++# Section 3: Integration Tests Against Clean PostgreSQL Database
++# ============================================================================
++
++
++@pytest.mark.committed_db
++async def test_predicate_compiler_execution_against_database(
++    committed_db_session: AsyncSession,
++) -> None:
++    """Verify compiled SQL predicates execute against real PostgreSQL tables with expected filtering."""
++    session = committed_db_session
++
++    ws_id = await create_workspace(session, name="Search Test WS")
++    admin_id = await create_user(session, ws_id, handle="@alice", display_name="Alice Engineer")
++    await add_role_binding(session, ws_id, admin_id, role="WORKSPACE_ADMIN", scope_type="workspace")
++    await session.commit()
++
++    proj_id = await create_project(
++        session, ws_id, identifier="FLTR", name="Filter Test Project", created_by_id=admin_id
++    )
++    await add_role_binding(
++        session, ws_id, admin_id, role="PROJECT_ADMIN", scope_type="project", project_id=proj_id
++    )
++    await rebuild_era(session, ws_id)
++    await session.commit()
++
++    proj = await session.get(Project, proj_id)
++    assert proj is not None
++
++    # Load seeded workflow states
++    states = (
++        await session.execute(
++            text(
++                "SELECT id, name, state_group FROM workflow_states WHERE project_id = :p ORDER BY sort_order"
++            ),
++            {"p": proj_id},
++        )
++    ).all()
++    st_todo_id = next(s[0] for s in states if s[2] in ("unstarted", "backlog"))
++    st_done_id = next(s[0] for s in states if s[2] == "completed")
++
++    # Load seeded priorities
++    priorities = (
++        await session.execute(
++            text(
++                "SELECT id, slug FROM project_priorities WHERE project_id = :p ORDER BY sort_order"
++            ),
++            {"p": proj_id},
++        )
++    ).all()
++    prio_high_id = next(p[0] for p in priorities if p[1] == "high")
++    prio_low_id = next(p[0] for p in priorities if p[1] == "low")
++
++    # Insert explicit label
++    lbl_sec_id = uuid.uuid4()
++    lbl_sec = ProjectLabel(
++        id=lbl_sec_id,
++        workspace_id=ws_id,
++        project_id=proj_id,
++        name="security",
++        color_hex="#ff0000",
++    )
++    session.add(lbl_sec)
++    await session.commit()
++
++    # Create Issue 1: Todo, High, Alice, Security, Mars Antenna
++    i1_id = uuid.uuid4()
++    seq1 = (
++        await session.execute(text("SELECT allocate_issue_sequence(:p)"), {"p": proj_id})
++    ).scalar_one()
++    await session.execute(
++        text("SELECT register_object('issue'::object_kind, :ws, :proj, :ckey, :title, :cr, :id)"),
++        {
++            "ws": ws_id,
++            "proj": proj_id,
++            "ckey": f"FLTR-{seq1}",
++            "title": "Mars antenna telemetry connection",
++            "cr": admin_id,
++            "id": i1_id,
++        },
++    )
++    await session.execute(
++        text(
++            "INSERT INTO issues (id, object_type, workspace_id, project_id, sequence_id, summary, description_markdown, state_id, priority_id, created_by_id, original_created_by_id, board_rank, ancestry_path) "
++            "VALUES (:id, 'issue', :ws, :proj, :seq, :summary, :desc, :st, :pri, :cr, :cr, '0|hzzzzz:', 'top')"
++        ),
++        {
++            "id": i1_id,
++            "ws": ws_id,
++            "proj": proj_id,
++            "seq": seq1,
++            "summary": "Mars antenna telemetry connection",
++            "desc": "Investigating telemetry antennas on rover.",
++            "st": st_todo_id,
++            "pri": prio_high_id,
++            "cr": admin_id,
++        },
++    )
++    i1_asg = IssueAssignee(
++        id=uuid.uuid4(),
++        workspace_id=ws_id,
++        issue_id=i1_id,
++        principal_id=admin_id,
++    )
++    i1_lbl = IssueLabel(
++        issue_id=i1_id,
++        label_id=lbl_sec_id,
++        workspace_id=ws_id,
++    )
++    session.add_all([i1_asg, i1_lbl])
++
++    # Create Issue 2: Done, Low, Unassigned, Jupiter Camera
++    i2_id = uuid.uuid4()
++    seq2 = (
++        await session.execute(text("SELECT allocate_issue_sequence(:p)"), {"p": proj_id})
++    ).scalar_one()
++    await session.execute(
++        text("SELECT register_object('issue'::object_kind, :ws, :proj, :ckey, :title, :cr, :id)"),
++        {
++            "ws": ws_id,
++            "proj": proj_id,
++            "ckey": f"FLTR-{seq2}",
++            "title": "Jupiter camera calibration",
++            "cr": admin_id,
++            "id": i2_id,
++        },
++    )
++    await session.execute(
++        text(
++            "INSERT INTO issues (id, object_type, workspace_id, project_id, sequence_id, summary, description_markdown, state_id, priority_id, created_by_id, original_created_by_id, board_rank, ancestry_path) "
++            "VALUES (:id, 'issue', :ws, :proj, :seq, :summary, :desc, :st, :pri, :cr, :cr, '0|hzzzzz:', 'top')"
++        ),
++        {
++            "id": i2_id,
++            "ws": ws_id,
++            "proj": proj_id,
++            "seq": seq2,
++            "summary": "Jupiter camera calibration",
++            "desc": "Calibrating optic sensors for Jupiter flyby.",
++            "st": st_done_id,
++            "pri": prio_low_id,
++            "cr": admin_id,
++        },
++    )
++    await session.commit()
++
++    # Query 1: Actionable state and high priority -> matches i1 only
++    q1 = "state:actionable AND priority:high"
++    preds1 = compile_predicate_string(q1, project=proj, caller_principal_id=admin_id)
++    stmt1 = select(Issue.id).where(Issue.project_id == proj_id, *preds1)
++    res1 = (await session.execute(stmt1)).scalars().all()
++    assert res1 == [i1_id]
++
++    # Query 2: Assignee @me -> matches i1 only
++    q2 = "assignee:@me"
++    preds2 = compile_predicate_string(q2, project=proj, caller_principal_id=admin_id)
++    stmt2 = select(Issue.id).where(Issue.project_id == proj_id, *preds2)
++    res2 = (await session.execute(stmt2)).scalars().all()
++    assert res2 == [i1_id]
++
++    # Query 3: Assignee unassigned -> matches i2 only
++    q3 = "assignee:unassigned"
++    preds3 = compile_predicate_string(q3, project=proj, caller_principal_id=admin_id)
++    stmt3 = select(Issue.id).where(Issue.project_id == proj_id, *preds3)
++    res3 = (await session.execute(stmt3)).scalars().all()
++    assert res3 == [i2_id]
++
++    # Query 4: Negative state: -state:completed -> matches i1 only
++    q4 = "-state:completed"
++    preds4 = compile_predicate_string(q4, project=proj, caller_principal_id=admin_id)
++    stmt4 = select(Issue.id).where(Issue.project_id == proj_id, *preds4)
++    res4 = (await session.execute(stmt4)).scalars().all()
++    assert res4 == [i1_id]
++
++    # Query 5: Label security -> matches i1 only
++    q5 = "label:security"
++    preds5 = compile_predicate_string(q5, project=proj, caller_principal_id=admin_id)
++    stmt5 = select(Issue.id).where(Issue.project_id == proj_id, *preds5)
++    res5 = (await session.execute(stmt5)).scalars().all()
++    assert res5 == [i1_id]
++
++
++# ============================================================================
++# Section 4: English Full-Text Search Stemming Consistency (Problem 2)
++# ============================================================================
++
++
++@pytest.mark.committed_db
++async def test_english_fts_stemming_consistency_vs_simple(
++    committed_db_session: AsyncSession,
++) -> None:
++    """Verify english dictionary matches inflected/plural terms while simple dictionary fails."""
++    session = committed_db_session
++
++    ws_id = await create_workspace(session, name="FTS Stemming WS")
++    admin_id = await create_user(session, ws_id, handle="@stemmer", display_name="Stemmer")
++    await add_role_binding(session, ws_id, admin_id, role="WORKSPACE_ADMIN", scope_type="workspace")
++    await session.commit()
++
++    proj_id = await create_project(
++        session, ws_id, identifier="STEM", name="Stemming Test Project", created_by_id=admin_id
++    )
++    await add_role_binding(
++        session, ws_id, admin_id, role="PROJECT_ADMIN", scope_type="project", project_id=proj_id
++    )
++    await rebuild_era(session, ws_id)
++    await session.commit()
++
++    proj = await session.get(Project, proj_id)
++    assert proj is not None
++
++    states = (
++        await session.execute(
++            text("SELECT id FROM workflow_states WHERE project_id = :p ORDER BY sort_order"),
++            {"p": proj_id},
++        )
++    ).all()
++    st_id = states[0][0]
++
++    priorities = (
++        await session.execute(
++            text("SELECT id FROM project_priorities WHERE project_id = :p ORDER BY sort_order"),
++            {"p": proj_id},
++        )
++    ).all()
++    pri_id = priorities[0][0]
++
++    # Issue with text containing stemmed terms
++    iss_id = uuid.uuid4()
++    seq = (
++        await session.execute(text("SELECT allocate_issue_sequence(:p)"), {"p": proj_id})
++    ).scalar_one()
++    await session.execute(
++        text("SELECT register_object('issue'::object_kind, :ws, :proj, :ckey, :title, :cr, :id)"),
++        {
++            "ws": ws_id,
++            "proj": proj_id,
++            "ckey": f"STEM-{seq}",
++            "title": "Database connection retry",
++            "cr": admin_id,
++            "id": iss_id,
++        },
++    )
++    await session.execute(
++        text(
++            "INSERT INTO issues (id, object_type, workspace_id, project_id, sequence_id, summary, description_markdown, state_id, priority_id, created_by_id, original_created_by_id, board_rank, ancestry_path) "
++            "VALUES (:id, 'issue', :ws, :proj, :seq, :summary, :desc, :st, :pri, :cr, :cr, '0|hzzzzz:', 'top')"
++        ),
++        {
++            "id": iss_id,
++            "ws": ws_id,
++            "proj": proj_id,
++            "seq": seq,
++            "summary": "Database connection retry",
++            "desc": "The server establishes connections and handles connection timeouts.",
++            "st": st_id,
++            "pri": pri_id,
++            "cr": admin_id,
++        },
++    )
++    await session.commit()
++
++    # In PostgreSQL, search_tsv is generated with 'english' configuration.
++    # Query with inflected plural 'connections' using 'english':
++    # to_tsquery('english', 'connections') stems to 'connect', matching 'connection' and 'connections'.
++    sql_english = text(
++        "SELECT issues.search_tsv @@ websearch_to_tsquery('english', :q) FROM issues WHERE id = :id"
++    )
++    res_english = (await session.execute(sql_english, {"q": "connections", "id": iss_id})).scalar()
++    assert res_english is True
++
++    # Query with 'retrying' vs 'retry'
++    res_inflection = (await session.execute(sql_english, {"q": "retrying", "id": iss_id})).scalar()
++    assert res_inflection is True
++
++    # Under 'simple' dictionary, no stemming occurs: 'retrying' != 'retry'
++    sql_simple = text(
++        "SELECT issues.search_tsv @@ websearch_to_tsquery('simple', :q) FROM issues WHERE id = :id"
++    )
++    res_simple_inflection = (
++        await session.execute(sql_simple, {"q": "retrying", "id": iss_id})
++    ).scalar()
++    # 'retrying' does not match 'retry' under simple dictionary
++    assert res_simple_inflection is False
++
++    # Verify compile_issue_filter_predicates compiles search_query with english stemming
++    filters = FilterSpec(search_query="connections")
++    preds = compile_issue_filter_predicates(session, proj, filters, admin_id)
++    stmt = select(Issue.id).where(Issue.id == iss_id, *preds)
++    matched_ids = (await session.execute(stmt)).scalars().all()
++    assert matched_ids == [iss_id]
++
++
++# ============================================================================
++# Section 5: HNSW Iterative Scan & Safe Fallback (Problem 3)
++# ============================================================================
++
++
++@pytest.mark.committed_db
++async def test_hnsw_iterative_scan_and_fallback(
++    committed_db_session: AsyncSession,
++) -> None:
++    """Verify SET LOCAL hnsw.iterative_scan = 'relaxed_order' executes or falls back cleanly."""
++    session = committed_db_session
++
++    # Test direct execution of the GUC or safe fallback
++    async with session.begin_nested():
++        try:
++            async with session.begin_nested():
++                await session.execute(text("SET LOCAL hnsw.iterative_scan = 'relaxed_order'"))
++        except Exception:
++            pass
++        # Ensure transaction is healthy and subsequent queries succeed
++        res = (await session.execute(text("SELECT 1"))).scalar()
++        assert res == 1
++
++
++class _DummySession:
++    """Mock session with sync begin / begin_nested returning self as async context manager."""
++
++    def __init__(self) -> None:
++        self.info: dict[str, Any] = {}
++        self.executed_statements: list[str] = []
++
++    async def __aenter__(self) -> Self:
++        return self
++
++    async def __aexit__(self, exc_type: Any, exc_val: Any, exc_tb: Any) -> None:
++        pass
++
++    def begin(self) -> _DummySession:
++        return self
++
++    def begin_nested(self) -> _DummySession:
++        return self
++
++    async def execute(self, stmt: Any, params: Any = None) -> Any:
++        sql = str(stmt)
++        self.executed_statements.append(sql)
++        if "hnsw.iterative_scan" in sql:
++            msg = "unrecognized configuration parameter 'hnsw.iterative_scan'"
++            raise RuntimeError(msg)
++        res = MagicMock()
++        res.fetchall.return_value = []
++        return res
++
++
++async def test_search_candidates_hnsw_iterative_scan_fallback_unit() -> None:
++    """Verify _query_vector_candidates executes hnsw.iterative_scan with fallback on mock session."""
++    dummy_session = _DummySession()
++
++    ws_id = uuid.uuid4()
++    query_vector = [0.1] * 384
++    candidates = await _query_vector_candidates(
++        session=dummy_session,  # type: ignore[arg-type]
++        workspace_id=ws_id,
++        project_id=None,
++        target_kinds=["issue"],
++        query_vector=query_vector,
++    )
++    assert candidates is None
++    # Verify statement_timeout and hnsw.iterative_scan were attempted
++    assert any("statement_timeout" in s for s in dummy_session.executed_statements)
++    assert any("hnsw.iterative_scan" in s for s in dummy_session.executed_statements)
++
++
++def test_predicate_compiler_edge_cases_and_branches() -> None:
++    """Exercise all branch conditions and edge cases in predicate_compiler."""
++    # 1. split_query_clauses extra whitespace after AND
++    clauses = split_query_clauses("state:todo    AND    priority:high")
++    assert clauses == ["state:todo", "priority:high"]
++
++    # 2. split_query_clauses exceeding max_clauses on tail
++    query_35 = " " + " AND ".join([f"f{i}:v{i}" for i in range(35)])
++    with pytest.raises(ProblemException) as exc_info:
++        split_query_clauses(query_35, max_clauses=32)
++    assert exc_info.value.code == "FILTER_TOO_COMPLEX"
++
++    # 3. parse_comparison_clause edge cases
++    # Multiple != or = operators
++    cmp1 = parse_comparison_clause("state!=todo!=done")
++    assert cmp1 is not None
++    assert cmp1.field == "state"
++    assert cmp1.operator == "!="
++    cmp2 = parse_comparison_clause("state=todo=done")
++    assert cmp2 is not None
++    assert cmp2.field == "state"
++    assert cmp2.operator == "="
++    # Negated comparison
++    cmp3 = parse_comparison_clause("NOT priority=urgent")
++    assert cmp3 is not None
++    assert cmp3.negated is True
++    assert cmp3.field == "priority"
++    # Invalid syntax or no identifier
++    assert parse_comparison_clause("=invalid") is None
++    assert parse_comparison_clause("invalid-field!=abc") is None
++
++    # 4. tokenize_predicate_string quotes and edge cases
++    toks1 = tokenize_predicate_string("state:'in progress' priority:\"urgent task\" key:FLTR-1")
++    assert any(t.field == "state" and t.value == "in progress" for t in toks1)
++    assert any(t.field == "priority" and t.value == "urgent task" for t in toks1)
++    assert any(t.field == "key" and t.value == "FLTR-1" for t in toks1)
++
++    # Exceeding max_tokens
++    many_tokens = " ".join([f"t{i}:val{i}" for i in range(35)])
++    with pytest.raises(ProblemException) as exc_tok:
++        tokenize_predicate_string(many_tokens, max_tokens=32)
++    assert exc_tok.value.code == "FILTER_TOO_COMPLEX"
++
++    # Negated free text words and dangling quotes
++    toks2 = tokenize_predicate_string('word1 NOT word2 NOT word3 "unclosed quote')
++    assert any(t.value == "word2" and t.negated is True for t in toks2)
++    assert any(t.value == "word3" and t.negated is True for t in toks2)
++
++    # 5. compile_predicate_string with varied project and caller_id types
++    p_uuid = uuid.uuid4()
++    caller_uuid = uuid.uuid4()
++    # project as UUID
++    preds_p = compile_predicate_string("state:closed", project=p_uuid)
++    assert len(preds_p) == 1
++    # caller_id as string UUID
++    preds_c = compile_predicate_string("assignee:@me", caller_principal_id=str(caller_uuid))
++    assert len(preds_c) == 1
++    # caller_id as non-UUID string
++    preds_bad_c = compile_predicate_string("assignee:@me", caller_principal_id="not-a-uuid")
++    assert len(preds_bad_c) == 1
++    # caller_id None
++    preds_no_c = compile_predicate_string("assignee:@me", caller_principal_id=None)
++    assert len(preds_no_c) == 1
++
++    # 6. compile_predicate_string fields with project, UUIDs, and invalid UUID fallback
++    # state
++    p_st1 = compile_predicate_string("state:closed", project=p_uuid)
++    p_st2 = compile_predicate_string("state:terminal", project=None)
++    p_st3 = compile_predicate_string("state:all,state:*")
++    p_st4 = compile_predicate_string(f"state:{uuid.uuid4()}", project=p_uuid)
++    p_st5 = compile_predicate_string("state:not-a-uuid-fallback", project=p_uuid)
++    assert len(p_st1) == 1
++    assert len(p_st2) == 1
++    assert len(p_st3) == 1
++    assert len(p_st4) == 1
++    assert len(p_st5) == 1
++
++    # state_group
++    p_sg1 = compile_predicate_string("state_group:active", project=p_uuid)
++    p_sg2 = compile_predicate_string("state_group:all", project=p_uuid)
++    p_sg3 = compile_predicate_string("state_group:backlog", project=p_uuid)
++    assert len(p_sg1) == 1
++    assert len(p_sg2) == 1
++    assert len(p_sg3) == 1
++
++    # priority
++    p_pr1 = compile_predicate_string(f"priority:{uuid.uuid4()}", project=p_uuid)
++    p_pr2 = compile_predicate_string("priority:not-a-uuid-fallback", project=p_uuid)
++    assert len(p_pr1) == 1
++    assert len(p_pr2) == 1
++
++    # assignee
++    p_asg1 = compile_predicate_string(f"assignee:{uuid.uuid4()}")
++    p_asg2 = compile_predicate_string("assignee:unassigned,none")
++    p_asg3 = compile_predicate_string("assignee:alice.dev")
++    assert len(p_asg1) == 1
++    assert len(p_asg2) == 1
++    assert len(p_asg3) == 1
++
++    # label
++    p_lbl1 = compile_predicate_string(f"label:{uuid.uuid4()}")
++    p_lbl2 = compile_predicate_string("label:frontend")
++    assert len(p_lbl1) == 1
++    assert len(p_lbl2) == 1
++
++    # cycle
++    p_cyc1 = compile_predicate_string("cycle:current", project=p_uuid)
++    p_cyc2 = compile_predicate_string("cycle:none,no-cycle", project=p_uuid)
++    p_cyc3 = compile_predicate_string(f"cycle:{uuid.uuid4()}", project=p_uuid)
++    p_cyc4 = compile_predicate_string("cycle:Sprint1", project=p_uuid)
++    p_cyc5 = compile_predicate_string("cycle:Sprint1", project=None)
++    assert len(p_cyc1) == 1
++    assert len(p_cyc2) == 1
++    assert len(p_cyc3) == 1
++    assert len(p_cyc4) == 1
++    assert len(p_cyc5) == 1
++
++    # module
++    p_mod1 = compile_predicate_string("module:none", project=p_uuid)
++    p_mod2 = compile_predicate_string(f"module:{uuid.uuid4()}", project=p_uuid)
++    p_mod3 = compile_predicate_string("module:Billing", project=p_uuid)
++    p_mod4 = compile_predicate_string("module:Billing", project=None)
++    assert len(p_mod1) == 1
++    assert len(p_mod2) == 1
++    assert len(p_mod3) == 1
++    assert len(p_mod4) == 1
++
++    # project & key
++    p_prj = compile_predicate_string("project:KANBA,-project:OTHER")
++    p_key1 = compile_predicate_string(f"key:{uuid.uuid4()}")
++    p_key2 = compile_predicate_string("key:KANBA-42")
++    p_key3 = compile_predicate_string("key:invalid_key_format")
++    assert len(p_prj) == 1
++    assert len(p_key1) == 1
++    assert len(p_key2) == 1
++    assert len(p_key3) == 1
++
++    # free text & unrecognized field
++    p_ft1 = compile_predicate_string("some_unrecognized_field:value")
++    p_ft2 = compile_predicate_string("")
++    p_ft3 = compile_predicate_string("   ")
++    assert len(p_ft1) == 1
++    assert len(p_ft2) == 0
++    assert len(p_ft3) == 0
++
++
++def test_view_dsl_filter_predicates_and_branches() -> None:
++    """Exercise branch conditions in view_dsl compile_issue_filter_predicates and validate_group_axes."""
++    mock_session = MagicMock(spec=AsyncSession)
++    caller_id = uuid.uuid4()
++    p_uuid = uuid.uuid4()
++
++    mock_project = MagicMock(spec=Project)
++    mock_project.id = p_uuid
++    mock_project.modules_enabled = True
++
++    # 1. validate_group_axes branch testing
++    # Same group axis
++    with pytest.raises(ProblemException) as exc_dup:
++        validate_group_axes(mock_project, GroupAxis.STATE, GroupAxis.STATE)
++    assert exc_dup.value.code == "DUPLICATE_GROUP_AXIS"
++
++    # Modules disabled but requested
++    mock_no_modules = MagicMock(spec=Project)
++    mock_no_modules.id = p_uuid
++    mock_no_modules.modules_enabled = False
++    with pytest.raises(ProblemException) as exc_mod:
++        validate_group_axes(mock_no_modules, GroupAxis.MODULE, None)
++    assert exc_mod.value.code == "MODULES_DISABLED"
++
++    with pytest.raises(ProblemException) as exc_mod_fltr:
++        validate_group_axes(mock_no_modules, None, None, FilterSpec(module_ids=[str(uuid.uuid4())]))
++    assert exc_mod_fltr.value.code == "MODULES_DISABLED"
++
++    # 2. compile_issue_filter_predicates with project=None
++    filters_no_proj = FilterSpec(
++        state_ids=[uuid.uuid4()],
++        priority_ids=[uuid.uuid4()],
++        assignee_ids=["invalid-assignee-uuid", str(uuid.uuid4())],
++        parent_issue_id="invalid-parent-uuid",
++        module_ids=["none", str(uuid.uuid4()), "invalid-module-uuid"],
++        search_query="   ",
++    )
++    preds_no_proj = compile_issue_filter_predicates(
++        session=mock_session,
++        project=None,
++        filters=filters_no_proj,
++        caller_principal_id=caller_id,
++    )
++    assert len(preds_no_proj) > 0
++
++    # 3. parent_issue_id valid uuid, cycle_ids with invalid uuid
++    filters_proj = FilterSpec(
++        parent_issue_id=str(uuid.uuid4()),
++        cycle_ids=["none", "active", str(uuid.uuid4()), "invalid-cycle-uuid"],
++        search_query="mars rover telemetry",
++    )
++    preds_proj = compile_issue_filter_predicates(
++        session=mock_session,
++        project=mock_project,
++        filters=filters_proj,
++        caller_principal_id=caller_id,
++    )
++    assert len(preds_proj) > 0

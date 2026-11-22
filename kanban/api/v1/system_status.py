@@ -66,9 +66,10 @@ class SystemStatusResponse(BaseModel):
         default_factory=lambda: ["scalar", "formula", "wasm", "nsjail"]
     )
     sandbox_unavailable_reason: str | None = None
+    version: str | None = None
     git_commit: str | None = None
     build_timestamp: str | None = None
-    openapi_version: str | None = "2.0.0"
+    openapi_version: str | None = None
     openapi_bundle_hash: str | None = None
     frontend_bundle_hash: str | None = None
 
@@ -216,6 +217,7 @@ async def _assemble_system_status_response(
         allow_unlimited_mcp_keys=not disable_unlimited,
         supported_custom_field_tiers=supported_tiers,
         sandbox_unavailable_reason=sandbox_reason,
+        version=b_info.version,
         git_commit=b_info.git_commit,
         build_timestamp=b_info.build_timestamp,
         openapi_version=b_info.openapi_version,

@@ -1,0 +1,84 @@
+{
+  "ticket": "KAN-312",
+  "version_format_specification": "0.<current_release_version>.<git_commit_count>",
+  "current_release_version": "2",
+  "resolved_git_commit_count": 1203,
+  "resolved_platform_version": "0.2.1203",
+  "system_about_contract": {
+    "version": "0.2.1203",
+    "git_commit": "4f836f69d99ce4837c4abb97a85a6892862fdade",
+    "git_commit_count": 1203,
+    "build_timestamp": "2026-11-22T13:00:00Z",
+    "openapi_version": "0.2.1203",
+    "openapi_bundle_hash": "062d56d1ad41c429d1b2dda13ceb263ec11a934ee5d4151787f898ed9ed5afd5",
+    "frontend_bundle_hash": "5671d66ee5ed50d038be37fa7b0ff46385e89dbb83d3e3c480ed3615e3164996",
+    "features": [
+      "realtime_notifications",
+      "cyclonedx_sbom",
+      "system_diagnostics",
+      "system_status",
+      "sparkle_ai",
+      "oidc_auth"
+    ],
+    "sbom_url": "/api/v1/system/sbom"
+  },
+  "system_status_contract": {
+    "status": "healthy",
+    "deployment_mode": "production_multi_container",
+    "version": "0.2.1203",
+    "openapi_version": "0.2.1203",
+    "persistent_volume": true,
+    "tier_b_sandbox_available": true,
+    "supported_custom_field_tiers": ["scalar", "formula", "wasm", "nsjail"]
+  },
+  "admin_diagnostics_build_info_contract": {
+    "version": "0.2.1203",
+    "git_commit": "4f836f69d99ce4837c4abb97a85a6892862fdade",
+    "git_commit_count": 1203,
+    "build_timestamp": "2026-11-22T13:00:00Z",
+    "openapi_version": "0.2.1203",
+    "openapi_bundle_hash": "062d56d1ad41c429d1b2dda13ceb263ec11a934ee5d4151787f898ed9ed5afd5",
+    "frontend_bundle_hash": "5671d66ee5ed50d038be37fa7b0ff46385e89dbb83d3e3c480ed3615e3164996"
+  },
+  "cyclonedx_sbom_contract": {
+    "bomFormat": "CycloneDX",
+    "specVersion": "1.5",
+    "version": 1,
+    "metadata": {
+      "component": {
+        "type": "application",
+        "name": "thumbs-up-kanban",
+        "version": "0.2.1203",
+        "description": "Agent-First, Security-First Kanban and Knowledge Platform"
+      },
+      "tools": {
+        "components": [
+          {
+            "type": "application",
+            "name": "kanban",
+            "version": "0.2.1203"
+          }
+        ]
+      }
+    }
+  },
+  "frontend_ui_elements": {
+    "about_hero_badge": "v0.2.1203",
+    "about_metadata_version_field": {
+      "container_testid": "about-metadata-section",
+      "label": "Version:",
+      "value_testid": "about-meta-version",
+      "rendered_value": "0.2.1203"
+    },
+    "sidebar_footer_version_badge": {
+      "class": "kb-sidebar-about-version",
+      "rendered_value": "v0.2.1203"
+    }
+  },
+  "docker_build_arg_contract": {
+    "dockerfile_target": "runtime-slim",
+    "build_arg": "KB_GIT_COMMIT_COUNT",
+    "env_var": "KB_GIT_COMMIT_COUNT=${KB_GIT_COMMIT_COUNT}",
+    "invocation_flag": "--build-arg KB_GIT_COMMIT_COUNT=$(git rev-list --count HEAD)"
+  }
+}

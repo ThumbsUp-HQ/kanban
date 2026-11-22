@@ -285,6 +285,11 @@ class KanbanApiClient:
             extra_dict["tainted_by"] = problem["extra"]["tainted_by"]
         if "unauthorized_mentions" in problem:
             extra_dict["unauthorized_mentions"] = problem["unauthorized_mentions"]
+        for secret_key in ("rule_id", "secret_kind", "line", "fingerprint"):
+            if secret_key in problem:
+                extra_dict[secret_key] = problem[secret_key]
+            elif isinstance(problem.get("extra"), dict) and secret_key in problem["extra"]:
+                extra_dict[secret_key] = problem["extra"][secret_key]
 
         enriched = self._enrich_progressive_disclosure(mapped_code, problem, hint_str, extra_dict)
         raise KbMcpError(
@@ -303,7 +308,7 @@ class KanbanApiClient:
         )
 
     @staticmethod
-    def _enrich_progressive_disclosure(
+    def _enrich_progressive_disclosure(  # noqa: C901
         mapped_code: McpErrorCode,
         problem: dict[str, Any],
         hint_str: str | None,
@@ -359,6 +364,13 @@ class KanbanApiClient:
                     f"Sticky has already been promoted to Doc '{target_doc}'. Use update instead."
                 )
                 cli_example = cli_example or f'kanban-cli-docs update --id="{target_doc}"'
+        elif mapped_code in (
+            McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
+            McpErrorCode.SECRET_DETECTED_PUSH_PROTECTION,
+        ):
+            fix_hint = fix_hint or (
+                "Remove sensitive credentials, tokens, or private keys before submission."
+            )
         elif mapped_code in (McpErrorCode.NOT_FOUND, McpErrorCode.SECTION_NOT_FOUND):
             if not fix_hint:
                 fix_hint = (
@@ -483,11 +495,15 @@ class KanbanApiClient:
             "BLAST_RADIUS_CHANGED": McpErrorCode.BLAST_RADIUS_CHANGED,
             "SOFT_TRASH_REQUIRED_FIRST": McpErrorCode.SOFT_TRASH_REQUIRED_FIRST,
             "SERVER_ADMIN_REQUIRED": McpErrorCode.SERVER_ADMIN_REQUIRED,
+            "SECRET_DETECTED_IN_PAYLOAD": McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
+            "SECRET_DETECTED_PUSH_PROTECTION": McpErrorCode.SECRET_DETECTED_PUSH_PROTECTION,
         }
         if prob_code in code_map:
             return code_map[prob_code]
 
         suffix_map: dict[str, McpErrorCode] = {
+            "secret-detected-in-payload": McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
+            "secret-detected-push-protection": McpErrorCode.SECRET_DETECTED_PUSH_PROTECTION,
             "aal2-required": McpErrorCode.AAL2_REQUIRED,
             "insufficient-capability": McpErrorCode.INSUFFICIENT_PERMISSION,
             "insufficient-permission": McpErrorCode.INSUFFICIENT_PERMISSION,

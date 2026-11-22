@@ -30,6 +30,7 @@ from kanban.auth.sessions.cookies import SESSION_COOKIE_NAME
 from kanban.auth.sessions.csrf import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, CsrfMiddleware
 from kanban.auth.sessions.resolver import SessionCookieResolver
 from kanban.auth.sessions.service import SessionService
+from kanban.ops.build_info import resolve_platform_version
 from kanban.security.keys import KeyMaterial
 from kanban.settings import Settings
 from kanban.standalone.export_service import (
@@ -294,7 +295,8 @@ def _assert_admin_status(data: dict[str, Any]) -> None:
     assert data["is_server_admin"] is True
     assert data["git_commit"] is not None
     assert "build_timestamp" in data
-    assert data["openapi_version"] == "2.0.0"
+    assert data["openapi_version"] == resolve_platform_version()
+    assert data["version"] == resolve_platform_version()
     assert "openapi_bundle_hash" in data
     assert "frontend_bundle_hash" in data
 
@@ -343,7 +345,8 @@ async def test_case_1_system_status_admin_full_fields_and_member_redaction(
         assert data_admin_sa["sandbox_unavailable_reason"] is not None
         assert data_admin_sa["git_commit"] is not None
         assert "build_timestamp" in data_admin_sa
-        assert data_admin_sa["openapi_version"] == "2.0.0"
+        assert data_admin_sa["openapi_version"] == resolve_platform_version()
+        assert data_admin_sa["version"] == resolve_platform_version()
 
         # 2. As regular MEMBER: sensitive host topology redacted to null
         client.cookies.clear()

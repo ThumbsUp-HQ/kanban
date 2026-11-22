@@ -22,9 +22,36 @@ from database.models import (
 )
 from kanban.api.problems import ProblemException
 from kanban.api.v1.schemas.views import FilterSpec, GateStatus, GroupAxis, LabelMatch
+from kanban.services.predicate_compiler import (
+    MAX_CLAUSES,
+    MAX_QUERY_LENGTH,
+    MAX_TOKENS,
+    ParsedComparisonClause,
+    ParsedToken,
+    compile_predicate_string,
+    parse_comparison_clause,
+    sanitize_query_string,
+    split_query_clauses,
+    tokenize_predicate_string,
+)
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
+
+__all__ = [
+    "MAX_CLAUSES",
+    "MAX_QUERY_LENGTH",
+    "MAX_TOKENS",
+    "ParsedComparisonClause",
+    "ParsedToken",
+    "compile_issue_filter_predicates",
+    "compile_predicate_string",
+    "parse_comparison_clause",
+    "sanitize_query_string",
+    "split_query_clauses",
+    "tokenize_predicate_string",
+    "validate_group_axes",
+]
 
 _UUID_RE = re.compile(
     r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
@@ -285,7 +312,7 @@ def _compile_search_gate_predicates(filters: FilterSpec) -> list[Any]:
         clean_q = filters.search_query.strip()
         if clean_q:
             predicates.append(
-                text("issues.search_tsv @@ websearch_to_tsquery('simple', :q)").bindparams(
+                text("issues.search_tsv @@ websearch_to_tsquery('english', :q)").bindparams(
                     q=clean_q
                 )
             )

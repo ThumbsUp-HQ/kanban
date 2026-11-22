@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Final
 
 from pydantic import ValidationError
 
+from kanban.security.push_protection import scan_text_for_secrets
 from mcp.context import get_current_mcp_context
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.help import build_help
@@ -53,7 +54,7 @@ COMPLETE_WORK_SCHEMA: Final[dict[str, Any]] = {
 }
 
 
-def _validate_complete_work_arguments(  # noqa: C901, PLR0912
+def _validate_complete_work_arguments(  # noqa: C901, PLR0912, PLR0915
     arguments: dict[str, Any],
 ) -> VerificationProof | None:
     """Validate complete_work arguments against schema constraints and return parsed proof."""
@@ -86,6 +87,22 @@ def _validate_complete_work_arguments(  # noqa: C901, PLR0912
     if summary_bytes < 1 or summary_bytes > _MAX_SUMMARY_BYTES:
         msg = f"Argument 'summary_markdown' must be 1..{_MAX_SUMMARY_BYTES} bytes"
         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+
+    findings = scan_text_for_secrets(summary)
+    if findings:
+        f = findings[0]
+        raise KbMcpError(
+            McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
+            f"Secret material detected in field 'summary_markdown' at line {f.line}",
+            hint="Remove sensitive credentials, tokens, or private keys before submission.",
+            field="summary_markdown",
+            extra={
+                "rule_id": f.rule_id,
+                "secret_kind": f.kind.value,
+                "line": f.line,
+                "fingerprint": f.fingerprint,
+            },
+        )
 
     if (
         summary.strip().startswith("# Integration Agent Reality-Based Report")

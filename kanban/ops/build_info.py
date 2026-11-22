@@ -1,6 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""Build, commit, and OpenAPI/frontend bundle fingerprinting (KAN-57)."""
+"""Build, commit, and OpenAPI/frontend bundle fingerprinting (KAN-57, KAN-312)."""
 
 from __future__ import annotations
 
@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
-from kanban.ops.sbom import PLATFORM_VERSION
+CURRENT_RELEASE_VERSION = os.environ.get("KB_RELEASE_VERSION", "2").strip() or "2"
 
 
 @dataclass(frozen=True)
@@ -23,6 +23,8 @@ class BuildInfo:
     git_commit: str
     build_timestamp: str | None
     openapi_version: str
+    version: str
+    git_commit_count: int
     openapi_bundle_hash: str | None = None
     frontend_bundle_hash: str | None = None
 
@@ -49,6 +51,44 @@ def resolve_git_commit(cwd: Path | None = None) -> str:
         return "unknown"
 
     return "unknown"
+
+
+def resolve_git_commit_count(cwd: Path | None = None) -> int:
+    """Resolve git commit count from environment variables or git CLI fallback."""
+    env_count = os.environ.get("KB_GIT_COMMIT_COUNT")
+    if env_count is not None and env_count.strip().isdigit():
+        return int(env_count.strip())
+
+    git_bin = shutil.which("git") or "/usr/bin/git"
+    try:
+        res = subprocess.run(  # noqa: S603
+            [git_bin, "rev-list", "--count", "HEAD"],
+            cwd=cwd or Path(__file__).resolve().parents[2],
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=5,
+        )
+        if res.returncode == 0 and res.stdout.strip().isdigit():
+            return int(res.stdout.strip())
+    except (subprocess.SubprocessError, OSError):
+        return 0
+
+    return 0
+
+
+def resolve_platform_version(cwd: Path | None = None) -> str:
+    """Resolve dynamic platform release version in 0.<release>.<commits> format."""
+    env_ver = os.environ.get("KB_VERSION")
+    if env_ver and env_ver.strip():
+        return env_ver.strip()
+
+    release_ver = (
+        os.environ.get("KB_RELEASE_VERSION", CURRENT_RELEASE_VERSION).strip()
+        or CURRENT_RELEASE_VERSION
+    )
+    commit_count = resolve_git_commit_count(cwd=cwd)
+    return f"0.{release_ver}.{commit_count}"
 
 
 def resolve_build_timestamp() -> str | None:
@@ -104,10 +144,14 @@ def resolve_frontend_bundle_hash(repo_root: Path | None = None) -> str | None:
 def get_build_info(openapi_doc: dict[str, Any] | None = None) -> BuildInfo:
     """Return consolidated BuildInfo snapshot."""
     bundle_hash = compute_openapi_bundle_hash(openapi_doc) if openapi_doc else None
+    version = resolve_platform_version()
+    commit_count = resolve_git_commit_count()
     return BuildInfo(
         git_commit=resolve_git_commit(),
         build_timestamp=resolve_build_timestamp(),
-        openapi_version=PLATFORM_VERSION,
+        openapi_version=version,
+        version=version,
+        git_commit_count=commit_count,
         openapi_bundle_hash=bundle_hash,
         frontend_bundle_hash=resolve_frontend_bundle_hash(),
     )

@@ -62,7 +62,7 @@ describe('About Navigation Entry Points (KB-ABOUT-SBOM, KAN-34)', () => {
     expect(aboutLink.textContent).toContain('About 👍kanban');
   });
 
-  it('Sidebar renders muted ℹ️ v2.0.0 link in footer', () => {
+  it('Sidebar renders muted ℹ️ version link in footer', () => {
     render(
       <MemoryRouter initialEntries={['/projects/KAN/issues']}>
         <Sidebar projectKey="KAN" projectName="kanban" modulesEnabled={true} />
@@ -72,7 +72,7 @@ describe('About Navigation Entry Points (KB-ABOUT-SBOM, KAN-34)', () => {
     const sidebarAboutLink = screen.getByTestId('sidebar-about-link');
     expect(sidebarAboutLink).toBeDefined();
     expect(sidebarAboutLink.getAttribute('href')).toBe('/about');
-    expect(sidebarAboutLink.textContent).toContain('v2.0.0');
+    expect(sidebarAboutLink.textContent).toMatch(/v0\.2\./);
   });
 
   it('CommandPalette includes "About 👍kanban (License, API Docs & SBOM)" navigation command', () => {

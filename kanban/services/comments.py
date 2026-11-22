@@ -32,6 +32,7 @@ from kanban.api.v1.schemas.comments import (
 )
 from kanban.content import ContentNormalizeError, normalize_to_markdown
 from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
+from kanban.security.push_protection import enforce_secret_push_protection
 from kanban.security.scrubber import scrub_text
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.issue_keys import resolve_issue_ref
@@ -272,6 +273,7 @@ async def create_comment(
             )
 
     normalized_body = _normalize_comment_body(body.body_markdown)
+    normalized_body = enforce_secret_push_protection(normalized_body, field="body_markdown") or ""
     extracted_handles = extract_mentions(normalized_body)
 
     authorized_mentions, unnotified_mentions, newly_acked_pids = await resolve_mentions(
@@ -556,6 +558,7 @@ async def update_comment(
         not_found()
 
     normalized_body = _normalize_comment_body(body.body_markdown)
+    normalized_body = enforce_secret_push_protection(normalized_body, field="body_markdown") or ""
     extracted_handles = extract_mentions(normalized_body)
 
     authorized_mentions, unnotified_mentions, newly_acked_pids = await resolve_mentions(

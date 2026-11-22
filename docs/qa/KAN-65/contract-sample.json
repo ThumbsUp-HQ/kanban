@@ -1,0 +1,151 @@
+{
+  "ticket": "KAN-65",
+  "title": "[KB-SEC-03] Strip Spoofed Headers & Block /internal/* in Caddyfile, Add Dedicated :8444 Runner mTLS Listener, & Configure KB_TRUSTED_PROXIES in Docker Compose",
+  "transcripts": {
+    "1_public_listener_spoofed_headers_stripped": {
+      "description": "Public listener reverse_proxy strips client-supplied certificate and internal authentication headers before reaching upstream services",
+      "client_request": {
+        "method": "POST",
+        "path": "/api/v1/issues",
+        "listener": "{$KB_DOMAIN:localhost}:443",
+        "headers": {
+          "host": "localhost",
+          "x-client-cert-pem": "-----BEGIN CERTIFICATE-----\nMIIDXTCCAkWgAwIBAgIU...\n-----END CERTIFICATE-----",
+          "x-client-cert-der-b64": "MIIDXTCCAkWgAwIBAgIU...",
+          "x-client-cert-cn": "runner:adversary",
+          "x-ssl-client-cert": "MIIDXTCCAkWgAwIBAgIU...",
+          "x-kb-service-principal": "mcp-gateway",
+          "x-kb-internal-auth": "ts=1795370000;sig=abcdef0123456789",
+          "x-kb-internal-timestamp": "1795370000",
+          "x-kb-internal-signature": "abcdef0123456789"
+        }
+      },
+      "upstream_proxy_action": {
+        "target": "kanban-api:8000",
+        "stripped_headers": [
+          "X-Client-Cert-Pem",
+          "X-Client-Cert-Der-B64",
+          "X-Client-Cert-CN",
+          "X-SSL-Client-Cert",
+          "X-KB-Service-Principal",
+          "X-KB-Internal-Auth",
+          "X-KB-Internal-Timestamp",
+          "X-KB-Internal-Signature"
+        ],
+        "received_by_upstream": {
+          "headers_present": ["host", "x-forwarded-for", "x-forwarded-proto"],
+          "cert_headers_present": false,
+          "internal_auth_headers_present": false
+        }
+      }
+    },
+    "2_public_listener_internal_routes_blocked_404": {
+      "description": "Public edge listener intercepts requests targeting /internal/* and /api/v1/internal/* and returns 404 immediately",
+      "client_request": {
+        "method": "GET",
+        "path": "/api/v1/internal/mcp-tokens/introspect",
+        "listener": "{$KB_DOMAIN:localhost}:443"
+      },
+      "edge_response": {
+        "status": 404,
+        "matched_rule": "@internal_routes path /internal/* /api/v1/internal/*",
+        "action": "respond @internal_routes 404",
+        "forwarded_to_upstream": false
+      }
+    },
+    "3_runner_mtls_listener_8444_ws_forwarded": {
+      "description": "Dedicated :8444 listener validates client TLS certificate and forwards verified certificate to kanban-api:8000 for runner WebSocket",
+      "client_request": {
+        "method": "GET",
+        "path": "/api/v1/runners/ws",
+        "listener": ":8444",
+        "tls_client_cert_presented": true,
+        "tls_client_cert_cn": "runner:0196ed40-7b2a-7000-8000-112233445566"
+      },
+      "edge_proxy_action": {
+        "matched_route": "@runner_ws path /api/v1/runners/ws /api/v1/runners/ws/*",
+        "tls_client_auth_mode": "require",
+        "forwarded_to": "kanban-api:8000",
+        "injected_headers": {
+          "X-Client-Cert-Pem": "{http.request.tls.client.certificate_pem}",
+          "X-Client-Cert-Der-B64": "{http.request.tls.client.certificate_der_base64}"
+        },
+        "flush_interval": -1
+      },
+      "upstream_response": {
+        "status": 101,
+        "upgrade": "websocket",
+        "handshake": "ChallengeHelloFrame sent over WebSocket"
+      }
+    },
+    "4_runner_mtls_listener_8444_other_routes_blocked_404": {
+      "description": "Dedicated :8444 listener rejects any non-runner route with HTTP 404 even with valid client cert",
+      "client_request": {
+        "method": "GET",
+        "path": "/api/v1/issues",
+        "listener": ":8444",
+        "tls_client_cert_presented": true
+      },
+      "edge_response": {
+        "status": 404,
+        "matched_rule": "default fallthrough on :8444",
+        "action": "respond 404",
+        "forwarded_to_upstream": false
+      }
+    },
+    "5_resolve_client_ip_untrusted_peer_spoofing_rejected": {
+      "description": "Untrusted direct peer attempts to spoof X-Forwarded-For and X-Real-IP; both are ignored and direct peer IP is returned",
+      "connection_scope": {
+        "type": "http",
+        "client": ["203.0.113.9", 54321],
+        "headers": {
+          "x-forwarded-for": "198.51.100.7, 10.0.0.2",
+          "x-real-ip": "198.51.100.8"
+        }
+      },
+      "configured_trusted_proxies": ["10.0.0.0/8"],
+      "resolution_result": {
+        "direct_peer": "203.0.113.9",
+        "is_direct_peer_trusted": false,
+        "resolved_client_ip": "203.0.113.9",
+        "spoofed_headers_honored": false
+      }
+    },
+    "6_resolve_client_ip_trusted_peer_traversal_success": {
+      "description": "Trusted Caddy proxy peer forwards client request; X-Forwarded-For is traversed right-to-left to find the real untrusted client",
+      "connection_scope": {
+        "type": "http",
+        "client": ["172.28.0.2", 45123],
+        "headers": {
+          "x-forwarded-for": "198.51.100.12, 10.0.0.5"
+        }
+      },
+      "configured_trusted_proxies": ["10.0.0.0/8", "172.28.0.0/16"],
+      "resolution_result": {
+        "direct_peer": "172.28.0.2",
+        "is_direct_peer_trusted": true,
+        "traversal_steps": [
+          {"ip": "10.0.0.5", "trusted": true},
+          {"ip": "198.51.100.12", "trusted": false}
+        ],
+        "resolved_client_ip": "198.51.100.12"
+      }
+    },
+    "7_resolve_client_ip_trusted_peer_x_real_ip_success": {
+      "description": "Trusted Caddy proxy peer forwards request with X-Real-IP when X-Forwarded-For is absent",
+      "connection_scope": {
+        "type": "http",
+        "client": ["172.28.0.10", 45123],
+        "headers": {
+          "x-real-ip": "203.0.113.45"
+        }
+      },
+      "configured_trusted_proxies": ["172.28.0.0/16"],
+      "resolution_result": {
+        "direct_peer": "172.28.0.10",
+        "is_direct_peer_trusted": true,
+        "resolved_client_ip": "203.0.113.45"
+      }
+    }
+  }
+}

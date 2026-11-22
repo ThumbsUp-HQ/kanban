@@ -1,0 +1,45 @@
+=== PYTEST UNIT & INTEGRATION TESTS ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan312-e9b22408
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 78 items
+
+kanban/tests/api/test_system_about.py ...............                    [ 19%]
+kanban/tests/api/test_system_status.py ...........                       [ 33%]
+kanban/tests/ops/test_sbom.py .......................                    [ 62%]
+kanban/tests/test_export_openapi.py ...............                      [ 82%]
+kanban/tests/platform/test_world_class_standards.py ...                  [ 85%]
+kanban/tests/api/test_admin_diagnostics.py ...........                   [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                       Stmts   Miss Branch BrPart  Cover   Missing
+----------------------------------------------------------------------
+kanban/ops/build_info.py      89      2     24      1    97%   133->141, 138-139
+----------------------------------------------------------------------
+TOTAL                         89      2     24      1    97%
+======================== 78 passed in 145.88s (0:02:25) ========================
+
+=== VITEST UNIT TESTS (FRONTEND) ===
+
+> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan312-e9b22408/kanban/web
+> vitest run src/features/about/ src/app/__tests__/AboutNavigation.test.tsx
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan312-e9b22408/kanban/web
+
+ ✓ src/features/about/__tests__/aboutApi.test.ts (2 tests) 9ms
+ ✓ src/app/__tests__/AboutNavigation.test.tsx (5 tests) 325ms
+ ✓ src/features/about/__tests__/AboutPage.test.tsx (7 tests) 2301ms
+   ✓ AboutPage (7)
+     ✓ switches between Apache-2.0 License and Third-Party NOTICE and copies to clipboard 2054ms
+
+ Test Files  3 passed (3)
+      Tests  14 passed (14)
+   Start at  13:11:30
+   Duration  3.50s (tests 45%, environment 39%, import 11%, transform 3%, worker 1%)
+

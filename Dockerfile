@@ -29,6 +29,8 @@ ARG KB_GIT_COMMIT=""
 ENV KB_GIT_COMMIT=${KB_GIT_COMMIT}
 ARG KB_BUILD_TIMESTAMP=""
 ENV KB_BUILD_TIMESTAMP=${KB_BUILD_TIMESTAMP}
+ARG KB_GIT_COMMIT_COUNT=""
+ENV KB_GIT_COMMIT_COUNT=${KB_GIT_COMMIT_COUNT}
 WORKDIR /opt/kanban
 # Base image digest is cryptographically pinned; allowing Debian security updates to flow
 # hadolint ignore=DL3008

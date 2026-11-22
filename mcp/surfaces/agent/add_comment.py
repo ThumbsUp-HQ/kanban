@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Final
 
+from kanban.security.push_protection import scan_text_for_secrets
 from mcp.context import get_current_mcp_context
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.help import build_help
@@ -83,6 +84,22 @@ def _validate_add_comment_arguments(arguments: dict[str, Any]) -> None:  # noqa:
             f"body_markdown length ({body_bytes} bytes) exceeds maximum of {_MAX_BODY_BYTES} bytes"
         )
         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+
+    findings = scan_text_for_secrets(body)
+    if findings:
+        f = findings[0]
+        raise KbMcpError(
+            McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
+            f"Secret material detected in field 'body_markdown' at line {f.line}",
+            hint="Remove sensitive credentials, tokens, or private keys before submission.",
+            field="body_markdown",
+            extra={
+                "rule_id": f.rule_id,
+                "secret_kind": f.kind.value,
+                "line": f.line,
+                "fingerprint": f.fingerprint,
+            },
+        )
 
     reply_to = arguments.get("reply_to")
     if reply_to is not None and (not isinstance(reply_to, str) or not reply_to.strip()):

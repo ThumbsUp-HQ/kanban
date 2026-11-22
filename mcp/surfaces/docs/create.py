@@ -7,6 +7,7 @@ from __future__ import annotations
 import re
 from typing import TYPE_CHECKING, Any, Final
 
+from kanban.security.push_protection import scan_text_for_secrets
 from mcp.context import current_internal_client, current_subject_token, get_current_mcp_context
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.registry import Surface, ToolSpec
@@ -165,6 +166,21 @@ async def create_handler(  # noqa: C901, PLR0912, PLR0915
         msg = f"Parameter 'title' is required (1..{_MAX_TITLE_LEN} characters)"
         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
     title = raw_title.strip()
+    title_findings = scan_text_for_secrets(title)
+    if title_findings:
+        f = title_findings[0]
+        raise KbMcpError(
+            McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
+            f"Secret material detected in field 'title' at line {f.line}",
+            hint="Remove sensitive credentials, tokens, or private keys before submission.",
+            field="title",
+            extra={
+                "rule_id": f.rule_id,
+                "secret_kind": f.kind.value,
+                "line": f.line,
+                "fingerprint": f.fingerprint,
+            },
+        )
 
     project = arguments.get("project")
     if not project:
@@ -175,6 +191,22 @@ async def create_handler(  # noqa: C901, PLR0912, PLR0915
     parent = arguments.get("parent")
     raw_content = arguments.get("content", "")
     content = str(raw_content) if raw_content is not None else ""
+    if content:
+        content_findings = scan_text_for_secrets(content)
+        if content_findings:
+            f = content_findings[0]
+            raise KbMcpError(
+                McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
+                f"Secret material detected in field 'content' at line {f.line}",
+                hint="Remove sensitive credentials, tokens, or private keys before submission.",
+                field="content",
+                extra={
+                    "rule_id": f.rule_id,
+                    "secret_kind": f.kind.value,
+                    "line": f.line,
+                    "fingerprint": f.fingerprint,
+                },
+            )
 
     active_client = client or current_internal_client.get()
     active_token = subject_token or current_subject_token.get()

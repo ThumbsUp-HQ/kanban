@@ -19,6 +19,7 @@ from kanban.api_docs import (
     render_redoc_html,
     render_swagger_ui_html,
 )
+from kanban.ops.build_info import resolve_platform_version
 from kanban.ops.openapi_builder import _enrich_paths
 from kanban.tools.export_openapi import export_openapi, main
 
@@ -219,7 +220,7 @@ def test_export_openapi_build_info_metadata_and_hashes() -> None:
     data: dict[str, Any] = json.loads(raw)
     info: dict[str, Any] = data["info"]
 
-    assert info["version"] == "2.0.0"
+    assert info["version"] == resolve_platform_version()
     assert "x-build-commit" in info
     assert info["x-build-commit"] is not None
     assert "x-openapi-bundle-hash" in info

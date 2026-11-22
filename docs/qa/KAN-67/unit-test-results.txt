@@ -1,0 +1,49 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan67-34988261/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan67-34988261
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 6 items
+
+database/tests/test_rls_credential_boundary.py::test_rls_context_credential_boundary_initialization PASSED [ 16%]
+database/tests/test_rls_credential_boundary.py::test_bind_rls_context_sets_credential_gucs PASSED [ 33%]
+database/tests/test_rls_credential_boundary.py::test_rls_workspace_allowlist_enforcement PASSED [ 50%]
+database/tests/test_rls_credential_boundary.py::test_rls_project_allowlist_enforcement PASSED [ 66%]
+database/tests/test_rls_credential_boundary.py::test_rls_capability_mask_enforcement PASSED [ 83%]
+database/tests/migrations/test_p6_04_enforce_credential_boundary_rls_gucs_migration.py::test_p6_04_enforce_credential_boundary_rls_gucs_migration_lifecycle PASSED [100%]
+
+============================== 6 passed in 0.65s ===============================
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan67-34988261/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan67-34988261
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 23 items
+
+mcp/tests/test_mcp_capability_mask_and_cidr.py::test_get_required_tool_capability_mapping PASSED [  4%]
+mcp/tests/test_mcp_capability_mask_and_cidr.py::test_enforce_credential_boundary_capability_mask_violations PASSED [  8%]
+mcp/tests/test_mcp_capability_mask_and_cidr.py::test_enforce_credential_boundary_workspace_and_project_allowlists PASSED [ 13%]
+mcp/tests/test_mcp_capability_mask_and_cidr.py::test_mcp_protocol_tools_call_capability_mask_rejection PASSED [ 17%]
+mcp/tests/test_mcp_capability_mask_and_cidr.py::test_mcp_protocol_tools_list_capability_mask_filtering PASSED [ 21%]
+mcp/tests/test_mcp_capability_mask_and_cidr.py::test_trusted_proxy_client_ip_cidr_validation PASSED [ 26%]
+mcp/tests/test_key_narrowing.py::test_disabled_tools_omitted_from_tools_list_and_blocked_on_call PASSED [ 30%]
+mcp/tests/test_key_narrowing.py::test_allowed_tools_narrowing PASSED     [ 34%]
+mcp/tests/test_key_narrowing.py::test_cidr_filtering_in_mcp_auth_middleware PASSED [ 39%]
+mcp/tests/test_connection_scoping.py::test_case_1_positive_global_meatloaf_bot_flow PASSED [ 43%]
+mcp/tests/test_connection_scoping.py::test_case_2_positive_ambiguous_global_key_disambiguation PASSED [ 47%]
+mcp/tests/test_connection_scoping.py::test_case_3_positive_project_pinned_repo_config PASSED [ 52%]
+mcp/tests/test_connection_scoping.py::test_case_4_security_monotonic_narrowing_and_cross_project_block PASSED [ 56%]
+mcp/tests/test_connection_scoping.py::test_case_5_security_conflicting_headers_and_session_replay PASSED [ 60%]
+mcp/tests/test_connection_scoping.py::test_scoping_header_path_project_mismatch PASSED [ 65%]
+mcp/tests/test_connection_scoping.py::test_intersect_key_and_connection_scope_token_inheritance PASSED [ 69%]
+mcp/tests/test_connection_scoping.py::test_intersect_key_and_connection_scope_violations PASSED [ 73%]
+mcp/tests/test_connection_scoping.py::test_enforce_connection_scope_auto_fill_and_parent_identifier PASSED [ 78%]
+mcp/tests/test_connection_scoping.py::test_enforce_connection_scope_docs_create_and_update_mutating_tools PASSED [ 82%]
+mcp/tests/test_connection_scoping.py::test_intersect_key_and_connection_scope_workspace_valid PASSED [ 86%]
+mcp/tests/test_connection_scoping.py::test_intersect_key_and_connection_scope_slug_vs_uuid_matching PASSED [ 91%]
+mcp/tests/test_connection_scoping.py::test_bare_mcp_routing_and_unauthorized_metadata PASSED [ 95%]
+mcp/tests/test_connection_scoping.py::test_path_pinned_tool_argument_no_project_collision PASSED [100%]
+
+============================== 23 passed in 0.10s ==============================

@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
 if TYPE_CHECKING:
     import pytest
 
+from kanban.ops.build_info import resolve_platform_version
 from kanban.ops.sbom import (
     ALLOW_SET,
     DENY_PREFIXES,
@@ -49,7 +50,8 @@ def test_platform_metadata_constants() -> None:
     assert PLATFORM_NAME == "👍kanban"
     assert PLATFORM_SLUG == "thumbs-up-kanban"
     assert "Agile team" in PLATFORM_TAGLINE
-    assert PLATFORM_VERSION == "2.0.0"
+    assert resolve_platform_version() == PLATFORM_VERSION
+    assert PLATFORM_VERSION.startswith("0.2.")
     assert PLATFORM_LICENSE_SPDX == "Apache-2.0"
     assert "MIT" in ALLOW_SET
     assert "GPL" in DENY_PREFIXES
@@ -373,7 +375,7 @@ def test_generate_cyclonedx_1_5() -> None:
     assert cdx["serialNumber"] == "urn:uuid:test-sbom-1234"
     assert cdx["version"] == 1
     assert cdx["metadata"]["component"]["name"] == "thumbs-up-kanban"
-    assert cdx["metadata"]["component"]["version"] == "2.0.0"
+    assert cdx["metadata"]["component"]["version"] == resolve_platform_version()
 
     components = cdx["components"]
     assert len(components) == 2

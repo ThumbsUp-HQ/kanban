@@ -1,0 +1,52 @@
+=== 1. make check ===
+uv run ruff check .
+All checks passed!
+uv run ruff format --check .
+2151 files already formatted
+uv run mypy
+Success: no issues found in 1193 source files
+uv run lint-imports
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 1045 files, 3833 dependencies.
+---------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT (7 ignored imports)
+mcp forbidden from importing database KEPT (50 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+uv run python -m scripts.check_no_dashes --all
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan65-2d43e4ee/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+uv run python -m database.migrations.cli check-migrations --static-only
+OK: All 65 migrations valid. Single head: p6_03_multi_source_imports_and_aliases
+=== 2. make compose-check ===
+install -d -m 0700 deploy/secrets
+test -f deploy/secrets/postgres_password.txt || echo "placeholder_postgres_password" > deploy/secrets/postgres_password.txt
+test -f deploy/secrets/master_kek.txt || echo "placeholder_master_kek_32_bytes_long" > deploy/secrets/master_kek.txt
+chmod 0600 deploy/secrets/*.txt
+docker compose -f docker-compose.yml --profile sandbox config --quiet
+uv run python -m scripts.check_compose_networks
+PASS: Docker Compose network isolation and hardening policies verified.
+=== 3. Caddyfile validation (docker caddy:2.8-alpine) ===
+{"level":"info","ts":1795370566.4706743,"msg":"using config from file","file":"/etc/caddy/Caddyfile"}
+{"level":"info","ts":1795370566.4728148,"msg":"adapted config to JSON","adapter":"caddyfile"}
+{"level":"info","ts":1795370566.4731236,"logger":"http.auto_https","msg":"enabling automatic HTTP->HTTPS redirects","server_name":"srv0"}
+{"level":"info","ts":1795370566.4731355,"logger":"http.auto_https","msg":"enabling automatic HTTP->HTTPS redirects","server_name":"srv1"}
+{"level":"info","ts":1795370566.4732175,"logger":"tls.cache.maintenance","msg":"started background certificate maintenance","cache":"0xc0004b0200"}
+{"level":"warn","ts":1795370566.475582,"logger":"http","msg":"enabling strict SNI-Host enforcement because TLS client auth is configured","server_id":"srv1"}
+{"level":"info","ts":1795370566.4756732,"logger":"tls.cache.maintenance","msg":"stopped background certificate maintenance","cache":"0xc0004b0200"}
+Valid configuration
+=== BUILD_CHECK_STATUS=SUCCESS ===

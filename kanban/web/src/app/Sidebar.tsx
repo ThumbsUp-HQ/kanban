@@ -20,6 +20,7 @@ import { CreateWorkspaceModal, type CreatedWorkspace } from '../features/workspa
 import { ensureSessionCsrfToken } from '../features/auth/useSessionGuard';
 import { setCsrfToken } from '../api/client';
 import { QueryClientContext } from '@tanstack/react-query';
+import { useSystemStatus } from './useSystemStatus';
 import { WorkspaceBadge } from '../components/workspace/WorkspaceBadge';
 import {
   ListTodo,
@@ -173,6 +174,9 @@ export function Sidebar({
   triggerButtonRef,
   user,
 }: SidebarProps): JSX.Element {
+  const { data: systemStatus } = useSystemStatus();
+  const systemVersion = systemStatus?.version ?? systemStatus?.openapi_version ?? '0.2.0';
+
   let locationPathname = '';
   let locationSearch = '';
   try {
@@ -1083,7 +1087,7 @@ export function Sidebar({
               <span className="kb-sidebar-icon" aria-hidden="true">
                 ℹ️
               </span>
-              <span className="kb-sidebar-about-version">v2.0.0</span>
+              <span className="kb-sidebar-about-version">v{systemVersion}</span>
             </Link>
           </div>
         </div>

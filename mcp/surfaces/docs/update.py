@@ -8,6 +8,7 @@ import difflib
 import re
 from typing import TYPE_CHECKING, Any, Final
 
+from kanban.security.push_protection import scan_text_for_secrets
 from mcp.context import current_internal_client, current_subject_token
 from mcp.errors import KbMcpError, McpErrorCode
 from mcp.registry import Surface, ToolSpec
@@ -488,9 +489,41 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
     if title is not None and not (1 <= len(title) <= _MAX_TITLE_LEN):
         msg = f"Parameter 'title' must be 1..{_MAX_TITLE_LEN} characters"
         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+    if title is not None:
+        title_findings = scan_text_for_secrets(title)
+        if title_findings:
+            f = title_findings[0]
+            raise KbMcpError(
+                McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
+                f"Secret material detected in field 'title' at line {f.line}",
+                hint="Remove sensitive credentials, tokens, or private keys before submission.",
+                field="title",
+                extra={
+                    "rule_id": f.rule_id,
+                    "secret_kind": f.kind.value,
+                    "line": f.line,
+                    "fingerprint": f.fingerprint,
+                },
+            )
 
     content_arg = arguments.get("content")
     content = str(content_arg) if content_arg is not None else None
+    if content is not None:
+        content_findings = scan_text_for_secrets(content)
+        if content_findings:
+            f = content_findings[0]
+            raise KbMcpError(
+                McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
+                f"Secret material detected in field 'content' at line {f.line}",
+                hint="Remove sensitive credentials, tokens, or private keys before submission.",
+                field="content",
+                extra={
+                    "rule_id": f.rule_id,
+                    "secret_kind": f.kind.value,
+                    "line": f.line,
+                    "fingerprint": f.fingerprint,
+                },
+            )
     parent_arg = arguments.get("parent")
     color_arg = arguments.get("color")
     color = str(color_arg).strip().lower() if color_arg else None
@@ -508,6 +541,23 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
             "together for surgical diff-patching"
         )
         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+
+    if replacement_text is not None:
+        rep_findings = scan_text_for_secrets(str(replacement_text))
+        if rep_findings:
+            f = rep_findings[0]
+            raise KbMcpError(
+                McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
+                f"Secret material detected in field 'replacement_text' at line {f.line}",
+                hint="Remove sensitive credentials, tokens, or private keys before submission.",
+                field="replacement_text",
+                extra={
+                    "rule_id": f.rule_id,
+                    "secret_kind": f.kind.value,
+                    "line": f.line,
+                    "fingerprint": f.fingerprint,
+                },
+            )
 
     raw_if_match = arguments.get("if_match")
     if_match = str(raw_if_match).strip().strip('"') if raw_if_match is not None else None

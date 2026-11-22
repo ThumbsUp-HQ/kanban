@@ -1,0 +1,58 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan65-2d43e4ee/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan65-2d43e4ee
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 39 items
+
+kanban/tests/security/test_caddy_and_trusted_proxies.py::test_caddyfile_blocks_internal_routes_with_404 PASSED [  2%]
+kanban/tests/security/test_caddy_and_trusted_proxies.py::test_caddyfile_strips_spoofable_headers_on_public_listener PASSED [  5%]
+kanban/tests/security/test_caddy_and_trusted_proxies.py::test_caddyfile_dedicated_8444_runner_mtls_listener PASSED [  7%]
+kanban/tests/security/test_caddy_and_trusted_proxies.py::test_docker_compose_trusted_proxies_and_runner_mtls_port PASSED [ 10%]
+kanban/tests/security/test_caddy_and_trusted_proxies.py::test_resolve_client_ip_untrusted_peer_ignores_spoofed_headers PASSED [ 12%]
+kanban/tests/security/test_caddy_and_trusted_proxies.py::test_resolve_client_ip_trusted_peer_traverses_xff PASSED [ 15%]
+kanban/tests/security/test_caddy_and_trusted_proxies.py::test_resolve_client_ip_trusted_peer_uses_x_real_ip_when_xff_absent PASSED [ 17%]
+kanban/tests/security/test_caddy_and_trusted_proxies.py::test_resolve_client_ip_xff_takes_precedence_over_x_real_ip PASSED [ 20%]
+kanban/tests/security/test_caddy_and_trusted_proxies.py::test_resolve_client_ip_malformed_xff_falls_back_to_direct_peer PASSED [ 23%]
+kanban/tests/security/test_caddy_and_trusted_proxies.py::test_resolve_client_ip_malformed_x_real_ip_falls_back_to_direct_peer PASSED [ 25%]
+kanban/tests/security/test_caddy_and_trusted_proxies.py::test_resolve_client_ip_ipv4_mapped_ipv6_normalization PASSED [ 28%]
+kanban/tests/security/test_caddy_and_trusted_proxies.py::test_resolve_client_ip_ipv6_subnet_bucketing PASSED [ 30%]
+kanban/tests/security/test_caddy_and_trusted_proxies.py::test_resolve_client_ip_environment_variable_configuration PASSED [ 33%]
+kanban/tests/security/test_caddy_and_trusted_proxies.py::test_resolve_client_ip_edge_scopes PASSED [ 35%]
+kanban/tests/security/test_caddy_and_trusted_proxies.py::test_resolve_client_ip_typed_networks_and_empty_xff PASSED [ 38%]
+kanban/tests/security/test_caddy_and_trusted_proxies.py::test_resolve_client_ip_all_trusted_returns_leftmost PASSED [ 41%]
+kanban/tests/security/test_caddy_and_trusted_proxies.py::test_resolve_client_ip_non_utf8_header_bytes PASSED [ 43%]
+kanban/tests/security/test_caddy_and_trusted_proxies.py::test_headers_helpers_coverage PASSED [ 46%]
+kanban/tests/standalone/test_compose_export.py::test_compose_export_with_keyring_carryover PASSED [ 48%]
+kanban/tests/standalone/test_compose_export.py::test_compose_export_without_keyring PASSED [ 51%]
+kanban/tests/standalone/test_compose_export.py::test_compose_export_nonexistent_or_corrupt_keyring PASSED [ 53%]
+kanban/tests/test_security_headers.py::test_security_headers_present_on_all_responses PASSED [ 56%]
+kanban/tests/test_security_headers.py::test_hsts_behavior_production_vs_standalone PASSED [ 58%]
+kanban/tests/test_security_headers.py::test_inner_app_headers_replaced_never_duplicated PASSED [ 61%]
+kanban/tests/test_security_headers.py::test_standalone_allows_cleartext_http_by_default PASSED [ 64%]
+kanban/tests/test_security_headers.py::test_standalone_cleartext_host_blocking PASSED [ 66%]
+kanban/tests/test_security_headers.py::test_standalone_missing_host_header PASSED [ 69%]
+kanban/tests/test_security_headers.py::test_non_http_scope_passes_through PASSED [ 71%]
+kanban/tests/test_security_headers.py::test_standalone_reverse_proxy_https_allowed PASSED [ 74%]
+kanban/tests/test_security_headers.py::test_standalone_reverse_proxy_scope_scheme_https PASSED [ 76%]
+kanban/tests/test_security_headers.py::test_standalone_idn_punycode_host_matching PASSED [ 79%]
+kanban/tests/test_security_headers.py::test_build_uvicorn_command_forwarded_allow_ips PASSED [ 82%]
+tests/deploy/test_caddyfile.py::test_caddyfile_exists PASSED             [ 84%]
+tests/deploy/test_caddyfile.py::test_tls13_enforcement PASSED            [ 87%]
+tests/deploy/test_caddyfile.py::test_protocols_h1_h2_h3 PASSED           [ 89%]
+tests/deploy/test_caddyfile.py::test_flush_interval_unbuffered_streaming PASSED [ 92%]
+tests/deploy/test_caddyfile.py::test_precompressed_static_serving PASSED [ 94%]
+tests/deploy/test_caddyfile.py::test_csp_policy_matches_codebase PASSED  [ 97%]
+tests/deploy/test_caddyfile.py::test_security_headers_present PASSED     [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                  Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------
+kanban/security/headers.py              214      4     96      5    97%   65->67, 124, 190, 229, 362
+kanban/standalone/compose_export.py      69      0     14      0   100%
+---------------------------------------------------------------------------------
+TOTAL                                   283      4    110      5    98%
+============================== 39 passed in 2.67s ==============================

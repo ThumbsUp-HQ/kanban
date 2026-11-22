@@ -9,8 +9,11 @@ from typing import TYPE_CHECKING, Any
 from fastapi.openapi.utils import get_openapi
 
 from kanban.api.problems import Problem
-from kanban.ops.build_info import compute_openapi_bundle_hash, resolve_git_commit
-from kanban.ops.sbom import PLATFORM_VERSION
+from kanban.ops.build_info import (
+    compute_openapi_bundle_hash,
+    resolve_git_commit,
+    resolve_platform_version,
+)
 
 if TYPE_CHECKING:
     from fastapi import FastAPI
@@ -228,9 +231,10 @@ def _enrich_paths(
 
 def build_custom_openapi(app: FastAPI) -> dict[str, Any]:
     """Generate and return canonical OpenAPI schema with security, problems, and build info."""
+    platform_ver = resolve_platform_version()
     openapi_schema = get_openapi(
         title=app.title,
-        version=app.version or PLATFORM_VERSION,
+        version=app.version or platform_ver,
         openapi_version=app.openapi_version,
         summary=app.summary,
         description=app.description,
@@ -255,7 +259,7 @@ def build_custom_openapi(app: FastAPI) -> dict[str, Any]:
     )
 
     info = openapi_schema.setdefault("info", {})
-    info["version"] = PLATFORM_VERSION
+    info["version"] = platform_ver
     info["x-build-commit"] = resolve_git_commit()
     info["x-openapi-bundle-hash"] = compute_openapi_bundle_hash(openapi_schema)
 

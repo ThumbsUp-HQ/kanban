@@ -11,13 +11,12 @@ from fastapi import APIRouter, Depends, Query, Request, Response
 from pydantic import BaseModel, ConfigDict, Field
 
 from kanban.api.deps import PrincipalContext, get_principal
-from kanban.ops.build_info import get_build_info
+from kanban.ops.build_info import get_build_info, resolve_platform_version
 from kanban.ops.sbom import (
     PLATFORM_LICENSE_SPDX,
     PLATFORM_NAME,
     PLATFORM_SLUG,
     PLATFORM_TAGLINE,
-    PLATFORM_VERSION,
     calculate_sbom_summary,
     generate_cyclonedx_1_5,
     get_license_texts,
@@ -195,7 +194,10 @@ class PlatformSummaryResponse(BaseModel):
         default="thumbs-up-kanban", description="Distribution container and repository slug"
     )
     license: str = Field(default="Apache-2.0", description="Open-source permissive license")
-    version: str = Field(default="2.0.0", description="Platform architecture release version")
+    version: str = Field(
+        default_factory=resolve_platform_version,
+        description="Platform architecture release version",
+    )
     github_issue_1_resolved: bool = Field(
         default=True,
         description="Affirmation of GitHub Issue #1 resolution across all 4 pillars",
@@ -264,7 +266,10 @@ class SystemAboutResponse(BaseModel):
         default="The difference between a swarm and an Agile team is a kanban.",
         description="Official platform tagline",
     )
-    version: str = Field(default="2.0.0", description="Platform release version")
+    version: str = Field(
+        default_factory=resolve_platform_version,
+        description="Platform release version",
+    )
     license_spdx: str = Field(default="Apache-2.0", description="Primary platform license SPDX ID")
     api_docs_urls: dict[str, str] = Field(
         default_factory=lambda: {
@@ -282,7 +287,10 @@ class SystemAboutResponse(BaseModel):
     components: list[SbomComponentModel] = Field(description="Discovered third-party components")
     git_commit: str = Field(default="unknown", description="Build git commit SHA")
     build_timestamp: str | None = Field(default=None, description="ISO build timestamp")
-    openapi_version: str = Field(default="2.0.0", description="OpenAPI specification version")
+    openapi_version: str = Field(
+        default_factory=resolve_platform_version,
+        description="OpenAPI specification version",
+    )
     openapi_bundle_hash: str | None = Field(
         default=None, description="SHA-256 fingerprint of OpenAPI bundle"
     )
@@ -294,7 +302,7 @@ class SystemAboutResponse(BaseModel):
 def get_platform_summary(settings: Settings | None = None) -> PlatformSummaryResponse:
     """Return verified platform capability summary and world-class parity metadata."""
     del settings  # Future-proof parameter for dynamic capability overrides if needed
-    return PlatformSummaryResponse()
+    return PlatformSummaryResponse(version=resolve_platform_version())
 
 
 router = APIRouter(prefix="/system", tags=["system"])
@@ -328,7 +336,7 @@ async def get_system_about_endpoint(
         platform=PLATFORM_NAME,
         slug=PLATFORM_SLUG,
         tagline=PLATFORM_TAGLINE,
-        version=PLATFORM_VERSION,
+        version=b_info.version,
         license_spdx=PLATFORM_LICENSE_SPDX,
         api_docs_urls={
             "swagger_ui": "/api/docs",

@@ -39,6 +39,8 @@ from kanban.security.permissions import (
     evaluate_capabilities,
     require_capability,
 )
+from kanban.security.push_protection import enforce_secret_push_protection
+from kanban.security.scrubber import scrub_text
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.lexorank import midpoint_rank
 from kanban.services.projects import get_project_or_404
@@ -289,11 +291,12 @@ async def _build_sticky_response(
             session, caller, sticky.promoted_to_doc_id
         )
 
+    body_md = scrub_text(sticky.body_markdown) if sticky.body_markdown else sticky.body_markdown
     resp = StickyResponse(
         id=sticky.id,
         workspace_id=sticky.workspace_id,
         project_id=sticky.project_id,
-        body_markdown=sticky.body_markdown,
+        body_markdown=body_md,
         body_sha256=sticky.body_sha256.hex() if sticky.body_sha256 else "",
         color_token=sticky.color_token,
         sort_rank=sticky.sort_rank,
@@ -323,6 +326,7 @@ async def create_sticky(
     await require_capability(session, caller, project.id, Capability.EDIT)
 
     clean_body = _clean_body(body.body_markdown)
+    clean_body = enforce_secret_push_protection(clean_body, field="body_markdown") or ""
     color_val = body.color_token.value
 
     if body.sort_rank:
@@ -543,6 +547,7 @@ async def update_sticky(
                 )
             _verify_if_match(if_match, sticky.body_sha256)
             clean_body = _clean_body(body.body_markdown)
+            clean_body = enforce_secret_push_protection(clean_body, field="body_markdown") or ""
             sticky.body_markdown = clean_body
             assessment = evaluate_sticky_promotion(
                 clean_body,
@@ -987,6 +992,7 @@ async def promote_sticky_to_doc(
         if body.structured_body_markdown is not None
         else sticky.body_markdown
     )
+    target_body = enforce_secret_push_protection(target_body, field="body_markdown") or ""
 
     parent_doc: Doc | None = None
     if body.parent_doc_id is not None:

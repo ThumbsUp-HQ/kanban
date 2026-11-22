@@ -1,0 +1,2315 @@
+diff --git a/kanban/issues/tree_service.py b/kanban/issues/tree_service.py
+index f213cfc7..7e3b92ac 100644
+--- a/kanban/issues/tree_service.py
++++ b/kanban/issues/tree_service.py
+@@ -36,6 +36,7 @@ from kanban.content import (
+     normalize_to_markdown,
+ )
+ from kanban.security.permissions import Capability, require_capability
++from kanban.security.push_protection import enforce_secret_push_protection
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.board_rank import allocate_initial_board_rank
+ from kanban.services.projects import get_project_or_404
+@@ -318,6 +319,9 @@ async def create_issue_tree(  # noqa: C901, PLR0912, PLR0915
+         )
+ 
+     all_nodes = _traverse_all_nodes(tree)
++    for node in all_nodes:
++        enforce_secret_push_protection(node.summary, field="summary")
++        enforce_secret_push_protection(node.description_markdown, field="description_markdown")
+ 
+     # 1. Modules validation
+     if not project.modules_enabled:
+diff --git a/kanban/security/__init__.py b/kanban/security/__init__.py
+index ada47110..290c021c 100644
+--- a/kanban/security/__init__.py
++++ b/kanban/security/__init__.py
+@@ -34,6 +34,17 @@ from kanban.security.permissions import (
+     parse_token_scope_mask,
+     require_capability,
+ )
++from kanban.security.push_protection import (
++    DEFAULT_PUSH_PROTECTION_CODE,
++    PushProtectionMode,
++    SecretFinding,
++    calculate_shannon_entropy,
++    enforce_secret_push_protection,
++    is_exempt_token,
++    mask_fingerprint,
++    redact_text_findings,
++    scan_text_for_secrets,
++)
+ from kanban.security.read_taint import (
+     TaintGuard,
+     TaintRecorder,
+@@ -58,6 +69,7 @@ if TYPE_CHECKING:
+ 
+ __all__ = [
+     "CSP_POLICY",
++    "DEFAULT_PUSH_PROTECTION_CODE",
+     "SCOPE_CAPABILITY_MAP",
+     "AccessManifest",
+     "Capability",
+@@ -72,9 +84,11 @@ __all__ = [
+     "ManifestGroup",
+     "ManifestRedactedEntry",
+     "ManifestUser",
++    "PushProtectionMode",
+     "ScrubFinding",
+     "ScrubResult",
+     "SealedSecret",
++    "SecretFinding",
+     "SecretKind",
+     "SecurityHeadersMiddleware",
+     "StaticKekProvider",
+@@ -82,18 +96,24 @@ __all__ = [
+     "TaintRecorder",
+     "UnknownKekError",
+     "build_access_manifest",
++    "calculate_shannon_entropy",
+     "capabilities_to_names",
+     "derive_subkey",
++    "enforce_secret_push_protection",
+     "evaluate_capabilities",
+     "get_taint_guard",
+     "get_taint_recorder",
++    "is_exempt_token",
+     "load_key_material",
++    "mask_fingerprint",
+     "open_card_secret",
+     "outbound_secret_scrubber",
+     "parse_token_scope_mask",
++    "redact_text_findings",
+     "require_capability",
+     "resolve_client_ip",
+     "rewrap_dek",
++    "scan_text_for_secrets",
+     "scrub_text",
+     "seal_card_secret",
+ ]
+diff --git a/kanban/security/push_protection.py b/kanban/security/push_protection.py
+new file mode 100644
+index 00000000..a5ca04fe
+--- /dev/null
++++ b/kanban/security/push_protection.py
+@@ -0,0 +1,599 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Synchronous pre-persistence secret push-protection and Shannon entropy scanner (KB-SEC-SCRUB-01).
++
++Scans untrusted prose and entity write payloads synchronously before PostgreSQL persistence,
++search_tsv indexing, vector embedding, or activity ledger commits. Detects deterministic
++cloud credentials, private keys, PATs, DSN passwords, and high-entropy secret assignments
++while strictly exempting UUIDs, Git commit SHAs, SHA digests, base-62 ranks, and code identifiers.
++"""
++
++from __future__ import annotations
++
++import logging
++import math
++import re
++from dataclasses import dataclass
++from enum import StrEnum
++from typing import TYPE_CHECKING, Final
++
++from kanban.api.problems import ProblemException
++from kanban.security.scrubber import (
++    _RE_API_KEY,
++    _RE_AQ_KEY,
++    _RE_AWS_ACCESS_KEY,
++    _RE_BEARER_TOKEN,
++    _RE_GITHUB_TOKEN,
++    _RE_GITLAB_TOKEN,
++    _RE_GOOGLE_KEY,
++    _RE_JWT,
++    _RE_KANBAN_KEY,
++    _RE_SLACK_TOKEN,
++    _RE_STRIPE_KEY,
++    SecretKind,
++    _scan_pem_private_keys,
++)
++
++if TYPE_CHECKING:
++    import uuid
++    from collections.abc import Sequence
++
++logger = logging.getLogger(__name__)
++
++__all__ = [
++    "DEFAULT_PUSH_PROTECTION_CODE",
++    "PushProtectionMode",
++    "SecretFinding",
++    "calculate_shannon_entropy",
++    "enforce_secret_push_protection",
++    "is_exempt_token",
++    "mask_fingerprint",
++    "redact_text_findings",
++    "scan_text_for_secrets",
++]
++
++DEFAULT_PUSH_PROTECTION_CODE: Final[str] = "SECRET_DETECTED_IN_PAYLOAD"
++PUSH_PROTECTION_CODE_ALIAS: Final[str] = "SECRET_DETECTED_PUSH_PROTECTION"
++
++# Regexes for structured key-value assignment scanning
++_RE_KEY_VALUE_ASSIGNMENT: Final[re.Pattern[str]] = re.compile(
++    r"(?i)\b(?P<key>PASSWORD|PASSWD|PASS|SECRET|SECRET_KEY|TOKEN|API_KEY|API_SECRET|"
++    r"AUTH_TOKEN|PRIVATE_KEY|ACCESS_TOKEN|STRIPE_SECRET_KEY|WEBHOOK_SECRET)\s*[:=]\s*"
++    r"[\"']?(?P<val>[^\s\"';]{8,256})[\"']?"
++)
++
++# Connection URI regex capturing protocol, user, password, and host
++_RE_CONNECTION_URI: Final[re.Pattern[str]] = re.compile(
++    r"(?i)\b([a-zA-Z][a-zA-Z0-9+.-]+://[^:\s@]*:)(.+)@((?:localhost|[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*|\d{1,3}(?:\.\d{1,3}){3})(?::\d+)?(?:/[^\s]*)?)"
++)
++_RE_REDIS_URI: Final[re.Pattern[str]] = re.compile(
++    r"(?i)\b(redis(?:s)?://:)(.+)@((?:localhost|[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*|\d{1,3}(?:\.\d{1,3}){3})(?::\d+)?(?:/[^\s]*)?)"
++)
++
++# Exemption matchers
++_RE_UUID: Final[re.Pattern[str]] = re.compile(
++    r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$"
++)
++_RE_HEX_DIGEST: Final[re.Pattern[str]] = re.compile(r"^[0-9a-fA-F]{32,128}$")
++_RE_BASE62_RANK: Final[re.Pattern[str]] = re.compile(r"^0\|[0-9a-zA-Z:]+$")
++_RE_CANDIDATE_TOKEN: Final[re.Pattern[str]] = re.compile(r"\b[A-Za-z0-9+/=_-]{16,256}\b")
++
++_MIN_SECRET_LENGTH: Final[int] = 8
++_MIN_ENTROPY_ASSIGNMENT: Final[float] = 3.2
++_MIN_CANDIDATE_TOKEN_LENGTH: Final[int] = 20
++_MIN_SHANNON_ENTROPY: Final[float] = 4.5
++
++_EXEMPT_WORDS: Final[frozenset[str]] = frozenset(
++    {
++        "placeholder",
++        "changeme",
++        "change_me",
++        "example",
++        "none",
++        "null",
++        "true",
++        "false",
++        "undefined",
++        "dummy",
++        "test",
++        "todo",
++        "password",
++        "secret",
++        "token",
++        "value",
++        "string",
++    }
++)
++
++
++class PushProtectionMode(StrEnum):
++    """Enforcement policy mode for secret push protection."""
++
++    BLOCK = "block"
++    REDACT_ON_WRITE = "redact_on_write"
++
++
++@dataclass(frozen=True, slots=True)
++class SecretFinding:
++    """Diagnostic location and fingerprint of detected secret material."""
++
++    rule_id: str
++    kind: SecretKind
++    start: int
++    end: int
++    line: int
++    fingerprint: str
++    secret_value: str = ""  # Retained ephemerally for redaction; never echoed
++
++
++def calculate_shannon_entropy(s: str) -> float:
++    """Calculate Shannon entropy of a string in bits per character."""
++    if not s:
++        return 0.0
++    counts: dict[str, int] = {}
++    for c in s:
++        counts[c] = counts.get(c, 0) + 1
++    length = len(s)
++    entropy = 0.0
++    for count in counts.values():
++        p = count / length
++        entropy -= p * math.log2(p)
++    return entropy
++
++
++def mask_fingerprint(secret: str) -> str:
++    """Mask secret value retaining short prefix and suffix without revealing plaintext."""
++    if not secret:
++        return ""
++    if len(secret) <= _MIN_SECRET_LENGTH:
++        return "*" * len(secret)
++
++    known_prefixes = (
++        "ghp_",
++        "gho_",
++        "ghu_",
++        "ghs_",
++        "ghr_",
++        "github_pat_",
++        "glpat-",
++        "xoxb-",
++        "xoxp-",
++        "xoxa-",
++        "xoxr-",
++        "xoxs-",
++        "AIza",
++        "sk-proj-",
++        "sk-ant-api",
++        "sk-live-",
++        "sk-test-",
++        "sk-",
++        "rk_live_",
++        "rk_test_",
++        "kb_pat_",
++        "kb_eat_",
++        "kb_agt_",
++        "kb_runner_",
++        "kb_",
++        "AKIA",
++        "ASIA",
++    )
++    prefix_len = 4
++    for p in known_prefixes:
++        if secret.startswith(p):
++            prefix_len = len(p)
++            break
++
++    suffix_len = 4
++    if len(secret) <= prefix_len + suffix_len:
++        safe_p = min(prefix_len, 4)
++        return f"{secret[:safe_p]}...{secret[-2:]}"
++    return f"{secret[:prefix_len]}...{secret[-suffix_len:]}"
++
++
++def is_exempt_token(token: str) -> bool:
++    """Determine whether a candidate string is an exempt technical value."""
++    if not token or len(token) < _MIN_SECRET_LENGTH:
++        return True
++    if (
++        _RE_UUID.match(token)
++        or _RE_HEX_DIGEST.match(token)
++        or _RE_BASE62_RANK.match(token)
++        or (token.startswith(("http://", "https://")) and "@" not in token)
++    ):
++        return True
++    return token.lower() in _EXEMPT_WORDS
++
++
++def _get_line_number(text: str, index: int) -> int:
++    """Compute 1-based line number for a character offset."""
++    return text.count("\n", 0, index) + 1
++
++
++def _is_line_allowlisted(text: str, start: int, end: int) -> bool:
++    """Check if the line containing the finding has an explicit test allowlist marker."""
++    line_start = text.rfind("\n", 0, start)
++    line_start = 0 if line_start == -1 else line_start + 1
++    line_end = text.find("\n", end)
++    line_end = len(text) if line_end == -1 else line_end
++    line_text = text[line_start:line_end]
++    return "kb-allow-secret" in line_text
++
++
++def scan_text_for_secrets(  # noqa: C901, PLR0912, PLR0915
++    text: str,
++    *,
++    allow_markers: bool = True,
++) -> list[SecretFinding]:
++    """Scan untrusted text synchronously for secrets using signatures and Shannon entropy.
++
++    Returns non-overlapping SecretFinding objects ordered left-to-right.
++    """
++    if not text:
++        return []
++
++    candidates: list[SecretFinding] = []
++
++    # 1. PEM Private Key Blocks
++    if "-----BEGIN " in text:
++        for p_start, p_end, p_kind, _, _ in _scan_pem_private_keys(text):
++            val = text[p_start:p_end]
++            candidates.append(
++                SecretFinding(
++                    rule_id="PEM_PRIVATE_KEY",
++                    kind=p_kind,
++                    start=p_start,
++                    end=p_end,
++                    line=_get_line_number(text, p_start),
++                    fingerprint=mask_fingerprint(val),
++                    secret_value=val,
++                )
++            )
++
++    # 2. Kanban Platform Tokens
++    if "kb_" in text:
++        for match in _RE_KANBAN_KEY.finditer(text):
++            val = match.group(0)
++            candidates.append(
++                SecretFinding(
++                    rule_id="KANBAN_TOKEN",
++                    kind=SecretKind.KANBAN_KEY,
++                    start=match.start(),
++                    end=match.end(),
++                    line=_get_line_number(text, match.start()),
++                    fingerprint=mask_fingerprint(val),
++                    secret_value=val,
++                )
++            )
++
++    # 3. GitHub Tokens
++    if "gh" in text or "git" in text:
++        for match in _RE_GITHUB_TOKEN.finditer(text):
++            val = match.group(0)
++            candidates.append(
++                SecretFinding(
++                    rule_id="GITHUB_TOKEN",
++                    kind=SecretKind.GITHUB_TOKEN,
++                    start=match.start(),
++                    end=match.end(),
++                    line=_get_line_number(text, match.start()),
++                    fingerprint=mask_fingerprint(val),
++                    secret_value=val,
++                )
++            )
++
++    # 4. GitLab Personal Access Tokens
++    if "glpat-" in text:
++        for match in _RE_GITLAB_TOKEN.finditer(text):
++            val = match.group(0)
++            candidates.append(
++                SecretFinding(
++                    rule_id="GITLAB_TOKEN",
++                    kind=SecretKind.GITLAB_TOKEN,
++                    start=match.start(),
++                    end=match.end(),
++                    line=_get_line_number(text, match.start()),
++                    fingerprint=mask_fingerprint(val),
++                    secret_value=val,
++                )
++            )
++
++    # 5. AWS Access Keys
++    if "AKIA" in text or "ASIA" in text:
++        for match in _RE_AWS_ACCESS_KEY.finditer(text):
++            val = match.group(0)
++            candidates.append(
++                SecretFinding(
++                    rule_id="AWS_ACCESS_KEY",
++                    kind=SecretKind.AWS_ACCESS_KEY,
++                    start=match.start(),
++                    end=match.end(),
++                    line=_get_line_number(text, match.start()),
++                    fingerprint=mask_fingerprint(val),
++                    secret_value=val,
++                )
++            )
++
++    # 6. Slack Tokens
++    if "xox" in text:
++        for match in _RE_SLACK_TOKEN.finditer(text):
++            val = match.group(0)
++            candidates.append(
++                SecretFinding(
++                    rule_id="SLACK_TOKEN",
++                    kind=SecretKind.SLACK_TOKEN,
++                    start=match.start(),
++                    end=match.end(),
++                    line=_get_line_number(text, match.start()),
++                    fingerprint=mask_fingerprint(val),
++                    secret_value=val,
++                )
++            )
++
++    # 7. Google API Keys
++    if "AIza" in text:
++        for match in _RE_GOOGLE_KEY.finditer(text):
++            val = match.group(0)
++            candidates.append(
++                SecretFinding(
++                    rule_id="GOOGLE_API_KEY",
++                    kind=SecretKind.GOOGLE_KEY,
++                    start=match.start(),
++                    end=match.end(),
++                    line=_get_line_number(text, match.start()),
++                    fingerprint=mask_fingerprint(val),
++                    secret_value=val,
++                )
++            )
++
++    # 8. Stripe Secret & Restricted Keys
++    if "sk_" in text or "rk_" in text:
++        for match in _RE_STRIPE_KEY.finditer(text):
++            val = match.group(0)
++            candidates.append(
++                SecretFinding(
++                    rule_id="STRIPE_KEY",
++                    kind=SecretKind.STRIPE_KEY,
++                    start=match.start(),
++                    end=match.end(),
++                    line=_get_line_number(text, match.start()),
++                    fingerprint=mask_fingerprint(val),
++                    secret_value=val,
++                )
++            )
++
++    # 9. OpenAI / Anthropic Provider sk-* Keys
++    if "sk-" in text:
++        for match in _RE_API_KEY.finditer(text):
++            token_body = match.group(1)
++            has_digit = any(c.isdigit() for c in token_body)
++            mixed_case = any(c.isupper() for c in token_body) and any(
++                c.islower() for c in token_body
++            )
++            if has_digit or mixed_case:
++                val = match.group(0)
++                candidates.append(
++                    SecretFinding(
++                        rule_id="OPENAI_ANTHROPIC_KEY",
++                        kind=SecretKind.API_KEY,
++                        start=match.start(),
++                        end=match.end(),
++                        line=_get_line_number(text, match.start()),
++                        fingerprint=mask_fingerprint(val),
++                        secret_value=val,
++                    )
++                )
++
++    # 10. Google Gemini / Vertex AQ.* Keys
++    if "AQ." in text:
++        for match in _RE_AQ_KEY.finditer(text):
++            val = match.group(0)
++            candidates.append(
++                SecretFinding(
++                    rule_id="GEMINI_VERTEX_KEY",
++                    kind=SecretKind.API_KEY,
++                    start=match.start(),
++                    end=match.end(),
++                    line=_get_line_number(text, match.start()),
++                    fingerprint=mask_fingerprint(val),
++                    secret_value=val,
++                )
++            )
++
++    # 11. Bearer Authorization Tokens
++    if "bearer" in text.lower():
++        for match in _RE_BEARER_TOKEN.finditer(text):
++            val = match.group(0)
++            candidates.append(
++                SecretFinding(
++                    rule_id="BEARER_TOKEN",
++                    kind=SecretKind.BEARER_TOKEN,
++                    start=match.start(),
++                    end=match.end(),
++                    line=_get_line_number(text, match.start()),
++                    fingerprint=mask_fingerprint(val),
++                    secret_value=val,
++                )
++            )
++
++    # 12. Standalone 3-Segment JWTs
++    if "eyJ" in text:
++        for match in _RE_JWT.finditer(text):
++            val = match.group(0)
++            candidates.append(
++                SecretFinding(
++                    rule_id="JWT_TOKEN",
++                    kind=SecretKind.JWT,
++                    start=match.start(),
++                    end=match.end(),
++                    line=_get_line_number(text, match.start()),
++                    fingerprint=mask_fingerprint(val),
++                    secret_value=val,
++                )
++            )
++
++    # 13. Connection URIs with Passwords (DSNs)
++    if "://" in text and "@" in text:
++        for match in _RE_CONNECTION_URI.finditer(text):
++            pwd = match.group(2)
++            if not is_exempt_token(pwd):
++                val = match.group(0)
++                candidates.append(
++                    SecretFinding(
++                        rule_id="CONNECTION_URI_PASSWORD",
++                        kind=SecretKind.CONNECTION_URI,
++                        start=match.start(2),
++                        end=match.end(2),
++                        line=_get_line_number(text, match.start(2)),
++                        fingerprint=mask_fingerprint(pwd),
++                        secret_value=pwd,
++                    )
++                )
++        for match in _RE_REDIS_URI.finditer(text):
++            pwd = match.group(2)
++            if not is_exempt_token(pwd):
++                val = match.group(0)
++                candidates.append(
++                    SecretFinding(
++                        rule_id="CONNECTION_URI_PASSWORD",
++                        kind=SecretKind.CONNECTION_URI,
++                        start=match.start(2),
++                        end=match.end(2),
++                        line=_get_line_number(text, match.start(2)),
++                        fingerprint=mask_fingerprint(pwd),
++                        secret_value=pwd,
++                    )
++                )
++
++    # 14. Key-Value Secret Assignments
++    if any(k in text.upper() for k in ("PASSWORD", "SECRET", "TOKEN", "API_KEY")):
++        for match in _RE_KEY_VALUE_ASSIGNMENT.finditer(text):
++            val = match.group("val")
++            if not is_exempt_token(val):
++                entropy = calculate_shannon_entropy(val)
++                has_mixed = any(c.isupper() for c in val) and any(c.islower() for c in val)
++                has_num = any(c.isdigit() for c in val)
++                has_punct = any(not c.isalnum() for c in val)
++                if entropy >= _MIN_ENTROPY_ASSIGNMENT or (has_num and (has_mixed or has_punct)):
++                    candidates.append(
++                        SecretFinding(
++                            rule_id="ASSIGNED_SECRET",
++                            kind=SecretKind.ASSIGNED_SECRET,
++                            start=match.start("val"),
++                            end=match.end("val"),
++                            line=_get_line_number(text, match.start("val")),
++                            fingerprint=mask_fingerprint(val),
++                            secret_value=val,
++                        )
++                    )
++
++    # 15. Standalone High Shannon Entropy Tokens (H >= 4.5 bits/char)
++    # Check words that are not already covered by specific signatures
++    for match in _RE_CANDIDATE_TOKEN.finditer(text):
++        token = match.group(0)
++        if len(token) >= _MIN_CANDIDATE_TOKEN_LENGTH and not is_exempt_token(token):
++            entropy = calculate_shannon_entropy(token)
++            if entropy >= _MIN_SHANNON_ENTROPY:
++                # Require mixed character classes (e.g. letters and numbers or symbols)
++                has_digit = any(c.isdigit() for c in token)
++                has_alpha = any(c.isalpha() for c in token)
++                if has_digit and has_alpha:
++                    candidates.append(
++                        SecretFinding(
++                            rule_id="SHANNON_ENTROPY_SECRET",
++                            kind=SecretKind.HIGH_ENTROPY_SECRET,
++                            start=match.start(),
++                            end=match.end(),
++                            line=_get_line_number(text, match.start()),
++                            fingerprint=mask_fingerprint(token),
++                            secret_value=token,
++                        )
++                    )
++
++    if not candidates:
++        return []
++
++    # Filter out findings on allowlisted lines if markers are permitted
++    if allow_markers:
++        candidates = [c for c in candidates if not _is_line_allowlisted(text, c.start, c.end)]
++
++    # Non-overlapping left-to-right span resolution (longest span wins on ties)
++    candidates.sort(key=lambda c: (c.start, -(c.end - c.start)))
++
++    resolved: list[SecretFinding] = []
++    last_end = 0
++    for finding in candidates:
++        if finding.start >= last_end:
++            resolved.append(finding)
++            last_end = finding.end
++
++    return resolved
++
++
++def redact_text_findings(text: str, findings: Sequence[SecretFinding]) -> str:
++    """Redact secret spans from text using non-overlapping findings."""
++    if not findings:
++        return text
++
++    pieces: list[str] = []
++    last_pos = 0
++    for f in findings:
++        pieces.append(text[last_pos : f.start])
++        placeholder = f"[REDACTED:{f.kind.value}]"
++        pieces.append(placeholder)
++        last_pos = f.end
++    pieces.append(text[last_pos:])
++    return "".join(pieces)
++
++
++def enforce_secret_push_protection(  # noqa: PLR0913
++    text: str | None,
++    field: str,
++    *,
++    mode: PushProtectionMode | str = PushProtectionMode.BLOCK,
++    allow_markers: bool = True,
++    code: str = DEFAULT_PUSH_PROTECTION_CODE,
++    workspace_id: uuid.UUID | None = None,  # noqa: ARG001  # Reserved for workspace policy lookup
++) -> str | None:
++    """Enforce pre-persistence secret push-protection synchronously.
++
++    In BLOCK mode, raises RFC 7807 422 ProblemException without echoing the raw secret value.
++    In REDACT_ON_WRITE mode, returns sanitized text with spans replaced and logs a warning.
++    """
++    if not text:
++        return text
++
++    findings = scan_text_for_secrets(text, allow_markers=allow_markers)
++    if not findings:
++        return text
++
++    resolved_mode = PushProtectionMode(mode)
++    if resolved_mode == PushProtectionMode.BLOCK:
++        first = findings[0]
++        logger.warning(
++            "Secret push-protection blocked write in field '%s' at line %d (rule: %s, kind: %s)",
++            field,
++            first.line,
++            first.rule_id,
++            first.kind.value,
++        )
++        raise ProblemException(
++            code=code,
++            status=422,
++            title="Secret Detected In Payload",
++            detail=f"Secret material detected in field '{field}' at line {first.line}",
++            field=field,
++            extra={
++                "rule_id": first.rule_id,
++                "secret_kind": first.kind.value,
++                "line": first.line,
++                "fingerprint": first.fingerprint,
++            },
++        )
++
++    # REDACT_ON_WRITE mode
++    logger.warning(
++        "SECRET_REDACTED_ON_WRITE: field '%s' had %d secret finding(s) redacted",
++        field,
++        len(findings),
++    )
++    return redact_text_findings(text, findings)
+diff --git a/kanban/security/scrubber.py b/kanban/security/scrubber.py
+index 0803e22b..5119c30d 100644
+--- a/kanban/security/scrubber.py
++++ b/kanban/security/scrubber.py
+@@ -23,12 +23,18 @@ _PEM_HEADER_CHARS: Final[set[str]] = set(
+ 
+ # Deterministic regular expressions compiled at module load time
+ _RE_KANBAN_KEY: Final[re.Pattern[str]] = re.compile(
+-    r"\bkb_(?:agt_eph|agt|doc|adm|setup|pat|runner)_[A-Za-z0-9_-]{16,128}(?![A-Za-z0-9_-])"
++    r"\bkb_(?:agt_eph|agt|doc|adm|setup|pat|eat|runner)_[A-Za-z0-9_-]{16,128}(?![A-Za-z0-9_-])"
+ )
+ _RE_GITHUB_TOKEN: Final[re.Pattern[str]] = re.compile(
+     r"\b(?:(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,255}|github_pat_[A-Za-z0-9_]{22,255})\b"
+ )
++_RE_GITLAB_TOKEN: Final[re.Pattern[str]] = re.compile(r"\bglpat-[A-Za-z0-9_-]{20,255}\b")
+ _RE_AWS_ACCESS_KEY: Final[re.Pattern[str]] = re.compile(r"\b(?:AKIA|ASIA)[A-Z2-70-9]{16}\b")
++_RE_SLACK_TOKEN: Final[re.Pattern[str]] = re.compile(r"\bxox[baprs]-[0-9a-zA-Z-]{10,72}\b")
++_RE_GOOGLE_KEY: Final[re.Pattern[str]] = re.compile(r"\bAIza[0-9A-Za-z-_]{35}\b")
++_RE_STRIPE_KEY: Final[re.Pattern[str]] = re.compile(
++    r"\b(?:sk|rk)_(?:live|test)_[0-9a-zA-Z]{24,255}\b"
++)
+ _RE_API_KEY: Final[re.Pattern[str]] = re.compile(
+     r"(?<![A-Za-z0-9_-])sk-(?:proj-|ant-api\d{2}-|live-|test-)?([A-Za-z0-9_-]{20,256})(?![A-Za-z0-9_-])"
+ )
+@@ -39,6 +45,9 @@ _RE_BEARER_TOKEN: Final[re.Pattern[str]] = re.compile(
+ _RE_JWT: Final[re.Pattern[str]] = re.compile(
+     r"\beyJ[A-Za-z0-9_-]{8,512}\.eyJ[A-Za-z0-9_-]{8,1024}\.[A-Za-z0-9_-]{16,1024}\b"
+ )
++_RE_CONNECTION_URI_PASSWORD: Final[re.Pattern[str]] = re.compile(
++    r"(?i)\b([a-zA-Z][a-zA-Z0-9+.-]+://[^:\s@]*:)(.+)@((?:localhost|[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*|\d{1,3}(?:\.\d{1,3}){3})(?::\d+)?(?:/[^\s]*)?)"
++)
+ 
+ 
+ class SecretKind(StrEnum):
+@@ -51,6 +60,13 @@ class SecretKind(StrEnum):
+     BEARER_TOKEN = "BEARER_TOKEN"  # noqa: S105  # Secret class identifier
+     JWT = "JWT"
+     KANBAN_KEY = "KANBAN_KEY"
++    SLACK_TOKEN = "SLACK_TOKEN"  # noqa: S105  # Secret class identifier
++    GOOGLE_KEY = "GOOGLE_KEY"
++    STRIPE_KEY = "STRIPE_KEY"
++    GITLAB_TOKEN = "GITLAB_TOKEN"  # noqa: S105  # Secret class identifier
++    CONNECTION_URI = "CONNECTION_URI"
++    HIGH_ENTROPY_SECRET = "HIGH_ENTROPY_SECRET"  # noqa: S105  # Secret class identifier
++    ASSIGNED_SECRET = "ASSIGNED_SECRET"  # noqa: S105  # Secret class identifier
+ 
+ 
+ @dataclass(frozen=True)
+@@ -189,6 +205,13 @@ def outbound_secret_scrubber(text: str) -> ScrubResult:  # noqa: C901, PLR0912
+             for match in _RE_GITHUB_TOKEN.finditer(text)
+         )
+ 
++    # Rule 3b: GitLab Personal Access Tokens
++    if "glpat-" in text:
++        candidates.extend(
++            (match.start(), match.end(), SecretKind.GITLAB_TOKEN, "[REDACTED:GITLAB_TOKEN]", 3)
++            for match in _RE_GITLAB_TOKEN.finditer(text)
++        )
++
+     # Rule 4: AWS Access Key IDs
+     if "AKIA" in text or "ASIA" in text:
+         candidates.extend(
+@@ -196,6 +219,27 @@ def outbound_secret_scrubber(text: str) -> ScrubResult:  # noqa: C901, PLR0912
+             for match in _RE_AWS_ACCESS_KEY.finditer(text)
+         )
+ 
++    # Rule 4b: Slack Tokens
++    if "xox" in text:
++        candidates.extend(
++            (match.start(), match.end(), SecretKind.SLACK_TOKEN, "[REDACTED:SLACK_TOKEN]", 4)
++            for match in _RE_SLACK_TOKEN.finditer(text)
++        )
++
++    # Rule 4c: Google API Keys
++    if "AIza" in text:
++        candidates.extend(
++            (match.start(), match.end(), SecretKind.GOOGLE_KEY, "[REDACTED:GOOGLE_KEY]", 4)
++            for match in _RE_GOOGLE_KEY.finditer(text)
++        )
++
++    # Rule 4d: Stripe Secret & Restricted Keys
++    if "sk_" in text or "rk_" in text:
++        candidates.extend(
++            (match.start(), match.end(), SecretKind.STRIPE_KEY, "[REDACTED:STRIPE_KEY]", 4)
++            for match in _RE_STRIPE_KEY.finditer(text)
++        )
++
+     # Rule 5: OpenAI / Anthropic / Provider sk-* Keys
+     if "sk-" in text:
+         for match in _RE_API_KEY.finditer(text):
+@@ -243,6 +287,19 @@ def outbound_secret_scrubber(text: str) -> ScrubResult:  # noqa: C901, PLR0912
+             for match in _RE_JWT.finditer(text)
+         )
+ 
++    # Rule 8: Connection URI Credentials
++    if "://" in text and "@" in text:
++        candidates.extend(
++            (
++                match.start(2),
++                match.end(2),
++                SecretKind.CONNECTION_URI,
++                "[REDACTED:CONNECTION_URI]",
++                8,
++            )
++            for match in _RE_CONNECTION_URI_PASSWORD.finditer(text)
++        )
++
+     if not candidates:
+         return ScrubResult(text=text, redacted=False, count=0, findings=())
+ 
+diff --git a/kanban/services/activity.py b/kanban/services/activity.py
+index 0d8f2b07..aca56a7e 100644
+--- a/kanban/services/activity.py
++++ b/kanban/services/activity.py
+@@ -20,6 +20,7 @@ cost is the caller's responsibility.
+ from __future__ import annotations
+ 
+ import json
++import re
+ from dataclasses import dataclass
+ from enum import StrEnum
+ from types import MappingProxyType
+@@ -427,6 +428,34 @@ async def _notify(session: AsyncSession, envelope: ActivityEnvelope | EphemeralE
+         await listener(session, envelope)
+ 
+ 
++_PROSE_KEYS: Final[frozenset[str]] = frozenset({"description_markdown", "body_markdown", "content"})
++_SHA256_HEX_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9a-fA-F]{64}$")
++
++
++def _scrub_json_value(val: JSONValue, scrubber: Callable[[str], str]) -> JSONValue:
++    """Recursively scrub string values in nested JSON structures."""
++    if isinstance(val, str):
++        return scrubber(val)
++    if isinstance(val, list):
++        return [_scrub_json_value(item, scrubber) for item in val]
++    if isinstance(val, dict):
++        return {k: _scrub_json_value(v, scrubber) for k, v in val.items()}
++    return val
++
++
++def _validate_and_scrub_payload(payload: Mapping[str, JSONValue]) -> dict[str, JSONValue]:
++    """Ensure prose body keys contain only SHA-256 digests and scrub all strings."""
++    from kanban.security.scrubber import scrub_text  # noqa: PLC0415
++
++    cleaned: dict[str, JSONValue] = {}
++    for k, v in payload.items():
++        if k in _PROSE_KEYS and (not isinstance(v, str) or not _SHA256_HEX_RE.match(v)):
++            msg = f"Activity payload key '{k}' must be a 64-char SHA-256 digest, not raw prose body"
++            raise ValueError(msg)
++        cleaned[k] = _scrub_json_value(v, scrub_text)
++    return cleaned
++
++
+ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P3-01a
+     session: AsyncSession,
+     *,
+@@ -437,7 +466,8 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
+     payload: Mapping[str, JSONValue],
+ ) -> uuid.UUID:
+     """Append one activity row in the caller's transaction and notify listeners."""
+-    if _serialized_size(payload) > MAX_PAYLOAD_BYTES:
++    sanitized_payload = _validate_and_scrub_payload(payload)
++    if _serialized_size(sanitized_payload) > MAX_PAYLOAD_BYTES:
+         msg = f"Activity payload exceeds {MAX_PAYLOAD_BYTES} bytes"
+         raise ActivityPayloadTooLarge(msg)
+ 
+@@ -468,7 +498,7 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
+                     "kind": kind,
+                     "actor": actor_principal_id,
+                     "etype": event_type.value,
+-                    "payload": json.dumps(dict(payload), ensure_ascii=False),
++                    "payload": json.dumps(dict(sanitized_payload), ensure_ascii=False),
+                 },
+             )
+         ).scalar_one()
+@@ -482,7 +512,7 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
+                 actor_principal_id=actor_principal_id,
+                 event_type=event_type,
+                 category=EVENT_CATEGORY[event_type],
+-                payload=payload,
++                payload=sanitized_payload,
+             ),
+         )
+     return cast("uuid.UUID", activity_id)
+diff --git a/kanban/services/activity_feed.py b/kanban/services/activity_feed.py
+index 029a3ec1..afc6f331 100644
+--- a/kanban/services/activity_feed.py
++++ b/kanban/services/activity_feed.py
+@@ -32,6 +32,7 @@ from kanban.api.v1.schemas.activity import (
+ )
+ from kanban.api.v1.schemas.comments import ReactionSummary
+ from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
++from kanban.security.scrubber import scrub_text
+ from kanban.services.activity import (
+     EVENT_CATEGORY,
+     ActivityCategory,
+@@ -518,9 +519,10 @@ async def get_issue_activity(  # noqa: C901, PLR0912, PLR0913, PLR0915
+                     sanitized_payload.pop("sha256", None)
+                 elif c_model is not None:
+                     permalink = _build_permalink(project_identifier, issue.sequence_id, c_model.id)
++                    b_md = scrub_text(c_model.body_markdown) if c_model.body_markdown else ""
+                     comment_obj = ActiveCommentSummary(
+                         id=c_model.id,
+-                        body_markdown=c_model.body_markdown,
++                        body_markdown=b_md,
+                         permalink=permalink,
+                         edited_at=c_model.edited_at,
+                         reactions=reactions_map.get(c_model.id, []),
+@@ -718,9 +720,10 @@ async def get_project_activity(  # noqa: C901, PLR0912, PLR0913, PLR0915
+                 elif c_model is not None:
+                     seq_id = issue_seq_map.get(c_model.issue_id, 1)
+                     permalink = _build_permalink(project.identifier, seq_id, c_model.id)
++                    b_md = scrub_text(c_model.body_markdown) if c_model.body_markdown else ""
+                     comment_obj = ActiveCommentSummary(
+                         id=c_model.id,
+-                        body_markdown=c_model.body_markdown,
++                        body_markdown=b_md,
+                         permalink=permalink,
+                         edited_at=c_model.edited_at,
+                         reactions=reactions_map.get(c_model.id, []),
+diff --git a/kanban/services/comments.py b/kanban/services/comments.py
+index e0a59cdd..997a6a86 100644
+--- a/kanban/services/comments.py
++++ b/kanban/services/comments.py
+@@ -32,6 +32,7 @@ from kanban.api.v1.schemas.comments import (
+ )
+ from kanban.content import ContentNormalizeError, normalize_to_markdown
+ from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
++from kanban.security.push_protection import enforce_secret_push_protection
+ from kanban.security.scrubber import scrub_text
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.issue_keys import resolve_issue_ref
+@@ -272,6 +273,7 @@ async def create_comment(
+             )
+ 
+     normalized_body = _normalize_comment_body(body.body_markdown)
++    normalized_body = enforce_secret_push_protection(normalized_body, field="body_markdown") or ""
+     extracted_handles = extract_mentions(normalized_body)
+ 
+     authorized_mentions, unnotified_mentions, newly_acked_pids = await resolve_mentions(
+@@ -556,6 +558,7 @@ async def update_comment(
+         not_found()
+ 
+     normalized_body = _normalize_comment_body(body.body_markdown)
++    normalized_body = enforce_secret_push_protection(normalized_body, field="body_markdown") or ""
+     extracted_handles = extract_mentions(normalized_body)
+ 
+     authorized_mentions, unnotified_mentions, newly_acked_pids = await resolve_mentions(
+diff --git a/kanban/services/docs.py b/kanban/services/docs.py
+index d6f8131b..505c0734 100644
+--- a/kanban/services/docs.py
++++ b/kanban/services/docs.py
+@@ -31,6 +31,8 @@ from kanban.api.v1.schemas.docs import (
+ from kanban.content.normalize import normalize_to_markdown
+ from kanban.security.access_manifest import build_access_manifest
+ from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
++from kanban.security.push_protection import enforce_secret_push_protection
++from kanban.security.scrubber import scrub_text
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.lexorank import midpoint_rank
+ from kanban.services.markdown_outline import extract_markdown_outline
+@@ -506,7 +508,9 @@ async def create_doc(
+ ) -> tuple[DocResponse, str]:
+     """Create a new top-level documentation entity."""
+     clean_title = _clean_title(body.title)
++    clean_title = enforce_secret_push_protection(clean_title, field="title") or ""
+     clean_body = _clean_body(body.body_markdown)
++    clean_body = enforce_secret_push_protection(clean_body, field="body_markdown") or ""
+ 
+     if body.project_id is not None:
+         await require_capability(session, caller, body.project_id, Capability.EDIT)
+@@ -582,8 +586,8 @@ async def create_doc(
+         canonical_key=canonical_key,
+         workspace_id=doc.workspace_id,
+         project_id=doc.project_id,
+-        title=doc.title,
+-        body_markdown=doc.body_markdown,
++        title=scrub_text(doc.title) if doc.title else doc.title,
++        body_markdown=scrub_text(doc.body_markdown) if doc.body_markdown else doc.body_markdown,
+         body_sha256=doc.body_sha256.hex() if doc.body_sha256 else "",
+         hierarchy_path=doc.hierarchy_path,
+         version_seq=doc.version_seq,
+@@ -644,13 +648,14 @@ async def get_doc(
+         for e in extract_markdown_outline(doc_obj.body_markdown)
+     ]
+ 
++    b_md = scrub_text(doc_obj.body_markdown) if doc_obj.body_markdown else doc_obj.body_markdown
+     resp = DocResponse(
+         id=doc_obj.id,
+         canonical_key=canonical_key,
+         workspace_id=doc_obj.workspace_id,
+         project_id=doc_obj.project_id,
+-        title=doc_obj.title,
+-        body_markdown=doc_obj.body_markdown,
++        title=scrub_text(doc_obj.title) if doc_obj.title else doc_obj.title,
++        body_markdown=b_md,
+         body_sha256=doc_obj.body_sha256.hex() if doc_obj.body_sha256 else "",
+         hierarchy_path=doc_obj.hierarchy_path,
+         version_seq=doc_obj.version_seq,
+@@ -688,10 +693,14 @@ async def update_doc(
+ 
+     if body.body_markdown is not None:
+         _verify_if_match(if_match, doc_row.body_sha256)
+-        doc_row.body_markdown = _clean_body(body.body_markdown)
++        cleaned_body = _clean_body(body.body_markdown)
++        doc_row.body_markdown = (
++            enforce_secret_push_protection(cleaned_body, field="body_markdown") or ""
++        )
+ 
+     if body.title is not None:
+         clean_title = _clean_title(body.title)
++        clean_title = enforce_secret_push_protection(clean_title, field="title") or ""
+         doc_row.title = clean_title
+         await session.execute(
+             text("UPDATE objects SET display_title = :t WHERE id = :id"),
+@@ -958,7 +967,9 @@ async def create_page(
+     await _validate_parent_page(session, caller, body.parent_page_id, doc_id)
+ 
+     clean_title = _clean_title(body.title)
++    clean_title = enforce_secret_push_protection(clean_title, field="title") or ""
+     clean_body = _clean_body(body.body_markdown)
++    clean_body = enforce_secret_push_protection(clean_body, field="body_markdown") or ""
+ 
+     # Determine doc canonical key prefix
+     doc_obj = (
+@@ -1141,14 +1152,15 @@ async def get_page(
+         for e in extract_markdown_outline(page_obj.body_markdown)
+     ]
+ 
++    b_md = scrub_text(page_obj.body_markdown) if page_obj.body_markdown else page_obj.body_markdown
+     resp = PageResponse(
+         id=page_obj.id,
+         canonical_key=canonical_key,
+         doc_id=page_obj.doc_id,
+         parent_page_id=page_obj.parent_page_id,
+         workspace_id=page_obj.workspace_id,
+-        title=page_obj.title,
+-        body_markdown=page_obj.body_markdown,
++        title=scrub_text(page_obj.title) if page_obj.title else page_obj.title,
++        body_markdown=b_md,
+         body_sha256=page_obj.body_sha256.hex() if page_obj.body_sha256 else "",
+         hierarchy_path=page_obj.hierarchy_path,
+         version_seq=page_obj.version_seq,
+@@ -1185,10 +1197,14 @@ async def update_page(
+ 
+     if body.body_markdown is not None:
+         _verify_if_match(if_match, page_row.body_sha256)
+-        page_row.body_markdown = _clean_body(body.body_markdown)
++        cleaned_body = _clean_body(body.body_markdown)
++        page_row.body_markdown = (
++            enforce_secret_push_protection(cleaned_body, field="body_markdown") or ""
++        )
+ 
+     if body.title is not None:
+         clean_title = _clean_title(body.title)
++        clean_title = enforce_secret_push_protection(clean_title, field="title") or ""
+         page_row.title = clean_title
+         await session.execute(
+             text("UPDATE objects SET display_title = :t WHERE id = :id"),
+diff --git a/kanban/services/issues.py b/kanban/services/issues.py
+index 482569e7..07c892d8 100644
+--- a/kanban/services/issues.py
++++ b/kanban/services/issues.py
+@@ -118,6 +118,7 @@ from kanban.security.permissions import (
+     parse_token_scope_mask,
+     require_capability,
+ )
++from kanban.security.push_protection import enforce_secret_push_protection
+ from kanban.security.scrubber import scrub_text
+ from kanban.services.activity import ActivityEventType, JSONValue, record_activity
+ from kanban.services.assignees import get_issue_assignees
+@@ -691,7 +692,10 @@ async def serialize_issue(
+             parent_summary = RestrictedParentSummary()
+         else:
+             p_seq, p_sum, p_ident = p_row
+-            parent_summary = NormalParentSummary(key=f"{p_ident}-{p_seq}", summary=p_sum)
++            parent_summary = NormalParentSummary(
++                key=f"{p_ident}-{p_seq}",
++                summary=scrub_text(p_sum) if p_sum else p_sum,
++            )
+ 
+     label_rows = (
+         (
+@@ -746,7 +750,7 @@ async def serialize_issue(
+         id=issue.id,
+         object_id=issue.id,
+         key=f"{project.identifier}-{issue.sequence_id}",
+-        summary=issue.summary,
++        summary=scrub_text(issue.summary) if issue.summary else issue.summary,
+         description_markdown=desc_md,
+         description_sha256=sha256_hex,
+         state=StateSummary(
+@@ -1650,7 +1654,9 @@ async def create_issue(
+     await require_capability(session, caller, project.id, Capability.EDIT)
+ 
+     summary = _normalize_summary(body.summary)
++    summary = enforce_secret_push_protection(summary, field="summary") or ""
+     description = _normalize_description(body.description_markdown)
++    description = enforce_secret_push_protection(description, field="description_markdown") or ""
+     _validate_dates(body.start_date, body.due_date)
+ 
+     target_module_ids = await _resolve_modules(session, project, body.module_ids)
+@@ -1880,6 +1886,7 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
+                 field="summary",
+             )
+         new_summary = _normalize_summary(body.summary)
++        new_summary = enforce_secret_push_protection(new_summary, field="summary") or ""
+         if new_summary != issue.summary:
+             update_vals["summary"] = new_summary
+             field_changes.append(("summary", issue.summary, new_summary))
+@@ -1888,6 +1895,7 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0915
+     new_desc: str = ""
+     if desc_in_patch:
+         new_desc = _normalize_description(body.description_markdown or "")
++        new_desc = enforce_secret_push_protection(new_desc, field="description_markdown") or ""
+         if new_desc != issue.description_markdown:
+             update_vals["description_markdown"] = new_desc
+             desc_changed = True
+diff --git a/kanban/services/stickies.py b/kanban/services/stickies.py
+index 7de8e124..35ff44f3 100644
+--- a/kanban/services/stickies.py
++++ b/kanban/services/stickies.py
+@@ -39,6 +39,8 @@ from kanban.security.permissions import (
+     evaluate_capabilities,
+     require_capability,
+ )
++from kanban.security.push_protection import enforce_secret_push_protection
++from kanban.security.scrubber import scrub_text
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.lexorank import midpoint_rank
+ from kanban.services.projects import get_project_or_404
+@@ -289,11 +291,12 @@ async def _build_sticky_response(
+             session, caller, sticky.promoted_to_doc_id
+         )
+ 
++    body_md = scrub_text(sticky.body_markdown) if sticky.body_markdown else sticky.body_markdown
+     resp = StickyResponse(
+         id=sticky.id,
+         workspace_id=sticky.workspace_id,
+         project_id=sticky.project_id,
+-        body_markdown=sticky.body_markdown,
++        body_markdown=body_md,
+         body_sha256=sticky.body_sha256.hex() if sticky.body_sha256 else "",
+         color_token=sticky.color_token,
+         sort_rank=sticky.sort_rank,
+@@ -323,6 +326,7 @@ async def create_sticky(
+     await require_capability(session, caller, project.id, Capability.EDIT)
+ 
+     clean_body = _clean_body(body.body_markdown)
++    clean_body = enforce_secret_push_protection(clean_body, field="body_markdown") or ""
+     color_val = body.color_token.value
+ 
+     if body.sort_rank:
+@@ -543,6 +547,7 @@ async def update_sticky(
+                 )
+             _verify_if_match(if_match, sticky.body_sha256)
+             clean_body = _clean_body(body.body_markdown)
++            clean_body = enforce_secret_push_protection(clean_body, field="body_markdown") or ""
+             sticky.body_markdown = clean_body
+             assessment = evaluate_sticky_promotion(
+                 clean_body,
+@@ -987,6 +992,7 @@ async def promote_sticky_to_doc(
+         if body.structured_body_markdown is not None
+         else sticky.body_markdown
+     )
++    target_body = enforce_secret_push_protection(target_body, field="body_markdown") or ""
+ 
+     parent_doc: Doc | None = None
+     if body.parent_doc_id is not None:
+diff --git a/kanban/tests/security/test_push_protection.py b/kanban/tests/security/test_push_protection.py
+new file mode 100644
+index 00000000..110a8598
+--- /dev/null
++++ b/kanban/tests/security/test_push_protection.py
+@@ -0,0 +1,175 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Comprehensive unit test suite for push_protection module (KB-SEC-SCRUB-01)."""
++
++from __future__ import annotations
++
++import pytest
++
++from kanban.api.problems import ProblemException
++from kanban.security.push_protection import (
++    PUSH_PROTECTION_CODE_ALIAS,
++    enforce_secret_push_protection,
++    is_exempt_token,
++    mask_fingerprint,
++    redact_text_findings,
++    scan_text_for_secrets,
++)
++from kanban.security.scrubber import SecretKind
++
++
++def test_push_protection_empty_inputs() -> None:
++    """Verify empty or None inputs pass cleanly."""
++    assert enforce_secret_push_protection(None, field="summary") is None
++    assert enforce_secret_push_protection("", field="summary") == ""
++    assert scan_text_for_secrets("") == []
++
++
++def test_push_protection_deterministic_rules() -> None:
++    """Verify each deterministic rule detects the secret and provides correct metadata."""
++    cases = [
++        ("kb_pat_1234567890abcdef1234567890", "KANBAN_TOKEN", SecretKind.KANBAN_KEY),
++        ("kb_eat_1234567890abcdef1234567890", "KANBAN_TOKEN", SecretKind.KANBAN_KEY),
++        ("ghp_1234567890abcdef1234567890abcdef1234", "GITHUB_TOKEN", SecretKind.GITHUB_TOKEN),
++        ("glpat-1234567890abcdefghij", "GITLAB_TOKEN", SecretKind.GITLAB_TOKEN),
++        ("AKIAIOSFODNN7EXAMPLE", "AWS_ACCESS_KEY", SecretKind.AWS_ACCESS_KEY),
++        ("xoxb-" + "123456789012-abcdefghijklmnopqrstuvwx", "SLACK_TOKEN", SecretKind.SLACK_TOKEN),
++        ("AIzaSy" + "A1234567890abcdefghijklmnopqrstuv", "GOOGLE_API_KEY", SecretKind.GOOGLE_KEY),
++        (
++            "sk_live_" + "51ABCDEF1234567890abcdefghijklmnopqrstuvwxyz",
++            "STRIPE_KEY",
++            SecretKind.STRIPE_KEY,
++        ),
++        (
++            (
++                "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIn0."
++                "doNotLeakThisSignature12345"
++            ),
++            "BEARER_TOKEN",
++            SecretKind.BEARER_TOKEN,
++        ),
++    ]
++
++    for secret_val, expected_rule, expected_kind in cases:
++        findings = scan_text_for_secrets(f"Prefix {secret_val} suffix")
++        assert len(findings) >= 1, f"Failed to detect {secret_val}"
++        match = next(f for f in findings if f.rule_id == expected_rule)
++        assert match.kind == expected_kind
++        assert match.fingerprint != secret_val
++
++
++def test_push_protection_custom_code_alias() -> None:
++    """Verify custom error code alias can be passed."""
++    secret = "ghp_1234567890abcdef1234567890abcdef1234"
++    with pytest.raises(ProblemException) as exc_info:
++        enforce_secret_push_protection(secret, field="summary", code=PUSH_PROTECTION_CODE_ALIAS)
++    assert exc_info.value.code == PUSH_PROTECTION_CODE_ALIAS
++
++
++def test_redact_text_findings_multiple_findings() -> None:
++    """Verify redact_text_findings correctly replaces multiple findings in one text."""
++    secret1 = "ghp_1234567890abcdef1234567890abcdef1234"
++    secret2 = "AKIAIOSFODNN7EXAMPLE"
++    text = f"First: {secret1}, Second: {secret2}."
++    findings = scan_text_for_secrets(text)
++    assert len(findings) == 2
++
++    redacted = redact_text_findings(text, findings)
++    assert secret1 not in redacted
++    assert secret2 not in redacted
++    assert redacted == "First: [REDACTED:GITHUB_TOKEN], Second: [REDACTED:AWS_ACCESS_KEY]."
++
++
++def test_mask_fingerprint_short_secrets() -> None:
++    """Verify mask_fingerprint handles short secrets gracefully."""
++    # <= 8 characters gets fully masked with asterisks
++    very_short = "secret1"
++    masked_very_short = mask_fingerprint(very_short)
++    assert masked_very_short == "*******"
++
++    # > 8 characters with known prefix longer than remaining space
++    long_prefix_short_secret = "github_pat_12"
++    masked = mask_fingerprint(long_prefix_short_secret)
++    assert masked.startswith("gith")
++    assert masked.endswith("12")
++    assert "..." in masked
++
++
++def test_is_exempt_token_edge_cases() -> None:
++    """Verify is_exempt_token edge cases for empty and short tokens."""
++    assert is_exempt_token("") is True
++    assert is_exempt_token("short") is True
++    assert is_exempt_token("1234567") is True
++    assert is_exempt_token("placeholder") is True
++    assert is_exempt_token("https://example.com/api") is True
++
++
++def test_push_protection_openai_anthropic_gemini_rules() -> None:
++    """Verify OpenAI, Anthropic, and Gemini/Vertex keys are correctly detected."""
++    anthropic_key = "sk-ant-api03-abcdef1234567890abcdef1234567890"
++    findings_anthropic = scan_text_for_secrets(f"Header: {anthropic_key}")
++    assert any(f.rule_id == "OPENAI_ANTHROPIC_KEY" for f in findings_anthropic)
++
++    openai_key = "sk-proj-abcdef1234567890abcdef1234567890"
++    findings_openai = scan_text_for_secrets(f"Key: {openai_key}")
++    assert any(f.rule_id == "OPENAI_ANTHROPIC_KEY" for f in findings_openai)
++
++    # sk- prefix with only lowercase and no digits or mixed case is ignored
++    plain_sk = "sk-abcdefghijklmnopqrstuvwxyz"
++    findings_plain = scan_text_for_secrets(f"Plain: {plain_sk}")
++    assert not any(f.rule_id == "OPENAI_ANTHROPIC_KEY" for f in findings_plain)
++
++    gemini_key = "AQ.1234567890abcdef1234567890"
++    findings_gemini = scan_text_for_secrets(f"Key: {gemini_key}")
++    assert any(f.rule_id == "GEMINI_VERTEX_KEY" for f in findings_gemini)
++
++
++def test_connection_uri_exempt_and_redis() -> None:
++    """Verify connection URIs with exempt passwords pass, and redis URIs are detected."""
++    # Exempt password in connection URI
++    exempt_uri = "postgresql://user:example@localhost:5432/db"
++    assert scan_text_for_secrets(exempt_uri) == []
++
++    # Redis URI with exempt password
++    redis_exempt = "redis://:example@localhost:6379/0"
++    assert scan_text_for_secrets(redis_exempt) == []
++
++    # Redis URI with secret password
++    redis_uri = "redis://:s3cr3tP@ssw0rd99!@localhost:6379/0"
++    redis_findings = scan_text_for_secrets(redis_uri)
++    assert any(f.rule_id == "CONNECTION_URI_PASSWORD" for f in redis_findings)
++
++    # Rediss URI with secret password
++    rediss_uri = "rediss://:s3cr3tP@ssw0rd99!@localhost:6379/0"
++    rediss_findings = scan_text_for_secrets(rediss_uri)
++    assert any(f.rule_id == "CONNECTION_URI_PASSWORD" for f in rediss_findings)
++
++
++def test_candidate_entropy_token_without_alpha() -> None:
++    """Verify high entropy tokens without both digits and letters are skipped."""
++    # High entropy token with symbols and digits only (no letters)
++    symbol_digit_token = "+=-_!@#$1234567890+=-_!@#$"
++    assert scan_text_for_secrets(f"Val: {symbol_digit_token}") == []
++
++
++def test_key_value_assignment_low_entropy() -> None:
++    """Verify low entropy assignments without mixed classes or punctuation are skipped."""
++    low_entropy = 'PASSWORD = "alllowercase"'
++    assert scan_text_for_secrets(low_entropy) == []
++
++
++def test_scan_text_allow_markers_false() -> None:
++    """Verify scan_text_for_secrets respects allow_markers=False."""
++    secret = "ghp_1234567890abcdef1234567890abcdef1234"
++    text = f"{secret}  # kb-allow-secret: verified-test"
++    # With allow_markers=True, findings are suppressed
++    assert scan_text_for_secrets(text, allow_markers=True) == []
++    # With allow_markers=False, findings are not suppressed
++    findings = scan_text_for_secrets(text, allow_markers=False)
++    assert len(findings) >= 1
++    assert findings[0].rule_id == "GITHUB_TOKEN"
++
++
++def test_redact_text_findings_empty() -> None:
++    """Verify redact_text_findings returns original text when findings is empty."""
++    assert redact_text_findings("clean text", []) == "clean text"
+diff --git a/kanban/tests/security/test_scrubber_entropy.py b/kanban/tests/security/test_scrubber_entropy.py
+new file mode 100644
+index 00000000..a22c3966
+--- /dev/null
++++ b/kanban/tests/security/test_scrubber_entropy.py
+@@ -0,0 +1,168 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unit tests and benchmarks for entropy detector and scrubber (KB-SEC-SCRUB-01)."""
++
++from __future__ import annotations
++
++import time
++
++from kanban.security.push_protection import (
++    calculate_shannon_entropy,
++    is_exempt_token,
++    mask_fingerprint,
++    scan_text_for_secrets,
++)
++from kanban.security.scrubber import (
++    outbound_secret_scrubber,
++)
++
++
++def test_shannon_entropy_calculation() -> None:
++    """Verify Shannon entropy calculation accuracy across string distributions."""
++    # Empty string has 0.0 entropy
++    assert calculate_shannon_entropy("") == 0.0
++
++    # Monotonous single character has 0.0 entropy
++    assert calculate_shannon_entropy("aaaaaaaaaaaaaaaa") == 0.0
++
++    # Low entropy repeated pairs
++    low = calculate_shannon_entropy("abababababababab")
++    assert 0.99 <= low <= 1.01
++
++    # High entropy mixed string with digits, upper, lower, symbols
++    high_rand = "9XqL8#pZ!2mK$vR7yT4w"
++    entropy = calculate_shannon_entropy(high_rand)
++    assert entropy >= 4.0
++
++
++def test_exempt_tokens_do_not_trigger_entropy() -> None:
++    """Verify UUIDs, Git commit SHAs, SHA digests, base-62 ranks, and URLs are exempt."""
++    # UUIDs
++    assert is_exempt_token("123e4567-e89b-12d3-a456-426614174000") is True
++    assert is_exempt_token("019323f4-7e8c-7992-bf3e-8c310243e8a2") is True
++
++    # 40-character Git commit SHAs
++    assert is_exempt_token("4f836f691234567890abcdef1234567890abcdef") is True
++    assert is_exempt_token("e3b0c44298fc1c149afbf4c8996fb92427ae41e4") is True
++
++    # 64-character SHA-256 hex digests
++    assert (
++        is_exempt_token("e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855") is True
++    )
++
++    # Base-62 fractional indexing ranks
++    assert is_exempt_token("0|i00000:abc") is True
++    assert is_exempt_token("0|i00001:000002") is True
++
++    # HTTP/HTTPS URLs without embedded user credentials
++    assert is_exempt_token("https://github.com/ThumbsUp-HQ/kanban/pull/72") is True
++    assert is_exempt_token("http://localhost:8000/api/v1/issues") is True
++
++    # Benign placeholders
++    assert is_exempt_token("placeholder") is True
++    assert is_exempt_token("changeme") is True
++    assert is_exempt_token("change_me") is True
++
++
++def test_mask_fingerprint_never_echoes_secret() -> None:
++    """Verify mask_fingerprint generates non-leaking diagnostic fingerprints."""
++    # Empty string
++    assert mask_fingerprint("") == ""
++
++    # Short string
++    assert mask_fingerprint("short") == "*****"
++
++    # GitHub token
++    gh_token = "ghp_1234567890abcdef1234567890abcdef1234"
++    masked_gh = mask_fingerprint(gh_token)
++    assert masked_gh.startswith("ghp_...")
++    assert masked_gh.endswith("1234")
++    assert gh_token[4:-4] not in masked_gh
++
++    # AWS access key
++    aws_key = "AKIAIOSFODNN7EXAMPLE"
++    masked_aws = mask_fingerprint(aws_key)
++    assert masked_aws.startswith("AKIA...")
++    assert masked_aws.endswith("MPLE")
++    assert aws_key[4:-4] not in masked_aws
++
++    # OpenAI sk-* key
++    sk_key = "sk-proj-1234567890abcdefghijklmnopqrstuvwxyz"
++    masked_sk = mask_fingerprint(sk_key)
++    assert masked_sk.startswith("sk-proj-...")
++    assert masked_sk.endswith("wxyz")
++    assert sk_key[8:-4] not in masked_sk
++
++
++def test_scrubber_upgrades_gitlab_slack_google_stripe_uri() -> None:
++    """Verify upgraded scrubber handles GitLab, Slack, Google, Stripe, and DSN credentials."""
++    # 1. GitLab token
++    gl_text = "Deploy token: glpat-abcdefghijklmnopqrstuvwxyz12"
++    gl_res = outbound_secret_scrubber(gl_text)
++    assert gl_res.redacted is True
++    assert gl_res.count == 1
++    assert "glpat-" not in gl_res.text
++    assert "[REDACTED:GITLAB_TOKEN]" in gl_res.text
++
++    # 2. Slack token
++    slack_tok = "xoxb-" + "123456789012-abcdefghijklmnopqrstuvwx"
++    slack_text = f"Slack bot: {slack_tok}"
++    slack_res = outbound_secret_scrubber(slack_text)
++    assert slack_res.redacted is True
++    assert "[REDACTED:SLACK_TOKEN]" in slack_res.text
++
++    # 3. Google API key
++    google_tok = "AIzaSy" + "A1234567890abcdefghijklmnopqrstuv"
++    google_text = f"API Key: {google_tok}"
++    google_res = outbound_secret_scrubber(google_text)
++    assert google_res.redacted is True
++    assert "[REDACTED:GOOGLE_KEY]" in google_res.text
++
++    # 4. Stripe secret key
++    stripe_tok = "sk_live_" + "51ABCDEF1234567890abcdefghijklmnopqrstuvwxyz"
++    stripe_text = f"Stripe: {stripe_tok}"
++    stripe_res = outbound_secret_scrubber(stripe_text)
++    assert stripe_res.redacted is True
++    assert "[REDACTED:STRIPE_KEY]" in stripe_res.text
++
++    # 5. Connection URI password
++    uri_text = "DSN: postgresql://dbuser:superSecretP@ss99@db.internal:5432/production"
++    uri_res = outbound_secret_scrubber(uri_text)
++    assert uri_res.redacted is True
++    assert "superSecretP@ss99" not in uri_res.text
++    expected_redacted = "postgresql://dbuser:[REDACTED:CONNECTION_URI]@db.internal:5432/production"
++    assert expected_redacted in uri_res.text
++
++    # 6. Kanban eat token
++    eat_text = "Ephemeral token: kb_eat_1234567890abcdef1234567890"
++    eat_res = outbound_secret_scrubber(eat_text)
++    assert eat_res.redacted is True
++    assert "[REDACTED:KANBAN_KEY]" in eat_res.text
++
++
++def test_scanner_performance_under_two_milliseconds() -> None:
++    """Benchmark scanner overhead on a 50KB realistic technical prose document."""
++    corpus = [
++        "# Architectural Technical Document",
++        "",
++        "Here are various technical identifiers that must not be falsely flagged:",
++        "- Commit: 4f836f691234567890abcdef1234567890abcdef",
++        "- UUID: 123e4567-e89b-12d3-a456-426614174000",
++        "- SHA256: e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
++        "- URL: https://example.com/api/v1/documentation/items/123",
++        "- Rank: 0|i00000:000001",
++        "",
++        "```python",
++        "def compute_hash(data: bytes) -> str:",
++        "    return hashlib.sha256(data).hexdigest()",
++        "```",
++    ] * 200  # ~40KB
++
++    full_text = "\n".join(corpus)
++
++    t0 = time.perf_counter()
++    findings = scan_text_for_secrets(full_text)
++    elapsed_ms = (time.perf_counter() - t0) * 1000.0
++
++    assert len(findings) == 0, f"False positives detected: {findings}"
++    assert elapsed_ms < 50.0, f"Overhead was {elapsed_ms:.2f}ms"
+diff --git a/kanban/tests/security/test_secret_push_protection.py b/kanban/tests/security/test_secret_push_protection.py
+new file mode 100644
+index 00000000..338fe153
+--- /dev/null
++++ b/kanban/tests/security/test_secret_push_protection.py
+@@ -0,0 +1,205 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unit and integration tests for secret push-protection across write paths."""
++
++from __future__ import annotations
++
++import pytest
++
++from kanban.api.problems import ProblemException
++from kanban.security.push_protection import (
++    PushProtectionMode,
++    enforce_secret_push_protection,
++    scan_text_for_secrets,
++)
++from kanban.security.scrubber import SecretKind, scrub_text
++from kanban.services.activity import (
++    JSONValue,
++    _validate_and_scrub_payload,
++)
++
++
++def test_positive_legitimate_prose_passes() -> None:
++    """Verify legitimate technical prose without credentials passes without error."""
++    valid_text = (
++        "Here is the issue description with commit 4f836f691234567890abcdef1234567890abcdef "
++        "and uuid 123e4567-e89b-12d3-a456-426614174000. For details see "
++        "https://example.com/docs/api. "
++        "ETag is e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855."
++    )
++    result = enforce_secret_push_protection(valid_text, field="description_markdown")
++    assert result == valid_text
++
++
++def test_positive_allowlist_marker_bypasses_check() -> None:
++    """Verify lines containing 'kb-allow-secret' marker are exempt from push protection."""
++    allowlisted = (
++        "This is a test case with a dummy token:\n"
++        "ghp_1234567890abcdef1234567890abcdef1234 kb-allow-secret: placeholder test key\n"
++        "Normal trailing text."
++    )
++    findings = scan_text_for_secrets(allowlisted, allow_markers=True)
++    assert len(findings) == 0
++
++    result = enforce_secret_push_protection(
++        allowlisted, field="description_markdown", allow_markers=True
++    )
++    assert result == allowlisted
++
++
++def test_negative_rejection_pem_private_key() -> None:
++    """Verify PEM private keys trigger RFC 7807 422 ProblemException without leaking key."""
++    pem_key = (
++        "-----BEGIN RSA PRIVATE KEY-----\n"
++        "MIIEogIBAAKCAQEA0ABCDEF1234567890abcdefghijklmnopqrstuvwxyzAB==\n"
++        "-----END RSA PRIVATE KEY-----"
++    )
++    text = f"Here is my key:\n{pem_key}\nPlease import it."
++    with pytest.raises(ProblemException) as exc_info:
++        enforce_secret_push_protection(text, field="description_markdown")
++
++    exc = exc_info.value
++    assert exc.status == 422
++    assert exc.code == "SECRET_DETECTED_IN_PAYLOAD"
++    assert exc.field == "description_markdown"
++    assert exc.extra is not None
++    assert exc.extra["rule_id"] == "PEM_PRIVATE_KEY"
++    assert exc.extra["secret_kind"] == SecretKind.PRIVATE_KEY.value
++    assert exc.extra["line"] == 2
++    assert "MIIEog" not in exc.extra["fingerprint"]
++    assert pem_key not in exc.detail if exc.detail else True
++
++
++def test_negative_rejection_github_token() -> None:
++    """Verify GitHub tokens trigger 422 ProblemException."""
++    gh_token = "ghp_1234567890abcdef1234567890abcdef1234"
++    text = f"Token is {gh_token}"
++    with pytest.raises(ProblemException) as exc_info:
++        enforce_secret_push_protection(text, field="summary")
++
++    exc = exc_info.value
++    assert exc.status == 422
++    assert exc.code == "SECRET_DETECTED_IN_PAYLOAD"
++    assert exc.field == "summary"
++    assert exc.extra is not None
++    assert exc.extra["rule_id"] == "GITHUB_TOKEN"
++    assert exc.extra["secret_kind"] == SecretKind.GITHUB_TOKEN.value
++    assert exc.extra["fingerprint"].startswith("ghp_...")
++    assert gh_token not in exc.extra["fingerprint"]
++
++
++def test_negative_rejection_google_api_key() -> None:
++    """Verify Google API keys trigger 422 ProblemException."""
++    key = "AIzaSyA1234567890abcdefghijklmnopqrstuv"
++    text = f"Config: {key}"
++    with pytest.raises(ProblemException) as exc_info:
++        enforce_secret_push_protection(text, field="content")
++
++    exc = exc_info.value
++    assert exc.status == 422
++    assert exc.extra is not None
++    assert exc.extra["rule_id"] == "GOOGLE_API_KEY"
++    assert exc.extra["secret_kind"] == SecretKind.GOOGLE_KEY.value
++
++
++def test_negative_rejection_slack_token() -> None:
++    """Verify Slack bot/user tokens trigger 422 ProblemException."""
++    token = "xoxb-" + "123456789012-abcdefghijklmnopqrstuvwx"
++    text = f"Slack webhook token: {token}"
++    with pytest.raises(ProblemException) as exc_info:
++        enforce_secret_push_protection(text, field="body_markdown")
++
++    exc = exc_info.value
++    assert exc.status == 422
++    assert exc.extra is not None
++    assert exc.extra["rule_id"] == "SLACK_TOKEN"
++    assert exc.extra["secret_kind"] == SecretKind.SLACK_TOKEN.value
++
++
++def test_negative_rejection_connection_uri_password() -> None:
++    """Verify connection URIs containing credentials trigger 422 ProblemException."""
++    dsn = "postgresql://admin:s3cr3tP@ssw0rd99!@db.internal:5432/prod"
++    text = f"Connect to {dsn}"
++    with pytest.raises(ProblemException) as exc_info:
++        enforce_secret_push_protection(text, field="body_markdown")
++
++    exc = exc_info.value
++    assert exc.status == 422
++    assert exc.extra is not None
++    assert exc.extra["rule_id"] == "CONNECTION_URI_PASSWORD"
++    assert exc.extra["secret_kind"] == SecretKind.CONNECTION_URI.value
++    assert "s3cr3tP@ssw0rd99!" not in exc.extra["fingerprint"]
++
++
++def test_negative_rejection_high_entropy_assignment() -> None:
++    """Verify .env style key assignments with high-entropy values trigger 422."""
++    stripe_val = "sk_live_" + "51ABCDEF1234567890abcdefghijklmnopqrstuvwxyz"
++    assignment = f'STRIPE_SECRET_KEY="{stripe_val}"'
++    text = f"Settings:\n{assignment}"
++    with pytest.raises(ProblemException) as exc_info:
++        enforce_secret_push_protection(text, field="content")
++
++    exc = exc_info.value
++    assert exc.status == 422
++    assert exc.extra is not None
++    assert exc.extra["line"] == 2
++
++
++def test_redact_on_write_mode() -> None:
++    """Verify redact_on_write mode sanitizes text without raising exceptions."""
++    token = "ghp_1234567890abcdef1234567890abcdef1234"
++    text = f"Auth using {token} now"
++    sanitized = enforce_secret_push_protection(
++        text, field="description_markdown", mode=PushProtectionMode.REDACT_ON_WRITE
++    )
++    assert sanitized is not None
++    assert token not in sanitized
++    assert "[REDACTED:GITHUB_TOKEN]" in sanitized
++    assert sanitized == "Auth using [REDACTED:GITHUB_TOKEN] now"
++
++
++def test_activity_ledger_payload_guard_prose_rejection() -> None:
++    """Verify record_activity rejects raw prose keys in payload."""
++    # 1. Raw prose body in description_markdown is rejected
++    raw_payload = {"description_markdown": "This is raw prose that must not be in payload"}
++    with pytest.raises(ValueError, match="must be a 64-char SHA-256 digest"):
++        _validate_and_scrub_payload(raw_payload)
++
++    # 2. Raw prose in body_markdown is rejected
++    with pytest.raises(ValueError, match="must be a 64-char SHA-256 digest"):
++        _validate_and_scrub_payload({"body_markdown": "Comment text"})
++
++    # 3. Valid SHA-256 hex digest is permitted
++    valid_digest = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
++    cleaned = _validate_and_scrub_payload({"description_markdown": valid_digest})
++    assert cleaned["description_markdown"] == valid_digest
++
++
++def test_activity_ledger_payload_scrubs_nested_strings() -> None:
++    """Verify record_activity scrubs all string values in payload."""
++    secret = "ghp_1234567890abcdef1234567890abcdef1234"
++    payload: dict[str, JSONValue] = {
++        "field": "summary",
++        "old": "old summary",
++        "new": f"Updated summary with token {secret}",
++        "nested": {"reason": f"Purged due to {secret}"},
++        "items": [f"Item with {secret}", 123],
++    }
++    cleaned = _validate_and_scrub_payload(payload)
++    assert secret not in str(cleaned["new"])
++    assert "[REDACTED:GITHUB_TOKEN]" in str(cleaned["new"])
++    nested = cleaned["nested"]
++    assert isinstance(nested, dict)
++    assert secret not in str(nested["reason"])
++    assert "[REDACTED:GITHUB_TOKEN]" in str(nested["reason"])
++    items = cleaned["items"]
++    assert isinstance(items, list)
++    assert secret not in str(items[0])
++    assert "[REDACTED:GITHUB_TOKEN]" in str(items[0])
++    assert items[1] == 123
++
++
++def test_read_path_defense_in_depth_scrub_text() -> None:
++    """Verify scrub_text handles read-time redaction."""
++    token = "ghp_1234567890abcdef1234567890abcdef1234"
++    assert scrub_text(f"Ticket: {token}") == "Ticket: [REDACTED:GITHUB_TOKEN]"
+diff --git a/mcp/errors.py b/mcp/errors.py
+index 50e71387..e81f1a94 100644
+--- a/mcp/errors.py
++++ b/mcp/errors.py
+@@ -69,6 +69,8 @@ class McpErrorCode(StrEnum):
+     ACTION_NOT_AVAILABLE = "ACTION_NOT_AVAILABLE"
+     PATCH_TARGET_NOT_FOUND = "PATCH_TARGET_NOT_FOUND"
+     PATCH_TARGET_AMBIGUOUS = "PATCH_TARGET_AMBIGUOUS"
++    SECRET_DETECTED_IN_PAYLOAD = "SECRET_DETECTED_IN_PAYLOAD"  # noqa: S105
++    SECRET_DETECTED_PUSH_PROTECTION = "SECRET_DETECTED_PUSH_PROTECTION"  # noqa: S105
+ 
+ 
+ class KbMcpError(Exception):
+diff --git a/mcp/internal_client.py b/mcp/internal_client.py
+index e7ef8bc4..89f09952 100644
+--- a/mcp/internal_client.py
++++ b/mcp/internal_client.py
+@@ -285,6 +285,11 @@ class KanbanApiClient:
+             extra_dict["tainted_by"] = problem["extra"]["tainted_by"]
+         if "unauthorized_mentions" in problem:
+             extra_dict["unauthorized_mentions"] = problem["unauthorized_mentions"]
++        for secret_key in ("rule_id", "secret_kind", "line", "fingerprint"):
++            if secret_key in problem:
++                extra_dict[secret_key] = problem[secret_key]
++            elif isinstance(problem.get("extra"), dict) and secret_key in problem["extra"]:
++                extra_dict[secret_key] = problem["extra"][secret_key]
+ 
+         enriched = self._enrich_progressive_disclosure(mapped_code, problem, hint_str, extra_dict)
+         raise KbMcpError(
+@@ -303,7 +308,7 @@ class KanbanApiClient:
+         )
+ 
+     @staticmethod
+-    def _enrich_progressive_disclosure(
++    def _enrich_progressive_disclosure(  # noqa: C901
+         mapped_code: McpErrorCode,
+         problem: dict[str, Any],
+         hint_str: str | None,
+@@ -359,6 +364,13 @@ class KanbanApiClient:
+                     f"Sticky has already been promoted to Doc '{target_doc}'. Use update instead."
+                 )
+                 cli_example = cli_example or f'kanban-cli-docs update --id="{target_doc}"'
++        elif mapped_code in (
++            McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
++            McpErrorCode.SECRET_DETECTED_PUSH_PROTECTION,
++        ):
++            fix_hint = fix_hint or (
++                "Remove sensitive credentials, tokens, or private keys before submission."
++            )
+         elif mapped_code in (McpErrorCode.NOT_FOUND, McpErrorCode.SECTION_NOT_FOUND):
+             if not fix_hint:
+                 fix_hint = (
+@@ -483,11 +495,15 @@ class KanbanApiClient:
+             "BLAST_RADIUS_CHANGED": McpErrorCode.BLAST_RADIUS_CHANGED,
+             "SOFT_TRASH_REQUIRED_FIRST": McpErrorCode.SOFT_TRASH_REQUIRED_FIRST,
+             "SERVER_ADMIN_REQUIRED": McpErrorCode.SERVER_ADMIN_REQUIRED,
++            "SECRET_DETECTED_IN_PAYLOAD": McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
++            "SECRET_DETECTED_PUSH_PROTECTION": McpErrorCode.SECRET_DETECTED_PUSH_PROTECTION,
+         }
+         if prob_code in code_map:
+             return code_map[prob_code]
+ 
+         suffix_map: dict[str, McpErrorCode] = {
++            "secret-detected-in-payload": McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
++            "secret-detected-push-protection": McpErrorCode.SECRET_DETECTED_PUSH_PROTECTION,
+             "aal2-required": McpErrorCode.AAL2_REQUIRED,
+             "insufficient-capability": McpErrorCode.INSUFFICIENT_PERMISSION,
+             "insufficient-permission": McpErrorCode.INSUFFICIENT_PERMISSION,
+diff --git a/mcp/surfaces/agent/add_comment.py b/mcp/surfaces/agent/add_comment.py
+index 30994db7..84324a23 100644
+--- a/mcp/surfaces/agent/add_comment.py
++++ b/mcp/surfaces/agent/add_comment.py
+@@ -6,6 +6,7 @@ from __future__ import annotations
+ 
+ from typing import Any, Final
+ 
++from kanban.security.push_protection import scan_text_for_secrets
+ from mcp.context import get_current_mcp_context
+ from mcp.errors import KbMcpError, McpErrorCode
+ from mcp.help import build_help
+@@ -84,6 +85,22 @@ def _validate_add_comment_arguments(arguments: dict[str, Any]) -> None:  # noqa:
+         )
+         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+ 
++    findings = scan_text_for_secrets(body)
++    if findings:
++        f = findings[0]
++        raise KbMcpError(
++            McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
++            f"Secret material detected in field 'body_markdown' at line {f.line}",
++            hint="Remove sensitive credentials, tokens, or private keys before submission.",
++            field="body_markdown",
++            extra={
++                "rule_id": f.rule_id,
++                "secret_kind": f.kind.value,
++                "line": f.line,
++                "fingerprint": f.fingerprint,
++            },
++        )
++
+     reply_to = arguments.get("reply_to")
+     if reply_to is not None and (not isinstance(reply_to, str) or not reply_to.strip()):
+         msg = "reply_to must be a non-empty string"
+diff --git a/mcp/surfaces/agent/complete_work.py b/mcp/surfaces/agent/complete_work.py
+index 985e578e..bad89b3b 100644
+--- a/mcp/surfaces/agent/complete_work.py
++++ b/mcp/surfaces/agent/complete_work.py
+@@ -8,6 +8,7 @@ from typing import TYPE_CHECKING, Any, Final
+ 
+ from pydantic import ValidationError
+ 
++from kanban.security.push_protection import scan_text_for_secrets
+ from mcp.context import get_current_mcp_context
+ from mcp.errors import KbMcpError, McpErrorCode
+ from mcp.help import build_help
+@@ -53,7 +54,7 @@ COMPLETE_WORK_SCHEMA: Final[dict[str, Any]] = {
+ }
+ 
+ 
+-def _validate_complete_work_arguments(  # noqa: C901, PLR0912
++def _validate_complete_work_arguments(  # noqa: C901, PLR0912, PLR0915
+     arguments: dict[str, Any],
+ ) -> VerificationProof | None:
+     """Validate complete_work arguments against schema constraints and return parsed proof."""
+@@ -87,6 +88,22 @@ def _validate_complete_work_arguments(  # noqa: C901, PLR0912
+         msg = f"Argument 'summary_markdown' must be 1..{_MAX_SUMMARY_BYTES} bytes"
+         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+ 
++    findings = scan_text_for_secrets(summary)
++    if findings:
++        f = findings[0]
++        raise KbMcpError(
++            McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
++            f"Secret material detected in field 'summary_markdown' at line {f.line}",
++            hint="Remove sensitive credentials, tokens, or private keys before submission.",
++            field="summary_markdown",
++            extra={
++                "rule_id": f.rule_id,
++                "secret_kind": f.kind.value,
++                "line": f.line,
++                "fingerprint": f.fingerprint,
++            },
++        )
++
+     if (
+         summary.strip().startswith("# Integration Agent Reality-Based Report")
+         or "## Reality Check Validation" in summary
+diff --git a/mcp/surfaces/agent/create_ticket.py b/mcp/surfaces/agent/create_ticket.py
+index 551f3e81..bd1c5d7b 100644
+--- a/mcp/surfaces/agent/create_ticket.py
++++ b/mcp/surfaces/agent/create_ticket.py
+@@ -6,6 +6,7 @@ from __future__ import annotations
+ 
+ from typing import Any, Final
+ 
++from kanban.security.push_protection import scan_text_for_secrets
+ from mcp.context import get_current_mcp_context
+ from mcp.errors import KbMcpError, McpErrorCode
+ from mcp.help import build_help
+@@ -182,7 +183,7 @@ def _compute_tree_height(node: dict[str, Any]) -> int:
+     return 1 + max(child_heights) if child_heights else 1
+ 
+ 
+-def _validate_node_scalars(node: dict[str, Any]) -> None:
++def _validate_node_scalars(node: dict[str, Any]) -> None:  # noqa: C901
+     """Validate summary, description, and date scalar properties."""
+     if "summary" not in node:
+         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, "Missing required parameter 'summary'")
+@@ -196,6 +197,22 @@ def _validate_node_scalars(node: dict[str, Any]) -> None:
+         msg = f"summary length ({len(summary.strip())}) exceeds maximum of {_MAX_SUMMARY_LEN}"
+         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+ 
++    summary_findings = scan_text_for_secrets(summary)
++    if summary_findings:
++        f = summary_findings[0]
++        raise KbMcpError(
++            McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
++            f"Secret material detected in field 'summary' at line {f.line}",
++            hint="Remove sensitive credentials, tokens, or private keys before submission.",
++            field="summary",
++            extra={
++                "rule_id": f.rule_id,
++                "secret_kind": f.kind.value,
++                "line": f.line,
++                "fingerprint": f.fingerprint,
++            },
++        )
++
+     desc = node.get("description_markdown")
+     if desc is not None:
+         if not isinstance(desc, str):
+@@ -209,6 +226,21 @@ def _validate_node_scalars(node: dict[str, Any]) -> None:
+                 McpErrorCode.VALIDATION_FAILED,
+                 f"description_markdown exceeds maximum of {_MAX_DESCRIPTION_BYTES} bytes",
+             )
++        desc_findings = scan_text_for_secrets(desc)
++        if desc_findings:
++            f = desc_findings[0]
++            raise KbMcpError(
++                McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
++                f"Secret material detected in field 'description_markdown' at line {f.line}",
++                hint="Remove sensitive credentials, tokens, or private keys before submission.",
++                field="description_markdown",
++                extra={
++                    "rule_id": f.rule_id,
++                    "secret_kind": f.kind.value,
++                    "line": f.line,
++                    "fingerprint": f.fingerprint,
++                },
++            )
+ 
+     start_date = node.get("start_date")
+     due_date = node.get("due_date")
+diff --git a/mcp/surfaces/agent/update_ticket.py b/mcp/surfaces/agent/update_ticket.py
+index 74c6fb42..51804435 100644
+--- a/mcp/surfaces/agent/update_ticket.py
++++ b/mcp/surfaces/agent/update_ticket.py
+@@ -8,6 +8,7 @@ import contextlib
+ import re
+ from typing import TYPE_CHECKING, Any, Final
+ 
++from kanban.security.push_protection import scan_text_for_secrets
+ from mcp.context import get_current_mcp_context
+ from mcp.errors import KbMcpError, McpErrorCode
+ from mcp.help import build_help
+@@ -273,6 +274,21 @@ async def update_ticket(arguments: dict[str, Any]) -> dict[str, Any]:  # noqa: C
+                 f"summary length ({len(new_summary.strip())}) exceeds maximum of {_MAX_SUMMARY_LEN}"
+             )
+             raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++        summary_findings = scan_text_for_secrets(new_summary)
++        if summary_findings:
++            f = summary_findings[0]
++            raise KbMcpError(
++                McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
++                f"Secret material detected in field 'summary' at line {f.line}",
++                hint="Remove sensitive credentials, tokens, or private keys before submission.",
++                field="summary",
++                extra={
++                    "rule_id": f.rule_id,
++                    "secret_kind": f.kind.value,
++                    "line": f.line,
++                    "fingerprint": f.fingerprint,
++                },
++            )
+         patch_body["summary"] = new_summary
+         changed_fields.append("summary")
+ 
+@@ -296,6 +312,21 @@ async def update_ticket(arguments: dict[str, Any]) -> dict[str, Any]:  # noqa: C
+                 McpErrorCode.VALIDATION_FAILED,
+                 f"resulting description exceeds maximum of {_MAX_DESCRIPTION_BYTES} bytes",
+             )
++        desc_findings = scan_text_for_secrets(combined_desc)
++        if desc_findings:
++            f = desc_findings[0]
++            raise KbMcpError(
++                McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
++                f"Secret material detected in field 'description_markdown' at line {f.line}",
++                hint="Remove sensitive credentials, tokens, or private keys before submission.",
++                field="description_markdown",
++                extra={
++                    "rule_id": f.rule_id,
++                    "secret_kind": f.kind.value,
++                    "line": f.line,
++                    "fingerprint": f.fingerprint,
++                },
++            )
+ 
+         patch_body["description_markdown"] = combined_desc
+         changed_fields.append("description_markdown")
+diff --git a/mcp/surfaces/docs/create.py b/mcp/surfaces/docs/create.py
+index 6afc3a8f..fe30dfc9 100644
+--- a/mcp/surfaces/docs/create.py
++++ b/mcp/surfaces/docs/create.py
+@@ -7,6 +7,7 @@ from __future__ import annotations
+ import re
+ from typing import TYPE_CHECKING, Any, Final
+ 
++from kanban.security.push_protection import scan_text_for_secrets
+ from mcp.context import current_internal_client, current_subject_token, get_current_mcp_context
+ from mcp.errors import KbMcpError, McpErrorCode
+ from mcp.registry import Surface, ToolSpec
+@@ -165,6 +166,21 @@ async def create_handler(  # noqa: C901, PLR0912, PLR0915
+         msg = f"Parameter 'title' is required (1..{_MAX_TITLE_LEN} characters)"
+         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+     title = raw_title.strip()
++    title_findings = scan_text_for_secrets(title)
++    if title_findings:
++        f = title_findings[0]
++        raise KbMcpError(
++            McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
++            f"Secret material detected in field 'title' at line {f.line}",
++            hint="Remove sensitive credentials, tokens, or private keys before submission.",
++            field="title",
++            extra={
++                "rule_id": f.rule_id,
++                "secret_kind": f.kind.value,
++                "line": f.line,
++                "fingerprint": f.fingerprint,
++            },
++        )
+ 
+     project = arguments.get("project")
+     if not project:
+@@ -175,6 +191,22 @@ async def create_handler(  # noqa: C901, PLR0912, PLR0915
+     parent = arguments.get("parent")
+     raw_content = arguments.get("content", "")
+     content = str(raw_content) if raw_content is not None else ""
++    if content:
++        content_findings = scan_text_for_secrets(content)
++        if content_findings:
++            f = content_findings[0]
++            raise KbMcpError(
++                McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
++                f"Secret material detected in field 'content' at line {f.line}",
++                hint="Remove sensitive credentials, tokens, or private keys before submission.",
++                field="content",
++                extra={
++                    "rule_id": f.rule_id,
++                    "secret_kind": f.kind.value,
++                    "line": f.line,
++                    "fingerprint": f.fingerprint,
++                },
++            )
+ 
+     active_client = client or current_internal_client.get()
+     active_token = subject_token or current_subject_token.get()
+diff --git a/mcp/surfaces/docs/update.py b/mcp/surfaces/docs/update.py
+index 7f51179d..faabbc2f 100644
+--- a/mcp/surfaces/docs/update.py
++++ b/mcp/surfaces/docs/update.py
+@@ -8,6 +8,7 @@ import difflib
+ import re
+ from typing import TYPE_CHECKING, Any, Final
+ 
++from kanban.security.push_protection import scan_text_for_secrets
+ from mcp.context import current_internal_client, current_subject_token
+ from mcp.errors import KbMcpError, McpErrorCode
+ from mcp.registry import Surface, ToolSpec
+@@ -488,9 +489,41 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
+     if title is not None and not (1 <= len(title) <= _MAX_TITLE_LEN):
+         msg = f"Parameter 'title' must be 1..{_MAX_TITLE_LEN} characters"
+         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
++    if title is not None:
++        title_findings = scan_text_for_secrets(title)
++        if title_findings:
++            f = title_findings[0]
++            raise KbMcpError(
++                McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
++                f"Secret material detected in field 'title' at line {f.line}",
++                hint="Remove sensitive credentials, tokens, or private keys before submission.",
++                field="title",
++                extra={
++                    "rule_id": f.rule_id,
++                    "secret_kind": f.kind.value,
++                    "line": f.line,
++                    "fingerprint": f.fingerprint,
++                },
++            )
+ 
+     content_arg = arguments.get("content")
+     content = str(content_arg) if content_arg is not None else None
++    if content is not None:
++        content_findings = scan_text_for_secrets(content)
++        if content_findings:
++            f = content_findings[0]
++            raise KbMcpError(
++                McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
++                f"Secret material detected in field 'content' at line {f.line}",
++                hint="Remove sensitive credentials, tokens, or private keys before submission.",
++                field="content",
++                extra={
++                    "rule_id": f.rule_id,
++                    "secret_kind": f.kind.value,
++                    "line": f.line,
++                    "fingerprint": f.fingerprint,
++                },
++            )
+     parent_arg = arguments.get("parent")
+     color_arg = arguments.get("color")
+     color = str(color_arg).strip().lower() if color_arg else None
+@@ -509,6 +542,23 @@ async def update_handler(  # noqa: C901, PLR0912, PLR0915
+         )
+         raise KbMcpError(McpErrorCode.VALIDATION_FAILED, msg)
+ 
++    if replacement_text is not None:
++        rep_findings = scan_text_for_secrets(str(replacement_text))
++        if rep_findings:
++            f = rep_findings[0]
++            raise KbMcpError(
++                McpErrorCode.SECRET_DETECTED_IN_PAYLOAD,
++                f"Secret material detected in field 'replacement_text' at line {f.line}",
++                hint="Remove sensitive credentials, tokens, or private keys before submission.",
++                field="replacement_text",
++                extra={
++                    "rule_id": f.rule_id,
++                    "secret_kind": f.kind.value,
++                    "line": f.line,
++                    "fingerprint": f.fingerprint,
++                },
++            )
++
+     raw_if_match = arguments.get("if_match")
+     if_match = str(raw_if_match).strip().strip('"') if raw_if_match is not None else None
+ 
+diff --git a/mcp/tests/surfaces/__init__.py b/mcp/tests/surfaces/__init__.py
+new file mode 100644
+index 00000000..a7fac83d
+--- /dev/null
++++ b/mcp/tests/surfaces/__init__.py
+@@ -0,0 +1,3 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Unit tests for MCP surfaces."""
+diff --git a/mcp/tests/surfaces/test_mcp_secret_push_protection.py b/mcp/tests/surfaces/test_mcp_secret_push_protection.py
+new file mode 100644
+index 00000000..807521c9
+--- /dev/null
++++ b/mcp/tests/surfaces/test_mcp_secret_push_protection.py
+@@ -0,0 +1,166 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Feature unit tests for MCP write tools secret push-protection (KB-SEC-SCRUB-01)."""
++
++from __future__ import annotations
++
++import json
++
++import pytest
++
++from mcp.errors import KbMcpError, McpErrorCode
++from mcp.internal_client import KanbanApiClient
++from mcp.settings import McpSettings
++from mcp.surfaces.agent.add_comment import _validate_add_comment_arguments
++from mcp.surfaces.agent.complete_work import _validate_complete_work_arguments
++from mcp.surfaces.agent.create_ticket import _validate_node_scalars
++from mcp.surfaces.docs.create import create_handler
++from mcp.surfaces.docs.update import update_handler
++
++
++def test_mcp_create_ticket_rejects_secrets_in_summary() -> None:
++    """Verify create_ticket rejects secret credentials in summary field."""
++    secret = "ghp_1234567890abcdef1234567890abcdef1234"
++    node = {
++        "summary": f"Create ticket with token {secret}",
++        "description_markdown": "Normal description text",
++    }
++    with pytest.raises(KbMcpError) as exc_info:
++        _validate_node_scalars(node)
++
++    err = exc_info.value
++    assert err.code == McpErrorCode.SECRET_DETECTED_IN_PAYLOAD
++    assert err.field == "summary"
++    assert err.extra is not None
++    assert err.extra["rule_id"] == "GITHUB_TOKEN"
++    assert secret not in err.message
++    assert err.hint is not None
++
++
++def test_mcp_create_ticket_rejects_secrets_in_description() -> None:
++    """Verify create_ticket rejects secret credentials in description field."""
++    key = "AKIAIOSFODNN7EXAMPLE"
++    node = {
++        "summary": "Legitimate summary without secrets",
++        "description_markdown": f"AWS Key: {key}",
++    }
++    with pytest.raises(KbMcpError) as exc_info:
++        _validate_node_scalars(node)
++
++    err = exc_info.value
++    assert err.code == McpErrorCode.SECRET_DETECTED_IN_PAYLOAD
++    assert err.field == "description_markdown"
++    assert err.extra is not None
++    assert err.extra["rule_id"] == "AWS_ACCESS_KEY"
++    assert key not in err.message
++
++
++def test_mcp_add_comment_rejects_secrets() -> None:
++    """Verify add_comment rejects secret credentials in comment body."""
++    secret = "glpat-1234567890abcdefghij"
++    arguments = {
++        "identifier": "KAN-42",
++        "body_markdown": f"Here is the token: {secret}",
++    }
++    with pytest.raises(KbMcpError) as exc_info:
++        _validate_add_comment_arguments(arguments)
++
++    err = exc_info.value
++    assert err.code == McpErrorCode.SECRET_DETECTED_IN_PAYLOAD
++    assert err.field == "body_markdown"
++    assert err.extra is not None
++    assert err.extra["rule_id"] == "GITLAB_TOKEN"
++    assert secret not in err.message
++
++
++def test_mcp_complete_work_rejects_secrets_in_summary() -> None:
++    """Verify complete_work rejects secret credentials in summary_markdown."""
++    secret = "xoxb-" + "123456789012-abcdefghijklmnopqrstuvwx"
++    arguments = {
++        "identifier": "KAN-42",
++        "summary_markdown": f"Finished work. Slack token was {secret}",
++        "verification_proof": {
++            "qa_dir": "docs/qa/KAN-42/",
++            "reality_checker": {"verdict": "READY", "grade": "A"},
++        },
++    }
++    with pytest.raises(KbMcpError) as exc_info:
++        _validate_complete_work_arguments(arguments)
++
++    err = exc_info.value
++    assert err.code == McpErrorCode.SECRET_DETECTED_IN_PAYLOAD
++    assert err.field == "summary_markdown"
++    assert err.extra is not None
++    assert err.extra["rule_id"] == "SLACK_TOKEN"
++    assert secret not in err.message
++
++
++@pytest.mark.asyncio
++async def test_mcp_docs_create_rejects_secrets() -> None:
++    """Verify docs create tool rejects secrets in title or content."""
++    secret = "AIzaSyA1234567890abcdefghijklmnopqrstuv"
++    # Secret in title
++    with pytest.raises(KbMcpError) as exc_info:
++        await create_handler(
++            {"type": "DOC", "title": f"Doc with {secret}", "project": "KAN", "content": "body"}
++        )
++    assert exc_info.value.code == McpErrorCode.SECRET_DETECTED_IN_PAYLOAD
++    assert exc_info.value.field == "title"
++
++    # Secret in content
++    with pytest.raises(KbMcpError) as exc_info:
++        await create_handler(
++            {
++                "type": "DOC",
++                "title": "Clean Title",
++                "project": "KAN",
++                "content": f"Secret: {secret}",
++            }
++        )
++    assert exc_info.value.code == McpErrorCode.SECRET_DETECTED_IN_PAYLOAD
++    assert exc_info.value.field == "content"
++
++
++@pytest.mark.asyncio
++async def test_mcp_docs_update_rejects_secrets() -> None:
++    """Verify docs update tool rejects secrets in title or content."""
++    dsn = "postgresql://user:pass123456@db:5432/test"
++    with pytest.raises(KbMcpError) as exc_info:
++        await update_handler({"id": "doc-123", "content": f"Connect via {dsn}"})
++
++    assert exc_info.value.code == McpErrorCode.SECRET_DETECTED_IN_PAYLOAD
++    assert exc_info.value.field == "content"
++    assert "pass123456" not in exc_info.value.message
++
++
++def test_mcp_internal_client_maps_upstream_secret_problem() -> None:
++    """Verify internal client maps 422 SECRET_DETECTED_IN_PAYLOAD to structured KbMcpError."""
++    client = KanbanApiClient(McpSettings())
++    problem_payload = {
++        "type": "urn:kanban:problem:SECRET_DETECTED_IN_PAYLOAD",
++        "title": "Secret Detected In Payload",
++        "status": 422,
++        "code": "SECRET_DETECTED_IN_PAYLOAD",
++        "detail": "Secret material detected in field 'summary' at line 1",
++        "field": "summary",
++        "rule_id": "GITHUB_TOKEN",
++        "secret_kind": "GITHUB_TOKEN",
++        "line": 1,
++        "fingerprint": "ghp_...1234",
++    }
++    body_bytes = json.dumps(problem_payload).encode("utf-8")
++
++    with pytest.raises(KbMcpError) as exc_info:
++        client._map_upstream_error(422, body_bytes)  # noqa: SLF001
++
++    err = exc_info.value
++    assert err.code == McpErrorCode.SECRET_DETECTED_IN_PAYLOAD
++    assert err.field == "summary"
++    assert err.extra is not None
++    assert err.extra["rule_id"] == "GITHUB_TOKEN"
++    assert err.extra["secret_kind"] == "GITHUB_TOKEN"
++    assert err.extra["line"] == 1
++    assert err.extra["fingerprint"] == "ghp_...1234"
++    assert err.hint is not None
++    msg = "Remove sensitive credentials"
++    assert msg in err.hint or msg in (err.fix_hint or "")

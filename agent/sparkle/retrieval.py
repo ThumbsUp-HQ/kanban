@@ -135,6 +135,13 @@ async def retrieve_context(  # noqa: C901, PLR0912, PLR0915  # Database transact
             finally:
                 session.info.pop("_binding_in_progress", None)
 
+            # Enable hnsw.iterative_scan for pgvector RLS recall with safe fallback
+            try:
+                async with session.begin_nested():
+                    await session.execute(text("SET LOCAL hnsw.iterative_scan = 'relaxed_order'"))
+            except Exception:  # noqa: BLE001, S110
+                pass
+
             # Query nearest embeddings in same project
             q_literal = _format_vector_literal(query_vector)
             knn_stmt = text(

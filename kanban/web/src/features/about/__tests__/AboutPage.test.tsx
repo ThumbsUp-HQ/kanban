@@ -11,11 +11,11 @@ const mockAboutData: aboutApi.SystemAboutData = {
   platform: '👍kanban',
   slug: 'thumbs-up-kanban',
   tagline: 'The difference between a swarm and an Agile team is a kanban.',
-  version: '2.0.0',
+  version: '0.2.1205',
   license_spdx: 'Apache-2.0',
   git_commit: '9d5577ad9b50',
   build_timestamp: '2026-11-21T01:14:28Z',
-  openapi_version: '2.0.0',
+  openapi_version: '0.2.1205',
   openapi_bundle_hash: '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
   frontend_bundle_hash: 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
   api_docs_urls: {
@@ -129,11 +129,12 @@ describe('AboutPage', () => {
       'The difference between a swarm and an Agile team is a kanban.',
     );
     expect(screen.getByText('👍kanban')).toBeDefined();
-    expect(screen.getByText('v2.0.0')).toBeDefined();
+    expect(screen.getByText('v0.2.1205')).toBeDefined();
     expect(screen.getByText('Apache-2.0')).toBeDefined();
     expect(screen.getByTestId('about-build-commit')).toBeDefined();
     expect(screen.getByTestId('about-build-commit').textContent).toContain('9d5577ad9b50');
     expect(screen.getByTestId('about-git-commit').textContent).toBe('9d5577ad9b50');
+    expect(screen.getByTestId('about-meta-version').textContent).toBe('0.2.1205');
 
     const downloadBtn = screen.getByTestId('download-sbom-btn');
     expect(downloadBtn.getAttribute('href')).toBe('/api/v1/system/sbom?download=true');

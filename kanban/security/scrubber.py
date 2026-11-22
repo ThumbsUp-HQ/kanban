@@ -23,12 +23,18 @@ _PEM_HEADER_CHARS: Final[set[str]] = set(
 
 # Deterministic regular expressions compiled at module load time
 _RE_KANBAN_KEY: Final[re.Pattern[str]] = re.compile(
-    r"\bkb_(?:agt_eph|agt|doc|adm|setup|pat|runner)_[A-Za-z0-9_-]{16,128}(?![A-Za-z0-9_-])"
+    r"\bkb_(?:agt_eph|agt|doc|adm|setup|pat|eat|runner)_[A-Za-z0-9_-]{16,128}(?![A-Za-z0-9_-])"
 )
 _RE_GITHUB_TOKEN: Final[re.Pattern[str]] = re.compile(
     r"\b(?:(?:ghp|gho|ghu|ghs|ghr)_[A-Za-z0-9]{36,255}|github_pat_[A-Za-z0-9_]{22,255})\b"
 )
+_RE_GITLAB_TOKEN: Final[re.Pattern[str]] = re.compile(r"\bglpat-[A-Za-z0-9_-]{20,255}\b")
 _RE_AWS_ACCESS_KEY: Final[re.Pattern[str]] = re.compile(r"\b(?:AKIA|ASIA)[A-Z2-70-9]{16}\b")
+_RE_SLACK_TOKEN: Final[re.Pattern[str]] = re.compile(r"\bxox[baprs]-[0-9a-zA-Z-]{10,72}\b")
+_RE_GOOGLE_KEY: Final[re.Pattern[str]] = re.compile(r"\bAIza[0-9A-Za-z-_]{35}\b")
+_RE_STRIPE_KEY: Final[re.Pattern[str]] = re.compile(
+    r"\b(?:sk|rk)_(?:live|test)_[0-9a-zA-Z]{24,255}\b"
+)
 _RE_API_KEY: Final[re.Pattern[str]] = re.compile(
     r"(?<![A-Za-z0-9_-])sk-(?:proj-|ant-api\d{2}-|live-|test-)?([A-Za-z0-9_-]{20,256})(?![A-Za-z0-9_-])"
 )
@@ -38,6 +44,9 @@ _RE_BEARER_TOKEN: Final[re.Pattern[str]] = re.compile(
 )
 _RE_JWT: Final[re.Pattern[str]] = re.compile(
     r"\beyJ[A-Za-z0-9_-]{8,512}\.eyJ[A-Za-z0-9_-]{8,1024}\.[A-Za-z0-9_-]{16,1024}\b"
+)
+_RE_CONNECTION_URI_PASSWORD: Final[re.Pattern[str]] = re.compile(
+    r"(?i)\b([a-zA-Z][a-zA-Z0-9+.-]+://[^:\s@]*:)(.+)@((?:localhost|[a-zA-Z0-9_-]+(?:\.[a-zA-Z0-9_-]+)*|\d{1,3}(?:\.\d{1,3}){3})(?::\d+)?(?:/[^\s]*)?)"
 )
 
 
@@ -51,6 +60,13 @@ class SecretKind(StrEnum):
     BEARER_TOKEN = "BEARER_TOKEN"  # noqa: S105  # Secret class identifier
     JWT = "JWT"
     KANBAN_KEY = "KANBAN_KEY"
+    SLACK_TOKEN = "SLACK_TOKEN"  # noqa: S105  # Secret class identifier
+    GOOGLE_KEY = "GOOGLE_KEY"
+    STRIPE_KEY = "STRIPE_KEY"
+    GITLAB_TOKEN = "GITLAB_TOKEN"  # noqa: S105  # Secret class identifier
+    CONNECTION_URI = "CONNECTION_URI"
+    HIGH_ENTROPY_SECRET = "HIGH_ENTROPY_SECRET"  # noqa: S105  # Secret class identifier
+    ASSIGNED_SECRET = "ASSIGNED_SECRET"  # noqa: S105  # Secret class identifier
 
 
 @dataclass(frozen=True)
@@ -189,11 +205,39 @@ def outbound_secret_scrubber(text: str) -> ScrubResult:  # noqa: C901, PLR0912  
             for match in _RE_GITHUB_TOKEN.finditer(text)
         )
 
+    # Rule 3b: GitLab Personal Access Tokens
+    if "glpat-" in text:
+        candidates.extend(
+            (match.start(), match.end(), SecretKind.GITLAB_TOKEN, "[REDACTED:GITLAB_TOKEN]", 3)
+            for match in _RE_GITLAB_TOKEN.finditer(text)
+        )
+
     # Rule 4: AWS Access Key IDs
     if "AKIA" in text or "ASIA" in text:
         candidates.extend(
             (match.start(), match.end(), SecretKind.AWS_ACCESS_KEY, "[REDACTED:AWS_ACCESS_KEY]", 4)
             for match in _RE_AWS_ACCESS_KEY.finditer(text)
+        )
+
+    # Rule 4b: Slack Tokens
+    if "xox" in text:
+        candidates.extend(
+            (match.start(), match.end(), SecretKind.SLACK_TOKEN, "[REDACTED:SLACK_TOKEN]", 4)
+            for match in _RE_SLACK_TOKEN.finditer(text)
+        )
+
+    # Rule 4c: Google API Keys
+    if "AIza" in text:
+        candidates.extend(
+            (match.start(), match.end(), SecretKind.GOOGLE_KEY, "[REDACTED:GOOGLE_KEY]", 4)
+            for match in _RE_GOOGLE_KEY.finditer(text)
+        )
+
+    # Rule 4d: Stripe Secret & Restricted Keys
+    if "sk_" in text or "rk_" in text:
+        candidates.extend(
+            (match.start(), match.end(), SecretKind.STRIPE_KEY, "[REDACTED:STRIPE_KEY]", 4)
+            for match in _RE_STRIPE_KEY.finditer(text)
         )
 
     # Rule 5: OpenAI / Anthropic / Provider sk-* Keys
@@ -241,6 +285,19 @@ def outbound_secret_scrubber(text: str) -> ScrubResult:  # noqa: C901, PLR0912  
         candidates.extend(
             (match.start(), match.end(), SecretKind.JWT, "[REDACTED:JWT]", 7)
             for match in _RE_JWT.finditer(text)
+        )
+
+    # Rule 8: Connection URI Credentials
+    if "://" in text and "@" in text:
+        candidates.extend(
+            (
+                match.start(2),
+                match.end(2),
+                SecretKind.CONNECTION_URI,
+                "[REDACTED:CONNECTION_URI]",
+                8,
+            )
+            for match in _RE_CONNECTION_URI_PASSWORD.finditer(text)
         )
 
     if not candidates:

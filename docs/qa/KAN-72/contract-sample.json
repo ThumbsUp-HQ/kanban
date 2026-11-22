@@ -1,0 +1,67 @@
+{
+  "rest_rejection_problem_details": {
+    "type": "urn:kanban:problem:SECRET_DETECTED_IN_PAYLOAD",
+    "title": "Secret Detected In Payload",
+    "status": 422,
+    "code": "SECRET_DETECTED_IN_PAYLOAD",
+    "detail": "Secret material detected in field 'summary' at line 1",
+    "field": "summary",
+    "extra": {
+      "rule_id": "GITHUB_TOKEN",
+      "secret_kind": "GITHUB_TOKEN",
+      "line": 1,
+      "fingerprint": "ghp_...1234"
+    }
+  },
+  "rest_rejection_connection_uri_sample": {
+    "type": "urn:kanban:problem:SECRET_DETECTED_IN_PAYLOAD",
+    "title": "Secret Detected In Payload",
+    "status": 422,
+    "code": "SECRET_DETECTED_IN_PAYLOAD",
+    "detail": "Secret material detected in field 'description_markdown' at line 5",
+    "field": "description_markdown",
+    "extra": {
+      "rule_id": "CONNECTION_URI_PASSWORD",
+      "secret_kind": "CONNECTION_URI",
+      "line": 5,
+      "fingerprint": "s3cr...d99!"
+    }
+  },
+  "rest_rejection_entropy_sample": {
+    "type": "urn:kanban:problem:SECRET_DETECTED_IN_PAYLOAD",
+    "title": "Secret Detected In Payload",
+    "status": 422,
+    "code": "SECRET_DETECTED_IN_PAYLOAD",
+    "detail": "Secret material detected in field 'content' at line 12",
+    "field": "content",
+    "extra": {
+      "rule_id": "SHANNON_ENTROPY_SECRET",
+      "secret_kind": "HIGH_ENTROPY_SECRET",
+      "line": 12,
+      "fingerprint": "7c82...9e21"
+    }
+  },
+  "mcp_error_contract_sample": {
+    "code": "SECRET_DETECTED_IN_PAYLOAD",
+    "message": "Secret material detected in field 'body_markdown' at line 2. Sensitive credentials must not be committed or transmitted.",
+    "field": "body_markdown",
+    "hint": "Remove sensitive credentials from the request payload. For intentional test fixtures or documentation examples, append '# kb-allow-secret: <reason>' to the affected line.",
+    "fix_hint": "Remove sensitive credentials from the request payload. For intentional test fixtures or documentation examples, append '# kb-allow-secret: <reason>' to the affected line.",
+    "extra": {
+      "rule_id": "GOOGLE_API_KEY",
+      "secret_kind": "GOOGLE_KEY",
+      "line": 2,
+      "fingerprint": "AIza...stuv"
+    }
+  },
+  "allowlist_marker_example": {
+    "raw_input": "AIzaSyA1234567890abcdefghijklmnopqrstuv  # kb-allow-secret: intentional-doc-example",
+    "result": "PASSED_WITHOUT_REJECTION",
+    "notes": "Line-level allowlist marker suppresses secret rejection for verified test and doc fixtures."
+  },
+  "redact_on_write_sample": {
+    "raw_input": "Please review token ghp_1234567890abcdef1234567890abcdef1234 on AWS AKIAIOSFODNN7EXAMPLE.",
+    "redacted_output": "Please review token [REDACTED:GITHUB_TOKEN] on AWS [REDACTED:AWS_ACCESS_KEY].",
+    "audit_log_event": "SECRET_REDACTED_ON_WRITE"
+  }
+}

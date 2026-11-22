@@ -32,6 +32,7 @@ from kanban.api.v1.schemas.activity import (
 )
 from kanban.api.v1.schemas.comments import ReactionSummary
 from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
+from kanban.security.scrubber import scrub_text
 from kanban.services.activity import (
     EVENT_CATEGORY,
     ActivityCategory,
@@ -518,9 +519,10 @@ async def get_issue_activity(  # noqa: C901, PLR0912, PLR0913, PLR0915
                     sanitized_payload.pop("sha256", None)
                 elif c_model is not None:
                     permalink = _build_permalink(project_identifier, issue.sequence_id, c_model.id)
+                    b_md = scrub_text(c_model.body_markdown) if c_model.body_markdown else ""
                     comment_obj = ActiveCommentSummary(
                         id=c_model.id,
-                        body_markdown=c_model.body_markdown,
+                        body_markdown=b_md,
                         permalink=permalink,
                         edited_at=c_model.edited_at,
                         reactions=reactions_map.get(c_model.id, []),
@@ -718,9 +720,10 @@ async def get_project_activity(  # noqa: C901, PLR0912, PLR0913, PLR0915
                 elif c_model is not None:
                     seq_id = issue_seq_map.get(c_model.issue_id, 1)
                     permalink = _build_permalink(project.identifier, seq_id, c_model.id)
+                    b_md = scrub_text(c_model.body_markdown) if c_model.body_markdown else ""
                     comment_obj = ActiveCommentSummary(
                         id=c_model.id,
-                        body_markdown=c_model.body_markdown,
+                        body_markdown=b_md,
                         permalink=permalink,
                         edited_at=c_model.edited_at,
                         reactions=reactions_map.get(c_model.id, []),

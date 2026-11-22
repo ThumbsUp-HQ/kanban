@@ -163,6 +163,10 @@ export function AboutPage(): JSX.Element {
         </div>
         <div className="kb-about-metadata-grid">
           <div className="kb-about-meta-item">
+            <span className="kb-about-meta-label">Version:</span>
+            <code className="kb-about-meta-value" data-testid="about-meta-version">{version}</code>
+          </div>
+          <div className="kb-about-meta-item">
             <span className="kb-about-meta-label">Build / Git Commit:</span>
             <code className="kb-about-meta-value" data-testid="about-git-commit">{data.git_commit ?? 'unknown'}</code>
           </div>

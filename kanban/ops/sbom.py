@@ -23,12 +23,14 @@ from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, Final
 
+from kanban.ops.build_info import resolve_platform_version
+
 logger = logging.getLogger(__name__)
 
 PLATFORM_NAME: Final[str] = "👍kanban"
 PLATFORM_SLUG: Final[str] = "thumbs-up-kanban"
 PLATFORM_TAGLINE: Final[str] = "The difference between a swarm and an Agile team is a kanban."
-PLATFORM_VERSION: Final[str] = "2.0.0"
+PLATFORM_VERSION: Final[str] = resolve_platform_version()
 PLATFORM_LICENSE_SPDX: Final[str] = "Apache-2.0"
 
 MAX_INLINE_LICENSE_LEN: Final[int] = 100
@@ -664,16 +666,16 @@ def generate_cyclonedx_1_5(
                 {
                     "vendor": PLATFORM_NAME,
                     "name": PLATFORM_SLUG,
-                    "version": PLATFORM_VERSION,
+                    "version": resolve_platform_version(),
                 }
             ],
             "component": {
                 "type": "application",
                 "name": PLATFORM_SLUG,
-                "version": PLATFORM_VERSION,
+                "version": resolve_platform_version(),
                 "description": PLATFORM_TAGLINE,
                 "licenses": [{"license": {"id": PLATFORM_LICENSE_SPDX}}],
-                "purl": f"pkg:generic/{PLATFORM_SLUG}@{PLATFORM_VERSION}",
+                "purl": f"pkg:generic/{PLATFORM_SLUG}@{resolve_platform_version()}",
             },
         },
         "components": cdx_components,

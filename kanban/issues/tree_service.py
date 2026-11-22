@@ -36,6 +36,7 @@ from kanban.content import (
     normalize_to_markdown,
 )
 from kanban.security.permissions import Capability, require_capability
+from kanban.security.push_protection import enforce_secret_push_protection
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.board_rank import allocate_initial_board_rank
 from kanban.services.projects import get_project_or_404
@@ -318,6 +319,9 @@ async def create_issue_tree(  # noqa: C901, PLR0912, PLR0915
         )
 
     all_nodes = _traverse_all_nodes(tree)
+    for node in all_nodes:
+        enforce_secret_push_protection(node.summary, field="summary")
+        enforce_secret_push_protection(node.description_markdown, field="description_markdown")
 
     # 1. Modules validation
     if not project.modules_enabled:

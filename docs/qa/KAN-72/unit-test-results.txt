@@ -1,0 +1,55 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan72-a36e1d6a/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan72-a36e1d6a
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 36 items
+
+kanban/tests/security/test_secret_push_protection.py::test_positive_legitimate_prose_passes PASSED [  2%]
+kanban/tests/security/test_secret_push_protection.py::test_positive_allowlist_marker_bypasses_check PASSED [  5%]
+kanban/tests/security/test_secret_push_protection.py::test_negative_rejection_pem_private_key PASSED [  8%]
+kanban/tests/security/test_secret_push_protection.py::test_negative_rejection_github_token PASSED [ 11%]
+kanban/tests/security/test_secret_push_protection.py::test_negative_rejection_google_api_key PASSED [ 13%]
+kanban/tests/security/test_secret_push_protection.py::test_negative_rejection_slack_token PASSED [ 16%]
+kanban/tests/security/test_secret_push_protection.py::test_negative_rejection_connection_uri_password PASSED [ 19%]
+kanban/tests/security/test_secret_push_protection.py::test_negative_rejection_high_entropy_assignment PASSED [ 22%]
+kanban/tests/security/test_secret_push_protection.py::test_redact_on_write_mode PASSED [ 25%]
+kanban/tests/security/test_secret_push_protection.py::test_activity_ledger_payload_guard_prose_rejection PASSED [ 27%]
+kanban/tests/security/test_secret_push_protection.py::test_activity_ledger_payload_scrubs_nested_strings PASSED [ 30%]
+kanban/tests/security/test_secret_push_protection.py::test_read_path_defense_in_depth_scrub_text PASSED [ 33%]
+kanban/tests/security/test_scrubber_entropy.py::test_shannon_entropy_calculation PASSED [ 36%]
+kanban/tests/security/test_scrubber_entropy.py::test_exempt_tokens_do_not_trigger_entropy PASSED [ 38%]
+kanban/tests/security/test_scrubber_entropy.py::test_mask_fingerprint_never_echoes_secret PASSED [ 41%]
+kanban/tests/security/test_scrubber_entropy.py::test_scrubber_upgrades_gitlab_slack_google_stripe_uri PASSED [ 44%]
+kanban/tests/security/test_scrubber_entropy.py::test_scanner_performance_under_two_milliseconds PASSED [ 47%]
+mcp/tests/surfaces/test_mcp_secret_push_protection.py::test_mcp_create_ticket_rejects_secrets_in_summary PASSED [ 50%]
+mcp/tests/surfaces/test_mcp_secret_push_protection.py::test_mcp_create_ticket_rejects_secrets_in_description PASSED [ 52%]
+mcp/tests/surfaces/test_mcp_secret_push_protection.py::test_mcp_add_comment_rejects_secrets PASSED [ 55%]
+mcp/tests/surfaces/test_mcp_secret_push_protection.py::test_mcp_complete_work_rejects_secrets_in_summary PASSED [ 58%]
+mcp/tests/surfaces/test_mcp_secret_push_protection.py::test_mcp_docs_create_rejects_secrets PASSED [ 61%]
+mcp/tests/surfaces/test_mcp_secret_push_protection.py::test_mcp_docs_update_rejects_secrets PASSED [ 63%]
+mcp/tests/surfaces/test_mcp_secret_push_protection.py::test_mcp_internal_client_maps_upstream_secret_problem PASSED [ 66%]
+kanban/tests/security/test_push_protection.py::test_push_protection_empty_inputs PASSED [ 69%]
+kanban/tests/security/test_push_protection.py::test_push_protection_deterministic_rules PASSED [ 72%]
+kanban/tests/security/test_push_protection.py::test_push_protection_custom_code_alias PASSED [ 75%]
+kanban/tests/security/test_push_protection.py::test_redact_text_findings_multiple_findings PASSED [ 77%]
+kanban/tests/security/test_push_protection.py::test_mask_fingerprint_short_secrets PASSED [ 80%]
+kanban/tests/security/test_push_protection.py::test_is_exempt_token_edge_cases PASSED [ 83%]
+kanban/tests/security/test_push_protection.py::test_push_protection_openai_anthropic_gemini_rules PASSED [ 86%]
+kanban/tests/security/test_push_protection.py::test_connection_uri_exempt_and_redis PASSED [ 88%]
+kanban/tests/security/test_push_protection.py::test_candidate_entropy_token_without_alpha PASSED [ 91%]
+kanban/tests/security/test_push_protection.py::test_key_value_assignment_low_entropy PASSED [ 94%]
+kanban/tests/security/test_push_protection.py::test_scan_text_allow_markers_false PASSED [ 97%]
+kanban/tests/security/test_push_protection.py::test_redact_text_findings_empty PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                 Stmts   Miss Branch BrPart  Cover   Missing
+--------------------------------------------------------------------------------
+kanban/security/push_protection.py     203      0    116      0   100%
+kanban/security/scrubber.py            159     45     62     12    67%   99-124, 136->168, 143-144, 149-150, 162-166, 185, 192, 217, 245-253, 265, 272, 285, 314->313
+--------------------------------------------------------------------------------
+TOTAL                                  362     45    178     12    86%
+============================== 36 passed in 1.26s ==============================

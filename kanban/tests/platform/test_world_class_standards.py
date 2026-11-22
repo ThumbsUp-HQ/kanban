@@ -21,6 +21,7 @@ from kanban.content.unicode_guard import (
     ContentNormalizeError,
     strip_invisible_and_control_chars,
 )
+from kanban.ops.build_info import resolve_platform_version
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -44,7 +45,7 @@ def _assert_summary_pillars(summary: PlatformSummaryResponse) -> None:
     assert summary.platform == "👍kanban"
     assert summary.slug == "thumbs-up-kanban"
     assert summary.license == "Apache-2.0"
-    assert summary.version == "2.0.0"
+    assert summary.version == resolve_platform_version()
     assert summary.github_issue_1_resolved is True
 
     # Pillar 1: Native Agent-First Architecture

@@ -26,6 +26,8 @@ from kanban.ops.build_info import (
     resolve_build_timestamp,
     resolve_frontend_bundle_hash,
     resolve_git_commit,
+    resolve_git_commit_count,
+    resolve_platform_version,
 )
 from kanban.settings import Settings
 
@@ -82,13 +84,13 @@ async def test_system_about_authenticated_returns_full_metadata(
         assert data["platform"] == "👍kanban"
         assert data["slug"] == "thumbs-up-kanban"
         assert data["tagline"] == "The difference between a swarm and an Agile team is a kanban."
-        assert data["version"] == "2.0.0"
+        assert data["version"] == resolve_platform_version()
         assert data["license_spdx"] == "Apache-2.0"
 
         # Build and bundle metadata (KAN-57)
         assert data["git_commit"] is not None
         assert "build_timestamp" in data
-        assert data["openapi_version"] == "2.0.0"
+        assert data["openapi_version"] == resolve_platform_version()
         assert data["openapi_bundle_hash"] is not None
         assert len(data["openapi_bundle_hash"]) == 64
         assert "frontend_bundle_hash" in data
@@ -365,7 +367,9 @@ def test_build_info_get_build_info(monkeypatch: pytest.MonkeyPatch) -> None:
     info = get_build_info(openapi_doc={"paths": {}, "components": {}})
     assert info.git_commit == "test-commit-sha"
     assert info.build_timestamp == "2026-11-21T05:30:00Z"
-    assert info.openapi_version == "2.0.0"
+    assert info.openapi_version == resolve_platform_version()
+    assert info.version == resolve_platform_version()
+    assert isinstance(info.git_commit_count, int)
     assert info.openapi_bundle_hash is not None
     assert len(info.openapi_bundle_hash) == 64
 
@@ -404,7 +408,8 @@ async def test_assemble_system_status_response_server_admin_and_member(
     assert admin_status.is_server_admin is True
     assert admin_status.git_commit == "test-sha-status"
     assert admin_status.build_timestamp == "2026-11-21T06:00:00Z"
-    assert admin_status.openapi_version == "2.0.0"
+    assert admin_status.openapi_version == resolve_platform_version()
+    assert admin_status.version == resolve_platform_version()
     assert admin_status.openapi_bundle_hash is not None
 
     # 2. Regular member caller (anti-enumeration redaction)
@@ -425,3 +430,46 @@ async def test_assemble_system_status_response_server_admin_and_member(
     assert member_status.is_server_admin is False
     assert member_status.data_mount_point is None
     assert member_status.git_commit == "test-sha-status"
+
+
+def test_resolve_git_commit_count(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
+    """Verify resolve_git_commit_count handles env vars, git CLI, and error fallbacks (KAN-312)."""
+    # 1. Direct env variable takes precedence
+    monkeypatch.setenv("KB_GIT_COMMIT_COUNT", "42")
+    assert resolve_git_commit_count() == 42
+
+    monkeypatch.setenv("KB_GIT_COMMIT_COUNT", "0")
+    assert resolve_git_commit_count() == 0
+
+    # 2. Invalid env falls back to git or 0
+    monkeypatch.setenv("KB_GIT_COMMIT_COUNT", "not-a-digit")
+    count = resolve_git_commit_count()
+    assert count >= 0
+
+    # 3. Subprocess failure falls back to 0
+    monkeypatch.delenv("KB_GIT_COMMIT_COUNT", raising=False)
+    monkeypatch.setattr(subprocess, "run", MagicMock(side_effect=OSError("git not found")))
+    assert resolve_git_commit_count(cwd=tmp_path) == 0
+
+    # 4. Subprocess non-zero return code falls back to 0
+    mock_run = MagicMock(return_value=MagicMock(returncode=1, stdout=""))
+    monkeypatch.setattr(subprocess, "run", mock_run)
+    assert resolve_git_commit_count(cwd=tmp_path) == 0
+
+
+def test_resolve_platform_version(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Verify resolve_platform_version formats 0.<release>.<commits> (KAN-312)."""
+    # 1. Explicit KB_VERSION override
+    monkeypatch.setenv("KB_VERSION", "0.9.999")
+    assert resolve_platform_version() == "0.9.999"
+
+    # 2. Custom release version and commit count
+    monkeypatch.delenv("KB_VERSION", raising=False)
+    monkeypatch.setenv("KB_RELEASE_VERSION", "3")
+    monkeypatch.setenv("KB_GIT_COMMIT_COUNT", "150")
+    assert resolve_platform_version() == "0.3.150"
+
+    # 3. Default release version (2) with commit count
+    monkeypatch.delenv("KB_RELEASE_VERSION", raising=False)
+    monkeypatch.setenv("KB_GIT_COMMIT_COUNT", "777")
+    assert resolve_platform_version() == "0.2.777"

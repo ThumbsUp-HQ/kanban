@@ -31,6 +31,8 @@ from kanban.api.v1.schemas.docs import (
 from kanban.content.normalize import normalize_to_markdown
 from kanban.security.access_manifest import build_access_manifest
 from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
+from kanban.security.push_protection import enforce_secret_push_protection
+from kanban.security.scrubber import scrub_text
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.lexorank import midpoint_rank
 from kanban.services.markdown_outline import extract_markdown_outline
@@ -506,7 +508,9 @@ async def create_doc(
 ) -> tuple[DocResponse, str]:
     """Create a new top-level documentation entity."""
     clean_title = _clean_title(body.title)
+    clean_title = enforce_secret_push_protection(clean_title, field="title") or ""
     clean_body = _clean_body(body.body_markdown)
+    clean_body = enforce_secret_push_protection(clean_body, field="body_markdown") or ""
 
     if body.project_id is not None:
         await require_capability(session, caller, body.project_id, Capability.EDIT)
@@ -582,8 +586,8 @@ async def create_doc(
         canonical_key=canonical_key,
         workspace_id=doc.workspace_id,
         project_id=doc.project_id,
-        title=doc.title,
-        body_markdown=doc.body_markdown,
+        title=scrub_text(doc.title) if doc.title else doc.title,
+        body_markdown=scrub_text(doc.body_markdown) if doc.body_markdown else doc.body_markdown,
         body_sha256=doc.body_sha256.hex() if doc.body_sha256 else "",
         hierarchy_path=doc.hierarchy_path,
         version_seq=doc.version_seq,
@@ -644,13 +648,14 @@ async def get_doc(
         for e in extract_markdown_outline(doc_obj.body_markdown)
     ]
 
+    b_md = scrub_text(doc_obj.body_markdown) if doc_obj.body_markdown else doc_obj.body_markdown
     resp = DocResponse(
         id=doc_obj.id,
         canonical_key=canonical_key,
         workspace_id=doc_obj.workspace_id,
         project_id=doc_obj.project_id,
-        title=doc_obj.title,
-        body_markdown=doc_obj.body_markdown,
+        title=scrub_text(doc_obj.title) if doc_obj.title else doc_obj.title,
+        body_markdown=b_md,
         body_sha256=doc_obj.body_sha256.hex() if doc_obj.body_sha256 else "",
         hierarchy_path=doc_obj.hierarchy_path,
         version_seq=doc_obj.version_seq,
@@ -688,10 +693,14 @@ async def update_doc(
 
     if body.body_markdown is not None:
         _verify_if_match(if_match, doc_row.body_sha256)
-        doc_row.body_markdown = _clean_body(body.body_markdown)
+        cleaned_body = _clean_body(body.body_markdown)
+        doc_row.body_markdown = (
+            enforce_secret_push_protection(cleaned_body, field="body_markdown") or ""
+        )
 
     if body.title is not None:
         clean_title = _clean_title(body.title)
+        clean_title = enforce_secret_push_protection(clean_title, field="title") or ""
         doc_row.title = clean_title
         await session.execute(
             text("UPDATE objects SET display_title = :t WHERE id = :id"),
@@ -958,7 +967,9 @@ async def create_page(
     await _validate_parent_page(session, caller, body.parent_page_id, doc_id)
 
     clean_title = _clean_title(body.title)
+    clean_title = enforce_secret_push_protection(clean_title, field="title") or ""
     clean_body = _clean_body(body.body_markdown)
+    clean_body = enforce_secret_push_protection(clean_body, field="body_markdown") or ""
 
     # Determine doc canonical key prefix
     doc_obj = (
@@ -1141,14 +1152,15 @@ async def get_page(
         for e in extract_markdown_outline(page_obj.body_markdown)
     ]
 
+    b_md = scrub_text(page_obj.body_markdown) if page_obj.body_markdown else page_obj.body_markdown
     resp = PageResponse(
         id=page_obj.id,
         canonical_key=canonical_key,
         doc_id=page_obj.doc_id,
         parent_page_id=page_obj.parent_page_id,
         workspace_id=page_obj.workspace_id,
-        title=page_obj.title,
-        body_markdown=page_obj.body_markdown,
+        title=scrub_text(page_obj.title) if page_obj.title else page_obj.title,
+        body_markdown=b_md,
         body_sha256=page_obj.body_sha256.hex() if page_obj.body_sha256 else "",
         hierarchy_path=page_obj.hierarchy_path,
         version_seq=page_obj.version_seq,
@@ -1185,10 +1197,14 @@ async def update_page(
 
     if body.body_markdown is not None:
         _verify_if_match(if_match, page_row.body_sha256)
-        page_row.body_markdown = _clean_body(body.body_markdown)
+        cleaned_body = _clean_body(body.body_markdown)
+        page_row.body_markdown = (
+            enforce_secret_push_protection(cleaned_body, field="body_markdown") or ""
+        )
 
     if body.title is not None:
         clean_title = _clean_title(body.title)
+        clean_title = enforce_secret_push_protection(clean_title, field="title") or ""
         page_row.title = clean_title
         await session.execute(
             text("UPDATE objects SET display_title = :t WHERE id = :id"),

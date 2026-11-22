@@ -2,18 +2,26 @@
 
 Implements the hardened production HTTP response headers mandated by Section 5.4,
 including the strict Content-Security-Policy, anti-framing, nosniff, and
-standalone cleartext loopback protections.
+standalone cleartext loopback protections, as well as spoof-resistant client IP
+resolution with trusted proxy traversal.
 """
 
 from __future__ import annotations
 
 import contextlib
+import ipaddress
 import json
-from typing import TYPE_CHECKING, Final
+import os
+from ipaddress import IPv4Address, IPv4Network, IPv6Address, IPv6Network
+from typing import TYPE_CHECKING, Any, Final
 
 from starlette.datastructures import Headers
 
+from kanban.settings import get_settings
+
 if TYPE_CHECKING:
+    from collections.abc import Mapping, Sequence
+
     from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
     from kanban.settings import Settings
@@ -116,6 +124,181 @@ def _is_host_allowed(host_name: str, allowed_hosts: frozenset[str] | set[str]) -
                 return True
 
     return False
+
+
+def _get_raw_trusted_proxies() -> str:
+    """Retrieve raw trusted proxies string from environment or application settings."""
+    raw_env = os.environ.get("KB_TRUSTED_PROXIES") or os.environ.get("KANBAN_TRUSTED_PROXIES", "")
+    if not raw_env.strip():
+        try:
+            raw_env = get_settings().trusted_proxies
+        except (RuntimeError, ValueError):
+            return ""
+    return raw_env
+
+
+def _parse_trusted_networks(
+    trusted: Sequence[IPv4Network | IPv6Network | str] | str | None,
+) -> tuple[IPv4Network | IPv6Network, ...]:
+    """Parse trusted proxy CIDR entries from sequence, string, or environment."""
+    if trusted is None:
+        raw_str = _get_raw_trusted_proxies()
+        entries: Sequence[IPv4Network | IPv6Network | str] = [
+            item.strip() for item in raw_str.replace(" ", ",").split(",") if item.strip()
+        ]
+    elif isinstance(trusted, str):
+        entries = [item.strip() for item in trusted.replace(" ", ",").split(",") if item.strip()]
+    else:
+        entries = trusted
+
+    parsed_list: list[IPv4Network | IPv6Network] = []
+    for item in entries:
+        if isinstance(item, (IPv4Network, IPv6Network)):
+            parsed_list.append(item)
+            continue
+        token = item.strip()
+        if not token:
+            continue
+        try:
+            parsed_list.append(ipaddress.ip_network(token, strict=False))
+        except ValueError:
+            continue
+    return tuple(parsed_list)
+
+
+def _is_trusted(
+    ip: IPv4Address | IPv6Address,
+    trusted_networks: Sequence[IPv4Network | IPv6Network],
+) -> bool:
+    """Determine whether an IP address falls within configured trusted proxy CIDRs."""
+    return any(ip in net for net in trusted_networks)
+
+
+def _format_ip(ip: IPv4Address | IPv6Address) -> str:
+    """Format IP address normalizing IPv4-mapped IPv6 and bucketing IPv6 by /64."""
+    if isinstance(ip, IPv6Address):
+        if ip.ipv4_mapped is not None:
+            return str(ip.ipv4_mapped)
+        network = IPv6Network(f"{ip}/64", strict=False)
+        return f"{network.network_address}/64"
+    return str(ip)
+
+
+def _extract_direct_peer(scope: Mapping[str, Any]) -> IPv4Address | IPv6Address | str:
+    """Extract and normalize the direct peer IP from the ASGI connection scope."""
+    if hasattr(scope, "scope"):
+        scope = scope.scope
+    client_info = scope.get("client")
+    direct_peer_str: str = ""
+    if client_info and len(client_info) > 0 and client_info[0]:
+        direct_peer_str = str(client_info[0]).strip().strip("[]")
+
+    if not direct_peer_str:
+        return ipaddress.ip_address("127.0.0.1")
+
+    try:
+        ip = ipaddress.ip_address(direct_peer_str)
+    except ValueError:
+        return direct_peer_str
+    if isinstance(ip, IPv6Address) and ip.ipv4_mapped is not None:
+        return ip.ipv4_mapped
+    return ip
+
+
+def _extract_header_val(scope: Mapping[str, Any], header_name_bytes: bytes) -> str | None:
+    """Extract decoded header string from ASGI headers if present."""
+    headers: Sequence[tuple[bytes, bytes]] = scope.get("headers", ())
+    for key, value in headers:
+        if key.lower() == header_name_bytes:
+            try:
+                decoded = value.decode("utf-8").strip()
+            except UnicodeDecodeError:
+                return None
+            return decoded or None
+    return None
+
+
+def _resolve_from_xff(
+    xff_str: str,
+    trusted_nets: Sequence[IPv4Network | IPv6Network],
+    direct_ip: IPv4Address | IPv6Address,
+) -> IPv4Address | IPv6Address:
+    """Walk X-Forwarded-For entries right-to-left and return first untrusted address."""
+    entries = [elem.strip().strip("[]") for elem in xff_str.split(",") if elem.strip()]
+    if not entries:
+        return direct_ip
+
+    leftmost: IPv4Address | IPv6Address | None = None
+    for entry in reversed(entries):
+        try:
+            candidate = ipaddress.ip_address(entry)
+        except ValueError:
+            return direct_ip
+
+        if isinstance(candidate, IPv6Address) and candidate.ipv4_mapped is not None:
+            candidate = candidate.ipv4_mapped
+
+        leftmost = candidate
+        if not _is_trusted(candidate, trusted_nets):
+            return candidate
+
+    return leftmost or direct_ip
+
+
+def _resolve_from_real_ip(
+    real_ip_str: str,
+    direct_ip: IPv4Address | IPv6Address,
+) -> IPv4Address | IPv6Address:
+    """Parse X-Real-IP candidate returning normalized address or direct peer fallback."""
+    candidate_str = real_ip_str.strip().strip("[]")
+    try:
+        candidate = ipaddress.ip_address(candidate_str)
+    except ValueError:
+        return direct_ip
+    else:
+        if isinstance(candidate, IPv6Address) and candidate.ipv4_mapped is not None:
+            return candidate.ipv4_mapped
+        return candidate
+
+
+def resolve_client_ip(
+    scope: Mapping[str, Any],
+    trusted_proxies: Sequence[IPv4Network | IPv6Network | str] | str | None = None,
+) -> str:
+    """Resolve spoof-resistant client IP address from ASGI connection scope.
+
+    Uses scope['client'][0] as the direct peer. X-Forwarded-For and X-Real-IP headers
+    are inspected ONLY if the direct peer is inside trusted_proxies (or KB_TRUSTED_PROXIES /
+    KANBAN_TRUSTED_PROXIES).
+    Untrusted peers have their direct peer IP returned immediately, ignoring all spoofed headers.
+    When the direct peer is trusted, X-Forwarded-For is traversed right-to-left. If absent,
+    X-Real-IP is inspected. Malformed entries immediately fall back to the direct peer.
+    IPv4-mapped IPv6 addresses are normalized to IPv4. IPv6 clients are bucketed by /64 prefix.
+    """
+    if hasattr(scope, "scope"):
+        scope = scope.scope
+    peer = _extract_direct_peer(scope)
+    if isinstance(peer, str):
+        return peer
+
+    trusted_nets = _parse_trusted_networks(trusted_proxies)
+    if not trusted_nets or not _is_trusted(peer, trusted_nets):
+        return _format_ip(peer)
+
+    # 1. Check X-Forwarded-For
+    xff_str = _extract_header_val(scope, b"x-forwarded-for")
+    if xff_str:
+        candidate = _resolve_from_xff(xff_str, trusted_nets, peer)
+        if candidate != peer or not _is_trusted(candidate, trusted_nets):
+            return _format_ip(candidate)
+
+    # 2. Fall back to X-Real-IP if X-Forwarded-For is absent
+    x_real_ip = _extract_header_val(scope, b"x-real-ip")
+    if x_real_ip:
+        candidate = _resolve_from_real_ip(x_real_ip, peer)
+        return _format_ip(candidate)
+
+    return _format_ip(peer)
 
 
 class SecurityHeadersMiddleware:

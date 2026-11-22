@@ -1,0 +1,692 @@
+diff --git a/.forgejo/workflows/ci.yml b/.forgejo/workflows/ci.yml
+index c52520ff..0ef17426 100644
+--- a/.forgejo/workflows/ci.yml
++++ b/.forgejo/workflows/ci.yml
+@@ -190,13 +190,13 @@ jobs:
+         shell: bash
+         run: |
+           scripts/ci/run_and_log.sh build-runtime-slim -- \
+-            docker buildx build --target runtime-slim --build-arg KB_GIT_COMMIT=${{ github.sha }} -t kanban:runtime-slim --load .
++            docker buildx build --target runtime-slim --build-arg KB_GIT_COMMIT=${{ github.sha }} --build-arg KB_GIT_COMMIT_COUNT=$(git rev-list --count HEAD) -t kanban:runtime-slim --load .
+ 
+       - name: Build standalone image
+         shell: bash
+         run: |
+           scripts/ci/run_and_log.sh build-standalone -- \
+-            docker buildx build --target standalone --build-arg KB_GIT_COMMIT=${{ github.sha }} -t kanban:standalone --load .
++            docker buildx build --target standalone --build-arg KB_GIT_COMMIT=${{ github.sha }} --build-arg KB_GIT_COMMIT_COUNT=$(git rev-list --count HEAD) -t kanban:standalone --load .
+ 
+       - name: List built images
+         shell: bash
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+index d6c896a0..eecefb3d 100644
+--- a/.github/workflows/ci.yml
++++ b/.github/workflows/ci.yml
+@@ -95,11 +95,11 @@ jobs:
+ 
+       - name: Build runtime-slim image
+         shell: bash
+-        run: docker buildx build --target runtime-slim --build-arg KB_GIT_COMMIT=${{ github.sha }} -t kanban:runtime-slim --load .
++        run: docker buildx build --target runtime-slim --build-arg KB_GIT_COMMIT=${{ github.sha }} --build-arg KB_GIT_COMMIT_COUNT=$(git rev-list --count HEAD) -t kanban:runtime-slim --load .
+ 
+       - name: Build standalone image
+         shell: bash
+-        run: docker buildx build --target standalone --build-arg KB_GIT_COMMIT=${{ github.sha }} -t kanban:standalone --load .
++        run: docker buildx build --target standalone --build-arg KB_GIT_COMMIT=${{ github.sha }} --build-arg KB_GIT_COMMIT_COUNT=$(git rev-list --count HEAD) -t kanban:standalone --load .
+ 
+       - name: Verify built images
+         shell: bash
+diff --git a/Dockerfile b/Dockerfile
+index f4af07a8..c0a12aeb 100644
+--- a/Dockerfile
++++ b/Dockerfile
+@@ -29,6 +29,8 @@ ARG KB_GIT_COMMIT=""
+ ENV KB_GIT_COMMIT=${KB_GIT_COMMIT}
+ ARG KB_BUILD_TIMESTAMP=""
+ ENV KB_BUILD_TIMESTAMP=${KB_BUILD_TIMESTAMP}
++ARG KB_GIT_COMMIT_COUNT=""
++ENV KB_GIT_COMMIT_COUNT=${KB_GIT_COMMIT_COUNT}
+ WORKDIR /opt/kanban
+ # Base image digest is cryptographically pinned; allowing Debian security updates to flow
+ # hadolint ignore=DL3008
+diff --git a/kanban/api/v1/admin/diagnostics.py b/kanban/api/v1/admin/diagnostics.py
+index bd8f5c99..7088adb2 100644
+--- a/kanban/api/v1/admin/diagnostics.py
++++ b/kanban/api/v1/admin/diagnostics.py
+@@ -305,7 +305,7 @@ class BuildDiagnosticsInfo(BaseModel):
+     version: str
+     git_commit: str | None = None
+     build_timestamp: str | None = None
+-    openapi_version: str | None = "2.0.0"
++    openapi_version: str | None = None
+     openapi_bundle_hash: str | None = None
+     frontend_bundle_hash: str | None = None
+ 
+@@ -1088,7 +1088,7 @@ async def get_admin_diagnostics_endpoint(
+         openapi_doc = request.app.openapi() if hasattr(request.app, "openapi") else None
+         b_info = get_build_info(openapi_doc)
+         build_info = BuildDiagnosticsInfo(
+-            version="2.0.0",
++            version=b_info.version,
+             git_commit=b_info.git_commit,
+             build_timestamp=b_info.build_timestamp,
+             openapi_version=b_info.openapi_version,
+diff --git a/kanban/api/v1/system.py b/kanban/api/v1/system.py
+index c6d81532..3c931296 100644
+--- a/kanban/api/v1/system.py
++++ b/kanban/api/v1/system.py
+@@ -11,13 +11,12 @@ from fastapi import APIRouter, Depends, Query, Request, Response
+ from pydantic import BaseModel, ConfigDict, Field
+ 
+ from kanban.api.deps import PrincipalContext, get_principal
+-from kanban.ops.build_info import get_build_info
++from kanban.ops.build_info import get_build_info, resolve_platform_version
+ from kanban.ops.sbom import (
+     PLATFORM_LICENSE_SPDX,
+     PLATFORM_NAME,
+     PLATFORM_SLUG,
+     PLATFORM_TAGLINE,
+-    PLATFORM_VERSION,
+     calculate_sbom_summary,
+     generate_cyclonedx_1_5,
+     get_license_texts,
+@@ -195,7 +194,10 @@ class PlatformSummaryResponse(BaseModel):
+         default="thumbs-up-kanban", description="Distribution container and repository slug"
+     )
+     license: str = Field(default="Apache-2.0", description="Open-source permissive license")
+-    version: str = Field(default="2.0.0", description="Platform architecture release version")
++    version: str = Field(
++        default_factory=resolve_platform_version,
++        description="Platform architecture release version",
++    )
+     github_issue_1_resolved: bool = Field(
+         default=True,
+         description="Affirmation of GitHub Issue #1 resolution across all 4 pillars",
+@@ -264,7 +266,10 @@ class SystemAboutResponse(BaseModel):
+         default="The difference between a swarm and an Agile team is a kanban.",
+         description="Official platform tagline",
+     )
+-    version: str = Field(default="2.0.0", description="Platform release version")
++    version: str = Field(
++        default_factory=resolve_platform_version,
++        description="Platform release version",
++    )
+     license_spdx: str = Field(default="Apache-2.0", description="Primary platform license SPDX ID")
+     api_docs_urls: dict[str, str] = Field(
+         default_factory=lambda: {
+@@ -282,7 +287,10 @@ class SystemAboutResponse(BaseModel):
+     components: list[SbomComponentModel] = Field(description="Discovered third-party components")
+     git_commit: str = Field(default="unknown", description="Build git commit SHA")
+     build_timestamp: str | None = Field(default=None, description="ISO build timestamp")
+-    openapi_version: str = Field(default="2.0.0", description="OpenAPI specification version")
++    openapi_version: str = Field(
++        default_factory=resolve_platform_version,
++        description="OpenAPI specification version",
++    )
+     openapi_bundle_hash: str | None = Field(
+         default=None, description="SHA-256 fingerprint of OpenAPI bundle"
+     )
+@@ -294,7 +302,7 @@ class SystemAboutResponse(BaseModel):
+ def get_platform_summary(settings: Settings | None = None) -> PlatformSummaryResponse:
+     """Return verified platform capability summary and world-class parity metadata."""
+     del settings  # Future-proof parameter for dynamic capability overrides if needed
+-    return PlatformSummaryResponse()
++    return PlatformSummaryResponse(version=resolve_platform_version())
+ 
+ 
+ router = APIRouter(prefix="/system", tags=["system"])
+@@ -328,7 +336,7 @@ async def get_system_about_endpoint(
+         platform=PLATFORM_NAME,
+         slug=PLATFORM_SLUG,
+         tagline=PLATFORM_TAGLINE,
+-        version=PLATFORM_VERSION,
++        version=b_info.version,
+         license_spdx=PLATFORM_LICENSE_SPDX,
+         api_docs_urls={
+             "swagger_ui": "/api/docs",
+diff --git a/kanban/api/v1/system_status.py b/kanban/api/v1/system_status.py
+index a318dfb4..be6a4d3f 100644
+--- a/kanban/api/v1/system_status.py
++++ b/kanban/api/v1/system_status.py
+@@ -66,9 +66,10 @@ class SystemStatusResponse(BaseModel):
+         default_factory=lambda: ["scalar", "formula", "wasm", "nsjail"]
+     )
+     sandbox_unavailable_reason: str | None = None
++    version: str | None = None
+     git_commit: str | None = None
+     build_timestamp: str | None = None
+-    openapi_version: str | None = "2.0.0"
++    openapi_version: str | None = None
+     openapi_bundle_hash: str | None = None
+     frontend_bundle_hash: str | None = None
+ 
+@@ -216,6 +217,7 @@ async def _assemble_system_status_response(
+         allow_unlimited_mcp_keys=not disable_unlimited,
+         supported_custom_field_tiers=supported_tiers,
+         sandbox_unavailable_reason=sandbox_reason,
++        version=b_info.version,
+         git_commit=b_info.git_commit,
+         build_timestamp=b_info.build_timestamp,
+         openapi_version=b_info.openapi_version,
+diff --git a/kanban/ops/build_info.py b/kanban/ops/build_info.py
+index dab3314b..6f3a4149 100644
+--- a/kanban/ops/build_info.py
++++ b/kanban/ops/build_info.py
+@@ -1,6 +1,6 @@
+ # Copyright 2026 Kanban Platform Contributors
+ # Apache-2.0 License. See LICENSE for details.
+-"""Build, commit, and OpenAPI/frontend bundle fingerprinting (KAN-57)."""
++"""Build, commit, and OpenAPI/frontend bundle fingerprinting (KAN-57, KAN-312)."""
+ 
+ from __future__ import annotations
+ 
+@@ -13,7 +13,7 @@ from dataclasses import dataclass
+ from pathlib import Path
+ from typing import Any
+ 
+-from kanban.ops.sbom import PLATFORM_VERSION
++CURRENT_RELEASE_VERSION = os.environ.get("KB_RELEASE_VERSION", "2").strip() or "2"
+ 
+ 
+ @dataclass(frozen=True)
+@@ -23,6 +23,8 @@ class BuildInfo:
+     git_commit: str
+     build_timestamp: str | None
+     openapi_version: str
++    version: str
++    git_commit_count: int
+     openapi_bundle_hash: str | None = None
+     frontend_bundle_hash: str | None = None
+ 
+@@ -51,6 +53,44 @@ def resolve_git_commit(cwd: Path | None = None) -> str:
+     return "unknown"
+ 
+ 
++def resolve_git_commit_count(cwd: Path | None = None) -> int:
++    """Resolve git commit count from environment variables or git CLI fallback."""
++    env_count = os.environ.get("KB_GIT_COMMIT_COUNT")
++    if env_count is not None and env_count.strip().isdigit():
++        return int(env_count.strip())
++
++    git_bin = shutil.which("git") or "/usr/bin/git"
++    try:
++        res = subprocess.run(  # noqa: S603
++            [git_bin, "rev-list", "--count", "HEAD"],
++            cwd=cwd or Path(__file__).resolve().parents[2],
++            capture_output=True,
++            text=True,
++            check=False,
++            timeout=5,
++        )
++        if res.returncode == 0 and res.stdout.strip().isdigit():
++            return int(res.stdout.strip())
++    except (subprocess.SubprocessError, OSError):
++        return 0
++
++    return 0
++
++
++def resolve_platform_version(cwd: Path | None = None) -> str:
++    """Resolve dynamic platform release version in 0.<release>.<commits> format."""
++    env_ver = os.environ.get("KB_VERSION")
++    if env_ver and env_ver.strip():
++        return env_ver.strip()
++
++    release_ver = (
++        os.environ.get("KB_RELEASE_VERSION", CURRENT_RELEASE_VERSION).strip()
++        or CURRENT_RELEASE_VERSION
++    )
++    commit_count = resolve_git_commit_count(cwd=cwd)
++    return f"0.{release_ver}.{commit_count}"
++
++
+ def resolve_build_timestamp() -> str | None:
+     """Resolve build timestamp from environment variable or None."""
+     ts = os.environ.get("KB_BUILD_TIMESTAMP")
+@@ -104,10 +144,14 @@ def resolve_frontend_bundle_hash(repo_root: Path | None = None) -> str | None:
+ def get_build_info(openapi_doc: dict[str, Any] | None = None) -> BuildInfo:
+     """Return consolidated BuildInfo snapshot."""
+     bundle_hash = compute_openapi_bundle_hash(openapi_doc) if openapi_doc else None
++    version = resolve_platform_version()
++    commit_count = resolve_git_commit_count()
+     return BuildInfo(
+         git_commit=resolve_git_commit(),
+         build_timestamp=resolve_build_timestamp(),
+-        openapi_version=PLATFORM_VERSION,
++        openapi_version=version,
++        version=version,
++        git_commit_count=commit_count,
+         openapi_bundle_hash=bundle_hash,
+         frontend_bundle_hash=resolve_frontend_bundle_hash(),
+     )
+diff --git a/kanban/ops/openapi_builder.py b/kanban/ops/openapi_builder.py
+index 43296597..b86673ce 100644
+--- a/kanban/ops/openapi_builder.py
++++ b/kanban/ops/openapi_builder.py
+@@ -9,8 +9,11 @@ from typing import TYPE_CHECKING, Any
+ from fastapi.openapi.utils import get_openapi
+ 
+ from kanban.api.problems import Problem
+-from kanban.ops.build_info import compute_openapi_bundle_hash, resolve_git_commit
+-from kanban.ops.sbom import PLATFORM_VERSION
++from kanban.ops.build_info import (
++    compute_openapi_bundle_hash,
++    resolve_git_commit,
++    resolve_platform_version,
++)
+ 
+ if TYPE_CHECKING:
+     from fastapi import FastAPI
+@@ -228,9 +231,10 @@ def _enrich_paths(
+ 
+ def build_custom_openapi(app: FastAPI) -> dict[str, Any]:
+     """Generate and return canonical OpenAPI schema with security, problems, and build info."""
++    platform_ver = resolve_platform_version()
+     openapi_schema = get_openapi(
+         title=app.title,
+-        version=app.version or PLATFORM_VERSION,
++        version=app.version or platform_ver,
+         openapi_version=app.openapi_version,
+         summary=app.summary,
+         description=app.description,
+@@ -255,7 +259,7 @@ def build_custom_openapi(app: FastAPI) -> dict[str, Any]:
+     )
+ 
+     info = openapi_schema.setdefault("info", {})
+-    info["version"] = PLATFORM_VERSION
++    info["version"] = platform_ver
+     info["x-build-commit"] = resolve_git_commit()
+     info["x-openapi-bundle-hash"] = compute_openapi_bundle_hash(openapi_schema)
+ 
+diff --git a/kanban/ops/sbom.py b/kanban/ops/sbom.py
+index 199ea942..2afb6ac2 100644
+--- a/kanban/ops/sbom.py
++++ b/kanban/ops/sbom.py
+@@ -23,12 +23,14 @@ from datetime import UTC, datetime
+ from pathlib import Path
+ from typing import Any, Final
+ 
++from kanban.ops.build_info import resolve_platform_version
++
+ logger = logging.getLogger(__name__)
+ 
+ PLATFORM_NAME: Final[str] = "👍kanban"
+ PLATFORM_SLUG: Final[str] = "thumbs-up-kanban"
+ PLATFORM_TAGLINE: Final[str] = "The difference between a swarm and an Agile team is a kanban."
+-PLATFORM_VERSION: Final[str] = "2.0.0"
++PLATFORM_VERSION: Final[str] = resolve_platform_version()
+ PLATFORM_LICENSE_SPDX: Final[str] = "Apache-2.0"
+ 
+ MAX_INLINE_LICENSE_LEN: Final[int] = 100
+@@ -664,16 +666,16 @@ def generate_cyclonedx_1_5(
+                 {
+                     "vendor": PLATFORM_NAME,
+                     "name": PLATFORM_SLUG,
+-                    "version": PLATFORM_VERSION,
++                    "version": resolve_platform_version(),
+                 }
+             ],
+             "component": {
+                 "type": "application",
+                 "name": PLATFORM_SLUG,
+-                "version": PLATFORM_VERSION,
++                "version": resolve_platform_version(),
+                 "description": PLATFORM_TAGLINE,
+                 "licenses": [{"license": {"id": PLATFORM_LICENSE_SPDX}}],
+-                "purl": f"pkg:generic/{PLATFORM_SLUG}@{PLATFORM_VERSION}",
++                "purl": f"pkg:generic/{PLATFORM_SLUG}@{resolve_platform_version()}",
+             },
+         },
+         "components": cdx_components,
+diff --git a/kanban/tests/api/test_admin_diagnostics.py b/kanban/tests/api/test_admin_diagnostics.py
+index 70258c85..da65d967 100644
+--- a/kanban/tests/api/test_admin_diagnostics.py
++++ b/kanban/tests/api/test_admin_diagnostics.py
+@@ -39,6 +39,7 @@ from kanban.auth.sessions.csrf import (
+ from kanban.auth.sessions.resolver import SessionCookieResolver
+ from kanban.auth.sessions.service import SessionService
+ from kanban.jobs import JobRegistry, JobRunner, JobScheduler
++from kanban.ops.build_info import resolve_platform_version
+ from kanban.realtime.hub import RealtimeHub
+ from kanban.sandbox.wasm_runner import TierAWasmRunner, WasmScriptRunner
+ from kanban.security.keys import KeyMaterial
+@@ -351,6 +352,10 @@ async def test_admin_diagnostics_security_and_redaction(
+             assert sub in data_sa
+             assert data_sa["subsystems"][sub]["status"] in ("healthy", "degraded", "unhealthy")
+ 
++        assert "build" in data_sa
++        assert data_sa["build"]["version"] == resolve_platform_version()
++        assert data_sa["build"]["openapi_version"] == resolve_platform_version()
++
+         # Verify zero secret leakage
+         raw_text = res_sa.text
+         assert "secret_pepper_bytes" not in raw_text
+diff --git a/kanban/tests/api/test_system_about.py b/kanban/tests/api/test_system_about.py
+index c04debe4..80bf2477 100644
+--- a/kanban/tests/api/test_system_about.py
++++ b/kanban/tests/api/test_system_about.py
+@@ -26,6 +26,8 @@ from kanban.ops.build_info import (
+     resolve_build_timestamp,
+     resolve_frontend_bundle_hash,
+     resolve_git_commit,
++    resolve_git_commit_count,
++    resolve_platform_version,
+ )
+ from kanban.settings import Settings
+ 
+@@ -82,13 +84,13 @@ async def test_system_about_authenticated_returns_full_metadata(
+         assert data["platform"] == "👍kanban"
+         assert data["slug"] == "thumbs-up-kanban"
+         assert data["tagline"] == "The difference between a swarm and an Agile team is a kanban."
+-        assert data["version"] == "2.0.0"
++        assert data["version"] == resolve_platform_version()
+         assert data["license_spdx"] == "Apache-2.0"
+ 
+         # Build and bundle metadata (KAN-57)
+         assert data["git_commit"] is not None
+         assert "build_timestamp" in data
+-        assert data["openapi_version"] == "2.0.0"
++        assert data["openapi_version"] == resolve_platform_version()
+         assert data["openapi_bundle_hash"] is not None
+         assert len(data["openapi_bundle_hash"]) == 64
+         assert "frontend_bundle_hash" in data
+@@ -365,7 +367,9 @@ def test_build_info_get_build_info(monkeypatch: pytest.MonkeyPatch) -> None:
+     info = get_build_info(openapi_doc={"paths": {}, "components": {}})
+     assert info.git_commit == "test-commit-sha"
+     assert info.build_timestamp == "2026-11-21T05:30:00Z"
+-    assert info.openapi_version == "2.0.0"
++    assert info.openapi_version == resolve_platform_version()
++    assert info.version == resolve_platform_version()
++    assert isinstance(info.git_commit_count, int)
+     assert info.openapi_bundle_hash is not None
+     assert len(info.openapi_bundle_hash) == 64
+ 
+@@ -404,7 +408,8 @@ async def test_assemble_system_status_response_server_admin_and_member(
+     assert admin_status.is_server_admin is True
+     assert admin_status.git_commit == "test-sha-status"
+     assert admin_status.build_timestamp == "2026-11-21T06:00:00Z"
+-    assert admin_status.openapi_version == "2.0.0"
++    assert admin_status.openapi_version == resolve_platform_version()
++    assert admin_status.version == resolve_platform_version()
+     assert admin_status.openapi_bundle_hash is not None
+ 
+     # 2. Regular member caller (anti-enumeration redaction)
+@@ -425,3 +430,46 @@ async def test_assemble_system_status_response_server_admin_and_member(
+     assert member_status.is_server_admin is False
+     assert member_status.data_mount_point is None
+     assert member_status.git_commit == "test-sha-status"
++
++
++def test_resolve_git_commit_count(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
++    """Verify resolve_git_commit_count handles env vars, git CLI, and error fallbacks (KAN-312)."""
++    # 1. Direct env variable takes precedence
++    monkeypatch.setenv("KB_GIT_COMMIT_COUNT", "42")
++    assert resolve_git_commit_count() == 42
++
++    monkeypatch.setenv("KB_GIT_COMMIT_COUNT", "0")
++    assert resolve_git_commit_count() == 0
++
++    # 2. Invalid env falls back to git or 0
++    monkeypatch.setenv("KB_GIT_COMMIT_COUNT", "not-a-digit")
++    count = resolve_git_commit_count()
++    assert count >= 0
++
++    # 3. Subprocess failure falls back to 0
++    monkeypatch.delenv("KB_GIT_COMMIT_COUNT", raising=False)
++    monkeypatch.setattr(subprocess, "run", MagicMock(side_effect=OSError("git not found")))
++    assert resolve_git_commit_count(cwd=tmp_path) == 0
++
++    # 4. Subprocess non-zero return code falls back to 0
++    mock_run = MagicMock(return_value=MagicMock(returncode=1, stdout=""))
++    monkeypatch.setattr(subprocess, "run", mock_run)
++    assert resolve_git_commit_count(cwd=tmp_path) == 0
++
++
++def test_resolve_platform_version(monkeypatch: pytest.MonkeyPatch) -> None:
++    """Verify resolve_platform_version formats 0.<release>.<commits> (KAN-312)."""
++    # 1. Explicit KB_VERSION override
++    monkeypatch.setenv("KB_VERSION", "0.9.999")
++    assert resolve_platform_version() == "0.9.999"
++
++    # 2. Custom release version and commit count
++    monkeypatch.delenv("KB_VERSION", raising=False)
++    monkeypatch.setenv("KB_RELEASE_VERSION", "3")
++    monkeypatch.setenv("KB_GIT_COMMIT_COUNT", "150")
++    assert resolve_platform_version() == "0.3.150"
++
++    # 3. Default release version (2) with commit count
++    monkeypatch.delenv("KB_RELEASE_VERSION", raising=False)
++    monkeypatch.setenv("KB_GIT_COMMIT_COUNT", "777")
++    assert resolve_platform_version() == "0.2.777"
+diff --git a/kanban/tests/api/test_system_status.py b/kanban/tests/api/test_system_status.py
+index 3128314e..f9a9b2fd 100644
+--- a/kanban/tests/api/test_system_status.py
++++ b/kanban/tests/api/test_system_status.py
+@@ -30,6 +30,7 @@ from kanban.auth.sessions.cookies import SESSION_COOKIE_NAME
+ from kanban.auth.sessions.csrf import CSRF_COOKIE_NAME, CSRF_HEADER_NAME, CsrfMiddleware
+ from kanban.auth.sessions.resolver import SessionCookieResolver
+ from kanban.auth.sessions.service import SessionService
++from kanban.ops.build_info import resolve_platform_version
+ from kanban.security.keys import KeyMaterial
+ from kanban.settings import Settings
+ from kanban.standalone.export_service import (
+@@ -294,7 +295,8 @@ def _assert_admin_status(data: dict[str, Any]) -> None:
+     assert data["is_server_admin"] is True
+     assert data["git_commit"] is not None
+     assert "build_timestamp" in data
+-    assert data["openapi_version"] == "2.0.0"
++    assert data["openapi_version"] == resolve_platform_version()
++    assert data["version"] == resolve_platform_version()
+     assert "openapi_bundle_hash" in data
+     assert "frontend_bundle_hash" in data
+ 
+@@ -343,7 +345,8 @@ async def test_case_1_system_status_admin_full_fields_and_member_redaction(
+         assert data_admin_sa["sandbox_unavailable_reason"] is not None
+         assert data_admin_sa["git_commit"] is not None
+         assert "build_timestamp" in data_admin_sa
+-        assert data_admin_sa["openapi_version"] == "2.0.0"
++        assert data_admin_sa["openapi_version"] == resolve_platform_version()
++        assert data_admin_sa["version"] == resolve_platform_version()
+ 
+         # 2. As regular MEMBER: sensitive host topology redacted to null
+         client.cookies.clear()
+diff --git a/kanban/tests/ops/test_sbom.py b/kanban/tests/ops/test_sbom.py
+index 25ff17c8..98245eed 100644
+--- a/kanban/tests/ops/test_sbom.py
++++ b/kanban/tests/ops/test_sbom.py
+@@ -12,6 +12,7 @@ from unittest.mock import MagicMock
+ if TYPE_CHECKING:
+     import pytest
+ 
++from kanban.ops.build_info import resolve_platform_version
+ from kanban.ops.sbom import (
+     ALLOW_SET,
+     DENY_PREFIXES,
+@@ -49,7 +50,8 @@ def test_platform_metadata_constants() -> None:
+     assert PLATFORM_NAME == "👍kanban"
+     assert PLATFORM_SLUG == "thumbs-up-kanban"
+     assert "Agile team" in PLATFORM_TAGLINE
+-    assert PLATFORM_VERSION == "2.0.0"
++    assert resolve_platform_version() == PLATFORM_VERSION
++    assert PLATFORM_VERSION.startswith("0.2.")
+     assert PLATFORM_LICENSE_SPDX == "Apache-2.0"
+     assert "MIT" in ALLOW_SET
+     assert "GPL" in DENY_PREFIXES
+@@ -373,7 +375,7 @@ def test_generate_cyclonedx_1_5() -> None:
+     assert cdx["serialNumber"] == "urn:uuid:test-sbom-1234"
+     assert cdx["version"] == 1
+     assert cdx["metadata"]["component"]["name"] == "thumbs-up-kanban"
+-    assert cdx["metadata"]["component"]["version"] == "2.0.0"
++    assert cdx["metadata"]["component"]["version"] == resolve_platform_version()
+ 
+     components = cdx["components"]
+     assert len(components) == 2
+diff --git a/kanban/tests/platform/test_world_class_standards.py b/kanban/tests/platform/test_world_class_standards.py
+index 1f8b1252..858c07cc 100644
+--- a/kanban/tests/platform/test_world_class_standards.py
++++ b/kanban/tests/platform/test_world_class_standards.py
+@@ -21,6 +21,7 @@ from kanban.content.unicode_guard import (
+     ContentNormalizeError,
+     strip_invisible_and_control_chars,
+ )
++from kanban.ops.build_info import resolve_platform_version
+ 
+ if TYPE_CHECKING:
+     from sqlalchemy.ext.asyncio import AsyncSession
+@@ -44,7 +45,7 @@ def _assert_summary_pillars(summary: PlatformSummaryResponse) -> None:
+     assert summary.platform == "👍kanban"
+     assert summary.slug == "thumbs-up-kanban"
+     assert summary.license == "Apache-2.0"
+-    assert summary.version == "2.0.0"
++    assert summary.version == resolve_platform_version()
+     assert summary.github_issue_1_resolved is True
+ 
+     # Pillar 1: Native Agent-First Architecture
+diff --git a/kanban/tests/test_export_openapi.py b/kanban/tests/test_export_openapi.py
+index 5dd31c3d..bb3c6f07 100644
+--- a/kanban/tests/test_export_openapi.py
++++ b/kanban/tests/test_export_openapi.py
+@@ -19,6 +19,7 @@ from kanban.api_docs import (
+     render_redoc_html,
+     render_swagger_ui_html,
+ )
++from kanban.ops.build_info import resolve_platform_version
+ from kanban.ops.openapi_builder import _enrich_paths
+ from kanban.tools.export_openapi import export_openapi, main
+ 
+@@ -219,7 +220,7 @@ def test_export_openapi_build_info_metadata_and_hashes() -> None:
+     data: dict[str, Any] = json.loads(raw)
+     info: dict[str, Any] = data["info"]
+ 
+-    assert info["version"] == "2.0.0"
++    assert info["version"] == resolve_platform_version()
+     assert "x-build-commit" in info
+     assert info["x-build-commit"] is not None
+     assert "x-openapi-bundle-hash" in info
+diff --git a/kanban/web/src/app/Sidebar.tsx b/kanban/web/src/app/Sidebar.tsx
+index c6fd2c01..b3a178a0 100644
+--- a/kanban/web/src/app/Sidebar.tsx
++++ b/kanban/web/src/app/Sidebar.tsx
+@@ -20,6 +20,7 @@ import { CreateWorkspaceModal, type CreatedWorkspace } from '../features/workspa
+ import { ensureSessionCsrfToken } from '../features/auth/useSessionGuard';
+ import { setCsrfToken } from '../api/client';
+ import { QueryClientContext } from '@tanstack/react-query';
++import { useSystemStatus } from './useSystemStatus';
+ import { WorkspaceBadge } from '../components/workspace/WorkspaceBadge';
+ import {
+   ListTodo,
+@@ -173,6 +174,9 @@ export function Sidebar({
+   triggerButtonRef,
+   user,
+ }: SidebarProps): JSX.Element {
++  const { data: systemStatus } = useSystemStatus();
++  const systemVersion = systemStatus?.version ?? systemStatus?.openapi_version ?? '0.2.0';
++
+   let locationPathname = '';
+   let locationSearch = '';
+   try {
+@@ -1083,7 +1087,7 @@ export function Sidebar({
+               <span className="kb-sidebar-icon" aria-hidden="true">
+                 ℹ️
+               </span>
+-              <span className="kb-sidebar-about-version">v2.0.0</span>
++              <span className="kb-sidebar-about-version">v{systemVersion}</span>
+             </Link>
+           </div>
+         </div>
+diff --git a/kanban/web/src/app/__tests__/AboutNavigation.test.tsx b/kanban/web/src/app/__tests__/AboutNavigation.test.tsx
+index 55a901fa..6f606dc0 100644
+--- a/kanban/web/src/app/__tests__/AboutNavigation.test.tsx
++++ b/kanban/web/src/app/__tests__/AboutNavigation.test.tsx
+@@ -62,7 +62,7 @@ describe('About Navigation Entry Points (KB-ABOUT-SBOM, KAN-34)', () => {
+     expect(aboutLink.textContent).toContain('About 👍kanban');
+   });
+ 
+-  it('Sidebar renders muted ℹ️ v2.0.0 link in footer', () => {
++  it('Sidebar renders muted ℹ️ version link in footer', () => {
+     render(
+       <MemoryRouter initialEntries={['/projects/KAN/issues']}>
+         <Sidebar projectKey="KAN" projectName="kanban" modulesEnabled={true} />
+@@ -72,7 +72,7 @@ describe('About Navigation Entry Points (KB-ABOUT-SBOM, KAN-34)', () => {
+     const sidebarAboutLink = screen.getByTestId('sidebar-about-link');
+     expect(sidebarAboutLink).toBeDefined();
+     expect(sidebarAboutLink.getAttribute('href')).toBe('/about');
+-    expect(sidebarAboutLink.textContent).toContain('v2.0.0');
++    expect(sidebarAboutLink.textContent).toMatch(/v0\.2\./);
+   });
+ 
+   it('CommandPalette includes "About 👍kanban (License, API Docs & SBOM)" navigation command', () => {
+diff --git a/kanban/web/src/app/useSystemStatus.ts b/kanban/web/src/app/useSystemStatus.ts
+index c22cfba2..e5797728 100644
+--- a/kanban/web/src/app/useSystemStatus.ts
++++ b/kanban/web/src/app/useSystemStatus.ts
+@@ -27,6 +27,9 @@ export interface SystemStatus {
+   readonly persistent_volume: boolean;
+   readonly air_gap_mode: boolean;
+   readonly local_llm_endpoint_host: string | null;
++  readonly version?: string | null;
++  readonly openapi_version?: string | null;
++  readonly git_commit?: string | null;
+   readonly is_server_admin?: boolean;
+   readonly allow_unlimited_mcp_keys?: boolean;
+   readonly data_mount_point?: string | null;
+diff --git a/kanban/web/src/features/about/AboutPage.tsx b/kanban/web/src/features/about/AboutPage.tsx
+index 23f1ee0a..ae4acebf 100644
+--- a/kanban/web/src/features/about/AboutPage.tsx
++++ b/kanban/web/src/features/about/AboutPage.tsx
+@@ -162,6 +162,10 @@ export function AboutPage(): JSX.Element {
+           </h2>
+         </div>
+         <div className="kb-about-metadata-grid">
++          <div className="kb-about-meta-item">
++            <span className="kb-about-meta-label">Version:</span>
++            <code className="kb-about-meta-value" data-testid="about-meta-version">{version}</code>
++          </div>
+           <div className="kb-about-meta-item">
+             <span className="kb-about-meta-label">Build / Git Commit:</span>
+             <code className="kb-about-meta-value" data-testid="about-git-commit">{data.git_commit ?? 'unknown'}</code>
+diff --git a/kanban/web/src/features/about/__tests__/AboutPage.test.tsx b/kanban/web/src/features/about/__tests__/AboutPage.test.tsx
+index f867418c..ca2bfed3 100644
+--- a/kanban/web/src/features/about/__tests__/AboutPage.test.tsx
++++ b/kanban/web/src/features/about/__tests__/AboutPage.test.tsx
+@@ -11,11 +11,11 @@ const mockAboutData: aboutApi.SystemAboutData = {
+   platform: '👍kanban',
+   slug: 'thumbs-up-kanban',
+   tagline: 'The difference between a swarm and an Agile team is a kanban.',
+-  version: '2.0.0',
++  version: '0.2.1205',
+   license_spdx: 'Apache-2.0',
+   git_commit: '9d5577ad9b50',
+   build_timestamp: '2026-11-21T01:14:28Z',
+-  openapi_version: '2.0.0',
++  openapi_version: '0.2.1205',
+   openapi_bundle_hash: '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+   frontend_bundle_hash: 'abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890',
+   api_docs_urls: {
+@@ -129,11 +129,12 @@ describe('AboutPage', () => {
+       'The difference between a swarm and an Agile team is a kanban.',
+     );
+     expect(screen.getByText('👍kanban')).toBeDefined();
+-    expect(screen.getByText('v2.0.0')).toBeDefined();
++    expect(screen.getByText('v0.2.1205')).toBeDefined();
+     expect(screen.getByText('Apache-2.0')).toBeDefined();
+     expect(screen.getByTestId('about-build-commit')).toBeDefined();
+     expect(screen.getByTestId('about-build-commit').textContent).toContain('9d5577ad9b50');
+     expect(screen.getByTestId('about-git-commit').textContent).toBe('9d5577ad9b50');
++    expect(screen.getByTestId('about-meta-version').textContent).toBe('0.2.1205');
+ 
+     const downloadBtn = screen.getByTestId('download-sbom-btn');
+     expect(downloadBtn.getAttribute('href')).toBe('/api/v1/system/sbom?download=true');
+diff --git a/kanban/web/src/features/about/__tests__/aboutApi.test.ts b/kanban/web/src/features/about/__tests__/aboutApi.test.ts
+index 6714c029..5478a353 100644
+--- a/kanban/web/src/features/about/__tests__/aboutApi.test.ts
++++ b/kanban/web/src/features/about/__tests__/aboutApi.test.ts
+@@ -18,7 +18,7 @@ describe('aboutApi', () => {
+       platform: '👍kanban',
+       slug: 'thumbs-up-kanban',
+       tagline: 'The difference between a swarm and an Agile team is a kanban.',
+-      version: '2.0.0',
++      version: '0.2.1205',
+       license_spdx: 'Apache-2.0',
+       api_docs_urls: {
+         swagger_ui: '/api/docs',

@@ -1,0 +1,2311 @@
+diff --git a/database/migrations/sql/p6_04_enforce_credential_boundary_rls_gucs.down.sql b/database/migrations/sql/p6_04_enforce_credential_boundary_rls_gucs.down.sql
+new file mode 100644
+index 00000000..5cfb4b41
+--- /dev/null
++++ b/database/migrations/sql/p6_04_enforce_credential_boundary_rls_gucs.down.sql
+@@ -0,0 +1,136 @@
++-- Copyright 2026 Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++-- Revert KB-SEC-05
++
++DROP POLICY IF EXISTS objects_select_rls ON objects;
++CREATE POLICY objects_select_rls ON objects
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND EXISTS (
++            SELECT 1 FROM effective_resource_access era
++            WHERE era.object_id = objects.id
++              AND era.principal_id = ANY (app_effective_principal_set())
++              AND (era.allow_mask & 1) = 1
++              AND (era.deny_mask  & 1) = 0
++        )
++    );
++
++CREATE OR REPLACE FUNCTION app_has_object_capability(p_object_id uuid, p_mask integer)
++RETURNS boolean
++LANGUAGE plpgsql
++STABLE PARALLEL SAFE SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_human_pset uuid[];
++    v_agent_pset uuid[];
++    v_agent_id_str text;
++    v_eph_proj text;
++    v_obj_proj uuid;
++    v_obj_type text;
++BEGIN
++    v_eph_proj := NULLIF(current_setting('app.ephemeral_project_id', true), '');
++    IF v_eph_proj IS NOT NULL THEN
++        SELECT project_id, object_type::text INTO v_obj_proj, v_obj_type FROM objects WHERE id = p_object_id;
++        IF NOT FOUND THEN
++            RETURN FALSE;
++        END IF;
++        IF v_obj_type = 'project' THEN
++            IF p_object_id <> v_eph_proj::uuid THEN
++                RETURN FALSE;
++            END IF;
++        ELSIF v_obj_proj IS NULL OR v_obj_proj <> v_eph_proj::uuid THEN
++            RETURN FALSE;
++        END IF;
++    END IF;
++
++    v_human_pset := app_effective_principal_set();
++    IF cardinality(v_human_pset) = 0 THEN
++        RETURN FALSE;
++    END IF;
++
++    IF NOT EXISTS (
++        SELECT 1 FROM effective_resource_access era
++        WHERE era.object_id = p_object_id
++          AND era.workspace_id = app_current_workspace_id()
++          AND era.principal_id = ANY (v_human_pset)
++          AND (era.allow_mask & p_mask) = p_mask
++          AND (era.deny_mask  & p_mask) = 0
++    ) THEN
++        RETURN FALSE;
++    END IF;
++
++    v_agent_id_str := NULLIF(current_setting('app.agent_principal_id', true), '');
++    IF v_agent_id_str IS NOT NULL THEN
++        v_agent_pset := app_effective_principal_set_for(v_agent_id_str::uuid);
++        IF cardinality(v_agent_pset) = 0 THEN
++            RETURN FALSE;
++        END IF;
++
++        IF NOT EXISTS (
++            SELECT 1 FROM effective_resource_access era
++            WHERE era.object_id = p_object_id
++              AND era.workspace_id = app_current_workspace_id()
++              AND era.principal_id = ANY (v_agent_pset)
++              AND (era.allow_mask & p_mask) = p_mask
++              AND (era.deny_mask  & p_mask) = 0
++        ) THEN
++            RETURN FALSE;
++        END IF;
++    END IF;
++
++    RETURN TRUE;
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION app_has_object_capability(uuid, integer) TO kanban_app, app_rls_reader, kanban_migrator;
++
++CREATE OR REPLACE FUNCTION app_principal_has_role(p_project_id uuid, p_roles text[])
++RETURNS boolean
++LANGUAGE plpgsql
++STABLE SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_pset uuid[];
++    v_ws uuid;
++BEGIN
++    v_pset := app_effective_principal_set();
++    IF cardinality(v_pset) = 0 THEN
++        RETURN FALSE;
++    END IF;
++
++    v_ws := app_current_workspace_id();
++    IF v_ws IS NULL THEN
++        RETURN FALSE;
++    END IF;
++
++    RETURN EXISTS (
++        SELECT 1
++        FROM role_bindings rb
++        WHERE rb.principal_id = ANY (v_pset)
++          AND rb.workspace_id = v_ws
++          AND rb.role::text = ANY (p_roles)
++          AND (
++              rb.scope_type = 'server'
++              OR rb.scope_type = 'workspace'
++              OR (rb.scope_type = 'project' AND rb.project_id = p_project_id AND p_project_id IS NOT NULL)
++          )
++    );
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION app_principal_has_role(uuid, text[]) TO kanban_app, app_rls_reader, kanban_migrator;
++
++CREATE OR REPLACE FUNCTION app_current_workspace_id()
++RETURNS uuid
++LANGUAGE sql
++STABLE PARALLEL SAFE
++AS $$ SELECT NULLIF(current_setting('app.workspace_id', true), '')::uuid $$;
++
++GRANT EXECUTE ON FUNCTION app_current_workspace_id() TO kanban_app, app_rls_reader, kanban_migrator;
++
++DROP FUNCTION IF EXISTS app_credential_capability_mask();
++DROP FUNCTION IF EXISTS app_credential_projects();
++DROP FUNCTION IF EXISTS app_credential_workspaces();
+diff --git a/database/migrations/sql/p6_04_enforce_credential_boundary_rls_gucs.up.sql b/database/migrations/sql/p6_04_enforce_credential_boundary_rls_gucs.up.sql
+new file mode 100644
+index 00000000..287c6407
+--- /dev/null
++++ b/database/migrations/sql/p6_04_enforce_credential_boundary_rls_gucs.up.sql
+@@ -0,0 +1,229 @@
++-- Copyright 2026 Kanban Platform Contributors
++-- Apache-2.0 License. See LICENSE for details.
++
++-- KB-SEC-05: Enforce CredentialBoundary in PostgreSQL FORCE RLS Session GUCs
++
++-- 1. Credential Boundary Session GUC Helper Functions
++CREATE OR REPLACE FUNCTION app_credential_workspaces()
++RETURNS uuid[]
++LANGUAGE sql
++STABLE PARALLEL SAFE
++AS $$
++    SELECT CASE
++        WHEN NULLIF(current_setting('app.credential_workspaces', true), '') IS NULL THEN NULL
++        ELSE string_to_array(current_setting('app.credential_workspaces', true), ',')::uuid[]
++    END;
++$$;
++
++CREATE OR REPLACE FUNCTION app_credential_projects()
++RETURNS uuid[]
++LANGUAGE sql
++STABLE PARALLEL SAFE
++AS $$
++    SELECT CASE
++        WHEN NULLIF(current_setting('app.credential_projects', true), '') IS NULL THEN NULL
++        ELSE string_to_array(current_setting('app.credential_projects', true), ',')::uuid[]
++    END;
++$$;
++
++CREATE OR REPLACE FUNCTION app_credential_capability_mask()
++RETURNS integer
++LANGUAGE sql
++STABLE PARALLEL SAFE
++AS $$
++    SELECT NULLIF(current_setting('app.credential_capability_mask', true), '')::integer;
++$$;
++
++GRANT EXECUTE ON FUNCTION app_credential_workspaces() TO kanban_app, app_rls_reader, kanban_migrator;
++GRANT EXECUTE ON FUNCTION app_credential_projects() TO kanban_app, app_rls_reader, kanban_migrator;
++GRANT EXECUTE ON FUNCTION app_credential_capability_mask() TO kanban_app, app_rls_reader, kanban_migrator;
++
++ALTER FUNCTION app_credential_workspaces() OWNER TO kanban_migrator;
++ALTER FUNCTION app_credential_projects() OWNER TO kanban_migrator;
++ALTER FUNCTION app_credential_capability_mask() OWNER TO kanban_migrator;
++
++-- 2. Upgrade app_current_workspace_id() to enforce app.credential_workspaces allowlist
++CREATE OR REPLACE FUNCTION app_current_workspace_id()
++RETURNS uuid
++LANGUAGE sql
++STABLE PARALLEL SAFE
++AS $$
++    SELECT CASE
++        WHEN NULLIF(current_setting('app.workspace_id', true), '') IS NULL THEN NULL
++        WHEN NULLIF(current_setting('app.credential_workspaces', true), '') IS NOT NULL
++             AND NOT (NULLIF(current_setting('app.workspace_id', true), '')::uuid = ANY(string_to_array(current_setting('app.credential_workspaces', true), ',')::uuid[]))
++             THEN NULL
++        ELSE NULLIF(current_setting('app.workspace_id', true), '')::uuid
++    END;
++$$;
++
++GRANT EXECUTE ON FUNCTION app_current_workspace_id() TO kanban_app, app_rls_reader, kanban_migrator;
++
++-- 3. Upgrade app_principal_has_role to enforce app.credential_projects allowlist
++CREATE OR REPLACE FUNCTION app_principal_has_role(p_project_id uuid, p_roles text[])
++RETURNS boolean
++LANGUAGE plpgsql
++STABLE SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_pset uuid[];
++    v_ws uuid;
++    v_cred_projs_str text;
++BEGIN
++    v_pset := app_effective_principal_set();
++    IF cardinality(v_pset) = 0 THEN
++        RETURN FALSE;
++    END IF;
++
++    v_ws := app_current_workspace_id();
++    IF v_ws IS NULL THEN
++        RETURN FALSE;
++    END IF;
++
++    IF p_project_id IS NOT NULL THEN
++        v_cred_projs_str := NULLIF(current_setting('app.credential_projects', true), '');
++        IF v_cred_projs_str IS NOT NULL THEN
++            IF NOT (p_project_id = ANY (string_to_array(v_cred_projs_str, ',')::uuid[])) THEN
++                RETURN FALSE;
++            END IF;
++        END IF;
++    END IF;
++
++    RETURN EXISTS (
++        SELECT 1
++        FROM role_bindings rb
++        WHERE rb.principal_id = ANY (v_pset)
++          AND rb.workspace_id = v_ws
++          AND rb.role::text = ANY (p_roles)
++          AND (
++              rb.scope_type = 'server'
++              OR rb.scope_type = 'workspace'
++              OR (rb.scope_type = 'project' AND rb.project_id = p_project_id AND p_project_id IS NOT NULL)
++          )
++    );
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION app_principal_has_role(uuid, text[]) TO kanban_app, app_rls_reader, kanban_migrator;
++
++-- 4. Upgrade app_has_object_capability to enforce capability_mask and project allowlist
++CREATE OR REPLACE FUNCTION app_has_object_capability(p_object_id uuid, p_mask integer)
++RETURNS boolean
++LANGUAGE plpgsql
++STABLE PARALLEL SAFE SECURITY DEFINER
++SET search_path = pg_catalog, public
++AS $$
++DECLARE
++    v_human_pset uuid[];
++    v_agent_pset uuid[];
++    v_agent_id_str text;
++    v_eph_proj text;
++    v_obj_proj uuid;
++    v_obj_type text;
++    v_cred_mask_str text;
++    v_cred_mask integer;
++    v_cred_projs_str text;
++    v_cur_ws uuid;
++BEGIN
++    -- 1. Capability mask check when app.credential_capability_mask is set
++    v_cred_mask_str := NULLIF(current_setting('app.credential_capability_mask', true), '');
++    IF v_cred_mask_str IS NOT NULL THEN
++        v_cred_mask := v_cred_mask_str::integer;
++        IF (v_cred_mask & p_mask) <> p_mask THEN
++            RETURN FALSE;
++        END IF;
++    END IF;
++
++    -- 2. Workspace check (fail closed if app_current_workspace_id() is null or outside credential_workspaces)
++    v_cur_ws := app_current_workspace_id();
++    IF v_cur_ws IS NULL THEN
++        RETURN FALSE;
++    END IF;
++
++    -- 3. Ephemeral project pin check when app.ephemeral_project_id is set
++    v_eph_proj := NULLIF(current_setting('app.ephemeral_project_id', true), '');
++    IF v_eph_proj IS NOT NULL THEN
++        SELECT project_id, object_type::text INTO v_obj_proj, v_obj_type FROM objects WHERE id = p_object_id;
++        IF NOT FOUND THEN
++            RETURN FALSE;
++        END IF;
++        IF v_obj_type = 'project' THEN
++            IF p_object_id <> v_eph_proj::uuid THEN
++                RETURN FALSE;
++            END IF;
++        ELSIF v_obj_proj IS NULL OR v_obj_proj <> v_eph_proj::uuid THEN
++            RETURN FALSE;
++        END IF;
++    END IF;
++
++    -- 4. Credential project allowlist check when app.credential_projects is set
++    v_cred_projs_str := NULLIF(current_setting('app.credential_projects', true), '');
++    IF v_cred_projs_str IS NOT NULL THEN
++        IF v_obj_proj IS NULL AND v_obj_type IS NULL THEN
++            SELECT project_id, object_type::text INTO v_obj_proj, v_obj_type FROM objects WHERE id = p_object_id;
++            IF NOT FOUND THEN
++                RETURN FALSE;
++            END IF;
++        END IF;
++        IF v_obj_type = 'project' THEN
++            IF NOT (p_object_id = ANY (string_to_array(v_cred_projs_str, ',')::uuid[])) THEN
++                RETURN FALSE;
++            END IF;
++        ELSIF v_obj_proj IS NOT NULL THEN
++            IF NOT (v_obj_proj = ANY (string_to_array(v_cred_projs_str, ',')::uuid[])) THEN
++                RETURN FALSE;
++            END IF;
++        END IF;
++    END IF;
++
++    -- 5. Human principal capability check
++    v_human_pset := app_effective_principal_set();
++    IF cardinality(v_human_pset) = 0 THEN
++        RETURN FALSE;
++    END IF;
++
++    IF NOT EXISTS (
++        SELECT 1 FROM effective_resource_access era
++        WHERE era.object_id = p_object_id
++          AND era.workspace_id = v_cur_ws
++          AND era.principal_id = ANY (v_human_pset)
++          AND (era.allow_mask & p_mask) = p_mask
++          AND (era.deny_mask  & p_mask) = 0
++    ) THEN
++        RETURN FALSE;
++    END IF;
++
++    -- 6. Agent capability check (OBO intersection) when app.agent_principal_id is set
++    v_agent_id_str := NULLIF(current_setting('app.agent_principal_id', true), '');
++    IF v_agent_id_str IS NOT NULL THEN
++        v_agent_pset := app_effective_principal_set_for(v_agent_id_str::uuid);
++        IF cardinality(v_agent_pset) = 0 THEN
++            RETURN FALSE;
++        END IF;
++
++        IF NOT EXISTS (
++            SELECT 1 FROM effective_resource_access era
++            WHERE era.object_id = p_object_id
++              AND era.workspace_id = v_cur_ws
++              AND era.principal_id = ANY (v_agent_pset)
++              AND (era.allow_mask & p_mask) = p_mask
++              AND (era.deny_mask  & p_mask) = 0
++        ) THEN
++            RETURN FALSE;
++        END IF;
++    END IF;
++
++    RETURN TRUE;
++END;
++$$;
++
++GRANT EXECUTE ON FUNCTION app_has_object_capability(uuid, integer) TO kanban_app, app_rls_reader, kanban_migrator;
++
++-- 5. Upgrade objects_select_rls to route through app_has_object_capability
++DROP POLICY IF EXISTS objects_select_rls ON objects;
++CREATE POLICY objects_select_rls ON objects
++    FOR SELECT USING (
++        workspace_id = app_current_workspace_id()
++        AND app_has_object_capability(id, 1)
++    );
+diff --git a/database/migrations/versions/p6_04_enforce_credential_boundary_rls_gucs.py b/database/migrations/versions/p6_04_enforce_credential_boundary_rls_gucs.py
+new file mode 100644
+index 00000000..668606d9
+--- /dev/null
++++ b/database/migrations/versions/p6_04_enforce_credential_boundary_rls_gucs.py
+@@ -0,0 +1,28 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Enforce credential boundary rls gucs.
++
++Revision ID: p6_04_enforce_credential_boundary_rls_gucs
++Revises: p6_03_multi_source_imports_and_aliases
++Create Date: 2026-11-22 17:48:39.000000
++"""
++
++from collections.abc import Sequence
++
++from database.migrations.sqlfile import execute_sql_file
++
++# revision identifiers, used by Alembic.
++revision: str = "p6_04_enforce_credential_boundary_rls_gucs"
++down_revision: str | None = "p6_03_multi_source_imports_and_aliases"
++branch_labels: str | Sequence[str] | None = None
++depends_on: str | Sequence[str] | None = None
++
++
++def upgrade() -> None:
++    """Apply p6_04_enforce_credential_boundary_rls_gucs migration."""
++    execute_sql_file("p6_04_enforce_credential_boundary_rls_gucs.up.sql")
++
++
++def downgrade() -> None:
++    """Revert p6_04_enforce_credential_boundary_rls_gucs migration."""
++    execute_sql_file("p6_04_enforce_credential_boundary_rls_gucs.down.sql")
+diff --git a/database/rls/__init__.py b/database/rls/__init__.py
+new file mode 100644
+index 00000000..2ccead4b
+--- /dev/null
++++ b/database/rls/__init__.py
+@@ -0,0 +1,19 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""RLS context package."""
++
++from database.rls.context import (
++    RLSContext,
++    RLSContextError,
++    RLSRoleViolationError,
++    UnboundRLSSessionError,
++    bind_rls_context,
++)
++
++__all__ = [
++    "RLSContext",
++    "RLSContextError",
++    "RLSRoleViolationError",
++    "UnboundRLSSessionError",
++    "bind_rls_context",
++]
+diff --git a/database/rls/context.py b/database/rls/context.py
+new file mode 100644
+index 00000000..3995a34d
+--- /dev/null
++++ b/database/rls/context.py
+@@ -0,0 +1,179 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""RLS session context management and PostgreSQL SET LOCAL binding."""
++
++from __future__ import annotations
++
++import re
++import uuid
++from dataclasses import dataclass
++from typing import TYPE_CHECKING, Any, Literal
++
++from sqlalchemy import text
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++__all__ = [
++    "RLSContext",
++    "RLSContextError",
++    "RLSRoleViolationError",
++    "UnboundRLSSessionError",
++    "bind_rls_context",
++]
++
++_SCOPE_REGEX = re.compile(r"^[a-z0-9][a-z0-9:._-]{0,63}$")
++
++
++class RLSContextError(RuntimeError):
++    """Base exception for RLS context and session binding violations."""
++
++
++class UnboundRLSSessionError(RLSContextError):
++    """Raised when an ORM query is attempted on a session lacking RLS context binding."""
++
++
++class RLSRoleViolationError(RLSContextError):
++    """Raised when the connected database role has SUPERUSER or BYPASSRLS privileges."""
++
++
++@dataclass(frozen=True, slots=True)
++class RLSContext:
++    """Immutable security context bound to PostgreSQL session variables via SET LOCAL."""
++
++    principal_id: uuid.UUID
++    workspace_id: uuid.UUID
++    token_scopes: tuple[str, ...] = ()
++    aal_level: Literal[1, 2] = 1
++    user_access_hash: bytes | str | None = None
++    agent_principal_id: uuid.UUID | None = None
++    ephemeral_project_id: uuid.UUID | None = None
++    read_only: bool = False
++    credential_workspaces: tuple[uuid.UUID, ...] | frozenset[uuid.UUID] = ()
++    credential_projects: tuple[uuid.UUID, ...] | frozenset[uuid.UUID] = ()
++    credential_capability_mask: int | None = None
++    credential_boundary: Any = None
++
++    def _validate_aal_and_scopes(self) -> None:
++        if self.aal_level not in (1, 2):
++            msg = f"Invalid aal_level: {self.aal_level} (must be 1 or 2)"
++            raise ValueError(msg)
++
++        raw_scopes: object = self.token_scopes
++        if not isinstance(raw_scopes, tuple):
++            if not hasattr(raw_scopes, "__iter__"):
++                msg = f"Token scopes must be an iterable (got {type(raw_scopes).__name__})"
++                raise TypeError(msg)
++            converted: tuple[object, ...] = tuple(raw_scopes)
++            object.__setattr__(self, "token_scopes", converted)
++            raw_scopes = converted
++
++        for scope in raw_scopes:
++            if not isinstance(scope, str):
++                msg = f"Token scope must be a string (got {type(scope).__name__})"
++                raise TypeError(msg)
++            if "," in scope or any(c.isspace() for c in scope) or not _SCOPE_REGEX.match(scope):
++                msg = f"Invalid token scope: {scope!r}"
++                raise ValueError(msg)
++
++    def _normalize_credential_boundary(self) -> None:
++        cb = self.credential_boundary
++        if cb is not None:
++            if not self.credential_workspaces and hasattr(cb, "workspace_allowlist"):
++                ws_allow = cb.workspace_allowlist
++                if ws_allow:
++                    object.__setattr__(self, "credential_workspaces", tuple(ws_allow))
++            if not self.credential_projects and hasattr(cb, "project_allowlist"):
++                proj_allow = cb.project_allowlist
++                if proj_allow:
++                    object.__setattr__(self, "credential_projects", tuple(proj_allow))
++            if self.credential_capability_mask is None and hasattr(cb, "capability_mask"):
++                object.__setattr__(self, "credential_capability_mask", cb.capability_mask)
++
++        ws_tuple: tuple[uuid.UUID, ...] = tuple(
++            w if isinstance(w, uuid.UUID) else uuid.UUID(str(w))  # type: ignore[redundant-expr]
++            for w in (self.credential_workspaces or ())
++        )
++        object.__setattr__(self, "credential_workspaces", ws_tuple)
++
++        proj_tuple: tuple[uuid.UUID, ...] = tuple(
++            p if isinstance(p, uuid.UUID) else uuid.UUID(str(p))  # type: ignore[redundant-expr]
++            for p in (self.credential_projects or ())
++        )
++        object.__setattr__(self, "credential_projects", proj_tuple)
++
++        if self.credential_capability_mask is not None:
++            object.__setattr__(
++                self,
++                "credential_capability_mask",
++                int(self.credential_capability_mask),
++            )
++
++    def __post_init__(self) -> None:
++        """Validate aal_level, token scopes, and normalize credential boundary attributes."""
++        self._validate_aal_and_scopes()
++        self._normalize_credential_boundary()
++
++
++async def bind_rls_context(session: AsyncSession, ctx: RLSContext) -> None:
++    """Bind RLS session context variables using SET LOCAL within an active transaction."""
++    if not session.in_transaction():
++        msg = "bind_rls_context requires an active transaction"
++        raise RLSContextError(msg)
++
++    session.info["_binding_in_progress"] = True
++    try:
++        user_hash_val = ""
++        if ctx.user_access_hash is not None:
++            if isinstance(ctx.user_access_hash, bytes):
++                user_hash_val = ctx.user_access_hash.hex()
++            else:
++                user_hash_val = str(ctx.user_access_hash)
++
++        ws_list = (
++            ",".join(str(w) for w in ctx.credential_workspaces) if ctx.credential_workspaces else ""
++        )
++        proj_list = (
++            ",".join(str(p) for p in ctx.credential_projects) if ctx.credential_projects else ""
++        )
++        cap_mask_str = (
++            str(ctx.credential_capability_mask)
++            if ctx.credential_capability_mask is not None
++            else ""
++        )
++
++        stmt = text(
++            "SELECT set_config('app.principal_id', :principal_id, true), "
++            "set_config('app.workspace_id', :workspace_id, true), "
++            "set_config('app.token_scopes', :token_scopes, true), "
++            "set_config('app.aal_level', :aal_level, true), "
++            "set_config('app.user_access_hash', :user_access_hash, true), "
++            "set_config('app.agent_principal_id', :agent_principal_id, true), "
++            "set_config('app.ephemeral_project_id', :ephemeral_project_id, true), "
++            "set_config('app.credential_workspaces', :credential_workspaces, true), "
++            "set_config('app.credential_projects', :credential_projects, true), "
++            "set_config('app.credential_capability_mask', :credential_capability_mask, true)"
++        )
++        params = {
++            "principal_id": str(ctx.principal_id),
++            "workspace_id": str(ctx.workspace_id),
++            "token_scopes": ",".join(ctx.token_scopes),
++            "aal_level": str(ctx.aal_level),
++            "user_access_hash": user_hash_val,
++            "agent_principal_id": (
++                str(ctx.agent_principal_id) if ctx.agent_principal_id is not None else ""
++            ),
++            "ephemeral_project_id": (
++                str(ctx.ephemeral_project_id) if ctx.ephemeral_project_id is not None else ""
++            ),
++            "credential_workspaces": ws_list,
++            "credential_projects": proj_list,
++            "credential_capability_mask": cap_mask_str,
++        }
++        await session.execute(stmt, params)
++        if ctx.read_only:
++            await session.execute(text("SET LOCAL TRANSACTION READ ONLY"))
++        session.info["rls_bound"] = True
++        session.info["rls_context"] = ctx
++    finally:
++        session.info.pop("_binding_in_progress", None)
+diff --git a/database/session.py b/database/session.py
+index 41bce56a..aabed262 100644
+--- a/database/session.py
++++ b/database/session.py
+@@ -1,11 +1,8 @@
+ """RLS session binding, context management, and fail-closed security guards."""
+ 
+-import re
+-import uuid
+ from collections.abc import AsyncIterator
+ from contextlib import asynccontextmanager
+-from dataclasses import dataclass
+-from typing import Any, Literal
++from typing import Any
+ 
+ from sqlalchemy import event, text
+ from sqlalchemy.ext.asyncio import (
+@@ -16,102 +13,25 @@ from sqlalchemy.ext.asyncio import (
+ )
+ from sqlalchemy.orm import ORMExecuteState, Session, SessionTransaction
+ 
+-_SCOPE_REGEX = re.compile(r"^[a-z0-9][a-z0-9:._-]{0,63}$")
+-
+-
+-class RLSContextError(RuntimeError):
+-    """Base exception for RLS context and session binding violations."""
+-
+-
+-class UnboundRLSSessionError(RLSContextError):
+-    """Raised when an ORM query is attempted on a session lacking RLS context binding."""
+-
+-
+-class RLSRoleViolationError(RLSContextError):
+-    """Raised when the connected database role has SUPERUSER or BYPASSRLS privileges."""
+-
+-
+-@dataclass(frozen=True, slots=True)
+-class RLSContext:
+-    """Immutable security context bound to PostgreSQL session variables via SET LOCAL."""
+-
+-    principal_id: uuid.UUID
+-    workspace_id: uuid.UUID
+-    token_scopes: tuple[str, ...] = ()
+-    aal_level: Literal[1, 2] = 1
+-    user_access_hash: bytes | str | None = None
+-    agent_principal_id: uuid.UUID | None = None
+-    ephemeral_project_id: uuid.UUID | None = None
+-    read_only: bool = False
+-
+-    def __post_init__(self) -> None:
+-        """Validate aal_level and token scope formatting constraints."""
+-        if self.aal_level not in (1, 2):
+-            msg = f"Invalid aal_level: {self.aal_level} (must be 1 or 2)"
+-            raise ValueError(msg)
+-
+-        raw_scopes: object = self.token_scopes
+-        if not isinstance(raw_scopes, tuple):
+-            if not hasattr(raw_scopes, "__iter__"):
+-                msg = f"Token scopes must be an iterable (got {type(raw_scopes).__name__})"
+-                raise TypeError(msg)
+-            converted: tuple[object, ...] = tuple(raw_scopes)
+-            object.__setattr__(self, "token_scopes", converted)
+-            raw_scopes = converted
+-
+-        for scope in raw_scopes:
+-            if not isinstance(scope, str):
+-                msg = f"Token scope must be a string (got {type(scope).__name__})"
+-                raise TypeError(msg)
+-            if "," in scope or any(c.isspace() for c in scope) or not _SCOPE_REGEX.match(scope):
+-                msg = f"Invalid token scope: {scope!r}"
+-                raise ValueError(msg)
+-
+-
+-async def bind_rls_context(session: AsyncSession, ctx: RLSContext) -> None:
+-    """Bind RLS session context variables using SET LOCAL within an active transaction."""
+-    if not session.in_transaction():
+-        msg = "bind_rls_context requires an active transaction"
+-        raise RLSContextError(msg)
++from database.rls.context import (
++    RLSContext,
++    RLSContextError,
++    RLSRoleViolationError,
++    UnboundRLSSessionError,
++    bind_rls_context,
++)
+ 
+-    session.info["_binding_in_progress"] = True
+-    try:
+-        user_hash_val = ""
+-        if ctx.user_access_hash is not None:
+-            if isinstance(ctx.user_access_hash, bytes):
+-                user_hash_val = ctx.user_access_hash.hex()
+-            else:
+-                user_hash_val = str(ctx.user_access_hash)
+-
+-        stmt = text(
+-            "SELECT set_config('app.principal_id', :principal_id, true), "
+-            "set_config('app.workspace_id', :workspace_id, true), "
+-            "set_config('app.token_scopes', :token_scopes, true), "
+-            "set_config('app.aal_level', :aal_level, true), "
+-            "set_config('app.user_access_hash', :user_access_hash, true), "
+-            "set_config('app.agent_principal_id', :agent_principal_id, true), "
+-            "set_config('app.ephemeral_project_id', :ephemeral_project_id, true)"
+-        )
+-        params = {
+-            "principal_id": str(ctx.principal_id),
+-            "workspace_id": str(ctx.workspace_id),
+-            "token_scopes": ",".join(ctx.token_scopes),
+-            "aal_level": str(ctx.aal_level),
+-            "user_access_hash": user_hash_val,
+-            "agent_principal_id": (
+-                str(ctx.agent_principal_id) if ctx.agent_principal_id is not None else ""
+-            ),
+-            "ephemeral_project_id": (
+-                str(ctx.ephemeral_project_id) if ctx.ephemeral_project_id is not None else ""
+-            ),
+-        }
+-        await session.execute(stmt, params)
+-        if ctx.read_only:
+-            await session.execute(text("SET LOCAL TRANSACTION READ ONLY"))
+-        session.info["rls_bound"] = True
+-        session.info["rls_context"] = ctx
+-    finally:
+-        session.info.pop("_binding_in_progress", None)
++__all__ = [
++    "RLSAsyncSession",
++    "RLSContext",
++    "RLSContextError",
++    "RLSRoleViolationError",
++    "RLSSessionFactory",
++    "RLSSyncSession",
++    "UnboundRLSSessionError",
++    "bind_rls_context",
++    "create_rls_engine",
++]
+ 
+ 
+ class RLSSyncSession(Session):
+diff --git a/database/tests/migrations/test_p6_04_enforce_credential_boundary_rls_gucs_migration.py b/database/tests/migrations/test_p6_04_enforce_credential_boundary_rls_gucs_migration.py
+new file mode 100644
+index 00000000..484c8d94
+--- /dev/null
++++ b/database/tests/migrations/test_p6_04_enforce_credential_boundary_rls_gucs_migration.py
+@@ -0,0 +1,24 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Migration lifecycle test for p6_04_enforce_credential_boundary_rls_gucs."""
++
++import pytest
++
++from database.tests.migration_harness import MigrationHarness
++
++
++@pytest.mark.migration
++async def test_p6_04_enforce_credential_boundary_rls_gucs_migration_lifecycle() -> None:
++    """Verify p6_04_enforce_credential_boundary_rls_gucs upgrade and downgrade revert cleanly."""
++    async with MigrationHarness() as harness:
++        prev_rev = harness.previous_of("p6_04_enforce_credential_boundary_rls_gucs")
++        assert prev_rev == "p6_03_multi_source_imports_and_aliases"
++
++        # 1. Upgrade to p6_04_enforce_credential_boundary_rls_gucs
++        await harness.upgrade("p6_04_enforce_credential_boundary_rls_gucs")
++
++        # 2. Downgrade to previous revision
++        await harness.downgrade(prev_rev)
++
++        # 3. Upgrade back to head
++        await harness.upgrade("p6_04_enforce_credential_boundary_rls_gucs")
+diff --git a/database/tests/test_rls_credential_boundary.py b/database/tests/test_rls_credential_boundary.py
+new file mode 100644
+index 00000000..8bc7805a
+--- /dev/null
++++ b/database/tests/test_rls_credential_boundary.py
+@@ -0,0 +1,386 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Comprehensive unit and integration tests for PostgreSQL FORCE RLS CredentialBoundary GUCs.
++
++Validates KB-SEC-05 Action 1:
++1. RLSContext and bind_rls_context credential parameter binding.
++2. app.credential_workspaces, app.credential_projects, app.credential_capability_mask GUCs.
++3. SQL helper functions: app_credential_workspaces, app_credential_projects,
++   app_credential_capability_mask.
++4. Fail-closed row-level security enforcement for workspace allowlists, project allowlists,
++   and capability bitmasks.
++"""
++
++from __future__ import annotations
++
++import uuid
++from typing import TYPE_CHECKING
++from unittest.mock import MagicMock
++
++import pytest
++from sqlalchemy import text
++from sqlalchemy.exc import SQLAlchemyError
++
++from database.rls.context import (
++    RLSContext,
++    bind_rls_context,
++)
++from database.tests.test_p1_14_rls_policies import (
++    _create_issue,
++    _create_project,
++    _create_user,
++    _create_workspace,
++)
++
++_CAP_VIEW = 1
++_CAP_EDIT = 4
++_CAP_TRANSITION = 8
++_CAP_DELETE = 128
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncSession
++
++
++def test_rls_context_credential_boundary_initialization() -> None:
++    """Verify RLSContext accepts and normalizes credential boundary parameters."""
++    p_id = uuid.uuid4()
++    w_id = uuid.uuid4()
++    ws1 = uuid.uuid4()
++    proj1 = uuid.uuid4()
++
++    # 1. Direct tuple parameters
++    ctx = RLSContext(
++        principal_id=p_id,
++        workspace_id=w_id,
++        credential_workspaces=(ws1,),
++        credential_projects=(proj1,),
++        credential_capability_mask=15,
++    )
++    assert ctx.credential_workspaces == (ws1,)
++    assert ctx.credential_projects == (proj1,)
++    assert ctx.credential_capability_mask == 15
++
++    # 2. String conversion in tuples
++    ctx_str = RLSContext(
++        principal_id=p_id,
++        workspace_id=w_id,
++        credential_workspaces=(str(ws1),),  # type: ignore[arg-type]
++        credential_projects=(str(proj1),),  # type: ignore[arg-type]
++        credential_capability_mask="7",  # type: ignore[arg-type]
++    )
++    assert ctx_str.credential_workspaces == (ws1,)
++    assert ctx_str.credential_projects == (proj1,)
++    assert ctx_str.credential_capability_mask == 7
++
++    # 3. Duck-typed CredentialBoundary object ingestion
++    boundary_mock = MagicMock()
++    boundary_mock.workspace_allowlist = frozenset({ws1})
++    boundary_mock.project_allowlist = frozenset({proj1})
++    boundary_mock.capability_mask = 31
++
++    ctx_boundary = RLSContext(
++        principal_id=p_id,
++        workspace_id=w_id,
++        credential_boundary=boundary_mock,
++    )
++    assert ws1 in ctx_boundary.credential_workspaces
++    assert proj1 in ctx_boundary.credential_projects
++    assert ctx_boundary.credential_capability_mask == 31
++
++
++async def test_bind_rls_context_sets_credential_gucs(app_session: AsyncSession) -> None:
++    """Verify bind_rls_context binds app.credential_* session GUCs via SET LOCAL."""
++    p_id = uuid.uuid4()
++    w_id = uuid.uuid4()
++    ws1 = uuid.uuid4()
++    ws2 = uuid.uuid4()
++    proj1 = uuid.uuid4()
++
++    ctx = RLSContext(
++        principal_id=p_id,
++        workspace_id=w_id,
++        credential_workspaces=(ws1, ws2),
++        credential_projects=(proj1,),
++        credential_capability_mask=_CAP_VIEW | _CAP_EDIT,
++    )
++
++    await bind_rls_context(app_session, ctx)
++
++    # Inspect current_setting values
++    res_ws = await app_session.scalar(
++        text("SELECT current_setting('app.credential_workspaces', true)")
++    )
++    assert str(ws1) in str(res_ws)
++    assert str(ws2) in str(res_ws)
++
++    res_proj = await app_session.scalar(
++        text("SELECT current_setting('app.credential_projects', true)")
++    )
++    assert str(res_proj) == str(proj1)
++
++    res_mask = await app_session.scalar(
++        text("SELECT current_setting('app.credential_capability_mask', true)")
++    )
++    assert str(res_mask) == str(_CAP_VIEW | _CAP_EDIT)
++
++    # Test SQL helper functions
++    helper_ws = await app_session.scalar(text("SELECT app_credential_workspaces()"))
++    assert set(helper_ws) == {ws1, ws2}
++
++    helper_proj = await app_session.scalar(text("SELECT app_credential_projects()"))
++    assert set(helper_proj) == {proj1}
++
++    helper_mask = await app_session.scalar(text("SELECT app_credential_capability_mask()"))
++    assert helper_mask == _CAP_VIEW | _CAP_EDIT
++
++
++async def test_rls_workspace_allowlist_enforcement(app_session: AsyncSession) -> None:
++    """Verify app.credential_workspaces restricts app_current_workspace_id fail-closed."""
++    await app_session.execute(text("RESET SESSION AUTHORIZATION"))
++    ws1 = await _create_workspace(app_session, name="Workspace 1")
++    ws2 = await _create_workspace(app_session, name="Workspace 2")
++    user_id, _ = await _create_user(app_session, ws1, display_name="Alice")
++
++    await app_session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
++
++    # 1. When session matches allowed workspace, app_current_workspace_id returns ws1
++    ctx_allowed = RLSContext(
++        principal_id=user_id,
++        workspace_id=ws1,
++        credential_workspaces=(ws1,),
++    )
++    await bind_rls_context(app_session, ctx_allowed)
++    cur_ws = await app_session.scalar(text("SELECT app_current_workspace_id()"))
++    assert cur_ws == ws1
++
++    # 2. When session targets ws2 outside allowed workspaces (ws1),
++    # app_current_workspace_id returns NULL
++    ctx_denied = RLSContext(
++        principal_id=user_id,
++        workspace_id=ws2,
++        credential_workspaces=(ws1,),
++    )
++    await bind_rls_context(app_session, ctx_denied)
++    cur_ws_denied = await app_session.scalar(text("SELECT app_current_workspace_id()"))
++    assert cur_ws_denied is None
++
++    # Workspace query returns 0 rows fail-closed
++    rows = (await app_session.execute(text("SELECT id FROM workspaces"))).scalars().all()
++    assert len(rows) == 0
++
++
++async def test_rls_project_allowlist_enforcement(app_session: AsyncSession) -> None:
++    """Verify app.credential_projects restricts visibility and capabilities to allowed projects."""
++    await app_session.execute(text("RESET SESSION AUTHORIZATION"))
++    ws_id = await _create_workspace(app_session, name="Project Scope WS")
++    user_id, _ = await _create_user(app_session, ws_id, display_name="Bob")
++
++    proj1_id, _, _ = await _create_project(
++        app_session, ws_id, user_id, identifier="PR1", name="Project 1"
++    )
++    proj2_id, _, _ = await _create_project(
++        app_session, ws_id, user_id, identifier="PR2", name="Project 2"
++    )
++
++    # Grant Workspace Admin to user so they would normally see all projects
++    await app_session.execute(
++        text(
++            "INSERT INTO role_bindings (principal_id, workspace_id, role, scope_type, project_id) "
++            "VALUES (:p_id, :ws_id, 'WORKSPACE_ADMIN', 'workspace', NULL)"
++        ),
++        {"p_id": user_id, "ws_id": ws_id},
++    )
++    await app_session.execute(
++        text("SELECT rebuild_effective_access_for_workspace(:ws_id)"),
++        {"ws_id": ws_id},
++    )
++
++    await app_session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
++
++    # 1. Unconstrained session sees both projects
++    ctx_full = RLSContext(
++        principal_id=user_id,
++        workspace_id=ws_id,
++    )
++    await bind_rls_context(app_session, ctx_full)
++    projs_full = (
++        (
++            await app_session.execute(
++                text("SELECT id FROM projects WHERE id IN (:p1, :p2)"),
++                {"p1": proj1_id, "p2": proj2_id},
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert set(projs_full) == {proj1_id, proj2_id}
++
++    # 2. Session bounded to proj1 sees only proj1
++    ctx_scoped = RLSContext(
++        principal_id=user_id,
++        workspace_id=ws_id,
++        credential_projects=(proj1_id,),
++    )
++    await bind_rls_context(app_session, ctx_scoped)
++
++    # Capability check
++    can_view_p1 = await app_session.scalar(
++        text("SELECT app_has_object_capability(:p_id, 1)"),
++        {"p_id": proj1_id},
++    )
++    assert can_view_p1 is True
++
++    can_view_p2 = await app_session.scalar(
++        text("SELECT app_has_object_capability(:p_id, 1)"),
++        {"p_id": proj2_id},
++    )
++    assert can_view_p2 is False
++
++    # Projects table query enforces project allowlist at SQL row level
++    projs_scoped = (
++        (
++            await app_session.execute(
++                text("SELECT id FROM projects WHERE id IN (:p1, :p2)"),
++                {"p1": proj1_id, "p2": proj2_id},
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert projs_scoped == [proj1_id]
++
++    # Objects table query enforces project allowlist at SQL row level
++    objs_scoped = (
++        (
++            await app_session.execute(
++                text("SELECT id FROM objects WHERE id IN (:p1, :p2)"),
++                {"p1": proj1_id, "p2": proj2_id},
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert objs_scoped == [proj1_id]
++
++    # Role check on proj2 returns false
++    has_p2_role = await app_session.scalar(
++        text("SELECT app_principal_has_role(:p_id, ARRAY['WORKSPACE_ADMIN', 'PROJECT_ADMIN'])"),
++        {"p_id": proj2_id},
++    )
++    assert has_p2_role is False
++
++
++async def test_rls_capability_mask_enforcement(app_session: AsyncSession) -> None:
++    """Verify app.credential_capability_mask enforces capability bitmask at SQL row level."""
++    await app_session.execute(text("RESET SESSION AUTHORIZATION"))
++    ws_id = await _create_workspace(app_session, name="Cap Mask WS")
++    user_id, _ = await _create_user(app_session, ws_id, display_name="Charlie")
++    proj_id, state_id, prio_id = await _create_project(
++        app_session, ws_id, user_id, identifier="CAP", name="Cap Project"
++    )
++
++    # Create issue in project
++    issue_id = await _create_issue(
++        app_session,
++        ws_id,
++        proj_id,
++        user_id,
++        state_id,
++        prio_id,
++        summary="Test Issue",
++    )
++
++    # Grant Workspace Admin to user
++    await app_session.execute(
++        text(
++            "INSERT INTO role_bindings (principal_id, workspace_id, role, scope_type, project_id) "
++            "VALUES (:p_id, :ws_id, 'WORKSPACE_ADMIN', 'workspace', NULL)"
++        ),
++        {"p_id": user_id, "ws_id": ws_id},
++    )
++    await app_session.execute(
++        text("SELECT rebuild_effective_access_for_workspace(:ws_id)"),
++        {"ws_id": ws_id},
++    )
++
++    await app_session.execute(text("SET LOCAL SESSION AUTHORIZATION kanban_app"))
++
++    # 1. Read-only capability mask (_CAP_VIEW = 1)
++    ctx_view_only = RLSContext(
++        principal_id=user_id,
++        workspace_id=ws_id,
++        credential_capability_mask=_CAP_VIEW,
++    )
++    await bind_rls_context(app_session, ctx_view_only)
++
++    can_view = await app_session.scalar(
++        text("SELECT app_has_object_capability(:id, 1)"), {"id": issue_id}
++    )
++    can_edit = await app_session.scalar(
++        text("SELECT app_has_object_capability(:id, 4)"), {"id": issue_id}
++    )
++    can_trans = await app_session.scalar(
++        text("SELECT app_has_object_capability(:id, 8)"), {"id": issue_id}
++    )
++    can_del = await app_session.scalar(
++        text("SELECT app_has_object_capability(:id, 128)"), {"id": issue_id}
++    )
++
++    assert can_view is True
++    assert can_edit is False
++    assert can_trans is False
++    assert can_del is False
++
++    # Issue is visible on SELECT
++    selected_issue = await app_session.scalar(
++        text("SELECT id FROM issues WHERE id = :id"), {"id": issue_id}
++    )
++    assert selected_issue == issue_id
++
++    # Direct UPDATE fails WITH CHECK because EDIT (4) capability is masked out
++    with pytest.raises(SQLAlchemyError) as exc_info:
++        async with app_session.begin_nested():
++            await app_session.execute(
++                text("UPDATE issues SET summary = 'Malicious Update' WHERE id = :id"),
++                {"id": issue_id},
++            )
++    assert "row-level security policy" in str(exc_info.value).lower()
++
++    # Direct DELETE fails because DELETE (128) capability is masked out in USING
++    del_res = await app_session.execute(
++        text("DELETE FROM issues WHERE id = :id"),
++        {"id": issue_id},
++    )
++    assert getattr(del_res, "rowcount", 0) == 0
++
++    # 2. Read + Edit capability mask (_CAP_VIEW | _CAP_EDIT = 5)
++    ctx_view_edit = RLSContext(
++        principal_id=user_id,
++        workspace_id=ws_id,
++        credential_capability_mask=_CAP_VIEW | _CAP_EDIT,
++    )
++    await bind_rls_context(app_session, ctx_view_edit)
++
++    can_view_2 = await app_session.scalar(
++        text("SELECT app_has_object_capability(:id, 1)"), {"id": issue_id}
++    )
++    can_edit_2 = await app_session.scalar(
++        text("SELECT app_has_object_capability(:id, 4)"), {"id": issue_id}
++    )
++    can_trans_2 = await app_session.scalar(
++        text("SELECT app_has_object_capability(:id, 8)"), {"id": issue_id}
++    )
++
++    assert can_view_2 is True
++    assert can_edit_2 is True
++    assert can_trans_2 is False
++
++    # UPDATE succeeds because EDIT capability is present in bitmask
++    await app_session.execute(
++        text("UPDATE issues SET summary = 'Permitted Update' WHERE id = :id"),
++        {"id": issue_id},
++    )
++    updated_summary = await app_session.scalar(
++        text("SELECT summary FROM issues WHERE id = :id"), {"id": issue_id}
++    )
++    assert updated_summary == "Permitted Update"
+diff --git a/mcp/auth.py b/mcp/auth.py
+index 9a278a97..8f8e9755 100644
+--- a/mcp/auth.py
++++ b/mcp/auth.py
+@@ -4,11 +4,13 @@
+ 
+ from __future__ import annotations
+ 
++import contextlib
+ import hashlib
+ import ipaddress
+ import logging
+ import os
+ import time
++import uuid
+ from collections import OrderedDict
+ from dataclasses import dataclass
+ from typing import TYPE_CHECKING, Any, Final
+@@ -27,7 +29,6 @@ from mcp.registry import Surface
+ from mcp.settings import McpSettings
+ 
+ if TYPE_CHECKING:
+-    import uuid
+     from collections.abc import Callable
+ 
+     from starlette.types import ASGIApp, Receive, Scope, Send
+@@ -140,10 +141,11 @@ class McpAuthContext:
+     allowed_project_keys: list[str] | None = None
+     allowed_workspace_ids: list[str] | None = None
+     allowed_project_ids: list[str] | None = None
+-    capability_mask: int = 7
++    capability_mask: int = 255
+     allowed_cidrs: list[str] | None = None
+     disabled_tools: frozenset[str] | None = None
+     aal_level: int = 2
++    credential_boundary: Any | None = None
+ 
+ 
+ class IntrospectionCache:
+@@ -465,24 +467,29 @@ class McpAuthMiddleware:
+                     self.cache.set(surface.value, digest, res_data, ttl_s=DEFAULT_CACHE_TTL_S)
+                 intro_result = res_data
+ 
+-        # Check CIDR restriction if configured on token
++        # Check CIDR restriction if configured on token (KB-SEC-05 Action 3)
+         allowed_cidrs = intro_result.get("allowed_cidrs")
+         if allowed_cidrs:
+-            client_ip = None
+-            xff = headers.get("x-forwarded-for")
+-            if xff:
+-                client_ip = xff.split(",")[0].strip()
+-            elif scope.get("client"):
+-                client_ip = scope["client"][0]
++            from kanban.security.client_ip import resolve_client_ip  # noqa: PLC0415
++
++            trusted_proxies = getattr(self.settings, "trusted_proxies", None)
++            if not trusted_proxies:
++                trusted_proxies = (
++                    os.environ.get("KANBAN_TRUSTED_PROXIES")
++                    or os.environ.get("KB_TRUSTED_PROXIES")
++                    or "127.0.0.1/32,::1/128"
++                )
++
++            client_ip = resolve_client_ip(scope, trusted_proxies=trusted_proxies)
+ 
+             if client_ip:
+                 try:
+-                    ip = ipaddress.ip_address(client_ip)
+-                    matched = False
+-                    for cidr_str in allowed_cidrs:
+-                        if ip in ipaddress.ip_network(str(cidr_str), strict=False):
+-                            matched = True
+-                            break
++                    clean_ip = client_ip.split("/")[0] if "/" in client_ip else client_ip
++                    ip = ipaddress.ip_address(clean_ip)
++                    matched = any(
++                        ip in ipaddress.ip_network(str(cidr_str), strict=False)
++                        for cidr_str in allowed_cidrs
++                    )
+                     if not matched:
+                         resp = JSONResponse(
+                             {
+@@ -536,6 +543,71 @@ class McpAuthMiddleware:
+             else None
+         )
+         aal = int(intro_result.get("aal_level", 2))
++        cap_mask_raw = intro_result.get("capability_mask")
++        cap_mask = int(cap_mask_raw) if cap_mask_raw is not None else 255
++        allowed_cidrs_tuple = tuple(str(c) for c in (allowed_cidrs or ()))
++
++        ws_set: set[uuid.UUID] = set()
++        if intro_result.get("allowed_workspace_ids"):
++            for w in intro_result["allowed_workspace_ids"]:
++                with contextlib.suppress(ValueError):
++                    ws_set.add(w if isinstance(w, uuid.UUID) else uuid.UUID(str(w)))
++        elif intro_result.get("workspace_id") and intro_result.get("scope_tier") in (
++            "workspace",
++            "project",
++        ):
++            with contextlib.suppress(ValueError):
++                w_val = intro_result["workspace_id"]
++                ws_set.add(w_val if isinstance(w_val, uuid.UUID) else uuid.UUID(str(w_val)))
++
++        proj_set: set[uuid.UUID] = set()
++        if intro_result.get("allowed_project_ids"):
++            for p in intro_result["allowed_project_ids"]:
++                with contextlib.suppress(ValueError):
++                    proj_set.add(p if isinstance(p, uuid.UUID) else uuid.UUID(str(p)))
++        elif intro_result.get("allowed_projects"):
++            for p in intro_result["allowed_projects"]:
++                with contextlib.suppress(ValueError):
++                    proj_set.add(p if isinstance(p, uuid.UUID) else uuid.UUID(str(p)))
++        if intro_result.get("project_id"):
++            with contextlib.suppress(ValueError):
++                p_val = intro_result["project_id"]
++                proj_set.add(p_val if isinstance(p_val, uuid.UUID) else uuid.UUID(str(p_val)))
++
++        exec_id_raw = intro_result.get("execution_id")
++        exec_id: uuid.UUID | None = None
++        if exec_id_raw:
++            with contextlib.suppress(ValueError):
++                exec_id = (
++                    exec_id_raw
++                    if isinstance(exec_id_raw, uuid.UUID)
++                    else uuid.UUID(str(exec_id_raw))
++                )
++
++        is_eph = (
++            token.startswith(RESERVED_EPHEMERAL_PREFIX)
++            or intro_result.get("token_kind") == "ephemeral"
++        )
++        resolved_scope_tier = (
++            "ephemeral" if is_eph else (intro_result.get("scope_tier") or "workspace")
++        )
++
++        from mcp.scoping import CredentialBoundary  # noqa: PLC0415
++
++        cred_boundary = CredentialBoundary(
++            scope_tier=resolved_scope_tier,
++            surface=surface.value,
++            workspace_allowlist=frozenset(ws_set),
++            project_allowlist=frozenset(proj_set),
++            capability_mask=cap_mask,
++            allowed_tools=allowed_tools_set,
++            allowed_cidrs=allowed_cidrs_tuple,
++            execution_id=exec_id,
++            has_aal2_provenance=(
++                surface == Surface.ADMIN and intro_result.get("token_kind") == "api_key"
++            ),
++        )
++
+         auth_context = McpAuthContext(
+             token=token,
+             token_sha256=digest,
+@@ -567,8 +639,9 @@ class McpAuthMiddleware:
+                 if intro_result.get("allowed_project_ids")
+                 else None
+             ),
+-            capability_mask=int(intro_result.get("capability_mask") or 7),
++            capability_mask=cap_mask,
+             allowed_cidrs=allowed_cidrs,
++            credential_boundary=cred_boundary,
+         )
+ 
+         mcp_actor = format_log_actor(
+diff --git a/mcp/protocol.py b/mcp/protocol.py
+index 153cfa38..77cb6c4d 100644
+--- a/mcp/protocol.py
++++ b/mcp/protocol.py
+@@ -637,6 +637,18 @@ class McpProtocolHandler:
+                 specs = [s for s in specs if s.name in auth_context.allowed_tools]
+             if auth_context.disabled_tools:
+                 specs = [s for s in specs if s.name not in auth_context.disabled_tools]
++            boundary = getattr(auth_context, "credential_boundary", None)
++            if boundary is not None and boundary.capability_mask is not None:
++                from mcp.scoping import get_required_tool_capability  # noqa: PLC0415
++
++                specs = [
++                    s
++                    for s in specs
++                    if (
++                        (int(boundary.capability_mask) & int(get_required_tool_capability(s.name)))
++                        == int(get_required_tool_capability(s.name))
++                    )
++                ]
+ 
+         tools_list: list[dict[str, Any]] = [
+             {
+@@ -728,6 +740,32 @@ class McpProtocolHandler:
+                     }
+                 )
+ 
++        # Enforce caller's CredentialBoundary (capability_mask, allowed_tools, allowlists)
++        if auth_context is not None:
++            boundary = getattr(auth_context, "credential_boundary", None)
++            if boundary is not None:
++                from mcp.scoping import (  # noqa: PLC0415
++                    enforce_credential_boundary_on_tool_call,
++                )
++
++                try:
++                    enforce_credential_boundary_on_tool_call(
++                        tool_name,
++                        arguments,
++                        boundary,
++                    )
++                except KbMcpError as boundary_err:
++                    return JSONResponse(
++                        {
++                            "jsonrpc": "2.0",
++                            "id": req_id,
++                            "result": {
++                                "content": [{"type": "text", "text": boundary_err.to_yaml()}],
++                                "isError": True,
++                            },
++                        }
++                    )
++
+         if spec is None:
+             avail_tools = [t.name for t in self.registry.list_specs()]
+             fuzzy_matches = difflib.get_close_matches(tool_name, avail_tools, n=3, cutoff=0.4)
+diff --git a/mcp/scoping.py b/mcp/scoping.py
+index ce0fb23f..c7c85748 100644
+--- a/mcp/scoping.py
++++ b/mcp/scoping.py
+@@ -6,9 +6,11 @@ from __future__ import annotations
+ 
+ import contextlib
+ import hashlib
++import ipaddress
+ import re
++import uuid
+ from dataclasses import dataclass
+-from enum import StrEnum
++from enum import IntFlag, StrEnum
+ from typing import TYPE_CHECKING, Any, Final
+ 
+ from mcp.errors import KbMcpError, McpErrorCode
+@@ -19,10 +21,15 @@ if TYPE_CHECKING:
+     from mcp.auth import McpAuthContext
+ 
+ __all__ = [
++    "TOOL_REQUIRED_CAPABILITIES",
++    "Capability",
+     "ConnectionScope",
++    "CredentialBoundary",
+     "ScopeMode",
+     "compute_session_fingerprint",
+     "enforce_connection_scope_on_tool_call",
++    "enforce_credential_boundary_on_tool_call",
++    "get_required_tool_capability",
+     "intersect_key_and_connection_scope",
+     "parse_connection_scope",
+ ]
+@@ -33,6 +40,82 @@ _PATH_WORKSPACE_RE: Final[re.Pattern[str]] = re.compile(
+ _ISSUE_KEY_REGEX: Final[re.Pattern[str]] = re.compile(r"^([A-Z][A-Z0-9]{0,9})-([0-9]+)$")
+ 
+ 
++class Capability(IntFlag):
++    """Granular capability bitmask matching S3.2 / KB-P1-13 bit positions."""
++
++    NONE = 0
++    VIEW = 1 << 0  # 1
++    COMMENT = 1 << 1  # 2
++    EDIT = 1 << 2  # 4
++    TRANSITION = 1 << 3  # 8
++    LINK = 1 << 4  # 16
++    SHARE = 1 << 5  # 32
++    ADMIN = 1 << 6  # 64
++    DELETE = 1 << 7  # 128
++    ALL = 0xFF  # 255
++
++
++@dataclass(frozen=True, slots=True)
++class CredentialBoundary:
++    """Immutable boundary enforcing scoping, surface, CIDR, and capability invariants."""
++
++    scope_tier: str = "workspace"
++    surface: str = "agent"
++    workspace_allowlist: frozenset[uuid.UUID] = frozenset()
++    project_allowlist: frozenset[uuid.UUID] = frozenset()
++    capability_mask: int = 255
++    allowed_tools: frozenset[str] | None = None
++    allowed_cidrs: tuple[str, ...] = ()
++    execution_id: uuid.UUID | None = None
++    has_aal2_provenance: bool = False
++
++    def allows_workspace(self, workspace_id: uuid.UUID | str | None) -> bool:
++        """Check whether the workspace is permitted under this credential boundary."""
++        if workspace_id is None:
++            return True
++        target = (
++            uuid.UUID(str(workspace_id))
++            if not isinstance(workspace_id, uuid.UUID)
++            else workspace_id
++        )
++        if self.workspace_allowlist:
++            return target in self.workspace_allowlist
++        return self.scope_tier == "global"
++
++    def allows_project(self, project_id: uuid.UUID | str | None) -> bool:
++        """Check whether the project is permitted under this credential boundary."""
++        if project_id is None:
++            return True
++        target = uuid.UUID(str(project_id)) if not isinstance(project_id, uuid.UUID) else project_id
++        if self.project_allowlist:
++            return target in self.project_allowlist
++        return self.scope_tier != "project"
++
++    def allows_ip(self, client_ip: str | None) -> bool:
++        """Check whether the client IP address is allowed under the CIDR allowlist."""
++        if not self.allowed_cidrs or not client_ip:
++            return True
++        try:
++            ip = ipaddress.ip_address(client_ip)
++            return any(
++                ip in ipaddress.ip_network(cidr, strict=False) for cidr in self.allowed_cidrs
++            )
++        except ValueError:
++            return False
++
++
++def _as_uuid(val: object) -> uuid.UUID | None:
++    """Safely convert value to UUID, returning None if unparseable."""
++    if val is None:
++        return None
++    if isinstance(val, uuid.UUID):
++        return val
++    try:
++        return uuid.UUID(str(val))
++    except (ValueError, AttributeError, TypeError):
++        return None
++
++
+ class ScopeMode(StrEnum):
+     """Connection scoping mode."""
+ 
+@@ -127,6 +210,56 @@ def parse_connection_scope(  # noqa: C901
+     return ConnectionScope(mode=ScopeMode.GLOBAL)
+ 
+ 
++def _validate_boundary_workspace(
++    boundary: CredentialBoundary | None,
++    scope: ConnectionScope,
++    auth_ctx: McpAuthContext,
++    *,
++    ws_match: bool,
++) -> None:
++    if boundary is not None and boundary.workspace_allowlist:
++        ws_uuid = (
++            _as_uuid(scope.workspace_id)
++            or (_as_uuid(auth_ctx.workspace_id) if ws_match else None)
++            or _as_uuid(scope.workspace_slug)
++        )
++        if ws_uuid is not None and not boundary.allows_workspace(ws_uuid):
++            msg = (
++                f"Requested workspace '{scope.workspace_slug}' is outside "
++                f"the scope boundary of this credential."
++            )
++            raise KbMcpError(
++                McpErrorCode.KEY_SCOPE_VIOLATION,
++                msg,
++                extra={"allowed_workspaces": [str(w) for w in boundary.workspace_allowlist]},
++                hint="Use an API key with global or appropriate workspace permissions.",
++            )
++
++
++def _validate_boundary_project(
++    boundary: CredentialBoundary | None,
++    scope: ConnectionScope,
++    auth_ctx: McpAuthContext,
++) -> None:
++    if boundary is not None and boundary.project_allowlist:
++        proj_uuid = (
++            _as_uuid(scope.project_id)
++            or _as_uuid(auth_ctx.project_id)
++            or _as_uuid(scope.project_key)
++        )
++        if proj_uuid is not None and not boundary.allows_project(proj_uuid):
++            msg = (
++                f"Requested project '{scope.project_key}' is outside "
++                f"the scope boundary of this credential."
++            )
++            raise KbMcpError(
++                McpErrorCode.KEY_SCOPE_VIOLATION,
++                msg,
++                extra={"allowed_projects": [str(p) for p in boundary.project_allowlist]},
++                hint="Use an API key with permissions for this project.",
++            )
++
++
+ def intersect_key_and_connection_scope(
+     auth_ctx: McpAuthContext,
+     scope: ConnectionScope,
+@@ -161,6 +294,10 @@ def intersect_key_and_connection_scope(
+         ws_match = (
+             bool(auth_ctx.workspace_slug) and auth_ctx.workspace_slug == scope.workspace_slug
+         ) or (bool(auth_ctx.workspace_id) and str(auth_ctx.workspace_id) == scope.workspace_slug)
++        _validate_boundary_workspace(
++            getattr(auth_ctx, "credential_boundary", None), scope, auth_ctx, ws_match=ws_match
++        )
++
+         has_boundary = bool(auth_ctx.workspace_slug or auth_ctx.workspace_id)
+         if token_tier != "global" and has_boundary and not ws_match:  # noqa: S105
+             msg = (
+@@ -198,6 +335,10 @@ def intersect_key_and_connection_scope(
+         ws_match = (
+             bool(auth_ctx.workspace_slug) and auth_ctx.workspace_slug == scope.workspace_slug
+         ) or (bool(auth_ctx.workspace_id) and str(auth_ctx.workspace_id) == scope.workspace_slug)
++        boundary = getattr(auth_ctx, "credential_boundary", None)
++        _validate_boundary_workspace(boundary, scope, auth_ctx, ws_match=ws_match)
++        _validate_boundary_project(boundary, scope, auth_ctx)
++
+         has_boundary = bool(auth_ctx.workspace_slug or auth_ctx.workspace_id)
+         if token_tier != "global" and has_boundary and not ws_match:  # noqa: S105
+             msg = (
+@@ -215,6 +356,7 @@ def intersect_key_and_connection_scope(
+                 extra={"allowed_workspaces": allowed_ws},
+                 hint="Use an API key with global or appropriate workspace permissions.",
+             )
++
+         proj_str = str(auth_ctx.project_id) if auth_ctx.project_id is not None else None
+         allowed_proj_keys = getattr(auth_ctx, "allowed_project_keys", None) or []
+         proj_match = (
+@@ -382,3 +524,210 @@ def enforce_connection_scope_on_tool_call(
+                         "or run in Global mode (/mcp/agent) to operate across projects."
+                     ),
+                 )
++
++
++TOOL_REQUIRED_CAPABILITIES: Final[dict[str, Capability]] = {
++    # Agent surface tools
++    "ping_agent": Capability.VIEW,
++    "search_tickets": Capability.VIEW,
++    "read_ticket": Capability.VIEW,
++    "create_ticket": Capability.EDIT,
++    "update_ticket": Capability.EDIT,
++    "begin_work": Capability.TRANSITION,
++    "transition_ticket": Capability.TRANSITION,
++    "complete_work": Capability.TRANSITION,
++    "add_comment": Capability.COMMENT,
++    "link_objects": Capability.LINK,
++    "test_agent_write": Capability.EDIT,
++    # Docs surface tools
++    "ping_docs": Capability.VIEW,
++    "search": Capability.VIEW,
++    "search_docs": Capability.VIEW,
++    "search_knowledge": Capability.VIEW,
++    "read_doc": Capability.VIEW,
++    "create": Capability.EDIT,
++    "update": Capability.EDIT,
++    "create_doc": Capability.EDIT,
++    "update_doc": Capability.EDIT,
++    "upsert_doc": Capability.EDIT,
++    "manage_stickies": Capability.EDIT,
++    "promote_sticky_to_doc": Capability.EDIT,
++    "link_knowledge": Capability.LINK,
++    # Admin surface tools
++    "destructive_lifecycle": Capability.DELETE,
++    "test_admin_destructive": Capability.DELETE,
++}
++
++_ADMIN_DESTRUCTIVE_ACTIONS: Final[frozenset[str]] = frozenset({"execute_delete", "detach"})
++_ADMIN_WRITE_PREFIXES: Final[tuple[str, ...]] = (
++    "create_",
++    "update_",
++    "set_",
++    "upsert_",
++    "provision_",
++    "bind_",
++    "unbind_",
++    "add_",
++    "remove_",
++    "attach",
++    "apply",
++    "plan",
++    "mint_",
++    "rotate_",
++)
++_ADMIN_WRITE_ACTIONS: Final[frozenset[str]] = frozenset(
++    {
++        "override_creator",
++        "override_hard_wip_move",
++        "unarchive_issue",
++        "run_audit",
++        "refresh_repo_binding",
++        "request_delete",
++        "restore",
++        "deactivate",
++        "reactivate",
++    }
++)
++
++
++def get_required_tool_capability(tool_name: str, action: str | None = None) -> Capability:
++    """Return the Capability bit required to dispatch the specified tool/action."""
++    if tool_name in TOOL_REQUIRED_CAPABILITIES:
++        return TOOL_REQUIRED_CAPABILITIES[tool_name]
++
++    if action:
++        act = str(action).strip().lower()
++        if act.startswith(("delete_", "purge_", "revoke_")) or act in _ADMIN_DESTRUCTIVE_ACTIONS:
++            return Capability.DELETE
++        if act.startswith(_ADMIN_WRITE_PREFIXES) or act in _ADMIN_WRITE_ACTIONS:
++            return Capability.ADMIN
++
++    return Capability.ADMIN
++
++
++def _check_boundary_allowed_tools(boundary: CredentialBoundary, tool_name: str) -> None:
++    allowed_tools = getattr(boundary, "allowed_tools", None)
++    if allowed_tools is None:
++        return
++
++    is_allowed = tool_name in allowed_tools
++    if not is_allowed and tool_name == "search":
++        is_allowed = bool({"search", "search_knowledge", "read_doc"}.intersection(allowed_tools))
++
++    if not is_allowed:
++        is_ephemeral = (
++            getattr(boundary, "scope_tier", None) == "ephemeral"
++            or getattr(boundary, "execution_id", None) is not None
++        )
++        err_code = (
++            McpErrorCode.EPHEMERAL_TOOL_FORBIDDEN
++            if is_ephemeral
++            else McpErrorCode.INSUFFICIENT_SCOPE
++        )
++        msg = (
++            f"Tool '{tool_name}' is forbidden on ephemeral token"
++            if is_ephemeral
++            else f"Tool '{tool_name}' is not in allowed_tools for this credential"
++        )
++        hint = (
++            "Ephemeral tokens are strictly read-only and allow at most: "
++            "search_tickets, read_ticket, search."
++            if is_ephemeral
++            else "Tool narrowing is active; only tools in allowed_tools may be called."
++        )
++        raise KbMcpError(
++            err_code,
++            msg,
++            allowed_tools=sorted(str(t) for t in allowed_tools),
++            hint=hint,
++        )
++
++
++def _check_boundary_capability_mask(
++    boundary: CredentialBoundary, tool_name: str, arguments: dict[str, Any]
++) -> None:
++    cap_mask = getattr(boundary, "capability_mask", None)
++    if cap_mask is None:
++        return
++
++    action_arg = arguments.get("action")
++    req_cap = get_required_tool_capability(
++        tool_name, str(action_arg) if action_arg is not None else None
++    )
++    if (int(cap_mask) & int(req_cap)) != int(req_cap):
++        msg = (
++            f"Tool '{tool_name}' requires capability {req_cap.name} ({int(req_cap)}), "
++            f"which is masked out by capability_mask ({cap_mask})"
++        )
++        raise KbMcpError(
++            McpErrorCode.INSUFFICIENT_SCOPE,
++            msg,
++            extra={
++                "required_capability": req_cap.name,
++                "required_bit": int(req_cap),
++                "capability_mask": int(cap_mask),
++            },
++            hint=f"Request an API key or token with {req_cap.name} capability bit enabled.",
++        )
++
++
++def _check_boundary_allowlists(boundary: CredentialBoundary, arguments: dict[str, Any]) -> None:
++    ws_allow = getattr(boundary, "workspace_allowlist", None)
++    if ws_allow:
++        raw_ws = arguments.get("workspace") or arguments.get("workspace_id")
++        target_ws = _as_uuid(raw_ws)
++        if target_ws is not None and not boundary.allows_workspace(target_ws):
++            msg = (
++                f"Target workspace '{raw_ws}' is outside the allowed workspaces "
++                "for this credential."
++            )
++            hint_ws = (
++                "Connect to an allowed workspace or use a credential with appropriate permissions."
++            )
++            raise KbMcpError(
++                McpErrorCode.KEY_SCOPE_VIOLATION,
++                msg,
++                extra={"allowed_workspaces": [str(w) for w in ws_allow]},
++                hint=hint_ws,
++            )
++
++    proj_allow = getattr(boundary, "project_allowlist", None)
++    if proj_allow:
++        raw_proj = arguments.get("project") or arguments.get("project_id")
++        if not raw_proj:
++            ident = (
++                arguments.get("identifier")
++                or arguments.get("parent")
++                or arguments.get("ticket")
++                or arguments.get("id")
++            )
++            if ident and isinstance(ident, str):
++                match = _ISSUE_KEY_REGEX.match(ident)
++                if match:
++                    raw_proj = match.group(1).upper()
++
++        target_proj = _as_uuid(raw_proj)
++        if target_proj is not None and not boundary.allows_project(target_proj):
++            msg = (
++                f"Target project '{raw_proj}' is outside the allowed projects for this credential."
++            )
++            raise KbMcpError(
++                McpErrorCode.KEY_SCOPE_VIOLATION,
++                msg,
++                extra={"allowed_projects": [str(p) for p in proj_allow]},
++                hint="Target an allowed project or use a credential with appropriate permissions.",
++            )
++
++
++def enforce_credential_boundary_on_tool_call(
++    tool_name: str,
++    arguments: dict[str, Any],
++    boundary: CredentialBoundary | None,
++) -> None:
++    """Enforce CredentialBoundary before executing an MCP tool call."""
++    if boundary is None:
++        return
++
++    _check_boundary_allowed_tools(boundary, tool_name)
++    _check_boundary_capability_mask(boundary, tool_name, arguments)
++    _check_boundary_allowlists(boundary, arguments)
+diff --git a/mcp/tests/test_mcp_capability_mask_and_cidr.py b/mcp/tests/test_mcp_capability_mask_and_cidr.py
+new file mode 100644
+index 00000000..6adec7af
+--- /dev/null
++++ b/mcp/tests/test_mcp_capability_mask_and_cidr.py
+@@ -0,0 +1,489 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Comprehensive unit and integration tests for MCP capability_mask and CIDR validation.
++
++Validates KB-SEC-05 Actions 2 and 3:
++1. Tool dispatch rejection when caller's CredentialBoundary.capability_mask masks out
++   required capabilities (EDIT, TRANSITION, DELETE, COMMENT, LINK).
++2. tools/list filtering when capability_mask is narrowed to read-only.
++3. Spoof-resistant trusted proxy client IP validation for allowed_cidrs (rejecting
++   spoofed X-Forwarded-For from untrusted peers, accepting traversed IP from trusted peers).
++"""
++
++from __future__ import annotations
++
++import base64
++import os
++import uuid
++from typing import Any
++
++import httpx
++import pytest
++
++from mcp.app import create_mcp_app
++from mcp.auth import McpAuthContext, McpAuthMiddleware
++from mcp.errors import KbMcpError, McpErrorCode
++from mcp.internal_client import KanbanApiClient
++from mcp.protocol import InMemorySessionStore, McpProtocolHandler
++from mcp.registry import Surface, ToolRegistry, ToolSpec
++from mcp.scoping import (
++    Capability,
++    CredentialBoundary,
++    enforce_credential_boundary_on_tool_call,
++    get_required_tool_capability,
++)
++from mcp.settings import McpSettings
++
++_DUMMY_SCHEMA: dict[str, Any] = {"type": "object"}
++
++
++def _generate_test_key(surface: Surface) -> str:
++    prefix = {"agent": "kb_agt_", "docs": "kb_doc_", "admin": "kb_adm_"}[surface.value]
++    rand = base64.urlsafe_b64encode(os.urandom(32)).decode("ascii").rstrip("=")
++    return f"{prefix}{rand}"
++
++
++def test_get_required_tool_capability_mapping() -> None:
++    """Verify tool names correctly map to required Capability bit flags."""
++    assert get_required_tool_capability("search_tickets") == Capability.VIEW
++    assert get_required_tool_capability("read_ticket") == Capability.VIEW
++    assert get_required_tool_capability("search") == Capability.VIEW
++    assert get_required_tool_capability("read_doc") == Capability.VIEW
++
++    assert get_required_tool_capability("create_ticket") == Capability.EDIT
++    assert get_required_tool_capability("update_ticket") == Capability.EDIT
++    assert get_required_tool_capability("create") == Capability.EDIT
++    assert get_required_tool_capability("update") == Capability.EDIT
++
++    assert get_required_tool_capability("begin_work") == Capability.TRANSITION
++    assert get_required_tool_capability("transition_ticket") == Capability.TRANSITION
++    assert get_required_tool_capability("complete_work") == Capability.TRANSITION
++
++    assert get_required_tool_capability("destructive_lifecycle") == Capability.DELETE
++
++    assert get_required_tool_capability("add_comment") == Capability.COMMENT
++    assert get_required_tool_capability("link_objects") == Capability.LINK
++
++    # Admin actions mapping
++    assert get_required_tool_capability("admin", "delete_principal") == Capability.DELETE
++    assert get_required_tool_capability("admin", "rebuild_era") == Capability.ADMIN
++    assert get_required_tool_capability("admin", "configure_workspace") == Capability.ADMIN
++
++
++def test_enforce_credential_boundary_capability_mask_violations() -> None:
++    """Verify tool call capability enforcement rejects masked capabilities."""
++    # 1. Caller with VIEW only (1) attempting create_ticket (EDIT = 4)
++    boundary_view_only = CredentialBoundary(
++        scope_tier="workspace",
++        surface="agent",
++        capability_mask=int(Capability.VIEW),
++    )
++
++    with pytest.raises(KbMcpError) as exc_view:
++        enforce_credential_boundary_on_tool_call(
++            "create_ticket",
++            {"summary": "Test"},
++            boundary_view_only,
++        )
++    err = exc_view.value
++    assert err.code == McpErrorCode.INSUFFICIENT_SCOPE
++    assert "requires capability EDIT (4)" in err.message
++    assert err.extra is not None
++    assert err.extra.get("required_capability") == "EDIT"
++    assert err.extra.get("required_bit") == 4
++    assert err.extra.get("capability_mask") == 1
++
++    # 2. Caller with VIEW | EDIT (5) attempting transition_ticket (TRANSITION = 8)
++    boundary_view_edit = CredentialBoundary(
++        scope_tier="workspace",
++        surface="agent",
++        capability_mask=int(Capability.VIEW | Capability.EDIT),
++    )
++    with pytest.raises(KbMcpError) as exc_trans:
++        enforce_credential_boundary_on_tool_call(
++            "transition_ticket",
++            {"identifier": "KAN-1", "state": "In Progress"},
++            boundary_view_edit,
++        )
++    assert exc_trans.value.code == McpErrorCode.INSUFFICIENT_SCOPE
++    assert exc_trans.value.extra is not None
++    assert exc_trans.value.extra.get("required_capability") == "TRANSITION"
++
++    # 3. Caller attempting add_comment (COMMENT = 16) without COMMENT capability
++    with pytest.raises(KbMcpError) as exc_comment:
++        enforce_credential_boundary_on_tool_call(
++            "add_comment",
++            {"identifier": "KAN-1", "comment": "Note"},
++            boundary_view_edit,
++        )
++    assert exc_comment.value.code == McpErrorCode.INSUFFICIENT_SCOPE
++    assert exc_comment.value.extra is not None
++    assert exc_comment.value.extra.get("required_capability") == "COMMENT"
++
++    # 4. Caller attempting link_objects (LINK = 32) without LINK capability
++    with pytest.raises(KbMcpError) as exc_link:
++        enforce_credential_boundary_on_tool_call(
++            "link_objects",
++            {"source": "KAN-1", "target": "KAN-2"},
++            boundary_view_edit,
++        )
++    assert exc_link.value.code == McpErrorCode.INSUFFICIENT_SCOPE
++    assert exc_link.value.extra is not None
++    assert exc_link.value.extra.get("required_capability") == "LINK"
++
++    # 5. Caller attempting destructive_lifecycle (DELETE = 128) without DELETE capability
++    boundary_admin_no_delete = CredentialBoundary(
++        scope_tier="workspace",
++        surface="admin",
++        capability_mask=int(Capability.ALL & ~Capability.DELETE),
++    )
++    with pytest.raises(KbMcpError) as exc_del:
++        enforce_credential_boundary_on_tool_call(
++            "destructive_lifecycle",
++            {"target": "doc", "id": str(uuid.uuid4())},
++            boundary_admin_no_delete,
++        )
++    assert exc_del.value.code == McpErrorCode.INSUFFICIENT_SCOPE
++    assert exc_del.value.extra is not None
++    assert exc_del.value.extra.get("required_capability") == "DELETE"
++
++    # 6. Caller with proper capabilities succeeds without exception
++    boundary_full = CredentialBoundary(
++        scope_tier="workspace",
++        surface="agent",
++        capability_mask=int(Capability.ALL),
++    )
++    enforce_credential_boundary_on_tool_call("create_ticket", {"summary": "Ok"}, boundary_full)
++    enforce_credential_boundary_on_tool_call(
++        "transition_ticket", {"identifier": "KAN-1"}, boundary_full
++    )
++    enforce_credential_boundary_on_tool_call("add_comment", {"identifier": "KAN-1"}, boundary_full)
++
++
++def test_enforce_credential_boundary_workspace_and_project_allowlists() -> None:
++    """Verify workspace and project allowlists are enforced at tool dispatch."""
++    ws_allowed = uuid.uuid4()
++    ws_denied = uuid.uuid4()
++    proj_allowed = uuid.uuid4()
++    proj_denied = uuid.uuid4()
++
++    boundary = CredentialBoundary(
++        scope_tier="workspace",
++        surface="agent",
++        workspace_allowlist=frozenset({ws_allowed}),
++        project_allowlist=frozenset({proj_allowed}),
++        capability_mask=255,
++    )
++
++    # 1. Allowed workspace argument succeeds
++    enforce_credential_boundary_on_tool_call(
++        "search_tickets", {"workspace": str(ws_allowed)}, boundary
++    )
++
++    # 2. Denied workspace argument rejected
++    with pytest.raises(KbMcpError) as exc_ws:
++        enforce_credential_boundary_on_tool_call(
++            "search_tickets", {"workspace": str(ws_denied)}, boundary
++        )
++    assert exc_ws.value.code == McpErrorCode.KEY_SCOPE_VIOLATION
++    assert str(ws_denied) in exc_ws.value.message
++
++    # 3. Allowed project argument succeeds
++    enforce_credential_boundary_on_tool_call(
++        "search_tickets", {"project": str(proj_allowed)}, boundary
++    )
++
++    # 4. Denied project argument rejected
++    with pytest.raises(KbMcpError) as exc_proj:
++        enforce_credential_boundary_on_tool_call(
++            "search_tickets", {"project": str(proj_denied)}, boundary
++        )
++    assert exc_proj.value.code == McpErrorCode.KEY_SCOPE_VIOLATION
++    assert str(proj_denied) in exc_proj.value.message
++
++    # 5. Non-ephemeral allowed_tools narrowing
++    boundary_narrowed = CredentialBoundary(
++        scope_tier="workspace",
++        surface="agent",
++        allowed_tools=frozenset({"search_tickets", "read_ticket"}),
++    )
++    with pytest.raises(KbMcpError) as exc_narrowed:
++        enforce_credential_boundary_on_tool_call(
++            "create_ticket", {"summary": "Denied"}, boundary_narrowed
++        )
++    assert exc_narrowed.value.code == McpErrorCode.INSUFFICIENT_SCOPE
++    assert "Tool narrowing is active" in str(exc_narrowed.value.hint)
++
++    # 6. CredentialBoundary method coverage
++    assert boundary.allows_workspace(None) is True
++    assert boundary.allows_project(None) is True
++    boundary_global = CredentialBoundary(scope_tier="global")
++    assert boundary_global.allows_workspace(uuid.uuid4()) is True
++    assert boundary_global.allows_project(uuid.uuid4()) is True
++
++    boundary_cidr = CredentialBoundary(allowed_cidrs=("10.0.0.0/8",))
++    assert boundary_cidr.allows_ip("10.1.2.3") is True
++    assert boundary_cidr.allows_ip("192.168.1.1") is False
++    assert boundary_cidr.allows_ip("invalid-ip") is False
++    assert boundary_cidr.allows_ip(None) is True
++
++
++@pytest.mark.asyncio
++async def test_mcp_protocol_tools_call_capability_mask_rejection() -> None:
++    """Verify McpProtocolHandler rejects tool call in JSON-RPC when capability is masked out."""
++    reg = ToolRegistry(Surface.AGENT)
++
++    async def _dummy_create(_args: dict[str, Any]) -> dict[str, str]:
++        return {"status": "created"}
++
++    reg.register(
++        ToolSpec(
++            name="create_ticket",
++            description="Create ticket",
++            surface=Surface.AGENT,
++            input_schema=_DUMMY_SCHEMA,
++            handler=_dummy_create,
++        )
++    )
++
++    store = InMemorySessionStore()
++    settings = McpSettings(mode="standalone_inprocess", auth_enabled=True)
++    handler = McpProtocolHandler(Surface.AGENT, reg, store, settings)
++
++    # Caller with VIEW only (capability_mask = 1)
++    boundary = CredentialBoundary(
++        scope_tier="workspace",
++        surface="agent",
++        capability_mask=int(Capability.VIEW),
++    )
++    auth_ctx = McpAuthContext(
++        token="kb_agt_testtoken",  # noqa: S106
++        token_sha256=b"fake-digest",
++        principal_id="user-1",
++        surface=Surface.AGENT,
++        scopes=frozenset(["agent:read", "agent:write"]),
++        capability_mask=int(Capability.VIEW),
++        credential_boundary=boundary,
++    )
++
++    resp = await handler._handle_tools_call(  # noqa: SLF001
++        101,
++        {"name": "create_ticket", "arguments": {"summary": "Test Summary"}},
++        auth_context=auth_ctx,
++    )
++    assert resp.status_code == 200
++    assert isinstance(resp.body, bytes)
++    data = resp.body.decode("utf-8")
++    assert "isError" in data
++    assert "EDIT" in data
++    assert "INSUFFICIENT_SCOPE" in data
++
++
++@pytest.mark.asyncio
++async def test_mcp_protocol_tools_list_capability_mask_filtering() -> None:
++    """Verify protocol handler filters mutating tools out of tools/list for read-only tokens."""
++    reg = ToolRegistry(Surface.AGENT)
++
++    async def _dummy_read(_args: dict[str, Any]) -> dict[str, str]:
++        return {"status": "ok"}
++
++    async def _dummy_write(_args: dict[str, Any]) -> dict[str, str]:
++        return {"status": "ok"}
++
++    reg.register(
++        ToolSpec(
++            name="read_ticket",
++            description="Read ticket",
++            surface=Surface.AGENT,
++            input_schema=_DUMMY_SCHEMA,
++            handler=_dummy_read,
++        )
++    )
++    reg.register(
++        ToolSpec(
++            name="create_ticket",
++            description="Create ticket",
++            surface=Surface.AGENT,
++            input_schema=_DUMMY_SCHEMA,
++            handler=_dummy_write,
++        )
++    )
++
++    store = InMemorySessionStore()
++    settings = McpSettings(mode="standalone_inprocess", auth_enabled=True)
++    handler = McpProtocolHandler(Surface.AGENT, reg, store, settings)
++
++    # 1. Read-only caller (VIEW = 1) sees only read_ticket
++    boundary_ro = CredentialBoundary(
++        scope_tier="workspace",
++        surface="agent",
++        capability_mask=int(Capability.VIEW),
++    )
++    auth_ro = McpAuthContext(
++        token="kb_agt_ro",  # noqa: S106
++        token_sha256=b"ro-digest",
++        principal_id="user-1",
++        surface=Surface.AGENT,
++        scopes=frozenset(["agent:read"]),
++        capability_mask=int(Capability.VIEW),
++        credential_boundary=boundary_ro,
++    )
++
++    resp_ro = handler._handle_tools_list(1, auth_context=auth_ro)  # noqa: SLF001
++    assert isinstance(resp_ro.body, bytes)
++    data_ro = resp_ro.body.decode("utf-8")
++    assert "read_ticket" in data_ro
++    assert "create_ticket" not in data_ro
++
++    # 2. Read-write caller (VIEW | EDIT = 5) sees both tools
++    boundary_rw = CredentialBoundary(
++        scope_tier="workspace",
++        surface="agent",
++        capability_mask=int(Capability.VIEW | Capability.EDIT),
++    )
++    auth_rw = McpAuthContext(
++        token="kb_agt_rw",  # noqa: S106
++        token_sha256=b"rw-digest",
++        principal_id="user-1",
++        surface=Surface.AGENT,
++        scopes=frozenset(["agent:read", "agent:write"]),
++        capability_mask=int(Capability.VIEW | Capability.EDIT),
++        credential_boundary=boundary_rw,
++    )
++
++    resp_rw = handler._handle_tools_list(2, auth_context=auth_rw)  # noqa: SLF001
++    assert isinstance(resp_rw.body, bytes)
++    data_rw = resp_rw.body.decode("utf-8")
++    assert "read_ticket" in data_rw
++    assert "create_ticket" in data_rw
++
++
++@pytest.mark.asyncio
++async def test_trusted_proxy_client_ip_cidr_validation() -> None:
++    """Verify spoofed X-Forwarded-For is rejected unless peer is a trusted proxy."""
++    token = _generate_test_key(Surface.AGENT)
++
++    def mock_introspect(_request: httpx.Request) -> httpx.Response:
++        return httpx.Response(
++            200,
++            json={
++                "active": True,
++                "principal_id": "018f-0000",
++                "workspace_id": "018f-0001",
++                "surface": "agent",
++                "scopes": ["agent:read", "agent:write"],
++                "scope_tier": "personal_user",
++                "allowed_cidrs": ["192.168.1.0/24"],
++            },
++        )
++
++    mock_transport = httpx.MockTransport(mock_introspect)
++
++    reg = ToolRegistry(Surface.AGENT)
++
++    async def _write_handler(_args: dict[str, Any]) -> dict[str, str]:
++        return {"status": "created"}
++
++    reg.register(
++        ToolSpec(
++            name="test_agent_write",
++            description="Test tool",
++            surface=Surface.AGENT,
++            input_schema=_DUMMY_SCHEMA,
++            handler=_write_handler,
++        )
++    )
++
++    settings = McpSettings(mode="standalone_inprocess", auth_enabled=True)
++    kanban_client = KanbanApiClient(settings, transport=mock_transport)
++
++    base_app = create_mcp_app(
++        settings,
++        agent_registry=reg,
++        kanban_app=None,
++    )
++    app = McpAuthMiddleware(
++        base_app,
++        surface=Surface.AGENT,
++        internal_client=kanban_client,
++        settings=settings,
++    )
++
++    # 1. Direct request from untrusted peer attempting to spoof X-Forwarded-For
++    transport_untrusted = httpx.ASGITransport(
++        app=app,
++        client=("203.0.113.9", 54321),  # Untrusted external client
++    )
++    async with httpx.AsyncClient(
++        transport=transport_untrusted, base_url="http://test"
++    ) as client_untrusted:
++        spoofed_resp = await client_untrusted.post(
++            "/mcp/agent",
++            headers={
++                "Authorization": f"Bearer {token}",
++                "X-Forwarded-For": "192.168.1.50",
++            },
++            json={
++                "jsonrpc": "2.0",
++                "id": 1,
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": "2025-06-18",
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-client", "version": "1.0"},
++                },
++            },
++        )
++        # MUST BE REJECTED (403) because 203.0.113.9 is not in trusted_proxies, so XFF is ignored!
++        assert spoofed_resp.status_code == 403
++        data = spoofed_resp.json()
++        assert data["error"] == "KEY_CIDR_DENIED"
++        assert "203.0.113.9" in data["message"]
++
++    # 2. Request through trusted proxy (127.0.0.1) with valid upstream IP in allowed CIDR
++    transport_trusted = httpx.ASGITransport(
++        app=app,
++        client=("127.0.0.1", 54321),  # Local trusted proxy
++    )
++    async with httpx.AsyncClient(
++        transport=transport_trusted, base_url="http://test"
++    ) as client_trusted:
++        valid_resp = await client_trusted.post(
++            "/mcp/agent",
++            headers={
++                "Authorization": f"Bearer {token}",
++                "X-Forwarded-For": "192.168.1.50",
++            },
++            json={
++                "jsonrpc": "2.0",
++                "id": 2,
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": "2025-06-18",
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-client", "version": "1.0"},
++                },
++            },
++        )
++        assert valid_resp.status_code == 200
++
++        # 3. Request through trusted proxy with upstream IP outside allowed CIDR
++        invalid_resp = await client_trusted.post(
++            "/mcp/agent",
++            headers={
++                "Authorization": f"Bearer {token}",
++                "X-Forwarded-For": "10.0.0.99",
++            },
++            json={
++                "jsonrpc": "2.0",
++                "id": 3,
++                "method": "initialize",
++                "params": {
++                    "protocolVersion": "2025-06-18",
++                    "capabilities": {},
++                    "clientInfo": {"name": "test-client", "version": "1.0"},
++                },
++            },
++        )
++        assert invalid_resp.status_code == 403
++        assert invalid_resp.json()["error"] == "KEY_CIDR_DENIED"

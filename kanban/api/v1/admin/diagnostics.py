@@ -305,7 +305,7 @@ class BuildDiagnosticsInfo(BaseModel):
     version: str
     git_commit: str | None = None
     build_timestamp: str | None = None
-    openapi_version: str | None = "2.0.0"
+    openapi_version: str | None = None
     openapi_bundle_hash: str | None = None
     frontend_bundle_hash: str | None = None
 
@@ -1088,7 +1088,7 @@ async def get_admin_diagnostics_endpoint(
         openapi_doc = request.app.openapi() if hasattr(request.app, "openapi") else None
         b_info = get_build_info(openapi_doc)
         build_info = BuildDiagnosticsInfo(
-            version="2.0.0",
+            version=b_info.version,
             git_commit=b_info.git_commit,
             build_timestamp=b_info.build_timestamp,
             openapi_version=b_info.openapi_version,

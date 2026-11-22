@@ -637,6 +637,18 @@ class McpProtocolHandler:
                 specs = [s for s in specs if s.name in auth_context.allowed_tools]
             if auth_context.disabled_tools:
                 specs = [s for s in specs if s.name not in auth_context.disabled_tools]
+            boundary = getattr(auth_context, "credential_boundary", None)
+            if boundary is not None and boundary.capability_mask is not None:
+                from mcp.scoping import get_required_tool_capability  # noqa: PLC0415
+
+                specs = [
+                    s
+                    for s in specs
+                    if (
+                        (int(boundary.capability_mask) & int(get_required_tool_capability(s.name)))
+                        == int(get_required_tool_capability(s.name))
+                    )
+                ]
 
         tools_list: list[dict[str, Any]] = [
             {
@@ -727,6 +739,32 @@ class McpProtocolHandler:
                         },
                     }
                 )
+
+        # Enforce caller's CredentialBoundary (capability_mask, allowed_tools, allowlists)
+        if auth_context is not None:
+            boundary = getattr(auth_context, "credential_boundary", None)
+            if boundary is not None:
+                from mcp.scoping import (  # noqa: PLC0415
+                    enforce_credential_boundary_on_tool_call,
+                )
+
+                try:
+                    enforce_credential_boundary_on_tool_call(
+                        tool_name,
+                        arguments,
+                        boundary,
+                    )
+                except KbMcpError as boundary_err:
+                    return JSONResponse(
+                        {
+                            "jsonrpc": "2.0",
+                            "id": req_id,
+                            "result": {
+                                "content": [{"type": "text", "text": boundary_err.to_yaml()}],
+                                "isError": True,
+                            },
+                        }
+                    )
 
         if spec is None:
             avail_tools = [t.name for t in self.registry.list_specs()]

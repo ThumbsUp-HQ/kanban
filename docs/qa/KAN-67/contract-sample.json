@@ -1,0 +1,97 @@
+{
+  "tools_call_capability_mask_violation": {
+    "request": {
+      "jsonrpc": "2.0",
+      "id": 101,
+      "method": "tools/call",
+      "params": {
+        "name": "create_ticket",
+        "arguments": {
+          "workspace": "018f-ws-1",
+          "project": "PRJ",
+          "summary": "Attempted ticket creation with read-only token"
+        }
+      }
+    },
+    "response": {
+      "jsonrpc": "2.0",
+      "id": 101,
+      "result": {
+        "content": [
+          {
+            "type": "text",
+            "text": "Tool 'create_ticket' requires capability EDIT (4), which is masked out by capability_mask (1)"
+          }
+        ],
+        "isError": true,
+        "error": {
+          "code": "INSUFFICIENT_SCOPE",
+          "message": "Tool 'create_ticket' requires capability EDIT (4), which is masked out by capability_mask (1)",
+          "required_capability": "EDIT",
+          "required_bit": 4,
+          "capability_mask": 1,
+          "hint": "Request an API key or token with EDIT capability bit enabled."
+        }
+      }
+    }
+  },
+  "tools_list_read_only_capability_mask_filtered": {
+    "request": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "method": "tools/list",
+      "params": {}
+    },
+    "response": {
+      "jsonrpc": "2.0",
+      "id": 1,
+      "result": {
+        "tools": [
+          {
+            "name": "search_tickets",
+            "description": "Search tickets within allowed workspace and project boundaries",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "query": { "type": "string" }
+              }
+            }
+          },
+          {
+            "name": "read_ticket",
+            "description": "Read ticket details and prose",
+            "inputSchema": {
+              "type": "object",
+              "properties": {
+                "identifier": { "type": "string" }
+              },
+              "required": ["identifier"]
+            }
+          }
+        ]
+      }
+    }
+  },
+  "trusted_proxy_client_ip_cidr_denial": {
+    "request": {
+      "method": "POST",
+      "path": "/mcp/agent",
+      "headers": {
+        "Authorization": "Bearer kb_agt_***",
+        "X-Forwarded-For": "192.168.1.50"
+      },
+      "direct_peer": "203.0.113.9:54321"
+    },
+    "response": {
+      "status": 403,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "error": "KEY_CIDR_DENIED",
+        "message": "Client IP '203.0.113.9' is not allowed by this API key.",
+        "hint": "Check the allowed_cidrs configured on this API key or connect from an authorized IP address."
+      }
+    }
+  }
+}

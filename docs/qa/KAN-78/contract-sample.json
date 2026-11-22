@@ -1,0 +1,82 @@
+{
+  "ticket": "KAN-78",
+  "feature": "predicate_compiler_fts_hnsw",
+  "bounded_dsl_compiler": {
+    "bounds": {
+      "MAX_QUERY_LENGTH": 512,
+      "MAX_CLAUSES": 32,
+      "MAX_TOKENS": 32
+    },
+    "sample_query": "state:actionable AND priority:high,urgent AND assignee:@me AND label:security AND -cycle:current AND \"mars telemetry\"",
+    "parsed_clauses": [
+      {
+        "clause": "state:actionable",
+        "type": "token_clause",
+        "field": "state",
+        "value": "actionable",
+        "negated": false
+      },
+      {
+        "clause": "priority:high,urgent",
+        "type": "token_clause",
+        "field": "priority",
+        "value": "high,urgent",
+        "negated": false
+      },
+      {
+        "clause": "assignee:@me",
+        "type": "token_clause",
+        "field": "assignee",
+        "value": "@me",
+        "negated": false
+      },
+      {
+        "clause": "label:security",
+        "type": "token_clause",
+        "field": "label",
+        "value": "security",
+        "negated": false
+      },
+      {
+        "clause": "-cycle:current",
+        "type": "token_clause",
+        "field": "cycle",
+        "value": "current",
+        "negated": true
+      },
+      {
+        "clause": "\"mars telemetry\"",
+        "type": "free_text",
+        "field": null,
+        "value": "mars telemetry",
+        "negated": false
+      }
+    ],
+    "sql_predicates": [
+      "issues.state_id IN (SELECT workflow_states.id FROM workflow_states WHERE workflow_states.state_group NOT IN ('completed', 'cancelled') AND workflow_states.project_id = :project_id)",
+      "issues.priority_id IN (SELECT project_priorities.id FROM project_priorities WHERE (lower(project_priorities.slug) IN ('high', 'urgent') OR lower(project_priorities.label) IN ('high', 'urgent')) AND project_priorities.project_id = :project_id)",
+      "EXISTS (SELECT 1 FROM issue_assignees WHERE issue_assignees.issue_id = issues.id AND issue_assignees.principal_id = :caller_principal_id)",
+      "EXISTS (SELECT 1 FROM issue_labels WHERE issue_labels.issue_id = issues.id AND EXISTS (SELECT 1 FROM project_labels WHERE project_labels.id = issue_labels.label_id AND lower(project_labels.name) IN ('security')))",
+      "NOT (issues.cycle_id IN (SELECT cycles.id FROM cycles WHERE cycles.status = 'active' AND cycles.project_id = :project_id))",
+      "issues.search_tsv @@ websearch_to_tsquery('english', 'mars telemetry')"
+    ]
+  },
+  "fts_dictionary": {
+    "indexed_dictionary": "english",
+    "query_dictionary": "english",
+    "status": "synchronized",
+    "example_matches": [
+      {
+        "term": "telemetries",
+        "matched_term": "telemetry",
+        "query": "websearch_to_tsquery('english', 'telemetries')",
+        "indexed_tsvector": "to_tsvector('english', 'telemetry')"
+      }
+    ]
+  },
+  "hnsw_vector_recall": {
+    "guc": "SET LOCAL hnsw.iterative_scan = 'relaxed_order'",
+    "isolation": "SAVEPOINT-isolated fallback via begin_nested()",
+    "status": "enabled_with_safe_fallback"
+  }
+}

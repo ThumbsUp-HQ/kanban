@@ -4,11 +4,13 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import ipaddress
 import logging
 import os
 import time
+import uuid
 from collections import OrderedDict
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Final
@@ -27,7 +29,6 @@ from mcp.registry import Surface
 from mcp.settings import McpSettings
 
 if TYPE_CHECKING:
-    import uuid
     from collections.abc import Callable
 
     from starlette.types import ASGIApp, Receive, Scope, Send
@@ -140,10 +141,11 @@ class McpAuthContext:
     allowed_project_keys: list[str] | None = None
     allowed_workspace_ids: list[str] | None = None
     allowed_project_ids: list[str] | None = None
-    capability_mask: int = 7
+    capability_mask: int = 255
     allowed_cidrs: list[str] | None = None
     disabled_tools: frozenset[str] | None = None
     aal_level: int = 2
+    credential_boundary: Any | None = None
 
 
 class IntrospectionCache:
@@ -465,24 +467,29 @@ class McpAuthMiddleware:
                     self.cache.set(surface.value, digest, res_data, ttl_s=DEFAULT_CACHE_TTL_S)
                 intro_result = res_data
 
-        # Check CIDR restriction if configured on token
+        # Check CIDR restriction if configured on token (KB-SEC-05 Action 3)
         allowed_cidrs = intro_result.get("allowed_cidrs")
         if allowed_cidrs:
-            client_ip = None
-            xff = headers.get("x-forwarded-for")
-            if xff:
-                client_ip = xff.split(",")[0].strip()
-            elif scope.get("client"):
-                client_ip = scope["client"][0]
+            from kanban.security.client_ip import resolve_client_ip  # noqa: PLC0415
+
+            trusted_proxies = getattr(self.settings, "trusted_proxies", None)
+            if not trusted_proxies:
+                trusted_proxies = (
+                    os.environ.get("KANBAN_TRUSTED_PROXIES")
+                    or os.environ.get("KB_TRUSTED_PROXIES")
+                    or "127.0.0.1/32,::1/128"
+                )
+
+            client_ip = resolve_client_ip(scope, trusted_proxies=trusted_proxies)
 
             if client_ip:
                 try:
-                    ip = ipaddress.ip_address(client_ip)
-                    matched = False
-                    for cidr_str in allowed_cidrs:
-                        if ip in ipaddress.ip_network(str(cidr_str), strict=False):
-                            matched = True
-                            break
+                    clean_ip = client_ip.split("/")[0] if "/" in client_ip else client_ip
+                    ip = ipaddress.ip_address(clean_ip)
+                    matched = any(
+                        ip in ipaddress.ip_network(str(cidr_str), strict=False)
+                        for cidr_str in allowed_cidrs
+                    )
                     if not matched:
                         resp = JSONResponse(
                             {
@@ -536,6 +543,71 @@ class McpAuthMiddleware:
             else None
         )
         aal = int(intro_result.get("aal_level", 2))
+        cap_mask_raw = intro_result.get("capability_mask")
+        cap_mask = int(cap_mask_raw) if cap_mask_raw is not None else 255
+        allowed_cidrs_tuple = tuple(str(c) for c in (allowed_cidrs or ()))
+
+        ws_set: set[uuid.UUID] = set()
+        if intro_result.get("allowed_workspace_ids"):
+            for w in intro_result["allowed_workspace_ids"]:
+                with contextlib.suppress(ValueError):
+                    ws_set.add(w if isinstance(w, uuid.UUID) else uuid.UUID(str(w)))
+        elif intro_result.get("workspace_id") and intro_result.get("scope_tier") in (
+            "workspace",
+            "project",
+        ):
+            with contextlib.suppress(ValueError):
+                w_val = intro_result["workspace_id"]
+                ws_set.add(w_val if isinstance(w_val, uuid.UUID) else uuid.UUID(str(w_val)))
+
+        proj_set: set[uuid.UUID] = set()
+        if intro_result.get("allowed_project_ids"):
+            for p in intro_result["allowed_project_ids"]:
+                with contextlib.suppress(ValueError):
+                    proj_set.add(p if isinstance(p, uuid.UUID) else uuid.UUID(str(p)))
+        elif intro_result.get("allowed_projects"):
+            for p in intro_result["allowed_projects"]:
+                with contextlib.suppress(ValueError):
+                    proj_set.add(p if isinstance(p, uuid.UUID) else uuid.UUID(str(p)))
+        if intro_result.get("project_id"):
+            with contextlib.suppress(ValueError):
+                p_val = intro_result["project_id"]
+                proj_set.add(p_val if isinstance(p_val, uuid.UUID) else uuid.UUID(str(p_val)))
+
+        exec_id_raw = intro_result.get("execution_id")
+        exec_id: uuid.UUID | None = None
+        if exec_id_raw:
+            with contextlib.suppress(ValueError):
+                exec_id = (
+                    exec_id_raw
+                    if isinstance(exec_id_raw, uuid.UUID)
+                    else uuid.UUID(str(exec_id_raw))
+                )
+
+        is_eph = (
+            token.startswith(RESERVED_EPHEMERAL_PREFIX)
+            or intro_result.get("token_kind") == "ephemeral"
+        )
+        resolved_scope_tier = (
+            "ephemeral" if is_eph else (intro_result.get("scope_tier") or "workspace")
+        )
+
+        from mcp.scoping import CredentialBoundary  # noqa: PLC0415
+
+        cred_boundary = CredentialBoundary(
+            scope_tier=resolved_scope_tier,
+            surface=surface.value,
+            workspace_allowlist=frozenset(ws_set),
+            project_allowlist=frozenset(proj_set),
+            capability_mask=cap_mask,
+            allowed_tools=allowed_tools_set,
+            allowed_cidrs=allowed_cidrs_tuple,
+            execution_id=exec_id,
+            has_aal2_provenance=(
+                surface == Surface.ADMIN and intro_result.get("token_kind") == "api_key"
+            ),
+        )
+
         auth_context = McpAuthContext(
             token=token,
             token_sha256=digest,
@@ -567,8 +639,9 @@ class McpAuthMiddleware:
                 if intro_result.get("allowed_project_ids")
                 else None
             ),
-            capability_mask=int(intro_result.get("capability_mask") or 7),
+            capability_mask=cap_mask,
             allowed_cidrs=allowed_cidrs,
+            credential_boundary=cred_boundary,
         )
 
         mcp_actor = format_log_actor(

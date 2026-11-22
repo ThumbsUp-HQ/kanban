@@ -27,6 +27,9 @@ export interface SystemStatus {
   readonly persistent_volume: boolean;
   readonly air_gap_mode: boolean;
   readonly local_llm_endpoint_host: string | null;
+  readonly version?: string | null;
+  readonly openapi_version?: string | null;
+  readonly git_commit?: string | null;
   readonly is_server_admin?: boolean;
   readonly allow_unlimited_mcp_keys?: boolean;
   readonly data_mount_point?: string | null;

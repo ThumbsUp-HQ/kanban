@@ -20,6 +20,7 @@ cost is the caller's responsibility.
 from __future__ import annotations
 
 import json
+import re
 from dataclasses import dataclass
 from enum import StrEnum
 from types import MappingProxyType
@@ -427,6 +428,34 @@ async def _notify(session: AsyncSession, envelope: ActivityEnvelope | EphemeralE
         await listener(session, envelope)
 
 
+_PROSE_KEYS: Final[frozenset[str]] = frozenset({"description_markdown", "body_markdown", "content"})
+_SHA256_HEX_RE: Final[re.Pattern[str]] = re.compile(r"^[0-9a-fA-F]{64}$")
+
+
+def _scrub_json_value(val: JSONValue, scrubber: Callable[[str], str]) -> JSONValue:
+    """Recursively scrub string values in nested JSON structures."""
+    if isinstance(val, str):
+        return scrubber(val)
+    if isinstance(val, list):
+        return [_scrub_json_value(item, scrubber) for item in val]
+    if isinstance(val, dict):
+        return {k: _scrub_json_value(v, scrubber) for k, v in val.items()}
+    return val
+
+
+def _validate_and_scrub_payload(payload: Mapping[str, JSONValue]) -> dict[str, JSONValue]:
+    """Ensure prose body keys contain only SHA-256 digests and scrub all strings."""
+    from kanban.security.scrubber import scrub_text  # noqa: PLC0415
+
+    cleaned: dict[str, JSONValue] = {}
+    for k, v in payload.items():
+        if k in _PROSE_KEYS and (not isinstance(v, str) or not _SHA256_HEX_RE.match(v)):
+            msg = f"Activity payload key '{k}' must be a 64-char SHA-256 digest, not raw prose body"
+            raise ValueError(msg)
+        cleaned[k] = _scrub_json_value(v, scrub_text)
+    return cleaned
+
+
 async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P3-01a
     session: AsyncSession,
     *,
@@ -437,7 +466,8 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
     payload: Mapping[str, JSONValue],
 ) -> uuid.UUID:
     """Append one activity row in the caller's transaction and notify listeners."""
-    if _serialized_size(payload) > MAX_PAYLOAD_BYTES:
+    sanitized_payload = _validate_and_scrub_payload(payload)
+    if _serialized_size(sanitized_payload) > MAX_PAYLOAD_BYTES:
         msg = f"Activity payload exceeds {MAX_PAYLOAD_BYTES} bytes"
         raise ActivityPayloadTooLarge(msg)
 
@@ -468,7 +498,7 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
                     "kind": kind,
                     "actor": actor_principal_id,
                     "etype": event_type.value,
-                    "payload": json.dumps(dict(payload), ensure_ascii=False),
+                    "payload": json.dumps(dict(sanitized_payload), ensure_ascii=False),
                 },
             )
         ).scalar_one()
@@ -482,7 +512,7 @@ async def record_activity(  # noqa: PLR0913  # Keyword-only API mandated by KB-P
                 actor_principal_id=actor_principal_id,
                 event_type=event_type,
                 category=EVENT_CATEGORY[event_type],
-                payload=payload,
+                payload=sanitized_payload,
             ),
         )
     return cast("uuid.UUID", activity_id)

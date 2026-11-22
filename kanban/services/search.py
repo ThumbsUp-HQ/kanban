@@ -524,6 +524,11 @@ async def _query_vector_candidates(  # noqa: PLR0913, PLR0917
     try:
         async with session.begin_nested():
             await session.execute(text("SET LOCAL statement_timeout = '25ms'"))
+            try:
+                async with session.begin_nested():
+                    await session.execute(text("SET LOCAL hnsw.iterative_scan = 'relaxed_order'"))
+            except Exception:  # noqa: BLE001, S110
+                pass
             q_literal = "[" + ",".join(str(float(x)) for x in query_vector) + "]"
             where_clauses = [
                 "oe.workspace_id = :ws_id",
