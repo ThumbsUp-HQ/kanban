@@ -2,14 +2,19 @@
 
 - **Reviewer Persona:** `backend-architect` / `api-tester` / `security-engineer` (API & Security Specialist Reviewer)
 - **Ticket:** `KAN-309` (`[KB-ISSUES-TTFD-01] Cut Issues View Time-to-First-Display on 300+ Tickets via Single-Flight Staged Loading, Batched lod=summary API, and Lazy Issue Detail Hydration`)
-- **Audited Commit (`HEAD`):** `ad9a1daf7cae5088eb7c8b4e72ce006a8e8be342` (`ad9a1daf`)
-- **Audited Branch:** `feat/KAN-309-ttfd-summary-lod`
+- **Audited Commit (`HEAD`):** `e662d6781584b9883dd45ade51d0d280008325c1` (`e662d678`, merging `ad9a1daf7cae5088eb7c8b4e72ce006a8e8be342`)
+- **Audited Branch:** `main` (merged from `feat/KAN-309-ttfd-summary-lod`)
 - **Reviewed Artifacts:**
   - `docs/qa/KAN-309/git-diff.patch`
   - `docs/qa/KAN-309/contract-sample.json`
   - `docs/qa/KAN-309/unit-test-results.txt`
   - `docs/qa/KAN-309/build-check.txt`
   - `docs/qa/KAN-309/message-to-reality-checker.md`
+  - `docs/qa/KAN-309/screenshots/01-desktop-light-issues-ttfd-summary.png`
+  - `docs/qa/KAN-309/screenshots/02-desktop-dark-issues-ttfd-summary.png`
+  - `docs/qa/KAN-309/screenshots/03-tablet-issues-ttfd-summary.png`
+  - `docs/qa/KAN-309/screenshots/04-mobile-portrait-issues-ttfd-summary.png`
+  - `docs/qa/KAN-309/screenshots/05-mobile-landscape-issues-ttfd-summary.png`
 - **Reviewed Source & Test Files:**
   - `kanban/api/v1/issues.py`
   - `kanban/api/v1/schemas/issues.py`

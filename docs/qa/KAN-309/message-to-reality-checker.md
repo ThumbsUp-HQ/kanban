@@ -2,7 +2,14 @@
 
 ## Summary of Changes
 Ticket: `KAN-309` ([KB-ISSUES-TTFD-01] Cut Issues View Time-to-First-Display on 300+ Tickets via Single-Flight Staged Loading, Batched lod=summary API, and Lazy Issue Detail Hydration).
-Branch: `feat/KAN-309-ttfd-summary-lod`
+Branch: `main` (merged from `feat/KAN-309-ttfd-summary-lod`)
+Merged `main` Commit SHA: `e662d6781584b9883dd45ade51d0d280008325c1` (`e662d678`, merging `ad9a1daf7cae5088eb7c8b4e72ce006a8e8be342`)
+Zero-Mock Playwright Screenshots (`docs/qa/KAN-309/screenshots/`, captured against local `kanban-liveqa-1` on `http://localhost:18961`):
+- `docs/qa/KAN-309/screenshots/01-desktop-light-issues-ttfd-summary.png` (`1440x900` Light)
+- `docs/qa/KAN-309/screenshots/02-desktop-dark-issues-ttfd-summary.png` (`1440x900` Dark)
+- `docs/qa/KAN-309/screenshots/03-tablet-issues-ttfd-summary.png` (`768x1024` Tablet)
+- `docs/qa/KAN-309/screenshots/04-mobile-portrait-issues-ttfd-summary.png` (`390x844` Mobile Portrait)
+- `docs/qa/KAN-309/screenshots/05-mobile-landscape-issues-ttfd-summary.png` (`844x390` Mobile Landscape)
 
 All 4 problems specified in the authoritative KAN-309 specification have been fully implemented and verified with zero compiler, linter, or test failures:
 
