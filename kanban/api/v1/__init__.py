@@ -19,6 +19,7 @@ from kanban.api.v1.admin.principals import router as admin_principals_router
 from kanban.api.v1.admin.project_blueprint import (
     router as admin_project_blueprint_router,
 )
+from kanban.api.v1.admin.webhooks import router as admin_webhooks_router
 from kanban.api.v1.admin.workspace_settings import (
     router as admin_workspace_settings_router,
 )
@@ -83,6 +84,7 @@ from kanban.api.v1.system_status import (
 from kanban.api.v1.transitions import router as transitions_router
 from kanban.api.v1.user_settings import router as user_settings_router
 from kanban.api.v1.views import router as views_router
+from kanban.api.v1.webhooks_scm import router as webhooks_scm_router
 from kanban.api.v1.workflow_hooks import router as workflow_hooks_router
 from kanban.api.v1.workspaces import router as workspaces_router
 
@@ -142,6 +144,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(admin_link_auditor_router)
     v1.include_router(admin_mcp_keys_router)
     v1.include_router(admin_workspace_settings_router)
+    v1.include_router(admin_webhooks_router)
     v1.include_router(admin_project_blueprint_router)
     v1.include_router(admin_principals_router)
     v1.include_router(admin_acl_router)
@@ -151,6 +154,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(search_router)
     v1.include_router(custom_field_approvals_router)
     v1.include_router(repo_bindings_router)
+    v1.include_router(webhooks_scm_router)
     v1.include_router(remote_runners_router)
     v1.include_router(workspaces_router)
     v1.include_router(system_router)

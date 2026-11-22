@@ -37,3 +37,4 @@ def test_multi_source_and_export_routes_registered() -> None:
     assert "/api/v1/admin/audit-ledger/request-shred" in admin_paths
     assert "/api/v1/admin/audit-ledger/execute-shred" in admin_paths
     assert "/api/v1/admin/workload-identities" in admin_paths
+    assert "/api/v1/admin/webhooks" in admin_paths

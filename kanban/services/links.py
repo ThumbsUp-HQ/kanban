@@ -57,6 +57,9 @@ SYSTEM_LINK_KINDS: Final[frozenset[str]] = frozenset(
         "PROMOTED_TO_DOC",
         "EMBEDS_OBJECT",
         "GOVERNED_BY_VIEW",
+        "IMPLEMENTED_IN_PR",
+        "REFERENCED_BY_COMMIT",
+        "TRACKED_ON_BRANCH",
     }
 )
 

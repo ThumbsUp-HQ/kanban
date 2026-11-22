@@ -8,6 +8,7 @@ import logging
 import os
 import signal
 import sys
+from collections.abc import Awaitable, Callable, Sequence
 from typing import TYPE_CHECKING, Any
 from uuid import UUID
 
@@ -26,6 +27,8 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger("database.outbox.relay")
 
+EventHook = Callable[[OutboxEnvelope], Awaitable[None]]
+
 
 class OutboxRelay:
     """Relay worker moving events from outbox_events to RealtimeBroker via SKIP LOCKED."""
@@ -39,6 +42,7 @@ class OutboxRelay:
         batch_size: int = 100,
         poll_interval_s: float = 1.0,
         max_attempts: int = 5,
+        event_hooks: Sequence[Callable[[OutboxEnvelope], Awaitable[None]]] | None = None,
     ) -> None:
         """Initialize outbox relay with database engine, notification DSN, and target broker."""
         self._engine = engine
@@ -47,12 +51,19 @@ class OutboxRelay:
         self._batch_size = batch_size
         self._poll_interval_s = poll_interval_s
         self._max_attempts = max_attempts
+        self._event_hooks: list[Callable[[OutboxEnvelope], Awaitable[None]]] = (
+            list(event_hooks) if event_hooks else []
+        )
         self._running = False
 
     @property
     def is_running(self) -> bool:
         """Whether the relay worker is actively running."""
         return self._running
+
+    def add_event_hook(self, hook: Callable[[OutboxEnvelope], Awaitable[None]]) -> None:
+        """Register an asynchronous event hook callback invoked on published outbox envelopes."""
+        self._event_hooks.append(hook)
 
     async def get_diagnostics_snapshot(self) -> dict[str, Any]:
         """Return diagnostic status of outbox relay worker and pending event queue."""
@@ -86,6 +97,20 @@ class OutboxRelay:
         """Alias for get_diagnostics_snapshot."""
         return await self.get_diagnostics_snapshot()
 
+    async def _invoke_event_hooks(self, envelope: OutboxEnvelope) -> None:
+        """Execute registered event hooks in order, suppressing and logging exceptions."""
+        if not self._event_hooks:
+            return
+        for hook in self._event_hooks:
+            try:
+                await hook(envelope)
+            except Exception as hook_exc:  # noqa: BLE001
+                logger.warning(
+                    "Event hook error for outbox event %s: %s",
+                    envelope.id,
+                    hook_exc,
+                )
+
     async def drain_once(self) -> int:
         """Claim a batch of pending events, publish to broker, and update database state."""
         async with self._engine.begin() as conn:
@@ -117,6 +142,7 @@ class OutboxRelay:
 
             try:
                 await self._broker.publish(envelope)
+                await self._invoke_event_hooks(envelope)
                 succeeded_ids.append(event_id)
             except Exception as exc:  # noqa: BLE001
                 logger.warning(

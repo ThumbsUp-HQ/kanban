@@ -6,12 +6,16 @@ from __future__ import annotations
 
 from kanban.api.v1 import build_v1_router
 from kanban.api.v1.admin.audit_shred import router as admin_audit_shred_router
+from kanban.api.v1.admin.webhooks import router as admin_webhooks_router
 from kanban.api.v1.admin.workload_identities import (
     router as admin_workload_identities_router,
 )
+from kanban.api.v1.webhooks_scm import router as webhooks_scm_router
 
 __all__ = [
     "admin_audit_shred_router",
+    "admin_webhooks_router",
     "admin_workload_identities_router",
     "build_v1_router",
+    "webhooks_scm_router",
 ]

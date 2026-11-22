@@ -1,0 +1,27 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan75-f07352f0
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 57 items
+
+kanban/tests/security/test_shared_ssrf_transport.py ............         [ 21%]
+kanban/tests/repos/test_mirror_ssh_known_hosts.py ..                     [ 24%]
+kanban/tests/webhooks/test_inbound_scm_webhooks.py ......                [ 35%]
+kanban/tests/webhooks/test_outbound_webhook_dispatcher.py ........       [ 49%]
+kanban/tests/security/test_admin_routes_protected.py ..                  [ 52%]
+database/tests/test_p1_17_models.py .....                                [ 61%]
+kanban/tests/media_proxy/test_media_proxy_api.py .................       [ 91%]
+kanban/tests/media_proxy/test_ssrf_and_rebinding.py .....                [100%]
+
+============================= 57 passed in 18.13s ==============================
+Name                                     Stmts   Miss Branch BrPart  Cover
+--------------------------------------------------------------------------
+database/models/webhooks.py                 65      0      0      0   100%
+kanban/api/v1/admin/webhooks.py            164      2     28      2    98%
+kanban/api/v1/webhooks_scm.py              290     11    100      8    95%
+kanban/security/ssrf.py                    110      0     34      0   100%
+kanban/webhooks/outbound_dispatcher.py     130      5     28      2    96%
+--------------------------------------------------------------------------
+TOTAL                                      759     18    190     12    97%
