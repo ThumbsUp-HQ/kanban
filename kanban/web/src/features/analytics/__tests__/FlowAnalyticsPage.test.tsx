@@ -4,6 +4,11 @@ import React from 'react';
 import { MemoryRouter, Routes, Route } from 'react-router';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { FlowAnalyticsPage } from '../FlowAnalyticsPage';
+import { CfdAreaChart } from '../charts/CfdAreaChart';
+import { CycleTimeScatterChart } from '../charts/CycleTimeScatterChart';
+import { AgingWipChart } from '../charts/AgingWipChart';
+import { MonteCarloForecastCard } from '../charts/MonteCarloForecastCard';
+import { CycleBurndownChart } from '../charts/CycleBurndownChart';
 import { BoardCard } from '../../board/BoardCard';
 import * as clientModule from '../../../api/client';
 
@@ -347,5 +352,272 @@ describe('FlowAnalyticsPage & Flow Telemetry Studio (KAN-79)', () => {
     );
 
     expect(screen.queryByTestId('aging-wip-KAN-100')).toBeNull();
+  });
+
+  it('covers chart edge cases, loading/empty states, mode toggles, and fallback branches', () => {
+    // 1. CfdAreaChart loading, empty, and single-point states
+    const { rerender } = render(<CfdAreaChart points={[]} isLoading={true} />);
+    expect(screen.getByTestId('cfd-loading')).toBeDefined();
+
+    rerender(<CfdAreaChart points={[]} isLoading={false} />);
+    expect(screen.getByTestId('cfd-empty')).toBeDefined();
+
+    rerender(
+      <CfdAreaChart
+        points={[
+          { date: '2026-11-01', backlog: 2, unstarted: 1, started: 1, completed: 1, cancelled: 0, total: 5 },
+        ]}
+      />
+    );
+    expect(screen.getByTestId('cfd-area-chart-card')).toBeDefined();
+
+    // 2. CycleTimeScatterChart loading, empty, single-point, p85 threshold colors, and cycle/lead mode toggle
+    const pct = { p50: 2.0, p85: 3.0, p95: 5.0 };
+    rerender(
+      <CycleTimeScatterChart
+        points={[]}
+        cycleTimePercentiles={pct}
+        leadTimePercentiles={pct}
+        totalCompleted={0}
+        isLoading={true}
+      />
+    );
+    expect(screen.getByTestId('cycletime-loading')).toBeDefined();
+
+    rerender(
+      <CycleTimeScatterChart
+        points={[]}
+        cycleTimePercentiles={pct}
+        leadTimePercentiles={pct}
+        totalCompleted={0}
+        isLoading={false}
+      />
+    );
+    expect(screen.getByTestId('cycletime-empty')).toBeDefined();
+
+    rerender(
+      <CycleTimeScatterChart
+        points={[
+          {
+            issue_id: 'i-single',
+            issue_key: 'KAN-10',
+            title: 'Single Point',
+            cycle_time_days: 4.5,
+            lead_time_days: 1.5,
+            completed_at: '2026-11-02T10:00:00Z',
+          },
+        ]}
+        cycleTimePercentiles={pct}
+        leadTimePercentiles={pct}
+        totalCompleted={1}
+      />
+    );
+    const modeBtn = screen.getByTestId('mode-toggle-btn');
+    fireEvent.click(modeBtn);
+    expect(modeBtn.textContent).toContain('Switch to Cycle Time');
+    fireEvent.click(modeBtn);
+    expect(modeBtn.textContent).toContain('Switch to Lead Time');
+
+    // 3. AgingWipChart loading, empty, unmapped column, normal (<p85) item, and zero thresholds
+    rerender(
+      <AgingWipChart activeIssues={[]} columnThresholds={{}} totalActiveWip={0} isLoading={true} />
+    );
+    expect(screen.getByTestId('aging-wip-loading')).toBeDefined();
+
+    rerender(
+      <AgingWipChart activeIssues={[]} columnThresholds={{}} totalActiveWip={0} isLoading={false} />
+    );
+    expect(screen.getByTestId('aging-wip-empty')).toBeDefined();
+
+    rerender(
+      <AgingWipChart
+        activeIssues={[
+          {
+            issue_id: 'i-norm',
+            issue_key: 'KAN-11',
+            title: 'Normal WIP',
+            state_id: 's2',
+            state_name: 'In Progress',
+            state_color_hex: '#3b82f6',
+            state_entered_at: '2026-11-20T10:00:00Z',
+            first_started_at: '2026-11-20T10:00:00Z',
+            age_in_current_state_hours: 10.0,
+            total_wip_hours: 10.0,
+          },
+          {
+            issue_id: 'i-unmapped',
+            issue_key: 'KAN-12',
+            title: 'Unmapped State',
+            state_id: 's-missing',
+            state_name: 'Missing',
+            state_color_hex: '#94a3b8',
+            state_entered_at: '2026-11-20T10:00:00Z',
+            first_started_at: '2026-11-20T10:00:00Z',
+            age_in_current_state_hours: 5.0,
+            total_wip_hours: 5.0,
+          },
+        ]}
+        columnThresholds={{
+          s2: {
+            state_id: 's2',
+            state_name: 'In Progress',
+            p50_hours: 20.0,
+            p85_hours: 40.0,
+            p95_hours: 60.0,
+          },
+          sZero: {
+            state_id: 'sZero',
+            state_name: 'Zero Col',
+            p50_hours: 0,
+            p85_hours: 0,
+            p95_hours: 0,
+          },
+        }}
+        totalActiveWip={2}
+      />
+    );
+    fireEvent.click(screen.getByTestId('aging-wip-table-toggle'));
+    expect(screen.getAllByText('Normal').length).toBeGreaterThan(0);
+
+    // 4. MonteCarloForecastCard null forecast, null days/dates, and TBD date fallbacks
+    rerender(<MonteCarloForecastCard forecast={null} />);
+    expect(screen.getByText(/No throughput history available/)).toBeDefined();
+
+    rerender(
+      <MonteCarloForecastCard
+        forecast={{
+          trials: 1000,
+          historical_daily_throughput: [0],
+          average_daily_throughput: 0,
+          how_many: { horizon_days: 14, p50: 0, p85: 0, p95: 0, distribution: {} },
+          when: {
+            target_items: 10,
+            p50_days: null,
+            p50_date: null,
+            p85_days: null,
+            p85_date: null,
+            p95_days: null,
+            p95_date: null,
+            distribution: {},
+          },
+        }}
+      />
+    );
+    fireEvent.click(screen.getByTestId('monte-carlo-table-toggle'));
+    expect(screen.getByTestId('mc-when-p50').textContent).toBe('N/A');
+
+    rerender(
+      <MonteCarloForecastCard
+        forecast={{
+          trials: 1000,
+          historical_daily_throughput: [1],
+          average_daily_throughput: 1,
+          how_many: { horizon_days: 14, p50: 14, p85: 10, p95: 8, distribution: {} },
+          when: {
+            target_items: 10,
+            p50_days: 10,
+            p50_date: null,
+            p85_days: 14,
+            p85_date: null,
+            p95_days: 18,
+            p95_date: null,
+            distribution: {},
+          },
+        }}
+      />
+    );
+    expect(screen.getByTestId('mc-when-p50').textContent).toContain('TBD');
+
+    // 5. CycleBurndownChart empty, single point without ideal, and >10 points decimation
+    rerender(<CycleBurndownChart burndown={null} />);
+    expect(screen.getByText(/No burndown data recorded/)).toBeDefined();
+
+    rerender(
+      <CycleBurndownChart
+        burndown={{
+          cycle_id: 'c1',
+          series: [{ date: '2026-11-01', scope: 5, remaining: 5 }],
+          ideal: [],
+        }}
+      />
+    );
+    fireEvent.click(screen.getByTestId('burndown-table-toggle'));
+    expect(screen.getAllByText('N/A').length).toBeGreaterThan(0);
+
+    const manySeries = Array.from({ length: 12 }, (_, idx) => ({
+      date: `2026-11-${String(idx + 1).padStart(2, '0')}`,
+      scope: 12,
+      remaining: Math.max(0, 12 - idx),
+    }));
+    rerender(
+      <CycleBurndownChart
+        burndown={{
+          cycle_id: 'c1',
+          series: manySeries,
+          ideal: manySeries.map((s) => ({ date: s.date, remaining: s.remaining })),
+        }}
+      />
+    );
+    expect(screen.getByTestId('cycle-burndown-chart')).toBeDefined();
+  });
+
+  it('handles wrapped cycle items response, cycle selection change, empty numeric input fallbacks, and error retry', async () => {
+    let failFirst = true;
+    vi.mocked(clientModule.apiFetch).mockImplementation((_method, path) => {
+      const p = typeof path === 'string' ? path : '';
+      if (p.includes('/analytics/flow')) {
+        if (failFirst) {
+          failFirst = false;
+          return Promise.reject(new Error('Temporary failure'));
+        }
+        return Promise.resolve(mockFlowData);
+      }
+      if (p.includes('/cycles') && p.includes('/burndown')) {
+        return Promise.resolve(mockBurndown);
+      }
+      if (p.includes('/cycles')) {
+        return Promise.resolve({
+          items: [
+            {
+              id: 'c-planned',
+              project_id: 'a0000000-0000-0000-0000-000000000001',
+              name: 'Sprint Planned',
+              status: 'upcoming',
+              issue_count: 4,
+              completed_count: 0,
+            },
+            {
+              id: 'c-second',
+              project_id: 'a0000000-0000-0000-0000-000000000001',
+              name: 'Sprint Second',
+              status: 'completed',
+              issue_count: 6,
+              completed_count: 6,
+            },
+          ],
+        });
+      }
+      return Promise.reject(new Error(`Unhandled: ${p}`));
+    });
+
+    renderWithProviders(<FlowAnalyticsPage />);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('flow-error')).toBeDefined();
+    });
+
+    fireEvent.click(screen.getByText('Retry'));
+
+    await waitFor(() => {
+      expect(screen.getByTestId('flow-cycle-select')).toBeDefined();
+    });
+
+    fireEvent.change(screen.getByTestId('flow-cycle-select'), { target: { value: 'c-second' } });
+    fireEvent.change(screen.getByTestId('flow-horizon-input'), { target: { value: '0' } });
+    fireEvent.change(screen.getByTestId('flow-target-items-input'), { target: { value: '0' } });
+
+    await waitFor(() => {
+      expect(screen.getByTestId<HTMLSelectElement>('flow-cycle-select').value).toBe('c-second');
+    });
   });
 });
