@@ -4,8 +4,10 @@
 - **Ticket ID**: `KAN-66`
 - **Spec Section**: `KB-SEC-04` (S11.4, S7.2, S4.2 item 1, S3.2 item 2, S13.2)
 - **Title**: `[KB-SEC-04] Enforce Immutable CredentialBoundary Across REST Bearer Auth, Workspace/Project Allowlists, CIDR, Capability Mask, & Tool Scope`
-- **Git Branch**: `feat/KAN-66-rest-credential-boundary`
-- **Workspace**: `/home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan66-2b84dffc`
+- **Git Branch**: `main` (merged from `feat/KAN-66-rest-credential-boundary`)
+- **Merged `main` Commit SHA**: `ea104737b3071af8b0d7331325dad31425cdff5c` (`ea104737`, merging `a5d23fb913ca87601c20d93b39a3a103d237c0df`)
+- **Browser Screenshots**: `N/A - Non-UI Security & REST Bearer CredentialBoundary Ticket`
+- **Workspace**: `/home/adamoutler/kanban`
 
 ---
 

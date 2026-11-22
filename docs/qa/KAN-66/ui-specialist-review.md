@@ -2,8 +2,8 @@
 
 - **Reviewer Persona:** `ux-architect` / `ui-designer` (UI/UX Specialist Reviewer)
 - **Ticket:** `KAN-66` (`[KB-SEC-04] Enforce Immutable CredentialBoundary Across REST Bearer Auth, Workspace/Project Allowlists, CIDR, Capability Mask, & Tool Scope`)
-- **Audited Commit (`HEAD`):** `a5d23fb913ca87601c20d93b39a3a103d237c0df` (`a5d23fb9`)
-- **Audited Branch:** `feat/KAN-66-rest-credential-boundary`
+- **Audited Commit (`HEAD`):** `ea104737b3071af8b0d7331325dad31425cdff5c` (`ea104737`, merging `a5d23fb913ca87601c20d93b39a3a103d237c0df`)
+- **Audited Branch:** `main` (merged from `feat/KAN-66-rest-credential-boundary`)
 - **Reviewed Artifacts:**
   - `docs/qa/KAN-66/git-diff.patch`
   - `docs/qa/KAN-66/contract-sample.json`
