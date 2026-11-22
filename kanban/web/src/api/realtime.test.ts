@@ -4,10 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   DEDUP_CAPACITY,
   RealtimeClient,
+  SSE_EVENT_NAMES,
   backoffDelay,
   bindQueryInvalidation,
   getRealtimeClient,
   setRealtimeClient,
+  sseUrl,
   useRealtime,
   type RealtimeEvent,
 } from './realtime.ts';
@@ -631,6 +633,193 @@ describe('bindQueryInvalidation', () => {
       setRealtimeClient(client);
       expect(getRealtimeClient()).toBe(client);
       setRealtimeClient(prev);
+    });
+  });
+
+  describe('Recipient-scoped notifications, SSE Last-Event-ID, and frame hardening (KAN-310)', () => {
+    it('includes notification.created, notification.read, and notification.read_all in SSE_EVENT_NAMES and forwards last_event_id in sseUrl', () => {
+      expect(SSE_EVENT_NAMES).toContain('notification.created');
+      expect(SSE_EVENT_NAMES).toContain('notification.read');
+      expect(SSE_EVENT_NAMES).toContain('notification.read_all');
+
+      expect(sseUrl(['notifications:self'])).toContain('/sse?channels=notifications%3Aself');
+      expect(sseUrl(['notifications:self'])).not.toContain('last_event_id=');
+      expect(sseUrl(['notifications:self'], '42')).toContain(
+        '/sse?channels=notifications%3Aself&last_event_id=42',
+      );
+    });
+
+    it('strips __proto__, constructor, and prototype keys via safeJsonParse and drops mismatched recipient_principal_id frames', () => {
+      const client = new RealtimeClient({
+        session: { authenticated: true, mfa_pending: false, principal_id: 'principal-alice' },
+      });
+      const received: RealtimeEvent[] = [];
+      client.subscribe('notifications:self', (e) => received.push(e));
+
+      // 1. Prototype pollution payload in handleFrame is sanitized
+      client.simulateFrame(
+        '{"type":"event","topic":"notification.created","channel":"notifications:self","event_id":"101","payload":{"recipient_principal_id":"principal-alice","notification_id":"n-1","__proto__":{"polluted":true},"constructor":{"bad":1},"prototype":{"evil":1}}}',
+      );
+      expect(received).toHaveLength(1);
+      expect(({} as Record<string, unknown>).polluted).toBeUndefined();
+      expect(Object.prototype.hasOwnProperty.call(received[0]?.payload, '__proto__')).toBe(false);
+      expect(Object.prototype.hasOwnProperty.call(received[0]?.payload, 'constructor')).toBe(false);
+      expect(Object.prototype.hasOwnProperty.call(received[0]?.payload, 'prototype')).toBe(false);
+
+      // 2. Mismatched recipient_principal_id is dropped and counted in droppedEvents
+      client.simulateFrame(
+        JSON.stringify({
+          type: 'event',
+          topic: 'notification.created',
+          channel: 'notifications:self',
+          event_id: '102',
+          payload: {
+            recipient_principal_id: 'principal-bob',
+            notification_id: 'n-2',
+          },
+        }),
+      );
+      expect(received).toHaveLength(1);
+      expect(client.droppedEvents).toBe(1);
+      expect(client.lastEventId).toBe('101');
+    });
+
+    it('handles notification.created, notification.read, and notification.read_all in bindQueryInvalidation with optimistic cache patching', () => {
+      const client = new RealtimeClient();
+      const queryClient = new QueryClient();
+      const invalidate = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue();
+      const setQueryDataSpy = vi.spyOn(queryClient, 'setQueryData');
+      bindQueryInvalidation(client, queryClient);
+
+      // 1. notification.created invalidates ['notifications']
+      client.simulateFrame(
+        JSON.stringify({
+          type: 'event',
+          topic: 'notification.created',
+          channel: 'notifications:self',
+          event_id: '201',
+          payload: { recipient_principal_id: 'u1', notification_id: 'notif-1' },
+        }),
+      );
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['notifications'] });
+      invalidate.mockClear();
+
+      // 2. notification.read when cache is populated patches in-place without invalidation stampede
+      queryClient.setQueryData(['notifications', false], {
+        items: [
+          { id: 'notif-1', read_at: null, read: false },
+          { id: 'notif-2', read_at: null, read: false },
+        ],
+      });
+      setQueryDataSpy.mockClear();
+
+      client.simulateFrame(
+        JSON.stringify({
+          type: 'event',
+          topic: 'notification.read',
+          channel: 'notifications:self',
+          event_id: '202',
+          payload: { recipient_principal_id: 'u1', notification_id: 'notif-1' },
+        }),
+      );
+      expect(setQueryDataSpy).toHaveBeenCalled();
+      expect(invalidate).not.toHaveBeenCalled();
+      const afterRead = queryClient.getQueryData<{
+        items: { id: string; read_at: string | null; read?: boolean }[];
+      }>(['notifications', false]);
+      expect(afterRead?.items[0]?.read_at).toEqual(expect.any(String));
+      expect(afterRead?.items[0]?.read).toBe(true);
+      expect(afterRead?.items[1]?.read_at).toBeNull();
+
+      // 3. notification.read for uncached notification ID falls back to invalidateQueries
+      client.simulateFrame(
+        JSON.stringify({
+          type: 'event',
+          topic: 'notification.read',
+          channel: 'notifications:self',
+          event_id: '203',
+          payload: { recipient_principal_id: 'u1', notification_id: 'notif-uncached' },
+        }),
+      );
+      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['notifications'] });
+      invalidate.mockClear();
+
+      // 4. notification.read_all patches all cached items read without invalidation stampede
+      client.simulateFrame(
+        JSON.stringify({
+          type: 'event',
+          topic: 'notification.read_all',
+          channel: 'notifications:self',
+          event_id: '204',
+          payload: { recipient_principal_id: 'u1', marked_count: 1 },
+        }),
+      );
+      expect(invalidate).not.toHaveBeenCalled();
+      const afterReadAll = queryClient.getQueryData<{
+        items: { id: string; read_at: string | null; read?: boolean }[];
+      }>(['notifications', false]);
+      expect(afterReadAll?.items.every((item) => typeof item.read_at === 'string' && item.read === true)).toBe(true);
+
+      // 5. notification.read_all when cache is empty falls back to invalidateQueries
+      const emptyQueryClient = new QueryClient();
+      const emptyInvalidate = vi.spyOn(emptyQueryClient, 'invalidateQueries').mockResolvedValue();
+      bindQueryInvalidation(client, emptyQueryClient);
+      client.simulateFrame(
+        JSON.stringify({
+          type: 'event',
+          topic: 'notification.read_all',
+          channel: 'notifications:self',
+          event_id: '205',
+          payload: { recipient_principal_id: 'u1', marked_count: 1 },
+        }),
+      );
+      expect(emptyInvalidate).toHaveBeenCalledWith({ queryKey: ['notifications'] });
+
+      // 6. comment.created with comment_id invalidates ['comments', commentId]
+      client.simulateFrame(
+        JSON.stringify({
+          type: 'event',
+          topic: 'comment.created',
+          channel: 'issue:KAN-5',
+          event_id: '206',
+          payload: { comment_id: 'cmt-99' },
+        }),
+      );
+      expect(emptyInvalidate).toHaveBeenCalledWith({ queryKey: ['comments', 'cmt-99'] });
+    });
+
+    it('setSession connects when allowed and reconnects when workspace_id changes, and sse-fallback updates on subscribe/unsubscribe', () => {
+      vi.useFakeTimers();
+      FakeWebSocket.instances = [];
+      FakeEventSource.instances = [];
+      vi.stubGlobal('WebSocket', FakeWebSocket);
+      vi.stubGlobal('EventSource', FakeEventSource);
+      try {
+        const c = new RealtimeClient({
+          session: { authenticated: false, mfa_pending: false, workspace_id: 'ws-1' },
+        });
+        c.setSession({ authenticated: true, mfa_pending: false, workspace_id: 'ws-1' });
+        expect(c.state).toBe('connecting');
+        ws().open();
+        expect(c.state).toBe('open');
+
+        c.setSession({ authenticated: true, mfa_pending: false, workspace_id: 'ws-2' });
+        expect(c.state).toBe('connecting');
+
+        // Switch to sse-fallback and test subscribe/unsubscribe re-opening SSE
+        for (let i = 0; i < 3; i += 1) {
+          ws().fail();
+          vi.runOnlyPendingTimers();
+        }
+        expect(c.state).toBe('sse-fallback');
+        const unsub = c.subscribe('notifications:self', () => undefined);
+        expect(sse().url).toContain('notifications%3Aself');
+        unsub();
+        c.close();
+      } finally {
+        vi.useRealTimers();
+        vi.unstubAllGlobals();
+      }
     });
   });
 });

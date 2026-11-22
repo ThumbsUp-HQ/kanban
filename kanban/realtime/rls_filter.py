@@ -17,10 +17,19 @@ if TYPE_CHECKING:
 
 __all__ = [
     "EXTERNAL_COLLABORATOR_REDACTED",
+    "NOTIFICATION_TOPICS",
     "OutboxEventLike",
     "authorize_event_recipients",
     "redact_event_payload",
 ]
+
+NOTIFICATION_TOPICS: Final[frozenset[str]] = frozenset(
+    {
+        "notification.created",
+        "notification.read",
+        "notification.read_all",
+    }
+)
 
 EXTERNAL_COLLABORATOR_REDACTED: Final[dict[str, Any]] = {
     "redacted": True,
@@ -63,6 +72,32 @@ def redact_event_payload(payload: dict[str, Any], *, is_visible: bool = True) ->
     return redacted
 
 
+def _filter_notification_candidates(
+    event: OutboxEventLike | object,
+    candidate_principals: Sequence[uuid.UUID] | AbstractSet[uuid.UUID],
+) -> set[uuid.UUID]:
+    """Intersect candidates with recipient_principal_id for notification events."""
+    topic: str | None = getattr(event, "topic", None)
+    raw_payload: Any = getattr(event, "payload", None)
+    payload: dict[str, Any] = raw_payload if isinstance(raw_payload, dict) else {}
+
+    is_notif = (
+        isinstance(topic, str)
+        and (topic in NOTIFICATION_TOPICS or topic.startswith("notification."))
+    ) or "recipient_principal_id" in payload
+    if not is_notif:
+        return set(candidate_principals)
+
+    recipient_raw = payload.get("recipient_principal_id")
+    if not recipient_raw:
+        return set()
+    try:
+        recipient_uuid = uuid.UUID(str(recipient_raw))
+    except (ValueError, TypeError, AttributeError):
+        return set()
+    return set(candidate_principals) & {recipient_uuid}
+
+
 async def authorize_event_recipients(
     session: AsyncSession,
     event: OutboxEventLike | object,
@@ -77,15 +112,18 @@ async def authorize_event_recipients(
     if not candidate_principals:
         return set()
 
+    candidates_set = _filter_notification_candidates(event, candidate_principals)
+    if not candidates_set:
+        return set()
+
     object_id: uuid.UUID | None = getattr(event, "object_id", None)
     workspace_id: uuid.UUID | None = getattr(event, "workspace_id", None)
     project_id: uuid.UUID | None = getattr(event, "project_id", None)
 
     target_id = object_id if object_id is not None else project_id
     if target_id is None:
-        # Event is not bound to a specific object or project; all candidate principals in the
-        # workspace are authorized recipients.
-        return set(candidate_principals)
+        # Event is not bound to a specific object or project; return remaining candidate principals.
+        return candidates_set
 
     if workspace_id is None:
         ws_val = await session.scalar(
@@ -98,7 +136,7 @@ async def authorize_event_recipients(
     authorized: set[uuid.UUID] = set()
     ws_str = str(workspace_id) if workspace_id is not None else ""
 
-    for candidate in candidate_principals:
+    for candidate in candidates_set:
         if ws_str:
             await session.execute(
                 text(

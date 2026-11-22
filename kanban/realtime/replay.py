@@ -11,7 +11,11 @@ from typing import TYPE_CHECKING, Any
 
 from sqlalchemy import text
 
-from kanban.realtime.rls_filter import OutboxEventLike, authorize_event_recipients
+from kanban.realtime.rls_filter import (
+    NOTIFICATION_TOPICS,
+    OutboxEventLike,
+    authorize_event_recipients,
+)
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -120,6 +124,29 @@ class OutboxReplayer:
         return False, max_seq
 
     @staticmethod
+    def _match_notification_channel(
+        channel_set: AbstractSet[str],
+        payload: dict[str, Any] | None,
+        principal_id: uuid.UUID | None,
+    ) -> str | None:
+        """Determine recipient-only channel for notification events."""
+        if principal_id is None or not isinstance(payload, dict):
+            return None
+        recipient_raw = payload.get("recipient_principal_id")
+        if not recipient_raw:
+            return None
+        try:
+            recipient_uuid = uuid.UUID(str(recipient_raw))
+        except (ValueError, TypeError, AttributeError):
+            return None
+        if recipient_uuid != principal_id:
+            return None
+        for chan in ("notifications:self", f"user:{principal_id}"):
+            if chan in channel_set:
+                return chan
+        return None
+
+    @staticmethod
     def _match_channel(
         channel_set: AbstractSet[str],
         ws_id: uuid.UUID,
@@ -173,10 +200,21 @@ class OutboxReplayer:
         replayed: list[ReplayedEvent] = []
         for row in rows:
             row_ws_id = uuid.UUID(str(row["workspace_id"]))
+            if row_ws_id != workspace_id:
+                continue
             row_proj_id = uuid.UUID(str(row["project_id"])) if row["project_id"] else None
             row_obj_id = uuid.UUID(str(row["object_id"])) if row["object_id"] else None
+            row_topic = str(row["topic"])
+            row_payload = dict(row["payload"]) if isinstance(row["payload"], dict) else {}
 
-            matching_channel = self._match_channel(channel_set, row_ws_id, row_proj_id, row_obj_id)
+            if row_topic in NOTIFICATION_TOPICS or row_topic.startswith("notification."):
+                matching_channel = self._match_notification_channel(
+                    channel_set, row_payload, principal_id
+                )
+            else:
+                matching_channel = self._match_channel(
+                    channel_set, row_ws_id, row_proj_id, row_obj_id
+                )
             if matching_channel is None:
                 continue
 
@@ -184,6 +222,8 @@ class OutboxReplayer:
                 workspace_id=row_ws_id,
                 object_id=row_obj_id,
                 project_id=row_proj_id,
+                topic=row_topic,
+                payload=row_payload,
             )
             authorized = await authorize_event_recipients(session, envelope, [principal_id])
             if principal_id not in authorized:
@@ -193,11 +233,11 @@ class OutboxReplayer:
                 ReplayedEvent(
                     event_id=str(row["seq"]),
                     channel=matching_channel,
-                    topic=str(row["topic"]),
+                    topic=row_topic,
                     workspace_id=row_ws_id,
                     project_id=row_proj_id,
                     object_id=row_obj_id,
-                    payload=dict(row["payload"]),
+                    payload=row_payload,
                     created_at=row["created_at"],
                 )
             )
@@ -258,3 +298,5 @@ class _SimpleEnvelope(OutboxEventLike):
     workspace_id: uuid.UUID
     object_id: uuid.UUID | None
     project_id: uuid.UUID | None
+    topic: str = ""
+    payload: dict[str, Any] | None = None

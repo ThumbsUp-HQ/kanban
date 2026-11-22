@@ -20,6 +20,7 @@ from sqlalchemy import text
 from database.session import RLSContext
 from kanban.realtime.replay import OutboxReplayer
 from kanban.realtime.rls_filter import (
+    NOTIFICATION_TOPICS,
     authorize_event_recipients,
 )
 
@@ -48,7 +49,7 @@ WS_CLOSE_CONNECTION_LIMIT: Final[int] = 4429
 WS_CLOSE_DRAINING: Final[int] = 1001
 
 _CHANNEL_REGEX = re.compile(
-    r"^(?P<kind>workspace|project|issue|doc):(?P<id>[0-9a-fA-F-]{36}|[0-9a-fA-F]{32})$"
+    r"^(?:(?P<kind>workspace|project|issue|doc|user):(?P<id>[0-9a-fA-F-]{36}|[0-9a-fA-F]{32})|notifications:self)$"
 )
 
 
@@ -439,6 +440,26 @@ class RealtimeHub:
             return None
         return (f"doc:{target_uuid}", target_uuid, "doc")
 
+    @staticmethod
+    def _resolve_user_channel(
+        principal_id: uuid.UUID,
+        kind: str,
+        raw_id: str,
+    ) -> tuple[str, uuid.UUID, str] | None:
+        if kind == "notifications":
+            if raw_id == "self":
+                return (f"user:{principal_id}", principal_id, "user")
+            return None
+
+        try:
+            target_uuid = uuid.UUID(raw_id)
+        except ValueError:
+            return None
+
+        if target_uuid != principal_id:
+            return None
+        return (f"user:{principal_id}", principal_id, "user")
+
     async def resolve_channel(
         self,
         session: AsyncSession,
@@ -453,6 +474,7 @@ class RealtimeHub:
         - project:<UUID> or project:<KEY>
         - issue:<UUID> or issue:<KEY>
         - doc:<UUID>
+        - notifications:self or user:<SELF_UUID>
 
         Returns None if channel format is invalid, target does not exist, or principal lacks VIEW.
         """
@@ -475,6 +497,8 @@ class RealtimeHub:
             result = await self._resolve_issue_channel(session, workspace_id, principal_id, raw_id)
         elif kind == "doc":
             result = await self._resolve_doc_channel(session, workspace_id, principal_id, raw_id)
+        elif kind in ("notifications", "user"):
+            result = self._resolve_user_channel(principal_id, kind, raw_id)
         return result
 
     async def check_channel_viewable(
@@ -564,8 +588,18 @@ class RealtimeHub:
     ) -> None:
         """Handle client unsubscribe request."""
         unsubscribed: list[str] = []
+        user_chan = f"user:{conn.principal_id}"
         for ch in channels:
-            if ch in conn.subscribed_channels:
+            if ch in ("notifications:self", user_chan):
+                if (
+                    ch in conn.subscribed_channels
+                    or "notifications:self" in conn.subscribed_channels
+                    or user_chan in conn.subscribed_channels
+                ):
+                    conn.subscribed_channels.discard("notifications:self")
+                    conn.subscribed_channels.discard(user_chan)
+                    unsubscribed.append(ch)
+            elif ch in conn.subscribed_channels:
                 conn.subscribed_channels.remove(ch)
                 unsubscribed.append(ch)
 
@@ -616,10 +650,40 @@ class RealtimeHub:
             return ws_chan
         return None
 
+    async def _resolve_notification_candidates(
+        self, envelope: OutboxEnvelope
+    ) -> list[tuple[RealtimeConnection, str]]:
+        """Resolve recipient-only connections subscribed to notifications:self or user:<uuid>."""
+        raw_payload = envelope.payload or {}
+        recipient_raw = raw_payload.get("recipient_principal_id")
+        if not recipient_raw:
+            return []
+        try:
+            recipient_uuid = uuid.UUID(str(recipient_raw))
+        except (ValueError, TypeError, AttributeError):
+            return []
+
+        user_chan = f"user:{recipient_uuid}"
+        notif_candidates: list[tuple[RealtimeConnection, str]] = []
+        async with self._lock:
+            user_conns = self.get_user_connections(envelope.workspace_id, recipient_uuid)
+
+        for conn in user_conns:
+            if conn.workspace_id != envelope.workspace_id or conn.principal_id != recipient_uuid:
+                continue
+            if "notifications:self" in conn.subscribed_channels:
+                notif_candidates.append((conn, "notifications:self"))
+            elif user_chan in conn.subscribed_channels:
+                notif_candidates.append((conn, user_chan))
+        return notif_candidates
+
     async def _resolve_candidate_connections(
         self, envelope: OutboxEnvelope
     ) -> list[tuple[RealtimeConnection, str]]:
         """Identify active connections subscribed to matching channels for this envelope."""
+        if envelope.topic in NOTIFICATION_TOPICS or envelope.topic.startswith("notification."):
+            return await self._resolve_notification_candidates(envelope)
+
         ws_chan = f"workspace:{envelope.workspace_id}"
         proj_chan = f"project:{envelope.project_id}" if envelope.project_id is not None else None
         issue_chan = f"issue:{envelope.object_id}" if envelope.object_id is not None else None
@@ -654,6 +718,25 @@ class RealtimeHub:
 
         return candidates
 
+    @staticmethod
+    async def _dispatch_notification_candidates(
+        envelope: OutboxEnvelope,
+        candidates: list[tuple[RealtimeConnection, str]],
+        authorized_principals: set[uuid.UUID],
+    ) -> None:
+        recipient_raw = (envelope.payload or {}).get("recipient_principal_id")
+        try:
+            recipient_uuid = uuid.UUID(str(recipient_raw))
+        except (ValueError, TypeError, AttributeError):
+            return
+        for conn, matching_chan in candidates:
+            if (
+                conn.principal_id == recipient_uuid
+                and conn.workspace_id == envelope.workspace_id
+                and conn.principal_id in authorized_principals
+            ):
+                await conn.send_event(envelope, matching_chan)
+
     async def dispatch_envelope(self, session: AsyncSession, envelope: OutboxEnvelope) -> None:
         """Route outbox envelope through delivery-time RLS filter to subscribed connections."""
         if envelope.topic in ("security.session_revoked", "security.principal_deactivated"):
@@ -668,6 +751,12 @@ class RealtimeHub:
         authorized_principals = await authorize_event_recipients(
             session, envelope, candidate_principals
         )
+
+        if envelope.topic in NOTIFICATION_TOPICS or envelope.topic.startswith("notification."):
+            await self._dispatch_notification_candidates(
+                envelope, candidates, authorized_principals
+            )
+            return
 
         issue_chan = f"issue:{envelope.object_id}" if envelope.object_id is not None else None
         doc_chan = f"doc:{envelope.object_id}" if envelope.object_id is not None else None

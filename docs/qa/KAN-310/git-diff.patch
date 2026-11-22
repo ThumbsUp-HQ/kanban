@@ -1,0 +1,2748 @@
+diff --git a/kanban/realtime/hub.py b/kanban/realtime/hub.py
+index a5e2ef5f..49838137 100644
+--- a/kanban/realtime/hub.py
++++ b/kanban/realtime/hub.py
+@@ -20,6 +20,7 @@ from sqlalchemy import text
+ from database.session import RLSContext
+ from kanban.realtime.replay import OutboxReplayer
+ from kanban.realtime.rls_filter import (
++    NOTIFICATION_TOPICS,
+     authorize_event_recipients,
+ )
+ 
+@@ -48,7 +49,7 @@ WS_CLOSE_CONNECTION_LIMIT: Final[int] = 4429
+ WS_CLOSE_DRAINING: Final[int] = 1001
+ 
+ _CHANNEL_REGEX = re.compile(
+-    r"^(?P<kind>workspace|project|issue|doc):(?P<id>[0-9a-fA-F-]{36}|[0-9a-fA-F]{32})$"
++    r"^(?:(?P<kind>workspace|project|issue|doc|user):(?P<id>[0-9a-fA-F-]{36}|[0-9a-fA-F]{32})|notifications:self)$"
+ )
+ 
+ 
+@@ -439,6 +440,26 @@ class RealtimeHub:
+             return None
+         return (f"doc:{target_uuid}", target_uuid, "doc")
+ 
++    @staticmethod
++    def _resolve_user_channel(
++        principal_id: uuid.UUID,
++        kind: str,
++        raw_id: str,
++    ) -> tuple[str, uuid.UUID, str] | None:
++        if kind == "notifications":
++            if raw_id == "self":
++                return (f"user:{principal_id}", principal_id, "user")
++            return None
++
++        try:
++            target_uuid = uuid.UUID(raw_id)
++        except ValueError:
++            return None
++
++        if target_uuid != principal_id:
++            return None
++        return (f"user:{principal_id}", principal_id, "user")
++
+     async def resolve_channel(
+         self,
+         session: AsyncSession,
+@@ -453,6 +474,7 @@ class RealtimeHub:
+         - project:<UUID> or project:<KEY>
+         - issue:<UUID> or issue:<KEY>
+         - doc:<UUID>
++        - notifications:self or user:<SELF_UUID>
+ 
+         Returns None if channel format is invalid, target does not exist, or principal lacks VIEW.
+         """
+@@ -475,6 +497,8 @@ class RealtimeHub:
+             result = await self._resolve_issue_channel(session, workspace_id, principal_id, raw_id)
+         elif kind == "doc":
+             result = await self._resolve_doc_channel(session, workspace_id, principal_id, raw_id)
++        elif kind in ("notifications", "user"):
++            result = self._resolve_user_channel(principal_id, kind, raw_id)
+         return result
+ 
+     async def check_channel_viewable(
+@@ -564,8 +588,18 @@ class RealtimeHub:
+     ) -> None:
+         """Handle client unsubscribe request."""
+         unsubscribed: list[str] = []
++        user_chan = f"user:{conn.principal_id}"
+         for ch in channels:
+-            if ch in conn.subscribed_channels:
++            if ch in ("notifications:self", user_chan):
++                if (
++                    ch in conn.subscribed_channels
++                    or "notifications:self" in conn.subscribed_channels
++                    or user_chan in conn.subscribed_channels
++                ):
++                    conn.subscribed_channels.discard("notifications:self")
++                    conn.subscribed_channels.discard(user_chan)
++                    unsubscribed.append(ch)
++            elif ch in conn.subscribed_channels:
+                 conn.subscribed_channels.remove(ch)
+                 unsubscribed.append(ch)
+ 
+@@ -616,10 +650,40 @@ class RealtimeHub:
+             return ws_chan
+         return None
+ 
++    async def _resolve_notification_candidates(
++        self, envelope: OutboxEnvelope
++    ) -> list[tuple[RealtimeConnection, str]]:
++        """Resolve recipient-only connections subscribed to notifications:self or user:<uuid>."""
++        raw_payload = envelope.payload or {}
++        recipient_raw = raw_payload.get("recipient_principal_id")
++        if not recipient_raw:
++            return []
++        try:
++            recipient_uuid = uuid.UUID(str(recipient_raw))
++        except (ValueError, TypeError, AttributeError):
++            return []
++
++        user_chan = f"user:{recipient_uuid}"
++        notif_candidates: list[tuple[RealtimeConnection, str]] = []
++        async with self._lock:
++            user_conns = self.get_user_connections(envelope.workspace_id, recipient_uuid)
++
++        for conn in user_conns:
++            if conn.workspace_id != envelope.workspace_id or conn.principal_id != recipient_uuid:
++                continue
++            if "notifications:self" in conn.subscribed_channels:
++                notif_candidates.append((conn, "notifications:self"))
++            elif user_chan in conn.subscribed_channels:
++                notif_candidates.append((conn, user_chan))
++        return notif_candidates
++
+     async def _resolve_candidate_connections(
+         self, envelope: OutboxEnvelope
+     ) -> list[tuple[RealtimeConnection, str]]:
+         """Identify active connections subscribed to matching channels for this envelope."""
++        if envelope.topic in NOTIFICATION_TOPICS or envelope.topic.startswith("notification."):
++            return await self._resolve_notification_candidates(envelope)
++
+         ws_chan = f"workspace:{envelope.workspace_id}"
+         proj_chan = f"project:{envelope.project_id}" if envelope.project_id is not None else None
+         issue_chan = f"issue:{envelope.object_id}" if envelope.object_id is not None else None
+@@ -654,6 +718,25 @@ class RealtimeHub:
+ 
+         return candidates
+ 
++    @staticmethod
++    async def _dispatch_notification_candidates(
++        envelope: OutboxEnvelope,
++        candidates: list[tuple[RealtimeConnection, str]],
++        authorized_principals: set[uuid.UUID],
++    ) -> None:
++        recipient_raw = (envelope.payload or {}).get("recipient_principal_id")
++        try:
++            recipient_uuid = uuid.UUID(str(recipient_raw))
++        except (ValueError, TypeError, AttributeError):
++            return
++        for conn, matching_chan in candidates:
++            if (
++                conn.principal_id == recipient_uuid
++                and conn.workspace_id == envelope.workspace_id
++                and conn.principal_id in authorized_principals
++            ):
++                await conn.send_event(envelope, matching_chan)
++
+     async def dispatch_envelope(self, session: AsyncSession, envelope: OutboxEnvelope) -> None:
+         """Route outbox envelope through delivery-time RLS filter to subscribed connections."""
+         if envelope.topic in ("security.session_revoked", "security.principal_deactivated"):
+@@ -669,6 +752,12 @@ class RealtimeHub:
+             session, envelope, candidate_principals
+         )
+ 
++        if envelope.topic in NOTIFICATION_TOPICS or envelope.topic.startswith("notification."):
++            await self._dispatch_notification_candidates(
++                envelope, candidates, authorized_principals
++            )
++            return
++
+         issue_chan = f"issue:{envelope.object_id}" if envelope.object_id is not None else None
+         doc_chan = f"doc:{envelope.object_id}" if envelope.object_id is not None else None
+ 
+diff --git a/kanban/realtime/replay.py b/kanban/realtime/replay.py
+index 3357b3fb..674d86ed 100644
+--- a/kanban/realtime/replay.py
++++ b/kanban/realtime/replay.py
+@@ -11,7 +11,11 @@ from typing import TYPE_CHECKING, Any
+ 
+ from sqlalchemy import text
+ 
+-from kanban.realtime.rls_filter import OutboxEventLike, authorize_event_recipients
++from kanban.realtime.rls_filter import (
++    NOTIFICATION_TOPICS,
++    OutboxEventLike,
++    authorize_event_recipients,
++)
+ 
+ if TYPE_CHECKING:
+     from collections.abc import Sequence
+@@ -119,6 +123,29 @@ class OutboxReplayer:
+ 
+         return False, max_seq
+ 
++    @staticmethod
++    def _match_notification_channel(
++        channel_set: AbstractSet[str],
++        payload: dict[str, Any] | None,
++        principal_id: uuid.UUID | None,
++    ) -> str | None:
++        """Determine recipient-only channel for notification events."""
++        if principal_id is None or not isinstance(payload, dict):
++            return None
++        recipient_raw = payload.get("recipient_principal_id")
++        if not recipient_raw:
++            return None
++        try:
++            recipient_uuid = uuid.UUID(str(recipient_raw))
++        except (ValueError, TypeError, AttributeError):
++            return None
++        if recipient_uuid != principal_id:
++            return None
++        for chan in ("notifications:self", f"user:{principal_id}"):
++            if chan in channel_set:
++                return chan
++        return None
++
+     @staticmethod
+     def _match_channel(
+         channel_set: AbstractSet[str],
+@@ -173,10 +200,21 @@ class OutboxReplayer:
+         replayed: list[ReplayedEvent] = []
+         for row in rows:
+             row_ws_id = uuid.UUID(str(row["workspace_id"]))
++            if row_ws_id != workspace_id:
++                continue
+             row_proj_id = uuid.UUID(str(row["project_id"])) if row["project_id"] else None
+             row_obj_id = uuid.UUID(str(row["object_id"])) if row["object_id"] else None
++            row_topic = str(row["topic"])
++            row_payload = dict(row["payload"]) if isinstance(row["payload"], dict) else {}
+ 
+-            matching_channel = self._match_channel(channel_set, row_ws_id, row_proj_id, row_obj_id)
++            if row_topic in NOTIFICATION_TOPICS or row_topic.startswith("notification."):
++                matching_channel = self._match_notification_channel(
++                    channel_set, row_payload, principal_id
++                )
++            else:
++                matching_channel = self._match_channel(
++                    channel_set, row_ws_id, row_proj_id, row_obj_id
++                )
+             if matching_channel is None:
+                 continue
+ 
+@@ -184,6 +222,8 @@ class OutboxReplayer:
+                 workspace_id=row_ws_id,
+                 object_id=row_obj_id,
+                 project_id=row_proj_id,
++                topic=row_topic,
++                payload=row_payload,
+             )
+             authorized = await authorize_event_recipients(session, envelope, [principal_id])
+             if principal_id not in authorized:
+@@ -193,11 +233,11 @@ class OutboxReplayer:
+                 ReplayedEvent(
+                     event_id=str(row["seq"]),
+                     channel=matching_channel,
+-                    topic=str(row["topic"]),
++                    topic=row_topic,
+                     workspace_id=row_ws_id,
+                     project_id=row_proj_id,
+                     object_id=row_obj_id,
+-                    payload=dict(row["payload"]),
++                    payload=row_payload,
+                     created_at=row["created_at"],
+                 )
+             )
+@@ -258,3 +298,5 @@ class _SimpleEnvelope(OutboxEventLike):
+     workspace_id: uuid.UUID
+     object_id: uuid.UUID | None
+     project_id: uuid.UUID | None
++    topic: str = ""
++    payload: dict[str, Any] | None = None
+diff --git a/kanban/realtime/rls_filter.py b/kanban/realtime/rls_filter.py
+index ab6dcb93..001f107c 100644
+--- a/kanban/realtime/rls_filter.py
++++ b/kanban/realtime/rls_filter.py
+@@ -17,11 +17,20 @@ if TYPE_CHECKING:
+ 
+ __all__ = [
+     "EXTERNAL_COLLABORATOR_REDACTED",
++    "NOTIFICATION_TOPICS",
+     "OutboxEventLike",
+     "authorize_event_recipients",
+     "redact_event_payload",
+ ]
+ 
++NOTIFICATION_TOPICS: Final[frozenset[str]] = frozenset(
++    {
++        "notification.created",
++        "notification.read",
++        "notification.read_all",
++    }
++)
++
+ EXTERNAL_COLLABORATOR_REDACTED: Final[dict[str, Any]] = {
+     "redacted": True,
+     "label": "1 External Collaborator",
+@@ -63,6 +72,32 @@ def redact_event_payload(payload: dict[str, Any], *, is_visible: bool = True) ->
+     return redacted
+ 
+ 
++def _filter_notification_candidates(
++    event: OutboxEventLike | object,
++    candidate_principals: Sequence[uuid.UUID] | AbstractSet[uuid.UUID],
++) -> set[uuid.UUID]:
++    """Intersect candidates with recipient_principal_id for notification events."""
++    topic: str | None = getattr(event, "topic", None)
++    raw_payload: Any = getattr(event, "payload", None)
++    payload: dict[str, Any] = raw_payload if isinstance(raw_payload, dict) else {}
++
++    is_notif = (
++        isinstance(topic, str)
++        and (topic in NOTIFICATION_TOPICS or topic.startswith("notification."))
++    ) or "recipient_principal_id" in payload
++    if not is_notif:
++        return set(candidate_principals)
++
++    recipient_raw = payload.get("recipient_principal_id")
++    if not recipient_raw:
++        return set()
++    try:
++        recipient_uuid = uuid.UUID(str(recipient_raw))
++    except (ValueError, TypeError, AttributeError):
++        return set()
++    return set(candidate_principals) & {recipient_uuid}
++
++
+ async def authorize_event_recipients(
+     session: AsyncSession,
+     event: OutboxEventLike | object,
+@@ -77,15 +112,18 @@ async def authorize_event_recipients(
+     if not candidate_principals:
+         return set()
+ 
++    candidates_set = _filter_notification_candidates(event, candidate_principals)
++    if not candidates_set:
++        return set()
++
+     object_id: uuid.UUID | None = getattr(event, "object_id", None)
+     workspace_id: uuid.UUID | None = getattr(event, "workspace_id", None)
+     project_id: uuid.UUID | None = getattr(event, "project_id", None)
+ 
+     target_id = object_id if object_id is not None else project_id
+     if target_id is None:
+-        # Event is not bound to a specific object or project; all candidate principals in the
+-        # workspace are authorized recipients.
+-        return set(candidate_principals)
++        # Event is not bound to a specific object or project; return remaining candidate principals.
++        return candidates_set
+ 
+     if workspace_id is None:
+         ws_val = await session.scalar(
+@@ -98,7 +136,7 @@ async def authorize_event_recipients(
+     authorized: set[uuid.UUID] = set()
+     ws_str = str(workspace_id) if workspace_id is not None else ""
+ 
+-    for candidate in candidate_principals:
++    for candidate in candidates_set:
+         if ws_str:
+             await session.execute(
+                 text(
+diff --git a/kanban/services/notifications.py b/kanban/services/notifications.py
+index e75c40b4..675d528d 100644
+--- a/kanban/services/notifications.py
++++ b/kanban/services/notifications.py
+@@ -180,6 +180,21 @@ async def mark_notification_read(
+ 
+     if notif.read_at is None:
+         notif.read_at = datetime.now(UTC)
++        await session.execute(
++            insert(OutboxEvent)
++            .inline()
++            .values(
++                workspace_id=notif.workspace_id,
++                project_id=None,
++                object_id=None,
++                topic="notification.read",
++                payload={
++                    "topic": "notification.read",
++                    "recipient_principal_id": str(caller.principal_id),
++                    "notification_id": str(notification_id),
++                },
++            )
++        )
+         await session.flush()
+ 
+ 
+@@ -195,8 +210,25 @@ async def mark_all_read(session: AsyncSession, caller: PrincipalContext) -> int:
+         .values(read_at=now)
+     )
+     result = await session.execute(stmt)
++    marked = int(result.rowcount)
++    if marked > 0:
++        await session.execute(
++            insert(OutboxEvent)
++            .inline()
++            .values(
++                workspace_id=caller.workspace_id,
++                project_id=None,
++                object_id=None,
++                topic="notification.read_all",
++                payload={
++                    "topic": "notification.read_all",
++                    "recipient_principal_id": str(caller.principal_id),
++                    "marked_count": marked,
++                },
++            )
++        )
+     await session.flush()
+-    return int(result.rowcount)
++    return marked
+ 
+ 
+ async def handle_activity_event(
+diff --git a/kanban/tests/api/test_notifications.py b/kanban/tests/api/test_notifications.py
+new file mode 100644
+index 00000000..9e151424
+--- /dev/null
++++ b/kanban/tests/api/test_notifications.py
+@@ -0,0 +1,583 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""API and service tests for notifications and outbox read sync events (KB-P3-06, KAN-310)."""
++
++# ruff: noqa: PLR0915
++
++from __future__ import annotations
++
++import uuid
++from datetime import UTC, datetime, timedelta
++from typing import TYPE_CHECKING
++
++import pytest
++from sqlalchemy import select, text
++
++from database.models import IssueSubscription, Notification, OutboxEvent
++from kanban.api.deps import PrincipalContext
++from kanban.api.problems import ProblemException
++from kanban.services.activity import (
++    ActivityCategory,
++    ActivityEnvelope,
++    ActivityEventType,
++    EphemeralEnvelope,
++    clear_activity_listeners,
++    record_activity,
++)
++from kanban.services.notifications import (
++    decode_cursor,
++    handle_activity_event,
++    list_notifications,
++    mark_all_read,
++    mark_notification_read,
++    register_notifications_listener,
++)
++
++if TYPE_CHECKING:
++    from collections.abc import Awaitable, Callable
++
++    import httpx
++
++    from kanban.tests.api.conftest import ApiEnv, SeededUser
++    from kanban.tests.contract import ContractRecorder
++
++pytestmark = pytest.mark.committed_db
++
++FORBIDDEN_PAYLOAD_KEYS = frozenset(
++    {
++        "summary",
++        "description",
++        "description_markdown",
++        "body",
++        "body_markdown",
++        "title",
++        "key",
++        "issue_key",
++        "actor",
++        "actor_email",
++        "actor_handle",
++        "actor_name",
++        "display_name",
++        "email",
++        "handle",
++    }
++)
++
++
++async def test_notifications_mark_read_and_read_all_emit_idempotent_outbox_events_for_member(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Verify non-admin MEMBER mark_read and mark_all_read emit idempotent ID-only outbox events."""
++    admin = await make_user("notif_outbox_admin", workspace_role="WORKSPACE_ADMIN")
++    member = await make_user("notif_outbox_member", workspace_role="WORKSPACE_MEMBER")
++    other = await make_user("notif_outbox_other", workspace_role="WORKSPACE_MEMBER")
++
++    _ = await make_project(
++        "NTFWS",
++        created_by=admin,
++        roles={admin: "PROJECT_ADMIN", member: "MEMBER", other: "MEMBER"},
++    )
++
++    clear_activity_listeners()
++    register_notifications_listener()
++
++    # 1. Member creates an issue (auto-subscribed as CREATOR)
++    client_member = as_principal(member)
++    issue_resp = await client_member.post(
++        "/api/v1/projects/NTFWS/issues",
++        json={"summary": "Confidential Security Issue Title", "priority": "high"},
++    )
++    assert issue_resp.status_code == 201, issue_resp.text
++    issue_data = issue_resp.json()
++    issue_id = uuid.UUID(issue_data["id"])
++
++    # 2. Admin posts two comments so Member receives 2 notifications + 2 outbox rows
++    client_admin = as_principal(admin)
++    for idx in (1, 2):
++        c_resp = await client_admin.post(
++            f"/api/v1/issues/{issue_data['key']}/comments",
++            json={"body_markdown": f"Top secret comment body #{idx}"},
++        )
++        assert c_resp.status_code == 201, c_resp.text
++
++    # Seed 1 notification for other user to verify isolation on mark_all_read
++    other_notif_id = uuid.uuid4()
++    api_env.seed.add(
++        Notification(
++            id=other_notif_id,
++            workspace_id=api_env.workspace_id,
++            recipient_principal_id=other.id,
++            issue_id=issue_id,
++            activity_record_id=uuid.uuid4(),
++            event_type="COMMENT_CREATED",
++            created_at=datetime.now(UTC),
++            read_at=None,
++        )
++    )
++    await api_env.seed.commit()
++
++    # 3. Member lists unread notifications via GET /api/v1/notifications
++    client_member = as_principal(member)
++    list_resp = await client_member.get("/api/v1/notifications?unread=true&limit=10")
++    assert list_resp.status_code == 200, list_resp.text
++    items = list_resp.json()["items"]
++    assert len(items) == 2
++    notif_1_id = uuid.UUID(items[0]["id"])
++    notif_2_id = uuid.UUID(items[1]["id"])
++
++    # Verify notification.created outbox payloads have zero sensitive keys
++    created_outbox = (
++        (
++            await api_env.seed.execute(
++                select(OutboxEvent).where(
++                    OutboxEvent.workspace_id == api_env.workspace_id,
++                    OutboxEvent.topic == "notification.created",
++                )
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert len(created_outbox) >= 2
++    for ob in created_outbox:
++        assert set(ob.payload.keys()) == {"topic", "recipient_principal_id", "notification_id"}
++        assert FORBIDDEN_PAYLOAD_KEYS.isdisjoint(ob.payload.keys())
++
++    # 4. Foreign user attempting to mark Member's notification read gets 404 and emits 0 outbox rows
++    client_other = as_principal(other)
++    foreign_resp = await client_other.post(f"/api/v1/notifications/{notif_1_id}/read")
++    assert foreign_resp.status_code == 404
++
++    read_outbox_before = (
++        (
++            await api_env.seed.execute(
++                select(OutboxEvent).where(
++                    OutboxEvent.workspace_id == api_env.workspace_id,
++                    OutboxEvent.topic == "notification.read",
++                )
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert len(read_outbox_before) == 0
++
++    # 5. Non-admin MEMBER marks notif_1 as read -> 204 and emits 1 notification.read outbox row
++    client_member = as_principal(member)
++    mark_resp1 = await client_member.post(f"/api/v1/notifications/{notif_1_id}/read")
++    assert mark_resp1.status_code == 204
++    contract_recorder.record("notification_mark_read_204", mark_resp1.request, mark_resp1)
++
++    read_outbox_after1 = (
++        (
++            await api_env.seed.execute(
++                select(OutboxEvent).where(
++                    OutboxEvent.workspace_id == api_env.workspace_id,
++                    OutboxEvent.topic == "notification.read",
++                )
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert len(read_outbox_after1) == 1
++    ob_read = read_outbox_after1[0]
++    assert ob_read.workspace_id == api_env.workspace_id
++    assert ob_read.project_id is None
++    assert ob_read.object_id is None
++    assert ob_read.payload == {
++        "topic": "notification.read",
++        "recipient_principal_id": str(member.id),
++        "notification_id": str(notif_1_id),
++    }
++    assert FORBIDDEN_PAYLOAD_KEYS.isdisjoint(ob_read.payload.keys())
++
++    # 6. Repeat POST /api/v1/notifications/{notif_1_id}/read is idempotent (204, 0 new rows)
++    mark_resp1_repeat = await client_member.post(f"/api/v1/notifications/{notif_1_id}/read")
++    assert mark_resp1_repeat.status_code == 204
++
++    read_outbox_after_repeat = (
++        (
++            await api_env.seed.execute(
++                select(OutboxEvent).where(
++                    OutboxEvent.workspace_id == api_env.workspace_id,
++                    OutboxEvent.topic == "notification.read",
++                )
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert len(read_outbox_after_repeat) == 1
++
++    # 7. Non-admin MEMBER calls POST /api/v1/notifications/read-all -> marks remaining 1 unread
++    # and emits 1 notification.read_all outbox row
++    read_all_resp = await client_member.post("/api/v1/notifications/read-all")
++    assert read_all_resp.status_code == 200
++    assert read_all_resp.json() == {"marked": 1}
++    contract_recorder.record("notification_mark_all_read_200", read_all_resp.request, read_all_resp)
++
++    read_all_outbox = (
++        (
++            await api_env.seed.execute(
++                select(OutboxEvent).where(
++                    OutboxEvent.workspace_id == api_env.workspace_id,
++                    OutboxEvent.topic == "notification.read_all",
++                )
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert len(read_all_outbox) == 1
++    ob_ra = read_all_outbox[0]
++    assert ob_ra.workspace_id == api_env.workspace_id
++    assert ob_ra.project_id is None
++    assert ob_ra.object_id is None
++    assert ob_ra.payload == {
++        "topic": "notification.read_all",
++        "recipient_principal_id": str(member.id),
++        "marked_count": 1,
++    }
++    assert FORBIDDEN_PAYLOAD_KEYS.isdisjoint(ob_ra.payload.keys())
++
++    # 8. Repeat POST /api/v1/notifications/read-all when 0 unread remain returns marked=0 (0 rows)
++    read_all_repeat = await client_member.post("/api/v1/notifications/read-all")
++    assert read_all_repeat.status_code == 200
++    assert read_all_repeat.json() == {"marked": 0}
++
++    read_all_outbox_repeat = (
++        (
++            await api_env.seed.execute(
++                select(OutboxEvent).where(
++                    OutboxEvent.workspace_id == api_env.workspace_id,
++                    OutboxEvent.topic == "notification.read_all",
++                )
++            )
++        )
++        .scalars()
++        .all()
++    )
++    assert len(read_all_outbox_repeat) == 1
++
++    # Verify notif_2 is read and other user's notification is still unread
++    api_env.seed.expire_all()
++    n2_row = (
++        await api_env.seed.execute(select(Notification).where(Notification.id == notif_2_id))
++    ).scalar_one()
++    assert n2_row.read_at is not None
++
++    other_row = (
++        await api_env.seed.execute(select(Notification).where(Notification.id == other_notif_id))
++    ).scalar_one()
++    assert other_row.read_at is None
++
++
++async def test_notifications_service_branches_pagination_and_auto_subscriptions(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Exercise notifications service pagination, actor redaction, auto-subscribe, and limits."""
++    admin = await make_user("svc_admin", workspace_role="WORKSPACE_ADMIN")
++    member = await make_user("svc_member", workspace_role="WORKSPACE_MEMBER")
++    mention_user = await make_user("svc_mention", workspace_role="WORKSPACE_MEMBER")
++    outsider = await make_user("svc_outsider")
++
++    proj_id = await make_project(
++        "NTFS",
++        created_by=admin,
++        roles={admin: "PROJECT_ADMIN", member: "MEMBER", mention_user: "MEMBER"},
++    )
++
++    clear_activity_listeners()
++    register_notifications_listener()
++    register_notifications_listener()
++
++    client_admin = as_principal(admin)
++    issue_resp = await client_admin.post(
++        "/api/v1/projects/NTFS/issues",
++        json={"summary": "Service Branch Issue", "priority": "none"},
++    )
++    assert issue_resp.status_code == 201
++    issue_id = uuid.UUID(issue_resp.json()["id"])
++
++    session = api_env.seed
++
++    # 1. Ephemeral and non-issue activity events are ignored cleanly
++    await handle_activity_event(
++        session,
++        EphemeralEnvelope(
++            workspace_id=api_env.workspace_id,
++            object_id=issue_id,
++            actor_principal_id=admin.id,
++            event_type="issue.reordered",
++            payload={},
++        ),
++    )
++    await handle_activity_event(
++        session,
++        ActivityEnvelope(
++            activity_id=uuid.uuid4(),
++            workspace_id=api_env.workspace_id,
++            object_id=None,
++            actor_principal_id=admin.id,
++            event_type=ActivityEventType.PROJECT_CREATED,
++            category=ActivityCategory.SYSTEM,
++            payload={},
++        ),
++    )
++    await handle_activity_event(
++        session,
++        ActivityEnvelope(
++            activity_id=uuid.uuid4(),
++            workspace_id=api_env.workspace_id,
++            object_id=proj_id,
++            actor_principal_id=admin.id,
++            event_type=ActivityEventType.PROJECT_CREATED,
++            category=ActivityCategory.SYSTEM,
++            payload={},
++        ),
++    )
++
++    # 2. Auto-subscribe assignee (principal vs invalid vs non-viewer)
++    await record_activity(
++        session,
++        workspace_id=api_env.workspace_id,
++        object_id=issue_id,
++        actor_principal_id=admin.id,
++        event_type=ActivityEventType.ASSIGNEE_ADDED,
++        payload={"kind": "principal", "principal_id": str(member.id)},
++    )
++    await record_activity(
++        session,
++        workspace_id=api_env.workspace_id,
++        object_id=issue_id,
++        actor_principal_id=admin.id,
++        event_type=ActivityEventType.ASSIGNEE_ADDED,
++        payload={"kind": "principal", "principal_id": "invalid-uuid"},
++    )
++    await record_activity(
++        session,
++        workspace_id=api_env.workspace_id,
++        object_id=issue_id,
++        actor_principal_id=admin.id,
++        event_type=ActivityEventType.ASSIGNEE_ADDED,
++        payload={"kind": "free_text", "display_name": "External"},
++    )
++
++    # 3. Auto-subscribe mention (viewer vs non-viewer vs invalid vs non-list)
++    await record_activity(
++        session,
++        workspace_id=api_env.workspace_id,
++        object_id=issue_id,
++        actor_principal_id=admin.id,
++        event_type=ActivityEventType.COMMENT_CREATED,
++        payload={
++            "mentioned_principal_ids": [
++                str(mention_user.id),
++                str(outsider.id),
++                "bad-uuid",
++            ]
++        },
++    )
++    await record_activity(
++        session,
++        workspace_id=api_env.workspace_id,
++        object_id=issue_id,
++        actor_principal_id=admin.id,
++        event_type=ActivityEventType.COMMENT_CREATED,
++        payload={"mentioned_principal_ids": "not-a-list"},
++    )
++    await session.commit()
++
++    # Mute COMMENT_CREATED for mention_user and test muted skip
++    await session.execute(
++        text(
++            "UPDATE issue_subscriptions SET muted_event_types = :m "
++            "WHERE issue_id = :iss AND principal_id = :pid"
++        ),
++        {"iss": issue_id, "m": ["COMMENT_CREATED"], "pid": mention_user.id},
++    )
++    # Tombstone member and verify auto-subscribe respects tombstone
++    await session.execute(
++        text(
++            "UPDATE issue_subscriptions SET unsubscribed_at = now() "
++            "WHERE issue_id = :iss AND principal_id = :pid"
++        ),
++        {"iss": issue_id, "pid": member.id},
++    )
++    await record_activity(
++        session,
++        workspace_id=api_env.workspace_id,
++        object_id=issue_id,
++        actor_principal_id=admin.id,
++        event_type=ActivityEventType.ASSIGNEE_ADDED,
++        payload={"kind": "principal", "principal_id": str(member.id)},
++    )
++    await record_activity(
++        session,
++        workspace_id=api_env.workspace_id,
++        object_id=issue_id,
++        actor_principal_id=admin.id,
++        event_type=ActivityEventType.COMMENT_CREATED,
++        payload={"body_markdown": "Muted for mention_user"},
++    )
++    await session.commit()
++
++    # 4. Seed notifications without matching ActivityRecord to test redacted external actor fallback
++    now = datetime.now(UTC)
++    for i in range(4):
++        session.add(
++            Notification(
++                id=uuid.uuid4(),
++                workspace_id=api_env.workspace_id,
++                recipient_principal_id=admin.id,
++                issue_id=issue_id,
++                activity_record_id=uuid.uuid4(),
++                event_type="ISSUE_STATE_CHANGED",
++                created_at=now + timedelta(seconds=i),
++                read_at=None,
++            )
++        )
++    await session.commit()
++
++    admin_ctx = PrincipalContext(
++        principal_id=admin.id,
++        workspace_id=api_env.workspace_id,
++        token_scopes=("session",),
++    )
++
++    page1 = await list_notifications(session, admin_ctx, unread=True, limit=2)
++    assert len(page1.items) == 2
++    assert page1.items[0].actor.redacted is True
++    assert page1.next_cursor is not None
++
++    page2 = await list_notifications(
++        session, admin_ctx, unread=False, cursor=page1.next_cursor, limit=10
++    )
++    assert len(page2.items) >= 2
++
++    # 5. Validation errors on list_notifications and decode_cursor
++    with pytest.raises(ProblemException) as exc_lim:
++        await list_notifications(session, admin_ctx, limit=0)
++    assert exc_lim.value.status == 422
++
++    with pytest.raises(ProblemException) as exc_cur:
++        decode_cursor("invalid_cursor")
++    assert exc_cur.value.status == 422
++
++    # 6. Mark all read directly via service
++    marked = await mark_all_read(session, admin_ctx)
++    assert marked >= 4
++    assert await mark_all_read(session, admin_ctx) == 0
++
++    # 7. Missing notification raises 404
++    with pytest.raises(ProblemException) as exc_nf:
++        await mark_notification_read(session, admin_ctx, uuid.uuid4())
++    assert exc_nf.value.status == 404
++
++
++async def test_notifications_500_recipient_cap_and_no_eligible_branches(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    make_project: Callable[..., Awaitable[uuid.UUID]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Test >500 recipients cap and no-eligible-viewers early exit in _deliver_notifications."""
++    admin = await make_user("cap_admin", workspace_role="WORKSPACE_ADMIN")
++    no_view_user = await make_user("cap_noview")
++    _ = await make_project("NTFC", created_by=admin, roles={admin: "PROJECT_ADMIN"})
++
++    clear_activity_listeners()
++    register_notifications_listener()
++
++    client_admin = as_principal(admin)
++    issue_resp = await client_admin.post(
++        "/api/v1/projects/NTFC/issues",
++        json={"summary": "Cap Issue", "priority": "none"},
++    )
++    assert issue_resp.status_code == 201
++    issue_id = uuid.UUID(issue_resp.json()["id"])
++
++    session = api_env.seed
++
++    # 1. Subscriber lacks VIEW in effective_resource_access -> eligible is empty
++    session.add(
++        IssueSubscription(
++            issue_id=issue_id,
++            principal_id=no_view_user.id,
++            workspace_id=api_env.workspace_id,
++            source="MANUAL",
++            is_muted=False,
++            muted_event_types=[],
++            unsubscribed_at=None,
++        )
++    )
++    await session.commit()
++
++    await record_activity(
++        session,
++        workspace_id=api_env.workspace_id,
++        object_id=issue_id,
++        actor_principal_id=admin.id,
++        event_type=ActivityEventType.ISSUE_STATE_CHANGED,
++        payload={"state": "IN_PROGRESS"},
++    )
++    await session.commit()
++
++    # 2. Seed 501 eligible subscribers and verify cap at 500
++    base_time = datetime.now(UTC) - timedelta(days=5)
++    for i in range(501):
++        uid = uuid.uuid4()
++        await session.execute(
++            text(
++                "INSERT INTO principals (id, principal_type, workspace_id, status, display_name) "
++                "VALUES (:id, 'USER', :ws, 'ACTIVE', :name)"
++            ),
++            {"id": uid, "name": f"Cap User {i}", "ws": api_env.workspace_id},
++        )
++        await session.execute(
++            text(
++                "INSERT INTO issue_subscriptions "
++                "(issue_id, principal_id, workspace_id, source, is_muted, "
++                "muted_event_types, created_at) "
++                "VALUES (:iss, :p, :ws, 'MANUAL', false, '{}', :ts)"
++            ),
++            {
++                "iss": issue_id,
++                "p": uid,
++                "ts": base_time + timedelta(seconds=i),
++                "ws": api_env.workspace_id,
++            },
++        )
++        await session.execute(
++            text(
++                "INSERT INTO effective_resource_access "
++                "(object_id, principal_id, allow_mask, deny_mask, workspace_id) "
++                "VALUES (:obj, :p, 1, 0, :ws)"
++            ),
++            {"obj": issue_id, "p": uid, "ws": api_env.workspace_id},
++        )
++    await session.commit()
++
++    await record_activity(
++        session,
++        workspace_id=api_env.workspace_id,
++        object_id=issue_id,
++        actor_principal_id=admin.id,
++        event_type=ActivityEventType.ISSUE_STATE_CHANGED,
++        payload={"state": "DONE"},
++    )
++    await session.commit()
++
++    count = await session.scalar(
++        text("SELECT count(*) FROM notifications WHERE issue_id = :iss"),
++        {"iss": issue_id},
++    )
++    assert count == 500
+diff --git a/kanban/tests/realtime/test_notification_realtime_isolation.py b/kanban/tests/realtime/test_notification_realtime_isolation.py
+new file mode 100644
+index 00000000..eee032bb
+--- /dev/null
++++ b/kanban/tests/realtime/test_notification_realtime_isolation.py
+@@ -0,0 +1,762 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Tests for recipient-scoped realtime notifications and cross-user isolation (KAN-310)."""
++
++# ruff: noqa: PLR0915, SLF001
++
++from __future__ import annotations
++
++import json
++import uuid
++from datetime import UTC, datetime
++from typing import TYPE_CHECKING, Any
++
++import pytest
++from sqlalchemy import text
++
++from database.outbox.broker import OutboxEnvelope
++from database.session import RLSContext, RLSSessionFactory
++from kanban.realtime.hub import RealtimeHub, WebSocketConnection
++from kanban.realtime.replay import OutboxReplayer
++from kanban.realtime.rls_filter import (
++    NOTIFICATION_TOPICS,
++    OutboxEventLike,
++    authorize_event_recipients,
++)
++from kanban.security.permissions import Capability
++from kanban.tests.realtime.conftest import (
++    AsyncSSETestClient,
++    AsyncWebSocketTestClient,
++    build_realtime_test_app,
++    create_auth_session,
++    create_realtime_test_fixtures,
++)
++from kanban.tests.realtime.test_hub_unit import MockWebSocket
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncEngine
++
++    from kanban.auth.sessions.service import SessionService
++    from kanban.tests.contract import ContractRecorder
++
++
++class _NotifEnvelope(OutboxEventLike):
++    def __init__(
++        self,
++        workspace_id: uuid.UUID,
++        topic: str,
++        payload: dict[str, Any] | None,
++        object_id: uuid.UUID | None = None,
++        project_id: uuid.UUID | None = None,
++    ) -> None:
++        self.workspace_id = workspace_id
++        self.topic = topic
++        self.payload = payload
++        self.object_id = object_id
++        self.project_id = project_id
++
++
++@pytest.mark.asyncio
++async def test_notification_topics_constant_and_rls_filter_recipient_intersection(
++    pg_worker_db: AsyncEngine,
++) -> None:
++    """Verify NOTIFICATION_TOPICS and authorize_event_recipients recipient intersection."""
++    assert (
++        frozenset({"notification.created", "notification.read", "notification.read_all"})
++        == NOTIFICATION_TOPICS
++    )
++
++    factory = RLSSessionFactory(pg_worker_db)
++    fixtures = await create_realtime_test_fixtures(factory)
++    ws_id = fixtures["ws_id"]
++    admin_id = fixtures["admin_id"]
++    maya_id = fixtures["maya_id"]
++    other_id = fixtures["other_id"]
++    issue_id = fixtures["issue_id"]
++    proj_id = fixtures["proj_id"]
++
++    ctx = RLSContext(principal_id=admin_id, workspace_id=ws_id, aal_level=1)
++    async with factory.session(ctx) as session:
++        # 1. notification.read / notification.read_all with object_id=None, project_id=None
++        # Must authorize ONLY maya_id, never admin_id or other_id
++        for topic in ("notification.read", "notification.read_all"):
++            env_read = _NotifEnvelope(
++                workspace_id=ws_id,
++                topic=topic,
++                payload={"topic": topic, "recipient_principal_id": str(maya_id)},
++                object_id=None,
++                project_id=None,
++            )
++            auth_read = await authorize_event_recipients(
++                session, env_read, [admin_id, maya_id, other_id]
++            )
++            assert auth_read == {maya_id}
++
++            # When recipient is not in candidate_principals -> empty set
++            auth_absent = await authorize_event_recipients(session, env_read, [admin_id, other_id])
++            assert auth_absent == set()
++
++        # 2. notification.created with object_id=issue_id intersects with recipient AND checks VIEW
++        env_created = _NotifEnvelope(
++            workspace_id=ws_id,
++            topic="notification.created",
++            payload={
++                "topic": "notification.created",
++                "recipient_principal_id": str(maya_id),
++                "notification_id": str(uuid.uuid4()),
++            },
++            object_id=issue_id,
++            project_id=proj_id,
++        )
++        auth_created = await authorize_event_recipients(
++            session, env_created, [admin_id, maya_id, other_id]
++        )
++        assert auth_created == {maya_id}
++
++        # 3. Missing or malformed recipient_principal_id fails closed
++        for bad_payload in (
++            None,
++            {},
++            {"recipient_principal_id": ""},
++            {"recipient_principal_id": "not-a-uuid"},
++        ):
++            env_bad = _NotifEnvelope(
++                workspace_id=ws_id,
++                topic="notification.created",
++                payload=bad_payload,
++                object_id=issue_id,
++                project_id=proj_id,
++            )
++            assert (
++                await authorize_event_recipients(session, env_bad, [admin_id, maya_id, other_id])
++                == set()
++            )
++
++
++@pytest.mark.asyncio
++async def test_channel_resolution_and_unsubscribe_for_notifications_self_and_user_uuid(
++    pg_worker_db: AsyncEngine,
++    session_service: SessionService,
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Test notifications:self and user:<uuid> channel resolution, anti-enumeration, and cleanup."""
++    factory = RLSSessionFactory(pg_worker_db)
++    fixtures = await create_realtime_test_fixtures(factory)
++    ws_id = fixtures["ws_id"]
++    maya_id = fixtures["maya_id"]
++    other_id = fixtures["other_id"]
++
++    app, hub = build_realtime_test_app(factory, session_service)
++    maya_session = await create_auth_session(
++        factory, session_service, principal_id=maya_id, workspace_id=ws_id
++    )
++
++    ctx = RLSContext(principal_id=maya_id, workspace_id=ws_id, aal_level=1)
++    async with factory.session(ctx) as session:
++        # 1. Valid self resolutions
++        res_alias = await hub.resolve_channel(session, ws_id, maya_id, "notifications:self")
++        assert res_alias == (f"user:{maya_id}", maya_id, "user")
++
++        res_user = await hub.resolve_channel(session, ws_id, maya_id, f"user:{maya_id}")
++        assert res_user == (f"user:{maya_id}", maya_id, "user")
++
++        # 2. Invalid / cross-user resolutions return None (NOT_FOUND, anti-enumeration)
++        assert await hub.resolve_channel(session, ws_id, maya_id, f"user:{other_id}") is None
++        assert await hub.resolve_channel(session, ws_id, maya_id, "user:not-a-uuid") is None
++        assert await hub.resolve_channel(session, ws_id, maya_id, "notifications:other") is None
++        assert (
++            await hub.resolve_channel(session, ws_id, maya_id, f"notifications:{other_id}") is None
++        )
++
++    # 3. WebSocket subscribe/unsubscribe lifecycle and anti-enumeration NOT_FOUND
++    async with AsyncWebSocketTestClient(
++        app,
++        headers={
++            "Cookie": f"__Host-kb_session={maya_session.cookie_val}",
++            "Origin": "https://kanban.example",
++        },
++    ) as ws:
++        # Subscribe to notifications:self
++        sub_req = {"op": "subscribe", "req_id": "sub-self-1", "channels": ["notifications:self"]}
++        await ws.send_text(json.dumps(sub_req))
++        ack = await ws.receive_json()
++        assert ack == {
++            "channels": ["notifications:self"],
++            "req_id": "sub-self-1",
++            "type": "subscribe_ack",
++        }
++        contract_recorder.record_raw("ws_subscribe_notifications_self_ack", sub_req, ack)
++
++        maya_conns = hub.get_user_connections(ws_id, maya_id)
++        assert len(maya_conns) == 1
++        assert "notifications:self" in maya_conns[0].subscribed_channels
++        assert f"user:{maya_id}" in maya_conns[0].subscribed_channels
++
++        # Attempt cross-user subscription -> indistinguishable NOT_FOUND
++        cross_req = {
++            "op": "subscribe",
++            "req_id": "sub-cross-1",
++            "channels": [f"user:{other_id}", "notifications:all"],
++        }
++        await ws.send_text(json.dumps(cross_req))
++        err1 = await ws.receive_json()
++        err2 = await ws.receive_json()
++        assert err1 == {
++            "channel": f"user:{other_id}",
++            "code": "NOT_FOUND",
++            "req_id": "sub-cross-1",
++            "type": "subscribe_error",
++        }
++        assert err2 == {
++            "channel": "notifications:all",
++            "code": "NOT_FOUND",
++            "req_id": "sub-cross-1",
++            "type": "subscribe_error",
++        }
++        contract_recorder.record_raw("ws_subscribe_cross_user_not_found", cross_req, [err1, err2])
++
++        # Unsubscribe notifications:self removes both notifications:self and user:<maya_id>
++        unsub_req = {
++            "op": "unsubscribe",
++            "req_id": "unsub-self-1",
++            "channels": ["notifications:self"],
++        }
++        await ws.send_text(json.dumps(unsub_req))
++        unsub_ack = await ws.receive_json()
++        assert unsub_ack == {
++            "channels": ["notifications:self"],
++            "req_id": "unsub-self-1",
++            "type": "unsubscribe_ack",
++        }
++        assert "notifications:self" not in maya_conns[0].subscribed_channels
++        assert f"user:{maya_id}" not in maya_conns[0].subscribed_channels
++
++        # Subscribe directly to user:<maya_id> and unsubscribe via user:<maya_id>
++        await ws.send_text(
++            json.dumps(
++                {"op": "subscribe", "req_id": "sub-direct-1", "channels": [f"user:{maya_id}"]}
++            )
++        )
++        ack_direct = await ws.receive_json()
++        assert ack_direct["type"] == "subscribe_ack"
++        assert f"user:{maya_id}" in maya_conns[0].subscribed_channels
++
++        await ws.send_text(
++            json.dumps(
++                {"op": "unsubscribe", "req_id": "unsub-direct-1", "channels": [f"user:{maya_id}"]}
++            )
++        )
++        unsub_direct = await ws.receive_json()
++        assert unsub_direct["type"] == "unsubscribe_ack"
++        assert f"user:{maya_id}" not in maya_conns[0].subscribed_channels
++
++
++@pytest.mark.asyncio
++async def test_shared_channel_leak_regression_and_multi_tab_fanout(
++    pg_worker_db: AsyncEngine,
++    session_service: SessionService,
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Verify notification.* events deliver ONLY to recipient and never leak on shared channels."""
++    factory = RLSSessionFactory(pg_worker_db)
++    fixtures = await create_realtime_test_fixtures(factory)
++    ws_id = fixtures["ws_id"]
++    maya_id = fixtures["maya_id"]
++    other_id = fixtures["other_id"]
++    proj_id = fixtures["proj_id"]
++    issue_id = fixtures["issue_id"]
++
++    app, hub = build_realtime_test_app(factory, session_service)
++    maya_sess = await create_auth_session(
++        factory, session_service, principal_id=maya_id, workspace_id=ws_id
++    )
++    other_sess = await create_auth_session(
++        factory, session_service, principal_id=other_id, workspace_id=ws_id
++    )
++
++    async with (
++        AsyncWebSocketTestClient(
++            app,
++            headers={
++                "Cookie": f"__Host-kb_session={maya_sess.cookie_val}",
++                "Origin": "https://kanban.example",
++            },
++        ) as ws_maya_tab1,
++        AsyncWebSocketTestClient(
++            app,
++            headers={
++                "Cookie": f"__Host-kb_session={maya_sess.cookie_val}",
++                "Origin": "https://kanban.example",
++            },
++        ) as ws_maya_tab2,
++        AsyncWebSocketTestClient(
++            app,
++            headers={
++                "Cookie": f"__Host-kb_session={other_sess.cookie_val}",
++                "Origin": "https://kanban.example",
++            },
++        ) as ws_other,
++    ):
++        # Maya Tab 1 subscribes to notifications:self + shared workspace/project/issue channels
++        shared_plus_self = [
++            f"workspace:{ws_id}",
++            f"project:{proj_id}",
++            "project:KAN",
++            f"issue:{issue_id}",
++            "issue:KAN-1",
++            "notifications:self",
++        ]
++        await ws_maya_tab1.send_text(
++            json.dumps({"op": "subscribe", "req_id": "m1", "channels": shared_plus_self})
++        )
++        assert (await ws_maya_tab1.receive_json())["type"] == "subscribe_ack"
++
++        # Maya Tab 2 subscribes ONLY to canonical user:<maya_id>
++        await ws_maya_tab2.send_text(
++            json.dumps({"op": "subscribe", "req_id": "m2", "channels": [f"user:{maya_id}"]})
++        )
++        assert (await ws_maya_tab2.receive_json())["type"] == "subscribe_ack"
++
++        # Other user (also holding VIEW on project & issue) subscribes to ALL shared channels
++        # PLUS their own notifications:self
++        await ws_other.send_text(
++            json.dumps({"op": "subscribe", "req_id": "o1", "channels": shared_plus_self})
++        )
++        assert (await ws_other.receive_json())["type"] == "subscribe_ack"
++
++        ctx = RLSContext(principal_id=fixtures["admin_id"], workspace_id=ws_id, aal_level=1)
++        notif_id = uuid.uuid4()
++        async with factory.session(ctx) as session:
++            # 1. Dispatch notification.created for Maya (bound to proj_id and issue_id)
++            env_created = OutboxEnvelope(
++                id=uuid.uuid4(),
++                seq=701,
++                workspace_id=ws_id,
++                project_id=proj_id,
++                object_id=issue_id,
++                topic="notification.created",
++                payload={
++                    "topic": "notification.created",
++                    "recipient_principal_id": str(maya_id),
++                    "notification_id": str(notif_id),
++                },
++                created_at=datetime.now(UTC),
++            )
++            await hub.dispatch_envelope(session, env_created)
++
++            msg_m1 = await ws_maya_tab1.receive_json(timeout_seconds=2.0)
++            msg_m2 = await ws_maya_tab2.receive_json(timeout_seconds=2.0)
++            assert msg_m1["type"] == "event"
++            assert msg_m1["topic"] == "notification.created"
++            assert msg_m1["channel"] == "notifications:self"
++            assert msg_m1["payload"]["notification_id"] == str(notif_id)
++            assert msg_m2["type"] == "event"
++            assert msg_m2["topic"] == "notification.created"
++            assert msg_m2["channel"] == f"user:{maya_id}"
++            contract_recorder.record_raw("ws_notification_created_frame", {"seq": 701}, msg_m1)
++
++            # Other user MUST receive 0 frames
++            with pytest.raises(TimeoutError):
++                await ws_other.receive_json(timeout_seconds=0.25)
++
++            # 2. Dispatch notification.read for Maya (project_id=None, object_id=None)
++            env_read = OutboxEnvelope(
++                id=uuid.uuid4(),
++                seq=702,
++                workspace_id=ws_id,
++                project_id=None,
++                object_id=None,
++                topic="notification.read",
++                payload={
++                    "topic": "notification.read",
++                    "recipient_principal_id": str(maya_id),
++                    "notification_id": str(notif_id),
++                },
++                created_at=datetime.now(UTC),
++            )
++            await hub.dispatch_envelope(session, env_read)
++
++            read_m1 = await ws_maya_tab1.receive_json(timeout_seconds=2.0)
++            read_m2 = await ws_maya_tab2.receive_json(timeout_seconds=2.0)
++            assert read_m1["topic"] == "notification.read"
++            assert read_m1["channel"] == "notifications:self"
++            assert read_m2["topic"] == "notification.read"
++            assert read_m2["channel"] == f"user:{maya_id}"
++            contract_recorder.record_raw("ws_notification_read_frame", {"seq": 702}, read_m1)
++
++            with pytest.raises(TimeoutError):
++                await ws_other.receive_json(timeout_seconds=0.25)
++
++            # 3. Dispatch notification.read_all for Maya (project_id=None, object_id=None)
++            env_read_all = OutboxEnvelope(
++                id=uuid.uuid4(),
++                seq=703,
++                workspace_id=ws_id,
++                project_id=None,
++                object_id=None,
++                topic="notification.read_all",
++                payload={
++                    "topic": "notification.read_all",
++                    "recipient_principal_id": str(maya_id),
++                    "marked_count": 3,
++                },
++                created_at=datetime.now(UTC),
++            )
++            await hub.dispatch_envelope(session, env_read_all)
++
++            ra_m1 = await ws_maya_tab1.receive_json(timeout_seconds=2.0)
++            ra_m2 = await ws_maya_tab2.receive_json(timeout_seconds=2.0)
++            assert ra_m1["topic"] == "notification.read_all"
++            assert ra_m1["payload"]["marked_count"] == 3
++            assert ra_m2["topic"] == "notification.read_all"
++            contract_recorder.record_raw("ws_notification_read_all_frame", {"seq": 703}, ra_m1)
++
++            with pytest.raises(TimeoutError):
++                await ws_other.receive_json(timeout_seconds=0.25)
++
++
++@pytest.mark.asyncio
++async def test_notification_live_dispatch_requires_user_channel_and_enforces_view_and_workspace(
++    pg_worker_db: AsyncEngine,
++) -> None:
++    """Test notification.* never routes via project/issue/workspace and checks VIEW/workspace."""
++    factory = RLSSessionFactory(pg_worker_db)
++    fixtures = await create_realtime_test_fixtures(factory)
++    ws_id = fixtures["ws_id"]
++    admin_id = fixtures["admin_id"]
++    maya_id = fixtures["maya_id"]
++    proj_id = fixtures["proj_id"]
++    issue_id = fixtures["issue_id"]
++
++    hub = RealtimeHub(session_factory=factory)
++
++    # 1. Maya connected in ws_id subscribed ONLY to workspace/project/issue (not notifications:self)
++    ws_shared_only = MockWebSocket()
++    conn_shared_only = WebSocketConnection(
++        id=uuid.uuid4(),
++        websocket=ws_shared_only,  # type: ignore[arg-type]
++        workspace_id=ws_id,
++        principal_id=maya_id,
++        session_id=uuid.uuid4(),
++        subscribed_channels={
++            f"workspace:{ws_id}",
++            f"project:{proj_id}",
++            f"issue:{issue_id}",
++        },
++    )
++    await hub.register_connection(conn_shared_only)
++
++    # 2. Same principal connected in a DIFFERENT workspace (ws_2) subscribed to notifications:self
++    ws_other_workspace = MockWebSocket()
++    conn_other_ws = WebSocketConnection(
++        id=uuid.uuid4(),
++        websocket=ws_other_workspace,  # type: ignore[arg-type]
++        workspace_id=uuid.uuid4(),
++        principal_id=maya_id,
++        session_id=uuid.uuid4(),
++        subscribed_channels={"notifications:self", f"user:{maya_id}"},
++    )
++    await hub.register_connection(conn_other_ws)
++
++    ctx = RLSContext(principal_id=admin_id, workspace_id=ws_id, aal_level=1)
++    async with factory.session(ctx) as session:
++        env = OutboxEnvelope(
++            id=uuid.uuid4(),
++            seq=801,
++            workspace_id=ws_id,
++            project_id=proj_id,
++            object_id=issue_id,
++            topic="notification.created",
++            payload={
++                "topic": "notification.created",
++                "recipient_principal_id": str(maya_id),
++                "notification_id": str(uuid.uuid4()),
++            },
++            created_at=datetime.now(UTC),
++        )
++        await hub.dispatch_envelope(session, env)
++        assert ws_shared_only.sent_texts == []
++        assert ws_other_workspace.sent_texts == []
++
++        # 3. Malformed or missing recipient_principal_id delivers 0 frames
++        conn_shared_only.subscribed_channels.add("notifications:self")
++        for bad_payload in ({}, {"recipient_principal_id": "invalid-uuid"}):
++            bad_env = OutboxEnvelope(
++                id=uuid.uuid4(),
++                seq=802,
++                workspace_id=ws_id,
++                project_id=proj_id,
++                object_id=issue_id,
++                topic="notification.created",
++                payload=bad_payload,
++                created_at=datetime.now(UTC),
++            )
++            await hub.dispatch_envelope(session, bad_env)
++        assert ws_shared_only.sent_texts == []
++
++        # 4. Post-commit VIEW revocation on issue_id suppresses notification.created delivery
++        # without revoking notifications:self channel
++        await session.execute(
++            text(
++                "UPDATE effective_resource_access "
++                "SET deny_mask = :deny "
++                "WHERE object_id = :oid AND principal_id = :pid"
++            ),
++            {"deny": Capability.VIEW.value, "oid": issue_id, "pid": maya_id},
++        )
++        await hub.dispatch_envelope(session, env)
++        assert ws_shared_only.sent_texts == []
++        assert "notifications:self" in conn_shared_only.subscribed_channels
++
++
++@pytest.mark.asyncio
++async def test_replay_and_sse_notification_recipient_isolation(
++    pg_worker_db: AsyncEngine,
++    session_service: SessionService,
++    contract_recorder: ContractRecorder,
++) -> None:
++    """Test OutboxReplayer and SSE /sse Last-Event-ID replay enforce recipient & VIEW isolation."""
++    factory = RLSSessionFactory(pg_worker_db)
++    fixtures = await create_realtime_test_fixtures(factory)
++    ws_id = fixtures["ws_id"]
++    admin_id = fixtures["admin_id"]
++    maya_id = fixtures["maya_id"]
++    other_id = fixtures["other_id"]
++    proj_id = fixtures["proj_id"]
++    issue_id = fixtures["issue_id"]
++
++    ctx = RLSContext(principal_id=admin_id, workspace_id=ws_id, aal_level=1)
++    notif1_id = uuid.uuid4()
++    async with factory.session(ctx) as session:
++        ins_stmt = text(
++            "INSERT INTO outbox_events "
++            "(id, workspace_id, project_id, object_id, topic, payload, created_at) "
++            "VALUES (:id, :ws_id, :pid, :oid, :topic, CAST(:payload AS jsonb), :created_at) "
++            "RETURNING seq"
++        )
++        now = datetime.now(UTC)
++        # Anchor event seq0
++        s0 = int(
++            (
++                await session.execute(
++                    ins_stmt,
++                    {
++                        "created_at": now,
++                        "id": uuid.uuid4(),
++                        "oid": issue_id,
++                        "payload": json.dumps({"issue_key": "KAN-1"}),
++                        "pid": proj_id,
++                        "topic": "issue.updated",
++                        "ws_id": ws_id,
++                    },
++                )
++            ).scalar_one()
++        )
++        # s1: notification.created for Maya
++        s1 = int(
++            (
++                await session.execute(
++                    ins_stmt,
++                    {
++                        "created_at": now,
++                        "id": uuid.uuid4(),
++                        "oid": issue_id,
++                        "payload": json.dumps(
++                            {
++                                "notification_id": str(notif1_id),
++                                "recipient_principal_id": str(maya_id),
++                                "topic": "notification.created",
++                            }
++                        ),
++                        "pid": proj_id,
++                        "topic": "notification.created",
++                        "ws_id": ws_id,
++                    },
++                )
++            ).scalar_one()
++        )
++        # s2: notification.read for Maya
++        s2 = int(
++            (
++                await session.execute(
++                    ins_stmt,
++                    {
++                        "created_at": now,
++                        "id": uuid.uuid4(),
++                        "oid": None,
++                        "payload": json.dumps(
++                            {
++                                "notification_id": str(notif1_id),
++                                "recipient_principal_id": str(maya_id),
++                                "topic": "notification.read",
++                            }
++                        ),
++                        "pid": None,
++                        "topic": "notification.read",
++                        "ws_id": ws_id,
++                    },
++                )
++            ).scalar_one()
++        )
++        # s3: notification.read_all for Maya
++        s3 = int(
++            (
++                await session.execute(
++                    ins_stmt,
++                    {
++                        "created_at": now,
++                        "id": uuid.uuid4(),
++                        "oid": None,
++                        "payload": json.dumps(
++                            {
++                                "marked_count": 2,
++                                "recipient_principal_id": str(maya_id),
++                                "topic": "notification.read_all",
++                            }
++                        ),
++                        "pid": None,
++                        "topic": "notification.read_all",
++                        "ws_id": ws_id,
++                    },
++                )
++            ).scalar_one()
++        )
++        # s4: malformed notification row (missing recipient_principal_id)
++        _ = int(
++            (
++                await session.execute(
++                    ins_stmt,
++                    {
++                        "created_at": now,
++                        "id": uuid.uuid4(),
++                        "oid": None,
++                        "payload": json.dumps({"topic": "notification.read_all"}),
++                        "pid": None,
++                        "topic": "notification.read_all",
++                        "ws_id": ws_id,
++                    },
++                )
++            ).scalar_one()
++        )
++
++    replayer = OutboxReplayer()
++    async with factory.session(ctx) as session:
++        # 1. Other user replaying with workspace, project, issue, and notifications:self gets 0
++        res_other = await replayer.replay_events(
++            session,
++            workspace_id=ws_id,
++            principal_id=other_id,
++            channels=[
++                f"workspace:{ws_id}",
++                f"project:{proj_id}",
++                f"issue:{issue_id}",
++                "notifications:self",
++                f"user:{other_id}",
++            ],
++            last_event_id=s0,
++        )
++        assert res_other.resync_required is False
++        assert res_other.events == []
++
++        # 2. Maya replaying ONLY on workspace/project/issue (without notifications:self) gets 0
++        res_maya_shared = await replayer.replay_events(
++            session,
++            workspace_id=ws_id,
++            principal_id=maya_id,
++            channels=[f"workspace:{ws_id}", f"project:{proj_id}", f"issue:{issue_id}"],
++            last_event_id=s0,
++        )
++        assert res_maya_shared.events == []
++
++        # 3. Maya replaying on notifications:self gets s1, s2, s3
++        res_maya_self = await replayer.replay_events(
++            session,
++            workspace_id=ws_id,
++            principal_id=maya_id,
++            channels=["notifications:self", f"user:{maya_id}"],
++            last_event_id=s0,
++        )
++        assert [int(e.event_id) for e in res_maya_self.events] == [s1, s2, s3]
++        assert all(e.channel == "notifications:self" for e in res_maya_self.events)
++
++        # 4. Maya replaying on canonical user:<maya_id> only gets s1, s2, s3 with user:<maya_id>
++        res_maya_user = await replayer.replay_events(
++            session,
++            workspace_id=ws_id,
++            principal_id=maya_id,
++            channels=[f"user:{maya_id}"],
++            last_event_id=s0,
++        )
++        assert [int(e.event_id) for e in res_maya_user.events] == [s1, s2, s3]
++        assert all(e.channel == f"user:{maya_id}" for e in res_maya_user.events)
++
++        # 5. Revoking Maya's VIEW on issue_id filters out s1 (notification.created) during replay
++        # while still replaying s2 and s3 (notification.read / read_all)
++        await session.execute(
++            text(
++                "UPDATE effective_resource_access "
++                "SET deny_mask = :deny "
++                "WHERE object_id = :oid AND principal_id = :pid"
++            ),
++            {"deny": Capability.VIEW.value, "oid": issue_id, "pid": maya_id},
++        )
++        res_maya_revoked = await replayer.replay_events(
++            session,
++            workspace_id=ws_id,
++            principal_id=maya_id,
++            channels=["notifications:self"],
++            last_event_id=s0,
++        )
++        assert [int(e.event_id) for e in res_maya_revoked.events] == [s2, s3]
++
++        # Restore VIEW for SSE replay check
++        await session.execute(
++            text(
++                "UPDATE effective_resource_access "
++                "SET deny_mask = 0 "
++                "WHERE object_id = :oid AND principal_id = :pid"
++            ),
++            {"oid": issue_id, "pid": maya_id},
++        )
++
++    # 6. End-to-end SSE /sse?channels=notifications:self&last_event_id=<s0> replay
++    app, _ = build_realtime_test_app(factory, session_service)
++    maya_session = await create_auth_session(
++        factory, session_service, principal_id=maya_id, workspace_id=ws_id
++    )
++    async with AsyncSSETestClient(
++        app,
++        f"/sse?channels=notifications:self,user:{other_id}&last_event_id={s0}",
++        headers={"Cookie": f"__Host-kb_session={maya_session.cookie_val}"},
++    ) as sse_client:
++        assert sse_client.status_code == 200
++        ev1 = await sse_client.read_event()
++        ev2 = await sse_client.read_event()
++        ev3 = await sse_client.read_event()
++        assert [int(ev1["id"]), int(ev2["id"]), int(ev3["id"])] == [s1, s2, s3]
++        assert ev1["event"] == "notification.created"
++        assert ev2["event"] == "notification.read"
++        assert ev3["event"] == "notification.read_all"
++        contract_recorder.record_raw(
++            "sse_notifications_self_replay",
++            {"url": f"/sse?channels=notifications:self&last_event_id={s0}"},
++            [ev1, ev2, ev3],
++        )
++
++
++def test_replayer_match_channel_notification_edge_cases() -> None:
++    """Test OutboxReplayer._match_notification_channel defensive branches."""
++    ws_id = uuid.uuid4()
++    pid = uuid.uuid4()
++    chans = {"notifications:self", f"user:{pid}", f"workspace:{ws_id}"}
++
++    # Missing principal_id or non-dict payload
++    assert OutboxReplayer._match_notification_channel(chans, None, pid) is None
++    assert OutboxReplayer._match_notification_channel(chans, {}, None) is None
++    # Invalid recipient UUID
++    assert (
++        OutboxReplayer._match_notification_channel(
++            chans, {"recipient_principal_id": "bad-uuid"}, pid
++        )
++        is None
++    )
+diff --git a/kanban/web/src/api/realtime.test.ts b/kanban/web/src/api/realtime.test.ts
+index cc78f39c..923d7fd0 100644
+--- a/kanban/web/src/api/realtime.test.ts
++++ b/kanban/web/src/api/realtime.test.ts
+@@ -4,10 +4,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+ import {
+   DEDUP_CAPACITY,
+   RealtimeClient,
++  SSE_EVENT_NAMES,
+   backoffDelay,
+   bindQueryInvalidation,
+   getRealtimeClient,
+   setRealtimeClient,
++  sseUrl,
+   useRealtime,
+   type RealtimeEvent,
+ } from './realtime.ts';
+@@ -633,4 +635,191 @@ describe('bindQueryInvalidation', () => {
+       setRealtimeClient(prev);
+     });
+   });
++
++  describe('Recipient-scoped notifications, SSE Last-Event-ID, and frame hardening (KAN-310)', () => {
++    it('includes notification.created, notification.read, and notification.read_all in SSE_EVENT_NAMES and forwards last_event_id in sseUrl', () => {
++      expect(SSE_EVENT_NAMES).toContain('notification.created');
++      expect(SSE_EVENT_NAMES).toContain('notification.read');
++      expect(SSE_EVENT_NAMES).toContain('notification.read_all');
++
++      expect(sseUrl(['notifications:self'])).toContain('/sse?channels=notifications%3Aself');
++      expect(sseUrl(['notifications:self'])).not.toContain('last_event_id=');
++      expect(sseUrl(['notifications:self'], '42')).toContain(
++        '/sse?channels=notifications%3Aself&last_event_id=42',
++      );
++    });
++
++    it('strips __proto__, constructor, and prototype keys via safeJsonParse and drops mismatched recipient_principal_id frames', () => {
++      const client = new RealtimeClient({
++        session: { authenticated: true, mfa_pending: false, principal_id: 'principal-alice' },
++      });
++      const received: RealtimeEvent[] = [];
++      client.subscribe('notifications:self', (e) => received.push(e));
++
++      // 1. Prototype pollution payload in handleFrame is sanitized
++      client.simulateFrame(
++        '{"type":"event","topic":"notification.created","channel":"notifications:self","event_id":"101","payload":{"recipient_principal_id":"principal-alice","notification_id":"n-1","__proto__":{"polluted":true},"constructor":{"bad":1},"prototype":{"evil":1}}}',
++      );
++      expect(received).toHaveLength(1);
++      expect(({} as Record<string, unknown>).polluted).toBeUndefined();
++      expect(Object.prototype.hasOwnProperty.call(received[0]?.payload, '__proto__')).toBe(false);
++      expect(Object.prototype.hasOwnProperty.call(received[0]?.payload, 'constructor')).toBe(false);
++      expect(Object.prototype.hasOwnProperty.call(received[0]?.payload, 'prototype')).toBe(false);
++
++      // 2. Mismatched recipient_principal_id is dropped and counted in droppedEvents
++      client.simulateFrame(
++        JSON.stringify({
++          type: 'event',
++          topic: 'notification.created',
++          channel: 'notifications:self',
++          event_id: '102',
++          payload: {
++            recipient_principal_id: 'principal-bob',
++            notification_id: 'n-2',
++          },
++        }),
++      );
++      expect(received).toHaveLength(1);
++      expect(client.droppedEvents).toBe(1);
++      expect(client.lastEventId).toBe('101');
++    });
++
++    it('handles notification.created, notification.read, and notification.read_all in bindQueryInvalidation with optimistic cache patching', () => {
++      const client = new RealtimeClient();
++      const queryClient = new QueryClient();
++      const invalidate = vi.spyOn(queryClient, 'invalidateQueries').mockResolvedValue();
++      const setQueryDataSpy = vi.spyOn(queryClient, 'setQueryData');
++      bindQueryInvalidation(client, queryClient);
++
++      // 1. notification.created invalidates ['notifications']
++      client.simulateFrame(
++        JSON.stringify({
++          type: 'event',
++          topic: 'notification.created',
++          channel: 'notifications:self',
++          event_id: '201',
++          payload: { recipient_principal_id: 'u1', notification_id: 'notif-1' },
++        }),
++      );
++      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['notifications'] });
++      invalidate.mockClear();
++
++      // 2. notification.read when cache is populated patches in-place without invalidation stampede
++      queryClient.setQueryData(['notifications', false], {
++        items: [
++          { id: 'notif-1', read_at: null, read: false },
++          { id: 'notif-2', read_at: null, read: false },
++        ],
++      });
++      setQueryDataSpy.mockClear();
++
++      client.simulateFrame(
++        JSON.stringify({
++          type: 'event',
++          topic: 'notification.read',
++          channel: 'notifications:self',
++          event_id: '202',
++          payload: { recipient_principal_id: 'u1', notification_id: 'notif-1' },
++        }),
++      );
++      expect(setQueryDataSpy).toHaveBeenCalled();
++      expect(invalidate).not.toHaveBeenCalled();
++      const afterRead = queryClient.getQueryData<{
++        items: { id: string; read_at: string | null; read?: boolean }[];
++      }>(['notifications', false]);
++      expect(afterRead?.items[0]?.read_at).toEqual(expect.any(String));
++      expect(afterRead?.items[0]?.read).toBe(true);
++      expect(afterRead?.items[1]?.read_at).toBeNull();
++
++      // 3. notification.read for uncached notification ID falls back to invalidateQueries
++      client.simulateFrame(
++        JSON.stringify({
++          type: 'event',
++          topic: 'notification.read',
++          channel: 'notifications:self',
++          event_id: '203',
++          payload: { recipient_principal_id: 'u1', notification_id: 'notif-uncached' },
++        }),
++      );
++      expect(invalidate).toHaveBeenCalledWith({ queryKey: ['notifications'] });
++      invalidate.mockClear();
++
++      // 4. notification.read_all patches all cached items read without invalidation stampede
++      client.simulateFrame(
++        JSON.stringify({
++          type: 'event',
++          topic: 'notification.read_all',
++          channel: 'notifications:self',
++          event_id: '204',
++          payload: { recipient_principal_id: 'u1', marked_count: 1 },
++        }),
++      );
++      expect(invalidate).not.toHaveBeenCalled();
++      const afterReadAll = queryClient.getQueryData<{
++        items: { id: string; read_at: string | null; read?: boolean }[];
++      }>(['notifications', false]);
++      expect(afterReadAll?.items.every((item) => typeof item.read_at === 'string' && item.read === true)).toBe(true);
++
++      // 5. notification.read_all when cache is empty falls back to invalidateQueries
++      const emptyQueryClient = new QueryClient();
++      const emptyInvalidate = vi.spyOn(emptyQueryClient, 'invalidateQueries').mockResolvedValue();
++      bindQueryInvalidation(client, emptyQueryClient);
++      client.simulateFrame(
++        JSON.stringify({
++          type: 'event',
++          topic: 'notification.read_all',
++          channel: 'notifications:self',
++          event_id: '205',
++          payload: { recipient_principal_id: 'u1', marked_count: 1 },
++        }),
++      );
++      expect(emptyInvalidate).toHaveBeenCalledWith({ queryKey: ['notifications'] });
++
++      // 6. comment.created with comment_id invalidates ['comments', commentId]
++      client.simulateFrame(
++        JSON.stringify({
++          type: 'event',
++          topic: 'comment.created',
++          channel: 'issue:KAN-5',
++          event_id: '206',
++          payload: { comment_id: 'cmt-99' },
++        }),
++      );
++      expect(emptyInvalidate).toHaveBeenCalledWith({ queryKey: ['comments', 'cmt-99'] });
++    });
++
++    it('setSession connects when allowed and reconnects when workspace_id changes, and sse-fallback updates on subscribe/unsubscribe', () => {
++      vi.useFakeTimers();
++      FakeWebSocket.instances = [];
++      FakeEventSource.instances = [];
++      vi.stubGlobal('WebSocket', FakeWebSocket);
++      vi.stubGlobal('EventSource', FakeEventSource);
++      try {
++        const c = new RealtimeClient({
++          session: { authenticated: false, mfa_pending: false, workspace_id: 'ws-1' },
++        });
++        c.setSession({ authenticated: true, mfa_pending: false, workspace_id: 'ws-1' });
++        expect(c.state).toBe('connecting');
++        ws().open();
++        expect(c.state).toBe('open');
++
++        c.setSession({ authenticated: true, mfa_pending: false, workspace_id: 'ws-2' });
++        expect(c.state).toBe('connecting');
++
++        // Switch to sse-fallback and test subscribe/unsubscribe re-opening SSE
++        for (let i = 0; i < 3; i += 1) {
++          ws().fail();
++          vi.runOnlyPendingTimers();
++        }
++        expect(c.state).toBe('sse-fallback');
++        const unsub = c.subscribe('notifications:self', () => undefined);
++        expect(sse().url).toContain('notifications%3Aself');
++        unsub();
++        c.close();
++      } finally {
++        vi.useRealTimers();
++        vi.unstubAllGlobals();
++      }
++    });
++  });
+ });
+diff --git a/kanban/web/src/api/realtime.ts b/kanban/web/src/api/realtime.ts
+index a034ed9d..5095a632 100644
+--- a/kanban/web/src/api/realtime.ts
++++ b/kanban/web/src/api/realtime.ts
+@@ -11,6 +11,7 @@
+ 
+ import { useEffect } from 'react';
+ import type { QueryClient } from '@tanstack/react-query';
++import { safeJsonParse } from '../utils/safeJson.ts';
+ import { qk } from './queryKeys.ts';
+ import type { RealtimeState } from './RealtimeStatus.tsx';
+ 
+@@ -33,7 +34,7 @@ const MAX_BACKOFF_MS = 15000;
+ const BASE_BACKOFF_MS = 500;
+ 
+ /** SSE delivers server events under their topic name; EventSource needs explicit listeners. */
+-const SSE_EVENT_NAMES: readonly string[] = [
++export const SSE_EVENT_NAMES: readonly string[] = [
+   'message',
+   'resync_required',
+   'channel.revoked',
+@@ -60,6 +61,9 @@ const SSE_EVENT_NAMES: readonly string[] = [
+   'workflow.gate.completed',
+   'workflow.gate.failed',
+   'gate.updated',
++  'notification.created',
++  'notification.read',
++  'notification.read_all',
+ ];
+ 
+ function wsUrl(customPath = '/ws'): string {
+@@ -67,9 +71,12 @@ function wsUrl(customPath = '/ws'): string {
+   return `${scheme}//${window.location.host}${customPath}`;
+ }
+ 
+-function sseUrl(channels: readonly string[]): string {
++export function sseUrl(channels: readonly string[], lastEventId?: string): string {
+   const url = new URL('/sse', window.location.origin);
+   url.searchParams.set('channels', channels.join(','));
++  if (lastEventId !== undefined && lastEventId.length > 0) {
++    url.searchParams.set('last_event_id', lastEventId);
++  }
+   return url.toString();
+ }
+ 
+@@ -88,6 +95,8 @@ function asRecord(value: unknown): Record<string, unknown> | null {
+ export interface RealtimeSessionState {
+   authenticated?: boolean;
+   mfa_pending?: boolean;
++  principal_id?: string;
++  workspace_id?: string;
+   [key: string]: unknown;
+ }
+ 
+@@ -331,7 +340,7 @@ export class RealtimeClient {
+     }
+     this.setState('sse-fallback');
+     this.closeSse();
+-    const source = new EventSource(sseUrl([...this.subscriptions.keys()]));
++    const source = new EventSource(sseUrl([...this.subscriptions.keys()], this.lastEventId));
+     this.sse = source;
+     const listener = (event: Event): void => {
+       const message = event as MessageEvent;
+@@ -424,7 +433,7 @@ export class RealtimeClient {
+     }
+     let parsed: unknown;
+     try {
+-      parsed = JSON.parse(raw);
++      parsed = safeJsonParse(raw);
+     } catch {
+       this.droppedEvents += 1;
+       return;
+@@ -473,6 +482,22 @@ export class RealtimeClient {
+       this.droppedEvents += 1;
+       return;
+     }
++    if (topic.startsWith('notification.')) {
++      const recipientId = payload.recipient_principal_id;
++      const sessionPrincipalId =
++        typeof this.session?.principal_id === 'string' && this.session.principal_id.length > 0
++          ? this.session.principal_id
++          : undefined;
++      if (
++        sessionPrincipalId !== undefined &&
++        typeof recipientId === 'string' &&
++        recipientId.length > 0 &&
++        recipientId !== sessionPrincipalId
++      ) {
++        this.droppedEvents += 1;
++        return;
++      }
++    }
+     this.lastEventId = rawId;
+     this.emit({ id: rawId, channel: obj.channel, type: topic, payload }, true);
+   }
+@@ -660,5 +685,56 @@ export function bindQueryInvalidation(client: RealtimeClient, queryClient: Query
+       }
+       return;
+     }
++
++    // 5. Recipient-scoped notification events (KAN-310)
++    if (event.type === 'notification.created') {
++      void queryClient.invalidateQueries({ queryKey: ['notifications'] });
++      return;
++    }
++
++    if (event.type === 'notification.read') {
++      const notifId = stringField(event.payload, 'notification_id', 'notificationId', 'id');
++      const cached = queryClient.getQueryData<{ items?: Record<string, unknown>[] }>(
++        qk.notifications(),
++      );
++      if (notifId !== undefined && cached?.items?.some((item) => item.id === notifId)) {
++        const nowIso = new Date().toISOString();
++        queryClient.setQueryData<{ items: Record<string, unknown>[] }>(qk.notifications(), {
++          ...cached,
++          items: cached.items.map((item) =>
++            item.id === notifId
++              ? {
++                  ...item,
++                  read_at: item.read_at ?? nowIso,
++                  read: true,
++                }
++              : item,
++          ),
++        });
++      } else {
++        void queryClient.invalidateQueries({ queryKey: ['notifications'] });
++      }
++      return;
++    }
++
++    if (event.type === 'notification.read_all') {
++      const cached = queryClient.getQueryData<{ items?: Record<string, unknown>[] }>(
++        qk.notifications(),
++      );
++      if (cached?.items) {
++        const nowIso = new Date().toISOString();
++        queryClient.setQueryData<{ items: Record<string, unknown>[] }>(qk.notifications(), {
++          ...cached,
++          items: cached.items.map((item) => ({
++            ...item,
++            read_at: item.read_at ?? nowIso,
++            read: true,
++          })),
++        });
++      } else {
++        void queryClient.invalidateQueries({ queryKey: ['notifications'] });
++      }
++      return;
++    }
+   });
+ }
+diff --git a/kanban/web/src/features/notifications/NotificationsBell.test.tsx b/kanban/web/src/features/notifications/NotificationsBell.test.tsx
+index f57c2c61..125391f4 100644
+--- a/kanban/web/src/features/notifications/NotificationsBell.test.tsx
++++ b/kanban/web/src/features/notifications/NotificationsBell.test.tsx
+@@ -1,14 +1,18 @@
+ import React from 'react';
+-import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
++import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
+ import { MemoryRouter } from 'react-router';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import {
+   NotificationsBell,
+   formatEventBadge,
+   formatTimeAgo,
++  isNotificationUnread,
+ } from './NotificationsBell';
+ import { apiFetch } from '../../api/client';
++import { RealtimeClient } from '../../api/realtime';
++import type { RealtimeState } from '../../api/RealtimeStatus';
++import { RealtimeContext } from '../../realtime/context';
+ 
+ vi.mock('../../api/client', () => ({
+   apiFetch: vi.fn(),
+@@ -238,4 +242,353 @@ describe('NotificationsBell & Feed Tray', () => {
+     fireEvent.click(bellBtn);
+     expect(screen.queryByTestId('notifications-tray')).toBeNull();
+   });
++
++  describe('Realtime subscription, transport-gated fallback polling, recovery resync, and announcer (KAN-310)', () => {
++    afterEach(() => {
++      vi.useRealTimers();
++    });
++
++    function renderWithRealtime(client: RealtimeClient, state: RealtimeState, queryClient?: QueryClient) {
++      const qc =
++        queryClient ??
++        new QueryClient({
++          defaultOptions: { queries: { retry: false, gcTime: 0 } },
++        });
++      return render(
++        <QueryClientProvider client={qc}>
++          <RealtimeContext.Provider value={{ client, state }}>
++            <MemoryRouter>
++              <NotificationsBell />
++            </MemoryRouter>
++          </RealtimeContext.Provider>
++        </QueryClientProvider>,
++      );
++    }
++
++    it('subscribes to notifications:self, suppresses 30s polling while open/sse-fallback, and polls only when reconnecting/closed', async () => {
++      vi.useFakeTimers({ shouldAdvanceTime: true });
++      const client = new RealtimeClient();
++      const subSpy = vi.spyOn(client, 'subscribe');
++      const qc = new QueryClient({
++        defaultOptions: { queries: { retry: false, gcTime: 0 } },
++      });
++
++      const { rerender, unmount } = renderWithRealtime(client, 'open', qc);
++      const bell = await screen.findByTestId('notifications-bell');
++      expect(subSpy).toHaveBeenCalledWith('notifications:self', expect.any(Function));
++      expect(bell.getAttribute('data-realtime-state')).toBe('open');
++      expect(bell.getAttribute('data-polling-active')).toBe('false');
++
++      await waitFor(() => {
++        expect(mockApiFetch).toHaveBeenCalledTimes(1);
++      });
++
++      // Advance 65s while open -> 0 periodic polls
++      await act(async () => {
++        await vi.advanceTimersByTimeAsync(65000);
++      });
++      expect(mockApiFetch).toHaveBeenCalledTimes(1);
++
++      // Switch to sse-fallback -> still 0 periodic polls over 65s
++      rerender(
++        <QueryClientProvider client={qc}>
++          <RealtimeContext.Provider value={{ client, state: 'sse-fallback' }}>
++            <MemoryRouter>
++              <NotificationsBell />
++            </MemoryRouter>
++          </RealtimeContext.Provider>
++        </QueryClientProvider>,
++      );
++      expect(bell.getAttribute('data-realtime-state')).toBe('sse-fallback');
++      expect(bell.getAttribute('data-polling-active')).toBe('false');
++      await act(async () => {
++        await vi.advanceTimersByTimeAsync(65000);
++      });
++      expect(mockApiFetch).toHaveBeenCalledTimes(1);
++
++      // Transition to reconnecting -> enables 30s fallback polling
++      rerender(
++        <QueryClientProvider client={qc}>
++          <RealtimeContext.Provider value={{ client, state: 'reconnecting' }}>
++            <MemoryRouter>
++              <NotificationsBell />
++            </MemoryRouter>
++          </RealtimeContext.Provider>
++        </QueryClientProvider>,
++      );
++      expect(bell.getAttribute('data-realtime-state')).toBe('reconnecting');
++      expect(bell.getAttribute('data-polling-active')).toBe('true');
++
++      await act(async () => {
++        await vi.advanceTimersByTimeAsync(30000);
++      });
++      expect(mockApiFetch).toHaveBeenCalledTimes(2);
++
++      unmount();
++    });
++
++    it('fires single-shot recovery resync on reconnecting|closed -> open|sse-fallback but not on connecting -> open', async () => {
++      const client = new RealtimeClient();
++      const qc = new QueryClient({
++        defaultOptions: { queries: { retry: false, gcTime: 0 } },
++      });
++
++      const { rerender } = renderWithRealtime(client, 'connecting', qc);
++      await waitFor(() => {
++        expect(mockApiFetch).toHaveBeenCalledTimes(1);
++      });
++
++      // connecting -> open must NOT trigger a second fetch
++      rerender(
++        <QueryClientProvider client={qc}>
++          <RealtimeContext.Provider value={{ client, state: 'open' }}>
++            <MemoryRouter>
++              <NotificationsBell />
++            </MemoryRouter>
++          </RealtimeContext.Provider>
++        </QueryClientProvider>,
++      );
++      expect(mockApiFetch).toHaveBeenCalledTimes(1);
++
++      // open -> reconnecting -> open MUST trigger a single-shot recovery resync
++      rerender(
++        <QueryClientProvider client={qc}>
++          <RealtimeContext.Provider value={{ client, state: 'reconnecting' }}>
++            <MemoryRouter>
++              <NotificationsBell />
++            </MemoryRouter>
++          </RealtimeContext.Provider>
++        </QueryClientProvider>,
++      );
++      rerender(
++        <QueryClientProvider client={qc}>
++          <RealtimeContext.Provider value={{ client, state: 'open' }}>
++            <MemoryRouter>
++              <NotificationsBell />
++            </MemoryRouter>
++          </RealtimeContext.Provider>
++        </QueryClientProvider>,
++      );
++      await waitFor(() => {
++        expect(mockApiFetch).toHaveBeenCalledTimes(2);
++      });
++
++      // open -> closed -> sse-fallback MUST trigger a single-shot recovery resync
++      rerender(
++        <QueryClientProvider client={qc}>
++          <RealtimeContext.Provider value={{ client, state: 'closed' }}>
++            <MemoryRouter>
++              <NotificationsBell />
++            </MemoryRouter>
++          </RealtimeContext.Provider>
++        </QueryClientProvider>,
++      );
++      rerender(
++        <QueryClientProvider client={qc}>
++          <RealtimeContext.Provider value={{ client, state: 'sse-fallback' }}>
++            <MemoryRouter>
++              <NotificationsBell />
++            </MemoryRouter>
++          </RealtimeContext.Provider>
++        </QueryClientProvider>,
++      );
++      await waitFor(() => {
++        expect(mockApiFetch).toHaveBeenCalledTimes(3);
++      });
++    });
++
++    it('updates unread badge across tabs on notification.created, notification.read, and notification.read_all and coalesces polite announcements', async () => {
++      vi.useFakeTimers({ shouldAdvanceTime: true });
++      const client = new RealtimeClient();
++      const qc = new QueryClient({
++        defaultOptions: { queries: { retry: false, gcTime: 0 } },
++      });
++
++      renderWithRealtime(client, 'open', qc);
++      const badge = await screen.findByTestId('notifications-badge');
++      expect(badge.textContent).toBe('2');
++
++      // 1. Optimistic multi-tab notification.read decrements badge from 2 -> 1 without extra GET fetch
++      const callsBeforeRead = mockApiFetch.mock.calls.length;
++      await act(async () => {
++        client.simulateEvent({
++          id: 'evt-read-1',
++          channel: 'notifications:self',
++          type: 'notification.read',
++          payload: { notification_id: 'notif-1', recipient_principal_id: 'u1' },
++        });
++        await vi.advanceTimersByTimeAsync(10);
++      });
++      expect(screen.getByTestId('notifications-badge').textContent).toBe('1');
++      expect(mockApiFetch.mock.calls.length).toBe(callsBeforeRead);
++      expect(screen.getByTestId('notifications-live-announcer').textContent).toBe('');
++
++      // 2. Optimistic multi-tab notification.read_all clears badge from 1 -> 0 without extra GET fetch
++      await act(async () => {
++        client.simulateEvent({
++          id: 'evt-read-all',
++          channel: 'notifications:self',
++          type: 'notification.read_all',
++          payload: { marked_count: 1, recipient_principal_id: 'u1' },
++        });
++        await vi.advanceTimersByTimeAsync(10);
++      });
++      expect(screen.queryByTestId('notifications-badge')).toBeNull();
++      expect(mockApiFetch.mock.calls.length).toBe(callsBeforeRead);
++
++      // 3. Simulate single notification.created event -> announces '1 new notification' after 1000ms
++      mockApiFetch.mockResolvedValue({
++        items: [
++          ...mockNotifications.items,
++          {
++            id: 'notif-4',
++            issue: { id: 'iss-4', key: 'KAN-104', summary: 'New live arrival' },
++            event_type: 'COMMENT_MENTION',
++            actor: { handle: 'dana', display_name: 'Dana' },
++            created_at: new Date().toISOString(),
++            read_at: null,
++          },
++        ],
++      });
++
++      await act(async () => {
++        client.simulateEvent({
++          id: 'evt-created-single',
++          channel: 'notifications:self',
++          type: 'notification.created',
++          payload: { notification_id: 'notif-4', recipient_principal_id: 'u1' },
++        });
++        await vi.advanceTimersByTimeAsync(1000);
++      });
++      expect(screen.getByTestId('notifications-live-announcer').textContent).toBe(
++        '1 new notification',
++      );
++
++      // 4. Simulate 2 rapid notification.created events while tray is closed -> coalesces announcement over 1000ms
++      await act(async () => {
++        client.simulateEvent({
++          id: 'evt-created-1',
++          channel: 'notifications:self',
++          type: 'notification.created',
++          payload: { notification_id: 'notif-4', recipient_principal_id: 'u1' },
++        });
++        client.simulateEvent({
++          id: 'evt-created-2',
++          channel: 'notifications:self',
++          type: 'notification.created',
++          payload: { notification_id: 'notif-5', recipient_principal_id: 'u1' },
++        });
++        await vi.advanceTimersByTimeAsync(1000);
++      });
++      expect(screen.getByTestId('notifications-live-announcer').textContent).toBe(
++        '2 new notifications',
++      );
++      expect((await screen.findByTestId('notifications-badge')).textContent).toBe('3');
++
++      // 5. Simulate notification.read for an uncached ID -> falls back to invalidation
++      await act(async () => {
++        client.simulateEvent({
++          id: 'evt-read-uncached',
++          channel: 'notifications:self',
++          type: 'notification.read',
++          payload: { notification_id: 'notif-unknown', recipient_principal_id: 'u1' },
++        });
++        await vi.advanceTimersByTimeAsync(10);
++      });
++
++      // Opening the tray clears the live announcement
++      fireEvent.click(screen.getByTestId('notifications-bell'));
++      expect(screen.getByTestId('notifications-live-announcer').textContent).toBe('');
++    });
++
++    it('aligns unreadCount predicate for items with read: true and read_at: null', async () => {
++      expect(isNotificationUnread({ id: '1', created_at: '2026-01-01T00:00:00Z', read_at: null, read: true })).toBe(false);
++      expect(isNotificationUnread({ id: '2', created_at: '2026-01-01T00:00:00Z', read_at: null, read: false })).toBe(true);
++      expect(isNotificationUnread({ id: '3', created_at: '2026-01-01T00:00:00Z', read_at: null })).toBe(true);
++      expect(isNotificationUnread({ id: '4', created_at: '2026-01-01T00:00:00Z', read_at: '2026-01-02T00:00:00Z', read: false })).toBe(false);
++
++      mockApiFetch.mockResolvedValue({
++        items: [
++          {
++            id: 'notif-boolean-read',
++            title: 'Fallback title item',
++            created_at: new Date().toISOString(),
++            read_at: null,
++            read: true,
++          },
++          {
++            id: 'notif-body-only',
++            body: 'Fallback body item',
++            type: 'ASSIGN',
++            created_at: new Date().toISOString(),
++            read_at: null,
++          },
++          {
++            id: 'notif-default-text',
++            issue: { key: 'KAN-999' },
++            created_at: new Date().toISOString(),
++            read_at: null,
++          },
++          {
++            id: 'notif-bare',
++            created_at: new Date().toISOString(),
++            read_at: null,
++          },
++        ],
++      });
++      renderComponent();
++      const bell = await screen.findByTestId('notifications-bell');
++      fireEvent.click(bell);
++      expect(await screen.findByText('Fallback title item')).toBeDefined();
++      expect(screen.getByText('Fallback body item')).toBeDefined();
++      expect(screen.getByText('Notification')).toBeDefined();
++      expect(screen.getByTestId('notifications-badge').textContent).toBe('3');
++    });
++
++    it('handles apiFetch error fallback, cancels pending announcer timer on tray open or unmount, and covers fallback actor/item branches', async () => {
++      vi.useFakeTimers({ shouldAdvanceTime: true });
++      mockApiFetch.mockRejectedValueOnce(new Error('network error'));
++      const client = new RealtimeClient();
++      const qc = new QueryClient({
++        defaultOptions: { queries: { retry: false, gcTime: 0 } },
++      });
++
++      const { unmount } = renderWithRealtime(client, 'open', qc);
++      const bell = await screen.findByTestId('notifications-bell');
++
++      // Queue announcement timer, then open tray before 1000ms elapses -> timer cleared
++      act(() => {
++        client.simulateEvent({
++          id: 'evt-cancel-open',
++          channel: 'notifications:self',
++          type: 'notification.created',
++          payload: { notification_id: 'n-open' },
++        });
++      });
++      mockApiFetch.mockResolvedValueOnce({});
++      fireEvent.click(bell);
++      // Clicking inside tray and pressing non-Escape key keeps tray open
++      const tray = await screen.findByTestId('notifications-tray');
++      fireEvent.mouseDown(tray);
++      fireEvent.keyDown(window, { key: 'Enter' });
++      expect(screen.getByTestId('notifications-tray')).toBeDefined();
++
++      await act(async () => {
++        await vi.advanceTimersByTimeAsync(1000);
++      });
++      expect(screen.getByTestId('notifications-live-announcer').textContent).toBe('');
++
++      // Close tray, queue another announcement timer, and unmount before 1000ms -> cleanup clears timer
++      fireEvent.click(bell);
++      act(() => {
++        client.simulateEvent({
++          id: 'evt-cancel-unmount',
++          channel: 'notifications:self',
++          type: 'notification.created',
++          payload: { notification_id: 'n-unmount' },
++        });
++      });
++      unmount();
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/notifications/NotificationsBell.tsx b/kanban/web/src/features/notifications/NotificationsBell.tsx
+index 3d26e5c2..d962de07 100644
+--- a/kanban/web/src/features/notifications/NotificationsBell.tsx
++++ b/kanban/web/src/features/notifications/NotificationsBell.tsx
+@@ -9,6 +9,9 @@ import { useNavigate } from 'react-router';
+ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+ import { apiFetch } from '../../api/client';
+ import { qk } from '../../api/queryKeys';
++import type { RealtimeState } from '../../api/RealtimeStatus';
++import type { RealtimeEvent } from '../../api/realtime';
++import { useRealtimeLiveState, useRealtimeSubscription } from '../../realtime/context';
+ import './NotificationsBell.css';
+ 
+ export interface NotificationItem {
+@@ -62,14 +65,117 @@ export function formatTimeAgo(isoString: string): string {
+   return `${String(days)}d ago`;
+ }
+ 
++export function isNotificationUnread(item: NotificationItem): boolean {
++  return item.read_at === null || item.read_at === undefined ? item.read !== true : false;
++}
++
+ export function NotificationsBell(): JSX.Element {
+   const [isOpen, setIsOpen] = useState(false);
++  const [liveAnnouncement, setLiveAnnouncement] = useState('');
+   const containerRef = useRef<HTMLDivElement>(null);
+   const triggerRef = useRef<HTMLButtonElement>(null);
++  const isOpenRef = useRef(isOpen);
++  const pendingAnnounceCountRef = useRef(0);
++  const announceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+   const navigate = useNavigate();
+   const queryClient = useQueryClient();
++  const realtimeState = useRealtimeLiveState();
++  const prevRealtimeStateRef = useRef<RealtimeState>(realtimeState);
++  const isFallbackPolling = realtimeState === 'reconnecting' || realtimeState === 'closed';
++
++  const clearPendingAnnouncement = (): void => {
++    if (announceTimerRef.current !== null) {
++      clearTimeout(announceTimerRef.current);
++      announceTimerRef.current = null;
++    }
++    pendingAnnounceCountRef.current = 0;
++  };
++
++  useEffect(() => {
++    isOpenRef.current = isOpen;
++  }, [isOpen]);
+ 
+-  // Query notifications feed
++  useEffect(() => {
++    return () => {
++      if (announceTimerRef.current !== null) {
++        clearTimeout(announceTimerRef.current);
++        announceTimerRef.current = null;
++      }
++    };
++  }, []);
++
++  // Single-shot recovery resync when transitioning from disconnected to active transport
++  useEffect(() => {
++    const prev = prevRealtimeStateRef.current;
++    prevRealtimeStateRef.current = realtimeState;
++    const wasDisconnected = prev === 'reconnecting' || prev === 'closed';
++    const isRecovered = realtimeState === 'open' || realtimeState === 'sse-fallback';
++    if (wasDisconnected && isRecovered) {
++      void queryClient.invalidateQueries({ queryKey: qk.notifications() });
++    }
++  }, [realtimeState, queryClient]);
++
++  // Recipient-scoped realtime subscription for live arrivals and multi-tab read sync
++  useRealtimeSubscription('notifications:self', (event: RealtimeEvent) => {
++    if (event.type === 'notification.created') {
++      void queryClient.invalidateQueries({ queryKey: qk.notifications() });
++      if (!isOpenRef.current) {
++        pendingAnnounceCountRef.current += 1;
++        announceTimerRef.current ??= setTimeout(() => {
++          const count = pendingAnnounceCountRef.current;
++          pendingAnnounceCountRef.current = 0;
++          announceTimerRef.current = null;
++          setLiveAnnouncement(
++            count === 1 ? '1 new notification' : `${String(count)} new notifications`,
++          );
++        }, 1000);
++      }
++      return;
++    }
++
++    if (event.type === 'notification.read') {
++      const rawId = event.payload.notification_id ?? event.payload.notificationId ?? event.payload.id;
++      if (typeof rawId === 'string') {
++        const cached = queryClient.getQueryData<{ items: NotificationItem[] }>(qk.notifications());
++        if (cached?.items.some((item) => item.id === rawId)) {
++          const nowIso = new Date().toISOString();
++          queryClient.setQueryData<{ items: NotificationItem[] }>(qk.notifications(), {
++            ...cached,
++            items: cached.items.map((item) =>
++              item.id === rawId
++                ? {
++                    ...item,
++                    read_at: item.read_at ?? nowIso,
++                    read: true,
++                  }
++                : item,
++            ),
++          });
++        } else {
++          void queryClient.invalidateQueries({ queryKey: qk.notifications() });
++        }
++      }
++      return;
++    }
++
++    if (event.type === 'notification.read_all') {
++      const nowIso = new Date().toISOString();
++      queryClient.setQueryData<{ items: NotificationItem[] }>(qk.notifications(), (old) =>
++        old
++          ? {
++              ...old,
++              items: old.items.map((item) => ({
++                ...item,
++                read_at: item.read_at ?? nowIso,
++                read: true,
++              })),
++            }
++          : old,
++      );
++    }
++  });
++
++  // Query notifications feed (fallback polling active only while reconnecting or closed)
+   const { data, refetch } = useQuery<{ items: NotificationItem[] }>({
+     queryKey: qk.notifications(),
+     queryFn: async () => {
+@@ -84,11 +190,16 @@ export function NotificationsBell(): JSX.Element {
+         return { items: [] };
+       }
+     },
+-    refetchInterval: 30000,
++    refetchInterval: isFallbackPolling ? 30000 : false,
++    refetchIntervalInBackground: false,
++    refetchOnWindowFocus: false,
+   });
+ 
+   const items = useMemo(() => data?.items ?? [], [data?.items]);
+-  const unreadCount = useMemo(() => items.filter((n) => !n.read_at).length, [items]);
++  const unreadCount = useMemo(
++    () => items.filter((n) => (n.read_at == null ? n.read !== true : false)).length,
++    [items],
++  );
+ 
+   // Mark single notification read
+   const markReadMutation = useMutation({
+@@ -141,7 +252,7 @@ export function NotificationsBell(): JSX.Element {
+ 
+   const handleDeepLink = (issueKey: string): void => {
+     setIsOpen(false);
+-    const pKey = issueKey.includes('-') ? (issueKey.split('-')[0] ?? 'KAN') : 'KAN';
++    const pKey = issueKey.includes('-') ? issueKey.slice(0, issueKey.indexOf('-')) : 'KAN';
+     void navigate(`/projects/${pKey}/issues?peek=${encodeURIComponent(issueKey)}`);
+     window.dispatchEvent(
+       new CustomEvent('kb:open-issue-peek', {
+@@ -153,6 +264,14 @@ export function NotificationsBell(): JSX.Element {
+ 
+   return (
+     <div ref={containerRef} className="kb-notif-wrapper">
++      <span
++        className="sr-only"
++        aria-live="polite"
++        aria-atomic="true"
++        data-testid="notifications-live-announcer"
++      >
++        {isOpen ? '' : liveAnnouncement}
++      </span>
+       <button
+         ref={triggerRef}
+         type="button"
+@@ -161,10 +280,17 @@ export function NotificationsBell(): JSX.Element {
+         aria-expanded={isOpen}
+         aria-haspopup="dialog"
+         onClick={() => {
+-          setIsOpen(!isOpen);
+-          if (!isOpen) void refetch();
++          const nextOpen = !isOpen;
++          setIsOpen(nextOpen);
++          if (nextOpen) {
++            clearPendingAnnouncement();
++            setLiveAnnouncement('');
++            void refetch();
++          }
+         }}
+         data-testid="notifications-bell"
++        data-realtime-state={realtimeState}
++        data-polling-active={String(isFallbackPolling)}
+       >
+         <span aria-hidden="true" className="kb-notif-bell-icon">🔔</span>
+         {unreadCount > 0 && (
+@@ -207,10 +333,9 @@ export function NotificationsBell(): JSX.Element {
+             ) : (
+               <ul className="kb-notif-list">
+                 {items.map((item) => {
+-                  const isUnread = item.read_at === null || item.read_at === undefined
+-                    ? (item.read !== undefined ? !item.read : true)
+-                    : false;
++                  const isUnread = isNotificationUnread(item);
+                   const badge = formatEventBadge(item.event_type ?? item.type);
++                  const issueKey = item.issue?.key;
+                   const actorName =
+                     item.actor?.display_name ??
+                     (item.actor?.handle ? `@${item.actor.handle.replace(/^@+/, '')}` : (item.actor?.label ?? 'System'));
+@@ -230,7 +355,7 @@ export function NotificationsBell(): JSX.Element {
+                           <button
+                             type="button"
+                             className="kb-notif-mark-read-btn"
+-                            aria-label={`Mark as read: ${item.issue?.key ?? item.id}`}
++                            aria-label={`Mark as read: ${issueKey ?? item.id}`}
+                             onClick={() => {
+                               markReadMutation.mutate(item.id);
+                             }}
+@@ -244,20 +369,18 @@ export function NotificationsBell(): JSX.Element {
+ 
+                       <div className="kb-notif-item-content">
+                         <span className="kb-notif-actor">{actorName}</span>
+-                        {item.issue?.key ? (
++                        {issueKey ? (
+                           <a
+-                            href={`?peek=${encodeURIComponent(item.issue.key)}`}
++                            href={`?peek=${encodeURIComponent(issueKey)}`}
+                             className="kb-notif-link"
+                             onClick={(e) => {
+                               e.preventDefault();
+-                              if (item.issue?.key) {
+-                                handleDeepLink(item.issue.key);
+-                              }
++                              handleDeepLink(issueKey);
+                             }}
+-                            data-testid={`notif-deep-link-${item.issue.key}`}
++                            data-testid={`notif-deep-link-${issueKey}`}
+                           >
+-                            <span className="kb-notif-issue-key">{item.issue.key}</span>
+-                            <span className="kb-notif-summary">{item.issue.summary ?? ''}</span>
++                            <span className="kb-notif-issue-key">{issueKey}</span>
++                            <span className="kb-notif-summary">{item.issue?.summary ?? ''}</span>
+                           </a>
+                         ) : (
+                           <span className="kb-notif-summary">{item.title ?? item.body ?? 'Notification'}</span>

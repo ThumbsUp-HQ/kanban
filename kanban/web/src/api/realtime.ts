@@ -11,6 +11,7 @@
 
 import { useEffect } from 'react';
 import type { QueryClient } from '@tanstack/react-query';
+import { safeJsonParse } from '../utils/safeJson.ts';
 import { qk } from './queryKeys.ts';
 import type { RealtimeState } from './RealtimeStatus.tsx';
 
@@ -33,7 +34,7 @@ const MAX_BACKOFF_MS = 15000;
 const BASE_BACKOFF_MS = 500;
 
 /** SSE delivers server events under their topic name; EventSource needs explicit listeners. */
-const SSE_EVENT_NAMES: readonly string[] = [
+export const SSE_EVENT_NAMES: readonly string[] = [
   'message',
   'resync_required',
   'channel.revoked',
@@ -60,6 +61,9 @@ const SSE_EVENT_NAMES: readonly string[] = [
   'workflow.gate.completed',
   'workflow.gate.failed',
   'gate.updated',
+  'notification.created',
+  'notification.read',
+  'notification.read_all',
 ];
 
 function wsUrl(customPath = '/ws'): string {
@@ -67,9 +71,12 @@ function wsUrl(customPath = '/ws'): string {
   return `${scheme}//${window.location.host}${customPath}`;
 }
 
-function sseUrl(channels: readonly string[]): string {
+export function sseUrl(channels: readonly string[], lastEventId?: string): string {
   const url = new URL('/sse', window.location.origin);
   url.searchParams.set('channels', channels.join(','));
+  if (lastEventId !== undefined && lastEventId.length > 0) {
+    url.searchParams.set('last_event_id', lastEventId);
+  }
   return url.toString();
 }
 
@@ -88,6 +95,8 @@ function asRecord(value: unknown): Record<string, unknown> | null {
 export interface RealtimeSessionState {
   authenticated?: boolean;
   mfa_pending?: boolean;
+  principal_id?: string;
+  workspace_id?: string;
   [key: string]: unknown;
 }
 
@@ -331,7 +340,7 @@ export class RealtimeClient {
     }
     this.setState('sse-fallback');
     this.closeSse();
-    const source = new EventSource(sseUrl([...this.subscriptions.keys()]));
+    const source = new EventSource(sseUrl([...this.subscriptions.keys()], this.lastEventId));
     this.sse = source;
     const listener = (event: Event): void => {
       const message = event as MessageEvent;
@@ -424,7 +433,7 @@ export class RealtimeClient {
     }
     let parsed: unknown;
     try {
-      parsed = JSON.parse(raw);
+      parsed = safeJsonParse(raw);
     } catch {
       this.droppedEvents += 1;
       return;
@@ -472,6 +481,22 @@ export class RealtimeClient {
     ) {
       this.droppedEvents += 1;
       return;
+    }
+    if (topic.startsWith('notification.')) {
+      const recipientId = payload.recipient_principal_id;
+      const sessionPrincipalId =
+        typeof this.session?.principal_id === 'string' && this.session.principal_id.length > 0
+          ? this.session.principal_id
+          : undefined;
+      if (
+        sessionPrincipalId !== undefined &&
+        typeof recipientId === 'string' &&
+        recipientId.length > 0 &&
+        recipientId !== sessionPrincipalId
+      ) {
+        this.droppedEvents += 1;
+        return;
+      }
     }
     this.lastEventId = rawId;
     this.emit({ id: rawId, channel: obj.channel, type: topic, payload }, true);
@@ -657,6 +682,57 @@ export function bindQueryInvalidation(client: RealtimeClient, queryClient: Query
       });
       if (typeof window !== 'undefined') {
         window.dispatchEvent(new CustomEvent('kb:issue-updated', { detail: event }));
+      }
+      return;
+    }
+
+    // 5. Recipient-scoped notification events (KAN-310)
+    if (event.type === 'notification.created') {
+      void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      return;
+    }
+
+    if (event.type === 'notification.read') {
+      const notifId = stringField(event.payload, 'notification_id', 'notificationId', 'id');
+      const cached = queryClient.getQueryData<{ items?: Record<string, unknown>[] }>(
+        qk.notifications(),
+      );
+      if (notifId !== undefined && cached?.items?.some((item) => item.id === notifId)) {
+        const nowIso = new Date().toISOString();
+        queryClient.setQueryData<{ items: Record<string, unknown>[] }>(qk.notifications(), {
+          ...cached,
+          items: cached.items.map((item) =>
+            item.id === notifId
+              ? {
+                  ...item,
+                  read_at: item.read_at ?? nowIso,
+                  read: true,
+                }
+              : item,
+          ),
+        });
+      } else {
+        void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+      }
+      return;
+    }
+
+    if (event.type === 'notification.read_all') {
+      const cached = queryClient.getQueryData<{ items?: Record<string, unknown>[] }>(
+        qk.notifications(),
+      );
+      if (cached?.items) {
+        const nowIso = new Date().toISOString();
+        queryClient.setQueryData<{ items: Record<string, unknown>[] }>(qk.notifications(), {
+          ...cached,
+          items: cached.items.map((item) => ({
+            ...item,
+            read_at: item.read_at ?? nowIso,
+            read: true,
+          })),
+        });
+      } else {
+        void queryClient.invalidateQueries({ queryKey: ['notifications'] });
       }
       return;
     }
