@@ -876,7 +876,7 @@ export function AuthStudioPage(): JSX.Element {
                   ) : (
                     users.map((u) => (
                       <tr key={u.id} className="auth-users-tr" data-testid={`auth-user-row-${u.id}`}>
-                        <td className="auth-users-td">
+                        <td className="auth-users-td" data-label="User / Handle">
                           <div className="auth-user-name-cell">
                             <span className="auth-user-display-name">
                               {u.display_name || (u.handle ?? u.principal)}
@@ -886,10 +886,10 @@ export function AuthStudioPage(): JSX.Element {
                             </span>
                           </div>
                         </td>
-                        <td className="auth-users-td">
+                        <td className="auth-users-td" data-label="Email">
                           <span className="auth-user-email">{u.email ?? '-'}</span>
                         </td>
-                        <td className="auth-users-td">
+                        <td className="auth-users-td" data-label="Type">
                           {(() => {
                             const rawType = (u.type ?? 'USER').toUpperCase();
                             const pillClass = rawType === 'GROUP' ? 'group' : rawType === 'AGENT' ? 'agent' : 'user';
@@ -901,14 +901,14 @@ export function AuthStudioPage(): JSX.Element {
                             );
                           })()}
                         </td>
-                        <td className="auth-users-td">
+                        <td className="auth-users-td" data-label="Provider">
                           <span
                             className={`auth-badge-provider ${getProviderBadgeClass(u.provider)}`}
                           >
                             {u.provider ?? 'LOCAL'}
                           </span>
                         </td>
-                        <td className="auth-users-td">
+                        <td className="auth-users-td" data-label="Role Grant">
                           <select
                             className="auth-role-select"
                             value={u.role ?? 'WORKSPACE_MEMBER'}
@@ -924,7 +924,7 @@ export function AuthStudioPage(): JSX.Element {
                           </select>
                           <RoleLabelPicker principalId={u.id} />
                         </td>
-                        <td className="auth-users-td">
+                        <td className="auth-users-td" data-label="Actions">
                           {(() => {
                             const rawType = (
                               u.type ??

@@ -1,0 +1,110 @@
+/* Copyright 2026 Kanban Platform Contributors */
+/* Apache-2.0 License. See LICENSE for details. */
+
+/**
+ * Workspace Settings Studio Responsive Styles (KAN-344).
+ * Enforces horizontal swipe tabs, responsive card stacking for tables,
+ * and sticky visible action buttons on mobile viewports.
+ */
+
+.kb-workspace-settings-container {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--space-6, 24px) var(--space-4, 16px);
+  color: var(--kb-color-text-primary, #0f172a);
+}
+
+/* Horizontal swipeable tabs for mobile viewports (KAN-344) */
+@media (max-width: 767px) {
+  .kb-settings-tabs {
+    display: flex;
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    padding-bottom: var(--space-1, 4px);
+    margin-bottom: var(--space-4, 16px);
+    gap: var(--space-2, 8px);
+  }
+
+  .kb-settings-tab {
+    flex-shrink: 0;
+    white-space: nowrap;
+    min-height: var(--tap-min, 44px);
+    padding: var(--space-2, 8px) var(--space-3, 12px);
+    font-size: 0.875rem;
+  }
+
+  /* Responsive column stacking for multi-column tables (KAN-344) */
+  .kb-table-scroll-container,
+  .kb-members-table-wrapper,
+  .kb-group-members-table-wrapper {
+    overflow-x: visible;
+  }
+
+  .kb-table,
+  .kb-table tbody,
+  .kb-table tr,
+  .kb-table td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .kb-table thead {
+    display: none;
+  }
+
+  .kb-table tr {
+    margin-bottom: var(--space-3, 12px);
+    border: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
+    border-radius: var(--radius-md, 8px);
+    background: var(--kb-color-bg-surface, var(--bg-surface, #ffffff));
+    padding: var(--space-3, 12px);
+  }
+
+  .kb-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-2, 8px) 0;
+    border-bottom: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
+    text-align: right;
+  }
+
+  .kb-table td:last-child {
+    border-bottom: none;
+  }
+
+  .kb-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--kb-color-text-secondary, var(--text-secondary, #64748b));
+    text-align: left;
+    margin-right: var(--space-2, 8px);
+    font-size: 0.8125rem;
+    flex-shrink: 0;
+  }
+
+  /* Sticky / visible action buttons (KAN-344) */
+  .kb-settings-form-actions,
+  .kb-members-actions-bar {
+    position: sticky;
+    bottom: 0;
+    background: var(--kb-color-bg-surface, var(--bg-surface, #ffffff));
+    border-top: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
+    padding: var(--space-3, 12px) 0;
+    z-index: 5;
+    display: flex;
+    gap: var(--space-2, 8px);
+  }
+
+  .kb-settings-form-actions .kb-btn,
+  .kb-members-actions-bar .kb-btn {
+    min-height: var(--tap-min, 44px);
+    min-width: var(--tap-min, 44px);
+    flex: 1;
+    justify-content: center;
+  }
+}
