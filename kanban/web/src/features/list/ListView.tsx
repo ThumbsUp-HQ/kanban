@@ -425,39 +425,19 @@ export function ListView({
               }}
               onKeyDown={(e) => {
                 const currentIndex = sortedIssues.findIndex((it) => it.key === issue.key);
-                if (e.key === 'ArrowDown') {
+                const navMap: Record<string, number> = {
+                  ArrowDown: Math.min(sortedIssues.length - 1, currentIndex + 1),
+                  ArrowUp: Math.max(0, currentIndex - 1),
+                  Home: 0,
+                  End: sortedIssues.length - 1,
+                };
+                const targetIdx = navMap[e.key];
+                if (targetIdx !== undefined) {
                   e.preventDefault();
-                  const nextIndex = Math.min(sortedIssues.length - 1, currentIndex + 1);
-                  const nextKey = sortedIssues[nextIndex]?.key;
+                  const nextKey = sortedIssues[targetIdx]?.key;
                   if (nextKey) {
                     setInternalFocusedKey(nextKey);
-                    const target = document.querySelector<HTMLElement>(`[data-issue-key="${nextKey}"]`);
-                    target?.focus();
-                  }
-                } else if (e.key === 'ArrowUp') {
-                  e.preventDefault();
-                  const prevIndex = Math.max(0, currentIndex - 1);
-                  const prevKey = sortedIssues[prevIndex]?.key;
-                  if (prevKey) {
-                    setInternalFocusedKey(prevKey);
-                    const target = document.querySelector<HTMLElement>(`[data-issue-key="${prevKey}"]`);
-                    target?.focus();
-                  }
-                } else if (e.key === 'Home') {
-                  e.preventDefault();
-                  const firstKey = sortedIssues[0]?.key;
-                  if (firstKey) {
-                    setInternalFocusedKey(firstKey);
-                    const target = document.querySelector<HTMLElement>(`[data-issue-key="${firstKey}"]`);
-                    target?.focus();
-                  }
-                } else if (e.key === 'End') {
-                  e.preventDefault();
-                  const lastKey = sortedIssues[sortedIssues.length - 1]?.key;
-                  if (lastKey) {
-                    setInternalFocusedKey(lastKey);
-                    const target = document.querySelector<HTMLElement>(`[data-issue-key="${lastKey}"]`);
-                    target?.focus();
+                    document.querySelector<HTMLElement>(`[data-issue-key="${nextKey}"]`)?.focus();
                   }
                 } else if (e.key === 'Enter') {
                   onOpenPeek?.(issue.key);

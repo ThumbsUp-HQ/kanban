@@ -334,135 +334,25 @@ export function SwimlaneBoardGrid({
     e: React.KeyboardEvent<HTMLDivElement>,
     currentKey: string
   ) => {
-    if (['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key)) {
+    const currentIdx = allVisibleCards.indexOf(currentKey);
+    const navMap: Record<string, number> = {
+      ArrowDown: Math.min(allVisibleCards.length - 1, currentIdx + 1),
+      ArrowRight: Math.min(allVisibleCards.length - 1, currentIdx + 1),
+      ArrowUp: Math.max(0, currentIdx - 1),
+      ArrowLeft: Math.max(0, currentIdx - 1),
+      Home: 0,
+      End: allVisibleCards.length - 1,
+    };
+    const targetIdx = navMap[e.key];
+    if (targetIdx !== undefined) {
       e.preventDefault();
       e.stopPropagation();
-
-      const flatCards: string[] = [];
-      const cellMap: Record<string, { laneIdx: number; colIdx: number; cardIdx: number }> = {};
-
-      swimlanes.forEach((l, lIdx) => {
-        if (collapsedLanes[l.id]) return;
-        columns.forEach((c, cIdx) => {
-          const issuesInCell = partitionedGrid[l.id]?.[c.id] ?? [];
-          issuesInCell.forEach((iss, kIdx) => {
-            flatCards.push(iss.key);
-            cellMap[iss.key] = { laneIdx: lIdx, colIdx: cIdx, cardIdx: kIdx };
-          });
-        });
-      });
-
-      if (flatCards.length === 0) return;
-
-      let nextKey: string | null = null;
-      const currentMeta = cellMap[currentKey];
-
-      if (e.key === 'Home') {
-        nextKey = flatCards[0] ?? null;
-      } else if (e.key === 'End') {
-        nextKey = flatCards[flatCards.length - 1] ?? null;
-      } else if (currentMeta) {
-        const { laneIdx, colIdx, cardIdx } = currentMeta;
-        const currentLane = swimlanes[laneIdx];
-        const currentColumn = columns[colIdx];
-        const currentLaneIssuesInCol = (currentLane && currentColumn)
-          ? (partitionedGrid[currentLane.id]?.[currentColumn.id] ?? [])
-          : [];
-
-        if (e.key === 'ArrowDown') {
-          if (cardIdx + 1 < currentLaneIssuesInCol.length) {
-            nextKey = currentLaneIssuesInCol[cardIdx + 1]?.key ?? null;
-          } else {
-            for (let l = laneIdx + 1; l < swimlanes.length; l++) {
-              const nextLane = swimlanes[l];
-              if (!nextLane || collapsedLanes[nextLane.id]) continue;
-              const targetCol = columns[colIdx];
-              const nextLaneColIssues = targetCol ? (partitionedGrid[nextLane.id]?.[targetCol.id] ?? []) : [];
-              if (nextLaneColIssues.length > 0 && nextLaneColIssues[0]) {
-                nextKey = nextLaneColIssues[0].key;
-                break;
-              }
-            }
-            if (!nextKey) {
-              const currentFlatIdx = flatCards.indexOf(currentKey);
-              if (currentFlatIdx + 1 < flatCards.length) {
-                nextKey = flatCards[currentFlatIdx + 1] ?? null;
-              }
-            }
-          }
-        } else if (e.key === 'ArrowUp') {
-          if (cardIdx - 1 >= 0) {
-            nextKey = currentLaneIssuesInCol[cardIdx - 1]?.key ?? null;
-          } else {
-            for (let l = laneIdx - 1; l >= 0; l--) {
-              const prevLane = swimlanes[l];
-              if (!prevLane || collapsedLanes[prevLane.id]) continue;
-              const targetCol = columns[colIdx];
-              const prevLaneColIssues = targetCol ? (partitionedGrid[prevLane.id]?.[targetCol.id] ?? []) : [];
-              if (prevLaneColIssues.length > 0) {
-                const lastIssue = prevLaneColIssues[prevLaneColIssues.length - 1];
-                if (lastIssue) {
-                  nextKey = lastIssue.key;
-                  break;
-                }
-              }
-            }
-            if (!nextKey) {
-              const currentFlatIdx = flatCards.indexOf(currentKey);
-              if (currentFlatIdx - 1 >= 0) {
-                nextKey = flatCards[currentFlatIdx - 1] ?? null;
-              }
-            }
-          }
-        } else if (e.key === 'ArrowRight') {
-          if (currentLane) {
-            for (let c = colIdx + 1; c < columns.length; c++) {
-              const targetCol = columns[c];
-              const issuesInCol = targetCol ? (partitionedGrid[currentLane.id]?.[targetCol.id] ?? []) : [];
-              if (issuesInCol.length > 0) {
-                const targetIssue = issuesInCol[Math.min(cardIdx, issuesInCol.length - 1)];
-                if (targetIssue) {
-                  nextKey = targetIssue.key;
-                  break;
-                }
-              }
-            }
-          }
-          if (!nextKey) {
-            const currentFlatIdx = flatCards.indexOf(currentKey);
-            if (currentFlatIdx + 1 < flatCards.length) {
-              nextKey = flatCards[currentFlatIdx + 1] ?? null;
-            }
-          }
-        } else if (e.key === 'ArrowLeft') {
-          if (currentLane) {
-            for (let c = colIdx - 1; c >= 0; c--) {
-              const targetCol = columns[c];
-              const issuesInCol = targetCol ? (partitionedGrid[currentLane.id]?.[targetCol.id] ?? []) : [];
-              if (issuesInCol.length > 0) {
-                const targetIssue = issuesInCol[Math.min(cardIdx, issuesInCol.length - 1)];
-                if (targetIssue) {
-                  nextKey = targetIssue.key;
-                  break;
-                }
-              }
-            }
-          }
-          if (!nextKey) {
-            const currentFlatIdx = flatCards.indexOf(currentKey);
-            if (currentFlatIdx - 1 >= 0) {
-              nextKey = flatCards[currentFlatIdx - 1] ?? null;
-            }
-          }
-        }
-      }
-
+      const nextKey = allVisibleCards[targetIdx];
       if (nextKey) {
         setRovingKey(nextKey);
-        const targetEl = document.querySelector<HTMLElement>(`[data-issue-key="${nextKey}"]`);
-        targetEl?.focus();
+        document.querySelector<HTMLElement>(`[data-issue-key="${nextKey}"]`)?.focus();
       }
-    } else if (e.key === 'Enter' || e.key === ' ') {
+    } else if (e.key === 'Enter') {
       onCardClick?.(currentKey, e.shiftKey);
     }
   };

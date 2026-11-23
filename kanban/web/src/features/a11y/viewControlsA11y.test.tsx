@@ -392,10 +392,25 @@ describe('viewControlsA11y (KAN-358: 2D Swimlane, Navigator, Table, Calendar, an
         expect(sc.getAttribute('aria-colindex')).toBe(String(idx + 1));
       });
 
-      const leftRows = document.querySelectorAll('.timeline-left-row[role="row"]');
+      const leftRows = document.querySelectorAll<HTMLElement>('.timeline-left-row[role="row"]');
       expect(leftRows.length).toBe(FIXTURE_12_ISSUES.length);
       leftRows.forEach((lr, idx) => {
         expect(lr.getAttribute('aria-rowindex')).toBe(String(idx + 2));
+      });
+
+      const firstLeftRow = expectElement(leftRows[0], 'firstLeftRow');
+      const secondLeftRow = expectElement(leftRows[1], 'secondLeftRow');
+      act(() => {
+        firstLeftRow.focus();
+        fireEvent.keyDown(firstLeftRow, { key: 'ArrowDown' });
+      });
+      expect(document.activeElement).toBe(secondLeftRow);
+      act(() => {
+        fireEvent.keyDown(secondLeftRow, { key: 'ArrowUp' });
+      });
+      expect(document.activeElement).toBe(firstLeftRow);
+      act(() => {
+        fireEvent.keyDown(firstLeftRow, { key: 'Enter' });
       });
     });
   });

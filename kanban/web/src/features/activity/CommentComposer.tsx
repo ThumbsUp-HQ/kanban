@@ -114,16 +114,12 @@ export function CommentComposer({
   const [isPreview, setIsPreview] = useState(false);
 
   // Mobile toolbar and virtual keyboard handling (KAN-345)
-  const [isMobile, setIsMobile] = useState<boolean>(() => {
-    if (typeof window !== 'undefined') {
-      const matchMediaActive =
-        typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 480px)').matches;
-      return window.innerWidth <= 480 || matchMediaActive;
-    }
-    return false;
-  });
+  const checkMobileViewport = (): boolean =>
+    window.innerWidth <= 480 ||
+    (typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 480px)').matches);
+
+  const [isMobile, setIsMobile] = useState<boolean>(checkMobileViewport);
   const [isOverflowOpen, setIsOverflowOpen] = useState(false);
-  const [, setKeyboardInset] = useState<number>(0);
 
   const containerRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
@@ -133,12 +129,8 @@ export function CommentComposer({
   const undoDraftRef = useRef<string | null>(null);
 
   useEffect(() => {
-    if (typeof window === 'undefined') return;
-
     const handleResize = () => {
-      const matchMediaActive =
-        typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 480px)').matches;
-      const mobile = window.innerWidth <= 480 || matchMediaActive;
+      const mobile = checkMobileViewport();
       setIsMobile(mobile);
       if (!mobile) {
         setIsOverflowOpen(false);
@@ -146,23 +138,14 @@ export function CommentComposer({
     };
 
     window.addEventListener('resize', handleResize);
-
     const mql = typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 480px)') : null;
     mql?.addEventListener('change', handleResize);
 
     const vv = window.visualViewport;
     const handleVisualViewportChange = () => {
-      if (!vv) return;
-      const inset = Math.max(0, window.innerHeight - vv.height);
-      setKeyboardInset(inset);
-      if (containerRef.current) {
-        containerRef.current.style.setProperty('--keyboard-inset-height', `${String(inset)}px`);
-      }
-      try {
-        document.documentElement.style.setProperty('--keyboard-inset-height', `${String(inset)}px`);
-      } catch {
-        // ignore
-      }
+      const inset = Math.max(0, window.innerHeight - (vv?.height ?? window.innerHeight));
+      containerRef.current?.style.setProperty('--keyboard-inset-height', `${String(inset)}px`);
+      document.documentElement.style.setProperty('--keyboard-inset-height', `${String(inset)}px`);
     };
 
     if (vv) {
@@ -183,7 +166,7 @@ export function CommentComposer({
   useEffect(() => {
     if (!isOverflowOpen) return;
     const handleClickOutside = (e: MouseEvent) => {
-      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) {
+      if (!overflowRef.current?.contains(e.target as Node)) {
         setIsOverflowOpen(false);
       }
     };
@@ -194,12 +177,10 @@ export function CommentComposer({
   }, [isOverflowOpen]);
 
   const handleFocus = (): void => {
-    if (containerRef.current) {
-      try {
-        containerRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      } catch {
-        // ignore
-      }
+    try {
+      containerRef.current?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    } catch {
+      // ignore
     }
   };
 
