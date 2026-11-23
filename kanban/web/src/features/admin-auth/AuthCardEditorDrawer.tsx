@@ -832,7 +832,7 @@ export function AuthCardEditorDrawer({
                         .replace(/[^a-z0-9]+/g, '-')
                         .replace(/^-+|-+$/g, '')
                         .slice(0, 48);
-                      if (autoSlug) setSlug(autoSlug);
+                      setSlug(autoSlug);
                     }
                   }}
                   disabled={isSubmitting}
