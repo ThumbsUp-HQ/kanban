@@ -4,6 +4,7 @@
 import React, { useState, type JSX } from 'react';
 import { Link } from 'react-router';
 import './AttachHookDialog.css';
+import { AdvancedSection } from '../../ui/AdvancedSection';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import {
   MUTABLE_FIELD_UNIVERSE,
@@ -266,160 +267,190 @@ function AttachHookDialogInner({
               </div>
             </div>
 
-            {/* Conditional: Wasm Module selector */}
-            {(hookKind === 'sync_validator' || hookKind === 'sync_mutator') && (
+            {/* Advanced Hook Settings (KB-ADVANCED-DISCLOSURE-03, KAN-369) */}
+            <AdvancedSection
+              title="Advanced Hook Settings"
+              summary="Execution failure policy, Wasm bytecode hashes, agent timeout, and mutable field permissions"
+              testId="attach-hook-advanced-section"
+              activeOverridesCount={
+                (failurePolicy === 'fail_closed' ? 1 : 0) +
+                ((hookKind === 'sync_validator' || hookKind === 'sync_mutator') && selectedWasmSha ? 1 : 0) +
+                (hookKind === 'agent_interceptor' && selectedAgent?.timeout_ms && selectedAgent.timeout_ms !== 30000 ? 1 : 0) +
+                (allowedMutableFields.length > 0 ? 1 : 0)
+              }
+              defaultOpen={false}
+            >
+              {/* Failure Policy */}
               <div className="workflow-form-group">
-                <label htmlFor="wasm-module-select" className="workflow-form-label">
-                  Approved WebAssembly Module (Built-in Formula Sandbox)
+                <label htmlFor="failure-policy-select" className="workflow-form-label">
+                  Failure Policy
+                  <FieldHelpHint
+                    title="Failure Policy"
+                    summary="Specifies behavior when helper times out, returns an error, or crashes."
+                    validValues={[
+                      { label: 'Fail-Closed', description: 'Blocks transition immediately, rejecting state change.' },
+                      { label: 'Fail-Open (Warn)', description: 'Records audit warning and allows transition to proceed.' },
+                    ]}
+                    docHref="/docs/scripted-workflows-and-transition-helpers#failure-policies"
+                    testId="failure-policy-help"
+                  />
                 </label>
                 <select
-                  id="wasm-module-select"
+                  id="failure-policy-select"
                   className="workflow-form-control"
-                  value={selectedWasmSha}
-                  onChange={(e) => { setSelectedWasmSha(e.target.value); }}
+                  value={failurePolicy}
+                  onChange={(e) => { setFailurePolicy(e.target.value as FailurePolicy); }}
                 >
-                  {wasmModules.map((m) => (
-                    <option key={m.sha256} value={m.sha256}>
-                      {m.name} ({m.sha256.slice(0, 8)}... - {m.target_latency_budget ?? '<25ms'})
-                    </option>
-                  ))}
+                  <option value="fail_closed">Fail-Closed (Blocks transition on failure or veto)</option>
+                  <option value="fail_open_warn">Fail-Open (Warn) (Logs warning but allows transition)</option>
                 </select>
               </div>
-            )}
 
-            {/* Conditional: Agent Transition Helper selector */}
-            {hookKind === 'agent_interceptor' && (
-              agentDefinitions.length === 0 ? (
-                <div className="workflow-alert workflow-alert-warning" data-testid="no-agents-warning">
-                  <strong>No Agent Definitions configured</strong>
-                  <p className="no-agents-warning-text">
-                    There are no active Agent Definitions registered in this workspace. Configure an Agent Definition before attaching an Agent Transition Helper hook.
-                  </p>
-                  <Link
-                    to="/admin/agents"
-                    className="workflow-btn workflow-btn-secondary workflow-btn-sm no-agents-configure-link"
-                    data-testid="configure-agents-link"
+              {/* Conditional: Wasm Module selector */}
+              {(hookKind === 'sync_validator' || hookKind === 'sync_mutator') && (
+                <div className="workflow-form-group">
+                  <label htmlFor="wasm-module-select" className="workflow-form-label">
+                    Approved WebAssembly Module (Built-in Formula Sandbox)
+                  </label>
+                  <select
+                    id="wasm-module-select"
+                    className="workflow-form-control"
+                    value={selectedWasmSha}
+                    onChange={(e) => { setSelectedWasmSha(e.target.value); }}
                   >
-                    Configure Agent Definitions &rarr;
-                  </Link>
+                    {wasmModules.map((m) => (
+                      <option key={m.sha256} value={m.sha256}>
+                        {m.name} ({m.sha256.slice(0, 8)}... - {m.target_latency_budget ?? '<25ms'})
+                      </option>
+                    ))}
+                  </select>
                 </div>
-              ) : (
-                <>
-                  <div className="workflow-form-group">
-                    <label htmlFor="agent-def-select" className="workflow-form-label">
-                      Agent Definition
-                    </label>
-                    <select
-                      id="agent-def-select"
-                      className="workflow-form-control"
-                      value={selectedAgentSlug}
-                      onChange={(e) => { setSelectedAgentSlug(e.target.value); }}
+              )}
+
+              {/* Conditional: Agent Transition Helper selector */}
+              {hookKind === 'agent_interceptor' && (
+                agentDefinitions.length === 0 ? (
+                  <div className="workflow-alert workflow-alert-warning" data-testid="no-agents-warning">
+                    <strong>No Agent Definitions configured</strong>
+                    <p className="no-agents-warning-text">
+                      There are no active Agent Definitions registered in this workspace. Configure an Agent Definition before attaching an Agent Transition Helper hook.
+                    </p>
+                    <Link
+                      to="/admin/agents"
+                      className="workflow-btn workflow-btn-secondary workflow-btn-sm no-agents-configure-link"
+                      data-testid="configure-agents-link"
                     >
-                      {cliAgents.length > 0 && (
-                        <optgroup label="CLI Pipe Agents (agy, codex)">
-                          {cliAgents.map((a) => (
-                            <option key={a.id} value={a.slug}>
-                              {a.display_name} ({a.cli_binary_allowlist_id ?? 'cli'})
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {sdkAgents.length > 0 && (
-                        <optgroup label="In-App SDK Agents (Ollama, Gemini, OpenAI)">
-                          {sdkAgents.map((a) => (
-                            <option key={a.id} value={a.slug}>
-                              {a.display_name} ({a.model_id ?? a.provider_kind})
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                      {remoteAgents.length > 0 && (
-                        <optgroup label="Remote Runner Pools">
-                          {remoteAgents.map((a) => (
-                            <option key={a.id} value={a.slug}>
-                              {a.display_name}
-                            </option>
-                          ))}
-                        </optgroup>
-                      )}
-                    </select>
+                      Configure Agent Definitions &rarr;
+                    </Link>
                   </div>
-
-                  {/* Agent read-only details summary */}
-                  {selectedAgent && (
-                    <div className="workflow-notice" data-testid="agent-details-summary">
-                      <strong>Agent Config Summary:</strong>
-                      <div>Harness: {selectedAgent.harness_kind}</div>
-                      {selectedAgent.cli_args.length > 0 && (
-                        <div>Validated CLI Args: <code>{selectedAgent.cli_args.join(' ')}</code></div>
-                      )}
-                      <div>Repo Access Mode: <code>{selectedAgent.repo_access_mode}</code></div>
-                      <div>Timeout: {Math.round(selectedAgent.timeout_ms / 1000)}s</div>
+                ) : (
+                  <>
+                    <div className="workflow-form-group">
+                      <label htmlFor="agent-def-select" className="workflow-form-label">
+                        Agent Definition
+                      </label>
+                      <select
+                        id="agent-def-select"
+                        className="workflow-form-control"
+                        value={selectedAgentSlug}
+                        onChange={(e) => { setSelectedAgentSlug(e.target.value); }}
+                      >
+                        {cliAgents.length > 0 && (
+                          <optgroup label="CLI Pipe Agents (agy, codex)">
+                            {cliAgents.map((a) => (
+                              <option key={a.id} value={a.slug}>
+                                {a.display_name} ({a.cli_binary_allowlist_id ?? 'cli'})
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {sdkAgents.length > 0 && (
+                          <optgroup label="In-App SDK Agents (Ollama, Gemini, OpenAI)">
+                            {sdkAgents.map((a) => (
+                              <option key={a.id} value={a.slug}>
+                                {a.display_name} ({a.model_id ?? a.provider_kind})
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                        {remoteAgents.length > 0 && (
+                          <optgroup label="Remote Runner Pools">
+                            {remoteAgents.map((a) => (
+                              <option key={a.id} value={a.slug}>
+                                {a.display_name}
+                              </option>
+                            ))}
+                          </optgroup>
+                        )}
+                      </select>
                     </div>
-                  )}
-                </>
-              )
-            )}
 
-            {/* Failure Policy */}
-            <div className="workflow-form-group">
-              <label htmlFor="failure-policy-select" className="workflow-form-label">
-                Failure Policy
-                <FieldHelpHint
-                  title="Failure Policy"
-                  summary="Specifies behavior when helper times out, returns an error, or crashes."
-                  validValues={[
-                    { label: 'Fail-Closed', description: 'Blocks transition immediately, rejecting state change.' },
-                    { label: 'Fail-Open (Warn)', description: 'Records audit warning and allows transition to proceed.' },
-                  ]}
-                  docHref="/docs/scripted-workflows-and-transition-helpers#failure-policies"
-                  testId="failure-policy-help"
-                />
-              </label>
-              <select
-                id="failure-policy-select"
-                className="workflow-form-control"
-                value={failurePolicy}
-                onChange={(e) => { setFailurePolicy(e.target.value as FailurePolicy); }}
-              >
-                <option value="fail_closed">Fail-Closed (Blocks transition on failure or veto)</option>
-                <option value="fail_open_warn">Fail-Open (Warn) (Logs warning but allows transition)</option>
-              </select>
-            </div>
+                    {/* Agent read-only details summary */}
+                    {selectedAgent && (
+                      <div className="workflow-notice" data-testid="agent-details-summary">
+                        <strong>Agent Config Summary:</strong>
+                        <div>Harness: {selectedAgent.harness_kind}</div>
+                        {selectedAgent.cli_args.length > 0 && (
+                          <div>Validated CLI Args: <code>{selectedAgent.cli_args.join(' ')}</code></div>
+                        )}
+                        <div>Repo Access Mode: <code>{selectedAgent.repo_access_mode}</code></div>
+                        <div>Timeout: {Math.round(selectedAgent.timeout_ms / 1000)}s</div>
+                      </div>
+                    )}
+                  </>
+                )
+              )}
 
-            {/* Allowed Mutable Fields */}
-            <div className="workflow-form-group">
-              <label className="workflow-form-label">
-                Allowed Mutable Fields
-                {hookKind === 'sync_validator' && ' (Disabled for Validators)'}
-              </label>
-              <div className="mutable-fields-picker">
-                {MUTABLE_FIELD_UNIVERSE.map((field) => {
-                  const isChecked = allowedMutableFields.includes(field);
-                  const isDisabled = hookKind === 'sync_validator';
-                  const labelClass = [
-                    'workflow-radio-label',
-                    isDisabled ? 'is-disabled' : '',
-                  ]
-                    .filter(Boolean)
-                    .join(' ');
-                  return (
-                    <label key={field} className={labelClass}>
-                      <input
-                        type="checkbox"
-                        checked={isChecked && !isDisabled}
-                        disabled={isDisabled}
-                        onChange={() => { handleToggleMutableField(field); }}
-                      />
-                      <code>{field}</code>
-                    </label>
-                  );
-                })}
+              {/* Allowed Mutable Fields */}
+              <div className="workflow-form-group">
+                <label className="workflow-form-label">
+                  Allowed Mutable Fields
+                  {hookKind === 'sync_validator' && ' (Disabled for Validators)'}
+                </label>
+                <div className="mutable-fields-picker">
+                  {MUTABLE_FIELD_UNIVERSE.map((field) => {
+                    const isChecked = allowedMutableFields.includes(field);
+                    const isDisabled = hookKind === 'sync_validator';
+                    const labelClass = [
+                      'workflow-radio-label',
+                      isDisabled ? 'is-disabled' : '',
+                    ]
+                      .filter(Boolean)
+                      .join(' ');
+                    return (
+                      <label key={field} className={labelClass}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked && !isDisabled}
+                          disabled={isDisabled}
+                          onChange={() => { handleToggleMutableField(field); }}
+                        />
+                        <code>{field}</code>
+                      </label>
+                    );
+                  })}
+                </div>
+                <div className="workflow-notice">
+                  {IMMUTABLE_FIELDS_NOTICE}
+                </div>
               </div>
-              <div className="workflow-notice">
-                {IMMUTABLE_FIELDS_NOTICE}
+
+              {/* Raw Execution Logs / Prior Runs */}
+              <div className="workflow-form-group" data-testid="hook-execution-logs-section">
+                <label className="workflow-form-label">
+                  Raw Execution Logs &amp; Diagnostics
+                </label>
+                {editingHook?.last_execution_log ? (
+                  <pre className="workflow-code-block" data-testid="hook-execution-log-output">
+                    {editingHook.last_execution_log}
+                  </pre>
+                ) : (
+                  <div className="workflow-notice" data-testid="hook-execution-logs-empty">
+                    No recent execution logs recorded for this transition helper hook.
+                  </div>
+                )}
               </div>
-            </div>
+            </AdvancedSection>
           </div>
 
           {/* Actions - Sticky Footer */}

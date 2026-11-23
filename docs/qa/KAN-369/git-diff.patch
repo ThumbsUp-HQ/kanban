@@ -1,0 +1,1487 @@
+diff --git a/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx b/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
+index 8826bd48..169e3526 100644
+--- a/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
++++ b/kanban/web/src/features/custom-fields/CustomFieldDefinitionEditor.tsx
+@@ -29,6 +29,7 @@ import {
+ } from './api';
+ import { CustomFieldValue } from './CustomFieldValue';
+ import { EscalationApprovalPanel } from './EscalationApprovalPanel';
++import { AdvancedSection } from '../../ui/AdvancedSection';
+ import { safeJsonParse } from '../../utils/safeJson';
+ import './custom-fields.css';
+ 
+@@ -965,155 +966,168 @@ export function CustomFieldDefinitionEditor({
+               </div>
+             </div>
+ 
+-            {/* Format Metadata JSON */}
+-            <div className="custom-field-form-group">
+-              <label htmlFor="format-metadata" className="custom-field-form-label">
+-                Format Configuration Metadata (JSON)
+-                <FieldHelpHint
+-                  title="Format Metadata JSON"
+-                  summary="JSON configuration dictionary tailoring display options for the selected output format."
+-                  validValues={[
+-                    { label: 'text', description: 'max_length, prefix, monospace' },
+-                    { label: 'number', description: 'maximum_fraction_digits, unit_suffix' },
+-                    { label: 'badge', description: 'color_token, allowed_labels' },
+-                    { label: 'markdown_snippet', description: 'max_chars' },
+-                    { label: 'url', description: 'allowed_schemes (e.g. ["https"])' },
+-                    { label: 'json_table', description: 'columns ([{key, label}]), max_rows' },
+-                    { label: 'severity_pill', description: 'Optional severity score thresholds' },
+-                  ]}
+-                  example={JSON.stringify({ maximum_fraction_digits: 2, unit_suffix: ' pts' })}
+-                  docHref="/docs/custom-fields#format-metadata"
+-                  testId="hint-format-metadata"
+-                />
+-              </label>
+-              <textarea
+-                id="format-metadata"
+-                className="custom-field-textarea mono"
+-                rows={8}
+-                value={metadataText}
+-                onChange={(e) => {
+-                  setMetadataText(e.target.value);
+-                }}
+-                data-testid="format-metadata-textarea"
+-              />
+-              {jsonError && <span className="custom-field-input-error">{jsonError}</span>}
+-            </div>
+-
+-            {/* Script Source Code */}
+-            <div className="custom-field-form-group">
+-              <label htmlFor="script-source" className="custom-field-form-label">
+-                Script Source Code (Sandboxed, never executed client-side)
+-                <FieldHelpHint
+-                  title="Script / Formula Source"
+-                  summary="Source code or AST formula evaluated in the server sandbox to compute the field value."
+-                  example='formula: issue.state === "DONE" ? "Completed" : "In Progress"'
+-                  caution="Scripts run inside hardened server sandboxes and are never executed inside the browser client."
+-                  docHref="/docs/custom-fields#script-source"
+-                  testId="hint-script-source"
++            {/* Advanced Format & Sandbox Script Settings (KB-ADVANCED-DISCLOSURE-03, KAN-369) */}
++            <AdvancedSection
++              title="Advanced Format & Sandbox Script Settings"
++              summary="Format configuration metadata (JSON), execution source code, and live sandbox evaluation"
++              testId="custom-field-advanced-section"
++              activeOverridesCount={
++                (scriptSource.trim() !== '' ? 1 : 0) +
++                (metadataText.trim() !== '' && metadataText.trim() !== '{}' ? 1 : 0)
++              }
++              hasErrors={Boolean(jsonError ?? testError)}
++              defaultOpen={false}
++            >
++              {/* Format Metadata JSON */}
++              <div className="custom-field-form-group">
++                <label htmlFor="format-metadata" className="custom-field-form-label">
++                  Format Configuration Metadata (JSON)
++                  <FieldHelpHint
++                    title="Format Metadata JSON"
++                    summary="JSON configuration dictionary tailoring display options for the selected output format."
++                    validValues={[
++                      { label: 'text', description: 'max_length, prefix, monospace' },
++                      { label: 'number', description: 'maximum_fraction_digits, unit_suffix' },
++                      { label: 'badge', description: 'color_token, allowed_labels' },
++                      { label: 'markdown_snippet', description: 'max_chars' },
++                      { label: 'url', description: 'allowed_schemes (e.g. ["https"])' },
++                      { label: 'json_table', description: 'columns ([{key, label}]), max_rows' },
++                      { label: 'severity_pill', description: 'Optional severity score thresholds' },
++                    ]}
++                    example={JSON.stringify({ maximum_fraction_digits: 2, unit_suffix: ' pts' })}
++                    docHref="/docs/custom-fields#format-metadata"
++                    testId="hint-format-metadata"
++                  />
++                </label>
++                <textarea
++                  id="format-metadata"
++                  className="custom-field-textarea mono"
++                  rows={8}
++                  value={metadataText}
++                  onChange={(e) => {
++                    setMetadataText(e.target.value);
++                  }}
++                  data-testid="format-metadata-textarea"
+                 />
+-              </label>
+-              <textarea
+-                id="script-source"
+-                className="custom-field-textarea mono custom-field-source-editor"
+-                rows={8}
+-                required
+-                value={scriptSource}
+-                onChange={(e) => {
+-                  setScriptSource(e.target.value);
+-                }}
+-                data-testid="script-source-textarea"
+-              />
+-            </div>
++                {jsonError && <span className="custom-field-input-error">{jsonError}</span>}
++              </div>
+ 
+-            {/* Test Execute Section */}
+-            <div className="custom-field-test-panel" data-testid="custom-field-test-panel">
+-              <div className="custom-field-test-controls">
+-                <label htmlFor="test-issue-key" className="custom-field-form-label">
+-                  Test With Issue Key
+-                </label>
+-                <div className="custom-field-test-input-row">
+-                  <input
+-                    id="test-issue-key"
+-                    type="text"
+-                    className="custom-field-input mono"
+-                    placeholder="e.g. KANBA-1"
+-                    value={testIssueKey}
+-                    onChange={(e) => {
+-                      setTestIssueKey(e.target.value.toUpperCase());
+-                    }}
+-                    data-testid="test-issue-key-input"
++              {/* Script Source Code */}
++              <div className="custom-field-form-group">
++                <label htmlFor="script-source" className="custom-field-form-label">
++                  Script Source Code (Sandboxed, never executed client-side)
++                  <FieldHelpHint
++                    title="Script / Formula Source"
++                    summary="Source code or AST formula evaluated in the server sandbox to compute the field value."
++                    example='formula: issue.state === "DONE" ? "Completed" : "In Progress"'
++                    caution="Scripts run inside hardened server sandboxes and are never executed inside the browser client."
++                    docHref="/docs/custom-fields#script-source"
++                    testId="hint-script-source"
+                   />
+-                  <button
+-                    type="button"
+-                    className="custom-field-btn custom-field-btn--secondary"
+-                    onClick={() => {
+-                      void handleTestExecute();
+-                    }}
+-                    disabled={isTesting}
+-                    data-testid="test-execute-btn"
+-                  >
+-                    {isTesting ? 'Evaluating...' : 'Test Execute'}
+-                  </button>
+-                </div>
++                </label>
++                <textarea
++                  id="script-source"
++                  className="custom-field-textarea mono custom-field-source-editor"
++                  rows={8}
++                  required
++                  value={scriptSource}
++                  onChange={(e) => {
++                    setScriptSource(e.target.value);
++                  }}
++                  data-testid="script-source-textarea"
++                />
+               </div>
+ 
+-              {testError && (
+-                <div
+-                  className="custom-field-input-error custom-field-test-error-mt"
+-                  data-testid="test-execute-error"
+-                >
+-                  {testError}
++              {/* Test Execute Section */}
++              <div className="custom-field-test-panel" data-testid="custom-field-test-panel">
++                <div className="custom-field-test-controls">
++                  <label htmlFor="test-issue-key" className="custom-field-form-label">
++                    Test With Issue Key
++                  </label>
++                  <div className="custom-field-test-input-row">
++                    <input
++                      id="test-issue-key"
++                      type="text"
++                      className="custom-field-input mono"
++                      placeholder="e.g. KANBA-1"
++                      value={testIssueKey}
++                      onChange={(e) => {
++                        setTestIssueKey(e.target.value.toUpperCase());
++                      }}
++                      data-testid="test-issue-key-input"
++                    />
++                    <button
++                      type="button"
++                      className="custom-field-btn custom-field-btn--secondary"
++                      onClick={() => {
++                        void handleTestExecute();
++                      }}
++                      disabled={isTesting}
++                      data-testid="test-execute-btn"
++                    >
++                      {isTesting ? 'Evaluating...' : 'Test Execute'}
++                    </button>
++                  </div>
+                 </div>
+-              )}
+ 
+-              {testResult && (
+-                <div className="custom-field-test-result" data-testid="test-execute-result-panel">
+-                  <div className="custom-field-test-meta custom-field-test-meta-row">
+-                    <span>
+-                      <strong>Status:</strong>{' '}
+-                      <span
+-                        className={`custom-field-status-pill custom-field-status-pill--${testResult.status.toLowerCase()}`}
+-                      >
+-                        {testResult.status}
+-                      </span>
+-                    </span>
+-                    <span data-testid="test-latency">
+-                      <strong>Latency:</strong> {testResult.latency_ms.toFixed(1)} ms
+-                    </span>
++                {testError && (
++                  <div
++                    className="custom-field-input-error custom-field-test-error-mt"
++                    data-testid="test-execute-error"
++                  >
++                    {testError}
+                   </div>
++                )}
+ 
+-                  <div className="custom-field-test-preview-wrap">
+-                    <strong>Rendered Output Pill:</strong>
+-                    <div
+-                      className="custom-field-pill-preview custom-field-pill-preview-mt"
+-                      data-testid="test-output-pill"
+-                    >
+-                      <CustomFieldValue
+-                        format={outputFormat}
+-                        value={testResult.value}
+-                        metadata={(() => {
+-                          try {
+-                            return safeJsonParse<Record<string, unknown>>(metadataText);
+-                          } catch {
+-                            return {};
+-                          }
+-                        })()}
+-                        testId="test-result-value"
+-                      />
++                {testResult && (
++                  <div className="custom-field-test-result" data-testid="test-execute-result-panel">
++                    <div className="custom-field-test-meta custom-field-test-meta-row">
++                      <span>
++                        <strong>Status:</strong>{' '}
++                        <span
++                          className={`custom-field-status-pill custom-field-status-pill--${testResult.status.toLowerCase()}`}
++                        >
++                          {testResult.status}
++                        </span>
++                      </span>
++                      <span data-testid="test-latency">
++                        <strong>Latency:</strong> {testResult.latency_ms.toFixed(1)} ms
++                      </span>
+                     </div>
+-                  </div>
+ 
+-                  {testResult.logs && (
+-                    <div>
+-                      <strong>Truncated Logs:</strong>
+-                      <pre className="custom-field-test-logs mono" data-testid="test-logs">
+-                        {testResult.logs}
+-                      </pre>
++                    <div className="custom-field-test-preview-wrap">
++                      <strong>Rendered Output Pill:</strong>
++                      <div
++                        className="custom-field-pill-preview custom-field-pill-preview-mt"
++                        data-testid="test-output-pill"
++                      >
++                        <CustomFieldValue
++                          format={outputFormat}
++                          value={testResult.value}
++                          metadata={(() => {
++                            try {
++                              return safeJsonParse<Record<string, unknown>>(metadataText);
++                            } catch {
++                              return {};
++                            }
++                          })()}
++                          testId="test-result-value"
++                        />
++                      </div>
+                     </div>
+-                  )}
+-                </div>
+-              )}
+-            </div>
++
++                    {testResult.logs && (
++                      <div>
++                        <strong>Truncated Logs:</strong>
++                        <pre className="custom-field-test-logs mono" data-testid="test-logs">
++                          {testResult.logs}
++                        </pre>
++                      </div>
++                    )}
++                  </div>
++                )}
++              </div>
++            </AdvancedSection>
+ 
+             {/* Is Enabled */}
+             <div className="custom-field-form-group">
+diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.tsx b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+index 62fd5e4a..edbbcf8a 100644
+--- a/kanban/web/src/features/settings/ProjectSettingsPage.tsx
++++ b/kanban/web/src/features/settings/ProjectSettingsPage.tsx
+@@ -26,6 +26,7 @@ import { DeleteAuditModal } from './DeleteAuditModal';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
++import { AdvancedSection } from '../../ui/AdvancedSection';
+ import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
+ import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
+ import './ProjectSettingsPage.css';
+@@ -1468,20 +1469,6 @@ export function ProjectSettingsPage(): JSX.Element {
+               </label>
+             </div>
+ 
+-            <div className="kb-form-group kb-form-group-checkbox">
+-              <label className="kb-checkbox-label" htmlFor="project-skip-loaded-seq">
+-                <input
+-                  type="checkbox"
+-                  id="project-skip-loaded-seq"
+-                  data-testid="project-skip-loaded-seq-checkbox"
+-                  checked={skipLoadedSeq}
+-                  onChange={(e) => { setSkipLoadedSeq(e.target.checked); }}
+-                />
+-                <span>Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)</span>
+-              </label>
+-              <EmojiHint kind="agentSafeNumbering" />
+-            </div>
+-
+             {/* Default Modules Selector (when modulesEnabled is true) */}
+             {modulesEnabled && (
+               <div className="kb-default-modules-box" data-testid="default-modules-section">
+@@ -1515,29 +1502,52 @@ export function ProjectSettingsPage(): JSX.Element {
+               </div>
+             )}
+ 
+-            <div className="kb-form-group">
+-              <label htmlFor="proj-auto-archive-input">
+-                Auto-Archive Days (optional)
+-                <FieldHelpHint
+-                  title="Auto-Archive Days"
+-                  summary="Number of days after completion or cancellation before work items are automatically archived from active views."
+-                  example="30"
+-                  docHref="/docs/ticket-screen-and-work-item-features#auto-archive"
+-                  testId="proj-auto-archive-help"
++            {/* Advanced Project Options (KB-ADVANCED-DISCLOSURE-03, KAN-369) */}
++            <AdvancedSection
++              title="Advanced Project Options"
++              summary="Agent-Safe sequence numbering and work item auto-archival policies"
++              testId="project-general-advanced-section"
++              activeOverridesCount={(skipLoadedSeq ? 1 : 0) + (autoArchiveDays ? 1 : 0)}
++              defaultOpen={false}
++            >
++              <div className="kb-form-group kb-form-group-checkbox">
++                <label className="kb-checkbox-label" htmlFor="project-skip-loaded-seq">
++                  <input
++                    type="checkbox"
++                    id="project-skip-loaded-seq"
++                    data-testid="project-skip-loaded-seq-checkbox"
++                    checked={skipLoadedSeq}
++                    onChange={(e) => { setSkipLoadedSeq(e.target.checked); }}
++                  />
++                  <span>Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)</span>
++                </label>
++                <EmojiHint kind="agentSafeNumbering" />
++              </div>
++
++              <div className="kb-form-group">
++                <label htmlFor="proj-auto-archive-input">
++                  Auto-Archive Days (optional)
++                  <FieldHelpHint
++                    title="Auto-Archive Days"
++                    summary="Number of days after completion or cancellation before work items are automatically archived from active views."
++                    example="30"
++                    docHref="/docs/ticket-screen-and-work-item-features#auto-archive"
++                    testId="proj-auto-archive-help"
++                  />
++                </label>
++                <input
++                  id="proj-auto-archive-input"
++                  data-testid="project-auto-archive-input"
++                  className="kb-input"
++                  type="number"
++                  min="1"
++                  max="365"
++                  value={autoArchiveDays}
++                  onChange={(e) => { setAutoArchiveDays(e.target.value); }}
++                  placeholder="e.g. 30"
+                 />
+-              </label>
+-              <input
+-                id="proj-auto-archive-input"
+-                data-testid="project-auto-archive-input"
+-                className="kb-input"
+-                type="number"
+-                min="1"
+-                max="365"
+-                value={autoArchiveDays}
+-                onChange={(e) => { setAutoArchiveDays(e.target.value); }}
+-                placeholder="e.g. 30"
+-              />
+-            </div>
++              </div>
++            </AdvancedSection>
+ 
+             <button
+               type="submit"
+@@ -1554,7 +1564,18 @@ export function ProjectSettingsPage(): JSX.Element {
+         {activeTab === 'states' && (
+           <div className="kb-members-section" data-testid="states-section">
+             <div className="kb-settings-header">
+-              <h3>Workflow States</h3>
++              <div className="kb-settings-title-row">
++                <h3>Workflow States</h3>
++                {states.filter((st) => st.wip_soft_limit != null || st.wip_hard_limit != null).length > 0 && (
++                  <span className="kb-wip-pill" data-testid="wip-overrides-active-badge">
++                    {states.filter((st) => st.wip_soft_limit != null || st.wip_hard_limit != null).length} custom WIP{' '}
++                    {states.filter((st) => st.wip_soft_limit != null || st.wip_hard_limit != null).length === 1
++                      ? 'limit'
++                      : 'limits'}{' '}
++                    active
++                  </span>
++                )}
++              </div>
+               <p className="kb-settings-subtitle">
+                 Configure lifecycle stages, sort order, and Soft/Hard WIP limits (with hard &gt;= soft
+                 validation).
+@@ -1599,36 +1620,6 @@ export function ProjectSettingsPage(): JSX.Element {
+                   value={stateColor}
+                   onChange={setStateColor}
+                 />
+-                <input
+-                  type="number"
+-                  data-testid="state-sort-order-input"
+-                  className="kb-input"
+-                  placeholder="Order (0)"
+-                  value={stateSortOrder}
+-                  onChange={(e) => { setStateSortOrder(e.target.value); }}
+-                />
+-                <input
+-                  type="number"
+-                  data-testid="state-wip-soft-input"
+-                  className="kb-input"
+-                  placeholder="Soft WIP"
+-                  value={stateWipSoft}
+-                  onChange={(e) => {
+-                    setStateWipSoft(e.target.value);
+-                    setWipLimitError(null);
+-                  }}
+-                />
+-                <input
+-                  type="number"
+-                  data-testid="state-wip-hard-input"
+-                  className="kb-input"
+-                  placeholder="Hard WIP"
+-                  value={stateWipHard}
+-                  onChange={(e) => {
+-                    setStateWipHard(e.target.value);
+-                    setWipLimitError(null);
+-                  }}
+-                />
+                 <label className="kb-checkbox-label">
+                   <input
+                     type="checkbox"
+@@ -1642,11 +1633,54 @@ export function ProjectSettingsPage(): JSX.Element {
+                   Add State
+                 </button>
+               </div>
+-              {wipLimitError && (
+-                <div className="kb-error-text" data-testid="wip-limit-error">
+-                  {wipLimitError}
++
++              {/* Advanced State Options (WIP Limits, Sort Order) */}
++              <AdvancedSection
++                title="Advanced State Limits & Sorting"
++                summary="Sort order and soft/hard work-in-progress (WIP) concurrency limits"
++                testId="state-advanced-section"
++                activeOverridesCount={(stateSortOrder ? 1 : 0) + (stateWipSoft ? 1 : 0) + (stateWipHard ? 1 : 0)}
++                hasErrors={Boolean(wipLimitError)}
++                defaultOpen={false}
++              >
++                <div className="kb-form-row kb-form-row-advanced">
++                  <input
++                    type="number"
++                    data-testid="state-sort-order-input"
++                    className="kb-input"
++                    placeholder="Order (0)"
++                    value={stateSortOrder}
++                    onChange={(e) => { setStateSortOrder(e.target.value); }}
++                  />
++                  <input
++                    type="number"
++                    data-testid="state-wip-soft-input"
++                    className="kb-input"
++                    placeholder="Soft WIP"
++                    value={stateWipSoft}
++                    onChange={(e) => {
++                      setStateWipSoft(e.target.value);
++                      setWipLimitError(null);
++                    }}
++                  />
++                  <input
++                    type="number"
++                    data-testid="state-wip-hard-input"
++                    className="kb-input"
++                    placeholder="Hard WIP"
++                    value={stateWipHard}
++                    onChange={(e) => {
++                      setStateWipHard(e.target.value);
++                      setWipLimitError(null);
++                    }}
++                  />
+                 </div>
+-              )}
++                {wipLimitError && (
++                  <div className="kb-error-text" data-testid="wip-limit-error">
++                    {wipLimitError}
++                  </div>
++                )}
++              </AdvancedSection>
+             </form>
+ 
+             {/* States Table */}
+@@ -2092,18 +2126,32 @@ export function ProjectSettingsPage(): JSX.Element {
+                   value={labelColor}
+                   onChange={setLabelColor}
+                 />
+-                <input
+-                  type="text"
+-                  data-testid="label-exclusive-group-input"
+-                  className="kb-input"
+-                  placeholder="Exclusive Group (optional)"
+-                  value={labelExclusiveGroup}
+-                  onChange={(e) => { setLabelExclusiveGroup(e.target.value); }}
+-                />
+                 <button type="submit" data-testid="create-label-btn" className="kb-btn kb-btn-primary">
+                   Add Label
+                 </button>
+               </div>
++
++              {/* Advanced Label Grouping (KB-ADVANCED-DISCLOSURE-03, KAN-369) */}
++              <AdvancedSection
++                title="Advanced Label Grouping"
++                summary="Exclusive mutual exclusion label groups"
++                testId="label-advanced-section"
++                activeOverridesCount={labelExclusiveGroup.trim() ? 1 : 0}
++                defaultOpen={false}
++              >
++                <div className="kb-form-group">
++                  <label htmlFor="label-exclusive-group-input">Exclusive Group (optional)</label>
++                  <input
++                    id="label-exclusive-group-input"
++                    type="text"
++                    data-testid="label-exclusive-group-input"
++                    className="kb-input"
++                    placeholder="Exclusive Group (optional)"
++                    value={labelExclusiveGroup}
++                    onChange={(e) => { setLabelExclusiveGroup(e.target.value); }}
++                  />
++                </div>
++              </AdvancedSection>
+             </form>
+ 
+             {/* Labels Table */}
+diff --git a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
+index bc198bfa..34bad00b 100644
+--- a/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/ProjectSettingsPage.test.tsx
+@@ -22,6 +22,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+   let queryClient: QueryClient;
+ 
+   beforeEach(() => {
++    HTMLDivElement.prototype.scrollIntoView = vi.fn();
+     queryClient = new QueryClient({
+       defaultOptions: {
+         queries: { retry: false },
+@@ -3483,4 +3484,121 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
+       auto_archive_days: null,
+     });
+   });
++
++  describe('Progressive Disclosure (KB-ADVANCED-DISCLOSURE-03 / KAN-369)', () => {
++    it('Positive case 1: ProjectSettingsPage renders basic settings and collapses WIP limits and numbering policies', async () => {
++      vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
++        await Promise.resolve();
++        const url: string = path;
++        if (
++          url.includes('/api/v1/projects/KAN') &&
++          !url.includes('/states') &&
++          !url.includes('/labels') &&
++          !url.includes('/modules') &&
++          !url.includes('/members')
++        ) {
++          return {
++            id: 'p-1',
++            identifier: 'KAN',
++            name: 'Platform Core',
++            description_markdown: 'Core project description',
++            modules_enabled: true,
++            skip_loaded_sequence_numbers: true,
++            auto_archive_days: 14,
++            is_project_admin: true,
++          };
++        }
++        if (url.includes('/states')) {
++          return [
++            {
++              id: 'st-1',
++              name: 'Backlog',
++              group: 'backlog',
++              color_hex: '#6b7280',
++              sort_order: 0,
++              is_default: true,
++              wip_soft_limit: 5,
++              wip_hard_limit: 10,
++            },
++            {
++              id: 'st-2',
++              name: 'Done',
++              group: 'completed',
++              color_hex: '#10b981',
++              sort_order: 1,
++              is_default: false,
++              wip_soft_limit: null,
++              wip_hard_limit: null,
++            },
++          ];
++        }
++        if (url.includes('/labels')) {
++          return [
++            { id: 'lbl-1', name: 'Frontend', color_hex: '#3b82f6', exclusive_group: 'layer' },
++          ];
++        }
++        if (url.includes('/modules')) {
++          return [{ id: 'm-1', name: 'Auth' }];
++        }
++        return [];
++      });
++
++      renderComponent('KAN');
++
++      // 1. General Settings tab renders primary fields by default
++      expect(await screen.findByTestId('project-name-input')).toBeDefined();
++      expect(screen.getByTestId('project-desc-input')).toBeDefined();
++      expect(screen.getByTestId('project-modules-checkbox')).toBeDefined();
++
++      // 2. Advanced Project Options section is collapsed by default
++      const generalAdvSection = screen.getByTestId<HTMLDetailsElement>('project-general-advanced-section');
++      expect(generalAdvSection.open).toBe(false);
++      expect(screen.getByTestId('project-general-advanced-section-toggle').getAttribute('aria-expanded')).toBe('false');
++
++      // Toggle open
++      fireEvent.click(screen.getByTestId('project-general-advanced-section-toggle'));
++      expect(generalAdvSection.open).toBe(true);
++      expect(screen.getByTestId('project-skip-loaded-seq-checkbox')).toBeDefined();
++      expect(screen.getByTestId('project-auto-archive-input')).toBeDefined();
++
++      // 3. Workflow States tab renders primary fields and collapses WIP limits and sort order
++      fireEvent.click(screen.getByTestId('tab-states'));
++      expect(await screen.findByTestId('state-name-input')).toBeDefined();
++      expect(screen.getByTestId('state-group-select')).toBeDefined();
++      expect(screen.getByTestId('state-color-input')).toBeDefined();
++      expect(screen.getByTestId('state-default-checkbox')).toBeDefined();
++      expect(screen.getByTestId('create-state-btn')).toBeDefined();
++
++      // Active WIP limits override badge is displayed
++      expect(screen.getByTestId('wip-overrides-active-badge').textContent).toContain('1 custom WIP limit active');
++
++      // Advanced state limits section is collapsed by default
++      const stateAdvSection = screen.getByTestId<HTMLDetailsElement>('state-advanced-section');
++      expect(stateAdvSection.open).toBe(false);
++      expect(screen.getByTestId('state-advanced-section-toggle').getAttribute('aria-expanded')).toBe('false');
++
++      // Toggle open
++      fireEvent.click(screen.getByTestId('state-advanced-section-toggle'));
++      expect(stateAdvSection.open).toBe(true);
++      expect(screen.getByTestId('state-sort-order-input')).toBeDefined();
++      expect(screen.getByTestId('state-wip-soft-input')).toBeDefined();
++      expect(screen.getByTestId('state-wip-hard-input')).toBeDefined();
++
++      // 4. Labels tab collapses exclusive group
++      fireEvent.click(screen.getByTestId('tab-labels'));
++      expect(await screen.findByTestId('label-name-input')).toBeDefined();
++      expect(screen.getByTestId('label-color-input')).toBeDefined();
++      const labelAdvSection = screen.getByTestId<HTMLDetailsElement>('label-advanced-section');
++      expect(labelAdvSection.open).toBe(false);
++
++      // Toggle open
++      fireEvent.click(screen.getByTestId('label-advanced-section-toggle'));
++      expect(labelAdvSection.open).toBe(true);
++      expect(screen.getByTestId('label-exclusive-group-input')).toBeDefined();
++
++      // 5. Roles tab navigation
++      fireEvent.click(screen.getByTestId('tab-roles'));
++      expect(await screen.findByTestId('project-roles-section')).toBeDefined();
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/workflows/AttachHookDialog.tsx b/kanban/web/src/features/workflows/AttachHookDialog.tsx
+index 55a2b1a0..41a10d4e 100644
+--- a/kanban/web/src/features/workflows/AttachHookDialog.tsx
++++ b/kanban/web/src/features/workflows/AttachHookDialog.tsx
+@@ -4,6 +4,7 @@
+ import React, { useState, type JSX } from 'react';
+ import { Link } from 'react-router';
+ import './AttachHookDialog.css';
++import { AdvancedSection } from '../../ui/AdvancedSection';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import {
+   MUTABLE_FIELD_UNIVERSE,
+@@ -266,160 +267,190 @@ function AttachHookDialogInner({
+               </div>
+             </div>
+ 
+-            {/* Conditional: Wasm Module selector */}
+-            {(hookKind === 'sync_validator' || hookKind === 'sync_mutator') && (
++            {/* Advanced Hook Settings (KB-ADVANCED-DISCLOSURE-03, KAN-369) */}
++            <AdvancedSection
++              title="Advanced Hook Settings"
++              summary="Execution failure policy, Wasm bytecode hashes, agent timeout, and mutable field permissions"
++              testId="attach-hook-advanced-section"
++              activeOverridesCount={
++                (failurePolicy === 'fail_closed' ? 1 : 0) +
++                ((hookKind === 'sync_validator' || hookKind === 'sync_mutator') && selectedWasmSha ? 1 : 0) +
++                (hookKind === 'agent_interceptor' && selectedAgent?.timeout_ms && selectedAgent.timeout_ms !== 30000 ? 1 : 0) +
++                (allowedMutableFields.length > 0 ? 1 : 0)
++              }
++              defaultOpen={false}
++            >
++              {/* Failure Policy */}
+               <div className="workflow-form-group">
+-                <label htmlFor="wasm-module-select" className="workflow-form-label">
+-                  Approved WebAssembly Module (Built-in Formula Sandbox)
++                <label htmlFor="failure-policy-select" className="workflow-form-label">
++                  Failure Policy
++                  <FieldHelpHint
++                    title="Failure Policy"
++                    summary="Specifies behavior when helper times out, returns an error, or crashes."
++                    validValues={[
++                      { label: 'Fail-Closed', description: 'Blocks transition immediately, rejecting state change.' },
++                      { label: 'Fail-Open (Warn)', description: 'Records audit warning and allows transition to proceed.' },
++                    ]}
++                    docHref="/docs/scripted-workflows-and-transition-helpers#failure-policies"
++                    testId="failure-policy-help"
++                  />
+                 </label>
+                 <select
+-                  id="wasm-module-select"
++                  id="failure-policy-select"
+                   className="workflow-form-control"
+-                  value={selectedWasmSha}
+-                  onChange={(e) => { setSelectedWasmSha(e.target.value); }}
++                  value={failurePolicy}
++                  onChange={(e) => { setFailurePolicy(e.target.value as FailurePolicy); }}
+                 >
+-                  {wasmModules.map((m) => (
+-                    <option key={m.sha256} value={m.sha256}>
+-                      {m.name} ({m.sha256.slice(0, 8)}... - {m.target_latency_budget ?? '<25ms'})
+-                    </option>
+-                  ))}
++                  <option value="fail_closed">Fail-Closed (Blocks transition on failure or veto)</option>
++                  <option value="fail_open_warn">Fail-Open (Warn) (Logs warning but allows transition)</option>
+                 </select>
+               </div>
+-            )}
+ 
+-            {/* Conditional: Agent Transition Helper selector */}
+-            {hookKind === 'agent_interceptor' && (
+-              agentDefinitions.length === 0 ? (
+-                <div className="workflow-alert workflow-alert-warning" data-testid="no-agents-warning">
+-                  <strong>No Agent Definitions configured</strong>
+-                  <p className="no-agents-warning-text">
+-                    There are no active Agent Definitions registered in this workspace. Configure an Agent Definition before attaching an Agent Transition Helper hook.
+-                  </p>
+-                  <Link
+-                    to="/admin/agents"
+-                    className="workflow-btn workflow-btn-secondary workflow-btn-sm no-agents-configure-link"
+-                    data-testid="configure-agents-link"
++              {/* Conditional: Wasm Module selector */}
++              {(hookKind === 'sync_validator' || hookKind === 'sync_mutator') && (
++                <div className="workflow-form-group">
++                  <label htmlFor="wasm-module-select" className="workflow-form-label">
++                    Approved WebAssembly Module (Built-in Formula Sandbox)
++                  </label>
++                  <select
++                    id="wasm-module-select"
++                    className="workflow-form-control"
++                    value={selectedWasmSha}
++                    onChange={(e) => { setSelectedWasmSha(e.target.value); }}
+                   >
+-                    Configure Agent Definitions &rarr;
+-                  </Link>
++                    {wasmModules.map((m) => (
++                      <option key={m.sha256} value={m.sha256}>
++                        {m.name} ({m.sha256.slice(0, 8)}... - {m.target_latency_budget ?? '<25ms'})
++                      </option>
++                    ))}
++                  </select>
+                 </div>
+-              ) : (
+-                <>
+-                  <div className="workflow-form-group">
+-                    <label htmlFor="agent-def-select" className="workflow-form-label">
+-                      Agent Definition
+-                    </label>
+-                    <select
+-                      id="agent-def-select"
+-                      className="workflow-form-control"
+-                      value={selectedAgentSlug}
+-                      onChange={(e) => { setSelectedAgentSlug(e.target.value); }}
++              )}
++
++              {/* Conditional: Agent Transition Helper selector */}
++              {hookKind === 'agent_interceptor' && (
++                agentDefinitions.length === 0 ? (
++                  <div className="workflow-alert workflow-alert-warning" data-testid="no-agents-warning">
++                    <strong>No Agent Definitions configured</strong>
++                    <p className="no-agents-warning-text">
++                      There are no active Agent Definitions registered in this workspace. Configure an Agent Definition before attaching an Agent Transition Helper hook.
++                    </p>
++                    <Link
++                      to="/admin/agents"
++                      className="workflow-btn workflow-btn-secondary workflow-btn-sm no-agents-configure-link"
++                      data-testid="configure-agents-link"
+                     >
+-                      {cliAgents.length > 0 && (
+-                        <optgroup label="CLI Pipe Agents (agy, codex)">
+-                          {cliAgents.map((a) => (
+-                            <option key={a.id} value={a.slug}>
+-                              {a.display_name} ({a.cli_binary_allowlist_id ?? 'cli'})
+-                            </option>
+-                          ))}
+-                        </optgroup>
+-                      )}
+-                      {sdkAgents.length > 0 && (
+-                        <optgroup label="In-App SDK Agents (Ollama, Gemini, OpenAI)">
+-                          {sdkAgents.map((a) => (
+-                            <option key={a.id} value={a.slug}>
+-                              {a.display_name} ({a.model_id ?? a.provider_kind})
+-                            </option>
+-                          ))}
+-                        </optgroup>
+-                      )}
+-                      {remoteAgents.length > 0 && (
+-                        <optgroup label="Remote Runner Pools">
+-                          {remoteAgents.map((a) => (
+-                            <option key={a.id} value={a.slug}>
+-                              {a.display_name}
+-                            </option>
+-                          ))}
+-                        </optgroup>
+-                      )}
+-                    </select>
++                      Configure Agent Definitions &rarr;
++                    </Link>
+                   </div>
+-
+-                  {/* Agent read-only details summary */}
+-                  {selectedAgent && (
+-                    <div className="workflow-notice" data-testid="agent-details-summary">
+-                      <strong>Agent Config Summary:</strong>
+-                      <div>Harness: {selectedAgent.harness_kind}</div>
+-                      {selectedAgent.cli_args.length > 0 && (
+-                        <div>Validated CLI Args: <code>{selectedAgent.cli_args.join(' ')}</code></div>
+-                      )}
+-                      <div>Repo Access Mode: <code>{selectedAgent.repo_access_mode}</code></div>
+-                      <div>Timeout: {Math.round(selectedAgent.timeout_ms / 1000)}s</div>
++                ) : (
++                  <>
++                    <div className="workflow-form-group">
++                      <label htmlFor="agent-def-select" className="workflow-form-label">
++                        Agent Definition
++                      </label>
++                      <select
++                        id="agent-def-select"
++                        className="workflow-form-control"
++                        value={selectedAgentSlug}
++                        onChange={(e) => { setSelectedAgentSlug(e.target.value); }}
++                      >
++                        {cliAgents.length > 0 && (
++                          <optgroup label="CLI Pipe Agents (agy, codex)">
++                            {cliAgents.map((a) => (
++                              <option key={a.id} value={a.slug}>
++                                {a.display_name} ({a.cli_binary_allowlist_id ?? 'cli'})
++                              </option>
++                            ))}
++                          </optgroup>
++                        )}
++                        {sdkAgents.length > 0 && (
++                          <optgroup label="In-App SDK Agents (Ollama, Gemini, OpenAI)">
++                            {sdkAgents.map((a) => (
++                              <option key={a.id} value={a.slug}>
++                                {a.display_name} ({a.model_id ?? a.provider_kind})
++                              </option>
++                            ))}
++                          </optgroup>
++                        )}
++                        {remoteAgents.length > 0 && (
++                          <optgroup label="Remote Runner Pools">
++                            {remoteAgents.map((a) => (
++                              <option key={a.id} value={a.slug}>
++                                {a.display_name}
++                              </option>
++                            ))}
++                          </optgroup>
++                        )}
++                      </select>
+                     </div>
+-                  )}
+-                </>
+-              )
+-            )}
+ 
+-            {/* Failure Policy */}
+-            <div className="workflow-form-group">
+-              <label htmlFor="failure-policy-select" className="workflow-form-label">
+-                Failure Policy
+-                <FieldHelpHint
+-                  title="Failure Policy"
+-                  summary="Specifies behavior when helper times out, returns an error, or crashes."
+-                  validValues={[
+-                    { label: 'Fail-Closed', description: 'Blocks transition immediately, rejecting state change.' },
+-                    { label: 'Fail-Open (Warn)', description: 'Records audit warning and allows transition to proceed.' },
+-                  ]}
+-                  docHref="/docs/scripted-workflows-and-transition-helpers#failure-policies"
+-                  testId="failure-policy-help"
+-                />
+-              </label>
+-              <select
+-                id="failure-policy-select"
+-                className="workflow-form-control"
+-                value={failurePolicy}
+-                onChange={(e) => { setFailurePolicy(e.target.value as FailurePolicy); }}
+-              >
+-                <option value="fail_closed">Fail-Closed (Blocks transition on failure or veto)</option>
+-                <option value="fail_open_warn">Fail-Open (Warn) (Logs warning but allows transition)</option>
+-              </select>
+-            </div>
++                    {/* Agent read-only details summary */}
++                    {selectedAgent && (
++                      <div className="workflow-notice" data-testid="agent-details-summary">
++                        <strong>Agent Config Summary:</strong>
++                        <div>Harness: {selectedAgent.harness_kind}</div>
++                        {selectedAgent.cli_args.length > 0 && (
++                          <div>Validated CLI Args: <code>{selectedAgent.cli_args.join(' ')}</code></div>
++                        )}
++                        <div>Repo Access Mode: <code>{selectedAgent.repo_access_mode}</code></div>
++                        <div>Timeout: {Math.round(selectedAgent.timeout_ms / 1000)}s</div>
++                      </div>
++                    )}
++                  </>
++                )
++              )}
+ 
+-            {/* Allowed Mutable Fields */}
+-            <div className="workflow-form-group">
+-              <label className="workflow-form-label">
+-                Allowed Mutable Fields
+-                {hookKind === 'sync_validator' && ' (Disabled for Validators)'}
+-              </label>
+-              <div className="mutable-fields-picker">
+-                {MUTABLE_FIELD_UNIVERSE.map((field) => {
+-                  const isChecked = allowedMutableFields.includes(field);
+-                  const isDisabled = hookKind === 'sync_validator';
+-                  const labelClass = [
+-                    'workflow-radio-label',
+-                    isDisabled ? 'is-disabled' : '',
+-                  ]
+-                    .filter(Boolean)
+-                    .join(' ');
+-                  return (
+-                    <label key={field} className={labelClass}>
+-                      <input
+-                        type="checkbox"
+-                        checked={isChecked && !isDisabled}
+-                        disabled={isDisabled}
+-                        onChange={() => { handleToggleMutableField(field); }}
+-                      />
+-                      <code>{field}</code>
+-                    </label>
+-                  );
+-                })}
++              {/* Allowed Mutable Fields */}
++              <div className="workflow-form-group">
++                <label className="workflow-form-label">
++                  Allowed Mutable Fields
++                  {hookKind === 'sync_validator' && ' (Disabled for Validators)'}
++                </label>
++                <div className="mutable-fields-picker">
++                  {MUTABLE_FIELD_UNIVERSE.map((field) => {
++                    const isChecked = allowedMutableFields.includes(field);
++                    const isDisabled = hookKind === 'sync_validator';
++                    const labelClass = [
++                      'workflow-radio-label',
++                      isDisabled ? 'is-disabled' : '',
++                    ]
++                      .filter(Boolean)
++                      .join(' ');
++                    return (
++                      <label key={field} className={labelClass}>
++                        <input
++                          type="checkbox"
++                          checked={isChecked && !isDisabled}
++                          disabled={isDisabled}
++                          onChange={() => { handleToggleMutableField(field); }}
++                        />
++                        <code>{field}</code>
++                      </label>
++                    );
++                  })}
++                </div>
++                <div className="workflow-notice">
++                  {IMMUTABLE_FIELDS_NOTICE}
++                </div>
+               </div>
+-              <div className="workflow-notice">
+-                {IMMUTABLE_FIELDS_NOTICE}
++
++              {/* Raw Execution Logs / Prior Runs */}
++              <div className="workflow-form-group" data-testid="hook-execution-logs-section">
++                <label className="workflow-form-label">
++                  Raw Execution Logs &amp; Diagnostics
++                </label>
++                {editingHook?.last_execution_log ? (
++                  <pre className="workflow-code-block" data-testid="hook-execution-log-output">
++                    {editingHook.last_execution_log}
++                  </pre>
++                ) : (
++                  <div className="workflow-notice" data-testid="hook-execution-logs-empty">
++                    No recent execution logs recorded for this transition helper hook.
++                  </div>
++                )}
+               </div>
+-            </div>
++            </AdvancedSection>
+           </div>
+ 
+           {/* Actions - Sticky Footer */}
+diff --git a/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx b/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx
+index 2f04a4da..d00271fc 100644
+--- a/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx
++++ b/kanban/web/src/features/workflows/__tests__/WorkflowStudioPage.test.tsx
+@@ -7,6 +7,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { MemoryRouter } from 'react-router';
+ import { WorkflowStudioPage } from '../WorkflowStudioPage';
++import { AttachHookDialog } from '../AttachHookDialog';
++import { CustomFieldDefinitionEditor } from '../../custom-fields/CustomFieldDefinitionEditor';
+ import * as api from '../api';
+ import { ApiProblem } from '../../../api/problem';
+ 
+@@ -375,4 +377,69 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
+     });
+     unmount();
+   });
++
++  describe('Progressive Disclosure (KB-ADVANCED-DISCLOSURE-03 / KAN-369)', () => {
++    it('Positive case 2: AttachHookDialog renders hook trigger and action with advanced execution policies collapsed', () => {
++      render(
++        <AttachHookDialog
++          isOpen={true}
++          projectKey="KAN"
++          states={api.DEFAULT_PROJECT_STATES}
++          agentDefinitions={[]}
++          wasmModules={api.DEFAULT_WASM_MODULES}
++          onSave={vi.fn()}
++          onClose={vi.fn()}
++        />,
++      );
++
++      // Primary trigger and action fields are directly visible
++      expect(screen.getByLabelText(/From State/i)).toBeDefined();
++      expect(screen.getByLabelText(/To State/i)).toBeDefined();
++      expect(screen.getByLabelText(/Hook Name/i)).toBeDefined();
++      expect(screen.getByText('Sync Wasm Validator')).toBeDefined();
++
++      // Advanced Hook Settings section is collapsed by default
++      const advSection = screen.getByTestId<HTMLDetailsElement>('attach-hook-advanced-section');
++      expect(advSection.open).toBe(false);
++      expect(screen.getByTestId('attach-hook-advanced-section-toggle').getAttribute('aria-expanded')).toBe('false');
++
++      // Active overrides badge is displayed
++      expect(screen.getByTestId('attach-hook-advanced-section-toggle').textContent).toContain('custom setting');
++
++      // Toggle open
++      fireEvent.click(screen.getByTestId('attach-hook-advanced-section-toggle'));
++      expect(advSection.open).toBe(true);
++      expect(screen.getByRole('combobox', { name: /^Failure Policy/i })).toBeDefined();
++      expect(screen.getByLabelText(/Approved WebAssembly Module/i)).toBeDefined();
++      expect(screen.getByText(/Allowed Mutable Fields/i)).toBeDefined();
++      expect(screen.getByTestId('hook-execution-logs-section')).toBeDefined();
++    });
++
++    it('Positive case 3: CustomFieldDefinitionEditor collapses raw JSON format metadata behind Advanced mode', async () => {
++      render(
++        <QueryClientProvider client={queryClient}>
++          <CustomFieldDefinitionEditor projectKey="KAN" isAdmin={true} />
++        </QueryClientProvider>,
++      );
++
++      // Primary basic properties are rendered
++      expect(await screen.findByTestId('field-name-input')).toBeDefined();
++      expect(screen.getByTestId('field-slug-input')).toBeDefined();
++      expect(screen.getByTestId('field-flavor-select')).toBeDefined();
++      expect(screen.getByTestId('output-format-select')).toBeDefined();
++      expect(screen.getByTestId('is-enabled-checkbox')).toBeDefined();
++
++      // Advanced format & sandbox script section is collapsed by default
++      const advSection = screen.getByTestId<HTMLDetailsElement>('custom-field-advanced-section');
++      expect(advSection.open).toBe(false);
++      expect(screen.getByTestId('custom-field-advanced-section-toggle').getAttribute('aria-expanded')).toBe('false');
++
++      // Toggle open
++      fireEvent.click(screen.getByTestId('custom-field-advanced-section-toggle'));
++      expect(advSection.open).toBe(true);
++      expect(screen.getByTestId('format-metadata-textarea')).toBeDefined();
++      expect(screen.getByTestId('script-source-textarea')).toBeDefined();
++      expect(screen.getByTestId('custom-field-test-panel')).toBeDefined();
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/workflows/api.ts b/kanban/web/src/features/workflows/api.ts
+index a21e4580..e73feacc 100644
+--- a/kanban/web/src/features/workflows/api.ts
++++ b/kanban/web/src/features/workflows/api.ts
+@@ -50,6 +50,8 @@ export interface WorkflowHook {
+   repo_access_mode?: string | undefined;
+   mcp_access_summary?: string | undefined;
+   allowed_mutable_fields?: string[] | undefined;
++  last_execution_log?: string | undefined;
++  last_execution_status?: string | undefined;
+ }
+ 
+ export interface TransitionRule {
+diff --git a/scripts/capture_kan369_screenshots.mjs b/scripts/capture_kan369_screenshots.mjs
+new file mode 100644
+index 00000000..9d27f0a9
+--- /dev/null
++++ b/scripts/capture_kan369_screenshots.mjs
+@@ -0,0 +1,328 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import fs from 'node:fs';
++import path from 'node:path';
++import { spawn } from 'node:child_process';
++import { chromium } from '/home/adamoutler/kanban/kanban/web/node_modules/@playwright/test/index.mjs';
++
++const PORT = 18989;
++const BASE_URL = `http://127.0.0.1:${PORT}`;
++const OUT_DIR = path.resolve('docs/qa/KAN-369/screenshots');
++
++const VIEWPORTS = [
++  {
++    name: '01-desktop-light-project-settings',
++    width: 1440,
++    height: 900,
++    theme: 'light',
++    url: `${BASE_URL}/projects/KAN/settings`,
++    action: async (page) => {
++      await page.waitForTimeout(1000);
++      const advToggle = await page.$('[data-testid="project-general-advanced-section-toggle"]');
++      if (advToggle) {
++        await advToggle.click();
++        await page.waitForTimeout(400);
++      }
++    },
++  },
++  {
++    name: '02-desktop-dark-workflow-studio',
++    width: 1440,
++    height: 900,
++    theme: 'dark',
++    url: `${BASE_URL}/projects/KAN/settings/workflows`,
++    action: async (page) => {
++      await page.waitForTimeout(1000);
++      const attachBtn = await page.$('[data-testid="attach-hook-button"], button:has-text("Add Hook"), button:has-text("Attach Hook")');
++      if (attachBtn) {
++        await attachBtn.click();
++        await page.waitForTimeout(500);
++        const hookAdvToggle = await page.$('[data-testid="attach-hook-advanced-section-toggle"]');
++        if (hookAdvToggle) {
++          await hookAdvToggle.click();
++          await page.waitForTimeout(400);
++        }
++      }
++    },
++  },
++  {
++    name: '03-tablet-custom-fields',
++    width: 768,
++    height: 1024,
++    theme: 'light',
++    url: `${BASE_URL}/projects/KAN/settings/custom-fields`,
++    action: async (page) => {
++      await page.waitForTimeout(1000);
++      const cfAdvToggle = await page.$('[data-testid="custom-field-advanced-section-toggle"]');
++      if (cfAdvToggle) {
++        await cfAdvToggle.click();
++        await page.waitForTimeout(400);
++      }
++    },
++  },
++  {
++    name: '04-mobile-portrait-project-settings',
++    width: 390,
++    height: 844,
++    theme: 'light',
++    url: `${BASE_URL}/projects/KAN/settings`,
++    action: async (page) => {
++      await page.waitForTimeout(1000);
++      const advToggle = await page.$('[data-testid="project-general-advanced-section-toggle"]');
++      if (advToggle) {
++        await advToggle.click();
++        await page.waitForTimeout(400);
++      }
++    },
++  },
++  {
++    name: '05-mobile-landscape-workflow-hooks',
++    width: 844,
++    height: 390,
++    theme: 'light',
++    url: `${BASE_URL}/projects/KAN/settings/workflows`,
++    action: async (page) => {
++      await page.waitForTimeout(1000);
++      const attachBtn = await page.$('[data-testid="attach-hook-button"], button:has-text("Add Hook"), button:has-text("Attach Hook")');
++      if (attachBtn) {
++        await attachBtn.click();
++        await page.waitForTimeout(500);
++        const hookAdvToggle = await page.$('[data-testid="attach-hook-advanced-section-toggle"]');
++        if (hookAdvToggle) {
++          await hookAdvToggle.click();
++          await page.waitForTimeout(400);
++        }
++      }
++    },
++  },
++];
++
++async function waitForServer(url, timeoutMs = 15000) {
++  const start = Date.now();
++  while (Date.now() - start < timeoutMs) {
++    try {
++      const res = await fetch(url);
++      if (res.ok || res.status === 404 || res.status === 200) {
++        return true;
++      }
++    } catch {
++      // wait and retry
++    }
++    await new Promise((resolve) => setTimeout(resolve, 300));
++  }
++  throw new Error(`Server failed to start at ${url} within ${timeoutMs}ms`);
++}
++
++async function main() {
++  fs.mkdirSync(OUT_DIR, { recursive: true });
++  console.log(`Starting preview server on port ${PORT}...`);
++  const previewProc = spawn(
++    'pnpm',
++    ['--dir', 'kanban/web', 'exec', 'vite', 'preview', '--port', String(PORT), '--host', '127.0.0.1'],
++    { stdio: 'inherit' }
++  );
++
++  try {
++    await waitForServer(BASE_URL);
++    console.log(`Preview server ready at ${BASE_URL}`);
++
++    const browser = await chromium.launch({
++      executablePath: '/usr/bin/google-chrome',
++      headless: true,
++      args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
++    });
++
++    for (const vp of VIEWPORTS) {
++      console.log(`Capturing ${vp.name}...`);
++      const context = await browser.newContext({
++        viewport: { width: vp.width, height: vp.height },
++        deviceScaleFactor: 1,
++      });
++
++      const page = await context.newPage();
++
++      // Intercept user profile & auth
++      await page.route('**/api/v1/auth/me', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify({
++            id: 'u-admin',
++            handle: 'admin',
++            display_name: 'Administrator',
++            email: 'admin@kanban.local',
++            is_server_admin: true,
++            is_workspace_admin: true,
++          }),
++        });
++      });
++      await page.route('**/api/v1/user/me', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify({
++            id: 'u-admin',
++            handle: 'admin',
++            display_name: 'Administrator',
++            email: 'admin@kanban.local',
++            is_server_admin: true,
++            is_workspace_admin: true,
++          }),
++        });
++      });
++
++      // Project mock endpoints
++      await page.route('**/api/v1/projects/KAN', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify({
++            id: 'p-kan',
++            key: 'KAN',
++            name: 'Core Platform',
++            description: 'Primary platform repository with progressive disclosure settings',
++            visibility: 'internal',
++            archived: false,
++            auto_archive_days: 90,
++            skip_loaded_seq: true,
++          }),
++        });
++      });
++      await page.route('**/api/v1/projects/KAN/states', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify([
++            { id: 'st-backlog', name: 'Backlog', category: 'backlog', color: '#64748b', sort_rank: '0', soft_wip_limit: null, hard_wip_limit: null },
++            { id: 'st-todo', name: 'Todo', category: 'unstarted', color: '#3b82f6', sort_rank: '1', soft_wip_limit: null, hard_wip_limit: null },
++            { id: 'st-inprog', name: 'In Progress', category: 'started', color: '#eab308', sort_rank: '2', soft_wip_limit: 5, hard_wip_limit: 10 },
++            { id: 'st-done', name: 'Done', category: 'completed', color: '#22c55e', sort_rank: '3', soft_wip_limit: null, hard_wip_limit: null },
++          ]),
++        });
++      });
++      await page.route('**/api/v1/projects/KAN/priorities', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify([
++            { id: 'pr-low', level: 1, name: 'Low', color: '#94a3b8', sort_order: 1 },
++            { id: 'pr-med', level: 2, name: 'Medium', color: '#3b82f6', sort_order: 2 },
++            { id: 'pr-high', level: 3, name: 'High', color: '#f97316', sort_order: 3 },
++            { id: 'pr-crit', level: 4, name: 'Urgent', color: '#ef4444', sort_order: 4 },
++          ]),
++        });
++      });
++      await page.route('**/api/v1/projects/KAN/labels', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify([
++            { id: 'lb-bug', name: 'bug', color: '#ef4444', exclusive_group: 'kind' },
++            { id: 'lb-feat', name: 'feature', color: '#3b82f6', exclusive_group: 'kind' },
++          ]),
++        });
++      });
++      await page.route('**/api/v1/projects/KAN/members', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify([
++            { id: 'pm-1', user_id: 'u-admin', user: { id: 'u-admin', display_name: 'Administrator', handle: 'admin' }, role: 'admin' },
++          ]),
++        });
++      });
++      await page.route('**/api/v1/projects/KAN/modules', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
++      await page.route('**/api/v1/projects/KAN/trash', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
++      await page.route('**/api/v1/admin/principals*', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
++
++      // Workflow studio mocks
++      await page.route('**/api/v1/projects/KAN/workflow-hooks', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify([
++            {
++              id: 'hk-1',
++              name: 'Security Clearance Validator',
++              from_state: 'st-backlog',
++              to_state: 'st-inprog',
++              hook_kind: 'sync_validator',
++              sort_rank: '0',
++              failure_policy: 'fail_closed',
++              manifest_sha256: 'abc1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcd',
++              is_enabled: true,
++              wasm_module_sha256: '3fa85f64-5717-4562-b3fc-2c963f66afa6',
++              allowed_mutable_fields: ['labels', 'priority'],
++            },
++          ]),
++        });
++      });
++      await page.route('**/api/v1/projects/KAN/workflow-wasm-modules', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify([
++            { sha256: '3fa85f64-5717-4562-b3fc-2c963f66afa6', name: 'security_guard.wasm', size_bytes: 10240 },
++          ]),
++        });
++      });
++      await page.route('**/api/v1/projects/KAN/workflow-agents', (route) => route.fulfill({ status: 200, contentType: 'application/json', body: '[]' }));
++
++      // Custom fields mocks
++      await page.route('**/api/v1/projects/KAN/custom-fields', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify([
++            {
++              id: 'cf-1',
++              name: 'Risk Rating',
++              slug: 'risk_rating',
++              field_flavor: 'calculated',
++              output_format: 'text',
++              is_enabled: true,
++              script_source: "return issue.priority === 'urgent' ? 'HIGH' : 'LOW';",
++              format_metadata: { precision: 2 },
++            },
++          ]),
++        });
++      });
++
++      try {
++        await page.goto(vp.url, { waitUntil: 'load', timeout: 15000 });
++      } catch (err) {
++        console.warn(`Warning navigating to ${vp.url}:`, err.message);
++      }
++
++      await page.evaluate((theme) => {
++        document.documentElement.setAttribute('data-theme', theme);
++        document.documentElement.dataset.theme = theme;
++        localStorage.setItem('theme', theme);
++      }, vp.theme);
++
++      if (vp.action) {
++        try {
++          await vp.action(page);
++        } catch (e) {
++          console.warn(`Action failed for ${vp.name}:`, e.message);
++        }
++      }
++
++      const outPath = path.join(OUT_DIR, `${vp.name}.png`);
++      await page.screenshot({ path: outPath, fullPage: false });
++      console.log(`  -> Saved ${outPath}`);
++      await context.close();
++    }
++
++    await browser.close();
++    console.log('Playwright screenshot capture completed successfully.');
++  } finally {
++    previewProc.kill('SIGTERM');
++  }
++}
++
++main().catch((err) => {
++  console.error('Fatal error during screenshot capture:', err);
++  process.exit(1);
++});
