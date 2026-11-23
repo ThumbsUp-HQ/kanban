@@ -11,6 +11,7 @@ from database.models import Issue, ObjectRecord, Project, WorkflowState
 from kanban.api.problems import ProblemException
 from kanban.api.v1.schemas.issue_move import IssueMoveRequest, IssueMoveResponse, WipWarning
 from kanban.content.normalize import normalize_plain_text
+from kanban.security.granular_permissions import GranularPermission, require_permissions
 from kanban.security.permissions import Capability, require_capability
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.board_rank import REBALANCE_THRESHOLD_LEN, midpoint_rank
@@ -33,10 +34,12 @@ MAX_OVERRIDE_REASON_LEN: Final[int] = 500
 REQUIRED_AAL2_LEVEL: Final[int] = 2
 
 
-async def _verify_move_permissions(
+async def _verify_move_permissions(  # noqa: PLR0913
     session: AsyncSession,
     caller: PrincipalContext,
     issue_id: uuid.UUID,
+    workspace_id: uuid.UUID,
+    project_id: uuid.UUID,
     *,
     is_cross_column: bool,
 ) -> None:
@@ -44,6 +47,26 @@ async def _verify_move_permissions(
     await require_capability(session, caller, issue_id, Capability.EDIT)
     if is_cross_column:
         await require_capability(session, caller, issue_id, Capability.TRANSITION)
+        await require_permissions(
+            session,
+            caller,
+            workspace_id,
+            {
+                GranularPermission.FIELD_MODIFY_STATE.value,
+                GranularPermission.ISSUE_TRANSITION.value,
+            },
+            project_id=project_id,
+            object_readable=True,
+        )
+    else:
+        await require_permissions(
+            session,
+            caller,
+            workspace_id,
+            {GranularPermission.ISSUE_MOVE_RANK.value},
+            project_id=project_id,
+            object_readable=True,
+        )
 
 
 async def _lock_and_validate_target_state(
@@ -269,7 +292,14 @@ async def move_issue(
     is_cross_column = target_state_id != issue.state_id
 
     # 1. Authorization checks
-    await _verify_move_permissions(session, caller, issue.id, is_cross_column=is_cross_column)
+    await _verify_move_permissions(
+        session,
+        caller,
+        issue.id,
+        issue.workspace_id,
+        issue.project_id,
+        is_cross_column=is_cross_column,
+    )
 
     # 2. State validation and locking
     target_state = await _lock_and_validate_target_state(session, issue.project_id, target_state_id)

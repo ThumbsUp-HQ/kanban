@@ -111,6 +111,12 @@ from kanban.security.access_manifest import (
     _ManifestContext,
     build_access_manifest,
 )
+from kanban.security.granular_permissions import (
+    FIELD_PERMISSION_PROPERTY_MAP,
+    GranularPermission,
+    evaluate_granular_permissions,
+    require_permissions,
+)
 from kanban.security.permissions import (
     Capability,
     capabilities_to_names,
@@ -746,6 +752,18 @@ async def serialize_issue(
     pending_gate = await resolve_pending_gate(session, issue)
     latest_gate_verdict = await resolve_latest_gate_verdict(session, issue)
 
+    granular_perms = await evaluate_granular_permissions(
+        session, caller, issue.workspace_id, issue.project_id
+    )
+    issue_perms_list = sorted([p for p in granular_perms if p.startswith("issue:")])
+    editable_fields_list = sorted(
+        [
+            FIELD_PERMISSION_PROPERTY_MAP[p]
+            for p in granular_perms
+            if p in FIELD_PERMISSION_PROPERTY_MAP
+        ]
+    )
+
     res = IssueResponse(
         id=issue.id,
         object_id=issue.id,
@@ -776,6 +794,8 @@ async def serialize_issue(
         provenance=provenance,
         access_manifest=manifest,
         capabilities=caps_names,
+        editable_fields=editable_fields_list,
+        issue_permissions=issue_perms_list,
         created_at=issue_created_at,
         updated_at=issue_updated_at,
         archived_at=archived_at,
@@ -1859,6 +1879,37 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
     ) or ("state" in body.model_fields_set and body.state is not None):
         required |= Capability.TRANSITION
     await require_capability(session, caller, issue.id, required)
+
+    granular_required: set[str] = set()
+    if "summary" in body.model_fields_set:
+        granular_required.add(GranularPermission.FIELD_MODIFY_SUMMARY.value)
+    if "description_markdown" in body.model_fields_set:
+        granular_required.add(GranularPermission.FIELD_MODIFY_DESCRIPTION.value)
+    if "priority" in body.model_fields_set:
+        granular_required.add(GranularPermission.FIELD_MODIFY_PRIORITY.value)
+    if "state" in body.model_fields_set or "state_id" in body.model_fields_set:
+        granular_required.add(GranularPermission.FIELD_MODIFY_STATE.value)
+        granular_required.add(GranularPermission.ISSUE_TRANSITION.value)
+    if "start_date" in body.model_fields_set or "due_date" in body.model_fields_set:
+        granular_required.add(GranularPermission.FIELD_MODIFY_DATES.value)
+    if "cycle_id" in body.model_fields_set:
+        granular_required.add(GranularPermission.FIELD_MODIFY_CYCLE.value)
+    if "parent" in body.model_fields_set:
+        granular_required.add(GranularPermission.FIELD_MODIFY_PARENT.value)
+    if "label_ids" in body.model_fields_set:
+        granular_required.add(GranularPermission.FIELD_MODIFY_LABELS.value)
+    if "module_ids" in body.model_fields_set:
+        granular_required.add(GranularPermission.FIELD_MODIFY_MODULES.value)
+
+    if granular_required:
+        await require_permissions(
+            session,
+            caller,
+            issue.workspace_id,
+            granular_required,
+            project_id=issue.project_id,
+            object_readable=True,
+        )
 
     current_sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""
     current_serialized = await serialize_issue(session, caller, issue)

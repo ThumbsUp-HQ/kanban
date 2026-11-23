@@ -9,12 +9,15 @@ from __future__ import annotations
 
 import logging
 import uuid  # noqa: TC003
+from datetime import datetime  # noqa: TC003
 from typing import Annotated, Literal, Self
 
 from fastapi import APIRouter, Depends, Query, status
 from pydantic import BaseModel, ConfigDict, Field, model_validator
+from sqlalchemy import delete, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from database.models import PrincipalRoleLabel, RbacRoleModel, RbacRolePermission
 from kanban.admin import principal_service
 from kanban.api.deps import PrincipalContext, get_rls_session
 from kanban.api.problems import FieldError, ProblemException
@@ -411,3 +414,281 @@ async def unbind_role_endpoint(
         scope_type=body.scope_type,
         project_id=body.scope_id,
     )
+
+
+class PrincipalRoleLabelItem(BaseModel):
+    """Assigned role label for a principal."""
+
+    id: uuid.UUID
+    workspace_id: uuid.UUID
+    principal_id: uuid.UUID
+    role_id: uuid.UUID
+    role_slug: str
+    role_name: str
+    color_hex: str
+    scope_tier: str
+    project_id: uuid.UUID | None = None
+    created_at: datetime
+
+
+class AssignRoleLabelRequest(BaseModel):
+    """Payload to assign a single role label to a principal."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    role_id: uuid.UUID
+    project_id: uuid.UUID | None = None
+
+
+class BatchSetRoleLabelsRequest(BaseModel):
+    """Payload to replace all role labels on a principal."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    role_ids: list[uuid.UUID]
+    project_id: uuid.UUID | None = None
+
+
+async def _is_server_admin_caller(session: AsyncSession, caller: PrincipalContext) -> bool:
+    if getattr(caller, "is_server_admin", False):
+        return True
+    try:
+        stmt = text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN'])")
+        res = await session.execute(stmt)
+        return bool(res.scalar_one())
+    except Exception:  # noqa: BLE001
+        return False
+
+
+async def _check_role_label_escalation(
+    session: AsyncSession, caller: PrincipalContext, role: RbacRoleModel
+) -> None:
+    is_server_admin = await _is_server_admin_caller(session, caller)
+    is_sys_or_server_role = role.slug == "system-admin" or role.system_role == "SERVER_ADMIN"
+    if is_sys_or_server_role and not is_server_admin:
+        raise ProblemException(
+            code="ROLE_ESCALATION_DENIED",
+            status=status.HTTP_403_FORBIDDEN,
+            title="Role Escalation Denied",
+            detail="Binding or unbinding a role with workspace permissions requires SERVER_ADMIN.",
+        )
+    stmt = select(RbacRolePermission.id).where(
+        RbacRolePermission.role_id == role.id,
+        RbacRolePermission.permission_key.like("workspace:%"),
+        RbacRolePermission.effect == "ALLOW",
+    )
+    if (await session.execute(stmt)).first() is not None and not is_server_admin:
+        raise ProblemException(
+            code="ROLE_ESCALATION_DENIED",
+            status=status.HTTP_403_FORBIDDEN,
+            title="Role Escalation Denied",
+            detail="Binding or unbinding a role with workspace permissions requires SERVER_ADMIN.",
+        )
+
+
+@router.get(
+    "/admin/principals/{principal_id}/role-labels",
+    response_model=list[PrincipalRoleLabelItem],
+    summary="List assigned role labels for principal",
+)
+async def list_principal_role_labels_endpoint(
+    principal_id: uuid.UUID,
+    caller: Caller,
+    session: Session,
+    project_id: Annotated[uuid.UUID | None, Query()] = None,
+) -> list[PrincipalRoleLabelItem]:
+    """List all custom and built-in role labels attached to a user, group, or agent."""
+    stmt = (
+        select(PrincipalRoleLabel, RbacRoleModel)
+        .join(RbacRoleModel, RbacRoleModel.id == PrincipalRoleLabel.role_id)
+        .where(
+            PrincipalRoleLabel.principal_id == principal_id,
+            PrincipalRoleLabel.workspace_id == caller.workspace_id,
+            (
+                PrincipalRoleLabel.project_id.is_(None)
+                if project_id is None
+                else (
+                    PrincipalRoleLabel.project_id.is_(None)
+                    | (PrincipalRoleLabel.project_id == project_id)
+                )
+            ),
+        )
+        .order_by(PrincipalRoleLabel.created_at.asc())
+    )
+    rows = (await session.execute(stmt)).all()
+    return [
+        PrincipalRoleLabelItem(
+            id=label.id,
+            workspace_id=label.workspace_id,
+            principal_id=label.principal_id,
+            role_id=label.role_id,
+            role_slug=role.slug,
+            role_name=role.name,
+            color_hex=role.color_hex,
+            scope_tier=role.scope_tier,
+            project_id=label.project_id,
+            created_at=label.created_at,
+        )
+        for label, role in rows
+    ]
+
+
+@router.post(
+    "/admin/principals/{principal_id}/role-labels",
+    response_model=PrincipalRoleLabelItem,
+    status_code=status.HTTP_201_CREATED,
+    summary="Assign role label to principal",
+)
+async def assign_principal_role_label_endpoint(
+    principal_id: uuid.UUID,
+    body: AssignRoleLabelRequest,
+    caller: Caller,
+    session: Session,
+) -> PrincipalRoleLabelItem:
+    """Attach a role label to a principal (Rule 1)."""
+    role = await session.get(RbacRoleModel, body.role_id)
+    if role is None or role.workspace_id != caller.workspace_id:
+        raise ProblemException(
+            code="NOT_FOUND",
+            status=status.HTTP_404_NOT_FOUND,
+            title="Not Found",
+            detail="RBAC role not found.",
+        )
+
+    await _check_role_label_escalation(session, caller, role)
+
+    label = PrincipalRoleLabel(
+        workspace_id=caller.workspace_id,
+        principal_id=principal_id,
+        role_id=body.role_id,
+        project_id=body.project_id,
+        assigned_by_id=caller.principal_id,
+    )
+    session.add(label)
+    await session.commit()
+    await session.refresh(label)
+
+    return PrincipalRoleLabelItem(
+        id=label.id,
+        workspace_id=label.workspace_id,
+        principal_id=label.principal_id,
+        role_id=label.role_id,
+        role_slug=role.slug,
+        role_name=role.name,
+        color_hex=role.color_hex,
+        scope_tier=role.scope_tier,
+        project_id=label.project_id,
+        created_at=label.created_at,
+    )
+
+
+@router.put(
+    "/admin/principals/{principal_id}/role-labels",
+    response_model=list[PrincipalRoleLabelItem],
+    summary="Batch set role labels for principal",
+)
+async def batch_set_principal_role_labels_endpoint(
+    principal_id: uuid.UUID,
+    body: BatchSetRoleLabelsRequest,
+    caller: Caller,
+    session: Session,
+) -> list[PrincipalRoleLabelItem]:
+    """Batch replace all role labels on a principal (multi-role chip picker support)."""
+    # Fetch existing labels
+    cur_labels = (
+        (
+            await session.execute(
+                select(PrincipalRoleLabel).where(
+                    PrincipalRoleLabel.principal_id == principal_id,
+                    PrincipalRoleLabel.workspace_id == caller.workspace_id,
+                    (
+                        PrincipalRoleLabel.project_id.is_(None)
+                        if body.project_id is None
+                        else PrincipalRoleLabel.project_id == body.project_id
+                    ),
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+    cur_role_ids = {lbl.role_id for lbl in cur_labels}
+    new_role_ids = set(body.role_ids)
+
+    # Check escalation on all changed roles
+    changed_ids = cur_role_ids ^ new_role_ids
+    if changed_ids:
+        roles_stmt = select(RbacRoleModel).where(
+            RbacRoleModel.id.in_(changed_ids),
+            RbacRoleModel.workspace_id == caller.workspace_id,
+        )
+        for r in (await session.execute(roles_stmt)).scalars().all():
+            await _check_role_label_escalation(session, caller, r)
+
+    # Delete removed
+    to_delete = cur_role_ids - new_role_ids
+    if to_delete:
+        await session.execute(
+            delete(PrincipalRoleLabel).where(
+                PrincipalRoleLabel.principal_id == principal_id,
+                PrincipalRoleLabel.workspace_id == caller.workspace_id,
+                PrincipalRoleLabel.role_id.in_(to_delete),
+                (
+                    PrincipalRoleLabel.project_id.is_(None)
+                    if body.project_id is None
+                    else PrincipalRoleLabel.project_id == body.project_id
+                ),
+            )
+        )
+
+    # Add new
+    to_add = new_role_ids - cur_role_ids
+    for r_id in to_add:
+        session.add(
+            PrincipalRoleLabel(
+                workspace_id=caller.workspace_id,
+                principal_id=principal_id,
+                role_id=r_id,
+                project_id=body.project_id,
+                assigned_by_id=caller.principal_id,
+            )
+        )
+
+    await session.commit()
+
+    # Return refreshed list
+    return await list_principal_role_labels_endpoint(
+        principal_id, caller, session, project_id=body.project_id
+    )
+
+
+@router.delete(
+    "/admin/principals/{principal_id}/role-labels/{role_id}",
+    summary="Remove a role label from principal",
+)
+async def remove_principal_role_label_endpoint(
+    principal_id: uuid.UUID,
+    role_id: uuid.UUID,
+    caller: Caller,
+    session: Session,
+    project_id: Annotated[uuid.UUID | None, Query()] = None,
+) -> dict[str, object]:
+    """Detach a role label from a principal (Rule 1)."""
+    role = await session.get(RbacRoleModel, role_id)
+    if role is not None and role.workspace_id == caller.workspace_id:
+        await _check_role_label_escalation(session, caller, role)
+
+    await session.execute(
+        delete(PrincipalRoleLabel).where(
+            PrincipalRoleLabel.principal_id == principal_id,
+            PrincipalRoleLabel.workspace_id == caller.workspace_id,
+            PrincipalRoleLabel.role_id == role_id,
+            (
+                PrincipalRoleLabel.project_id.is_(None)
+                if project_id is None
+                else PrincipalRoleLabel.project_id == project_id
+            ),
+        )
+    )
+    await session.commit()
+    return {"status": "deleted", "principal_id": str(principal_id), "role_id": str(role_id)}

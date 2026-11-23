@@ -11,6 +11,7 @@ from sqlalchemy import select
 from database.models import Issue as IssueModel
 from database.models import ObjectRecord, Project, WorkflowState
 from kanban.api.problems import ProblemException, not_found
+from kanban.security.granular_permissions import GranularPermission, require_permissions
 from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
 from kanban.services.activity import ActivityEventType, JSONValue, record_activity
 from kanban.services.issue_keys import resolve_issue_ref
@@ -46,6 +47,14 @@ async def archive_issue(
     """
     issue = await resolve_issue_ref(session, caller, issue_ref)
     await require_capability(session, caller, issue.id, Capability.EDIT)
+    await require_permissions(
+        session,
+        caller,
+        issue.workspace_id,
+        {GranularPermission.ISSUE_ARCHIVE.value},
+        project_id=issue.project_id,
+        object_readable=True,
+    )
 
     obj = await session.get(ObjectRecord, issue.id)
     if obj is None:  # pragma: no cover
@@ -138,6 +147,14 @@ async def unarchive_issue(
     """
     issue = await resolve_issue_ref(session, caller, issue_ref)
     await require_capability(session, caller, issue.id, Capability.EDIT)
+    await require_permissions(
+        session,
+        caller,
+        issue.workspace_id,
+        {GranularPermission.ISSUE_ARCHIVE.value},
+        project_id=issue.project_id,
+        object_readable=True,
+    )
 
     obj = await session.get(ObjectRecord, issue.id)
     if obj is None or obj.archived_at is None:

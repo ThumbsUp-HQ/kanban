@@ -19,6 +19,7 @@ from kanban.api.v1.admin.principals import router as admin_principals_router
 from kanban.api.v1.admin.project_blueprint import (
     router as admin_project_blueprint_router,
 )
+from kanban.api.v1.admin.rbac import router as admin_rbac_router
 from kanban.api.v1.admin.system_settings import (
     router as admin_system_settings_router,
 )
@@ -156,6 +157,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(admin_webhooks_router)
     v1.include_router(admin_project_blueprint_router)
     v1.include_router(admin_principals_router)
+    v1.include_router(admin_rbac_router)
     v1.include_router(admin_acl_router)
     v1.include_router(oauth_v1_router)
     v1.include_router(subscriptions_router)

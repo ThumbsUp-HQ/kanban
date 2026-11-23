@@ -24,6 +24,7 @@ from kanban.api.v1.schemas.issue_copy import (
 )
 from kanban.api.v1.schemas.links import LinkCreateRequest
 from kanban.content import ContentNormalizeError, normalize_to_markdown
+from kanban.security.granular_permissions import GranularPermission, require_permissions
 from kanban.security.permissions import Capability, evaluate_capabilities
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.issue_keys import resolve_issue_ref
@@ -116,6 +117,14 @@ async def copy_issue(  # noqa: C901, PLR0912, PLR0915
     """
     # 1. Resolve source issue through caller access checks
     source_issue = await resolve_issue_ref(session, caller, issue_ref)
+    await require_permissions(
+        session,
+        caller,
+        source_issue.workspace_id,
+        {GranularPermission.ISSUE_COPY.value},
+        project_id=source_issue.project_id,
+        object_readable=True,
+    )
     caps = await evaluate_capabilities(session, caller, source_issue.id)
     if Capability.VIEW not in caps:
         not_found()

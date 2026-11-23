@@ -32,6 +32,7 @@ import { StateBadge } from '../../components/state/StateBadge';
 import * as railApi from '../drawer-rail/railApi';
 import { SummaryField } from './SummaryField';
 import { useFocusTrap } from './useFocusTrap';
+import { canModifyIssueField, hasIssuePermission } from './permissions';
 import {
   ensureCsrfToken,
   fetchProjectStates,
@@ -924,10 +925,15 @@ function IssueSurfaceContent({
 
     const capabilities = currentIssue.capabilities ?? ['EDIT', 'TRANSITION'];
     const canTransition =
+      hasIssuePermission(currentIssue, 'issue:transition') ||
       capabilities.includes('TRANSITION') ||
       capabilities.includes('EDIT') ||
       capabilities.includes('ADMIN');
-    const canEdit = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
+    const canEdit =
+      canModifyIssueField(currentIssue, 'description') &&
+      (capabilities.includes('EDIT') || capabilities.includes('ADMIN'));
+    const canComment = hasIssuePermission(currentIssue, 'issue:comment');
+    const canAttach = hasIssuePermission(currentIssue, 'field:attach_files');
 
     const headerStates = (() => {
       if (projectStates.length > 0) {

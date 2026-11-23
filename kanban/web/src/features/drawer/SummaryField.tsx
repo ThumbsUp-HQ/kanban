@@ -14,6 +14,7 @@ import { ApiProblem } from '../../api/problem';
 import { qk } from '../../api/queryKeys';
 import { useOptimisticMutation } from '../../api/optimistic';
 import type { IssueDetail } from './slots';
+import { canModifyIssueField } from './permissions';
 import './SummaryField.css';
 
 export interface SummaryFieldProps {
@@ -201,7 +202,7 @@ export function SummaryField({ issue, descriptionFocusRef }: SummaryFieldProps):
       ) : (
         <h1 id={`issue-summary-${issue.key}`} className="summary-field__heading">
           <span className="summary-field__display-text">{issue.summary}</span>
-          {(issue.capabilities ? (issue.capabilities.includes('EDIT') || issue.capabilities.includes('ADMIN')) : true) && (
+          {canModifyIssueField(issue, 'summary') && (
             <button
               ref={editButtonRef}
               type="button"

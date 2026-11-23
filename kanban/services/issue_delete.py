@@ -28,6 +28,7 @@ from kanban.api.v1.schemas.issue_delete import (
     TrashedObjectList,
 )
 from kanban.api.v1.schemas.issues import IssueResponse, PrioritySummary, StateSummary
+from kanban.security.granular_permissions import GranularPermission, require_permissions
 from kanban.security.permissions import (
     Capability,
     capabilities_to_names,
@@ -215,6 +216,14 @@ async def trash_issue(
 
     issue = await resolve_issue_ref(session, caller, issue_ref)
     await require_capability(session, caller, issue.id, Capability.DELETE)
+    await require_permissions(
+        session,
+        caller,
+        issue.workspace_id,
+        {GranularPermission.ISSUE_DELETE.value},
+        project_id=issue.project_id,
+        object_readable=True,
+    )
 
     blast = await compute_blast_radius(session, issue.id, for_update=True)
     if blast_hash_header.strip().lower() != blast.blast_hash.lower():
@@ -371,6 +380,14 @@ async def restore_issue(
     """Restore a soft-deleted issue from trash back to active state."""
     issue = await resolve_issue_ref(session, caller, issue_ref, include_deleted=True)
     await require_capability(session, caller, issue.id, Capability.DELETE)
+    await require_permissions(
+        session,
+        caller,
+        issue.workspace_id,
+        {GranularPermission.ISSUE_DELETE.value},
+        project_id=issue.project_id,
+        object_readable=True,
+    )
 
     obj = await session.get(ObjectRecord, issue.id)
     if obj is None or obj.deleted_at is None:

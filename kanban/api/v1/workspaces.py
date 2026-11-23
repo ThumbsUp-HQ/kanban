@@ -25,6 +25,7 @@ from kanban.api.v1.admin.workspace_settings import (
     WorkspaceSettingsUpdate,
     _get_or_create_settings,
 )
+from kanban.auth.mfa.policy import require_admin_aal2
 from kanban.auth.sessions.cookies import (
     FALLBACK_SESSION_COOKIE_NAME,
     SESSION_COOKIE_NAME,
@@ -37,6 +38,7 @@ from kanban.auth.sessions.csrf import (
     FALLBACK_CSRF_COOKIE_NAME,
     build_clear_fallback_csrf_cookie_header,
 )
+from kanban.security.granular_permissions import GranularPermission, require_permissions
 
 if TYPE_CHECKING:
     from kanban.auth.sessions.service import SessionService
@@ -190,6 +192,9 @@ async def create_workspace_endpoint(
     request: Request,
 ) -> WorkspaceResponse:
     """Create a new workspace, auto-initialize settings, and assign WORKSPACE_ADMIN."""
+    await require_permissions(
+        session, caller, caller.workspace_id, {GranularPermission.WORKSPACE_CREATE.value}
+    )
     session_factory = getattr(request.app.state, "session_factory", None)
     if session_factory is None:
         raise ProblemException(
@@ -393,6 +398,7 @@ class UpdateWorkspaceRequest(BaseModel):
     "/{workspace_id}",
     response_model=WorkspaceResponse,
     summary="Update workspace name or slug",
+    dependencies=[Depends(require_admin_aal2)],
 )
 async def update_workspace_endpoint(
     workspace_id: uuid.UUID,
@@ -401,19 +407,11 @@ async def update_workspace_endpoint(
     session: Annotated[AsyncSession, Depends(get_rls_session)],
 ) -> WorkspaceResponse:
     """Update workspace name or slug. Requires WORKSPACE_ADMIN or SERVER_ADMIN."""
-    admin_check = await session.execute(
-        text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])")
-    )
-    if not bool(admin_check.scalar_one()):
-        raise ProblemException(
-            code="INSUFFICIENT_CAPABILITY",
-            status=status.HTTP_403_FORBIDDEN,
-            title="Insufficient Capability",
-            detail="Operation requires SERVER_ADMIN or WORKSPACE_ADMIN role.",
-        )
-
     target_id = (
         caller.workspace_id if str(workspace_id) == str(caller.workspace_id) else workspace_id
+    )
+    await require_permissions(
+        session, caller, target_id, {GranularPermission.WORKSPACE_EDIT_SETTINGS.value}
     )
     ws_stmt = select(Workspace).where(Workspace.id == target_id)
     ws = (await session.execute(ws_stmt)).scalar_one_or_none()
@@ -503,6 +501,7 @@ class WorkspaceRoleBindingRequest(BaseModel):
 @router.post(
     "/{workspace_id}/role-bindings",
     summary="Bind RBAC role to principal in workspace",
+    dependencies=[Depends(require_admin_aal2)],
 )
 async def bind_workspace_role_endpoint(
     workspace_id: uuid.UUID,
@@ -511,16 +510,9 @@ async def bind_workspace_role_endpoint(
     session: Annotated[AsyncSession, Depends(get_rls_session)],
 ) -> dict[str, object]:
     """Bind role to principal at workspace scope."""
-    admin_check = await session.execute(
-        text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])")
+    await require_permissions(
+        session, caller, workspace_id, {GranularPermission.WORKSPACE_MANAGE_MEMBERS.value}
     )
-    if not bool(admin_check.scalar_one()):
-        raise ProblemException(
-            code="INSUFFICIENT_CAPABILITY",
-            status=status.HTTP_403_FORBIDDEN,
-            title="Insufficient Capability",
-            detail="Operation requires SERVER_ADMIN or WORKSPACE_ADMIN role.",
-        )
     res = await principal_service.bind_role(
         session,
         workspace_id,
@@ -537,6 +529,7 @@ async def bind_workspace_role_endpoint(
 @router.delete(
     "/{workspace_id}/role-bindings",
     summary="Unbind RBAC role from principal in workspace",
+    dependencies=[Depends(require_admin_aal2)],
 )
 async def unbind_workspace_role_endpoint(
     workspace_id: uuid.UUID,
@@ -545,16 +538,9 @@ async def unbind_workspace_role_endpoint(
     session: Annotated[AsyncSession, Depends(get_rls_session)],
 ) -> dict[str, object]:
     """Unbind role from principal at workspace scope."""
-    admin_check = await session.execute(
-        text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])")
+    await require_permissions(
+        session, caller, workspace_id, {GranularPermission.WORKSPACE_MANAGE_MEMBERS.value}
     )
-    if not bool(admin_check.scalar_one()):
-        raise ProblemException(
-            code="INSUFFICIENT_CAPABILITY",
-            status=status.HTTP_403_FORBIDDEN,
-            title="Insufficient Capability",
-            detail="Operation requires SERVER_ADMIN or WORKSPACE_ADMIN role.",
-        )
     res = await principal_service.unbind_role(
         session,
         workspace_id,

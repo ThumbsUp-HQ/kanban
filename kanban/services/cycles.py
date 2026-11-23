@@ -21,6 +21,7 @@ from kanban.api.v1.schemas.cycles import (
     CycleRolloverRequest,
     CycleRolloverResponse,
 )
+from kanban.security.granular_permissions import GranularPermission, require_permissions
 from kanban.security.permissions import Capability, require_capability
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.issue_keys import resolve_issue_ref
@@ -651,6 +652,14 @@ async def add_issue_to_cycle(
     issue = await resolve_issue_ref(session, caller, issue_ref)
 
     await require_capability(session, caller, issue.id, Capability.EDIT)
+    await require_permissions(
+        session,
+        caller,
+        issue.workspace_id,
+        {GranularPermission.FIELD_MODIFY_CYCLE.value},
+        project_id=issue.project_id,
+        object_readable=True,
+    )
 
     if issue.project_id != cycle.project_id:
         raise ProblemException(
@@ -717,6 +726,14 @@ async def remove_issue_from_cycle(
     issue = await resolve_issue_ref(session, caller, issue_ref)
 
     await require_capability(session, caller, issue.id, Capability.EDIT)
+    await require_permissions(
+        session,
+        caller,
+        issue.workspace_id,
+        {GranularPermission.FIELD_MODIFY_CYCLE.value},
+        project_id=issue.project_id,
+        object_readable=True,
+    )
 
     if issue.cycle_id != cycle.id:
         raise ProblemException(

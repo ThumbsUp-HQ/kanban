@@ -294,6 +294,14 @@ class IssueResponse(BaseModel):
     capabilities: list[str] = Field(
         description="Effective capabilities held by the calling principal on this issue"
     )
+    editable_fields: list[str] = Field(
+        default_factory=list,
+        description="List of issue field names caller has granular permission to modify",
+    )
+    issue_permissions: list[str] = Field(
+        default_factory=list,
+        description="List of granular issue permissions caller holds on this issue",
+    )
     created_at: datetime = Field(description="Issue creation timestamp")
     updated_at: datetime = Field(description="Issue last updated timestamp")
     archived_at: datetime | None = Field(

@@ -27,6 +27,7 @@ from database.models.workflow import (
 from kanban.api.problems import ProblemException, not_found
 from kanban.content.normalize import normalize_to_markdown
 from kanban.sandbox.wasm_runner import TierAWasmRunner, WasmRunError, WasmRunLimits
+from kanban.security.granular_permissions import GranularPermission, require_permissions
 from kanban.security.permissions import Capability, evaluate_capabilities
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.issue_keys import resolve_issue_ref
@@ -199,6 +200,18 @@ class TransitionEngine:
         caps = await evaluate_capabilities(session, actor, issue.id)
         if Capability.VIEW not in caps or Capability.TRANSITION not in caps:
             not_found()
+
+        await require_permissions(
+            session,
+            actor,
+            issue.workspace_id,
+            {
+                GranularPermission.ISSUE_TRANSITION.value,
+                GranularPermission.FIELD_MODIFY_STATE.value,
+            },
+            project_id=issue.project_id,
+            object_readable=True,
+        )
 
         # Lock issue row
         locked_stmt = select(Issue).where(Issue.id == issue.id).with_for_update()

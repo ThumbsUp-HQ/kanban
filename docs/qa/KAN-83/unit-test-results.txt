@@ -1,0 +1,44 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan83-0b5a56cb/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan83-0b5a56cb
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 16 items
+
+database/tests/test_granular_rbac_rls.py::test_built_in_roles_seeded PASSED [  6%]
+database/tests/test_granular_rbac_rls.py::test_tenant_isolation_rls PASSED [ 12%]
+database/tests/test_granular_rbac_rls.py::test_rule_1_workspace_admin_cannot_modify_workspace_permissions PASSED [ 18%]
+database/tests/test_granular_rbac_rls.py::test_rule_1_workspace_admin_cannot_modify_or_delete_system_admin_role PASSED [ 25%]
+database/tests/test_granular_rbac_rls.py::test_rule_1_workspace_admin_cannot_bind_workspace_permission_role PASSED [ 31%]
+database/tests/test_granular_rbac_rls.py::test_rule_2_standard_user_cannot_modify_permissions PASSED [ 37%]
+database/tests/test_granular_rbac_rls.py::test_server_admin_can_modify_workspace_permissions PASSED [ 43%]
+database/tests/test_granular_rbac_rls.py::test_mask_derivation_and_era_rebuild_additive_union PASSED [ 50%]
+kanban/tests/api/test_granular_rbac_api.py::test_workspace_creation_granular_permission PASSED [ 56%]
+kanban/tests/api/test_granular_rbac_api.py::test_workspace_settings_and_members_aal2_and_granular_permissions PASSED [ 62%]
+kanban/tests/api/test_granular_rbac_api.py::test_viewer_attachment_upload_bug_closed PASSED [ 68%]
+kanban/tests/api/test_granular_rbac_api.py::test_issue_field_level_permissions_and_response_fields PASSED [ 75%]
+kanban/tests/api/test_granular_rbac_api.py::test_admin_rbac_roles_crud_and_tier_governance PASSED [ 81%]
+kanban/tests/api/test_granular_rbac_api.py::test_admin_principals_role_labels_and_escalation PASSED [ 87%]
+kanban/tests/api/test_granular_rbac_api.py::test_multi_role_label_additive_union_in_api PASSED [ 93%]
+database/tests/migrations/test_p6_12_granular_rbac_roles_migration.py::test_p6_12_granular_rbac_roles_migration_lifecycle PASSED [100%]
+
+============================== 16 passed in 5.98s ==============================
+
+=== Web Vitest Test Results ===
+
+> @kanban/web@0.1.0 test /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan83-0b5a56cb/kanban/web
+> vitest run src/features/rbac src/features/drawer/__tests__/permissions.test.ts --run
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan83-0b5a56cb/kanban/web
+
+ ✓ src/features/drawer/__tests__/permissions.test.ts (4 tests) 9ms
+ ✓ src/features/rbac/__tests__/RoleLabelPicker.test.tsx (3 tests) 99ms
+ ✓ src/features/rbac/__tests__/RbacPolicyBuilder.test.tsx (4 tests) 310ms
+
+ Test Files  3 passed (3)
+      Tests  11 passed (11)
+   Start at  20:15:38
+   Duration  1.50s (environment 73%, tests 13%, import 8%, transform 5%, worker 1%)
+

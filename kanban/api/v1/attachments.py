@@ -29,6 +29,7 @@ from kanban.attachments.sniff import (
     sanitize_content_disposition_filename,
 )
 from kanban.attachments.storage import LocalFilesystemBlobStore
+from kanban.security.granular_permissions import GranularPermission, require_permissions
 from kanban.security.permissions import Capability, evaluate_capabilities, require_capability
 from kanban.security.ratelimit import ATTACHMENT_UPLOAD_PRINCIPAL
 from kanban.security.ratelimit.decorator import rate_limited
@@ -192,7 +193,15 @@ async def _verify_upload_permissions(
     project_id: uuid.UUID,
     target_issue_id: uuid.UUID | None,
 ) -> None:
-    """Enforce VIEW and COMMENT/EDIT permissions on project and optional issue."""
+    """Enforce upload permissions on project and optional issue."""
+    await require_permissions(
+        session,
+        caller,
+        caller.workspace_id,
+        {GranularPermission.FIELD_ATTACH_FILES.value},
+        project_id=project_id,
+        object_readable=True,
+    )
     caps = await evaluate_capabilities(session, caller, project_id)
     if not (caps & (Capability.COMMENT | Capability.EDIT)):
         raise ProblemException(
@@ -238,9 +247,11 @@ async def upload_attachment(
 ) -> AttachmentResponse:
     """Stream and validate attachment upload with decompression-bomb guards and metadata strip."""
     project = await get_project_or_404(session, caller, project_ref)
+    await _verify_upload_permissions(session, caller, project.id, None)
     body_bytes = await _read_stream_payload(request)
     raw_fn, decl_ct, target_issue_id, raw_bytes = _parse_upload_body(request, body_bytes)
-    await _verify_upload_permissions(session, caller, project.id, target_issue_id)
+    if target_issue_id is not None:
+        await _verify_upload_permissions(session, caller, project.id, target_issue_id)
 
     service = get_attachment_service(request)
     result = await service.upload_attachment(

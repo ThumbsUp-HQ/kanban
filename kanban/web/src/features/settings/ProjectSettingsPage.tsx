@@ -26,6 +26,8 @@ import { DeleteAuditModal } from './DeleteAuditModal';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
+import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
+import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
 import './ProjectSettingsPage.css';
 
 export interface ProjectDetail {
@@ -153,6 +155,7 @@ type SettingsTab =
   | 'priorities'
   | 'labels'
   | 'members'
+  | 'roles'
   | 'integrations'
   | 'trash'
   | 'danger';
@@ -1374,6 +1377,14 @@ export function ProjectSettingsPage(): JSX.Element {
         </button>
         <button
           type="button"
+          data-testid="tab-roles"
+          className={`kb-settings-tab ${activeTab === 'roles' ? 'kb-settings-tab-active' : ''}`}
+          onClick={() => { handleTabSwitch('roles'); }}
+        >
+          Roles &amp; Permissions
+        </button>
+        <button
+          type="button"
           data-testid="tab-integrations"
           className={`kb-settings-tab ${activeTab === 'integrations' ? 'kb-settings-tab-active' : ''}`}
           onClick={() => { handleTabSwitch('integrations'); }}
@@ -2331,6 +2342,7 @@ export function ProjectSettingsPage(): JSX.Element {
                       >
                         {m.role}
                       </span>
+                      <RoleLabelPicker principalId={m.principal_id} />
                     </td>
                     <td>
                       <button
@@ -2351,6 +2363,16 @@ export function ProjectSettingsPage(): JSX.Element {
         )}
 
         {/* 6. Automation & Integrations Tab */}
+        {activeTab === 'roles' && (
+          <div className="kb-settings-section" data-testid="project-roles-section">
+            <RbacPolicyBuilder
+              projectId={project?.id}
+              isServerAdmin={isServerAdmin}
+              initialRoleTier="project admin"
+            />
+          </div>
+        )}
+
         {activeTab === 'integrations' && (
           <div className="kb-integrations-grid" data-testid="integrations-section">
             <Link

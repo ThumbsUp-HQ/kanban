@@ -26,6 +26,7 @@ import { CreatedByRow } from './CreatedByRow';
 import { DatesCycleModulesRows } from './DatesCycleModulesRows';
 import { ParentLabelsRows } from './ParentLabelsRows';
 import { CustomFieldsRailSection } from '../custom-fields/CustomFieldsRailSection';
+import { canModifyIssueField, hasIssuePermission } from '../drawer/permissions';
 import './PropertiesRail.css';
 
 export interface PropertiesRailProps {
@@ -59,8 +60,13 @@ export function PropertiesRail({
       : (currentIssue.key.includes('-') ? (currentIssue.key.split('-')[0] ?? '') : '');
   const capabilities = currentIssue.capabilities ?? ['EDIT', 'TRANSITION'];
   const canEdit = capabilities.includes('EDIT') || capabilities.includes('ADMIN');
-  const canTransition = capabilities.includes('TRANSITION') || capabilities.includes('ADMIN');
+  const canTransition = hasIssuePermission(currentIssue, 'issue:transition') || canModifyIssueField(currentIssue, 'state');
   const isAdmin = capabilities.includes('ADMIN');
+  const canEditPriority = canModifyIssueField(currentIssue, 'priority');
+  const canEditAssignees = canModifyIssueField(currentIssue, 'assignees');
+  const canEditDatesCycles = canModifyIssueField(currentIssue, 'dates') || canModifyIssueField(currentIssue, 'cycle_id') || canModifyIssueField(currentIssue, 'modules') || canEdit;
+  const canEditParentLabels = canModifyIssueField(currentIssue, 'parent_id') || canModifyIssueField(currentIssue, 'label_ids') || canEdit;
+  const canEditCustomFields = canModifyIssueField(currentIssue, 'custom_fields') && canEdit;
 
   const modulesEnabled =
     (metadata?.modules_enabled ?? initialMetadata?.modules_enabled) !== false;
@@ -250,7 +256,7 @@ export function PropertiesRail({
         issue={currentIssue}
         projectStates={metadata?.states}
         projectPriorities={priorities}
-        canEdit={canEdit}
+        canEdit={canEditPriority}
         canTransition={canTransition}
         onStateChange={handleStateChange}
         onPriorityChange={handlePriorityChange}
@@ -259,7 +265,7 @@ export function PropertiesRail({
       <AssigneesRow
         issue={currentIssue}
         projectKey={projectKey}
-        canEdit={canEdit}
+        canEdit={canEditAssignees}
         onAddAssignee={handleAddAssignee}
         onRemoveAssignee={handleRemoveAssignee}
         fetchSuggestions={fetchAssigneeSuggestions}
@@ -276,7 +282,7 @@ export function PropertiesRail({
         modulesEnabled={modulesEnabled}
         projectModules={modules}
         projectCycles={cycles}
-        canEdit={canEdit}
+        canEdit={canEditDatesCycles}
         onUpdateDates={handleUpdateDates}
         onUpdateModules={handleUpdateModules}
         onUpdateCycle={handleUpdateCycle}
@@ -285,7 +291,7 @@ export function PropertiesRail({
       <ParentLabelsRows
         issue={currentIssue}
         projectLabels={labels}
-        canEdit={canEdit}
+        canEdit={canEditParentLabels}
         onUpdateParent={handleUpdateParent}
         onUpdateLabels={handleUpdateLabels}
         onCreateLabel={handleCreateLabel}
@@ -296,7 +302,7 @@ export function PropertiesRail({
         <CustomFieldsRailSection
           projectKey={projectKey}
           issueKey={currentIssue.key}
-          canEdit={canEdit}
+          canEdit={canEditCustomFields}
         />
       </div>
     </aside>

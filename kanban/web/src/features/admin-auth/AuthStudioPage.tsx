@@ -28,6 +28,8 @@ import {
 import { SecondFactorStep } from '../auth/SecondFactorStep';
 import type { MfaMethod } from '../auth/authApi';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
+import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
 import './adminAuth.css';
 
 interface CurrentUserResponse {
@@ -108,7 +110,7 @@ export function AuthStudioPage(): JSX.Element {
   const [accessDenied, setAccessDenied] = useState(false);
 
   // Studio tab state
-  const [activeTab, setActiveTab] = useState<'cards' | 'users'>('cards');
+  const [activeTab, setActiveTab] = useState<'cards' | 'users' | 'roles'>('cards');
 
   // Cards state
   const [cards, setCards] = useState<AdminAuthCard[]>([]);
@@ -707,6 +709,18 @@ export function AuthStudioPage(): JSX.Element {
         >
           Users &amp; Permissions
         </button>
+        <button
+          type="button"
+          role="tab"
+          id="tab-roles"
+          data-testid="tab-roles"
+          aria-selected={activeTab === 'roles'}
+          aria-controls="panel-roles"
+          className={`auth-tab-btn ${activeTab === 'roles' ? 'auth-tab-btn--active' : ''}`}
+          onClick={() => { setActiveTab('roles'); }}
+        >
+          Roles &amp; Permissions
+        </button>
       </div>
 
       {activeTab === 'users' && (
@@ -725,6 +739,12 @@ export function AuthStudioPage(): JSX.Element {
               {kind === 'ALL' ? 'All Principals' : kind === 'USER' ? 'Users' : kind === 'GROUP' ? 'Groups' : 'Agents'}
             </button>
           ))}
+        </div>
+      )}
+
+      {activeTab === 'roles' && (
+        <div id="panel-roles" role="tabpanel" aria-labelledby="tab-roles" data-testid="auth-roles-section">
+          <RbacPolicyBuilder isServerAdmin={true} />
         </div>
       )}
 
@@ -900,6 +920,7 @@ export function AuthStudioPage(): JSX.Element {
                             <option value="WORKSPACE_MEMBER">WORKSPACE_MEMBER (Workspace Member)</option>
                             <option value="WORKSPACE_GUEST">WORKSPACE_GUEST (Workspace Guest)</option>
                           </select>
+                          <RoleLabelPicker principalId={u.id} />
                         </td>
                         <td className="auth-users-td">
                           {(() => {
@@ -936,6 +957,12 @@ export function AuthStudioPage(): JSX.Element {
               </table>
             </div>
           )}
+        </div>
+      )}
+
+      {activeTab === 'roles' && (
+        <div id="panel-roles" role="tabpanel" aria-labelledby="tab-roles" data-testid="auth-roles-section">
+          <RbacPolicyBuilder isServerAdmin={true} />
         </div>
       )}
 
