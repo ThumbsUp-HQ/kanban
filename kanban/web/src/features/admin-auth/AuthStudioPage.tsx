@@ -624,26 +624,26 @@ export function AuthStudioPage(): JSX.Element {
   // Access denied / non-admin: uniform empty state
   if (accessDenied) {
     return (
-      <main className="auth-studio-page" data-testid="auth-studio-page">
+      <div className="auth-studio-page" data-testid="auth-studio-page">
         <div className="auth-empty-state" role="alert">
           <h2>Not found or no access</h2>
           <p>The requested page does not exist or you do not have permission to view it.</p>
         </div>
-      </main>
+      </div>
     );
   }
 
   // Loading state
   if (isUserLoading || isLoadingCards) {
     return (
-      <main className="auth-studio-page" data-testid="auth-studio-page">
+      <div className="auth-studio-page" data-testid="auth-studio-page">
         <p className="auth-card-subtext">Loading Authentication Studio...</p>
-      </main>
+      </div>
     );
   }
 
   return (
-    <main className="auth-studio-page" data-testid="auth-studio-page">
+    <div className="auth-studio-page" data-testid="auth-studio-page">
       <AdminStudioSubnav activeTab="auth" />
       {/* Studio Header */}
       <header className="auth-studio-header">
@@ -1252,6 +1252,6 @@ export function AuthStudioPage(): JSX.Element {
           </div>
         </div>
       ) : null}
-    </main>
+    </div>
   );
 }

@@ -253,11 +253,11 @@ export function DocsWorkspaceView(): JSX.Element {
             )}
           </>
         ) : (
-          <main className="docs-center-pane" aria-label="Page Editor">
+          <section className="docs-center-pane" aria-label="Page Editor">
             <div className="docs-center-pane__empty" data-testid="docs-empty-state">
               Select a document from the tree or create a new one to begin editing.
             </div>
-          </main>
+          </section>
         )}
 
         {/* Right Pane (Outline & History) */}

@@ -316,7 +316,7 @@ export function LinkAuditorStudio(): JSX.Element {
   };
 
   return (
-    <main
+    <div
       className="link-auditor-container"
       data-testid="link-auditor-studio"
       tabIndex={-1}
@@ -840,6 +840,6 @@ export function LinkAuditorStudio(): JSX.Element {
           </div>
         </>
       )}
-    </main>
+    </div>
   );
 }

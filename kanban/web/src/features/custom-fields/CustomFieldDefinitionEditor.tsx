@@ -666,7 +666,7 @@ export function CustomFieldDefinitionEditor({
       </aside>
 
       {/* Main Canvas: Form & Security Controls */}
-      <main className="custom-fields-editor-main">
+      <section className="custom-fields-editor-main" aria-label="Custom Field Configuration">
         <div className="custom-fields-editor-main__header">
           <h2 className="custom-fields-editor-main__title">
             {selectedField ? `Edit: ${selectedField.name}` : 'New Custom Field Definition'}
@@ -1385,7 +1385,7 @@ export function CustomFieldDefinitionEditor({
             }}
           />
         )}
-      </main>
+      </section>
 
       {/* Tamper Confirmation Dialog (S13.2) */}
       {isTamperConfirmOpen && (

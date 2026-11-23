@@ -184,7 +184,7 @@ export function NotFoundView(): JSX.Element {
 export function RoutePlaceholder({ route }: { route: string }): JSX.Element {
   return (
     <section data-testid="route-placeholder" data-route={route}>
-      <h2>Route: {route}</h2>
+      <h1>Route: {route}</h1>
     </section>
   );
 }
@@ -650,7 +650,7 @@ export function DraftsWorkspaceView(): JSX.Element {
                   {new Date(draft.createdAt).toLocaleDateString()}
                 </span>
               </div>
-              <h3 className="draft-card-title">{draft.summary}</h3>
+              <h2 className="draft-card-title">{draft.summary}</h2>
               {draft.description && (
                 <p className="draft-card-desc">{draft.description}</p>
               )}
@@ -956,7 +956,7 @@ function ProjectCyclesViewInner({
 
       {canCreate && (
         <form onSubmit={handleSubmit} className="kb-cycles-create-form" data-testid="create-cycle-form">
-          <h3>Create New Cycle</h3>
+          <h2>Create New Cycle</h2>
           {errorMsg && (
             <div className="kb-cycles-error" role="alert" data-testid="cycle-error-banner">
               {errorMsg}
@@ -1013,7 +1013,7 @@ function ProjectCyclesViewInner({
       {editingCycle && (
         <div className="kb-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="edit-cycle-modal-title">
           <div className="kb-modal" data-testid="edit-cycle-modal">
-            <h3 id="edit-cycle-modal-title">Edit Cycle</h3>
+            <h2 id="edit-cycle-modal-title">Edit Cycle</h2>
             {editErrorMsg && (
               <div className="kb-cycles-error" role="alert" data-testid="edit-cycle-error">
                 {editErrorMsg}
@@ -1078,7 +1078,7 @@ function ProjectCyclesViewInner({
       {completingCycle && (
         <div className="kb-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="complete-cycle-modal-title">
           <div className="kb-modal" data-testid="complete-cycle-modal">
-            <h3 id="complete-cycle-modal-title">Complete Cycle ({completingCycle.name})</h3>
+            <h2 id="complete-cycle-modal-title">Complete Cycle ({completingCycle.name})</h2>
             <p style={{ fontSize: 13, color: 'var(--fg-secondary)', marginBottom: 16 }}>
               Select a target cycle to roll over any unfinished issues, or send them to the backlog.
             </p>
@@ -1438,7 +1438,7 @@ function ProjectModulesViewInner({
 
       {canCreate && (
         <form onSubmit={handleSubmit} className="kb-modules-create-form" data-testid="create-module-form">
-          <h3>Create New Module</h3>
+          <h2>Create New Module</h2>
           {errorMsg && (
             <div className="kb-modules-error" role="alert" data-testid="module-error-banner">
               {errorMsg}
@@ -1522,7 +1522,7 @@ function ProjectModulesViewInner({
       {editingModule && (
         <div className="kb-modal-backdrop" role="dialog" aria-modal="true" aria-labelledby="edit-module-modal-title">
           <div className="kb-modal" data-testid="edit-module-modal">
-            <h3 id="edit-module-modal-title">Edit Module</h3>
+            <h2 id="edit-module-modal-title">Edit Module</h2>
             {editErrorMsg && (
               <div className="kb-modules-error" role="alert" data-testid="edit-module-error">
                 {editErrorMsg}

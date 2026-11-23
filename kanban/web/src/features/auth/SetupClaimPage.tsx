@@ -376,7 +376,16 @@ export function SetupClaimPage({
   };
 
   return (
-    <main className="auth-container" data-testid="setup-claim-page" aria-labelledby="setup-title">
+    <main
+      id="main"
+      tabIndex={-1}
+      className="auth-container"
+      data-testid="setup-claim-page"
+      aria-labelledby="setup-title"
+    >
+      <a href="#main" className="kb-skip-link">
+        Skip to content
+      </a>
       <div className="auth-panel">
         <header className="auth-header">
           <div className="auth-header-title-row">

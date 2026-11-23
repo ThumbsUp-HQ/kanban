@@ -259,9 +259,11 @@ function InnerEditorForm({
   };
 
   const breadcrumbs = page.breadcrumbs;
+  const isInsideMain = typeof document !== 'undefined' && Boolean(document.getElementById('main'));
+  const Container = isInsideMain ? 'section' : 'main';
 
   return (
-    <main className="docs-center-pane" aria-label="Page Editor" onBlur={handleBlur}>
+    <Container className="docs-center-pane" aria-label="Page Editor" onBlur={handleBlur}>
       {/* Top Metadata Bar */}
       <header className="docs-metadata-bar">
         <nav aria-label="Breadcrumb" className="docs-breadcrumbs">
@@ -413,7 +415,7 @@ function InnerEditorForm({
           </div>
         )}
       </div>
-    </main>
+    </Container>
   );
 }
 
@@ -437,24 +439,27 @@ export function PageEditorPane({
     queryFn: () => fetchPage(pageId),
   });
 
+  const isInsideMain = typeof document !== 'undefined' && Boolean(document.getElementById('main'));
+  const Container = isInsideMain ? 'section' : 'main';
+
   // 403 & 404 security handling
   if (error) {
     return (
-      <main className="docs-center-pane" aria-label="Page Editor">
+      <Container className="docs-center-pane" aria-label="Page Editor">
         <div className="docs-center-pane__not-found" role="alert" data-testid="page-not-found">
           Page was not found or you do not have access.
         </div>
-      </main>
+      </Container>
     );
   }
 
   if (isLoading || !page) {
     return (
-      <main className="docs-center-pane" aria-label="Page Editor">
+      <Container className="docs-center-pane" aria-label="Page Editor">
         <div className="docs-center-pane__loading" data-testid="page-loading">
           Loading page...
         </div>
-      </main>
+      </Container>
     );
   }
 

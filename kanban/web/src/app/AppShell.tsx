@@ -317,7 +317,11 @@ export function AppShell({
   };
 
   if (!isAuthReady) {
-    return <div className="kb-app-shell" data-testid="app-shell-auth-loading" />;
+    return (
+      <div className="kb-app-shell" data-testid="app-shell-auth-loading">
+        <main id="main" tabIndex={-1} className="kb-main-canvas" aria-label="Loading workspace" />
+      </div>
+    );
   }
 
   return (

@@ -243,7 +243,15 @@ export function DeviceActivatePage(): JSX.Element {
   const isAdminTarget = info?.surface === 'admin' || (info?.resource ?? '').includes('/mcp/admin');
 
   return (
-    <div className="kb-device-activate-layout" data-testid="device-activate-layout">
+    <main
+      id="main"
+      tabIndex={-1}
+      className="kb-device-activate-layout"
+      data-testid="device-activate-layout"
+    >
+      <a href="#main" className="kb-skip-link">
+        Skip to content
+      </a>
       <div className="kb-device-activate-card">
         <header className="kb-device-activate-header">
           <h1 className="kb-device-activate-title">Connect CLI Device</h1>
@@ -435,6 +443,6 @@ export function DeviceActivatePage(): JSX.Element {
           </section>
         )}
       </div>
-    </div>
+    </main>
   );
 }
