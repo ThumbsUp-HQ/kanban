@@ -15,7 +15,7 @@
       "process_uid": 1000,
       "process_gid": 126,
       "is_non_root": true,
-      "uptime_seconds": 3.8,
+      "uptime_seconds": 46.3,
       "cgroup_version": "v2",
       "memory_limit_bytes": null,
       "memory_current_bytes": null,
@@ -74,28 +74,28 @@
     },
     "database": {
       "connected": true,
-      "latency_ms": 1.02,
+      "latency_ms": 0.32,
       "server_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg12+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit",
       "active_role_non_bypass": false,
       "force_rls_verified": true,
       "alembic_head_current": true,
       "code_heads": [
-        "p6_03_multi_source_imports_and_aliases"
+        "p6_15_hardened_workspace_switch_and_module_issues"
       ],
       "db_heads": [
-        "p6_03_multi_source_imports_and_aliases"
+        "p6_15_hardened_workspace_switch_and_module_issues"
       ],
       "pool": {
         "size": 2,
-        "checked_in": 0,
+        "checked_in": 1,
         "checked_out": 1,
-        "overflow": -1
+        "overflow": 0
       },
       "sanitized_dsn_target": {
         "dialect": "postgresql+asyncpg",
         "host": null,
         "port": null,
-        "database": "kanban_test_master",
+        "database": "kanban_test_gw3",
         "is_unix_socket": false
       }
     },
@@ -331,12 +331,12 @@
       }
     ],
     "build": {
-      "version": "2.0.0",
-      "git_commit": "aef08a3f731b",
+      "version": "0.2.1322",
+      "git_commit": "e65b511f9a1e",
       "build_timestamp": null,
-      "openapi_version": "2.0.0",
-      "openapi_bundle_hash": "a865cc740c90bf5e05b115abd252a36186e24f2d33551801a9ddb1a14856bb85",
-      "frontend_bundle_hash": "c8e862bbfbea286fee4d38bd883165d339c34955a7f54f54d01cc95540e3b4b9"
+      "openapi_version": "0.2.1322",
+      "openapi_bundle_hash": "747dc162122598c20859659dd46359f583438d2daf7cbd7de9427561f38b4652",
+      "frontend_bundle_hash": "f9d9536ccfe4eb2f3802c8a697901fdb268b1f60ab9fba0ee287f180a446453d"
     },
     "subsystems": {
       "postgresql_rls": {
@@ -345,7 +345,7 @@
         "status": "healthy",
         "description": "Row-Level Security isolation, migration consistency, and connection pool status",
         "details": {
-          "latency_ms": 1.02,
+          "latency_ms": 0.32,
           "server_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg12+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit",
           "active_role_non_bypass": false,
           "force_rls_verified": true,
@@ -422,7 +422,7 @@
       "status": "healthy",
       "description": "Row-Level Security isolation, migration consistency, and connection pool status",
       "details": {
-        "latency_ms": 1.02,
+        "latency_ms": 0.32,
         "server_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg12+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit",
         "active_role_non_bypass": false,
         "force_rls_verified": true,
@@ -505,7 +505,7 @@
       "process_uid": 1000,
       "process_gid": 126,
       "is_non_root": true,
-      "uptime_seconds": 8.6,
+      "uptime_seconds": 47.8,
       "cgroup_version": "v2",
       "memory_limit_bytes": null,
       "memory_current_bytes": null,
@@ -564,22 +564,22 @@
     },
     "database": {
       "connected": true,
-      "latency_ms": 0.39,
+      "latency_ms": 0.26,
       "server_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg12+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit",
       "active_role_non_bypass": false,
       "force_rls_verified": true,
       "alembic_head_current": true,
       "code_heads": [
-        "p6_03_multi_source_imports_and_aliases"
+        "p6_15_hardened_workspace_switch_and_module_issues"
       ],
       "db_heads": [
-        "p6_03_multi_source_imports_and_aliases"
+        "p6_15_hardened_workspace_switch_and_module_issues"
       ],
       "pool": {
         "size": 2,
-        "checked_in": 0,
+        "checked_in": 1,
         "checked_out": 1,
-        "overflow": -1
+        "overflow": 0
       },
       "sanitized_dsn_target": null
     },
@@ -815,12 +815,12 @@
       }
     ],
     "build": {
-      "version": "2.0.0",
-      "git_commit": "aef08a3f731b",
+      "version": "0.2.1322",
+      "git_commit": "e65b511f9a1e",
       "build_timestamp": null,
-      "openapi_version": "2.0.0",
-      "openapi_bundle_hash": "a865cc740c90bf5e05b115abd252a36186e24f2d33551801a9ddb1a14856bb85",
-      "frontend_bundle_hash": "c8e862bbfbea286fee4d38bd883165d339c34955a7f54f54d01cc95540e3b4b9"
+      "openapi_version": "0.2.1322",
+      "openapi_bundle_hash": "747dc162122598c20859659dd46359f583438d2daf7cbd7de9427561f38b4652",
+      "frontend_bundle_hash": "f9d9536ccfe4eb2f3802c8a697901fdb268b1f60ab9fba0ee287f180a446453d"
     },
     "subsystems": {
       "postgresql_rls": {
@@ -829,7 +829,7 @@
         "status": "healthy",
         "description": "Row-Level Security isolation, migration consistency, and connection pool status",
         "details": {
-          "latency_ms": 0.39,
+          "latency_ms": 0.26,
           "server_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg12+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit",
           "active_role_non_bypass": false,
           "force_rls_verified": true,
@@ -906,7 +906,7 @@
       "status": "healthy",
       "description": "Row-Level Security isolation, migration consistency, and connection pool status",
       "details": {
-        "latency_ms": 0.39,
+        "latency_ms": 0.26,
         "server_version": "PostgreSQL 16.15 (Debian 16.15-1.pgdg12+2) on x86_64-pc-linux-gnu, compiled by gcc (Debian 12.2.0-14+deb12u1) 12.2.0, 64-bit",
         "active_role_non_bypass": false,
         "force_rls_verified": true,
@@ -979,10 +979,10 @@
   },
   "realtime_probe_sample": {
     "success": true,
-    "db_latency_ms": 0.39,
+    "db_latency_ms": 0.23,
     "notify_rtt_ms": 0.85,
-    "channel": "kb_diag_1768cc8851b4",
-    "message": "LISTEN/NOTIFY roundtrip successful on kb_diag_1768cc8851b4 (RTT: 0.85ms)"
+    "channel": "kb_diag_a72aed7a7dd6",
+    "message": "LISTEN/NOTIFY roundtrip successful on kb_diag_a72aed7a7dd6 (RTT: 0.85ms)"
   },
   "ws_ping_pong_frame_sample": {
     "inbound_client_frame": {

@@ -194,9 +194,9 @@ And the access visibility inspector:
         const imgMatches = Array.from(ch.content.matchAll(/!\[[^\]]*\]\(([^)]+)\)/g));
         expect(imgMatches.length).toBeGreaterThanOrEqual(1);
         for (const match of imgMatches) {
-          const src = match[1];
-          expect(src).toBeDefined();
-          const resolved = resolveSafeDocImageUrl(src!);
+          const src = match[1] ?? '';
+          expect(src).toBeTruthy();
+          const resolved = resolveSafeDocImageUrl(src);
           expect(resolved).not.toBeNull();
           expect(resolved).toMatch(/^\/docs-images\/[0-9a-zA-Z_-]+\.png$/);
         }

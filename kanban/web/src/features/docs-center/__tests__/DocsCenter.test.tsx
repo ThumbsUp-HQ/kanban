@@ -1025,7 +1025,7 @@ Here is **bold text**, *italic text*, \`inline code\`, and a [TOC Anchor](#my-an
       expect(WIKI_CHAPTERS[0]?.order).toBe(1);
       expect(WIKI_CHAPTERS[0]?.category).toBe('informational');
       expect(WIKI_CHAPTERS[0]?.track).toBe('Overview');
-      expect(WIKI_CHAPTERS.length).toBe(29);
+      expect(WIKI_CHAPTERS.length).toBe(34);
     });
 
     it('exercises resolveSafeDocImageUrl branches directly', () => {

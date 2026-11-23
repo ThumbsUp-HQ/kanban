@@ -33,6 +33,7 @@ from kanban.runners.hub import (
     RemoteRunnerRevokedError,
     RemoteRunnerUnavailableError,
     RunnerWssHub,
+    get_global_hub,
 )
 
 if TYPE_CHECKING:
@@ -555,7 +556,10 @@ async def test_endpoint_handshake_and_valid_lifecycle(
     as_principal: Callable[..., httpx.AsyncClient],
 ) -> None:
     """Test full valid WebSocket handshake, heartbeat interval, and clean disconnect."""
-    runner_id_str, _, fp_hex, app = await _setup_enrolled_runner(api_env, make_user, as_principal)
+    runner_id_str, runner_uuid, fp_hex, app = await _setup_enrolled_runner(
+        api_env, make_user, as_principal
+    )
+    get_global_hub()._job_to_runner["job-100"] = runner_uuid  # noqa: SLF001
 
     s_valid = AsyncWebSocketSession(app, headers={"x-client-cert-sha256": fp_hex})
     t_valid = asyncio.create_task(remote_runner_websocket_endpoint(s_valid.ws))
