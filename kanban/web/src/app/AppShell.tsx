@@ -49,6 +49,7 @@ export interface AppShellProps {
   projectId?: string | undefined;
   projectName?: string | undefined;
   modulesEnabled?: boolean | undefined;
+  showLayoutSwitcher?: boolean | undefined;
   issueCount?: number | null | undefined;
   currentSection?: string | undefined;
   accessManifest?: AccessManifestData | null | undefined;
@@ -105,6 +106,7 @@ export function AppShell({
   projectId,
   projectName,
   modulesEnabled = true,
+  showLayoutSwitcher,
   issueCount,
   currentSection = 'Work Items',
   accessManifest,
@@ -358,7 +360,7 @@ export function AppShell({
           issueCount={issueCount}
           accessManifest={accessManifest}
           systemStatus={systemStatus}
-          showLayoutSwitcher={false}
+          showLayoutSwitcher={showLayoutSwitcher}
           user={currentUser}
           hamburgerButtonRef={hamburgerButtonRef}
         />
