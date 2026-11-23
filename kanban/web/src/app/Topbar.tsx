@@ -460,40 +460,22 @@ export function Topbar({
                 </Link>
 
                 {isWorkspaceAdmin && (
-                  <>
-                    <Link
-                      to="/workspaces/settings"
-                      role="menuitem"
-                      data-testid="topbar-workspace-settings-link"
-                      className="kb-theme-radio kb-avatar-menu-link"
-                      onClick={() => {
-                        setAvatarMenuOpen(false);
-                      }}
-                    >
-                      <span>
-                        <span aria-hidden="true" className="kb-avatar-menu-icon">
-                          🏢
-                        </span>
-                        Workspace Settings
+                  <Link
+                    to="/workspaces/settings"
+                    role="menuitem"
+                    data-testid="topbar-workspace-settings-link"
+                    className="kb-theme-radio kb-avatar-menu-link"
+                    onClick={() => {
+                      setAvatarMenuOpen(false);
+                    }}
+                  >
+                    <span>
+                      <span aria-hidden="true" className="kb-avatar-menu-icon">
+                        🏢
                       </span>
-                    </Link>
-
-                    <Link
-                      to="/workspaces/settings/ai"
-                      role="menuitem"
-                      className="kb-theme-radio kb-avatar-menu-link"
-                      onClick={() => {
-                        setAvatarMenuOpen(false);
-                      }}
-                    >
-                      <span>
-                        <span aria-hidden="true" className="kb-avatar-menu-icon">
-                          🧠
-                        </span>
-                        Workspace AI Studio
-                      </span>
-                    </Link>
-                  </>
+                      Workspace Settings
+                    </span>
+                  </Link>
                 )}
 
                 {(isWorkspaceAdmin || isServerAdmin) && (

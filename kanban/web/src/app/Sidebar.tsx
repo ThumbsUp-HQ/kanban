@@ -735,6 +735,18 @@ export function Sidebar({
               )}
             </div>
 
+            {Boolean(user?.is_workspace_admin ?? user?.is_server_admin) && (
+              <Link
+                to="/workspaces/settings"
+                className="kb-sidebar-workspace-settings-gear"
+                data-testid="sidebar-workspace-settings-gear"
+                aria-label="Workspace Settings"
+                title="Workspace Settings"
+              >
+                <span aria-hidden="true">⚙️</span>
+              </Link>
+            )}
+
             <button
               type="button"
               className="kb-sidebar-nav-close-btn"
@@ -817,19 +829,6 @@ export function Sidebar({
                     🟨
                   </span>
                   <span>Stickies</span>
-                </NavLink>
-              </li>
-              <li>
-                <NavLink
-                  to="/docs"
-                  className="kb-sidebar-nav-item"
-                  data-testid="sidebar-docs-link"
-                  aria-current={currentPath === '/docs' || currentPath.startsWith('/docs/') || currentPath.startsWith('/help') ? 'page' : undefined}
-                >
-                  <span className="kb-sidebar-icon" aria-hidden="true">
-                    📖
-                  </span>
-                  <span>Docs</span>
                 </NavLink>
               </li>
             </ul>
@@ -1041,6 +1040,8 @@ export function Sidebar({
                         <NavLink
                           to={`/projects/${proj.key}/docs`}
                           className="kb-sidebar-nav-item"
+                          data-testid={`sidebar-project-docs-${proj.key}`}
+                          title={`Project Docs: ${proj.name}`}
                           aria-current={
                             currentPath.startsWith(`/projects/${proj.key}/docs`)
                               ? 'page'
@@ -1142,17 +1143,24 @@ export function Sidebar({
           </nav>
 
           <div className="kb-sidebar-footer">
-            <Link
+            <NavLink
               to="/docs"
               className="kb-sidebar-about-link"
-              data-testid="sidebar-footer-docs-link"
+              data-testid="sidebar-docs-link"
               title="Documentation Center"
+              aria-current={
+                currentPath === '/docs' ||
+                currentPath.startsWith('/docs/') ||
+                currentPath.startsWith('/help')
+                  ? 'page'
+                  : undefined
+              }
             >
               <span className="kb-sidebar-icon" aria-hidden="true">
                 📖
               </span>
               <span>Docs</span>
-            </Link>
+            </NavLink>
             <Link
               to="/about"
               className="kb-sidebar-about-link"
