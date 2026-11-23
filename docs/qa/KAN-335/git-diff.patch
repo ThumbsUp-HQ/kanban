@@ -1,0 +1,209 @@
+diff --git a/database/rls/context.py b/database/rls/context.py
+index 3995a34d..0b2ca180 100644
+--- a/database/rls/context.py
++++ b/database/rls/context.py
+@@ -20,6 +20,7 @@ __all__ = [
+     "RLSRoleViolationError",
+     "UnboundRLSSessionError",
+     "bind_rls_context",
++    "bind_rls_context_sync",
+ ]
+ 
+ _SCOPE_REGEX = re.compile(r"^[a-z0-9][a-z0-9:._-]{0,63}$")
+@@ -115,6 +116,61 @@ class RLSContext:
+         self._normalize_credential_boundary()
+ 
+ 
++def _build_rls_bind_stmt_and_params(ctx: RLSContext) -> tuple[Any, dict[str, Any]]:
++    user_hash_val = ""
++    if ctx.user_access_hash is not None:
++        if isinstance(ctx.user_access_hash, bytes):
++            user_hash_val = ctx.user_access_hash.hex()
++        else:
++            user_hash_val = str(ctx.user_access_hash)
++
++    ws_list = (
++        ",".join(str(w) for w in ctx.credential_workspaces) if ctx.credential_workspaces else ""
++    )
++    proj_list = ",".join(str(p) for p in ctx.credential_projects) if ctx.credential_projects else ""
++    cap_mask_str = (
++        str(ctx.credential_capability_mask) if ctx.credential_capability_mask is not None else ""
++    )
++
++    stmt = text(
++        "SELECT set_config('app.principal_id', :principal_id, true), "
++        "set_config('app.workspace_id', :workspace_id, true), "
++        "set_config('app.token_scopes', :token_scopes, true), "
++        "set_config('app.aal_level', :aal_level, true), "
++        "set_config('app.user_access_hash', :user_access_hash, true), "
++        "set_config('app.agent_principal_id', :agent_principal_id, true), "
++        "set_config('app.ephemeral_project_id', :ephemeral_project_id, true), "
++        "set_config('app.credential_workspaces', :credential_workspaces, true), "
++        "set_config('app.credential_projects', :credential_projects, true), "
++        "set_config('app.credential_capability_mask', :credential_capability_mask, true)"
++    )
++    params = {
++        "principal_id": str(ctx.principal_id),
++        "workspace_id": str(ctx.workspace_id),
++        "token_scopes": ",".join(ctx.token_scopes),
++        "aal_level": str(ctx.aal_level),
++        "user_access_hash": user_hash_val,
++        "agent_principal_id": (
++            str(ctx.agent_principal_id) if ctx.agent_principal_id is not None else ""
++        ),
++        "ephemeral_project_id": (
++            str(ctx.ephemeral_project_id) if ctx.ephemeral_project_id is not None else ""
++        ),
++        "credential_workspaces": ws_list,
++        "credential_projects": proj_list,
++        "credential_capability_mask": cap_mask_str,
++    }
++    return stmt, params
++
++
++def bind_rls_context_sync(conn: Any, ctx: RLSContext) -> None:  # noqa: ANN401
++    """Execute SET LOCAL context on a connection or sync session synchronously."""
++    stmt, params = _build_rls_bind_stmt_and_params(ctx)
++    conn.execute(stmt, params)
++    if ctx.read_only:
++        conn.execute(text("SET LOCAL TRANSACTION READ ONLY"))
++
++
+ async def bind_rls_context(session: AsyncSession, ctx: RLSContext) -> None:
+     """Bind RLS session context variables using SET LOCAL within an active transaction."""
+     if not session.in_transaction():
+@@ -123,53 +179,7 @@ async def bind_rls_context(session: AsyncSession, ctx: RLSContext) -> None:
+ 
+     session.info["_binding_in_progress"] = True
+     try:
+-        user_hash_val = ""
+-        if ctx.user_access_hash is not None:
+-            if isinstance(ctx.user_access_hash, bytes):
+-                user_hash_val = ctx.user_access_hash.hex()
+-            else:
+-                user_hash_val = str(ctx.user_access_hash)
+-
+-        ws_list = (
+-            ",".join(str(w) for w in ctx.credential_workspaces) if ctx.credential_workspaces else ""
+-        )
+-        proj_list = (
+-            ",".join(str(p) for p in ctx.credential_projects) if ctx.credential_projects else ""
+-        )
+-        cap_mask_str = (
+-            str(ctx.credential_capability_mask)
+-            if ctx.credential_capability_mask is not None
+-            else ""
+-        )
+-
+-        stmt = text(
+-            "SELECT set_config('app.principal_id', :principal_id, true), "
+-            "set_config('app.workspace_id', :workspace_id, true), "
+-            "set_config('app.token_scopes', :token_scopes, true), "
+-            "set_config('app.aal_level', :aal_level, true), "
+-            "set_config('app.user_access_hash', :user_access_hash, true), "
+-            "set_config('app.agent_principal_id', :agent_principal_id, true), "
+-            "set_config('app.ephemeral_project_id', :ephemeral_project_id, true), "
+-            "set_config('app.credential_workspaces', :credential_workspaces, true), "
+-            "set_config('app.credential_projects', :credential_projects, true), "
+-            "set_config('app.credential_capability_mask', :credential_capability_mask, true)"
+-        )
+-        params = {
+-            "principal_id": str(ctx.principal_id),
+-            "workspace_id": str(ctx.workspace_id),
+-            "token_scopes": ",".join(ctx.token_scopes),
+-            "aal_level": str(ctx.aal_level),
+-            "user_access_hash": user_hash_val,
+-            "agent_principal_id": (
+-                str(ctx.agent_principal_id) if ctx.agent_principal_id is not None else ""
+-            ),
+-            "ephemeral_project_id": (
+-                str(ctx.ephemeral_project_id) if ctx.ephemeral_project_id is not None else ""
+-            ),
+-            "credential_workspaces": ws_list,
+-            "credential_projects": proj_list,
+-            "credential_capability_mask": cap_mask_str,
+-        }
++        stmt, params = _build_rls_bind_stmt_and_params(ctx)
+         await session.execute(stmt, params)
+         if ctx.read_only:
+             await session.execute(text("SET LOCAL TRANSACTION READ ONLY"))
+diff --git a/database/session.py b/database/session.py
+index aabed262..6792985c 100644
+--- a/database/session.py
++++ b/database/session.py
+@@ -19,6 +19,7 @@ from database.rls.context import (
+     RLSRoleViolationError,
+     UnboundRLSSessionError,
+     bind_rls_context,
++    bind_rls_context_sync,
+ )
+ 
+ __all__ = [
+@@ -142,9 +143,15 @@ class RLSSessionFactory:
+         sess = self._sessionmaker()
+         sess.info["rls_managed_session"] = True
+ 
+-        def _rebind_on_begin(sync_sess: Session, _trans: SessionTransaction, _conn: object) -> None:
++        def _rebind_on_begin(
++            sync_sess: Session,
++            _trans: SessionTransaction,
++            conn: Any,  # noqa: ANN401
++        ) -> None:
+             sync_sess.info["rls_bound"] = True
+             sync_sess.info["rls_context"] = ctx
++            if conn is not None:
++                bind_rls_context_sync(conn, ctx)
+ 
+         event.listen(sess.sync_session, "after_begin", _rebind_on_begin)
+         try:
+diff --git a/database/tests/test_rls_session_rebegin.py b/database/tests/test_rls_session_rebegin.py
+new file mode 100644
+index 00000000..a3618692
+--- /dev/null
++++ b/database/tests/test_rls_session_rebegin.py
+@@ -0,0 +1,45 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Tests for re-executing SET LOCAL GUC context on transaction re-begin (KAN-335)."""
++
++import uuid
++
++import pytest
++from sqlalchemy import text
++from sqlalchemy.ext.asyncio import AsyncEngine
++
++from database.session import RLSContext, RLSSessionFactory
++
++
++@pytest.mark.asyncio
++async def test_rls_session_rebegin_preserves_guc_context(pg_worker_db: AsyncEngine) -> None:
++    """Verify that committing a transaction and continuing in the same session re-binds GUCs."""
++    factory = RLSSessionFactory(pg_worker_db)
++    ws_id = uuid.uuid4()
++    p_id = uuid.uuid4()
++    ctx = RLSContext(
++        principal_id=p_id,
++        workspace_id=ws_id,
++        token_scopes=("user", "read"),
++        aal_level=2,
++    )
++
++    async with factory.session(ctx) as session:
++        # Transaction 1
++        ws1 = await session.scalar(text("SELECT current_setting('app.workspace_id', true)"))
++        p1 = await session.scalar(text("SELECT current_setting('app.principal_id', true)"))
++        aal1 = await session.scalar(text("SELECT current_setting('app.aal_level', true)"))
++        assert ws1 == str(ws_id)
++        assert p1 == str(p_id)
++        assert aal1 == "2"
++
++        # Commit Transaction 1
++        await session.commit()
++
++        # Transaction 2 (mid-session continuation)
++        ws2 = await session.scalar(text("SELECT current_setting('app.workspace_id', true)"))
++        p2 = await session.scalar(text("SELECT current_setting('app.principal_id', true)"))
++        aal2 = await session.scalar(text("SELECT current_setting('app.aal_level', true)"))
++        assert ws2 == str(ws_id), f"Expected {ws_id} in Tx 2, got {ws2!r}"
++        assert p2 == str(p_id), f"Expected {p_id} in Tx 2, got {p2!r}"
++        assert aal2 == "2", f"Expected '2' in Tx 2, got {aal2!r}"

@@ -99,13 +99,36 @@ class TotpService:
         """Initialize service with root KEK provider."""
         self._kek = kek
 
+    async def has_active_factor(
+        self,
+        session: AsyncSession,
+        principal_id: uuid.UUID,
+    ) -> bool:
+        """Check if principal has an active TOTP factor or WebAuthn credentials."""
+        res = await session.execute(
+            text(
+                "SELECT has_active_totp, webauthn_credential_count FROM kb_auth.mfa_status(:p_id)"
+            ),
+            {"p_id": principal_id},
+        )
+        row = res.mappings().first()
+        if not row:
+            return False
+        return bool(row["has_active_totp"] or (row["webauthn_credential_count"] or 0) > 0)
+
     async def enroll(
         self,
         session: AsyncSession,
         principal_id: uuid.UUID,
         username: str,
+        *,
+        deny_if_active: bool = False,
     ) -> tuple[str, str]:
         """Enroll a new pending TOTP factor. Returns (otpauth_uri, secret_b32)."""
+        if deny_if_active and await self.has_active_factor(session, principal_id):
+            msg = "Cannot enroll or overwrite TOTP factor when MFA is already active"
+            raise ValueError(msg)
+
         secret = secrets.token_bytes(20)
         secret_b32 = base64.b32encode(secret).decode("ascii")
         aad = b"kanban/totp/v1|" + principal_id.bytes

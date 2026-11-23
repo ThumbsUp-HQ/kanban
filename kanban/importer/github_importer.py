@@ -44,6 +44,7 @@ from kanban.content.svg_sanitizer import sanitize_svg
 from kanban.importer.cutover_verifier import CheckResult, CutoverAuditReport
 from kanban.importer.plane_importer import ImportIntegrityError
 from kanban.importer.plane_mapper import ImportDiffReport
+from kanban.security.push_protection import enforce_secret_push_protection
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.board_rank import allocate_initial_board_rank
 
@@ -332,8 +333,12 @@ class GitHubIssuesImporter:
             gh_id_str = str(num)
 
             title = str(item.get("title") or f"GitHub Issue #{num}").strip()
+            title = enforce_secret_push_protection(title, field="summary") or ""
             body = str(item.get("body") or "")
             norm_desc = normalize_to_markdown(body)
+            norm_desc = (
+                enforce_secret_push_protection(norm_desc, field="description_markdown") or ""
+            )
 
             raw_state = str(item.get("state") or "open").lower()
             state_reason = str(item.get("state_reason") or "").lower()
@@ -414,6 +419,7 @@ class GitHubIssuesImporter:
                 original_created_by_id=self.caller.principal_id,
                 board_rank=allocate_initial_board_rank(next_seq),
                 ancestry_path=issue_id.hex,
+                provenance_tier="imported",
             )
             self.session.add(new_issue)
             await self.session.flush()
@@ -705,6 +711,7 @@ class GitHubIssuesImporter:
                 norm_c = normalize_to_markdown(c_body)
                 if not norm_c.strip():
                     continue
+                norm_c = enforce_secret_push_protection(norm_c, field="body_markdown") or ""
 
                 c_sha = hashlib.sha256(norm_c.encode("utf-8")).digest()
                 c_source_key = ("comment", c_id_raw) if c_id_raw else None
@@ -730,6 +737,7 @@ class GitHubIssuesImporter:
                     author_id=self.caller.principal_id,
                     body_markdown=norm_c,
                     created_at=c_created_at,
+                    provenance_tier="imported",
                 )
                 self.session.add(comment)
                 if c_source_key:

@@ -1,0 +1,806 @@
+diff --git a/kanban/api/v1/custom_field_execution.py b/kanban/api/v1/custom_field_execution.py
+index 08466098..562cbd2c 100644
+--- a/kanban/api/v1/custom_field_execution.py
++++ b/kanban/api/v1/custom_field_execution.py
+@@ -29,6 +29,7 @@ from kanban.custom_fields.builtin_wasm import resolve_wasm_module_bytes
+ from kanban.custom_fields.executor import CustomFieldExecutor
+ from kanban.custom_fields.service import CustomFieldDefinitionService
+ from kanban.sandbox.wasm_runner import TierAWasmRunner, WasmRunError
++from kanban.security.push_protection import enforce_secret_push_protection
+ from kanban.security.ratelimit.base import RateLimitPolicy
+ from kanban.security.ratelimit.pg import PgRateLimiter
+ from kanban.services.activity import ActivityEventType, record_activity
+@@ -157,6 +158,9 @@ async def upload_wasm_module(
+         proj = await get_project_or_404(session, caller, project)
+         await CustomFieldDefinitionService.require_admin_and_aal2(session, caller, proj)
+ 
++        if body.name:
++            enforce_secret_push_protection(body.name, field="name")
++
+         try:
+             wasm_bytes = base64.b64decode(body.wasm_base64, validate=True)
+         except Exception as ex:
+@@ -237,6 +241,9 @@ async def test_execute_custom_field(
+         proj = await get_project_or_404(session, caller, project)
+         await CustomFieldDefinitionService.require_admin_and_aal2(session, caller, proj)
+ 
++        if body.script_source and not body.script_source.startswith("AGFzbQ"):
++            enforce_secret_push_protection(body.script_source, field="script_source")
++
+         if str(body.tier) == "nsjail":
+             from kanban.custom_fields.service import assert_tier_available  # noqa: PLC0415
+ 
+diff --git a/kanban/custom_fields/executor.py b/kanban/custom_fields/executor.py
+index 01f5b9d1..4c23e005 100644
+--- a/kanban/custom_fields/executor.py
++++ b/kanban/custom_fields/executor.py
+@@ -47,6 +47,7 @@ from kanban.sandbox.wasm_runner import (
+     UnavailableTierBRunner,
+     WasmRunError,
+ )
++from kanban.security.push_protection import enforce_secret_push_protection
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.issue_keys import resolve_issue_ref
+ 
+@@ -512,6 +513,20 @@ def _get_caller_access_hash(caller: PrincipalContext) -> bytes:
+     return hashlib.sha256(raw).digest()
+ 
+ 
++def _scan_value_for_secrets(val: Any) -> None:  # noqa: ANN401
++    """Recursively enforce secret push-protection on custom field output values."""
++    if isinstance(val, str):
++        enforce_secret_push_protection(val, field="custom_field_value")
++    elif isinstance(val, dict):
++        for k, v in val.items():
++            if isinstance(k, str):
++                enforce_secret_push_protection(k, field="custom_field_key")
++            _scan_value_for_secrets(v)
++    elif isinstance(val, (list, tuple, set)):
++        for item in val:
++            _scan_value_for_secrets(item)
++
++
+ class CustomFieldExecutor:
+     """Manages secure execution and partitioned caching for custom fields."""
+ 
+@@ -719,6 +734,7 @@ class CustomFieldExecutor:
+                 metadata,
+                 raw_output,
+             )
++            _scan_value_for_secrets(validated_value)
+         except Exception as ex:
+             raise ProblemException(
+                 status=422,
+@@ -945,7 +961,7 @@ class CustomFieldExecutor:
+                 )
+         return results
+ 
+-    async def test_execute(  # noqa: C901, PLR0915
++    async def test_execute(  # noqa: C901, PLR0912, PLR0915
+         self,
+         session: AsyncSession,
+         caller: PrincipalContext,
+@@ -1038,6 +1054,7 @@ class CustomFieldExecutor:
+                 body.output_format, body.output_format_metadata
+             )
+             validated_val = validate_field_output_value(body.output_format, parsed_meta, raw_val)
++            _scan_value_for_secrets(validated_val)
+             elapsed_ms = max(latency_ms, int((time.perf_counter() - start_time) * 1000))
+             logs += f"Success: validated format {body.output_format}\n"
+             return {
+@@ -1049,6 +1066,8 @@ class CustomFieldExecutor:
+                 "error": None,
+             }
+         except ProblemException as pe:
++            if pe.code in ("SECRET_DETECTED_IN_PAYLOAD", "SECRET_PUSH_PROTECTED"):
++                raise
+             elapsed_ms = max(1, int((time.perf_counter() - start_time) * 1000))
+             logs += f"Execution error: {pe.code} - {pe.detail}\n"
+             return {
+diff --git a/kanban/custom_fields/service.py b/kanban/custom_fields/service.py
+index 4c79241c..8eca1bdf 100644
+--- a/kanban/custom_fields/service.py
++++ b/kanban/custom_fields/service.py
+@@ -23,6 +23,7 @@ from kanban.custom_fields.manifest import (
+ )
+ from kanban.custom_fields.output_formats import parse_output_format_metadata
+ from kanban.security.permissions import Capability, require_capability
++from kanban.security.push_protection import enforce_secret_push_protection
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.projects import get_project_or_404
+ from kanban.standalone.export_service import get_standalone_status
+@@ -223,6 +224,11 @@ class CustomFieldDefinitionService:
+         project = await get_project_or_404(session, caller, project_ref)
+         await cls.require_admin_and_aal2(session, caller, project)
+ 
++        if payload.name:
++            enforce_secret_push_protection(payload.name, field="name")
++        if payload.script_source and not payload.script_source.startswith("AGFzbQ"):
++            enforce_secret_push_protection(payload.script_source, field="script_source")
++
+         existing = (
+             await session.execute(
+                 select(CustomFieldDefinition.id).where(
+@@ -386,6 +392,11 @@ class CustomFieldDefinitionService:
+         project = await get_project_or_404(session, caller, project_ref)
+         await cls.require_admin_and_aal2(session, caller, project)
+ 
++        if payload.name:
++            enforce_secret_push_protection(payload.name, field="name")
++        if payload.script_source and not payload.script_source.startswith("AGFzbQ"):
++            enforce_secret_push_protection(payload.script_source, field="script_source")
++
+         row = await cls._find_definition(session, caller.workspace_id, project.id, field_id)
+         if row is None:
+             not_found()
+diff --git a/kanban/importer/github_importer.py b/kanban/importer/github_importer.py
+index fc0019f3..9130f27d 100644
+--- a/kanban/importer/github_importer.py
++++ b/kanban/importer/github_importer.py
+@@ -44,6 +44,7 @@ from kanban.content.svg_sanitizer import sanitize_svg
+ from kanban.importer.cutover_verifier import CheckResult, CutoverAuditReport
+ from kanban.importer.plane_importer import ImportIntegrityError
+ from kanban.importer.plane_mapper import ImportDiffReport
++from kanban.security.push_protection import enforce_secret_push_protection
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.board_rank import allocate_initial_board_rank
+ 
+@@ -332,8 +333,12 @@ class GitHubIssuesImporter:
+             gh_id_str = str(num)
+ 
+             title = str(item.get("title") or f"GitHub Issue #{num}").strip()
++            title = enforce_secret_push_protection(title, field="summary") or ""
+             body = str(item.get("body") or "")
+             norm_desc = normalize_to_markdown(body)
++            norm_desc = (
++                enforce_secret_push_protection(norm_desc, field="description_markdown") or ""
++            )
+ 
+             raw_state = str(item.get("state") or "open").lower()
+             state_reason = str(item.get("state_reason") or "").lower()
+@@ -414,6 +419,7 @@ class GitHubIssuesImporter:
+                 original_created_by_id=self.caller.principal_id,
+                 board_rank=allocate_initial_board_rank(next_seq),
+                 ancestry_path=issue_id.hex,
++                provenance_tier="imported",
+             )
+             self.session.add(new_issue)
+             await self.session.flush()
+@@ -705,6 +711,7 @@ class GitHubIssuesImporter:
+                 norm_c = normalize_to_markdown(c_body)
+                 if not norm_c.strip():
+                     continue
++                norm_c = enforce_secret_push_protection(norm_c, field="body_markdown") or ""
+ 
+                 c_sha = hashlib.sha256(norm_c.encode("utf-8")).digest()
+                 c_source_key = ("comment", c_id_raw) if c_id_raw else None
+@@ -730,6 +737,7 @@ class GitHubIssuesImporter:
+                     author_id=self.caller.principal_id,
+                     body_markdown=norm_c,
+                     created_at=c_created_at,
++                    provenance_tier="imported",
+                 )
+                 self.session.add(comment)
+                 if c_source_key:
+diff --git a/kanban/importer/jira_importer.py b/kanban/importer/jira_importer.py
+index 98a96e71..df4ac16e 100644
+--- a/kanban/importer/jira_importer.py
++++ b/kanban/importer/jira_importer.py
+@@ -41,6 +41,7 @@ from kanban.content.svg_sanitizer import sanitize_svg
+ from kanban.importer.cutover_verifier import CheckResult, CutoverAuditReport
+ from kanban.importer.plane_importer import ImportIntegrityError
+ from kanban.importer.plane_mapper import ImportDiffReport
++from kanban.security.push_protection import enforce_secret_push_protection
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.board_rank import allocate_initial_board_rank
+ 
+@@ -433,6 +434,7 @@ class JiraImporter:
+                 continue
+ 
+             summary = str(fields.get("summary") or "Untitled Jira Issue").strip()
++            summary = enforce_secret_push_protection(summary, field="summary") or ""
+ 
+             raw_desc = fields.get("description")
+             if isinstance(raw_desc, dict):
+@@ -442,6 +444,9 @@ class JiraImporter:
+             else:
+                 md_text = ""
+             norm_desc = normalize_to_markdown(md_text)
++            norm_desc = (
++                enforce_secret_push_protection(norm_desc, field="description_markdown") or ""
++            )
+ 
+             # Map state
+             status_obj = fields.get("status", {})
+@@ -538,6 +543,7 @@ class JiraImporter:
+                 original_created_by_id=self.caller.principal_id,
+                 board_rank=allocate_initial_board_rank(next_seq),
+                 ancestry_path=issue_id.hex,
++                provenance_tier="imported",
+             )
+             self.session.add(new_issue)
+             await self.session.flush()
+@@ -733,6 +739,7 @@ class JiraImporter:
+                 norm_c_md = normalize_to_markdown(c_md)
+                 if not norm_c_md.strip():
+                     continue
++                norm_c_md = enforce_secret_push_protection(norm_c_md, field="body_markdown") or ""
+ 
+                 c_sha = hashlib.sha256(norm_c_md.encode("utf-8")).digest()
+                 c_source_key = ("comment", c_id_raw) if c_id_raw else None
+@@ -758,6 +765,7 @@ class JiraImporter:
+                     author_id=self.caller.principal_id,
+                     body_markdown=norm_c_md,
+                     created_at=c_created_at,
++                    provenance_tier="imported",
+                 )
+                 self.session.add(comment)
+                 if c_source_key:
+diff --git a/kanban/importer/linear_importer.py b/kanban/importer/linear_importer.py
+index 1c9c2827..d6736265 100644
+--- a/kanban/importer/linear_importer.py
++++ b/kanban/importer/linear_importer.py
+@@ -43,6 +43,7 @@ from kanban.content.svg_sanitizer import sanitize_svg
+ from kanban.importer.cutover_verifier import CheckResult, CutoverAuditReport
+ from kanban.importer.plane_importer import ImportIntegrityError
+ from kanban.importer.plane_mapper import ImportDiffReport
++from kanban.security.push_protection import enforce_secret_push_protection
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.board_rank import allocate_initial_board_rank
+ 
+@@ -401,8 +402,12 @@ class LinearImporter:
+                 continue
+ 
+             title = str(item.get("title") or item.get("Title") or "Untitled Linear Issue").strip()
++            title = enforce_secret_push_protection(title, field="summary") or ""
+             desc_raw = str(item.get("description") or item.get("Description") or "")
+             norm_desc = normalize_to_markdown(desc_raw)
++            norm_desc = (
++                enforce_secret_push_protection(norm_desc, field="description_markdown") or ""
++            )
+ 
+             # State mapping
+             state_raw = item.get("state") or item.get("Status") or item.get("status")
+@@ -493,6 +498,7 @@ class LinearImporter:
+                 original_created_by_id=self.caller.principal_id,
+                 board_rank=allocate_initial_board_rank(next_seq),
+                 ancestry_path=issue_id.hex,
++                provenance_tier="imported",
+             )
+             self.session.add(new_issue)
+             await self.session.flush()
+@@ -681,6 +687,7 @@ class LinearImporter:
+                 norm_c_md = normalize_to_markdown(c_body)
+                 if not norm_c_md.strip():
+                     continue
++                norm_c_md = enforce_secret_push_protection(norm_c_md, field="body_markdown") or ""
+ 
+                 c_sha = hashlib.sha256(norm_c_md.encode("utf-8")).digest()
+                 c_source_key = ("comment", c_id_raw) if c_id_raw else None
+@@ -706,6 +713,7 @@ class LinearImporter:
+                     author_id=self.caller.principal_id,
+                     body_markdown=norm_c_md,
+                     created_at=c_created_at,
++                    provenance_tier="imported",
+                 )
+                 self.session.add(comment)
+                 if c_source_key:
+diff --git a/kanban/importer/plane_importer.py b/kanban/importer/plane_importer.py
+index 993d22f1..5823569e 100644
+--- a/kanban/importer/plane_importer.py
++++ b/kanban/importer/plane_importer.py
+@@ -50,6 +50,7 @@ from kanban.importer.plane_mapper import (
+     compute_source_sha256,
+     normalize_state_key,
+ )
++from kanban.security.push_protection import enforce_secret_push_protection
+ from kanban.services.activity import ActivityEventType, record_activity
+ from kanban.services.board_rank import allocate_initial_board_rank
+ 
+@@ -978,6 +979,9 @@ class PlaneImporter:
+                 clean_issue_name = (
+                     normalize_plain_text(issue.name)[:500] if issue.name else ""
+                 ) or "(untitled issue)"
++                clean_issue_name = (
++                    enforce_secret_push_protection(clean_issue_name, field="summary") or ""
++                )
+ 
+                 iss_created_at = _parse_iso_datetime(getattr(issue, "created_at", None))
+                 iss_updated_at = _parse_iso_datetime(getattr(issue, "updated_at", None))
+@@ -1032,6 +1036,10 @@ class PlaneImporter:
+                     if provenance_line not in clean_desc:
+                         clean_desc = provenance_line + clean_desc
+ 
++                clean_desc = (
++                    enforce_secret_push_protection(clean_desc, field="description_markdown") or ""
++                )
++
+                 # Resolve state strictly within issue_proj
+                 target_state_id = None
+                 raw_st_ref = issue.state_id or issue.state
+@@ -1102,6 +1110,7 @@ class PlaneImporter:
+                     start_date=s_date,
+                     due_date=t_date,
+                     ancestry_path=ancestry,
++                    provenance_tier="imported",
+                 )
+                 self.session.add(new_issue)
+                 await self.session.flush()
+@@ -1220,6 +1229,9 @@ class PlaneImporter:
+ 
+                 if not clean_comment.strip():
+                     clean_comment = "(empty comment)"
++                clean_comment = (
++                    enforce_secret_push_protection(clean_comment, field="body_markdown") or ""
++                )
+ 
+                 mapped_author_id = (
+                     _resolve_principal(comm.actor or comm.created_by) or self.caller.principal_id
+@@ -1236,6 +1248,7 @@ class PlaneImporter:
+                     body_markdown=clean_comment,
+                     parent_comment_id=target_parent_comm,
+                     created_at=comm_created_at,
++                    provenance_tier="imported",
+                 )
+                 self.session.add(new_comment)
+                 await self.session.flush()
+diff --git a/kanban/security/push_protection.py b/kanban/security/push_protection.py
+index a5ca04fe..60c1eb32 100644
+--- a/kanban/security/push_protection.py
++++ b/kanban/security/push_protection.py
+@@ -198,9 +198,13 @@ def is_exempt_token(token: str) -> bool:
+         _RE_UUID.match(token)
+         or _RE_HEX_DIGEST.match(token)
+         or _RE_BASE62_RANK.match(token)
+-        or (token.startswith(("http://", "https://")) and "@" not in token)
++        or (token.startswith(("http://", "https://", "/")) and "@" not in token)
+     ):
+         return True
++    if "/" in token and "@" not in token:
++        parts = token.split("/")
++        if any(_RE_UUID.match(p) or _RE_HEX_DIGEST.match(p) for p in parts):
++            return True
+     return token.lower() in _EXEMPT_WORDS
+ 
+ 
+diff --git a/kanban/tests/security/test_importer_push_protection.py b/kanban/tests/security/test_importer_push_protection.py
+new file mode 100644
+index 00000000..b82a16c6
+--- /dev/null
++++ b/kanban/tests/security/test_importer_push_protection.py
+@@ -0,0 +1,435 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Security tests for Secret Push Protection and Taint Scanning on Importers and Custom Fields (KAN-336 / KB-REDTEAM-05)."""
++# ruff: noqa: E501, TC002
++
++from __future__ import annotations
++
++import pytest
++from sqlalchemy import select, text
++from sqlalchemy.ext.asyncio import AsyncSession
++
++from database.models import (
++    Issue,
++    IssueComment,
++    IssueKeyAlias,
++    Project,
++)
++from database.tests.conftest import bootstrap_workspace_admin
++from kanban.api.deps import PrincipalContext
++from kanban.api.problems import ProblemException
++from kanban.api.v1.schemas.custom_fields import (
++    CustomFieldCreateRequest,
++    CustomFieldTestExecuteRequest,
++)
++from kanban.custom_fields.executor import CustomFieldExecutor
++from kanban.custom_fields.service import CustomFieldDefinitionService
++from kanban.importer.github_importer import GitHubIssuesImporter
++from kanban.importer.jira_importer import JiraImporter
++from kanban.importer.linear_importer import LinearImporter
++
++TEST_SECRET_AWS = "AKIAIOSFODNN7EXAMPLE"
++EXPECTED_SECRET_CODES = ("SECRET_DETECTED_IN_PAYLOAD", "SECRET_PUSH_PROTECTED")
++
++
++@pytest.fixture
++async def setup_import_env(
++    db_session: AsyncSession,
++) -> tuple[AsyncSession, PrincipalContext]:
++    """Bootstrap workspace, admin principal, and RLS context for security testing."""
++    ws_id, admin_id = await bootstrap_workspace_admin(db_session)
++
++    await db_session.execute(
++        text(
++            "INSERT INTO role_bindings (principal_id, workspace_id, role, scope_type, project_id) "
++            "VALUES (:p_id, :ws_id, 'SERVER_ADMIN', 'server', NULL)"
++        ),
++        {"p_id": admin_id, "ws_id": ws_id},
++    )
++
++    await db_session.execute(
++        text(
++            "SELECT set_config('app.current_workspace_id', :ws, true), "
++            "set_config('app.current_principal_id', :pid, true), "
++            "set_config('app.aal_level', '2', true)"
++        ),
++        {"ws": str(ws_id), "pid": str(admin_id)},
++    )
++
++    caller = PrincipalContext(
++        principal_id=admin_id,
++        workspace_id=ws_id,
++        is_server_admin=True,
++        aal_level=2,
++    )
++    return db_session, caller
++
++
++@pytest.mark.asyncio
++async def test_jira_importer_blocks_secret_in_summary(
++    setup_import_env: tuple[AsyncSession, PrincipalContext],
++) -> None:
++    """Verify Jira import blocks payloads containing high-confidence secrets in summary."""
++    session, caller = setup_import_env
++    importer = JiraImporter(session=session, caller=caller)
++
++    jira_export = {
++        "issues": [
++            {
++                "key": "JIRA-SEC-1",
++                "fields": {
++                    "summary": f"Leaked AWS Key {TEST_SECRET_AWS}",
++                    "description": "Safe description",
++                    "status": {"name": "Backlog"},
++                    "priority": {"name": "Medium"},
++                },
++            }
++        ]
++    }
++
++    with pytest.raises(ProblemException) as exc_info:
++        await importer.run_import(jira_export, target_project_key="JIRA", dry_run=False)
++
++    assert exc_info.value.code in EXPECTED_SECRET_CODES
++    assert exc_info.value.status == 422
++
++
++@pytest.mark.asyncio
++async def test_jira_importer_blocks_secret_in_description(
++    setup_import_env: tuple[AsyncSession, PrincipalContext],
++) -> None:
++    """Verify Jira import blocks payloads containing high-confidence secrets in description."""
++    session, caller = setup_import_env
++    importer = JiraImporter(session=session, caller=caller)
++
++    jira_export = {
++        "issues": [
++            {
++                "key": "JIRA-SEC-2",
++                "fields": {
++                    "summary": "Safe summary",
++                    "description": f"Leaked AWS key in desc: {TEST_SECRET_AWS}",
++                    "status": {"name": "Backlog"},
++                    "priority": {"name": "Medium"},
++                },
++            }
++        ]
++    }
++
++    with pytest.raises(ProblemException) as exc_info:
++        await importer.run_import(jira_export, target_project_key="JIRA", dry_run=False)
++
++    assert exc_info.value.code in EXPECTED_SECRET_CODES
++    assert exc_info.value.status == 422
++
++
++@pytest.mark.asyncio
++async def test_jira_importer_blocks_secret_in_comments(
++    setup_import_env: tuple[AsyncSession, PrincipalContext],
++) -> None:
++    """Verify Jira import blocks payloads containing high-confidence secrets in comments."""
++    session, caller = setup_import_env
++    importer = JiraImporter(session=session, caller=caller)
++
++    jira_export = {
++        "issues": [
++            {
++                "key": "JIRA-SEC-3",
++                "fields": {
++                    "summary": "Safe summary",
++                    "description": "Safe description",
++                    "status": {"name": "Backlog"},
++                    "priority": {"name": "Medium"},
++                    "comment": {
++                        "comments": [
++                            {
++                                "id": "c-sec-1",
++                                "body": f"Here is the secret token: {TEST_SECRET_AWS}",
++                            }
++                        ]
++                    },
++                },
++            }
++        ]
++    }
++
++    with pytest.raises(ProblemException) as exc_info:
++        await importer.run_import(jira_export, target_project_key="JIRA", dry_run=False)
++
++    assert exc_info.value.code in EXPECTED_SECRET_CODES
++    assert exc_info.value.status == 422
++
++
++@pytest.mark.asyncio
++async def test_github_importer_blocks_secret_in_issue_and_comment(
++    setup_import_env: tuple[AsyncSession, PrincipalContext],
++) -> None:
++    """Verify GitHub import blocks secrets in title, body, and comments."""
++    session, caller = setup_import_env
++    importer = GitHubIssuesImporter(session=session, caller=caller)
++
++    gh_export_bad_title = [
++        {
++            "number": 101,
++            "title": f"Secret in Title {TEST_SECRET_AWS}",
++            "body": "Normal body",
++            "state": "open",
++        }
++    ]
++
++    with pytest.raises(ProblemException) as exc_info:
++        await importer.run_import(gh_export_bad_title, target_project_key="GH", dry_run=False)
++    assert exc_info.value.code in EXPECTED_SECRET_CODES
++
++    gh_export_bad_comment = [
++        {
++            "number": 102,
++            "title": "Clean title",
++            "body": "Normal body",
++            "state": "open",
++            "comments": [
++                {
++                    "id": 5551,
++                    "body": f"Leaked credentials: {TEST_SECRET_AWS}",
++                }
++            ],
++        }
++    ]
++
++    with pytest.raises(ProblemException) as exc_info2:
++        await importer.run_import(gh_export_bad_comment, target_project_key="GH", dry_run=False)
++    assert exc_info2.value.code in EXPECTED_SECRET_CODES
++
++
++@pytest.mark.asyncio
++async def test_linear_importer_blocks_secret_in_issue_and_comment(
++    setup_import_env: tuple[AsyncSession, PrincipalContext],
++) -> None:
++    """Verify Linear import blocks secrets in title, description, and comments."""
++    session, caller = setup_import_env
++    importer = LinearImporter(session=session, caller=caller)
++
++    linear_export_bad_desc = [
++        {
++            "id": "LIN-201",
++            "title": "Clean Linear Title",
++            "description": f"Found key {TEST_SECRET_AWS}",
++            "state": {"name": "Todo"},
++        }
++    ]
++
++    with pytest.raises(ProblemException) as exc_info:
++        await importer.run_import(linear_export_bad_desc, target_project_key="LIN", dry_run=False)
++    assert exc_info.value.code in EXPECTED_SECRET_CODES
++
++    linear_export_bad_comment = [
++        {
++            "id": "LIN-202",
++            "title": "Clean Linear Title 2",
++            "description": "Safe description",
++            "state": {"name": "Todo"},
++            "comments": [
++                {
++                    "id": "l-comm-1",
++                    "body": f"Secret comment: {TEST_SECRET_AWS}",
++                }
++            ],
++        }
++    ]
++
++    with pytest.raises(ProblemException) as exc_info2:
++        await importer.run_import(
++            linear_export_bad_comment, target_project_key="LIN", dry_run=False
++        )
++    assert exc_info2.value.code in EXPECTED_SECRET_CODES
++
++
++@pytest.mark.asyncio
++async def test_importer_provenance_tier_and_taint(
++    setup_import_env: tuple[AsyncSession, PrincipalContext],
++) -> None:
++    """Verify imported issues and comments are marked with provenance_tier='imported' and is_untrusted_content=True."""
++    session, caller = setup_import_env
++    importer = JiraImporter(session=session, caller=caller)
++
++    jira_export = {
++        "issues": [
++            {
++                "key": "JIRA-PROV-1",
++                "fields": {
++                    "summary": "Untainted summary",
++                    "description": "Untainted description",
++                    "status": {"name": "Backlog"},
++                    "priority": {"name": "Low"},
++                    "comment": {
++                        "comments": [
++                            {
++                                "id": "c-prov-1",
++                                "body": "Untainted comment body",
++                            }
++                        ]
++                    },
++                },
++            }
++        ]
++    }
++
++    report = await importer.run_import(jira_export, target_project_key="JIRA", dry_run=False)
++    assert report.to_create == 1
++
++    alias_res = await session.execute(
++        select(IssueKeyAlias).where(
++            IssueKeyAlias.workspace_id == caller.workspace_id,
++            IssueKeyAlias.legacy_key == "JIRA-PROV-1",
++        )
++    )
++    alias = alias_res.scalar_one()
++
++    issue_res = await session.execute(select(Issue).where(Issue.id == alias.issue_id))
++    imported_issue = issue_res.scalar_one()
++
++    assert imported_issue.provenance_tier == "imported"
++    assert imported_issue.is_untrusted_content is True
++
++    comment_res = await session.execute(
++        select(IssueComment).where(IssueComment.issue_id == alias.issue_id)
++    )
++    imported_comment = comment_res.scalar_one()
++
++    assert imported_comment.provenance_tier == "imported"
++    assert imported_comment.is_untrusted_content is True
++
++
++@pytest.mark.asyncio
++async def test_custom_field_test_execute_blocks_secret_source(
++    setup_import_env: tuple[AsyncSession, PrincipalContext],
++) -> None:
++    """Verify CustomFieldExecutor blocks secret material returned or evaluated by custom fields."""
++    session, caller = setup_import_env
++
++    # 1. First import a valid issue to execute against
++    importer = JiraImporter(session=session, caller=caller)
++    await importer.run_import(
++        {
++            "issues": [
++                {
++                    "key": "JIRA-CF-1",
++                    "fields": {
++                        "summary": "Target Issue For Custom Field",
++                        "description": "Testing custom field execution",
++                        "status": {"name": "Backlog"},
++                        "priority": {"name": "Medium"},
++                    },
++                }
++            ]
++        },
++        target_project_key="JIRA",
++        dry_run=False,
++    )
++
++    alias_res = await session.execute(
++        select(IssueKeyAlias).where(
++            IssueKeyAlias.workspace_id == caller.workspace_id,
++            IssueKeyAlias.legacy_key == "JIRA-CF-1",
++        )
++    )
++    alias = alias_res.scalar_one()
++
++    issue_res = await session.execute(select(Issue).where(Issue.id == alias.issue_id))
++    target_issue = issue_res.scalar_one()
++
++    proj_res = await session.execute(select(Project).where(Project.id == target_issue.project_id))
++    target_project = proj_res.scalar_one()
++
++    # Construct request where returned scalar contains an AWS secret token
++    executor = CustomFieldExecutor(session)
++    request_body = CustomFieldTestExecuteRequest(
++        issue_key=f"{target_project.identifier}-{target_issue.sequence_id}",
++        tier="wasm",
++        output_format="text",
++        output_format_metadata={"max_length": 100},
++        script_source=f'scalar: "{TEST_SECRET_AWS}"',
++    )
++
++    with pytest.raises(ProblemException) as exc_info:
++        await executor.test_execute(
++            session=session,
++            caller=caller,
++            project=target_project,
++            body=request_body,
++        )
++
++    assert exc_info.value.code in EXPECTED_SECRET_CODES
++    assert exc_info.value.status == 422
++
++
++@pytest.mark.asyncio
++async def test_custom_field_definition_blocks_secret_in_name_and_source(
++    setup_import_env: tuple[AsyncSession, PrincipalContext],
++) -> None:
++    """Verify CustomFieldDefinitionService blocks custom field definitions containing secrets."""
++    session, caller = setup_import_env
++
++    # Bootstrap target project
++    importer = JiraImporter(session=session, caller=caller)
++    await importer.run_import(
++        {
++            "issues": [
++                {
++                    "key": "JIRA-DEF-1",
++                    "fields": {
++                        "summary": "Setup Project Target",
++                        "status": {"name": "Backlog"},
++                    },
++                }
++            ]
++        },
++        target_project_key="JIRA",
++        dry_run=False,
++    )
++
++    proj_res = await session.execute(
++        select(Project).where(
++            Project.workspace_id == caller.workspace_id,
++            Project.identifier == "JIRA",
++        )
++    )
++    proj = proj_res.scalar_one()
++
++    # Try creating custom field with secret in name
++    bad_name_req = CustomFieldCreateRequest(
++        slug="field-secret-name",
++        name=f"Field with Secret {TEST_SECRET_AWS}",
++        tier="wasm",
++        output_format="text",
++        output_format_metadata={"max_length": 50},
++        script_source="scalar: 'hello'",
++    )
++
++    with pytest.raises(ProblemException) as exc_info:
++        await CustomFieldDefinitionService.create_definition(
++            session=session,
++            caller=caller,
++            project_ref=proj.identifier,
++            payload=bad_name_req,
++        )
++    assert exc_info.value.code in EXPECTED_SECRET_CODES
++
++    # Try creating custom field with secret in script_source
++    bad_source_req = CustomFieldCreateRequest(
++        slug="field-secret-source",
++        name="Field with Secret Source",
++        tier="wasm",
++        output_format="text",
++        output_format_metadata={"max_length": 50},
++        script_source=f"export default function() {{ return '{TEST_SECRET_AWS}'; }}",
++    )
++
++    with pytest.raises(ProblemException) as exc_info2:
++        await CustomFieldDefinitionService.create_definition(
++            session=session,
++            caller=caller,
++            project_ref=proj.identifier,
++            payload=bad_source_req,
++        )
++    assert exc_info2.value.code in EXPECTED_SECRET_CODES

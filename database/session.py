@@ -19,6 +19,7 @@ from database.rls.context import (
     RLSRoleViolationError,
     UnboundRLSSessionError,
     bind_rls_context,
+    bind_rls_context_sync,
 )
 
 __all__ = [
@@ -142,9 +143,15 @@ class RLSSessionFactory:
         sess = self._sessionmaker()
         sess.info["rls_managed_session"] = True
 
-        def _rebind_on_begin(sync_sess: Session, _trans: SessionTransaction, _conn: object) -> None:
+        def _rebind_on_begin(
+            sync_sess: Session,
+            _trans: SessionTransaction,
+            conn: Any,  # noqa: ANN401
+        ) -> None:
             sync_sess.info["rls_bound"] = True
             sync_sess.info["rls_context"] = ctx
+            if conn is not None:
+                bind_rls_context_sync(conn, ctx)
 
         event.listen(sess.sync_session, "after_begin", _rebind_on_begin)
         try:

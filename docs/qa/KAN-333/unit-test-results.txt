@@ -1,0 +1,24 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan329-336-75f678ff/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan329-336-75f678ff
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 14 items
+
+kanban/tests/security/test_totp_re_enrollment_protection.py::test_mfa_pending_session_totp_overwrite_denied_when_active PASSED [  7%]
+kanban/tests/security/test_totp_re_enrollment_protection.py::test_totp_re_enrollment_allowed_from_elevated_aal2_session PASSED [ 14%]
+kanban/tests/security/test_totp_re_enrollment_protection.py::test_totp_service_deny_if_active_flag PASSED [ 21%]
+kanban/tests/auth/test_totp.py::test_case_1_rfc6238_appendix_b_vectors PASSED [ 28%]
+kanban/tests/auth/test_totp.py::test_case_5_window_boundaries PASSED     [ 35%]
+kanban/tests/auth/test_totp.py::test_case_6_format_rejection PASSED      [ 42%]
+kanban/tests/auth/test_totp.py::test_case_2_positive_lifecycle PASSED    [ 50%]
+kanban/tests/auth/test_totp.py::test_case_3_replay_rejection PASSED      [ 57%]
+kanban/tests/auth/test_totp.py::test_case_4_concurrency_race PASSED      [ 64%]
+kanban/tests/auth/test_totp.py::test_case_7_brute_force_rate_limit PASSED [ 71%]
+kanban/tests/auth/test_totp.py::test_case_11_secret_hygiene_and_blob_tampering PASSED [ 78%]
+kanban/tests/auth/test_totp.py::test_case_12_pending_factor_expiry PASSED [ 85%]
+kanban/tests/auth/test_totp.py::test_delete_totp_factor PASSED           [ 92%]
+kanban/tests/auth/test_totp.py::test_totp_verify_alias_endpoint PASSED   [100%]
+
+============================== 14 passed in 3.66s ==============================

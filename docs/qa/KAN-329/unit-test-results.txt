@@ -1,0 +1,23 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan329-336-75f678ff/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan329-336-75f678ff
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 13 items
+
+kanban/tests/security/test_workspace_switch_isolation.py::test_direct_member_workspace_switch_succeeds PASSED [  7%]
+kanban/tests/security/test_workspace_switch_isolation.py::test_verified_user_identities_cross_workspace_switch_succeeds PASSED [ 15%]
+kanban/tests/security/test_workspace_switch_isolation.py::test_unverified_matching_email_cross_tenant_switch_rejected PASSED [ 23%]
+kanban/tests/security/test_workspace_switch_isolation.py::test_non_admin_with_admin_email_cannot_elevate_server_admin PASSED [ 30%]
+kanban/tests/api/test_workspaces_api.py::test_case_1_list_workspaces_server_admin_and_member PASSED [ 38%]
+kanban/tests/api/test_workspaces_api.py::test_case_2_create_workspace_and_role_bindings PASSED [ 46%]
+kanban/tests/api/test_workspaces_api.py::test_case_3_switch_workspace_lifecycle_and_cookies PASSED [ 53%]
+kanban/tests/api/test_workspaces_api.py::test_case_4_member_cross_workspace_matching_email_and_switching PASSED [ 61%]
+kanban/tests/api/test_workspaces_api.py::test_case_5_workspace_edge_cases_and_error_branches PASSED [ 69%]
+kanban/tests/api/test_workspaces_api.py::test_case_6_coverage_direct_switch_and_fallback_cookies PASSED [ 76%]
+kanban/tests/api/test_workspaces_api.py::test_case_7_unit_coverage_direct_invocations PASSED [ 84%]
+kanban/tests/api/test_workspaces_api.py::test_case_8_workspaces_under_kanban_app_force_rls PASSED [ 92%]
+kanban/tests/api/test_workspaces_api.py::test_case_9_multi_workspace_switch_roundtrip_project_creation PASSED [100%]
+
+============================== 13 passed in 5.19s ==============================

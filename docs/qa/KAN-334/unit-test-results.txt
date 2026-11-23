@@ -1,0 +1,13 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan329-336-75f678ff/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan329-336-75f678ff
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 3 items
+
+database/tests/test_module_issues_rls.py::test_module_issues_view_has_security_invoker PASSED [ 33%]
+database/tests/test_module_issues_rls.py::test_module_issues_enforces_rls_isolation PASSED [ 66%]
+database/tests/migrations/test_p6_15_hardened_workspace_switch_and_module_issues_migration.py::test_p6_15_hardened_workspace_switch_and_module_issues_migration_lifecycle PASSED [100%]
+
+============================== 3 passed in 0.76s ===============================

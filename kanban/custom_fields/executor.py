@@ -47,6 +47,7 @@ from kanban.sandbox.wasm_runner import (
     UnavailableTierBRunner,
     WasmRunError,
 )
+from kanban.security.push_protection import enforce_secret_push_protection
 from kanban.services.activity import ActivityEventType, record_activity
 from kanban.services.issue_keys import resolve_issue_ref
 
@@ -512,6 +513,20 @@ def _get_caller_access_hash(caller: PrincipalContext) -> bytes:
     return hashlib.sha256(raw).digest()
 
 
+def _scan_value_for_secrets(val: Any) -> None:  # noqa: ANN401
+    """Recursively enforce secret push-protection on custom field output values."""
+    if isinstance(val, str):
+        enforce_secret_push_protection(val, field="custom_field_value")
+    elif isinstance(val, dict):
+        for k, v in val.items():
+            if isinstance(k, str):
+                enforce_secret_push_protection(k, field="custom_field_key")
+            _scan_value_for_secrets(v)
+    elif isinstance(val, (list, tuple, set)):
+        for item in val:
+            _scan_value_for_secrets(item)
+
+
 class CustomFieldExecutor:
     """Manages secure execution and partitioned caching for custom fields."""
 
@@ -719,6 +734,7 @@ class CustomFieldExecutor:
                 metadata,
                 raw_output,
             )
+            _scan_value_for_secrets(validated_value)
         except Exception as ex:
             raise ProblemException(
                 status=422,
@@ -945,7 +961,7 @@ class CustomFieldExecutor:
                 )
         return results
 
-    async def test_execute(  # noqa: C901, PLR0915
+    async def test_execute(  # noqa: C901, PLR0912, PLR0915
         self,
         session: AsyncSession,
         caller: PrincipalContext,
@@ -1038,6 +1054,7 @@ class CustomFieldExecutor:
                 body.output_format, body.output_format_metadata
             )
             validated_val = validate_field_output_value(body.output_format, parsed_meta, raw_val)
+            _scan_value_for_secrets(validated_val)
             elapsed_ms = max(latency_ms, int((time.perf_counter() - start_time) * 1000))
             logs += f"Success: validated format {body.output_format}\n"
             return {
@@ -1049,6 +1066,8 @@ class CustomFieldExecutor:
                 "error": None,
             }
         except ProblemException as pe:
+            if pe.code in ("SECRET_DETECTED_IN_PAYLOAD", "SECRET_PUSH_PROTECTED"):
+                raise
             elapsed_ms = max(1, int((time.perf_counter() - start_time) * 1000))
             logs += f"Execution error: {pe.code} - {pe.detail}\n"
             return {
