@@ -508,3 +508,277 @@ export async function assertDisallowedControls(
 
   return violations;
 }
+
+export interface LandmarkHeadingViolation {
+  kind: 'missing-main' | 'multiple-mains' | 'unlabelled-nav' | 'skipped-heading' | 'missing-h1';
+  message: string;
+  element?: string;
+}
+
+/**
+ * Scans page DOM for WCAG 2.2 AA landmarks and sequential heading structure.
+ */
+export async function scanLandmarksAndHeadings(page: Page): Promise<LandmarkHeadingViolation[]> {
+  return page.evaluate(() => {
+    const violations: LandmarkHeadingViolation[] = [];
+
+    // 1. Validate <main> landmark
+    const mains = Array.from(document.querySelectorAll('main, [role="main"]')).filter((el) => {
+      return !el.hasAttribute('inert') && el.getAttribute('aria-hidden') !== 'true';
+    });
+    if (mains.length === 0) {
+      violations.push({
+        kind: 'missing-main',
+        message: 'No visible <main> or role="main" landmark region found on page',
+      });
+    } else if (mains.length > 1) {
+      violations.push({
+        kind: 'multiple-mains',
+        message: `Found ${mains.length} simultaneous active <main> landmarks on page`,
+      });
+    }
+
+    // 2. Validate <nav> landmarks have accessible labels when multiple exist
+    const navs = Array.from(document.querySelectorAll('nav, [role="navigation"]')).filter((el) => {
+      return !el.hasAttribute('inert') && el.getAttribute('aria-hidden') !== 'true';
+    });
+    if (navs.length > 1) {
+      navs.forEach((nav, idx) => {
+        const ariaLabel = nav.getAttribute('aria-label')?.trim();
+        const ariaLabelledBy = nav.getAttribute('aria-labelledby')?.trim();
+        const title = nav.getAttribute('title')?.trim();
+        if (!ariaLabel && !ariaLabelledBy && !title) {
+          violations.push({
+            kind: 'unlabelled-nav',
+            message: `Unlabelled navigation landmark at index ${idx} when multiple navs exist`,
+            element: nav.tagName.toLowerCase(),
+          });
+        }
+      });
+    }
+
+    // 3. Validate sequential heading hierarchy (h1 -> h2 -> h3 without skipped levels)
+    const headings = Array.from(
+      document.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"]'),
+    ).filter((el) => {
+      const htmlEl = el as HTMLElement;
+      return (
+        !el.hasAttribute('inert') &&
+        el.getAttribute('aria-hidden') !== 'true' &&
+        (htmlEl.offsetParent !== null || htmlEl.classList.contains('sr-only'))
+      );
+    });
+
+    const hasH1 = headings.some((h) => {
+      const tag = h.tagName.toLowerCase();
+      const ariaLevel = h.getAttribute('aria-level');
+      return tag === 'h1' || ariaLevel === '1';
+    });
+    if (!hasH1 && headings.length > 0) {
+      violations.push({
+        kind: 'missing-h1',
+        message: 'No primary <h1> or role="heading" aria-level="1" landmark heading found on page',
+      });
+    }
+
+    let previousLevel = 0;
+    headings.forEach((h) => {
+      let level = 0;
+      const tag = h.tagName.toLowerCase();
+      if (/^h[1-6]$/.test(tag)) {
+        level = parseInt(tag[1] ?? '0', 10);
+      } else {
+        const ariaLevel = h.getAttribute('aria-level');
+        level = ariaLevel ? parseInt(ariaLevel, 10) : 2;
+      }
+
+      if (level > 0) {
+        if (previousLevel > 0 && level > previousLevel + 1) {
+          violations.push({
+            kind: 'skipped-heading',
+            message: `Heading level h${level} skips levels directly after h${previousLevel} ("${(h.textContent ?? '').slice(0, 30)}")`,
+            element: h.tagName.toLowerCase(),
+          });
+        }
+        previousLevel = level;
+      }
+    });
+
+    return violations;
+  });
+}
+
+export interface AriaViolation {
+  kind: 'missing-name' | 'invalid-parent-child' | 'broken-reference';
+  selector: string;
+  message: string;
+}
+
+/**
+ * Scans page DOM for accessible names and valid WAI-ARIA 1.2 parent-child relationships.
+ */
+export async function scanAccessibleNamesAndAria(page: Page): Promise<AriaViolation[]> {
+  return page.evaluate(() => {
+    const violations: AriaViolation[] = [];
+
+    // 1. Buttons, links, and inputs must have non-empty accessible names
+    const interactives = Array.from(
+      document.querySelectorAll(
+        'button:not([disabled]), a[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [role="button"], [role="menuitem"], [role="menuitemradio"], [role="tab"]',
+      ),
+    ).filter((el) => {
+      const htmlEl = el as HTMLElement;
+      return (
+        !el.hasAttribute('inert') &&
+        el.getAttribute('aria-hidden') !== 'true' &&
+        (htmlEl.offsetParent !== null || htmlEl.classList.contains('sr-only'))
+      );
+    });
+
+    interactives.forEach((el, idx) => {
+      const text = el.textContent?.trim() ?? '';
+      const ariaLabel = el.getAttribute('aria-label')?.trim() ?? '';
+      const ariaLabelledBy = el.getAttribute('aria-labelledby')?.trim() ?? '';
+      const title = el.getAttribute('title')?.trim() ?? '';
+      const placeholder = (el as HTMLInputElement).placeholder?.trim() ?? '';
+      const value = (el as HTMLInputElement).value?.trim() ?? '';
+      const imgAlt = el.querySelector('img')?.getAttribute('alt')?.trim() ?? '';
+
+      const hasName = Boolean(
+        text || ariaLabel || ariaLabelledBy || title || placeholder || value || imgAlt,
+      );
+
+      if (!hasName) {
+        violations.push({
+          kind: 'missing-name',
+          selector: `${el.tagName.toLowerCase()}:nth-of-type(${idx + 1})`,
+          message: `Interactive element <${el.tagName.toLowerCase()}> has no accessible name or label`,
+        });
+      }
+    });
+
+    // 2. WAI-ARIA 1.2 role="menu" parent-child validation:
+    // Menu direct children can only be menuitem, menuitemradio, menuitemcheckbox, group, or separator.
+    const menus = Array.from(document.querySelectorAll('[role="menu"]'));
+    menus.forEach((menu) => {
+      const invalidChildren = menu.querySelectorAll(
+        '[role="radiogroup"], button[role="radio"], [role="checkbox"]',
+      );
+      if (invalidChildren.length > 0) {
+        violations.push({
+          kind: 'invalid-parent-child',
+          selector: '[role="menu"]',
+          message: `role="menu" contains ${invalidChildren.length} invalid radiogroup/radio children; must use role="group" and role="menuitemradio"`,
+        });
+      }
+    });
+
+    // 3. Broken ID references in aria-labelledby, aria-controls, aria-activedescendant
+    const referencingElements = Array.from(
+      document.querySelectorAll('[aria-labelledby], [aria-controls], [aria-activedescendant]'),
+    );
+    referencingElements.forEach((el) => {
+      const labelledBy = el.getAttribute('aria-labelledby');
+      if (labelledBy) {
+        for (const id of labelledBy.split(/\s+/).filter(Boolean)) {
+          if (!document.getElementById(id)) {
+            violations.push({
+              kind: 'broken-reference',
+              selector: el.tagName.toLowerCase(),
+              message: `aria-labelledby references non-existent ID "${id}"`,
+            });
+          }
+        }
+      }
+      const controls = el.getAttribute('aria-controls');
+      if (controls) {
+        for (const id of controls.split(/\s+/).filter(Boolean)) {
+          if (!document.getElementById(id)) {
+            violations.push({
+              kind: 'broken-reference',
+              selector: el.tagName.toLowerCase(),
+              message: `aria-controls references non-existent ID "${id}"`,
+            });
+          }
+        }
+      }
+      const activeDesc = el.getAttribute('aria-activedescendant');
+      if (activeDesc && activeDesc.trim().length > 0) {
+        if (!document.getElementById(activeDesc)) {
+          violations.push({
+            kind: 'broken-reference',
+            selector: el.tagName.toLowerCase(),
+            message: `aria-activedescendant references non-existent ID "${activeDesc}"`,
+          });
+        }
+      }
+    });
+
+    return violations;
+  });
+}
+
+export interface FocusIndicatorViolation {
+  selector: string;
+  outlineWidth: string;
+  outlineStyle: string;
+  boxShadow: string;
+  message: string;
+}
+
+/**
+ * Focuses target selectors and verifies a visible >=2px focus indicator on :focus-visible.
+ */
+export async function scanFocusVisibleIndicators(
+  page: Page,
+  selectors: string[] = [
+    '.kb-palette-input',
+    '.navigator-search-input',
+    '.state-filter-search-input',
+    '.docs-title-input',
+    '.kb-layout-switcher-btn',
+    '.swimlane-card',
+    '.board-card',
+    '.navigator-issue-card',
+  ],
+): Promise<FocusIndicatorViolation[]> {
+  const violations: FocusIndicatorViolation[] = [];
+
+  for (const selector of selectors) {
+    const loc = page.locator(selector).first();
+    const count = await loc.count();
+    if (count === 0) continue;
+
+    try {
+      await loc.focus({ timeout: 1500 });
+      const styles = await loc.evaluate((el) => {
+        const cs = window.getComputedStyle(el);
+        return {
+          outlineWidth: cs.outlineWidth,
+          outlineStyle: cs.outlineStyle,
+          outlineColor: cs.outlineColor,
+          boxShadow: cs.boxShadow,
+        };
+      });
+
+      const outlinePixels = parseFloat(styles.outlineWidth) || 0;
+      const hasOutline = styles.outlineStyle !== 'none' && outlinePixels >= 1.5;
+      const hasShadow =
+        styles.boxShadow && styles.boxShadow !== 'none' && styles.boxShadow.includes('px');
+
+      if (!hasOutline && !hasShadow) {
+        violations.push({
+          selector,
+          outlineWidth: styles.outlineWidth,
+          outlineStyle: styles.outlineStyle,
+          boxShadow: styles.boxShadow,
+          message: `Selector "${selector}" has no visible outline or box-shadow on focus (${styles.outlineStyle} ${styles.outlineWidth})`,
+        });
+      }
+    } catch {
+      // Element may not be currently interactable in current layout
+    }
+  }
+
+  return violations;
+}

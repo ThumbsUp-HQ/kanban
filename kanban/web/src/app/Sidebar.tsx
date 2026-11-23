@@ -529,6 +529,32 @@ export function Sidebar({
     };
   }, [isOpen]);
 
+  const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(max-width: 1279px)').matches
+      : false,
+  );
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
+    const mql = window.matchMedia('(max-width: 1279px)');
+    const handler = (e: MediaQueryListEvent): void => {
+      setIsMobileViewport(e.matches);
+    };
+    if (mql.addEventListener) {
+      mql.addEventListener('change', handler);
+    } else if (typeof (mql as unknown as { addListener?: (h: (e: MediaQueryListEvent) => void) => void }).addListener === 'function') {
+      (mql as unknown as { addListener: (h: (e: MediaQueryListEvent) => void) => void }).addListener(handler);
+    }
+    return () => {
+      if (mql.removeEventListener) {
+        mql.removeEventListener('change', handler);
+      } else if (typeof (mql as unknown as { removeListener?: (h: (e: MediaQueryListEvent) => void) => void }).removeListener === 'function') {
+        (mql as unknown as { removeListener: (h: (e: MediaQueryListEvent) => void) => void }).removeListener(handler);
+      }
+    };
+  }, []);
+
   const handleMobileKeyDown = (e: KeyboardEvent<HTMLElement>): void => {
     if (e.key === 'Escape') {
       e.preventDefault();
@@ -566,6 +592,38 @@ export function Sidebar({
     }
   };
 
+  const handleWorkspaceDropdownKeyDown = (e: React.KeyboardEvent): void => {
+    if (e.key === 'Escape') {
+      e.preventDefault();
+      setWorkspaceDropdownOpen(false);
+      return;
+    }
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
+      e.preventDefault();
+      const dropdown = e.currentTarget as HTMLElement;
+      const items = Array.from(
+        dropdown.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])'),
+      );
+      if (items.length === 0) return;
+      if (e.key === 'Home') {
+        items[0]?.focus();
+        return;
+      }
+      if (e.key === 'End') {
+        items[items.length - 1]?.focus();
+        return;
+      }
+      const currentIndex = items.indexOf(document.activeElement as HTMLElement);
+      let nextIndex = 0;
+      if (e.key === 'ArrowDown') {
+        nextIndex = currentIndex >= 0 && currentIndex < items.length - 1 ? currentIndex + 1 : 0;
+      } else {
+        nextIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
+      }
+      items[nextIndex]?.focus();
+    }
+  };
+
   return (
     <>
       {/* Mobile Backdrop Scrim */}
@@ -579,16 +637,8 @@ export function Sidebar({
 
       <aside
         ref={sidebarRef}
-        role={
-          isOpen && typeof window !== 'undefined' && window.innerWidth <= 1279
-            ? 'dialog'
-            : undefined
-        }
-        aria-modal={
-          isOpen && typeof window !== 'undefined' && window.innerWidth <= 1279
-            ? 'true'
-            : undefined
-        }
+        role={isOpen && isMobileViewport ? 'dialog' : undefined}
+        aria-modal={isOpen && isMobileViewport ? 'true' : undefined}
         aria-label="Sidebar navigation"
         className={`kb-sidebar ${isDesktopCollapsed ? 'kb-sidebar-collapsed' : ''} ${
           isOpen ? 'kb-sidebar-overlay' : ''
@@ -624,7 +674,11 @@ export function Sidebar({
               </button>
 
               {workspaceDropdownOpen && (
-                <div className="kb-workspace-dropdown" role="menu">
+                <div
+                  className="kb-workspace-dropdown"
+                  role="menu"
+                  onKeyDown={handleWorkspaceDropdownKeyDown}
+                >
                   {deduplicatedWorkspaces.map((ws) => (
                     <button
                       key={ws.id}
@@ -639,7 +693,7 @@ export function Sidebar({
                         <WorkspaceBadge name={ws.name} size="sm" />
                         <span>{ws.name}</span>
                       </span>
-                      {ws.is_current && <span className="kb-workspace-dropdown-check">✓</span>}
+                      {ws.is_current && <span className="kb-workspace-dropdown-check" aria-hidden="true">✓</span>}
                     </button>
                   ))}
                   {deduplicatedWorkspaces.length > 0 && <div className="kb-workspace-dropdown-divider" />}

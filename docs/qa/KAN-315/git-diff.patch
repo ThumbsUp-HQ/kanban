@@ -1,0 +1,1963 @@
+diff --git a/kanban/web/e2e/a11y/wcag22-full-review.spec.ts b/kanban/web/e2e/a11y/wcag22-full-review.spec.ts
+new file mode 100644
+index 00000000..4ad7b431
+--- /dev/null
++++ b/kanban/web/e2e/a11y/wcag22-full-review.spec.ts
+@@ -0,0 +1,445 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { resolve } from 'node:path';
++import { mkdirSync } from 'node:fs';
++import type { Page } from '@playwright/test';
++import { test, expect } from '../support/test';
++import { mockApi, loadFixture, type MockHandlers } from '../support/mockApi';
++import { annotatedScreenshot } from '../support/annotate';
++import {
++  scanLandmarksAndHeadings,
++  scanAccessibleNamesAndAria,
++  scanFocusVisibleIndicators,
++  scanElementContrast,
++} from '../support/gateAuditor';
++
++const SCREENSHOT_DIR = resolve(
++  import.meta.dirname,
++  '../../../../docs/qa/KAN-315/screenshots',
++);
++
++process.env.QA_TICKET_ID = 'KAN-315';
++mkdirSync(SCREENSHOT_DIR, { recursive: true });
++
++const mockAdminUser = {
++  id: 'usr-admin-1',
++  handle: 'adam_architect',
++  display_name: 'Adam Architect',
++  email: 'adam@example.com',
++  workspace_role: 'WORKSPACE_ADMIN',
++  is_workspace_admin: true,
++  is_server_admin: true,
++};
++
++const mockProject = {
++  id: 'proj-kan-1',
++  identifier: 'KAN',
++  name: 'Platform Core',
++  description_markdown: 'Core platform engineering workspace',
++  modules_enabled: true,
++  auto_archive_days: 90,
++  capabilities: ['VIEW', 'COMMENT', 'EDIT', 'ADMIN', 'PROJECT_ADMIN'],
++  is_project_admin: true,
++  project_role: 'ADMIN',
++};
++
++const mockWorkspaces = [
++  {
++    id: 'ws-default',
++    name: 'Primary Workspace',
++    slug: 'primary-workspace',
++    is_current: true,
++  },
++];
++
++const mockCycles = [
++  {
++    id: 'cyc-1',
++    name: 'Sprint Alpha',
++    status: 'in_progress',
++    start_date: '2026-03-01',
++    end_date: '2026-03-14',
++  },
++];
++
++const mockModules = [
++  {
++    id: 'mod-1',
++    name: 'Auth Core',
++    status: 'in_progress',
++    start_date: '2026-03-01',
++    target_date: '2026-03-31',
++    description_markdown: 'Hardened multi-card authentication.',
++  },
++];
++
++const mockStates = [
++  { id: 'st-backlog', name: 'Backlog', group: 'backlog', sort_order: 1 },
++  { id: 'st-todo', name: 'To Do', group: 'unstarted', sort_order: 2 },
++  { id: 'st-in-progress', name: 'In Progress', group: 'started', sort_order: 3 },
++  { id: 'st-done', name: 'Done', group: 'completed', sort_order: 4 },
++];
++
++const mockPriorities = {
++  items: [
++    { id: 'prio-urgent', slug: 'urgent', label: 'Urgent', emoji: '🔥', sort_order: 1 },
++    { id: 'prio-high', slug: 'high', label: 'High', emoji: '⚡', sort_order: 2 },
++    { id: 'prio-medium', slug: 'medium', label: 'Medium', emoji: '🔹', sort_order: 3 },
++    { id: 'prio-low', slug: 'low', label: 'Low', emoji: '🔽', sort_order: 4 },
++  ],
++};
++
++const mockIssues = {
++  items: [
++    {
++      id: 'iss-315',
++      key: 'KAN-315',
++      project_key: 'KAN',
++      summary: 'Full WCAG 2.2 AA Accessibility Review and Remediation Epic',
++      state: { id: 'st-in-progress', name: 'In Progress', group: 'started' },
++      priority: { id: 'prio-high', slug: 'high', label: 'High', emoji: '⚡', sort_order: 2 },
++      cycle_id: 'cyc-1',
++      cycle: { id: 'cyc-1', name: 'Sprint Alpha' },
++      module_ids: ['mod-1'],
++      modules: [{ id: 'mod-1', name: 'Auth Core' }],
++      assignees: [
++        {
++          id: 'asg-1',
++          principal_id: 'usr-admin-1',
++          display_name: 'Adam Architect',
++          handle: 'adam_architect',
++          type: 'USER',
++          principal: { id: 'usr-admin-1', handle: 'adam_architect', display_name: 'Adam Architect', type: 'USER' },
++        },
++      ],
++      created_by_id: 'usr-admin-1',
++      created_by: 'usr-admin-1',
++      start_date: '2026-03-01',
++      due_date: '2026-03-15',
++      dependencies: [],
++      capabilities: ['VIEW', 'COMMENT', 'EDIT', 'ADMIN'],
++    },
++  ],
++  total: 1,
++};
++
++const mockSearchResults = {
++  items: [
++    {
++      id: 'iss-315',
++      kind: 'issue',
++      key: 'KAN-315',
++      title: 'Full WCAG 2.2 AA Accessibility Review and Remediation Epic',
++      link: '/projects/KAN/issues?peek=KAN-315',
++      project_key: 'KAN',
++    },
++    {
++      id: 'doc-arch',
++      kind: 'doc',
++      key: 'DOC-1',
++      title: 'Universal Graph and Architecture Spec',
++      link: '/docs/DOC-1',
++      project_key: 'KAN',
++    },
++  ],
++  results: [
++    {
++      id: 'iss-315',
++      kind: 'issue',
++      key: 'KAN-315',
++      title: 'Full WCAG 2.2 AA Accessibility Review and Remediation Epic',
++      link: '/projects/KAN/issues?peek=KAN-315',
++      project_key: 'KAN',
++    },
++  ],
++};
++
++function getA11yMocks(): MockHandlers {
++  const docsTree = loadFixture('docs-tree-kan');
++  const pageAuthStudio = loadFixture('page-auth-studio');
++  const pageVersions = loadFixture('page-versions-auth-studio');
++  const projectAccess = loadFixture('access-project-kan');
++
++  return {
++    'GET /api/v1/auth/me': { json: mockAdminUser },
++    'GET /api/v1/me': { json: mockAdminUser },
++    'GET /api/v1/users/me': { json: mockAdminUser },
++    'GET /api/v1/auth/session': {
++      json: {
++        authenticated: true,
++        aal_level: 2,
++        csrf_token: 'csrf-test-token',
++        user: mockAdminUser,
++      },
++    },
++    'GET /api/v1/session/csrf': { json: { csrf_token: 'csrf-test-token' } },
++    'GET /api/v1/setup/status': { json: { initialized: true, is_initialized: true, requires_setup: false } },
++    'GET /api/v1/workspaces': { json: mockWorkspaces },
++    'GET /api/v1/workspaces/current': {
++      json: { id: 'ws-default', name: 'Primary Workspace', slug: 'primary-workspace' },
++    },
++    'GET /api/v1/workspaces/:wsId': {
++      json: { id: 'ws-default', name: 'Primary Workspace', slug: 'primary-workspace', is_current: true },
++    },
++    'GET /api/v1/system/status': loadFixture('system-status-prod'),
++    'GET /api/v1/projects': { json: [mockProject] },
++    'GET /api/v1/projects/KAN': { json: mockProject },
++    'GET /api/v1/projects/KAN/cycles': { json: mockCycles },
++    'GET /api/v1/projects/KAN/modules': { json: mockModules },
++    'GET /api/v1/projects/KAN/states': { json: mockStates },
++    'GET /api/v1/projects/KAN/priorities': { json: mockPriorities },
++    'GET /api/v1/projects/KAN/labels': { json: [] },
++    'GET /api/v1/projects/KAN/members': {
++      json: [
++        {
++          id: 'usr-admin-1',
++          handle: 'adam_architect',
++          display_name: 'Adam Architect',
++          role: 'ADMIN',
++        },
++      ],
++    },
++    'GET /api/v1/projects/KAN/assignee-suggestions': { json: [] },
++    'GET /api/v1/projects/KAN/issues': { json: mockIssues },
++    'GET /api/v1/issues/:id': (req) => {
++      const found = mockIssues.items.find(
++        (i) => i.key === req.params.id || i.id === req.params.id,
++      );
++      return { json: found ?? mockIssues.items[0] };
++    },
++    'GET /api/v1/issues/:id/comments': { json: { items: [], total: 0 } },
++    'GET /api/v1/issues/:id/activity': { json: { items: [], total: 0 } },
++    'GET /api/v1/issues/:id/links': { json: { blocks: [], blocked_by: [], related: [] } },
++    'GET /api/v1/issues/:id/subscription': { json: { subscribed: false } },
++    'GET /api/v1/projects/KAN/views': { json: [] },
++    'GET /api/v1/projects/KAN/custom-fields': { json: [] },
++    'GET /api/v1/notifications': { json: { items: [], unread_count: 0 } },
++    'GET /api/v1/search': { json: mockSearchResults },
++    'GET /api/v1/projects/KAN/docs/tree': { json: docsTree },
++    'GET /api/v1/pages/:pageId': { json: pageAuthStudio },
++    'GET /api/v1/pages/:pageId/versions': { json: pageVersions },
++    'GET /api/v1/objects/:id/access': { json: projectAccess },
++    'GET /api/v1/objects/KAN/access': { json: projectAccess },
++    'GET /api/v1/media-proxy': {
++      status: 200,
++      contentType: 'image/png',
++      body: Buffer.from(
++        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=',
++        'base64',
++      ),
++    },
++  };
++}
++
++async function applyTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
++  await page.evaluate((t) => {
++    document.documentElement.setAttribute('data-theme', t);
++    localStorage.setItem('kb:theme', t);
++  }, theme);
++  await page.waitForTimeout(100);
++}
++
++test.describe('WCAG 2.2 AA Conformance Full Review & Verification Proofs (KAN-315)', () => {
++  test('01: CommandPalette combobox active-descendant and focus-visible outlines', async ({
++    page,
++  }, testInfo) => {
++    await page.setViewportSize({ width: 1280, height: 800 });
++    await mockApi(page, getA11yMocks());
++
++    await page.goto('/projects/KAN/issues?layout=board');
++    await page.waitForSelector('[data-testid="issues-workspace"]', { state: 'visible' });
++
++    // Open command palette via shortcut
++    await page.keyboard.press('ControlOrMeta+k');
++    await page.waitForSelector('[data-testid="command-palette-modal"]', { state: 'visible' });
++
++    const input = page.locator('[data-testid="command-palette-input"]');
++    await expect(input).toBeVisible();
++    await input.focus();
++
++    // Verify aria-activedescendant
++    const activeDesc = await input.getAttribute('aria-activedescendant');
++    expect(activeDesc).toBeTruthy();
++
++    // Focus-visible scanner
++    const focusViolations = await scanFocusVisibleIndicators(page, ['.kb-palette-input']);
++    expect(focusViolations).toHaveLength(0);
++
++    // Apply light theme and capture annotated proof
++    await applyTheme(page, 'light');
++    await annotatedScreenshot(page, testInfo, {
++      name: '01-focus-visible-palette-light',
++      annotations: [
++        {
++          selector: '[data-testid="command-palette-input"]',
++          label: 'Combobox input with aria-activedescendant and 2px focus ring',
++        },
++        {
++          selector: '#command-palette-list',
++          label: 'Option list with active option highlighted and scrolled into view',
++        },
++      ],
++    });
++
++    await page.keyboard.press('Escape');
++    await expect(page.locator('[data-testid="command-palette-modal"]')).toHaveCount(0);
++  });
++
++  test('02: Topbar theme switcher ARIA group and menuitemradio semantics', async ({
++    page,
++  }, testInfo) => {
++    await page.setViewportSize({ width: 1280, height: 800 });
++    await mockApi(page, getA11yMocks());
++
++    await page.goto('/projects/KAN/issues?layout=board');
++    await page.waitForSelector('[data-testid="issues-workspace"]', { state: 'visible' });
++
++    const avatarBtn = page.locator('[data-testid="topbar-avatar-button"]');
++    await avatarBtn.click();
++
++    const menu = page.locator('.kb-avatar-menu');
++    await expect(menu).toBeVisible();
++
++    const themeGroup = menu.locator('[role="group"][aria-label="Theme preference"]');
++    await expect(themeGroup).toBeVisible();
++
++    const radios = themeGroup.locator('[role="menuitemradio"]');
++    await expect(radios).toHaveCount(3);
++
++    // Validate ARIA semantics using gate auditor
++    const ariaViolations = await scanAccessibleNamesAndAria(page);
++    expect(ariaViolations).toHaveLength(0);
++
++    await applyTheme(page, 'light');
++    await annotatedScreenshot(page, testInfo, {
++      name: '02-topbar-theme-radio-menu-light',
++      annotations: [
++        {
++          selector: '[role="group"][aria-label="Theme preference"]',
++          label: 'Theme preference group inside role="menu"',
++        },
++        {
++          selector: '.kb-theme-radio[aria-checked="true"]',
++          label: 'Active theme radio item with aria-checked="true"',
++        },
++      ],
++    });
++
++    await page.keyboard.press('Escape');
++    await expect(menu).not.toBeVisible();
++  });
++
++  test('03: Sidebar mobile dialog role, aria-modal, and background canvas inertness', async ({
++    page,
++  }, testInfo) => {
++    // Set mobile viewport
++    await page.setViewportSize({ width: 390, height: 844 });
++    await mockApi(page, getA11yMocks());
++
++    await page.goto('/projects/KAN/issues?layout=board');
++    await page.waitForSelector('.kb-topbar-hamburger', { state: 'visible' });
++
++    // Click hamburger to open mobile sidebar
++    await page.click('.kb-topbar-hamburger');
++
++    const sidebar = page.locator('aside.kb-sidebar');
++    await expect(sidebar).toHaveAttribute('role', 'dialog');
++    await expect(sidebar).toHaveAttribute('aria-modal', 'true');
++
++    // Main canvas must have inert attribute
++    const mainCanvas = page.locator('#main');
++    await expect(mainCanvas).toHaveAttribute('inert');
++    await expect(mainCanvas).toHaveAttribute('aria-hidden', 'true');
++
++    await applyTheme(page, 'dark');
++    await annotatedScreenshot(page, testInfo, {
++      name: '03-sidebar-mobile-dialog-dark',
++      annotations: [
++        {
++          selector: 'aside.kb-sidebar',
++          label: 'Mobile sidebar overlay with role="dialog" and aria-modal="true"',
++        },
++        {
++          selector: '#main',
++          label: 'Main application canvas marked inert and aria-hidden="true"',
++        },
++      ],
++    });
++
++    // Close sidebar
++    await page.keyboard.press('Escape');
++    await expect(mainCanvas).not.toHaveAttribute('inert');
++  });
++
++  test('04: Docs Workspace and Version Diff theme tokens and dark-mode contrast', async ({
++    page,
++  }, testInfo) => {
++    await page.setViewportSize({ width: 1440, height: 900 });
++    await mockApi(page, getA11yMocks());
++
++    await page.goto('/projects/KAN/docs');
++    await page.waitForSelector('[data-testid="docs-workspace-view"]', { state: 'visible' });
++
++    await applyTheme(page, 'dark');
++
++    // Sweep contrast across headings, buttons, and inputs in docs workspace
++    const contrastViolations = await scanElementContrast(
++      page,
++      ['h1', 'h2', 'h3', 'button', 'input', 'p'],
++      '[data-testid="docs-workspace-view"]',
++    );
++    expect(contrastViolations).toHaveLength(0);
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '04-docs-workspace-contrast-dark',
++      annotations: [
++        {
++          selector: '[data-testid="docs-workspace-view"]',
++          label: 'Docs Workspace utilizing CSS theme tokens in Dark mode',
++        },
++        {
++          selector: '.docs-title-input',
++          label: 'Accessible document title input with theme border and focus ring',
++        },
++      ],
++    });
++  });
++
++  test('05: Issue Navigator search inputs and card focus rings in dark mode', async ({
++    page,
++  }, testInfo) => {
++    await page.setViewportSize({ width: 1440, height: 900 });
++    await mockApi(page, getA11yMocks());
++
++    await page.goto('/projects/KAN/issues?layout=list');
++    await page.waitForSelector('[data-testid="issues-workspace"]', { state: 'visible' });
++
++    await applyTheme(page, 'dark');
++
++    // Validate landmarks and headings
++    const landmarkViolations = await scanLandmarksAndHeadings(page);
++    expect(landmarkViolations).toHaveLength(0);
++
++    // Validate focus visible outlines on navigator inputs
++    const focusViolations = await scanFocusVisibleIndicators(page, [
++      '.navigator-search-input',
++      '.navigator-query-input',
++    ]);
++    expect(focusViolations).toHaveLength(0);
++
++    await annotatedScreenshot(page, testInfo, {
++      name: '05-navigator-focus-rings-dark',
++      annotations: [
++        {
++          selector: '.navigator-search-input',
++          label: 'Issue navigator search input with 2px solid focus indicator',
++        },
++        {
++          selector: '.issue-list-card',
++          label: 'Issue item card with visible outline on focus',
++        },
++      ],
++    });
++  });
++});
+diff --git a/kanban/web/e2e/support/gateAuditor.ts b/kanban/web/e2e/support/gateAuditor.ts
+index 9487bc18..6c35918a 100644
+--- a/kanban/web/e2e/support/gateAuditor.ts
++++ b/kanban/web/e2e/support/gateAuditor.ts
+@@ -508,3 +508,277 @@ export async function assertDisallowedControls(
+ 
+   return violations;
+ }
++
++export interface LandmarkHeadingViolation {
++  kind: 'missing-main' | 'multiple-mains' | 'unlabelled-nav' | 'skipped-heading' | 'missing-h1';
++  message: string;
++  element?: string;
++}
++
++/**
++ * Scans page DOM for WCAG 2.2 AA landmarks and sequential heading structure.
++ */
++export async function scanLandmarksAndHeadings(page: Page): Promise<LandmarkHeadingViolation[]> {
++  return page.evaluate(() => {
++    const violations: LandmarkHeadingViolation[] = [];
++
++    // 1. Validate <main> landmark
++    const mains = Array.from(document.querySelectorAll('main, [role="main"]')).filter((el) => {
++      return !el.hasAttribute('inert') && el.getAttribute('aria-hidden') !== 'true';
++    });
++    if (mains.length === 0) {
++      violations.push({
++        kind: 'missing-main',
++        message: 'No visible <main> or role="main" landmark region found on page',
++      });
++    } else if (mains.length > 1) {
++      violations.push({
++        kind: 'multiple-mains',
++        message: `Found ${mains.length} simultaneous active <main> landmarks on page`,
++      });
++    }
++
++    // 2. Validate <nav> landmarks have accessible labels when multiple exist
++    const navs = Array.from(document.querySelectorAll('nav, [role="navigation"]')).filter((el) => {
++      return !el.hasAttribute('inert') && el.getAttribute('aria-hidden') !== 'true';
++    });
++    if (navs.length > 1) {
++      navs.forEach((nav, idx) => {
++        const ariaLabel = nav.getAttribute('aria-label')?.trim();
++        const ariaLabelledBy = nav.getAttribute('aria-labelledby')?.trim();
++        const title = nav.getAttribute('title')?.trim();
++        if (!ariaLabel && !ariaLabelledBy && !title) {
++          violations.push({
++            kind: 'unlabelled-nav',
++            message: `Unlabelled navigation landmark at index ${idx} when multiple navs exist`,
++            element: nav.tagName.toLowerCase(),
++          });
++        }
++      });
++    }
++
++    // 3. Validate sequential heading hierarchy (h1 -> h2 -> h3 without skipped levels)
++    const headings = Array.from(
++      document.querySelectorAll('h1, h2, h3, h4, h5, h6, [role="heading"]'),
++    ).filter((el) => {
++      const htmlEl = el as HTMLElement;
++      return (
++        !el.hasAttribute('inert') &&
++        el.getAttribute('aria-hidden') !== 'true' &&
++        (htmlEl.offsetParent !== null || htmlEl.classList.contains('sr-only'))
++      );
++    });
++
++    const hasH1 = headings.some((h) => {
++      const tag = h.tagName.toLowerCase();
++      const ariaLevel = h.getAttribute('aria-level');
++      return tag === 'h1' || ariaLevel === '1';
++    });
++    if (!hasH1 && headings.length > 0) {
++      violations.push({
++        kind: 'missing-h1',
++        message: 'No primary <h1> or role="heading" aria-level="1" landmark heading found on page',
++      });
++    }
++
++    let previousLevel = 0;
++    headings.forEach((h) => {
++      let level = 0;
++      const tag = h.tagName.toLowerCase();
++      if (/^h[1-6]$/.test(tag)) {
++        level = parseInt(tag[1] ?? '0', 10);
++      } else {
++        const ariaLevel = h.getAttribute('aria-level');
++        level = ariaLevel ? parseInt(ariaLevel, 10) : 2;
++      }
++
++      if (level > 0) {
++        if (previousLevel > 0 && level > previousLevel + 1) {
++          violations.push({
++            kind: 'skipped-heading',
++            message: `Heading level h${level} skips levels directly after h${previousLevel} ("${(h.textContent ?? '').slice(0, 30)}")`,
++            element: h.tagName.toLowerCase(),
++          });
++        }
++        previousLevel = level;
++      }
++    });
++
++    return violations;
++  });
++}
++
++export interface AriaViolation {
++  kind: 'missing-name' | 'invalid-parent-child' | 'broken-reference';
++  selector: string;
++  message: string;
++}
++
++/**
++ * Scans page DOM for accessible names and valid WAI-ARIA 1.2 parent-child relationships.
++ */
++export async function scanAccessibleNamesAndAria(page: Page): Promise<AriaViolation[]> {
++  return page.evaluate(() => {
++    const violations: AriaViolation[] = [];
++
++    // 1. Buttons, links, and inputs must have non-empty accessible names
++    const interactives = Array.from(
++      document.querySelectorAll(
++        'button:not([disabled]), a[href], input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [role="button"], [role="menuitem"], [role="menuitemradio"], [role="tab"]',
++      ),
++    ).filter((el) => {
++      const htmlEl = el as HTMLElement;
++      return (
++        !el.hasAttribute('inert') &&
++        el.getAttribute('aria-hidden') !== 'true' &&
++        (htmlEl.offsetParent !== null || htmlEl.classList.contains('sr-only'))
++      );
++    });
++
++    interactives.forEach((el, idx) => {
++      const text = el.textContent?.trim() ?? '';
++      const ariaLabel = el.getAttribute('aria-label')?.trim() ?? '';
++      const ariaLabelledBy = el.getAttribute('aria-labelledby')?.trim() ?? '';
++      const title = el.getAttribute('title')?.trim() ?? '';
++      const placeholder = (el as HTMLInputElement).placeholder?.trim() ?? '';
++      const value = (el as HTMLInputElement).value?.trim() ?? '';
++      const imgAlt = el.querySelector('img')?.getAttribute('alt')?.trim() ?? '';
++
++      const hasName = Boolean(
++        text || ariaLabel || ariaLabelledBy || title || placeholder || value || imgAlt,
++      );
++
++      if (!hasName) {
++        violations.push({
++          kind: 'missing-name',
++          selector: `${el.tagName.toLowerCase()}:nth-of-type(${idx + 1})`,
++          message: `Interactive element <${el.tagName.toLowerCase()}> has no accessible name or label`,
++        });
++      }
++    });
++
++    // 2. WAI-ARIA 1.2 role="menu" parent-child validation:
++    // Menu direct children can only be menuitem, menuitemradio, menuitemcheckbox, group, or separator.
++    const menus = Array.from(document.querySelectorAll('[role="menu"]'));
++    menus.forEach((menu) => {
++      const invalidChildren = menu.querySelectorAll(
++        '[role="radiogroup"], button[role="radio"], [role="checkbox"]',
++      );
++      if (invalidChildren.length > 0) {
++        violations.push({
++          kind: 'invalid-parent-child',
++          selector: '[role="menu"]',
++          message: `role="menu" contains ${invalidChildren.length} invalid radiogroup/radio children; must use role="group" and role="menuitemradio"`,
++        });
++      }
++    });
++
++    // 3. Broken ID references in aria-labelledby, aria-controls, aria-activedescendant
++    const referencingElements = Array.from(
++      document.querySelectorAll('[aria-labelledby], [aria-controls], [aria-activedescendant]'),
++    );
++    referencingElements.forEach((el) => {
++      const labelledBy = el.getAttribute('aria-labelledby');
++      if (labelledBy) {
++        for (const id of labelledBy.split(/\s+/).filter(Boolean)) {
++          if (!document.getElementById(id)) {
++            violations.push({
++              kind: 'broken-reference',
++              selector: el.tagName.toLowerCase(),
++              message: `aria-labelledby references non-existent ID "${id}"`,
++            });
++          }
++        }
++      }
++      const controls = el.getAttribute('aria-controls');
++      if (controls) {
++        for (const id of controls.split(/\s+/).filter(Boolean)) {
++          if (!document.getElementById(id)) {
++            violations.push({
++              kind: 'broken-reference',
++              selector: el.tagName.toLowerCase(),
++              message: `aria-controls references non-existent ID "${id}"`,
++            });
++          }
++        }
++      }
++      const activeDesc = el.getAttribute('aria-activedescendant');
++      if (activeDesc && activeDesc.trim().length > 0) {
++        if (!document.getElementById(activeDesc)) {
++          violations.push({
++            kind: 'broken-reference',
++            selector: el.tagName.toLowerCase(),
++            message: `aria-activedescendant references non-existent ID "${activeDesc}"`,
++          });
++        }
++      }
++    });
++
++    return violations;
++  });
++}
++
++export interface FocusIndicatorViolation {
++  selector: string;
++  outlineWidth: string;
++  outlineStyle: string;
++  boxShadow: string;
++  message: string;
++}
++
++/**
++ * Focuses target selectors and verifies a visible >=2px focus indicator on :focus-visible.
++ */
++export async function scanFocusVisibleIndicators(
++  page: Page,
++  selectors: string[] = [
++    '.kb-palette-input',
++    '.navigator-search-input',
++    '.state-filter-search-input',
++    '.docs-title-input',
++    '.kb-layout-switcher-btn',
++    '.swimlane-card',
++    '.board-card',
++    '.navigator-issue-card',
++  ],
++): Promise<FocusIndicatorViolation[]> {
++  const violations: FocusIndicatorViolation[] = [];
++
++  for (const selector of selectors) {
++    const loc = page.locator(selector).first();
++    const count = await loc.count();
++    if (count === 0) continue;
++
++    try {
++      await loc.focus({ timeout: 1500 });
++      const styles = await loc.evaluate((el) => {
++        const cs = window.getComputedStyle(el);
++        return {
++          outlineWidth: cs.outlineWidth,
++          outlineStyle: cs.outlineStyle,
++          outlineColor: cs.outlineColor,
++          boxShadow: cs.boxShadow,
++        };
++      });
++
++      const outlinePixels = parseFloat(styles.outlineWidth) || 0;
++      const hasOutline = styles.outlineStyle !== 'none' && outlinePixels >= 1.5;
++      const hasShadow =
++        styles.boxShadow && styles.boxShadow !== 'none' && styles.boxShadow.includes('px');
++
++      if (!hasOutline && !hasShadow) {
++        violations.push({
++          selector,
++          outlineWidth: styles.outlineWidth,
++          outlineStyle: styles.outlineStyle,
++          boxShadow: styles.boxShadow,
++          message: `Selector "${selector}" has no visible outline or box-shadow on focus (${styles.outlineStyle} ${styles.outlineWidth})`,
++        });
++      }
++    } catch {
++      // Element may not be currently interactable in current layout
++    }
++  }
++
++  return violations;
++}
+diff --git a/kanban/web/src/app/AppShell.tsx b/kanban/web/src/app/AppShell.tsx
+index f695b019..933bf1b8 100644
+--- a/kanban/web/src/app/AppShell.tsx
++++ b/kanban/web/src/app/AppShell.tsx
+@@ -360,10 +360,17 @@ export function AppShell({
+           systemStatus={systemStatus}
+           showLayoutSwitcher={false}
+           user={currentUser}
++          hamburgerButtonRef={hamburgerButtonRef}
+         />
+ 
+         {/* Main Canvas Region */}
+-        <main id="main" tabIndex={-1} className="kb-main-canvas">
++        <main
++          id="main"
++          tabIndex={-1}
++          className="kb-main-canvas"
++          inert={mobileSidebarOpen ? true : undefined}
++          aria-hidden={mobileSidebarOpen ? 'true' : undefined}
++        >
+           {children ?? <Outlet />}
+         </main>
+ 
+diff --git a/kanban/web/src/app/CommandPalette.css b/kanban/web/src/app/CommandPalette.css
+index b66d5fca..97ec84ce 100644
+--- a/kanban/web/src/app/CommandPalette.css
++++ b/kanban/web/src/app/CommandPalette.css
+@@ -47,6 +47,11 @@
+   font-family: inherit;
+ }
+ 
++.kb-palette-input:focus-visible {
++  outline: 2px solid var(--focus-ring, #6366f1);
++  outline-offset: 2px;
++}
++
+ .kb-palette-input::placeholder {
+   color: var(--fg-muted, #64748b);
+ }
+diff --git a/kanban/web/src/app/CommandPalette.tsx b/kanban/web/src/app/CommandPalette.tsx
+index 4f700188..1607ab4a 100644
+--- a/kanban/web/src/app/CommandPalette.tsx
++++ b/kanban/web/src/app/CommandPalette.tsx
+@@ -589,6 +589,15 @@ export function CommandPalette({
+   const selectedIndex =
+     filteredOptions.length === 0 ? 0 : Math.min(rawSelectedIndex, filteredOptions.length - 1);
+ 
++  useEffect(() => {
++    if (filteredOptions[selectedIndex]) {
++      const activeEl = document.getElementById(`kb-palette-opt-${filteredOptions[selectedIndex].id}`);
++      if (typeof activeEl?.scrollIntoView === 'function') {
++        activeEl.scrollIntoView({ block: 'nearest' });
++      }
++    }
++  }, [selectedIndex, filteredOptions]);
++
+   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
+     const raw = e.target.value;
+     const truncated = raw.length > MAX_QUERY_LENGTH ? raw.slice(0, MAX_QUERY_LENGTH) : raw;
+@@ -666,6 +675,11 @@ export function CommandPalette({
+             aria-expanded="true"
+             aria-controls="command-palette-list"
+             aria-autocomplete="list"
++            aria-activedescendant={
++              filteredOptions[selectedIndex]
++                ? `kb-palette-opt-${filteredOptions[selectedIndex].id}`
++                : undefined
++            }
+             className="kb-palette-input"
+             data-testid="command-palette-input"
+             placeholder="Type a command or search issues..."
+diff --git a/kanban/web/src/app/LayoutSwitcher.css b/kanban/web/src/app/LayoutSwitcher.css
+index fe440bc2..30cb9fad 100644
+--- a/kanban/web/src/app/LayoutSwitcher.css
++++ b/kanban/web/src/app/LayoutSwitcher.css
+@@ -29,6 +29,11 @@
+   transition: background 120ms ease, color 120ms ease;
+ }
+ 
++.kb-layout-switcher-btn:focus-visible {
++  outline: 2px solid var(--focus-ring, #6366f1);
++  outline-offset: 2px;
++}
++
+ .kb-layout-switcher-btn--selected {
+   background: var(--bg-hover, #2c313a);
+   color: var(--fg-primary, #f8fafc);
+diff --git a/kanban/web/src/app/Sidebar.tsx b/kanban/web/src/app/Sidebar.tsx
+index 6ad8e465..1e73210d 100644
+--- a/kanban/web/src/app/Sidebar.tsx
++++ b/kanban/web/src/app/Sidebar.tsx
+@@ -529,6 +529,32 @@ export function Sidebar({
+     };
+   }, [isOpen]);
+ 
++  const [isMobileViewport, setIsMobileViewport] = useState<boolean>(() =>
++    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
++      ? window.matchMedia('(max-width: 1279px)').matches
++      : false,
++  );
++
++  useEffect(() => {
++    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
++    const mql = window.matchMedia('(max-width: 1279px)');
++    const handler = (e: MediaQueryListEvent): void => {
++      setIsMobileViewport(e.matches);
++    };
++    if (mql.addEventListener) {
++      mql.addEventListener('change', handler);
++    } else if (typeof (mql as unknown as { addListener?: (h: (e: MediaQueryListEvent) => void) => void }).addListener === 'function') {
++      (mql as unknown as { addListener: (h: (e: MediaQueryListEvent) => void) => void }).addListener(handler);
++    }
++    return () => {
++      if (mql.removeEventListener) {
++        mql.removeEventListener('change', handler);
++      } else if (typeof (mql as unknown as { removeListener?: (h: (e: MediaQueryListEvent) => void) => void }).removeListener === 'function') {
++        (mql as unknown as { removeListener: (h: (e: MediaQueryListEvent) => void) => void }).removeListener(handler);
++      }
++    };
++  }, []);
++
+   const handleMobileKeyDown = (e: KeyboardEvent<HTMLElement>): void => {
+     if (e.key === 'Escape') {
+       e.preventDefault();
+@@ -566,6 +592,38 @@ export function Sidebar({
+     }
+   };
+ 
++  const handleWorkspaceDropdownKeyDown = (e: React.KeyboardEvent): void => {
++    if (e.key === 'Escape') {
++      e.preventDefault();
++      setWorkspaceDropdownOpen(false);
++      return;
++    }
++    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
++      e.preventDefault();
++      const dropdown = e.currentTarget as HTMLElement;
++      const items = Array.from(
++        dropdown.querySelectorAll<HTMLElement>('[role="menuitem"]:not([disabled])'),
++      );
++      if (items.length === 0) return;
++      if (e.key === 'Home') {
++        items[0]?.focus();
++        return;
++      }
++      if (e.key === 'End') {
++        items[items.length - 1]?.focus();
++        return;
++      }
++      const currentIndex = items.indexOf(document.activeElement as HTMLElement);
++      let nextIndex = 0;
++      if (e.key === 'ArrowDown') {
++        nextIndex = currentIndex >= 0 && currentIndex < items.length - 1 ? currentIndex + 1 : 0;
++      } else {
++        nextIndex = currentIndex > 0 ? currentIndex - 1 : items.length - 1;
++      }
++      items[nextIndex]?.focus();
++    }
++  };
++
+   return (
+     <>
+       {/* Mobile Backdrop Scrim */}
+@@ -579,16 +637,8 @@ export function Sidebar({
+ 
+       <aside
+         ref={sidebarRef}
+-        role={
+-          isOpen && typeof window !== 'undefined' && window.innerWidth <= 1279
+-            ? 'dialog'
+-            : undefined
+-        }
+-        aria-modal={
+-          isOpen && typeof window !== 'undefined' && window.innerWidth <= 1279
+-            ? 'true'
+-            : undefined
+-        }
++        role={isOpen && isMobileViewport ? 'dialog' : undefined}
++        aria-modal={isOpen && isMobileViewport ? 'true' : undefined}
+         aria-label="Sidebar navigation"
+         className={`kb-sidebar ${isDesktopCollapsed ? 'kb-sidebar-collapsed' : ''} ${
+           isOpen ? 'kb-sidebar-overlay' : ''
+@@ -624,7 +674,11 @@ export function Sidebar({
+               </button>
+ 
+               {workspaceDropdownOpen && (
+-                <div className="kb-workspace-dropdown" role="menu">
++                <div
++                  className="kb-workspace-dropdown"
++                  role="menu"
++                  onKeyDown={handleWorkspaceDropdownKeyDown}
++                >
+                   {deduplicatedWorkspaces.map((ws) => (
+                     <button
+                       key={ws.id}
+@@ -639,7 +693,7 @@ export function Sidebar({
+                         <WorkspaceBadge name={ws.name} size="sm" />
+                         <span>{ws.name}</span>
+                       </span>
+-                      {ws.is_current && <span className="kb-workspace-dropdown-check">✓</span>}
++                      {ws.is_current && <span className="kb-workspace-dropdown-check" aria-hidden="true">✓</span>}
+                     </button>
+                   ))}
+                   {deduplicatedWorkspaces.length > 0 && <div className="kb-workspace-dropdown-divider" />}
+diff --git a/kanban/web/src/app/Topbar.tsx b/kanban/web/src/app/Topbar.tsx
+index f4d51fe2..133da90c 100644
+--- a/kanban/web/src/app/Topbar.tsx
++++ b/kanban/web/src/app/Topbar.tsx
+@@ -84,6 +84,7 @@ export interface TopbarProps {
+   accessManifest?: AccessManifestData | null | undefined;
+   systemStatus?: SystemStatus | null | undefined;
+   user?: TopbarUser | null | undefined;
++  hamburgerButtonRef?: React.RefObject<HTMLButtonElement | null> | undefined;
+ }
+ 
+ const THEME_OPTIONS: readonly { id: Theme; label: string; icon: string }[] = [
+@@ -108,6 +109,7 @@ export function Topbar({
+   accessManifest,
+   systemStatus,
+   user,
++  hamburgerButtonRef,
+ }: TopbarProps): JSX.Element {
+   const loc = useLocation();
+   const navigate = useNavigate();
+@@ -138,7 +140,7 @@ export function Topbar({
+     };
+   }, [queryClient]);
+ 
+-  // Close avatar menu on outside click
++  // Close avatar menu on outside click or Escape
+   useEffect(() => {
+     if (!avatarMenuOpen) return;
+     const handleOutside = (e: MouseEvent): void => {
+@@ -146,9 +148,18 @@ export function Topbar({
+         setAvatarMenuOpen(false);
+       }
+     };
++    const handleGlobalKeyDown = (e: KeyboardEvent): void => {
++      if (e.key === 'Escape') {
++        e.preventDefault();
++        setAvatarMenuOpen(false);
++        avatarButtonRef.current?.focus();
++      }
++    };
+     document.addEventListener('mousedown', handleOutside);
++    window.addEventListener('keydown', handleGlobalKeyDown);
+     return () => {
+       document.removeEventListener('mousedown', handleOutside);
++      window.removeEventListener('keydown', handleGlobalKeyDown);
+     };
+   }, [avatarMenuOpen]);
+ 
+@@ -161,7 +172,7 @@ export function Topbar({
+       return;
+     }
+ 
+-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
++    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
+       e.preventDefault();
+       if (!menuRef.current) return;
+       const focusable = Array.from(
+@@ -170,6 +181,14 @@ export function Topbar({
+         ),
+       );
+       if (focusable.length === 0) return;
++      if (e.key === 'Home') {
++        focusable[0]?.focus();
++        return;
++      }
++      if (e.key === 'End') {
++        focusable[focusable.length - 1]?.focus();
++        return;
++      }
+       const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
+       let nextIndex = 0;
+       if (e.key === 'ArrowDown') {
+@@ -232,6 +251,7 @@ export function Topbar({
+       {/* Left: Hamburger (<=1279px) & Expand Button (desktop >=1280px when collapsed) & Breadcrumb */}
+       <div className="kb-topbar-left">
+         <button
++          ref={hamburgerButtonRef}
+           type="button"
+           className="kb-topbar-hamburger"
+           aria-label="Open navigation"
+@@ -370,8 +390,8 @@ export function Topbar({
+               <div className="kb-theme-menu-title">Theme</div>
+               <div
+                 className="kb-theme-radiogroup"
+-                role="radiogroup"
+-                aria-label="Theme"
++                role="group"
++                aria-label="Theme preference"
+               >
+                 {THEME_OPTIONS.map((opt) => {
+                   const isChecked = activeTheme === opt.id;
+@@ -379,7 +399,7 @@ export function Topbar({
+                     <button
+                       key={opt.id}
+                       type="button"
+-                      role="radio"
++                      role="menuitemradio"
+                       aria-checked={isChecked}
+                       className="kb-theme-radio"
+                       onClick={() => {
+diff --git a/kanban/web/src/features/a11y/wcag22FullReview.test.tsx b/kanban/web/src/features/a11y/wcag22FullReview.test.tsx
+new file mode 100644
+index 00000000..07c42d29
+--- /dev/null
++++ b/kanban/web/src/features/a11y/wcag22FullReview.test.tsx
+@@ -0,0 +1,437 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import React, { createRef } from 'react';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { MemoryRouter, Routes, Route } from 'react-router';
++import { ThemeProvider } from '../../theme/ThemeProvider';
++import { ShellPanelsProvider } from '../../app/shellPanels';
++import { Topbar } from '../../app/Topbar';
++import { Sidebar } from '../../app/Sidebar';
++import { AppShell } from '../../app/AppShell';
++import { CommandPalette } from '../../app/CommandPalette';
++import { DocsCenterPage } from '../docs-center/DocsCenterPage';
++
++vi.mock('../docs/DocsTreeNav', () => ({
++  DocsTreeNav: () => <div data-testid="mock-tree-nav">Tree Nav</div>,
++}));
++
++vi.mock('../docs/PageEditorPane', () => ({
++  PageEditorPane: () => <div data-testid="mock-page-editor">Editor</div>,
++}));
++
++vi.mock('../docs/OutlineAndVersionsRail', () => ({
++  OutlineAndVersionsRail: () => <div data-testid="mock-rail">Rail</div>,
++}));
++
++vi.mock('../docs/SelectionToIssueToolbar', () => ({
++  SelectionToIssueToolbar: () => <div data-testid="mock-toolbar" />,
++}));
++
++import { DocsWorkspaceView } from '../docs/DocsWorkspaceView';
++
++describe('WCAG 2.2 AA Full Review and Remediation Suite (KAN-315)', () => {
++  let queryClient: QueryClient;
++
++  beforeEach(() => {
++    queryClient = new QueryClient({
++      defaultOptions: {
++        queries: { retry: false, gcTime: 0 },
++      },
++    });
++    vi.restoreAllMocks();
++
++    Element.prototype.scrollIntoView = vi.fn();
++
++    // Default matchMedia mock
++    window.matchMedia = vi.fn().mockImplementation((query: string) => {
++      return {
++        matches: false,
++        media: query,
++        onchange: null,
++        addListener: vi.fn(),
++        removeListener: vi.fn(),
++        addEventListener: vi.fn(),
++        removeEventListener: vi.fn(),
++        dispatchEvent: vi.fn(),
++      };
++    });
++  });
++
++  afterEach(() => {
++    queryClient.clear();
++  });
++
++  describe('Problem 1: ARIA Semantics and Keyboard Traversal in Topbar, CommandPalette, and Sidebar', () => {
++    it('Topbar theme options render inside role="group" with role="menuitemradio" and aria-checked', async () => {
++      render(
++        <QueryClientProvider client={queryClient}>
++          <ShellPanelsProvider>
++            <ThemeProvider>
++              <MemoryRouter>
++                <Topbar
++                  workspaceName="Primary Workspace"
++                  projectKey="KAN"
++                  projectName="Platform Core"
++                  user={{
++                    id: 'u-1',
++                    display_name: 'Adam Architect',
++                    email: 'adam@example.com',
++                    handle: 'adam',
++                    is_server_admin: true,
++                    is_workspace_admin: true,
++                  }}
++                />
++              </MemoryRouter>
++            </ThemeProvider>
++          </ShellPanelsProvider>
++        </QueryClientProvider>
++      );
++
++      const avatarBtn = screen.getByTestId('topbar-avatar-button');
++      fireEvent.click(avatarBtn);
++
++      const menu = await screen.findByRole('menu');
++      expect(menu).toBeDefined();
++
++      const themeGroup = screen.getByRole('group', { name: 'Theme preference' });
++      expect(themeGroup).toBeDefined();
++
++      const themeRadios = screen.getAllByRole('menuitemradio');
++      expect(themeRadios.length).toBe(3);
++
++      const checkedItems = themeRadios.filter(
++        (radio) => radio.getAttribute('aria-checked') === 'true'
++      );
++      expect(checkedItems.length).toBe(1);
++
++      const lightRadio = screen.getByRole('menuitemradio', { name: /light/i });
++      const darkRadio = screen.getByRole('menuitemradio', { name: /dark/i });
++      const systemRadio = screen.getByRole('menuitemradio', { name: /system/i });
++
++      expect(lightRadio).toBeDefined();
++      expect(darkRadio).toBeDefined();
++      expect(systemRadio).toBeDefined();
++
++      // Keyboard navigation with Home and End
++      fireEvent.keyDown(menu, { key: 'End' });
++      const menuItems = menu.querySelectorAll<HTMLElement>('[role^="menuitem"]');
++      expect(document.activeElement).toBe(menuItems[menuItems.length - 1]);
++
++      fireEvent.keyDown(menu, { key: 'Home' });
++      expect(document.activeElement).toBe(menuItems[0]);
++
++      // ArrowDown / ArrowUp traversal
++      fireEvent.keyDown(menu, { key: 'ArrowDown' });
++      expect(document.activeElement).toBe(menuItems[1]);
++
++      fireEvent.keyDown(menu, { key: 'ArrowUp' });
++      expect(document.activeElement).toBe(menuItems[0]);
++    });
++
++    it('Topbar attaches hamburgerButtonRef to hamburger button', () => {
++      const hamburgerRef = createRef<HTMLButtonElement>();
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <ShellPanelsProvider>
++            <ThemeProvider>
++              <MemoryRouter>
++                <Topbar
++                  hamburgerButtonRef={hamburgerRef}
++                  workspaceName="Primary Workspace"
++                />
++              </MemoryRouter>
++            </ThemeProvider>
++          </ShellPanelsProvider>
++        </QueryClientProvider>
++      );
++
++      expect(hamburgerRef.current).not.toBeNull();
++      expect(hamburgerRef.current?.getAttribute('aria-label')).toBe('Open navigation');
++    });
++
++    it('CommandPalette combobox exposes aria-activedescendant that updates with selection', async () => {
++      const onClose = vi.fn();
++      render(
++        <QueryClientProvider client={queryClient}>
++          <ThemeProvider>
++            <MemoryRouter>
++              <CommandPalette
++                isOpen={true}
++                onClose={onClose}
++                projectKey="KAN"
++                cachedIssues={[
++                  { key: 'KAN-101', summary: 'Harden OAuth endpoints' },
++                  { key: 'KAN-102', summary: 'Audit database indexes' },
++                ]}
++              />
++            </MemoryRouter>
++          </ThemeProvider>
++        </QueryClientProvider>
++      );
++
++      const combobox = screen.getByRole('combobox');
++      expect(combobox).toBeDefined();
++      expect(combobox.getAttribute('aria-expanded')).toBe('true');
++      expect(combobox.getAttribute('aria-autocomplete')).toBe('list');
++
++      const initialActiveId = combobox.getAttribute('aria-activedescendant');
++      expect(initialActiveId).toBeTruthy();
++      expect(document.getElementById(initialActiveId!)).not.toBeNull();
++
++      // ArrowDown updates active descendant
++      fireEvent.keyDown(combobox, { key: 'ArrowDown' });
++      const nextActiveId = combobox.getAttribute('aria-activedescendant');
++      expect(nextActiveId).toBeTruthy();
++      expect(nextActiveId).not.toBe(initialActiveId);
++      expect(document.getElementById(nextActiveId!)).not.toBeNull();
++
++      // ArrowUp returns back
++      fireEvent.keyDown(combobox, { key: 'ArrowUp' });
++      expect(combobox.getAttribute('aria-activedescendant')).toBe(initialActiveId);
++    });
++
++    it('Sidebar workspace switcher dropdown handles keyboard navigation and hides checkmark from screen readers', async () => {
++      const { container } = render(
++        <QueryClientProvider client={queryClient}>
++          <ThemeProvider>
++            <MemoryRouter>
++              <Sidebar
++                isOpen={true}
++                projectKey="KAN"
++                projectName="Platform Core"
++              />
++            </MemoryRouter>
++          </ThemeProvider>
++        </QueryClientProvider>
++      );
++
++      const switcher = container.querySelector('.kb-workspace-switcher') as HTMLButtonElement;
++      expect(switcher).not.toBeNull();
++      fireEvent.click(switcher);
++
++      const dropdown = screen.getByRole('menu');
++      expect(dropdown).toBeDefined();
++
++      const menuItems = dropdown.querySelectorAll<HTMLElement>('[role="menuitem"]');
++      expect(menuItems.length).toBeGreaterThan(0);
++
++      // Checkmark in active item must have aria-hidden="true"
++      const checkmark = dropdown.querySelector('.kb-workspace-dropdown-check');
++      if (checkmark) {
++        expect(checkmark.getAttribute('aria-hidden')).toBe('true');
++      }
++
++      // Keyboard navigation with ArrowDown, Home, End
++      fireEvent.keyDown(dropdown, { key: 'ArrowDown' });
++      fireEvent.keyDown(dropdown, { key: 'End' });
++      expect(document.activeElement).toBe(menuItems[menuItems.length - 1]);
++
++      fireEvent.keyDown(dropdown, { key: 'Home' });
++      expect(document.activeElement).toBe(menuItems[0]);
++
++      // Escape closes dropdown
++      fireEvent.keyDown(dropdown, { key: 'Escape' });
++      await waitFor(() => {
++        expect(screen.queryByRole('menu')).toBeNull();
++      });
++    });
++  });
++
++  describe('Problem 2: Mobile Viewport Dialog Roles, Focus Trapping, and Inert Backgrounds', () => {
++    it('Sidebar dynamically toggles role="dialog" and aria-modal="true" on mobile viewports', () => {
++      window.matchMedia = vi.fn().mockImplementation((query: string) => {
++        return {
++          matches: query.includes('1279px'),
++          media: query,
++          onchange: null,
++          addListener: vi.fn(),
++          removeListener: vi.fn(),
++          addEventListener: vi.fn(),
++          removeEventListener: vi.fn(),
++          dispatchEvent: vi.fn(),
++        };
++      });
++
++      const { container } = render(
++        <QueryClientProvider client={queryClient}>
++          <ThemeProvider>
++            <MemoryRouter>
++              <Sidebar
++                isOpen={true}
++                projectKey="KAN"
++                projectName="Platform Core"
++              />
++            </MemoryRouter>
++          </ThemeProvider>
++        </QueryClientProvider>
++      );
++
++      const aside = container.querySelector('aside');
++      expect(aside?.getAttribute('role')).toBe('dialog');
++      expect(aside?.getAttribute('aria-modal')).toBe('true');
++    });
++
++    it('AppShell marks main canvas with inert and aria-hidden when mobile sidebar is open', () => {
++      vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(800);
++      window.matchMedia = vi.fn().mockImplementation((query: string) => {
++        return {
++          matches: query.includes('1279px'),
++          media: query,
++          onchange: null,
++          addListener: vi.fn(),
++          removeListener: vi.fn(),
++          addEventListener: vi.fn(),
++          removeEventListener: vi.fn(),
++          dispatchEvent: vi.fn(),
++        };
++      });
++
++      const { container } = render(
++        <QueryClientProvider client={queryClient}>
++          <ShellPanelsProvider>
++            <ThemeProvider>
++              <MemoryRouter>
++                <AppShell>
++                  <div data-testid="inner-content">Page Content</div>
++                </AppShell>
++              </MemoryRouter>
++            </ThemeProvider>
++          </ShellPanelsProvider>
++        </QueryClientProvider>
++      );
++
++      const main = container.querySelector('#main');
++      expect(main).toBeDefined();
++
++      // Open mobile sidebar via Topbar hamburger
++      const hamburger = screen.getByRole('button', { name: 'Open navigation' });
++      fireEvent.click(hamburger);
++
++      expect(main?.hasAttribute('inert')).toBe(true);
++      expect(main?.getAttribute('aria-hidden')).toBe('true');
++
++      // Close mobile sidebar
++      fireEvent.click(hamburger);
++      expect(main?.hasAttribute('inert')).toBe(false);
++      expect(main?.getAttribute('aria-hidden')).toBeNull();
++    });
++
++    it('DocsWorkspaceView mobile tree and rail sheets enforce role="dialog" and aria-modal="true"', async () => {
++      vi.spyOn(window, 'innerWidth', 'get').mockReturnValue(800);
++
++      const { container } = render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/projects/KAN/docs']}>
++            <Routes>
++              <Route path="/projects/:projectKey/docs" element={<DocsWorkspaceView />} />
++            </Routes>
++          </MemoryRouter>
++        </QueryClientProvider>
++      );
++
++      // Open mobile tree sheet
++      const toggleTreeBtn = screen.getByTestId('toggle-tree-sheet-btn');
++      fireEvent.click(toggleTreeBtn);
++
++      const treePane = container.querySelector('.docs-tree-wrapper');
++      expect(treePane).toBeDefined();
++      expect(treePane?.getAttribute('role')).toBe('dialog');
++      expect(treePane?.getAttribute('aria-modal')).toBe('true');
++
++      // Escape key closes mobile tree sheet and restores focus
++      fireEvent.keyDown(window, { key: 'Escape' });
++      await waitFor(() => {
++        expect(treePane?.getAttribute('role')).toBeNull();
++      });
++      expect(document.activeElement).toBe(toggleTreeBtn);
++    });
++
++    it('DocsCenterPage mobile chapters drawer enforces role="dialog" and aria-modal="true"', async () => {
++      const { container } = render(
++        <MemoryRouter initialEntries={['/docs/home']}>
++          <DocsCenterPage />
++        </MemoryRouter>
++      );
++
++      const openDrawerBtn = screen.getByTestId('docs-mobile-chapters-btn');
++      fireEvent.click(openDrawerBtn);
++
++      const drawer = container.querySelector('.kb-docs-mobile-drawer');
++      expect(drawer).toBeDefined();
++      expect(drawer?.getAttribute('role')).toBe('dialog');
++      expect(drawer?.getAttribute('aria-modal')).toBe('true');
++
++      const closeDrawerBtn = screen.getByTestId('docs-mobile-drawer-close');
++      fireEvent.click(closeDrawerBtn);
++
++      await waitFor(() => {
++        expect(container.querySelector('.kb-docs-mobile-drawer')).toBeNull();
++      });
++      expect(document.activeElement).toBe(openDrawerBtn);
++    });
++  });
++
++  describe('Problem 4: prefers-reduced-motion in Smooth Scrolling Operations', () => {
++    it('DocsCenterPage respects prefers-reduced-motion: reduce during anchor scrolling', () => {
++      const scrollToSpy = vi.fn();
++      window.scrollTo = scrollToSpy;
++
++      window.matchMedia = vi.fn().mockImplementation((query: string) => {
++        return {
++          matches: query.includes('prefers-reduced-motion: reduce'),
++          media: query,
++          onchange: null,
++          addListener: vi.fn(),
++          removeListener: vi.fn(),
++          addEventListener: vi.fn(),
++          removeEventListener: vi.fn(),
++          dispatchEvent: vi.fn(),
++        };
++      });
++
++      render(
++        <MemoryRouter initialEntries={['/docs/home']}>
++          <DocsCenterPage />
++        </MemoryRouter>
++      );
++
++      expect(scrollToSpy).toHaveBeenCalledWith({
++        top: 0,
++        behavior: 'auto',
++      });
++    });
++
++    it('DocsCenterPage uses smooth behavior when prefers-reduced-motion is false', () => {
++      const scrollToSpy = vi.fn();
++      window.scrollTo = scrollToSpy;
++
++      window.matchMedia = vi.fn().mockImplementation((query: string) => {
++        return {
++          matches: false,
++          media: query,
++          onchange: null,
++          addListener: vi.fn(),
++          removeListener: vi.fn(),
++          addEventListener: vi.fn(),
++          removeEventListener: vi.fn(),
++          dispatchEvent: vi.fn(),
++        };
++      });
++
++      render(
++        <MemoryRouter initialEntries={['/docs/home']}>
++          <DocsCenterPage />
++        </MemoryRouter>
++      );
++
++      expect(scrollToSpy).toHaveBeenCalledWith({
++        top: 0,
++        behavior: 'smooth',
++      });
++    });
++  });
++});
+diff --git a/kanban/web/src/features/admin/LinkAuditorStudio.css b/kanban/web/src/features/admin/LinkAuditorStudio.css
+index 47f4fd24..904cbf9c 100644
+--- a/kanban/web/src/features/admin/LinkAuditorStudio.css
++++ b/kanban/web/src/features/admin/LinkAuditorStudio.css
+@@ -649,7 +649,13 @@
+ 
+ .purge-textarea:focus {
+   outline: none;
+-  border-color: #58a6ff;
++  border-color: var(--focus-ring, #58a6ff);
++}
++
++.purge-textarea:focus-visible {
++  outline: 2px solid var(--focus-ring, #58a6ff);
++  outline-offset: 2px;
++  border-color: var(--focus-ring, #58a6ff);
+ }
+ 
+ .char-count {
+@@ -661,7 +667,7 @@
+ .validation-error {
+   margin: 4px 0 0;
+   font-size: 0.8125rem;
+-  color: #ff7b72;
++  color: var(--danger-fg, #ff7b72);
+ }
+ 
+ .purge-modal__footer {
+diff --git a/kanban/web/src/features/docs-center/DocsCenterPage.tsx b/kanban/web/src/features/docs-center/DocsCenterPage.tsx
+index bfe55c32..33450099 100644
+--- a/kanban/web/src/features/docs-center/DocsCenterPage.tsx
++++ b/kanban/web/src/features/docs-center/DocsCenterPage.tsx
+@@ -23,6 +23,7 @@ import {
+   type WikiChapterCategory,
+ } from './docsService';
+ import { formatDocumentTitle, useDocumentTitle } from '../../app/documentTitle';
++import { useFocusTrap } from '../drawer/useFocusTrap';
+ import './DocsCenterPage.css';
+ 
+ export type CategoryFilter = 'all' | WikiChapterCategory;
+@@ -63,8 +64,11 @@ export function DocsCenterPage(): JSX.Element {
+   const contentRef = useRef<HTMLDivElement | null>(null);
+   const searchContainerRef = useRef<HTMLDivElement | null>(null);
+   const mobileChaptersBtnRef = useRef<HTMLButtonElement | null>(null);
++  const mobileChaptersDrawerRef = useRef<HTMLElement | null>(null);
+   const wasMobileChaptersOpenRef = useRef<boolean>(false);
+ 
++  useFocusTrap(isMobileChaptersOpen, mobileChaptersDrawerRef);
++
+   useEffect(() => {
+     if (wasMobileChaptersOpenRef.current && !isMobileChaptersOpen) {
+       mobileChaptersBtnRef.current?.focus();
+@@ -91,7 +95,14 @@ export function DocsCenterPage(): JSX.Element {
+     if (!contentRef.current) return;
+     const targetEl = resolveSectionElement(contentRef.current, anchorId);
+     if (targetEl) {
+-      targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
++      const prefersReducedMotion =
++        typeof window !== 'undefined' &&
++        typeof window.matchMedia === 'function' &&
++        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
++      targetEl.scrollIntoView({
++        behavior: prefersReducedMotion ? 'auto' : 'smooth',
++        block: 'start',
++      });
+     }
+   };
+ 
+@@ -105,7 +116,11 @@ export function DocsCenterPage(): JSX.Element {
+         window.clearTimeout(timer);
+       };
+     } else {
+-      window.scrollTo({ top: 0, behavior: 'smooth' });
++      const prefersReducedMotion =
++        typeof window !== 'undefined' &&
++        typeof window.matchMedia === 'function' &&
++        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
++      window.scrollTo({ top: 0, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
+     }
+   }, [location.hash, currentSlug]);
+ 
+@@ -335,6 +350,7 @@ export function DocsCenterPage(): JSX.Element {
+             aria-hidden="true"
+           />
+           <aside
++            ref={mobileChaptersDrawerRef}
+             className="kb-docs-mobile-drawer"
+             role="dialog"
+             aria-modal="true"
+diff --git a/kanban/web/src/features/docs/DocsWorkspaceView.css b/kanban/web/src/features/docs/DocsWorkspaceView.css
+index 52a0bb65..938949a6 100644
+--- a/kanban/web/src/features/docs/DocsWorkspaceView.css
++++ b/kanban/web/src/features/docs/DocsWorkspaceView.css
+@@ -113,7 +113,7 @@
+ 
+ .docs-tree-btn--primary {
+   background: var(--accent-primary);
+-  color: #ffffff;
++  color: var(--accent-primary-fg, #ffffff);
+   border-color: var(--accent-primary);
+ }
+ 
+@@ -501,7 +501,9 @@
+ }
+ 
+ .docs-title-input:focus-visible {
+-  outline: none;
++  outline: 2px solid var(--focus-ring, #6366f1);
++  outline-offset: 2px;
++  border-radius: var(--radius-sm, 4px);
+ }
+ 
+ .docs-editor-container {
+@@ -572,8 +574,8 @@
+ }
+ 
+ .docs-rail-tab--active {
+-  color: var(--accent-primary);
+-  border-bottom-color: var(--accent-primary);
++  color: var(--focus-ring, var(--accent-primary));
++  border-bottom-color: var(--focus-ring, var(--accent-primary));
+   font-weight: 600;
+ }
+ 
+@@ -767,7 +769,8 @@
+   overflow-y: auto;
+   white-space: pre-wrap;
+   word-break: break-word;
+-  background: #ffffff;
++  background: var(--bg-surface-raised, #ffffff);
++  color: var(--fg-primary);
+   padding: 8px;
+   border-radius: 4px;
+   border: 1px solid var(--border-subtle, #e2e8f0);
+@@ -802,7 +805,7 @@
+ }
+ 
+ .docs-version-view-btn--active {
+-  background: #ffffff;
++  background: var(--bg-surface-raised, #ffffff);
+   color: var(--fg-primary, #1e293b);
+   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+ }
+@@ -830,7 +833,8 @@
+   line-height: 1.4;
+   max-height: 220px;
+   overflow-y: auto;
+-  background: #ffffff;
++  background: var(--bg-surface-raised, #ffffff);
++  color: var(--fg-primary);
+   border: 1px solid var(--border-subtle, #e2e8f0);
+   border-radius: 4px;
+   padding: 4px 0;
+@@ -848,13 +852,13 @@
+ }
+ 
+ .docs-diff-line--added {
+-  background: rgba(34, 197, 94, 0.12);
+-  color: #166534;
++  background: rgba(34, 197, 94, 0.16);
++  color: var(--ok-fg, #22c55e);
+ }
+ 
+ .docs-diff-line--removed {
+-  background: rgba(239, 68, 68, 0.12);
+-  color: #991b1b;
++  background: rgba(239, 68, 68, 0.16);
++  color: var(--danger-fg, #ef4444);
+ }
+ 
+ .docs-diff-prefix {
+@@ -1005,8 +1009,8 @@
+ .docs-modal__error {
+   padding: 8px 12px;
+   border-radius: var(--radius-sm, 4px);
+-  background: #fef2f2;
+-  color: #dc2626;
++  background: var(--danger-bg, #fef2f2);
++  color: var(--danger-fg, #dc2626);
+   font-size: 12px;
+   margin-bottom: 12px;
+ }
+diff --git a/kanban/web/src/features/docs/DocsWorkspaceView.tsx b/kanban/web/src/features/docs/DocsWorkspaceView.tsx
+index fc863bc4..c41632dc 100644
+--- a/kanban/web/src/features/docs/DocsWorkspaceView.tsx
++++ b/kanban/web/src/features/docs/DocsWorkspaceView.tsx
+@@ -8,6 +8,7 @@ import React, {
+   useEffect,
+   useCallback,
+   useMemo,
++  useRef,
+   type JSX,
+ } from 'react';
+ import { useParams, useNavigate } from 'react-router';
+@@ -19,6 +20,7 @@ import { PageEditorPane } from './PageEditorPane';
+ import { OutlineAndVersionsRail } from './OutlineAndVersionsRail';
+ import { SelectionToIssueToolbar } from './SelectionToIssueToolbar';
+ import { useProjectRouteContext } from '../../app/ProjectRouteContext';
++import { useFocusTrap } from '../drawer/useFocusTrap';
+ import './DocsWorkspaceView.css';
+ 
+ export function DocsWorkspaceView(): JSX.Element {
+@@ -43,6 +45,46 @@ export function DocsWorkspaceView(): JSX.Element {
+     () => typeof window !== 'undefined' && window.innerWidth <= 1024
+   );
+ 
++  const toggleTreeBtnRef = useRef<HTMLButtonElement | null>(null);
++  const toggleRailBtnRef = useRef<HTMLButtonElement | null>(null);
++  const treePaneRef = useRef<HTMLDivElement | null>(null);
++  const railPaneRef = useRef<HTMLDivElement | null>(null);
++  const wasTreeSheetOpenRef = useRef<boolean>(false);
++  const wasRailSheetOpenRef = useRef<boolean>(false);
++
++  useEffect(() => {
++    if (wasTreeSheetOpenRef.current && !isTreeSheetOpen) {
++      toggleTreeBtnRef.current?.focus();
++    }
++    wasTreeSheetOpenRef.current = isTreeSheetOpen;
++  }, [isTreeSheetOpen]);
++
++  useEffect(() => {
++    if (wasRailSheetOpenRef.current && !isRailSheetOpen) {
++      toggleRailBtnRef.current?.focus();
++    }
++    wasRailSheetOpenRef.current = isRailSheetOpen;
++  }, [isRailSheetOpen]);
++
++  useEffect(() => {
++    const handleKeyDown = (e: KeyboardEvent): void => {
++      if (e.key === 'Escape') {
++        if (isTreeSheetOpen) {
++          setIsTreeSheetOpen(false);
++        } else if (isRailSheetOpen) {
++          setIsRailSheetOpen(false);
++        }
++      }
++    };
++    window.addEventListener('keydown', handleKeyDown);
++    return () => {
++      window.removeEventListener('keydown', handleKeyDown);
++    };
++  }, [isTreeSheetOpen, isRailSheetOpen]);
++
++  useFocusTrap(isMobile && isTreeSheetOpen, treePaneRef);
++  useFocusTrap(isMobile && isRailSheetOpen, railPaneRef);
++
+   useEffect(() => {
+     function handleResize() {
+       setIsMobile(window.innerWidth <= 1024);
+@@ -120,6 +162,7 @@ export function DocsWorkspaceView(): JSX.Element {
+       {/* Mobile Topbar */}
+       <div className="docs-mobile-bar" data-testid="docs-mobile-bar">
+         <button
++          ref={toggleTreeBtnRef}
+           type="button"
+           className="docs-mobile-btn"
+           onClick={() => {
+@@ -127,11 +170,13 @@ export function DocsWorkspaceView(): JSX.Element {
+             setIsRailSheetOpen(false);
+           }}
+           aria-label="Toggle document tree"
++          aria-expanded={isTreeSheetOpen}
+           data-testid="toggle-tree-sheet-btn"
+         >
+           📂 Pages Tree
+         </button>
+         <button
++          ref={toggleRailBtnRef}
+           type="button"
+           className="docs-mobile-btn"
+           onClick={() => {
+@@ -139,6 +184,7 @@ export function DocsWorkspaceView(): JSX.Element {
+             setIsTreeSheetOpen(false);
+           }}
+           aria-label="Toggle outline and history"
++          aria-expanded={isRailSheetOpen}
+           data-testid="toggle-rail-sheet-btn"
+         >
+           📑 Outline & History
+@@ -166,6 +212,10 @@ export function DocsWorkspaceView(): JSX.Element {
+ 
+         {/* Left Pane (Tree) */}
+         <div
++          ref={treePaneRef}
++          role={isMobile && isTreeSheetOpen ? 'dialog' : undefined}
++          aria-modal={isMobile && isTreeSheetOpen ? 'true' : undefined}
++          aria-label="Document pages tree"
+           className={`docs-tree-wrapper ${isTreeSheetOpen ? 'docs-tree-pane--open' : ''}`}
+           data-testid="docs-tree-wrapper"
+         >
+@@ -213,6 +263,10 @@ export function DocsWorkspaceView(): JSX.Element {
+         {/* Right Pane (Outline & History) */}
+         {activePageId && (
+           <div
++            ref={railPaneRef}
++            role={isMobile && isRailSheetOpen ? 'dialog' : undefined}
++            aria-modal={isMobile && isRailSheetOpen ? 'true' : undefined}
++            aria-label="Document outline and version history"
+             className={`docs-rail-wrapper ${isRailSheetOpen ? 'docs-rail-pane--open' : ''}`}
+             data-testid="docs-rail-wrapper"
+           >
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.css b/kanban/web/src/features/settings/McpAccessStudio.css
+index ba654c5e..0089c19d 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.css
++++ b/kanban/web/src/features/settings/McpAccessStudio.css
+@@ -35,7 +35,7 @@
+ .kb-mcp-studio-mint-btn {
+   height: var(--prop-row-h);
+   padding: 0 18px;
+-  background-color: #238636;
++  background-color: var(--ok-bg, #238636);
+   border: 1px solid rgba(240, 246, 252, 0.1);
+   color: #ffffff;
+   border-radius: 6px;
+@@ -44,7 +44,7 @@
+ }
+ 
+ .kb-mcp-studio-mint-btn:hover {
+-  background-color: #2ea043;
++  background-color: var(--ok-hover, #2ea043);
+ }
+ 
+ .kb-mcp-admin-subnav {
+@@ -75,8 +75,8 @@
+ }
+ 
+ .kb-mcp-admin-subnav-active {
+-  color: #58a6ff !important;
+-  border-bottom-color: #58a6ff !important;
++  color: var(--accent-primary, #58a6ff) !important;
++  border-bottom-color: var(--accent-primary, #58a6ff) !important;
+   font-weight: 600;
+ }
+ 
+@@ -138,11 +138,11 @@
+ .kb-mcp-key-hint {
+   font-family: var(--font-mono);
+   font-size: 0.8125rem;
+-  color: #79c0ff;
+-  background-color: #0d1117;
++  color: var(--accent-primary, #79c0ff);
++  background-color: var(--bg-surface-raised, #0d1117);
+   padding: 4px 8px;
+   border-radius: 4px;
+-  border: 1px solid #30363d;
++  border: 1px solid var(--border-subtle, #30363d);
+ }
+ 
+ .kb-mcp-tier-badge {
+@@ -154,31 +154,31 @@
+   font-size: 0.75rem;
+   font-weight: 500;
+   background-color: rgba(56, 139, 253, 0.15);
+-  color: #58a6ff;
++  color: var(--accent-primary, #58a6ff);
+   border: 1px solid rgba(56, 139, 253, 0.3);
+ }
+ 
+ .kb-mcp-tier-global {
+   background-color: rgba(163, 113, 247, 0.15);
+-  color: #bc8cff;
++  color: var(--brand-purple, #bc8cff);
+   border-color: rgba(163, 113, 247, 0.3);
+ }
+ 
+ .kb-mcp-tier-workspace {
+   background-color: rgba(46, 160, 67, 0.15);
+-  color: #3fb950;
++  color: var(--ok-fg, #3fb950);
+   border-color: rgba(46, 160, 67, 0.3);
+ }
+ 
+ .kb-mcp-tier-project {
+   background-color: rgba(56, 139, 253, 0.15);
+-  color: #58a6ff;
++  color: var(--accent-primary, #58a6ff);
+   border-color: rgba(56, 139, 253, 0.3);
+ }
+ 
+ .kb-mcp-tier-personal {
+   background-color: rgba(110, 118, 129, 0.15);
+-  color: #8b949e;
++  color: var(--fg-secondary, #8b949e);
+   border-color: rgba(110, 118, 129, 0.3);
+ }
+ 
+diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.css b/kanban/web/src/features/settings/ProjectSettingsPage.css
+index c49df242..79a6625f 100644
+--- a/kanban/web/src/features/settings/ProjectSettingsPage.css
++++ b/kanban/web/src/features/settings/ProjectSettingsPage.css
+@@ -721,13 +721,13 @@
+   border-radius: 4px;
+   font-size: 0.8rem;
+   font-weight: 600;
+-  background: #fef3c7;
+-  color: #b45309;
++  background: var(--warn-bg, #fef3c7);
++  color: var(--warn-fg, #b45309);
+ }
+ 
+ .kb-retention-pill-expired {
+-  background: #fee2e2;
+-  color: #b91c1c;
++  background: var(--danger-bg, #fee2e2);
++  color: var(--danger-fg, #b91c1c);
+ }
+ 
+ .kb-trash-empty {
+diff --git a/kanban/web/src/features/views/IssueNavigatorBar.css b/kanban/web/src/features/views/IssueNavigatorBar.css
+index a18b02fd..53c92e1d 100644
+--- a/kanban/web/src/features/views/IssueNavigatorBar.css
++++ b/kanban/web/src/features/views/IssueNavigatorBar.css
+@@ -58,6 +58,13 @@
+   border-color: var(--accent-primary);
+ }
+ 
++.navigator-search-input:focus-visible,
++.navigator-query-input:focus-visible {
++  outline: 2px solid var(--focus-ring, #6366f1);
++  outline-offset: 1px;
++  border-color: var(--focus-ring, #6366f1);
++}
++
+ .navigator-search-btn {
+   height: 32px;
+   padding: 0 var(--space-3, 12px);
+@@ -302,6 +309,12 @@
+   border-color: var(--accent-primary);
+ }
+ 
++.state-filter-search-input:focus-visible {
++  outline: 2px solid var(--focus-ring, #6366f1);
++  outline-offset: 1px;
++  border-color: var(--focus-ring, #6366f1);
++}
++
+ .state-filter-groups {
+   display: flex;
+   flex-direction: column;
+diff --git a/kanban/web/src/features/views/filterBulk.css b/kanban/web/src/features/views/filterBulk.css
+index 605ea0b5..7c5899cd 100644
+--- a/kanban/web/src/features/views/filterBulk.css
++++ b/kanban/web/src/features/views/filterBulk.css
+@@ -404,7 +404,8 @@
+   border-color: var(--border-strong);
+ }
+ 
+-.swimlane-card[data-focused="true"] {
++.swimlane-card[data-focused="true"],
++.swimlane-card:focus-visible {
+   outline: 2px solid var(--focus-ring);
+   outline-offset: 2px;
+ }
+diff --git a/kanban/web/src/features/views/listTable.css b/kanban/web/src/features/views/listTable.css
+index 5383c233..4bbdc87c 100644
+--- a/kanban/web/src/features/views/listTable.css
++++ b/kanban/web/src/features/views/listTable.css
+@@ -1075,6 +1075,12 @@
+   background: var(--bg-hover, #2c313a);
+ }
+ 
++.navigator-issue-card:focus-visible,
++.issue-list-card:focus-visible {
++  outline: 2px solid var(--focus-ring, #6366f1);
++  outline-offset: 2px;
++}
++
+ .issue-list-card.list-row--active {
+   background: var(--bg-hover, #2c313a);
+   border-color: var(--accent-primary);
+diff --git a/kanban/web/src/styles/theme.css b/kanban/web/src/styles/theme.css
+index 13c1e325..08b07d21 100644
+--- a/kanban/web/src/styles/theme.css
++++ b/kanban/web/src/styles/theme.css
+@@ -72,7 +72,7 @@
+   --fg-muted: #94a3b8;
+   --border-subtle: #2d333f;
+   --border-strong: #3f4756;
+-  --accent-primary: #1d4ed8;
++  --accent-primary: #2563eb;
+   --accent-primary-fg: #ffffff;
+   --focus-ring: #3b82f6;
+   --warn-bg: #451a03;

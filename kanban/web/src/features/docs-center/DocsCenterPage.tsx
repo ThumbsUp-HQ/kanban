@@ -23,6 +23,7 @@ import {
   type WikiChapterCategory,
 } from './docsService';
 import { formatDocumentTitle, useDocumentTitle } from '../../app/documentTitle';
+import { useFocusTrap } from '../drawer/useFocusTrap';
 import './DocsCenterPage.css';
 
 export type CategoryFilter = 'all' | WikiChapterCategory;
@@ -63,7 +64,10 @@ export function DocsCenterPage(): JSX.Element {
   const contentRef = useRef<HTMLDivElement | null>(null);
   const searchContainerRef = useRef<HTMLDivElement | null>(null);
   const mobileChaptersBtnRef = useRef<HTMLButtonElement | null>(null);
+  const mobileChaptersDrawerRef = useRef<HTMLElement | null>(null);
   const wasMobileChaptersOpenRef = useRef<boolean>(false);
+
+  useFocusTrap(isMobileChaptersOpen, mobileChaptersDrawerRef);
 
   useEffect(() => {
     if (wasMobileChaptersOpenRef.current && !isMobileChaptersOpen) {
@@ -91,7 +95,14 @@ export function DocsCenterPage(): JSX.Element {
     if (!contentRef.current) return;
     const targetEl = resolveSectionElement(contentRef.current, anchorId);
     if (targetEl) {
-      targetEl.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      const prefersReducedMotion =
+        typeof window !== 'undefined' &&
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      targetEl.scrollIntoView({
+        behavior: prefersReducedMotion ? 'auto' : 'smooth',
+        block: 'start',
+      });
     }
   };
 
@@ -105,7 +116,11 @@ export function DocsCenterPage(): JSX.Element {
         window.clearTimeout(timer);
       };
     } else {
-      window.scrollTo({ top: 0, behavior: 'smooth' });
+      const prefersReducedMotion =
+        typeof window !== 'undefined' &&
+        typeof window.matchMedia === 'function' &&
+        window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+      window.scrollTo({ top: 0, behavior: prefersReducedMotion ? 'auto' : 'smooth' });
     }
   }, [location.hash, currentSlug]);
 
@@ -335,6 +350,7 @@ export function DocsCenterPage(): JSX.Element {
             aria-hidden="true"
           />
           <aside
+            ref={mobileChaptersDrawerRef}
             className="kb-docs-mobile-drawer"
             role="dialog"
             aria-modal="true"

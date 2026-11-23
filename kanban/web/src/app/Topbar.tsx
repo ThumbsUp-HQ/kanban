@@ -84,6 +84,7 @@ export interface TopbarProps {
   accessManifest?: AccessManifestData | null | undefined;
   systemStatus?: SystemStatus | null | undefined;
   user?: TopbarUser | null | undefined;
+  hamburgerButtonRef?: React.RefObject<HTMLButtonElement | null> | undefined;
 }
 
 const THEME_OPTIONS: readonly { id: Theme; label: string; icon: string }[] = [
@@ -108,6 +109,7 @@ export function Topbar({
   accessManifest,
   systemStatus,
   user,
+  hamburgerButtonRef,
 }: TopbarProps): JSX.Element {
   const loc = useLocation();
   const navigate = useNavigate();
@@ -138,7 +140,7 @@ export function Topbar({
     };
   }, [queryClient]);
 
-  // Close avatar menu on outside click
+  // Close avatar menu on outside click or Escape
   useEffect(() => {
     if (!avatarMenuOpen) return;
     const handleOutside = (e: MouseEvent): void => {
@@ -146,9 +148,18 @@ export function Topbar({
         setAvatarMenuOpen(false);
       }
     };
+    const handleGlobalKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        e.preventDefault();
+        setAvatarMenuOpen(false);
+        avatarButtonRef.current?.focus();
+      }
+    };
     document.addEventListener('mousedown', handleOutside);
+    window.addEventListener('keydown', handleGlobalKeyDown);
     return () => {
       document.removeEventListener('mousedown', handleOutside);
+      window.removeEventListener('keydown', handleGlobalKeyDown);
     };
   }, [avatarMenuOpen]);
 
@@ -161,7 +172,7 @@ export function Topbar({
       return;
     }
 
-    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Home' || e.key === 'End') {
       e.preventDefault();
       if (!menuRef.current) return;
       const focusable = Array.from(
@@ -170,6 +181,14 @@ export function Topbar({
         ),
       );
       if (focusable.length === 0) return;
+      if (e.key === 'Home') {
+        focusable[0]?.focus();
+        return;
+      }
+      if (e.key === 'End') {
+        focusable[focusable.length - 1]?.focus();
+        return;
+      }
       const currentIndex = focusable.indexOf(document.activeElement as HTMLElement);
       let nextIndex = 0;
       if (e.key === 'ArrowDown') {
@@ -232,6 +251,7 @@ export function Topbar({
       {/* Left: Hamburger (<=1279px) & Expand Button (desktop >=1280px when collapsed) & Breadcrumb */}
       <div className="kb-topbar-left">
         <button
+          ref={hamburgerButtonRef}
           type="button"
           className="kb-topbar-hamburger"
           aria-label="Open navigation"
@@ -370,8 +390,8 @@ export function Topbar({
               <div className="kb-theme-menu-title">Theme</div>
               <div
                 className="kb-theme-radiogroup"
-                role="radiogroup"
-                aria-label="Theme"
+                role="group"
+                aria-label="Theme preference"
               >
                 {THEME_OPTIONS.map((opt) => {
                   const isChecked = activeTheme === opt.id;
@@ -379,7 +399,7 @@ export function Topbar({
                     <button
                       key={opt.id}
                       type="button"
-                      role="radio"
+                      role="menuitemradio"
                       aria-checked={isChecked}
                       className="kb-theme-radio"
                       onClick={() => {
