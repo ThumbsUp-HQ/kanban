@@ -55,6 +55,8 @@ describe('CsvImportExportModal (KAN-316)', () => {
 
     // 2. WinZip AES-256 ZIP export on workspace fallback (empty projectKey)
     rerender(<CsvImportExportModal {...defaultProps} projectKey="" />);
+    expect(screen.getByText('Password-Protected ZIP (AES-256)')).toBeDefined();
+    expect(screen.queryByText(/WinZip/i)).toBeNull();
     fireEvent.click(screen.getByTestId('export-format-zip'));
     fireEvent.change(screen.getByTestId('export-zip-password-input'), {
       target: { value: 'super-secure-long-password-123' },
@@ -144,6 +146,12 @@ describe('CsvImportExportModal (KAN-316)', () => {
     vi.stubGlobal('fetch', fetchMock);
 
     render(<CsvImportExportModal {...defaultProps} initialTab="import" />);
+    expect(
+      screen.getByText(
+        /Import issues from CSV or password-protected ZIP \(AES-256\) archive/,
+      ),
+    ).toBeDefined();
+    expect(screen.queryByText(/WinZip/i)).toBeNull();
 
     const fileInput = screen.getByTestId('import-file-input');
     const dropzone = fileInput.parentElement;

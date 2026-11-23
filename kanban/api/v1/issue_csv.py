@@ -85,7 +85,7 @@ class IssueExportRequest(BaseModel):
     )
     sort_dir: Literal["asc", "desc"] | None = Field(default="asc", description="Sort direction")
     format: Literal["csv", "zip_csv"] = Field(
-        default="csv", description="Output format: csv or WinZip AES-256 zip_csv"
+        default="csv", description="Output format: csv or Password-protected ZIP (AES-256) zip_csv"
     )
     zip_password: str | None = Field(
         default=None, description="Mandatory password when format is zip_csv (>= 12 characters)"
@@ -429,7 +429,7 @@ async def _execute_export_query(  # noqa: C901, PLR0912, PLR0915
 
 @router.post(
     "/projects/{project_ref}/issues/export",
-    summary="Export issues in project to CSV or WinZip AES-256 ZIP",
+    summary="Export issues in project to CSV or Password-protected ZIP (AES-256)",
     response_class=Response,
 )
 async def export_project_issues(
@@ -439,7 +439,7 @@ async def export_project_issues(
     session: Session,
     taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
 ) -> Response:
-    """Export project issues matching filters to CSV or WinZip AE-2 (AES-256) ZIP."""
+    """Export project issues matching filters to CSV or Password-protected ZIP (AES-256)."""
     async with timing_floor(floor_ms=25.0):
         project = await get_project_or_404(session, caller, project_ref)
         await _check_export_governance(session, caller, project.workspace_id, project.id)
@@ -500,7 +500,7 @@ async def export_project_issues(
 
 @router.post(
     "/workspaces/{workspace_ref}/issues/export",
-    summary="Export issues in workspace to CSV or WinZip AES-256 ZIP",
+    summary="Export issues in workspace to CSV or Password-protected ZIP (AES-256)",
     response_class=Response,
 )
 async def export_workspace_issues(
@@ -510,7 +510,7 @@ async def export_workspace_issues(
     session: Session,
     taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
 ) -> Response:
-    """Export workspace issues matching filters to CSV or WinZip AE-2 (AES-256) ZIP."""
+    """Export workspace issues matching filters to CSV or Password-protected ZIP (AES-256)."""
     async with timing_floor(floor_ms=25.0):
         ws_res = await session.execute(
             text(
@@ -591,7 +591,7 @@ async def export_workspace_issues(
 @router.post(
     "/projects/{project_ref}/issues/import",
     response_model=CsvImportDiffReport,
-    summary="Import issues from CSV or WinZip AES-256 ZIP into project",
+    summary="Import issues from CSV or Password-protected ZIP (AES-256) into project",
 )
 async def import_project_issues(  # noqa: C901, PLR0912
     project_ref: str,
@@ -603,7 +603,7 @@ async def import_project_issues(  # noqa: C901, PLR0912
         bool, Query(description="Simulate import and return diff without committing")
     ] = True,
 ) -> CsvImportDiffReport:
-    """Import issues from CSV or WinZip AE-2 (AES-256) ZIP archive into project."""
+    """Import issues from CSV or Password-protected ZIP (AES-256) archive into project."""
     async with timing_floor(floor_ms=25.0):
         project = await get_project_or_404(session, caller, project_ref)
         await _check_import_governance(session, caller, project.workspace_id, project.id)

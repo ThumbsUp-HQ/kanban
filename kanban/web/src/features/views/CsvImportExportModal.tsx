@@ -1,8 +1,8 @@
 /**
- * CSV & WinZip AES-256 Import, Export and Download Template Modal (KAN-316).
+ * CSV & Password-Protected ZIP (AES-256) Import, Export and Download Template Modal (KAN-316).
  *
  * Provides:
- * 1. Export Tab: CSV or WinZip AES-256 encrypted ZIP with active filter reflection.
+ * 1. Export Tab: CSV or Password-Protected ZIP (AES-256) encrypted ZIP with active filter reflection.
  * 2. Import Tab: Download Template, file drop, Dry-Run preview diff table, and atomic commit.
  * 3. 3-tier governance error decoding and minimum 12-char password enforcement.
  */
@@ -203,7 +203,7 @@ export function CsvImportExportModal({
   const handleRunImport = async (dryRun: boolean): Promise<void> => {
     /* v8 ignore next 4 */
     if (!importFile) {
-      setErrorMessage('Please select a CSV or WinZip AES-256 ZIP file.');
+      setErrorMessage('Please select a CSV or password-protected ZIP (AES-256) file.');
       return;
     }
 
@@ -366,7 +366,7 @@ export function CsvImportExportModal({
                       data-testid="export-format-zip"
                     />
                     <div>
-                      <strong>WinZip AES-256 Encrypted ZIP</strong>
+                      <strong>Password-Protected ZIP (AES-256)</strong>
                       <span className="kb-csv-modal-radio-desc">
                         Industry standard AE-2 encrypted container (AES-256-CTR with PBKDF2 and HMAC-SHA256).
                       </span>
@@ -424,7 +424,7 @@ export function CsvImportExportModal({
           {activeTab === 'import' && (
             <div className="kb-csv-modal-section">
               <p className="kb-csv-modal-desc">
-                Import issues from CSV or password-protected WinZip AE-2 container. Run a dry run to inspect changes before committing.
+                Import issues from CSV or password-protected ZIP (AES-256) archive. Run a dry run to inspect changes before committing.
               </p>
 
               <div className="kb-csv-modal-field">

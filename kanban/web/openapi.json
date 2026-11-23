@@ -7505,7 +7505,7 @@
           },
           "format": {
             "default": "csv",
-            "description": "Output format: csv or WinZip AES-256 zip_csv",
+            "description": "Output format: csv or Password-protected ZIP (AES-256) zip_csv",
             "enum": [
               "csv",
               "zip_csv"
@@ -22329,9 +22329,9 @@
   },
   "info": {
     "title": "\ud83d\udc4dkanban API",
-    "version": "0.2.1282",
-    "x-build-commit": "b308d37655cb",
-    "x-openapi-bundle-hash": "6c50eea38955944b6c65b81aa0875a15a684ae32bd77963a78474c52cf272376"
+    "version": "0.2.1395",
+    "x-build-commit": "72e49fe57958",
+    "x-openapi-bundle-hash": "1fd26b1bdd8c25f6b20ed4c319af206043f8700fe482cd9043699fa09f5b1d19"
   },
   "openapi": "3.1.0",
   "paths": {
@@ -36565,7 +36565,7 @@
     },
     "/api/v1/media-proxy": {
       "get": {
-        "description": "Retrieve external Markdown image over DNS-pinned cookieless socket.\n\nRequires authenticated principal and enforces MEDIA_PROXY_PRINCIPAL rate limits.\nValidates HMAC signature before URL parsing or DNS lookup.",
+        "description": "Retrieve external Markdown image over DNS-pinned cookieless socket.\n\nRequires authenticated principal and enforces MEDIA_PROXY_PRINCIPAL rate limits.\nValidates HMAC signature and expiration before URL parsing or DNS lookup.",
         "operationId": "get_media_proxy_api_v1_media_proxy_get",
         "parameters": [
           {
@@ -36588,6 +36588,24 @@
               "description": "HMAC-SHA256 signature for media URL",
               "title": "Sig",
               "type": "string"
+            }
+          },
+          {
+            "description": "Expiration timestamp (UNIX epoch seconds)",
+            "in": "query",
+            "name": "exp",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "integer"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Expiration timestamp (UNIX epoch seconds)",
+              "title": "Exp"
             }
           }
         ],
@@ -38856,6 +38874,20 @@
             }
           },
           {
+            "description": "Monte Carlo simulation trials (10 to 50000)",
+            "in": "query",
+            "name": "trials",
+            "required": false,
+            "schema": {
+              "default": 10000,
+              "description": "Monte Carlo simulation trials (10 to 50000)",
+              "maximum": 50000,
+              "minimum": 10,
+              "title": "Trials",
+              "type": "integer"
+            }
+          },
+          {
             "description": "Optional random seed for deterministic simulation and reproducibility",
             "in": "query",
             "name": "seed",
@@ -39670,7 +39702,7 @@
     },
     "/api/v1/projects/{project_ref}/issues/export": {
       "post": {
-        "description": "Export project issues matching filters to CSV or WinZip AE-2 (AES-256) ZIP.",
+        "description": "Export project issues matching filters to CSV or Password-protected ZIP (AES-256).",
         "operationId": "export_project_issues_api_v1_projects__project_ref__issues_export_post",
         "parameters": [
           {
@@ -39727,7 +39759,7 @@
             "BearerTokenAuth": []
           }
         ],
-        "summary": "Export issues in project to CSV or WinZip AES-256 ZIP",
+        "summary": "Export issues in project to CSV or Password-protected ZIP (AES-256)",
         "tags": [
           "issue-csv"
         ]
@@ -39735,7 +39767,7 @@
     },
     "/api/v1/projects/{project_ref}/issues/import": {
       "post": {
-        "description": "Import issues from CSV or WinZip AE-2 (AES-256) ZIP archive into project.",
+        "description": "Import issues from CSV or Password-protected ZIP (AES-256) archive into project.",
         "operationId": "import_project_issues_api_v1_projects__project_ref__issues_import_post",
         "parameters": [
           {
@@ -39801,7 +39833,7 @@
             "BearerTokenAuth": []
           }
         ],
-        "summary": "Import issues from CSV or WinZip AES-256 ZIP into project",
+        "summary": "Import issues from CSV or Password-protected ZIP (AES-256) into project",
         "tags": [
           "issue-csv"
         ]
@@ -45706,7 +45738,7 @@
     },
     "/api/v1/workspaces/{workspace_ref}/issues/export": {
       "post": {
-        "description": "Export workspace issues matching filters to CSV or WinZip AE-2 (AES-256) ZIP.",
+        "description": "Export workspace issues matching filters to CSV or Password-protected ZIP (AES-256).",
         "operationId": "export_workspace_issues_api_v1_workspaces__workspace_ref__issues_export_post",
         "parameters": [
           {
@@ -45763,7 +45795,7 @@
             "BearerTokenAuth": []
           }
         ],
-        "summary": "Export issues in workspace to CSV or WinZip AES-256 ZIP",
+        "summary": "Export issues in workspace to CSV or Password-protected ZIP (AES-256)",
         "tags": [
           "issue-csv"
         ]

@@ -1111,7 +1111,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                     }}
                   />
                   <span className="kb-toggle-text">
-                    Enable Issue Export (Allow exporting issues to CSV / WinZip AES-256)
+                    Enable Issue Export (Allow exporting issues to CSV / Password-Protected ZIP)
                   </span>
                 </label>
               </div>
@@ -1130,7 +1130,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                     }}
                   />
                   <span className="kb-toggle-text">
-                    Enable Issue Import (Allow importing issues from CSV / WinZip AES-256)
+                    Enable Issue Import (Allow importing issues from CSV / Password-Protected ZIP)
                   </span>
                 </label>
               </div>

@@ -248,7 +248,9 @@ def read_aes256_zip(
         ) = struct.unpack("<IHHHHHHIIIHHHHHII", zip_bytes[cd_ptr : cd_ptr + 46])
 
         if method != 99 or (flags & 1) == 0:
-            raise ValueError("Archive is not encrypted with WinZip AES (method 99).")
+            raise ValueError(
+                "Archive is not encrypted with AES-256 password-protected ZIP (method 99)."
+            )
 
         fn_start = cd_ptr + 46
         filename = zip_bytes[fn_start : fn_start + fn_len].decode("utf-8")
