@@ -14,7 +14,7 @@
  */
 
 import React, { useContext, useEffect, useRef, useState, type JSX, type SyntheticEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
 import { QueryClientContext } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client';
 import { ApiProblem } from '../../api/problem';
@@ -165,7 +165,26 @@ export function ProjectSettingsPage(): JSX.Element {
   const navigate = useNavigate();
   const queryClient = useContext(QueryClientContext);
 
-  const [activeTab, setActiveTab] = useState<SettingsTab>('general');
+  let searchParams: URLSearchParams | null = null;
+  let setSearchParams: ((params: URLSearchParams, opts?: { replace?: boolean }) => void) | null = null;
+  try {
+    const [params, setParams] = useSearchParams();
+    searchParams = params;
+    setSearchParams = setParams;
+  } catch {
+    // Graceful fallback when rendered outside RouterProvider
+  }
+
+  const rawTab = searchParams?.get('tab');
+  const initialTab: SettingsTab =
+    rawTab &&
+    ['general', 'states', 'priorities', 'labels', 'members', 'roles', 'integrations', 'trash', 'danger'].includes(
+      rawTab,
+    )
+      ? (rawTab as SettingsTab)
+      : 'general';
+
+  const [activeTab, setActiveTab] = useState<SettingsTab>(initialTab);
   const [project, setProject] = useState<ProjectDetail | null>(null);
   const [members, setMembers] = useState<ProjectMember[]>([]);
   const [states, setStates] = useState<WorkflowStateItem[]>([]);
@@ -192,6 +211,15 @@ export function ProjectSettingsPage(): JSX.Element {
     setErrorMessage(null);
     setSuccessMessage(null);
     setActiveTab(tab);
+    if (searchParams && setSearchParams) {
+      const next = new URLSearchParams(searchParams);
+      if (tab === 'general') {
+        next.delete('tab');
+      } else {
+        next.set('tab', tab);
+      }
+      setSearchParams(next, { replace: true });
+    }
   };
 
   // General Tab State
@@ -1351,6 +1379,20 @@ export function ProjectSettingsPage(): JSX.Element {
         >
           Workflow States
         </button>
+        <Link
+          to={`/projects/${projectKey}/settings/workflows`}
+          data-testid="tab-workflows"
+          className="kb-settings-tab"
+        >
+          Workflows
+        </Link>
+        <Link
+          to={`/projects/${projectKey}/settings/custom-fields`}
+          data-testid="tab-custom-fields"
+          className="kb-settings-tab"
+        >
+          Custom Fields
+        </Link>
         <button
           type="button"
           data-testid="tab-priorities"

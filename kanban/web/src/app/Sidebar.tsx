@@ -890,6 +890,7 @@ export function Sidebar({
                   {isProjExpanded && (
                     <ul
                       className="kb-project-subitems"
+                      data-testid={`sidebar-project-tree-${proj.key}`}
                       onClick={() => {
                         focusProject(proj.key);
                       }}
