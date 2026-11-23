@@ -7,17 +7,38 @@ import type { Page } from '@playwright/test';
 import { test, expect } from './support/test';
 import { mockApi, loadFixture, type MockHandlers } from './support/mockApi';
 
-process.env.QA_TICKET_ID = 'KAN-323';
-const SCREENSHOT_DIR_323 = resolve(
+const SCREENSHOT_DIR_347 = resolve(
   import.meta.dirname,
-  '../../../docs/qa/KAN-323/screenshots',
+  '../../../docs/qa/KAN-347/screenshots',
 );
-const SCREENSHOT_DIR_311 = resolve(
+const SCREENSHOT_DIR_348 = resolve(
   import.meta.dirname,
-  '../../../docs/qa/KAN-311/screenshots',
+  '../../../docs/qa/KAN-348/screenshots',
 );
-mkdirSync(SCREENSHOT_DIR_323, { recursive: true });
-mkdirSync(SCREENSHOT_DIR_311, { recursive: true });
+const SCREENSHOT_DIR_349 = resolve(
+  import.meta.dirname,
+  '../../../docs/qa/KAN-349/screenshots',
+);
+const SCREENSHOT_DIR_350 = resolve(
+  import.meta.dirname,
+  '../../../docs/qa/KAN-350/screenshots',
+);
+
+mkdirSync(SCREENSHOT_DIR_347, { recursive: true });
+mkdirSync(SCREENSHOT_DIR_348, { recursive: true });
+mkdirSync(SCREENSHOT_DIR_349, { recursive: true });
+mkdirSync(SCREENSHOT_DIR_350, { recursive: true });
+
+const WIKI_IMAGES_DIR = resolve(
+  process.env.KANBAN_WIKI_PATH ?? '/home/adamoutler/kanban/thumbs-up-kanban.wiki',
+  'images',
+);
+const PUBLIC_DOCS_IMAGES_DIR = resolve(
+  import.meta.dirname,
+  '../public/docs-images',
+);
+mkdirSync(WIKI_IMAGES_DIR, { recursive: true });
+mkdirSync(PUBLIC_DOCS_IMAGES_DIR, { recursive: true });
 
 async function applyTheme(page: Page, theme: 'light' | 'dark'): Promise<void> {
   await page.evaluate((t) => {
@@ -560,29 +581,31 @@ function getCommonMocks(): MockHandlers {
   };
 }
 
-test.describe('Documentation & Visual Proof Screenshot Capture (KAN-323 / KAN-311)', () => {
-  test('01: desktop light - Docs Center Overview', async ({ page }: { page: Page }) => {
+test.describe('KAN-347: Core Board, Master-Detail, and State Filter Screenshots', () => {
+  test('01: desktop light - Core Board View', async ({ page }: { page: Page }) => {
     await mockApi(page, getCommonMocks());
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/docs');
+    await page.goto('/projects/KAN/issues?layout=board');
     await applyTheme(page, 'light');
-    await expect(page.locator('[data-testid="docs-center-page"]')).toBeVisible();
+    await expect(page.locator('[data-issue-key="KAN-142"]')).toBeVisible();
 
-    const shot323 = resolve(SCREENSHOT_DIR_323, '1440x900-desktop-light.png');
-    await page.screenshot({ path: shot323, fullPage: false });
-    copyFileSync(shot323, resolve(SCREENSHOT_DIR_311, '1440x900-desktop-light.png'));
+    const shot347 = resolve(SCREENSHOT_DIR_347, '1440x900-desktop-light.png');
+    await page.screenshot({ path: shot347, fullPage: false });
+    copyFileSync(shot347, resolve(WIKI_IMAGES_DIR, '06-board-view.png'));
+    copyFileSync(shot347, resolve(PUBLIC_DOCS_IMAGES_DIR, '06-board-view.png'));
   });
 
-  test('02: desktop dark - Docs Center Chapter with Media', async ({ page }: { page: Page }) => {
+  test('02: desktop dark - Core Board View with Active Filter', async ({ page }: { page: Page }) => {
     await mockApi(page, getCommonMocks());
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto('/docs/enterprise-whitespace-and-kanban-board');
+    await page.goto('/projects/KAN/issues?layout=board');
     await applyTheme(page, 'dark');
-    await expect(page.locator('[data-testid="docs-center-page"]')).toBeVisible();
+    await expect(page.locator('[data-issue-key="KAN-142"]')).toBeVisible();
 
-    const shot323 = resolve(SCREENSHOT_DIR_323, '1440x900-desktop-dark.png');
-    await page.screenshot({ path: shot323, fullPage: false });
-    copyFileSync(shot323, resolve(SCREENSHOT_DIR_311, '1440x900-desktop-dark.png'));
+    const shot347 = resolve(SCREENSHOT_DIR_347, '1440x900-desktop-dark.png');
+    await page.screenshot({ path: shot347, fullPage: false });
+    copyFileSync(shot347, resolve(WIKI_IMAGES_DIR, '29-filter-and-2d-swimlanes.png'));
+    copyFileSync(shot347, resolve(PUBLIC_DOCS_IMAGES_DIR, '29-filter-and-2d-swimlanes.png'));
   });
 
   test('03: tablet - Master-Detail Issue Navigator', async ({ page }: { page: Page }) => {
@@ -592,32 +615,200 @@ test.describe('Documentation & Visual Proof Screenshot Capture (KAN-323 / KAN-31
     await applyTheme(page, 'light');
     await expect(page.locator('[data-issue-key="KAN-142"]')).toBeVisible();
 
-    const shot323 = resolve(SCREENSHOT_DIR_323, '768x1024-tablet.png');
-    await page.screenshot({ path: shot323, fullPage: false });
-    copyFileSync(shot323, resolve(SCREENSHOT_DIR_311, '768x1024-tablet.png'));
+    const shot347 = resolve(SCREENSHOT_DIR_347, '768x1024-tablet.png');
+    await page.screenshot({ path: shot347, fullPage: false });
   });
 
-  test('04: mobile portrait - Flow Telemetry Studio & Analytics', async ({ page }: { page: Page }) => {
+  test('04: mobile portrait - Master-Detail List View', async ({ page }: { page: Page }) => {
+    await mockApi(page, getCommonMocks());
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/projects/KAN/issues?layout=list');
+    await applyTheme(page, 'light');
+    await page.waitForTimeout(300);
+
+    const shot347 = resolve(SCREENSHOT_DIR_347, '390x844-mobile-portrait.png');
+    await page.screenshot({ path: shot347, fullPage: false });
+  });
+
+  test('05: mobile landscape - Core Board View', async ({ page }: { page: Page }) => {
+    await mockApi(page, getCommonMocks());
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.goto('/projects/KAN/issues?layout=board');
+    await applyTheme(page, 'light');
+    await page.waitForTimeout(300);
+
+    const shot347 = resolve(SCREENSHOT_DIR_347, '844x390-mobile-landscape.png');
+    await page.screenshot({ path: shot347, fullPage: false });
+  });
+});
+
+test.describe('KAN-348: Statistical Flow Telemetry Studio Screenshots', () => {
+  test('01: desktop light - Flow Telemetry Studio', async ({ page }: { page: Page }) => {
+    await mockApi(page, getCommonMocks());
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/projects/KAN/analytics');
+    await applyTheme(page, 'light');
+    await page.waitForTimeout(400);
+
+    const shot348 = resolve(SCREENSHOT_DIR_348, '1440x900-desktop-light.png');
+    await page.screenshot({ path: shot348, fullPage: false });
+  });
+
+  test('02: desktop dark - Flow Telemetry Studio', async ({ page }: { page: Page }) => {
+    await mockApi(page, getCommonMocks());
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/projects/KAN/analytics');
+    await applyTheme(page, 'dark');
+    await page.waitForTimeout(400);
+
+    const shot348 = resolve(SCREENSHOT_DIR_348, '1440x900-desktop-dark.png');
+    await page.screenshot({ path: shot348, fullPage: false });
+  });
+
+  test('03: tablet - Flow Telemetry Studio', async ({ page }: { page: Page }) => {
+    await mockApi(page, getCommonMocks());
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await page.goto('/projects/KAN/analytics');
+    await applyTheme(page, 'light');
+    await page.waitForTimeout(400);
+
+    const shot348 = resolve(SCREENSHOT_DIR_348, '768x1024-tablet.png');
+    await page.screenshot({ path: shot348, fullPage: false });
+  });
+
+  test('04: mobile portrait - Flow Telemetry Studio', async ({ page }: { page: Page }) => {
     await mockApi(page, getCommonMocks());
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto('/projects/KAN/analytics');
     await applyTheme(page, 'light');
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(400);
 
-    const shot323 = resolve(SCREENSHOT_DIR_323, '390x844-mobile-portrait.png');
-    await page.screenshot({ path: shot323, fullPage: false });
-    copyFileSync(shot323, resolve(SCREENSHOT_DIR_311, '390x844-mobile-portrait.png'));
+    const shot348 = resolve(SCREENSHOT_DIR_348, '390x844-mobile-portrait.png');
+    await page.screenshot({ path: shot348, fullPage: false });
   });
 
-  test('05: mobile landscape - Unified Admin Diagnostics Studio', async ({ page }: { page: Page }) => {
+  test('05: mobile landscape - Flow Telemetry Studio', async ({ page }: { page: Page }) => {
+    await mockApi(page, getCommonMocks());
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.goto('/projects/KAN/analytics');
+    await applyTheme(page, 'light');
+    await page.waitForTimeout(400);
+
+    const shot348 = resolve(SCREENSHOT_DIR_348, '844x390-mobile-landscape.png');
+    await page.screenshot({ path: shot348, fullPage: false });
+  });
+});
+
+test.describe('KAN-349: Unified Admin Diagnostics Studio Screenshots', () => {
+  test('01: desktop light - Admin Diagnostics Studio', async ({ page }: { page: Page }) => {
+    await mockApi(page, getCommonMocks());
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/admin/diagnostics');
+    await applyTheme(page, 'light');
+    await page.waitForTimeout(400);
+
+    const shot349 = resolve(SCREENSHOT_DIR_349, '1440x900-desktop-light.png');
+    await page.screenshot({ path: shot349, fullPage: false });
+  });
+
+  test('02: desktop dark - Admin Diagnostics Studio', async ({ page }: { page: Page }) => {
+    await mockApi(page, getCommonMocks());
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/admin/diagnostics');
+    await applyTheme(page, 'dark');
+    await page.waitForTimeout(400);
+
+    const shot349 = resolve(SCREENSHOT_DIR_349, '1440x900-desktop-dark.png');
+    await page.screenshot({ path: shot349, fullPage: false });
+  });
+
+  test('03: tablet - Admin Diagnostics Studio', async ({ page }: { page: Page }) => {
+    await mockApi(page, getCommonMocks());
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await page.goto('/admin/diagnostics');
+    await applyTheme(page, 'light');
+    await page.waitForTimeout(400);
+
+    const shot349 = resolve(SCREENSHOT_DIR_349, '768x1024-tablet.png');
+    await page.screenshot({ path: shot349, fullPage: false });
+  });
+
+  test('04: mobile portrait - Admin Diagnostics Studio', async ({ page }: { page: Page }) => {
+    await mockApi(page, getCommonMocks());
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/admin/diagnostics');
+    await applyTheme(page, 'light');
+    await page.waitForTimeout(400);
+
+    const shot349 = resolve(SCREENSHOT_DIR_349, '390x844-mobile-portrait.png');
+    await page.screenshot({ path: shot349, fullPage: false });
+  });
+
+  test('05: mobile landscape - Admin Diagnostics Studio', async ({ page }: { page: Page }) => {
     await mockApi(page, getCommonMocks());
     await page.setViewportSize({ width: 844, height: 390 });
     await page.goto('/admin/diagnostics');
     await applyTheme(page, 'light');
-    await page.waitForTimeout(500);
+    await page.waitForTimeout(400);
 
-    const shot323 = resolve(SCREENSHOT_DIR_323, '844x390-mobile-landscape.png');
-    await page.screenshot({ path: shot323, fullPage: false });
-    copyFileSync(shot323, resolve(SCREENSHOT_DIR_311, '844x390-mobile-landscape.png'));
+    const shot349 = resolve(SCREENSHOT_DIR_349, '844x390-mobile-landscape.png');
+    await page.screenshot({ path: shot349, fullPage: false });
+  });
+});
+
+test.describe('KAN-350: Docs Center and Deduplicated Wiki Images Screenshots', () => {
+  test('01: desktop light - Docs Center Overview', async ({ page }: { page: Page }) => {
+    await mockApi(page, getCommonMocks());
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/docs');
+    await applyTheme(page, 'light');
+    await expect(page.locator('[data-testid="docs-center-page"]')).toBeVisible();
+
+    const shot350 = resolve(SCREENSHOT_DIR_350, '1440x900-desktop-light.png');
+    await page.screenshot({ path: shot350, fullPage: false });
+  });
+
+  test('02: desktop dark - Docs Center Chapter with Media', async ({ page }: { page: Page }) => {
+    await mockApi(page, getCommonMocks());
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/docs/enterprise-whitespace-and-kanban-board');
+    await applyTheme(page, 'dark');
+    await expect(page.locator('[data-testid="docs-center-page"]')).toBeVisible();
+
+    const shot350 = resolve(SCREENSHOT_DIR_350, '1440x900-desktop-dark.png');
+    await page.screenshot({ path: shot350, fullPage: false });
+  });
+
+  test('03: tablet - Docs Center Navigation', async ({ page }: { page: Page }) => {
+    await mockApi(page, getCommonMocks());
+    await page.setViewportSize({ width: 768, height: 1024 });
+    await page.goto('/docs');
+    await applyTheme(page, 'light');
+    await expect(page.locator('[data-testid="docs-center-page"]')).toBeVisible();
+
+    const shot350 = resolve(SCREENSHOT_DIR_350, '768x1024-tablet.png');
+    await page.screenshot({ path: shot350, fullPage: false });
+  });
+
+  test('04: mobile portrait - Docs Center Help Drawer', async ({ page }: { page: Page }) => {
+    await mockApi(page, getCommonMocks());
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/docs/offline-docs-center-and-help-drawer');
+    await applyTheme(page, 'light');
+    await page.waitForTimeout(300);
+
+    const shot350 = resolve(SCREENSHOT_DIR_350, '390x844-mobile-portrait.png');
+    await page.screenshot({ path: shot350, fullPage: false });
+  });
+
+  test('05: mobile landscape - Docs Center Viewport', async ({ page }: { page: Page }) => {
+    await mockApi(page, getCommonMocks());
+    await page.setViewportSize({ width: 844, height: 390 });
+    await page.goto('/docs');
+    await applyTheme(page, 'light');
+    await page.waitForTimeout(300);
+
+    const shot350 = resolve(SCREENSHOT_DIR_350, '844x390-mobile-landscape.png');
+    await page.screenshot({ path: shot350, fullPage: false });
   });
 });

@@ -183,13 +183,179 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "content": "# [Architectural] Admin Custom Scripted Fields and Sandboxed Execution\n\n## Overview\n\nModern software development requires dynamic metadata: calculated story points, security compliance flags, release readiness scores, and SLA countdowns. However, permitting custom scripts to run inside a project management system has historically introduced catastrophic security vulnerabilities, including server-side request forgery (SSRF), infinite loops, and arbitrary code execution.\n\n\ud83d\udc4dkanban resolves this through **Admin-Only Custom Scripted Fields** evaluated inside a hardened, multi-tier isolation sandbox with cryptographic privilege escalation controls.\n\n---\n\n## Admin-Only Definition Security Gate\n\nTo protect the platform from unauthorized logic injection:\n- **Admin-Only Gate:** Only verified Server Administrators or Project Administrators possessing Authenticator Assurance Level 2 (AAL2) credentials can create, modify, or delete custom field scripts.\n- **Route Protection:** All custom field endpoints under `/api/v1/projects/{project_id}/custom-fields` declare explicit dependencies on `require_admin_aal2`.\n- **Immutable Script Signatures:** When a script is saved, a SHA-256 cryptographic digest is generated and recorded. Any unauthorized database tampering immediately invalidates script execution.\n\n---\n\n## The Custom Fields Studio\n\nAdministrators manage custom fields through the visual studio at `/projects/KAN/settings/custom-fields`.\n\n![Custom Fields Studio and Escalation Banner](images/14-custom-fields-studio.png)\n\n### Studio Capabilities\n- **Field Types:** String, Integer, Float, Boolean, Date, Multi-Select, and Dynamic Computed Script.\n- **Execution Engine Selection:** Choose between lightweight WebAssembly (Wasmtime) or isolated containerized scripts (nsjail).\n- **Execution Badging (`\ud83e\uddea`):** Computed fields render a subtle test tube (`\ud83e\uddea`) glyph on the ticket properties rail, showing real-time computation status and latency.\n- **Pre-Commit Test Execution:** Test custom script logic against sample payloads in real time before committing field definitions to the database.\n\n---\n\n## Test-Execute Sandbox Modal\n\nBefore saving or deploying a custom scripted field to production tickets, administrators can validate script logic in an interactive test execution modal:\n\n```mermaid\nsequenceDiagram\n    autonumber\n    actor Admin as Project Admin (AAL2)\n    participant Studio as Custom Fields Studio\n    participant Modal as Test-Execute Modal\n    participant Sandbox as Wasm / nsjail Sandbox\n\n    Admin->>Studio: Author script source (e.g. CVSS calculation)\n    Admin->>Studio: Click \"Test-Execute\"\n    Studio->>Modal: Open Test-Execute Modal with sample ticket JSON\n    Admin->>Modal: Click \"Run Test\"\n    Modal->>Sandbox: Execute script against sample properties\n    Sandbox-->>Modal: Return evaluated output, execution time (<2ms), stdout logs\n    Modal-->>Admin: Render live severity pill preview (e.g. \"8.8 High\")\n```\n\n![Custom Fields Pre-Commit Test Execution Modal](images/53-custom-fields-test-execute.png)\n\nThe Test-Execute modal displays execution duration, memory consumption, output formatting, and sandboxed stdout logs. This guarantees that syntax errors, infinite loops, or unexpected outputs are caught before fields impact active workflows.\n\n---\n\n## Multi-Tier Execution Sandbox Architecture\n\nWhen a work item is created or updated, active custom field scripts are executed within an isolated multi-tier sandbox:\n\n```mermaid\nflowchart TD\n    Update[\"Work Item Updated: State / Properties Changed\"] --> Dispatcher[\"Sandbox Dispatcher (kanban/sandbox/)\"]\n    \n    Dispatcher -->|Lightweight Math / String Formats| TierA[\"Tier A: Wasmtime Engine<br/>- In-process WebAssembly<br/>- Sub-millisecond execution (<1ms)<br/>- Zero OS syscall capability<br/>- Memory capped at 16 MB\"]\n    Dispatcher -->|Complex Logic / Scripts| TierB[\"Tier B: nsjail Container Jail<br/>- Linux namespaces (CLONE_NEWNET)<br/>- Read-only root filesystem<br/>- CPU timeout: 5 sec, Memory: 512 MB\"]\n    \n    TierA --> Verify[\"Verify Computed Value vs Pydantic Schema\"]\n    TierB --> Verify\n    Verify --> Store[\"Recorded in work item properties JSONB\"]\n```\n\n![Custom Fields on Ticket Properties Rail](images/36-rail-custom-fields.png)\n\n### Tier A: WebAssembly Runtime (Wasmtime)\n- Runs compiled WebAssembly modules in-process.\n- Provides sub-millisecond execution times.\n- Zero capability to open sockets, access the filesystem, or spawn processes.\n- Memory allocation strictly capped at 16 MB with instruction count fuel limits.\n\n### Tier B: Hardened Container Jail (nsjail)\n- Utilizes Linux kernel namespaces (`CLONE_NEWPID`, `CLONE_NEWNET`, `CLONE_NEWNS`).\n- Root filesystem mounted strictly read-only.\n- Network access completely disabled (`CLONE_NEWNET`).\n- Hard resource limits enforced via cgroups (512 MB RAM, 5-second wall clock timeout).\n\n---\n\n## Ephemeral Scoped Tokens and Tiered Privilege Escalation\n\nCustom scripts often need to query project metadata (such as counting open bugs or reading cycle end dates). To prevent privilege leakage:\n\n```mermaid\nsequenceDiagram\n    autonumber\n    actor Script as Custom Scripted Field\n    participant Gate as Authorization Gate\n    participant Admin as Server/Workspace Admin (AAL2)\n    participant TokenService as Ephemeral Token Minter\n\n    Note over Script,TokenService: Default Execution: Project Scoped\n    Script->>Gate: Execute with default Project-scoped ephemeral token\n    \n    Note over Script,TokenService: Escalation Request: Workspace or Server\n    Script->>Gate: Request Escalated Scope (WORKSPACE or SERVER)\n    Gate->>Admin: Display Unmissable Blast Radius Warning Banner\n    Admin->>Gate: Cryptographic Signature with AAL2 Confirmation\n    Gate->>TokenService: Mint Time-Limited Ephemeral Escalated Token\n    TokenService-->>Script: Deliver Ephemeral Token for Execution\n```\n\n1. **Ephemeral Project Tokens:** By default, every script executes using an ephemeral API token scoped strictly to the current **Project**. It cannot read data from other projects or workspace settings.\n2. **Cryptographic Privilege Escalation:** If a script requires broader access (such as reading data across the entire **Workspace** or querying **Server** configuration):\n   - The script must request an escalated token scope.\n   - The UI displays an unmissable administrative warning banner detailing the blast radius.\n   - The escalation must be signed with cryptographic approval by an administrator possessing authority over that target tier.\n   - Scripts can never escalate to Server Admin privileges without explicit multi-factor confirmation.\n\n![Custom Fields Dual Control Escalation Studio](images/52-custom-fields-dual-control.png)\n\n### Dual-Control Principle:\nTo satisfy enterprise SOC 2 and ISO 27001 separation of duties, escalating a custom scripted field to workspace-wide or server-wide scope requires dual-control authorization:\n- A project administrator can author and propose the escalation.\n- A distinct, independent administrator holding target tier authority must review the blast radius warning banner and supply fresh Authenticator Assurance Level 2 (AAL2) credentials to activate the escalated token scope.\n- All escalation grants are logged with SHA-256 cryptographic digests in the immutable audit ledger.\n"
   },
   {
+    "slug": "admin-diagnostics-and-link-inspector-studio",
+    "title": "[Guide] Admin Diagnostics and Link Inspector Studio Guide and Architecture Walkthrough",
+    "category": "guide",
+    "track": "Track 1: Step-by-Step Guides",
+    "subtrack": "General",
+    "audience": "Developers & Operators",
+    "order": 3,
+    "summary": "Authoritative operational runbook and engineering architecture guide for the Unified Admin Diagnostics Studio, Link Inspector Studio, real-time subsystem telemetry, and Universal Object Graph defect remediation.",
+    "sections": [
+      {
+        "id": "executive-summary-and-architecture-overview",
+        "title": "1. Executive Summary and Architecture Overview",
+        "level": 2
+      },
+      {
+        "id": "multi-tier-security-authentication-and-aal2-session-governance",
+        "title": "2. Multi-Tier Security, Authentication, and AAL2 Session Governance",
+        "level": 2
+      },
+      {
+        "id": "security-invariants",
+        "title": "Security Invariants",
+        "level": 3
+      },
+      {
+        "id": "real-time-telemetry-and-subsystem-probes",
+        "title": "3. Real-Time Telemetry and Subsystem Probes",
+        "level": 2
+      },
+      {
+        "id": "telemetry-subsystem-breakdown",
+        "title": "Telemetry Subsystem Breakdown",
+        "level": 3
+      },
+      {
+        "id": "universal-object-graph-link-auditor-and-inspector-studio",
+        "title": "4. Universal Object Graph Link Auditor and Inspector Studio",
+        "level": 2
+      },
+      {
+        "id": "the-six-defect-classes",
+        "title": "The Six Defect Classes",
+        "level": 3
+      },
+      {
+        "id": "forensic-link-inspection-drawer",
+        "title": "Forensic Link Inspection Drawer",
+        "level": 3
+      },
+      {
+        "id": "two-stage-destructive-confirmation-and-blast-radius-engine",
+        "title": "Two-Stage Destructive Confirmation and Blast-Radius Engine",
+        "level": 3
+      },
+      {
+        "id": "operational-runbook-inspections-and-disaster-recovery",
+        "title": "5. Operational Runbook: Inspections and Disaster Recovery",
+        "level": 2
+      },
+      {
+        "id": "routine-diagnostic-inspection",
+        "title": "Routine Diagnostic Inspection",
+        "level": 3
+      },
+      {
+        "id": "link-graph-remediation-procedure",
+        "title": "Link Graph Remediation Procedure",
+        "level": 3
+      },
+      {
+        "id": "command-line-diagnostics-headless-air-gapped-environments",
+        "title": "Command-Line Diagnostics (Headless & Air-Gapped Environments)",
+        "level": 3
+      },
+      {
+        "id": "visual-reference-and-studio-screenshots",
+        "title": "6. Visual Reference and Studio Screenshots",
+        "level": 2
+      }
+    ],
+    "content": "# [Guide] Admin Diagnostics and Link Inspector Studio Guide and Architecture Walkthrough\n\nAuthoritative operational runbook and engineering architecture guide for the Unified Admin Diagnostics Studio, Link Inspector Studio, real-time subsystem telemetry, and Universal Object Graph defect remediation.\n\n---\n\n## 1. Executive Summary and Architecture Overview\n\nThe Unified Admin Diagnostics Studio (mounted at `/admin/diagnostics` and `/admin/link-auditor`) provides enterprise platform administrators with continuous visibility into system health, database migration integrity, Row-Level Security (RLS) enforcement, event relay queues, background worker execution, and object link topology across \ud83d\udc4dkanban.\n\nDesigned under Security Priority #0 and Agent-First Priority #1, the Diagnostics Studio serves two distinct operational functions:\n1. **Real-Time Subsystem Health Probing (`/admin/diagnostics`):** Collects synchronous and asynchronous telemetry across PostgreSQL connectivity, connection pool saturation, 76 single-head database migrations, PostgreSQL `FORCE RLS` policy status, transactional outbox message lag, WebSocket hub subscriptions, background job executor states, and Wasmtime/nsjail sandboxed execution runners.\n2. **Universal Object Graph Link Inspector & Purger (`/admin/link-auditor`):** Discovers, classifies, inspects, and remediates referential integrity anomalies across the Universal Object Graph without locking production tables or requiring downtime.\n\n```mermaid\ngraph TD\n    UI[\"Admin Diagnostics Studio UI (/admin/diagnostics, /admin/link-auditor)\"] --> AAL2[\"AAL2 Session Gate (require_admin_aal2)\"]\n    AAL2 --> Router[\"FastAPI Diagnostics & Link Auditor Router (/api/v1/admin/*)\"]\n    Router --> DBProbe[\"PostgreSQL Health & Migration Check (76 Migrations, 92 Tables)\"]\n    Router --> RLSProbe[\"PostgreSQL FORCE RLS Policy Audit\"]\n    Router --> RelayProbe[\"Outbox Relay Broker Telemetry (database/outbox)\"]\n    Router --> WSProbe[\"WebSocket Realtime Hub Ping/Pong Frame Telemetry\"]\n    Router --> WasmProbe[\"Wasmtime & nsjail Sandbox Worker Telemetry\"]\n    Router --> Auditor[\"Link Auditor Engine (6 Defect Classes)\"]\n    Auditor --> Inspector[\"Forensic Link Inspection Drawer\"]\n    Auditor --> Purge[\"Two-Stage Destructive Confirmation & Blast-Radius Engine\"]\n```\n\n---\n\n## 2. Multi-Tier Security, Authentication, and AAL2 Session Governance\n\nEvery endpoint mounted under `/api/v1/admin/diagnostics` and `/api/v1/admin/link-auditor` enforces Authenticator Assurance Level 2 (AAL2) multi-factor authentication. \n\n### Security Invariants\n- **AAL2 Session Dependency:** Route declarations strictly mandate `Depends(require_admin_aal2)` and `Depends(require_server_admin)` at both the router mount and endpoint handler levels.\n- **Fail-Closed Route Protection:** Automated tests (`assert_admin_routes_protected`) scan the OpenAPI routing table at build time. Any administrative route lacking explicit AAL2 session validation fails CI/CD immediately.\n- **Zero-Information Exposure:** Unauthenticated or unauthorized callers receive RFC 7807 problem responses without leaking database schema versions, internal hostnames, CIDR blocks, or subsystem topology.\n\n```python\n# Architecture contract in kanban/api/v1/admin/diagnostics.py\nrouter = APIRouter(\n    prefix=\"/admin/diagnostics\",\n    tags=[\"admin-diagnostics\"],\n    dependencies=[Depends(require_admin_aal2)],\n)\n```\n\n---\n\n## 3. Real-Time Telemetry and Subsystem Probes\n\nThe Diagnostics Studio executes comprehensive health checks against core application subsystems, reporting structured telemetry to the administrative UI and monitoring agents:\n\n### Telemetry Subsystem Breakdown\n\n| Subsystem Component | Metric & Probe Target | Healthy Threshold | Degraded Condition | Remediation Action |\n| :--- | :--- | :--- | :--- | :--- |\n| **PostgreSQL Engine** | Latency, connection pool saturation (`pool_size`, `checked_out`) | `< 15ms`, saturation `< 75%` | Latency `> 50ms`, pool exhausted | Scale connection pool (`DB_POOL_SIZE`), tune PostgreSQL `max_connections` |\n| **Migration Consistency** | Current version vs single-head Alembic tree | `76 / 76` migrations applied | Head mismatch or split branches | Run `kanban-ctl db migrate` or verify Alembic head |\n| **Row-Level Security** | `FORCE ROW LEVEL SECURITY` status on all tables | 100% (92 of 92 tables) | Any table lacking `FORCE RLS` | Run `kanban-ctl db audit-rls` and apply missing security policies |\n| **Transactional Outbox** | Queue backlog, dispatch latency, relay loop status | Lag `< 5s`, relay `running` | Backlog `> 1000` events, relay stopped | Inspect `database/outbox/relay.py` worker process and restart daemon |\n| **Realtime WebSocket Hub** | Active client connections, ping/pong frame roundtrip | Ping latency `< 50ms` | Stalled connections, high dropped frames | Inspect Caddy/reverse-proxy timeouts and client network conditions |\n| **Async Job Executor** | Active tasks, dead letter queue (DLQ) depth | DLQ depth `= 0` | DLQ depth `> 0`, executor stalled | Inspect dead-letter payloads, clear retry budgets, check worker logs |\n| **Sandboxed Runners** | Wasmtime AST compiler and nsjail container isolation | Wasmtime initialized, nsjail active | nsjail unavailable (fallback to standalone) | Check kernel namespace support (`CONFIG_USER_NS`) and cgroup limits |\n\n---\n\n## 4. Universal Object Graph Link Auditor and Inspector Studio\n\n\ud83d\udc4dkanban models all work items, digital stickies, technical documents, sprint cycles, and modules as registered entities connected via typed `object_links`. The Link Auditor continuously detects and repairs referential anomalies.\n\n### The Six Defect Classes\n\n```mermaid\nclassDiagram\n    class ObjectLinkDefect {\n        <<enumeration>>\n        ORPHAN_SOURCE\n        ORPHAN_TARGET\n        CROSS_WORKSPACE\n        INVALID_KIND\n        INVERTED_DEPENDENCY\n        DANGLING_PARENT\n    }\n```\n\n1. **`ORPHAN_SOURCE`:** The link record specifies a `source_id` entity that has been hard-deleted or does not exist in PostgreSQL.\n2. **`ORPHAN_TARGET`:** The link record specifies a `target_id` entity that no longer exists in PostgreSQL.\n3. **`CROSS_WORKSPACE`:** The link connects two entities across distinct workspace tenant boundaries without an active federation agreement, violating multi-tenant isolation.\n4. **`INVALID_KIND`:** The link record specifies an unregistered or deprecated relation kind (valid kinds: `BLOCKS`, `BLOCKED_BY`, `RELATES_TO`, `DUPLICATE_OF`, `PARENT_OF`, `CHILD_OF`).\n5. **`INVERTED_DEPENDENCY`:** An illegal cyclic or inverted dependency violates topological sort order (e.g. Issue A blocks Issue B while Issue B blocks Issue A).\n6. **`DANGLING_PARENT`:** A hierarchical child item references a parent container that has been archived, shredded, or purged.\n\n### Forensic Link Inspection Drawer\n\nThe Link Auditor interface renders defective links in an interactive inspection drawer. Administrators can review:\n- Source and target entity types (`issue`, `sticky`, `doc`, `cycle`, `module`).\n- Link kind and timestamp of creation.\n- Root cause forensic classification.\n- Impacted workspace and project keys.\n\n### Two-Stage Destructive Confirmation and Blast-Radius Engine\n\nTo prevent accidental data loss during remediation, link purging requires explicit two-stage confirmation:\n1. **Stage 1 (Blast-Radius Calculation):** The administrator requests a purge dry run (`POST /api/v1/admin/link-auditor/purge?dry_run=true`). The server computes the exact list of link IDs scheduled for removal and records a cryptographic summary in session state.\n2. **Stage 2 (Cryptographic Confirmation):** The administrator confirms the operation by providing the exact confirmation token generated in Stage 1. The server deletes the invalid links inside a single transactional block and writes an immutable entry to the SHA-256 hash-chained `audit_events` ledger.\n\n```json\n{\n  \"operation\": \"PURGE_INVALID_OBJECT_LINKS\",\n  \"purged_count\": 14,\n  \"defect_breakdown\": {\n    \"ORPHAN_TARGET\": 9,\n    \"CROSS_WORKSPACE\": 3,\n    \"INVALID_KIND\": 2\n  },\n  \"dry_run\": false,\n  \"confirmed_by_principal\": \"usr_admin_01\",\n  \"audit_event_id\": \"aud_018f92b7c4d173e2\"\n}\n```\n\n---\n\n## 5. Operational Runbook: Inspections and Disaster Recovery\n\n### Routine Diagnostic Inspection\n\n1. Navigate to `/admin/diagnostics` in the web application using an account with `SERVER_ADMIN` credentials.\n2. Verify that all status indicators in the Subsystem Overview grid display **Operational** (`green`).\n3. Click **Run Health Probe** to execute active roundtrip latency measurements against the database, outbox relay, and WebSocket hub.\n4. Review the **Migration State** card to confirm 76/76 migrations are applied with single-head consistency.\n5. If any subsystem reports **Degraded** or **Down**, click **Inspect Subsystem** to view raw exception logs and performance percentiles.\n\n### Link Graph Remediation Procedure\n\n1. Switch to the **Link Inspector** tab or navigate directly to `/admin/link-auditor`.\n2. Click **Start Comprehensive Scan** (`GET /api/v1/admin/link-auditor/scan`).\n3. Review the defect summary cards grouped by defect class (`ORPHAN_SOURCE`, `ORPHAN_TARGET`, `CROSS_WORKSPACE`, etc.).\n4. Click on any row to open the **Forensic Inspection Drawer** and review the link metadata.\n5. Click **Purge Invalid Links** to open the remediation modal.\n6. Review the calculated blast radius. Type the confirmation phrase `PURGE INVALID LINKS` and confirm.\n7. Verify that the operation completes successfully and inspect the updated link audit counter (expected: 0 defects).\n\n### Command-Line Diagnostics (Headless & Air-Gapped Environments)\n\nFor headless container environments or automated CI/CD maintenance jobs, platform administrators can invoke equivalent diagnostics via `kanban-ctl`:\n\n```bash\n# Verify database connection and single-head migration consistency\nkanban-ctl db check-migrations\n\n# Audit all 92 tables for Row-Level Security enforcement\nkanban-ctl db audit-rls\n\n# Scan universal object graph for orphaned or corrupt links\nkanban-ctl db audit-links --verbose\n\n# Perform dry-run link purge\nkanban-ctl db purge-invalid-links --dry-run\n\n# Execute audited link purge and write to audit chain\nkanban-ctl db purge-invalid-links --confirm\n```\n\n---\n\n## 6. Visual Reference and Studio Screenshots\n\nThe Admin Diagnostics Studio provides a clean, breathable interface matching the \ud83d\udc4dkanban design system tokens:\n\n![Admin Link Auditor Overview](images/46-admin-link-auditor.png)\n\n![Link Auditor Forensic Inspection Drawer](images/47-admin-link-auditor-inspect-drawer.png)\n\n![Link Auditor Purge Blast-Radius Modal](images/48-admin-link-auditor-purge-modal.png)\n\n![Admin Browser QA and Diagnostics View](images/68-admin-browser-qa.png)\n"
+  },
+  {
+    "slug": "agent-lease-fencing-workpads-and-push-protection",
+    "title": "[Architectural] Autonomous Agent Lease Fencing, Workpad Rework Breaker, and Secret Push-Protection Guide",
+    "category": "architectural",
+    "track": "Track 4: Engineering & Security Architecture",
+    "subtrack": "General",
+    "audience": "Developers & Operators",
+    "order": 4,
+    "summary": "Authoritative architectural reference and engineering guide for distributed agent coordination: atomic PostgreSQL issue leases with monotonic fencing tokens, silent per-issue workpads, rework loop circuit breakers, and pre-persistence Shannon-entropy secret push-protection.",
+    "sections": [
+      {
+        "id": "the-autonomous-multi-agent-coordination-challenge",
+        "title": "1. The Autonomous Multi-Agent Coordination Challenge",
+        "level": 2
+      },
+      {
+        "id": "postgresql-issue-leases-and-monotonic-fencing-tokens",
+        "title": "2. PostgreSQL Issue Leases and Monotonic Fencing Tokens",
+        "level": 2
+      },
+      {
+        "id": "database-schema-and-invariants",
+        "title": "Database Schema and Invariants",
+        "level": 3
+      },
+      {
+        "id": "compare-and-swap-cas-lease-acquisition",
+        "title": "Compare-And-Swap (CAS) Lease Acquisition",
+        "level": 3
+      },
+      {
+        "id": "the-monotonic-fencing-token-protocol",
+        "title": "The Monotonic Fencing Token Protocol",
+        "level": 3
+      },
+      {
+        "id": "dedicated-issue-workpads-and-rework-circuit-breakers",
+        "title": "3. Dedicated Issue Workpads and Rework Circuit Breakers",
+        "level": 2
+      },
+      {
+        "id": "silent-per-issue-workpad-slot",
+        "title": "Silent Per-Issue Workpad Slot",
+        "level": 3
+      },
+      {
+        "id": "per-issue-rework-loop-circuit-breaker",
+        "title": "Per-Issue Rework Loop Circuit Breaker",
+        "level": 3
+      },
+      {
+        "id": "synchronous-pre-persistence-secret-push-protection",
+        "title": "4. Synchronous Pre-Persistence Secret Push-Protection",
+        "level": 2
+      },
+      {
+        "id": "the-invariant-block-before-persistence",
+        "title": "The Invariant: Block Before Persistence",
+        "level": 3
+      },
+      {
+        "id": "token-level-shannon-entropy-scanner",
+        "title": "Token-Level Shannon Entropy Scanner",
+        "level": 3
+      },
+      {
+        "id": "high-precision-signature-catalog",
+        "title": "High-Precision Signature Catalog",
+        "level": 3
+      },
+      {
+        "id": "deterministic-exemption-engine",
+        "title": "Deterministic Exemption Engine",
+        "level": 3
+      },
+      {
+        "id": "visual-reference-and-studio-screenshots",
+        "title": "5. Visual Reference and Studio Screenshots",
+        "level": 2
+      }
+    ],
+    "content": "# [Architectural] Autonomous Agent Lease Fencing, Workpad Rework Breaker, and Secret Push-Protection Guide\n\nAuthoritative architectural reference and engineering guide for distributed agent coordination: atomic PostgreSQL issue leases with monotonic fencing tokens, silent per-issue workpads, rework loop circuit breakers, and pre-persistence Shannon-entropy secret push-protection.\n\n---\n\n## 1. The Autonomous Multi-Agent Coordination Challenge\n\nDeploying autonomous AI agents (such as Codex, Gemini, Claude, and local LLM runners) at enterprise scale introduces unique distributed systems challenges that do not exist in purely human-driven issue trackers:\n1. **Split-Brain Race Conditions:** Two autonomous agents can simultaneously pick up the same ticket, overwrite each other's commits, and corrupt ticket state.\n2. **Zombie Agent Lockout:** If an agent encounters a network timeout, container eviction, or unhandled crash while holding an exclusive lock, human workflows must not remain permanently frozen.\n3. **Comment Stream Pollution:** Autonomous agents generate extensive chain-of-thought traces, bash command outputs, and intermediate test results. Dumping these into public ticket comment threads creates overwhelming noise for human stakeholders.\n4. **Infinite Rework Prompt Loops:** When an agent's code submission fails an automated QA gate or security check, the agent may attempt immediate fixes in an unconstrained loop, rapidly consuming token quotas and thrashing CI/CD pipelines.\n5. **Accidental Credential Ingestion:** Autonomous agents routinely handle environment variables, API tokens, and private keys. Without strict pre-persistence filters, credentials can easily leak into database tables, search indexes, and immutable audit logs.\n\n\ud83d\udc4dkanban resolves all five challenges through a layered autonomous agent safety architecture:\n\n```mermaid\ngraph TD\n    Agent[\"Autonomous Sub-Agent (Gemini / Claude / Codex / Runner)\"] --> LeaseGate[\"Atomic Lease Fencing (p6_05 CAS Fencing Token)\"]\n    LeaseGate --> Workpad[\"Silent Per-Issue Workpad (p6_10 issue_workpads)\"]\n    Workpad --> PushProtection[\"Synchronous Secret Push-Protection (Shannon Entropy Scanner)\"]\n    PushProtection --> BreakerCheck[\"Rework Circuit Breaker Gate (Streak Tracking)\"]\n    BreakerCheck --> Transition[\"Atomic PostgreSQL Transition & Audit Hash-Chain\"]\n```\n\n---\n\n## 2. PostgreSQL Issue Leases and Monotonic Fencing Tokens\n\nTicket `KAN-69` implements distributed coordination primitives directly inside PostgreSQL (`database/migrations/sql/p6_05_issue_leases_and_fencing.up.sql` and `kanban/api/v1/issue_workflow.py`), preventing split-brain race conditions without requiring external Redis or ZooKeeper dependencies.\n\n### Database Schema and Invariants\n\nEvery issue record tracks its exclusive execution lease:\n\n```sql\nALTER TABLE issues\n    ADD COLUMN fencing_token BIGINT NOT NULL DEFAULT 0,\n    ADD COLUMN lease_expires_at TIMESTAMPTZ,\n    ADD COLUMN leased_by_principal_id UUID REFERENCES users(id) ON DELETE SET NULL;\n\nCREATE INDEX ix_issues_lease_expires_at ON issues(lease_expires_at)\n    WHERE lease_expires_at IS NOT NULL;\n```\n\n### Compare-And-Swap (CAS) Lease Acquisition\n\nWhen an agent invokes `begin_work` (via REST API or the `/mcp/agent` tool), the server executes an atomic Compare-And-Swap (CAS) query:\n\n```sql\nUPDATE issues\nSET\n    leased_by_principal_id = :agent_principal_id,\n    lease_expires_at = clock_timestamp() + INTERVAL '15 minutes',\n    fencing_token = fencing_token + 1\nWHERE id = :issue_id\n  AND (lease_expires_at IS NULL OR lease_expires_at < clock_timestamp() OR leased_by_principal_id = :agent_principal_id)\nRETURNING fencing_token, lease_expires_at;\n```\n\n### The Monotonic Fencing Token Protocol\n\nThe returned `fencing_token` is an integer that strictly increments with every lease acquisition or extension. When an agent attempts to mutate the ticket (transitioning state, posting workpads, or modifying properties), it must include its assigned `fencing_token`:\n- If the token matches the current database record, the write succeeds.\n- If another agent acquired a newer lease while the first agent was computing, the database record contains a higher `fencing_token`. The outdated write is rejected with `409 LEASE_CONFLICT`.\n- If an agent crashes or loses network connectivity, its lease expires automatically after 15 minutes (`lease_expires_at < clock_timestamp()`), allowing standby agents or human engineers to take over without manual intervention.\n\n---\n\n## 3. Dedicated Issue Workpads and Rework Circuit Breakers\n\nTicket `KAN-71` resolves the twin issues of comment pollution and runaway prompt loops (`database/migrations/sql/p6_10_issue_workpads_and_rework_breaker.up.sql` and `mcp/surfaces/agent/workpad.py`).\n\n### Silent Per-Issue Workpad Slot\n\nEach issue maintains a dedicated, isolated scratchpad table (`issue_workpads`):\n- **Zero Comment Spam:** Agents write intermediate reasoning traces, scratch scripts, sub-task breakdowns, and tool outputs to the workpad instead of creating hundreds of notification-triggering comments.\n- **Model Context Protocol Tool:** Exposed on `/mcp/agent` as `update_workpad` within a compact schema budget (1,674 tokens).\n- **Payload & Surrogate Bounds:** Workpad bodies are bounded to 65,536 bytes (`WORKPAD_PAYLOAD_TOO_LARGE`) and enforce strict UTF-16 lone surrogate rejection (`INVALID_UTF8_SURROGATE`).\n- **Web UI Rendering:** The web application displays the workpad inside a collapsible `\ud83e\udd16 Workpad` drawer in `IssueSurface.tsx`, keeping human comment streams pristine.\n\n```mermaid\nsequenceDiagram\n    participant Agent as Autonomous Agent\n    participant MCP as /mcp/agent (update_workpad)\n    participant DB as PostgreSQL (issue_workpads)\n    participant UI as Human Web UI (IssueSurface.tsx)\n\n    Agent->>MCP: update_workpad(identifier=\"KAN-42\", body=\"# Execution Scratchpad...\")\n    MCP->>DB: UPSERT INTO issue_workpads WHERE issue_id = :id\n    DB-->>MCP: Success\n    MCP-->>Agent: {\"status\": \"ok\", \"revision\": 3}\n    Note over UI: Human comment feed remains clean; workpad rendered in collapsible drawer\n```\n\n### Per-Issue Rework Loop Circuit Breaker\n\nTo halt runaway execution loops when automated QA gates or specialist reviews repeatedly veto code changes:\n1. **Configurable Threshold:** Workflow transition hooks define a `max_rework_attempts` threshold (default: 3).\n2. **Rejection Streak Tracking:** The `issues` table tracks consecutive rejections (`rework_rejection_streak`) and trip timestamps (`rework_tripped_at`).\n3. **Tripping the Breaker:** If an agent's submission fails verification 3 times consecutively, the system trips the breaker:\n   - Sets `rework_tripped_at = clock_timestamp()`.\n   - Agent-initiated state transitions are blocked with `409 REWORK_LOOP_LIMIT_EXCEEDED`.\n   - Renders a prominent `\ud83d\uded1\ud83e\udd16 Tripped Rework Breaker` banner on the web issue screen.\n4. **Human Reset Governance:** Agents are strictly forbidden from resetting their own circuit breaker (API returns `403 FORBIDDEN`). Only a human engineer can review the blockage and clear the breaker:\n   - Manually transitioning the ticket automatically resets the streak to 0.\n   - Alternatively, human admins can trigger `POST /api/v1/issues/{key}/reset-rework-breaker`.\n\n---\n\n## 4. Synchronous Pre-Persistence Secret Push-Protection\n\nTicket `KAN-72` establishes synchronous, fail-closed pre-persistence secret push-protection (`kanban/security/push_protection.py`) across all write paths (REST API, MCP tool calls, digital stickies, and technical documents).\n\n### The Invariant: Block Before Persistence\n\nUnlike asynchronous background scrubbers that attempt to clean data after insertion, \ud83d\udc4dkanban scans prose synchronously before it touches PostgreSQL storage, search TSV indexes, vector embeddings, or the immutable SHA-256 audit ledger.\n\n```mermaid\ngraph LR\n    Payload[\"Incoming Write Payload (Prose, Comments, Workpads)\"] --> Detector[\"Synchronous Push Protection Filter\"]\n    Detector --> RegEx[\"High-Precision Signatures (AWS, GitHub, Slack, OpenAI, DSNs)\"]\n    Detector --> Shannon[\"Token-Level Shannon Entropy Scanner (H >= 4.5, len >= 20)\"]\n    RegEx & Shannon --> Exemptions[\"Exemptions Engine (UUIDs, Git SHAs, Hashes, Base62 Ranks)\"]\n    Exemptions -->|Secret Detected| Reject[\"HTTP 422 ProblemException (SECRET_DETECTED_IN_PAYLOAD)\"]\n    Exemptions -->|Clean| Persist[\"PostgreSQL Commit & Audit Ledger Hash\"]\n```\n\n### Token-Level Shannon Entropy Scanner\n\nHigh-entropy random keys that do not match known regex patterns are detected via Shannon entropy analysis:\n\n$$H(X) = -\\sum_{i=1}^{n} P(x_i) \\log_2 P(x_i)$$\n\nWhere $P(x_i)$ is the probability of character $x_i$ appearing within the token string.\n- **Entropy Threshold:** Flags tokens where $H(X) \\ge 4.5$ bits per character.\n- **Length Constraint:** Applied only to candidate tokens of length $\\ge 20$ characters.\n- **Character Class Diversity:** Candidates must span at least three character classes (uppercase, lowercase, numeric, special symbols).\n\n### High-Precision Signature Catalog\n\nThe scanner detects dozens of deterministic cloud credentials:\n- **Private Key Blocks:** PEM headers (`BEGIN RSA PRIVATE KEY`, `BEGIN OPENSSH PRIVATE KEY`).\n- **Cloud Provider Keys:** AWS Access Key IDs (`AKIA[0-9A-Z]{16}`, `ASIA...`), Google API keys (`AIzaSy...`), Gemini/Vertex keys (`AQ...`).\n- **SCM & Platform Tokens:** GitHub Personal Access Tokens (`ghp_`, `github_pat_`), GitLab tokens (`glpat-`), Slack tokens (`xoxb-`, `xoxp-`), OpenAI keys (`sk-proj-...`), Anthropic keys (`sk-ant-api...`).\n- **\ud83d\udc4dkanban Internal Keys:** Platform tokens (`kb_pat_`, `kb_eat_`, `kb_agt_`, `kb_runner_`).\n- **Connection Strings (DSNs):** URIs containing embedded passwords (`postgresql://user:pass@host:5432/db`).\n\n### Deterministic Exemption Engine\n\nTo prevent false-positive blocks on benign technical data, the scanner strictly exempts:\n1. **Standard UUIDs:** RFC 4122 UUIDv4 and UUIDv7 strings.\n2. **Hexadecimal Digests:** 32-character, 40-character, 64-character, and 128-character hex strings (Git commit SHAs, MD5, SHA-1, SHA-256 digests).\n3. **Base62 Fractional Rank Keys:** Board ordering keys (e.g. `0|hzzzzz:`).\n4. **Documentation URLs:** Clean HTTP/HTTPS hyperlinks containing no embedded authentication credentials.\n\n---\n\n## 5. Visual Reference and Studio Screenshots\n\n![Asynchronous Agent Gate States](images/16-async-agent-gate-states.png)\n\n![Agent Kill Switch and Emergency Fencing](images/18-agent-kill-switch.png)\n\n![Model Context Protocol Scoping and Rework Loop Breaker](images/70-mcp-scoping-and-rework-loop.png)\n"
+  },
+  {
     "slug": "architecture-delta-and-missing-features",
     "title": "[Architectural] \ud83d\udc4dkanban: Architecture Specification Delta & Gap Analysis",
     "category": "architectural",
     "track": "Engineering & Security Architecture",
     "subtrack": "Engineering Appendix",
     "audience": "Core Contributors & Maintainers",
-    "order": 3,
+    "order": 5,
     "summary": "This document presents a section-by-section architectural delta and gap analysis comparing the authoritative specification (`docs/ARCHITECTURE_AND_PRODUCT_SPEC.md`, Sections 1 through 15) against the actual implementation codebase across `kanban/`, `database/`, `mcp/`, `agent/`, and `kanban/web/`, active unit and integration test suites, and project documentation topics.",
     "sections": [
       {
@@ -382,7 +548,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Feature & Field Reference",
     "subtrack": "Inline AI Completion",
     "audience": "Authors & Engineers",
-    "order": 4,
+    "order": 6,
     "summary": "Software documentation, bug reports, and requirements specifications benefit greatly from AI assistance, but disruptive popups and intrusive autocomplete modals create frustration. \ud83d\udc4dkanban introduces the **Blinking Cursor Sparkle (`\u2728`) Completion Engine**: an unobtrusive, editor-integrated Fill-In-the-Middle (FIM) completion system.",
     "sections": [
       {
@@ -430,7 +596,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Engineering & Security Architecture",
     "subtrack": "Functional Architecture",
     "audience": "Security Engineers & Content Architects",
-    "order": 5,
+    "order": 7,
     "summary": "The storage and rendering of rich text is a primary vector for both data corruption and cross-site scripting (XSS) vulnerabilities. Many project management tools store raw HTML or proprietary JSON formats, leading to database bloat, rendering inconsistencies across platforms, and prompt injection vulnerabilities when ingested by AI agents.",
     "sections": [
       {
@@ -488,7 +654,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Engineering & Security Architecture",
     "subtrack": "Functional Architecture",
     "audience": "QA Engineers & Test Automation Leads",
-    "order": 6,
+    "order": 8,
     "summary": "Software quality and security cannot be tested into a system as an afterthought. \ud83d\udc4dkanban operates under a strict **Shift-Left Mandate**: all code must achieve and maintain a minimum of **95% automated test coverage**, zero compiler or linter warnings, sub-second test execution speeds, and verifiable CI/CD build proofs before merging.",
     "sections": [
       {
@@ -531,7 +697,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Engineering & Security Architecture",
     "subtrack": "Security Architecture",
     "audience": "Application Security Engineers",
-    "order": 7,
+    "order": 9,
     "summary": "Extensibility is central to \ud83d\udc4dkanban: administrators can author custom fields, dynamic computed formulas, and WebAssembly (Wasm) logic to compute metadata in real time. However, allowing untrusted or semi-trusted script execution and arbitrary JSON payloads introduces critical attack vectors: 1. **Supply-chain and Binary Tampering:** Substituting an approved Wasm module binary with a malicious payload after approval. 2. **Re-entrant Elevation:** Calling privileged endpoints (such as `test-execute` or `dry-run`) from within custom field scripts or workflow hooks to bypass security boundaries. 3. **Event-Loop CPU and Memory Denial-of-Service:** Exploiting Python abstract syntax tree (AST) evaluation through exponential operations, unbounded sequence allocations, or deep syntax tree exhaustion. 4. **JSON Payload Bombs:** Crashing or freezing ASGI servers via nested JSON recursion (stack overflow), unbounded key allocation (memory exhaustion), or invalid UTF-16 lone surrogates. 5. **Client-Side Prototype Pollution and DOM XSS:** Polluting JavaScript object prototypes via `__proto__` or `constructor` keys in parsed JSON, or injecting unvalidated HTML strings into the document object model.",
     "sections": [
       {
@@ -639,7 +805,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Feature & Field Reference",
     "subtrack": "Board & Visual Design",
     "audience": "End Users & Product Leads",
-    "order": 8,
+    "order": 10,
     "summary": "High-performing engineering teams require interfaces that balance visual clarity with deep technical density. Cluttered, cramped dashboards create cognitive fatigue, while overly sparse designs hide crucial metadata. \ud83d\udc4dkanban delivers a refined **Enterprise Whitespace Design System**, combining generous breathing room with dense information display, sub-16ms drag-and-drop responsiveness, and the intuitive `<EmojiHint>` hover elaboration system.",
     "sections": [
       {
@@ -727,7 +893,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Security & Adoption Overview",
     "subtrack": "Market & Capability Analysis",
     "audience": "Technology Evaluators & Leadership",
-    "order": 9,
+    "order": 11,
     "summary": "A kanban is just a kanban until you start digging deeper. On the surface, every issue tracker presents identical columns, draggable cards, and basic workflow states. The real architectural divergence begins the moment you inspect paywalled enterprise controls, database-level security invariants, canonical Markdown integrity, multi-agent concurrency primitives, and native agent/MCP execution gates. While commercial SaaS, copyleft boards, and external agent runners lock custom properties, audit logs, Single Sign-On, and AI integrations behind per-seat subscription tiers, 1:1 REST-wrapper MCP schemas, or headless external-tracker daemons, `\ud83d\udc4dkanban` ships a unified, security-first, agent-first platform under a pure Apache-2.0 license. Below is the full 46-feature technical capability matrix comparing `\ud83d\udc4dkanban` directly against legacy trackers, modern boards, and autonomous agent orchestrators, followed by an honest non-goal compatibility and routing guide.",
     "sections": [
       {
@@ -770,7 +936,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Step-by-Step Guides",
     "subtrack": "Custom Fields",
     "audience": "Project & Workspace Admins",
-    "order": 10,
+    "order": 12,
     "summary": "Custom Fields extend your projects and issues with dynamic calculations, computed business metrics, compliance indicators, and metadata without modifying the core database schema or writing custom server plugins.",
     "sections": [
       {
@@ -953,7 +1119,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Feature & Field Reference",
     "subtrack": "Knowledge Management",
     "audience": "Technical Writers & Product Managers",
-    "order": 11,
+    "order": 13,
     "summary": "Software engineering encompasses both informal, ephemeral scratchpads (meeting notes, architecture brainstorming, quick snippets) and formal, structured documentation (system specifications, API references, runbooks). In conventional tools, informal notes either get lost in chat threads or prematurely clutter formal document trees.",
     "sections": [
       {
@@ -1021,7 +1187,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Feature & Field Reference",
     "subtrack": "Protocol Reference",
     "audience": "AI Integrators & Developers",
-    "order": 12,
+    "order": 14,
     "summary": "The \ud83d\udc4dkanban platform exposes 24 intent-driven Model Context Protocol (MCP) tools across three streamable HTTP surfaces (`2025-06-18` specification). Unlike conventional project management APIs that force agents to coordinate dozens of low-level CRUD endpoints, \ud83d\udc4dkanban tools encapsulate multi-step engineering workflows into atomic, type-safe operations.",
     "sections": [
       {
@@ -1189,7 +1355,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Step-by-Step Guides",
     "subtrack": "Data Migration",
     "audience": "Enterprise Administrators",
-    "order": 13,
+    "order": 15,
     "summary": "Organizations seeking to escape SaaS paywalls, Jira seat taxes, and single-vendor agent lock-in require a safe, deterministic migration path. Legacy project management tools often store data in proprietary formats, making manual migration prone to data loss, dropped comments, and broken ticket linkages.",
     "sections": [
       {
@@ -1262,7 +1428,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Step-by-Step Guides",
     "subtrack": "Authentication & Identity",
     "audience": "Security & Identity Administrators",
-    "order": 14,
+    "order": 16,
     "summary": "Enterprise identity management demands both flexibility and strict security. Rather than forcing organizations into a single identity silo, \ud83d\udc4dkanban implements a **Multi-Card Authentication Studio**. Administrators can configure, reorder, test, and enable multiple independent authentication providers simultaneously.",
     "sections": [
       {
@@ -1325,7 +1491,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Step-by-Step Guides",
     "subtrack": "AI & Distributed Runners",
     "audience": "DevOps & Platform Architects",
-    "order": 15,
+    "order": 17,
     "summary": "Unlike commercial SaaS ticketing platforms that hardcode proprietary cloud models behind expensive monthly add-ons, \ud83d\udc4dkanban features an open, multi-provider **AI Orchestration Engine** (`agent/`). Organizations can leverage cloud AI providers, local open-source models, or zero-shell isolated command-line pipes without changing application code.",
     "sections": [
       {
@@ -1422,13 +1588,116 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "content": "# [Guide] Multi-Provider AI Engine, Execution Harnesses, and Runners\n\n## Overview\n\nUnlike commercial SaaS ticketing platforms that hardcode proprietary cloud models behind expensive monthly add-ons, \ud83d\udc4dkanban features an open, multi-provider **AI Orchestration Engine** (`agent/`). Organizations can leverage cloud AI providers, local open-source models, or zero-shell isolated command-line pipes without changing application code.\n\nSupported provider ecosystems:\n- **Cloud LLMs:** OpenAI (GPT-4o, o3-mini), Google Gemini (Gemini 2.5 Flash/Pro), and OpenAI-compatible gateways.\n- **Local Private LLMs:** Ollama (Llama 3, DeepSeek-R1, Qwen 2.5) running completely on-premise with zero data egress.\n- **Zero-Shell CLI Pipe Harnesses:** Direct pipe execution (`agy -p`, `codex -p`) running inside hardened Linux sandboxes.\n- **Remote Read-Only mTLS Runners:** Distributed runners executing builds and code inspections over encrypted WebSockets.\n\n```mermaid\nflowchart TD\n    subgraph Core[\"\ud83d\udc4dkanban Agent Runtime\"]\n        App[\"FastAPI & Worker Dispatcher\"]\n        Protocol[\"LLMProvider Interface (agent/providers/base.py)\"]\n    end\n\n    subgraph Providers[\"Multi-Provider Implementations\"]\n        OpenAI[\"OpenAI Provider<br/>GPT-4o, o3-mini, compatible gateways\"]\n        Gemini[\"Google Gemini Provider<br/>Gemini 2.5 Flash / Pro (native tools)\"]\n        Ollama[\"Local Ollama Provider<br/>Llama 3, DeepSeek-R1, Qwen 2.5\"]\n        CLIPipe[\"Zero-Shell CLI Pipe<br/>agy -p / codex -p in nsjail\"]\n        Runner[\"Remote mTLS Runner<br/>Encrypted WSS, read-only repo\"]\n    end\n\n    App --> Protocol\n    Protocol --> OpenAI\n    Protocol --> Gemini\n    Protocol --> Ollama\n    Protocol --> CLIPipe\n    Protocol --> Runner\n```\n\n![Async Agent Gate Card States and Transition Lifecycle](images/16-async-agent-gate-states.png)\n\n---\n\n## Provider Architecture and Abstraction Layer\n\nThe engine abstracts all AI interactions behind a clean, asynchronous provider protocol (`agent/providers/base.py`):\n\n```python\nclass LLMProvider(ABC):\n    @abstractmethod\n    async def complete(self, prompt: str, system: str | None = None, **kwargs) -> CompletionResult:\n        \"\"\"Execute a text completion or FIM generation.\"\"\"\n\n    @abstractmethod\n    async def chat(self, messages: list[ChatMessage], **kwargs) -> ChatResult:\n        \"\"\"Execute a multi-turn conversation with tool calling.\"\"\"\n\n    @abstractmethod\n    async def embed(self, texts: list[str]) -> list[list[float]]:\n        \"\"\"Generate vector embeddings for semantic search.\"\"\"\n```\n\n<a id=\"supported-runtimes\"></a>\n### Supported Providers Matrix\n\n| Provider Key | Primary Use Cases | Streaming Support | Function / Tool Calling | Network Boundary |\n| :--- | :--- | :---: | :---: | :--- |\n| **`openai`** | Complex planning, synthesis | Yes | Yes (Native JSON Schema) | `egress_llm_net` |\n| **`gemini`** | Large context specs, vision | Yes | Yes (Native Function Calling) | `egress_llm_net` |\n| **`ollama`** | Air-gapped workstations, privacy | Yes | Yes (Model dependent) | `data_net` / local |\n| **`cli_pipe`** | Deterministic CI agents, bash-less | No (Batch) | Pipe JSON protocol | `sandbox_net` (nsjail) |\n| **`remote_runner`** | Forensic code audits, test gates | Yes (WSS) | Streamable RPC | Dedicated mTLS |\n\n---\n\n<a id=\"execution-harnesses\"></a>\n## Zero-Shell CLI Pipe Harnesses (`agy -p` / `codex -p`)\n\n```mermaid\nsequenceDiagram\n    autonumber\n    participant Engine as AI Orchestrator\n    participant Sandbox as nsjail Sandbox Runner\n    participant Model as CLI Pipe (agy -p / codex -p)\n\n    Engine->>Sandbox: Spawn isolated container (CLONE_NEWNET, read-only FS, 512MB RAM)\n    Engine->>Sandbox: Pipe prompt.json over STDIN\n    Sandbox->>Model: Execute deterministic harness without shell/bash\n    Model->>Sandbox: Generate tool call / response JSON over STDOUT\n    Sandbox-->>Engine: Structured JSON stream (Zero bash exposure)\n    Engine->>Engine: Validate response against Pydantic schema\n```\n\nAutonomous agents frequently need to inspect code, run validators, or check commit history. However, granting an LLM arbitrary bash or shell access introduces severe remote code execution (RCE) hazards.\n\n\ud83d\udc4dkanban resolves this with **Zero-Shell CLI Pipes**:\n- Agents do not receive an interactive shell or bash process.\n- Execution communicates strictly over standard input (`stdin`) and standard output (`stdout`) using structured JSON pipes.\n- Commands run inside a sandboxed Linux jail (`nsjail` / `setpriv`):\n  - Read-only root filesystem.\n  - Network namespace disabled (`CLONE_NEWNET`).\n  - Memory limit capped at 512 MB.\n  - Execution time limited to 15 seconds.\n\n```bash\n# Example invocation of pipe harness:\ncat prompt.json | agy -p --sandbox-jail > response.json\n```\n\n---\n\n## AI Providers and Token Caps Studio (`/admin/ai`)\n\nWorkspace and server administrators manage LLM provider registrations, write-only API key custody, monthly token budgets, and zero-egress policies in the visual studio at `/admin/ai`.\n\n```mermaid\nflowchart TD\n    subgraph AIStudio[\"AI Providers & Token Caps Architecture\"]\n        AdminUser[\"Administrator (AAL2)\"] --> Reg[\"Register / Edit Provider\"]\n        Reg --> ProvidersList[\"Configured Providers<br/>- OpenAI (Cloud, priority 10)<br/>- Gemini (Cloud, priority 20)<br/>- Ollama (Local Air-Gap, priority 5)\"]\n        \n        ProvidersList --> AirGapCheck{\"Air-Gap Policy Active?\"}\n        AirGapCheck -->|Yes| BlockCloud[\"Cloud Providers Blocked<br/>Only Local Zero-Egress Ollama Allowed\"]\n        AirGapCheck -->|No| AllowCloud[\"Dispatched by Priority Tier\"]\n        \n        AllowCloud --> BudgetGate{\"Monthly Token Budget Gate\"}\n        BlockCloud --> BudgetGate\n        \n        BudgetGate -->|Within Cap| Exec[\"Execute Completion / Tool Call\"]\n        BudgetGate -->|Cap Exceeded| Reject[\"429 Budget Exceeded<br/>Alert Admin to Reset or Expand Cap\"]\n    end\n```\n\n![AI Providers and Token Caps Studio](images/43-admin-ai-studio-providers.png)\n\n### Key Provider Governance Features:\n1. **Write-Only API Key Custody:** API keys are submitted over encrypted TLS, stored encrypted in the database, and never echoed back to the browser.\n2. **Enterprise Air-Gap Mode:** When activated, all cloud egress to external AI services is blocked at the network layer. Only local, on-premise runtimes (such as Ollama) are authorized for completions.\n3. **Monthly Token Budgets & Ledgers:** Each provider configuration enforces monthly input/output token caps with automated rollover and audit ledger accounting.\n\n---\n\n## Agent Definitions Studio (`/admin/agents`)\n\nAdministrators define and customize autonomous agent personas, tool permissions, and system prompt templates at `/admin/agents`.\n\n```mermaid\nflowchart LR\n    subgraph AgentDefFlow[\"Agent Definition & Validation Lifecycle\"]\n        Def[\"Agent Definition<br/>Name, Slug, Model, Prompt Template\"] --> Scope[\"Tool Allowlist Scoping<br/>Permitted MCP Tools (read_ticket, add_comment, etc.)\"]\n        Scope --> Modal[\"Validation Modal (/admin/agents)<br/>Simulate test prompt against agent schema\"]\n        Modal --> Verdict{\"Validation Passes?\"}\n        Verdict -->|Yes| Active[\"Registered as Active Agent Principal\"]\n        Verdict -->|No| Fix[\"Report Schema / Prompt Errors for Correction\"]\n    end\n```\n\n![Agent Definitions Studio Overview](images/44-admin-agent-definitions.png)\n\n![Agent Validation Modal](images/60-agent-validation-modal.png)\n\n### Definition Capabilities:\n- **Role and Model Mapping:** Bind specific personas (e.g. `reality-checker`, `security-auditor`, `code-reviewer`) to optimal models (Gemini 2.5 Flash, GPT-4o, DeepSeek-R1).\n- **Tool Allowlist Scoping:** Strictly restrict which MCP tools each agent principal can invoke, enforcing least privilege.\n- **Interactive Validation Modal:** Test and validate agent definitions before deploying them to live project workflows.\n\n---\n\n## Agent Runners Studio and Distributed mTLS Daemon (`/admin/agent-runners`)\n\nFor heavy build verification, sandbox test execution, and isolated code review, \ud83d\udc4dkanban deploys distributed **Agent Runners** managed through `/admin/agent-runners`.\n\n```mermaid\nsequenceDiagram\n    autonumber\n    actor Admin as Server Administrator\n    participant Studio as Runner Studio (/admin/agent-runners)\n    participant Server as \ud83d\udc4dkanban Orchestrator\n    participant Daemon as Remote Runner Daemon\n\n    Admin->>Studio: Click \"+ Mint Runner Token\"\n    Studio->>Server: Generate single-use enrollment token (Max 15 min TTL)\n    Server-->>Studio: Return copyable CLI enrollment snippet\n    Admin->>Daemon: Execute enrollment on runner host\n    Daemon->>Server: Connect to dedicated mTLS port :8444 with PoP handshake\n    Server->>Server: Verify token & bind X.509 client certificate\n    Server-->>Daemon: Channel verified: Runner enters \"ONLINE\"\n    Daemon->>Server: Heartbeat ping every 15s over :8444 (CPU, RAM, active jobs)\n```\n\n![Agent Runner Studio Overview](images/45-admin-runner-studio.png)\n\n![Runner Mint Token Modal](images/61-runner-mint-token-modal.png)\n\n### Runner Infrastructure and Protocol Security\n\n- **Dedicated Port `:8444` and Proof-of-Possession Handshake:** Distributed runners connect exclusively over dedicated mutual TLS port `:8444`. Port `:8444` rejects standard HTTP requests and unauthenticated TLS handshakes, demanding a valid X.509 client certificate verified via a cryptographic Proof-of-Possession (PoP) challenge.\n- **Single-Use Enrollment Token (Max 15-Minute TTL):** When an administrator clicks `+ Mint Runner Token` in `/admin/agent-runners` (requiring AAL2 step-up authentication), the orchestrator mints an ephemeral enrollment token valid for at most 15 minutes (900 seconds). Upon first enrollment or expiration, the token is permanently invalidated.\n- **CLI Enrollment Syntax:** The studio generates an exact command to enroll the host daemon:\n  ```bash\n  echo \"${ENROLLMENT_TOKEN}\" | uv run kanban-agent-runner enroll \\\n    --url https://kanban.example.com \\\n    --token-stdin \\\n    --pool default\n  ```\n- **Hardware-Bound Certificate Rotation Guidance:** Runner client certificates are hardware-bound to the host and cannot be renewed in place. To rotate a certificate or decommission a host:\n  1. Revoke the existing runner in `/admin/agent-runners` (AAL2 challenge confirmed).\n  2. Mint a fresh enrollment token (15-minute TTL).\n  3. Re-enroll the runner daemon using the CLI command above.\n- **Private `/internal/v1/mcp/*` Runner Ingress Isolation:** All daemon polling, task dispatch, and execution telemetry endpoints (`/internal/v1/mcp/*`) are strictly segregated from public edge networks. They are reachable only over the internal container network via authenticated mTLS.\n\n---\n\n## Agent Revocation and Security Controls\n\nWhen an agent session exhibits anomalous activity or a credential leak is detected, administrators can invoke an instant Kill Switch across all surfaces:\n\n![Agent Kill Switch and Immediate Session Revocation](images/18-agent-kill-switch.png)\n\n---\n\n## Remote mTLS Repository Runners\n\nFor long-running verification tasks (e.g. compiling large C++ or Rust binaries, running full end-to-end Playwright suites), tasks are dispatched to external **mTLS Runners**:\n- **Mutual TLS Authentication (mTLS):** Both the \ud83d\udc4dkanban server and the runner verify cryptographic X.509 certificates over dedicated port `:8444`.\n- **WebSocket Streaming:** Real-time log output and build artifacts stream back over encrypted WebSocket channels.\n- **Read-Only Volume Mounting:** The repository is mounted read-only to prevent unauthorized code mutations on the build host.\n\n---\n\n## Testable AI: Pluggable Fixtures and CLI Validation\n\nAI agent workflows can be notoriously difficult to test deterministically in CI pipelines due to model drift, token costs, and rate limits. \ud83d\udc4dkanban enforces **100% Deterministic AI Testing**:\n\n### Pluggable AI Response Fixtures\nIn test suites, providers are swapped with `FixtureLLMProvider` and `FixtureCLIRunner`:\n- Replays recorded, deterministic JSON responses without making network calls.\n- Simulates network timeouts, rate limit errors (`429`), and malformed responses to verify system resilience.\n\n### Local Agent CLI Diagnostics\nEngineers can validate transition helpers and AI workflows locally via the command line:\n\n```bash\n# Validate a transition helper against a ticket fixture\nkanban-agent validate-transition \\\n  --ticket-file test_ticket.json \\\n  --from-state in_progress \\\n  --to-state done \\\n  --dry-run\n```\n\n---\n\n## Multi-Provider Benchmark & Cutoff Timeout Guide\n\nEvery AI provider configuration and agent definition exposes a configurable hard cutoff timeout (`timeout_ms`, `1000` to `300000` ms). At runtime, `GateWorkerRunner` enforces `cutoff_ms = min(provider.timeout_ms, agent.timeout_ms)`. When an upstream model exceeds `cutoff_ms`, the worker raises `GATE_TIMEOUT` and **fails closed**, leaving the ticket in its source state with zero hung workers.\n\n### Live Full-Stack In-Transition Benchmark Matrix (`In Progress -> Done`)\n\nMeasured end-to-end against `kanban-liveqa-2` (embedded PostgreSQL 16 + `FORCE ROW LEVEL SECURITY`) using `StrictVerdictSchema` (`kb-transition-verdict/v1`) on a Positive software ticket (`KAN-1`) and a Negative impossible/unverified ticket (`KAN-2: \"Build a rocket ship and serve ice cream on Saturn\"`):\n\n| Runtime & Model | Cutoff (`timeout_ms`) | Positive (`KAN-1`) | Positive Latency | Negative (`KAN-2`) | Negative Latency | Operational Guidance |\n| :--- | :---: | :--- | :---: | :--- | :---: | :--- |\n| **Google Gemini** (`gemini-2.5-flash-lite`) | `20000` | `approve` (`Done`) | `3,215 ms` | `reject` (`In Progress`) | `1,594 ms` | Fastest overall cloud model with strict schema compliance and `v1beta` AI Studio routing. |\n| **OpenAI Cloud** (`gpt-4o-mini`) | `20000` | `approve` (`Done`) | `3,846 ms` | `reject` (`In Progress`) | `2,224 ms` | Fast cloud fallback with strict JSON schema adherence. |\n| **Local Ollama Supercomputer** (`gemma4:e2b`) | `25000` | `approve` (`Done`) | `19,892 ms` | `reject` (`In Progress`) | `5,213 ms` | Strong air-gapped 2B edge choice; `20000`-`25000 ms` cutoff recommended. |\n| **Local Ollama GPU/CPU** (`gemma3:4b`) | `20000` / `35000` | `timed_out` (20s) / `approve` (35s) | `20,929 ms` / `31,431 ms` | `reject` (`In Progress`) | `16,630 ms` | If VRAM is shared with another pinned model (CPU fallback), set `timeout_ms >= 35000`. |\n| **Local Ollama GPU/CPU** (`granite3.3:2b`) | `20000` | `timed_out` (fail-closed) | `20,321 ms` | `reject` (`In Progress`) | `12,691 ms` | Warm-keep or `25000 ms` cutoff avoids cold-load timeout on long prompts. |\n| **Local Ollama Reasoning** (`nemotron-3-super:latest`) | `5000` (Strict) | N/A | N/A | `GATE_TIMEOUT` (fail-closed) | `6,023 ms` | Validates hard 5s cutoff protection with clean fail-closed veto. |\n| **Local Ollama Reasoning** (`nemotron-3-super:latest`) | `45000` (Extended) | `approve` (`Done`) | `31,940 ms` | `reject` (`In Progress`) | `26,502 ms` | Heavy reasoning models (`<think>` tags stripped) should use `45000`-`60000 ms`. |\n\n### Choosing a Cutoff Timeout\n- **Fast Cloud Models (`gpt-4o-mini`, `gemini-2.5-flash-lite`):** `15000` to `20000` ms.\n- **Local 2B-4B Edge Models (`gemma4:e2b`, `gemma3:4b`, `granite3.3:2b`):** `25000` to `35000` ms (covers occasional model reload or shared VRAM).\n- **Heavy Reasoning Models (`nemotron-3-super:latest`, `deepseek-r1`):** `45000` to `60000` ms, or pair with a strict `5000`-`10000` ms cutoff on latency-sensitive columns so stuck calls fail closed immediately.\n\n<a id=\"remote-runners\"></a>\n<a id=\"repository-access\"></a>\n"
   },
   {
+    "slug": "multi-source-migration-and-key-alias-redirects",
+    "title": "[Guide] End-to-End Multi-Source Migration, Key Alias Redirects, and Cross-Project Merge Guide",
+    "category": "guide",
+    "track": "Track 1: Step-by-Step Guides",
+    "subtrack": "General",
+    "audience": "Developers & Operators",
+    "order": 18,
+    "summary": "Comprehensive operator and engineering guide for multi-source migration from Jira, GitHub Issues, Linear, and Plane-DB, legacy issue key alias redirection, cross-project merge mode, and canonical CSV import/export governance.",
+    "sections": [
+      {
+        "id": "overview-and-lossless-migration-philosophy",
+        "title": "1. Overview and Lossless Migration Philosophy",
+        "level": 2
+      },
+      {
+        "id": "multi-source-importer-architecture",
+        "title": "2. Multi-Source Importer Architecture",
+        "level": 2
+      },
+      {
+        "id": "supported-importers-and-capability-matrix",
+        "title": "Supported Importers and Capability Matrix",
+        "level": 3
+      },
+      {
+        "id": "jira-adf-to-canonical-markdown-conversion",
+        "title": "Jira ADF to Canonical Markdown Conversion",
+        "level": 3
+      },
+      {
+        "id": "legacy-key-alias-routing-and-permalinks",
+        "title": "3. Legacy Key Alias Routing and Permalinks",
+        "level": 2
+      },
+      {
+        "id": "schema-and-model-architecture",
+        "title": "Schema and Model Architecture",
+        "level": 3
+      },
+      {
+        "id": "http-redirection-flow",
+        "title": "HTTP Redirection Flow",
+        "level": 3
+      },
+      {
+        "id": "cross-project-merge-mode-kanba---kan",
+        "title": "4. Cross-Project Merge Mode (KANBA -> KAN)",
+        "level": 2
+      },
+      {
+        "id": "merge-execution-steps",
+        "title": "Merge Execution Steps",
+        "level": 3
+      },
+      {
+        "id": "canonical-csv-import-export-and-winzip-aes-256-packaging",
+        "title": "5. Canonical CSV Import, Export, and WinZip AES-256 Packaging",
+        "level": 2
+      },
+      {
+        "id": "16-canonical-csv-columns",
+        "title": "16 Canonical CSV Columns",
+        "level": 3
+      },
+      {
+        "id": "cwe-1236-formula-injection-defense",
+        "title": "CWE-1236 Formula Injection Defense",
+        "level": 3
+      },
+      {
+        "id": "winzip-ae-2-aes-256-password-protected-packaging",
+        "title": "WinZip AE-2 (AES-256) Password-Protected Packaging",
+        "level": 3
+      },
+      {
+        "id": "step-by-step-operator-runbook-dry-run-and-cutover",
+        "title": "6. Step-by-Step Operator Runbook: Dry Run and Cutover",
+        "level": 2
+      },
+      {
+        "id": "step-1-pre-migration-validation-and-dry-run",
+        "title": "Step 1: Pre-Migration Validation and Dry Run",
+        "level": 3
+      },
+      {
+        "id": "step-2-executing-live-cutover",
+        "title": "Step 2: Executing Live Cutover",
+        "level": 3
+      },
+      {
+        "id": "step-3-post-migration-audit-and-verification",
+        "title": "Step 3: Post-Migration Audit and Verification",
+        "level": 3
+      },
+      {
+        "id": "visual-reference-and-studio-screenshots",
+        "title": "7. Visual Reference and Studio Screenshots",
+        "level": 2
+      }
+    ],
+    "content": "# [Guide] End-to-End Multi-Source Migration, Key Alias Redirects, and Cross-Project Merge Guide\n\nComprehensive operator and engineering guide for multi-source migration from Jira, GitHub Issues, Linear, and Plane-DB, legacy issue key alias redirection, cross-project merge mode, and canonical CSV import/export governance.\n\n---\n\n## 1. Overview and Lossless Migration Philosophy\n\nMigrating issue tracking infrastructure between legacy platforms often introduces severe data loss: rich-text formatting degrades into corrupted markup, custom field hierarchies fracture, media attachments break into dead hyperlinks, and historical issue keys (`JIRA-101`, `PROJ-42`, `GH-89`) vanish, destroying institutional knowledge and broken permalinks across pull requests and documentation.\n\n\ud83d\udc4dkanban resolves these challenges through an end-to-end, multi-source migration pipeline engineered under three core principles:\n1. **Canonical Markdown Normalization:** Ingests proprietary document trees (such as Atlassian Document Format or raw HTML) and converts them into standardized, sanitized UTF-8 Markdown with strict UTF-16 lone surrogate rejection.\n2. **Deterministic Key Alias Routing (`IssueKeyAlias`):** Retains every historical issue key from upstream systems in a dedicated alias catalog, providing automatic HTTP 301/308 redirection across REST API and web interfaces.\n3. **Lossless Media Attachment Streaming:** Streams binary assets directly from legacy object stores (e.g. MinIO or S3) through HMAC-signed media shields, preventing SSRF attacks and broken image references.\n\n```mermaid\ngraph TD\n    Sources[\"Source Platforms (Jira, GitHub, Linear, Plane-DB, CSV)\"] --> Ingestion[\"Streaming Ingestion & Sanitization Engine\"]\n    Ingestion --> MarkdownConv[\"Canonical Markdown Converter (ADF/HTML -> GFM)\"]\n    Ingestion --> MediaStream[\"HMAC Media Proxy Attachment Storage\"]\n    Ingestion --> AliasRouter[\"IssueKeyAlias Catalog (301/308 Redirection Engine)\"]\n    Ingestion --> RLSInsert[\"PostgreSQL FORCE RLS Transactional Insertion\"]\n    RLSInsert --> UniversalGraph[\"Universal Object Graph (Issues, Stickies, Docs, Links)\"]\n```\n\n---\n\n## 2. Multi-Source Importer Architecture\n\nThe migration subsystem in `kanban/importer/` provides modular importers tailored to specific platform export formats:\n\n### Supported Importers and Capability Matrix\n\n| Source Tracker | Input Format | Converted Entities | Custom Fields & Mapping | Attachment Ingestion |\n| :--- | :--- | :--- | :--- | :--- |\n| **Jira Cloud & Server/DC** | JSON export bundle / REST dump | Issues, Subtasks, Comments, Worklogs, Links | Full ADF/HTML to Markdown conversion, user account mapping | Extracted and routed through HMAC media shield |\n| **GitHub Issues** | Issues JSON export / REST API dump | Issues, Pull Request links, Milestones, Labels | Milestones mapped to Cycles; Labels mapped to ProjectLabels | Downloaded and cryptographically hashed |\n| **Linear** | Linear JSON export / CSV archive | Issues, Cycles, Modules, Relations, Triage states | State taxonomy normalization; relations mapped to object_links | Assets fetched with token authorization |\n| **Plane-DB** | PostgreSQL dump + MinIO bucket (`scripts/export_plane_db.py`) | Workspaces, Projects, States, Issues, Docs, Stickies | 1:1 Universal Object Graph restoration | Direct streaming from MinIO S3 bucket |\n| **Canonical CSV** | RFC 4180 CSV / WinZip AES-256 ZIP (`KAN-316`) | 16-column canonical work items | JSON-encoded custom fields; CWE-1236 neutralized | Attachment metadata linked via URLs |\n\n### Jira ADF to Canonical Markdown Conversion\n\nAtlassian Document Format (ADF) stores rich text as deeply nested JSON node trees. The Jira importer traverses these AST nodes, translating them into standard GitHub Flavored Markdown:\n- Nested bullet lists, ordered lists, and task checklists.\n- Code blocks with language syntax tags.\n- Blockquotes, callout panels, and horizontal rules.\n- Table grids with cell alignments.\n- Inline mentions, status tags, and hyperlinks.\n\nUnrecognized node types fall back safely to formatted plain text, preventing pipeline crashes during bulk migrations.\n\n---\n\n## 3. Legacy Key Alias Routing and Permalinks\n\nTo preserve external hyperlinks in pull requests, commit messages, and external tickets, \ud83d\udc4dkanban implements persistent key aliasing.\n\n### Schema and Model Architecture\n\nThe `issue_key_aliases` table (managed via `database/models/issue_alias.py` and single-head migration `p6_03_multi_source_imports_and_aliases`) records historical keys:\n\n```sql\nCREATE TABLE issue_key_aliases (\n    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),\n    workspace_id UUID NOT NULL REFERENCES workspaces(id) ON DELETE CASCADE,\n    project_id UUID NOT NULL REFERENCES projects(id) ON DELETE CASCADE,\n    issue_id UUID NOT NULL REFERENCES issues(id) ON DELETE CASCADE,\n    legacy_key VARCHAR(64) NOT NULL,\n    source_platform VARCHAR(32) NOT NULL,\n    created_at TIMESTAMPTZ NOT NULL DEFAULT clock_timestamp(),\n    CONSTRAINT uq_issue_key_aliases_legacy_key UNIQUE (workspace_id, legacy_key)\n);\n```\n\n### HTTP Redirection Flow\n\nWhen a user or external API client requests an issue using an obsolete key:\n1. The resolver queries `issues` by current key (`project.key + '-' + sequence_id`).\n2. If not found, it queries `issue_key_aliases` by `legacy_key` within the caller's authorized workspace.\n3. If an alias match exists, the REST API returns `HTTP 308 Permanent Redirect` with the `Location` header set to `/api/v1/issues/{canonical_key}`.\n4. The web frontend navigates smoothly to the new canonical URL without breaking user state.\n\n```mermaid\nsequenceDiagram\n    participant Client as Web Browser / API Client\n    participant API as FastAPI Issue Router (/api/v1/issues/{key})\n    participant DB as PostgreSQL (issues & issue_key_aliases)\n\n    Client->>API: GET /api/v1/issues/JIRA-101\n    API->>DB: SELECT * FROM issues WHERE key = 'JIRA-101'\n    DB-->>API: 0 rows returned\n    API->>DB: SELECT canonical_key FROM issue_key_aliases WHERE legacy_key = 'JIRA-101'\n    DB-->>API: 1 row returned ('KAN-42')\n    API-->>Client: HTTP 308 Permanent Redirect (Location: /api/v1/issues/KAN-42)\n    Client->>API: GET /api/v1/issues/KAN-42\n    API->>DB: SELECT * FROM issues WHERE key = 'KAN-42'\n    DB-->>API: Issue payload\n    API-->>Client: HTTP 200 OK\n```\n\n---\n\n## 4. Cross-Project Merge Mode (`KANBA -> KAN`)\n\nDuring organizational consolidations, teams frequently need to merge entire projects into a single target project. The cross-project merge mode executes this consolidation losslessly:\n\n### Merge Execution Steps\n1. **Entity Re-Keying:** Each issue from the source project is re-keyed to the destination project prefix (e.g. `KANBA-15` becomes `KAN-248`), with sequence numbers allocated sequentially to avoid collisions.\n2. **Alias Registration:** The original key (`KANBA-15`) is recorded in `issue_key_aliases` pointing to the new issue ID.\n3. **Object Link Rewiring:** All directional relations (`PARENT_OF`, `BLOCKS`, `RELATES_TO`) in `object_links` pointing to the old issue are updated in place.\n4. **State Taxonomy Mapping:** Workflow states from the source project are mapped to equivalent states in the target project via an interactive alignment table.\n5. **Activity Log Continuity:** Historical audit entries are preserved and appended with a merge marker documenting the consolidation event.\n\n---\n\n## 5. Canonical CSV Import, Export, and WinZip AES-256 Packaging\n\nTicket `KAN-316` establishes enterprise CSV data interchange governance across system, workspace, and role tiers:\n\n### 16 Canonical CSV Columns\n\nExports and imports follow a deterministic 16-column RFC 4180 layout:\n1. `key`: Canonical issue key (e.g. `KAN-42`).\n2. `project_key`: Target project identifier.\n3. `summary`: Concise issue title.\n4. `description_markdown`: Canonical Markdown body text.\n5. `state`: Current workflow state name.\n6. `priority`: Priority name (`urgent`, `high`, `medium`, `low`).\n7. `assignees`: Semicolon-delimited list of assignee usernames.\n8. `labels`: Semicolon-delimited list of project labels.\n9. `cycle`: Sprint cycle name or identifier.\n10. `modules`: Semicolon-delimited list of functional modules.\n11. `parent_key`: Parent issue key for hierarchical tasks.\n12. `start_date`: ISO-8601 calendar start date (`YYYY-MM-DD`).\n13. `due_date`: ISO-8601 calendar deadline date (`YYYY-MM-DD`).\n14. `created_at`: Creation timestamp with timezone.\n15. `updated_at`: Modification timestamp with timezone.\n16. `custom_fields_json`: Serialized JSON dictionary of custom field values.\n\n### CWE-1236 Formula Injection Defense\n\nSpreadsheet applications (such as Microsoft Excel and LibreOffice Calc) interpret leading characters (`=`, `+`, `-`, `@`, `\\t`, `\\r`) as executable formulas. To eliminate CSV formula injection (CWE-1236):\n- **On Export:** Any cell beginning with a formula trigger character is neutralized by prepending a single quote (`'`).\n- **On Import:** The importer strips the protective prefix (`desanitize_cell_from_import`) before storing prose in PostgreSQL.\n\n### WinZip AE-2 (AES-256) Password-Protected Packaging\n\nFor highly confidential environments, CSV archives can be exported inside WinZip AE-2 encrypted ZIP containers:\n- **Cryptographic Standard:** AES-256 in Counter Mode (CTR) with PBKDF2-HMAC-SHA256 key derivation (1000 iterations) and 10-byte HMAC-SHA256 authentication tags.\n- **Strict Password Policy:** Passwords must meet a minimum length of 12 characters.\n- **Volatile Memory Sanitization:** Cryptographic key buffers are actively zeroized (`zeroize(aes_key, hmac_key)`) in mandatory Python `finally` blocks to prevent memory residue attacks.\n- **Zip-Bomb & Path Traversal Guards:** Enforces uncompressed size ratios and validates file paths against directory escape attempts.\n\n---\n\n## 6. Step-by-Step Operator Runbook: Dry Run and Cutover\n\n### Step 1: Pre-Migration Validation and Dry Run\n\nBefore importing production data, execute a non-destructive dry run:\n\n```bash\n# Export source Plane database and MinIO media objects\npython -m scripts.export_plane_db \\\n  --db-url \"postgresql://plane:secret@plane-db:5432/plane\" \\\n  --minio-endpoint \"http://minio:9000\" \\\n  --minio-bucket \"plane-uploads\" \\\n  --output-dir \"/backups/plane-export\"\n\n# Validate export bundle integrity and print summary metrics\nkanban-ctl import plane-bundle /backups/plane-export --dry-run\n```\n\nReview the dry-run output to verify total counts for workspaces, projects, states, issues, documents, and media attachments.\n\n### Step 2: Executing Live Cutover\n\nOnce dry-run validation passes:\n\n```bash\n# Execute live import with key alias generation and media streaming\nkanban-ctl import plane-bundle /backups/plane-export \\\n  --target-workspace \"kanban\" \\\n  --target-project \"KAN\" \\\n  --record-aliases \\\n  --confirm\n```\n\n### Step 3: Post-Migration Audit and Verification\n\n1. Verify that all issues are indexed and searchable via the web interface.\n2. Test legacy URL redirection by requesting an old key in your browser (e.g. `http://localhost:8000/issues/KANBA-1`). Confirm that the browser redirects automatically to the new canonical key (`KAN-1`).\n3. Navigate to `/admin/link-auditor` and execute a scan to confirm zero orphaned object links.\n\n---\n\n## 7. Visual Reference and Studio Screenshots\n\n![Plane Import Studio Configuration](images/49-admin-plane-import-studio.png)\n\n![Plane Migration Dry-Run and Validation Results](images/71-plane-migration-dry-run.png)\n"
+  },
+  {
     "slug": "production-promotion-and-backup-runbook",
     "title": "[Guide] Production Promotion and Backup Runbook",
     "category": "guide",
     "track": "Step-by-Step Guides",
     "subtrack": "Deployment & Backups",
     "audience": "DevOps & Platform Operators",
-    "order": 16,
+    "order": 19,
     "summary": "Teams frequently evaluate software in a standalone environment before promoting it to a production cluster. In conventional ticketing platforms, moving from a single test container to a hardened multi-container architecture requires painful manual database migrations, re-uploading media assets, and rebuilding configuration.",
     "sections": [
       {
@@ -1491,7 +1760,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Feature & Field Reference",
     "subtrack": "API & SDK Reference",
     "audience": "Frontend & Backend Developers",
-    "order": 17,
+    "order": 20,
     "summary": "Software projects that attempt to manually maintain hundreds of static wiki pages for every REST endpoint inevitably suffer from documentation drift: code changes, parameters evolve, but static documentation falls behind, creating frustration and integration bugs.",
     "sections": [
       {
@@ -1554,7 +1823,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Engineering & Security Architecture",
     "subtrack": "Functional Architecture",
     "audience": "Realtime Systems & Network Engineers",
-    "order": 18,
+    "order": 21,
     "summary": "Modern software engineering teams collaborate concurrently across distributed locations. When one developer moves a card on the Kanban board, adds a comment, or when an autonomous AI agent updates a verification gate, all team members viewing the project must see the update instantly without manual page refreshes.",
     "sections": [
       {
@@ -1612,7 +1881,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Security & Adoption Overview",
     "subtrack": "Access Control & Governance",
     "audience": "Security Officers & Compliance Auditors",
-    "order": 19,
+    "order": 22,
     "summary": "This document defines the authoritative, fine-grained access control model across all 7 principal tiers in the \ud83d\udc4dkanban platform.",
     "sections": [
       {
@@ -1650,7 +1919,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Step-by-Step Guides",
     "subtrack": "Workflow Automation",
     "audience": "Engineers & Workflow Designers",
-    "order": 20,
+    "order": 23,
     "summary": "In traditional project management tools, workflow rules are either simple notification triggers or inflexible webhooks that fire only *after* a change has occurred. If an issue is improperly moved to \"Done\" without meeting code coverage requirements or QA verification, the damage is already done.",
     "sections": [
       {
@@ -1753,7 +2022,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Security & Adoption Overview",
     "subtrack": "Zero-Trust Architecture",
     "audience": "Security Officers & Compliance Auditors",
-    "order": 21,
+    "order": 24,
     "summary": "Security is Priority 0 in \ud83d\udc4dkanban. Rather than treating security as an afterthought or an enterprise-tier upsell, \ud83d\udc4dkanban engineers root-level defense-in-depth across every layer of the platform: 1. Every input is hostile. 2. Every external dependency is untrusted. 3. Every component boundary must fail closed. 4. Database Row-Level Security (FORCE RLS) is the absolute authorization bedrock. 5. All sensitive operations must leave immutable forensic audit trails.",
     "sections": [
       {
@@ -1830,13 +2099,126 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "content": "# [Informational] Security Architecture and STRIDE Threat Model Matrix\n\n## Overview\n\nSecurity is Priority 0 in \ud83d\udc4dkanban. Rather than treating security as an afterthought or an enterprise-tier upsell, \ud83d\udc4dkanban engineers root-level defense-in-depth across every layer of the platform:\n1. Every input is hostile.\n2. Every external dependency is untrusted.\n3. Every component boundary must fail closed.\n4. Database Row-Level Security (FORCE RLS) is the absolute authorization bedrock.\n5. All sensitive operations must leave immutable forensic audit trails.\n\n---\n\n## 1. Network Trust Boundaries and System Architecture\n\nThe platform architecture partitions operations across five distinct network trust boundaries:\n\n```\n[ External Wire / Browsers / Agents ]\n                 |\n                 v\n        +------------------+\n        |   1. edge_net    |  TLS 1.3 termination, CSRF validation, WebAuthn Relying Party\n        +------------------+\n                 |\n                 v (Unix socket / HTTP)\n        +------------------+\n        |   2. app_net     |  Uvicorn (UID 65532, setpriv drop), FastAPI, RLS session binding\n        +------------------+\n          |              |\n          | (Unix socket)| (nsjail CLI / IPC)\n          v              v\n+------------------+   +------------------+\n|   3. data_net    |   |  4. sandbox_net  |  Tier B nsjail containers, network-isolated,\n| PostgreSQL Unix  |   |                  |  MS_RDONLY repo mounts, secret whiteouts\n| socket, FORCE RLS|   +------------------+\n+------------------+\n          |\n          v (Outbound TLS via Outbound Secret Scrubber)\n+------------------+\n|5. egress_llm_net |  OpenAI, Gemini, Ollama API egress\n+------------------+\n```\n\n### System-Wide Trust Boundary Architecture\n\n```mermaid\nflowchart TD\n    subgraph E1[\"E1: Edge Reverse Proxy (Caddy :443 / :8444)\"]\n        Edge443[\"Public Port :443 (TLS 1.3, CSP, Rate Limits)\"]\n        Edge8444[\"Dedicated Port :8444 (mTLS Runner PoP)\"]\n    end\n\n    subgraph E2[\"E2: Primary Web & REST ASGI App (create_app)\"]\n        PublicAPI[\"Public & Auth Routes (/api/v1/auth, /oauth)\"]\n        TenantAPI[\"Tenant REST Routes (/api/v1/issues, /docs)\"]\n        AdminAPI[\"Admin Routes (/api/v1/admin/*, Depends(require_admin_aal2))\"]\n    end\n\n    subgraph E3[\"E3: Dedicated Internal Service ASGI App (create_internal_app)\"]\n        InternalIntrospect[\"/internal/v1/mcp/introspect\"]\n        InternalEphemeral[\"/internal/v1/mcp/ephemeral-tokens/*\"]\n    end\n\n    subgraph E4[\"E4: Realtime Multiplexers & Runner Channels\"]\n        WebSockets[\"/ws (Max 16 conns/user, Origin Check)\"]\n        SSEStream[\"/sse (Last-Event-ID, EventSource)\"]\n        RunnerWS[\"/api/v1/agent-runners/ws (mTLS Hardware PoP)\"]\n    end\n\n    subgraph E5[\"E5: 3-Surface MCP Gateway (create_mcp_app)\"]\n        MCPAgent[\"/mcp/agent (4 Read Tools + Workflow Gates)\"]\n        MCPDocs[\"/mcp/docs (3 CLI Tools: search, create, update)\"]\n        MCPAdmin[\"/mcp/admin (12 Tools, 2-Stage Confirmation)\"]\n    end\n\n    subgraph E6[\"E6: Sandboxes & Agent Harnesses\"]\n        WasmRunner[\"TierAWasmRunner (Wasmtime Runtime)\"]\n        NsjailRunner[\"TierBNsjailRunner (Linux User Namespaces)\"]\n        EgressProxy[\"TokenInjectingEgressProxy (Secret Scrubber)\"]\n        PdfSanitizer[\"PDF Sanitizer Subprocess (KAN-81)\"]\n    end\n\n    subgraph E7[\"E7: Media Proxy & Importers/Exporters\"]\n        MediaProxy[\"/api/v1/media-proxy (HMAC, DNS-Pinned SSRF Defense)\"]\n        Attachments[\"/api/v1/projects/{p}/attachments (CAS Storage)\"]\n        AdminMigrations[\"/api/v1/admin/imports/* & /exports/portable\"]\n    end\n\n    subgraph E8[\"E8: Operator & Agent CLIs\"]\n        KanbanCtl[\"kanban-ctl (Admin & DB Migrations)\"]\n        KanbanAgent[\"kanban-agent (CLI Pipe & Workflow Harness)\"]\n        LlmsCatalog[\"/llms.txt (Capability & Skills Catalog)\"]\n    end\n\n    subgraph Storage[\"PostgreSQL 16 Universal Object Graph\"]\n        RLSSession[\"kanban_app (FORCE ROW LEVEL SECURITY, NOBYPASSRLS)\"]\n        AuditLedger[\"Immutable Activity & Audit Ledger (Crypto-Shredded)\"]\n    end\n\n    Edge443 --> PublicAPI\n    Edge443 --> TenantAPI\n    Edge443 --> AdminAPI\n    Edge443 --> WebSockets\n    Edge443 --> SSEStream\n    Edge443 --> MCPAgent\n    Edge443 --> MCPDocs\n    Edge443 --> MCPAdmin\n    Edge443 --> MediaProxy\n    Edge443 --> Attachments\n    Edge8444 --> RunnerWS\n\n    TenantAPI --> Storage\n    AdminAPI --> Storage\n    MCPAgent --> Storage\n    MCPDocs --> Storage\n    MCPAdmin --> Storage\n    InternalIntrospect --> Storage\n    InternalEphemeral --> Storage\n    WebSockets --> Storage\n\n    MCPAgent -.-> E3\n    TenantAPI -.-> WasmRunner\n    TenantAPI -.-> NsjailRunner\n    TenantAPI -.-> EgressProxy\n    Attachments -.-> PdfSanitizer\n```\n\n---\n\n## 2. Complete Asset Inventory Matrix (A1 - A6)\n\n| Asset ID | Asset Name & Code Location | Classification | Cryptographic & Storage Protection | Lifecycle & Destruction | Blast Radius Mitigation |\n| :--- | :--- | :--- | :--- | :--- | :--- |\n| **A1** | **Root Cryptographic Keyring**<br/>`kanban/security/envelope.py`<br/>`kanban/security/service_auth.py`<br/>`kanban/settings.py` | Critical System Secret | `MASTER_KEK` / `KB_MASTER_KEK_B64` loaded from env or `0600` keyring file. HKDF-SHA256 derivation for subkeys (`kanban/internal-service-auth/v1`, `media-proxy/url`). `KB_AUTH_PEPPER` for Argon2id. | Ephemeral in-process memory. Key rotation supported via key versioning (`kid`). Backup encryption keys (`KBBAK1`) separate. | Compromise of KEK allows offline decryption of wrapped DEKs; mitigated by HSM/KMS envelope wrapping, zero disk persistence of plaintext DEKs, and separate HMAC peppers. |\n| **A2** | **Envelope-Encrypted Tenant Secrets**<br/>`kanban/security/envelope.py`<br/>`database/models/auth.py` | High Tenant Secret | AES-256-GCM authenticated encryption per record using unique Data Encryption Keys (DEKs) wrapped by `MASTER_KEK`. Protects OAuth client secrets, LDAP bind passwords, AI provider keys, mTLS enrollment tokens, and webhook secrets. | Re-encrypted on key rotation. Instant crypto-shredding upon tenant workspace deletion by destroying record DEKs. | Compromise of a single DEK exposes only that specific secret record; adjacent tenant records remain encrypted under independent DEKs. |\n| **A3** | **User Authentication & AAL2 Credentials**<br/>`database/models/auth.py`<br/>`kanban/auth/guards.py`<br/>`kanban/auth/mfa/` | High Identity Asset | Passwords hashed with Argon2id (`m=64MiB`, `t=3`, `p=4`) plus server pepper. WebAuthn Passkeys with hardware COSE public keys and monotonic signature counters (`rp.name = \"\ud83d\udc4dkanban\"`, strict ASCII FQDN `rp.id`). TOTP seeds encrypted under AES-256-GCM. OAuth 2.1 authorization codes (S256 PKCE). | Sessions expire on idle timeout or explicit logout. AAL2 elevation valid for max 900 seconds (`ADMIN_AAL2_MAX_AGE_SECONDS`). Recovery codes single-use hashed. | Account takeover bounded by mandatory AAL2 for all `/api/v1/admin/*` routes; stolen password cannot execute administrative actions without second factor. |\n| **A4** | **Scoped MCP API Keys & Ephemeral Tokens**<br/>`database/models/mcp_api_key.py`<br/>`kanban/security/boundary.py`<br/>`kanban/security/read_taint.py` | High Delegated Credential | Tokens hashed with SHA-256 (`token_hash`). Monotonic `Capability(IntFlag)` bitmask ceiling (0x01..0xFF), `SCOPE_CAPABILITY_MAP`, allowed project scope, tool allowlists, and optional `allowed_cidrs`. Session high-water mark `mcp_read_taint`. | Short-lived ephemeral tokens (TTL <= 15m) tied to specific execution ID; instant revocation via `revoke_ephemeral_tokens_by_execution`. | Monotonic clamp ensures leaked token cannot exceed caller authority or configured CIDR/tool boundaries; read-taint blocks cross-project exfiltration. |\n| **A5** | **Universal Object Graph & Tenant Content**<br/>`database/models/` (80 ORM models)<br/>`kanban/attachments/pdf.py`<br/>`kanban/security/push_protection.py` | Confidential Tenant Asset | Canonical UTF-8 Markdown only. Strict lone-surrogate rejection (`INVALID_UTF8_SURROGATE`). Pre-persistence Shannon-entropy secret push protection (`KAN-72`). Quarantined CAS attachment storage. Subprocess active-content PDF sanitizer (`KAN-81`). Lease concurrency fencing (`KAN-69`). | Soft-delete with tombstoning followed by cryptographic purge via Invalid Object Link Auditor. Workload OIDC federation (`KAN-74`). DNS-pinned SSRF transport (`KAN-75`). | Cross-tenant bleed prevented by 100% PostgreSQL `FORCE ROW LEVEL SECURITY`. Anti-enumeration timing floors (25ms) normalize unreadable vs non-existent objects. |\n| **A6** | **Authorization Graph & Forensic Audit Ledger**<br/>`database/models/audit_ledger.py`<br/>`database/session.py`<br/>`kanban/security/audit_crypto_shred.py` | Integrity & Compliance Asset | PostgreSQL Row-Level Security policies (`FORCE RLS`, `NOBYPASSRLS`). Effective Resource Access (`ERA`) cache. Append-only `audit_ledger` and `activity` streams with cryptographic event hashing and tenant-scoped crypto-shredding keys (`KAN-73`). | Immutable append-only ledger. Right-to-be-forgotten / GDPR compliance implemented via targeted DEK shredding without breaking blockchain-like hash continuity. | Unauthorized log modification prevented by immutable database triggers and append-only constraints; attribution guaranteed by cryptographic principal binding. |\n\n---\n\n## 3. Complete Entry Point & Trust Boundary Catalog (E1 - E8)\n\n### E1 - Reverse Proxy Boundary\n- **Code & Config:** `deploy/caddy/Caddyfile`, `deploy/standalone/Caddyfile`\n- **Network Interfaces:** External TCP :443 (HTTPS / WSS / HTTP/3), External TCP :8444 (Dedicated Runner mTLS).\n- **Security Invariants:**\n  - TLS 1.3 mandatory with modern cipher suites.\n  - Strict Content-Security-Policy (CSP) with Trusted Types (`require-trusted-types-for 'script'; trusted-types kanban-sanitizer dompurify`).\n  - HSTS (`max-age=63072000; includeSubDomains`), `nosniff`, `frame-ancestors 'none'`, and `no-referrer`.\n  - Strips all client-supplied internal identity headers (`X-Client-Cert-*`, `X-KB-Service-Principal`, `X-KB-Internal-*`) on port :443.\n  - Drops external requests to `/internal/*` and `/api/v1/internal/*` with HTTP 404.\n  - Port :8444 enforces mandatory mutual TLS client certificate verification (`client_auth { mode require }`) forwarding exclusively to runner endpoints.\n\n### E2 - Primary Public Web & REST ASGI Application\n- **Code & Config:** `kanban/app.py:create_app`, `kanban/api/v1/`, `kanban/auth/`\n- **Endpoints:** 244+ OpenAPI 3.1 endpoints across `/api/v1/*`, `/oauth/*`, `/.well-known/*`.\n- **Security Invariants:**\n  - Explicit dependency-level authentication (`Depends(get_principal)`).\n  - Every administrative route under `/api/v1/admin/*` MUST declare `Depends(require_admin_aal2)` (`assert_admin_routes_protected`).\n  - RFC 7807 problem details returned for all errors, preventing stack trace or internal state leakage.\n  - Rate limiting enforced on authentication, media proxy, and search endpoints.\n  - ETag and `If-Match` optimistic concurrency control on all entity mutation endpoints.\n\n### E3 - Dedicated Internal Service ASGI Application\n- **Code & Config:** `kanban/app.py:create_internal_app`, `kanban/api/internal/`\n- **Endpoints:** `/internal/v1/mcp/introspect`, `/internal/v1/mcp/ephemeral-tokens`, `/internal/v1/mcp/ephemeral-tokens/by-execution/{id}/revoke`.\n- **Security Invariants:**\n  - Completely isolated from edge routing (zero reverse-proxy exposure; dropped with 404 at Caddy).\n  - Enforces `verify_internal_service_auth` on 100% of routes: validates `X-KB-Internal-Timestamp` (clock skew <= 300s) and `X-KB-Internal-Signature` (HMAC-SHA256 computed with HKDF-derived key `kanban/internal-service-auth/v1`).\n  - Used strictly for inter-service communication between MCP server containers and core API.\n\n### E4 - Realtime Multiplexers & Runner Channels\n- **Code & Config:** `kanban/api/ws.py`, `kanban/api/sse.py`, `kanban/api/v1/remote_runners.py`\n- **Endpoints:** `/ws`, `/api/v1/ws`, `/sse`, `/api/v1/agent-runners/ws`.\n- **Security Invariants:**\n  - `/ws` and `/sse`: Enforce origin validation against `settings.allowed_origins` and authenticated session resolution. Connection pool capped at 16 concurrent WebSockets per user (`WS_CLOSE_CONNECTION_LIMIT`). Frame size capped at 64 KiB (`WS_CLOSE_FRAME_TOO_LARGE`).\n  - `/api/v1/agent-runners/ws`: Dedicated distributed runner channel. Authenticates peer mTLS certificate fingerprint, verifies non-revoked runner registration, and executes cryptographic challenge Proof-of-Possession (PoP) before accepting runner workloads.\n\n### E5 - 3-Surface Model Context Protocol (MCP) Gateway\n- **Code & Config:** `mcp/app.py:create_mcp_app`, `mcp/protocol/handler.py`, `mcp/surfaces/`\n- **Surfaces & Endpoints:**\n  - `/mcp/agent` (and scoped sub-routes `/w/{workspace}/p/{project}`): 4 primary read tools (`search_tickets`, `read_ticket`, `search_knowledge`, `read_doc`), workflow transition gates, and agent workpads. Total schema budgeted under 1,800 tokens.\n  - `/mcp/docs` (and scoped sub-routes): 3 surgical tools (`search`, `create`, `update`).\n  - `/mcp/admin` (and scoped sub-routes): 12 intent-based administrative tools requiring 2-stage destructive confirmation.\n  - `/.well-known/oauth-protected-resource/*`: RFC 9728 discovery metadata.\n- **Security Invariants:**\n  - `McpAuthMiddleware`: Validates Bearer API keys and ephemeral tokens via internal introspection.\n  - `CredentialBoundary`: Clamps tool availability and data access to key capability mask and allowed projects.\n  - `mcp_read_taint`: Tracks high-water mark of accessed audience scopes; halts write attempts to broader audiences with `CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED`.\n\n### E6 - Sandboxes & Agent Harnesses\n- **Code & Config:** `kanban/sandbox/`, `agent/harnesses/`, `kanban/attachments/pdf.py`\n- **Engines:**\n  - `TierAWasmRunner` (`wasm_runner.py`): In-process Wasmtime engine executing validated WebAssembly custom field formulas and transition helpers with strict memory and instruction limits.\n  - `TierBNsjailRunner` (`nsjail_runner.py`): Linux user/net namespace container sandbox with zero network access, read-only mounts, and secret whiteout masks over credentials.\n  - `TokenInjectingEgressProxy` (`egress_proxy.py`): Managed HTTP outbound proxy injecting ephemeral secrets for third-party tools while scrubbing credentials from responses.\n  - `cli_pipe.py`: Zero-shell `execve` stdin/stdout harness executing CLI agents (`agy -p`, `codex exec -s read-only -`) using random nonce delimiters (`<<<UNTRUSTED_TICKET_DATA_{nonce}>>>`).\n  - `pdf.py`: Subprocess PDF active-content sanitizer running bounded inspection (timeout <= 3.0s) stripping dangerous PDF objects (`/JS`, `/Launch`, `/OpenAction`).\n\n### E7 - Media Proxy, Attachments & Importers/Exporters\n- **Code & Config:** `kanban/api/v1/media_proxy.py`, `kanban/api/v1/attachments.py`, `kanban/api/v1/admin/imports.py`, `kanban/api/v1/admin/exports.py`, `kanban/api/v1/reports.py`\n- **Endpoints:** `/api/v1/media-proxy`, `/api/v1/projects/{project_ref}/attachments`, `/api/v1/admin/imports/*`, `/api/v1/admin/exports/portable`, `/api/v1/reports/*`.\n- **Security Invariants:**\n  - Media Proxy: HMAC-SHA256 signed external image URLs. DNS-pinned cookieless socket transport blocking loopback, RFC 1918, link-local, and cloud metadata (169.254.169.254). Maximum pixel decompression limit (40,000,000 pixels).\n  - Attachments: Quarantined Content-Addressable Storage (CAS), SVG disinfection (billion-laughs DAG limits), PDF active-content sanitization, and sandboxed download headers (`default-src 'none'; sandbox; attachment`).\n  - Importers & Exporters: Rate-limited, administrative AAL2-only, DefusedXML parsing, CSV formula-injection defense (`=`, `+`, `-`, `@`, `\\t`, `\\r` escaping).\n  - Reports: SSTI-hardened Jinja2 sandbox blocking attribute access (`_`, `mro`, `subclasses`, `globals`, `builtins`).\n\n### E8 - Operator & Agent CLIs\n- **Code & Config:** `pyproject.toml`, `kanban/cli/ctl.py`, `agent/cli.py`, `mcp/cli/main.py`, `deploy/standalone/entrypoint.py`\n- **Commands:** `kanban-ctl`, `kanban-agent`, `kanban-cli`, `/llms.txt`.\n- **Security Invariants:**\n  - `kanban-ctl`: Administrative CLI for migrations, diagnostics, and tenant management; drops privileges when possible and refuses to run dangerous commands without explicit flags.\n  - `kanban-agent`: CLI runner supporting local offline validation (`kanban-agent validate-*`) with deterministic AI response fixtures.\n  - Standalone Bootstrap: Generates single-use setup token (`/run/kanban/setup_token`) with 60-minute expiry; enforces UID 65532 capability drop and Unix socket database communication.\n  - `/llms.txt`: Machine-readable capability and skills catalog served with strict read-only caching headers.\n\n---\n\n## 4. Comprehensive STRIDE Threat Mitigation Matrix\n\n| STRIDE Category | Threat Vector | Affected Asset / Entry Point | Architectural Defense & Invariant | Verification Gate |\n| :--- | :--- | :--- | :--- | :--- |\n| **Spoofing** | Forged internal service requests to introspect or mint tokens | A1, A4 / E3 (`/internal/*`) | HMAC-SHA256 signature verification (`X-KB-Internal-Signature`, `X-KB-Internal-Timestamp` <= 300s skew) using HKDF domain subkey `kanban/internal-service-auth/v1`. Edge proxy drops `/internal/*` with 404. | `kanban/tests/security/test_internal_route_isolation.py` |\n| **Spoofing** | Stolen or replayed administrative credentials | A3 / E2 (`/api/v1/admin/*`) | Multi-Card AAL2 enforcement: mandatory WebAuthn/Passkey or TOTP second factor within 900s. Passkeys bound to strict ASCII FQDN `rp.id`. Single-use recovery codes. | `kanban/tests/security/test_admin_routes_protected.py` |\n| **Spoofing** | Rogue distributed runner impersonation | A2 / E4 (`/api/v1/agent-runners/ws`) | Dedicated port :8444 with TLS 1.3 client authentication (`client_auth { mode require }`), hardware-bound certificate fingerprint check, and cryptographic challenge Proof-of-Possession. | `kanban/tests/runners/test_remote_runners.py` |\n| **Tampering** | Unauthorized mutation of tenant issues or docs | A5 / E2, E5 | PostgreSQL `FORCE ROW LEVEL SECURITY` on 100% of tenant tables. Zero-context fail-closed sessions. ETag and `If-Match` optimistic concurrency check. | `database/tests/test_p1_14_rls_catalog.py` |\n| **Tampering** | Forged agent transition approvals or CLI injection | A5 / E6 (`cli_pipe.py`) | Zero-shell `execve` argv execution (never `/bin/sh`). True random nonce delimiter wrapping (`<<<UNTRUSTED_TICKET_DATA_{nonce}>>>`). Cryptographic `verdict_nonce` validation. | `agent/tests/cli/test_cli_policy.py` |\n| **Tampering** | Committing cleartext secrets into tickets or stickies | A1, A2 / E2, E5 | Pre-persistence Shannon-entropy push protection (`KAN-72`) scanning all incoming Markdown for high-entropy tokens and API keys prior to database write. | `kanban/tests/security/test_push_protection.py` |\n| **Repudiation** | Denying ticket modifications or deletion | A6 / E2, E5 | Append-only immutable `audit_ledger` and `activity` streams recording actor principal ID, event type, timestamp, and object links with cryptographic hash chaining. | `kanban/tests/security/test_audit_crypto_shred.py` |\n| **Information Disclosure** | Cross-tenant data leakage via ID enumeration | A5 / E2 | Uniform RFC 7807 404 Not Found responses for both unauthorized and non-existent entities. Synthetic 25ms timing floors (`timing_floor`) neutralizing timing side-channels. | `kanban/tests/api/test_anti_enumeration.py` |\n| **Information Disclosure** | Autonomous agent reading private docs and leaking to public tickets | A4, A5 / E5 (`/mcp/agent`) | MCP Read-Taint High-Water Mark (`mcp_read_taint`): accumulates audience principals during reads; blocks write attempts to broader audiences with `CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED`. | `kanban/tests/security/test_read_taint.py` |\n| **Information Disclosure** | Outbound AI provider prompts leaking internal secrets | A1, A2 / E6 (`egress_llm_net`) | `OutboundSecretScrubber` scans all payloads leaving the application boundary, redacting API keys, session HMACs, and private PEM blocks. | `kanban/tests/security/test_scrubber.py` |\n| **Denial of Service** | Billion-laughs XML attacks or decompression bombs | A5 / E7 (Attachments, PDF) | SVG parser enforces maximum DAG depth <= 5 and max 500 expanded nodes. PDF active-content analyzer caps file size at 25 MiB, Flate expansion ratio at 100x, and decompressed bytes at 100 MiB. | `kanban/tests/attachments/test_pdf.py` |\n| **Denial of Service** | WebSocket connection exhaustion or token starvation | A4 / E4 (`/ws`) | Client connection limits (max 16 concurrent WebSockets per user), 64 KiB frame size caps, client IP rate limiting, and token budget enforcers. | `kanban/tests/realtime/test_ws_limits.py` |\n| **Elevation of Privilege** | Scoped API key attempting to access unauthorized projects or tools | A4 / E5 | Monotonic `CredentialBoundary` ceiling: bitwise AND between issuer capabilities and token mask; strict project and tool allowlist filtering. | `kanban/tests/security/test_mcp_scopable_keys.py` |\n| **Elevation of Privilege** | Custom scripted fields escaping container host | A1 / E6 (Sandboxes) | Tier A Wasmtime sandbox with bounded fuel/memory. Tier B nsjail sandbox with Linux user/net namespaces, read-only mounts, and secret whiteout masks. | `kanban/tests/sandbox/test_nsjail.py` |\n"
   },
   {
+    "slug": "statistical-flow-telemetry-and-lean-analytics",
+    "title": "[Informational] Statistical Flow Telemetry, Lead Time Percentiles, and Monte Carlo Forecasting Guide",
+    "category": "informational",
+    "track": "Track 2: Feature & Field Reference",
+    "subtrack": "General",
+    "audience": "Developers & Operators",
+    "order": 25,
+    "summary": "Comprehensive user and mathematical reference for the native Statistical Flow Telemetry Studio, Cumulative Flow Diagrams, Lead Time and Cycle Time percentiles, Aging WIP telemetry, and Monte Carlo delivery forecasting.",
+    "sections": [
+      {
+        "id": "lean-flow-principles-and-littles-law-foundation",
+        "title": "1. Lean Flow Principles and Little's Law Foundation",
+        "level": 2
+      },
+      {
+        "id": "the-four-operational-invariants-of-littles-law",
+        "title": "The Four Operational Invariants of Little's Law",
+        "level": 3
+      },
+      {
+        "id": "cumulative-flow-diagram-cfd-engine",
+        "title": "2. Cumulative Flow Diagram (CFD) Engine",
+        "level": 2
+      },
+      {
+        "id": "historical-activity-ledger-replay",
+        "title": "Historical Activity Ledger Replay",
+        "level": 3
+      },
+      {
+        "id": "standardized-workflow-state-groups",
+        "title": "Standardized Workflow State Groups",
+        "level": 3
+      },
+      {
+        "id": "interpreting-cfd-band-shapes",
+        "title": "Interpreting CFD Band Shapes",
+        "level": 3
+      },
+      {
+        "id": "lead-time-and-cycle-time-statistical-analysis",
+        "title": "3. Lead Time and Cycle Time Statistical Analysis",
+        "level": 2
+      },
+      {
+        "id": "lead-time-vs-cycle-time-definitions",
+        "title": "Lead Time vs Cycle Time Definitions",
+        "level": 3
+      },
+      {
+        "id": "why-averages-are-misleading",
+        "title": "Why Averages Are Misleading",
+        "level": 3
+      },
+      {
+        "id": "non-parametric-percentile-metrics",
+        "title": "Non-Parametric Percentile Metrics",
+        "level": 3
+      },
+      {
+        "id": "aging-wip-telemetry",
+        "title": "4. Aging WIP Telemetry",
+        "level": 2
+      },
+      {
+        "id": "proactive-wip-age-tracking",
+        "title": "Proactive WIP Age Tracking",
+        "level": 3
+      },
+      {
+        "id": "percentile-risk-thresholds",
+        "title": "Percentile Risk Thresholds",
+        "level": 3
+      },
+      {
+        "id": "monte-carlo-probabilistic-delivery-forecasting",
+        "title": "5. Monte Carlo Probabilistic Delivery Forecasting",
+        "level": 2
+      },
+      {
+        "id": "empirical-bootstrap-resampling-algorithm",
+        "title": "Empirical Bootstrap Resampling Algorithm",
+        "level": 3
+      },
+      {
+        "id": "rest-api-reference",
+        "title": "6. REST API Reference",
+        "level": 2
+      },
+      {
+        "id": "endpoint-specification",
+        "title": "Endpoint Specification",
+        "level": 3
+      },
+      {
+        "id": "query-parameters",
+        "title": "Query Parameters",
+        "level": 3
+      },
+      {
+        "id": "response-schema-structure",
+        "title": "Response Schema Structure",
+        "level": 3
+      },
+      {
+        "id": "flow-telemetry-studio-ui-walkthrough",
+        "title": "7. Flow Telemetry Studio UI Walkthrough",
+        "level": 2
+      }
+    ],
+    "content": "# [Informational] Statistical Flow Telemetry, Lead Time Percentiles, and Monte Carlo Forecasting Guide\n\nComprehensive user and mathematical reference for the native Statistical Flow Telemetry Studio, Cumulative Flow Diagrams, Lead Time and Cycle Time percentiles, Aging WIP telemetry, and Monte Carlo delivery forecasting.\n\n---\n\n## 1. Lean Flow Principles and Little's Law Foundation\n\nModern agile delivery frequently falters on arbitrary story-point estimation and velocity metrics that assume software tasks follow Gaussian (normal) distributions. In reality, software development cycle times exhibit heavy-tailed, skewed distributions where outliers dominate delivery timelines.\n\n\ud83d\udc4dkanban replaces subjective story points with empirical, statistical flow telemetry grounded in Lean manufacturing principles and Little's Law:\n\n$$\\text{Work In Progress (WIP)} = \\text{Throughput} \\times \\text{Lead Time}$$\n\n$$L = \\lambda W$$\n\nWhere:\n- $L$ is the average number of active work items in the delivery system (WIP).\n- $\\lambda$ is the average departure rate (Throughput: items completed per unit of time).\n- $W$ is the average time an item spends in the delivery system (Lead Time).\n\n### The Four Operational Invariants of Little's Law\nFor Little's Law to hold and produce reliable forecasting:\n1. **Conserved Flow:** Over the observation window, the average arrival rate must approximately equal the average departure rate ($\\lambda_{\\text{in}} \\approx \\lambda_{\\text{out}}$).\n2. **Bounded Capacity:** The system must enforce explicit Work In Progress (WIP) limits across workflow states.\n3. **No Stagnant Inventory:** Items entering the system must progress toward completion; abandoned items must be explicitly cancelled.\n4. **Consistent Units:** Time windows, item granularities, and state boundaries must remain consistent throughout measurement.\n\n```mermaid\ngraph LR\n    Backlog[\"Backlog / Unstarted\"] -->|Arrival Rate \u03bb_in| WIP[\"In Progress WIP (Bounded Capacity)\"]\n    WIP -->|Departure Rate \u03bb_out| Done[\"Completed / Shipped\"]\n    WIP -.->|Little's Law: WIP = Throughput x Lead Time| Analytics[\"Statistical Telemetry & Percentiles\"]\n```\n\n---\n\n## 2. Cumulative Flow Diagram (CFD) Engine\n\nThe Cumulative Flow Diagram (CFD) is the primary diagnostic instrument for visualizing delivery stability, queue accumulation, and process bottlenecks over time.\n\n### Historical Activity Ledger Replay\n\nRather than taking fragile, lossy daily database snapshots, the \ud83d\udc4dkanban flow telemetry engine (`kanban/services/flow_metrics.py`) dynamically reconstructs historical state distributions by replaying the immutable `activity_events` ledger:\n1. Queries all `ISSUE_CREATED` events within the specified analysis window ($1 \\le \\text{window\\_days} \\le 366$).\n2. Traverses all chronological `ISSUE_STATE_CHANGED` transition events for those work items.\n3. Reconstructs the exact end-of-day count for each workflow state group across every calendar date in the window.\n\n### Standardized Workflow State Groups\n\nTo enable consistent cross-team comparisons, individual custom workflow states are mapped into five canonical state groups:\n- **`backlog`:** Work items defined but not yet prioritized for near-term delivery.\n- **`unstarted`:** Committed items ready for immediate execution by engineers or agents.\n- **`started`:** Active Work In Progress (WIP) being implemented, reviewed, or tested.\n- **`completed`:** Successfully shipped items meeting the Definition of Done.\n- **`cancelled`:** Abandoned or closed items rejected prior to completion.\n\n### Interpreting CFD Band Shapes\n\n```mermaid\ngraph TD\n    A[\"CFD Curve Shape Analysis\"] --> B[\"Parallel Bands: Stable, predictable flow; arrival rate matches departure rate\"]\n    A --> C[\"Diverging Bands: In-progress WIP is growing; indicates an active bottleneck\"]\n    A --> D[\"Flat Horizontal Band: Work has stalled; zero throughput during that interval\"]\n    A --> E[\"Vertical Jump: Batch release or bulk transition; violates single-piece flow\"]\n```\n\n- **Stable Flow (Parallel Bands):** The vertical distance between the `started` band and `completed` band remains constant. WIP is bounded, and lead times remain predictable.\n- **Bottleneck Accumulation (Diverging Bands):** The vertical distance between `started` and `completed` expands. New work is being initiated faster than it is being finished, inflating delivery lead times.\n- **Starvation or Stoppage (Flat Bands):** The `completed` line flattens out horizontally. Items are blocked or idling in queue, indicating external dependencies or environment outages.\n\n---\n\n## 3. Lead Time and Cycle Time Statistical Analysis\n\n### Lead Time vs Cycle Time Definitions\n\n- **Lead Time:** The total elapsed calendar duration from work item creation (`created_at`) to completion (`completed_at`). Represents the customer experience of delivery speed.\n- **Cycle Time:** The elapsed duration from when active work commenced (transition into a `started` state group) until completion (`completed_at`). Represents pure engineering and verification execution time.\n\n### Why Averages Are Misleading\n\nIn software engineering, cycle times do not follow a bell curve. They follow Weibull or log-normal distributions with long right-hand tails. When a distribution is skewed, the arithmetic mean (average) is pulled significantly to the right by a few severely delayed items. Relying on averages for commitments creates a situation where over 60% to 70% of all tasks miss their target delivery date!\n\n### Non-Parametric Percentile Metrics\n\n\ud83d\udc4dkanban computes exact non-parametric percentiles across completed issues within the observation window:\n\n| Percentile Metric | Statistical Meaning | Operational SLA Application |\n| :--- | :--- | :--- |\n| **50th Percentile (p50 / Median)** | 50% of items finished in this time or faster | Internal baseline pacing; 1-in-2 chance of completion |\n| **85th Percentile (p85)** | 85% of items finished in this time or faster | Standard commitment target for sprint planning and SLAs |\n| **95th Percentile (p95)** | 95% of items finished in this time or faster | Conservative enterprise service contract or external release commitment |\n\n```\nLead Time Distribution Curve (Long-Tail / Non-Gaussian):\nFrequency\n  ^\n  |    *\n  |   ***\n  |  *****\n  | *******     <- p50 (Median, e.g. 3.2 days)\n  |*********\n  |***********       <- p85 (Commitment Target, e.g. 7.5 days)\n  |*************\n  |*****************      <- p95 (Conservative Cap, e.g. 14.1 days)\n  |*********************-------------------------------*** (Extreme Outliers)\n  +---------------------------------------------------------> Elapsed Days\n```\n\n---\n\n## 4. Aging WIP Telemetry\n\nWhile Lead Time and Cycle Time percentiles measure historical performance on completed items, Aging WIP provides real-time proactive observability into tasks currently in progress.\n\n### Proactive WIP Age Tracking\n\nFor every issue currently residing in a `started` workflow state group, the Aging WIP module calculates the active elapsed duration since work started:\n\n$$\\text{WIP Age} = \\text{Current Timestamp} - \\text{Work Commenced Timestamp}$$\n\n### Percentile Risk Thresholds\n\nThe Flow Telemetry Studio overlays historical p50, p85, and p95 percentile lines onto the Aging WIP scatterplot:\n- **Green (Age < p50):** Healthy pacing; within typical median delivery duration.\n- **Amber (p50 <= Age < p85):** Maturing item; at risk of exceeding standard commitment SLAs unless prioritized.\n- **Red (Age >= p85):** Aging outlier; actively violating the team's statistical SLA. Requires immediate unblocking, scope shedding, or mob debugging.\n\n---\n\n## 5. Monte Carlo Probabilistic Delivery Forecasting\n\nDeterministic estimation (\"this milestone will finish on March 15th\") is inherently fragile. \ud83d\udc4dkanban replaces deterministic dates with Monte Carlo simulation, answering two critical planning questions with calibrated probabilities:\n1. **Scope Forecast:** How many calendar days are required to complete $N$ backlog items?\n2. **Time Forecast:** How many backlog items can be completed within a fixed horizon of $D$ days?\n\n### Empirical Bootstrap Resampling Algorithm\n\nThe simulation engine avoids synthetic distributions by performing non-parametric bootstrap resampling directly from historical team performance:\n1. **Sampling Base:** Extracts daily completion throughput ($T_1, T_2, \\dots, T_k$) across all working days in the analysis window (excluding configured non-working days).\n2. **Simulation Iterations:** Executes 10,000 independent trial iterations:\n   - For each iteration, the engine randomly samples daily throughput values with replacement until the target backlog count is satisfied.\n   - Records the total simulated calendar days required for that iteration.\n3. **Probability Curve Generation:** Ranks the 10,000 resulting durations to produce an empirical cumulative distribution function (CDF):\n   - **50% Confidence:** 5,000 trials completed by this date.\n   - **85% Confidence:** 8,500 trials completed by this date (recommended delivery forecast).\n   - **95% Confidence:** 9,500 trials completed by this date (high-assurance release target).\n\n```mermaid\ngraph TD\n    History[\"Historical Daily Throughput Samples (k days)\"] --> Resample[\"Bootstrap Resampling (10,000 Iterations)\"]\n    Resample --> Sim1[\"Iteration 1: 18 days\"]\n    Resample --> Sim2[\"Iteration 2: 24 days\"]\n    Resample --> Sim10k[\"Iteration 10,000: 21 days\"]\n    Sim1 & Sim2 & Sim10k --> Distribution[\"Empirical Probability Curve\"]\n    Distribution --> P50[\"50% Probability: 19 days\"]\n    Distribution --> P85[\"85% Probability: 25 days (SLA Target)\"]\n    Distribution --> P95[\"95% Probability: 31 days (High-Assurance)\"]\n```\n\n---\n\n## 6. REST API Reference\n\nFlow telemetry and Monte Carlo simulations are accessible via the native analytics API:\n\n### Endpoint Specification\n\n`GET /api/v1/projects/{project_ref}/analytics/flow`\n\n### Query Parameters\n\n| Parameter | Type | Default | Constraints | Description |\n| :--- | :--- | :--- | :--- | :--- |\n| `window_days` | `integer` | `30` | $1 \\le \\text{window\\_days} \\le 366$ | Historical lookback window for throughput and cycle times |\n| `target_items` | `integer` | `50` | $1 \\le \\text{target\\_items} \\le 10000$ | Backlog size for Monte Carlo scope forecasting |\n| `horizon_days` | `integer` | `30` | $1 \\le \\text{horizon\\_days} \\le 366$ | Target calendar duration for Monte Carlo capacity forecasting |\n\n### Response Schema Structure\n\n```json\n{\n  \"project_id\": \"018f92b7-c4d1-73e2-8349-923fbc01e842\",\n  \"project_key\": \"KAN\",\n  \"window_days\": 30,\n  \"summary\": {\n    \"total_created\": 48,\n    \"total_completed\": 42,\n    \"current_wip\": 12,\n    \"average_daily_throughput\": 1.4\n  },\n  \"cycle_time_percentiles_days\": {\n    \"p50\": 3.2,\n    \"p85\": 7.5,\n    \"p95\": 14.1\n  },\n  \"lead_time_percentiles_days\": {\n    \"p50\": 4.1,\n    \"p85\": 9.2,\n    \"p95\": 16.8\n  },\n  \"cfd_series\": [\n    {\n      \"date\": \"2026-11-01\",\n      \"backlog\": 10,\n      \"unstarted\": 5,\n      \"started\": 8,\n      \"completed\": 20,\n      \"cancelled\": 2\n    }\n  ],\n  \"monte_carlo_forecast\": {\n    \"target_items\": 50,\n    \"simulation_runs\": 10000,\n    \"days_to_complete\": {\n      \"p50\": 34,\n      \"p85\": 42,\n      \"p95\": 51\n    }\n  }\n}\n```\n\n---\n\n## 7. Flow Telemetry Studio UI Walkthrough\n\nMounted at `/projects/{key}/flow`, the Flow Telemetry Studio offers an interactive, responsive analytics workspace:\n- **Interactive Time-Window Slider:** Dynamically adjust analysis windows between 7, 14, 30, 90, or 365 days with instant recomputation.\n- **CFD Layer Toggles:** Toggle individual workflow state bands on or off to isolate specific process queues.\n- **Aging WIP Scatterplot:** Inspect individual in-progress issues, view assignee avatars, and jump directly to overdue work items.\n- **Monte Carlo Target Simulator:** Interactively adjust backlog item counts and observe shifting delivery date confidence bands in real time.\n\n![Project Workflow States and WIP Configuration](images/55-project-workflow-states-wip.png)\n\n![Board View and Flow Pacing](images/06-board-view.png)\n"
+  },
+  {
     "slug": "studio-configuration-reference",
     "title": "[Informational] Studio Configuration Reference",
     "category": "informational",
     "track": "Feature & Field Reference",
     "subtrack": "Studio Configuration",
     "audience": "Workspace & Project Administrators",
-    "order": 22,
+    "order": 26,
     "summary": "Authoritative technical reference specification for all configuration attributes, execution tiers, and administrative controls across all 11 \ud83d\udc4dkanban Studios.",
     "sections": [
       {
@@ -1959,7 +2341,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Engineering & Security Architecture",
     "subtrack": "Functional Architecture",
     "audience": "Infrastructure & Systems Architects",
-    "order": 23,
+    "order": 27,
     "summary": "The \ud83d\udc4dkanban platform is designed for operational flexibility and security hardening. It supports two primary deployment topologies: 1. **Standalone Single-Container Mode (`docker run`):** A zero-dependency, turnkey distribution where the web application, FastAPI backend, and PostgreSQL 16 database run within a single container using an embedded Unix socket. Ideal for evaluation, air-gapped workstations, and single-host developer instances. 2. **Multi-Container Production Stack (`docker compose`):** An enterprise-grade, five-network isolated container mesh designed for high availability, least-privilege service boundaries, and strict network compartmentalization.",
     "sections": [
       {
@@ -2022,7 +2404,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Step-by-Step Guides",
     "subtrack": "MCP & OAuth Clients",
     "audience": "Autonomous Agent Developers",
-    "order": 24,
+    "order": 28,
     "summary": "The Model Context Protocol (MCP) allows Large Language Models (LLMs) and autonomous engineering agents to interact with development platforms. However, conventional tracker integrations (such as legacy Jira REST bridges and generic CRUD wrappers) expose raw REST endpoints 1:1 as MCP tools. This naive approach results in 70 to 120 bloated tools consuming 15,000 to 25,000 context tokens before the agent begins reasoning, causing catastrophic context exhaustion and multi-turn thrashing.",
     "sections": [
       {
@@ -2100,7 +2482,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Feature & Field Reference",
     "subtrack": "Issue Studio & Peek Drawer",
     "audience": "Software Engineers & Contributors",
-    "order": 25,
+    "order": 29,
     "summary": "The ticket screen is the central operating surface for software engineering teams. \ud83d\udc4dkanban competes globally against Jira, Vibe Kanban, and legacy commercial trackers while eliminating context-switching friction through its high-performance **960px Ticket Peek Drawer** and keyboard-driven **Quick-Create Modal**.",
     "sections": [
       {
@@ -2183,7 +2565,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Engineering & Security Architecture",
     "subtrack": "Functional Architecture",
     "audience": "Database Engineers & Core Architects",
-    "order": 26,
+    "order": 30,
     "summary": "Traditional project management databases rely on fragmented, ad-hoc foreign keys connecting tickets, documents, and attachments. This fragmented design leads to dangling pointers, orphaned files, accidental cross-tenant data leaks, and broken graph traversals when objects are archived or deleted.",
     "sections": [
       {
@@ -2256,7 +2638,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Engineering & Security Architecture",
     "subtrack": "Engineering Appendix",
     "audience": "Forensic QA & Certification Auditors",
-    "order": 27,
+    "order": 31,
     "summary": "flowchart TD Spec[\"Authoritative Product Spec (S1-S15)\"] --> QAPipeline[\"Forensic QA Verification Pipeline\"]",
     "sections": [
       {
@@ -2304,7 +2686,7 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "track": "Security & Adoption Overview",
     "subtrack": "Zero-Trust Architecture",
     "audience": "Security Architects & Hardening Engineers",
-    "order": 28,
+    "order": 32,
     "summary": "Security is Priority 0 in \ud83d\udc4dkanban. Rather than relying on fragile application-level checks or leaky implicit permissions, \ud83d\udc4dkanban implements an uncompromising zero-trust architecture. Every request, query, and agent invocation is authenticated, scoped, and strictly evaluated against mathematical access invariants.",
     "sections": [
       {
@@ -2371,13 +2753,91 @@ export const WIKI_CHAPTERS: WikiChapter[] = [
     "content": "# [Informational] Zero-Trust Security Architecture and Explicit Access Visibility\n\n## Overview\n\nSecurity is Priority 0 in \ud83d\udc4dkanban. Rather than relying on fragile application-level checks or leaky implicit permissions, \ud83d\udc4dkanban implements an uncompromising zero-trust architecture. Every request, query, and agent invocation is authenticated, scoped, and strictly evaluated against mathematical access invariants.\n\nKey security pillars:\n1. **Hardware-Enforced Database RLS:** PostgreSQL `FORCE ROW LEVEL SECURITY` is enabled across 100% of tenant tables.\n2. **Zero-Context Fail-Closed Execution:** Unbound database sessions return zero rows.\n3. **Explicit Access Visibility:** Every ticket, doc, and sticky renders an explicit sharing manifest with zero cross-tenant enumeration.\n4. **Agent On-Behalf-Of (OBO) Key Scoping:** Agent permissions are computed strictly as the mathematical intersection of the calling user's permissions and the API key's scope.\n5. **MCP Read-Taint High-Water Mark Defense:** Prevents autonomous agents from exfiltrating sensitive data read from higher-privilege scopes into lower-privilege write targets.\n\n---\n\n## Universal Access Control Model\n\n\ud83d\udc4dkanban unifies human users, user groups, and autonomous agent service-principals under a single Universal Object Graph access model.\n\n### Effective Resource Access (ERA) Evaluation\n\nAccess to any resource (`Project`, `Issue`, `Doc`, `Sticky`, `View`) is determined dynamically:\n\n```mermaid\nflowchart TD\n    User[\"Principal (Human / Agent)\"] --> Inherited[\"Inherited RBAC (Workspace & Project Roles)\"]\n    User --> Direct[\"Direct Resource ACLs (Allow & Deny Masks)\"]\n    Inherited --> Combined[\"Effective User Access = (Inherited \u222a Allow) \\ Deny\"]\n    \n    subgraph AgentOBO[\"Agent On-Behalf-Of Clamping\"]\n        Combined --> Intersect{\"Intersection (\u2229)\"}\n        KeyScope[\"API Key Scope Constraints<br/>(Allowed surfaces, projects, tools)\"] --> Intersect\n        AgentGrant[\"Explicit Agent Grant\"] --> Intersect\n        Intersect --> Effective[\"Final Effective Agent Permission\"]\n    end\n```\n\nWhere:\n- **Roles:** `Owner`, `Admin`, `Member`, `Guest`.\n- **Authoritative 8-Bit Capability Bitmask (`Capability(IntFlag)`):**\n  * `VIEW` (`0x01` / `1`): Read ticket summary, description, and metadata.\n  * `COMMENT` (`0x02` / `2`): Add comments to discussions and activity feeds.\n  * `EDIT` (`0x04` / `4`): Mutate scalar fields, tags, and assignments.\n  * `TRANSITION` (`0x08` / `8`): Move card state across workflow stages.\n  * `LINK` (`0x10` / `16`): Create or sever typed object links.\n  * `SHARE` (`0x20` / `32`): Modify access audience and direct object sharing.\n  * `ADMIN` (`0x40` / `64`): Manage permissions, scripted fields, and audit settings.\n  * `DELETE` (`0x80` / `128`): Soft-trash or permanently purge entities.\n  * `ALL` (`0xFF` / `255`): Full administrative capability mask.\n- **`SCOPE_CAPABILITY_MAP`:** Maps OAuth/API key scopes to capabilities:\n  * `session`: `Capability.ALL` (`0xFF`)\n  * `read`, `agent:read`, `docs:read`, `admin:read`: `Capability.VIEW` (`0x01`)\n  * `comment`: `Capability.VIEW | Capability.COMMENT` (`0x03`)\n  * `write`: `Capability.VIEW | Capability.COMMENT | Capability.EDIT | Capability.TRANSITION | Capability.LINK` (`0x1F`)\n  * `agent:write`: `Capability.VIEW | Capability.COMMENT | Capability.EDIT | Capability.TRANSITION | Capability.LINK` (`0x1F`)\n  * `docs:write`: `Capability.VIEW | Capability.COMMENT | Capability.EDIT | Capability.LINK` (`0x17`)\n  * `admin:write`: `Capability.ALL` (`0xFF`)\n- **Agent OBO Key Intersection:** When an autonomous agent acts on behalf of a user using an API key, the effective permission is clamped:\n  ```\n  AgentEffectiveAccess = UserPermissions INTERSECT KeyScopeConstraints\n  ```\n  An agent cannot escalate privileges beyond the user who generated the key, nor can it exceed the explicit scope configured on the key.\n\n### Monotonic CredentialBoundary Enforcement\n\nAll issued credentials (MCP API keys, personal user tokens, and OAuth 2.1 access tokens) enforce a strict, monotonic privilege ceiling via the `CredentialBoundary` kernel:\n\n- **Monotonic Clamping:** An issued key can only narrow privileges, never expand them. The effective capability bitmask of any token is computed as:\n  ```\n  TokenEffectiveCapability = IssuerActiveCapability BITWISE-AND KeyCapabilityMask\n  ```\n- **Read-Only Scoping:** When minting a read-only token (`capability_mask = 1`, `VIEW` only), the system emits strictly read-only scopes (`${surface}:read`). Write scopes (`${surface}:write`) are completely withheld. Any incoming API or MCP invocation carrying a write payload is rejected at the route gateway before reaching application logic.\n- **Allowed CIDRs (Optional Network Pinning):** Administrators and users can bind keys to explicit IPv4 or IPv6 CIDR subnets (e.g., `192.168.1.0/24, 2001:db8::/32`). Invocations from client IP addresses outside the allowlist receive an immediate `403 Forbidden` (`FORBIDDEN_CIDR`).\n\n---\n\n## PostgreSQL FORCE ROW LEVEL SECURITY (100% Coverage)\n\nEvery tenant table in PostgreSQL enforces Row-Level Security:\n\n```sql\nALTER TABLE issues ENABLE ROW LEVEL SECURITY;\nALTER TABLE issues FORCE ROW LEVEL SECURITY;\n```\n\n### The Fail-Closed Context Invariant\n\nPostgreSQL sessions authenticate as the unprivileged database role `kanban_app`. This role is stripped of `SUPERUSER` and `BYPASSRLS`. To query or mutate tenant data, the application server must establish an explicit session context within a transaction:\n\n```sql\nSET LOCAL app.current_principal_id = '01932e6b-7341-789a-bc01-123456789abc';\nSET LOCAL app.current_workspace_id = '01932e6b-7341-789a-bc01-def012345678';\n```\n\nIf a developer writes a raw query without setting the session context, the RLS policies fail closed: **zero rows are returned, and zero mutations succeed**. Even if an attacker executes SQL injection, they cannot bypass RLS to read cross-tenant data.\n\n---\n\n## Explicit Access Visibility and Sharing Manifests\n\nSaaS platforms often hide sharing rules behind obscure settings menus, leading to accidental leaks. In \ud83d\udc4dkanban, every resource view exposes a dynamic `\ud83d\udee1\ufe0f` sharing pill.\n\nClicking the sharing pill reveals the **Access Manifest**:\n- **Explicit Principals:** Lists all users, groups, and autonomous agents with direct access.\n- **Inherited Scope:** Displays parent project and workspace inheritance paths.\n- **Auditable Effective Mask:** Shows exact read, write, share, and delete capabilities for each principal.\n\n![Access Visibility Inspector and Sharing Manifest](images/17-access-visibility-inspector.png)\n\n### Anti-Enumeration and Timing Defense\n\nTo prevent malicious actors from scanning IDs or usernames:\n- **Identical RFC 7807 404 Responses:** Accessing an unauthorized resource returns an identical `404 Not Found` response as a non-existent resource. Unauthorized users cannot determine whether an object exists.\n- **25ms Timing Floor:** All resource lookups enforce a synthetic 25ms timing floor to neutralize side-channel timing attacks that measure database index lookups.\n\n---\n\n## MCP Read-Taint High-Water Mark Defense\n\nAutonomous LLMs can be tricked by prompt injection into reading confidential documents and writing excerpts into public tickets. \ud83d\udc4dkanban prevents this through **Read-Taint Tracking**:\n\n```mermaid\nsequenceDiagram\n    autonumber\n    actor Agent as Autonomous Agent\n    participant Gateway as MCP Gateway Taint Engine\n    participant PrivateDoc as Confidential Doc (Tier: PRIVATE)\n    participant PublicTicket as Public Ticket (Tier: PUBLIC)\n\n    Agent->>Gateway: read_doc(id='confidential_spec')\n    Gateway->>PrivateDoc: Fetch Document\n    PrivateDoc-->>Gateway: Return Content\n    Gateway->>Gateway: Elevate Agent Session High-Water Mark to PRIVATE\n    Gateway-->>Agent: Deliver Markdown Payload\n\n    Note over Agent: Later in conversation...\n    Agent->>Gateway: update_ticket(id='public_bug', body=...)\n    Gateway->>Gateway: Check Destination Scope (PUBLIC) vs High-Water Mark (PRIVATE)\n    Gateway-->>Agent: 403 Forbidden (CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED)\n```\n\n![Agent Kill Switch and Immediate Session Revocation](images/18-agent-kill-switch.png)\n\nWhen an agent reads a resource with an elevated confidentiality label, its session high-water mark increases. Any subsequent write operation to a lower-privilege target is halted immediately with an error requiring human operator confirmation.\n\n---\n\n## Distributed Runner Dedicated mTLS Port (:8444) and PoP Handshake\n\nRemote execution daemons and test runners never share general HTTP application ingress. Instead, they authenticate through a dedicated mutual TLS port:\n\n- **Dedicated Port `:8444`:** Distributed runners communicate exclusively with the orchestrator over port `:8444`. Port `:8921` handles human web traffic and general REST/MCP calls, while `:8444` enforces mandatory client certificate exchange.\n- **Cryptographic Proof-of-Possession (PoP):** During runner enrollment, the daemon generates a local private key and presents a hardware-bound CSR. Upon successful verification of the short-lived enrollment token (15-minute TTL), the orchestrator signs the client certificate. Every subsequent WebSocket connection requires a cryptographic Proof-of-Possession challenge, verifying the daemon possesses the matching private key before receiving build workloads.\n- **Hardware-Bound Certificate Rotation:** Certificates cannot be silently renewed. If a runner certificate expires or requires rotation, the administrator revokes the runner identity in `/admin/agent-runners` (requiring AAL2 step-up verification), mints a fresh enrollment token, and re-enrolls the runner host.\n\n---\n\n## Private-Only Internal MCP Route Isolation (/internal/v1/mcp/*)\n\nInternal agent orchestration, runner dispatch, and distributed tool calls are isolated from external edge routing:\n\n- **Zero Edge Routing:** All `/internal/v1/mcp/*` endpoints are bound strictly to internal container networks (`app_net`, `data_net`). Reverse proxies (`edge_net`) explicitly drop or block `/internal/*` request paths from external ingress.\n- **mTLS Verification:** Calls across internal MCP routes require valid internal mTLS certificates or cryptographic service-principal tokens signed by the local authority. Unauthorized external callers cannot reach or probe internal agent pipelines.\n\n---\n\n## STRIDE Threat Mitigation Matrix\n\nFor the complete architectural taxonomy, see [[Informational] Security Architecture and STRIDE Threat Model Matrix](Security-and-STRIDE-Threat-Matrix), covering the complete Asset Inventory Matrix (`A1` to `A6`) and Entry Point Catalog (`E1` to `E8`).\n\n| Threat Category | Potential Attack Vector | \ud83d\udc4dkanban Architectural Defense |\n| :--- | :--- | :--- |\n| **Spoofing** | Forged session cookies or stolen API tokens | Multi-Card AAL2 enforcement, cryptographic token binding, dedicated `:8444` mTLS PoP, and WebAuthn Passkeys. |\n| **Tampering** | Parameter manipulation or state corruption | PostgreSQL immutable audit ledger and Wasm state transition validators. |\n| **Repudiation** | Denying ticket edits or deletions | Cryptographically signed append-only activity ledger recording principal IDs. |\n| **Information Disclosure** | Cross-tenant data leakage or ID enumeration | PostgreSQL FORCE RLS on 100% of tables, `/internal/v1/mcp/*` edge isolation, and uniform 404 anti-enumeration responses. |\n| **Denial of Service** | Deep query recursion or token exhaustion | Strict limit of 16 WebSocket conns per user, query depth caps, CIDR filtering, and MCP token budgets. |\n| **Elevation of Privilege** | Agent tool escalation or script escape | Sandboxed Wasm/nsjail execution, monotonic `CredentialBoundary` ceiling, and two-stage destructive confirmation tokens. |\n"
   },
   {
+    "slug": "zero-trust-service-auth-and-workload-oidc",
+    "title": "[Architectural] Zero-Trust Service Auth, Headless Workload OIDC, and CredentialBoundary Enforcement Guide",
+    "category": "architectural",
+    "track": "Track 4: Engineering & Security Architecture",
+    "subtrack": "General",
+    "audience": "Developers & Operators",
+    "order": 33,
+    "summary": "Authoritative architectural reference and implementation guide for internal HKDF-HMAC service authentication, headless CI/CD workload identity federation (RFC 8693), and monotonic CredentialBoundary Row-Level Security isolation.",
+    "sections": [
+      {
+        "id": "zero-trust-security-philosophy-the-hostile-wire",
+        "title": "1. Zero-Trust Security Philosophy: The Hostile Wire",
+        "level": 2
+      },
+      {
+        "id": "role-bound-hkdf-hmac-internal-service-authentication",
+        "title": "2. Role-Bound HKDF-HMAC Internal Service Authentication",
+        "level": 2
+      },
+      {
+        "id": "hkdf-key-derivation",
+        "title": "HKDF Key Derivation",
+        "level": 3
+      },
+      {
+        "id": "canonical-request-envelope-signing",
+        "title": "Canonical Request Envelope Signing",
+        "level": 3
+      },
+      {
+        "id": "asgi-tls-scope-client-certificate-extraction",
+        "title": "ASGI TLS Scope Client Certificate Extraction",
+        "level": 3
+      },
+      {
+        "id": "headless-workload-identity-federation-rfc-8693",
+        "title": "3. Headless Workload Identity Federation (RFC 8693)",
+        "level": 2
+      },
+      {
+        "id": "the-rfc-8693-token-exchange-flow",
+        "title": "The RFC 8693 Token Exchange Flow",
+        "level": 3
+      },
+      {
+        "id": "security-invariant-rules",
+        "title": "Security & Invariant Rules",
+        "level": 3
+      },
+      {
+        "id": "credentialboundary-enforcement-rls-isolation",
+        "title": "4. CredentialBoundary Enforcement & RLS Isolation",
+        "level": 2
+      },
+      {
+        "id": "monotonic-capability-bitmasks",
+        "title": "Monotonic Capability Bitmasks",
+        "level": 3
+      },
+      {
+        "id": "practical-implementation-recipes",
+        "title": "5. Practical Implementation Recipes",
+        "level": 2
+      },
+      {
+        "id": "github-actions-cicd-configuration",
+        "title": "GitHub Actions CI/CD Configuration",
+        "level": 3
+      },
+      {
+        "id": "visual-reference-and-studio-screenshots",
+        "title": "6. Visual Reference and Studio Screenshots",
+        "level": 2
+      }
+    ],
+    "content": "# [Architectural] Zero-Trust Service Auth, Headless Workload OIDC, and CredentialBoundary Enforcement Guide\n\nAuthoritative architectural reference and implementation guide for internal HKDF-HMAC service authentication, headless CI/CD workload identity federation (RFC 8693), and monotonic CredentialBoundary Row-Level Security isolation.\n\n---\n\n## 1. Zero-Trust Security Philosophy: The Hostile Wire\n\nIn traditional enterprise software, internal service-to-service communication is frequently treated with implicit trust: once an HTTP request crosses the outer perimeter firewall, backend services assume callers are authentic based on unvalidated network location or spoofable HTTP headers (`X-Forwarded-For`, `X-Client-Cert`).\n\n\ud83d\udc4dkanban rejects this perimeter security model under Security Priority #0. Every packet is treated as originating from a hostile wire:\n1. **Zero Implicit Trust:** No service endpoint trusts caller identity based on IP address, internal Docker network topology, or unverified HTTP headers.\n2. **Cryptographic Proof of Identity:** Every inter-service invocation must present verifiable cryptographic proof: either an HMAC-SHA256 signature derived via HKDF from a hardware-backed master key, or a verified mutual TLS (mTLS) client certificate extracted from the raw TLS handshake.\n3. **Least Privilege by Default:** Ephemeral tokens issued to autonomous agents and automated workloads are constrained by monotonic capability bitmasks (`CredentialBoundary`) enforced directly inside the PostgreSQL database engine via Row-Level Security (RLS) Grand Unified Configuration (GUC) variables.\n\n```mermaid\ngraph TD\n    Workload[\"Headless Workload (GitHub Actions, GitLab CI, K8s)\"] --> OIDCExchange[\"RFC 8693 Token Exchange (POST /oauth/token)\"]\n    OIDCExchange --> JWKS[\"SSRF-Safe OIDC Discovery & JWKS Verification\"]\n    JWKS --> ReplayCheck[\"Atomic PostgreSQL JTI Replay Guard (workload_jti_replays)\"]\n    ReplayCheck --> EphemeralToken[\"Ephemeral Scoped MCP Token (kb_eat_*)\"]\n    EphemeralToken --> BoundaryCheck[\"CredentialBoundary Bitmask Gate\"]\n    BoundaryCheck --> RLSContext[\"PostgreSQL Session Context (SET LOCAL app.credential_boundary)\"]\n    RLSContext --> ForceRLS[\"PostgreSQL FORCE ROW LEVEL SECURITY Filter\"]\n```\n\n---\n\n## 2. Role-Bound HKDF-HMAC Internal Service Authentication\n\nTicket `KAN-63` establishes hardened inter-service authentication (`kanban/security/service_auth.py`) governing direct communication between background runners, sync daemons, and application servers.\n\n### HKDF Key Derivation\n\nSubkeys are derived on demand from the system master key encryption key (`master_kek`) using HMAC-based Extract-and-Expand Key Derivation Function (HKDF-SHA256, RFC 5869):\n\n$$\\text{Subkey} = \\text{HKDF-Expand}(\\text{Extract}(\\text{master\\_kek}, \\text{salt}), \\text{\"internal-service-v2/\"} \\parallel \\text{principal}, 32)$$\n\nThis derivation ensures:\n- Cryptographic isolation between service roles (`runner`, `relay`, `auditor`, `migrator`).\n- A compromise of an individual service subkey does not compromise the root `master_kek` or other subsystem keys.\n\n### Canonical Request Envelope Signing\n\nWhen a service invokes an internal API endpoint, it packages and signs a canonical request envelope:\n\n$$\\text{Signature} = \\text{HMAC-SHA256}\\left(\\text{Subkey}, \\text{Timestamp} \\parallel \\text{Principal} \\parallel \\text{Method} \\parallel \\text{Path} \\parallel \\text{SHA256}(\\text{Body})\\right)$$\n\nThe receiving endpoint validates the signature according to strict security invariants:\n- **Timestamp Skew Limit:** Requests with timestamps drifting more than 300 seconds from the server clock are immediately rejected (`CLOCK_DRIFT_EXCEEDED`), neutralizing replay attacks.\n- **Constant-Time Verification:** Signatures are compared using constant-time string comparison (`hmac.compare_digest`), eliminating timing side-channel attacks.\n- **Header Tampering Defense:** The canonical envelope binds the HTTP method, URI path, and SHA-256 digest of the request body, preventing reverse-proxy header injection or request modification in flight.\n\n### ASGI TLS Scope Client Certificate Extraction\n\nFor mutual TLS (mTLS) client validation, \ud83d\udc4dkanban never trusts raw HTTP headers such as `X-SSL-Client-Cert` or `X-KB-Service-Principal`, which can be injected by untrusted intermediaries. Instead, the service authenticator extracts certificate attributes directly from the ASGI connection scope:\n\n```python\n# Verifiable TLS scope extraction in kanban/security/service_auth.py\nclient_cert = scope.get(\"client_cert\")\nif not client_cert:\n    raise ServiceAuthError(\"Missing verified mTLS client certificate in ASGI scope\")\n\ncert = x509.load_der_x509_certificate(client_cert)\ncommon_name = cert.subject.get_attributes_for_oid(x509.NameOID.COMMON_NAME)[0].value\n```\n\n---\n\n## 3. Headless Workload Identity Federation (RFC 8693)\n\nTicket `KAN-74` implements headless Workload Identity Federation and RFC 8693 OAuth 2.0 Token Exchange, eliminating the need to store long-lived static API secrets or passwords inside CI/CD repositories.\n\n### The RFC 8693 Token Exchange Flow\n\nExternal automated workloads (e.g. GitHub Actions runners, GitLab CI jobs, Kubernetes pods) obtain short-lived, permission-scoped tokens using their native OpenID Connect (OIDC) identity tokens:\n\n```mermaid\nsequenceDiagram\n    participant CI as GitHub Actions / GitLab CI Runner\n    participant IdP as Identity Provider (GitHub / GitLab OIDC)\n    participant KB as \ud83d\udc4dkanban Token Endpoint (/oauth/token)\n    participant DB as PostgreSQL (workload_identity_policies)\n\n    CI->>IdP: Request OIDC ID token (aud: https://kanban.example.com)\n    IdP-->>CI: Signed JWT ID token\n    CI->>KB: POST /oauth/token (grant_type=token-exchange, subject_token=JWT)\n    KB->>IdP: Fetch discovery document & JWKS public keys\n    KB->>KB: Verify cryptographic signature (RS256, ES256, EdDSA)\n    KB->>DB: Query matching policy for issuer and subject pattern\n    KB->>DB: Atomically insert JTI into workload_jti_replays\n    DB-->>KB: Insert successful (no conflict)\n    KB-->>CI: Short-lived scoped token (kb_eat_*) with CredentialBoundary\n```\n\n### Security & Invariant Rules\n\n1. **Strict Cryptographic Algorithm Allowlist:** Only asymmetric signature algorithms (`RS256`, `PS256`, `ES256`, `EdDSA`) are permitted. Symmetric algorithms (`HS256`) and unsigned tokens (`alg=\"none\"`) are rejected with `400 invalid_grant`.\n2. **SSRF-Hardened OpenID Discovery:** Provider discovery and JWKS retrieval reuse the secure discovery client, enforcing private IP address blocking (RFC 1918 / RFC 4193), timeout caps, and response size limits.\n3. **Atomic Replay Prevention:** Each OIDC JWT carries a unique token identifier (`jti`). The server executes an atomic PostgreSQL insert into `workload_jti_replays` (`ON CONFLICT DO NOTHING`). If the same `jti` is submitted a second time, the transaction aborts with `401 WORKLOAD_TOKEN_REPLAYED`.\n4. **Subject Pattern & Claim Filtering:** Workload identity policies define glob patterns for the token subject (`sub`), such as `repo:org/repo:ref:refs/heads/main`, alongside mandatory JSON claim subsets (e.g. `{\"environment\": \"production\"}`).\n\n---\n\n## 4. CredentialBoundary Enforcement & RLS Isolation\n\nTokens issued to automated agents, external workloads, and third-party integrations are governed by the `CredentialBoundary` capability bitmask (tickets `KAN-66` and `KAN-67`).\n\n### Monotonic Capability Bitmasks\n\nThe `CredentialBoundary` bitmask restricts the maximum capabilities a token can exercise, regardless of the assigned user role:\n\n| Capability Bit | Bitmask Value | Description & Bound |\n| :--- | :--- | :--- |\n| `READ_ISSUES` | `0x0001` | Read work items and comments within project scope |\n| `WRITE_ISSUES` | `0x0002` | Create and modify issues and work items |\n| `TRANSITION_ISSUES`| `0x0004` | Execute workflow state transitions |\n| `READ_DOCS` | `0x0008` | Access technical documentation and project stickies |\n| `WRITE_DOCS` | `0x0010` | Author and edit documents |\n| `EXECUTE_AGENT` | `0x0020` | Invoke autonomous agent helper routines |\n| `ADMIN_READ` | `0x0040` | Read non-destructive system diagnostics |\n\nWhen an incoming request is authenticated:\n1. The middleware computes the effective capability set: $\\text{Effective} = \\text{UserRoleCapabilities} \\cap \\text{CredentialBoundary}$.\n2. The middleware sets PostgreSQL session Grand Unified Configuration (GUC) variables inside the transaction:\n   ```sql\n   SET LOCAL app.current_principal_id = 'usr_workload_agent';\n   SET LOCAL app.credential_boundary = '0x0007';\n   ```\n3. PostgreSQL Row-Level Security policies evaluate `app.credential_boundary` before returning or mutating records. If the capability bit is missing, PostgreSQL returns zero records or aborts the write with a constraint violation.\n\n---\n\n## 5. Practical Implementation Recipes\n\n### GitHub Actions CI/CD Configuration\n\nTo authenticate a GitHub Actions workflow to the \ud83d\udc4dkanban Model Context Protocol (MCP) server without storing permanent secrets:\n\n```yaml\nname: Automated Agent CI/CD Integration\non:\n  push:\n    branches: [main]\n\npermissions:\n  id-token: write\n  contents: read\n\njobs:\n  kanban-sync:\n    runs-on: ubuntu-latest\n    steps:\n      - name: Checkout Code\n        uses: actions/checkout@v4\n\n      - name: Authenticate to \ud83d\udc4dkanban via RFC 8693\n        id: auth\n        run: |\n          # 1. Fetch OIDC ID token from GitHub Actions environment\n          ID_TOKEN=$(curl -sLS \\\n            -H \"Authorization: bearer ${ACTIONS_ID_TOKEN_REQUEST_TOKEN}\" \\\n            \"${ACTIONS_ID_TOKEN_REQUEST_URL}&audience=https://kanban.example.com\" | jq -r .value)\n\n          # 2. Exchange OIDC token for short-lived scoped MCP token\n          RESPONSE=$(curl -sLS -X POST \"https://kanban.example.com/oauth/token\" \\\n            -H \"Content-Type: application/x-www-form-urlencoded\" \\\n            -d \"grant_type=urn:ietf:params:oauth:grant-type:token-exchange\" \\\n            -d \"subject_token=${ID_TOKEN}\" \\\n            -d \"subject_token_type=urn:ietf:params:oauth:token-type:jwt\" \\\n            -d \"audience=https://kanban.example.com/mcp/agent\")\n\n          TOKEN=$(echo \"${RESPONSE}\" | jq -r .access_token)\n          echo \"::add-mask::${TOKEN}\"\n          echo \"mcp_token=${TOKEN}\" >> \"$GITHUB_OUTPUT\"\n\n      - name: Execute Model Context Protocol Tool\n        run: |\n          curl -sLS -X POST \"https://kanban.example.com/mcp/agent/tools/call\" \\\n            -H \"Authorization: Bearer ${{ steps.auth.outputs.mcp_token }}\" \\\n            -H \"Content-Type: application/json\" \\\n            -d '{\n              \"name\": \"read_ticket\",\n              \"arguments\": {\"identifier\": \"KAN-42\", \"lod\": \"summary\"}\n            }'\n```\n\n---\n\n## 6. Visual Reference and Studio Screenshots\n\n![Model Context Protocol Access Studio](images/13-mcp-access-studio.png)\n\n![OAuth and Workload Governance Studio](images/42-admin-oauth-governance.png)\n"
+  },
+  {
     "slug": "configuration-value-reference",
     "title": "[Informational] Configuration Value Reference",
     "category": "informational",
     "track": "Feature & Field Reference",
     "subtrack": "Studio Configuration",
     "audience": "System Administrators",
-    "order": 29,
+    "order": 34,
     "summary": "Reference guide for system environment variables and execution tiers.",
     "sections": [
       {
@@ -2422,6 +2882,16 @@ export const WIKI_CATEGORIES: WikiCategory[] = [
       {
         "slug": "migration-and-cutover-runbook",
         "title": "[Guide] Legacy Tracker Migration and Cutover Runbook",
+        "category": "guide"
+      },
+      {
+        "slug": "multi-source-migration-and-key-alias-redirects",
+        "title": "[Guide] End-to-End Multi-Source Migration, Key Alias Redirects, and Cross-Project Merge Guide",
+        "category": "guide"
+      },
+      {
+        "slug": "admin-diagnostics-and-link-inspector-studio",
+        "title": "[Guide] Admin Diagnostics and Link Inspector Studio Guide and Architecture Walkthrough",
         "category": "guide"
       },
       {
@@ -2472,6 +2942,11 @@ export const WIKI_CATEGORIES: WikiCategory[] = [
       {
         "slug": "hierarchical-docs-and-stickies-with-smart-promotion",
         "title": "[Informational] Hierarchical Docs, Project Stickies, and Smart Promotion",
+        "category": "informational"
+      },
+      {
+        "slug": "statistical-flow-telemetry-and-lean-analytics",
+        "title": "[Informational] Statistical Flow Telemetry, Lead Time Percentiles, and Monte Carlo Forecasting Guide",
         "category": "informational"
       },
       {
@@ -2532,6 +3007,16 @@ export const WIKI_CATEGORIES: WikiCategory[] = [
       {
         "slug": "universal-object-graph-and-link-auditor",
         "title": "[Architectural] Universal Object Graph and Invalid Link Auditor",
+        "category": "architectural"
+      },
+      {
+        "slug": "zero-trust-service-auth-and-workload-oidc",
+        "title": "[Architectural] Zero-Trust Service Auth, Headless Workload OIDC, and CredentialBoundary Enforcement Guide",
+        "category": "architectural"
+      },
+      {
+        "slug": "agent-lease-fencing-workpads-and-push-protection",
+        "title": "[Architectural] Autonomous Agent Lease Fencing, Workpad Rework Breaker, and Secret Push-Protection Guide",
         "category": "architectural"
       },
       {
