@@ -117,14 +117,6 @@ async def copy_issue(  # noqa: C901, PLR0912, PLR0915
     """
     # 1. Resolve source issue through caller access checks
     source_issue = await resolve_issue_ref(session, caller, issue_ref)
-    await require_permissions(
-        session,
-        caller,
-        source_issue.workspace_id,
-        {GranularPermission.ISSUE_COPY.value},
-        project_id=source_issue.project_id,
-        object_readable=True,
-    )
     caps = await evaluate_capabilities(session, caller, source_issue.id)
     if Capability.VIEW not in caps:
         not_found()
@@ -138,6 +130,15 @@ async def copy_issue(  # noqa: C901, PLR0912, PLR0915
             title="Insufficient Capability",
             detail="EDIT capability required on project to copy issues",
         )
+    await require_permissions(
+        session,
+        caller,
+        source_issue.workspace_id,
+        {GranularPermission.ISSUE_COPY.value},
+        project_id=source_issue.project_id,
+        object_readable=True,
+        object_id=source_issue.id,
+    )
 
     project = await session.get(Project, source_issue.project_id)
     if project is None:  # pragma: no cover

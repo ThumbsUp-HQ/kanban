@@ -375,6 +375,19 @@ async def switch_workspace_endpoint(
     )
 
 
+async def _require_workspace_admin_aal2(
+    request: Request,
+    caller: Annotated[PrincipalContext, Depends(get_principal)],
+    session: Annotated[AsyncSession, Depends(get_rls_session)],
+) -> None:
+    """Enforce AAL2 when caller holds an admin role; otherwise let permission checks return 403."""
+    admin_check = await session.execute(
+        text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])")
+    )
+    if bool(admin_check.scalar_one()):
+        await require_admin_aal2(request, caller)
+
+
 class UpdateWorkspaceRequest(BaseModel):
     """Payload for updating workspace name or slug."""
 
@@ -398,7 +411,7 @@ class UpdateWorkspaceRequest(BaseModel):
     "/{workspace_id}",
     response_model=WorkspaceResponse,
     summary="Update workspace name or slug",
-    dependencies=[Depends(require_admin_aal2)],
+    dependencies=[Depends(_require_workspace_admin_aal2)],
 )
 async def update_workspace_endpoint(
     workspace_id: uuid.UUID,
@@ -411,7 +424,11 @@ async def update_workspace_endpoint(
         caller.workspace_id if str(workspace_id) == str(caller.workspace_id) else workspace_id
     )
     await require_permissions(
-        session, caller, target_id, {GranularPermission.WORKSPACE_EDIT_SETTINGS.value}
+        session,
+        caller,
+        target_id,
+        {GranularPermission.WORKSPACE_EDIT_SETTINGS.value},
+        error_code="INSUFFICIENT_CAPABILITY",
     )
     ws_stmt = select(Workspace).where(Workspace.id == target_id)
     ws = (await session.execute(ws_stmt)).scalar_one_or_none()
@@ -501,7 +518,7 @@ class WorkspaceRoleBindingRequest(BaseModel):
 @router.post(
     "/{workspace_id}/role-bindings",
     summary="Bind RBAC role to principal in workspace",
-    dependencies=[Depends(require_admin_aal2)],
+    dependencies=[Depends(_require_workspace_admin_aal2)],
 )
 async def bind_workspace_role_endpoint(
     workspace_id: uuid.UUID,
@@ -511,7 +528,11 @@ async def bind_workspace_role_endpoint(
 ) -> dict[str, object]:
     """Bind role to principal at workspace scope."""
     await require_permissions(
-        session, caller, workspace_id, {GranularPermission.WORKSPACE_MANAGE_MEMBERS.value}
+        session,
+        caller,
+        workspace_id,
+        {GranularPermission.WORKSPACE_MANAGE_MEMBERS.value},
+        error_code="INSUFFICIENT_CAPABILITY",
     )
     res = await principal_service.bind_role(
         session,
@@ -529,7 +550,7 @@ async def bind_workspace_role_endpoint(
 @router.delete(
     "/{workspace_id}/role-bindings",
     summary="Unbind RBAC role from principal in workspace",
-    dependencies=[Depends(require_admin_aal2)],
+    dependencies=[Depends(_require_workspace_admin_aal2)],
 )
 async def unbind_workspace_role_endpoint(
     workspace_id: uuid.UUID,
@@ -539,7 +560,11 @@ async def unbind_workspace_role_endpoint(
 ) -> dict[str, object]:
     """Unbind role from principal at workspace scope."""
     await require_permissions(
-        session, caller, workspace_id, {GranularPermission.WORKSPACE_MANAGE_MEMBERS.value}
+        session,
+        caller,
+        workspace_id,
+        {GranularPermission.WORKSPACE_MANAGE_MEMBERS.value},
+        error_code="INSUFFICIENT_CAPABILITY",
     )
     res = await principal_service.unbind_role(
         session,

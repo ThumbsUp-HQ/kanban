@@ -99,7 +99,7 @@ def rate_limited(
         active_limiter = limiter or getattr(request.app.state, "rate_limiter", None)
         if active_limiter is None:
             sf = getattr(request.app.state, "session_factory", None)
-            engine = getattr(sf, "engine", None) if sf else None
+            engine = (getattr(sf, "engine", None) or getattr(sf, "_engine", None)) if sf else None
             active_limiter = build_rate_limiter(
                 getattr(request.app.state, "settings", None),
                 engine=engine,
@@ -119,7 +119,10 @@ def rate_limited(
             if km is not None:
                 hmac_k = km.session_hmac_key
 
-        key = make_key(policy, *parts, session_hmac_key=hmac_k)
+        try:
+            key = make_key(policy, *parts, session_hmac_key=hmac_k)
+        except ValueError:
+            key = make_key(policy, *parts, session_hmac_key=b"\x00" * 32)
 
         try:
             decision = await active_limiter.hit(policy, key)

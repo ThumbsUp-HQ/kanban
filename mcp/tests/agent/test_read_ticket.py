@@ -726,6 +726,8 @@ async def test_read_ticket_additional_coverage_boosters() -> None:
             [],
             # activity
             [],
+            # workpad
+            None,
         ]
         res = await read_ticket({"identifier": "KAN-20", "workspace": "test-ws", "lod": "full"})
         assert res["key"] == "KAN-20"

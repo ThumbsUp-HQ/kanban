@@ -113,7 +113,11 @@ from kanban.security.access_manifest import (
 )
 from kanban.security.granular_permissions import (
     FIELD_PERMISSION_PROPERTY_MAP,
+    FIELD_PERMISSIONS,
+    ISSUE_PERMISSIONS,
     GranularPermission,
+    _filter_permissions_by_boundary,
+    _filter_permissions_by_token_scope,
     evaluate_granular_permissions,
     require_permissions,
 )
@@ -1549,6 +1553,42 @@ def _batch_resolve_archive_eligibility(
     return ArchiveEligibility(allowed=True, reason=None)
 
 
+async def _batch_resolve_scope_granular_permissions(  # noqa: PLR0913, PLR0917
+    session: AsyncSession,
+    caller: PrincipalContext,
+    workspace_id: uuid.UUID,
+    project_id: uuid.UUID,
+    ctx: _BatchIssueHydrationContext,
+    lod: Literal["summary", "standard", "full"],
+) -> tuple[list[str], list[str]]:
+    """Resolve (editable_fields, issue_permissions) for a project scope using pre-fetched roles."""
+    g_perms: set[str] | None = None
+    if lod != "summary" and caller.agent_principal_id is None:
+        ws_roles = ctx.workspace_roles_by_ws.get(workspace_id, {})
+        proj_roles = ctx.project_roles_by_project.get(project_id, {})
+        has_full_issue_admin = any(
+            ws_roles.get(pid) in ("SERVER_ADMIN", "WORKSPACE_ADMIN")
+            or proj_roles.get(pid) == "PROJECT_ADMIN"
+            for pid in ctx.human_all_pids
+        )
+        if has_full_issue_admin:
+            base_perms = set(ISSUE_PERMISSIONS | FIELD_PERMISSIONS)
+            if caller.token_scopes:
+                base_perms = _filter_permissions_by_token_scope(base_perms, caller.token_scopes)
+            if caller.credential_boundary is not None:
+                base_perms = _filter_permissions_by_boundary(base_perms, caller.credential_boundary)
+            g_perms = base_perms
+
+    if g_perms is None:
+        g_perms = await evaluate_granular_permissions(session, caller, workspace_id, project_id)
+
+    g_issue_perms = sorted([p for p in g_perms if p.startswith("issue:")])
+    g_editable_fields = sorted(
+        [FIELD_PERMISSION_PROPERTY_MAP[p] for p in g_perms if p in FIELD_PERMISSION_PROPERTY_MAP]
+    )
+    return g_editable_fields, g_issue_perms
+
+
 async def serialize_issues_batch(
     session: AsyncSession,
     caller: PrincipalContext,
@@ -1562,11 +1602,18 @@ async def serialize_issues_batch(
     ctx = await _hydrate_batch_issue_context(session, caller, issues, lod=lod)
     now_utc = datetime.now(UTC)
     results: list[IssueResponse] = []
+    granular_by_scope: dict[tuple[uuid.UUID, uuid.UUID], tuple[list[str], list[str]]] = {}
 
     for issue in issues:
         project = ctx.projects_by_id[issue.project_id]
         state = ctx.states_by_id[issue.state_id]
         priority = ctx.priorities_by_id[issue.priority_id]
+        scope_key = (issue.workspace_id, issue.project_id)
+        if scope_key not in granular_by_scope:
+            granular_by_scope[scope_key] = await _batch_resolve_scope_granular_permissions(
+                session, caller, issue.workspace_id, issue.project_id, ctx, lod
+            )
+        editable_fields_list, issue_perms_list = granular_by_scope[scope_key]
 
         parent_summary: NormalParentSummary | RestrictedParentSummary | None = None
         if issue.parent_issue_id is not None:
@@ -1653,6 +1700,8 @@ async def serialize_issues_batch(
             provenance=provenance,
             access_manifest=manifest,
             capabilities=caps_list,
+            editable_fields=editable_fields_list,
+            issue_permissions=issue_perms_list,
             created_at=issue_created_at,
             updated_at=issue_updated_at,
             archived_at=archived_at,
@@ -1909,6 +1958,7 @@ async def update_issue(  # noqa: C901, PLR0912, PLR0913, PLR0915, PLR0917
             granular_required,
             project_id=issue.project_id,
             object_readable=True,
+            object_id=issue.id,
         )
 
     current_sha256_hex = issue.description_sha256.hex() if issue.description_sha256 else ""

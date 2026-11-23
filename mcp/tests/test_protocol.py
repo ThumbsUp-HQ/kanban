@@ -49,6 +49,7 @@ async def test_case_1_positive_initialize_and_tools_list(
                 "complete_work",
                 "add_comment",
                 "link_objects",
+                "update_workpad",
             ],
             "search_tickets",
             {"gate_status": "approved"},

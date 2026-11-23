@@ -405,7 +405,7 @@ async def test_negative_self_correcting_error_parity(monkeypatch: pytest.MonkeyP
 
 
 def test_100_percent_tool_coverage_inventory() -> None:
-    """Verify 100% of the 24 tools across agent (9), docs (3), and admin (12) are wired to kanban-cli."""
+    """Verify 100% of the 25 tools across agent (10), docs (3), and admin (12) are wired to kanban-cli."""
     from mcp.cli.schema_cli import build_unified_cli_parser
 
     _parser, dispatch = build_unified_cli_parser()
@@ -414,13 +414,13 @@ def test_100_percent_tool_coverage_inventory() -> None:
     docs_reg = build_docs_registry()
     admin_reg = build_admin_registry()
 
-    assert len(agent_reg.list_specs()) == 9
+    assert len(agent_reg.list_specs()) == 10
     assert len(docs_reg.list_specs()) == 3
     assert len(admin_reg.list_specs()) == 12
     total_mcp_tools = (
         len(agent_reg.list_specs()) + len(docs_reg.list_specs()) + len(admin_reg.list_specs())
     )
-    assert total_mcp_tools == 24
+    assert total_mcp_tools == 25
 
     # Verify all agent tools are mapped
     for spec in agent_reg.list_specs():

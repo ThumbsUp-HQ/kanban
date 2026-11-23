@@ -57,6 +57,7 @@ async def _verify_move_permissions(  # noqa: PLR0913
             },
             project_id=project_id,
             object_readable=True,
+            object_id=issue_id,
         )
     else:
         await require_permissions(
@@ -66,6 +67,7 @@ async def _verify_move_permissions(  # noqa: PLR0913
             {GranularPermission.ISSUE_MOVE_RANK.value},
             project_id=project_id,
             object_readable=True,
+            object_id=issue_id,
         )
 
 

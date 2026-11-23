@@ -194,14 +194,6 @@ async def _verify_upload_permissions(
     target_issue_id: uuid.UUID | None,
 ) -> None:
     """Enforce upload permissions on project and optional issue."""
-    await require_permissions(
-        session,
-        caller,
-        caller.workspace_id,
-        {GranularPermission.FIELD_ATTACH_FILES.value},
-        project_id=project_id,
-        object_readable=True,
-    )
     caps = await evaluate_capabilities(session, caller, project_id)
     if not (caps & (Capability.COMMENT | Capability.EDIT)):
         raise ProblemException(
@@ -210,6 +202,15 @@ async def _verify_upload_permissions(
             title="Insufficient Capability",
             detail="Uploading attachments requires COMMENT or EDIT capability on target project",
         )
+    await require_permissions(
+        session,
+        caller,
+        caller.workspace_id,
+        {GranularPermission.FIELD_ATTACH_FILES.value},
+        project_id=project_id,
+        object_readable=True,
+        object_id=target_issue_id,
+    )
 
     if target_issue_id is not None:
         issue_stmt = select(Issue).where(
@@ -247,11 +248,9 @@ async def upload_attachment(
 ) -> AttachmentResponse:
     """Stream and validate attachment upload with decompression-bomb guards and metadata strip."""
     project = await get_project_or_404(session, caller, project_ref)
-    await _verify_upload_permissions(session, caller, project.id, None)
     body_bytes = await _read_stream_payload(request)
     raw_fn, decl_ct, target_issue_id, raw_bytes = _parse_upload_body(request, body_bytes)
-    if target_issue_id is not None:
-        await _verify_upload_permissions(session, caller, project.id, target_issue_id)
+    await _verify_upload_permissions(session, caller, project.id, target_issue_id)
 
     service = get_attachment_service(request)
     result = await service.upload_attachment(

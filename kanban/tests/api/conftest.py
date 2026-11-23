@@ -27,7 +27,6 @@ from kanban.auth.sessions.csrf import (
     PRE_SESSION_ID,
     generate_csrf_token,
 )
-from kanban.security.keys import KeyMaterial
 from kanban.security.ratelimit.decorator import build_rate_limiter
 from kanban.tests.contract import ContractRecorder
 from kanban.tests.security.helpers import (
@@ -101,11 +100,6 @@ async def api_env(
     )
     resolver = _MutableResolver()
     app = create_app()
-    app.state.key_material = KeyMaterial(
-        master_kek=b"m" * 32,
-        auth_pepper=b"p" * 32,
-        session_hmac_key=b"\x00" * 32,
-    )
     app.state.session_factory = RLSSessionFactory(app_engine)
     app.state.rate_limiter = build_rate_limiter(engine=app_engine)
     app.state.principal_resolver = resolver

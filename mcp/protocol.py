@@ -521,56 +521,64 @@ class McpProtocolHandler:
             if active_limiter is None:
                 sf = getattr(getattr(request, "app", None), "state", None)
                 sf_obj = getattr(sf, "session_factory", None) if sf else None
-                engine = getattr(sf_obj, "engine", None) if sf_obj else None
-                active_limiter = build_rate_limiter(
-                    getattr(getattr(request, "app", None), "state", None),
-                    engine=engine,
+                engine = (
+                    (getattr(sf_obj, "engine", None) or getattr(sf_obj, "_engine", None))
+                    if sf_obj
+                    else None
                 )
+                if engine is not None:
+                    active_limiter = build_rate_limiter(
+                        getattr(getattr(request, "app", None), "state", None),
+                        engine=engine,
+                    )
 
-            key_id = (
-                (current_token_sha256.hex() if current_token_sha256 else None)
-                or session_id
-                or (request.client.host if request.client else "unknown")
-            )
-            km = (
-                getattr(request.app.state, "key_material", None)
-                if hasattr(request, "app") and hasattr(request.app, "state")
-                else None
-            )
-            hmac_k = getattr(km, "session_hmac_key", None) if km else None
-            if hmac_k is None and not (
-                os.environ.get("KANBAN_SESSION_HMAC_KEY") or os.environ.get("KB_SESSION_HMAC_KEY")
-            ):
-                hmac_k = b"\x01" * 32
-            rl_key = make_key(MCP_TOOLS_CALL_RATE_LIMIT, key_id, session_hmac_key=hmac_k)
-            try:
-                rl_decision = await active_limiter.hit(MCP_TOOLS_CALL_RATE_LIMIT, rl_key)
-                if not rl_decision.allowed:
-                    return JSONResponse(
-                        {
-                            "type": "about:blank",
-                            "title": "Rate Limit Exceeded",
-                            "status": 429,
-                            "detail": (
-                                f"Rate limit exceeded for policy '{MCP_TOOLS_CALL_RATE_LIMIT.name}'"
-                            ),
-                            "code": "RATE_LIMITED",
-                        },
-                        status_code=429,
-                        headers={"Retry-After": str(rl_decision.retry_after_seconds)},
-                    )
-            except Exception:  # noqa: BLE001
-                if MCP_TOOLS_CALL_RATE_LIMIT.fail_mode == "closed":
-                    return JSONResponse(
-                        {
-                            "type": "about:blank",
-                            "title": "Rate Limiter Unavailable",
-                            "status": 503,
-                            "detail": "Rate limiting backend is temporarily unavailable",
-                            "code": "RATE_LIMIT_UNAVAILABLE",
-                        },
-                        status_code=503,
-                    )
+            if active_limiter is not None:
+                key_id = (
+                    (current_token_sha256.hex() if current_token_sha256 else None)
+                    or session_id
+                    or (request.client.host if request.client else "unknown")
+                )
+                km = (
+                    getattr(request.app.state, "key_material", None)
+                    if hasattr(request, "app") and hasattr(request.app, "state")
+                    else None
+                )
+                hmac_k = getattr(km, "session_hmac_key", None) if km else None
+                if hmac_k is None and not (
+                    os.environ.get("KANBAN_SESSION_HMAC_KEY")
+                    or os.environ.get("KB_SESSION_HMAC_KEY")
+                ):
+                    hmac_k = b"\x01" * 32
+                rl_key = make_key(MCP_TOOLS_CALL_RATE_LIMIT, key_id, session_hmac_key=hmac_k)
+                try:
+                    rl_decision = await active_limiter.hit(MCP_TOOLS_CALL_RATE_LIMIT, rl_key)
+                    if not rl_decision.allowed:
+                        return JSONResponse(
+                            {
+                                "type": "about:blank",
+                                "title": "Rate Limit Exceeded",
+                                "status": 429,
+                                "detail": (
+                                    "Rate limit exceeded for policy "
+                                    f"'{MCP_TOOLS_CALL_RATE_LIMIT.name}'"
+                                ),
+                                "code": "RATE_LIMITED",
+                            },
+                            status_code=429,
+                            headers={"Retry-After": str(rl_decision.retry_after_seconds)},
+                        )
+                except Exception:  # noqa: BLE001
+                    if MCP_TOOLS_CALL_RATE_LIMIT.fail_mode == "closed":
+                        return JSONResponse(
+                            {
+                                "type": "about:blank",
+                                "title": "Rate Limiter Unavailable",
+                                "status": 503,
+                                "detail": "Rate limiting backend is temporarily unavailable",
+                                "code": "RATE_LIMIT_UNAVAILABLE",
+                            },
+                            status_code=503,
+                        )
 
         return await self._dispatch_method(
             method,

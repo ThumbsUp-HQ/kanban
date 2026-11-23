@@ -517,7 +517,7 @@ async def test_condition_a_user_agent_unscoped_global_key() -> None:
     assert session_id is not None
     qa_contract_recorder.record("condition_a_initialize", init_resp.request, init_resp)
 
-    # 2. tools/list shows exactly 9 agent tools
+    # 2. tools/list shows exactly 10 agent tools
     sess_headers = {**headers, "mcp-session-id": session_id}
     list_resp = await client.post(
         "/mcp/agent",
@@ -537,8 +537,9 @@ async def test_condition_a_user_agent_unscoped_global_key() -> None:
         "complete_work",
         "add_comment",
         "link_objects",
+        "update_workpad",
     ]
-    assert len(tool_names) == 9
+    assert len(tool_names) == 10
     assert sorted(tool_names) == sorted(expected_tools)
     qa_contract_recorder.record("condition_a_tools_list", list_resp.request, list_resp)
 

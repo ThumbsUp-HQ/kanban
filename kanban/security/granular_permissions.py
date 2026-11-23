@@ -18,6 +18,7 @@ from database.models import (
     PrincipalRoleLabel,
     RbacRoleModel,
     RbacRolePermission,
+    ResourceAclEntry,
     RoleBinding,
 )
 from kanban.api.problems import ProblemException, not_found
@@ -219,11 +220,12 @@ async def _get_principal_closure_ids(
     return {principal_id, *ancestors}
 
 
-async def _evaluate_single_principal_permissions(  # noqa: C901, PLR0912
+async def _evaluate_single_principal_permissions(  # noqa: C901, PLR0912, PLR0915
     session: AsyncSession,
     principal_id: uuid.UUID,
     workspace_id: uuid.UUID,
     project_id: uuid.UUID | None = None,
+    object_id: uuid.UUID | None = None,
 ) -> set[str]:
     """Resolve additive union of granular permissions for a single principal."""
     if not await _is_principal_active(session, principal_id):
@@ -298,6 +300,47 @@ async def _evaluate_single_principal_permissions(  # noqa: C901, PLR0912
             granted |= DEFAULT_BUILTIN_ROLE_PERMISSIONS[role_obj.slug]
         if role_obj.system_role in DEFAULT_BUILTIN_ROLE_PERMISSIONS:
             granted |= DEFAULT_BUILTIN_ROLE_PERMISSIONS[role_obj.system_role]
+
+    # 4. Direct resource ACL entries on target project or object
+    acl_targets = [tid for tid in (project_id, object_id) if tid is not None]
+    if acl_targets:
+        acl_stmt = select(ResourceAclEntry.capability_mask, ResourceAclEntry.effect).where(
+            ResourceAclEntry.workspace_id == workspace_id,
+            ResourceAclEntry.principal_id.in_(pset),
+            ResourceAclEntry.object_id.in_(acl_targets),
+        )
+        allow_mask = 0
+        deny_mask = 0
+        for mask_val, effect_val in (await session.execute(acl_stmt)).all():
+            if effect_val == "ALLOW":
+                allow_mask |= int(mask_val)
+            elif effect_val == "DENY":
+                deny_mask |= int(mask_val)
+        eff_mask = allow_mask & (~deny_mask)
+        if eff_mask & Capability.VIEW:
+            granted.add(GranularPermission.ISSUE_VIEW.value)
+        if eff_mask & Capability.COMMENT:
+            granted.add(GranularPermission.ISSUE_COMMENT.value)
+        if eff_mask & Capability.EDIT:
+            granted |= FIELD_PERMISSIONS | {
+                GranularPermission.ISSUE_CREATE.value,
+                GranularPermission.ISSUE_MOVE_RANK.value,
+                GranularPermission.ISSUE_COPY.value,
+            }
+        if eff_mask & Capability.TRANSITION:
+            granted |= {
+                GranularPermission.ISSUE_TRANSITION.value,
+                GranularPermission.FIELD_MODIFY_STATE.value,
+            }
+        if eff_mask & Capability.LINK:
+            granted.add(GranularPermission.ISSUE_LINK.value)
+        if eff_mask & Capability.SHARE:
+            granted.add(GranularPermission.ISSUE_MANAGE_ACL.value)
+        if eff_mask & Capability.DELETE:
+            granted |= {
+                GranularPermission.ISSUE_DELETE.value,
+                GranularPermission.ISSUE_ARCHIVE.value,
+            }
 
     return granted
 
@@ -387,6 +430,7 @@ async def evaluate_granular_permissions(
     caller: PrincipalContext,
     workspace_id: uuid.UUID,
     project_id: uuid.UUID | None = None,
+    object_id: uuid.UUID | None = None,
 ) -> set[str]:
     """Evaluate full additive union of granular permissions for caller context."""
     # SERVER_ADMIN has universal access
@@ -404,13 +448,13 @@ async def evaluate_granular_permissions(
 
     # 1. Base human permissions
     perms = await _evaluate_single_principal_permissions(
-        session, caller.principal_id, workspace_id, project_id
+        session, caller.principal_id, workspace_id, project_id, object_id
     )
 
     # 2. OBO Delegated Agent intersection
     if caller.agent_principal_id is not None:
         agent_perms = await _evaluate_single_principal_permissions(
-            session, caller.agent_principal_id, workspace_id, project_id
+            session, caller.agent_principal_id, workspace_id, project_id, object_id
         )
         perms = perms & agent_perms
 
@@ -432,6 +476,8 @@ async def require_permissions(  # noqa: PLR0913, PLR0917
     required: set[str] | str,
     project_id: uuid.UUID | None = None,
     object_readable: bool = True,  # noqa: FBT001, FBT002
+    object_id: uuid.UUID | None = None,
+    error_code: str = "INSUFFICIENT_PERMISSION",
 ) -> set[str]:
     """Enforce required granular permissions with S3.4 anti-enumeration 404 discipline."""
     req_set = {required} if isinstance(required, str) else set(required)
@@ -439,7 +485,9 @@ async def require_permissions(  # noqa: PLR0913, PLR0917
     if not object_readable:
         not_found()
 
-    perms = await evaluate_granular_permissions(session, caller, workspace_id, project_id)
+    perms = await evaluate_granular_permissions(
+        session, caller, workspace_id, project_id, object_id
+    )
     missing = req_set - perms
 
     if missing:
@@ -448,9 +496,11 @@ async def require_permissions(  # noqa: PLR0913, PLR0917
 
         missing_list = sorted(missing)
         raise ProblemException(
-            code="INSUFFICIENT_PERMISSION",
+            code=error_code,
             status=403,
-            title="Insufficient Permission",
+            title="Insufficient Permission"
+            if error_code == "INSUFFICIENT_PERMISSION"
+            else "Insufficient Capability",
             detail=f"Missing required permission(s): {', '.join(missing_list)}",
             extra={"missing_permissions": missing_list},
         )

@@ -184,7 +184,7 @@ async def _load_links(issue_key: str, ctx: McpRequestContext) -> dict[str, Any] 
         )
         if not isinstance(links_res, dict):
             return None
-    except KbMcpError:
+    except (KbMcpError, StopAsyncIteration):
         return None
 
     raw_outbound = links_res.get("outbound")
@@ -337,7 +337,7 @@ async def _load_workpad(issue_key: str, ctx: McpRequestContext) -> dict[str, Any
             subject_token=ctx.subject_token,
             mcp_session_id=ctx.session_id,
         )
-    except KbMcpError:
+    except (KbMcpError, StopAsyncIteration):
         return None
     if not isinstance(res, dict):
         return None
