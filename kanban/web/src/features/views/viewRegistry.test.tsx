@@ -3141,6 +3141,7 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', () 
 
       // Open and close CSV Export modal
       fireEvent.click(screen.getByTestId('navigator-export-btn'));
+      fireEvent.click(screen.getByTestId('navigator-export-opt-csv'));
       expect(screen.getByTestId('csv-import-export-modal')).toBeDefined();
       fireEvent.click(screen.getByTestId('csv-modal-close-btn'));
       expect(screen.queryByTestId('csv-import-export-modal')).toBeNull();

@@ -296,6 +296,7 @@ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
     );
 
     fireEvent.click(screen.getByTestId('navigator-export-btn'));
+    fireEvent.click(screen.getByTestId('navigator-export-opt-csv'));
     expect(onExport).toHaveBeenCalledTimes(1);
 
     fireEvent.click(screen.getByTestId('navigator-import-btn'));
