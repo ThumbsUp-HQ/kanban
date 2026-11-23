@@ -185,21 +185,21 @@
 }
 
 .kb-badge-p50 {
-  background: rgba(96, 165, 250, 0.15);
-  color: #1d4ed8;
-  border: 1px solid rgba(96, 165, 250, 0.3);
+  background: var(--bg-accent-subtle, rgba(96, 165, 250, 0.15));
+  color: var(--chart-line-1, #1d4ed8);
+  border: 1px solid var(--border-accent-subtle, rgba(96, 165, 250, 0.3));
 }
 
 .kb-badge-p85 {
-  background: rgba(245, 158, 11, 0.15);
-  color: #b45309;
-  border: 1px solid rgba(245, 158, 11, 0.3);
+  background: var(--warn-bg, rgba(245, 158, 11, 0.15));
+  color: var(--warn-fg, #b45309);
+  border: 1px solid var(--border-warning, rgba(245, 158, 11, 0.3));
 }
 
 .kb-badge-p95 {
-  background: rgba(16, 185, 129, 0.15);
-  color: #047857;
-  border: 1px solid rgba(16, 185, 129, 0.3);
+  background: var(--bg-success-subtle, rgba(16, 185, 129, 0.15));
+  color: var(--ok-fg, #047857);
+  border: 1px solid var(--border-success, rgba(16, 185, 129, 0.3));
 }
 
 /* Monte Carlo Sections */

@@ -161,10 +161,10 @@ export function CfdAreaChart({
           />
 
           {/* Stacked Areas */}
-          <path d={pathBacklog} fill="rgba(148, 163, 184, 0.5)" data-testid="cfd-area-backlog" />
-          <path d={pathUnstarted} fill="rgba(96, 165, 250, 0.6)" data-testid="cfd-area-unstarted" />
-          <path d={pathStarted} fill="rgba(245, 158, 11, 0.7)" data-testid="cfd-area-started" />
-          <path d={pathCompleted} fill="rgba(16, 185, 129, 0.8)" data-testid="cfd-area-completed" />
+          <path d={pathBacklog} fill="var(--state-backlog-fg, #94a3b8)" fillOpacity="0.5" data-testid="cfd-area-backlog" />
+          <path d={pathUnstarted} fill="var(--state-unstarted-fg, #60a5fa)" fillOpacity="0.6" data-testid="cfd-area-unstarted" />
+          <path d={pathStarted} fill="var(--state-started-fg, #f59e0b)" fillOpacity="0.7" data-testid="cfd-area-started" />
+          <path d={pathCompleted} fill="var(--state-completed-fg, #10b981)" fillOpacity="0.8" data-testid="cfd-area-completed" />
 
           {/* Axis labels */}
           <text

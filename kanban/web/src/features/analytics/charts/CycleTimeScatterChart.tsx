@@ -142,7 +142,7 @@ export function CycleTimeScatterChart({
             y1={yP50}
             x2={width - padRight}
             y2={yP50}
-            stroke="rgba(96, 165, 250, 0.9)"
+            stroke="var(--chart-line-1, rgba(96, 165, 250, 0.9))"
             strokeDasharray="4 4"
             data-testid="p50-line"
           />
@@ -151,7 +151,7 @@ export function CycleTimeScatterChart({
             y={yP50 - 4}
             textAnchor="end"
             fontSize="10"
-            fill="rgba(96, 165, 250, 1)"
+            fill="var(--chart-line-1, #2563eb)"
           >
             p50 ({currentPercentiles.p50}d)
           </text>
@@ -161,7 +161,7 @@ export function CycleTimeScatterChart({
             y1={yP85}
             x2={width - padRight}
             y2={yP85}
-            stroke="rgba(245, 158, 11, 0.9)"
+            stroke="var(--warn-fg, rgba(245, 158, 11, 0.9))"
             strokeDasharray="6 4"
             data-testid="p85-line"
           />
@@ -170,7 +170,7 @@ export function CycleTimeScatterChart({
             y={yP85 - 4}
             textAnchor="end"
             fontSize="10"
-            fill="rgba(245, 158, 11, 1)"
+            fill="var(--warn-fg, #b45309)"
           >
             p85 ({currentPercentiles.p85}d)
           </text>
@@ -180,7 +180,7 @@ export function CycleTimeScatterChart({
             y1={yP95}
             x2={width - padRight}
             y2={yP95}
-            stroke="rgba(16, 185, 129, 0.9)"
+            stroke="var(--ok-fg, rgba(16, 185, 129, 0.9))"
             strokeDasharray="2 2"
             data-testid="p95-line"
           />
@@ -189,7 +189,7 @@ export function CycleTimeScatterChart({
             y={yP95 - 4}
             textAnchor="end"
             fontSize="10"
-            fill="rgba(16, 185, 129, 1)"
+            fill="var(--ok-fg, #059669)"
           >
             p95 ({currentPercentiles.p95}d)
           </text>
@@ -199,19 +199,21 @@ export function CycleTimeScatterChart({
             const val = metricMode === 'cycle' ? pt.cycle_time_days : pt.lead_time_days;
             const cx = xCoord(idx);
             const cy = yCoord(val);
+            const isExceeded = val > currentPercentiles.p85;
             return (
               <circle
                 key={pt.issue_id}
                 cx={cx}
                 cy={cy}
-                r={5}
+                r={isExceeded ? 6 : 4.5}
                 fill={
-                  val > currentPercentiles.p85
-                    ? 'rgba(239, 68, 68, 0.9)'
-                    : 'rgba(37, 99, 235, 0.8)'
+                  isExceeded
+                    ? 'var(--danger-fg, #dc2626)'
+                    : 'var(--chart-line-1, #2563eb)'
                 }
                 stroke="var(--bg-surface, #ffffff)"
-                strokeWidth={1.5}
+                strokeWidth={isExceeded ? 2 : 1.5}
+                strokeDasharray={isExceeded ? '2 1' : undefined}
                 data-testid={`scatter-dot-${pt.issue_key}`}
               >
                 <title>{`${pt.issue_key} - ${pt.title}: ${String(val)} days`}</title>
