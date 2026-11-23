@@ -63,11 +63,6 @@ _HTTP_401: Final[int] = 401
 _HTTP_403: Final[int] = 403
 _HTTP_404: Final[int] = 404
 
-_DEFAULT_KEK_FALLBACK = StaticKekProvider(
-    keys={"kek-v1": b"k" * 32},
-    current="kek-v1",
-)
-
 
 class AirGapViolation(Exception):  # noqa: N818
     """Raised when external cloud provider egress is attempted under active air-gap mode."""
@@ -243,7 +238,18 @@ class AIProviderConfigService:
     ) -> None:
         """Initialize service with active database session and KEK provider."""
         self._session = session
-        self._kek = kek_provider if kek_provider is not None else _DEFAULT_KEK_FALLBACK
+        if kek_provider is None:
+            try:
+                from kanban.security.keys import load_key_material  # noqa: PLC0415
+
+                km = load_key_material()
+                kek_provider = StaticKekProvider(
+                    {km.master_kek_kid: km.master_kek},
+                    current=km.master_kek_kid,
+                )
+            except (KeyError, ValueError, RuntimeError, TypeError, OSError):
+                kek_provider = None
+        self._kek = kek_provider
         self._resolver = resolver
 
     @staticmethod
@@ -252,9 +258,12 @@ class AIProviderConfigService:
         workspace_id: uuid.UUID,
         provider_kind: str,
         api_key: bytearray | bytes | str,
-        kek_provider: KekProvider,
+        kek_provider: KekProvider | None,
     ) -> tuple[bytes, bytes, bytes, str]:
         """Wrap plaintext API key using AES-256-GCM envelope encryption and zero source bytes."""
+        if kek_provider is None:
+            msg = "No KEK provider configured for AI provider secret sealing"
+            raise RuntimeError(msg)
         if isinstance(api_key, str):
             raw_key = bytearray(api_key.encode("utf-8"))
         elif isinstance(api_key, bytes):
@@ -290,9 +299,12 @@ class AIProviderConfigService:
         api_key_nonce: bytes,
         wrapped_dek: bytes,
         dek_kid: str,
-        kek_provider: KekProvider,
+        kek_provider: KekProvider | None,
     ) -> bytearray:
         """Unwrap and authenticate encrypted API key returning a mutable bytearray."""
+        if kek_provider is None:
+            msg = "No KEK provider configured for AI provider secret unwrapping"
+            raise RuntimeError(msg)
         aad = build_ai_provider_aad(config_id, workspace_id, provider_kind)
         encrypted_blob = bytes([BLOB_VERSION]) + api_key_nonce + wrapped_api_key
         sealed = SealedSecret(

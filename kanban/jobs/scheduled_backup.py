@@ -226,13 +226,19 @@ def run_scheduled_backup_pass(
     effective_key_source = key_source
     if effective_key_source is None:
         master_kek_b64 = os.environ.get("KB_MASTER_KEK_B64")
-        if master_kek_b64:
-            padded = master_kek_b64 + "=" * (-len(master_kek_b64) % 4)
-            kek_bytes = base64.urlsafe_b64decode(padded)
-            effective_key_source = RawKeySource(kek_bytes)
-        else:
-            # Fallback to ephemeral deterministic key source for tests or standalone default
-            effective_key_source = RawKeySource(b"\x00" * 32)
+        if not master_kek_b64:
+            logger.error(
+                "Cannot run scheduled backup: KB_MASTER_KEK_B64 is missing; "
+                "refusing insecure all-zero key fallback"
+            )
+            err_msg = (
+                "Missing KB_MASTER_KEK_B64 environment variable: "
+                "refusing all-zero key backup encryption"
+            )
+            raise ValueError(err_msg)
+        padded = master_kek_b64 + "=" * (-len(master_kek_b64) % 4)
+        kek_bytes = base64.urlsafe_b64decode(padded)
+        effective_key_source = RawKeySource(kek_bytes)
 
     try:
         summary = create_backup(

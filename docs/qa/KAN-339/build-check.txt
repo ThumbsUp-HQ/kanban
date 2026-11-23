@@ -1,0 +1,12 @@
+uv run ruff check .
+All checks passed!
+uv run ruff format --check .
+2395 files already formatted
+uv run mypy
+Success: no issues found in 1321 source files
+uv run lint-imports
+Contracts: 2 kept, 0 broken.
+uv run python -m scripts.check_no_dashes --all
+OK: 0 em-dashes and 0 en-dashes found.
+uv run python -m database.migrations.cli check-migrations --static-only
+OK: All 76 migrations valid. Single head: p6_12_granular_rbac_roles

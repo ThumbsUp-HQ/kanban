@@ -1,0 +1,68 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan337-341-814e49d3/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan337-341-814e49d3
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 4 items
+
+kanban/tests/security/test_ai_provider_kek_enforcement.py::test_case_1_static_fallback_kek_eliminated PASSED [ 25%]
+kanban/tests/security/test_ai_provider_kek_enforcement.py::test_case_2_seal_and_unwrap_fail_closed_without_kek FAILED [ 50%]
+kanban/tests/security/test_ai_provider_kek_enforcement.py::test_case_3_injected_kek_provider_seals_and_unwraps_cleanly PASSED [ 75%]
+kanban/tests/security/test_ai_provider_kek_enforcement.py::test_case_4_get_kek_provider_resolution_and_fail_closed PASSED [100%]
+
+=================================== FAILURES ===================================
+_____________ test_case_2_seal_and_unwrap_fail_closed_without_kek ______________
+
+db_session = <sqlalchemy.ext.asyncio.session.AsyncSession object at 0x7de2383a8500>
+monkeypatch = <_pytest.monkeypatch.MonkeyPatch object at 0x7de238295b20>
+
+    @pytest.mark.asyncio
+    async def test_case_2_seal_and_unwrap_fail_closed_without_kek(
+        db_session: AsyncSession,
+        monkeypatch: pytest.MonkeyPatch,
+    ) -> None:
+        """Case 2: Sealing and unwrapping secrets without KEK provider fails closed with RuntimeError."""
+        monkeypatch.delenv("KANBAN_KEYRING_FILE", raising=False)
+        monkeypatch.delenv("KANBAN_MASTER_KEK", raising=False)
+        monkeypatch.delenv("KB_MASTER_KEK_B64", raising=False)
+    
+        ws_id, _ = await bootstrap_workspace_admin(db_session)
+>       service = AIProviderConfigService(db_session, kek_provider=None)
+                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+kanban/tests/security/test_ai_provider_kek_enforcement.py:60: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+kanban/ai_config/service.py:245: in __init__
+    km = load_key_material()
+         ^^^^^^^^^^^^^^^^^^^
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+keyring_file = None
+
+    def load_key_material(keyring_file: str | Path | None = None) -> KeyMaterial:
+        """Load platform key material from KANBAN_KEYRING_FILE or fallback environment variables.
+    
+        Fails closed if keys are missing, corrupt, too short, or if keyring file permissions
+        exceed mode 0600 or if the file is a symlink.
+        """
+        file_target = keyring_file or os.environ.get("KANBAN_KEYRING_FILE")
+        if file_target is not None:
+            return _load_from_keyring_file(Path(file_target))
+    
+        from_env = _load_from_env()
+        if from_env is not None:
+            return from_env
+    
+        msg = (
+            "No valid key material source found. Provide either KANBAN_KEYRING_FILE "
+            "(JSON with MASTER_KEK, KB_AUTH_PEPPER, SESSION_HMAC_KEY) or environment variables "
+            "KANBAN_MASTER_KEK, KANBAN_AUTH_PEPPER, KANBAN_SESSION_HMAC_KEY."
+        )
+>       raise KeyMaterialError(msg)
+E       kanban.security.keys.KeyMaterialError: No valid key material source found. Provide either KANBAN_KEYRING_FILE (JSON with MASTER_KEK, KB_AUTH_PEPPER, SESSION_HMAC_KEY) or environment variables KANBAN_MASTER_KEK, KANBAN_AUTH_PEPPER, KANBAN_SESSION_HMAC_KEY.
+
+kanban/security/keys.py:174: KeyMaterialError
+=========================== short test summary info ============================
+FAILED kanban/tests/security/test_ai_provider_kek_enforcement.py::test_case_2_seal_and_unwrap_fail_closed_without_kek
+========================= 1 failed, 3 passed in 0.25s ==========================

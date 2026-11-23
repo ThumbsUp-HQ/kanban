@@ -1,0 +1,462 @@
+diff --git a/kanban/api/v1/docs.py b/kanban/api/v1/docs.py
+index 2d114383..fe5d49c3 100644
+--- a/kanban/api/v1/docs.py
++++ b/kanban/api/v1/docs.py
+@@ -23,6 +23,12 @@ from kanban.api.v1.schemas.docs import (
+     PageUpdate,
+     PageVersionResponse,
+ )
++from kanban.security.read_taint import (
++    TaintGuard,
++    TaintRecorder,
++    get_taint_guard,
++    get_taint_recorder,
++)
+ from kanban.services import docs as svc
+ from kanban.services.projects import get_project_or_404
+ 
+@@ -41,10 +47,17 @@ Session = Annotated[AsyncSession, Depends(get_rls_session)]
+ async def list_docs(
+     caller: Caller,
+     session: Session,
++    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
+     project: Annotated[uuid.UUID | None, Query()] = None,
+ ) -> list[DocSummaryResponse]:
+     """List documents visible to the caller filtered by workspace and optional project."""
+-    return await svc.list_docs(session, caller, project_id=project)
++    res = await svc.list_docs(session, caller, project_id=project)
++    pids = {d.project_id for d in res if d.project_id is not None}
++    if project is not None:
++        pids.add(project)
++    if pids:
++        await taint_recorder.record_project_ids(pids)
++    return res
+ 
+ 
+ @router.post("/docs", status_code=201, response_model=DocResponse, summary="Create a document")
+@@ -53,8 +66,11 @@ async def create_doc(
+     caller: Caller,
+     session: Session,
+     response: Response,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+ ) -> DocResponse:
+     """Create a new top-level documentation entity."""
++    if body.project_id is not None:
++        await taint_guard.check_write(body.project_id, tool_name="create_doc")
+     result, etag = await svc.create_doc(session, caller, body)
+     response.headers["ETag"] = etag
+     response.headers["Location"] = f"/api/v1/docs/{result.canonical_key}"
+@@ -66,8 +82,12 @@ async def get_doc_tree(
+     doc_ref: str,
+     caller: Caller,
+     session: Session,
++    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
+ ) -> list[PageTreeNode]:
+     """Retrieve full hierarchical page tree with restricted ancestor masking."""
++    doc, _ = await svc.get_doc(session, caller, doc_ref)
++    if doc.project_id is not None:
++        await taint_recorder.record_project_ids([doc.project_id])
+     return await svc.get_doc_tree(session, caller, doc_ref)
+ 
+ 
+@@ -80,9 +100,11 @@ async def get_project_docs_tree(
+     project_ref: str,
+     caller: Caller,
+     session: Session,
++    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
+ ) -> list[PageTreeNode]:
+     """Retrieve full hierarchical page tree for a project."""
+     project = await get_project_or_404(session, caller, project_ref)
++    await taint_recorder.record_project_ids([project.id])
+     docs = await svc.list_docs(session, caller, project_id=project.id)
+     tree: list[PageTreeNode] = []
+     for d in docs:
+@@ -97,14 +119,16 @@ async def get_project_docs_tree(
+     response_model=PageResponse,
+     summary="Create page in a project",
+ )
+-async def create_project_page(
++async def create_project_page(  # noqa: PLR0913, PLR0917
+     project_ref: str,
+     body: PageCreate,
+     caller: Caller,
+     session: Session,
+     response: Response,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+ ) -> PageResponse:
+     """Create a hierarchical page within a project, auto-creating a parent doc if needed."""
++    await taint_guard.check_write(project_ref, tool_name="create_page")
+     result, etag = await svc.create_page(session, caller, project_ref, body)
+     response.headers["ETag"] = etag
+     response.headers["Location"] = f"/api/v1/pages/{result.canonical_key}"
+@@ -117,14 +141,18 @@ async def create_project_page(
+     response_model=PageResponse,
+     summary="Create a page",
+ )
+-async def create_page(
++async def create_page(  # noqa: PLR0913, PLR0917
+     doc_ref: str,
+     body: PageCreate,
+     caller: Caller,
+     session: Session,
+     response: Response,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+ ) -> PageResponse:
+     """Create a hierarchical page within a document."""
++    doc, _ = await svc.get_doc(session, caller, doc_ref)
++    if doc.project_id is not None:
++        await taint_guard.check_write(doc.project_id, tool_name="create_page")
+     result, etag = await svc.create_page(session, caller, doc_ref, body)
+     response.headers["ETag"] = etag
+     response.headers["Location"] = f"/api/v1/pages/{result.canonical_key}"
+@@ -132,16 +160,19 @@ async def create_page(
+ 
+ 
+ @router.get("/docs/{doc_ref:path}", response_model=DocResponse, summary="Get a document")
+-async def get_doc(
++async def get_doc(  # noqa: PLR0913, PLR0917
+     doc_ref: str,
+     caller: Caller,
+     session: Session,
+     response: Response,
++    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
+     if_none_match: Annotated[str | None, Header()] = None,
+ ) -> Response | DocResponse:
+     """Return a document with ETag caching, or timing-equalized 404 when absent or unreadable."""
+     async with timing_floor(floor_ms=25.0):
+         result, etag = await svc.get_doc(session, caller, doc_ref)
++        if result.project_id is not None:
++            await taint_recorder.record_project_ids([result.project_id])
+         if if_none_match and (if_none_match.strip() in (etag, etag.strip('"'), "*")):
+             return Response(status_code=304, headers={"ETag": etag})
+         response.headers["ETag"] = etag
+@@ -156,9 +187,13 @@ async def update_doc(  # noqa: PLR0913
+     caller: Caller,
+     session: Session,
+     response: Response,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+     if_match: Annotated[str | None, Header()] = None,
+ ) -> DocResponse:
+     """Update document metadata or body under optimistic concurrency."""
++    doc, _ = await svc.get_doc(session, caller, doc_ref)
++    if doc.project_id is not None:
++        await taint_guard.check_write(doc.project_id, tool_name="update_doc")
+     result, etag = await svc.update_doc(session, caller, doc_ref, body, if_match)
+     response.headers["ETag"] = etag
+     return result
+@@ -169,8 +204,12 @@ async def delete_doc(
+     doc_ref: str,
+     caller: Caller,
+     session: Session,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+ ) -> dict[str, str]:
+     """Soft-trash document and all hierarchical pages."""
++    doc, _ = await svc.get_doc(session, caller, doc_ref)
++    if doc.project_id is not None:
++        await taint_guard.check_write(doc.project_id, tool_name="delete_doc")
+     await svc.delete_doc(session, caller, doc_ref)
+     return {"status": "deleted"}
+ 
+@@ -192,9 +231,14 @@ async def restore_page_version(  # noqa: PLR0913
+     caller: Caller,
+     session: Session,
+     response: Response,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+     if_match: Annotated[str | None, Header()] = None,
+ ) -> PageResponse:
+     """Restore historical version content into the current page under If-Match concurrency."""
++    page, _ = await svc.get_page(session, caller, page_ref)
++    doc, _ = await svc.get_doc(session, caller, str(page.doc_id))
++    if doc.project_id is not None:
++        await taint_guard.check_write(doc.project_id, tool_name="restore_page_version")
+     result, etag = await svc.restore_page_version(session, caller, page_ref, version_seq, if_match)
+     response.headers["ETag"] = etag
+     return result
+@@ -210,9 +254,14 @@ async def get_page_version(
+     version_seq: int,
+     caller: Caller,
+     session: Session,
++    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
+ ) -> PageVersionResponse:
+     """Retrieve a single historical version snapshot of a page."""
+     async with timing_floor(floor_ms=25.0):
++        page, _ = await svc.get_page(session, caller, page_ref)
++        doc, _ = await svc.get_doc(session, caller, str(page.doc_id))
++        if doc.project_id is not None:
++            await taint_recorder.record_project_ids([doc.project_id])
+         return await svc.get_page_version(session, caller, page_ref, version_seq)
+ 
+ 
+@@ -221,15 +270,20 @@ async def get_page_version(
+     response_model=list[PageVersionResponse],
+     summary="List page versions",
+ )
+-async def list_page_versions(
++async def list_page_versions(  # noqa: PLR0913, PLR0917
+     page_ref: str,
+     caller: Caller,
+     session: Session,
++    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
+     cursor: Annotated[int | None, Query()] = None,
+     limit: Annotated[int, Query(ge=1, le=100)] = 50,
+ ) -> list[PageVersionResponse]:
+     """List historical version snapshots of a page with pagination."""
+     async with timing_floor(floor_ms=25.0):
++        page, _ = await svc.get_page(session, caller, page_ref)
++        doc, _ = await svc.get_doc(session, caller, str(page.doc_id))
++        if doc.project_id is not None:
++            await taint_recorder.record_project_ids([doc.project_id])
+         return await svc.list_page_versions(session, caller, page_ref, cursor=cursor, limit=limit)
+ 
+ 
+@@ -239,22 +293,31 @@ async def move_page(
+     body: PageMove,
+     caller: Caller,
+     session: Session,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+ ) -> PageResponse:
+     """Move a page to a new parent or re-order among siblings."""
++    page, _ = await svc.get_page(session, caller, page_ref)
++    doc, _ = await svc.get_doc(session, caller, str(page.doc_id))
++    if doc.project_id is not None:
++        await taint_guard.check_write(doc.project_id, tool_name="move_page")
+     return await svc.move_page(session, caller, page_ref, body)
+ 
+ 
+ @router.get("/pages/{page_ref:path}", response_model=PageResponse, summary="Get a page")
+-async def get_page(
++async def get_page(  # noqa: PLR0913, PLR0917
+     page_ref: str,
+     caller: Caller,
+     session: Session,
+     response: Response,
++    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
+     if_none_match: Annotated[str | None, Header()] = None,
+ ) -> Response | PageResponse:
+     """Return a page with ETag caching, or timing-equalized 404 when absent or unreadable."""
+     async with timing_floor(floor_ms=25.0):
+         result, etag = await svc.get_page(session, caller, page_ref)
++        doc, _ = await svc.get_doc(session, caller, str(result.doc_id))
++        if doc.project_id is not None:
++            await taint_recorder.record_project_ids([doc.project_id])
+         if if_none_match and (if_none_match.strip() in (etag, etag.strip('"'), "*")):
+             return Response(status_code=304, headers={"ETag": etag})
+         response.headers["ETag"] = etag
+@@ -269,9 +332,14 @@ async def update_page(  # noqa: PLR0913
+     caller: Caller,
+     session: Session,
+     response: Response,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+     if_match: Annotated[str | None, Header()] = None,
+ ) -> PageResponse:
+     """Update page title or body under optimistic concurrency."""
++    page, _ = await svc.get_page(session, caller, page_ref)
++    doc, _ = await svc.get_doc(session, caller, str(page.doc_id))
++    if doc.project_id is not None:
++        await taint_guard.check_write(doc.project_id, tool_name="update_page")
+     result, etag = await svc.update_page(session, caller, page_ref, body, if_match)
+     response.headers["ETag"] = etag
+     return result
+@@ -282,7 +350,12 @@ async def delete_page(
+     page_ref: str,
+     caller: Caller,
+     session: Session,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+ ) -> dict[str, str]:
+     """Soft-trash page and all its hierarchical descendants."""
++    page, _ = await svc.get_page(session, caller, page_ref)
++    doc, _ = await svc.get_doc(session, caller, str(page.doc_id))
++    if doc.project_id is not None:
++        await taint_guard.check_write(doc.project_id, tool_name="delete_page")
+     await svc.delete_page(session, caller, page_ref)
+     return {"status": "deleted"}
+diff --git a/kanban/api/v1/stickies.py b/kanban/api/v1/stickies.py
+index d0f087f7..54e6e046 100644
+--- a/kanban/api/v1/stickies.py
++++ b/kanban/api/v1/stickies.py
+@@ -19,6 +19,12 @@ from kanban.api.v1.schemas.stickies import (
+     StickyResponse,
+     StickyUpdate,
+ )
++from kanban.security.read_taint import (
++    TaintGuard,
++    TaintRecorder,
++    get_taint_guard,
++    get_taint_recorder,
++)
+ from kanban.services import stickies as svc
+ 
+ router = APIRouter(tags=["stickies"])
+@@ -36,6 +42,7 @@ async def list_project_stickies(
+     project_ref: str,
+     caller: Caller,
+     session: Session,
++    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
+     *,
+     include_promoted: Annotated[bool, Query()] = True,
+ ) -> list[StickyResponse]:
+@@ -43,9 +50,11 @@ async def list_project_stickies(
+ 
+     Orders rank using COLLATE 'C', with optional inclusion of promoted stubs.
+     """
+-    return await svc.list_project_stickies(
++    res = await svc.list_project_stickies(
+         session, caller, project_ref, include_promoted=include_promoted
+     )
++    await taint_recorder.record_project_ids([project_ref])
++    return res
+ 
+ 
+ @router.post(
+@@ -54,19 +63,21 @@ async def list_project_stickies(
+     response_model=StickyResponse,
+     summary="Create a sticky note",
+ )
+-async def create_sticky(
++async def create_sticky(  # noqa: PLR0913
+     project_ref: str,
+     body: StickyCreate,
+     *,
+     caller: Caller,
+     session: Session,
+     response: Response,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+ ) -> StickyResponse:
+     """Create a new sticky note in the specified project.
+ 
+     Supports auto-detected Markdown, color token, and sets ETag response header.
+     """
+     async with timing_floor(floor_ms=25.0):
++        await taint_guard.check_write(project_ref, tool_name="create_sticky")
+         result, etag = await svc.create_sticky(session, caller, project_ref, body)
+         response.headers["ETag"] = etag
+         response.headers["Location"] = f"/api/v1/stickies/{result.id}"
+@@ -81,6 +92,7 @@ async def create_sticky(
+ async def list_workspace_stickies(
+     caller: Caller,
+     session: Session,
++    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
+     *,
+     cursor: Annotated[str | None, Query()] = None,
+     limit: Annotated[int, Query(ge=1, le=100)] = 50,
+@@ -89,7 +101,11 @@ async def list_workspace_stickies(
+ 
+     Returns stickies visible to the caller under row-level security.
+     """
+-    return await svc.list_workspace_stickies(session, caller, cursor=cursor, limit=limit)
++    res = await svc.list_workspace_stickies(session, caller, cursor=cursor, limit=limit)
++    pids = {s.project_id for s in res.items if s.project_id is not None}
++    if pids:
++        await taint_recorder.record_project_ids(pids)
++    return res
+ 
+ 
+ @router.get(
+@@ -98,11 +114,12 @@ async def list_workspace_stickies(
+     summary="Get a sticky note",
+     responses={304: {"description": "Not Modified"}},
+ )
+-async def get_sticky(
++async def get_sticky(  # noqa: PLR0913
+     sticky_id: uuid.UUID,
+     caller: Caller,
+     session: Session,
+     response: Response,
++    taint_recorder: Annotated[TaintRecorder, Depends(get_taint_recorder)],
+     *,
+     if_none_match: Annotated[str | None, Header()] = None,
+ ) -> Response | StickyResponse:
+@@ -111,6 +128,8 @@ async def get_sticky(
+     Returns 304 Not Modified when matching If-None-Match header.
+     """
+     result, etag = await svc.get_sticky(session, caller, sticky_id)
++    if result.project_id is not None:
++        await taint_recorder.record_project_ids([result.project_id])
+     if if_none_match and (if_none_match.strip() in (etag, etag.strip('"'), "*")):
+         return Response(status_code=304, headers={"ETag": etag})
+     response.headers["ETag"] = etag
+@@ -129,6 +148,7 @@ async def update_sticky(  # noqa: PLR0913
+     caller: Caller,
+     session: Session,
+     response: Response,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+     if_match: Annotated[str | None, Header()] = None,
+ ) -> StickyResponse:
+     """Update a sticky note with ETag optimistic concurrency enforcement.
+@@ -136,6 +156,9 @@ async def update_sticky(  # noqa: PLR0913
+     Enforces concurrency using the If-Match request header.
+     """
+     async with timing_floor(floor_ms=25.0):
++        sticky, _ = await svc.get_sticky(session, caller, sticky_id)
++        if sticky.project_id is not None:
++            await taint_guard.check_write(sticky.project_id, tool_name="update_sticky")
+         result, etag = await svc.update_sticky(session, caller, sticky_id, body, if_match)
+         response.headers["ETag"] = etag
+         return result
+@@ -150,12 +173,16 @@ async def delete_sticky(
+     sticky_id: uuid.UUID,
+     caller: Caller,
+     session: Session,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+ ) -> dict[str, Any]:
+     """Soft-delete a sticky note into the project trash bin.
+ 
+     Preserves activity audit ledger history.
+     """
+     async with timing_floor(floor_ms=25.0):
++        sticky, _ = await svc.get_sticky(session, caller, sticky_id)
++        if sticky.project_id is not None:
++            await taint_guard.check_write(sticky.project_id, tool_name="delete_sticky")
+         return await svc.delete_sticky(session, caller, sticky_id)
+ 
+ 
+@@ -170,9 +197,13 @@ async def snooze_sticky_promotion(
+     caller: Caller,
+     session: Session,
+     response: Response,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+ ) -> StickyResponse:
+     """Snooze promotion recommendation until body grows by >= 1.5x."""
+     async with timing_floor(floor_ms=25.0):
++        sticky, _ = await svc.get_sticky(session, caller, sticky_id)
++        if sticky.project_id is not None:
++            await taint_guard.check_write(sticky.project_id, tool_name="snooze_sticky_promotion")
+         result, etag = await svc.snooze_sticky_promotion(session, caller, sticky_id)
+         response.headers["ETag"] = etag
+         return result
+@@ -184,16 +215,20 @@ async def snooze_sticky_promotion(
+     response_model=StickyResponse,
+     summary="Promote sticky to doc",
+ )
+-async def promote_sticky_to_doc(
++async def promote_sticky_to_doc(  # noqa: PLR0913
+     sticky_id: uuid.UUID,
+     body: StickyPromoteRequest,
+     *,
+     caller: Caller,
+     session: Session,
+     response: Response,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+ ) -> StickyResponse:
+     """Atomically promote a sticky into a Doc + Page preserving direct ACLs verbatim."""
+     async with timing_floor(floor_ms=25.0):
++        sticky, _ = await svc.get_sticky(session, caller, sticky_id)
++        if sticky.project_id is not None:
++            await taint_guard.check_write(sticky.project_id, tool_name="promote_sticky_to_doc")
+         result, etag = await svc.promote_sticky_to_doc(session, caller, sticky_id, body)
+         response.headers["ETag"] = etag
+         response.headers["Location"] = f"/api/v1/stickies/{result.id}"
+@@ -212,9 +247,13 @@ async def unarchive_sticky_copy(
+     caller: Caller,
+     session: Session,
+     response: Response,
++    taint_guard: Annotated[TaintGuard, Depends(get_taint_guard)],
+ ) -> StickyResponse:
+     """Clone a promoted sticky's content, color, and ACLs into a fresh unpromoted sticky note."""
+     async with timing_floor(floor_ms=25.0):
++        sticky, _ = await svc.get_sticky(session, caller, sticky_id)
++        if sticky.project_id is not None:
++            await taint_guard.check_write(sticky.project_id, tool_name="unarchive_sticky_copy")
+         result, etag = await svc.unarchive_sticky_copy(session, caller, sticky_id)
+         response.headers["ETag"] = etag
+         response.headers["Location"] = f"/api/v1/stickies/{result.id}"
