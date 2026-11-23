@@ -54,6 +54,9 @@ export interface StickyCardProps {
       expected_sticky_sha256?: string;
     },
   ) => Promise<void> | void;
+  onAnnounce?: ((message: string) => void) | undefined;
+  onKeyboardMove?: ((stickyId: string, direction: 'up' | 'down' | 'left' | 'right') => void) | undefined;
+  onSpatialNavigate?: ((stickyId: string, direction: 'up' | 'down' | 'left' | 'right') => void) | undefined;
 }
 
 export function StickyCard({
@@ -63,6 +66,9 @@ export function StickyCard({
   onUpdate,
   onDelete,
   onPromote,
+  onAnnounce,
+  onKeyboardMove,
+  onSpatialNavigate,
 }: StickyCardProps): JSX.Element {
   const [body, setBody] = useState(sticky.body_markdown);
   const [evaluatedBody, setEvaluatedBody] = useState(sticky.body_markdown);
@@ -75,6 +81,8 @@ export function StickyCard({
   const [isPromoteModalOpen, setIsPromoteModalOpen] = useState(false);
   const [isTouchPopoverOpen, setIsTouchPopoverOpen] = useState(false);
   const [inlineError, setInlineError] = useState<string | null>(null);
+  const [cardAnnouncement, setCardAnnouncement] = useState<string | null>(null);
+  const cardRef = useRef<HTMLElement>(null);
 
   const { isTouchLifted, touchHandlers } = useTouchDragSensor({
     delay: 200,
@@ -143,6 +151,9 @@ export function StickyCard({
 
   const handleColorSelect = async (nextColor: StickyColorToken): Promise<void> => {
     setColor(nextColor);
+    const msg = `Sticky note color changed to ${nextColor}.`;
+    setCardAnnouncement(msg);
+    onAnnounce?.(msg);
     try {
       setInlineError(null);
       await onUpdate(
@@ -152,6 +163,41 @@ export function StickyCard({
       );
     } catch (err: unknown) {
       setInlineError(err instanceof Error ? err.message : 'Failed to recolor sticky');
+    }
+  };
+
+  const handleCardKeyDown = (e: KeyboardEvent<HTMLElement>): void => {
+    const isTargetCard = e.target === cardRef.current;
+    const isArrow =
+      e.key === 'ArrowUp' ||
+      e.key === 'ArrowDown' ||
+      e.key === 'ArrowLeft' ||
+      e.key === 'ArrowRight';
+
+    if (!isArrow) return;
+
+    const dir =
+      e.key === 'ArrowUp'
+        ? 'up'
+        : e.key === 'ArrowDown'
+          ? 'down'
+          : e.key === 'ArrowLeft'
+            ? 'left'
+            : 'right';
+
+    if (e.altKey && onKeyboardMove) {
+      e.preventDefault();
+      onKeyboardMove(sticky.id, dir);
+      return;
+    }
+
+    if (isTargetCard) {
+      e.preventDefault();
+      if (onSpatialNavigate) {
+        onSpatialNavigate(sticky.id, dir);
+      } else if (onKeyboardMove) {
+        onKeyboardMove(sticky.id, dir);
+      }
     }
   };
 
@@ -225,11 +271,17 @@ export function StickyCard({
 
   return (
     <article
+      ref={cardRef}
+      tabIndex={0}
+      role="article"
+      aria-roledescription="sticky card"
       className={`sticky-card sticky-card--${color} ${isTouchLifted ? 'sticky-card--touch-lifted' : ''}`}
       aria-label={`Sticky note in ${color}`}
       data-testid={`sticky-card-${sticky.id}`}
       data-sticky-id={sticky.id}
+      data-color={color}
       data-touch-lifted={isTouchLifted ? 'true' : undefined}
+      onKeyDown={handleCardKeyDown}
       {...touchHandlers}
     >
       <header className="sticky-card__header">
@@ -261,6 +313,16 @@ export function StickyCard({
             })}
           </div>
         )}
+
+        {/* Color-Independent Textual Indicator Badge (KAN-359) */}
+        <div className="sticky-card__color-indicator" aria-label={`Color ${color}`}>
+          <span
+            className="sticky-card__color-badge"
+            data-testid={`sticky-color-badge-${sticky.id}`}
+          >
+            {color}
+          </span>
+        </div>
 
         <div className="sticky-card__actions">
           {canEdit && (
@@ -403,6 +465,18 @@ export function StickyCard({
           }}
         />
       )}
+
+      {/* Accessible Live Region for standalone announcements (KAN-359) */}
+      {cardAnnouncement && !onAnnounce ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="sticky-card__announcement visually-hidden"
+          data-testid={`sticky-card-announcement-${sticky.id}`}
+        >
+          {cardAnnouncement}
+        </div>
+      ) : null}
     </article>
   );
 }

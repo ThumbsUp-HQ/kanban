@@ -39,6 +39,10 @@ export interface StickiesGridProps {
     },
   ) => Promise<void> | void;
   onUnarchiveCopy: (stickyId: string) => Promise<void> | void;
+  onMoveSticky?: (
+    stickyId: string,
+    direction: 'up' | 'down' | 'left' | 'right',
+  ) => Promise<void> | void;
 }
 
 export function StickiesGrid({
@@ -52,8 +56,77 @@ export function StickiesGrid({
   onDeleteSticky,
   onPromoteSticky,
   onUnarchiveCopy,
+  onMoveSticky,
 }: StickiesGridProps): JSX.Element {
   const [announcement, setAnnouncement] = useState<string | null>(null);
+  const [reorderedStickies, setReorderedStickies] = useState<StickyItem[] | null>(null);
+  const displayedStickies = reorderedStickies ?? stickies;
+
+  const handleKeyboardMove = (
+    stickyId: string,
+    direction: 'up' | 'down' | 'left' | 'right',
+  ): void => {
+    const currentIndex = displayedStickies.findIndex((s) => s.id === stickyId);
+    const targetIndex =
+      direction === 'left' || direction === 'up'
+        ? Math.max(0, currentIndex - 1)
+        : Math.min(displayedStickies.length - 1, currentIndex + 1);
+
+    if (currentIndex >= 0 && targetIndex !== currentIndex) {
+      const nextList = [...displayedStickies];
+      const moved = nextList.splice(currentIndex, 1)[0];
+      if (moved) {
+        nextList.splice(targetIndex, 0, moved);
+        setReorderedStickies(nextList);
+      }
+      setAnnouncement(
+        `Moved sticky note ${direction} to position ${String(targetIndex + 1)} of ${String(displayedStickies.length)}.`,
+      );
+      if (onMoveSticky) {
+        void onMoveSticky(stickyId, direction);
+      }
+      requestAnimationFrame(() => {
+        const el = document.querySelector<HTMLElement>(`[data-testid="sticky-card-${stickyId}"]`);
+        el?.focus();
+      });
+    }
+  };
+
+  const handleSpatialNavigate = (
+    stickyId: string,
+    direction: 'up' | 'down' | 'left' | 'right',
+  ): void => {
+    const currentIndex = displayedStickies.findIndex((s) => s.id === stickyId);
+    const targetIndex =
+      direction === 'left' || direction === 'up'
+        ? Math.max(0, currentIndex - 1)
+        : Math.min(displayedStickies.length - 1, currentIndex + 1);
+
+    if (currentIndex >= 0 && targetIndex !== currentIndex) {
+      const target = displayedStickies[targetIndex];
+      if (target) {
+        const el = document.querySelector<HTMLElement>(
+          `[data-testid="sticky-card-${target.id}"], [data-testid="promoted-sticky-stub-${target.id}"]`,
+        );
+        el?.focus();
+      }
+    }
+  };
+
+  const handleUpdate = async (
+    stickyId: string,
+    payload: {
+      body_markdown?: string | undefined;
+      color_token?: StickyColorToken | undefined;
+      promotion_snoozed_at_length?: number | null | undefined;
+    },
+    etag?: string,
+  ): Promise<void> => {
+    if (payload.color_token) {
+      setAnnouncement(`Sticky note color changed to ${payload.color_token}.`);
+    }
+    await onUpdateSticky(stickyId, payload, etag);
+  };
 
   const handlePromote = async (
     stickyId: string,
@@ -129,7 +202,7 @@ export function StickiesGrid({
             ) : null}
           </div>
         ) : (
-          stickies.map((sticky) =>
+          displayedStickies.map((sticky) =>
             sticky.is_promoted_stub || sticky.promoted_to_doc_id !== null ? (
               <PromotedStickyStub
                 key={sticky.id}
@@ -145,9 +218,12 @@ export function StickiesGrid({
                 sticky={sticky}
                 projectKey={projectKey}
                 readOnly={readOnly}
-                onUpdate={onUpdateSticky}
+                onUpdate={handleUpdate}
                 onDelete={onDeleteSticky}
                 onPromote={handlePromote}
+                onAnnounce={setAnnouncement}
+                onKeyboardMove={handleKeyboardMove}
+                onSpatialNavigate={handleSpatialNavigate}
               />
             ),
           )

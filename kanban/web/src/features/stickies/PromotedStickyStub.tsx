@@ -55,6 +55,7 @@ export function PromotedStickyStub({
 
   return (
     <article
+      tabIndex={0}
       className={`sticky-card sticky-card--${sticky.color_token} sticky-card--promoted`}
       aria-label={`Promoted sticky: ${docTitle}`}
       data-testid={`promoted-sticky-stub-${sticky.id}`}

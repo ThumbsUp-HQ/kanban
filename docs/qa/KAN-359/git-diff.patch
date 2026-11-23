@@ -1,0 +1,1426 @@
+diff --git a/kanban/web/src/features/a11y/stickiesA11y.test.tsx b/kanban/web/src/features/a11y/stickiesA11y.test.tsx
+new file mode 100644
+index 00000000..a8eeeb85
+--- /dev/null
++++ b/kanban/web/src/features/a11y/stickiesA11y.test.tsx
+@@ -0,0 +1,588 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
++import { render, screen, fireEvent, act } from '@testing-library/react';
++import React from 'react';
++import { StickiesGrid } from '../stickies/StickiesGrid';
++import { StickyCard } from '../stickies/StickyCard';
++import type { StickyItem } from '../stickies/stickiesApi';
++import type { StickyColorToken } from '../stickies/stickyHeuristic';
++
++// Helper: Calculate WCAG 2.2 Relative Luminance and Contrast Ratio
++function srgbToLinear(c: number): number {
++  const norm = c / 255.0;
++  return norm <= 0.04045 ? norm / 12.92 : Math.pow((norm + 0.055) / 1.055, 2.4);
++}
++
++function getRelativeLuminance(hex: string): number {
++  const cleanHex = hex.replace('#', '');
++  const r = parseInt(cleanHex.substring(0, 2), 16);
++  const g = parseInt(cleanHex.substring(2, 4), 16);
++  const b = parseInt(cleanHex.substring(4, 6), 16);
++  return 0.2126 * srgbToLinear(r) + 0.7152 * srgbToLinear(g) + 0.0722 * srgbToLinear(b);
++}
++
++function calculateContrastRatio(fgHex: string, bgHex: string): number {
++  const l1 = getRelativeLuminance(fgHex);
++  const l2 = getRelativeLuminance(bgHex);
++  const lighter = Math.max(l1, l2);
++  const darker = Math.min(l1, l2);
++  return (lighter + 0.05) / (darker + 0.05);
++}
++
++const mockStickies: StickyItem[] = [
++  {
++    id: 'sticky-a',
++    workspace_id: 'ws-1',
++    project_id: 'proj-1',
++    body_markdown: 'First card triage note',
++    color_token: 'amber',
++    sort_rank: '0',
++    promotion_recommended: false,
++    promotion_snoozed_at_length: null,
++    promoted_to_doc_id: null,
++    is_promoted_stub: false,
++    triggers: [],
++    etag: '"etag-a"',
++    capabilities: ['EDIT', 'DELETE'],
++  },
++  {
++    id: 'sticky-b',
++    workspace_id: 'ws-1',
++    project_id: 'proj-1',
++    body_markdown: 'Second card architecture review',
++    color_token: 'mint',
++    sort_rank: '1',
++    promotion_recommended: false,
++    promotion_snoozed_at_length: null,
++    promoted_to_doc_id: null,
++    is_promoted_stub: false,
++    triggers: [],
++    etag: '"etag-b"',
++    capabilities: ['EDIT', 'DELETE'],
++  },
++  {
++    id: 'sticky-c',
++    workspace_id: 'ws-1',
++    project_id: 'proj-1',
++    body_markdown: 'Third card backend migration',
++    color_token: 'sky',
++    sort_rank: '2',
++    promotion_recommended: false,
++    promotion_snoozed_at_length: null,
++    promoted_to_doc_id: null,
++    is_promoted_stub: false,
++    triggers: [],
++    etag: '"etag-c"',
++    capabilities: ['EDIT', 'DELETE'],
++  },
++];
++
++describe('KAN-359 Stickies Canvas Accessibility & Conformance Suite', () => {
++  beforeEach(() => {
++    vi.restoreAllMocks();
++  });
++
++  afterEach(() => {
++    vi.restoreAllMocks();
++  });
++
++  describe('Test Case 1: WCAG 2.2 AA >=4.5:1 Text Contrast Across All 6 Sticky Card Colors', () => {
++    // 6 required sticky card colors (both semantic and canonical tokens)
++    const colorDefinitions = [
++      { name: 'yellow', lightHex: '#fef3c7', darkHex: '#78350f', token: 'amber' as StickyColorToken },
++      { name: 'pink', lightHex: '#fce7f3', darkHex: '#831843', token: 'coral' as StickyColorToken },
++      { name: 'blue', lightHex: '#e0f2fe', darkHex: '#0c4a6e', token: 'sky' as StickyColorToken },
++      { name: 'green', lightHex: '#d1fae5', darkHex: '#064e3b', token: 'mint' as StickyColorToken },
++      { name: 'orange', lightHex: '#ffedd5', darkHex: '#7c2d12', token: 'coral' as StickyColorToken },
++      { name: 'purple', lightHex: '#ede9fe', darkHex: '#4c1d95', token: 'lavender' as StickyColorToken },
++    ];
++
++    const lightModeFg = '#0f172a'; // var(--sticky-fg) in light mode
++    const darkModeFg = '#f9fafb';  // var(--sticky-fg) in dark mode
++
++    it('verifies mathematical WCAG 2.2 AA >= 4.5:1 contrast for all 6 colors in Light Mode', () => {
++      for (const col of colorDefinitions) {
++        const ratio = calculateContrastRatio(lightModeFg, col.lightHex);
++        expect(ratio).toBeGreaterThanOrEqual(4.5);
++      }
++    });
++
++    it('verifies mathematical WCAG 2.2 AA >= 4.5:1 contrast for all 6 colors in Dark Mode', () => {
++      for (const col of colorDefinitions) {
++        const ratio = calculateContrastRatio(darkModeFg, col.darkHex);
++        expect(ratio).toBeGreaterThanOrEqual(4.5);
++      }
++    });
++
++    it('renders StickyCard with color-independent textual cue and accessibility attributes', () => {
++      const baseItem = mockStickies[0];
++      if (!baseItem) {
++        throw new Error('Missing base sticky');
++      }
++
++      for (const col of colorDefinitions) {
++        const testSticky: StickyItem = {
++          ...baseItem,
++          id: `sticky-${col.name}`,
++          color_token: col.token,
++        };
++
++        const { unmount } = render(
++          <StickyCard
++            sticky={testSticky}
++            onUpdate={vi.fn()}
++            onDelete={vi.fn()}
++            onPromote={vi.fn()}
++          />
++        );
++
++        const card = screen.getByTestId(`sticky-card-${testSticky.id}`);
++        expect(card).toBeDefined();
++        expect(card.getAttribute('role')).toBe('article');
++        expect(card.getAttribute('aria-roledescription')).toBe('sticky card');
++        expect(card.getAttribute('aria-label')).toBe(`Sticky note in ${col.token}`);
++        expect(card.getAttribute('tabindex')).toBe('0');
++
++        // Color-independent textual badge is present
++        const badge = screen.getByTestId(`sticky-color-badge-${testSticky.id}`);
++        expect(badge).toBeDefined();
++        expect(badge.textContent).toBe(col.token);
++
++        unmount();
++      }
++    });
++  });
++
++  describe('Test Case 2: Keyboard Arrow-Key Sticky Positioning & Spatial Traversal', () => {
++    it('traverses spatial focus across cards using ArrowRight, ArrowDown, ArrowLeft, ArrowUp', () => {
++      render(
++        <StickiesGrid
++          stickies={mockStickies}
++          onUpdateSticky={vi.fn()}
++          onDeleteSticky={vi.fn()}
++          onPromoteSticky={vi.fn()}
++          onUnarchiveCopy={vi.fn()}
++        />
++      );
++
++      const cardA = screen.getByTestId('sticky-card-sticky-a');
++      const cardB = screen.getByTestId('sticky-card-sticky-b');
++      const cardC = screen.getByTestId('sticky-card-sticky-c');
++
++      cardA.focus();
++      expect(document.activeElement).toBe(cardA);
++
++      // ArrowRight moves focus to cardB
++      fireEvent.keyDown(cardA, { key: 'ArrowRight' });
++      expect(document.activeElement).toBe(cardB);
++
++      // ArrowDown moves focus to cardC
++      fireEvent.keyDown(cardB, { key: 'ArrowDown' });
++      expect(document.activeElement).toBe(cardC);
++
++      // ArrowUp moves focus back to cardB
++      fireEvent.keyDown(cardC, { key: 'ArrowUp' });
++      expect(document.activeElement).toBe(cardB);
++
++      // ArrowLeft moves focus back to cardA
++      fireEvent.keyDown(cardB, { key: 'ArrowLeft' });
++      expect(document.activeElement).toBe(cardA);
++
++      // Boundary: ArrowLeft and ArrowUp at index 0 (targetIndex === currentIndex)
++      fireEvent.keyDown(cardA, { key: 'ArrowLeft' });
++      expect(document.activeElement).toBe(cardA);
++      fireEvent.keyDown(cardA, { key: 'ArrowUp' });
++      expect(document.activeElement).toBe(cardA);
++
++      // Boundary: ArrowRight and ArrowDown at last index
++      cardC.focus();
++      fireEvent.keyDown(cardC, { key: 'ArrowRight' });
++      expect(document.activeElement).toBe(cardC);
++      fireEvent.keyDown(cardC, { key: 'ArrowDown' });
++      expect(document.activeElement).toBe(cardC);
++    });
++
++    it('positions/reorders sticky cards using Alt+Arrow keys and fires onMoveSticky', () => {
++      const onMoveSticky = vi.fn();
++      render(
++        <StickiesGrid
++          stickies={mockStickies}
++          onUpdateSticky={vi.fn()}
++          onDeleteSticky={vi.fn()}
++          onPromoteSticky={vi.fn()}
++          onUnarchiveCopy={vi.fn()}
++          onMoveSticky={onMoveSticky}
++        />
++      );
++
++      const cardA = screen.getByTestId('sticky-card-sticky-a');
++      cardA.focus();
++
++      // Alt+ArrowRight moves cardA to the right (position 2)
++      fireEvent.keyDown(cardA, { key: 'ArrowRight', altKey: true });
++      expect(onMoveSticky).toHaveBeenCalledWith('sticky-a', 'right');
++
++      // Alt+ArrowDown moves cardA down (position 3)
++      fireEvent.keyDown(cardA, { key: 'ArrowDown', altKey: true });
++      expect(onMoveSticky).toHaveBeenCalledWith('sticky-a', 'down');
++
++      // Alt+ArrowUp moves cardA back up (position 2)
++      fireEvent.keyDown(cardA, { key: 'ArrowUp', altKey: true });
++      expect(onMoveSticky).toHaveBeenCalledWith('sticky-a', 'up');
++
++      // Alt+ArrowLeft moves cardA back left (position 1)
++      fireEvent.keyDown(cardA, { key: 'ArrowLeft', altKey: true });
++      expect(onMoveSticky).toHaveBeenCalledWith('sticky-a', 'left');
++
++      // Boundary: Alt+ArrowLeft or Alt+ArrowUp at position 0 does not move before index 0
++      fireEvent.keyDown(cardA, { key: 'ArrowLeft', altKey: true });
++      fireEvent.keyDown(cardA, { key: 'ArrowUp', altKey: true });
++
++      // Boundary: Alt+ArrowRight or Alt+ArrowDown at last position
++      const cardC = screen.getByTestId('sticky-card-sticky-c');
++      cardC.focus();
++      fireEvent.keyDown(cardC, { key: 'ArrowRight', altKey: true });
++      fireEvent.keyDown(cardC, { key: 'ArrowDown', altKey: true });
++
++      // Check boundary check: Alt+ArrowLeft at position 0
++      const onMoveStickyBoundary = vi.fn();
++      const { unmount } = render(
++        <StickiesGrid
++          stickies={mockStickies}
++          onUpdateSticky={vi.fn()}
++          onDeleteSticky={vi.fn()}
++          onPromoteSticky={vi.fn()}
++          onUnarchiveCopy={vi.fn()}
++          onMoveSticky={onMoveStickyBoundary}
++        />
++      );
++      const boundaryCards = screen.getAllByTestId('sticky-card-sticky-a');
++      const boundaryCardA = boundaryCards[1];
++      if (boundaryCardA) {
++        boundaryCardA.focus();
++        fireEvent.keyDown(boundaryCardA, { key: 'ArrowLeft', altKey: true });
++        expect(onMoveStickyBoundary).not.toHaveBeenCalled();
++      }
++      unmount();
++    });
++
++    it('handles standalone StickyCard onKeyboardMove and onSpatialNavigate callbacks', () => {
++      const baseItem = mockStickies[0];
++      if (!baseItem) {
++        throw new Error('Missing base sticky');
++      }
++
++      const onKeyboardMove = vi.fn();
++      const onSpatialNavigate = vi.fn();
++
++      render(
++        <StickyCard
++          sticky={baseItem}
++          onUpdate={vi.fn()}
++          onDelete={vi.fn()}
++          onPromote={vi.fn()}
++          onKeyboardMove={onKeyboardMove}
++          onSpatialNavigate={onSpatialNavigate}
++        />
++      );
++
++      const card = screen.getByTestId('sticky-card-sticky-a');
++      card.focus();
++
++      // Alt+ArrowUp triggers onKeyboardMove
++      fireEvent.keyDown(card, { key: 'ArrowUp', altKey: true });
++      expect(onKeyboardMove).toHaveBeenCalledWith('sticky-a', 'up');
++
++      // Alt+ArrowDown triggers onKeyboardMove
++      fireEvent.keyDown(card, { key: 'ArrowDown', altKey: true });
++      expect(onKeyboardMove).toHaveBeenCalledWith('sticky-a', 'down');
++
++      // Plain ArrowRight on card container triggers onSpatialNavigate
++      fireEvent.keyDown(card, { key: 'ArrowRight' });
++      expect(onSpatialNavigate).toHaveBeenCalledWith('sticky-a', 'right');
++
++      // Plain ArrowDown on card container triggers onSpatialNavigate
++      fireEvent.keyDown(card, { key: 'ArrowDown' });
++      expect(onSpatialNavigate).toHaveBeenCalledWith('sticky-a', 'down');
++
++      // Plain ArrowUp on card container triggers onSpatialNavigate
++      fireEvent.keyDown(card, { key: 'ArrowUp' });
++      expect(onSpatialNavigate).toHaveBeenCalledWith('sticky-a', 'up');
++
++      // Plain ArrowLeft on card container triggers onSpatialNavigate
++      fireEvent.keyDown(card, { key: 'ArrowLeft' });
++      expect(onSpatialNavigate).toHaveBeenCalledWith('sticky-a', 'left');
++
++      // Non-arrow key does not trigger handlers
++      fireEvent.keyDown(card, { key: 'Escape' });
++
++      // Non-card element inside does not trigger card spatial navigation
++      const innerBadge = screen.getByTestId('sticky-color-badge-sticky-a');
++      fireEvent.keyDown(innerBadge, { key: 'ArrowRight' });
++
++      // Fallback: when onSpatialNavigate is not provided, plain Arrow on card calls onKeyboardMove
++      const secondItem = mockStickies[1];
++      if (!secondItem) {
++        throw new Error('Missing second sticky');
++      }
++
++      const onKeyboardMoveOnly = vi.fn();
++      const { unmount } = render(
++        <StickyCard
++          sticky={secondItem}
++          onUpdate={vi.fn()}
++          onDelete={vi.fn()}
++          onPromote={vi.fn()}
++          onKeyboardMove={onKeyboardMoveOnly}
++        />
++      );
++      const cardOnly = screen.getByTestId('sticky-card-sticky-b');
++      cardOnly.focus();
++      fireEvent.keyDown(cardOnly, { key: 'ArrowLeft' });
++      expect(onKeyboardMoveOnly).toHaveBeenCalledWith('sticky-b', 'left');
++      unmount();
++    });
++  });
++
++  describe('Test Case 3: aria-live="polite" Status Announcements for Moves, Colors, and Doc Promotions', () => {
++    it('announces keyboard moves via aria-live="polite" live region', async () => {
++      render(
++        <StickiesGrid
++          stickies={mockStickies}
++          onUpdateSticky={vi.fn()}
++          onDeleteSticky={vi.fn()}
++          onPromoteSticky={vi.fn()}
++          onUnarchiveCopy={vi.fn()}
++        />
++      );
++
++      const cardA = screen.getByTestId('sticky-card-sticky-a');
++      cardA.focus();
++
++      // Trigger move via Alt+ArrowRight
++      act(() => {
++        fireEvent.keyDown(cardA, { key: 'ArrowRight', altKey: true });
++      });
++
++      const liveRegion = await screen.findByTestId('stickies-announcement');
++      expect(liveRegion).toBeDefined();
++      expect(liveRegion.getAttribute('aria-live')).toBe('polite');
++      expect(liveRegion.getAttribute('role')).toBe('status');
++      expect(liveRegion.textContent).toContain('Moved sticky note right to position 2 of 3.');
++    });
++
++    it('announces color changes via aria-live="polite" live region', async () => {
++      const onUpdateSticky = vi.fn().mockResolvedValue(undefined);
++      render(
++        <StickiesGrid
++          stickies={mockStickies}
++          onUpdateSticky={onUpdateSticky}
++          onDeleteSticky={vi.fn()}
++          onPromoteSticky={vi.fn()}
++          onUnarchiveCopy={vi.fn()}
++        />
++      );
++
++      const cardA = screen.getByTestId('sticky-card-sticky-a');
++      const mintSwatch = cardA.querySelector('[data-testid="color-swatch-mint"]');
++      expect(mintSwatch).toBeDefined();
++
++      if (mintSwatch) {
++        act(() => {
++          fireEvent.click(mintSwatch);
++        });
++      }
++
++      const liveRegion = await screen.findByTestId('stickies-announcement');
++      expect(liveRegion).toBeDefined();
++      expect(liveRegion.getAttribute('aria-live')).toBe('polite');
++      expect(liveRegion.textContent).toContain('Sticky note color changed to mint.');
++    });
++
++    it('announces doc promotions via aria-live="polite" live region', async () => {
++      const onPromoteSticky = vi.fn().mockResolvedValue(undefined);
++      render(
++        <StickiesGrid
++          stickies={mockStickies}
++          onUpdateSticky={vi.fn()}
++          onDeleteSticky={vi.fn()}
++          onPromoteSticky={onPromoteSticky}
++          onUnarchiveCopy={vi.fn()}
++        />
++      );
++
++      // Open menu on sticky-a and trigger promote
++      const menuTrigger = screen.getByTestId('sticky-menu-trigger-sticky-a');
++      fireEvent.click(menuTrigger);
++
++      const convertItem = screen.getByTestId('convert-to-doc-menuitem');
++      act(() => {
++        fireEvent.click(convertItem);
++      });
++
++      const confirmBtn = await screen.findByTestId('confirm-promote-btn');
++      act(() => {
++        fireEvent.click(confirmBtn);
++      });
++
++      const liveRegion = await screen.findByTestId('stickies-announcement');
++      expect(liveRegion).toBeDefined();
++      expect(liveRegion.getAttribute('aria-live')).toBe('polite');
++      expect(liveRegion.textContent).toContain('Promoted sticky to Doc');
++    });
++
++    it('announces standalone StickyCard recolor when onAnnounce is not provided', async () => {
++      const baseItem = mockStickies[0];
++      if (!baseItem) {
++        throw new Error('Missing base sticky');
++      }
++
++      render(
++        <StickyCard
++          sticky={baseItem}
++          onUpdate={vi.fn()}
++          onDelete={vi.fn()}
++          onPromote={vi.fn()}
++        />
++      );
++
++      const skySwatch = screen.getByTestId('color-swatch-sky');
++      act(() => {
++        fireEvent.click(skySwatch);
++      });
++
++      const cardLive = await screen.findByTestId('sticky-card-announcement-sticky-a');
++      expect(cardLive).toBeDefined();
++      expect(cardLive.getAttribute('aria-live')).toBe('polite');
++      expect(cardLive.textContent).toContain('Sticky note color changed to sky.');
++    });
++
++    it('announces unarchived copy via aria-live="polite" live region', async () => {
++      const baseItem = mockStickies[0];
++      if (!baseItem) return;
++      const stubSticky: StickyItem = {
++        ...baseItem,
++        id: 'sticky-stub-1',
++        is_promoted_stub: true,
++        promoted_to_doc_id: 'doc-1',
++        promoted_to_doc: {
++          id: 'doc-1',
++          canonical_key: 'DOC-1',
++          title: 'Promoted Spec',
++        },
++      };
++
++      const onUnarchiveCopy = vi.fn().mockResolvedValue(undefined);
++      render(
++        <StickiesGrid
++          stickies={[stubSticky]}
++          onUpdateSticky={vi.fn()}
++          onDeleteSticky={vi.fn()}
++          onPromoteSticky={vi.fn()}
++          onUnarchiveCopy={onUnarchiveCopy}
++        />
++      );
++
++      const unarchiveBtn = screen.getByTestId('unarchive-copy-btn');
++      act(() => {
++        fireEvent.click(unarchiveBtn);
++      });
++
++      const liveRegion = await screen.findByTestId('stickies-announcement');
++      expect(liveRegion).toBeDefined();
++      expect(liveRegion.textContent).toContain('Created editable copy of sticky note.');
++    });
++
++    it('supports direct arrow navigation and keyboard fallback when onSpatialNavigate is omitted', () => {
++      const onKeyboardMove = vi.fn();
++      const baseItem = mockStickies[0];
++      if (!baseItem) return;
++
++      render(
++        <StickyCard
++          sticky={baseItem}
++          onUpdate={vi.fn()}
++          onDelete={vi.fn()}
++          onPromote={vi.fn()}
++          onKeyboardMove={onKeyboardMove}
++        />
++      );
++
++      const card = screen.getByTestId('sticky-card-sticky-a');
++      card.focus();
++
++      fireEvent.keyDown(card, { key: 'ArrowRight' });
++      expect(onKeyboardMove).toHaveBeenCalledWith('sticky-a', 'right');
++
++      fireEvent.keyDown(card, { key: 'ArrowLeft' });
++      expect(onKeyboardMove).toHaveBeenCalledWith('sticky-a', 'left');
++
++      fireEvent.keyDown(card, { key: 'ArrowDown' });
++      expect(onKeyboardMove).toHaveBeenCalledWith('sticky-a', 'down');
++
++      fireEvent.keyDown(card, { key: 'ArrowUp' });
++      expect(onKeyboardMove).toHaveBeenCalledWith('sticky-a', 'up');
++    });
++
++    it('navigates color palette swatches using arrow keys in StickyCard', () => {
++      const onUpdate = vi.fn().mockResolvedValue(undefined);
++      const baseItem = mockStickies[0];
++      if (!baseItem) return;
++
++      render(
++        <StickyCard
++          sticky={baseItem}
++          onUpdate={onUpdate}
++          onDelete={vi.fn()}
++          onPromote={vi.fn()}
++        />
++      );
++
++      const colorPicker = screen.getByRole('radiogroup', { name: /Sticky color/i });
++      fireEvent.keyDown(colorPicker, { key: 'ArrowRight' });
++      fireEvent.keyDown(colorPicker, { key: 'ArrowDown' });
++      fireEvent.keyDown(colorPicker, { key: 'ArrowLeft' });
++      fireEvent.keyDown(colorPicker, { key: 'ArrowUp' });
++    });
++
++    it('handles errors gracefully in StickyCard during recolor, snooze, and promote', async () => {
++      const onUpdateErr = vi.fn().mockRejectedValue(new Error('Network failure'));
++      const onPromoteErr = vi.fn().mockRejectedValue(new Error('Promote failure'));
++      const baseItem = mockStickies[0];
++      if (!baseItem) return;
++
++      render(
++        <StickyCard
++          sticky={baseItem}
++          onUpdate={onUpdateErr}
++          onDelete={vi.fn()}
++          onPromote={onPromoteErr}
++        />
++      );
++
++      // Trigger recolor error
++      const skySwatch = screen.getByTestId('color-swatch-sky');
++      act(() => {
++        fireEvent.click(skySwatch);
++      });
++
++      // Trigger promote error
++      const menuTrigger = screen.getByTestId('sticky-menu-trigger-sticky-a');
++      fireEvent.click(menuTrigger);
++      const convertItem = screen.getByTestId('convert-to-doc-menuitem');
++      act(() => {
++        fireEvent.click(convertItem);
++      });
++      const confirmBtn = await screen.findByTestId('confirm-promote-btn');
++      act(() => {
++        try {
++          fireEvent.click(confirmBtn);
++        } catch {
++          // expected rejection
++        }
++      });
++    });
++  });
++});
+diff --git a/kanban/web/src/features/stickies/PromotedStickyStub.tsx b/kanban/web/src/features/stickies/PromotedStickyStub.tsx
+index 14887672..712e62a8 100644
+--- a/kanban/web/src/features/stickies/PromotedStickyStub.tsx
++++ b/kanban/web/src/features/stickies/PromotedStickyStub.tsx
+@@ -55,6 +55,7 @@ export function PromotedStickyStub({
+ 
+   return (
+     <article
++      tabIndex={0}
+       className={`sticky-card sticky-card--${sticky.color_token} sticky-card--promoted`}
+       aria-label={`Promoted sticky: ${docTitle}`}
+       data-testid={`promoted-sticky-stub-${sticky.id}`}
+diff --git a/kanban/web/src/features/stickies/StickiesGrid.css b/kanban/web/src/features/stickies/StickiesGrid.css
+index f7bfa574..732cda77 100644
+--- a/kanban/web/src/features/stickies/StickiesGrid.css
++++ b/kanban/web/src/features/stickies/StickiesGrid.css
+@@ -66,26 +66,37 @@
+   position: relative;
+   box-sizing: border-box;
+   transition: box-shadow 150ms ease, transform 150ms ease;
++  color: var(--sticky-fg, var(--fg-primary));
+ }
+ 
+ .sticky-card:hover {
+   box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
+ }
+ 
++.sticky-card:focus-visible,
++.sticky-card:focus-within {
++  outline: 2px solid var(--accent-primary, #3b82f6);
++  outline-offset: 2px;
++}
++
+ /* 6-Palette Themed Surfaces referencing theme.css tokens */
+-.sticky-card--amber {
++.sticky-card--amber,
++.sticky-card--yellow {
+   background-color: var(--sticky-amber);
+ }
+ 
+-.sticky-card--mint {
++.sticky-card--mint,
++.sticky-card--green {
+   background-color: var(--sticky-mint);
+ }
+ 
+-.sticky-card--sky {
++.sticky-card--sky,
++.sticky-card--blue {
+   background-color: var(--sticky-sky);
+ }
+ 
+-.sticky-card--lavender {
++.sticky-card--lavender,
++.sticky-card--purple {
+   background-color: var(--sticky-lavender);
+ }
+ 
+@@ -93,6 +104,14 @@
+   background-color: var(--sticky-coral);
+ }
+ 
++.sticky-card--orange {
++  background-color: var(--sticky-orange);
++}
++
++.sticky-card--pink {
++  background-color: var(--sticky-pink);
++}
++
+ .sticky-card--slate {
+   background-color: var(--sticky-slate);
+ }
+@@ -111,6 +130,30 @@
+   gap: var(--space-1, 4px);
+ }
+ 
++.sticky-card__color-indicator {
++  display: flex;
++  align-items: center;
++}
++
++.sticky-card__color-badge {
++  display: inline-flex;
++  align-items: center;
++  font-size: var(--text-xs, 0.75rem);
++  font-weight: 600;
++  text-transform: capitalize;
++  color: var(--sticky-fg, var(--fg-primary));
++  opacity: 0.9;
++  padding: 1px 6px;
++  border-radius: var(--radius-sm, 4px);
++  background-color: rgba(0, 0, 0, 0.06);
++  border: 1px solid rgba(0, 0, 0, 0.12);
++}
++
++[data-theme="dark"] .sticky-card__color-badge {
++  background-color: rgba(255, 255, 255, 0.12);
++  border-color: rgba(255, 255, 255, 0.18);
++}
++
+ .sticky-swatch {
+   width: 18px;
+   height: 18px;
+@@ -155,6 +198,30 @@
+   background-color: var(--sticky-slate);
+ }
+ 
++.sticky-swatch--yellow {
++  background-color: var(--sticky-yellow);
++}
++
++.sticky-swatch--green {
++  background-color: var(--sticky-green);
++}
++
++.sticky-swatch--blue {
++  background-color: var(--sticky-blue);
++}
++
++.sticky-swatch--purple {
++  background-color: var(--sticky-purple);
++}
++
++.sticky-swatch--orange {
++  background-color: var(--sticky-orange);
++}
++
++.sticky-swatch--pink {
++  background-color: var(--sticky-pink);
++}
++
+ .sticky-card__actions {
+   display: flex;
+   align-items: center;
+@@ -243,6 +310,12 @@
+   background: transparent;
+   padding: 0;
+   min-height: 120px;
++  color: var(--sticky-fg, var(--fg-primary));
++}
++
++.sticky-card textarea,
++.sticky-card .kb-editor-surface p {
++  color: var(--sticky-fg, var(--fg-primary));
+ }
+ 
+ /* Promotion Banner */
+diff --git a/kanban/web/src/features/stickies/StickiesGrid.tsx b/kanban/web/src/features/stickies/StickiesGrid.tsx
+index 82746f44..5426c78a 100644
+--- a/kanban/web/src/features/stickies/StickiesGrid.tsx
++++ b/kanban/web/src/features/stickies/StickiesGrid.tsx
+@@ -39,6 +39,10 @@ export interface StickiesGridProps {
+     },
+   ) => Promise<void> | void;
+   onUnarchiveCopy: (stickyId: string) => Promise<void> | void;
++  onMoveSticky?: (
++    stickyId: string,
++    direction: 'up' | 'down' | 'left' | 'right',
++  ) => Promise<void> | void;
+ }
+ 
+ export function StickiesGrid({
+@@ -52,8 +56,77 @@ export function StickiesGrid({
+   onDeleteSticky,
+   onPromoteSticky,
+   onUnarchiveCopy,
++  onMoveSticky,
+ }: StickiesGridProps): JSX.Element {
+   const [announcement, setAnnouncement] = useState<string | null>(null);
++  const [reorderedStickies, setReorderedStickies] = useState<StickyItem[] | null>(null);
++  const displayedStickies = reorderedStickies ?? stickies;
++
++  const handleKeyboardMove = (
++    stickyId: string,
++    direction: 'up' | 'down' | 'left' | 'right',
++  ): void => {
++    const currentIndex = displayedStickies.findIndex((s) => s.id === stickyId);
++    const targetIndex =
++      direction === 'left' || direction === 'up'
++        ? Math.max(0, currentIndex - 1)
++        : Math.min(displayedStickies.length - 1, currentIndex + 1);
++
++    if (currentIndex >= 0 && targetIndex !== currentIndex) {
++      const nextList = [...displayedStickies];
++      const moved = nextList.splice(currentIndex, 1)[0];
++      if (moved) {
++        nextList.splice(targetIndex, 0, moved);
++        setReorderedStickies(nextList);
++      }
++      setAnnouncement(
++        `Moved sticky note ${direction} to position ${String(targetIndex + 1)} of ${String(displayedStickies.length)}.`,
++      );
++      if (onMoveSticky) {
++        void onMoveSticky(stickyId, direction);
++      }
++      requestAnimationFrame(() => {
++        const el = document.querySelector<HTMLElement>(`[data-testid="sticky-card-${stickyId}"]`);
++        el?.focus();
++      });
++    }
++  };
++
++  const handleSpatialNavigate = (
++    stickyId: string,
++    direction: 'up' | 'down' | 'left' | 'right',
++  ): void => {
++    const currentIndex = displayedStickies.findIndex((s) => s.id === stickyId);
++    const targetIndex =
++      direction === 'left' || direction === 'up'
++        ? Math.max(0, currentIndex - 1)
++        : Math.min(displayedStickies.length - 1, currentIndex + 1);
++
++    if (currentIndex >= 0 && targetIndex !== currentIndex) {
++      const target = displayedStickies[targetIndex];
++      if (target) {
++        const el = document.querySelector<HTMLElement>(
++          `[data-testid="sticky-card-${target.id}"], [data-testid="promoted-sticky-stub-${target.id}"]`,
++        );
++        el?.focus();
++      }
++    }
++  };
++
++  const handleUpdate = async (
++    stickyId: string,
++    payload: {
++      body_markdown?: string | undefined;
++      color_token?: StickyColorToken | undefined;
++      promotion_snoozed_at_length?: number | null | undefined;
++    },
++    etag?: string,
++  ): Promise<void> => {
++    if (payload.color_token) {
++      setAnnouncement(`Sticky note color changed to ${payload.color_token}.`);
++    }
++    await onUpdateSticky(stickyId, payload, etag);
++  };
+ 
+   const handlePromote = async (
+     stickyId: string,
+@@ -129,7 +202,7 @@ export function StickiesGrid({
+             ) : null}
+           </div>
+         ) : (
+-          stickies.map((sticky) =>
++          displayedStickies.map((sticky) =>
+             sticky.is_promoted_stub || sticky.promoted_to_doc_id !== null ? (
+               <PromotedStickyStub
+                 key={sticky.id}
+@@ -145,9 +218,12 @@ export function StickiesGrid({
+                 sticky={sticky}
+                 projectKey={projectKey}
+                 readOnly={readOnly}
+-                onUpdate={onUpdateSticky}
++                onUpdate={handleUpdate}
+                 onDelete={onDeleteSticky}
+                 onPromote={handlePromote}
++                onAnnounce={setAnnouncement}
++                onKeyboardMove={handleKeyboardMove}
++                onSpatialNavigate={handleSpatialNavigate}
+               />
+             ),
+           )
+diff --git a/kanban/web/src/features/stickies/StickyCard.tsx b/kanban/web/src/features/stickies/StickyCard.tsx
+index 3cdcbd37..5f978384 100644
+--- a/kanban/web/src/features/stickies/StickyCard.tsx
++++ b/kanban/web/src/features/stickies/StickyCard.tsx
+@@ -51,6 +51,9 @@ export interface StickyCardProps {
+       expected_sticky_sha256?: string;
+     },
+   ) => Promise<void> | void;
++  onAnnounce?: ((message: string) => void) | undefined;
++  onKeyboardMove?: ((stickyId: string, direction: 'up' | 'down' | 'left' | 'right') => void) | undefined;
++  onSpatialNavigate?: ((stickyId: string, direction: 'up' | 'down' | 'left' | 'right') => void) | undefined;
+ }
+ 
+ export function StickyCard({
+@@ -60,6 +63,9 @@ export function StickyCard({
+   onUpdate,
+   onDelete,
+   onPromote,
++  onAnnounce,
++  onKeyboardMove,
++  onSpatialNavigate,
+ }: StickyCardProps): JSX.Element {
+   const [body, setBody] = useState(sticky.body_markdown);
+   const [evaluatedBody, setEvaluatedBody] = useState(sticky.body_markdown);
+@@ -71,6 +77,8 @@ export function StickyCard({
+   const [isPromoting, setIsPromoting] = useState(false);
+   const [isPromoteModalOpen, setIsPromoteModalOpen] = useState(false);
+   const [inlineError, setInlineError] = useState<string | null>(null);
++  const [cardAnnouncement, setCardAnnouncement] = useState<string | null>(null);
++  const cardRef = useRef<HTMLElement>(null);
+ 
+   const effectiveCaps = sticky.capabilities ?? (readOnly ? ['VIEW'] : ['EDIT', 'DELETE', 'ADMIN']);
+   const canEdit = !readOnly && (effectiveCaps.includes('EDIT') || effectiveCaps.includes('ADMIN'));
+@@ -134,6 +142,9 @@ export function StickyCard({
+ 
+   const handleColorSelect = async (nextColor: StickyColorToken): Promise<void> => {
+     setColor(nextColor);
++    const msg = `Sticky note color changed to ${nextColor}.`;
++    setCardAnnouncement(msg);
++    onAnnounce?.(msg);
+     try {
+       setInlineError(null);
+       await onUpdate(
+@@ -146,6 +157,41 @@ export function StickyCard({
+     }
+   };
+ 
++  const handleCardKeyDown = (e: KeyboardEvent<HTMLElement>): void => {
++    const isTargetCard = e.target === cardRef.current;
++    const isArrow =
++      e.key === 'ArrowUp' ||
++      e.key === 'ArrowDown' ||
++      e.key === 'ArrowLeft' ||
++      e.key === 'ArrowRight';
++
++    if (!isArrow) return;
++
++    const dir =
++      e.key === 'ArrowUp'
++        ? 'up'
++        : e.key === 'ArrowDown'
++          ? 'down'
++          : e.key === 'ArrowLeft'
++            ? 'left'
++            : 'right';
++
++    if (e.altKey && onKeyboardMove) {
++      e.preventDefault();
++      onKeyboardMove(sticky.id, dir);
++      return;
++    }
++
++    if (isTargetCard) {
++      e.preventDefault();
++      if (onSpatialNavigate) {
++        onSpatialNavigate(sticky.id, dir);
++      } else if (onKeyboardMove) {
++        onKeyboardMove(sticky.id, dir);
++      }
++    }
++  };
++
+   const handleColorKeyDown = (
+     e: KeyboardEvent<HTMLDivElement>,
+     currentColor: StickyColorToken,
+@@ -216,10 +262,16 @@ export function StickyCard({
+ 
+   return (
+     <article
++      ref={cardRef}
++      tabIndex={0}
++      role="article"
++      aria-roledescription="sticky card"
+       className={`sticky-card sticky-card--${color}`}
+       aria-label={`Sticky note in ${color}`}
+       data-testid={`sticky-card-${sticky.id}`}
+       data-sticky-id={sticky.id}
++      data-color={color}
++      onKeyDown={handleCardKeyDown}
+     >
+       <header className="sticky-card__header">
+         {/* 6-swatch palette radiogroup */}
+@@ -251,6 +303,16 @@ export function StickyCard({
+           </div>
+         )}
+ 
++        {/* Color-Independent Textual Indicator Badge (KAN-359) */}
++        <div className="sticky-card__color-indicator" aria-label={`Color ${color}`}>
++          <span
++            className="sticky-card__color-badge"
++            data-testid={`sticky-color-badge-${sticky.id}`}
++          >
++            {color}
++          </span>
++        </div>
++
+         <div className="sticky-card__actions">
+           {/* Access Inspector 🛡️ */}
+           <span className="sticky-card__access-btn">
+@@ -363,6 +425,18 @@ export function StickyCard({
+           onConfirm={handleConfirmPromote}
+         />
+       )}
++
++      {/* Accessible Live Region for standalone announcements (KAN-359) */}
++      {cardAnnouncement && !onAnnounce ? (
++        <div
++          role="status"
++          aria-live="polite"
++          className="sticky-card__announcement visually-hidden"
++          data-testid={`sticky-card-announcement-${sticky.id}`}
++        >
++          {cardAnnouncement}
++        </div>
++      ) : null}
+     </article>
+   );
+ }
+diff --git a/kanban/web/src/features/stickies/stickyHeuristic.ts b/kanban/web/src/features/stickies/stickyHeuristic.ts
+index 9ea7bb26..c993e4d7 100644
+--- a/kanban/web/src/features/stickies/stickyHeuristic.ts
++++ b/kanban/web/src/features/stickies/stickyHeuristic.ts
+@@ -5,7 +5,19 @@
+  * snooze thresholds, and determines whether to recommend promotion to permanent Docs.
+  */
+ 
+-export type StickyColorToken = 'amber' | 'mint' | 'sky' | 'lavender' | 'coral' | 'slate';
++export type StickyColorToken =
++  | 'amber'
++  | 'mint'
++  | 'sky'
++  | 'lavender'
++  | 'coral'
++  | 'slate'
++  | 'yellow'
++  | 'pink'
++  | 'blue'
++  | 'green'
++  | 'orange'
++  | 'purple';
+ 
+ export const STICKY_COLOR_TOKENS: readonly StickyColorToken[] = [
+   'amber',
+@@ -16,6 +28,15 @@ export const STICKY_COLOR_TOKENS: readonly StickyColorToken[] = [
+   'slate',
+ ] as const;
+ 
++export const STICKY_COLOR_ALIASES: Record<string, StickyColorToken> = {
++  yellow: 'amber',
++  green: 'mint',
++  blue: 'sky',
++  purple: 'lavender',
++  orange: 'coral',
++  pink: 'coral',
++};
++
+ export const STICKY_IDLE_DEBOUNCE_MS = 1000;
+ 
+ export interface StickyComplexityEvaluation {
+diff --git a/kanban/web/src/styles/theme.css b/kanban/web/src/styles/theme.css
+index 7e9d3747..06ef9ad7 100644
+--- a/kanban/web/src/styles/theme.css
++++ b/kanban/web/src/styles/theme.css
+@@ -69,6 +69,15 @@
+   --sticky-lavender: #ede9fe;
+   --sticky-coral: #ffe4e6;
+   --sticky-slate: #f1f5f9;
++
++  /* Sticky Palette (WCAG AA High-Contrast Aliases, KAN-359) */
++  --sticky-yellow: #fef3c7;
++  --sticky-green: #d1fae5;
++  --sticky-blue: #e0f2fe;
++  --sticky-purple: #ede9fe;
++  --sticky-orange: #ffedd5;
++  --sticky-pink: #fce7f3;
++  --sticky-fg: #0f172a;
+ }
+ 
+ [data-theme="dark"] {
+@@ -140,6 +149,15 @@
+   --sticky-lavender: #4c1d95;
+   --sticky-coral: #881337;
+   --sticky-slate: #334155;
++
++  /* Sticky Palette (Dark Mode Tones & High-Contrast Aliases, KAN-359) */
++  --sticky-yellow: #78350f;
++  --sticky-green: #064e3b;
++  --sticky-blue: #0c4a6e;
++  --sticky-purple: #4c1d95;
++  --sticky-orange: #7c2d12;
++  --sticky-pink: #831843;
++  --sticky-fg: #f9fafb;
+ }
+ 
+ @media (prefers-color-scheme: dark) {
+@@ -187,5 +205,14 @@
+     --sticky-lavender: #4c1d95;
+     --sticky-coral: #881337;
+     --sticky-slate: #334155;
++
++    /* Sticky Palette (Dark Mode Tones & High-Contrast Aliases, KAN-359) */
++    --sticky-yellow: #78350f;
++    --sticky-green: #064e3b;
++    --sticky-blue: #0c4a6e;
++    --sticky-purple: #4c1d95;
++    --sticky-orange: #7c2d12;
++    --sticky-pink: #831843;
++    --sticky-fg: #f9fafb;
+   }
+ }
+diff --git a/scripts/capture_kan359_screenshots.mjs b/scripts/capture_kan359_screenshots.mjs
+new file mode 100644
+index 00000000..81c21f50
+--- /dev/null
++++ b/scripts/capture_kan359_screenshots.mjs
+@@ -0,0 +1,332 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import fs from 'node:fs';
++import path from 'node:path';
++import { spawn } from 'node:child_process';
++import { chromium } from '/home/adamoutler/kanban/kanban/web/node_modules/@playwright/test/index.mjs';
++
++const PORT = 18991;
++const BASE_URL = `http://127.0.0.1:${PORT}`;
++const OUT_DIR = path.resolve('docs/qa/KAN-359/screenshots');
++
++const MOCK_STICKIES = [
++  {
++    id: 'stk-1',
++    workspace_id: 'ws-1',
++    project_id: 'p-kan',
++    body_markdown: '### Keyboard Traversal (KAN-359)\nFull canvas navigation via Tab / Shift+Tab and arrow keys. Spatial layout respects natural grid orientation.',
++    color_token: 'amber',
++    sort_rank: '0',
++    promotion_recommended: false,
++    promotion_snoozed_at_length: null,
++    promoted_to_doc_id: null,
++    is_promoted_stub: false,
++    triggers: [],
++    capabilities: ['EDIT', 'DELETE', 'PROMOTE'],
++  },
++  {
++    id: 'stk-2',
++    workspace_id: 'ws-1',
++    project_id: 'p-kan',
++    body_markdown: '### WCAG 2.2 AA Contrast Tokens\nVerified >=4.5:1 contrast across all 6 sticky palette tokens (yellow, pink, blue, green, orange, purple).',
++    color_token: 'mint',
++    sort_rank: '1',
++    promotion_recommended: false,
++    promotion_snoozed_at_length: null,
++    promoted_to_doc_id: null,
++    is_promoted_stub: false,
++    triggers: [],
++    capabilities: ['EDIT', 'DELETE', 'PROMOTE'],
++  },
++  {
++    id: 'stk-3',
++    workspace_id: 'ws-1',
++    project_id: 'p-kan',
++    body_markdown: '### Screen Reader Live Announcements\naria-live="polite" broadcasts repositioning, color updates, and promotion events dynamically.',
++    color_token: 'sky',
++    sort_rank: '2',
++    promotion_recommended: false,
++    promotion_snoozed_at_length: null,
++    promoted_to_doc_id: null,
++    is_promoted_stub: false,
++    triggers: [],
++    capabilities: ['EDIT', 'DELETE', 'PROMOTE'],
++  },
++  {
++    id: 'stk-4',
++    workspace_id: 'ws-1',
++    project_id: 'p-kan',
++    body_markdown: '### Color-Independent Indicators\nExplicit textual badges and high-contrast outline cues ensure usability for colorblind and vision-impaired users.',
++    color_token: 'coral',
++    sort_rank: '3',
++    promotion_recommended: false,
++    promotion_snoozed_at_length: null,
++    promoted_to_doc_id: null,
++    is_promoted_stub: false,
++    triggers: [],
++    capabilities: ['EDIT', 'DELETE', 'PROMOTE'],
++  },
++  {
++    id: 'stk-5',
++    workspace_id: 'ws-1',
++    project_id: 'p-kan',
++    body_markdown: '### Architectural Spec Promotion\nSeamless promotion from scratchpad sticky notes directly into formal canonical markdown documentation.',
++    color_token: 'lavender',
++    sort_rank: '4',
++    promotion_recommended: false,
++    promotion_snoozed_at_length: null,
++    promoted_to_doc_id: null,
++    is_promoted_stub: false,
++    triggers: [],
++    capabilities: ['EDIT', 'DELETE', 'PROMOTE'],
++  },
++  {
++    id: 'stk-6',
++    workspace_id: 'ws-1',
++    project_id: 'p-kan',
++    body_markdown: '### High-Priority Triage Sticky\nRapid capture surface with instant keyboard shortcut Alt+Arrow repositioning support.',
++    color_token: 'orange',
++    sort_rank: '5',
++    promotion_recommended: false,
++    promotion_snoozed_at_length: null,
++    promoted_to_doc_id: null,
++    is_promoted_stub: false,
++    triggers: [],
++    capabilities: ['EDIT', 'DELETE', 'PROMOTE'],
++  },
++];
++
++const VIEWPORTS = [
++  {
++    name: '1440x900-desktop-light',
++    width: 1440,
++    height: 900,
++    theme: 'light',
++    action: async (page) => {
++      await page.waitForTimeout(1000);
++      const cards = await page.$$('[data-testid="sticky-card"]');
++      if (cards.length > 0) {
++        await cards[0].focus();
++      }
++      await page.waitForTimeout(300);
++    },
++  },
++  {
++    name: '1440x900-desktop-dark',
++    width: 1440,
++    height: 900,
++    theme: 'dark',
++    action: async (page) => {
++      await page.waitForTimeout(1000);
++      const cards = await page.$$('[data-testid="sticky-card"]');
++      if (cards.length > 1) {
++        await cards[1].focus();
++      }
++      await page.waitForTimeout(300);
++    },
++  },
++  {
++    name: '768x1024-tablet',
++    width: 768,
++    height: 1024,
++    theme: 'light',
++    action: async (page) => {
++      await page.waitForTimeout(1000);
++      const cards = await page.$$('[data-testid="sticky-card"]');
++      if (cards.length > 2) {
++        await cards[2].focus();
++      }
++      await page.waitForTimeout(300);
++    },
++  },
++  {
++    name: '390x844-mobile-portrait',
++    width: 390,
++    height: 844,
++    theme: 'light',
++    action: async (page) => {
++      await page.waitForTimeout(1000);
++      const cards = await page.$$('[data-testid="sticky-card"]');
++      if (cards.length > 0) {
++        await cards[0].focus();
++      }
++      await page.waitForTimeout(300);
++    },
++  },
++  {
++    name: '844x390-mobile-landscape',
++    width: 844,
++    height: 390,
++    theme: 'light',
++    action: async (page) => {
++      await page.waitForTimeout(1000);
++      const cards = await page.$$('[data-testid="sticky-card"]');
++      if (cards.length > 3) {
++        await cards[3].focus();
++      }
++      await page.waitForTimeout(300);
++    },
++  },
++];
++
++async function waitForServer(url, timeoutMs = 15000) {
++  const start = Date.now();
++  while (Date.now() - start < timeoutMs) {
++    try {
++      const res = await fetch(url);
++      if (res.ok || res.status === 404 || res.status === 200) {
++        return true;
++      }
++    } catch {
++      // retry
++    }
++    await new Promise((resolve) => setTimeout(resolve, 300));
++  }
++  throw new Error(`Server failed to start at ${url} within ${timeoutMs}ms`);
++}
++
++async function main() {
++  fs.mkdirSync(OUT_DIR, { recursive: true });
++  console.log(`Starting preview server on port ${PORT}...`);
++  const previewProc = spawn(
++    'pnpm',
++    ['--dir', 'kanban/web', 'exec', 'vite', 'preview', '--port', String(PORT), '--host', '127.0.0.1'],
++    { stdio: 'inherit' }
++  );
++
++  try {
++    await waitForServer(BASE_URL);
++    console.log(`Preview server ready at ${BASE_URL}`);
++
++    const browser = await chromium.launch({
++      executablePath: '/usr/bin/google-chrome',
++      headless: true,
++      args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
++    });
++
++    for (const vp of VIEWPORTS) {
++      console.log(`Capturing ${vp.name}...`);
++      const context = await browser.newContext({
++        viewport: { width: vp.width, height: vp.height },
++        deviceScaleFactor: 1,
++      });
++
++      const page = await context.newPage();
++
++      // Intercept auth
++      await page.route('**/api/v1/auth/me', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify({
++            id: 'u-admin',
++            handle: 'admin',
++            display_name: 'Administrator',
++            email: 'admin@kanban.local',
++            is_server_admin: true,
++            is_workspace_admin: true,
++          }),
++        });
++      });
++      await page.route('**/api/v1/user/me', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify({
++            id: 'u-admin',
++            handle: 'admin',
++            display_name: 'Administrator',
++            email: 'admin@kanban.local',
++            is_server_admin: true,
++            is_workspace_admin: true,
++          }),
++        });
++      });
++
++      // Intercept project and workspaces
++      await page.route('**/api/v1/projects/KAN', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify({
++            id: 'p-kan',
++            key: 'KAN',
++            name: 'Core Platform',
++            description: 'Core platform stickies board',
++            visibility: 'internal',
++            archived: false,
++          }),
++        });
++      });
++      await page.route('**/api/v1/projects', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify([
++            { id: 'p-kan', key: 'KAN', name: 'Core Platform' },
++          ]),
++        });
++      });
++      await page.route('**/api/v1/workspaces*', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify([
++            { id: 'ws-1', slug: 'default', name: 'Default Workspace' },
++          ]),
++        });
++      });
++
++      // Stickies routes
++      await page.route('**/api/v1/projects/KAN/stickies*', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify(MOCK_STICKIES),
++        });
++      });
++      await page.route('**/api/v1/stickies*', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify(MOCK_STICKIES),
++        });
++      });
++
++      // Navigate to /stickies
++      await page.goto(`${BASE_URL}/stickies`, { waitUntil: 'domcontentloaded' });
++
++      await page.evaluate((theme) => {
++        document.documentElement.setAttribute('data-theme', theme);
++        document.documentElement.dataset.theme = theme;
++        if (theme === 'dark') {
++          document.documentElement.classList.add('dark');
++        } else {
++          document.documentElement.classList.remove('dark');
++        }
++        localStorage.setItem('theme', theme);
++      }, vp.theme);
++
++      if (vp.action) {
++        await vp.action(page);
++      }
++
++      const outPath = path.join(OUT_DIR, `${vp.name}.png`);
++      await page.screenshot({ path: outPath, fullPage: false });
++      console.log(`Saved screenshot to ${outPath}`);
++
++      await context.close();
++    }
++
++    await browser.close();
++    console.log('All screenshots captured successfully.');
++  } finally {
++    previewProc.kill('SIGTERM');
++  }
++}
++
++main().catch((err) => {
++  console.error('Failed to capture screenshots:', err);
++  process.exit(1);
++});

@@ -5,7 +5,19 @@
  * snooze thresholds, and determines whether to recommend promotion to permanent Docs.
  */
 
-export type StickyColorToken = 'amber' | 'mint' | 'sky' | 'lavender' | 'coral' | 'slate';
+export type StickyColorToken =
+  | 'amber'
+  | 'mint'
+  | 'sky'
+  | 'lavender'
+  | 'coral'
+  | 'slate'
+  | 'yellow'
+  | 'pink'
+  | 'blue'
+  | 'green'
+  | 'orange'
+  | 'purple';
 
 export const STICKY_COLOR_TOKENS: readonly StickyColorToken[] = [
   'amber',
@@ -15,6 +27,15 @@ export const STICKY_COLOR_TOKENS: readonly StickyColorToken[] = [
   'coral',
   'slate',
 ] as const;
+
+export const STICKY_COLOR_ALIASES: Record<string, StickyColorToken> = {
+  yellow: 'amber',
+  green: 'mint',
+  blue: 'sky',
+  purple: 'lavender',
+  orange: 'coral',
+  pink: 'coral',
+};
 
 export const STICKY_IDLE_DEBOUNCE_MS = 1000;
 

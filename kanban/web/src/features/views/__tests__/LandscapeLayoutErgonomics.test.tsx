@@ -254,9 +254,9 @@ describe('LandscapeLayoutErgonomics (KAN-343)', () => {
     }
 
     // Check header row structure
-    const headerRow = thead.querySelector('tr');
+    const headerRow = thead?.querySelector('tr');
     expect(headerRow).not.toBeNull();
-    expect(thead.getAttribute('class')).toContain('issues-table-head');
+    expect(thead?.getAttribute('class')).toContain('issues-table-head');
   });
 
   it('verifies view forwarders exist in features/views/ for TableView.css, CalendarView.css, and TimelineView.css', () => {
