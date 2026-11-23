@@ -40,7 +40,9 @@ class WorkflowTransitionHook(Base):
             "(hook_kind IN ('sync_validator', 'sync_mutator') "
             "AND wasm_module_sha256 IS NOT NULL AND agent_definition_id IS NULL) "
             "OR (hook_kind = 'agent_interceptor' "
-            "AND agent_definition_id IS NOT NULL AND wasm_module_sha256 IS NULL)",
+            "AND agent_definition_id IS NOT NULL AND wasm_module_sha256 IS NULL) "
+            "OR (hook_kind IN ('commit_signature', 'ci_check_run', 'slsa_provenance') "
+            "AND wasm_module_sha256 IS NULL AND agent_definition_id IS NULL)",
             name="ck_workflow_transition_hooks_kind",
         ),
         CheckConstraint(
@@ -153,7 +155,8 @@ class WorkflowHookInvocation(Base):
     __tablename__ = "workflow_hook_invocations"
     __table_args__ = (
         CheckConstraint(
-            "hook_kind IN ('sync_validator','sync_mutator','agent_interceptor')",
+            "hook_kind IN ('sync_validator', 'sync_mutator', 'agent_interceptor', "
+            "'commit_signature', 'ci_check_run', 'slsa_provenance')",
             name="ck_workflow_hook_invocations_kind",
         ),
         CheckConstraint(

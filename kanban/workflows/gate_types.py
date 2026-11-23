@@ -23,6 +23,25 @@ class GateEventType(StrEnum):
     CANCELLED = "workflow.gate.cancelled"
 
 
+class DeterministicGateType(StrEnum):
+    """Deterministic non-LLM workflow transition gate types (KB-DEVSECOPS-ATTEST-01)."""
+
+    COMMIT_SIGNATURE = "commit_signature"
+    CI_CHECK_RUN = "ci_check_run"
+    SLSA_PROVENANCE = "slsa_provenance"
+
+
+@dataclass(frozen=True)
+class ProvenanceGateVerdict:
+    """Consolidated verdict payload from deterministic provenance gates."""
+
+    decision: Literal["approve", "reject"]
+    gate_type: str
+    verified: bool
+    reason_markdown: str
+    details: Mapping[str, Any] = field(default_factory=dict)
+
+
 @dataclass(frozen=True)
 class LinkSpec:
     """Specification of an object link proposed by an agent gate."""

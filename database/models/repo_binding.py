@@ -1,6 +1,6 @@
 # Copyright 2026 Kanban Platform Contributors
 # Apache-2.0 License. See LICENSE for details.
-"""SQLAlchemy 2.0 ORM model for project_repo_bindings (KB-P5-19b, S14.2)."""
+"""SQLAlchemy 2.0 ORM models for repo bindings and attestations (KB-DEVSECOPS-ATTEST-01)."""
 
 from __future__ import annotations
 
@@ -8,8 +8,10 @@ import os
 import uuid  # noqa: TC003
 from datetime import datetime  # noqa: TC003
 from pathlib import Path
+from typing import Any
 
 from sqlalchemy import (
+    Boolean,
     CheckConstraint,
     DateTime,
     ForeignKey,
@@ -20,7 +22,8 @@ from sqlalchemy import (
     UniqueConstraint,
     text,
 )
-from sqlalchemy.orm import Mapped, mapped_column
+from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database.models.base import Base
 
@@ -73,6 +76,14 @@ class ProjectRepoBinding(Base):
     ssh_known_hosts: Mapped[str | None] = mapped_column(Text, nullable=True)
     wrapped_webhook_secret: Mapped[bytes | None] = mapped_column(LargeBinary, nullable=True)
     webhook_secret_dek_kid: Mapped[str | None] = mapped_column(Text, nullable=True)
+    ssh_allowed_signers: Mapped[str | None] = mapped_column(Text, nullable=True)
+    gpg_trusted_armored_keys: Mapped[str | None] = mapped_column(Text, nullable=True)
+    sigstore_trusted_identities_json: Mapped[list[dict[str, Any]]] = mapped_column(
+        JSONB,
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
     last_fetched_commit: Mapped[str | None] = mapped_column(String(64), nullable=True)
     last_fetched_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
     last_fetch_error: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -81,6 +92,12 @@ class ProjectRepoBinding(Base):
         DateTime(timezone=True),
         nullable=False,
         server_default=text("clock_timestamp()"),
+    )
+
+    commit_attestations: Mapped[list[CommitAttestation]] = relationship(
+        "CommitAttestation",
+        back_populates="repo_binding",
+        cascade="all, delete-orphan",
     )
 
     @property
@@ -93,3 +110,41 @@ class ProjectRepoBinding(Base):
             or "/var/lib/kanban/git-mirrors"
         )
         return Path(f"{base}/{self.workspace_id}/{self.id}.git")
+
+
+class CommitAttestation(Base):
+    """Cryptographic commit/tag signature attestation (KB-DEVSECOPS-ATTEST-01, S12.2, S14.1)."""
+
+    __tablename__ = "commit_attestations"
+    __table_args__ = (
+        Index("idx_commit_attestations_ws", "workspace_id"),
+        Index("idx_commit_attestations_repo_sha", "repo_binding_id", "commit_sha"),
+    )
+
+    id: Mapped[uuid.UUID] = mapped_column(primary_key=True, server_default=text("uuidv7()"))
+    workspace_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("workspaces.id", ondelete="CASCADE"), nullable=False
+    )
+    repo_binding_id: Mapped[uuid.UUID] = mapped_column(
+        ForeignKey("project_repo_bindings.id", ondelete="CASCADE"), nullable=False
+    )
+    commit_sha: Mapped[str] = mapped_column(Text, nullable=False)
+    sig_scheme: Mapped[str] = mapped_column(Text, nullable=False)
+    signer_identity: Mapped[str] = mapped_column(Text, nullable=False)
+    key_fingerprint: Mapped[str] = mapped_column(Text, nullable=False)
+    verified: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        default=True,
+        server_default=text("TRUE"),
+    )
+    verified_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        nullable=False,
+        server_default=text("clock_timestamp()"),
+    )
+
+    repo_binding: Mapped[ProjectRepoBinding] = relationship(
+        "ProjectRepoBinding",
+        back_populates="commit_attestations",
+    )

@@ -131,6 +131,7 @@ class TransitionEngine:
         *,
         wasm_runner: WasmRunnerProtocol | None = None,
         async_dispatcher: AsyncGateDispatcher | None = None,
+        air_gap_mode: bool = False,
     ) -> None:
         """Initialize TransitionEngine bound to session."""
         self.session = session
@@ -140,6 +141,7 @@ class TransitionEngine:
 
             async_dispatcher = AgentGateDispatcher()
         self.async_dispatcher: AsyncGateDispatcher = async_dispatcher
+        self.air_gap_mode = air_gap_mode
 
     @classmethod
     async def request_transition(  # noqa: PLR0913, PLR0917
@@ -156,9 +158,15 @@ class TransitionEngine:
         is_complete_work: bool = False,
         wasm_runner: WasmRunnerProtocol | None = None,
         async_dispatcher: AsyncGateDispatcher | None = None,
+        air_gap_mode: bool = False,
     ) -> TransitionOutcome:
         """Delegate to TransitionEngine instance."""
-        engine = cls(session, wasm_runner=wasm_runner, async_dispatcher=async_dispatcher)
+        engine = cls(
+            session,
+            wasm_runner=wasm_runner,
+            async_dispatcher=async_dispatcher,
+            air_gap_mode=air_gap_mode,
+        )
         return await engine.execute_transition(
             issue_key=issue_key,
             to_state=to_state,
@@ -331,6 +339,21 @@ class TransitionEngine:
 
         sync_hooks = [h for h in hooks if h.hook_kind in ("sync_validator", "sync_mutator")]
         agent_hooks = [h for h in hooks if h.hook_kind == "agent_interceptor"]
+        deterministic_hooks = [
+            h
+            for h in hooks
+            if h.hook_kind in ("commit_signature", "ci_check_run", "slsa_provenance")
+        ]
+
+        # 4b. Execute deterministic non-LLM workflow gates
+        if deterministic_hooks:
+            await self._evaluate_deterministic_gates(
+                session=session,
+                issue=issue,
+                execution=execution,
+                hooks=deterministic_hooks,
+                verification_proof=verification_proof,
+            )
 
         # 5. Build hook input payload
         hook_input_dict = await self._build_hook_input(
@@ -862,3 +885,378 @@ class TransitionEngine:
                 "role": "MEMBER",
             },
         }
+
+    async def _evaluate_deterministic_gates(  # noqa: C901, PLR0915
+        self,
+        session: AsyncSession,
+        issue: Issue,
+        execution: WorkflowTransitionExecution,
+        hooks: Sequence[WorkflowTransitionHook],
+        verification_proof: dict[str, Any] | None,
+    ) -> None:
+        """Evaluate deterministic non-LLM workflow gates."""
+        proof = verification_proof or {}
+
+        for hook in hooks:
+            t0 = time.perf_counter()
+            recomputed_hash = compute_hook_manifest_sha256(
+                hook_kind=hook.hook_kind,
+                wasm_module_sha256=hook.wasm_module_sha256,
+                agent_definition_id=hook.agent_definition_id,
+                allowed_mutable_fields=hook.allowed_mutable_fields,
+                failure_policy=hook.failure_policy,
+                from_state_id=hook.from_state_id,
+                to_state_id=hook.to_state_id,
+            )
+            if recomputed_hash != hook.manifest_sha256:
+                await self._record_invocation(
+                    session=session,
+                    workspace_id=issue.workspace_id,
+                    execution_id=execution.id,
+                    hook=hook,
+                    status="error",
+                    error_code="HOOK_MANIFEST_MISMATCH",
+                    duration_us=0,
+                )
+                execution.status = "rejected"
+                execution.verdict_json = {
+                    "decision": "reject",
+                    "reason": f"Cryptographic manifest mismatch on hook '{hook.name}'",
+                }
+                execution.completed_at = dt.datetime.now(dt.UTC)
+                await session.flush()
+                raise ProblemException(
+                    code="HOOK_MANIFEST_MISMATCH",
+                    status=422,
+                    title="Hook Manifest Mismatch",
+                    detail=f"Cryptographic manifest mismatch on hook '{hook.name}'",
+                    extra={"hook_name": hook.name},
+                )
+
+            if hook.hook_kind == "commit_signature":
+                from database.models.repo_binding import (  # noqa: PLC0415
+                    CommitAttestation,
+                    ProjectRepoBinding,
+                )
+                from kanban.repos.signature_verifier import (  # noqa: PLC0415
+                    verify_commit_signature,
+                )
+
+                repo_stmt = (
+                    select(ProjectRepoBinding)
+                    .where(ProjectRepoBinding.project_id == issue.project_id)
+                    .limit(1)
+                )
+                repo_binding = (await session.execute(repo_stmt)).scalar_one_or_none()
+
+                commit_sha = (
+                    proof.get("head_sha")
+                    or proof.get("commit_sha")
+                    or (repo_binding.last_fetched_commit if repo_binding else None)
+                )
+
+                if not repo_binding or not commit_sha:
+                    dur_us = max(1, int((time.perf_counter() - t0) * 1_000_000))
+                    await self._record_invocation(
+                        session=session,
+                        workspace_id=issue.workspace_id,
+                        execution_id=execution.id,
+                        hook=hook,
+                        status="rejected",
+                        error_code="PROVENANCE_ATTESTATION_FAILED",
+                        duration_us=dur_us,
+                    )
+                    execution.status = "rejected"
+                    execution.verdict_json = {
+                        "decision": "reject",
+                        "gate": "commit_signature",
+                        "reason": (
+                            "Missing repository binding or commit SHA for commit_signature gate"
+                        ),
+                    }
+                    execution.completed_at = dt.datetime.now(dt.UTC)
+                    await session.flush()
+                    raise ProblemException(
+                        code="PROVENANCE_ATTESTATION_FAILED",
+                        status=409,
+                        title="Provenance Attestation Failed",
+                        detail="Missing repository binding or commit SHA for commit_signature gate",
+                        extra={"gate": "commit_signature"},
+                    )
+
+                sig_res = await verify_commit_signature(
+                    repo_binding.mirror_path,
+                    str(commit_sha),
+                    ssh_allowed_signers=repo_binding.ssh_allowed_signers,
+                    gpg_trusted_armored_keys=repo_binding.gpg_trusted_armored_keys,
+                    sigstore_trusted_identities=repo_binding.sigstore_trusted_identities_json,
+                )
+                dur_us = max(1, int((time.perf_counter() - t0) * 1_000_000))
+
+                if not sig_res.verified:
+                    await self._record_invocation(
+                        session=session,
+                        workspace_id=issue.workspace_id,
+                        execution_id=execution.id,
+                        hook=hook,
+                        status="rejected",
+                        error_code="PROVENANCE_ATTESTATION_FAILED",
+                        output_json={
+                            "decision": "reject",
+                            "error_code": sig_res.error_code,
+                            "reason": sig_res.error_detail,
+                        },
+                        duration_us=dur_us,
+                    )
+                    execution.status = "rejected"
+                    execution.verdict_json = {
+                        "decision": "reject",
+                        "gate": "commit_signature",
+                        "error_code": sig_res.error_code,
+                        "reason": sig_res.error_detail,
+                    }
+                    execution.completed_at = dt.datetime.now(dt.UTC)
+                    await session.flush()
+                    raise ProblemException(
+                        code="PROVENANCE_ATTESTATION_FAILED",
+                        status=409,
+                        title="Provenance Attestation Failed",
+                        detail=f"Commit signature verification failed: {sig_res.error_detail}",
+                        extra={
+                            "gate": "commit_signature",
+                            "commit_sha": commit_sha,
+                            "error_code": sig_res.error_code,
+                        },
+                    )
+
+                att = CommitAttestation(
+                    workspace_id=issue.workspace_id,
+                    repo_binding_id=repo_binding.id,
+                    commit_sha=str(commit_sha),
+                    sig_scheme=sig_res.sig_scheme,
+                    signer_identity=sig_res.signer_identity,
+                    key_fingerprint=sig_res.key_fingerprint,
+                    verified=True,
+                )
+                session.add(att)
+                await session.flush()
+
+                await self._record_invocation(
+                    session=session,
+                    workspace_id=issue.workspace_id,
+                    execution_id=execution.id,
+                    hook=hook,
+                    status="allowed",
+                    output_json={
+                        "verified": True,
+                        "sig_scheme": sig_res.sig_scheme,
+                        "signer_identity": sig_res.signer_identity,
+                        "key_fingerprint": sig_res.key_fingerprint,
+                    },
+                    duration_us=dur_us,
+                )
+                cur_verdict = dict(execution.verdict_json or {})
+                cur_verdict["commit_attestation"] = {
+                    "verified": True,
+                    "sig_scheme": sig_res.sig_scheme,
+                    "signer_identity": sig_res.signer_identity,
+                    "key_fingerprint": sig_res.key_fingerprint,
+                    "commit_sha": str(commit_sha),
+                }
+                execution.verdict_json = cur_verdict
+
+            elif hook.hook_kind == "slsa_provenance":
+                from kanban.workflows.attestation_gate import (  # noqa: PLC0415
+                    verify_slsa_provenance,
+                )
+
+                slsa_bundle = (
+                    proof.get("slsa_provenance")
+                    or proof.get("slsa_bundle")
+                    or proof.get("dsse_envelope")
+                )
+                head_sha = proof.get("head_sha") or proof.get("commit_sha")
+
+                if not slsa_bundle or not head_sha:
+                    dur_us = max(1, int((time.perf_counter() - t0) * 1_000_000))
+                    await self._record_invocation(
+                        session=session,
+                        workspace_id=issue.workspace_id,
+                        execution_id=execution.id,
+                        hook=hook,
+                        status="rejected",
+                        error_code="PROVENANCE_ATTESTATION_FAILED",
+                        duration_us=dur_us,
+                    )
+                    execution.status = "rejected"
+                    execution.verdict_json = {
+                        "decision": "reject",
+                        "gate": "slsa_provenance",
+                        "reason": (
+                            "Missing slsa_provenance bundle or head_sha in verification_proof"
+                        ),
+                    }
+                    execution.completed_at = dt.datetime.now(dt.UTC)
+                    await session.flush()
+                    raise ProblemException(
+                        code="PROVENANCE_ATTESTATION_FAILED",
+                        status=409,
+                        title="Provenance Attestation Failed",
+                        detail="Missing slsa_provenance bundle or head_sha in verification_proof",
+                        extra={"gate": "slsa_provenance"},
+                    )
+
+                slsa_res = verify_slsa_provenance(slsa_bundle, str(head_sha))
+                dur_us = max(1, int((time.perf_counter() - t0) * 1_000_000))
+
+                if not slsa_res.verified:
+                    await self._record_invocation(
+                        session=session,
+                        workspace_id=issue.workspace_id,
+                        execution_id=execution.id,
+                        hook=hook,
+                        status="rejected",
+                        error_code="PROVENANCE_ATTESTATION_FAILED",
+                        output_json={
+                            "decision": "reject",
+                            "error_code": slsa_res.error_code,
+                            "reason": slsa_res.error_detail,
+                        },
+                        duration_us=dur_us,
+                    )
+                    execution.status = "rejected"
+                    execution.verdict_json = {
+                        "decision": "reject",
+                        "gate": "slsa_provenance",
+                        "error_code": slsa_res.error_code,
+                        "reason": slsa_res.error_detail,
+                    }
+                    execution.completed_at = dt.datetime.now(dt.UTC)
+                    await session.flush()
+                    raise ProblemException(
+                        code="PROVENANCE_ATTESTATION_FAILED",
+                        status=409,
+                        title="Provenance Attestation Failed",
+                        detail=f"SLSA provenance verification failed: {slsa_res.error_detail}",
+                        extra={"gate": "slsa_provenance", "error_code": slsa_res.error_code},
+                    )
+
+                await self._record_invocation(
+                    session=session,
+                    workspace_id=issue.workspace_id,
+                    execution_id=execution.id,
+                    hook=hook,
+                    status="allowed",
+                    output_json={
+                        "verified": True,
+                        "builder_id": slsa_res.builder_id,
+                        "build_type": slsa_res.build_type,
+                        "matched_digest": slsa_res.matched_digest,
+                    },
+                    duration_us=dur_us,
+                )
+                cur_verdict = dict(execution.verdict_json or {})
+                cur_verdict["slsa_provenance"] = {
+                    "verified": True,
+                    "builder_id": slsa_res.builder_id,
+                    "build_type": slsa_res.build_type,
+                    "matched_digest": slsa_res.matched_digest,
+                }
+                execution.verdict_json = cur_verdict
+
+            elif hook.hook_kind == "ci_check_run":
+                from kanban.workflows.attestation_gate import (  # noqa: PLC0415
+                    verify_live_ci_check_run,
+                )
+
+                ci_run_url = proof.get("ci_run_url")
+                head_sha = proof.get("head_sha") or proof.get("commit_sha")
+
+                if not ci_run_url or not head_sha:
+                    dur_us = max(1, int((time.perf_counter() - t0) * 1_000_000))
+                    await self._record_invocation(
+                        session=session,
+                        workspace_id=issue.workspace_id,
+                        execution_id=execution.id,
+                        hook=hook,
+                        status="rejected",
+                        error_code="PROVENANCE_ATTESTATION_FAILED",
+                        duration_us=dur_us,
+                    )
+                    execution.status = "rejected"
+                    execution.verdict_json = {
+                        "decision": "reject",
+                        "gate": "ci_check_run",
+                        "reason": "Missing ci_run_url or head_sha for ci_check_run gate",
+                    }
+                    execution.completed_at = dt.datetime.now(dt.UTC)
+                    await session.flush()
+                    raise ProblemException(
+                        code="PROVENANCE_ATTESTATION_FAILED",
+                        status=409,
+                        title="Provenance Attestation Failed",
+                        detail="Missing ci_run_url or head_sha for ci_check_run gate",
+                        extra={"gate": "ci_check_run"},
+                    )
+
+                ci_res = await verify_live_ci_check_run(
+                    str(ci_run_url),
+                    str(head_sha),
+                    air_gap_mode=self.air_gap_mode,
+                )
+                dur_us = max(1, int((time.perf_counter() - t0) * 1_000_000))
+
+                if not ci_res.verified:
+                    await self._record_invocation(
+                        session=session,
+                        workspace_id=issue.workspace_id,
+                        execution_id=execution.id,
+                        hook=hook,
+                        status="rejected",
+                        error_code="PROVENANCE_ATTESTATION_FAILED",
+                        output_json={
+                            "decision": "reject",
+                            "error_code": ci_res.error_code,
+                            "reason": ci_res.error_detail,
+                        },
+                        duration_us=dur_us,
+                    )
+                    execution.status = "rejected"
+                    execution.verdict_json = {
+                        "decision": "reject",
+                        "gate": "ci_check_run",
+                        "error_code": ci_res.error_code,
+                        "reason": ci_res.error_detail,
+                    }
+                    execution.completed_at = dt.datetime.now(dt.UTC)
+                    await session.flush()
+                    raise ProblemException(
+                        code="PROVENANCE_ATTESTATION_FAILED",
+                        status=409,
+                        title="Provenance Attestation Failed",
+                        detail=f"Live CI check run failed: {ci_res.error_detail}",
+                        extra={"gate": "ci_check_run", "error_code": ci_res.error_code},
+                    )
+
+                await self._record_invocation(
+                    session=session,
+                    workspace_id=issue.workspace_id,
+                    execution_id=execution.id,
+                    hook=hook,
+                    status="allowed",
+                    output_json={
+                        "verified": True,
+                        "provider": ci_res.provider,
+                        "run_id": ci_res.run_id,
+                        "conclusion": ci_res.conclusion,
+                    },
+                    duration_us=dur_us,
+                )
+                cur_verdict = dict(execution.verdict_json or {})
+                cur_verdict["ci_check_run"] = {
+                    "verified": True,
+                    "provider": ci_res.provider,
+                    "run_id": ci_res.run_id,
+                    "conclusion": ci_res.conclusion,
+                }
+                execution.verdict_json = cur_verdict

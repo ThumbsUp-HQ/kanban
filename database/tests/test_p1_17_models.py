@@ -501,3 +501,56 @@ def test_supply_chain_checks() -> None:
     installed = {dist.metadata["Name"].lower() for dist in importlib.metadata.distributions()}
     assert "sqlmodel" not in installed
     assert "sqlalchemy-utils" not in installed
+
+
+@pytest.mark.asyncio
+async def test_commit_attestation_and_repo_truststore_roundtrip(db_session: AsyncSession) -> None:
+    """Verify round-trip ORM persistence for ProjectRepoBinding truststore and CommitAttestation."""
+    from database.models import CommitAttestation, ProjectRepoBinding  # noqa: PLC0415
+
+    ws_id, u_id, p_id, _state, _priority = await _setup_test_project_spine(db_session)
+
+    dev_key = "dev@example.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAI..."
+    binding = ProjectRepoBinding(
+        workspace_id=ws_id,
+        project_id=p_id,
+        slug="attest-repo",
+        remote_url="https://github.com/example/attest-repo.git",
+        default_ref="main",
+        access_mode="bare_git_tools",
+        ssh_allowed_signers=dev_key,
+        gpg_trusted_armored_keys="-----BEGIN PGP PUBLIC KEY BLOCK-----\n...",
+        sigstore_trusted_identities_json=[
+            {
+                "issuer": "https://token.actions.githubusercontent.com",
+                "subject": "https://github.com/example/attest-repo/.github/workflows/ci.yml@refs/heads/main",
+            }
+        ],
+        created_by=u_id,
+    )
+    db_session.add(binding)
+    await db_session.flush()
+
+    attestation = CommitAttestation(
+        workspace_id=ws_id,
+        repo_binding_id=binding.id,
+        commit_sha="a" * 40,
+        sig_scheme="ssh",
+        signer_identity="dev@example.com",
+        key_fingerprint="SHA256:fingerprint1234567890",
+        verified=True,
+    )
+    db_session.add(attestation)
+    await db_session.flush()
+
+    fetched_binding = await db_session.get(ProjectRepoBinding, binding.id)
+    assert fetched_binding is not None
+    assert fetched_binding.ssh_allowed_signers == dev_key
+    assert len(fetched_binding.sigstore_trusted_identities_json) == 1
+
+    fetched_attestation = await db_session.get(CommitAttestation, attestation.id)
+    assert fetched_attestation is not None
+    assert fetched_attestation.commit_sha == "a" * 40
+    assert fetched_attestation.sig_scheme == "ssh"
+    assert fetched_attestation.signer_identity == "dev@example.com"
+    assert fetched_attestation.verified is True

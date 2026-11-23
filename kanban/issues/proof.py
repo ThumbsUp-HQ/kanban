@@ -19,6 +19,7 @@ __all__ = [
     "RealityCheckerProof",
     "VerificationProof",
     "validate_ci_run_url",
+    "validate_ci_run_url_live",
     "validate_proof_ticket_key",
     "validate_reality_checker_report",
 ]
@@ -90,6 +91,29 @@ def validate_ci_run_url(v: str) -> str:
         raise ValueError(msg)
 
     return v
+
+
+async def validate_ci_run_url_live(
+    v: str,
+    head_sha: str,
+    *,
+    air_gap_mode: bool = False,
+    auth_token: str | None = None,
+) -> str:
+    """Validate ci_run_url syntax and verify live passing CI check-run status."""
+    clean_url = validate_ci_run_url(v)
+    from kanban.workflows.attestation_gate import verify_live_ci_check_run  # noqa: PLC0415
+
+    res = await verify_live_ci_check_run(
+        clean_url,
+        head_sha,
+        air_gap_mode=air_gap_mode,
+        auth_token=auth_token,
+    )
+    if not res.verified:
+        msg = f"Live CI check-run verification failed: {res.error_detail}"
+        raise ValueError(msg)
+    return clean_url
 
 
 def _pydantic_pattern(rx: str) -> str:

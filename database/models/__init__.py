@@ -81,7 +81,7 @@ from database.models.projects import (
 )
 from database.models.ratelimit import RateLimitBucket
 from database.models.remote_runner import RemoteRunner, RemoteRunnerEnrollmentToken
-from database.models.repo_binding import ProjectRepoBinding
+from database.models.repo_binding import CommitAttestation, ProjectRepoBinding
 from database.models.spine import (
     InvalidObjectLinkAudit,
     LinkTypeMatrix,
@@ -119,6 +119,7 @@ __all__ = [
     "AuthProviderCard",
     "Base",
     "CommentReaction",
+    "CommitAttestation",
     "CustomFieldApproval",
     "CustomFieldDefinition",
     "CustomFieldValue",

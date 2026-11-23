@@ -1,0 +1,189 @@
+{
+  "200_OK_ATTESTATION_SUCCESS": {
+    "description": "Transition to Done succeeds when commit is signed with trusted SSH/GPG key, CI check run is green, and SLSA v1.0 provenance digest matches head SHA.",
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/issues/POSP-1/transitions",
+      "headers": {
+        "authorization": "Bearer kb_pat_[REDACTED]",
+        "content-type": "application/json"
+      },
+      "body": {
+        "to_state_id": "019356cb-ef23-7182-8924-f3da2a0b1002",
+        "verification_proof": {
+          "head_sha": "d3b07384d113edec49eaa6238ad5ff00",
+          "ci_run_url": "https://github.com/example/repo/actions/runs/12345",
+          "slsa_provenance": {
+            "_type": "https://in-toto.io/Statement/v1",
+            "subject": [
+              {
+                "name": "artifact-release",
+                "digest": {
+                  "sha256": "d3b07384d113edec49eaa6238ad5ff00"
+                }
+              }
+            ],
+            "predicateType": "https://slsa.dev/provenance/v1",
+            "predicate": {
+              "buildDefinition": {
+                "buildType": "https://actions.github.com/buildtypes/v1",
+                "externalParameters": {}
+              }
+            }
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 200,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "id": "019356cc-0a12-789a-bcde-f12345678901",
+        "key": "POSP-1",
+        "state_id": "019356cb-ef23-7182-8924-f3da2a0b1002",
+        "updated_at": "2026-11-22T19:35:00Z"
+      }
+    }
+  },
+  "409_PROVENANCE_ATTESTATION_FAILED_UNSIGNED_COMMIT": {
+    "description": "Transition rejected when commit is unsigned or key is not in repo truststore.",
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/issues/NEGP-1/transitions",
+      "headers": {
+        "authorization": "Bearer kb_pat_[REDACTED]",
+        "content-type": "application/json"
+      },
+      "body": {
+        "to_state_id": "019356cb-ef23-7182-8924-f3da2a0b1002",
+        "verification_proof": {
+          "head_sha": "e4c18495e224feef50fbb7349be60011"
+        }
+      }
+    },
+    "response": {
+      "status": 409,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "type": "urn:problem:provenance-attestation-failed",
+        "title": "Provenance Attestation Failed",
+        "status": 409,
+        "detail": "Gate 'gate-commit-sig' (commit_signature) rejected transition: Commit signature verification failed: No signature found on commit e4c18495e224feef50fbb7349be60011",
+        "instance": "/api/v1/issues/NEGP-1/transitions",
+        "error_code": "PROVENANCE_ATTESTATION_FAILED"
+      }
+    }
+  },
+  "409_PROVENANCE_ATTESTATION_FAILED_RED_CI": {
+    "description": "Transition rejected when live CI check run returned failure or conclusion was not success.",
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/issues/NEGP-2/transitions",
+      "headers": {
+        "authorization": "Bearer kb_pat_[REDACTED]",
+        "content-type": "application/json"
+      },
+      "body": {
+        "to_state_id": "019356cb-ef23-7182-8924-f3da2a0b1002",
+        "verification_proof": {
+          "head_sha": "d3b07384d113edec49eaa6238ad5ff00",
+          "ci_run_url": "https://github.com/example/repo/actions/runs/99999"
+        }
+      }
+    },
+    "response": {
+      "status": 409,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "type": "urn:problem:provenance-attestation-failed",
+        "title": "Provenance Attestation Failed",
+        "status": 409,
+        "detail": "Gate 'gate-ci-check' (ci_check_run) rejected transition: CI check runs failed or not concluded: failure",
+        "instance": "/api/v1/issues/NEGP-2/transitions",
+        "error_code": "PROVENANCE_ATTESTATION_FAILED"
+      }
+    }
+  },
+  "409_PROVENANCE_ATTESTATION_FAILED_SLSA_DIGEST_MISMATCH": {
+    "description": "Transition rejected when in-toto SLSA v1.0 statement subject digest does not match commit SHA.",
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/issues/NEGP-3/transitions",
+      "headers": {
+        "authorization": "Bearer kb_pat_[REDACTED]",
+        "content-type": "application/json"
+      },
+      "body": {
+        "to_state_id": "019356cb-ef23-7182-8924-f3da2a0b1002",
+        "verification_proof": {
+          "head_sha": "d3b07384d113edec49eaa6238ad5ff00",
+          "slsa_provenance": {
+            "_type": "https://in-toto.io/Statement/v1",
+            "subject": [
+              {
+                "name": "tampered-artifact",
+                "digest": {
+                  "sha256": "ffffffffffffffffffffffffffffffff"
+                }
+              }
+            ],
+            "predicateType": "https://slsa.dev/provenance/v1",
+            "predicate": {}
+          }
+        }
+      }
+    },
+    "response": {
+      "status": 409,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "type": "urn:problem:provenance-attestation-failed",
+        "title": "Provenance Attestation Failed",
+        "status": 409,
+        "detail": "Gate 'gate-slsa' (slsa_provenance) rejected transition: SLSA provenance subject digests do not match expected sha: d3b07384d113edec49eaa6238ad5ff00",
+        "instance": "/api/v1/issues/NEGP-3/transitions",
+        "error_code": "PROVENANCE_ATTESTATION_FAILED"
+      }
+    }
+  },
+  "409_AIR_GAP_EGRESS_BLOCKED": {
+    "description": "Live CI gate fails closed with 409 AIR_GAP_EGRESS_BLOCKED when instance is in air-gap mode.",
+    "request": {
+      "method": "POST",
+      "path": "/api/v1/issues/NEGP-4/transitions",
+      "headers": {
+        "authorization": "Bearer kb_pat_[REDACTED]",
+        "content-type": "application/json"
+      },
+      "body": {
+        "to_state_id": "019356cb-ef23-7182-8924-f3da2a0b1002",
+        "verification_proof": {
+          "head_sha": "d3b07384d113edec49eaa6238ad5ff00",
+          "ci_run_url": "https://github.com/example/repo/actions/runs/12345"
+        }
+      }
+    },
+    "response": {
+      "status": 409,
+      "headers": {
+        "content-type": "application/json"
+      },
+      "body": {
+        "type": "urn:problem:air-gap-egress-blocked",
+        "title": "Air Gap Egress Blocked",
+        "status": 409,
+        "detail": "Live CI check-run verification blocked in air-gap mode for URL: https://github.com/example/repo/actions/runs/12345",
+        "instance": "/api/v1/issues/NEGP-4/transitions",
+        "error_code": "AIR_GAP_EGRESS_BLOCKED"
+      }
+    }
+  }
+}

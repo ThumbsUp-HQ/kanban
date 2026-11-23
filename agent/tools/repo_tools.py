@@ -320,7 +320,7 @@ class BareGitRepoToolkit:
         cmd_args = [
             "log",
             f"-n{commits_limit}",
-            "--format=%H%x09%ad%x09%an%x09%s",
+            "--format=%H%x09%ad%x09%an%x09%s%x09%G?%x09%GS%x09%GK",
             "--date=iso-strict",
             "--end-of-options",
             self.head_commit,
