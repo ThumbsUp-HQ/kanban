@@ -28,6 +28,7 @@ import { useSystemStatus } from '../../app/useSystemStatus';
 import { apiFetch } from '../../api/client';
 import { NotFoundView } from '../../app/routes';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { copyToClipboard } from '../../utils/clipboard';
 import './McpAccessStudio.css';
@@ -740,29 +741,7 @@ export function McpAccessStudio({
 
       {/* Admin subnav for global tier */}
       {tier === 'global' && (
-        <nav className="kb-mcp-admin-subnav" aria-label="Admin MCP and Governance Navigation">
-          <Link
-            to="/admin/mcp"
-            className="kb-mcp-admin-subnav-link kb-mcp-admin-subnav-active"
-            data-testid="tab-admin-mcp"
-          >
-            Bot API Keys
-          </Link>
-          <Link
-            to="/admin/oauth"
-            className="kb-mcp-admin-subnav-link"
-            data-testid="tab-admin-oauth"
-          >
-            OAuth 2.1 Clients
-          </Link>
-          <Link
-            to="/admin/imports"
-            className="kb-mcp-admin-subnav-link"
-            data-testid="tab-admin-imports"
-          >
-            Plane Migration Studio
-          </Link>
-        </nav>
+        <AdminStudioSubnav activeTab="mcp" />
       )}
 
       {/* Admin View Switch (My Keys vs Governance) */}

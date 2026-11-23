@@ -2002,10 +2002,8 @@ export function WorkspaceMcpRedirect(): JSX.Element {
 export function AdminMcpRedirect(): JSX.Element {
   const [searchParams] = useSearchParams();
   const nextParams = new URLSearchParams(searchParams);
-  if (!nextParams.has('scope')) {
-    nextParams.set('scope', 'server');
-  }
-  return <Navigate to={`/settings/mcp?${nextParams.toString()}`} replace />;
+  const qs = nextParams.toString();
+  return <Navigate to={`/admin/mcp${qs ? `?${qs}` : ''}`} replace />;
 }
 
 const projectRouteChildren: RouteObject[] = [
@@ -2183,11 +2181,11 @@ export const appRoutes: RouteObject[] = [
               },
               {
                 path: 'mcp',
-                element: <AdminMcpRedirect />,
+                element: <McpAccessStudio tier="global" />,
               },
               {
                 path: 'mcp-keys',
-                element: <AdminMcpRedirect />,
+                element: <Navigate to="/admin/mcp" replace />,
               },
               {
                 path: 'oauth',

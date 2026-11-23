@@ -187,7 +187,7 @@ export function LinkGraphAction({ issue }: LinkGraphActionProps): JSX.Element {
         onClick={() => { setPopoverOpen((prev) => !prev); }}
         data-testid="link-graph-trigger"
       >
-        <span aria-hidden="true">🔗</span>
+        <span aria-hidden="true">🕸️</span>
       </button>
 
       {popoverOpen && (

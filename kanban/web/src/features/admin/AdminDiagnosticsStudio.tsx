@@ -7,6 +7,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { apiFetch } from '../../api/client';
 import { NotFoundView } from '../../app/routes';
 import { LinkAuditorStudio } from './LinkAuditorStudio';
+import { AdminStudioSubnav } from './AdminStudioSubnav';
 import './AdminDiagnosticsStudio.css';
 
 export interface SubsystemHealth {
@@ -416,6 +417,8 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
           </button>
         </div>
       </header>
+
+      <AdminStudioSubnav activeTab="diagnostics" />
 
       {/* Top 4-Card Summary Strip */}
       <section className="admin-diag-summary-strip" aria-label="System Summary Strip">

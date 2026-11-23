@@ -11,6 +11,7 @@ import { MintEnrollmentTokenModal } from './MintEnrollmentTokenModal';
 import { SecondFactorStep } from '../auth/SecondFactorStep';
 import type { MfaMethod } from '../auth/authApi';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import './runnerStudio.css';
 
 export function RunnerStudioPage(): JSX.Element {
@@ -105,6 +106,7 @@ export function RunnerStudioPage(): JSX.Element {
 
   return (
     <section className="kb-runner-studio" data-testid="runner-studio-page">
+      <AdminStudioSubnav activeTab="runners" />
       <div className="kb-runner-studio-header">
         <div className="kb-runner-studio-title-group">
           <h1>

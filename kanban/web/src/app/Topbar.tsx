@@ -478,7 +478,7 @@ export function Topbar({
 
                 {(isWorkspaceAdmin || isServerAdmin) && (
                   <Link
-                    to="/admin/link-auditor"
+                    to="/admin/diagnostics"
                     role="menuitem"
                     data-testid="topbar-link-auditor-link"
                     className="kb-theme-radio kb-avatar-menu-link"
@@ -500,6 +500,7 @@ export function Topbar({
                     <Link
                       to="/admin/auth"
                       role="menuitem"
+                      data-testid="topbar-admin-auth-link"
                       className="kb-theme-radio kb-avatar-menu-link"
                       onClick={() => {
                         setAvatarMenuOpen(false);
@@ -516,6 +517,7 @@ export function Topbar({
                     <Link
                       to="/admin/ai"
                       role="menuitem"
+                      data-testid="topbar-admin-ai-link"
                       className="kb-theme-radio kb-avatar-menu-link"
                       onClick={() => {
                         setAvatarMenuOpen(false);
@@ -532,6 +534,7 @@ export function Topbar({
                     <Link
                       to="/admin/agents"
                       role="menuitem"
+                      data-testid="topbar-admin-agents-link"
                       className="kb-theme-radio kb-avatar-menu-link"
                       onClick={() => {
                         setAvatarMenuOpen(false);
@@ -548,6 +551,7 @@ export function Topbar({
                     <Link
                       to="/admin/agent-runners"
                       role="menuitem"
+                      data-testid="topbar-admin-runners-link"
                       className="kb-theme-radio kb-avatar-menu-link"
                       onClick={() => {
                         setAvatarMenuOpen(false);
@@ -561,10 +565,45 @@ export function Topbar({
                       </span>
                     </Link>
 
+                    <Link
+                      to="/admin/oauth"
+                      role="menuitem"
+                      data-testid="topbar-admin-oauth-link"
+                      className="kb-theme-radio kb-avatar-menu-link"
+                      onClick={() => {
+                        setAvatarMenuOpen(false);
+                      }}
+                    >
+                      <span>
+                        <span aria-hidden="true" className="kb-avatar-menu-icon">
+                          🌐
+                        </span>
+                        OAuth 2.1 Clients
+                      </span>
+                    </Link>
+
+                    <Link
+                      to="/admin/imports"
+                      role="menuitem"
+                      data-testid="topbar-admin-imports-link"
+                      className="kb-theme-radio kb-avatar-menu-link"
+                      onClick={() => {
+                        setAvatarMenuOpen(false);
+                      }}
+                    >
+                      <span>
+                        <span aria-hidden="true" className="kb-avatar-menu-icon">
+                          📥
+                        </span>
+                        Plane Migration Studio
+                      </span>
+                    </Link>
+
                     {/* Preserving System Storage, Backups & Deployment from KANBA-188 */}
                     <Link
                       to="/admin/standalone"
                       role="menuitem"
+                      data-testid="topbar-admin-standalone-link"
                       className="kb-theme-radio kb-avatar-menu-link"
                       onClick={() => {
                         setAvatarMenuOpen(false);

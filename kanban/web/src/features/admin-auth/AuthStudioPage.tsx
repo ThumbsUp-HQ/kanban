@@ -28,6 +28,7 @@ import {
 import { SecondFactorStep } from '../auth/SecondFactorStep';
 import type { MfaMethod } from '../auth/authApi';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
 import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
 import './adminAuth.css';
@@ -643,6 +644,7 @@ export function AuthStudioPage(): JSX.Element {
 
   return (
     <main className="auth-studio-page" data-testid="auth-studio-page">
+      <AdminStudioSubnav activeTab="auth" />
       {/* Studio Header */}
       <header className="auth-studio-header">
         <div className="auth-studio-title-row">

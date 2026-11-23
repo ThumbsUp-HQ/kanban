@@ -16,6 +16,7 @@ import {
 import { AiBudgetModal } from './AiBudgetModal';
 import { AiProviderEditorDrawer } from './AiProviderEditorDrawer';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import './aiStudio.css';
 
 interface CardTestStatus {
@@ -204,6 +205,7 @@ export function AiStudioPage(): JSX.Element {
 
   return (
     <section className="kb-ai-studio" data-testid="ai-studio-page">
+      <AdminStudioSubnav activeTab="ai" />
       <div className="kb-ai-studio-header">
         <div className="kb-ai-studio-title-group">
           <h1>

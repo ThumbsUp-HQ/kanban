@@ -11,6 +11,7 @@ import {
   type ImportSource,
 } from './planeImportApi';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
+import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import './PlaneImportStudio.css';
 
 export interface EntityCounts {
@@ -326,21 +327,7 @@ export function PlaneImportStudio(): JSX.Element {
         </div>
       </header>
 
-      <nav className="kb-mcp-admin-subnav" aria-label="Admin MCP and Governance Navigation">
-        <Link to="/admin/mcp" className="kb-mcp-admin-subnav-link" data-testid="tab-admin-mcp">
-          Bot API Keys
-        </Link>
-        <Link to="/admin/oauth" className="kb-mcp-admin-subnav-link" data-testid="tab-admin-oauth">
-          OAuth 2.1 Clients
-        </Link>
-        <Link
-          to="/admin/imports"
-          className="kb-mcp-admin-subnav-link kb-mcp-admin-subnav-active"
-          data-testid="tab-admin-imports"
-        >
-          Migration Studio
-        </Link>
-      </nav>
+      <AdminStudioSubnav activeTab="imports" />
 
       <div
         className="kb-plane-mode-row"

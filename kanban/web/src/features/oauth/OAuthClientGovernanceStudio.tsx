@@ -14,6 +14,7 @@ import { copyToClipboard } from '../../utils/clipboard';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
+import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
 import './OAuthClientGovernanceStudio.css';
 
 export function OAuthClientGovernanceStudio(): JSX.Element {
@@ -233,25 +234,7 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
         </div>
       </header>
 
-      <nav className="kb-mcp-admin-subnav" aria-label="Admin MCP and Governance Navigation">
-        <Link to="/admin/mcp" className="kb-mcp-admin-subnav-link" data-testid="tab-admin-mcp">
-          Bot API Keys
-        </Link>
-        <Link
-          to="/admin/oauth"
-          className="kb-mcp-admin-subnav-link kb-mcp-admin-subnav-active"
-          data-testid="tab-admin-oauth"
-        >
-          OAuth 2.1 Clients
-        </Link>
-        <Link
-          to="/admin/imports"
-          className="kb-mcp-admin-subnav-link"
-          data-testid="tab-admin-imports"
-        >
-          Plane Migration Studio
-        </Link>
-      </nav>
+      <AdminStudioSubnav activeTab="oauth" />
 
       {error !== null && (
         <div className="kb-oauth-gov-alert kb-oauth-gov-alert-error" role="alert" data-testid="error-alert">
