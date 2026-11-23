@@ -1,5 +1,9 @@
 import React, { useState, useRef, useEffect, useCallback, useMemo, type JSX } from 'react';
-import type { GroupAxis, IssueItem } from './viewsApi';
+import type { GroupAxis, IssueItem, SavedView, StateSummary } from './viewsApi';
+import { createAllStatesFilterPreference, type ProjectStateFilterPreference } from './issueFilterCookie';
+import { StateFilterPopover } from './StateFilterPopover';
+import { CsvImportExportModal } from './CsvImportExportModal';
+import { ReportExportModal } from '../reports/ReportExportModal';
 import {
   fetchAssigneeSuggestions,
   fetchProjectLabels,
@@ -31,11 +35,26 @@ export interface FilterDisplayBarProps {
   onSaveView?: () => void;
   onExport?: () => void;
   onImport?: () => void;
+  onExportReports?: () => void;
   searchInputRef?: React.RefObject<HTMLInputElement | null>;
   isFilterOpen?: boolean;
   onToggleFilterOpen?: (open: boolean) => void;
   projectKey?: string;
   issues?: IssueItem[];
+  // Unified toolbar consistency across all layouts (KAN-365)
+  searchQuery?: string;
+  onSearchQueryChange?: (q: string) => void;
+  queryMode?: 'basic' | 'query';
+  onQueryModeChange?: (mode: 'basic' | 'query') => void;
+  onSearchSubmit?: () => void;
+  savedViews?: SavedView[];
+  activeViewId?: string | null;
+  onSelectSavedView?: (viewId: string) => void;
+  projectStates?: StateSummary[];
+  stateFilter?: ProjectStateFilterPreference;
+  onStateFilterChange?: (pref: ProjectStateFilterPreference) => void;
+  workspaceScope?: string;
+  className?: string;
 }
 
 interface FacetOption {
@@ -56,21 +75,39 @@ export function FilterDisplayBar({
   onSaveView,
   onExport,
   onImport,
+  onExportReports,
   searchInputRef: externalSearchRef,
   isFilterOpen: externalFilterOpen,
   onToggleFilterOpen: externalToggleFilterOpen,
   projectKey,
   issues,
+  searchQuery: propSearchQuery,
+  onSearchQueryChange,
+  queryMode = 'basic',
+  onQueryModeChange,
+  onSearchSubmit,
+  savedViews = [],
+  activeViewId = null,
+  onSelectSavedView,
+  projectStates = [],
+  stateFilter,
+  onStateFilterChange,
+  workspaceScope,
+  className = '',
 }: FilterDisplayBarProps): JSX.Element {
   const [internalFilterOpen, setInternalFilterOpen] = useState(false);
   const [isDisplayTuneOpen, setIsDisplayTuneOpen] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [facetSearchQuery, setFacetSearchQuery] = useState('');
   const [liveAssignees, setLiveAssignees] = useState<FacetOption[]>([]);
   const [liveLabels, setLiveLabels] = useState<FacetOption[]>([]);
   const [liveCycles, setLiveCycles] = useState<FacetOption[]>([]);
   const [liveModules, setLiveModules] = useState<FacetOption[]>([]);
+  const [csvModalTab, setCsvModalTab] = useState<'export' | 'import' | null>(null);
+  const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
   const internalSearchRef = useRef<HTMLInputElement>(null);
   const searchRef = externalSearchRef ?? internalSearchRef;
+
+  const effectiveSearchQuery = propSearchQuery ?? '';
 
   const isPopoverOpen = externalFilterOpen ?? internalFilterOpen;
   const setPopoverOpen = useCallback((open: boolean) => {
@@ -360,8 +397,8 @@ export function FilterDisplayBar({
   }
 
   const filteredFacets = facetDefinitions.filter((facet) => {
-    if (!searchQuery) return true;
-    const q = searchQuery.toLowerCase();
+    if (!facetSearchQuery) return true;
+    const q = facetSearchQuery.toLowerCase();
     return (
       facet.label.toLowerCase().includes(q) ||
       facet.category.toLowerCase().includes(q)
@@ -369,8 +406,102 @@ export function FilterDisplayBar({
   });
 
   return (
-    <div className="filter-display-bar" role="region" aria-label="Filter and display controls">
+    <div
+      className={`filter-display-bar ${className}`}
+      role="region"
+      aria-label="Filter and display controls"
+      data-testid="filter-display-bar"
+    >
+      {/* Search DSL Form (KAN-365 Parity across layouts) */}
+      {onSearchQueryChange && (
+        <form
+          className="filter-search-form navigator-search-form"
+          data-testid="filter-display-search-form"
+          onSubmit={(e) => {
+            e.preventDefault();
+            onSearchSubmit?.();
+          }}
+        >
+          {queryMode === 'basic' ? (
+            <input
+              type="search"
+              className="navigator-search-input filter-search-dsl-input"
+              data-testid="filter-display-search-input"
+              placeholder="Search issues by summary, key, or details..."
+              aria-label="Search issues"
+              value={effectiveSearchQuery}
+              onChange={(e) => {
+                onSearchQueryChange(e.target.value);
+              }}
+            />
+          ) : (
+            <input
+              type="text"
+              className="navigator-query-input filter-query-dsl-input"
+              data-testid="filter-display-query-input"
+              placeholder='e.g. project = "KAN" AND status = "Todo"'
+              aria-label="Structured query search"
+              value={effectiveSearchQuery}
+              onChange={(e) => {
+                onSearchQueryChange(e.target.value);
+              }}
+            />
+          )}
+
+          <button
+            type="submit"
+            className="navigator-search-btn filter-search-btn"
+            data-testid="filter-display-search-btn"
+            aria-label="Search"
+          >
+            Search
+          </button>
+
+          {onQueryModeChange && (
+            <div
+              className="navigator-mode-group filter-mode-group"
+              data-testid="filter-display-mode-toggle"
+              role="group"
+              aria-label="Search mode"
+            >
+              <button
+                type="button"
+                className={`navigator-mode-btn ${queryMode === 'basic' ? 'navigator-mode-btn--active' : ''}`}
+                data-testid="mode-basic-btn"
+                aria-pressed={queryMode === 'basic'}
+                onClick={() => {
+                  onQueryModeChange('basic');
+                }}
+              >
+                Basic
+              </button>
+              <button
+                type="button"
+                className={`navigator-mode-btn ${queryMode === 'query' ? 'navigator-mode-btn--active' : ''}`}
+                data-testid="mode-query-btn"
+                aria-pressed={queryMode === 'query'}
+                onClick={() => {
+                  onQueryModeChange('query');
+                }}
+              >
+                Query
+              </button>
+            </div>
+          )}
+        </form>
+      )}
+
       <div className="filter-controls-group">
+        {/* Multi-Select StateFilterPopover parity when provided */}
+        {(onStateFilterChange ?? stateFilter) != null && (
+          <StateFilterPopover
+            projectStates={projectStates}
+            issues={issues ?? []}
+            value={stateFilter ?? createAllStatesFilterPreference()}
+            onChange={(pref) => onStateFilterChange?.(pref)}
+          />
+        )}
+
         <button
           type="button"
           className="filter-btn-trigger"
@@ -394,8 +525,8 @@ export function FilterDisplayBar({
               type="text"
               className="filter-search-input"
               placeholder="Search filters..."
-              value={searchQuery}
-              onChange={(e) => { setSearchQuery(e.target.value); }}
+              value={facetSearchQuery}
+              onChange={(e) => { setFacetSearchQuery(e.target.value); }}
               aria-label="Search filter facets"
             />
             <div className="filter-facets-list">
@@ -521,9 +652,35 @@ export function FilterDisplayBar({
             aria-label="Display options"
           >
             <div className="filter-facet-category-title">Display Settings</div>
+
+            {savedViews.length > 0 && (
+              <div
+                className="filter-display-saved-views-section"
+                data-testid="filter-display-saved-views-list"
+              >
+                <div className="filter-facet-category-title">Saved Views</div>
+                {savedViews.map((v) => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    className={`filter-facet-option ${activeViewId === v.id ? 'filter-facet-option--active' : ''}`}
+                    data-testid={`filter-display-saved-view-${v.id}`}
+                    onClick={() => {
+                      onSelectSavedView?.(v.id);
+                      setIsDisplayTuneOpen(false);
+                    }}
+                  >
+                    <span>{v.name}</span>
+                    {activeViewId === v.id && <span>✓</span>}
+                  </button>
+                ))}
+              </div>
+            )}
+
             <button
               type="button"
               className="filter-facet-option"
+              data-testid="filter-display-save-view-btn"
               onClick={() => {
                 onSaveView?.();
                 setIsDisplayTuneOpen(false);
@@ -531,35 +688,124 @@ export function FilterDisplayBar({
             >
               Save as view
             </button>
-            {onExport && (
-              <button
-                type="button"
-                className="filter-facet-option"
-                data-testid="filter-display-export-btn"
-                onClick={() => {
+            <button
+              type="button"
+              className="filter-facet-option"
+              data-testid="filter-display-reports-btn"
+              onClick={() => {
+                if (onExportReports) {
+                  onExportReports();
+                } else {
+                  setIsReportsModalOpen(true);
+                }
+                setIsDisplayTuneOpen(false);
+              }}
+            >
+              Export Reports (PDF, XLSX, CSV, DOCX, HTML, MD)
+            </button>
+            <button
+              type="button"
+              className="filter-facet-option"
+              data-testid="filter-display-export-btn"
+              onClick={() => {
+                if (onExport) {
                   onExport();
-                  setIsDisplayTuneOpen(false);
-                }}
-              >
-                Export Issues (CSV / ZIP)
-              </button>
-            )}
-            {onImport && (
-              <button
-                type="button"
-                className="filter-facet-option"
-                data-testid="filter-display-import-btn"
-                onClick={() => {
+                } else {
+                  setCsvModalTab('export');
+                }
+                setIsDisplayTuneOpen(false);
+              }}
+            >
+              Export Issues (CSV / ZIP)
+            </button>
+            <button
+              type="button"
+              className="filter-facet-option"
+              data-testid="filter-display-import-btn"
+              onClick={() => {
+                if (onImport) {
                   onImport();
-                  setIsDisplayTuneOpen(false);
-                }}
-              >
-                Import Issues (CSV / ZIP)
-              </button>
-            )}
+                } else {
+                  setCsvModalTab('import');
+                }
+                setIsDisplayTuneOpen(false);
+              }}
+            >
+              Import Issues (CSV / ZIP)
+            </button>
           </div>
         )}
       </div>
+
+      {/* Saved Views Chip Strip (KAN-365) */}
+      {savedViews.length > 0 && (
+        <div
+          className="filter-saved-views-strip navigator-saved-views-strip"
+          data-testid="filter-display-saved-views"
+          role="region"
+          aria-label="Saved Views"
+        >
+          <span className="navigator-saved-views-label">Views:</span>
+          {savedViews.map((v) => {
+            const isActive = activeViewId === v.id;
+            return (
+              <button
+                key={v.id}
+                type="button"
+                className={`navigator-view-chip ${isActive ? 'navigator-view-chip--active' : ''}`}
+                data-testid={`saved-view-chip-${v.id}`}
+                aria-pressed={isActive}
+                onClick={() => {
+                  onSelectSavedView?.(v.id);
+                }}
+              >
+                {v.name}
+              </button>
+            );
+          })}
+          {onSelectSavedView && (
+            <select
+              className="navigator-saved-views-select filter-saved-views-select"
+              data-testid="filter-display-saved-views-select"
+              aria-label="Select saved view"
+              value={activeViewId ?? ''}
+              onChange={(e) => {
+                if (e.target.value) {
+                  onSelectSavedView(e.target.value);
+                }
+              }}
+            >
+              <option value="">Select view...</option>
+              {savedViews.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+          )}
+        </div>
+      )}
+
+      {csvModalTab && projectKey && (
+        <CsvImportExportModal
+          isOpen={true}
+          onClose={() => { setCsvModalTab(null); }}
+          projectKey={projectKey}
+          workspaceScope={workspaceScope}
+          activeFilters={activeFilters}
+          searchQuery={effectiveSearchQuery}
+          initialTab={csvModalTab}
+        />
+      )}
+
+      {isReportsModalOpen && projectKey && (
+        <ReportExportModal
+          isOpen={isReportsModalOpen}
+          onClose={() => { setIsReportsModalOpen(false); }}
+          workspaceSlug={workspaceScope}
+          projectKey={projectKey}
+        />
+      )}
     </div>
   );
 }
