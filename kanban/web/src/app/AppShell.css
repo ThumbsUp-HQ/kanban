@@ -671,3 +671,16 @@
   }
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .kb-btn-primary,
+  .kb-btn-secondary,
+  .kb-btn-danger,
+  .kb-not-found-btn {
+    animation: none !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
