@@ -33,7 +33,7 @@ export interface FilterDisplayBarProps {
   onSubGroupByChange?: (subGroup: GroupAxis) => void;
   modulesEnabled?: boolean;
   onSaveView?: () => void;
-  onExport?: () => void;
+  onExport?: (format?: 'csv' | 'zip_csv') => void;
   onImport?: () => void;
   onExportReports?: () => void;
   searchInputRef?: React.RefObject<HTMLInputElement | null>;
@@ -103,6 +103,7 @@ export function FilterDisplayBar({
   const [liveCycles, setLiveCycles] = useState<FacetOption[]>([]);
   const [liveModules, setLiveModules] = useState<FacetOption[]>([]);
   const [csvModalTab, setCsvModalTab] = useState<'export' | 'import' | null>(null);
+  const [csvExportFormat, setCsvExportFormat] = useState<'csv' | 'zip_csv'>('csv');
   const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
   const internalSearchRef = useRef<HTMLInputElement>(null);
   const searchRef = externalSearchRef ?? internalSearchRef;
@@ -688,6 +689,39 @@ export function FilterDisplayBar({
             >
               Save as view
             </button>
+            <div className="filter-facet-category-title">Export & Import</div>
+            <button
+              type="button"
+              className="filter-facet-option"
+              data-testid="filter-display-export-opt-csv"
+              onClick={() => {
+                if (onExport) {
+                  onExport('csv');
+                } else {
+                  setCsvExportFormat('csv');
+                  setCsvModalTab('export');
+                }
+                setIsDisplayTuneOpen(false);
+              }}
+            >
+              CSV (.csv)
+            </button>
+            <button
+              type="button"
+              className="filter-facet-option"
+              data-testid="filter-display-export-opt-zip"
+              onClick={() => {
+                if (onExport) {
+                  onExport('zip_csv');
+                } else {
+                  setCsvExportFormat('zip_csv');
+                  setCsvModalTab('export');
+                }
+                setIsDisplayTuneOpen(false);
+              }}
+            >
+              Password-Protected ZIP (AES-256)
+            </button>
             <button
               type="button"
               className="filter-facet-option"
@@ -701,7 +735,7 @@ export function FilterDisplayBar({
                 setIsDisplayTuneOpen(false);
               }}
             >
-              Export Reports (PDF, XLSX, CSV, DOCX, HTML, MD)
+              Report Template...
             </button>
             <button
               type="button"
@@ -709,8 +743,9 @@ export function FilterDisplayBar({
               data-testid="filter-display-export-btn"
               onClick={() => {
                 if (onExport) {
-                  onExport();
+                  onExport('csv');
                 } else {
+                  setCsvExportFormat('csv');
                   setCsvModalTab('export');
                 }
                 setIsDisplayTuneOpen(false);
@@ -795,6 +830,7 @@ export function FilterDisplayBar({
           activeFilters={activeFilters}
           searchQuery={effectiveSearchQuery}
           initialTab={csvModalTab}
+          initialExportFormat={csvExportFormat}
         />
       )}
 

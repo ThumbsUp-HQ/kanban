@@ -49,6 +49,7 @@ export interface CsvImportExportModalProps {
   activeFilters?: ActiveFilters | undefined;
   searchQuery?: string | undefined;
   initialTab?: 'export' | 'import' | undefined;
+  initialExportFormat?: 'csv' | 'zip_csv' | undefined;
   onImportSuccess?: (() => void) | undefined;
 }
 
@@ -60,10 +61,22 @@ export function CsvImportExportModal({
   activeFilters = {},
   searchQuery,
   initialTab = 'export',
+  initialExportFormat = 'csv',
   onImportSuccess,
 }: CsvImportExportModalProps): JSX.Element | null {
   const [activeTab, setActiveTab] = useState<'export' | 'import'>(initialTab);
-  const [exportFormat, setExportFormat] = useState<'csv' | 'zip_csv'>('csv');
+  const [prevInitialTab, setPrevInitialTab] = useState(initialTab);
+  if (initialTab !== prevInitialTab) {
+    setPrevInitialTab(initialTab);
+    setActiveTab(initialTab);
+  }
+
+  const [exportFormat, setExportFormat] = useState<'csv' | 'zip_csv'>(initialExportFormat);
+  const [prevInitialExportFormat, setPrevInitialExportFormat] = useState(initialExportFormat);
+  if (initialExportFormat !== prevInitialExportFormat) {
+    setPrevInitialExportFormat(initialExportFormat);
+    setExportFormat(initialExportFormat);
+  }
   const [exportPassword, setExportPassword] = useState('');
   const [isExporting, setIsExporting] = useState(false);
 

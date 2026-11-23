@@ -68,6 +68,18 @@ describe('CsvImportExportModal (KAN-316)', () => {
     });
   });
 
+  it('supports initialExportFormat prop to pre-select CSV or ZIP format (KAN-374)', () => {
+    const { rerender } = render(
+      <CsvImportExportModal {...defaultProps} initialExportFormat="zip_csv" />,
+    );
+    const zipRadio = screen.getByTestId<HTMLInputElement>('export-format-zip');
+    expect(zipRadio.checked).toBe(true);
+
+    rerender(<CsvImportExportModal {...defaultProps} initialExportFormat="csv" />);
+    const csvRadio = screen.getByTestId<HTMLInputElement>('export-format-csv');
+    expect(csvRadio.checked).toBe(true);
+  });
+
   it('switches between export and import tabs and handles template download success and failure', async () => {
     const fetchMock = vi
       .fn()

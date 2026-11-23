@@ -575,7 +575,13 @@ export function IssuesWorkspaceRoute({
   const [isSaveViewModalOpen, setIsSaveViewModalOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
   const [csvModalTab, setCsvModalTab] = useState<'export' | 'import' | null>(null);
+  const [csvExportFormat, setCsvExportFormat] = useState<'csv' | 'zip_csv'>('csv');
   const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
+
+  const handleExport = useCallback((format: 'csv' | 'zip_csv' = 'csv') => {
+    setCsvExportFormat(format);
+    setCsvModalTab('export');
+  }, []);
 
   const handleOpenCreateModal = useCallback(() => {
     setIsCreateModalOpen(true);
@@ -1275,7 +1281,7 @@ export function IssuesWorkspaceRoute({
           savedViews={savedViews}
           activeViewId={activeViewId}
           onSelectSavedView={handleSelectSavedView}
-          onExport={() => { setCsvModalTab('export'); }}
+          onExport={handleExport}
           onImport={() => { setCsvModalTab('import'); }}
           onExportReports={() => { setIsReportsModalOpen(true); }}
         />
@@ -1306,7 +1312,7 @@ export function IssuesWorkspaceRoute({
           projectStates={projectStates}
           stateFilter={stateFilterPref}
           onStateFilterChange={handleUserStateFilterChange}
-          onExport={() => { setCsvModalTab('export'); }}
+          onExport={handleExport}
           onImport={() => { setCsvModalTab('import'); }}
           onExportReports={() => { setIsReportsModalOpen(true); }}
         />
@@ -1540,6 +1546,7 @@ export function IssuesWorkspaceRoute({
           activeFilters={activeFilters}
           searchQuery={searchQuery}
           initialTab={csvModalTab}
+          initialExportFormat={csvExportFormat}
         />
       )}
 

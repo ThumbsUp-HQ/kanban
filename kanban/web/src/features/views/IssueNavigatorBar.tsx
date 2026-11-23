@@ -4,7 +4,7 @@
  * and renders non-intrusive hidden-completed-banner during search.
  */
 
-import React, { useMemo, useCallback, useState, type JSX } from 'react';
+import React, { useMemo, useCallback, useState, useRef, useEffect, type JSX } from 'react';
 import {
   buildPreferenceFromExplicitStateTokens,
   classifyStateFilterPreset,
@@ -53,7 +53,7 @@ export interface IssueNavigatorBarProps {
   activeViewId?: string | null;
   onSelectSavedView?: (viewId: string) => void;
   onSearchSubmit?: () => void;
-  onExport?: () => void;
+  onExport?: (format?: 'csv' | 'zip_csv') => void;
   onImport?: () => void;
   onExportReports?: () => void;
   className?: string;
@@ -277,6 +277,29 @@ export function IssueNavigatorBar({
   const currentModule = activeFilters.module?.[0] ?? 'all';
   const [filtersExpanded, setFiltersExpanded] = React.useState<boolean>(false);
   const [csvModalTab, setCsvModalTab] = useState<'export' | 'import' | null>(null);
+  const [csvExportFormat, setCsvExportFormat] = useState<'csv' | 'zip_csv'>('csv');
+  const [isExportMenuOpen, setIsExportMenuOpen] = useState(false);
+  const exportMenuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    if (!isExportMenuOpen) return;
+    const handleOutsideClick = (e: MouseEvent) => {
+      if (exportMenuRef.current && !exportMenuRef.current.contains(e.target as Node)) {
+        setIsExportMenuOpen(false);
+      }
+    };
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setIsExportMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isExportMenuOpen]);
 
   return (
     <div
@@ -359,23 +382,83 @@ export function IssueNavigatorBar({
           </button>
         </div>
 
-        {/* CSV Import & Export Actions */}
-        <div className="navigator-csv-actions" role="group" aria-label="CSV actions">
-          <button
-            type="button"
-            className="navigator-csv-btn"
-            data-testid="navigator-export-btn"
-            aria-label="Export Issues to CSV"
-            onClick={() => {
-              if (onExport) {
-                onExport();
-              } else {
-                setCsvModalTab('export');
-              }
-            }}
-          >
-            Export
-          </button>
+        {/* CSV & Reports Export & Import Actions */}
+        <div className="navigator-csv-actions" role="group" aria-label="Export and import actions">
+          <div className="navigator-export-dropdown" ref={exportMenuRef}>
+            <button
+              type="button"
+              className="navigator-csv-btn navigator-export-btn"
+              data-testid="navigator-export-btn"
+              aria-label="Export issues"
+              aria-haspopup="menu"
+              aria-expanded={isExportMenuOpen}
+              onClick={() => {
+                setIsExportMenuOpen((prev) => !prev);
+              }}
+            >
+              <span>Export</span>
+              <span aria-hidden="true">▾</span>
+            </button>
+            {isExportMenuOpen && (
+              <div
+                className="navigator-export-menu"
+                role="menu"
+                aria-label="Export options"
+                data-testid="navigator-export-menu"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="navigator-export-menu-item"
+                  data-testid="navigator-export-opt-csv"
+                  onClick={() => {
+                    setIsExportMenuOpen(false);
+                    if (onExport) {
+                      onExport('csv');
+                    } else {
+                      setCsvExportFormat('csv');
+                      setCsvModalTab('export');
+                    }
+                  }}
+                >
+                  CSV (.csv)
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="navigator-export-menu-item"
+                  data-testid="navigator-export-opt-zip"
+                  onClick={() => {
+                    setIsExportMenuOpen(false);
+                    if (onExport) {
+                      onExport('zip_csv');
+                    } else {
+                      setCsvExportFormat('zip_csv');
+                      setCsvModalTab('export');
+                    }
+                  }}
+                >
+                  Password-Protected ZIP (AES-256)
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="navigator-export-menu-item"
+                  data-testid="navigator-export-opt-template"
+                  onClick={() => {
+                    setIsExportMenuOpen(false);
+                    if (onExportReports) {
+                      onExportReports();
+                    } else {
+                      setIsReportsModalOpen(true);
+                    }
+                  }}
+                >
+                  Report Template...
+                </button>
+              </div>
+            )}
+          </div>
           <button
             type="button"
             className="navigator-csv-btn"
@@ -391,6 +474,21 @@ export function IssueNavigatorBar({
           >
             Import
           </button>
+          {/* Backwards-compatible alias for deprecated Row-2 reports export button */}
+          <button
+            type="button"
+            data-testid="navigator-reports-export-btn"
+            style={{ display: 'none' }}
+            aria-hidden="true"
+            tabIndex={-1}
+            onClick={() => {
+              if (onExportReports) {
+                onExportReports();
+              } else {
+                setIsReportsModalOpen(true);
+              }
+            }}
+          />
         </div>
 
         {/* Mobile / Compact Landscape Filters Toggle */}
@@ -528,23 +626,6 @@ export function IssueNavigatorBar({
           >
             <span>{favoritesOnly ? '⭐ Favorites only' : '☆ Favorites only'}</span>
           </button>
-
-          {/* Reports & Export Modal Trigger */}
-          <button
-            type="button"
-            className="navigator-reports-btn"
-            data-testid="navigator-reports-export-btn"
-            onClick={() => {
-              if (onExportReports) {
-                onExportReports();
-              } else {
-                setIsReportsModalOpen(true);
-              }
-            }}
-            title="Export reports in PDF, XLSX, CSV, DOCX, ODT, HTML, MD"
-          >
-            <span>📄 Export</span>
-          </button>
         </div>
       )}
 
@@ -632,6 +713,7 @@ export function IssueNavigatorBar({
             activeFilters={activeFilters}
             searchQuery={searchQuery}
             initialTab={csvModalTab}
+            initialExportFormat={csvExportFormat}
           />
         )
       }
