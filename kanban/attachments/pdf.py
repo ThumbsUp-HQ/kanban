@@ -30,7 +30,10 @@ import sys
 import zlib
 from dataclasses import dataclass
 from hashlib import sha256
-from typing import Final
+from typing import TYPE_CHECKING, Final
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
 
 try:
     import resource
@@ -51,6 +54,10 @@ MAX_PDF_OBJECTS: Final[int] = 50_000
 SUBPROCESS_TIMEOUT_SECONDS: Final[float] = 3.0
 MIN_PDF_HEADER_LEN: Final[int] = 8
 DEFAULT_AS_LIMIT_BYTES: Final[int] = 512 * 1024 * 1024
+DEFAULT_CPU_LIMIT_SECONDS: Final[int] = 5
+DEFAULT_FSIZE_LIMIT_BYTES: Final[int] = 0
+DEFAULT_NOFILE_LIMIT: Final[int] = 64
+DEFAULT_CORE_LIMIT_BYTES: Final[int] = 0
 
 FORBIDDEN_NAME_SET: Final[frozenset[bytes]] = frozenset(
     {
@@ -513,13 +520,34 @@ def scan_and_validate_pdf_in_process(raw_bytes: bytes) -> tuple[int, bytes]:
     return page_count, digest
 
 
+def _apply_posix_rlimit(res_attr: str, limits: tuple[int, int]) -> None:
+    """Safely apply a POSIX resource limit if available."""
+    rlimit_const = getattr(resource, res_attr, None)
+    setrlimit_fn = getattr(resource, "setrlimit", None)
+    if rlimit_const is not None and setrlimit_fn is not None:
+        try:
+            setrlimit_fn(rlimit_const, limits)
+        except (OSError, ValueError):
+            logger.debug("Could not set %s", res_attr, exc_info=True)
+
+
+def _set_posix_limits(
+    as_limit_bytes: int = DEFAULT_AS_LIMIT_BYTES,
+    cpu_limit_seconds: int = DEFAULT_CPU_LIMIT_SECONDS,
+    fsize_limit_bytes: int = DEFAULT_FSIZE_LIMIT_BYTES,
+    nofile_limit: int = DEFAULT_NOFILE_LIMIT,
+) -> None:
+    """Enforce strict POSIX resource limits on child worker subprocess."""
+    _apply_posix_rlimit("RLIMIT_AS", (as_limit_bytes, as_limit_bytes))
+    _apply_posix_rlimit("RLIMIT_CPU", (cpu_limit_seconds, cpu_limit_seconds))
+    _apply_posix_rlimit("RLIMIT_FSIZE", (fsize_limit_bytes, fsize_limit_bytes))
+    _apply_posix_rlimit("RLIMIT_NOFILE", (nofile_limit, nofile_limit))
+    _apply_posix_rlimit("RLIMIT_CORE", (DEFAULT_CORE_LIMIT_BYTES, DEFAULT_CORE_LIMIT_BYTES))
+
+
 def _run_subprocess_worker() -> None:
     """Run internal CLI worker executed inside bounded child subprocess."""
-    if hasattr(resource, "RLIMIT_AS"):
-        try:
-            resource.setrlimit(resource.RLIMIT_AS, (DEFAULT_AS_LIMIT_BYTES, DEFAULT_AS_LIMIT_BYTES))
-        except (OSError, ValueError):
-            logger.debug("Could not set RLIMIT_AS address space limit", exc_info=True)
+    _set_posix_limits()
 
     try:
         raw_input = sys.stdin.buffer.read()
@@ -556,9 +584,17 @@ def _run_subprocess_worker() -> None:
         sys.exit(2)
 
 
-def _execute_subprocess(raw_bytes: bytes) -> dict[str, object]:
-    """Execute bounded child subprocess with strict timeout."""
+def _execute_subprocess(
+    raw_bytes: bytes,
+    *,
+    preexec_fn: Callable[[], None] | None = None,
+) -> dict[str, object]:
+    """Execute bounded child subprocess with strict timeout and POSIX resource limits."""
     cmd = [sys.executable, "-m", "kanban.attachments.pdf"]
+    actual_preexec = preexec_fn
+    if actual_preexec is None and sys.platform != "win32":
+        actual_preexec = _set_posix_limits
+
     try:
         proc = subprocess.run(  # noqa: S603
             cmd,
@@ -566,6 +602,7 @@ def _execute_subprocess(raw_bytes: bytes) -> dict[str, object]:
             capture_output=True,
             timeout=SUBPROCESS_TIMEOUT_SECONDS,
             check=False,
+            preexec_fn=actual_preexec,
         )
     except subprocess.TimeoutExpired as exc:
         raise ProblemException(
@@ -574,6 +611,18 @@ def _execute_subprocess(raw_bytes: bytes) -> dict[str, object]:
             title="Unsafe PDF Content",
             detail=f"PDF validation timed out after {SUBPROCESS_TIMEOUT_SECONDS}s",
         ) from exc
+
+    retcode = getattr(proc, "returncode", 0)
+    if retcode is not None and isinstance(retcode, int) and retcode < 0:
+        sig = -retcode
+        raise ProblemException(
+            code="UNSAFE_PDF_CONTENT",
+            status=422,
+            title="Unsafe PDF Content",
+            detail=(
+                f"PDF validator subprocess terminated by resource limit violation or signal {sig}"
+            ),
+        )
 
     stdout_text = proc.stdout.decode("utf-8", errors="replace").strip()
     if not stdout_text:

@@ -61,15 +61,18 @@ from kanban.security.scrubber import (
 
 if TYPE_CHECKING:
     from kanban.security.keys import (
+        MAX_KEYRING_FILE_BYTES,
         KeyMaterial,
         KeyMaterialError,
         derive_subkey,
         load_key_material,
+        validate_keyring_file_permissions,
     )
 
 __all__ = [
     "CSP_POLICY",
     "DEFAULT_PUSH_PROTECTION_CODE",
+    "MAX_KEYRING_FILE_BYTES",
     "SCOPE_CAPABILITY_MAP",
     "AccessManifest",
     "Capability",
@@ -116,12 +119,20 @@ __all__ = [
     "scan_text_for_secrets",
     "scrub_text",
     "seal_card_secret",
+    "validate_keyring_file_permissions",
 ]
 
 
 def __getattr__(name: str) -> Any:  # noqa: ANN401
     """Lazy import keys module to prevent premature import during test setup."""
-    if name in ("KeyMaterial", "KeyMaterialError", "load_key_material", "derive_subkey"):
+    if name in (
+        "KeyMaterial",
+        "KeyMaterialError",
+        "load_key_material",
+        "derive_subkey",
+        "validate_keyring_file_permissions",
+        "MAX_KEYRING_FILE_BYTES",
+    ):
         import kanban.security.keys as _keys  # noqa: PLC0415
 
         return getattr(_keys, name)

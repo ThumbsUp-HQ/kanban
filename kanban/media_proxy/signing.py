@@ -7,7 +7,8 @@ import binascii
 import hashlib
 import hmac
 import ipaddress
-from typing import TYPE_CHECKING
+from datetime import UTC, datetime
+from typing import TYPE_CHECKING, Final
 from urllib.parse import quote, urlsplit
 
 from kanban.api.problems import ProblemException
@@ -23,6 +24,9 @@ _MAX_URL_LENGTH = 2048
 _MAX_HOST_LENGTH = 253
 _MAX_SIG_LENGTH = 64
 _HTTPS_PORT = 443
+
+DEFAULT_MEDIA_PROXY_TTL_SECONDS: Final[int] = 86400  # 24 hours
+MAX_MEDIA_PROXY_TTL_SECONDS: Final[int] = 604800  # 7 days
 
 
 def _validate_host(hostname: str | None) -> None:
@@ -140,29 +144,64 @@ def validate_external_image_url(url: str) -> SplitResult:
     return parsed
 
 
-def sign_media_proxy_url(url: str, key_material: KeyMaterial) -> str:
-    """Validate and compute HMAC signature for external media URL.
+def sign_media_proxy_url(
+    url: str,
+    key_material: KeyMaterial,
+    *,
+    expires_in: int = DEFAULT_MEDIA_PROXY_TTL_SECONDS,
+    exp: int | None = None,
+) -> str:
+    """Validate and compute HMAC signature for external media URL with bounded expiration.
 
-    Returns canonical relative proxy URL '/api/v1/media-proxy?u=...&sig=...'.
+    Returns canonical relative proxy URL '/api/v1/media-proxy?u=...&exp=...&sig=...'.
     """
     validate_external_image_url(url)
+    now_ts = int(datetime.now(UTC).timestamp())
+    if exp is None:
+        if expires_in <= 0 or expires_in > MAX_MEDIA_PROXY_TTL_SECONDS:
+            msg = f"expires_in must be between 1 and {MAX_MEDIA_PROXY_TTL_SECONDS} seconds"
+            raise ProblemException(
+                code="INVALID_MEDIA_URL",
+                status=400,
+                title="Invalid Media URL",
+                detail=msg,
+            )
+        exp = now_ts + expires_in
+
     subkey = derive_subkey(key_material.session_hmac_key, "media-proxy/url")
-    digest = hmac.new(subkey, url.encode("utf-8"), hashlib.sha256).digest()
+    payload = f"{exp}:{url}".encode()
+    digest = hmac.new(subkey, payload, hashlib.sha256).digest()
     sig = base64.urlsafe_b64encode(digest).decode("ascii").rstrip("=")
     quoted_url = quote(url, safe="")
-    return f"/api/v1/media-proxy?u={quoted_url}&sig={sig}"
+    return f"/api/v1/media-proxy?u={quoted_url}&exp={exp}&sig={sig}"
 
 
-def verify_media_proxy_url(url: str, sig: str, key_material: KeyMaterial) -> bool:
-    """Verify media proxy HMAC signature using constant-time comparison.
+def verify_media_proxy_url(
+    url: str,
+    sig: str,
+    key_material: KeyMaterial,
+    *,
+    exp: int | None = None,
+    current_time: int | None = None,
+) -> bool:
+    """Verify media proxy HMAC signature and bounded expiration using constant-time comparison.
 
     Executed BEFORE URL parsing or DNS resolution to eliminate unauthenticated work.
     """
-    if not sig or len(sig) > _MAX_SIG_LENGTH or not url:
+    if not sig or len(sig) > _MAX_SIG_LENGTH or not url or exp is None:
+        return False
+
+    now_ts = current_time if current_time is not None else int(datetime.now(UTC).timestamp())
+    # Reject expired URLs
+    if exp < now_ts:
+        return False
+    # Reject expiration timestamps unreasonably far into the future (bounding)
+    if exp > now_ts + MAX_MEDIA_PROXY_TTL_SECONDS + 300:
         return False
 
     subkey = derive_subkey(key_material.session_hmac_key, "media-proxy/url")
-    expected_digest = hmac.new(subkey, url.encode("utf-8"), hashlib.sha256).digest()
+    payload = f"{exp}:{url}".encode()
+    expected_digest = hmac.new(subkey, payload, hashlib.sha256).digest()
 
     padded_sig = sig + "=" * (-len(sig) % 4)
     try:

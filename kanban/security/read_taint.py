@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import hashlib
 import uuid
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 from typing import TYPE_CHECKING, Annotated, Any, Final, Literal, cast
 
@@ -23,6 +24,8 @@ from kanban.services.activity import ActivityEventType, record_activity
 if TYPE_CHECKING:
     from collections.abc import Iterable, Sequence
 
+    from sqlalchemy.sql.elements import TextClause
+
 __all__ = [
     "CREDENTIAL_TAINT_TTL_HOURS",
     "SESSION_TAINT_TTL_SECONDS",
@@ -30,6 +33,7 @@ __all__ = [
     "TaintRecorder",
     "get_taint_guard",
     "get_taint_recorder",
+    "record_read_taint",
 ]
 
 SESSION_TAINT_TTL_SECONDS: Final[int] = 3600
@@ -83,6 +87,155 @@ def _resolve_verified_service_principal(request: Request) -> str | None:
     return None
 
 
+def _parse_source_object_id(obj_ref: uuid.UUID | str | None) -> uuid.UUID | None:
+    if obj_ref is None:
+        return None
+    if isinstance(obj_ref, uuid.UUID):
+        return obj_ref
+    try:
+        return uuid.UUID(str(obj_ref))
+    except (ValueError, TypeError):
+        return None
+
+
+async def _resolve_project_id(
+    session: AsyncSession, workspace_id: uuid.UUID, ref: uuid.UUID | str
+) -> uuid.UUID | None:
+    if isinstance(ref, uuid.UUID):
+        return ref
+    try:
+        return uuid.UUID(str(ref))
+    except (ValueError, TypeError):
+        resolved = await _resolve_project_uuid(session, workspace_id, ref)
+        return resolved[0] if resolved else None
+
+
+@dataclass(frozen=True, slots=True)
+class _TaintParams:
+    now: datetime
+    session_key: bytes | None
+    session_expires: datetime
+    credential_key: bytes | None
+    cred_expires: datetime
+    source_obj_id: uuid.UUID | None
+    contains_untrusted_content: bool
+
+
+async def _upsert_project_taints(
+    session: AsyncSession,
+    upsert_sql: TextClause,
+    workspace_id: uuid.UUID,
+    proj_id: uuid.UUID,
+    params: _TaintParams,
+) -> None:
+    if params.session_key is not None:
+        await session.execute(
+            upsert_sql,
+            {
+                "ws_id": workspace_id,
+                "taint_key": params.session_key,
+                "key_kind": "session",
+                "proj_id": proj_id,
+                "now": params.now,
+                "expires_at": params.session_expires,
+                "untrusted_source_object_id": params.source_obj_id,
+                "contains_untrusted_content": params.contains_untrusted_content,
+            },
+        )
+    if params.credential_key is not None:
+        await session.execute(
+            upsert_sql,
+            {
+                "ws_id": workspace_id,
+                "taint_key": params.credential_key,
+                "key_kind": "credential",
+                "proj_id": proj_id,
+                "now": params.now,
+                "expires_at": params.cred_expires,
+                "untrusted_source_object_id": params.source_obj_id,
+                "contains_untrusted_content": params.contains_untrusted_content,
+            },
+        )
+
+
+async def record_read_taint(  # noqa: PLR0913
+    session: AsyncSession,
+    workspace_id: uuid.UUID,
+    project_ids: Iterable[uuid.UUID | str],
+    *,
+    session_id: str | uuid.UUID | None = None,
+    session_key: bytes | None = None,
+    credential_key: bytes | None = None,
+    credential_token: str | None = None,
+    untrusted_source_object_id: uuid.UUID | str | None = None,
+    contains_untrusted_content: bool = False,
+) -> None:
+    """Record read-taint for project IDs in mcp_read_taint for both session and credential."""
+    if session_key is None and session_id is not None:
+        session_key = hashlib.sha256(str(session_id).encode("utf-8")).digest()
+
+    if credential_key is None and credential_token is not None:
+        credential_key = hashlib.sha256(credential_token.encode("utf-8")).digest()
+
+    if session_key is None and credential_key is None:
+        return
+
+    now = datetime.now(UTC)
+    session_expires = now + timedelta(seconds=SESSION_TAINT_TTL_SECONDS)
+    cred_expires = now + timedelta(hours=CREDENTIAL_TAINT_TTL_HOURS)
+    source_obj_id = _parse_source_object_id(untrusted_source_object_id)
+    params = _TaintParams(
+        now=now,
+        session_key=session_key,
+        session_expires=session_expires,
+        credential_key=credential_key,
+        cred_expires=cred_expires,
+        source_obj_id=source_obj_id,
+        contains_untrusted_content=contains_untrusted_content,
+    )
+
+    upsert_sql = text(
+        """
+        INSERT INTO mcp_read_taint (
+            workspace_id, taint_key, key_kind, project_id, first_read_at, expires_at,
+            untrusted_source_object_id, contains_untrusted_content
+        )
+        VALUES (
+            :ws_id, :taint_key, :key_kind, :proj_id, :now, :expires_at,
+            :untrusted_source_object_id, :contains_untrusted_content
+        )
+        ON CONFLICT (taint_key, project_id)
+        DO UPDATE SET
+            expires_at = EXCLUDED.expires_at,
+            contains_untrusted_content = (
+                mcp_read_taint.contains_untrusted_content
+                OR EXCLUDED.contains_untrusted_content
+            ),
+            untrusted_source_object_id = COALESCE(
+                EXCLUDED.untrusted_source_object_id,
+                mcp_read_taint.untrusted_source_object_id
+            );
+        """
+    )
+
+    seen_projects: set[uuid.UUID] = set()
+    for ref in project_ids:
+        proj_id = await _resolve_project_id(session, workspace_id, ref)
+        if proj_id is None or proj_id in seen_projects:
+            continue
+        seen_projects.add(proj_id)
+        await _upsert_project_taints(
+            session,
+            upsert_sql,
+            workspace_id,
+            proj_id,
+            params,
+        )
+
+    if seen_projects:
+        await session.flush()
+
+
 class TaintRecorder:
     """FastAPI dependency recording project read-taint for MCP sessions."""
 
@@ -120,97 +273,19 @@ class TaintRecorder:
         if not self.session_id or self.caller.read_only:
             return
 
-        session_key = hashlib.sha256(self.session_id.encode("utf-8")).digest()
         subject_token = self.request.headers.get("x-kb-subject-token") or getattr(
             self.caller, "token", None
         )
-        credential_key = (
-            hashlib.sha256(subject_token.encode("utf-8")).digest()
-            if subject_token is not None
-            else None
+
+        await record_read_taint(
+            session=self.session,
+            workspace_id=self.caller.workspace_id,
+            project_ids=project_refs,
+            session_id=self.session_id,
+            credential_token=subject_token,
+            untrusted_source_object_id=untrusted_source_object_id,
+            contains_untrusted_content=contains_untrusted_content,
         )
-
-        now = datetime.now(UTC)
-        session_expires = now + timedelta(seconds=SESSION_TAINT_TTL_SECONDS)
-        cred_expires = now + timedelta(hours=CREDENTIAL_TAINT_TTL_HOURS)
-
-        parsed_source_obj_id: uuid.UUID | None = None
-        if untrusted_source_object_id is not None:
-            if isinstance(untrusted_source_object_id, uuid.UUID):
-                parsed_source_obj_id = untrusted_source_object_id
-            else:
-                try:
-                    parsed_source_obj_id = uuid.UUID(str(untrusted_source_object_id))
-                except (ValueError, TypeError):
-                    parsed_source_obj_id = None
-
-        upsert_sql = text(
-            """
-            INSERT INTO mcp_read_taint (
-                workspace_id, taint_key, key_kind, project_id, first_read_at, expires_at,
-                untrusted_source_object_id, contains_untrusted_content
-            )
-            VALUES (
-                :ws_id, :taint_key, :key_kind, :proj_id, :now, :expires_at,
-                :untrusted_source_object_id, :contains_untrusted_content
-            )
-            ON CONFLICT (taint_key, project_id)
-            DO UPDATE SET
-                expires_at = EXCLUDED.expires_at,
-                contains_untrusted_content = (
-                    mcp_read_taint.contains_untrusted_content
-                    OR EXCLUDED.contains_untrusted_content
-                ),
-                untrusted_source_object_id = COALESCE(
-                    EXCLUDED.untrusted_source_object_id,
-                    mcp_read_taint.untrusted_source_object_id
-                );
-            """
-        )
-
-        seen_projects: set[uuid.UUID] = set()
-        for ref in project_refs:
-            resolved = await _resolve_project_uuid(self.session, self.caller.workspace_id, ref)
-            if resolved is None:
-                continue
-            proj_id, _ = resolved
-            if proj_id in seen_projects:
-                continue
-            seen_projects.add(proj_id)
-
-            # Record session taint
-            await self.session.execute(
-                upsert_sql,
-                {
-                    "ws_id": self.caller.workspace_id,
-                    "taint_key": session_key,
-                    "key_kind": "session",
-                    "proj_id": proj_id,
-                    "now": now,
-                    "expires_at": session_expires,
-                    "untrusted_source_object_id": parsed_source_obj_id,
-                    "contains_untrusted_content": contains_untrusted_content,
-                },
-            )
-
-            # Record credential taint
-            if credential_key is not None:
-                await self.session.execute(
-                    upsert_sql,
-                    {
-                        "ws_id": self.caller.workspace_id,
-                        "taint_key": credential_key,
-                        "key_kind": "credential",
-                        "proj_id": proj_id,
-                        "now": now,
-                        "expires_at": cred_expires,
-                        "untrusted_source_object_id": parsed_source_obj_id,
-                        "contains_untrusted_content": contains_untrusted_content,
-                    },
-                )
-
-        if seen_projects:
-            await self.session.flush()
 
     async def record_untrusted_read(
         self,

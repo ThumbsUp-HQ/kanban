@@ -1,0 +1,933 @@
+diff --git a/kanban/api/ws.py b/kanban/api/ws.py
+index 1677a225..f204e77c 100644
+--- a/kanban/api/ws.py
++++ b/kanban/api/ws.py
+@@ -206,6 +206,9 @@ async def handle_ws_connection(websocket: WebSocket) -> None:  # noqa: C901, PLR
+         websocket.app.state.realtime_hub = hub
+         await hub.start()
+ 
++    mcp_session_id = websocket.headers.get("x-kb-mcp-session") or websocket.query_params.get(
++        "mcp_session"
++    )
+     conn = WebSocketConnection(
+         id=uuid.uuid4(),
+         websocket=websocket,
+@@ -213,6 +216,7 @@ async def handle_ws_connection(websocket: WebSocket) -> None:  # noqa: C901, PLR
+         principal_id=principal_id,
+         session_id=session_id,
+         token_sha256=token_sha256,
++        mcp_session_id=mcp_session_id,
+     )
+ 
+     # 4. Enforce connection limit (max 16 per principal)
+diff --git a/kanban/realtime/hub.py b/kanban/realtime/hub.py
+index 3a0b6697..f8215f3f 100644
+--- a/kanban/realtime/hub.py
++++ b/kanban/realtime/hub.py
+@@ -63,6 +63,7 @@ class RealtimeConnection(Protocol):
+     session_id: uuid.UUID
+     token_sha256: bytes | None
+     subscribed_channels: set[str]
++    mcp_session_id: str | None
+ 
+     async def send_json(self, data: dict[str, Any]) -> None:
+         """Send JSON payload to the client."""
+@@ -87,6 +88,7 @@ class WebSocketConnection:
+     principal_id: uuid.UUID
+     session_id: uuid.UUID
+     token_sha256: bytes | None = None
++    mcp_session_id: str | None = None
+     subscribed_channels: set[str] = field(default_factory=set)
+     connected_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+     last_pong_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+@@ -126,6 +128,7 @@ class SSEConnection:
+     principal_id: uuid.UUID
+     session_id: uuid.UUID
+     token_sha256: bytes | None = None
++    mcp_session_id: str | None = None
+     subscribed_channels: set[str] = field(default_factory=set)
+     queue: asyncio.Queue[str | None] = field(default_factory=lambda: asyncio.Queue(maxsize=1024))
+     connected_at: datetime = field(default_factory=lambda: datetime.now(UTC))
+@@ -559,6 +562,98 @@ class RealtimeHub:
+         resolved = await self.resolve_channel(session, workspace_id, principal_id, channel)
+         return resolved is not None
+ 
++    async def _resolve_channel_taint(
++        self,
++        session: AsyncSession,
++        workspace_id: uuid.UUID,
++        kind: str,
++        target_uuid: uuid.UUID,
++    ) -> tuple[uuid.UUID | None, bool]:
++        """Resolve parent project ID and untrusted content flag for a channel target."""
++        if kind == "project":
++            return target_uuid, False
++        if kind == "issue":
++            stmt = text(
++                "SELECT project_id, is_untrusted_content "
++                "FROM issues WHERE id = :id AND workspace_id = :ws_id"
++            )
++        elif kind == "doc":
++            stmt = text(
++                "SELECT project_id, is_untrusted_content "
++                "FROM docs WHERE id = :id AND workspace_id = :ws_id"
++            )
++        else:
++            return None, False
++
++        row = (await session.execute(stmt, {"id": target_uuid, "ws_id": workspace_id})).first()
++        if row is not None and row[0] is not None:
++            return uuid.UUID(str(row[0])), bool(row[1])
++        return None, False
++
++    async def _propagate_subscription_read_taint(
++        self,
++        session: AsyncSession,
++        conn: RealtimeConnection,
++        resolved_targets: Sequence[tuple[str, uuid.UUID]],
++    ) -> None:
++        """Propagate read-taint for subscribed projects, issues, and docs to mcp_read_taint."""
++        import hashlib  # noqa: PLC0415
++
++        from kanban.security.read_taint import record_read_taint  # noqa: PLC0415
++
++        taint_project_ids: set[uuid.UUID] = set()
++        untrusted_entries: list[tuple[uuid.UUID, uuid.UUID]] = []
++
++        for kind, target_uuid in resolved_targets:
++            p_id, is_untrusted = await self._resolve_channel_taint(
++                session, conn.workspace_id, kind, target_uuid
++            )
++            if p_id is not None:
++                taint_project_ids.add(p_id)
++                if is_untrusted:
++                    untrusted_entries.append((p_id, target_uuid))
++
++        if not taint_project_ids:
++            return
++
++        mcp_sess = getattr(conn, "mcp_session_id", None)
++        mcp_key = hashlib.sha256(mcp_sess.encode("utf-8")).digest() if mcp_sess else None
++
++        await record_read_taint(
++            session=session,
++            workspace_id=conn.workspace_id,
++            project_ids=taint_project_ids,
++            session_id=conn.session_id,
++            credential_key=conn.token_sha256,
++        )
++        if mcp_key is not None:
++            await record_read_taint(
++                session=session,
++                workspace_id=conn.workspace_id,
++                project_ids=taint_project_ids,
++                session_key=mcp_key,
++            )
++
++        for p_id, src_id in untrusted_entries:
++            await record_read_taint(
++                session=session,
++                workspace_id=conn.workspace_id,
++                project_ids=[p_id],
++                session_id=conn.session_id,
++                credential_key=conn.token_sha256,
++                untrusted_source_object_id=src_id,
++                contains_untrusted_content=True,
++            )
++            if mcp_key is not None:
++                await record_read_taint(
++                    session=session,
++                    workspace_id=conn.workspace_id,
++                    project_ids=[p_id],
++                    session_key=mcp_key,
++                    untrusted_source_object_id=src_id,
++                    contains_untrusted_content=True,
++                )
++
+     async def handle_subscribe(
+         self,
+         session: AsyncSession,
+@@ -569,6 +664,7 @@ class RealtimeHub:
+     ) -> None:
+         """Handle client subscribe request, validating limits and anti-enumeration permissions."""
+         successful_channels: list[str] = []
++        resolved_targets: list[tuple[str, uuid.UUID]] = []
+ 
+         for ch in channels:
+             if len(conn.subscribed_channels) >= MAX_CHANNELS_PER_CONNECTION:
+@@ -594,12 +690,14 @@ class RealtimeHub:
+                 )
+                 continue
+ 
+-            canonical_ch, _, _ = resolved
++            canonical_ch, target_uuid, kind = resolved
+             conn.subscribed_channels.add(ch)
+             conn.subscribed_channels.add(canonical_ch)
+             successful_channels.append(ch)
++            resolved_targets.append((kind, target_uuid))
+ 
+         if successful_channels:
++            await self._propagate_subscription_read_taint(session, conn, resolved_targets)
+             await conn.send_json(
+                 {
+                     "channels": successful_channels,
+diff --git a/kanban/security/read_taint.py b/kanban/security/read_taint.py
+index f0809d66..b6656bb0 100644
+--- a/kanban/security/read_taint.py
++++ b/kanban/security/read_taint.py
+@@ -6,6 +6,7 @@ from __future__ import annotations
+ 
+ import hashlib
+ import uuid
++from dataclasses import dataclass
+ from datetime import UTC, datetime, timedelta
+ from typing import TYPE_CHECKING, Annotated, Any, Final, Literal, cast
+ 
+@@ -23,6 +24,8 @@ from kanban.services.activity import ActivityEventType, record_activity
+ if TYPE_CHECKING:
+     from collections.abc import Iterable, Sequence
+ 
++    from sqlalchemy.sql.elements import TextClause
++
+ __all__ = [
+     "CREDENTIAL_TAINT_TTL_HOURS",
+     "SESSION_TAINT_TTL_SECONDS",
+@@ -30,6 +33,7 @@ __all__ = [
+     "TaintRecorder",
+     "get_taint_guard",
+     "get_taint_recorder",
++    "record_read_taint",
+ ]
+ 
+ SESSION_TAINT_TTL_SECONDS: Final[int] = 3600
+@@ -83,6 +87,155 @@ def _resolve_verified_service_principal(request: Request) -> str | None:
+     return None
+ 
+ 
++def _parse_source_object_id(obj_ref: uuid.UUID | str | None) -> uuid.UUID | None:
++    if obj_ref is None:
++        return None
++    if isinstance(obj_ref, uuid.UUID):
++        return obj_ref
++    try:
++        return uuid.UUID(str(obj_ref))
++    except (ValueError, TypeError):
++        return None
++
++
++async def _resolve_project_id(
++    session: AsyncSession, workspace_id: uuid.UUID, ref: uuid.UUID | str
++) -> uuid.UUID | None:
++    if isinstance(ref, uuid.UUID):
++        return ref
++    try:
++        return uuid.UUID(str(ref))
++    except (ValueError, TypeError):
++        resolved = await _resolve_project_uuid(session, workspace_id, ref)
++        return resolved[0] if resolved else None
++
++
++@dataclass(frozen=True, slots=True)
++class _TaintParams:
++    now: datetime
++    session_key: bytes | None
++    session_expires: datetime
++    credential_key: bytes | None
++    cred_expires: datetime
++    source_obj_id: uuid.UUID | None
++    contains_untrusted_content: bool
++
++
++async def _upsert_project_taints(
++    session: AsyncSession,
++    upsert_sql: TextClause,
++    workspace_id: uuid.UUID,
++    proj_id: uuid.UUID,
++    params: _TaintParams,
++) -> None:
++    if params.session_key is not None:
++        await session.execute(
++            upsert_sql,
++            {
++                "ws_id": workspace_id,
++                "taint_key": params.session_key,
++                "key_kind": "session",
++                "proj_id": proj_id,
++                "now": params.now,
++                "expires_at": params.session_expires,
++                "untrusted_source_object_id": params.source_obj_id,
++                "contains_untrusted_content": params.contains_untrusted_content,
++            },
++        )
++    if params.credential_key is not None:
++        await session.execute(
++            upsert_sql,
++            {
++                "ws_id": workspace_id,
++                "taint_key": params.credential_key,
++                "key_kind": "credential",
++                "proj_id": proj_id,
++                "now": params.now,
++                "expires_at": params.cred_expires,
++                "untrusted_source_object_id": params.source_obj_id,
++                "contains_untrusted_content": params.contains_untrusted_content,
++            },
++        )
++
++
++async def record_read_taint(  # noqa: PLR0913
++    session: AsyncSession,
++    workspace_id: uuid.UUID,
++    project_ids: Iterable[uuid.UUID | str],
++    *,
++    session_id: str | uuid.UUID | None = None,
++    session_key: bytes | None = None,
++    credential_key: bytes | None = None,
++    credential_token: str | None = None,
++    untrusted_source_object_id: uuid.UUID | str | None = None,
++    contains_untrusted_content: bool = False,
++) -> None:
++    """Record read-taint for project IDs in mcp_read_taint for both session and credential."""
++    if session_key is None and session_id is not None:
++        session_key = hashlib.sha256(str(session_id).encode("utf-8")).digest()
++
++    if credential_key is None and credential_token is not None:
++        credential_key = hashlib.sha256(credential_token.encode("utf-8")).digest()
++
++    if session_key is None and credential_key is None:
++        return
++
++    now = datetime.now(UTC)
++    session_expires = now + timedelta(seconds=SESSION_TAINT_TTL_SECONDS)
++    cred_expires = now + timedelta(hours=CREDENTIAL_TAINT_TTL_HOURS)
++    source_obj_id = _parse_source_object_id(untrusted_source_object_id)
++    params = _TaintParams(
++        now=now,
++        session_key=session_key,
++        session_expires=session_expires,
++        credential_key=credential_key,
++        cred_expires=cred_expires,
++        source_obj_id=source_obj_id,
++        contains_untrusted_content=contains_untrusted_content,
++    )
++
++    upsert_sql = text(
++        """
++        INSERT INTO mcp_read_taint (
++            workspace_id, taint_key, key_kind, project_id, first_read_at, expires_at,
++            untrusted_source_object_id, contains_untrusted_content
++        )
++        VALUES (
++            :ws_id, :taint_key, :key_kind, :proj_id, :now, :expires_at,
++            :untrusted_source_object_id, :contains_untrusted_content
++        )
++        ON CONFLICT (taint_key, project_id)
++        DO UPDATE SET
++            expires_at = EXCLUDED.expires_at,
++            contains_untrusted_content = (
++                mcp_read_taint.contains_untrusted_content
++                OR EXCLUDED.contains_untrusted_content
++            ),
++            untrusted_source_object_id = COALESCE(
++                EXCLUDED.untrusted_source_object_id,
++                mcp_read_taint.untrusted_source_object_id
++            );
++        """
++    )
++
++    seen_projects: set[uuid.UUID] = set()
++    for ref in project_ids:
++        proj_id = await _resolve_project_id(session, workspace_id, ref)
++        if proj_id is None or proj_id in seen_projects:
++            continue
++        seen_projects.add(proj_id)
++        await _upsert_project_taints(
++            session,
++            upsert_sql,
++            workspace_id,
++            proj_id,
++            params,
++        )
++
++    if seen_projects:
++        await session.flush()
++
++
+ class TaintRecorder:
+     """FastAPI dependency recording project read-taint for MCP sessions."""
+ 
+@@ -120,98 +273,20 @@ class TaintRecorder:
+         if not self.session_id or self.caller.read_only:
+             return
+ 
+-        session_key = hashlib.sha256(self.session_id.encode("utf-8")).digest()
+         subject_token = self.request.headers.get("x-kb-subject-token") or getattr(
+             self.caller, "token", None
+         )
+-        credential_key = (
+-            hashlib.sha256(subject_token.encode("utf-8")).digest()
+-            if subject_token is not None
+-            else None
+-        )
+ 
+-        now = datetime.now(UTC)
+-        session_expires = now + timedelta(seconds=SESSION_TAINT_TTL_SECONDS)
+-        cred_expires = now + timedelta(hours=CREDENTIAL_TAINT_TTL_HOURS)
+-
+-        parsed_source_obj_id: uuid.UUID | None = None
+-        if untrusted_source_object_id is not None:
+-            if isinstance(untrusted_source_object_id, uuid.UUID):
+-                parsed_source_obj_id = untrusted_source_object_id
+-            else:
+-                try:
+-                    parsed_source_obj_id = uuid.UUID(str(untrusted_source_object_id))
+-                except (ValueError, TypeError):
+-                    parsed_source_obj_id = None
+-
+-        upsert_sql = text(
+-            """
+-            INSERT INTO mcp_read_taint (
+-                workspace_id, taint_key, key_kind, project_id, first_read_at, expires_at,
+-                untrusted_source_object_id, contains_untrusted_content
+-            )
+-            VALUES (
+-                :ws_id, :taint_key, :key_kind, :proj_id, :now, :expires_at,
+-                :untrusted_source_object_id, :contains_untrusted_content
+-            )
+-            ON CONFLICT (taint_key, project_id)
+-            DO UPDATE SET
+-                expires_at = EXCLUDED.expires_at,
+-                contains_untrusted_content = (
+-                    mcp_read_taint.contains_untrusted_content
+-                    OR EXCLUDED.contains_untrusted_content
+-                ),
+-                untrusted_source_object_id = COALESCE(
+-                    EXCLUDED.untrusted_source_object_id,
+-                    mcp_read_taint.untrusted_source_object_id
+-                );
+-            """
++        await record_read_taint(
++            session=self.session,
++            workspace_id=self.caller.workspace_id,
++            project_ids=project_refs,
++            session_id=self.session_id,
++            credential_token=subject_token,
++            untrusted_source_object_id=untrusted_source_object_id,
++            contains_untrusted_content=contains_untrusted_content,
+         )
+ 
+-        seen_projects: set[uuid.UUID] = set()
+-        for ref in project_refs:
+-            resolved = await _resolve_project_uuid(self.session, self.caller.workspace_id, ref)
+-            if resolved is None:
+-                continue
+-            proj_id, _ = resolved
+-            if proj_id in seen_projects:
+-                continue
+-            seen_projects.add(proj_id)
+-
+-            # Record session taint
+-            await self.session.execute(
+-                upsert_sql,
+-                {
+-                    "ws_id": self.caller.workspace_id,
+-                    "taint_key": session_key,
+-                    "key_kind": "session",
+-                    "proj_id": proj_id,
+-                    "now": now,
+-                    "expires_at": session_expires,
+-                    "untrusted_source_object_id": parsed_source_obj_id,
+-                    "contains_untrusted_content": contains_untrusted_content,
+-                },
+-            )
+-
+-            # Record credential taint
+-            if credential_key is not None:
+-                await self.session.execute(
+-                    upsert_sql,
+-                    {
+-                        "ws_id": self.caller.workspace_id,
+-                        "taint_key": credential_key,
+-                        "key_kind": "credential",
+-                        "proj_id": proj_id,
+-                        "now": now,
+-                        "expires_at": cred_expires,
+-                        "untrusted_source_object_id": parsed_source_obj_id,
+-                        "contains_untrusted_content": contains_untrusted_content,
+-                    },
+-                )
+-
+-        if seen_projects:
+-            await self.session.flush()
+-
+     async def record_untrusted_read(
+         self,
+         project_ref: uuid.UUID | str,
+diff --git a/kanban/tests/realtime/test_ws_read_taint.py b/kanban/tests/realtime/test_ws_read_taint.py
+new file mode 100644
+index 00000000..926f742d
+--- /dev/null
++++ b/kanban/tests/realtime/test_ws_read_taint.py
+@@ -0,0 +1,462 @@
++# Copyright 2026 Kanban Platform Contributors
++# Apache-2.0 License. See LICENSE for details.
++"""Security and unit tests for propagating MCP read-taint to WebSocket subscriptions (KAN-326).
++
++Covers:
++  1. Subscribing to project channel propagates session & credential taint to mcp_read_taint.
++  2. Subscribing to issue channel resolves parent project and records project read-taint.
++  3. Subscribing to doc channel resolves parent project and records project read-taint.
++  4. Subscribing with X-KB-MCP-Session propagates taint to the hashed MCP session key.
++  5. Subscribing to untrusted content channel marks contains_untrusted_content=True.
++  6. Exfiltration canary: WS subscription to confidential project blocks subsequent write
++     to broader project with 409 CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED.
++  7. Monotonicity: Unsubscribing does NOT clear read-taint from mcp_read_taint.
++"""
++
++from __future__ import annotations
++
++import hashlib
++import json
++import uuid
++from typing import TYPE_CHECKING
++
++import pytest
++from sqlalchemy import text
++from starlette.requests import Request
++
++from database.session import RLSContext, RLSSessionFactory
++from kanban.api.deps import PrincipalContext
++from kanban.api.problems import ProblemException
++from kanban.security.read_taint import TaintGuard
++from kanban.tests.realtime.conftest import (
++    AsyncWebSocketTestClient,
++    build_realtime_test_app,
++    create_auth_session,
++    create_realtime_test_fixtures,
++)
++from kanban.tests.security.helpers import (
++    add_role_binding,
++    create_project,
++    create_user,
++    create_workspace,
++    rebuild_era,
++)
++
++if TYPE_CHECKING:
++    from sqlalchemy.ext.asyncio import AsyncEngine
++
++    from kanban.auth.sessions.service import SessionService
++
++pytestmark = pytest.mark.committed_db
++
++
++@pytest.mark.asyncio
++async def test_ws_subscribe_project_propagates_read_taint(
++    pg_worker_db: AsyncEngine,
++    session_service: SessionService,
++) -> None:
++    """Subscribing to project:<UUID> records session and credential taint in mcp_read_taint."""
++    factory = RLSSessionFactory(pg_worker_db)
++    app, _hub = build_realtime_test_app(factory, session_service)
++
++    # 1. Setup fixtures
++    ws_id = uuid.uuid4()
++    user_id = uuid.uuid4()
++    proj_id = uuid.uuid4()
++    await create_realtime_test_fixtures(
++        factory,
++        ws_id=ws_id,
++        maya_id=user_id,
++        proj_id=proj_id,
++    )
++
++    # 2. Create authenticated session
++    issued = await create_auth_session(
++        factory, session_service, principal_id=user_id, workspace_id=ws_id
++    )
++    headers = {
++        "Cookie": f"__Host-kb_session={issued.cookie_val}",
++        "Origin": "https://kanban.example",
++    }
++    client = AsyncWebSocketTestClient(app, headers=headers)
++    await client.connect()
++
++    # 4. Subscribe to project channel
++    req_id = "sub-proj-1"
++    sub_frame = json.dumps(
++        {"op": "subscribe", "req_id": req_id, "channels": [f"project:{proj_id}"]}
++    )
++    await client.send_text(sub_frame)
++
++    ack = await client.receive_json()
++    assert ack.get("type") == "subscribe_ack"
++    assert ack.get("req_id") == req_id
++    assert f"project:{proj_id}" in ack.get("channels", [])
++
++    await client.close()
++
++    # 5. Query mcp_read_taint table to verify records
++    ctx = RLSContext(principal_id=user_id, workspace_id=ws_id)
++    async with factory.session(ctx) as session:
++        stmt = text(
++            "SELECT taint_key, key_kind, project_id, contains_untrusted_content "
++            "FROM mcp_read_taint WHERE workspace_id = :ws_id AND project_id = :proj_id"
++        )
++        rows = (await session.execute(stmt, {"ws_id": ws_id, "proj_id": proj_id})).fetchall()
++
++    assert len(rows) == 2, f"Expected 2 taint entries (session and credential), got {len(rows)}"
++
++    kinds = {r[1] for r in rows}
++    assert kinds == {"session", "credential"}
++
++    # Verify session key is sha256(session_id)
++    session_key_expected = hashlib.sha256(str(issued.session_id).encode("utf-8")).digest()
++    token_bytes = issued.token
++    cred_key_expected = hashlib.sha256(token_bytes).digest()
++
++    keys = {bytes(r[0]) for r in rows}
++    assert session_key_expected in keys
++    assert cred_key_expected in keys
++
++
++@pytest.mark.asyncio
++async def test_ws_subscribe_issue_propagates_parent_project_read_taint(
++    pg_worker_db: AsyncEngine,
++    session_service: SessionService,
++) -> None:
++    """Subscribing to issue:<UUID> records taint for the parent project."""
++    factory = RLSSessionFactory(pg_worker_db)
++    app, _hub = build_realtime_test_app(factory, session_service)
++
++    ws_id = uuid.uuid4()
++    user_id = uuid.uuid4()
++    proj_id = uuid.uuid4()
++    issue_id = uuid.uuid4()
++    await create_realtime_test_fixtures(
++        factory,
++        ws_id=ws_id,
++        maya_id=user_id,
++        proj_id=proj_id,
++        issue_id=issue_id,
++    )
++
++    issued = await create_auth_session(
++        factory, session_service, principal_id=user_id, workspace_id=ws_id
++    )
++    headers = {
++        "Cookie": f"__Host-kb_session={issued.cookie_val}",
++        "Origin": "https://kanban.example",
++    }
++    client = AsyncWebSocketTestClient(app, headers=headers)
++    await client.connect()
++
++    req_id = "sub-issue-1"
++    sub_frame = json.dumps({"op": "subscribe", "req_id": req_id, "channels": [f"issue:{issue_id}"]})
++    await client.send_text(sub_frame)
++
++    ack = await client.receive_json()
++    assert ack.get("type") == "subscribe_ack"
++    assert f"issue:{issue_id}" in ack.get("channels", [])
++
++    await client.close()
++
++    ctx = RLSContext(principal_id=user_id, workspace_id=ws_id)
++    async with factory.session(ctx) as session:
++        stmt = text(
++            "SELECT taint_key, key_kind, project_id "
++            "FROM mcp_read_taint WHERE workspace_id = :ws_id AND project_id = :proj_id"
++        )
++        rows = (await session.execute(stmt, {"ws_id": ws_id, "proj_id": proj_id})).fetchall()
++
++    assert len(rows) == 2
++    session_key_expected = hashlib.sha256(str(issued.session_id).encode("utf-8")).digest()
++    keys = {bytes(r[0]) for r in rows}
++    assert session_key_expected in keys
++
++
++@pytest.mark.asyncio
++async def test_ws_subscribe_with_mcp_session_propagates_to_mcp_session_key(
++    pg_worker_db: AsyncEngine,
++    session_service: SessionService,
++) -> None:
++    """Subscribing with X-KB-MCP-Session header propagates taint to that MCP session key."""
++    factory = RLSSessionFactory(pg_worker_db)
++    app, _hub = build_realtime_test_app(factory, session_service)
++
++    ws_id = uuid.uuid4()
++    user_id = uuid.uuid4()
++    proj_id = uuid.uuid4()
++    await create_realtime_test_fixtures(
++        factory,
++        ws_id=ws_id,
++        maya_id=user_id,
++        proj_id=proj_id,
++    )
++
++    issued = await create_auth_session(
++        factory, session_service, principal_id=user_id, workspace_id=ws_id
++    )
++    mcp_session_raw = "mcp-agent-session-xyz-987"
++    client = AsyncWebSocketTestClient(
++        app,
++        headers={
++            "Cookie": f"__Host-kb_session={issued.cookie_val}",
++            "Origin": "https://kanban.example",
++            "X-KB-MCP-Session": mcp_session_raw,
++        },
++    )
++    await client.connect()
++
++    req_id = "sub-mcp-1"
++    sub_frame = json.dumps(
++        {"op": "subscribe", "req_id": req_id, "channels": [f"project:{proj_id}"]}
++    )
++    await client.send_text(sub_frame)
++
++    ack = await client.receive_json()
++    assert ack.get("type") == "subscribe_ack"
++
++    await client.close()
++
++    mcp_key_expected = hashlib.sha256(mcp_session_raw.encode("utf-8")).digest()
++
++    ctx = RLSContext(principal_id=user_id, workspace_id=ws_id)
++    async with factory.session(ctx) as session:
++        stmt = text(
++            "SELECT taint_key, key_kind, project_id "
++            "FROM mcp_read_taint WHERE workspace_id = :ws_id AND taint_key = :mcp_key"
++        )
++        row = (await session.execute(stmt, {"ws_id": ws_id, "mcp_key": mcp_key_expected})).first()
++
++    assert row is not None
++    assert row[1] == "session"
++    assert row[2] == proj_id
++
++
++@pytest.mark.asyncio
++async def test_ws_unsubscribe_does_not_clear_read_taint(
++    pg_worker_db: AsyncEngine,
++    session_service: SessionService,
++) -> None:
++    """Unsubscribing does not clear recorded read taint (high-water mark monotonicity)."""
++    factory = RLSSessionFactory(pg_worker_db)
++    app, _hub = build_realtime_test_app(factory, session_service)
++
++    ws_id = uuid.uuid4()
++    user_id = uuid.uuid4()
++    proj_id = uuid.uuid4()
++    await create_realtime_test_fixtures(
++        factory,
++        ws_id=ws_id,
++        maya_id=user_id,
++        proj_id=proj_id,
++    )
++
++    issued = await create_auth_session(
++        factory, session_service, principal_id=user_id, workspace_id=ws_id
++    )
++    headers = {
++        "Cookie": f"__Host-kb_session={issued.cookie_val}",
++        "Origin": "https://kanban.example",
++    }
++    client = AsyncWebSocketTestClient(app, headers=headers)
++    await client.connect()
++
++    # 1. Subscribe
++    sub_msg = {"op": "subscribe", "req_id": "sub-1", "channels": [f"project:{proj_id}"]}
++    await client.send_text(json.dumps(sub_msg))
++    ack_sub = await client.receive_json()
++    assert ack_sub.get("type") == "subscribe_ack"
++
++    # 2. Unsubscribe
++    unsub_msg = {"op": "unsubscribe", "req_id": "unsub-1", "channels": [f"project:{proj_id}"]}
++    await client.send_text(json.dumps(unsub_msg))
++    ack_unsub = await client.receive_json()
++    assert ack_unsub.get("type") == "unsubscribe_ack"
++
++    await client.close()
++
++    # 3. Verify taint remains in database
++    ctx = RLSContext(principal_id=user_id, workspace_id=ws_id)
++    async with factory.session(ctx) as session:
++        stmt = text(
++            "SELECT count(*) FROM mcp_read_taint "
++            "WHERE workspace_id = :ws_id AND project_id = :proj_id"
++        )
++        count = (await session.execute(stmt, {"ws_id": ws_id, "proj_id": proj_id})).scalar()
++
++    assert count == 2, "Read taint must persist monotonically after unsubscribe"
++
++
++@pytest.mark.asyncio
++async def test_ws_subscribe_doc_propagates_read_taint(
++    pg_worker_db: AsyncEngine,
++    session_service: SessionService,
++) -> None:
++    """Subscribing to doc:<UUID> records taint for the doc's project in mcp_read_taint."""
++    factory = RLSSessionFactory(pg_worker_db)
++    app, _hub = build_realtime_test_app(factory, session_service)
++
++    ws_id = uuid.uuid4()
++    user_id = uuid.uuid4()
++    proj_id = uuid.uuid4()
++    doc_id = uuid.uuid4()
++
++    await create_realtime_test_fixtures(
++        factory,
++        ws_id=ws_id,
++        maya_id=user_id,
++        proj_id=proj_id,
++    )
++
++    # Insert doc attached to project
++    ctx_admin = RLSContext(principal_id=user_id, workspace_id=ws_id)
++    async with factory.session(ctx_admin) as session:
++        await session.execute(
++            text(
++                "INSERT INTO objects "
++                "(id, workspace_id, project_id, object_type, canonical_key, display_title, "
++                "created_by_id) "
++                "VALUES (:id, :ws_id, :proj_id, 'doc', 'doc-1', "
++                "'Confidential Architecture Doc', :user_id)"
++            ),
++            {"id": doc_id, "ws_id": ws_id, "proj_id": proj_id, "user_id": user_id},
++        )
++        await session.execute(
++            text(
++                "INSERT INTO docs "
++                "(id, workspace_id, project_id, title, hierarchy_path, provenance_tier) "
++                "VALUES (:id, :ws_id, :proj_id, 'Confidential Architecture Doc', "
++                "'doc_1', 'trusted_member')"
++            ),
++            {"id": doc_id, "ws_id": ws_id, "proj_id": proj_id},
++        )
++        await session.commit()
++
++    issued = await create_auth_session(
++        factory, session_service, principal_id=user_id, workspace_id=ws_id
++    )
++    headers = {
++        "Cookie": f"__Host-kb_session={issued.cookie_val}",
++        "Origin": "https://kanban.example",
++    }
++    client = AsyncWebSocketTestClient(app, headers=headers)
++    await client.connect()
++
++    req_id = "sub-doc-1"
++    sub_frame = json.dumps({"op": "subscribe", "req_id": req_id, "channels": [f"doc:{doc_id}"]})
++    await client.send_text(sub_frame)
++
++    ack = await client.receive_json()
++    assert ack.get("type") == "subscribe_ack"
++    assert f"doc:{doc_id}" in ack.get("channels", [])
++
++    await client.close()
++
++    ctx = RLSContext(principal_id=user_id, workspace_id=ws_id)
++    async with factory.session(ctx) as session:
++        stmt = text(
++            "SELECT count(*) FROM mcp_read_taint "
++            "WHERE workspace_id = :ws_id AND project_id = :proj_id"
++        )
++        count = (await session.execute(stmt, {"ws_id": ws_id, "proj_id": proj_id})).scalar()
++
++    assert count == 2, (
++        "Doc subscription must record session and credential taint for parent project"
++    )
++
++
++@pytest.mark.asyncio
++async def test_ws_read_taint_blocks_subsequent_cross_scope_write(
++    pg_worker_db: AsyncEngine,
++    session_service: SessionService,
++) -> None:
++    """Exfiltration Canary: WS subscription to secret project blocks write to broader."""
++    factory = RLSSessionFactory(pg_worker_db)
++    app, _hub = build_realtime_test_app(factory, session_service)
++
++    # 1. Setup workspace & projects via security helpers under superuser/admin context
++    bootstrap_ws = uuid.uuid4()
++    bootstrap_user = uuid.uuid4()
++    ctx_boot = RLSContext(principal_id=bootstrap_user, workspace_id=bootstrap_ws)
++    async with factory.session(ctx_boot) as session:
++        ws_id = await create_workspace(session, name="Sec Test WS")
++        admin_id = await create_user(session, ws_id, handle="@admin", display_name="Admin User")
++        await add_role_binding(
++            session, ws_id, admin_id, role="WORKSPACE_ADMIN", scope_type="workspace"
++        )
++
++        adam_id = await create_user(session, ws_id, handle="@adam", display_name="Adam Engineer")
++        maya_id = await create_user(session, ws_id, handle="@maya", display_name="Maya Engineer")
++
++        sec_proj_id = await create_project(
++            session, ws_id, identifier="SEC", name="Secret Project", created_by_id=admin_id
++        )
++        pub_proj_id = await create_project(
++            session, ws_id, identifier="PUB", name="Public Project", created_by_id=admin_id
++        )
++
++        # Adam in both projects
++        await add_role_binding(
++            session, ws_id, adam_id, role="MEMBER", scope_type="project", project_id=sec_proj_id
++        )
++        await add_role_binding(
++            session, ws_id, adam_id, role="MEMBER", scope_type="project", project_id=pub_proj_id
++        )
++
++        # Maya ONLY in Public Project (so PUB has broader audience)
++        await add_role_binding(
++            session, ws_id, maya_id, role="MEMBER", scope_type="project", project_id=pub_proj_id
++        )
++
++        await session.commit()
++        await rebuild_era(session, ws_id)
++
++    # 2. Adam connects to WebSocket and subscribes to Secret Project
++    adam_session = await create_auth_session(
++        factory, session_service, principal_id=adam_id, workspace_id=ws_id
++    )
++    headers = {
++        "Cookie": f"__Host-kb_session={adam_session.cookie_val}",
++        "Origin": "https://kanban.example",
++    }
++    client = AsyncWebSocketTestClient(app, headers=headers)
++    await client.connect()
++
++    sub_frame = json.dumps(
++        {"op": "subscribe", "req_id": "sub-sec", "channels": [f"project:{sec_proj_id}"]}
++    )
++    await client.send_text(sub_frame)
++    ack = await client.receive_json()
++    assert ack.get("type") == "subscribe_ack"
++
++    await client.close()
++
++    # 3. Adam attempts an MCP write to Public Project with active session
++    token_bytes = adam_session.token
++    mock_request = Request(
++        scope={
++            "type": "http",
++            "method": "POST",
++            "path": f"/api/v1/projects/{pub_proj_id}/issues",
++            "headers": [
++                (b"x-kb-mcp-session", str(adam_session.session_id).encode("utf-8")),
++                (b"x-kb-subject-token", token_bytes),
++            ],
++            "app": app,
++        }
++    )
++    caller = PrincipalContext(
++        principal_id=adam_id,
++        workspace_id=ws_id,
++        token_scopes=("mcp",),
++    )
++
++    ctx_adam = RLSContext(principal_id=adam_id, workspace_id=ws_id)
++    async with factory.session(ctx_adam) as session:
++        guard = TaintGuard(mock_request, session, caller)
++        with pytest.raises(ProblemException) as exc_info:
++            await guard.check_write(target_projects=pub_proj_id, tool_name="create_issue")
++
++        assert exc_info.value.code == "CROSS_SCOPE_TAINT_CONFIRMATION_REQUIRED"
++        assert exc_info.value.status == 409

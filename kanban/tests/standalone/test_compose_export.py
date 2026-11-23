@@ -119,7 +119,7 @@ def test_compose_export_with_keyring_carryover(tmp_path: Path) -> None:  # noqa:
     # Action 2: Dedicated :8444 runner mTLS block
     assert ":8444 {" in caddy_content
     assert "mode require" in caddy_content
-    assert "@runner_ws path /api/v1/runners/ws /api/v1/runners/ws/*" in caddy_content
+    assert "@runner_ws path /api/v1/agent-runners/ws /api/v1/agent-runners/ws/*" in caddy_content
     assert "X-Client-Cert-Pem {http.request.tls.client.certificate_pem}" in caddy_content
     assert "X-Client-Cert-Der-B64 {http.request.tls.client.certificate_der_base64}" in caddy_content
 

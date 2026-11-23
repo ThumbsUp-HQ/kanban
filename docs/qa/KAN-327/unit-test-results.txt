@@ -1,0 +1,21 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan324-328-9a11c982
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 40 items
+
+kanban/tests/attachments/test_pdf_resource_limits.py ............        [ 30%]
+kanban/tests/attachments/test_pdf_validation.py ........................ [ 90%]
+....                                                                     [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                        Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------------------------
+kanban/attachments/pdf.py     347      8    134     12    96%   109-110, 145->147, 210->194, 213->194, 215->194, 284-287, 311->324, 325, 358->353, 398->389, 403->402, 465->463, 707
+-----------------------------------------------------------------------
+TOTAL                         347      8    134     12    96%
+============================= 40 passed in 25.49s ==============================
