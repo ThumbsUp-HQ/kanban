@@ -448,7 +448,7 @@ function IssueSurfaceContent({
   }, [location, navigate, issueKey, onCloseProp]);
 
   const handleToggleFullScreen = useCallback((): void => {
-    if (mode === 'drawer') {
+    if (mode === 'drawer' || mode === 'split') {
       const resolvedProject = projectKey ?? issueKey.split('-')[0] ?? 'KAN';
       void navigate(toFullScreenPath(resolvedProject, issueKey));
     } else {

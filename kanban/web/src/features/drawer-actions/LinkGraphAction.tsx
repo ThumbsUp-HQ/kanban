@@ -182,6 +182,7 @@ export function LinkGraphAction({ issue }: LinkGraphActionProps): JSX.Element {
         type="button"
         className={`drawer-action-btn ${popoverOpen ? 'drawer-action-btn--active' : ''}`}
         aria-label="Link and Object Graph"
+        title="Link and Object Graph"
         aria-haspopup="dialog"
         aria-expanded={popoverOpen}
         onClick={() => { setPopoverOpen((prev) => !prev); }}

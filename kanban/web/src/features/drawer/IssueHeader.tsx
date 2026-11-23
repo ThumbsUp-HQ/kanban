@@ -164,8 +164,9 @@ export function IssueHeader({
       <button
         type="button"
         className={`issue-header__btn ${mode === 'full' ? 'issue-header__fullscreen-toggle--active' : ''}`}
+        data-testid="issue-header-fullscreen-toggle"
         aria-label={mode === 'full' ? 'Return to side panel' : 'Open in full screen'}
-        title={mode === 'full' ? 'Return to side panel' : 'Open in full screen'}
+        title={mode === 'full' ? 'Return to side panel (Meta+Shift+F)' : 'Open in full screen (Meta+Shift+F)'}
         aria-keyshortcuts="Meta+Shift+F Control+Shift+F"
         onMouseDown={(e) => { e.preventDefault(); }}
         onClick={toggleFullScreen}

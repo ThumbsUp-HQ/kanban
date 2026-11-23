@@ -168,6 +168,8 @@ export function IssueOverflowMenu({
             type="button"
             className="overflow-menu__item"
             role="menuitem"
+            aria-label={mode === 'full' ? 'Return to side panel' : 'Open in full screen'}
+            title={mode === 'full' ? 'Return to side panel' : 'Open in full screen'}
             onClick={() => {
               setMenuOpen(false);
               toggleFullScreen();
@@ -175,7 +177,7 @@ export function IssueOverflowMenu({
             data-testid="overflow-toggle-fullscreen-btn"
           >
             <div className="overflow-menu__label-row">
-              <span aria-hidden="true">↗</span>
+              <span aria-hidden="true">{mode === 'full' ? '↙' : '↗'}</span>
               <span>{mode === 'full' ? 'Return to side panel' : 'Open in full screen'}</span>
             </div>
           </button>
