@@ -130,6 +130,7 @@ export function SwimlaneBoardGrid({
 }: SwimlaneBoardGridProps): JSX.Element {
   // Collapsed bands map: laneId -> boolean
   const [collapsedLanes, setCollapsedLanes] = useState<Record<string, boolean>>({});
+  const [rovingKey, setRovingKey] = useState<string | null>(null);
   const [popoverState, setPopoverState] = useState<{
     isOpen: boolean;
     issue: IssueItem | null;
@@ -300,6 +301,22 @@ export function SwimlaneBoardGrid({
     return grid;
   }, [issues, columns, swimlanes, groupBy, subGroupBy, modulesEnabled, projectStates]);
 
+  const allVisibleCards = useMemo(() => {
+    const list: string[] = [];
+    for (const lane of swimlanes) {
+      if (collapsedLanes[lane.id]) continue;
+      for (const col of columns) {
+        const cellIssues = partitionedGrid[lane.id]?.[col.id] ?? [];
+        for (const it of cellIssues) {
+          list.push(it.key);
+        }
+      }
+    }
+    return list;
+  }, [swimlanes, collapsedLanes, columns, partitionedGrid]);
+
+  const activeFocusedKey = focusedKey ?? rovingKey ?? allVisibleCards[0] ?? null;
+
   const toggleLane = (laneId: string) => {
     setCollapsedLanes((prev) => ({
       ...prev,
@@ -313,161 +330,324 @@ export function SwimlaneBoardGrid({
     return laneCols ? Object.values(laneCols).reduce((sum, list) => sum + list.length, 0) : 0;
   };
 
+  const handleCardKeyDown = (
+    e: React.KeyboardEvent<HTMLDivElement>,
+    currentKey: string
+  ) => {
+    if (['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key)) {
+      e.preventDefault();
+      e.stopPropagation();
+
+      const flatCards: string[] = [];
+      const cellMap: Record<string, { laneIdx: number; colIdx: number; cardIdx: number }> = {};
+
+      swimlanes.forEach((l, lIdx) => {
+        if (collapsedLanes[l.id]) return;
+        columns.forEach((c, cIdx) => {
+          const issuesInCell = partitionedGrid[l.id]?.[c.id] ?? [];
+          issuesInCell.forEach((iss, kIdx) => {
+            flatCards.push(iss.key);
+            cellMap[iss.key] = { laneIdx: lIdx, colIdx: cIdx, cardIdx: kIdx };
+          });
+        });
+      });
+
+      if (flatCards.length === 0) return;
+
+      let nextKey: string | null = null;
+      const currentMeta = cellMap[currentKey];
+
+      if (e.key === 'Home') {
+        nextKey = flatCards[0] ?? null;
+      } else if (e.key === 'End') {
+        nextKey = flatCards[flatCards.length - 1] ?? null;
+      } else if (currentMeta) {
+        const { laneIdx, colIdx, cardIdx } = currentMeta;
+        const currentLane = swimlanes[laneIdx];
+        const currentColumn = columns[colIdx];
+        const currentLaneIssuesInCol = (currentLane && currentColumn)
+          ? (partitionedGrid[currentLane.id]?.[currentColumn.id] ?? [])
+          : [];
+
+        if (e.key === 'ArrowDown') {
+          if (cardIdx + 1 < currentLaneIssuesInCol.length) {
+            nextKey = currentLaneIssuesInCol[cardIdx + 1]?.key ?? null;
+          } else {
+            for (let l = laneIdx + 1; l < swimlanes.length; l++) {
+              const nextLane = swimlanes[l];
+              if (!nextLane || collapsedLanes[nextLane.id]) continue;
+              const targetCol = columns[colIdx];
+              const nextLaneColIssues = targetCol ? (partitionedGrid[nextLane.id]?.[targetCol.id] ?? []) : [];
+              if (nextLaneColIssues.length > 0 && nextLaneColIssues[0]) {
+                nextKey = nextLaneColIssues[0].key;
+                break;
+              }
+            }
+            if (!nextKey) {
+              const currentFlatIdx = flatCards.indexOf(currentKey);
+              if (currentFlatIdx + 1 < flatCards.length) {
+                nextKey = flatCards[currentFlatIdx + 1] ?? null;
+              }
+            }
+          }
+        } else if (e.key === 'ArrowUp') {
+          if (cardIdx - 1 >= 0) {
+            nextKey = currentLaneIssuesInCol[cardIdx - 1]?.key ?? null;
+          } else {
+            for (let l = laneIdx - 1; l >= 0; l--) {
+              const prevLane = swimlanes[l];
+              if (!prevLane || collapsedLanes[prevLane.id]) continue;
+              const targetCol = columns[colIdx];
+              const prevLaneColIssues = targetCol ? (partitionedGrid[prevLane.id]?.[targetCol.id] ?? []) : [];
+              if (prevLaneColIssues.length > 0) {
+                const lastIssue = prevLaneColIssues[prevLaneColIssues.length - 1];
+                if (lastIssue) {
+                  nextKey = lastIssue.key;
+                  break;
+                }
+              }
+            }
+            if (!nextKey) {
+              const currentFlatIdx = flatCards.indexOf(currentKey);
+              if (currentFlatIdx - 1 >= 0) {
+                nextKey = flatCards[currentFlatIdx - 1] ?? null;
+              }
+            }
+          }
+        } else if (e.key === 'ArrowRight') {
+          if (currentLane) {
+            for (let c = colIdx + 1; c < columns.length; c++) {
+              const targetCol = columns[c];
+              const issuesInCol = targetCol ? (partitionedGrid[currentLane.id]?.[targetCol.id] ?? []) : [];
+              if (issuesInCol.length > 0) {
+                const targetIssue = issuesInCol[Math.min(cardIdx, issuesInCol.length - 1)];
+                if (targetIssue) {
+                  nextKey = targetIssue.key;
+                  break;
+                }
+              }
+            }
+          }
+          if (!nextKey) {
+            const currentFlatIdx = flatCards.indexOf(currentKey);
+            if (currentFlatIdx + 1 < flatCards.length) {
+              nextKey = flatCards[currentFlatIdx + 1] ?? null;
+            }
+          }
+        } else if (e.key === 'ArrowLeft') {
+          if (currentLane) {
+            for (let c = colIdx - 1; c >= 0; c--) {
+              const targetCol = columns[c];
+              const issuesInCol = targetCol ? (partitionedGrid[currentLane.id]?.[targetCol.id] ?? []) : [];
+              if (issuesInCol.length > 0) {
+                const targetIssue = issuesInCol[Math.min(cardIdx, issuesInCol.length - 1)];
+                if (targetIssue) {
+                  nextKey = targetIssue.key;
+                  break;
+                }
+              }
+            }
+          }
+          if (!nextKey) {
+            const currentFlatIdx = flatCards.indexOf(currentKey);
+            if (currentFlatIdx - 1 >= 0) {
+              nextKey = flatCards[currentFlatIdx - 1] ?? null;
+            }
+          }
+        }
+      }
+
+      if (nextKey) {
+        setRovingKey(nextKey);
+        const targetEl = document.querySelector<HTMLElement>(`[data-issue-key="${nextKey}"]`);
+        targetEl?.focus();
+      }
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      onCardClick?.(currentKey, e.shiftKey);
+    }
+  };
+
   return (
     <div className="swimlane-board-grid" role="region" aria-label="2D Swimlane Board Grid">
-      {/* Sticky Top Column Headers aligned to 324px */}
-      <div className="swimlane-col-headers" role="row">
-        {columns.map((col) => (
-          <div key={col.id} className="swimlane-col-header-item" role="columnheader">
-            <span>{col.name}</span>
-          </div>
-        ))}
-      </div>
-
-      {/* Horizontal Swimlane Bands */}
-      {swimlanes.map((lane) => {
-        const isCollapsed = Boolean(collapsedLanes[lane.id]);
-        const laneCount = getLaneCount(lane.id);
-
-        return (
-          <div
-            key={lane.id}
-            className="swimlane-band"
-            data-subgroup-id={lane.id}
-            data-subgroup-value={lane.title}
-          >
-            <div className="swimlane-band-header">
-              <button
-                type="button"
-                className="swimlane-band-toggle"
-                onClick={() => { toggleLane(lane.id); }}
-                aria-expanded={!isCollapsed}
-                aria-controls={`swimlane-content-${lane.id}`}
-              >
-                <span className="swimlane-band-icon" aria-hidden="true">
-                  ▼
-                </span>
-                <span>{lane.title.replace('💤', '🔽')}</span>
-                {lane.title.includes('💤') && <span hidden>{lane.title}</span>}
-                <span className="swimlane-band-count">{laneCount}</span>
-              </button>
+      <div
+        className="swimlane-grid-table"
+        role="grid"
+        aria-label="2D Swimlane Board Grid"
+        aria-rowcount={swimlanes.length + 1}
+        aria-colcount={columns.length}
+      >
+        {/* Sticky Top Column Headers aligned to 324px */}
+        <div className="swimlane-col-headers" role="row" aria-rowindex={1}>
+          {columns.map((col, colIdx) => (
+            <div
+              key={col.id}
+              className="swimlane-col-header-item"
+              role="columnheader"
+              aria-colindex={colIdx + 1}
+            >
+              <span>{col.name}</span>
             </div>
+          ))}
+        </div>
 
-            {!isCollapsed && (
-              <div
-                id={`swimlane-content-${lane.id}`}
-                className="swimlane-band-columns"
-                role="row"
-              >
-                {columns.map((col) => {
-                  const cellIssues = partitionedGrid[lane.id]?.[col.id] ?? [];
+        {/* Horizontal Swimlane Bands */}
+        {swimlanes.map((lane, laneIdx) => {
+          const isCollapsed = Boolean(collapsedLanes[lane.id]);
+          const laneCount = getLaneCount(lane.id);
 
-                  return (
-                    <div
-                      key={col.id}
-                      className="board-column"
-                      data-column-id={col.id}
-                      data-swimlane-id={lane.id}
-                      role="cell"
-                    >
-                      <div className="swimlane-column-mobile-header" aria-hidden="true">
-                        <span className="swimlane-column-mobile-title">{col.name}</span>
-                        <span className="swimlane-column-mobile-count">{cellIssues.length}</span>
-                      </div>
-                      {cellIssues.map((issue) => {
-                        const isSelected = selectedIds.includes(issue.key);
-                        const isFocused = focusedKey === issue.key;
+          return (
+            <div
+              key={lane.id}
+              className="swimlane-band"
+              data-subgroup-id={lane.id}
+              data-subgroup-value={lane.title}
+            >
+              <div className="swimlane-band-header">
+                <button
+                  type="button"
+                  className="swimlane-band-toggle"
+                  onClick={() => { toggleLane(lane.id); }}
+                  aria-expanded={!isCollapsed}
+                  aria-controls={`swimlane-content-${lane.id}`}
+                >
+                  <span className="swimlane-band-icon" aria-hidden="true">
+                    ▼
+                  </span>
+                  <span>{lane.title.replace('💤', '🔽')}</span>
+                  {lane.title.includes('💤') && <span hidden>{lane.title}</span>}
+                  <span className="swimlane-band-count">{laneCount}</span>
+                </button>
+              </div>
 
-                        let pKind: 'priorityUrgent' | 'priorityHigh' | 'priorityMedium' | 'priorityLow' =
-                          'priorityMedium';
-                        const slug = issue.priority.slug.toLowerCase();
-                        if (slug === 'urgent') pKind = 'priorityUrgent';
-                        else if (slug === 'high') pKind = 'priorityHigh';
-                        else if (slug === 'low') pKind = 'priorityLow';
+              {!isCollapsed && (
+                <div
+                  id={`swimlane-content-${lane.id}`}
+                  className="swimlane-band-columns"
+                  role="row"
+                  aria-rowindex={laneIdx + 2}
+                >
+                  {columns.map((col, colIdx) => {
+                    const cellIssues = partitionedGrid[lane.id]?.[col.id] ?? [];
+                    const isCellFocused = activeFocusedKey
+                      ? cellIssues.some((it) => it.key === activeFocusedKey)
+                      : false;
 
-                        const rawCaps = issue.capabilities ?? currentUserCapabilities;
-                        const cardCaps = rawCaps ?? ['EDIT', 'TRANSITION'];
-                        const canTransitionCard =
-                          cardCaps.includes('TRANSITION') ||
-                          cardCaps.includes('EDIT') ||
-                          cardCaps.includes('ADMIN');
+                    return (
+                      <div
+                        key={col.id}
+                        className="board-column"
+                        data-column-id={col.id}
+                        data-swimlane-id={lane.id}
+                        role="gridcell"
+                        aria-colindex={colIdx + 1}
+                        tabIndex={isCellFocused ? 0 : -1}
+                      >
+                        <div className="swimlane-column-mobile-header" aria-hidden="true">
+                          <span className="swimlane-column-mobile-title">{col.name}</span>
+                          <span className="swimlane-column-mobile-count">{cellIssues.length}</span>
+                        </div>
+                        {cellIssues.map((issue) => {
+                          const isSelected = selectedIds.includes(issue.key);
+                          const isFocused = activeFocusedKey === issue.key;
 
-                        return (
-                          <div
-                            key={issue.key}
-                            className={`swimlane-card ${isSelected ? 'swimlane-card--selected' : ''}`}
-                            data-issue-key={issue.key}
-                            data-focused={isFocused ? 'true' : 'false'}
-                            tabIndex={isFocused ? 0 : -1}
-                            onClick={(e) => {
-                              onCardClick?.(issue.key, e.shiftKey);
-                            }}
-                          >
-                            <div className="swimlane-card-top">
-                              {onToggleSelect && (
-                                <label
-                                  className="swimlane-card-checkbox-wrap"
+                          let pKind: 'priorityUrgent' | 'priorityHigh' | 'priorityMedium' | 'priorityLow' =
+                            'priorityMedium';
+                          const slug = issue.priority.slug.toLowerCase();
+                          if (slug === 'urgent') pKind = 'priorityUrgent';
+                          else if (slug === 'high') pKind = 'priorityHigh';
+                          else if (slug === 'low') pKind = 'priorityLow';
+
+                          const rawCaps = issue.capabilities ?? currentUserCapabilities;
+                          const cardCaps = rawCaps ?? ['EDIT', 'TRANSITION'];
+                          const canTransitionCard =
+                            cardCaps.includes('TRANSITION') ||
+                            cardCaps.includes('EDIT') ||
+                            cardCaps.includes('ADMIN');
+
+                          return (
+                            <div
+                              key={issue.key}
+                              className={`swimlane-card ${isSelected ? 'swimlane-card--selected' : ''}`}
+                              data-issue-key={issue.key}
+                              data-focused={isFocused ? 'true' : 'false'}
+                              tabIndex={isFocused ? 0 : -1}
+                              onClick={(e) => {
+                                setRovingKey(issue.key);
+                                onCardClick?.(issue.key, e.shiftKey);
+                              }}
+                              onFocus={() => {
+                                setRovingKey(issue.key);
+                              }}
+                              onKeyDown={(e) => {
+                                handleCardKeyDown(e, issue.key);
+                              }}
+                            >
+                              <div className="swimlane-card-top">
+                                {onToggleSelect && (
+                                  <label
+                                    className="swimlane-card-checkbox-wrap"
+                                    onClick={(e) => { e.stopPropagation(); }}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={isSelected}
+                                      onChange={(e) => { onToggleSelect(issue.key, e.target.checked); }}
+                                      aria-label={`Select ${issue.key}`}
+                                    />
+                                  </label>
+                                )}
+
+                                <a
+                                  href={`/projects/${encodeURIComponent(projectKey)}/issues?layout=board&peek=${encodeURIComponent(issue.key)}`}
+                                  className="swimlane-card-key mono"
                                   onClick={(e) => { e.stopPropagation(); }}
                                 >
-                                  <input
-                                    type="checkbox"
-                                    checked={isSelected}
-                                    onChange={(e) => { onToggleSelect(issue.key, e.target.checked); }}
-                                    aria-label={`Select ${issue.key}`}
-                                  />
-                                </label>
-                              )}
+                                  {issue.key}
+                                </a>
 
-                              <a
-                                href={`/projects/${encodeURIComponent(projectKey)}/issues?layout=board&peek=${encodeURIComponent(issue.key)}`}
-                                className="swimlane-card-key mono"
-                                onClick={(e) => { e.stopPropagation(); }}
-                              >
-                                {issue.key}
-                              </a>
+                                {canTransitionCard && (
+                                  <button
+                                    type="button"
+                                    className="board-card-state-btn"
+                                    data-testid={`board-card-state-btn-${issue.key}`}
+                                    aria-label={`Move ${issue.key} to another state`}
+                                    title={`Move ${issue.key}`}
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      setPopoverState({
+                                        isOpen: true,
+                                        issue,
+                                        anchorRect: e.currentTarget.getBoundingClientRect(),
+                                      });
+                                    }}
+                                  >
+                                    <span className="board-card-state-btn-glyph" aria-hidden="true">⇄</span>
+                                    <span>{issue.state.name ? issue.state.name : 'Move'}</span>
+                                  </button>
+                                )}
 
-                              {canTransitionCard && (
-                                <button
-                                  type="button"
-                                  className="board-card-state-btn"
-                                  data-testid={`board-card-state-btn-${issue.key}`}
-                                  aria-label={`Move ${issue.key} to another state`}
-                                  title={`Move ${issue.key}`}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    setPopoverState({
-                                      isOpen: true,
-                                      issue,
-                                      anchorRect: e.currentTarget.getBoundingClientRect(),
-                                    });
-                                  }}
-                                >
-                                  <span className="board-card-state-btn-glyph" aria-hidden="true">⇄</span>
-                                  <span>{issue.state.name ? issue.state.name : 'Move'}</span>
-                                </button>
-                              )}
+                                <EmojiHint kind={pKind} />
+                              </div>
 
-                              <EmojiHint kind={pKind} />
+                              <div className="swimlane-card-summary">{issue.summary}</div>
+
+                              <div className="swimlane-card-footer">
+                                {issue.gate_status === 'pending' && <EmojiHint kind="gatePending" />}
+                                {issue.gate_status === 'vetoed' && <EmojiHint kind="gateVetoed" />}
+                                {issue.gate_status === 'approved' && <EmojiHint kind="gateApproved" />}
+                              </div>
                             </div>
-
-                            <div className="swimlane-card-summary">{issue.summary}</div>
-
-                            <div className="swimlane-card-footer">
-                              {issue.gate_status === 'pending' && <EmojiHint kind="gatePending" />}
-                              {issue.gate_status === 'vetoed' && <EmojiHint kind="gateVetoed" />}
-                              {issue.gate_status === 'approved' && <EmojiHint kind="gateApproved" />}
-                            </div>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        );
-      })}
+                          );
+                        })}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
       {popoverState.isOpen && popoverState.issue && (
         <QuickFieldPopover
           isOpen={popoverState.isOpen}

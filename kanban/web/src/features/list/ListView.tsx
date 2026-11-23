@@ -238,6 +238,7 @@ export function ListView({
   // QuickFieldPopover local fallback state
   const [localPopoverIssue, setLocalPopoverIssue] = useState<IssueItem | null>(null);
   const [localAnchor, setLocalAnchor] = useState<DOMRect | null>(null);
+  const [internalFocusedKey, setInternalFocusedKey] = useState<string | null>(null);
 
   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
 
@@ -245,6 +246,8 @@ export function ListView({
   const sortedIssues = useMemo(() => {
     return sortIssuesList(issues, sortBy, sortDir);
   }, [issues, sortBy, sortDir]);
+
+  const effectiveFocusedKey = focusedKey ?? internalFocusedKey ?? sortedIssues[0]?.key ?? null;
 
   if (issues.length === 0) {
     if (isLoading) {
@@ -383,10 +386,11 @@ export function ListView({
       {/* 2-Line Issue List Cards */}
       <div className="list-table" role="table" aria-label="Work items">
         <div className="issue-card-list list-rows" role="rowgroup">
-        {sortedIssues.map((issue) => {
+        {sortedIssues.map((issue, index) => {
           const isFav = favoriteKeys.has(issue.key);
           const isSelected = selectedSet.has(issue.key);
-          const isActive = activeKey === issue.key || focusedKey === issue.key;
+          const isFocused = effectiveFocusedKey === issue.key;
+          const isActive = activeKey === issue.key || isFocused;
 
           const handleStateClick = (e: React.MouseEvent<HTMLButtonElement>): void => {
             e.stopPropagation();
@@ -403,25 +407,65 @@ export function ListView({
             <div
               key={issue.id || issue.key}
               role="row"
-              tabIndex={focusedKey === issue.key ? 0 : -1}
+              aria-rowindex={index + 1}
+              tabIndex={isFocused ? 0 : -1}
               className={`issue-list-card list-row ${isSelected ? 'list-row--selected' : ''} ${
                 isActive ? 'list-row--active' : ''
               }`}
               data-issue-key={issue.key}
               data-testid={`issue-list-card-${issue.key}`}
               onClick={(e) => {
+                setInternalFocusedKey(issue.key);
                 const target = e.target as HTMLElement;
                 if (target.closest('input, button, a')) return;
                 onOpenPeek?.(issue.key);
               }}
+              onFocus={() => {
+                setInternalFocusedKey(issue.key);
+              }}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') {
+                const currentIndex = sortedIssues.findIndex((it) => it.key === issue.key);
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  const nextIndex = Math.min(sortedIssues.length - 1, currentIndex + 1);
+                  const nextKey = sortedIssues[nextIndex]?.key;
+                  if (nextKey) {
+                    setInternalFocusedKey(nextKey);
+                    const target = document.querySelector<HTMLElement>(`[data-issue-key="${nextKey}"]`);
+                    target?.focus();
+                  }
+                } else if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  const prevIndex = Math.max(0, currentIndex - 1);
+                  const prevKey = sortedIssues[prevIndex]?.key;
+                  if (prevKey) {
+                    setInternalFocusedKey(prevKey);
+                    const target = document.querySelector<HTMLElement>(`[data-issue-key="${prevKey}"]`);
+                    target?.focus();
+                  }
+                } else if (e.key === 'Home') {
+                  e.preventDefault();
+                  const firstKey = sortedIssues[0]?.key;
+                  if (firstKey) {
+                    setInternalFocusedKey(firstKey);
+                    const target = document.querySelector<HTMLElement>(`[data-issue-key="${firstKey}"]`);
+                    target?.focus();
+                  }
+                } else if (e.key === 'End') {
+                  e.preventDefault();
+                  const lastKey = sortedIssues[sortedIssues.length - 1]?.key;
+                  if (lastKey) {
+                    setInternalFocusedKey(lastKey);
+                    const target = document.querySelector<HTMLElement>(`[data-issue-key="${lastKey}"]`);
+                    target?.focus();
+                  }
+                } else if (e.key === 'Enter') {
                   onOpenPeek?.(issue.key);
                 }
               }}
             >
               {/* Line 1: Priority Icon, Monospace Key, Right-aligned interactive state pill & Favorite star */}
-              <div className="issue-card-line-1" role="cell">
+              <div className="issue-card-line-1" role="cell" aria-colindex={1}>
                 <div className="issue-card-meta-left">
                   {onToggleSelect && (
                     <input
@@ -519,7 +563,7 @@ export function ListView({
               </div>
 
               {/* Line 2: Summary */}
-              <div className="issue-card-line-2" role="cell">
+              <div className="issue-card-line-2" role="cell" aria-colindex={2}>
                 <span className="issue-card-summary">{issue.summary}</span>
               </div>
             </div>

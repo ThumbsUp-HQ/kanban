@@ -662,8 +662,8 @@ export function TimelineView({
         {/* Left Sticky Issue Pane (280px desktop, 132px mobile) */}
         <div className="timeline-left-pane" role="region" aria-label="Issue list">
           <div className="timeline-left-header">Work Item</div>
-          <div className="timeline-left-rows">
-            {effIssues.map((issue) => {
+          <div className="timeline-left-rows" role="rowgroup">
+            {effIssues.map((issue, idx) => {
               const priorityKind = getPriorityKind(issue.priority.slug);
               const isBroken = brokenLinksByIssue.get(issue.key);
 
@@ -671,12 +671,28 @@ export function TimelineView({
                 <div
                   key={issue.key}
                   className="timeline-left-row"
+                  role="row"
+                  aria-rowindex={idx + 2}
+                  tabIndex={idx === 0 ? 0 : -1}
                   data-issue-key={issue.key}
                   data-testid={`timeline-left-row-${issue.key}`}
                   onClick={(e) => {
                     const target = e.target as HTMLElement | null;
                     if (target?.closest('a, button, input')) return;
                     onOpenPeek?.(issue.key);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      const nextRow = (e.currentTarget as HTMLElement).nextElementSibling as HTMLElement | null;
+                      if (nextRow) nextRow.focus();
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      const prevRow = (e.currentTarget as HTMLElement).previousElementSibling as HTMLElement | null;
+                      if (prevRow) prevRow.focus();
+                    } else if (e.key === 'Enter') {
+                      onOpenPeek?.(issue.key);
+                    }
                   }}
                 >
                   <EmojiHint kind={priorityKind} />
@@ -714,12 +730,13 @@ export function TimelineView({
         <div ref={canvasWrapperRef} className="timeline-right-canvas-wrapper">
           <div ref={canvasRef} className={`timeline-right-canvas timeline-right-canvas--${zoomScale}`}>
             {/* Scale Header Row */}
-            <div className="timeline-scale-header" role="row">
-              {scaleCells.map((c) => (
+            <div className="timeline-scale-header" role="row" aria-rowindex={1}>
+              {scaleCells.map((c, cIdx) => (
                 <div
                   key={c.date}
                   className={`timeline-scale-cell timeline-scale-cell--${zoomScale} ${c.isToday ? 'timeline-scale-cell--today' : ''}`}
                   role="columnheader"
+                  aria-colindex={cIdx + 1}
                   title={c.date}
                   data-date={c.date}
                 >
@@ -729,8 +746,8 @@ export function TimelineView({
             </div>
 
             {/* Track Rows */}
-            <div className="timeline-track-rows">
-              {effIssues.map((issue) => {
+            <div className="timeline-track-rows" role="rowgroup">
+              {effIssues.map((issue, idx) => {
                 const geom = barGeometries.get(issue.key);
                 const isTerminal =
                   issue.state.group === 'completed' || issue.state.group === 'cancelled';
@@ -742,6 +759,8 @@ export function TimelineView({
                   <div
                     key={issue.key}
                     className="timeline-track-row"
+                    role="row"
+                    aria-rowindex={idx + 2}
                     data-issue-key={issue.key}
                     data-testid={`timeline-track-row-${issue.key}`}
                     onClick={(e) => { handleTrackRowClick(e, issue); }}

@@ -1,0 +1,1588 @@
+diff --git a/kanban/web/src/features/a11y/viewControlsA11y.test.tsx b/kanban/web/src/features/a11y/viewControlsA11y.test.tsx
+new file mode 100644
+index 00000000..69e552b4
+--- /dev/null
++++ b/kanban/web/src/features/a11y/viewControlsA11y.test.tsx
+@@ -0,0 +1,510 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
++import { render, screen, fireEvent, act } from '@testing-library/react';
++import React from 'react';
++import { SwimlaneBoardGrid } from '../views/SwimlaneBoardGrid';
++import { ListView } from '../list/ListView';
++import { TableView } from '../table/TableView';
++import { CalendarView } from '../calendar/CalendarView';
++import { TimelineView, type TimelineIssueItem } from '../timeline/TimelineView';
++import { FIXTURE_12_ISSUES } from '../views/fixtures';
++
++function expectElement<T extends Element = HTMLElement>(
++  el: T | null | undefined,
++  name = 'element'
++): T {
++  if (!el) throw new Error(`Expected ${name}`);
++  return el;
++}
++
++describe('viewControlsA11y (KAN-358: 2D Swimlane, Navigator, Table, Calendar, and Timeline Grid ARIA and Arrow Navigation)', () => {
++  let cleanupNav: (() => void) | undefined;
++
++  beforeEach(() => {
++    const navHandler = (e: Event): void => {
++      e.preventDefault();
++    };
++    window.addEventListener('click', navHandler, true);
++    cleanupNav = () => {
++      window.removeEventListener('click', navHandler, true);
++    };
++  });
++
++  afterEach(() => {
++    cleanupNav?.();
++  });
++
++  // =========================================================================
++  // Required Test Case 1: Positive case — verifies Arrow keys move focus across
++  // swimlane cards and list rows
++  // =========================================================================
++  describe('Test Case 1: Positive Case - Arrow Keys Move Focus Across Swimlane Cards and List Rows', () => {
++    it('traverses 2D swimlane cards using ArrowDown, ArrowUp, ArrowRight, ArrowLeft, Home, and End', () => {
++      const handleCardClick = vi.fn();
++
++      render(
++        <SwimlaneBoardGrid
++          issues={FIXTURE_12_ISSUES}
++          projectKey="KAN"
++          groupBy="state"
++          subGroupBy="priority"
++          onCardClick={handleCardClick}
++        />
++      );
++
++      const allCards = document.querySelectorAll<HTMLElement>('.swimlane-card');
++      expect(allCards.length).toBeGreaterThanOrEqual(2);
++
++      const firstCard = expectElement(allCards[0], 'firstCard');
++      const initialKey = firstCard.getAttribute('data-issue-key') ?? '';
++      expect(firstCard.getAttribute('tabindex')).toBe('0');
++      expect(firstCard.getAttribute('data-focused')).toBe('true');
++
++      // Focus first card
++      act(() => {
++        firstCard.focus();
++      });
++      expect(document.activeElement).toBe(firstCard);
++
++      // Press ArrowDown to navigate to next card in column or lane
++      act(() => {
++        fireEvent.keyDown(firstCard, { key: 'ArrowDown' });
++      });
++      const activeAfterDown = document.activeElement as HTMLElement;
++      expect(activeAfterDown).not.toBeNull();
++      expect(activeAfterDown.classList.contains('swimlane-card')).toBe(true);
++      expect(activeAfterDown.getAttribute('tabindex')).toBe('0');
++      expect(activeAfterDown.getAttribute('data-focused')).toBe('true');
++      expect(firstCard.getAttribute('tabindex')).toBe('-1');
++
++      // Press ArrowUp to navigate back
++      act(() => {
++        fireEvent.keyDown(activeAfterDown, { key: 'ArrowUp' });
++      });
++      const activeAfterUp = document.activeElement as HTMLElement;
++      expect(activeAfterUp.getAttribute('data-issue-key')).toBe(initialKey);
++      expect(activeAfterUp.getAttribute('tabindex')).toBe('0');
++
++      // Press ArrowRight to navigate laterally
++      act(() => {
++        fireEvent.keyDown(activeAfterUp, { key: 'ArrowRight' });
++      });
++      const activeAfterRight = document.activeElement as HTMLElement;
++      expect(activeAfterRight).not.toBeNull();
++      expect(activeAfterRight.getAttribute('tabindex')).toBe('0');
++
++      // Press ArrowLeft to navigate laterally back
++      act(() => {
++        fireEvent.keyDown(activeAfterRight, { key: 'ArrowLeft' });
++      });
++      const activeAfterLeft = document.activeElement as HTMLElement;
++      expect(activeAfterLeft).not.toBeNull();
++      expect(activeAfterLeft.getAttribute('tabindex')).toBe('0');
++
++      // Press End to navigate to the last card
++      act(() => {
++        fireEvent.keyDown(activeAfterLeft, { key: 'End' });
++      });
++      const lastCard = document.activeElement as HTMLElement;
++      const lastExpectedCard = expectElement(allCards[allCards.length - 1], 'lastExpectedCard');
++      expect(lastCard.getAttribute('data-issue-key')).toBe(
++        lastExpectedCard.getAttribute('data-issue-key')
++      );
++      expect(lastCard.getAttribute('tabindex')).toBe('0');
++
++      // Press Home to return to the first card
++      act(() => {
++        fireEvent.keyDown(lastCard, { key: 'Home' });
++      });
++      const firstReturned = document.activeElement as HTMLElement;
++      expect(firstReturned.getAttribute('data-issue-key')).toBe(initialKey);
++      expect(firstReturned.getAttribute('tabindex')).toBe('0');
++
++      // Press Enter on card to trigger click
++      act(() => {
++        fireEvent.keyDown(firstReturned, { key: 'Enter' });
++      });
++      expect(handleCardClick).toHaveBeenCalledWith(initialKey, false);
++    });
++
++    it('traverses list rows using ArrowDown, ArrowUp, Home, End, and Enter in ListView', () => {
++      const handleOpenPeek = vi.fn();
++
++      render(
++        <ListView
++          issues={FIXTURE_12_ISSUES}
++          projectKey="KAN"
++          onOpenPeek={handleOpenPeek}
++        />
++      );
++
++      const rows = document.querySelectorAll<HTMLElement>('.issue-list-card');
++      expect(rows.length).toBeGreaterThanOrEqual(3);
++
++      const firstRow = expectElement(rows[0], 'firstRow');
++      const secondRow = expectElement(rows[1], 'secondRow');
++      const lastRow = expectElement(rows[rows.length - 1], 'lastRow');
++
++      // Initial active row has tabIndex 0
++      expect(firstRow.getAttribute('tabindex')).toBe('0');
++      expect(secondRow.getAttribute('tabindex')).toBe('-1');
++
++      act(() => {
++        firstRow.focus();
++      });
++      expect(document.activeElement).toBe(firstRow);
++
++      // ArrowDown to move to second row
++      act(() => {
++        fireEvent.keyDown(firstRow, { key: 'ArrowDown' });
++      });
++      expect(document.activeElement).toBe(secondRow);
++      expect(secondRow.getAttribute('tabindex')).toBe('0');
++      expect(firstRow.getAttribute('tabindex')).toBe('-1');
++
++      // ArrowUp to move back to first row
++      act(() => {
++        fireEvent.keyDown(secondRow, { key: 'ArrowUp' });
++      });
++      expect(document.activeElement).toBe(firstRow);
++      expect(firstRow.getAttribute('tabindex')).toBe('0');
++      expect(secondRow.getAttribute('tabindex')).toBe('-1');
++
++      // End key moves to last row
++      act(() => {
++        fireEvent.keyDown(firstRow, { key: 'End' });
++      });
++      expect(document.activeElement).toBe(lastRow);
++      expect(lastRow.getAttribute('tabindex')).toBe('0');
++
++      // Home key moves back to first row
++      act(() => {
++        fireEvent.keyDown(lastRow, { key: 'Home' });
++      });
++      expect(document.activeElement).toBe(firstRow);
++      expect(firstRow.getAttribute('tabindex')).toBe('0');
++
++      // Enter key opens peek
++      act(() => {
++        fireEvent.keyDown(firstRow, { key: 'Enter' });
++      });
++      expect(handleOpenPeek).toHaveBeenCalledWith(firstRow.getAttribute('data-issue-key'));
++    });
++
++    it('traverses table rows using ArrowDown, ArrowUp, Home, End in TableView', () => {
++      const handleOpenPeek = vi.fn();
++
++      render(
++        <TableView
++          issues={FIXTURE_12_ISSUES}
++          projectKey="KAN"
++          onOpenPeek={handleOpenPeek}
++        />
++      );
++
++      const rows = document.querySelectorAll<HTMLElement>('tbody.issues-table-body tr[role="row"]');
++      expect(rows.length).toBeGreaterThanOrEqual(3);
++
++      const firstRow = expectElement(rows[0], 'firstRow');
++      const secondRow = expectElement(rows[1], 'secondRow');
++      const lastRow = expectElement(rows[rows.length - 1], 'lastRow');
++
++      expect(firstRow.getAttribute('tabindex')).toBe('0');
++      expect(secondRow.getAttribute('tabindex')).toBe('-1');
++
++      act(() => {
++        firstRow.focus();
++      });
++      expect(document.activeElement).toBe(firstRow);
++
++      // ArrowDown moves focus
++      act(() => {
++        fireEvent.keyDown(firstRow, { key: 'ArrowDown' });
++      });
++      expect(document.activeElement).toBe(secondRow);
++      expect(secondRow.getAttribute('tabindex')).toBe('0');
++      expect(firstRow.getAttribute('tabindex')).toBe('-1');
++
++      // ArrowUp moves focus back
++      act(() => {
++        fireEvent.keyDown(secondRow, { key: 'ArrowUp' });
++      });
++      expect(document.activeElement).toBe(firstRow);
++      expect(firstRow.getAttribute('tabindex')).toBe('0');
++
++      // End moves to last row
++      act(() => {
++        fireEvent.keyDown(firstRow, { key: 'End' });
++      });
++      expect(document.activeElement).toBe(lastRow);
++      expect(lastRow.getAttribute('tabindex')).toBe('0');
++
++      // Home moves to first row
++      act(() => {
++        fireEvent.keyDown(lastRow, { key: 'Home' });
++      });
++      expect(document.activeElement).toBe(firstRow);
++      expect(firstRow.getAttribute('tabindex')).toBe('0');
++
++      // Enter triggers onOpenPeek
++      act(() => {
++        fireEvent.keyDown(firstRow, { key: 'Enter' });
++      });
++      expect(handleOpenPeek).toHaveBeenCalledWith(firstRow.getAttribute('data-issue-key'));
++    });
++  });
++
++  // =========================================================================
++  // Required Test Case 2: Positive case — verifies grid roles render valid
++  // ARIA relationships
++  // =========================================================================
++  describe('Test Case 2: Positive Case - Grid Roles Render Valid ARIA Relationships', () => {
++    it('verifies SwimlaneBoardGrid composite grid semantics (role="grid" -> role="row" -> role="columnheader" & role="gridcell")', () => {
++      render(
++        <SwimlaneBoardGrid
++          issues={FIXTURE_12_ISSUES}
++          projectKey="KAN"
++          groupBy="state"
++          subGroupBy="priority"
++        />
++      );
++
++      // 1. Grid container exists and declares role="grid" with valid accessible name
++      const grid = screen.getByRole('grid', { name: '2D Swimlane Board Grid' });
++      expect(grid).toBeDefined();
++      expect(grid.getAttribute('aria-rowcount')).toBeDefined();
++      expect(grid.getAttribute('aria-colcount')).toBeDefined();
++
++      // 2. Column headers row exists with role="row" and aria-rowindex="1"
++      const headerRow = expectElement(
++        grid.querySelector<HTMLElement>('.swimlane-col-headers[role="row"]'),
++        'headerRow'
++      );
++      expect(headerRow.getAttribute('aria-rowindex')).toBe('1');
++
++      // 3. Column headers declare role="columnheader" with sequential aria-colindex
++      const colHeaders = headerRow.querySelectorAll('[role="columnheader"]');
++      expect(colHeaders.length).toBeGreaterThan(0);
++      colHeaders.forEach((th, idx) => {
++        expect(th.getAttribute('aria-colindex')).toBe(String(idx + 1));
++      });
++
++      // 4. Swimlane bands render rows with role="row" and aria-rowindex >= 2
++      const bandRows = grid.querySelectorAll('.swimlane-band-columns[role="row"]');
++      expect(bandRows.length).toBeGreaterThan(0);
++      bandRows.forEach((row, rowIdx) => {
++        expect(row.getAttribute('aria-rowindex')).toBe(String(rowIdx + 2));
++
++        // 5. Columns inside band rows declare role="gridcell" with valid aria-colindex
++        const cells = row.querySelectorAll(':scope > [role="gridcell"]');
++        expect(cells.length).toBe(colHeaders.length);
++        cells.forEach((cell, cellIdx) => {
++          expect(cell.getAttribute('aria-colindex')).toBe(String(cellIdx + 1));
++        });
++      });
++    });
++
++    it('verifies CalendarView composite grid semantics (role="grid" -> role="row" -> role="columnheader" & role="gridcell")', () => {
++      render(
++        <CalendarView
++          issues={FIXTURE_12_ISSUES}
++          projectKey="KAN"
++          initialYear={2026}
++          initialMonth={11}
++          today="2026-11-20"
++        />
++      );
++
++      const grid = screen.getByRole('grid');
++      expect(grid).toBeDefined();
++
++      // Header row
++      const headerRow = grid.querySelector('.calendar-weekday-headers-row[role="row"]');
++      expect(headerRow).not.toBeNull();
++      expect(headerRow?.getAttribute('aria-rowindex')).toBe('1');
++
++      const colHeaders = headerRow?.querySelectorAll('[role="columnheader"]');
++      expect(colHeaders?.length).toBe(7);
++      colHeaders?.forEach((ch, idx) => {
++        expect(ch.getAttribute('aria-colindex')).toBe(String(idx + 1));
++      });
++
++      // 14 day cells with role="gridcell" and valid row/col indexes
++      const dayCells = grid.querySelectorAll('[role="gridcell"]');
++      expect(dayCells.length).toBe(14);
++      dayCells.forEach((dc, idx) => {
++        const expectedCol = (idx % 7) + 1;
++        const expectedRow = Math.floor(idx / 7) + 2;
++        expect(dc.getAttribute('aria-colindex')).toBe(String(expectedCol));
++        expect(dc.getAttribute('aria-rowindex')).toBe(String(expectedRow));
++      });
++    });
++
++    it('verifies TableView table rows and headers declare role="row", role="columnheader", and role="gridcell"', () => {
++      render(
++        <TableView
++          issues={FIXTURE_12_ISSUES}
++          projectKey="KAN"
++        />
++      );
++
++      const table = screen.getByRole('table');
++      expect(table).toBeDefined();
++
++      const headerRow = table.querySelector('thead tr[role="row"]');
++      expect(headerRow).not.toBeNull();
++      expect(headerRow?.getAttribute('aria-rowindex')).toBe('1');
++
++      const headers = headerRow?.querySelectorAll('th[role="columnheader"]');
++      expect(headers?.length).toBeGreaterThan(0);
++      headers?.forEach((th, idx) => {
++        expect(th.getAttribute('aria-colindex')).toBe(String(idx + 1));
++      });
++
++      const bodyRows = table.querySelectorAll('tbody tr[role="row"]');
++      expect(bodyRows.length).toBe(FIXTURE_12_ISSUES.length);
++      bodyRows.forEach((tr, idx) => {
++        expect(tr.getAttribute('aria-rowindex')).toBe(String(idx + 2));
++        const keyCell = tr.querySelector('td.table-key-cell[role="gridcell"]');
++        expect(keyCell).not.toBeNull();
++        expect(keyCell?.getAttribute('aria-colindex')).toBe('1');
++      });
++    });
++
++    it('verifies TimelineView scale header and rows render valid row and columnheader roles', () => {
++      render(
++        <TimelineView
++          issues={FIXTURE_12_ISSUES as TimelineIssueItem[]}
++          projectKey="KAN"
++          today="2026-11-20"
++        />
++      );
++
++      const scaleHeader = document.querySelector('.timeline-scale-header[role="row"]');
++      expect(scaleHeader).not.toBeNull();
++      expect(scaleHeader?.getAttribute('aria-rowindex')).toBe('1');
++
++      const scaleCells = scaleHeader?.querySelectorAll('[role="columnheader"]');
++      expect(scaleCells?.length).toBeGreaterThan(0);
++      scaleCells?.forEach((sc, idx) => {
++        expect(sc.getAttribute('aria-colindex')).toBe(String(idx + 1));
++      });
++
++      const leftRows = document.querySelectorAll('.timeline-left-row[role="row"]');
++      expect(leftRows.length).toBe(FIXTURE_12_ISSUES.length);
++      leftRows.forEach((lr, idx) => {
++        expect(lr.getAttribute('aria-rowindex')).toBe(String(idx + 2));
++      });
++    });
++  });
++
++  // =========================================================================
++  // Required Test Case 3: Negative case — verifies roving tabindex correctly
++  // sets tabIndex={-1} on unfocused cells
++  // =========================================================================
++  describe('Test Case 3: Negative Case - Roving Tabindex Sets tabIndex={-1} on Unfocused Cells', () => {
++    it('sets tabIndex={-1} on all unfocused swimlane cards when a specific card is focused', () => {
++      render(
++        <SwimlaneBoardGrid
++          issues={FIXTURE_12_ISSUES}
++          projectKey="KAN"
++          groupBy="state"
++          subGroupBy="priority"
++          focusedKey="KAN-142"
++        />
++      );
++
++      const focusedCard = document.querySelector<HTMLElement>('[data-issue-key="KAN-142"]');
++      expect(focusedCard).not.toBeNull();
++      expect(focusedCard?.getAttribute('tabindex')).toBe('0');
++      expect(focusedCard?.getAttribute('data-focused')).toBe('true');
++
++      // Verify all other cards in the grid carry tabIndex={-1} and data-focused="false"
++      const unfocusedCards = document.querySelectorAll<HTMLElement>(
++        '.swimlane-card:not([data-issue-key="KAN-142"])'
++      );
++      expect(unfocusedCards.length).toBeGreaterThan(0);
++      unfocusedCards.forEach((card) => {
++        expect(card.getAttribute('tabindex')).toBe('-1');
++        expect(card.getAttribute('data-focused')).toBe('false');
++      });
++
++      // Verify all non-matching column gridcells carry tabIndex={-1}
++      const allGridcells = document.querySelectorAll<HTMLElement>('.board-column[role="gridcell"]');
++      const unfocusedGridcells = Array.from(allGridcells).filter(
++        (cell) => !cell.contains(focusedCard)
++      );
++      expect(unfocusedGridcells.length).toBeGreaterThan(0);
++      unfocusedGridcells.forEach((cell) => {
++        expect(cell.getAttribute('tabindex')).toBe('-1');
++      });
++    });
++
++    it('sets tabIndex={-1} on all unfocused list rows in ListView', () => {
++      render(
++        <ListView
++          issues={FIXTURE_12_ISSUES}
++          projectKey="KAN"
++          focusedKey="KAN-142"
++        />
++      );
++
++      const focusedRow = document.querySelector<HTMLElement>('[data-issue-key="KAN-142"]');
++      expect(focusedRow).not.toBeNull();
++      expect(focusedRow?.getAttribute('tabindex')).toBe('0');
++
++      const unfocusedRows = document.querySelectorAll<HTMLElement>(
++        '.issue-list-card:not([data-issue-key="KAN-142"])'
++      );
++      expect(unfocusedRows.length).toBe(FIXTURE_12_ISSUES.length - 1);
++      unfocusedRows.forEach((row) => {
++        expect(row.getAttribute('tabindex')).toBe('-1');
++      });
++    });
++
++    it('sets tabIndex={-1} on all unfocused calendar day cells except the initial cell', () => {
++      render(
++        <CalendarView
++          issues={FIXTURE_12_ISSUES}
++          projectKey="KAN"
++          initialYear={2026}
++          initialMonth={11}
++          today="2026-11-20"
++        />
++      );
++
++      const cells = document.querySelectorAll<HTMLElement>('[role="gridcell"]');
++      expect(cells.length).toBe(14);
++
++      // Cell 0 has tabIndex=0, all other 13 cells have tabIndex=-1
++      expect(cells[0]?.getAttribute('tabindex')).toBe('0');
++      for (let i = 1; i < cells.length; i++) {
++        expect(cells[i]?.getAttribute('tabindex')).toBe('-1');
++      }
++    });
++
++    it('sets tabIndex={-1} on all unfocused table rows in TableView', () => {
++      render(
++        <TableView
++          issues={FIXTURE_12_ISSUES}
++          projectKey="KAN"
++          focusedKey="KAN-142"
++        />
++      );
++
++      const focusedRow = document.querySelector<HTMLElement>('tbody tr[data-issue-key="KAN-142"]');
++      expect(focusedRow).not.toBeNull();
++      expect(focusedRow?.getAttribute('tabindex')).toBe('0');
++
++      const unfocusedRows = document.querySelectorAll<HTMLElement>(
++        'tbody tr[role="row"]:not([data-issue-key="KAN-142"])'
++      );
++      expect(unfocusedRows.length).toBe(FIXTURE_12_ISSUES.length - 1);
++      unfocusedRows.forEach((row) => {
++        expect(row.getAttribute('tabindex')).toBe('-1');
++      });
++    });
++  });
++});
+diff --git a/kanban/web/src/features/calendar/CalendarView.tsx b/kanban/web/src/features/calendar/CalendarView.tsx
+index e1067b3a..f1018bda 100644
+--- a/kanban/web/src/features/calendar/CalendarView.tsx
++++ b/kanban/web/src/features/calendar/CalendarView.tsx
+@@ -316,14 +316,23 @@ export function CalendarView({
+       {/* 7-column 2-Week Grid (14 Day Cells, Desktop & Tablet) */}
+       <div className="calendar-month-grid" role="grid" aria-label={`2-week grid for ${rangeLabel}`}>
+         {/* Weekday headers */}
+-        {WEEKDAY_NAMES.map((name) => (
+-          <div key={name} className="calendar-weekday-header" role="columnheader">
+-            {name}
+-          </div>
+-        ))}
++        <div className="calendar-weekday-headers-row" role="row" aria-rowindex={1}>
++          {WEEKDAY_NAMES.map((name, colIdx) => (
++            <div
++              key={name}
++              className="calendar-weekday-header"
++              role="columnheader"
++              aria-colindex={colIdx + 1}
++            >
++              {name}
++            </div>
++          ))}
++        </div>
+ 
+         {/* 14 Day cells */}
+-        {twoWeekGrid.map((cell: CalendarDayCell) => {
++        {twoWeekGrid.map((cell: CalendarDayCell, idx: number) => {
++          const colIdx = idx % 7;
++          const rowIdx = Math.floor(idx / 7) + 2;
+           const cellIssues = issuesByDate[cell.date] ?? [];
+           const visibleIssues = cellIssues.slice(0, 3);
+           const hiddenCount = cellIssues.length - 3;
+@@ -340,6 +349,9 @@ export function CalendarView({
+               key={cell.date}
+               className={cellClassName}
+               role="gridcell"
++              aria-rowindex={rowIdx}
++              aria-colindex={colIdx + 1}
++              tabIndex={idx === 0 ? 0 : -1}
+               data-date={cell.date}
+               onDragOver={(e) => { handleDragOver(e, cell.date); }}
+               onDragLeave={(e) => { handleDragLeave(e, cell.date); }}
+diff --git a/kanban/web/src/features/list/ListRow.tsx b/kanban/web/src/features/list/ListRow.tsx
+index 3ea04732..9c18aeb6 100644
+--- a/kanban/web/src/features/list/ListRow.tsx
++++ b/kanban/web/src/features/list/ListRow.tsx
+@@ -104,7 +104,19 @@ export function ListRow({
+   };
+ 
+   const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+-    if (e.key === 'Enter') {
++    if (e.key === 'ArrowDown') {
++      e.preventDefault();
++      const nextRow = rowRef.current?.nextElementSibling as HTMLElement | null;
++      if (nextRow?.getAttribute('role') === 'row') {
++        nextRow.focus();
++      }
++    } else if (e.key === 'ArrowUp') {
++      e.preventDefault();
++      const prevRow = rowRef.current?.previousElementSibling as HTMLElement | null;
++      if (prevRow?.getAttribute('role') === 'row') {
++        prevRow.focus();
++      }
++    } else if (e.key === 'Enter') {
+       setOpenerElement(rowRef.current);
+       if (onOpenPeek) {
+         onOpenPeek(issue.key);
+@@ -128,7 +140,7 @@ export function ListRow({
+       onKeyDown={handleKeyDown}
+       aria-selected={isSelected}
+     >
+-      <div role="cell" className="list-row-left">
++      <div role="cell" aria-colindex={1} className="list-row-left">
+         {onToggleSelect && (
+           <span className="list-row-checkbox-wrap">
+             <input
+@@ -197,7 +209,7 @@ export function ListRow({
+         <span className="list-row-summary">{issue.summary}</span>
+       </div>
+ 
+-      <div role="cell" className="list-row-right">
++      <div role="cell" aria-colindex={2} className="list-row-right">
+         {gateKind && <EmojiHint kind={gateKind} />}
+ 
+         {Boolean(issue.has_explicit_acl) && <EmojiHint kind="access" testId="hint-access" />}
+diff --git a/kanban/web/src/features/list/ListView.tsx b/kanban/web/src/features/list/ListView.tsx
+index 08a8f5fb..c80cb844 100644
+--- a/kanban/web/src/features/list/ListView.tsx
++++ b/kanban/web/src/features/list/ListView.tsx
+@@ -238,6 +238,7 @@ export function ListView({
+   // QuickFieldPopover local fallback state
+   const [localPopoverIssue, setLocalPopoverIssue] = useState<IssueItem | null>(null);
+   const [localAnchor, setLocalAnchor] = useState<DOMRect | null>(null);
++  const [internalFocusedKey, setInternalFocusedKey] = useState<string | null>(null);
+ 
+   const selectedSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+ 
+@@ -246,6 +247,8 @@ export function ListView({
+     return sortIssuesList(issues, sortBy, sortDir);
+   }, [issues, sortBy, sortDir]);
+ 
++  const effectiveFocusedKey = focusedKey ?? internalFocusedKey ?? sortedIssues[0]?.key ?? null;
++
+   if (issues.length === 0) {
+     if (isLoading) {
+       return (
+@@ -383,10 +386,11 @@ export function ListView({
+       {/* 2-Line Issue List Cards */}
+       <div className="list-table" role="table" aria-label="Work items">
+         <div className="issue-card-list list-rows" role="rowgroup">
+-        {sortedIssues.map((issue) => {
++        {sortedIssues.map((issue, index) => {
+           const isFav = favoriteKeys.has(issue.key);
+           const isSelected = selectedSet.has(issue.key);
+-          const isActive = activeKey === issue.key || focusedKey === issue.key;
++          const isFocused = effectiveFocusedKey === issue.key;
++          const isActive = activeKey === issue.key || isFocused;
+ 
+           const handleStateClick = (e: React.MouseEvent<HTMLButtonElement>): void => {
+             e.stopPropagation();
+@@ -403,25 +407,65 @@ export function ListView({
+             <div
+               key={issue.id || issue.key}
+               role="row"
+-              tabIndex={focusedKey === issue.key ? 0 : -1}
++              aria-rowindex={index + 1}
++              tabIndex={isFocused ? 0 : -1}
+               className={`issue-list-card list-row ${isSelected ? 'list-row--selected' : ''} ${
+                 isActive ? 'list-row--active' : ''
+               }`}
+               data-issue-key={issue.key}
+               data-testid={`issue-list-card-${issue.key}`}
+               onClick={(e) => {
++                setInternalFocusedKey(issue.key);
+                 const target = e.target as HTMLElement;
+                 if (target.closest('input, button, a')) return;
+                 onOpenPeek?.(issue.key);
+               }}
++              onFocus={() => {
++                setInternalFocusedKey(issue.key);
++              }}
+               onKeyDown={(e) => {
+-                if (e.key === 'Enter') {
++                const currentIndex = sortedIssues.findIndex((it) => it.key === issue.key);
++                if (e.key === 'ArrowDown') {
++                  e.preventDefault();
++                  const nextIndex = Math.min(sortedIssues.length - 1, currentIndex + 1);
++                  const nextKey = sortedIssues[nextIndex]?.key;
++                  if (nextKey) {
++                    setInternalFocusedKey(nextKey);
++                    const target = document.querySelector<HTMLElement>(`[data-issue-key="${nextKey}"]`);
++                    target?.focus();
++                  }
++                } else if (e.key === 'ArrowUp') {
++                  e.preventDefault();
++                  const prevIndex = Math.max(0, currentIndex - 1);
++                  const prevKey = sortedIssues[prevIndex]?.key;
++                  if (prevKey) {
++                    setInternalFocusedKey(prevKey);
++                    const target = document.querySelector<HTMLElement>(`[data-issue-key="${prevKey}"]`);
++                    target?.focus();
++                  }
++                } else if (e.key === 'Home') {
++                  e.preventDefault();
++                  const firstKey = sortedIssues[0]?.key;
++                  if (firstKey) {
++                    setInternalFocusedKey(firstKey);
++                    const target = document.querySelector<HTMLElement>(`[data-issue-key="${firstKey}"]`);
++                    target?.focus();
++                  }
++                } else if (e.key === 'End') {
++                  e.preventDefault();
++                  const lastKey = sortedIssues[sortedIssues.length - 1]?.key;
++                  if (lastKey) {
++                    setInternalFocusedKey(lastKey);
++                    const target = document.querySelector<HTMLElement>(`[data-issue-key="${lastKey}"]`);
++                    target?.focus();
++                  }
++                } else if (e.key === 'Enter') {
+                   onOpenPeek?.(issue.key);
+                 }
+               }}
+             >
+               {/* Line 1: Priority Icon, Monospace Key, Right-aligned interactive state pill & Favorite star */}
+-              <div className="issue-card-line-1" role="cell">
++              <div className="issue-card-line-1" role="cell" aria-colindex={1}>
+                 <div className="issue-card-meta-left">
+                   {onToggleSelect && (
+                     <input
+@@ -519,7 +563,7 @@ export function ListView({
+               </div>
+ 
+               {/* Line 2: Summary */}
+-              <div className="issue-card-line-2" role="cell">
++              <div className="issue-card-line-2" role="cell" aria-colindex={2}>
+                 <span className="issue-card-summary">{issue.summary}</span>
+               </div>
+             </div>
+diff --git a/kanban/web/src/features/table/TableView.tsx b/kanban/web/src/features/table/TableView.tsx
+index 378ca59d..ddf738f4 100644
+--- a/kanban/web/src/features/table/TableView.tsx
++++ b/kanban/web/src/features/table/TableView.tsx
+@@ -39,6 +39,7 @@ export interface TableViewProps {
+   currentUserCapabilities?: string[] | undefined;
+   projectStates?: StateSummary[] | undefined;
+   onUpdateIssue?: ((issueKey: string, patch: Partial<IssueItem>) => Promise<void> | void) | undefined;
++  focusedKey?: string | null | undefined;
+   totalProjectIssueCount?: number | undefined;
+   hiddenByStateCount?: number | undefined;
+   onShowAllStates?: (() => void) | undefined;
+@@ -57,6 +58,7 @@ export function TableView({
+   nextCursor,
+   onLoadMore,
+   isLoading = false,
++  focusedKey = null,
+   onOpenPeek,
+   capabilities,
+   currentUserCapabilities,
+@@ -68,6 +70,7 @@ export function TableView({
+ }: TableViewProps): JSX.Element {
+   const [prevIssues, setPrevIssues] = useState<IssueItem[]>(issues);
+   const [localIssues, setLocalIssues] = useState<IssueItem[]>(issues);
++  const [internalFocusedKey, setInternalFocusedKey] = useState<string | null>(null);
+   if (issues !== prevIssues) {
+     setPrevIssues(issues);
+     setLocalIssues(issues);
+@@ -446,8 +449,8 @@ export function TableView({
+       <div className="table-scroll-wrap">
+         <table className="issues-table">
+           <thead className="issues-table-head">
+-            <tr className="table-header-row">
+-              <th className="sticky-col table-key-header" data-col-header="key">
++            <tr className="table-header-row" role="row" aria-rowindex={1}>
++              <th className="sticky-col table-key-header" data-col-header="key" role="columnheader" aria-colindex={1}>
+                 <div className="table-key-cell-content">
+                   {onSelectAll && (
+                     <input
+@@ -474,7 +477,7 @@ export function TableView({
+ 
+               {activeColumns
+                 .filter((id) => id !== 'key')
+-                .map((colId) => {
++                .map((colId, colIdx) => {
+                   const def = colDefMap.get(colId);
+                   if (!def) return null;
+                   const label = def.label;
+@@ -490,6 +493,8 @@ export function TableView({
+                       key={colId}
+                       data-col-header={colId}
+                       className={`table-col-header table-col-header--${colId}`}
++                      role="columnheader"
++                      aria-colindex={colIdx + 2}
+                       aria-sort={isSortable ? ariaSort : undefined}
+                     >
+                       {isSortable ? (
+@@ -515,9 +520,11 @@ export function TableView({
+           </thead>
+ 
+           <tbody className="issues-table-body">
+-            {sortedIssues.map((issue) => {
++            {sortedIssues.map((issue, rowIdx) => {
+               const isSelected = selectedSet.has(issue.key);
+               const canEdit = canEditIssue(issue);
++              const effectiveFocusedKey = focusedKey ?? internalFocusedKey ?? sortedIssues[0]?.key ?? null;
++              const isRowFocused = effectiveFocusedKey === issue.key;
+ 
+               // Priority mapping
+               let priorityKind: 'priorityUrgent' | 'priorityHigh' | 'priorityMedium' | 'priorityLow' =
+@@ -542,8 +549,12 @@ export function TableView({
+                 <tr
+                   key={issue.key}
+                   data-issue-key={issue.key}
++                  role="row"
++                  aria-rowindex={rowIdx + 2}
++                  tabIndex={isRowFocused ? 0 : -1}
+                   className={`table-row ${isSelected ? 'table-row--selected' : ''}`.trim()}
+                   onClick={(e) => {
++                    setInternalFocusedKey(issue.key);
+                     const target = e.target as HTMLElement | null;
+                     if (
+                       target?.closest(
+@@ -554,8 +565,47 @@ export function TableView({
+                     }
+                     onOpenPeek?.(issue.key);
+                   }}
++                  onFocus={() => {
++                    setInternalFocusedKey(issue.key);
++                  }}
++                  onKeyDown={(e) => {
++                    const currentIndex = sortedIssues.findIndex((it) => it.key === issue.key);
++                    if (e.key === 'ArrowDown') {
++                      e.preventDefault();
++                      const nextIndex = Math.min(sortedIssues.length - 1, currentIndex + 1);
++                      const nextKey = sortedIssues[nextIndex]?.key;
++                      if (nextKey) {
++                        setInternalFocusedKey(nextKey);
++                        document.querySelector<HTMLElement>(`tr[data-issue-key="${nextKey}"]`)?.focus();
++                      }
++                    } else if (e.key === 'ArrowUp') {
++                      e.preventDefault();
++                      const prevIndex = Math.max(0, currentIndex - 1);
++                      const prevKey = sortedIssues[prevIndex]?.key;
++                      if (prevKey) {
++                        setInternalFocusedKey(prevKey);
++                        document.querySelector<HTMLElement>(`tr[data-issue-key="${prevKey}"]`)?.focus();
++                      }
++                    } else if (e.key === 'Home') {
++                      e.preventDefault();
++                      const firstKey = sortedIssues[0]?.key;
++                      if (firstKey) {
++                        setInternalFocusedKey(firstKey);
++                        document.querySelector<HTMLElement>(`tr[data-issue-key="${firstKey}"]`)?.focus();
++                      }
++                    } else if (e.key === 'End') {
++                      e.preventDefault();
++                      const lastKey = sortedIssues[sortedIssues.length - 1]?.key;
++                      if (lastKey) {
++                        setInternalFocusedKey(lastKey);
++                        document.querySelector<HTMLElement>(`tr[data-issue-key="${lastKey}"]`)?.focus();
++                      }
++                    } else if (e.key === 'Enter') {
++                      onOpenPeek?.(issue.key);
++                    }
++                  }}
+                 >
+-                  <td className="sticky-col table-key-cell" data-col="key">
++                  <td className="sticky-col table-key-cell" data-col="key" role="gridcell" aria-colindex={1}>
+                     <div className="table-key-cell-content">
+                       {onToggleSelect && (
+                         <input
+diff --git a/kanban/web/src/features/timeline/TimelineView.tsx b/kanban/web/src/features/timeline/TimelineView.tsx
+index d70a3ccf..fa39db4e 100644
+--- a/kanban/web/src/features/timeline/TimelineView.tsx
++++ b/kanban/web/src/features/timeline/TimelineView.tsx
+@@ -662,8 +662,8 @@ export function TimelineView({
+         {/* Left Sticky Issue Pane (280px desktop, 132px mobile) */}
+         <div className="timeline-left-pane" role="region" aria-label="Issue list">
+           <div className="timeline-left-header">Work Item</div>
+-          <div className="timeline-left-rows">
+-            {effIssues.map((issue) => {
++          <div className="timeline-left-rows" role="rowgroup">
++            {effIssues.map((issue, idx) => {
+               const priorityKind = getPriorityKind(issue.priority.slug);
+               const isBroken = brokenLinksByIssue.get(issue.key);
+ 
+@@ -671,6 +671,9 @@ export function TimelineView({
+                 <div
+                   key={issue.key}
+                   className="timeline-left-row"
++                  role="row"
++                  aria-rowindex={idx + 2}
++                  tabIndex={idx === 0 ? 0 : -1}
+                   data-issue-key={issue.key}
+                   data-testid={`timeline-left-row-${issue.key}`}
+                   onClick={(e) => {
+@@ -678,6 +681,19 @@ export function TimelineView({
+                     if (target?.closest('a, button, input')) return;
+                     onOpenPeek?.(issue.key);
+                   }}
++                  onKeyDown={(e) => {
++                    if (e.key === 'ArrowDown') {
++                      e.preventDefault();
++                      const nextRow = (e.currentTarget as HTMLElement).nextElementSibling as HTMLElement | null;
++                      if (nextRow) nextRow.focus();
++                    } else if (e.key === 'ArrowUp') {
++                      e.preventDefault();
++                      const prevRow = (e.currentTarget as HTMLElement).previousElementSibling as HTMLElement | null;
++                      if (prevRow) prevRow.focus();
++                    } else if (e.key === 'Enter') {
++                      onOpenPeek?.(issue.key);
++                    }
++                  }}
+                 >
+                   <EmojiHint kind={priorityKind} />
+                   <a
+@@ -714,12 +730,13 @@ export function TimelineView({
+         <div ref={canvasWrapperRef} className="timeline-right-canvas-wrapper">
+           <div ref={canvasRef} className={`timeline-right-canvas timeline-right-canvas--${zoomScale}`}>
+             {/* Scale Header Row */}
+-            <div className="timeline-scale-header" role="row">
+-              {scaleCells.map((c) => (
++            <div className="timeline-scale-header" role="row" aria-rowindex={1}>
++              {scaleCells.map((c, cIdx) => (
+                 <div
+                   key={c.date}
+                   className={`timeline-scale-cell timeline-scale-cell--${zoomScale} ${c.isToday ? 'timeline-scale-cell--today' : ''}`}
+                   role="columnheader"
++                  aria-colindex={cIdx + 1}
+                   title={c.date}
+                   data-date={c.date}
+                 >
+@@ -729,8 +746,8 @@ export function TimelineView({
+             </div>
+ 
+             {/* Track Rows */}
+-            <div className="timeline-track-rows">
+-              {effIssues.map((issue) => {
++            <div className="timeline-track-rows" role="rowgroup">
++              {effIssues.map((issue, idx) => {
+                 const geom = barGeometries.get(issue.key);
+                 const isTerminal =
+                   issue.state.group === 'completed' || issue.state.group === 'cancelled';
+@@ -742,6 +759,8 @@ export function TimelineView({
+                   <div
+                     key={issue.key}
+                     className="timeline-track-row"
++                    role="row"
++                    aria-rowindex={idx + 2}
+                     data-issue-key={issue.key}
+                     data-testid={`timeline-track-row-${issue.key}`}
+                     onClick={(e) => { handleTrackRowClick(e, issue); }}
+diff --git a/kanban/web/src/features/timeline/calendarTimeline.css b/kanban/web/src/features/timeline/calendarTimeline.css
+index 0d4f176a..e36a9de3 100644
+--- a/kanban/web/src/features/timeline/calendarTimeline.css
++++ b/kanban/web/src/features/timeline/calendarTimeline.css
+@@ -84,6 +84,11 @@
+   gap: 1px;
+ }
+ 
++.calendar-weekday-headers-row,
++.calendar-week-row {
++  display: contents;
++}
++
+ .calendar-weekday-header {
+   text-align: center;
+   padding: var(--space-2, 8px) 0;
+diff --git a/kanban/web/src/features/views/SwimlaneBoardGrid.tsx b/kanban/web/src/features/views/SwimlaneBoardGrid.tsx
+index 158de836..85153c4c 100644
+--- a/kanban/web/src/features/views/SwimlaneBoardGrid.tsx
++++ b/kanban/web/src/features/views/SwimlaneBoardGrid.tsx
+@@ -130,6 +130,7 @@ export function SwimlaneBoardGrid({
+ }: SwimlaneBoardGridProps): JSX.Element {
+   // Collapsed bands map: laneId -> boolean
+   const [collapsedLanes, setCollapsedLanes] = useState<Record<string, boolean>>({});
++  const [rovingKey, setRovingKey] = useState<string | null>(null);
+   const [popoverState, setPopoverState] = useState<{
+     isOpen: boolean;
+     issue: IssueItem | null;
+@@ -300,6 +301,22 @@ export function SwimlaneBoardGrid({
+     return grid;
+   }, [issues, columns, swimlanes, groupBy, subGroupBy, modulesEnabled, projectStates]);
+ 
++  const allVisibleCards = useMemo(() => {
++    const list: string[] = [];
++    for (const lane of swimlanes) {
++      if (collapsedLanes[lane.id]) continue;
++      for (const col of columns) {
++        const cellIssues = partitionedGrid[lane.id]?.[col.id] ?? [];
++        for (const it of cellIssues) {
++          list.push(it.key);
++        }
++      }
++    }
++    return list;
++  }, [swimlanes, collapsedLanes, columns, partitionedGrid]);
++
++  const activeFocusedKey = focusedKey ?? rovingKey ?? allVisibleCards[0] ?? null;
++
+   const toggleLane = (laneId: string) => {
+     setCollapsedLanes((prev) => ({
+       ...prev,
+@@ -313,161 +330,324 @@ export function SwimlaneBoardGrid({
+     return laneCols ? Object.values(laneCols).reduce((sum, list) => sum + list.length, 0) : 0;
+   };
+ 
++  const handleCardKeyDown = (
++    e: React.KeyboardEvent<HTMLDivElement>,
++    currentKey: string
++  ) => {
++    if (['ArrowDown', 'ArrowUp', 'ArrowRight', 'ArrowLeft', 'Home', 'End'].includes(e.key)) {
++      e.preventDefault();
++      e.stopPropagation();
++
++      const flatCards: string[] = [];
++      const cellMap: Record<string, { laneIdx: number; colIdx: number; cardIdx: number }> = {};
++
++      swimlanes.forEach((l, lIdx) => {
++        if (collapsedLanes[l.id]) return;
++        columns.forEach((c, cIdx) => {
++          const issuesInCell = partitionedGrid[l.id]?.[c.id] ?? [];
++          issuesInCell.forEach((iss, kIdx) => {
++            flatCards.push(iss.key);
++            cellMap[iss.key] = { laneIdx: lIdx, colIdx: cIdx, cardIdx: kIdx };
++          });
++        });
++      });
++
++      if (flatCards.length === 0) return;
++
++      let nextKey: string | null = null;
++      const currentMeta = cellMap[currentKey];
++
++      if (e.key === 'Home') {
++        nextKey = flatCards[0] ?? null;
++      } else if (e.key === 'End') {
++        nextKey = flatCards[flatCards.length - 1] ?? null;
++      } else if (currentMeta) {
++        const { laneIdx, colIdx, cardIdx } = currentMeta;
++        const currentLane = swimlanes[laneIdx];
++        const currentColumn = columns[colIdx];
++        const currentLaneIssuesInCol = (currentLane && currentColumn)
++          ? (partitionedGrid[currentLane.id]?.[currentColumn.id] ?? [])
++          : [];
++
++        if (e.key === 'ArrowDown') {
++          if (cardIdx + 1 < currentLaneIssuesInCol.length) {
++            nextKey = currentLaneIssuesInCol[cardIdx + 1]?.key ?? null;
++          } else {
++            for (let l = laneIdx + 1; l < swimlanes.length; l++) {
++              const nextLane = swimlanes[l];
++              if (!nextLane || collapsedLanes[nextLane.id]) continue;
++              const targetCol = columns[colIdx];
++              const nextLaneColIssues = targetCol ? (partitionedGrid[nextLane.id]?.[targetCol.id] ?? []) : [];
++              if (nextLaneColIssues.length > 0 && nextLaneColIssues[0]) {
++                nextKey = nextLaneColIssues[0].key;
++                break;
++              }
++            }
++            if (!nextKey) {
++              const currentFlatIdx = flatCards.indexOf(currentKey);
++              if (currentFlatIdx + 1 < flatCards.length) {
++                nextKey = flatCards[currentFlatIdx + 1] ?? null;
++              }
++            }
++          }
++        } else if (e.key === 'ArrowUp') {
++          if (cardIdx - 1 >= 0) {
++            nextKey = currentLaneIssuesInCol[cardIdx - 1]?.key ?? null;
++          } else {
++            for (let l = laneIdx - 1; l >= 0; l--) {
++              const prevLane = swimlanes[l];
++              if (!prevLane || collapsedLanes[prevLane.id]) continue;
++              const targetCol = columns[colIdx];
++              const prevLaneColIssues = targetCol ? (partitionedGrid[prevLane.id]?.[targetCol.id] ?? []) : [];
++              if (prevLaneColIssues.length > 0) {
++                const lastIssue = prevLaneColIssues[prevLaneColIssues.length - 1];
++                if (lastIssue) {
++                  nextKey = lastIssue.key;
++                  break;
++                }
++              }
++            }
++            if (!nextKey) {
++              const currentFlatIdx = flatCards.indexOf(currentKey);
++              if (currentFlatIdx - 1 >= 0) {
++                nextKey = flatCards[currentFlatIdx - 1] ?? null;
++              }
++            }
++          }
++        } else if (e.key === 'ArrowRight') {
++          if (currentLane) {
++            for (let c = colIdx + 1; c < columns.length; c++) {
++              const targetCol = columns[c];
++              const issuesInCol = targetCol ? (partitionedGrid[currentLane.id]?.[targetCol.id] ?? []) : [];
++              if (issuesInCol.length > 0) {
++                const targetIssue = issuesInCol[Math.min(cardIdx, issuesInCol.length - 1)];
++                if (targetIssue) {
++                  nextKey = targetIssue.key;
++                  break;
++                }
++              }
++            }
++          }
++          if (!nextKey) {
++            const currentFlatIdx = flatCards.indexOf(currentKey);
++            if (currentFlatIdx + 1 < flatCards.length) {
++              nextKey = flatCards[currentFlatIdx + 1] ?? null;
++            }
++          }
++        } else if (e.key === 'ArrowLeft') {
++          if (currentLane) {
++            for (let c = colIdx - 1; c >= 0; c--) {
++              const targetCol = columns[c];
++              const issuesInCol = targetCol ? (partitionedGrid[currentLane.id]?.[targetCol.id] ?? []) : [];
++              if (issuesInCol.length > 0) {
++                const targetIssue = issuesInCol[Math.min(cardIdx, issuesInCol.length - 1)];
++                if (targetIssue) {
++                  nextKey = targetIssue.key;
++                  break;
++                }
++              }
++            }
++          }
++          if (!nextKey) {
++            const currentFlatIdx = flatCards.indexOf(currentKey);
++            if (currentFlatIdx - 1 >= 0) {
++              nextKey = flatCards[currentFlatIdx - 1] ?? null;
++            }
++          }
++        }
++      }
++
++      if (nextKey) {
++        setRovingKey(nextKey);
++        const targetEl = document.querySelector<HTMLElement>(`[data-issue-key="${nextKey}"]`);
++        targetEl?.focus();
++      }
++    } else if (e.key === 'Enter' || e.key === ' ') {
++      onCardClick?.(currentKey, e.shiftKey);
++    }
++  };
++
+   return (
+     <div className="swimlane-board-grid" role="region" aria-label="2D Swimlane Board Grid">
+-      {/* Sticky Top Column Headers aligned to 324px */}
+-      <div className="swimlane-col-headers" role="row">
+-        {columns.map((col) => (
+-          <div key={col.id} className="swimlane-col-header-item" role="columnheader">
+-            <span>{col.name}</span>
+-          </div>
+-        ))}
+-      </div>
+-
+-      {/* Horizontal Swimlane Bands */}
+-      {swimlanes.map((lane) => {
+-        const isCollapsed = Boolean(collapsedLanes[lane.id]);
+-        const laneCount = getLaneCount(lane.id);
+-
+-        return (
+-          <div
+-            key={lane.id}
+-            className="swimlane-band"
+-            data-subgroup-id={lane.id}
+-            data-subgroup-value={lane.title}
+-          >
+-            <div className="swimlane-band-header">
+-              <button
+-                type="button"
+-                className="swimlane-band-toggle"
+-                onClick={() => { toggleLane(lane.id); }}
+-                aria-expanded={!isCollapsed}
+-                aria-controls={`swimlane-content-${lane.id}`}
+-              >
+-                <span className="swimlane-band-icon" aria-hidden="true">
+-                  ▼
+-                </span>
+-                <span>{lane.title.replace('💤', '🔽')}</span>
+-                {lane.title.includes('💤') && <span hidden>{lane.title}</span>}
+-                <span className="swimlane-band-count">{laneCount}</span>
+-              </button>
++      <div
++        className="swimlane-grid-table"
++        role="grid"
++        aria-label="2D Swimlane Board Grid"
++        aria-rowcount={swimlanes.length + 1}
++        aria-colcount={columns.length}
++      >
++        {/* Sticky Top Column Headers aligned to 324px */}
++        <div className="swimlane-col-headers" role="row" aria-rowindex={1}>
++          {columns.map((col, colIdx) => (
++            <div
++              key={col.id}
++              className="swimlane-col-header-item"
++              role="columnheader"
++              aria-colindex={colIdx + 1}
++            >
++              <span>{col.name}</span>
+             </div>
++          ))}
++        </div>
+ 
+-            {!isCollapsed && (
+-              <div
+-                id={`swimlane-content-${lane.id}`}
+-                className="swimlane-band-columns"
+-                role="row"
+-              >
+-                {columns.map((col) => {
+-                  const cellIssues = partitionedGrid[lane.id]?.[col.id] ?? [];
+-
+-                  return (
+-                    <div
+-                      key={col.id}
+-                      className="board-column"
+-                      data-column-id={col.id}
+-                      data-swimlane-id={lane.id}
+-                      role="cell"
+-                    >
+-                      <div className="swimlane-column-mobile-header" aria-hidden="true">
+-                        <span className="swimlane-column-mobile-title">{col.name}</span>
+-                        <span className="swimlane-column-mobile-count">{cellIssues.length}</span>
+-                      </div>
+-                      {cellIssues.map((issue) => {
+-                        const isSelected = selectedIds.includes(issue.key);
+-                        const isFocused = focusedKey === issue.key;
+-
+-                        let pKind: 'priorityUrgent' | 'priorityHigh' | 'priorityMedium' | 'priorityLow' =
+-                          'priorityMedium';
+-                        const slug = issue.priority.slug.toLowerCase();
+-                        if (slug === 'urgent') pKind = 'priorityUrgent';
+-                        else if (slug === 'high') pKind = 'priorityHigh';
+-                        else if (slug === 'low') pKind = 'priorityLow';
+-
+-                        const rawCaps = issue.capabilities ?? currentUserCapabilities;
+-                        const cardCaps = rawCaps ?? ['EDIT', 'TRANSITION'];
+-                        const canTransitionCard =
+-                          cardCaps.includes('TRANSITION') ||
+-                          cardCaps.includes('EDIT') ||
+-                          cardCaps.includes('ADMIN');
+-
+-                        return (
+-                          <div
+-                            key={issue.key}
+-                            className={`swimlane-card ${isSelected ? 'swimlane-card--selected' : ''}`}
+-                            data-issue-key={issue.key}
+-                            data-focused={isFocused ? 'true' : 'false'}
+-                            tabIndex={isFocused ? 0 : -1}
+-                            onClick={(e) => {
+-                              onCardClick?.(issue.key, e.shiftKey);
+-                            }}
+-                          >
+-                            <div className="swimlane-card-top">
+-                              {onToggleSelect && (
+-                                <label
+-                                  className="swimlane-card-checkbox-wrap"
++        {/* Horizontal Swimlane Bands */}
++        {swimlanes.map((lane, laneIdx) => {
++          const isCollapsed = Boolean(collapsedLanes[lane.id]);
++          const laneCount = getLaneCount(lane.id);
++
++          return (
++            <div
++              key={lane.id}
++              className="swimlane-band"
++              data-subgroup-id={lane.id}
++              data-subgroup-value={lane.title}
++            >
++              <div className="swimlane-band-header">
++                <button
++                  type="button"
++                  className="swimlane-band-toggle"
++                  onClick={() => { toggleLane(lane.id); }}
++                  aria-expanded={!isCollapsed}
++                  aria-controls={`swimlane-content-${lane.id}`}
++                >
++                  <span className="swimlane-band-icon" aria-hidden="true">
++                    ▼
++                  </span>
++                  <span>{lane.title.replace('💤', '🔽')}</span>
++                  {lane.title.includes('💤') && <span hidden>{lane.title}</span>}
++                  <span className="swimlane-band-count">{laneCount}</span>
++                </button>
++              </div>
++
++              {!isCollapsed && (
++                <div
++                  id={`swimlane-content-${lane.id}`}
++                  className="swimlane-band-columns"
++                  role="row"
++                  aria-rowindex={laneIdx + 2}
++                >
++                  {columns.map((col, colIdx) => {
++                    const cellIssues = partitionedGrid[lane.id]?.[col.id] ?? [];
++                    const isCellFocused = activeFocusedKey
++                      ? cellIssues.some((it) => it.key === activeFocusedKey)
++                      : false;
++
++                    return (
++                      <div
++                        key={col.id}
++                        className="board-column"
++                        data-column-id={col.id}
++                        data-swimlane-id={lane.id}
++                        role="gridcell"
++                        aria-colindex={colIdx + 1}
++                        tabIndex={isCellFocused ? 0 : -1}
++                      >
++                        <div className="swimlane-column-mobile-header" aria-hidden="true">
++                          <span className="swimlane-column-mobile-title">{col.name}</span>
++                          <span className="swimlane-column-mobile-count">{cellIssues.length}</span>
++                        </div>
++                        {cellIssues.map((issue) => {
++                          const isSelected = selectedIds.includes(issue.key);
++                          const isFocused = activeFocusedKey === issue.key;
++
++                          let pKind: 'priorityUrgent' | 'priorityHigh' | 'priorityMedium' | 'priorityLow' =
++                            'priorityMedium';
++                          const slug = issue.priority.slug.toLowerCase();
++                          if (slug === 'urgent') pKind = 'priorityUrgent';
++                          else if (slug === 'high') pKind = 'priorityHigh';
++                          else if (slug === 'low') pKind = 'priorityLow';
++
++                          const rawCaps = issue.capabilities ?? currentUserCapabilities;
++                          const cardCaps = rawCaps ?? ['EDIT', 'TRANSITION'];
++                          const canTransitionCard =
++                            cardCaps.includes('TRANSITION') ||
++                            cardCaps.includes('EDIT') ||
++                            cardCaps.includes('ADMIN');
++
++                          return (
++                            <div
++                              key={issue.key}
++                              className={`swimlane-card ${isSelected ? 'swimlane-card--selected' : ''}`}
++                              data-issue-key={issue.key}
++                              data-focused={isFocused ? 'true' : 'false'}
++                              tabIndex={isFocused ? 0 : -1}
++                              onClick={(e) => {
++                                setRovingKey(issue.key);
++                                onCardClick?.(issue.key, e.shiftKey);
++                              }}
++                              onFocus={() => {
++                                setRovingKey(issue.key);
++                              }}
++                              onKeyDown={(e) => {
++                                handleCardKeyDown(e, issue.key);
++                              }}
++                            >
++                              <div className="swimlane-card-top">
++                                {onToggleSelect && (
++                                  <label
++                                    className="swimlane-card-checkbox-wrap"
++                                    onClick={(e) => { e.stopPropagation(); }}
++                                  >
++                                    <input
++                                      type="checkbox"
++                                      checked={isSelected}
++                                      onChange={(e) => { onToggleSelect(issue.key, e.target.checked); }}
++                                      aria-label={`Select ${issue.key}`}
++                                    />
++                                  </label>
++                                )}
++
++                                <a
++                                  href={`/projects/${encodeURIComponent(projectKey)}/issues?layout=board&peek=${encodeURIComponent(issue.key)}`}
++                                  className="swimlane-card-key mono"
+                                   onClick={(e) => { e.stopPropagation(); }}
+                                 >
+-                                  <input
+-                                    type="checkbox"
+-                                    checked={isSelected}
+-                                    onChange={(e) => { onToggleSelect(issue.key, e.target.checked); }}
+-                                    aria-label={`Select ${issue.key}`}
+-                                  />
+-                                </label>
+-                              )}
+-
+-                              <a
+-                                href={`/projects/${encodeURIComponent(projectKey)}/issues?layout=board&peek=${encodeURIComponent(issue.key)}`}
+-                                className="swimlane-card-key mono"
+-                                onClick={(e) => { e.stopPropagation(); }}
+-                              >
+-                                {issue.key}
+-                              </a>
+-
+-                              {canTransitionCard && (
+-                                <button
+-                                  type="button"
+-                                  className="board-card-state-btn"
+-                                  data-testid={`board-card-state-btn-${issue.key}`}
+-                                  aria-label={`Move ${issue.key} to another state`}
+-                                  title={`Move ${issue.key}`}
+-                                  onClick={(e) => {
+-                                    e.stopPropagation();
+-                                    setPopoverState({
+-                                      isOpen: true,
+-                                      issue,
+-                                      anchorRect: e.currentTarget.getBoundingClientRect(),
+-                                    });
+-                                  }}
+-                                >
+-                                  <span className="board-card-state-btn-glyph" aria-hidden="true">⇄</span>
+-                                  <span>{issue.state.name ? issue.state.name : 'Move'}</span>
+-                                </button>
+-                              )}
++                                  {issue.key}
++                                </a>
+ 
+-                              <EmojiHint kind={pKind} />
+-                            </div>
++                                {canTransitionCard && (
++                                  <button
++                                    type="button"
++                                    className="board-card-state-btn"
++                                    data-testid={`board-card-state-btn-${issue.key}`}
++                                    aria-label={`Move ${issue.key} to another state`}
++                                    title={`Move ${issue.key}`}
++                                    onClick={(e) => {
++                                      e.stopPropagation();
++                                      setPopoverState({
++                                        isOpen: true,
++                                        issue,
++                                        anchorRect: e.currentTarget.getBoundingClientRect(),
++                                      });
++                                    }}
++                                  >
++                                    <span className="board-card-state-btn-glyph" aria-hidden="true">⇄</span>
++                                    <span>{issue.state.name ? issue.state.name : 'Move'}</span>
++                                  </button>
++                                )}
++
++                                <EmojiHint kind={pKind} />
++                              </div>
+ 
+-                            <div className="swimlane-card-summary">{issue.summary}</div>
++                              <div className="swimlane-card-summary">{issue.summary}</div>
+ 
+-                            <div className="swimlane-card-footer">
+-                              {issue.gate_status === 'pending' && <EmojiHint kind="gatePending" />}
+-                              {issue.gate_status === 'vetoed' && <EmojiHint kind="gateVetoed" />}
+-                              {issue.gate_status === 'approved' && <EmojiHint kind="gateApproved" />}
++                              <div className="swimlane-card-footer">
++                                {issue.gate_status === 'pending' && <EmojiHint kind="gatePending" />}
++                                {issue.gate_status === 'vetoed' && <EmojiHint kind="gateVetoed" />}
++                                {issue.gate_status === 'approved' && <EmojiHint kind="gateApproved" />}
++                              </div>
+                             </div>
+-                          </div>
+-                        );
+-                      })}
+-                    </div>
+-                  );
+-                })}
+-              </div>
+-            )}
+-          </div>
+-        );
+-      })}
++                          );
++                        })}
++                      </div>
++                    );
++                  })}
++                </div>
++              )}
++            </div>
++          );
++        })}
++      </div>
+       {popoverState.isOpen && popoverState.issue && (
+         <QuickFieldPopover
+           isOpen={popoverState.isOpen}
+diff --git a/scripts/capture_kan358_screenshots.mjs b/scripts/capture_kan358_screenshots.mjs
+new file mode 100644
+index 00000000..37143324
+--- /dev/null
++++ b/scripts/capture_kan358_screenshots.mjs
+@@ -0,0 +1,132 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import fs from 'node:fs';
++import path from 'node:path';
++import { chromium } from '/home/adamoutler/kanban/kanban/web/node_modules/@playwright/test/index.mjs';
++
++const BASE_URL = process.env.BASE_URL || 'http://127.0.0.1:8921';
++const SESSION_COOKIE =
++  process.env.SESSION_COOKIE ||
++  '8he88j3caSZNFWU2ktkmGF7L87BH32rHQJSvGw-_JwY.O0T3UR_uw5OgTWALPTJh88wdvuTd6GoOPE-zkrNenN8';
++const OUT_DIR = path.resolve('docs/qa/KAN-358/screenshots');
++
++const VIEWPORTS = [
++  {
++    name: '01-swimlane-2d-grid-desktop-light',
++    width: 1440,
++    height: 900,
++    theme: 'light',
++    url: `${BASE_URL}/projects/KAN/issues?layout=board&sub_group_by=priority`,
++    focusSelector: '.swimlane-card',
++  },
++  {
++    name: '02-swimlane-2d-roving-focus-desktop-dark',
++    width: 1440,
++    height: 900,
++    theme: 'dark',
++    url: `${BASE_URL}/projects/KAN/issues?layout=board&sub_group_by=priority`,
++    focusSelector: '.swimlane-card',
++    keyPress: 'ArrowDown',
++  },
++  {
++    name: '03-list-view-row-grid-tablet',
++    width: 768,
++    height: 1024,
++    theme: 'light',
++    url: `${BASE_URL}/projects/KAN/issues?layout=list`,
++    focusSelector: '.issue-list-card',
++  },
++  {
++    name: '04-table-view-grid-mobile-landscape',
++    width: 844,
++    height: 390,
++    theme: 'light',
++    url: `${BASE_URL}/projects/KAN/issues?layout=table`,
++    focusSelector: 'tbody tr[role="row"]',
++  },
++  {
++    name: '05-calendar-timeline-grid-mobile-portrait',
++    width: 390,
++    height: 844,
++    theme: 'dark',
++    url: `${BASE_URL}/projects/KAN/issues?layout=calendar`,
++    focusSelector: '[role="gridcell"]',
++  },
++];
++
++async function main() {
++  fs.mkdirSync(OUT_DIR, { recursive: true });
++  console.log(`Connecting to ${BASE_URL}...`);
++
++  const browser = await chromium.launch({
++    executablePath: '/usr/bin/google-chrome',
++    headless: true,
++    args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
++  });
++
++  for (const vp of VIEWPORTS) {
++    console.log(`Capturing ${vp.name} (${vp.width}x${vp.height}, theme=${vp.theme})...`);
++    const context = await browser.newContext({
++      viewport: { width: vp.width, height: vp.height },
++      deviceScaleFactor: 1,
++      colorScheme: vp.theme,
++    });
++
++    await context.addCookies([
++      {
++        name: 'kb_session',
++        value: SESSION_COOKIE,
++        domain: '127.0.0.1',
++        path: '/',
++        httpOnly: true,
++        sameSite: 'Lax',
++      },
++    ]);
++
++    const page = await context.newPage();
++    try {
++      await page.goto(vp.url, { waitUntil: 'networkidle', timeout: 15000 });
++      await page.waitForTimeout(1000);
++
++      if (vp.theme === 'dark') {
++        await page.evaluate(() => {
++          document.documentElement.setAttribute('data-theme', 'dark');
++          document.documentElement.classList.add('dark');
++        });
++      }
++
++      if (vp.focusSelector) {
++        try {
++          const el = await page.$(vp.focusSelector);
++          if (el) {
++            await el.focus();
++            if (vp.keyPress) {
++              await page.keyboard.press(vp.keyPress);
++            }
++          }
++        } catch {
++          // ignore focus error if not found
++        }
++      }
++
++      await page.waitForTimeout(500);
++
++      const outPath = path.join(OUT_DIR, `${vp.name}.png`);
++      await page.screenshot({ path: outPath, fullPage: false });
++      console.log(`Saved screenshot: ${outPath} (${fs.statSync(outPath).size} bytes)`);
++    } catch (err) {
++      console.warn(`Warning capturing ${vp.name}: ${err.message}`);
++    } finally {
++      await context.close();
++    }
++  }
++
++  await browser.close();
++  console.log('All screenshots captured successfully.');
++}
++
++main().catch((err) => {
++  console.error('Fatal error in screenshot capture:', err);
++  process.exit(1);
++});

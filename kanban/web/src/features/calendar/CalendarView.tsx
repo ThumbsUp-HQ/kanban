@@ -316,14 +316,23 @@ export function CalendarView({
       {/* 7-column 2-Week Grid (14 Day Cells, Desktop & Tablet) */}
       <div className="calendar-month-grid" role="grid" aria-label={`2-week grid for ${rangeLabel}`}>
         {/* Weekday headers */}
-        {WEEKDAY_NAMES.map((name) => (
-          <div key={name} className="calendar-weekday-header" role="columnheader">
-            {name}
-          </div>
-        ))}
+        <div className="calendar-weekday-headers-row" role="row" aria-rowindex={1}>
+          {WEEKDAY_NAMES.map((name, colIdx) => (
+            <div
+              key={name}
+              className="calendar-weekday-header"
+              role="columnheader"
+              aria-colindex={colIdx + 1}
+            >
+              {name}
+            </div>
+          ))}
+        </div>
 
         {/* 14 Day cells */}
-        {twoWeekGrid.map((cell: CalendarDayCell) => {
+        {twoWeekGrid.map((cell: CalendarDayCell, idx: number) => {
+          const colIdx = idx % 7;
+          const rowIdx = Math.floor(idx / 7) + 2;
           const cellIssues = issuesByDate[cell.date] ?? [];
           const visibleIssues = cellIssues.slice(0, 3);
           const hiddenCount = cellIssues.length - 3;
@@ -340,6 +349,9 @@ export function CalendarView({
               key={cell.date}
               className={cellClassName}
               role="gridcell"
+              aria-rowindex={rowIdx}
+              aria-colindex={colIdx + 1}
+              tabIndex={idx === 0 ? 0 : -1}
               data-date={cell.date}
               onDragOver={(e) => { handleDragOver(e, cell.date); }}
               onDragLeave={(e) => { handleDragLeave(e, cell.date); }}
