@@ -15,6 +15,7 @@ Tests attacker exploit hypotheses across all 7 Attack Surface Domains:
 from __future__ import annotations
 
 import datetime as dt
+import importlib
 import uuid
 from typing import TYPE_CHECKING, Any
 
@@ -40,9 +41,6 @@ from kanban.security.service_auth import (
     verify_internal_service_auth,
 )
 from kanban.services.flow_metrics import _simulate_monte_carlo
-from mcp.surfaces.admin import build_admin_registry
-from mcp.surfaces.agent import create_agent_registry
-from mcp.surfaces.docs import build_docs_registry
 
 if TYPE_CHECKING:
     from sqlalchemy.ext.asyncio import AsyncSession
@@ -216,9 +214,9 @@ def test_domain_4_internal_service_auth_verification() -> None:
 
 def test_domain_4_mcp_surface_registry_isolation() -> None:
     """Domain 4: Verify agent, docs, and admin MCP registries enforce surface separation."""
-    agent_reg = create_agent_registry()
-    docs_reg = build_docs_registry()
-    admin_reg = build_admin_registry()
+    agent_reg = importlib.import_module("mcp.surfaces.agent").create_agent_registry()
+    docs_reg = importlib.import_module("mcp.surfaces.docs").build_docs_registry()
+    admin_reg = importlib.import_module("mcp.surfaces.admin").build_admin_registry()
 
     agent_tools = {spec.name for spec in agent_reg.list_specs()}
     docs_tools = {spec.name for spec in docs_reg.list_specs()}
