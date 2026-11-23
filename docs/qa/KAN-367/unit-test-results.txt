@@ -1,0 +1,29 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan367-2db728b1/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/admin-auth/AuthCardEditorDrawer.test.tsx (55 tests) 8789ms
+   ✓ AuthCardEditorDrawer (KB-P3-36) (55)
+     ✓ renders write-only secret field empty on edit, omits secret_input unless replace checked (Mandatory Test Case 2) 538ms
+     ✓ forces StartTLS = true when LDAP server_url starts with ldap:// and rejects 63-hex SPKI pin 364ms
+     ✓ updates metadata fields: icon preset, button subtext, auto-provision, domains, and scopes 372ms
+     ✓ handles non-Error rejection and toggles StartTLS on ldaps:// 345ms
+     ✓ creates an LDAP card with ldap:// scheme forcing start_tls true 300ms
+     ✓ Google OAuth JSON Importer (KB-AUTH-JSON / KANBA-185) (22)
+       ✓ creates LDAP card with ldap:// scheme, startTls, and restricted groups 655ms
+     ✓ Progressive Disclosure & AdvancedSection (KAN-319) (13)
+       ✓ applies 1-click provider presets correctly (Google, GitHub, Active Directory, OpenLDAP, Custom OAuth) 582ms
+       ✓ surfaces validation errors on AdvancedSection hasErrors prop when slug or subtext or SPKI is invalid 309ms
+
+ Test Files  1 passed (1)
+      Tests  55 passed (55)
+   Start at  07:36:52
+   Duration  10.42s (tests 88%, environment 9%, import 2%, transform 1%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.79 |    95.92 |     100 |     100 |                   
+ ...itorDrawer.tsx |   99.79 |    95.92 |     100 |     100 | ...1455,1517,1652 
+-------------------|---------|----------|---------|---------|-------------------

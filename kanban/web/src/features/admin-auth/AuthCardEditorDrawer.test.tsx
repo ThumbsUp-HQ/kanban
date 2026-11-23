@@ -1973,5 +1973,523 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
       expect(badge).toBeDefined();
       expect(badge.textContent).toContain('active');
     });
+
+    it('applies 1-click provider presets correctly (Google, GitHub, Active Directory, OpenLDAP, Custom OAuth)', () => {
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      // Google preset
+      const googleBtn = screen.getByRole('button', { name: /Google \(OAuth 2\.0\)/i });
+      fireEvent.click(googleBtn);
+      expect(screen.getByLabelText<HTMLInputElement>(/Display Name/i).value).toBe('Google Workspace');
+      expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i).value).toBe('google-oauth');
+      expect(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i).value).toBe('https://accounts.google.com');
+
+      // GitHub preset
+      const githubBtn = screen.getByRole('button', { name: /GitHub \(OAuth 2\.0\)/i });
+      fireEvent.click(githubBtn);
+      expect(screen.getByLabelText<HTMLInputElement>(/Display Name/i).value).toBe('GitHub');
+      expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i).value).toBe('github-oauth');
+      expect(screen.getByLabelText<HTMLInputElement>(/Issuer URL/i).value).toBe('https://github.com');
+
+      // Active Directory preset
+      const adBtn = screen.getByRole('button', { name: /Active Directory/i });
+      fireEvent.click(adBtn);
+      expect(screen.getByLabelText<HTMLInputElement>(/Display Name/i).value).toBe('Active Directory');
+      expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i).value).toBe('ad-ldap');
+      expect(screen.getByLabelText<HTMLInputElement>(/Server URL/i).value).toBe('ldaps://ad.corp.local:636');
+
+      // OpenLDAP preset
+      const openldapBtn = screen.getByRole('button', { name: /Standard LDAP/i });
+      fireEvent.click(openldapBtn);
+      expect(screen.getByLabelText<HTMLInputElement>(/Display Name/i).value).toBe('OpenLDAP');
+      expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i).value).toBe('openldap');
+      expect(screen.getByLabelText<HTMLInputElement>(/Server URL/i).value).toBe('ldaps://ldap.corp.local:636');
+
+      // Custom OAuth preset
+      const customBtn = screen.getByRole('button', { name: /Custom OAuth 2\.0/i });
+      fireEvent.click(customBtn);
+      expect(screen.getByLabelText<HTMLInputElement>(/Display Name/i).value).toBe('Custom SSO');
+      expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i).value).toBe('oauth1');
+    });
+
+    it('handles auto-derived slug clearing and edge cases in create vs edit mode', () => {
+      const { unmount } = render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      const nameInput = screen.getByLabelText<HTMLInputElement>(/Display Name/i);
+      const slugInput = screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i);
+
+      // Typing complex name
+      fireEvent.change(nameInput, { target: { value: 'Google SSO (US-West #1)!' } });
+      expect(slugInput.value).toBe('google-sso-us-west-1');
+
+      // Clearing name clears slug
+      fireEvent.change(nameInput, { target: { value: '' } });
+      expect(slugInput.value).toBe('');
+
+      // Customizing slug prevents further auto-derivation
+      fireEvent.change(slugInput, { target: { value: 'manual-slug' } });
+      fireEvent.change(nameInput, { target: { value: 'Enterprise Auth' } });
+      expect(slugInput.value).toBe('manual-slug');
+
+      unmount();
+
+      // On edit mode, slug is read-only and name changes do not change slug
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={existingOidcCard}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      const editNameInput = screen.getByLabelText<HTMLInputElement>(/Display Name/i);
+      const editSlugInput = screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i);
+
+      expect(editSlugInput.disabled).toBe(true);
+      fireEvent.change(editNameInput, { target: { value: 'Renamed Okta SSO' } });
+      expect(editSlugInput.value).toBe('okta-workforce');
+    });
+
+    it('toggles Enable Card and Replace Stored Secret on LDAP card', () => {
+      const existingLdapCard: AdminAuthCard = {
+        id: 'c-ldap',
+        provider_kind: 'LDAP',
+        slug: 'corp-ldap',
+        display_name: 'Corp LDAP',
+        button_subtext: 'LDAP Login',
+        icon_preset: 'ldap',
+        is_enabled: true,
+        sort_rank: '2',
+        auto_provision_users: true,
+        allowed_email_domains: [],
+        has_secret: true,
+        dek_kid: 'dek-ldap-1',
+        last_health_status: 'HEALTHY',
+        last_handshake_at: '2026-11-13T20:00:00Z',
+        check_summary: 'OK',
+        latency_ms: 12,
+        public_config: {
+          url: 'ldaps://ldap.example.com:636',
+          service_bind_dn: 'cn=admin,dc=example,dc=com',
+          base_dn: 'dc=example,dc=com',
+          transport_mode: 'ldaps',
+        },
+      };
+
+      const onSave = vi.fn().mockResolvedValue(undefined);
+
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={existingLdapCard}
+          onClose={vi.fn()}
+          onSave={onSave}
+        />,
+      );
+
+      // Toggle Enable Card
+      const enableCheckbox = screen.getByLabelText<HTMLInputElement>(/Enable Card/i);
+      expect(enableCheckbox.checked).toBe(true);
+      fireEvent.click(enableCheckbox);
+      expect(enableCheckbox.checked).toBe(false);
+
+      // Toggle Replace Secret
+      const replaceCheckbox = screen.getByLabelText<HTMLInputElement>(/Replace Stored Secret/i);
+      const secretInput = screen.getByLabelText<HTMLInputElement>(/Bind DN Password/i);
+      expect(replaceCheckbox.checked).toBe(false);
+      expect(secretInput.disabled).toBe(true);
+
+      fireEvent.click(replaceCheckbox);
+      expect(replaceCheckbox.checked).toBe(true);
+      expect(secretInput.disabled).toBe(false);
+
+      fireEvent.change(secretInput, { target: { value: 'NewSecret123!' } });
+      expect(secretInput.value).toBe('NewSecret123!');
+
+      // Unchecking clears secret input
+      fireEvent.click(replaceCheckbox);
+      expect(replaceCheckbox.checked).toBe(false);
+      expect(secretInput.value).toBe('');
+    });
+
+    it('allows editing AdvancedSection allowlists, attributes, and file upload trigger', () => {
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      // Open AdvancedSection
+      const advToggle = screen.getByTestId('auth-advanced-section-toggle');
+      fireEvent.click(advToggle);
+
+      // Access Policy restricted mode allowlists
+      const policySelect = screen.getByLabelText(/Access Policy/i);
+      fireEvent.change(policySelect, { target: { value: 'restricted' } });
+
+      const adminAllowlistInput = screen.getByLabelText<HTMLInputElement>(/Admin Allowlist/i);
+      const userAllowlistInput = screen.getByLabelText<HTMLInputElement>(/User Allowlist/i);
+
+      fireEvent.change(adminAllowlistInput, { target: { value: 'admin@corp.com, sysadmin' } });
+      fireEvent.change(userAllowlistInput, { target: { value: 'user@corp.com' } });
+      expect(adminAllowlistInput.value).toBe('admin@corp.com, sysadmin');
+      expect(userAllowlistInput.value).toBe('user@corp.com');
+
+      // Trigger upload button click
+      const uploadBtn = screen.getByTestId('google-json-upload-btn');
+      const hiddenFileInput = document.querySelector<HTMLInputElement>('.auth-hidden-file-input');
+      expect(hiddenFileInput).toBeDefined();
+      if (!hiddenFileInput) {
+        throw new Error('hiddenFileInput not found');
+      }
+      const clickSpy = vi.spyOn(hiddenFileInput, 'click');
+      fireEvent.click(uploadBtn);
+      expect(clickSpy).toHaveBeenCalled();
+
+      // Switch to LDAP to test LDAP attribute fields in AdvancedSection
+      const providerKindSelect = screen.getByLabelText(/Provider Kind/i);
+      fireEvent.change(providerKindSelect, { target: { value: 'LDAP' } });
+
+      const subjectInput = screen.getByLabelText<HTMLInputElement>(/Subject Attribute/i);
+      const emailInput = screen.getByLabelText<HTMLInputElement>(/Email Attribute/i);
+      const displayAttrInput = screen.getByLabelText<HTMLInputElement>(/Full Name Attribute/i);
+
+      fireEvent.change(subjectInput, { target: { value: 'customUUID' } });
+      fireEvent.change(emailInput, { target: { value: 'userPrincipalName' } });
+      fireEvent.change(displayAttrInput, { target: { value: 'gecos' } });
+
+      expect(subjectInput.value).toBe('customUUID');
+      expect(emailInput.value).toBe('userPrincipalName');
+      expect(displayAttrInput.value).toBe('gecos');
+    });
+
+    it('surfaces validation errors on AdvancedSection hasErrors prop when slug or subtext or SPKI is invalid', async () => {
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      // Fill primary fields
+      fireEvent.change(screen.getByLabelText(/Display Name/i), { target: { value: 'Valid Name' } });
+      fireEvent.change(screen.getByLabelText(/Client ID/i), { target: { value: 'client123' } });
+      fireEvent.change(screen.getByLabelText(/Client Secret/i), { target: { value: 'secret123' } });
+
+      // Open AdvancedSection and enter invalid slug
+      const advToggle = screen.getByTestId('auth-advanced-section-toggle');
+      fireEvent.click(advToggle);
+
+      const slugInput = screen.getByLabelText(/Slug Identifier/i);
+      fireEvent.change(slugInput, { target: { value: 'INVALID_UPPERCASE_SLUG' } });
+
+      const createBtn = screen.getByRole('button', { name: /Create Card/i });
+      fireEvent.click(createBtn);
+
+      await waitFor(() => {
+        expect(screen.getByText(/Slug must be 3-48 lowercase alphanumeric characters or hyphens/i)).toBeDefined();
+      });
+
+      const advSection = screen.getByTestId('auth-advanced-section');
+      // When hasErrors is true, AdvancedSection automatically expands
+      expect(advSection.hasAttribute('open')).toBe(true);
+      expect(screen.getByTestId('auth-advanced-section-toggle').getAttribute('aria-expanded')).toBe('true');
+    });
+
+    it('loads card with custom OAuth endpoints, spki pins array, and group restricted mode', () => {
+      const advancedOidcCard: AdminAuthCard = {
+        id: 'c-adv-oidc',
+        provider_kind: 'OIDC',
+        slug: 'advanced-sso',
+        display_name: 'Advanced SSO',
+        button_subtext: 'Enterprise Login',
+        icon_preset: 'key',
+        is_enabled: true,
+        sort_rank: '3',
+        auto_provision_users: false,
+        allowed_email_domains: ['example.com'],
+        has_secret: false,
+        dek_kid: null,
+        last_health_status: 'HEALTHY',
+        last_handshake_at: null,
+        check_summary: 'OK',
+        latency_ms: null,
+        public_config: {
+          issuer: 'https://auth.custom.com',
+          client_id: 'custom-client-id',
+          authorization_endpoint: 'https://auth.custom.com/oauth2/v1/authorize',
+          token_endpoint: 'https://auth.custom.com/oauth2/v1/token',
+          userinfo_endpoint: 'https://auth.custom.com/oauth2/v1/userinfo',
+          access_mode: 'group_restricted',
+          admin_groups: ['Admins'],
+          user_groups: ['Employees'],
+          spki_sha256_pins: ['0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'],
+        },
+      };
+
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={advancedOidcCard}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      // Open AdvancedSection
+      const advToggle = screen.getByTestId('auth-advanced-section-toggle');
+      fireEvent.click(advToggle);
+
+      expect(screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i).value).toBe('advanced-sso');
+      expect(screen.getByLabelText<HTMLSelectElement>(/Access Policy/i).value).toBe('restricted');
+      expect(screen.getByLabelText<HTMLInputElement>(/Button Subtext/i).value).toBe('Enterprise Login');
+      expect(screen.getByLabelText<HTMLSelectElement>(/Icon Preset/i).value).toBe('key');
+      expect(screen.getByLabelText<HTMLInputElement>(/Allowed Email Domains/i).value).toBe('example.com');
+    });
+
+    it('dynamically increments active overrides count badge when advanced settings are modified', () => {
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      // Open AdvancedSection
+      const advToggle = screen.getByTestId('auth-advanced-section-toggle');
+      fireEvent.click(advToggle);
+
+      // Customize subtext
+      const subtextInput = screen.getByLabelText(/Button Subtext/i);
+      fireEvent.change(subtextInput, { target: { value: 'Custom Button Subtext' } });
+
+      const badge = screen.getByTestId('advanced-active-badge');
+      expect(badge).toBeDefined();
+      expect(badge.textContent).toBe('1 custom setting active');
+
+      // Customize icon preset
+      const iconSelect = screen.getByLabelText(/Icon Preset/i);
+      fireEvent.change(iconSelect, { target: { value: 'key' } });
+      expect(badge.textContent).toBe('2 custom settings active');
+
+      // Uncheck auto-provision
+      const autoProv = screen.getByLabelText(/Auto-provision Users/i);
+      fireEvent.click(autoProv);
+      expect(badge.textContent).toBe('3 custom settings active');
+    });
+
+    it('synchronizes all state fields when card prop changes dynamically via rerender', () => {
+      const { rerender } = render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText('Add Authentication Card')).toBeDefined();
+
+      const oidcCardWithStrings: AdminAuthCard = {
+        id: 'c-oidc-dyn',
+        provider_kind: 'OIDC',
+        slug: 'dynamic-oidc',
+        display_name: 'Dynamic OIDC',
+        button_subtext: 'Dyn Subtext',
+        icon_preset: 'google',
+        is_enabled: false,
+        sort_rank: '1',
+        auto_provision_users: false,
+        allowed_email_domains: ['example.org'],
+        has_secret: false,
+        dek_kid: null,
+        last_health_status: 'HEALTHY',
+        last_handshake_at: null,
+        check_summary: 'OK',
+        latency_ms: null,
+        public_config: {
+          issuer: 'https://issuer.dynamic.com',
+          client_id: 'client-dyn',
+          authorization_endpoint: 'https://auth.dyn.com',
+          token_endpoint: 'https://token.dyn.com',
+          userinfo_endpoint: 'https://userinfo.dyn.com',
+          scopes: 'openid, profile',
+          client_auth: 'private_key_jwt',
+          access_mode: 'group_restricted',
+          admin_allowlist: ['admin1'],
+          user_allowlist: ['user1'],
+          admin_groups: ['Admins'],
+          user_groups: ['Users'],
+          spki_sha256_pins: ['0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef'],
+        },
+      };
+
+      rerender(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={oidcCardWithStrings}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText('Edit Dynamic OIDC')).toBeDefined();
+      expect(screen.getByLabelText<HTMLInputElement>(/Display Name/i).value).toBe('Dynamic OIDC');
+
+      const ldapCardDyn: AdminAuthCard = {
+        id: 'c-ldap-dyn',
+        provider_kind: 'LDAP',
+        slug: 'dynamic-ldap',
+        display_name: 'Dynamic LDAP',
+        button_subtext: 'Dyn LDAP',
+        icon_preset: 'ldap',
+        is_enabled: true,
+        sort_rank: '2',
+        auto_provision_users: true,
+        allowed_email_domains: [],
+        has_secret: false,
+        dek_kid: null,
+        last_health_status: 'HEALTHY',
+        last_handshake_at: null,
+        check_summary: 'OK',
+        latency_ms: null,
+        public_config: {
+          url: 'ldap://ldap.dynamic.com',
+          transport_mode: 'starttls',
+          service_bind_dn: 'cn=dyn,dc=dyn,dc=com',
+          base_dn: 'dc=dyn,dc=com',
+          user_search_filter: '(uid={username})',
+          subject_attribute: 'entryUUID',
+          email_attribute: 'mail',
+          display_name_attribute: 'cn',
+          ca_cert_pem: '-----BEGIN CERT-----DYN-----END CERT-----',
+          spki_sha256_pin: 'abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789',
+        },
+      };
+
+      rerender(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={ldapCardDyn}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText('Edit Dynamic LDAP')).toBeDefined();
+
+      rerender(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      expect(screen.getByText('Add Authentication Card')).toBeDefined();
+    });
+
+    it('covers payload construction and error handling branches', async () => {
+      const onSave = vi.fn().mockResolvedValue(undefined);
+
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={onSave}
+        />,
+      );
+
+      // GitHub preset applies endpoints (authorization_endpoint, token_endpoint, userinfo_endpoint)
+      const githubBtn = screen.getByRole('button', { name: /GitHub \(OAuth 2\.0\)/i });
+      fireEvent.click(githubBtn);
+
+      fireEvent.change(screen.getByLabelText(/Client ID/i), { target: { value: 'gh-cid' } });
+      fireEvent.change(screen.getByLabelText(/Client Secret/i), { target: { value: 'gh-secret' } });
+
+      // Open AdvancedSection and clear scopes so scopes fallback is triggered
+      const advToggle = screen.getByTestId('auth-advanced-section-toggle');
+      fireEvent.click(advToggle);
+
+      const scopesInput = screen.getByLabelText(/Scopes/i);
+      fireEvent.change(scopesInput, { target: { value: '' } });
+
+      const createBtn = screen.getByRole('button', { name: /Create Card/i });
+      fireEvent.click(createBtn);
+
+      await waitFor(() => {
+        expect(onSave).toHaveBeenCalledWith(
+          expect.objectContaining({
+            provider_kind: 'OAUTH2',
+            slug: 'github-oauth',
+            public_config: expect.objectContaining({
+              authorization_endpoint: 'https://github.com/login/oauth/authorize',
+              token_endpoint: 'https://github.com/login/oauth/access_token',
+              userinfo_endpoint: 'https://api.github.com/user',
+              scopes: ['openid', 'profile', 'email'],
+            }) as unknown,
+          }),
+          false,
+        );
+      });
+    });
+
+    it('covers non-Error exception handling in Google JSON parsing', () => {
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      // Open AdvancedSection
+      const advToggle = screen.getByTestId('auth-advanced-section-toggle');
+      fireEvent.click(advToggle);
+
+      // Toggle paste box
+      const pasteToggle = screen.getByRole('button', { name: /Paste JSON/i });
+      fireEvent.click(pasteToggle);
+
+      const pasteTextarea = screen.getByPlaceholderText(/Paste full Google Cloud Console web client JSON here/i);
+      fireEvent.change(pasteTextarea, { target: { value: '{"web": {}}' } });
+
+      // Mock JSON.parse to throw a string instead of an Error
+      const parseSpy = vi.spyOn(JSON, 'parse').mockImplementationOnce(() => {
+        // eslint-disable-next-line @typescript-eslint/only-throw-error
+        throw 'Non-error string payload';
+      });
+
+      const applyBtn = screen.getByRole('button', { name: /Apply Google JSON/i });
+      fireEvent.click(applyBtn);
+
+      expect(screen.getByText(/Failed to parse JSON: Non-error string payload/i)).toBeDefined();
+      parseSpy.mockRestore();
+    });
   });
 });
