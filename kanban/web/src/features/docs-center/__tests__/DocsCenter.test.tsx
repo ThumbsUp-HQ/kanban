@@ -1503,9 +1503,9 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
       });
       expect(symphonyHeaders).toHaveLength(6);
       expect(screen.getAllByRole('table')).toHaveLength(7);
-      expect(screen.getAllByRole('cell', { name: '🎯✅' })).toHaveLength(11);
-      expect(screen.getAllByRole('cell', { name: '🔗 Companion' })).toHaveLength(5);
-      expect(screen.getAllByRole('cell', { name: '🧭 Dedicated' })).toHaveLength(1);
+      expect(screen.queryAllByRole('cell', { name: '🎯✅' })).toHaveLength(0);
+      expect(screen.getAllByRole('cell', { name: '🔗 Companion' })).toHaveLength(4);
+      expect(screen.getAllByRole('cell', { name: '🧭 Dedicated' })).toHaveLength(2);
       const nonGoalsHeading = screen.getByRole('heading', {
         level: 2,
         name: /When 👍kanban Is Not the Right Fit/i,
@@ -1519,9 +1519,13 @@ Content paragraph with <a id="p-anchor"></a> text and \`code\`.
         ),
       ).toBe(true);
 
-      const gfmSection1Link = screen.getByRole('link', { name: 'Section 1' });
-      expect(gfmSection1Link.getAttribute('href')).toBe('#1-security-identity-audit--deployment');
-      fireEvent.click(gfmSection1Link);
+      const tocSection1Link = screen.getAllByRole('link', {
+        name: /Security, Identity, Audit/i,
+      })[0];
+      expect(tocSection1Link?.getAttribute('href')).toBe('#security-identity-audit-deployment');
+      if (tocSection1Link) {
+        fireEvent.click(tocSection1Link);
+      }
       // eslint-disable-next-line @typescript-eslint/unbound-method
       expect(window.HTMLElement.prototype.scrollIntoView).toHaveBeenCalled();
     });

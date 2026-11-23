@@ -1,0 +1,15 @@
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+Running 5 tests using 5 workers
+
+  ✓  2 [desktop] › e2e/capture-wiki-screenshots.spec.ts:564:3 › Documentation & Visual Proof Screenshot Capture (KAN-323 / KAN-311) › 01: desktop light - Docs Center Overview (1.0s)
+  ✓  5 [desktop] › e2e/capture-wiki-screenshots.spec.ts:588:3 › Documentation & Visual Proof Screenshot Capture (KAN-323 / KAN-311) › 03: tablet - Master-Detail Issue Navigator (953ms)
+  ✓  4 [desktop] › e2e/capture-wiki-screenshots.spec.ts:576:3 › Documentation & Visual Proof Screenshot Capture (KAN-323 / KAN-311) › 02: desktop dark - Docs Center Chapter with Media (1.1s)
+  ✓  1 [desktop] › e2e/capture-wiki-screenshots.spec.ts:612:3 › Documentation & Visual Proof Screenshot Capture (KAN-323 / KAN-311) › 05: mobile landscape - Unified Admin Diagnostics Studio (1.3s)
+  ✓  3 [desktop] › e2e/capture-wiki-screenshots.spec.ts:600:3 › Documentation & Visual Proof Screenshot Capture (KAN-323 / KAN-311) › 04: mobile portrait - Flow Telemetry Studio & Analytics (1.3s)
+
+  5 passed (28.2s)
