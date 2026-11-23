@@ -19,6 +19,9 @@ from kanban.api.v1.admin.principals import router as admin_principals_router
 from kanban.api.v1.admin.project_blueprint import (
     router as admin_project_blueprint_router,
 )
+from kanban.api.v1.admin.system_settings import (
+    router as admin_system_settings_router,
+)
 from kanban.api.v1.admin.webhooks import router as admin_webhooks_router
 from kanban.api.v1.admin.workspace_settings import (
     router as admin_workspace_settings_router,
@@ -50,6 +53,7 @@ from kanban.api.v1.flow_metrics import router as flow_metrics_router
 from kanban.api.v1.health import router as health_router
 from kanban.api.v1.issue_archive import router as archive_router
 from kanban.api.v1.issue_copy import router as issue_copy_router
+from kanban.api.v1.issue_csv import router as issue_csv_router
 from kanban.api.v1.issue_delete import router as issue_delete_router
 from kanban.api.v1.issue_move import router as issue_move_router
 from kanban.api.v1.issue_provenance import router as issue_provenance_router
@@ -101,6 +105,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(issues_router)
     v1.include_router(issue_trees_router)
     v1.include_router(issue_workflow_router)
+    v1.include_router(issue_csv_router)
     v1.include_router(transitions_router)
     v1.include_router(workflow_hooks_router)
     v1.include_router(issue_copy_router)
@@ -144,6 +149,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(admin_link_auditor_router)
     v1.include_router(admin_mcp_keys_router)
     v1.include_router(admin_workspace_settings_router)
+    v1.include_router(admin_system_settings_router)
     v1.include_router(admin_webhooks_router)
     v1.include_router(admin_project_blueprint_router)
     v1.include_router(admin_principals_router)

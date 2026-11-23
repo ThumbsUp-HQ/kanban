@@ -118,6 +118,22 @@ class Settings(BaseSettings):
             "trusted_proxies",
         ),
     )
+    enable_issue_export: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "KB_ENABLE_ISSUE_EXPORT",
+            "KANBAN_ENABLE_ISSUE_EXPORT",
+            "enable_issue_export",
+        ),
+    )
+    enable_issue_import: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "KB_ENABLE_ISSUE_IMPORT",
+            "KANBAN_ENABLE_ISSUE_IMPORT",
+            "enable_issue_import",
+        ),
+    )
 
     @field_validator("trash_retention_days")
     @classmethod

@@ -8,8 +8,8 @@ import uuid  # noqa: TC003  # Runtime import required for SQLAlchemy Mapped[uuid
 from datetime import datetime  # noqa: TC003  # Runtime import required for SQLAlchemy Mapped[datetime]
 from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, Text, func
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, Text, func, text
+from sqlalchemy.dialects.postgresql import ARRAY, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database.models.base import Base
@@ -66,6 +66,21 @@ class WorkspaceSettings(Base):
         Boolean,
         nullable=False,
         server_default="false",
+    )
+    issue_export_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default="true",
+    )
+    issue_import_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default="true",
+    )
+    issue_export_allowed_roles: Mapped[list[str]] = mapped_column(
+        ARRAY(Text),
+        nullable=False,
+        server_default=text("ARRAY['workspace_admin', 'project_admin', 'member']::text[]"),
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

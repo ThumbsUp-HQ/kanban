@@ -1,0 +1,153 @@
+{
+  "ticket": "KAN-316",
+  "summary": "Default CSV Import, Export & Download Template + WinZip AES-256 Password-Protected ZIP from Search/Issue Navigator with System, Workspace & Role Governance",
+  "governance_and_security_proof": {
+    "tiers": [
+      "system_admin_aal2_flag",
+      "workspace_admin_policy",
+      "rbac_role_capability_check"
+    ],
+    "encryption_mode": "WinZip AE-2 (AES-256-CTR + PBKDF2-HMAC-SHA256 1000 iter + 10-byte auth tag)",
+    "password_min_length": 12,
+    "memory_zeroization": "zeroize(aes_key, hmac_key) on all encryption/decryption paths",
+    "cwe_1236_defense": "Neutralize formula injection prefixes (=, +, -, @, \\t, \\r) with leading single-quote",
+    "secret_push_protection": "enforce_secret_push_protection() BLOCK mode on summary and description",
+    "surrogate_validation": "UTF-16 lone surrogate rejection (INVALID_UTF8_SURROGATE)"
+  },
+  "endpoints": [
+    {
+      "method": "GET",
+      "path": "/api/v1/projects/{project_ref}/issues/import-template.csv",
+      "description": "Download pre-populated RFC 4180 CSV template containing project workflow states and priorities",
+      "response": {
+        "status": 200,
+        "content_type": "text/csv; charset=utf-8",
+        "sample_body": "key,project_key,summary,description_markdown,state,priority,assignees,labels,cycle,modules,parent_key,start_date,due_date,created_at,updated_at,custom_fields_json\n,PRJ,Example issue summary,Detailed issue description markdown,In Progress,High,alice; bob,backend; security,Sprint 1,Core,PRJ-1,2026-11-01,2026-11-30,,,\"{\"\"risk\"\": \"\"low\"\"}\"\n"
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/{project_ref}/issues/export",
+      "description": "Export filtered issues to RFC 4180 CSV or WinZip AE-2 AES-256 encrypted ZIP",
+      "request": {
+        "format": "zip_csv",
+        "zip_password": "SuperSecretPassword123!",
+        "state_ids": ["01a205eb-e5c7-72dc-aefb-01795212e9c3"],
+        "priorities": ["high", "urgent"]
+      },
+      "response": {
+        "status": 200,
+        "content_type": "application/zip",
+        "headers": {
+          "Content-Disposition": "attachment; filename=\"PRJ-issues-export-20261122.zip\""
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/{project_ref}/issues/import?dry_run=true",
+      "description": "Dry-run preview validation inside an isolated transaction SAVEPOINT",
+      "request": {
+        "multipart": {
+          "file": "issues.csv (text/csv or application/zip)"
+        }
+      },
+      "response": {
+        "status": 200,
+        "content_type": "application/json",
+        "body": {
+          "creates_count": 12,
+          "updates_count": 3,
+          "error_count": 0,
+          "total_rows": 15,
+          "created_keys": [],
+          "updated_keys": ["PRJ-101", "PRJ-102", "PRJ-103"],
+          "items": [
+            {
+              "row": 1,
+              "key": null,
+              "action": "create",
+              "summary": "Hardened memory zeroize buffer protection",
+              "state": "In Progress",
+              "priority": "urgent"
+            },
+            {
+              "row": 2,
+              "key": "PRJ-101",
+              "action": "update",
+              "summary": "WinZip AE-2 CSV export governance",
+              "state": "In Review",
+              "priority": "high"
+            }
+          ],
+          "errors": []
+        }
+      }
+    },
+    {
+      "method": "POST",
+      "path": "/api/v1/projects/{project_ref}/issues/import?dry_run=false",
+      "description": "Atomic commit import of validated CSV issues",
+      "response": {
+        "status": 200,
+        "content_type": "application/json",
+        "body": {
+          "creates_count": 12,
+          "updates_count": 3,
+          "error_count": 0,
+          "total_rows": 15,
+          "created_keys": ["PRJ-104", "PRJ-105"],
+          "updated_keys": ["PRJ-101", "PRJ-102", "PRJ-103"],
+          "items": [],
+          "errors": []
+        }
+      }
+    },
+    {
+      "method": "GET",
+      "path": "/api/v1/admin/system-settings",
+      "description": "Read system-wide CSV export/import governance toggles (requires Admin AAL2)",
+      "response": {
+        "status": 200,
+        "body": {
+          "enable_issue_export": true,
+          "enable_issue_import": true
+        }
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/admin/system-settings",
+      "description": "Update system-wide CSV export/import governance toggles (requires Admin AAL2)",
+      "request": {
+        "enable_issue_export": false,
+        "enable_issue_import": false
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "enable_issue_export": false,
+          "enable_issue_import": false
+        }
+      }
+    },
+    {
+      "method": "PATCH",
+      "path": "/api/v1/workspaces/{workspace_ref}/settings",
+      "description": "Configure workspace governance toggles and allowed export roles",
+      "request": {
+        "issue_export_enabled": true,
+        "issue_import_enabled": true,
+        "issue_export_allowed_roles": ["workspace_admin", "project_admin"]
+      },
+      "response": {
+        "status": 200,
+        "body": {
+          "issue_export_enabled": true,
+          "issue_import_enabled": true,
+          "issue_export_allowed_roles": ["workspace_admin", "project_admin"]
+        }
+      }
+    }
+  ]
+}

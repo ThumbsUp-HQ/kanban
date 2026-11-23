@@ -44,6 +44,11 @@ class WorkspaceSettingsResponse(BaseModel):
     mcp_key_max_ttl_days: int
     air_gap_mode: bool
     default_skip_loaded_sequence_numbers: bool = False
+    issue_export_enabled: bool = True
+    issue_import_enabled: bool = True
+    issue_export_allowed_roles: list[str] = Field(
+        default_factory=lambda: ["workspace_admin", "project_admin", "member"]
+    )
     updated_at: datetime
 
 
@@ -62,6 +67,9 @@ class WorkspaceSettingsUpdate(BaseModel):
     mcp_key_max_ttl_days: int | None = Field(default=None, ge=1, le=365)
     air_gap_mode: bool | None = None
     default_skip_loaded_sequence_numbers: bool | None = None
+    issue_export_enabled: bool | None = None
+    issue_import_enabled: bool | None = None
+    issue_export_allowed_roles: list[str] | None = None
 
 
 async def require_workspace_or_server_admin(
@@ -122,6 +130,9 @@ async def _get_or_create_settings(
         mcp_key_max_ttl_days=90,
         air_gap_mode=False,
         default_skip_loaded_sequence_numbers=False,
+        issue_export_enabled=True,
+        issue_import_enabled=True,
+        issue_export_allowed_roles=["workspace_admin", "project_admin", "member"],
     )
     session.add(settings)
     await session.flush()
@@ -154,6 +165,11 @@ async def get_workspace_settings(
         mcp_key_max_ttl_days=settings.mcp_key_max_ttl_days,
         air_gap_mode=settings.air_gap_mode,
         default_skip_loaded_sequence_numbers=settings.default_skip_loaded_sequence_numbers,
+        issue_export_enabled=settings.issue_export_enabled,
+        issue_import_enabled=settings.issue_import_enabled,
+        issue_export_allowed_roles=list(
+            settings.issue_export_allowed_roles or ["workspace_admin", "project_admin", "member"]
+        ),
         updated_at=settings.updated_at,
     )
 
@@ -251,6 +267,11 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
         "mcp_key_max_ttl_days": settings.mcp_key_max_ttl_days,
         "air_gap_mode": settings.air_gap_mode,
         "default_skip_loaded_sequence_numbers": settings.default_skip_loaded_sequence_numbers,
+        "issue_export_enabled": settings.issue_export_enabled,
+        "issue_import_enabled": settings.issue_import_enabled,
+        "issue_export_allowed_roles": list(
+            settings.issue_export_allowed_roles or ["workspace_admin", "project_admin", "member"]
+        ),
     }
 
     diff: dict[str, Any] = {}
@@ -342,6 +363,27 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
         diff["default_skip_loaded_sequence_numbers"] = skip_seq
         settings.default_skip_loaded_sequence_numbers = skip_seq
 
+    if (
+        body.issue_export_enabled is not None
+        and body.issue_export_enabled != settings.issue_export_enabled
+    ):
+        diff["issue_export_enabled"] = body.issue_export_enabled
+        settings.issue_export_enabled = body.issue_export_enabled
+
+    if (
+        body.issue_import_enabled is not None
+        and body.issue_import_enabled != settings.issue_import_enabled
+    ):
+        diff["issue_import_enabled"] = body.issue_import_enabled
+        settings.issue_import_enabled = body.issue_import_enabled
+
+    if (
+        body.issue_export_allowed_roles is not None
+        and body.issue_export_allowed_roles != settings.issue_export_allowed_roles
+    ):
+        diff["issue_export_allowed_roles"] = body.issue_export_allowed_roles
+        settings.issue_export_allowed_roles = body.issue_export_allowed_roles
+
     if diff:
         await session.flush()
         await session.refresh(settings)
@@ -357,6 +399,11 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
             "mcp_key_max_ttl_days": settings.mcp_key_max_ttl_days,
             "air_gap_mode": settings.air_gap_mode,
             "default_skip_loaded_sequence_numbers": settings.default_skip_loaded_sequence_numbers,
+            "issue_export_enabled": settings.issue_export_enabled,
+            "issue_import_enabled": settings.issue_import_enabled,
+            "issue_export_allowed_roles": list(
+                settings.issue_export_allowed_roles or ["workspace_admin", "project_admin", "member"]
+            ),
         }
 
         await record_activity(
@@ -415,5 +462,10 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
         mcp_key_max_ttl_days=settings.mcp_key_max_ttl_days,
         air_gap_mode=settings.air_gap_mode,
         default_skip_loaded_sequence_numbers=settings.default_skip_loaded_sequence_numbers,
+        issue_export_enabled=settings.issue_export_enabled,
+        issue_import_enabled=settings.issue_import_enabled,
+        issue_export_allowed_roles=list(
+            settings.issue_export_allowed_roles or ["workspace_admin", "project_admin", "member"]
+        ),
         updated_at=settings.updated_at,
     )

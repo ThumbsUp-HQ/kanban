@@ -29,6 +29,8 @@ export interface FilterDisplayBarProps {
   onSubGroupByChange?: (subGroup: GroupAxis) => void;
   modulesEnabled?: boolean;
   onSaveView?: () => void;
+  onExport?: () => void;
+  onImport?: () => void;
   searchInputRef?: React.RefObject<HTMLInputElement | null>;
   isFilterOpen?: boolean;
   onToggleFilterOpen?: (open: boolean) => void;
@@ -52,6 +54,8 @@ export function FilterDisplayBar({
   onSubGroupByChange,
   modulesEnabled = true,
   onSaveView,
+  onExport,
+  onImport,
   searchInputRef: externalSearchRef,
   isFilterOpen: externalFilterOpen,
   onToggleFilterOpen: externalToggleFilterOpen,
@@ -527,6 +531,32 @@ export function FilterDisplayBar({
             >
               Save as view
             </button>
+            {onExport && (
+              <button
+                type="button"
+                className="filter-facet-option"
+                data-testid="filter-display-export-btn"
+                onClick={() => {
+                  onExport();
+                  setIsDisplayTuneOpen(false);
+                }}
+              >
+                Export Issues (CSV / ZIP)
+              </button>
+            )}
+            {onImport && (
+              <button
+                type="button"
+                className="filter-facet-option"
+                data-testid="filter-display-import-btn"
+                onClick={() => {
+                  onImport();
+                  setIsDisplayTuneOpen(false);
+                }}
+              >
+                Import Issues (CSV / ZIP)
+              </button>
+            )}
           </div>
         )}
       </div>
