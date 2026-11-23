@@ -15,6 +15,7 @@ import { AuthCardButton } from './AuthCardButton';
 import { LdapLoginForm } from './LdapLoginForm';
 import { LocalAdminDisclosure } from './LocalAdminDisclosure';
 import { SecondFactorStep } from './SecondFactorStep';
+import { formatDocumentTitle, useDocumentTitle } from '../../app/documentTitle';
 import './auth.css';
 
 export interface LoginPageProps {
@@ -28,6 +29,7 @@ export function LoginPage({
   initialNext,
   onNavigate,
 }: LoginPageProps): JSX.Element {
+  useDocumentTitle(formatDocumentTitle(['Login']));
   const [cards, setCards] = useState<AuthCard[]>(initialCards ?? []);
   const [loading, setLoading] = useState(!initialCards);
   const [expandedLdapSlug, setExpandedLdapSlug] = useState<string | null>(null);

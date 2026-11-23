@@ -32,6 +32,11 @@ import {
   type RouteObject,
 } from 'react-router';
 import { AppShell } from './AppShell';
+import {
+  formatDocumentTitle,
+  stripLeadingThumb,
+  useDocumentTitle,
+} from './documentTitle';
 import type { AccessManifestData } from './HeaderPills';
 import { TokenStory } from '../dev/TokenStory';
 import { EmojiStory } from '../dev/EmojiStory';
@@ -111,6 +116,7 @@ function NotFoundViewContent({
   pathname,
   onReturn,
 }: NotFoundViewContentProps): JSX.Element {
+  useDocumentTitle(formatDocumentTitle(['404 - Page Not Found']));
   return (
     <section data-testid="not-found-view" className="kb-not-found-view">
       <div className="kb-not-found-card">
@@ -1775,7 +1781,12 @@ export function FullScreenIssueRoute(): JSX.Element {
 
   useEffect(() => {
     if (issueKey) {
-      document.title = issue?.summary ? `${issueKey} - ${issue.summary}` : issueKey;
+      const prevTitle = document.title;
+      const cleanSummary = issue?.summary ? stripLeadingThumb(issue.summary) : '';
+      document.title = cleanSummary ? `${issueKey} - ${cleanSummary}` : issueKey;
+      return () => {
+        document.title = prevTitle;
+      };
     }
   }, [issueKey, issue?.summary]);
 

@@ -83,6 +83,19 @@ export async function testGuardFixture(
   // 4. Default API mock handlers
   const recorder = await mockApi(page, {
     'GET /api/v1/me': loadFixture('me-adam'),
+    'GET /api/v1/auth/me': loadFixture('me-adam'),
+    'GET /api/v1/users/me': loadFixture('me-adam'),
+    'GET /api/v1/auth/session': {
+      json: {
+        authenticated: true,
+        aal_level: 2,
+        csrf_token: 'test-csrf-token',
+        user: loadFixture('me-adam'),
+      },
+    },
+    'GET /api/v1/setup/status': {
+      json: { initialized: true, is_initialized: true, requires_setup: false },
+    },
     'GET /api/v1/system/status': loadFixture('system-status-prod'),
     'GET /api/v1/workspaces': {
       json: {
@@ -90,6 +103,8 @@ export async function testGuardFixture(
         active_workspace_id: 'ws-default',
       },
     },
+    'GET /api/v1/projects': { json: [] },
+    'GET /api/v1/notifications': { json: { items: [], unread_count: 0 } },
     'GET /api/v1/media-proxy': {
       status: 200,
       contentType: 'image/png',

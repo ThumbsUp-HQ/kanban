@@ -16,6 +16,7 @@ import {
   isWebAuthnSupported,
 } from './webauthn';
 import { copyToClipboard } from '../../utils/clipboard';
+import { formatDocumentTitle, useDocumentTitle } from '../../app/documentTitle';
 import './auth.css';
 
 const TOKEN_REGEX = /^kb_setup_[A-Za-z0-9_-]{43}$/;
@@ -30,6 +31,7 @@ export function SetupClaimPage({
   initialToken,
   onNavigate,
 }: SetupClaimPageProps): JSX.Element {
+  useDocumentTitle(formatDocumentTitle(['Setup']));
   const [tokenValid, setTokenValid] = useState<boolean>(() => {
     let token = initialToken;
     if (!token && typeof window !== 'undefined') {

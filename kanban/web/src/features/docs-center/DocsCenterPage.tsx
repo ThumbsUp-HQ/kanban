@@ -22,6 +22,7 @@ import {
   type WikiChapter,
   type WikiChapterCategory,
 } from './docsService';
+import { formatDocumentTitle, useDocumentTitle } from '../../app/documentTitle';
 import './DocsCenterPage.css';
 
 export type CategoryFilter = 'all' | WikiChapterCategory;
@@ -46,6 +47,10 @@ export function DocsCenterPage(): JSX.Element {
   };
   const chapter: WikiChapter =
     getChapter(currentSlug) ?? WIKI_CHAPTERS[0] ?? fallbackChapter;
+
+  useDocumentTitle(
+    formatDocumentTitle(['Docs', chapter.title !== 'Documentation' ? chapter.title : null]),
+  );
 
   const [searchQuery, setSearchQuery] = useState('');
   const [searchResults, setSearchResults] = useState<SearchResult[]>([]);

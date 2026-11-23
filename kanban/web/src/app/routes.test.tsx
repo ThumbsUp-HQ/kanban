@@ -26,6 +26,7 @@ import {
   ProjectRouteContext,
   ProjectOverviewRoute,
   ProjectIssuesRoute,
+  FullScreenIssueRoute,
 } from './routes';
 import { saveDraft } from '../features/drafts/draftsStore';
 import { ThemeProvider } from '../theme/ThemeProvider';
@@ -700,6 +701,51 @@ describe('IssuesWorkspaceRoute', () => {
     await waitFor(() => {
       expect(document.title).toBe('KAN-999 - Critical Bug Fix');
     });
+  });
+
+  it('renders FullScreenIssueRoute, strips leading thumbs, and restores previous title on unmount', async () => {
+    document.title = 'Work Items - KAN - kanban';
+    const testQueryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    vi.spyOn(client.apiClient, 'get').mockResolvedValue({
+      id: 'iss-2',
+      key: 'KAN-313',
+      summary: '👍 Fix double thumbs in tab title',
+    });
+
+    const { unmount } = render(
+      <QueryClientProvider client={testQueryClient}>
+        <ThemeProvider>
+          <MemoryRouter initialEntries={['/issues/KAN-313']}>
+            <Routes>
+              <Route path="/issues/:issueKey" element={<FullScreenIssueRoute />} />
+            </Routes>
+          </MemoryRouter>
+        </ThemeProvider>
+      </QueryClientProvider>,
+    );
+
+    await waitFor(() => {
+      expect(document.title).toBe('KAN-313 - Fix double thumbs in tab title');
+    });
+
+    unmount();
+    expect(document.title).toBe('Work Items - KAN - kanban');
+  });
+
+  it('verifies NotFoundView sets document.title without leading thumbs', async () => {
+    document.title = 'Initial Title';
+    const { unmount } = render(
+      <MemoryRouter initialEntries={['/non-existent-route']}>
+        <NotFoundView />
+      </MemoryRouter>,
+    );
+
+    await waitFor(() => {
+      expect(document.title).toBe('404 - Page Not Found - kanban');
+    });
+
+    unmount();
+    expect(document.title).toBe('Initial Title');
   });
 
   it('covers cycle creation, validation, and error states in ProjectCyclesView', async () => {
