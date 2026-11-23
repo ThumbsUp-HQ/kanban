@@ -1881,4 +1881,97 @@ describe('AuthCardEditorDrawer (KB-P3-36)', () => {
       u2();
     });
   });
+
+  describe('Progressive Disclosure & AdvancedSection (KAN-319)', () => {
+    it('renders primary fields outside AdvancedSection and keeps advanced fields collapsed by default on create and edit', () => {
+      const { unmount } = render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      // Primary fields must be immediately present
+      const displayNameInput = screen.getByLabelText(/Display Name/i);
+      const providerKindSelect = screen.getByLabelText(/Provider Kind/i);
+      const enableCardCheckbox = screen.getByLabelText(/Enable Card/i);
+      const issuerUrlInput = screen.getByLabelText(/Issuer URL/i);
+      const clientIdInput = screen.getByLabelText(/Client ID/i);
+      const clientSecretInput = screen.getByLabelText(/Client Secret/i);
+
+      expect(displayNameInput).toBeDefined();
+      expect(providerKindSelect).toBeDefined();
+      expect(enableCardCheckbox).toBeDefined();
+      expect(issuerUrlInput).toBeDefined();
+      expect(clientIdInput).toBeDefined();
+      expect(clientSecretInput).toBeDefined();
+
+      // AdvancedSection must be collapsed by default
+      const advSection = screen.getByTestId('auth-advanced-section');
+      expect(advSection.hasAttribute('open')).toBe(false);
+
+      const advToggle = screen.getByTestId('auth-advanced-section-toggle');
+      expect(advToggle.getAttribute('aria-expanded')).toBe('false');
+
+      // Clicking the toggle expands the section
+      fireEvent.click(advToggle);
+      expect(advSection.hasAttribute('open')).toBe(true);
+      expect(advToggle.getAttribute('aria-expanded')).toBe('true');
+
+      unmount();
+
+      // On edit, it also defaults to collapsed
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={existingOidcCard}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      const editAdvSection = screen.getByTestId('auth-advanced-section');
+      expect(editAdvSection.hasAttribute('open')).toBe(false);
+    });
+
+    it('auto-derives slug from display name on create unless customized', () => {
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={null}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      const nameInput = screen.getByLabelText<HTMLInputElement>(/Display Name/i);
+      const slugInput = screen.getByLabelText<HTMLInputElement>(/Slug Identifier/i);
+
+      fireEvent.change(nameInput, { target: { value: 'Corp Google SSO' } });
+      expect(slugInput.value).toBe('corp-google-sso');
+
+      // If user customizes slug, further display name changes do not overwrite it
+      fireEvent.change(slugInput, { target: { value: 'my-custom-slug' } });
+      fireEvent.change(nameInput, { target: { value: 'Corp Google SSO Updated' } });
+      expect(slugInput.value).toBe('my-custom-slug');
+    });
+
+    it('renders active overrides count badge when advanced settings differ from defaults', () => {
+      render(
+        <AuthCardEditorDrawer
+          isOpen={true}
+          card={existingOidcCard}
+          onClose={vi.fn()}
+          onSave={vi.fn()}
+        />,
+      );
+
+      // existingOidcCard has button_subtext='Workforce IDP' and allowed_email_domains=['corp.example.com']
+      const badge = screen.getByTestId('advanced-active-badge');
+      expect(badge).toBeDefined();
+      expect(badge.textContent).toContain('active');
+    });
+  });
 });

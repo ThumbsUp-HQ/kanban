@@ -602,7 +602,7 @@
   border-color: var(--accent-primary);
 }
 
-/* Optional / Advanced Settings Accordion */
+/* Optional / Advanced Settings Accordion (Legacy & Helper) */
 .auth-advanced-accordion {
   margin-top: 20px;
   border: 1px solid var(--border-subtle);
@@ -618,6 +618,32 @@
   cursor: pointer;
   padding: 4px 0;
   user-select: none;
+}
+
+.auth-hidden-file-input {
+  display: none;
+}
+
+.auth-google-json-upload-btn {
+  margin-top: 8px;
+}
+
+.auth-google-json-paste-box {
+  margin-top: 8px;
+}
+
+.auth-google-json-actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 4px;
+}
+
+.auth-google-json-details {
+  margin-top: 6px;
+}
+
+.auth-google-json-summary {
+  cursor: pointer;
 }
 
 .auth-field-helper {

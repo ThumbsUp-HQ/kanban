@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef, type JSX } from 'react';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
+import { AdvancedSection } from '../../ui/AdvancedSection';
 import {
   Google,
   GitHub,
@@ -64,9 +65,11 @@ export function AuthCardEditorDrawer({
   const [prevCard, setPrevCard] = useState<AdminAuthCard | null>(card);
   const [providerKind, setProviderKind] = useState<ProviderKind>(() => card?.provider_kind ?? 'OIDC');
   const [slug, setSlug] = useState(() => card?.slug ?? '');
+  const [slugCustomized, setSlugCustomized] = useState(false);
   const [displayName, setDisplayName] = useState(() => card?.display_name ?? '');
   const [buttonSubtext, setButtonSubtext] = useState(() => card?.button_subtext ?? '');
   const [iconPreset, setIconPreset] = useState(() => card?.icon_preset ?? 'shield');
+  const [isEnabled, setIsEnabled] = useState(() => card?.is_enabled ?? true);
   const [autoProvisionUsers, setAutoProvisionUsers] = useState(() => card?.auto_provision_users ?? true);
   const [allowedEmailDomains, setAllowedEmailDomains] = useState(() => card?.allowed_email_domains.join(', ') ?? '');
 
@@ -163,9 +166,11 @@ export function AuthCardEditorDrawer({
     setActivePreset(null);
     setProviderKind(card?.provider_kind ?? 'OIDC');
     setSlug(card?.slug ?? '');
+    setSlugCustomized(false);
     setDisplayName(card?.display_name ?? '');
     setButtonSubtext(card?.button_subtext ?? '');
     setIconPreset(card?.icon_preset ?? 'shield');
+    setIsEnabled(card?.is_enabled ?? true);
     setAutoProvisionUsers(card?.auto_provision_users ?? true);
     setAllowedEmailDomains(card?.allowed_email_domains.join(', ') ?? '');
 
@@ -546,7 +551,7 @@ export function AuthCardEditorDrawer({
       display_name: displayName.trim() || effectiveSlug,
       button_subtext: buttonSubtext.trim() || null,
       icon_preset: iconPreset,
-      is_enabled: card?.is_enabled ?? true,
+      is_enabled: isEnabled,
       auto_provision_users: autoProvisionUsers,
       allowed_email_domains: domains,
       public_config: publicConfig,
@@ -648,6 +653,43 @@ export function AuthCardEditorDrawer({
       ? `Stored encrypted (dek_kid: ${card.dek_kid ?? 'active'}) - leave blank to keep current secret`
       : 'Enter secret value';
 
+  const activeAdvancedCount = (() => {
+    let count = 0;
+    if (slugCustomized && slug.trim()) count += 1;
+    if (buttonSubtext.trim()) count += 1;
+    if (iconPreset && iconPreset !== (providerKind === 'LDAP' ? 'ldap' : 'shield')) count += 1;
+    if (!autoProvisionUsers) count += 1;
+    if (allowedEmailDomains.trim()) count += 1;
+    if (accessPolicyMode === 'restricted') count += 1;
+    if (providerKind === 'OIDC' || providerKind === 'OAUTH2') {
+      if (scopes.trim() && scopes.trim() !== 'openid, profile, email') count += 1;
+      if (tokenAuthMethod !== 'client_secret_basic') count += 1;
+      if (googleJsonPreview) count += 1;
+    } else if (providerKind === 'LDAP') {
+      if (startTls) count += 1;
+      if (
+        userFilter.trim() &&
+        userFilter.trim() !== '(sAMAccountName={username})' &&
+        userFilter.trim() !== '(&(objectClass=person)(uid={username}))'
+      ) {
+        count += 1;
+      }
+      if (subjectAttribute.trim() && subjectAttribute.trim() !== 'objectGUID') count += 1;
+      if (emailAttribute.trim() && emailAttribute.trim() !== 'mail') count += 1;
+      if (displayNameAttribute.trim() && displayNameAttribute.trim() !== 'displayName') count += 1;
+      if (spkiPin.trim()) count += 1;
+      if (caPem.trim()) count += 1;
+    }
+    return count;
+  })();
+
+  const hasAdvancedErrors = Boolean(
+    fieldErrors.slug ||
+      fieldErrors.buttonSubtext ||
+      fieldErrors.spkiPin ||
+      googleJsonError,
+  );
+
   return (
     <div className="auth-drawer-backdrop" onClick={onClose} role="presentation">
       <div
@@ -745,785 +787,861 @@ export function AuthCardEditorDrawer({
             </div>
           ) : (
             <>
-              {/* SECTION 1: MANDATORY SETTINGS */}
+              {/* SECTION 1: MANDATORY / PRIMARY SETTINGS */}
               <div className="auth-editor-section-title">Mandatory Settings</div>
 
-              {/* Google OAuth JSON Importer Section (KB-AUTH-JSON) */}
-              {(providerKind === 'OIDC' || providerKind === 'OAUTH2') && (
-                <div className="auth-google-json-section" data-testid="google-json-import-section">
-                  <div className="auth-google-json-header">
-                    <span className="auth-google-json-title">
-                      <Google size={14} />
-                      <span>Google OAuth Client Secret JSON (client_secret_*.json)</span>
-                    </span>
-                    <button
-                      type="button"
-                      className="auth-btn-secondary"
-                      data-testid="google-json-paste-toggle"
-                      aria-expanded={googleJsonPasteOpen}
-                      onClick={() => {
-                        setGoogleJsonPasteOpen(!googleJsonPasteOpen);
-                      }}
-                    >
-                      {googleJsonPasteOpen ? 'Hide Paste' : 'Paste JSON'}
-                    </button>
-                  </div>
+              {/* Provider Kind */}
+              <div className="auth-editor-prop-row">
+                <label className="auth-editor-label" htmlFor="card-provider-kind">
+                  Provider Kind
+                </label>
+                <select
+                  id="card-provider-kind"
+                  className="auth-editor-select"
+                  value={providerKind}
+                  onChange={(e) => {
+                    setProviderKind(e.target.value as ProviderKind);
+                  }}
+                  disabled={isEdit || isSubmitting}
+                >
+                  <option value="OIDC">OIDC</option>
+                  <option value="OAUTH2">OAuth 2.0</option>
+                  <option value="LDAP">LDAP / Active Directory</option>
+                  {isEdit && providerKind === 'LOCAL_ADMIN' ? (
+                    <option value="LOCAL_ADMIN">Local Administrator</option>
+                  ) : null}
+                </select>
+              </div>
 
-                  {googleJsonError && (
-                    <div className="auth-editor-error" role="alert" data-testid="google-json-error">
-                      {googleJsonError}
-                    </div>
-                  )}
+              {/* Display Name */}
+              <div className="auth-editor-prop-row">
+                <label className="auth-editor-label" htmlFor="card-display-name">
+                  Display Name
+                </label>
+                <input
+                  id="card-display-name"
+                  type="text"
+                  className="auth-editor-input"
+                  value={displayName}
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setDisplayName(val);
+                    if (!isEdit && !slugCustomized) {
+                      const autoSlug = val
+                        .toLowerCase()
+                        .replace(/[^a-z0-9]+/g, '-')
+                        .replace(/^-+|-+$/g, '')
+                        .slice(0, 48);
+                      if (autoSlug) setSlug(autoSlug);
+                    }
+                  }}
+                  disabled={isSubmitting}
+                  placeholder="e.g. Google Workspace, Corporate Active Directory"
+                  maxLength={80}
+                  required
+                />
+              </div>
+              {fieldErrors.displayName ? (
+                <div className="auth-editor-error">{fieldErrors.displayName}</div>
+              ) : null}
 
-                  {/* Drag-and-drop & File Upload Button */}
-                  <div
-                    className={`auth-google-json-dropzone ${isDraggingOver ? 'auth-google-json-dropzone--active' : ''}`}
-                    data-testid="google-json-dropzone"
-                    onDragOver={(e) => {
-                      e.preventDefault();
-                      setIsDraggingOver(true);
-                    }}
-                    onDragLeave={() => {
-                      setIsDraggingOver(false);
-                    }}
-                    onDrop={(e) => {
-                      e.preventDefault();
-                      setIsDraggingOver(false);
-                      const file = e.dataTransfer.files[0];
-                      if (file) {
-                        const reader = new FileReader();
-                        reader.onload = (ev) => {
-                          const text = ev.target?.result;
-                          if (typeof text === 'string') {
-                            processGoogleJsonContent(text);
-                          }
-                        };
-                        reader.readAsText(file);
-                      }
-                    }}
-                  >
-                    <p>Drag and drop <code>client_secret_*.json</code> here, or</p>
+              {/* Enable Card Toggle */}
+              <div className="auth-editor-prop-row">
+                <label className="auth-editor-label" htmlFor="card-is-enabled">
+                  Enable Card
+                </label>
+                <input
+                  id="card-is-enabled"
+                  type="checkbox"
+                  checked={isEnabled}
+                  onChange={(e) => {
+                    setIsEnabled(e.target.checked);
+                  }}
+                  disabled={isSubmitting}
+                />
+              </div>
+
+              {/* Primary Connection Settings: OIDC / OAuth 2.0 */}
+              {providerKind === 'OIDC' || providerKind === 'OAUTH2' ? (
+                <div>
+                  <div className="auth-editor-prop-row">
+                    <label className="auth-editor-label" htmlFor="card-issuer-url">
+                      Issuer URL
+                    </label>
                     <input
-                      ref={fileInputRef}
-                      type="file"
-                      accept=".json,application/json"
-                      style={{ display: 'none' }}
+                      id="card-issuer-url"
+                      type="url"
+                      className="auth-editor-input"
+                      value={issuerUrl}
                       onChange={(e) => {
-                        const file = e.target.files?.[0];
-                        if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (ev) => {
-                            const text = ev.target?.result;
-                            if (typeof text === 'string') {
-                              processGoogleJsonContent(text);
-                            }
-                          };
-                          reader.readAsText(file);
-                        }
+                        setIssuerUrl(e.target.value);
                       }}
+                      disabled={isSubmitting}
+                      placeholder="https://accounts.google.com"
+                      required={providerKind === 'OIDC'}
                     />
-                    <button
-                      type="button"
-                      className="auth-btn-secondary"
-                      data-testid="google-json-upload-btn"
-                      style={{ marginTop: '8px' }}
-                      onClick={() => {
-                        fileInputRef.current?.click();
-                      }}
-                    >
-                      Upload JSON File
-                    </button>
                   </div>
+                  {fieldErrors.issuerUrl ? (
+                    <div className="auth-editor-error">{fieldErrors.issuerUrl}</div>
+                  ) : null}
 
-                  {/* Paste JSON Disclosure */}
-                  {googleJsonPasteOpen && (
-                    <div className="auth-google-json-paste-box">
-                      <textarea
-                        className="auth-google-json-textarea"
-                        placeholder="Paste full Google Cloud Console web client JSON here..."
-                        value={googleJsonPasteText}
-                        onChange={(e) => {
-                          setGoogleJsonPasteText(e.target.value);
-                        }}
-                        aria-label="Paste Google Cloud Console client JSON"
+                  <div className="auth-editor-prop-row">
+                    <label className="auth-editor-label" htmlFor="card-callback-url">
+                      Authorized Redirect URI (Callback URL)
+                    </label>
+                    <div className="auth-editor-input-group">
+                      <input
+                        id="card-callback-url"
+                        data-testid="oauth-callback-url"
+                        type="text"
+                        className="auth-editor-input"
+                        value={
+                          `${window.location.origin}/api/v1/auth/oidc/${slug.trim() || 'oauth1'}/callback`
+                        }
+                        readOnly
                       />
                       <button
                         type="button"
-                        className="auth-studio-add-btn"
-                        data-testid="google-json-apply-btn"
+                        className="auth-btn-secondary"
                         onClick={() => {
-                          processGoogleJsonContent(googleJsonPasteText);
+                          const url = `${window.location.origin}/api/v1/auth/oidc/${slug.trim() || 'oauth1'}/callback`;
+                          void navigator.clipboard.writeText(url);
+                          setCopiedCallback(true);
+                          setTimeout(() => {
+                            setCopiedCallback(false);
+                          }, 2000);
                         }}
+                        data-testid="copy-callback-url-btn"
                       >
-                        Apply Google JSON
+                        {copiedCallback ? 'Copied!' : 'Copy'}
                       </button>
                     </div>
-                  )}
+                  </div>
+                  <div className="auth-field-helper">
+                    Add this URL to your Identity Provider authorized redirect URIs.
+                  </div>
 
-                  {/* Status announcement and redirect URI match feedback */}
-                  {googleJsonPreview && (
-                    googleJsonPreview.callback_uri_matched ? (
-                      <div
-                        role="status"
-                        aria-live="polite"
-                        className="auth-google-json-status auth-google-json-status--ok"
-                        data-testid="google-json-redirect-ok"
-                      >
-                        <span>✓ Authorized Redirect URI matched in uploaded Google client configuration.</span>
-                      </div>
-                    ) : (
-                      <div
-                        role="status"
-                        aria-live="polite"
-                        className="auth-google-json-status auth-google-json-status--warning"
-                        data-testid="google-json-redirect-warning"
-                      >
-                        <strong>⚠️ Authorized Redirect URI mismatch</strong>
-                        <span>
-                          Expected: <code>{googleJsonPreview.expected_callback_uri}</code>
-                        </span>
-                        <div style={{ display: "flex", gap: "8px", marginTop: "4px" }}>
-                          <button
-                            type="button"
-                            className="auth-btn-secondary"
-                            onClick={() => {
-                              if (googleJsonPreview.expected_callback_uri) {
-                                void navigator.clipboard.writeText(googleJsonPreview.expected_callback_uri);
-                              }
-                            }}
-                          >
-                            Copy Expected Callback URL
-                          </button>
-                        </div>
-                        {googleJsonPreview.redirect_uris.length > 0 && (
-                          <details style={{ marginTop: "6px" }}>
-                            <summary style={{ cursor: "pointer" }}>
-                              URIs found in Google JSON ({googleJsonPreview.redirect_uris.length})
-                            </summary>
-                            <ul className="auth-google-json-uris-list">
-                              {googleJsonPreview.redirect_uris.map((uri, idx) => (
-                                <li key={idx}>{uri}</li>
-                              ))}
-                            </ul>
-                          </details>
-                        )}
-                      </div>
-                    )
-                  )}
+                  <div className="auth-editor-prop-row">
+                    <span className="auth-editor-label">Authorized JavaScript Origin</span>
+                    <span className="auth-field-helper" data-testid="oauth-js-origin">
+                      {window.location.origin}
+                    </span>
+                  </div>
+
+                  <div className="auth-editor-prop-row">
+                    <label className="auth-editor-label" htmlFor="card-client-id">
+                      Client ID
+                    </label>
+                    <input
+                      id="card-client-id"
+                      type="text"
+                      className="auth-editor-input"
+                      value={clientId}
+                      onChange={(e) => {
+                        setClientId(e.target.value);
+                      }}
+                      disabled={isSubmitting}
+                      placeholder="e.g. 123456789-abcdef.apps.googleusercontent.com"
+                      required
+                    />
+                  </div>
+                  {fieldErrors.clientId ? (
+                    <div className="auth-editor-error">{fieldErrors.clientId}</div>
+                  ) : null}
+
+                  <div className="auth-editor-prop-row">
+                    <label className="auth-editor-label" htmlFor="card-secret">
+                      Client Secret
+                    </label>
+                    <input
+                      id="card-secret"
+                      type="password"
+                      className="auth-editor-input"
+                      value={secretInput}
+                      onChange={(e) => {
+                        setSecretInput(e.target.value);
+                      }}
+                      disabled={isSubmitting || (isEdit && !replaceSecret)}
+                      placeholder={secretPlaceholder}
+                    />
+                  </div>
+
+                  {isEdit && card?.has_secret ? (
+                    <div className="auth-editor-prop-row">
+                      <label className="auth-editor-label" htmlFor="card-replace-secret">
+                        Replace Stored Secret
+                      </label>
+                      <input
+                        id="card-replace-secret"
+                        type="checkbox"
+                        checked={replaceSecret}
+                        onChange={(e) => {
+                          setReplaceSecret(e.target.checked);
+                          if (!e.target.checked) setSecretInput('');
+                        }}
+                        disabled={isSubmitting}
+                      />
+                    </div>
+                  ) : null}
                 </div>
-              )}
-
-
-              {providerKind === 'OIDC' || providerKind === 'OAUTH2' ? (
-            <div>
-              <div className="auth-editor-prop-row">
-                <label className="auth-editor-label" htmlFor="card-callback-url">
-                  Authorized Redirect URI (Callback URL)
-                </label>
-                <div className="auth-editor-input-group">
-                  <input
-                    id="card-callback-url"
-                    data-testid="oauth-callback-url"
-                    type="text"
-                    className="auth-editor-input"
-                    value={
-                      `${window.location.origin}/api/v1/auth/oidc/${slug.trim() || 'oauth1'}/callback`
-                    }
-                    readOnly
-                  />
-                  <button
-                    type="button"
-                    className="auth-btn-secondary"
-                    onClick={() => {
-                      const url = `${window.location.origin}/api/v1/auth/oidc/${slug.trim() || 'oauth1'}/callback`;
-                      void navigator.clipboard.writeText(url);
-                      setCopiedCallback(true);
-                      setTimeout(() => { setCopiedCallback(false); }, 2000);
-                    }}
-                    data-testid="copy-callback-url-btn"
-                  >
-                    {copiedCallback ? 'Copied!' : 'Copy'}
-                  </button>
-                </div>
-              </div>
-
-              <div className="auth-editor-prop-row">
-                <span className="auth-editor-label">Authorized JavaScript Origin</span>
-                <span className="auth-field-helper" data-testid="oauth-js-origin">
-                  {window.location.origin}
-                </span>
-              </div>
-
-              <div className="auth-editor-prop-row">
-                <label className="auth-editor-label" htmlFor="card-client-id">
-                  Client ID
-                </label>
-                <input
-                  id="card-client-id"
-                  type="text"
-                  className="auth-editor-input"
-                  value={clientId}
-                  onChange={(e) => { setClientId(e.target.value); }}
-                  disabled={isSubmitting}
-                  placeholder="e.g. 123456789-abcdef.apps.googleusercontent.com"
-                  required
-                />
-              </div>
-              {fieldErrors.clientId ? (
-                <div className="auth-editor-error">{fieldErrors.clientId}</div>
-              ) : null}
-
-              <div className="auth-editor-prop-row">
-                <label className="auth-editor-label" htmlFor="card-secret">
-                  Client Secret
-                </label>
-                <input
-                  id="card-secret"
-                  type="password"
-                  className="auth-editor-input"
-                  value={secretInput}
-                  onChange={(e) => { setSecretInput(e.target.value); }}
-                  disabled={isSubmitting || (isEdit && !replaceSecret)}
-                  placeholder={secretPlaceholder}
-                />
-              </div>
-
-              {isEdit && card?.has_secret ? (
-                <div className="auth-editor-prop-row">
-                  <label className="auth-editor-label" htmlFor="card-replace-secret">
-                    Replace Stored Secret
-                  </label>
-                  <input
-                    id="card-replace-secret"
-                    type="checkbox"
-                    checked={replaceSecret}
-                    onChange={(e) => {
-                      setReplaceSecret(e.target.checked);
-                      if (!e.target.checked) setSecretInput('');
-                    }}
-                    disabled={isSubmitting}
-                  />
-                </div>
-              ) : null}
-
-              <div className="auth-editor-prop-row">
-                <label className="auth-editor-label" htmlFor="card-access-policy">
-                  Access Policy
-                </label>
-                <select
-                  id="card-access-policy"
-                  className="auth-editor-select"
-                  value={accessPolicyMode}
-                  onChange={(e) => { setAccessPolicyMode(e.target.value as 'any_user' | 'restricted'); }}
-                  disabled={isSubmitting}
-                >
-                  <option value="any_user">Any User in Domain/Directory (Auto-provisions Member)</option>
-                  <option value="restricted">Restricted by User/Admin Allowlist</option>
-                </select>
-              </div>
-
-              {accessPolicyMode === 'restricted' ? (
+              ) : providerKind === 'LDAP' ? (
                 <div>
                   <div className="auth-editor-prop-row">
-                    <label className="auth-editor-label" htmlFor="card-admin-allowlist">
-                      Admin Allowlist
+                    <label className="auth-editor-label" htmlFor="card-server-url">
+                      Server URL
                     </label>
                     <input
-                      id="card-admin-allowlist"
+                      id="card-server-url"
                       type="text"
                       className="auth-editor-input"
-                      value={adminAllowlist}
-                      onChange={(e) => { setAdminAllowlist(e.target.value); }}
+                      value={serverUrl}
+                      onChange={(e) => {
+                        handleServerUrlChange(e.target.value);
+                      }}
                       disabled={isSubmitting}
-                      placeholder="e.g. alice@corp.com, admin-user"
+                      placeholder="ldaps://ad.corp.example.com:636"
+                      required
                     />
                   </div>
-                  <div className="auth-field-helper">
-                    Users matching this list receive SERVER_ADMIN automatically.
-                  </div>
+                  {fieldErrors.serverUrl ? (
+                    <div className="auth-editor-error">{fieldErrors.serverUrl}</div>
+                  ) : null}
 
                   <div className="auth-editor-prop-row">
-                    <label className="auth-editor-label" htmlFor="card-user-allowlist">
-                      User Allowlist
+                    <label className="auth-editor-label" htmlFor="card-bind-dn">
+                      Bind DN
                     </label>
                     <input
-                      id="card-user-allowlist"
+                      id="card-bind-dn"
                       type="text"
                       className="auth-editor-input"
-                      value={userAllowlist}
-                      onChange={(e) => { setUserAllowlist(e.target.value); }}
+                      value={bindDn}
+                      onChange={(e) => {
+                        setBindDn(e.target.value);
+                      }}
                       disabled={isSubmitting}
-                      placeholder="e.g. bob@corp.com, carol@corp.com"
+                      placeholder="cn=svc-kanban,ou=services,dc=corp,dc=com"
+                      required
                     />
                   </div>
-                  <div className="auth-field-helper">
-                    Users matching this list receive WORKSPACE_MEMBER automatically.
+                  {fieldErrors.bindDn ? (
+                    <div className="auth-editor-error">{fieldErrors.bindDn}</div>
+                  ) : null}
+
+                  <div className="auth-editor-prop-row">
+                    <label className="auth-editor-label" htmlFor="card-secret">
+                      Bind DN Password
+                    </label>
+                    <input
+                      id="card-secret"
+                      type="password"
+                      className="auth-editor-input"
+                      value={secretInput}
+                      onChange={(e) => {
+                        setSecretInput(e.target.value);
+                      }}
+                      disabled={isSubmitting || (isEdit && !replaceSecret)}
+                      placeholder={secretPlaceholder}
+                    />
                   </div>
-                </div>
-              ) : null}
-            </div>
-          ) : providerKind === 'LDAP' ? (
-            <div>
-              <div className="auth-editor-prop-row">
-                <label className="auth-editor-label" htmlFor="card-server-url">
-                  Server URL
-                </label>
-                <input
-                  id="card-server-url"
-                  type="text"
-                  className="auth-editor-input"
-                  value={serverUrl}
-                  onChange={(e) => { handleServerUrlChange(e.target.value); }}
-                  disabled={isSubmitting}
-                  placeholder="ldaps://ad.corp.example.com:636"
-                  required
-                />
-              </div>
-              {fieldErrors.serverUrl ? (
-                <div className="auth-editor-error">{fieldErrors.serverUrl}</div>
-              ) : null}
 
-              <div className="auth-editor-prop-row">
-                <label className="auth-editor-label" htmlFor="card-bind-dn">
-                  Bind DN
-                </label>
-                <input
-                  id="card-bind-dn"
-                  type="text"
-                  className="auth-editor-input"
-                  value={bindDn}
-                  onChange={(e) => { setBindDn(e.target.value); }}
-                  disabled={isSubmitting}
-                  placeholder="cn=svc-kanban,ou=services,dc=corp,dc=com"
-                  required
-                />
-              </div>
-              {fieldErrors.bindDn ? (
-                <div className="auth-editor-error">{fieldErrors.bindDn}</div>
-              ) : null}
+                  {isEdit && card?.has_secret ? (
+                    <div className="auth-editor-prop-row">
+                      <label className="auth-editor-label" htmlFor="card-replace-secret">
+                        Replace Stored Secret
+                      </label>
+                      <input
+                        id="card-replace-secret"
+                        type="checkbox"
+                        checked={replaceSecret}
+                        onChange={(e) => {
+                          setReplaceSecret(e.target.checked);
+                          if (!e.target.checked) setSecretInput('');
+                        }}
+                        disabled={isSubmitting}
+                      />
+                    </div>
+                  ) : null}
 
-              <div className="auth-editor-prop-row">
-                <label className="auth-editor-label" htmlFor="card-secret">
-                  Bind DN Password
-                </label>
-                <input
-                  id="card-secret"
-                  type="password"
-                  className="auth-editor-input"
-                  value={secretInput}
-                  onChange={(e) => { setSecretInput(e.target.value); }}
-                  disabled={isSubmitting || (isEdit && !replaceSecret)}
-                  placeholder={secretPlaceholder}
-                />
-              </div>
-
-              {isEdit && card?.has_secret ? (
-                <div className="auth-editor-prop-row">
-                  <label className="auth-editor-label" htmlFor="card-replace-secret">
-                    Replace Stored Secret
-                  </label>
-                  <input
-                    id="card-replace-secret"
-                    type="checkbox"
-                    checked={replaceSecret}
-                    onChange={(e) => {
-                      setReplaceSecret(e.target.checked);
-                      if (!e.target.checked) setSecretInput('');
-                    }}
-                    disabled={isSubmitting}
-                  />
+                  <div className="auth-editor-prop-row">
+                    <label className="auth-editor-label" htmlFor="card-base-dn">
+                      Base DN
+                    </label>
+                    <input
+                      id="card-base-dn"
+                      type="text"
+                      className="auth-editor-input"
+                      value={baseDn}
+                      onChange={(e) => {
+                        setBaseDn(e.target.value);
+                      }}
+                      disabled={isSubmitting}
+                      placeholder="dc=corp,dc=com"
+                      required
+                    />
+                  </div>
+                  {fieldErrors.baseDn ? (
+                    <div className="auth-editor-error">{fieldErrors.baseDn}</div>
+                  ) : null}
                 </div>
               ) : null}
 
-              <div className="auth-editor-prop-row">
-                <label className="auth-editor-label" htmlFor="card-base-dn">
-                  Base DN
-                </label>
-                <input
-                  id="card-base-dn"
-                  type="text"
-                  className="auth-editor-input"
-                  value={baseDn}
-                  onChange={(e) => { setBaseDn(e.target.value); }}
-                  disabled={isSubmitting}
-                  placeholder="dc=corp,dc=com"
-                  required
-                />
-              </div>
-              {fieldErrors.baseDn ? (
-                <div className="auth-editor-error">{fieldErrors.baseDn}</div>
-              ) : null}
-
-              <div className="auth-editor-prop-row">
-                <label className="auth-editor-label" htmlFor="card-access-policy">
-                  Access Policy
-                </label>
-                <select
-                  id="card-access-policy"
-                  className="auth-editor-select"
-                  value={accessPolicyMode}
-                  onChange={(e) => { setAccessPolicyMode(e.target.value as 'any_user' | 'restricted'); }}
-                  disabled={isSubmitting}
-                >
-                  <option value="any_user">Any User in Directory (Auto-provisions Member)</option>
-                  <option value="restricted">Group-Restricted Access (Admin / User Groups)</option>
-                </select>
-              </div>
-
-              {accessPolicyMode === 'restricted' ? (
-                <div>
-                  <div className="auth-editor-prop-row">
-                    <label className="auth-editor-label" htmlFor="card-admin-groups">
-                      Admin Groups
-                    </label>
-                    <input
-                      id="card-admin-groups"
-                      type="text"
-                      className="auth-editor-input"
-                      value={adminGroups}
-                      onChange={(e) => { setAdminGroups(e.target.value); }}
-                      disabled={isSubmitting}
-                      placeholder="e.g. Domain Admins, Enterprise Admins"
-                    />
-                  </div>
-                  <div className="auth-field-helper">
-                    Members of these groups receive SERVER_ADMIN automatically.
-                  </div>
-
-                  <div className="auth-editor-prop-row">
-                    <label className="auth-editor-label" htmlFor="card-user-groups">
-                      User Groups
-                    </label>
-                    <input
-                      id="card-user-groups"
-                      type="text"
-                      className="auth-editor-input"
-                      value={userGroups}
-                      onChange={(e) => { setUserGroups(e.target.value); }}
-                      disabled={isSubmitting}
-                      placeholder="e.g. Engineering, Product, Domain Users"
-                    />
-                  </div>
-                  <div className="auth-field-helper">
-                    Members of these groups receive WORKSPACE_MEMBER automatically.
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ) : null}
-
-          {/* SECTION 2: OPTIONAL & ADVANCED SETTINGS ACCORDION */}
-          <details className="auth-advanced-accordion" open={isEdit}>
-            <summary className="auth-advanced-summary">
-              Optional &amp; Advanced Settings
-            </summary>
-
-            <div className="auth-editor-prop-row">
-              <label className="auth-editor-label" htmlFor="card-provider-kind">
-                Provider Kind
-              </label>
-              <select
-                id="card-provider-kind"
-                className="auth-editor-select"
-                value={providerKind}
-                onChange={(e) => { setProviderKind(e.target.value as ProviderKind); }}
-                disabled={isEdit || isSubmitting}
+              {/* SECTION 2: OPTIONAL & ADVANCED SETTINGS (Progressive Disclosure) */}
+              <AdvancedSection
+                title="Optional & Advanced Settings"
+                summary="Scopes, slug, branding, access policies, and advanced connection parameters"
+                testId="auth-advanced-section"
+                defaultOpen={false}
+                activeOverridesCount={activeAdvancedCount}
+                hasErrors={hasAdvancedErrors}
               >
-                <option value="OIDC">OIDC</option>
-                <option value="OAUTH2">OAuth 2.0</option>
-                <option value="LDAP">LDAP / Active Directory</option>
-                {isEdit && providerKind === 'LOCAL_ADMIN' ? (
-                  <option value="LOCAL_ADMIN">Local Administrator</option>
-                ) : null}
-              </select>
-            </div>
-
-            <div className="auth-editor-prop-row">
-              <label className="auth-editor-label" htmlFor="card-slug">
-                Slug Identifier
-              </label>
-              <input
-                id="card-slug"
-                type="text"
-                className="auth-editor-input"
-                value={slug}
-                onChange={(e) => { setSlug(e.target.value); }}
-                disabled={isEdit || isSubmitting}
-                placeholder="e.g. oauth1, google-oauth, ad-ldap"
-                maxLength={48}
-              />
-            </div>
-            {fieldErrors.slug ? (
-              <div className="auth-editor-error">{fieldErrors.slug}</div>
-            ) : null}
-            <div className="auth-field-helper">
-              Unique identifier slug for URLs and card references. Auto-generated if left blank.
-            </div>
-
-            <div className="auth-editor-prop-row">
-              <label className="auth-editor-label" htmlFor="card-display-name">
-                Display Name
-              </label>
-              <input
-                id="card-display-name"
-                type="text"
-                className="auth-editor-input"
-                value={displayName}
-                onChange={(e) => { setDisplayName(e.target.value); }}
-                disabled={isSubmitting}
-                placeholder="e.g. Google Workspace, Corporate Active Directory"
-                maxLength={80}
-                required
-              />
-            </div>
-            {fieldErrors.displayName ? (
-              <div className="auth-editor-error">{fieldErrors.displayName}</div>
-            ) : null}
-
-            <div className="auth-editor-prop-row">
-              <label className="auth-editor-label" htmlFor="card-subtext">
-                Button Subtext
-              </label>
-              <input
-                id="card-subtext"
-                type="text"
-                className="auth-editor-input"
-                value={buttonSubtext}
-                onChange={(e) => { setButtonSubtext(e.target.value); }}
-                disabled={isSubmitting}
-                placeholder="e.g. Sign in with your work email (@corp.com)"
-                maxLength={120}
-              />
-            </div>
-            {fieldErrors.buttonSubtext ? (
-              <div className="auth-editor-error">{fieldErrors.buttonSubtext}</div>
-            ) : null}
-            <div className="auth-field-helper">
-              Subtitle displayed directly beneath the login button to guide users.
-            </div>
-
-            <div className="auth-editor-prop-row">
-              <label className="auth-editor-label" htmlFor="card-icon-preset">
-                Icon Preset
-              </label>
-              <div className="auth-editor-input-group">
-                <select
-                  id="card-icon-preset"
-                  className="auth-editor-select"
-                  value={iconPreset}
-                  onChange={(e) => { setIconPreset(e.target.value); }}
-                  disabled={isSubmitting}
-                >
-                  <option value="shield">Shield</option>
-                  <option value="key">Key</option>
-                  <option value="lock">Lock</option>
-                  <option value="globe">Globe</option>
-                  <option value="google">Google</option>
-                  <option value="github">GitHub</option>
-                  <option value="active-directory">Active Directory</option>
-                  <option value="ldap">LDAP</option>
-                  <option value="local-admin">Local Administrator</option>
-                </select>
-                <span className="auth-card-icon-preview" aria-hidden="true">
-                  {renderAuthIcon(iconPreset, 20)}
-                </span>
-              </div>
-            </div>
-
-            <div className="auth-editor-prop-row">
-              <label className="auth-editor-label" htmlFor="card-auto-provision">
-                Auto-provision Users
-              </label>
-              <input
-                id="card-auto-provision"
-                type="checkbox"
-                checked={autoProvisionUsers}
-                onChange={(e) => { setAutoProvisionUsers(e.target.checked); }}
-                disabled={isSubmitting}
-              />
-            </div>
-
-            <div className="auth-editor-prop-row">
-              <label className="auth-editor-label" htmlFor="card-email-domains">
-                Allowed Email Domains
-              </label>
-              <input
-                id="card-email-domains"
-                type="text"
-                className="auth-editor-input"
-                value={allowedEmailDomains}
-                onChange={(e) => { setAllowedEmailDomains(e.target.value); }}
-                disabled={isSubmitting}
-                placeholder="e.g. corp.example.com, example.org"
-              />
-            </div>
-
-            {/* Provider specific optional fields */}
-            {providerKind === 'OIDC' || providerKind === 'OAUTH2' ? (
-              <div>
                 <div className="auth-editor-prop-row">
-                  <label className="auth-editor-label" htmlFor="card-issuer-url">
-                    Issuer URL
+                  <label className="auth-editor-label" htmlFor="card-slug">
+                    Slug Identifier
                   </label>
                   <input
-                    id="card-issuer-url"
-                    type="url"
-                    className="auth-editor-input"
-                    value={issuerUrl}
-                    onChange={(e) => { setIssuerUrl(e.target.value); }}
-                    disabled={isSubmitting}
-                    placeholder="https://accounts.google.com"
-                  />
-                </div>
-                {fieldErrors.issuerUrl ? (
-                  <div className="auth-editor-error">{fieldErrors.issuerUrl}</div>
-                ) : null}
-
-                <div className="auth-editor-prop-row">
-                  <label className="auth-editor-label" htmlFor="card-scopes">
-                    Scopes
-                  </label>
-                  <input
-                    id="card-scopes"
+                    id="card-slug"
                     type="text"
                     className="auth-editor-input"
-                    value={scopes}
-                    onChange={(e) => { setScopes(e.target.value); }}
+                    value={slug}
+                    onChange={(e) => {
+                      setSlug(e.target.value);
+                      setSlugCustomized(true);
+                    }}
+                    disabled={isEdit || isSubmitting}
+                    placeholder="e.g. oauth1, google-oauth, ad-ldap"
+                    maxLength={48}
+                  />
+                </div>
+                {fieldErrors.slug ? (
+                  <div className="auth-editor-error">{fieldErrors.slug}</div>
+                ) : null}
+                <div className="auth-field-helper">
+                  Unique identifier slug for URLs and card references. Auto-generated if left blank.
+                </div>
+
+                <div className="auth-editor-prop-row">
+                  <label className="auth-editor-label" htmlFor="card-subtext">
+                    Button Subtext
+                  </label>
+                  <input
+                    id="card-subtext"
+                    type="text"
+                    className="auth-editor-input"
+                    value={buttonSubtext}
+                    onChange={(e) => {
+                      setButtonSubtext(e.target.value);
+                    }}
                     disabled={isSubmitting}
-                    placeholder="openid, profile, email"
+                    placeholder="e.g. Sign in with your work email (@corp.com)"
+                    maxLength={120}
+                  />
+                </div>
+                {fieldErrors.buttonSubtext ? (
+                  <div className="auth-editor-error">{fieldErrors.buttonSubtext}</div>
+                ) : null}
+                <div className="auth-field-helper">
+                  Subtitle displayed directly beneath the login button to guide users.
+                </div>
+
+                <div className="auth-editor-prop-row">
+                  <label className="auth-editor-label" htmlFor="card-icon-preset">
+                    Icon Preset
+                  </label>
+                  <div className="auth-editor-input-group">
+                    <select
+                      id="card-icon-preset"
+                      className="auth-editor-select"
+                      value={iconPreset}
+                      onChange={(e) => {
+                        setIconPreset(e.target.value);
+                      }}
+                      disabled={isSubmitting}
+                    >
+                      <option value="shield">Shield</option>
+                      <option value="key">Key</option>
+                      <option value="lock">Lock</option>
+                      <option value="globe">Globe</option>
+                      <option value="google">Google</option>
+                      <option value="github">GitHub</option>
+                      <option value="active-directory">Active Directory</option>
+                      <option value="ldap">LDAP</option>
+                      <option value="local-admin">Local Administrator</option>
+                    </select>
+                    <span className="auth-card-icon-preview" aria-hidden="true">
+                      {renderAuthIcon(iconPreset, 20)}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="auth-editor-prop-row">
+                  <label className="auth-editor-label" htmlFor="card-auto-provision">
+                    Auto-provision Users
+                  </label>
+                  <input
+                    id="card-auto-provision"
+                    type="checkbox"
+                    checked={autoProvisionUsers}
+                    onChange={(e) => {
+                      setAutoProvisionUsers(e.target.checked);
+                    }}
+                    disabled={isSubmitting}
                   />
                 </div>
 
                 <div className="auth-editor-prop-row">
-                  <label className="auth-editor-label" htmlFor="card-token-auth">
-                    Token Auth Method
+                  <label className="auth-editor-label" htmlFor="card-email-domains">
+                    Allowed Email Domains
+                  </label>
+                  <input
+                    id="card-email-domains"
+                    type="text"
+                    className="auth-editor-input"
+                    value={allowedEmailDomains}
+                    onChange={(e) => {
+                      setAllowedEmailDomains(e.target.value);
+                    }}
+                    disabled={isSubmitting}
+                    placeholder="e.g. corp.example.com, example.org"
+                  />
+                </div>
+
+                <div className="auth-editor-prop-row">
+                  <label className="auth-editor-label" htmlFor="card-access-policy">
+                    Access Policy
                   </label>
                   <select
-                    id="card-token-auth"
+                    id="card-access-policy"
                     className="auth-editor-select"
-                    value={tokenAuthMethod}
+                    value={accessPolicyMode}
                     onChange={(e) => {
-                      setTokenAuthMethod(e.target.value as 'client_secret_basic' | 'private_key_jwt');
+                      setAccessPolicyMode(e.target.value as 'any_user' | 'restricted');
                     }}
                     disabled={isSubmitting}
                   >
-                    <option value="client_secret_basic">client_secret_basic</option>
-                    <option value="private_key_jwt">private_key_jwt (Asymmetric)</option>
+                    <option value="any_user">Any User in Domain/Directory (Auto-provisions Member)</option>
+                    <option value="restricted">Restricted by User/Admin Allowlist</option>
                   </select>
                 </div>
-              </div>
-            ) : providerKind === 'LDAP' ? (
-              <div>
-                <div className="auth-editor-prop-row">
-                  <label className="auth-editor-label" htmlFor="card-starttls">
-                    StartTLS
-                  </label>
-                  <input
-                    id="card-starttls"
-                    type="checkbox"
-                    checked={startTls}
-                    onChange={(e) => { setStartTls(e.target.checked); }}
-                    disabled={isSubmitting || serverUrl.trim().toLowerCase().startsWith('ldap://')}
-                  />
-                </div>
 
-                <div className="auth-editor-prop-row">
-                  <label className="auth-editor-label" htmlFor="card-user-filter">
-                    User Filter
-                  </label>
-                  <input
-                    id="card-user-filter"
-                    type="text"
-                    className="auth-editor-input"
-                    value={userFilter}
-                    onChange={(e) => { setUserFilter(e.target.value); }}
-                    disabled={isSubmitting}
-                    placeholder="(&(objectClass=person)(uid={username}))"
-                  />
-                </div>
+                {accessPolicyMode === 'restricted' ? (
+                  <div>
+                    <div className="auth-editor-prop-row">
+                      <label className="auth-editor-label" htmlFor="card-admin-allowlist">
+                        Admin Allowlist
+                      </label>
+                      <input
+                        id="card-admin-allowlist"
+                        type="text"
+                        className="auth-editor-input"
+                        value={adminAllowlist}
+                        onChange={(e) => {
+                          setAdminAllowlist(e.target.value);
+                        }}
+                        disabled={isSubmitting}
+                        placeholder="e.g. alice@corp.com, admin-user"
+                      />
+                    </div>
+                    <div className="auth-field-helper">
+                      Users matching this list receive SERVER_ADMIN automatically.
+                    </div>
 
-                <div className="auth-editor-prop-row">
-                  <label className="auth-editor-label" htmlFor="card-subject-attr">
-                    Subject Attribute
-                  </label>
-                  <input
-                    id="card-subject-attr"
-                    type="text"
-                    className="auth-editor-input"
-                    value={subjectAttribute}
-                    onChange={(e) => { setSubjectAttribute(e.target.value); }}
-                    disabled={isSubmitting}
-                    placeholder="objectGUID (AD) or entryUUID (OpenLDAP)"
-                  />
-                </div>
+                    <div className="auth-editor-prop-row">
+                      <label className="auth-editor-label" htmlFor="card-user-allowlist">
+                        User Allowlist
+                      </label>
+                      <input
+                        id="card-user-allowlist"
+                        type="text"
+                        className="auth-editor-input"
+                        value={userAllowlist}
+                        onChange={(e) => {
+                          setUserAllowlist(e.target.value);
+                        }}
+                        disabled={isSubmitting}
+                        placeholder="e.g. bob@corp.com, carol@corp.com"
+                      />
+                    </div>
+                    <div className="auth-field-helper">
+                      Users matching this list receive WORKSPACE_MEMBER automatically.
+                    </div>
 
-                <div className="auth-editor-prop-row">
-                  <label className="auth-editor-label" htmlFor="card-email-attr">
-                    Email Attribute
-                  </label>
-                  <input
-                    id="card-email-attr"
-                    type="text"
-                    className="auth-editor-input"
-                    value={emailAttribute}
-                    onChange={(e) => { setEmailAttribute(e.target.value); }}
-                    disabled={isSubmitting}
-                    placeholder="mail"
-                  />
-                </div>
+                    {providerKind === 'LDAP' ? (
+                      <div>
+                        <div className="auth-editor-prop-row">
+                          <label className="auth-editor-label" htmlFor="card-admin-groups">
+                            Admin Groups
+                          </label>
+                          <input
+                            id="card-admin-groups"
+                            type="text"
+                            className="auth-editor-input"
+                            value={adminGroups}
+                            onChange={(e) => {
+                              setAdminGroups(e.target.value);
+                            }}
+                            disabled={isSubmitting}
+                            placeholder="e.g. Domain Admins, Enterprise Admins"
+                          />
+                        </div>
+                        <div className="auth-field-helper">
+                          Members of these groups receive SERVER_ADMIN automatically.
+                        </div>
 
-                <div className="auth-editor-prop-row">
-                  <label className="auth-editor-label" htmlFor="card-display-attr">
-                    Full Name Attribute
-                  </label>
-                  <input
-                    id="card-display-attr"
-                    type="text"
-                    className="auth-editor-input"
-                    value={displayNameAttribute}
-                    onChange={(e) => { setDisplayNameAttribute(e.target.value); }}
-                    disabled={isSubmitting}
-                    placeholder="displayName (AD) or cn (OpenLDAP)"
-                  />
-                </div>
-
-                <div className="auth-editor-prop-row">
-                  <label className="auth-editor-label" htmlFor="card-spki-pin">
-                    SPKI SHA-256 Pin
-                  </label>
-                  <input
-                    id="card-spki-pin"
-                    type="text"
-                    className="auth-editor-input"
-                    value={spkiPin}
-                    onChange={(e) => { setSpkiPin(e.target.value); }}
-                    disabled={isSubmitting}
-                    placeholder="64-character hex digest"
-                    maxLength={64}
-                  />
-                </div>
-                {fieldErrors.spkiPin ? (
-                  <div className="auth-editor-error">{fieldErrors.spkiPin}</div>
+                        <div className="auth-editor-prop-row">
+                          <label className="auth-editor-label" htmlFor="card-user-groups">
+                            User Groups
+                          </label>
+                          <input
+                            id="card-user-groups"
+                            type="text"
+                            className="auth-editor-input"
+                            value={userGroups}
+                            onChange={(e) => {
+                              setUserGroups(e.target.value);
+                            }}
+                            disabled={isSubmitting}
+                            placeholder="e.g. Engineering, Product, Domain Users"
+                          />
+                        </div>
+                        <div className="auth-field-helper">
+                          Members of these groups receive WORKSPACE_MEMBER automatically.
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                 ) : null}
 
-                <div className="auth-editor-prop-row">
-                  <label className="auth-editor-label" htmlFor="card-ca-pem">
-                    CA Certificate PEM
-                  </label>
-                  <textarea
-                    id="card-ca-pem"
-                    className="auth-editor-textarea"
-                    value={caPem}
-                    onChange={(e) => { setCaPem(e.target.value); }}
-                    disabled={isSubmitting}
-                    placeholder="-----BEGIN CERTIFICATE----- ... -----END CERTIFICATE-----"
-                    rows={3}
-                  />
-                </div>
-              </div>
-            ) : null}
-          </details>
-          </>
+                {/* Provider specific optional fields */}
+                {providerKind === 'OIDC' || providerKind === 'OAUTH2' ? (
+                  <div>
+                    {/* Google OAuth JSON Importer Section (KB-AUTH-JSON) */}
+                    <div className="auth-google-json-section" data-testid="google-json-import-section">
+                      <div className="auth-google-json-header">
+                        <span className="auth-google-json-title">
+                          <Google size={14} />
+                          <span>Google OAuth Client Secret JSON (client_secret_*.json)</span>
+                        </span>
+                        <button
+                          type="button"
+                          className="auth-btn-secondary"
+                          data-testid="google-json-paste-toggle"
+                          aria-expanded={googleJsonPasteOpen}
+                          onClick={() => {
+                            setGoogleJsonPasteOpen(!googleJsonPasteOpen);
+                          }}
+                        >
+                          {googleJsonPasteOpen ? 'Hide Paste' : 'Paste JSON'}
+                        </button>
+                      </div>
+
+                      {googleJsonError && (
+                        <div className="auth-editor-error" role="alert" data-testid="google-json-error">
+                          {googleJsonError}
+                        </div>
+                      )}
+
+                      {/* Drag-and-drop & File Upload Button */}
+                      <div
+                        className={`auth-google-json-dropzone ${isDraggingOver ? 'auth-google-json-dropzone--active' : ''}`}
+                        data-testid="google-json-dropzone"
+                        onDragOver={(e) => {
+                          e.preventDefault();
+                          setIsDraggingOver(true);
+                        }}
+                        onDragLeave={() => {
+                          setIsDraggingOver(false);
+                        }}
+                        onDrop={(e) => {
+                          e.preventDefault();
+                          setIsDraggingOver(false);
+                          const file = e.dataTransfer.files[0];
+                          if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              const text = ev.target?.result;
+                              if (typeof text === 'string') {
+                                processGoogleJsonContent(text);
+                              }
+                            };
+                            reader.readAsText(file);
+                          }
+                        }}
+                      >
+                        <p>Drag and drop <code>client_secret_*.json</code> here, or</p>
+                        <input
+                          ref={fileInputRef}
+                          type="file"
+                          accept=".json,application/json"
+                          className="auth-hidden-file-input"
+                          onChange={(e) => {
+                            const file = e.target.files?.[0];
+                            if (file) {
+                              const reader = new FileReader();
+                              reader.onload = (ev) => {
+                                const text = ev.target?.result;
+                                if (typeof text === 'string') {
+                                  processGoogleJsonContent(text);
+                                }
+                              };
+                              reader.readAsText(file);
+                            }
+                          }}
+                        />
+                        <button
+                          type="button"
+                          className="auth-btn-secondary auth-google-json-upload-btn"
+                          data-testid="google-json-upload-btn"
+                          onClick={() => {
+                            fileInputRef.current?.click();
+                          }}
+                        >
+                          Upload JSON File
+                        </button>
+                      </div>
+
+                      {/* Paste JSON Disclosure */}
+                      {googleJsonPasteOpen && (
+                        <div className="auth-google-json-paste-box">
+                          <textarea
+                            className="auth-google-json-textarea"
+                            placeholder="Paste full Google Cloud Console web client JSON here..."
+                            value={googleJsonPasteText}
+                            onChange={(e) => {
+                              setGoogleJsonPasteText(e.target.value);
+                            }}
+                            aria-label="Paste Google Cloud Console client JSON"
+                          />
+                          <button
+                            type="button"
+                            className="auth-studio-add-btn"
+                            data-testid="google-json-apply-btn"
+                            onClick={() => {
+                              processGoogleJsonContent(googleJsonPasteText);
+                            }}
+                          >
+                            Apply Google JSON
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Status announcement and redirect URI match feedback */}
+                      {googleJsonPreview && (
+                        googleJsonPreview.callback_uri_matched ? (
+                          <div
+                            role="status"
+                            aria-live="polite"
+                            className="auth-google-json-status auth-google-json-status--ok"
+                            data-testid="google-json-redirect-ok"
+                          >
+                            <span>✓ Authorized Redirect URI matched in uploaded Google client configuration.</span>
+                          </div>
+                        ) : (
+                          <div
+                            role="status"
+                            aria-live="polite"
+                            className="auth-google-json-status auth-google-json-status--warning"
+                            data-testid="google-json-redirect-warning"
+                          >
+                            <strong>⚠️ Authorized Redirect URI mismatch</strong>
+                            <span>
+                              Expected: <code>{googleJsonPreview.expected_callback_uri}</code>
+                            </span>
+                            <div className="auth-google-json-actions">
+                              <button
+                                type="button"
+                                className="auth-btn-secondary"
+                                onClick={() => {
+                                  if (googleJsonPreview.expected_callback_uri) {
+                                    void navigator.clipboard.writeText(googleJsonPreview.expected_callback_uri);
+                                  }
+                                }}
+                              >
+                                Copy Expected Callback URL
+                              </button>
+                            </div>
+                            {googleJsonPreview.redirect_uris.length > 0 && (
+                              <details className="auth-google-json-details">
+                                <summary className="auth-google-json-summary">
+                                  URIs found in Google JSON ({googleJsonPreview.redirect_uris.length})
+                                </summary>
+                                <ul className="auth-google-json-uris-list">
+                                  {googleJsonPreview.redirect_uris.map((uri, idx) => (
+                                    <li key={idx}>{uri}</li>
+                                  ))}
+                                </ul>
+                              </details>
+                            )}
+                          </div>
+                        )
+                      )}
+                    </div>
+
+                    <div className="auth-editor-prop-row">
+                      <label className="auth-editor-label" htmlFor="card-scopes">
+                        Scopes
+                      </label>
+                      <input
+                        id="card-scopes"
+                        type="text"
+                        className="auth-editor-input"
+                        value={scopes}
+                        onChange={(e) => {
+                          setScopes(e.target.value);
+                        }}
+                        disabled={isSubmitting}
+                        placeholder="openid, profile, email"
+                      />
+                    </div>
+
+                    <div className="auth-editor-prop-row">
+                      <label className="auth-editor-label" htmlFor="card-token-auth">
+                        Token Auth Method
+                      </label>
+                      <select
+                        id="card-token-auth"
+                        className="auth-editor-select"
+                        value={tokenAuthMethod}
+                        onChange={(e) => {
+                          setTokenAuthMethod(
+                            e.target.value as 'client_secret_basic' | 'private_key_jwt',
+                          );
+                        }}
+                        disabled={isSubmitting}
+                      >
+                        <option value="client_secret_basic">client_secret_basic</option>
+                        <option value="private_key_jwt">private_key_jwt (Asymmetric)</option>
+                      </select>
+                    </div>
+                  </div>
+                ) : providerKind === 'LDAP' ? (
+                  <div>
+                    <div className="auth-editor-prop-row">
+                      <label className="auth-editor-label" htmlFor="card-starttls">
+                        StartTLS
+                      </label>
+                      <input
+                        id="card-starttls"
+                        type="checkbox"
+                        checked={startTls}
+                        onChange={(e) => {
+                          setStartTls(e.target.checked);
+                        }}
+                        disabled={
+                          isSubmitting || serverUrl.trim().toLowerCase().startsWith('ldap://')
+                        }
+                      />
+                    </div>
+
+                    <div className="auth-editor-prop-row">
+                      <label className="auth-editor-label" htmlFor="card-user-filter">
+                        User Filter
+                      </label>
+                      <input
+                        id="card-user-filter"
+                        type="text"
+                        className="auth-editor-input"
+                        value={userFilter}
+                        onChange={(e) => {
+                          setUserFilter(e.target.value);
+                        }}
+                        disabled={isSubmitting}
+                        placeholder="(&(objectClass=person)(uid={username}))"
+                      />
+                    </div>
+
+                    <div className="auth-editor-prop-row">
+                      <label className="auth-editor-label" htmlFor="card-subject-attr">
+                        Subject Attribute
+                      </label>
+                      <input
+                        id="card-subject-attr"
+                        type="text"
+                        className="auth-editor-input"
+                        value={subjectAttribute}
+                        onChange={(e) => {
+                          setSubjectAttribute(e.target.value);
+                        }}
+                        disabled={isSubmitting}
+                        placeholder="objectGUID (AD) or entryUUID (OpenLDAP)"
+                      />
+                    </div>
+
+                    <div className="auth-editor-prop-row">
+                      <label className="auth-editor-label" htmlFor="card-email-attr">
+                        Email Attribute
+                      </label>
+                      <input
+                        id="card-email-attr"
+                        type="text"
+                        className="auth-editor-input"
+                        value={emailAttribute}
+                        onChange={(e) => {
+                          setEmailAttribute(e.target.value);
+                        }}
+                        disabled={isSubmitting}
+                        placeholder="mail"
+                      />
+                    </div>
+
+                    <div className="auth-editor-prop-row">
+                      <label className="auth-editor-label" htmlFor="card-display-attr">
+                        Full Name Attribute
+                      </label>
+                      <input
+                        id="card-display-attr"
+                        type="text"
+                        className="auth-editor-input"
+                        value={displayNameAttribute}
+                        onChange={(e) => {
+                          setDisplayNameAttribute(e.target.value);
+                        }}
+                        disabled={isSubmitting}
+                        placeholder="displayName (AD) or cn (OpenLDAP)"
+                      />
+                    </div>
+
+                    <div className="auth-editor-prop-row">
+                      <label className="auth-editor-label" htmlFor="card-spki-pin">
+                        SPKI SHA-256 Pin
+                      </label>
+                      <input
+                        id="card-spki-pin"
+                        type="text"
+                        className="auth-editor-input"
+                        value={spkiPin}
+                        onChange={(e) => {
+                          setSpkiPin(e.target.value);
+                        }}
+                        disabled={isSubmitting}
+                        placeholder="64-character hex digest"
+                        maxLength={64}
+                      />
+                    </div>
+                    {fieldErrors.spkiPin ? (
+                      <div className="auth-editor-error">{fieldErrors.spkiPin}</div>
+                    ) : null}
+
+                    <div className="auth-editor-prop-row">
+                      <label className="auth-editor-label" htmlFor="card-ca-pem">
+                        CA Certificate PEM
+                      </label>
+                      <textarea
+                        id="card-ca-pem"
+                        className="auth-editor-textarea"
+                        value={caPem}
+                        onChange={(e) => {
+                          setCaPem(e.target.value);
+                        }}
+                        disabled={isSubmitting}
+                        placeholder="-----BEGIN CERTIFICATE----- ... -----END CERTIFICATE-----"
+                        rows={3}
+                      />
+                    </div>
+                  </div>
+                ) : null}
+              </AdvancedSection>
+            </>
         )}
 
           {handshakeResult && (
@@ -1537,7 +1655,6 @@ export function AuthCardEditorDrawer({
               }`}
               data-testid="drawer-handshake-result"
               role="status"
-              style={{ padding: '8px 12px', margin: '12px 0', borderRadius: '4px', border: '1px solid currentColor' }}
             >
               <span>{handshakeResult.status === 'healthy' ? 'HEALTHY' : 'FAILED'}: {handshakeResult.message}</span>
             </div>

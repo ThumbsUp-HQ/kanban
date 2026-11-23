@@ -1,0 +1,29 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan319-6d8985a0/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/ui/AdvancedSection.test.tsx (1 test) 58ms
+ ✓ src/components/__tests__/AdvancedSection.test.tsx (9 tests) 107ms
+ ✓ src/features/admin-auth/AuthCardEditorDrawer.test.tsx (45 tests) 4836ms
+   ✓ AuthCardEditorDrawer (KB-P3-36) (45)
+     ✓ renders write-only secret field empty on edit, omits secret_input unless replace checked (Mandatory Test Case 2) 359ms
+     ✓ forces StartTLS = true when LDAP server_url starts with ldap:// and rejects 63-hex SPKI pin 321ms
+     ✓ updates metadata fields: icon preset, button subtext, auto-provision, domains, and scopes 301ms
+     ✓ Google OAuth JSON Importer (KB-AUTH-JSON / KANBA-185) (22)
+       ✓ creates LDAP card with ldap:// scheme, startTls, and restricted groups 394ms
+
+ Test Files  3 passed (3)
+      Tests  55 passed (55)
+   Start at  22:54:51
+   Duration  6.04s (tests 65%, environment 27%, import 5%, worker 2%, transform 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |     100 |    97.22 |     100 |     100 |                   
+ components        |       0 |        0 |       0 |       0 |                   
+  ...edSection.tsx |       0 |        0 |       0 |       0 |                   
+ ui                |     100 |    97.22 |     100 |     100 |                   
+  ...edSection.tsx |     100 |    97.22 |     100 |     100 | 56                
+-------------------|---------|----------|---------|---------|-------------------

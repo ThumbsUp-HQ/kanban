@@ -1,0 +1,15 @@
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+Running 5 tests using 5 workers
+
+  ✓  2 [desktop] › e2e/qa/kan-319-advanced-disclosure.spec.ts:173:3 › KAN-319: Progressive Disclosure & AdvancedSection E2E Proofs › 03: 768x1024 - Tablet collapsed disclosure (1.1s)
+  ✓  4 [desktop] › e2e/qa/kan-319-advanced-disclosure.spec.ts:229:3 › KAN-319: Progressive Disclosure & AdvancedSection E2E Proofs › 05: 844x390 - Mobile landscape collapsed disclosure (1.1s)
+  ✓  5 [desktop] › e2e/qa/kan-319-advanced-disclosure.spec.ts:200:3 › KAN-319: Progressive Disclosure & AdvancedSection E2E Proofs › 04: 390x844 - Mobile portrait expanded disclosure (1.1s)
+  ✓  3 [desktop] › e2e/qa/kan-319-advanced-disclosure.spec.ts:98:3 › KAN-319: Progressive Disclosure & AdvancedSection E2E Proofs › 01: 1440x900 Light - Desktop collapsed default disclosure (1.2s)
+  ✓  1 [desktop] › e2e/qa/kan-319-advanced-disclosure.spec.ts:137:3 › KAN-319: Progressive Disclosure & AdvancedSection E2E Proofs › 02: 1440x900 Dark - Desktop expanded with active overrides badge (1.3s)
+
+  5 passed (30.4s)
