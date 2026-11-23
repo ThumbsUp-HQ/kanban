@@ -113,10 +113,95 @@ export function CommentComposer({
   const [sanitizedPill, setSanitizedPill] = useState<{ prunedHiddenNodes: number } | null>(null);
   const [isPreview, setIsPreview] = useState(false);
 
+  // Mobile toolbar and virtual keyboard handling (KAN-345)
+  const [isMobile, setIsMobile] = useState<boolean>(() => {
+    if (typeof window !== 'undefined') {
+      const matchMediaActive =
+        typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 480px)').matches;
+      return window.innerWidth <= 480 || matchMediaActive;
+    }
+    return false;
+  });
+  const [isOverflowOpen, setIsOverflowOpen] = useState(false);
+  const [, setKeyboardInset] = useState<number>(0);
+
+  const containerRef = useRef<HTMLDivElement | null>(null);
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
   const alertRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const overflowRef = useRef<HTMLDivElement | null>(null);
   const undoDraftRef = useRef<string | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+
+    const handleResize = () => {
+      const matchMediaActive =
+        typeof window.matchMedia === 'function' && window.matchMedia('(max-width: 480px)').matches;
+      const mobile = window.innerWidth <= 480 || matchMediaActive;
+      setIsMobile(mobile);
+      if (!mobile) {
+        setIsOverflowOpen(false);
+      }
+    };
+
+    window.addEventListener('resize', handleResize);
+
+    const mql = typeof window.matchMedia === 'function' ? window.matchMedia('(max-width: 480px)') : null;
+    mql?.addEventListener('change', handleResize);
+
+    const vv = window.visualViewport;
+    const handleVisualViewportChange = () => {
+      if (!vv) return;
+      const inset = Math.max(0, window.innerHeight - vv.height);
+      setKeyboardInset(inset);
+      if (containerRef.current) {
+        containerRef.current.style.setProperty('--keyboard-inset-height', `${String(inset)}px`);
+      }
+      try {
+        document.documentElement.style.setProperty('--keyboard-inset-height', `${String(inset)}px`);
+      } catch {
+        // ignore
+      }
+    };
+
+    if (vv) {
+      vv.addEventListener('resize', handleVisualViewportChange);
+      vv.addEventListener('scroll', handleVisualViewportChange);
+    }
+
+    return () => {
+      window.removeEventListener('resize', handleResize);
+      mql?.removeEventListener('change', handleResize);
+      if (vv) {
+        vv.removeEventListener('resize', handleVisualViewportChange);
+        vv.removeEventListener('scroll', handleVisualViewportChange);
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!isOverflowOpen) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (overflowRef.current && !overflowRef.current.contains(e.target as Node)) {
+        setIsOverflowOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [isOverflowOpen]);
+
+  const handleFocus = (): void => {
+    if (containerRef.current) {
+      try {
+        containerRef.current.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      } catch {
+        // ignore
+      }
+    }
+  };
 
   useEffect(() => {
     if (mentionWarning && alertRef.current) {
@@ -448,7 +533,11 @@ export function CommentComposer({
   };
 
   return (
-    <div className={`comment-composer${isEditing ? ' comment-composer--editing' : ''}`}>
+    <div
+      ref={containerRef}
+      className={`comment-composer comment-editor${isEditing ? ' comment-composer--editing' : ''}`}
+      data-testid="comment-composer"
+    >
       {/* Toolbar */}
       <div className="comment-composer__toolbar" role="toolbar" aria-label="Comment formatting">
         <button
@@ -467,14 +556,16 @@ export function CommentComposer({
         >
           <em>I</em>
         </button>
-        <button
-          type="button"
-          className="composer-tool-btn"
-          aria-label="Insert code"
-          onClick={() => { insertTextAtCursor('```\n', '\n```', 'code'); }}
-        >
-          <code>&lt;/&gt;</code>
-        </button>
+        {!isMobile && (
+          <button
+            type="button"
+            className="composer-tool-btn"
+            aria-label="Insert code"
+            onClick={() => { insertTextAtCursor('```\n', '\n```', 'code'); }}
+          >
+            <code>&lt;/&gt;</code>
+          </button>
+        )}
         <button
           type="button"
           className="composer-tool-btn"
@@ -491,16 +582,132 @@ export function CommentComposer({
         >
           ☑
         </button>
-        <button
-          type="button"
-          className="composer-tool-btn"
-          aria-label="Attach media, SVG, or PDF"
-          onClick={() => {
-            fileInputRef.current?.click();
-          }}
-        >
-          📎
-        </button>
+        {!isMobile && (
+          <>
+            <button
+              type="button"
+              className="composer-tool-btn"
+              aria-label="Insert table"
+              onClick={() => {
+                insertTextAtCursor('| Column 1 | Column 2 |\n| --- | --- |\n| Item 1 | Item 2 |\n', '', '');
+              }}
+            >
+              ⊞
+            </button>
+            <button
+              type="button"
+              className="composer-tool-btn"
+              aria-label="Attach media, SVG, or PDF"
+              onClick={() => {
+                fileInputRef.current?.click();
+              }}
+            >
+              📎
+            </button>
+            <button
+              type="button"
+              className="composer-tool-btn"
+              aria-label="Insert Mermaid diagram"
+              onClick={() => { insertTextAtCursor('```mermaid\ngraph TD\n  ', '\n```', 'A[Start] --> B[End]'); }}
+            >
+              📊
+            </button>
+            <button
+              type="button"
+              className={`composer-tool-btn${isPreview ? ' is-active' : ''}`}
+              aria-label="Raw markdown source view"
+              title="Raw markdown source view (Cmd/Ctrl+Shift+M)"
+              onClick={() => { setIsPreview((prev) => !prev); }}
+              data-testid="comment-tool-raw"
+            >
+              📝
+            </button>
+          </>
+        )}
+        {isMobile && (
+          <div ref={overflowRef} className="comment-composer__overflow-wrapper">
+            <button
+              type="button"
+              className={`composer-tool-btn${isOverflowOpen ? ' is-active' : ''}`}
+              aria-label="More formatting options"
+              title="More formatting options"
+              aria-haspopup="menu"
+              aria-expanded={isOverflowOpen}
+              data-testid="composer-overflow-btn"
+              onClick={() => { setIsOverflowOpen((prev) => !prev); }}
+            >
+              ⋮
+            </button>
+            {isOverflowOpen && (
+              <div
+                className="comment-composer__overflow-menu"
+                role="menu"
+                aria-label="More formatting options"
+              >
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="comment-composer__overflow-item"
+                  aria-label="Insert code"
+                  onClick={() => {
+                    insertTextAtCursor('```\n', '\n```', 'code');
+                    setIsOverflowOpen(false);
+                  }}
+                >
+                  <code>&lt;/&gt;</code> Code block
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="comment-composer__overflow-item"
+                  aria-label="Insert table"
+                  onClick={() => {
+                    insertTextAtCursor('| Column 1 | Column 2 |\n| --- | --- |\n| Item 1 | Item 2 |\n', '', '');
+                    setIsOverflowOpen(false);
+                  }}
+                >
+                  ⊞ Table
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="comment-composer__overflow-item"
+                  aria-label="Attach media, SVG, or PDF"
+                  onClick={() => {
+                    fileInputRef.current?.click();
+                    setIsOverflowOpen(false);
+                  }}
+                >
+                  📎 Attach media
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="comment-composer__overflow-item"
+                  aria-label="Insert Mermaid diagram"
+                  onClick={() => {
+                    insertTextAtCursor('```mermaid\ngraph TD\n  ', '\n```', 'A[Start] --> B[End]');
+                    setIsOverflowOpen(false);
+                  }}
+                >
+                  📊 Mermaid diagram
+                </button>
+                <button
+                  type="button"
+                  role="menuitem"
+                  className="comment-composer__overflow-item"
+                  aria-label="Raw markdown source view"
+                  onClick={() => {
+                    setIsPreview((prev) => !prev);
+                    setIsOverflowOpen(false);
+                  }}
+                >
+                  📝 Raw markdown
+                </button>
+              </div>
+            )}
+          </div>
+        )}
         <input
           ref={fileInputRef}
           type="file"
@@ -511,24 +718,6 @@ export function CommentComposer({
           onChange={(e) => { void handleFileSelected(e); }}
           data-testid="comment-file-input"
         />
-        <button
-          type="button"
-          className="composer-tool-btn"
-          aria-label="Insert Mermaid diagram"
-          onClick={() => { insertTextAtCursor('```mermaid\ngraph TD\n  ', '\n```', 'A[Start] --> B[End]'); }}
-        >
-          📊
-        </button>
-        <button
-          type="button"
-          className={`composer-tool-btn${isPreview ? ' is-active' : ''}`}
-          aria-label="Raw markdown source view"
-          title="Raw markdown source view (Cmd/Ctrl+Shift+M)"
-          onClick={() => { setIsPreview((prev) => !prev); }}
-          data-testid="comment-tool-raw"
-        >
-          📝
-        </button>
       </div>
 
       {/* Editor Box */}
@@ -546,11 +735,13 @@ export function CommentComposer({
             ref={textareaRef}
             className="comment-composer__textarea"
             aria-label="Write a comment"
+            data-testid="comment-textarea"
             placeholder={placeholder}
             value={draft}
             onChange={(e) => { void handleTextChange(e); }}
             onKeyDown={handleKeyDown}
             onPaste={handlePaste}
+            onFocus={handleFocus}
             rows={3}
           />
         )}

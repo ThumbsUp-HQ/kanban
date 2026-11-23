@@ -279,6 +279,7 @@
     border-left: none;
     border-top: none;
     box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.2);
+    padding-bottom: max(env(safe-area-inset-bottom, 0px), env(keyboard-inset-height, 0px), var(--keyboard-inset-height, 0px));
   }
   .surface__body,
   .surface--drawer .surface__body,

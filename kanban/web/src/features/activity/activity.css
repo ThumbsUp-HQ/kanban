@@ -482,12 +482,63 @@
   background: var(--bg-surface, #1e2227);
   border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.08));
   border-radius: var(--radius-lg, 8px);
+  position: relative;
+  padding-bottom: max(var(--space-4, 16px), env(keyboard-inset-height, 0px), var(--keyboard-inset-height, 0px));
+  transition: padding-bottom 150ms ease-out;
 }
 
 .comment-composer__toolbar {
   display: flex;
   align-items: center;
-  column-gap: 4px;
+  flex-wrap: wrap;
+  gap: var(--space-1, 4px);
+  position: relative;
+}
+
+.comment-composer__overflow-wrapper {
+  position: relative;
+  display: inline-flex;
+}
+
+.comment-composer__overflow-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: var(--space-1, 4px);
+  background: var(--bg-surface-raised, #1e2227);
+  border: 1px solid var(--border-subtle, rgba(255, 255, 255, 0.12));
+  border-radius: var(--radius-md, 6px);
+  box-shadow: var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.3));
+  padding: var(--space-1, 4px);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  z-index: 50;
+  min-width: 160px;
+}
+
+.comment-composer__overflow-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2, 8px);
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm, 4px);
+  color: var(--fg-secondary, #94a3b8);
+  font-size: 13px;
+  cursor: pointer;
+  text-align: left;
+  min-height: var(--tap-min, 44px);
+  box-sizing: border-box;
+}
+
+.comment-composer__overflow-item:hover,
+.comment-composer__overflow-item:focus-visible {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.08));
+  color: var(--fg-primary, #f8fafc);
+  outline: none;
 }
 
 .comment-composer__file-input {
@@ -658,6 +709,22 @@
   align-items: center;
   justify-content: flex-end;
   column-gap: 8px;
+  padding-bottom: max(0px, env(keyboard-inset-height, 0px), var(--keyboard-inset-height, 0px));
+}
+
+@media (max-width: 480px), (pointer: coarse) {
+  .comment-composer .composer-tool-btn {
+    min-width: var(--tap-min, 44px);
+    min-height: var(--tap-min, 44px);
+    padding: var(--space-2, 8px);
+  }
+
+  .comment-composer .composer-submit-btn,
+  .comment-composer .composer-cancel-btn {
+    min-width: var(--tap-min, 44px);
+    min-height: var(--tap-min, 44px);
+    padding: var(--space-2, 8px) var(--space-4, 16px);
+  }
 }
 
 .composer-cancel-btn {
