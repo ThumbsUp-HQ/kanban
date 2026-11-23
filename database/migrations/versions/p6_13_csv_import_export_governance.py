@@ -3,7 +3,7 @@
 """csv import export governance
 
 Revision ID: p6_13_csv_import_export_governance
-Revises: p6_09_scm_webhooks_and_outbound_bus
+Revises: p6_11_git_truststore_and_attestations
 Create Date: 2026-11-23 00:03:31.000000
 """
 
@@ -13,7 +13,7 @@ from database.migrations.sqlfile import execute_sql_file
 
 # revision identifiers, used by Alembic.
 revision: str = "p6_13_csv_import_export_governance"
-down_revision: str | None = "p6_09_scm_webhooks_and_outbound_bus"
+down_revision: str | None = "p6_11_git_truststore_and_attestations"
 branch_labels: str | Sequence[str] | None = None
 depends_on: str | Sequence[str] | None = None
 

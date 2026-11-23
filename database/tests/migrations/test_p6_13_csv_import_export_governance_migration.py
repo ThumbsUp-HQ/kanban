@@ -12,7 +12,7 @@ async def test_p6_13_csv_import_export_governance_migration_lifecycle() -> None:
     """Verify p6_13_csv_import_export_governance upgrade and downgrade revert cleanly."""
     async with MigrationHarness() as harness:
         prev_rev = harness.previous_of("p6_13_csv_import_export_governance")
-        assert prev_rev == "p6_09_scm_webhooks_and_outbound_bus"
+        assert prev_rev == "p6_11_git_truststore_and_attestations"
 
         # 1. Upgrade to p6_13_csv_import_export_governance
         await harness.upgrade("p6_13_csv_import_export_governance")
