@@ -2018,6 +2018,41 @@ describe('IssueSurface', () => {
       localStorage.clear();
     });
 
+    it('KAN-379: relocates action toolbar to right column and positions Add comment in activity section in split mode', async () => {
+      const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+      const { unmount } = render(
+        <QueryClientProvider client={qc}>
+          <MemoryRouter initialEntries={['/projects/KAN/issues/KAN-142']}>
+            <IssueSurfaceRoot
+              mode="split"
+              issueKey="KAN-142"
+              projectKey="KAN"
+            />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      );
+
+      await waitFor(() => {
+        expect(screen.getByTestId('split-action-toolbar')).toBeDefined();
+      });
+
+      const header = document.querySelector('.surface__header--split');
+      expect(header).not.toBeNull();
+      const editBtn = screen.getByTestId('split-edit-btn');
+      expect(header?.contains(editBtn)).toBe(true);
+      expect(header?.querySelector('.issue-header__key')).toBeNull();
+
+      const activitySection = screen.getByTestId('split-section-activity');
+      const addCommentBtn = screen.getByTestId('split-add-comment-btn');
+      expect(activitySection.contains(addCommentBtn)).toBe(true);
+
+      const rightCol = screen.getByTestId('split-right-column');
+      const toolbar = screen.getByTestId('split-action-toolbar');
+      expect(rightCol.contains(toolbar)).toBe(true);
+
+      unmount();
+    });
+
     it('covers pager without onNavigate, storage parse error, and alreadyAssigned branch', async () => {
       // 1. Storage not an array for isFavorite and toggleFavorite
       localStorage.setItem('kb_favorite_issues', JSON.stringify({ not: 'an_array' }));

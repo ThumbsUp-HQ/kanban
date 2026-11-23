@@ -1,0 +1,29 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan379-c6772c7d/kanban/web
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (6 tests) 31ms
+ ✓ src/app/__tests__/MenuConsolidation_KAN366.test.tsx (9 tests) 811ms
+ ✓ src/features/drawer/IssueSurfaceSplitMasterDetail.test.tsx (10 tests) 2260ms
+   ✓ IssueSurface split mode (KAN-52 Problem 3) (10)
+     ✓ split mode description editor formatting tools and quick-props state select work cleanly 1061ms
+ ✓ src/app/__tests__/MenuConsolidation.test.tsx (8 tests) 761ms
+   ✓ Menu & Navigation Consolidation Suite (KAN-318) (8)
+     ✓ 3. Topbar Avatar Menu Consolidation (2)
+       ✓ renders server admin studio navigation entries including OAuth, Imports, and Diagnostics 390ms
+ ✓ src/features/drawer/IssueSurface.test.tsx (58 tests) 5771ms
+   ✓ IssueSurface (58)
+     ✓ Required Test Case 1: Positive / Zero-remount invariant (1)
+       ✓ maintains identical data-mount-id and data-mount-seq across 5 round-trip toggles with exactly 1 GET fetch 344ms
+     ✓ Required Test Case 9: Error handling (403, 404, network error with Retry) (2)
+       ✓ renders "Could not load <KEY>." and Retry button on network error 330ms
+     ✓ Live Persistence & Backend Normalization (KANBA-165) (20)
+       ✓ edits and saves Markdown + Mermaid description via PATCH /api/v1/issues/{issue_key} 638ms
+       ✓ handles Reload Latest and Overwrite actions on conflict banner 372ms
+       ✓ connects toolbar buttons, media upload, preview toggle, and sanitized paste pill in description editor 482ms
+       ✓ covers conflict banner actions: reload, overwrite, overwrite failure, and discard 378ms
+
+ Test Files  5 passed (5)
+      Tests  91 passed (91)
+   Start at  10:39:21
+   Duration  10.11s (environment 37%, tests 33%, import 19%, transform 9%, worker 1%)
+

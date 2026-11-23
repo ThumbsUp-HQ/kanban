@@ -577,4 +577,43 @@ describe('IssueSurface split mode (KAN-52 Problem 3)', () => {
     });
     unmount3();
   });
+
+  it('KAN-379: replaces duplicate issue key with Edit button in header, moves Add Comment to activity section, and relocates action toolbar to right column', async () => {
+    renderSplitSurface();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('split-action-toolbar')).toBeDefined();
+    });
+
+    // 1. Verify .surface__header--split contains split-edit-btn and does NOT contain duplicate #KAN-52 text
+    const header = document.querySelector('.surface__header--split');
+    expect(header).not.toBeNull();
+    const editBtn = screen.getByTestId('split-edit-btn');
+    expect(header?.contains(editBtn)).toBe(true);
+
+    // Duplicate key #KAN-52 is no longer in header
+    const headerKey = header?.querySelector('.issue-header__key');
+    expect(headerKey).toBeNull();
+
+    // AccessPill is no longer in header
+    const accessPillInHeader = header?.querySelector('[data-testid="access-pill"]');
+    expect(accessPillInHeader).toBeNull();
+
+    // 2. Verify split-add-comment-btn is inside split-section-activity
+    const activitySection = screen.getByTestId('split-section-activity');
+    const addCommentBtn = screen.getByTestId('split-add-comment-btn');
+    expect(activitySection.contains(addCommentBtn)).toBe(true);
+
+    // 3. Verify split-action-toolbar is inside split-right-column
+    const rightCol = screen.getByTestId('split-right-column');
+    const toolbar = screen.getByTestId('split-action-toolbar');
+    expect(rightCol.contains(toolbar)).toBe(true);
+
+    // Toolbar contains AccessPill, state select, assign, favorite, and share
+    expect(toolbar.querySelector('[data-testid="access-pill"]')).not.toBeNull();
+    expect(toolbar.querySelector('[data-testid="split-state-select"]')).not.toBeNull();
+    expect(toolbar.querySelector('[data-testid="split-assign-btn"]')).not.toBeNull();
+    expect(toolbar.querySelector('[data-testid="favorite-issue-toggle"]')).not.toBeNull();
+    expect(toolbar.querySelector('[data-testid="split-share-btn"]')).not.toBeNull();
+  });
 });

@@ -1575,7 +1575,17 @@ function IssueSurfaceContent({
               <span className="sr-only">Open in new tab</span>
             </a>
 
-            <span className="mono issue-header__key">#{currentIssue.key}</span>
+            {canEdit && (
+              <button
+                type="button"
+                className="split-toolbar-btn split-edit-btn"
+                data-testid="split-edit-btn"
+                aria-label="Edit description"
+                onClick={handleStartEditDescription}
+              >
+                ✎ Edit
+              </button>
+            )}
 
             {/* Sequential Pager */}
             <div className="split-pager" data-testid="split-pager">
@@ -1605,8 +1615,6 @@ function IssueSurfaceContent({
                 v
               </button>
             </div>
-
-            <AccessPill issue={currentIssue} />
           </header>
         ) : (
           <IssueHeader
@@ -1620,97 +1628,10 @@ function IssueSurfaceContent({
           />
         )}
         {mode === 'split' ? (
-          <>
-            {/* Action Toolbar Row */}
-            <div
-              className="split-action-toolbar"
-              role="toolbar"
-              aria-label="Issue actions"
-              data-testid="split-action-toolbar"
-            >
-              {canEdit && (
-                <button
-                  type="button"
-                  className="split-toolbar-btn"
-                  data-testid="split-edit-btn"
-                  aria-label="Edit description"
-                  onClick={handleStartEditDescription}
-                >
-                  ✎ Edit
-                </button>
-              )}
-              <button
-                type="button"
-                className="split-toolbar-btn"
-                data-testid="split-add-comment-btn"
-                aria-label="Add comment"
-                onClick={handleAddCommentClick}
-              >
-                💬 Add comment
-              </button>
-              <button
-                type="button"
-                className="split-toolbar-btn"
-                data-testid="split-assign-btn"
-                aria-label="Assign issue"
-                onClick={handleAssignClick}
-              >
-                👤 Assign
-              </button>
-              {canTransition ? (
-                <select
-                  data-testid="split-state-select"
-                  className="split-state-select"
-                  aria-label="State selector"
-                  value={currentIssue.state?.id ?? ''}
-                  onChange={(e) => {
-                    void handleHeaderStateChange(e.target.value);
-                  }}
-                >
-                  {headerStates.map((s) => (
-                    <option key={s.id} value={s.id}>
-                      {s.name}
-                    </option>
-                  ))}
-                </select>
-              ) : (
-                <StateBadge state={currentIssue.state ?? undefined} testId="split-state-badge" />
-              )}
-              <button
-                type="button"
-                className={`split-toolbar-btn split-favorite-btn${isFavorite ? ' split-toolbar-btn--fav-active' : ''}`}
-                data-testid="favorite-issue-toggle"
-                aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
-                onClick={toggleFavorite}
-              >
-                {isFavorite ? '★' : '☆'} Favorite
-              </button>
-              <button
-                type="button"
-                className="split-toolbar-btn"
-                data-testid="split-share-btn"
-                aria-label="Share or export issue"
-                onClick={() => {
-                  void handleShareExport();
-                }}
-              >
-                {copiedShare ? '✓ Copied link!' : '🔗 Share / Export'}
-              </button>
-              {SubscribeSlot && <SubscribeSlot issue={currentIssue} />}
-              {LinkSlot && <LinkSlot issue={currentIssue} />}
-              {OverflowSlot && (
-                <OverflowSlot
-                  issue={currentIssue}
-                  mode="drawer"
-                  toggleFullScreen={handleToggleFullScreen}
-                />
-              )}
-            </div>
-
-            {/* 2-Column Collapsible Detail Layout */}
-            <div className="surface__body surface__body--split">
-              <div className="split-body-grid" data-testid="split-body-grid">
-                {/* Left / Main Column */}
+          /* 2-Column Collapsible Detail Layout */
+          <div className="surface__body surface__body--split">
+            <div className="split-body-grid" data-testid="split-body-grid">
+              {/* Left / Main Column */}
                 <div className="split-main-col">
                   {currentIssue.rework_tripped_at && (
                     <div
@@ -2058,6 +1979,17 @@ function IssueSurfaceContent({
                   <details open className="split-section" data-testid="split-section-activity">
                     <summary className="split-section-summary">Activity / Comments</summary>
                     <div className="split-section-body">
+                      <div className="split-activity-actions">
+                        <button
+                          type="button"
+                          className="split-toolbar-btn split-add-comment-btn"
+                          data-testid="split-add-comment-btn"
+                          aria-label="Add comment"
+                          onClick={handleAddCommentClick}
+                        >
+                          💬 Add comment
+                        </button>
+                      </div>
                       {ActivitySlot ? (
                         <ActivitySlot issue={currentIssue} />
                       ) : (
@@ -2097,6 +2029,75 @@ function IssueSurfaceContent({
 
                 {/* Right Column */}
                 <div className="split-right-column" data-testid="split-right-column">
+                  {/* Action Toolbar Row */}
+                  <div
+                    className="split-action-toolbar"
+                    role="toolbar"
+                    aria-label="Issue actions"
+                    data-testid="split-action-toolbar"
+                  >
+                    <AccessPill issue={currentIssue} />
+                    {canTransition ? (
+                      <select
+                        data-testid="split-state-select"
+                        className="split-state-select"
+                        aria-label="State selector"
+                        value={currentIssue.state?.id ?? ''}
+                        onChange={(e) => {
+                          void handleHeaderStateChange(e.target.value);
+                        }}
+                      >
+                        {headerStates.map((s) => (
+                          <option key={s.id} value={s.id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+                    ) : (
+                      <StateBadge state={currentIssue.state ?? undefined} testId="split-state-badge" />
+                    )}
+                    <button
+                      type="button"
+                      className="split-toolbar-btn"
+                      data-testid="split-assign-btn"
+                      aria-label="Assign issue"
+                      onClick={handleAssignClick}
+                    >
+                      👤 Assign
+                    </button>
+                    <button
+                      type="button"
+                      className={`split-toolbar-btn split-favorite-btn${isFavorite ? ' split-toolbar-btn--fav-active' : ''}`}
+                      data-testid="favorite-issue-toggle"
+                      aria-label={isFavorite ? 'Remove from favorites' : 'Add to favorites'}
+                      onClick={toggleFavorite}
+                    >
+                      <span data-testid="split-favorite-btn" style={{ display: 'contents' }}>
+                        {isFavorite ? '★' : '☆'} Favorite
+                      </span>
+                    </button>
+                    <button
+                      type="button"
+                      className="split-toolbar-btn"
+                      data-testid="split-share-btn"
+                      aria-label="Share or export issue"
+                      onClick={() => {
+                        void handleShareExport();
+                      }}
+                    >
+                      {copiedShare ? '✓ Copied link!' : '🔗 Share / Export'}
+                    </button>
+                    {SubscribeSlot && <SubscribeSlot issue={currentIssue} />}
+                    {LinkSlot && <LinkSlot issue={currentIssue} />}
+                    {OverflowSlot && (
+                      <OverflowSlot
+                        issue={currentIssue}
+                        mode="drawer"
+                        toggleFullScreen={handleToggleFullScreen}
+                      />
+                    )}
+                  </div>
+
                   {/* People */}
                   <details open className="split-section" data-testid="split-section-people">
                     <summary className="split-section-summary">People</summary>
@@ -2169,7 +2170,6 @@ function IssueSurfaceContent({
                 </div>
               </div>
             </div>
-          </>
         ) : (
           <div className="surface__body">
             <div className="surface__prose">
