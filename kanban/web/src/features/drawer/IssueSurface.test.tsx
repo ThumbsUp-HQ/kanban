@@ -1395,7 +1395,7 @@ describe('IssueSurface', () => {
       await waitFor(() => {
         expect(screen.getByTestId('issue-back-to-list-btn')).toBeDefined();
       });
-      expect(screen.getByTitle('Return to side panel')).toBeDefined();
+      expect(screen.getByTitle(/Return to side panel/)).toBeDefined();
       fireEvent.click(screen.getByTestId('issue-back-to-list-btn'));
       expect(onCloseFull).toHaveBeenCalledTimes(1);
     });
