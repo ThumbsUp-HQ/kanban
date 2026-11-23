@@ -22,6 +22,7 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
   let queryClient: QueryClient;
 
   beforeEach(() => {
+    HTMLDivElement.prototype.scrollIntoView = vi.fn();
     queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -3481,6 +3482,123 @@ describe('ProjectSettingsPage (KANBA-202)', () => {
       modules_enabled: false,
       skip_loaded_sequence_numbers: true,
       auto_archive_days: null,
+    });
+  });
+
+  describe('Progressive Disclosure (KB-ADVANCED-DISCLOSURE-03 / KAN-369)', () => {
+    it('Positive case 1: ProjectSettingsPage renders basic settings and collapses WIP limits and numbering policies', async () => {
+      vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+        await Promise.resolve();
+        const url: string = path;
+        if (
+          url.includes('/api/v1/projects/KAN') &&
+          !url.includes('/states') &&
+          !url.includes('/labels') &&
+          !url.includes('/modules') &&
+          !url.includes('/members')
+        ) {
+          return {
+            id: 'p-1',
+            identifier: 'KAN',
+            name: 'Platform Core',
+            description_markdown: 'Core project description',
+            modules_enabled: true,
+            skip_loaded_sequence_numbers: true,
+            auto_archive_days: 14,
+            is_project_admin: true,
+          };
+        }
+        if (url.includes('/states')) {
+          return [
+            {
+              id: 'st-1',
+              name: 'Backlog',
+              group: 'backlog',
+              color_hex: '#6b7280',
+              sort_order: 0,
+              is_default: true,
+              wip_soft_limit: 5,
+              wip_hard_limit: 10,
+            },
+            {
+              id: 'st-2',
+              name: 'Done',
+              group: 'completed',
+              color_hex: '#10b981',
+              sort_order: 1,
+              is_default: false,
+              wip_soft_limit: null,
+              wip_hard_limit: null,
+            },
+          ];
+        }
+        if (url.includes('/labels')) {
+          return [
+            { id: 'lbl-1', name: 'Frontend', color_hex: '#3b82f6', exclusive_group: 'layer' },
+          ];
+        }
+        if (url.includes('/modules')) {
+          return [{ id: 'm-1', name: 'Auth' }];
+        }
+        return [];
+      });
+
+      renderComponent('KAN');
+
+      // 1. General Settings tab renders primary fields by default
+      expect(await screen.findByTestId('project-name-input')).toBeDefined();
+      expect(screen.getByTestId('project-desc-input')).toBeDefined();
+      expect(screen.getByTestId('project-modules-checkbox')).toBeDefined();
+
+      // 2. Advanced Project Options section is collapsed by default
+      const generalAdvSection = screen.getByTestId<HTMLDetailsElement>('project-general-advanced-section');
+      expect(generalAdvSection.open).toBe(false);
+      expect(screen.getByTestId('project-general-advanced-section-toggle').getAttribute('aria-expanded')).toBe('false');
+
+      // Toggle open
+      fireEvent.click(screen.getByTestId('project-general-advanced-section-toggle'));
+      expect(generalAdvSection.open).toBe(true);
+      expect(screen.getByTestId('project-skip-loaded-seq-checkbox')).toBeDefined();
+      expect(screen.getByTestId('project-auto-archive-input')).toBeDefined();
+
+      // 3. Workflow States tab renders primary fields and collapses WIP limits and sort order
+      fireEvent.click(screen.getByTestId('tab-states'));
+      expect(await screen.findByTestId('state-name-input')).toBeDefined();
+      expect(screen.getByTestId('state-group-select')).toBeDefined();
+      expect(screen.getByTestId('state-color-input')).toBeDefined();
+      expect(screen.getByTestId('state-default-checkbox')).toBeDefined();
+      expect(screen.getByTestId('create-state-btn')).toBeDefined();
+
+      // Active WIP limits override badge is displayed
+      expect(screen.getByTestId('wip-overrides-active-badge').textContent).toContain('1 custom WIP limit active');
+
+      // Advanced state limits section is collapsed by default
+      const stateAdvSection = screen.getByTestId<HTMLDetailsElement>('state-advanced-section');
+      expect(stateAdvSection.open).toBe(false);
+      expect(screen.getByTestId('state-advanced-section-toggle').getAttribute('aria-expanded')).toBe('false');
+
+      // Toggle open
+      fireEvent.click(screen.getByTestId('state-advanced-section-toggle'));
+      expect(stateAdvSection.open).toBe(true);
+      expect(screen.getByTestId('state-sort-order-input')).toBeDefined();
+      expect(screen.getByTestId('state-wip-soft-input')).toBeDefined();
+      expect(screen.getByTestId('state-wip-hard-input')).toBeDefined();
+
+      // 4. Labels tab collapses exclusive group
+      fireEvent.click(screen.getByTestId('tab-labels'));
+      expect(await screen.findByTestId('label-name-input')).toBeDefined();
+      expect(screen.getByTestId('label-color-input')).toBeDefined();
+      const labelAdvSection = screen.getByTestId<HTMLDetailsElement>('label-advanced-section');
+      expect(labelAdvSection.open).toBe(false);
+
+      // Toggle open
+      fireEvent.click(screen.getByTestId('label-advanced-section-toggle'));
+      expect(labelAdvSection.open).toBe(true);
+      expect(screen.getByTestId('label-exclusive-group-input')).toBeDefined();
+
+      // 5. Roles tab navigation
+      fireEvent.click(screen.getByTestId('tab-roles'));
+      expect(await screen.findByTestId('project-roles-section')).toBeDefined();
     });
   });
 });

@@ -50,6 +50,8 @@ export interface WorkflowHook {
   repo_access_mode?: string | undefined;
   mcp_access_summary?: string | undefined;
   allowed_mutable_fields?: string[] | undefined;
+  last_execution_log?: string | undefined;
+  last_execution_status?: string | undefined;
 }
 
 export interface TransitionRule {

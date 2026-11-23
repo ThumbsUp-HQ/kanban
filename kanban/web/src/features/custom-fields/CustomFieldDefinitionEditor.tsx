@@ -29,6 +29,7 @@ import {
 } from './api';
 import { CustomFieldValue } from './CustomFieldValue';
 import { EscalationApprovalPanel } from './EscalationApprovalPanel';
+import { AdvancedSection } from '../../ui/AdvancedSection';
 import { safeJsonParse } from '../../utils/safeJson';
 import './custom-fields.css';
 
@@ -965,155 +966,168 @@ export function CustomFieldDefinitionEditor({
               </div>
             </div>
 
-            {/* Format Metadata JSON */}
-            <div className="custom-field-form-group">
-              <label htmlFor="format-metadata" className="custom-field-form-label">
-                Format Configuration Metadata (JSON)
-                <FieldHelpHint
-                  title="Format Metadata JSON"
-                  summary="JSON configuration dictionary tailoring display options for the selected output format."
-                  validValues={[
-                    { label: 'text', description: 'max_length, prefix, monospace' },
-                    { label: 'number', description: 'maximum_fraction_digits, unit_suffix' },
-                    { label: 'badge', description: 'color_token, allowed_labels' },
-                    { label: 'markdown_snippet', description: 'max_chars' },
-                    { label: 'url', description: 'allowed_schemes (e.g. ["https"])' },
-                    { label: 'json_table', description: 'columns ([{key, label}]), max_rows' },
-                    { label: 'severity_pill', description: 'Optional severity score thresholds' },
-                  ]}
-                  example={JSON.stringify({ maximum_fraction_digits: 2, unit_suffix: ' pts' })}
-                  docHref="/docs/custom-fields#format-metadata"
-                  testId="hint-format-metadata"
-                />
-              </label>
-              <textarea
-                id="format-metadata"
-                className="custom-field-textarea mono"
-                rows={8}
-                value={metadataText}
-                onChange={(e) => {
-                  setMetadataText(e.target.value);
-                }}
-                data-testid="format-metadata-textarea"
-              />
-              {jsonError && <span className="custom-field-input-error">{jsonError}</span>}
-            </div>
-
-            {/* Script Source Code */}
-            <div className="custom-field-form-group">
-              <label htmlFor="script-source" className="custom-field-form-label">
-                Script Source Code (Sandboxed, never executed client-side)
-                <FieldHelpHint
-                  title="Script / Formula Source"
-                  summary="Source code or AST formula evaluated in the server sandbox to compute the field value."
-                  example='formula: issue.state === "DONE" ? "Completed" : "In Progress"'
-                  caution="Scripts run inside hardened server sandboxes and are never executed inside the browser client."
-                  docHref="/docs/custom-fields#script-source"
-                  testId="hint-script-source"
-                />
-              </label>
-              <textarea
-                id="script-source"
-                className="custom-field-textarea mono custom-field-source-editor"
-                rows={8}
-                required
-                value={scriptSource}
-                onChange={(e) => {
-                  setScriptSource(e.target.value);
-                }}
-                data-testid="script-source-textarea"
-              />
-            </div>
-
-            {/* Test Execute Section */}
-            <div className="custom-field-test-panel" data-testid="custom-field-test-panel">
-              <div className="custom-field-test-controls">
-                <label htmlFor="test-issue-key" className="custom-field-form-label">
-                  Test With Issue Key
-                </label>
-                <div className="custom-field-test-input-row">
-                  <input
-                    id="test-issue-key"
-                    type="text"
-                    className="custom-field-input mono"
-                    placeholder="e.g. KANBA-1"
-                    value={testIssueKey}
-                    onChange={(e) => {
-                      setTestIssueKey(e.target.value.toUpperCase());
-                    }}
-                    data-testid="test-issue-key-input"
+            {/* Advanced Format & Sandbox Script Settings (KB-ADVANCED-DISCLOSURE-03, KAN-369) */}
+            <AdvancedSection
+              title="Advanced Format & Sandbox Script Settings"
+              summary="Format configuration metadata (JSON), execution source code, and live sandbox evaluation"
+              testId="custom-field-advanced-section"
+              activeOverridesCount={
+                (scriptSource.trim() !== '' ? 1 : 0) +
+                (metadataText.trim() !== '' && metadataText.trim() !== '{}' ? 1 : 0)
+              }
+              hasErrors={Boolean(jsonError ?? testError)}
+              defaultOpen={false}
+            >
+              {/* Format Metadata JSON */}
+              <div className="custom-field-form-group">
+                <label htmlFor="format-metadata" className="custom-field-form-label">
+                  Format Configuration Metadata (JSON)
+                  <FieldHelpHint
+                    title="Format Metadata JSON"
+                    summary="JSON configuration dictionary tailoring display options for the selected output format."
+                    validValues={[
+                      { label: 'text', description: 'max_length, prefix, monospace' },
+                      { label: 'number', description: 'maximum_fraction_digits, unit_suffix' },
+                      { label: 'badge', description: 'color_token, allowed_labels' },
+                      { label: 'markdown_snippet', description: 'max_chars' },
+                      { label: 'url', description: 'allowed_schemes (e.g. ["https"])' },
+                      { label: 'json_table', description: 'columns ([{key, label}]), max_rows' },
+                      { label: 'severity_pill', description: 'Optional severity score thresholds' },
+                    ]}
+                    example={JSON.stringify({ maximum_fraction_digits: 2, unit_suffix: ' pts' })}
+                    docHref="/docs/custom-fields#format-metadata"
+                    testId="hint-format-metadata"
                   />
-                  <button
-                    type="button"
-                    className="custom-field-btn custom-field-btn--secondary"
-                    onClick={() => {
-                      void handleTestExecute();
-                    }}
-                    disabled={isTesting}
-                    data-testid="test-execute-btn"
-                  >
-                    {isTesting ? 'Evaluating...' : 'Test Execute'}
-                  </button>
-                </div>
+                </label>
+                <textarea
+                  id="format-metadata"
+                  className="custom-field-textarea mono"
+                  rows={8}
+                  value={metadataText}
+                  onChange={(e) => {
+                    setMetadataText(e.target.value);
+                  }}
+                  data-testid="format-metadata-textarea"
+                />
+                {jsonError && <span className="custom-field-input-error">{jsonError}</span>}
               </div>
 
-              {testError && (
-                <div
-                  className="custom-field-input-error custom-field-test-error-mt"
-                  data-testid="test-execute-error"
-                >
-                  {testError}
-                </div>
-              )}
+              {/* Script Source Code */}
+              <div className="custom-field-form-group">
+                <label htmlFor="script-source" className="custom-field-form-label">
+                  Script Source Code (Sandboxed, never executed client-side)
+                  <FieldHelpHint
+                    title="Script / Formula Source"
+                    summary="Source code or AST formula evaluated in the server sandbox to compute the field value."
+                    example='formula: issue.state === "DONE" ? "Completed" : "In Progress"'
+                    caution="Scripts run inside hardened server sandboxes and are never executed inside the browser client."
+                    docHref="/docs/custom-fields#script-source"
+                    testId="hint-script-source"
+                  />
+                </label>
+                <textarea
+                  id="script-source"
+                  className="custom-field-textarea mono custom-field-source-editor"
+                  rows={8}
+                  required
+                  value={scriptSource}
+                  onChange={(e) => {
+                    setScriptSource(e.target.value);
+                  }}
+                  data-testid="script-source-textarea"
+                />
+              </div>
 
-              {testResult && (
-                <div className="custom-field-test-result" data-testid="test-execute-result-panel">
-                  <div className="custom-field-test-meta custom-field-test-meta-row">
-                    <span>
-                      <strong>Status:</strong>{' '}
-                      <span
-                        className={`custom-field-status-pill custom-field-status-pill--${testResult.status.toLowerCase()}`}
-                      >
-                        {testResult.status}
-                      </span>
-                    </span>
-                    <span data-testid="test-latency">
-                      <strong>Latency:</strong> {testResult.latency_ms.toFixed(1)} ms
-                    </span>
-                  </div>
-
-                  <div className="custom-field-test-preview-wrap">
-                    <strong>Rendered Output Pill:</strong>
-                    <div
-                      className="custom-field-pill-preview custom-field-pill-preview-mt"
-                      data-testid="test-output-pill"
+              {/* Test Execute Section */}
+              <div className="custom-field-test-panel" data-testid="custom-field-test-panel">
+                <div className="custom-field-test-controls">
+                  <label htmlFor="test-issue-key" className="custom-field-form-label">
+                    Test With Issue Key
+                  </label>
+                  <div className="custom-field-test-input-row">
+                    <input
+                      id="test-issue-key"
+                      type="text"
+                      className="custom-field-input mono"
+                      placeholder="e.g. KANBA-1"
+                      value={testIssueKey}
+                      onChange={(e) => {
+                        setTestIssueKey(e.target.value.toUpperCase());
+                      }}
+                      data-testid="test-issue-key-input"
+                    />
+                    <button
+                      type="button"
+                      className="custom-field-btn custom-field-btn--secondary"
+                      onClick={() => {
+                        void handleTestExecute();
+                      }}
+                      disabled={isTesting}
+                      data-testid="test-execute-btn"
                     >
-                      <CustomFieldValue
-                        format={outputFormat}
-                        value={testResult.value}
-                        metadata={(() => {
-                          try {
-                            return safeJsonParse<Record<string, unknown>>(metadataText);
-                          } catch {
-                            return {};
-                          }
-                        })()}
-                        testId="test-result-value"
-                      />
-                    </div>
+                      {isTesting ? 'Evaluating...' : 'Test Execute'}
+                    </button>
                   </div>
-
-                  {testResult.logs && (
-                    <div>
-                      <strong>Truncated Logs:</strong>
-                      <pre className="custom-field-test-logs mono" data-testid="test-logs">
-                        {testResult.logs}
-                      </pre>
-                    </div>
-                  )}
                 </div>
-              )}
-            </div>
+
+                {testError && (
+                  <div
+                    className="custom-field-input-error custom-field-test-error-mt"
+                    data-testid="test-execute-error"
+                  >
+                    {testError}
+                  </div>
+                )}
+
+                {testResult && (
+                  <div className="custom-field-test-result" data-testid="test-execute-result-panel">
+                    <div className="custom-field-test-meta custom-field-test-meta-row">
+                      <span>
+                        <strong>Status:</strong>{' '}
+                        <span
+                          className={`custom-field-status-pill custom-field-status-pill--${testResult.status.toLowerCase()}`}
+                        >
+                          {testResult.status}
+                        </span>
+                      </span>
+                      <span data-testid="test-latency">
+                        <strong>Latency:</strong> {testResult.latency_ms.toFixed(1)} ms
+                      </span>
+                    </div>
+
+                    <div className="custom-field-test-preview-wrap">
+                      <strong>Rendered Output Pill:</strong>
+                      <div
+                        className="custom-field-pill-preview custom-field-pill-preview-mt"
+                        data-testid="test-output-pill"
+                      >
+                        <CustomFieldValue
+                          format={outputFormat}
+                          value={testResult.value}
+                          metadata={(() => {
+                            try {
+                              return safeJsonParse<Record<string, unknown>>(metadataText);
+                            } catch {
+                              return {};
+                            }
+                          })()}
+                          testId="test-result-value"
+                        />
+                      </div>
+                    </div>
+
+                    {testResult.logs && (
+                      <div>
+                        <strong>Truncated Logs:</strong>
+                        <pre className="custom-field-test-logs mono" data-testid="test-logs">
+                          {testResult.logs}
+                        </pre>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
+            </AdvancedSection>
 
             {/* Is Enabled */}
             <div className="custom-field-form-group">

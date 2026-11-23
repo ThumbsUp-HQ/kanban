@@ -26,6 +26,7 @@ import { DeleteAuditModal } from './DeleteAuditModal';
 import { FieldHelpHint } from '../../components/help/FieldHelpHint';
 import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
+import { AdvancedSection } from '../../ui/AdvancedSection';
 import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
 import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
 import './ProjectSettingsPage.css';
@@ -1468,20 +1469,6 @@ export function ProjectSettingsPage(): JSX.Element {
               </label>
             </div>
 
-            <div className="kb-form-group kb-form-group-checkbox">
-              <label className="kb-checkbox-label" htmlFor="project-skip-loaded-seq">
-                <input
-                  type="checkbox"
-                  id="project-skip-loaded-seq"
-                  data-testid="project-skip-loaded-seq-checkbox"
-                  checked={skipLoadedSeq}
-                  onChange={(e) => { setSkipLoadedSeq(e.target.checked); }}
-                />
-                <span>Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)</span>
-              </label>
-              <EmojiHint kind="agentSafeNumbering" />
-            </div>
-
             {/* Default Modules Selector (when modulesEnabled is true) */}
             {modulesEnabled && (
               <div className="kb-default-modules-box" data-testid="default-modules-section">
@@ -1515,29 +1502,52 @@ export function ProjectSettingsPage(): JSX.Element {
               </div>
             )}
 
-            <div className="kb-form-group">
-              <label htmlFor="proj-auto-archive-input">
-                Auto-Archive Days (optional)
-                <FieldHelpHint
-                  title="Auto-Archive Days"
-                  summary="Number of days after completion or cancellation before work items are automatically archived from active views."
-                  example="30"
-                  docHref="/docs/ticket-screen-and-work-item-features#auto-archive"
-                  testId="proj-auto-archive-help"
+            {/* Advanced Project Options (KB-ADVANCED-DISCLOSURE-03, KAN-369) */}
+            <AdvancedSection
+              title="Advanced Project Options"
+              summary="Agent-Safe sequence numbering and work item auto-archival policies"
+              testId="project-general-advanced-section"
+              activeOverridesCount={(skipLoadedSeq ? 1 : 0) + (autoArchiveDays ? 1 : 0)}
+              defaultOpen={false}
+            >
+              <div className="kb-form-group kb-form-group-checkbox">
+                <label className="kb-checkbox-label" htmlFor="project-skip-loaded-seq">
+                  <input
+                    type="checkbox"
+                    id="project-skip-loaded-seq"
+                    data-testid="project-skip-loaded-seq-checkbox"
+                    checked={skipLoadedSeq}
+                    onChange={(e) => { setSkipLoadedSeq(e.target.checked); }}
+                  />
+                  <span>Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)</span>
+                </label>
+                <EmojiHint kind="agentSafeNumbering" />
+              </div>
+
+              <div className="kb-form-group">
+                <label htmlFor="proj-auto-archive-input">
+                  Auto-Archive Days (optional)
+                  <FieldHelpHint
+                    title="Auto-Archive Days"
+                    summary="Number of days after completion or cancellation before work items are automatically archived from active views."
+                    example="30"
+                    docHref="/docs/ticket-screen-and-work-item-features#auto-archive"
+                    testId="proj-auto-archive-help"
+                  />
+                </label>
+                <input
+                  id="proj-auto-archive-input"
+                  data-testid="project-auto-archive-input"
+                  className="kb-input"
+                  type="number"
+                  min="1"
+                  max="365"
+                  value={autoArchiveDays}
+                  onChange={(e) => { setAutoArchiveDays(e.target.value); }}
+                  placeholder="e.g. 30"
                 />
-              </label>
-              <input
-                id="proj-auto-archive-input"
-                data-testid="project-auto-archive-input"
-                className="kb-input"
-                type="number"
-                min="1"
-                max="365"
-                value={autoArchiveDays}
-                onChange={(e) => { setAutoArchiveDays(e.target.value); }}
-                placeholder="e.g. 30"
-              />
-            </div>
+              </div>
+            </AdvancedSection>
 
             <button
               type="submit"
@@ -1554,7 +1564,18 @@ export function ProjectSettingsPage(): JSX.Element {
         {activeTab === 'states' && (
           <div className="kb-members-section" data-testid="states-section">
             <div className="kb-settings-header">
-              <h3>Workflow States</h3>
+              <div className="kb-settings-title-row">
+                <h3>Workflow States</h3>
+                {states.filter((st) => st.wip_soft_limit != null || st.wip_hard_limit != null).length > 0 && (
+                  <span className="kb-wip-pill" data-testid="wip-overrides-active-badge">
+                    {states.filter((st) => st.wip_soft_limit != null || st.wip_hard_limit != null).length} custom WIP{' '}
+                    {states.filter((st) => st.wip_soft_limit != null || st.wip_hard_limit != null).length === 1
+                      ? 'limit'
+                      : 'limits'}{' '}
+                    active
+                  </span>
+                )}
+              </div>
               <p className="kb-settings-subtitle">
                 Configure lifecycle stages, sort order, and Soft/Hard WIP limits (with hard &gt;= soft
                 validation).
@@ -1599,36 +1620,6 @@ export function ProjectSettingsPage(): JSX.Element {
                   value={stateColor}
                   onChange={setStateColor}
                 />
-                <input
-                  type="number"
-                  data-testid="state-sort-order-input"
-                  className="kb-input"
-                  placeholder="Order (0)"
-                  value={stateSortOrder}
-                  onChange={(e) => { setStateSortOrder(e.target.value); }}
-                />
-                <input
-                  type="number"
-                  data-testid="state-wip-soft-input"
-                  className="kb-input"
-                  placeholder="Soft WIP"
-                  value={stateWipSoft}
-                  onChange={(e) => {
-                    setStateWipSoft(e.target.value);
-                    setWipLimitError(null);
-                  }}
-                />
-                <input
-                  type="number"
-                  data-testid="state-wip-hard-input"
-                  className="kb-input"
-                  placeholder="Hard WIP"
-                  value={stateWipHard}
-                  onChange={(e) => {
-                    setStateWipHard(e.target.value);
-                    setWipLimitError(null);
-                  }}
-                />
                 <label className="kb-checkbox-label">
                   <input
                     type="checkbox"
@@ -1642,11 +1633,54 @@ export function ProjectSettingsPage(): JSX.Element {
                   Add State
                 </button>
               </div>
-              {wipLimitError && (
-                <div className="kb-error-text" data-testid="wip-limit-error">
-                  {wipLimitError}
+
+              {/* Advanced State Options (WIP Limits, Sort Order) */}
+              <AdvancedSection
+                title="Advanced State Limits & Sorting"
+                summary="Sort order and soft/hard work-in-progress (WIP) concurrency limits"
+                testId="state-advanced-section"
+                activeOverridesCount={(stateSortOrder ? 1 : 0) + (stateWipSoft ? 1 : 0) + (stateWipHard ? 1 : 0)}
+                hasErrors={Boolean(wipLimitError)}
+                defaultOpen={false}
+              >
+                <div className="kb-form-row kb-form-row-advanced">
+                  <input
+                    type="number"
+                    data-testid="state-sort-order-input"
+                    className="kb-input"
+                    placeholder="Order (0)"
+                    value={stateSortOrder}
+                    onChange={(e) => { setStateSortOrder(e.target.value); }}
+                  />
+                  <input
+                    type="number"
+                    data-testid="state-wip-soft-input"
+                    className="kb-input"
+                    placeholder="Soft WIP"
+                    value={stateWipSoft}
+                    onChange={(e) => {
+                      setStateWipSoft(e.target.value);
+                      setWipLimitError(null);
+                    }}
+                  />
+                  <input
+                    type="number"
+                    data-testid="state-wip-hard-input"
+                    className="kb-input"
+                    placeholder="Hard WIP"
+                    value={stateWipHard}
+                    onChange={(e) => {
+                      setStateWipHard(e.target.value);
+                      setWipLimitError(null);
+                    }}
+                  />
                 </div>
-              )}
+                {wipLimitError && (
+                  <div className="kb-error-text" data-testid="wip-limit-error">
+                    {wipLimitError}
+                  </div>
+                )}
+              </AdvancedSection>
             </form>
 
             {/* States Table */}
@@ -2092,18 +2126,32 @@ export function ProjectSettingsPage(): JSX.Element {
                   value={labelColor}
                   onChange={setLabelColor}
                 />
-                <input
-                  type="text"
-                  data-testid="label-exclusive-group-input"
-                  className="kb-input"
-                  placeholder="Exclusive Group (optional)"
-                  value={labelExclusiveGroup}
-                  onChange={(e) => { setLabelExclusiveGroup(e.target.value); }}
-                />
                 <button type="submit" data-testid="create-label-btn" className="kb-btn kb-btn-primary">
                   Add Label
                 </button>
               </div>
+
+              {/* Advanced Label Grouping (KB-ADVANCED-DISCLOSURE-03, KAN-369) */}
+              <AdvancedSection
+                title="Advanced Label Grouping"
+                summary="Exclusive mutual exclusion label groups"
+                testId="label-advanced-section"
+                activeOverridesCount={labelExclusiveGroup.trim() ? 1 : 0}
+                defaultOpen={false}
+              >
+                <div className="kb-form-group">
+                  <label htmlFor="label-exclusive-group-input">Exclusive Group (optional)</label>
+                  <input
+                    id="label-exclusive-group-input"
+                    type="text"
+                    data-testid="label-exclusive-group-input"
+                    className="kb-input"
+                    placeholder="Exclusive Group (optional)"
+                    value={labelExclusiveGroup}
+                    onChange={(e) => { setLabelExclusiveGroup(e.target.value); }}
+                  />
+                </div>
+              </AdvancedSection>
             </form>
 
             {/* Labels Table */}

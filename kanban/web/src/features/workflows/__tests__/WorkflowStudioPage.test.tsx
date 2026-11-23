@@ -7,6 +7,8 @@ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { WorkflowStudioPage } from '../WorkflowStudioPage';
+import { AttachHookDialog } from '../AttachHookDialog';
+import { CustomFieldDefinitionEditor } from '../../custom-fields/CustomFieldDefinitionEditor';
 import * as api from '../api';
 import { ApiProblem } from '../../../api/problem';
 
@@ -374,5 +376,70 @@ describe('WorkflowStudioPage (KB-P5-24, S14.4)', () => {
       expect(screen.getAllByText(/Any State/).length).toBeGreaterThan(0);
     });
     unmount();
+  });
+
+  describe('Progressive Disclosure (KB-ADVANCED-DISCLOSURE-03 / KAN-369)', () => {
+    it('Positive case 2: AttachHookDialog renders hook trigger and action with advanced execution policies collapsed', () => {
+      render(
+        <AttachHookDialog
+          isOpen={true}
+          projectKey="KAN"
+          states={api.DEFAULT_PROJECT_STATES}
+          agentDefinitions={[]}
+          wasmModules={api.DEFAULT_WASM_MODULES}
+          onSave={vi.fn()}
+          onClose={vi.fn()}
+        />,
+      );
+
+      // Primary trigger and action fields are directly visible
+      expect(screen.getByLabelText(/From State/i)).toBeDefined();
+      expect(screen.getByLabelText(/To State/i)).toBeDefined();
+      expect(screen.getByLabelText(/Hook Name/i)).toBeDefined();
+      expect(screen.getByText('Sync Wasm Validator')).toBeDefined();
+
+      // Advanced Hook Settings section is collapsed by default
+      const advSection = screen.getByTestId<HTMLDetailsElement>('attach-hook-advanced-section');
+      expect(advSection.open).toBe(false);
+      expect(screen.getByTestId('attach-hook-advanced-section-toggle').getAttribute('aria-expanded')).toBe('false');
+
+      // Active overrides badge is displayed
+      expect(screen.getByTestId('attach-hook-advanced-section-toggle').textContent).toContain('custom setting');
+
+      // Toggle open
+      fireEvent.click(screen.getByTestId('attach-hook-advanced-section-toggle'));
+      expect(advSection.open).toBe(true);
+      expect(screen.getByRole('combobox', { name: /^Failure Policy/i })).toBeDefined();
+      expect(screen.getByLabelText(/Approved WebAssembly Module/i)).toBeDefined();
+      expect(screen.getByText(/Allowed Mutable Fields/i)).toBeDefined();
+      expect(screen.getByTestId('hook-execution-logs-section')).toBeDefined();
+    });
+
+    it('Positive case 3: CustomFieldDefinitionEditor collapses raw JSON format metadata behind Advanced mode', async () => {
+      render(
+        <QueryClientProvider client={queryClient}>
+          <CustomFieldDefinitionEditor projectKey="KAN" isAdmin={true} />
+        </QueryClientProvider>,
+      );
+
+      // Primary basic properties are rendered
+      expect(await screen.findByTestId('field-name-input')).toBeDefined();
+      expect(screen.getByTestId('field-slug-input')).toBeDefined();
+      expect(screen.getByTestId('field-flavor-select')).toBeDefined();
+      expect(screen.getByTestId('output-format-select')).toBeDefined();
+      expect(screen.getByTestId('is-enabled-checkbox')).toBeDefined();
+
+      // Advanced format & sandbox script section is collapsed by default
+      const advSection = screen.getByTestId<HTMLDetailsElement>('custom-field-advanced-section');
+      expect(advSection.open).toBe(false);
+      expect(screen.getByTestId('custom-field-advanced-section-toggle').getAttribute('aria-expanded')).toBe('false');
+
+      // Toggle open
+      fireEvent.click(screen.getByTestId('custom-field-advanced-section-toggle'));
+      expect(advSection.open).toBe(true);
+      expect(screen.getByTestId('format-metadata-textarea')).toBeDefined();
+      expect(screen.getByTestId('script-source-textarea')).toBeDefined();
+      expect(screen.getByTestId('custom-field-test-panel')).toBeDefined();
+    });
   });
 });

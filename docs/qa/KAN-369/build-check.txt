@@ -1,0 +1,54 @@
+=== 1. Vitest Unit Tests ===
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan369-3769ebd3/kanban/web
+
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx (13 tests) 1301ms
+   ✓ WorkflowStudioPage (KB-P5-24, S14.4) (13)
+     ✓ reorders hooks with keyboard Move up and toggles enabled state (Mandatory Test Case 2) 311ms
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (39 tests) 4583ms
+   ✓ ProjectSettingsPage (KANBA-202) (39)
+     ✓ renders project settings page tabs and switches between them 306ms
+     ✓ supports full workflow state editing UI, live StateBadge preview, and cache invalidation (KAN-43 Problem 1) 399ms
+
+ Test Files  2 passed (2)
+      Tests  52 passed (52)
+   Start at  07:44:01
+   Duration  6.18s (tests 60%, environment 19%, import 12%, transform 8%)
+
+
+=== 2. TypeScript Strict Typecheck (tsc -b --noEmit) ===
+
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan369-3769ebd3/kanban/web
+> tsc -b --noEmit
+
+
+=== 3. ESLint Zero Warnings (eslint . --max-warnings 0) ===
+
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan369-3769ebd3/kanban/web
+> eslint . --max-warnings 0
+
+
+=== 4. Vite Production Build (vite build) ===
+
+> @kanban/web@0.1.0 build /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan369-3769ebd3/kanban/web
+> tsc -b && vite build
+
+vite v8.3.8 building client environment for production...
+transforming...
+✓ 753 modules transformed.
+rendering chunks...
+computing gzip size...
+dist/index.html                             0.50 kB │ gzip:   0.31 kB
+dist/assets/mermaid.worker-DpboCUmS.js  1,530.54 kB
+dist/assets/index-CtCbS5kD.css            538.51 kB │ gzip:  75.42 kB
+dist/assets/index-D-NQDOnM.js           2,767.08 kB │ gzip: 769.08 kB
+
+[plugin builtin:vite-reporter] 
+(!) Some chunks are larger than 500 kB after minification. Consider:
+- Using dynamic import() to code-split the application
+- Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+- Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+✓ built in 1.64s
+
+=== 5. Plain ASCII Hyphens Check (scripts.check_no_dashes --all) ===
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan369-3769ebd3/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)

@@ -1,0 +1,48 @@
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan369-3769ebd3/kanban/web
+      Coverage enabled with v8
+
+ ✓ src/features/workflows/__tests__/AttachHookDialog.test.tsx (7 tests) 1463ms
+   ✓ AttachHookDialog (KB-P5-24) (7)
+     ✓ switches hook_kind between sync_validator, sync_mutator, and agent_interceptor showing/hiding selectors (Mandatory Test Case 3) 564ms
+ ✓ src/features/workflows/__tests__/WorkflowStudioPage.test.tsx (13 tests) 1947ms
+   ✓ WorkflowStudioPage (KB-P5-24, S14.4) (13)
+     ✓ reorders hooks with keyboard Move up and toggles enabled state (Mandatory Test Case 2) 391ms
+     ✓ handles edit hook, detach hook, and AAL2 intercept with fallback challenge values and success retry 498ms
+ ✓ src/features/custom-fields/__tests__/CustomFieldDefinitionEditor.test.tsx (42 tests) 3778ms
+ ✓ src/features/settings/__tests__/ProjectSettingsPage.test.tsx (39 tests) 5267ms
+   ✓ ProjectSettingsPage (KANBA-202) (39)
+     ✓ renders project settings page tabs and switches between them 479ms
+     ✓ manages workflow states: list, add with WIP limits, soft > hard validation, reorder up/down, delete 315ms
+     ✓ handles error states on workflow states, priorities, labels, and trash restore 352ms
+     ✓ covers fallback error messages when error object has no message property 324ms
+     ✓ supports inline row editing of workflow states: start, edit fields, cancel, save, error, soft>hard validation 321ms
+     ✓ supports full workflow state editing UI, live StateBadge preview, and cache invalidation (KAN-43 Problem 1) 372ms
+     ✓ supports inline priority editing, saving, and cache invalidation (KAN-43 Problem 1) 332ms
+ ✓ src/features/workflows/__tests__/workflowCoverageBooster.test.tsx (30 tests) 5904ms
+   ✓ Workflow Studio Coverage Booster (30)
+     ✓ HookPipelineRow variations (6)
+       ✓ renders different hook kinds and failure policies 438ms
+       ✓ exercises copy SHA timeout reset, repeat click, and unmount cleanup 2094ms
+     ✓ WorkflowStudioPage interactive actions (10)
+       ✓ opens and closes Add Transition Rule, Edit Hook, and Dry-Run drawer 832ms
+       ✓ exercises onAddHook from card and non-AAL2 error handling in studio 454ms
+
+ Test Files  5 passed (5)
+      Tests  131 passed (131)
+   Start at  07:47:33
+   Duration  9.32s (tests 62%, environment 18%, import 14%, transform 6%, worker 1%)
+
+ % Coverage report from v8
+-------------------|---------|----------|---------|---------|-------------------
+File               | % Stmts | % Branch | % Funcs | % Lines | Uncovered Line #s 
+-------------------|---------|----------|---------|---------|-------------------
+All files          |   99.64 |    95.68 |   99.62 |     100 |                   
+ custom-fields     |     100 |    96.27 |     100 |     100 |                   
+  ...ionEditor.tsx |     100 |    96.27 |     100 |     100 | ...70,525-548,583 
+ settings          |   99.56 |    95.03 |     100 |     100 |                   
+  ...tingsPage.tsx |   99.56 |    95.03 |     100 |     100 | ...1043-1046,1642 
+ workflows         |    99.5 |    96.96 |    98.3 |     100 |                   
+  ...ookDialog.tsx |   98.71 |    96.46 |     100 |     100 | 72,114,174,443    
+  ...tudioPage.tsx |     100 |    97.64 |   96.66 |     100 | 181,225           
+-------------------|---------|----------|---------|---------|-------------------
