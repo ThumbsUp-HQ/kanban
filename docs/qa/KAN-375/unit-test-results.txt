@@ -1,0 +1,29 @@
+=== Pytest: test_jinja_reports.py ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan375-fc704ae8
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collected 28 items
+
+kanban/tests/test_jinja_reports.py ............................          [100%]
+
+============================== 28 passed in 9.51s ==============================
+
+=== Vitest: ReportExportModal.test.tsx & cssTokensAudit.test.ts ===
+
+> @kanban/web@0.1.0 test /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan375-fc704ae8/kanban/web
+> vitest run src/features/reports/__tests__/ReportExportModal.test.tsx src/styles/__tests__/cssTokensAudit.test.ts
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan375-fc704ae8/kanban/web
+
+ ✓ src/styles/__tests__/cssTokensAudit.test.ts (6 tests) 13ms
+ ✓ src/features/reports/__tests__/ReportExportModal.test.tsx (15 tests) 341ms
+
+ Test Files  2 passed (2)
+      Tests  21 passed (21)
+   Start at  10:59:54
+   Duration  1.50s (environment 71%, tests 17%, import 8%, transform 3%, worker 1%)
+

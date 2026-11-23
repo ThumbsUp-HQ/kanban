@@ -5,6 +5,8 @@
  * REST API Client for Report Templates and Multi-Format Export Engine (KB-JINJA-REPORTS).
  */
 
+import { getCsrfToken } from '../../api/client';
+
 export interface ReportTemplate {
   id: string;
   workspace_id: string;
@@ -58,8 +60,9 @@ function buildHeaders(extraHeaders: Record<string, string> = {}): HeadersInit {
     'Content-Type': 'application/json',
     ...extraHeaders,
   };
-  const csrf = getCsrfTokenFromCookie();
+  const csrf = getCsrfToken() ?? getCsrfTokenFromCookie();
   if (csrf) {
+    headers['X-CSRF-Token'] = csrf;
     headers['x-kb-csrf'] = csrf;
   }
   return headers;
@@ -73,6 +76,7 @@ export async function fetchReportTemplates(
   const res = await fetch(`/api/v1/workspaces/${encodeURIComponent(workspaceRef)}/report-templates${query}`, {
     method: 'GET',
     headers: buildHeaders(),
+    credentials: 'same-origin',
   });
   if (!res.ok) {
     const errorBody = (await res.json().catch(() => ({}))) as { detail?: string };
@@ -91,6 +95,7 @@ export async function fetchReportTemplate(
     {
       method: 'GET',
       headers: buildHeaders(),
+      credentials: 'same-origin',
     },
   );
   if (!res.ok) {
@@ -118,6 +123,7 @@ export async function createReportTemplate(
     {
       method: 'POST',
       headers: buildHeaders(),
+      credentials: 'same-origin',
       body: JSON.stringify(payload),
     },
   );
@@ -146,6 +152,7 @@ export async function updateReportTemplate(
     {
       method: 'PATCH',
       headers: buildHeaders(),
+      credentials: 'same-origin',
       body: JSON.stringify(payload),
     },
   );
@@ -166,6 +173,7 @@ export async function deleteReportTemplate(
     {
       method: 'DELETE',
       headers: buildHeaders(),
+      credentials: 'same-origin',
     },
   );
   if (!res.ok && res.status !== 204) {
@@ -191,6 +199,7 @@ export async function previewReport(
     {
       method: 'POST',
       headers: buildHeaders(),
+      credentials: 'same-origin',
       body: JSON.stringify(params),
     },
   );
@@ -218,6 +227,7 @@ export async function generateReport(
   const res = await fetch(url, {
     method: 'POST',
     headers: buildHeaders(),
+    credentials: 'same-origin',
     body: JSON.stringify(params),
   });
 

@@ -1,0 +1,916 @@
+diff --git a/kanban/api/v1/reports.py b/kanban/api/v1/reports.py
+index b1b0eed8..feb2e4ec 100644
+--- a/kanban/api/v1/reports.py
++++ b/kanban/api/v1/reports.py
+@@ -83,6 +83,9 @@ async def _resolve_workspace_id(
+         if caller.is_server_admin or res_uuid == caller.workspace_id:
+             return res_uuid
+ 
++    if workspace_ref.strip().lower() in ("default", "current", "~", "@") and caller.workspace_id:
++        return caller.workspace_id
++
+     raise ProblemException(
+         code="NOT_FOUND",
+         status=404,
+diff --git a/kanban/tests/test_jinja_reports.py b/kanban/tests/test_jinja_reports.py
+index d8e29e73..24a1e11b 100644
+--- a/kanban/tests/test_jinja_reports.py
++++ b/kanban/tests/test_jinja_reports.py
+@@ -457,6 +457,24 @@ async def test_report_templates_crud_api(
+     assert res_del.status_code == 204
+ 
+ 
++async def test_report_templates_workspace_alias_resolution(
++    api_env: ApiEnv,
++    make_user: Callable[..., Awaitable[SeededUser]],
++    as_principal: Callable[..., httpx.AsyncClient],
++) -> None:
++    """Verify default, current, ~, and @ workspace references resolve to caller workspace."""
++    admin = await make_user("alias_admin", workspace_role="WORKSPACE_ADMIN")
++    client_admin = as_principal(admin)
++
++    for alias in ("default", "current", "~", "@"):
++        res = await client_admin.get(f"/api/v1/workspaces/{alias}/report-templates")
++        assert res.status_code == 200
++        data = res.json()
++        assert data["total"] >= 3
++        slugs = [t["slug"] for t in data["items"]]
++        assert "security-assessment-report" in slugs
++
++
+ async def test_preview_report_api(
+     api_env: ApiEnv,
+     make_user: Callable[..., Awaitable[SeededUser]],
+diff --git a/kanban/web/src/features/reports/ReportExportModal.tsx b/kanban/web/src/features/reports/ReportExportModal.tsx
+index a2d05111..dd18fef0 100644
+--- a/kanban/web/src/features/reports/ReportExportModal.tsx
++++ b/kanban/web/src/features/reports/ReportExportModal.tsx
+@@ -9,6 +9,10 @@
+  */
+ 
+ import React, { useState, useEffect, type JSX } from 'react';
++import { useParams } from 'react-router';
++import { QueryClientContext } from '@tanstack/react-query';
++import { useAuth } from '../auth/AuthContext';
++import { qk } from '../../api/queryKeys';
+ import {
+   fetchReportTemplates,
+   previewReport,
+@@ -31,10 +35,26 @@ const SUPPORTED_FORMATS = ['PDF', 'XLSX', 'CSV', 'DOCX', 'ODT', 'HTML', 'MD'] as
+ export function ReportExportModal({
+   isOpen,
+   onClose,
+-  workspaceSlug = 'default',
++  workspaceSlug,
+   projectKey,
+   selectedIssueIds,
+ }: ReportExportModalProps): JSX.Element | null {
++  const routeParams = useParams<{ workspaceSlug?: string }>();
++  const auth = useAuth();
++  const queryContext = React.useContext(QueryClientContext);
++  const cachedMe = queryContext ? queryContext.getQueryData<{ workspace_id?: string }>(qk.me()) : undefined;
++
++  const resolvedWorkspaceSlug =
++    (workspaceSlug && workspaceSlug !== 'default' && workspaceSlug.trim().length > 0)
++      ? workspaceSlug.trim()
++      : (routeParams.workspaceSlug && routeParams.workspaceSlug !== 'default' && routeParams.workspaceSlug.trim().length > 0)
++        ? routeParams.workspaceSlug.trim()
++        : (auth.session?.workspace_id && auth.session.workspace_id.trim().length > 0)
++          ? auth.session.workspace_id.trim()
++          : (cachedMe?.workspace_id && cachedMe.workspace_id.trim().length > 0)
++            ? cachedMe.workspace_id.trim()
++            : (workspaceSlug ?? 'default');
++
+   const [templates, setTemplates] = useState<ReportTemplate[]>([]);
+   const [selectedTemplateSlug, setSelectedTemplateSlug] = useState<string>('security-assessment-report');
+   const [selectedFormat, setSelectedFormat] = useState<string>('PDF');
+@@ -58,7 +78,7 @@ export function ReportExportModal({
+     setLoadingTemplates(true);
+     setError(null);
+ 
+-    fetchReportTemplates(workspaceSlug, projectKey)
++    fetchReportTemplates(resolvedWorkspaceSlug, projectKey)
+       .then((items) => {
+         /* v8 ignore next */
+         if (!isSubscribed) return;
+@@ -97,7 +117,7 @@ export function ReportExportModal({
+     return () => {
+       isSubscribed = false;
+     };
+-  }, [isOpen, workspaceSlug, projectKey]);
++  }, [isOpen, resolvedWorkspaceSlug, projectKey]);
+ 
+   const activeTemplate = templates.find((t) => t.slug === selectedTemplateSlug);
+ 
+@@ -134,7 +154,7 @@ export function ReportExportModal({
+     setLoadingPreview(true);
+     setError(null);
+     try {
+-      const res = await previewReport(workspaceSlug, {
++      const res = await previewReport(resolvedWorkspaceSlug, {
+         template_ref: activeTemplate.slug,
+         project_ref: projectKey,
+         parameters,
+@@ -162,7 +182,7 @@ export function ReportExportModal({
+     setError(null);
+     try {
+       const { blob, filename } = await generateReport(
+-        { projectRef: projectKey },
++        { projectRef: projectKey, workspaceRef: resolvedWorkspaceSlug },
+         {
+           template_ref: activeTemplate.slug,
+           format: selectedFormat,
+@@ -210,6 +230,7 @@ export function ReportExportModal({
+       >
+         <div
+           className="reports-modal-container"
++          data-testid="report-export-modal"
+           role="dialog"
+           aria-modal="true"
+           aria-labelledby="report-export-title"
+@@ -399,10 +420,13 @@ export function ReportExportModal({
+         <ReportTemplateStudioModal
+           isOpen={isStudioOpen}
+           onClose={() => { setIsStudioOpen(false); }}
+-          workspaceSlug={workspaceSlug}
++          workspaceSlug={resolvedWorkspaceSlug}
+           projectKey={projectKey}
+           onTemplateSaved={(newTpl) => {
+-            setTemplates((prev) => [...prev, newTpl]);
++            setTemplates((prev) => {
++              const filtered = prev.filter((t) => t.slug !== newTpl.slug);
++              return [...filtered, newTpl];
++            });
+             setSelectedTemplateSlug(newTpl.slug);
+           }}
+         />
+diff --git a/kanban/web/src/features/reports/ReportTemplateStudioModal.tsx b/kanban/web/src/features/reports/ReportTemplateStudioModal.tsx
+index cca99051..ffacc466 100644
+--- a/kanban/web/src/features/reports/ReportTemplateStudioModal.tsx
++++ b/kanban/web/src/features/reports/ReportTemplateStudioModal.tsx
+@@ -7,6 +7,10 @@
+  */
+ 
+ import React, { useState, useRef, type JSX, type SyntheticEvent } from 'react';
++import { useParams } from 'react-router';
++import { QueryClientContext } from '@tanstack/react-query';
++import { useAuth } from '../auth/AuthContext';
++import { qk } from '../../api/queryKeys';
+ import { createReportTemplate, type ReportTemplate } from './reportsApi';
+ import './reports.css';
+ 
+@@ -34,9 +38,25 @@ const TEMPLATE_SNIPPETS = [
+ export function ReportTemplateStudioModal({
+   isOpen,
+   onClose,
+-  workspaceSlug = 'default',
++  workspaceSlug,
++  projectKey,
+   onTemplateSaved,
+ }: ReportTemplateStudioModalProps): JSX.Element | null {
++  const routeParams = useParams<{ workspaceSlug?: string }>();
++  const auth = useAuth();
++  const queryContext = React.useContext(QueryClientContext);
++  const cachedMe = queryContext ? queryContext.getQueryData<{ workspace_id?: string }>(qk.me()) : undefined;
++
++  const resolvedWorkspaceSlug =
++    (workspaceSlug && workspaceSlug !== 'default' && workspaceSlug.trim().length > 0)
++      ? workspaceSlug.trim()
++      : (routeParams.workspaceSlug && routeParams.workspaceSlug !== 'default' && routeParams.workspaceSlug.trim().length > 0)
++        ? routeParams.workspaceSlug.trim()
++        : (auth.session?.workspace_id && auth.session.workspace_id.trim().length > 0)
++          ? auth.session.workspace_id.trim()
++          : (cachedMe?.workspace_id && cachedMe.workspace_id.trim().length > 0)
++            ? cachedMe.workspace_id.trim()
++            : (workspaceSlug ?? 'default');
+   const [name, setName] = useState('');
+   const [slug, setSlug] = useState('');
+   const [description, setDescription] = useState('');
+@@ -95,11 +115,12 @@ export function ReportTemplateStudioModal({
+ 
+       setLoading(true);
+       try {
+-        const created = await createReportTemplate(workspaceSlug, {
++        const created = await createReportTemplate(resolvedWorkspaceSlug, {
+           name: name.trim(),
+           slug: slug.trim(),
+           /* v8 ignore next */
+           description: description.trim() || undefined,
++          project_id: projectKey,
+           template_markdown: markdown,
+           allowed_formats: ['PDF', 'XLSX', 'CSV', 'DOCX', 'ODT', 'HTML', 'MD'],
+         });
+diff --git a/kanban/web/src/features/reports/__tests__/ReportExportModal.test.tsx b/kanban/web/src/features/reports/__tests__/ReportExportModal.test.tsx
+index 587878c5..e7f53922 100644
+--- a/kanban/web/src/features/reports/__tests__/ReportExportModal.test.tsx
++++ b/kanban/web/src/features/reports/__tests__/ReportExportModal.test.tsx
+@@ -8,6 +8,11 @@
+ import React from 'react';
+ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+ import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { MemoryRouter, Routes, Route } from 'react-router';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { setCsrfToken } from '../../../api/client';
++import { qk } from '../../../api/queryKeys';
++import * as authModule from '../../auth/AuthContext';
+ import { ReportExportModal } from '../ReportExportModal';
+ import { ReportTemplateStudioModal } from '../ReportTemplateStudioModal';
+ import * as reportsApi from '../reportsApi';
+@@ -82,6 +87,21 @@ describe('reportsApi client', () => {
+     });
+     const list1 = await reportsApi.fetchReportTemplates('ws-1', 'KAN');
+     expect(list1).toHaveLength(2);
++    const call0 = fetchMock.mock.calls[0] as [string, RequestInit & { headers: Record<string, string> }];
++    expect(call0[1].credentials).toBe('same-origin');
++    expect(call0[1].headers['X-CSRF-Token']).toBe('test-csrf-token');
++    expect(call0[1].headers['x-kb-csrf']).toBe('test-csrf-token');
++
++    // 1b. getCsrfToken cached client token takes precedence
++    setCsrfToken('client-cached-csrf');
++    fetchMock.mockResolvedValueOnce({
++      ok: true,
++      json: () => Promise.resolve({ items: MOCK_TEMPLATES }),
++    });
++    await reportsApi.fetchReportTemplates('ws-1', 'KAN');
++    const call1 = fetchMock.mock.calls[1] as [string, RequestInit & { headers: Record<string, string> }];
++    expect(call1[1].headers['X-CSRF-Token']).toBe('client-cached-csrf');
++    setCsrfToken(null);
+ 
+     fetchMock.mockResolvedValueOnce({
+       ok: true,
+@@ -313,6 +333,52 @@ describe('ReportTemplateStudioModal', () => {
+     fireEvent.click(screen.getByTestId('template-studio-backdrop'));
+     expect(onClose).toHaveBeenCalledTimes(2);
+   });
++
++  it('resolves active workspace dynamically in ReportTemplateStudioModal', async () => {
++    const tpl0 = MOCK_TEMPLATES[0];
++    if (!tpl0) throw new Error('Missing mock template');
++    const createSpy = vi.spyOn(reportsApi, 'createReportTemplate').mockResolvedValue(tpl0);
++    vi.spyOn(authModule, 'useAuth').mockReturnValue({
++      session: {
++        authenticated: true,
++        principal_id: 'p-1',
++        workspace_id: 'ws-studio-auth',
++        aal_level: 1,
++        mfa_pending: false,
++        csrf_token: 'csrf',
++      },
++      isLoading: false,
++      initialized: true,
++      refreshSession: () => Promise.resolve(null),
++      logout: () => Promise.resolve(),
++    });
++
++    render(
++      <ReportTemplateStudioModal
++        isOpen={true}
++        onClose={vi.fn()}
++        projectKey="KAN"
++      />,
++    );
++
++    const form = screen.getByTestId('template-studio-save-btn').closest('form');
++    if (!form) throw new Error('Form not found');
++
++    const nameInput = screen.getByTestId<HTMLInputElement>('studio-template-name-input');
++    fireEvent.change(nameInput, { target: { value: 'Studio Dynamic Workspace' } });
++
++    fireEvent.submit(form);
++
++    await waitFor(() => {
++      expect(createSpy).toHaveBeenCalledWith(
++        'ws-studio-auth',
++        expect.objectContaining({
++          name: 'Studio Dynamic Workspace',
++          project_id: 'KAN',
++        }),
++      );
++    });
++  });
+ });
+ 
+ describe('ReportExportModal', () => {
+@@ -532,4 +598,137 @@ describe('ReportExportModal', () => {
+       expect(screen.getByTestId('report-export-error').textContent).toContain('Load failed');
+     });
+   });
++
++  it('resolves active workspace dynamically from route params when workspaceSlug is not passed or default', async () => {
++    render(
++      <MemoryRouter initialEntries={['/w/acme-corp/p/KAN/reports']}>
++        <Routes>
++          <Route
++            path="/w/:workspaceSlug/p/:projectKey/reports"
++            element={
++              <ReportExportModal
++                isOpen={true}
++                onClose={vi.fn()}
++                projectKey="KAN"
++              />
++            }
++          />
++        </Routes>
++      </MemoryRouter>,
++    );
++
++    await waitFor(() => {
++      expect(reportsApi.fetchReportTemplates).toHaveBeenCalledWith('acme-corp', 'KAN');
++    });
++  });
++
++  it('resolves active workspace dynamically from useAuth session when workspaceSlug is omitted or default', async () => {
++    vi.spyOn(authModule, 'useAuth').mockReturnValue({
++      session: {
++        authenticated: true,
++        principal_id: 'p-1',
++        workspace_id: 'ws-auth-uuid-999',
++        aal_level: 1,
++        mfa_pending: false,
++        csrf_token: 'csrf',
++      },
++      isLoading: false,
++      initialized: true,
++      refreshSession: () => Promise.resolve(null),
++      logout: () => Promise.resolve(),
++    });
++
++    render(
++      <ReportExportModal
++        isOpen={true}
++        onClose={vi.fn()}
++        projectKey="KAN"
++        workspaceSlug="default"
++      />,
++    );
++
++    await waitFor(() => {
++      expect(reportsApi.fetchReportTemplates).toHaveBeenCalledWith('ws-auth-uuid-999', 'KAN');
++    });
++  });
++
++  it('resolves active workspace dynamically from qk.me() in QueryClient cache when workspaceSlug is omitted', async () => {
++    const queryClient = new QueryClient({
++      defaultOptions: { queries: { retry: false } },
++    });
++    queryClient.setQueryData(qk.me(), {
++      workspace_id: 'ws-from-me-cache',
++    });
++
++    render(
++      <QueryClientProvider client={queryClient}>
++        <ReportExportModal
++          isOpen={true}
++          onClose={vi.fn()}
++          projectKey="KAN"
++        />
++      </QueryClientProvider>,
++    );
++
++    await waitFor(() => {
++      expect(reportsApi.fetchReportTemplates).toHaveBeenCalledWith('ws-from-me-cache', 'KAN');
++    });
++  });
++
++  it('deduplicates templates on save when new template has the same slug', async () => {
++    const baseTpl = MOCK_TEMPLATES[0];
++    if (!baseTpl) throw new Error('Missing mock template');
++    const duplicateTpl: reportsApi.ReportTemplate = {
++      ...baseTpl,
++      name: 'Updated Security Report',
++    };
++    vi.spyOn(reportsApi, 'createReportTemplate').mockResolvedValue(duplicateTpl);
++
++    render(
++      <ReportExportModal
++        isOpen={true}
++        onClose={vi.fn()}
++        projectKey="KAN"
++        workspaceSlug="ws-1"
++      />,
++    );
++
++    await waitFor(() => {
++      expect(screen.getByTestId('reports-open-studio-btn')).toBeDefined();
++    });
++
++    fireEvent.click(screen.getByTestId('reports-open-studio-btn'));
++    const studioForm = screen.getByTestId('template-studio-save-btn').closest('form');
++    if (!studioForm) throw new Error('Studio form missing');
++
++    fireEvent.change(screen.getByTestId('studio-template-name-input'), {
++      target: { value: 'Updated Security Report' },
++    });
++    fireEvent.submit(studioForm);
++
++    await waitFor(() => {
++      expect(screen.queryByTestId('template-studio-backdrop')).toBeNull();
++    });
++  });
++
++  it('renders modal with semantic dark theme tokens and zero inline style attributes', async () => {
++    render(
++      <div data-theme="dark">
++        <ReportExportModal
++          isOpen={true}
++          onClose={vi.fn()}
++          projectKey="KAN"
++          workspaceSlug="ws-1"
++        />
++      </div>,
++    );
++
++    await waitFor(() => {
++      const container = screen.getByTestId('report-export-backdrop').querySelector('.reports-modal-container');
++      expect(container).toBeDefined();
++      expect(container?.getAttribute('style')).toBeNull();
++      const select = screen.getByTestId('report-template-select');
++      expect(select.getAttribute('style')).toBeNull();
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/reports/reports.css b/kanban/web/src/features/reports/reports.css
+index ba9705e1..8d960b94 100644
+--- a/kanban/web/src/features/reports/reports.css
++++ b/kanban/web/src/features/reports/reports.css
+@@ -18,8 +18,8 @@
+ 
+ .reports-modal-container {
+   background: var(--bg-surface, #ffffff);
+-  color: var(--text-primary, #0f172a);
+-  border: 1px solid var(--border-subtle, #e2e8f0);
++  color: var(--fg-primary, #111827);
++  border: 1px solid var(--border-subtle, #e5e7eb);
+   border-radius: 12px;
+   box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+   width: 100%;
+@@ -52,15 +52,15 @@
+   align-items: center;
+   justify-content: space-between;
+   padding: 18px 24px;
+-  border-bottom: 1px solid var(--border-subtle, #e2e8f0);
+-  background-color: var(--bg-surface-raised, #f8fafc);
++  border-bottom: 1px solid var(--border-subtle, #e5e7eb);
++  background-color: var(--bg-surface-raised, #ffffff);
+ }
+ 
+ .reports-modal-title {
+   margin: 0;
+   font-size: 1.25rem;
+   font-weight: 600;
+-  color: var(--text-primary, #0f172a);
++  color: var(--fg-primary, #111827);
+   display: flex;
+   align-items: center;
+   gap: 8px;
+@@ -70,7 +70,7 @@
+   background: transparent;
+   border: none;
+   font-size: 1.25rem;
+-  color: var(--text-secondary, #64748b);
++  color: var(--fg-secondary, #4b5563);
+   cursor: pointer;
+   padding: 4px 8px;
+   border-radius: 6px;
+@@ -78,8 +78,8 @@
+ }
+ 
+ .reports-modal-close-btn:hover {
+-  background-color: var(--bg-hover, #e2e8f0);
+-  color: var(--text-primary, #0f172a);
++  background-color: var(--bg-hover, #f1f3f5);
++  color: var(--fg-primary, #111827);
+ }
+ 
+ /* Modal Body */
+@@ -93,9 +93,9 @@
+ 
+ /* Error Banner */
+ .reports-error-banner {
+-  background-color: var(--bg-danger-subtle, #fef2f2);
+-  border: 1px solid var(--border-danger, #fecaca);
+-  color: var(--text-danger, #b91c1c);
++  background-color: var(--bg-danger-subtle, #ffe4e6);
++  border: 1px solid var(--border-danger, #d1d5db);
++  color: var(--text-danger, #881337);
+   padding: 12px 16px;
+   border-radius: 8px;
+   font-size: 0.875rem;
+@@ -112,7 +112,7 @@
+ .reports-label {
+   font-size: 0.875rem;
+   font-weight: 600;
+-  color: var(--text-primary, #1e293b);
++  color: var(--fg-primary, #111827);
+   display: flex;
+   justify-content: space-between;
+   align-items: center;
+@@ -123,20 +123,25 @@
+ .reports-textarea {
+   width: 100%;
+   padding: 8px 12px;
+-  border: 1px solid var(--border-strong, #cbd5e1);
++  border: 1px solid var(--border-strong, #d1d5db);
+   border-radius: 6px;
+   font-size: 0.875rem;
+-  color: var(--text-primary, #0f172a);
++  color: var(--fg-primary, #111827);
+   background-color: var(--bg-surface, #ffffff);
+   box-sizing: border-box;
+   transition: border-color 0.15s, box-shadow 0.15s;
+ }
+ 
++.reports-select option {
++  background-color: var(--bg-surface, #ffffff);
++  color: var(--fg-primary, #111827);
++}
++
+ .reports-input:focus,
+ .reports-select:focus,
+ .reports-textarea:focus {
+   outline: none;
+-  border-color: var(--brand-primary, #3b82f6);
++  border-color: var(--brand-primary, #1d4ed8);
+   box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.15);
+ }
+ 
+@@ -162,9 +167,9 @@
+ .reports-format-pill {
+   padding: 6px 14px;
+   border-radius: 9999px;
+-  border: 1px solid var(--border-subtle, #cbd5e1);
++  border: 1px solid var(--border-subtle, #e5e7eb);
+   background-color: var(--bg-surface, #ffffff);
+-  color: var(--text-secondary, #475569);
++  color: var(--fg-secondary, #4b5563);
+   font-size: 0.8125rem;
+   font-weight: 600;
+   cursor: pointer;
+@@ -172,21 +177,21 @@
+ }
+ 
+ .reports-format-pill:hover {
+-  background-color: var(--bg-hover, #f1f5f9);
+-  color: var(--text-primary, #0f172a);
++  background-color: var(--bg-hover, #f1f3f5);
++  color: var(--fg-primary, #111827);
+ }
+ 
+ .reports-format-pill--active {
+-  background-color: var(--brand-primary, #2563eb);
+-  color: #ffffff;
+-  border-color: var(--brand-primary, #2563eb);
++  background-color: var(--brand-primary, #1d4ed8);
++  color: var(--accent-primary-fg, #ffffff);
++  border-color: var(--brand-primary, #1d4ed8);
+   box-shadow: 0 2px 4px rgba(37, 99, 235, 0.25);
+ }
+ 
+ /* Encryption Row */
+ .reports-encryption-box {
+-  background-color: var(--bg-surface-raised, #f8fafc);
+-  border: 1px solid var(--border-subtle, #e2e8f0);
++  background-color: var(--bg-surface-raised, #ffffff);
++  border: 1px solid var(--border-subtle, #e5e7eb);
+   border-radius: 8px;
+   padding: 14px 16px;
+   display: flex;
+@@ -211,7 +216,7 @@
+ .reports-checkbox-label {
+   font-size: 0.875rem;
+   font-weight: 500;
+-  color: var(--text-primary, #1e293b);
++  color: var(--fg-primary, #111827);
+ }
+ 
+ /* Parameters Section */
+@@ -223,8 +228,8 @@
+ 
+ /* Preview Pane */
+ .reports-preview-container {
+-  background-color: var(--bg-surface-raised, #f8fafc);
+-  border: 1px solid var(--border-subtle, #e2e8f0);
++  background-color: var(--bg-surface-raised, #ffffff);
++  border: 1px solid var(--border-subtle, #e5e7eb);
+   border-radius: 8px;
+   padding: 16px;
+   max-height: 240px;
+@@ -237,7 +242,7 @@
+   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+   white-space: pre-wrap;
+   word-break: break-word;
+-  color: var(--text-primary, #1e293b);
++  color: var(--fg-primary, #111827);
+ }
+ 
+ /* Variable Chips for Studio */
+@@ -250,17 +255,19 @@
+ 
+ .reports-variable-chip {
+   padding: 3px 8px;
+-  background-color: var(--bg-hover, #e2e8f0);
+-  border: 1px solid var(--border-subtle, #cbd5e1);
++  background-color: var(--bg-hover, #f1f3f5);
++  border: 1px solid var(--border-subtle, #e5e7eb);
+   border-radius: 4px;
+   font-size: 0.75rem;
+   font-family: ui-monospace, monospace;
++  color: var(--fg-primary, #111827);
+   cursor: pointer;
+-  transition: background-color 0.15s;
++  transition: background-color 0.15s, color 0.15s;
+ }
+ 
+ .reports-variable-chip:hover {
+-  background-color: var(--border-subtle, #cbd5e1);
++  background-color: var(--border-subtle, #e5e7eb);
++  color: var(--fg-primary, #111827);
+ }
+ 
+ /* Modal Footer */
+@@ -269,8 +276,8 @@
+   align-items: center;
+   justify-content: space-between;
+   padding: 16px 24px;
+-  border-top: 1px solid var(--border-subtle, #e2e8f0);
+-  background-color: var(--bg-surface-raised, #f8fafc);
++  border-top: 1px solid var(--border-subtle, #e5e7eb);
++  background-color: var(--bg-surface-raised, #ffffff);
+ }
+ 
+ .reports-footer-left {
+@@ -298,21 +305,22 @@
+ 
+ .reports-btn--secondary {
+   background-color: var(--bg-surface, #ffffff);
+-  border-color: var(--border-subtle, #cbd5e1);
+-  color: var(--text-primary, #334155);
++  border-color: var(--border-subtle, #e5e7eb);
++  color: var(--fg-primary, #111827);
+ }
+ 
+ .reports-btn--secondary:hover {
+-  background-color: var(--bg-hover, #f1f5f9);
++  background-color: var(--bg-hover, #f1f3f5);
++  color: var(--fg-primary, #111827);
+ }
+ 
+ .reports-btn--primary {
+-  background-color: var(--brand-primary, #2563eb);
+-  color: #ffffff;
++  background-color: var(--brand-primary, #1d4ed8);
++  color: var(--accent-primary-fg, #ffffff);
+ }
+ 
+ .reports-btn--primary:hover {
+-  background-color: var(--brand-primary-hover, #1d4ed8);
++  background-color: var(--brand-primary-hover, #1e40af);
+ }
+ 
+ .reports-btn:disabled {
+@@ -320,6 +328,81 @@
+   cursor: not-allowed;
+ }
+ 
++/* Dark Theme Overrides for High-Contrast Skinning */
++[data-theme="dark"] .reports-modal-container {
++  background-color: var(--bg-surface, #16181d);
++  color: var(--fg-primary, #f9fafb);
++  border-color: var(--border-subtle, #2d333f);
++  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.5), 0 8px 10px -6px rgba(0, 0, 0, 0.5);
++}
++
++[data-theme="dark"] .reports-modal-header,
++[data-theme="dark"] .reports-modal-footer {
++  background-color: var(--bg-surface-raised, #1f232b);
++  border-color: var(--border-subtle, #2d333f);
++}
++
++[data-theme="dark"] .reports-input,
++[data-theme="dark"] .reports-select,
++[data-theme="dark"] .reports-textarea {
++  background-color: var(--bg-surface-raised, #1f232b);
++  color: var(--fg-primary, #f9fafb);
++  border-color: var(--border-strong, #3f4756);
++}
++
++[data-theme="dark"] .reports-select option {
++  background-color: var(--bg-surface-raised, #1f232b);
++  color: var(--fg-primary, #f9fafb);
++}
++
++[data-theme="dark"] .reports-format-pill {
++  background-color: var(--bg-surface-raised, #1f232b);
++  color: var(--fg-secondary, #9ca3af);
++  border-color: var(--border-subtle, #2d333f);
++}
++
++[data-theme="dark"] .reports-format-pill:hover {
++  background-color: var(--bg-hover, #262b35);
++  color: var(--fg-primary, #f9fafb);
++}
++
++[data-theme="dark"] .reports-format-pill--active {
++  background-color: var(--brand-primary, #1d4ed8);
++  color: var(--accent-primary-fg, #ffffff);
++  border-color: var(--brand-primary, #1d4ed8);
++}
++
++[data-theme="dark"] .reports-encryption-box,
++[data-theme="dark"] .reports-preview-container {
++  background-color: var(--bg-surface-raised, #1f232b);
++  border-color: var(--border-subtle, #2d333f);
++}
++
++[data-theme="dark"] .reports-preview-content {
++  color: var(--fg-primary, #f9fafb);
++}
++
++[data-theme="dark"] .reports-variable-chip {
++  background-color: var(--bg-surface-raised, #1f232b);
++  border-color: var(--border-subtle, #2d333f);
++  color: var(--fg-primary, #f9fafb);
++}
++
++[data-theme="dark"] .reports-variable-chip:hover {
++  background-color: var(--bg-hover, #262b35);
++}
++
++[data-theme="dark"] .reports-btn--secondary {
++  background-color: var(--bg-surface-raised, #1f232b);
++  border-color: var(--border-subtle, #2d333f);
++  color: var(--fg-primary, #f9fafb);
++}
++
++[data-theme="dark"] .reports-btn--secondary:hover {
++  background-color: var(--bg-hover, #262b35);
++  color: var(--fg-primary, #f9fafb);
++}
++
+ /* Responsive Viewports */
+ @media (max-width: 768px) {
+   .reports-modal-container {
+diff --git a/kanban/web/src/features/reports/reportsApi.ts b/kanban/web/src/features/reports/reportsApi.ts
+index 479124d0..9432a5e3 100644
+--- a/kanban/web/src/features/reports/reportsApi.ts
++++ b/kanban/web/src/features/reports/reportsApi.ts
+@@ -5,6 +5,8 @@
+  * REST API Client for Report Templates and Multi-Format Export Engine (KB-JINJA-REPORTS).
+  */
+ 
++import { getCsrfToken } from '../../api/client';
++
+ export interface ReportTemplate {
+   id: string;
+   workspace_id: string;
+@@ -58,8 +60,9 @@ function buildHeaders(extraHeaders: Record<string, string> = {}): HeadersInit {
+     'Content-Type': 'application/json',
+     ...extraHeaders,
+   };
+-  const csrf = getCsrfTokenFromCookie();
++  const csrf = getCsrfToken() ?? getCsrfTokenFromCookie();
+   if (csrf) {
++    headers['X-CSRF-Token'] = csrf;
+     headers['x-kb-csrf'] = csrf;
+   }
+   return headers;
+@@ -73,6 +76,7 @@ export async function fetchReportTemplates(
+   const res = await fetch(`/api/v1/workspaces/${encodeURIComponent(workspaceRef)}/report-templates${query}`, {
+     method: 'GET',
+     headers: buildHeaders(),
++    credentials: 'same-origin',
+   });
+   if (!res.ok) {
+     const errorBody = (await res.json().catch(() => ({}))) as { detail?: string };
+@@ -91,6 +95,7 @@ export async function fetchReportTemplate(
+     {
+       method: 'GET',
+       headers: buildHeaders(),
++      credentials: 'same-origin',
+     },
+   );
+   if (!res.ok) {
+@@ -118,6 +123,7 @@ export async function createReportTemplate(
+     {
+       method: 'POST',
+       headers: buildHeaders(),
++      credentials: 'same-origin',
+       body: JSON.stringify(payload),
+     },
+   );
+@@ -146,6 +152,7 @@ export async function updateReportTemplate(
+     {
+       method: 'PATCH',
+       headers: buildHeaders(),
++      credentials: 'same-origin',
+       body: JSON.stringify(payload),
+     },
+   );
+@@ -166,6 +173,7 @@ export async function deleteReportTemplate(
+     {
+       method: 'DELETE',
+       headers: buildHeaders(),
++      credentials: 'same-origin',
+     },
+   );
+   if (!res.ok && res.status !== 204) {
+@@ -191,6 +199,7 @@ export async function previewReport(
+     {
+       method: 'POST',
+       headers: buildHeaders(),
++      credentials: 'same-origin',
+       body: JSON.stringify(params),
+     },
+   );
+@@ -218,6 +227,7 @@ export async function generateReport(
+   const res = await fetch(url, {
+     method: 'POST',
+     headers: buildHeaders(),
++    credentials: 'same-origin',
+     body: JSON.stringify(params),
+   });
+ 
+diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
+index e3a0e223..64ce8274 100644
+--- a/kanban/web/src/features/views/viewRegistry.tsx
++++ b/kanban/web/src/features/views/viewRegistry.tsx
+@@ -1,5 +1,7 @@
+ import React, { useState, useMemo, useEffect, useCallback, type ComponentType, type JSX } from 'react';
++import { useParams } from 'react-router';
+ import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
++import { useAuth } from '../auth/AuthContext';
+ import { qk } from '../../api/queryKeys';
+ import { BoardView, type BoardViewProps } from '../board/BoardView.tsx';
+ import type { BoardIssue, BoardWorkflowState, StateGroup } from '../board/boardApi.ts';
+@@ -172,6 +174,7 @@ export interface IssuesWorkspaceRouteProps {
+   onOpenPeek?: ((issueKey: string) => void) | undefined;
+   capabilities?: string[] | undefined;
+   isProjectAdmin?: boolean | undefined;
++  workspaceSlug?: string | undefined;
+ }
+ 
+ /**
+@@ -230,7 +233,22 @@ export function IssuesWorkspaceRoute({
+   onOpenPeek: propOnOpenPeek,
+   capabilities,
+   isProjectAdmin,
++  workspaceSlug: propWorkspaceSlug,
+ }: IssuesWorkspaceRouteProps): JSX.Element {
++  const routeParams = useParams<{ workspaceSlug?: string }>();
++  const auth = useAuth();
++  const cachedMe = queryClient.getQueryData<{ workspace_id?: string }>(qk.me());
++  const activeWorkspaceSlug =
++    (propWorkspaceSlug && propWorkspaceSlug !== 'default' && propWorkspaceSlug.trim().length > 0)
++      ? propWorkspaceSlug.trim()
++      : (routeParams.workspaceSlug && routeParams.workspaceSlug !== 'default' && routeParams.workspaceSlug.trim().length > 0)
++        ? routeParams.workspaceSlug.trim()
++        : (auth.session?.workspace_id && auth.session.workspace_id.trim().length > 0)
++          ? auth.session.workspace_id.trim()
++          : (cachedMe?.workspace_id && cachedMe.workspace_id.trim().length > 0)
++            ? cachedMe.workspace_id.trim()
++            : 'current';
++
+   const isLiveMode = initialIssues === undefined;
+ 
+   const [projectMetadata, setProjectMetadata] = useState<{ modules_enabled?: boolean; name?: string } | null>(() => {
+@@ -1245,6 +1263,7 @@ export function IssuesWorkspaceRoute({
+       {layout === 'list' ? (
+         <IssueNavigatorBar
+           projectKey={projectKey}
++          workspaceScope={activeWorkspaceSlug}
+           issues={issues}
+           projectStates={projectStates}
+           modulesEnabled={modulesEnabled}
+@@ -1281,6 +1300,8 @@ export function IssuesWorkspaceRoute({
+         />
+       ) : (
+         <FilterDisplayBar
++          projectKey={projectKey}
++          workspaceScope={activeWorkspaceSlug}
+           activeFilters={activeFilters}
+           onFiltersChange={setActiveFilters}
+           groupBy={groupBy}
+@@ -1290,7 +1311,6 @@ export function IssuesWorkspaceRoute({
+           modulesEnabled={modulesEnabled}
+           isFilterOpen={isFilterOpen}
+           onToggleFilterOpen={setIsFilterOpen}
+-          projectKey={projectKey}
+           issues={issues}
+           onSaveView={() => { setIsSaveViewModalOpen(true); }}
+           searchQuery={searchQuery}
+@@ -1537,6 +1557,7 @@ export function IssuesWorkspaceRoute({
+           isOpen={true}
+           onClose={() => { setCsvModalTab(null); }}
+           projectKey={projectKey}
++          workspaceScope={activeWorkspaceSlug}
+           activeFilters={activeFilters}
+           searchQuery={searchQuery}
+           initialTab={csvModalTab}
+@@ -1549,6 +1570,7 @@ export function IssuesWorkspaceRoute({
+           isOpen={isReportsModalOpen}
+           onClose={() => { setIsReportsModalOpen(false); }}
+           projectKey={projectKey}
++          workspaceSlug={activeWorkspaceSlug}
+         />
+       )}
+     </div>

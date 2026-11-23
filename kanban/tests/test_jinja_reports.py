@@ -457,6 +457,24 @@ async def test_report_templates_crud_api(
     assert res_del.status_code == 204
 
 
+async def test_report_templates_workspace_alias_resolution(
+    api_env: ApiEnv,
+    make_user: Callable[..., Awaitable[SeededUser]],
+    as_principal: Callable[..., httpx.AsyncClient],
+) -> None:
+    """Verify default, current, ~, and @ workspace references resolve to caller workspace."""
+    admin = await make_user("alias_admin", workspace_role="WORKSPACE_ADMIN")
+    client_admin = as_principal(admin)
+
+    for alias in ("default", "current", "~", "@"):
+        res = await client_admin.get(f"/api/v1/workspaces/{alias}/report-templates")
+        assert res.status_code == 200
+        data = res.json()
+        assert data["total"] >= 3
+        slugs = [t["slug"] for t in data["items"]]
+        assert "security-assessment-report" in slugs
+
+
 async def test_preview_report_api(
     api_env: ApiEnv,
     make_user: Callable[..., Awaitable[SeededUser]],

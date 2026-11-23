@@ -9,6 +9,10 @@
  */
 
 import React, { useState, useEffect, type JSX } from 'react';
+import { useParams } from 'react-router';
+import { QueryClientContext } from '@tanstack/react-query';
+import { useAuth } from '../auth/AuthContext';
+import { qk } from '../../api/queryKeys';
 import {
   fetchReportTemplates,
   previewReport,
@@ -31,10 +35,26 @@ const SUPPORTED_FORMATS = ['PDF', 'XLSX', 'CSV', 'DOCX', 'ODT', 'HTML', 'MD'] as
 export function ReportExportModal({
   isOpen,
   onClose,
-  workspaceSlug = 'default',
+  workspaceSlug,
   projectKey,
   selectedIssueIds,
 }: ReportExportModalProps): JSX.Element | null {
+  const routeParams = useParams<{ workspaceSlug?: string }>();
+  const auth = useAuth();
+  const queryContext = React.useContext(QueryClientContext);
+  const cachedMe = queryContext ? queryContext.getQueryData<{ workspace_id?: string }>(qk.me()) : undefined;
+
+  const resolvedWorkspaceSlug =
+    (workspaceSlug && workspaceSlug !== 'default' && workspaceSlug.trim().length > 0)
+      ? workspaceSlug.trim()
+      : (routeParams.workspaceSlug && routeParams.workspaceSlug !== 'default' && routeParams.workspaceSlug.trim().length > 0)
+        ? routeParams.workspaceSlug.trim()
+        : (auth.session?.workspace_id && auth.session.workspace_id.trim().length > 0)
+          ? auth.session.workspace_id.trim()
+          : (cachedMe?.workspace_id && cachedMe.workspace_id.trim().length > 0)
+            ? cachedMe.workspace_id.trim()
+            : (workspaceSlug ?? 'default');
+
   const [templates, setTemplates] = useState<ReportTemplate[]>([]);
   const [selectedTemplateSlug, setSelectedTemplateSlug] = useState<string>('security-assessment-report');
   const [selectedFormat, setSelectedFormat] = useState<string>('PDF');
@@ -58,7 +78,7 @@ export function ReportExportModal({
     setLoadingTemplates(true);
     setError(null);
 
-    fetchReportTemplates(workspaceSlug, projectKey)
+    fetchReportTemplates(resolvedWorkspaceSlug, projectKey)
       .then((items) => {
         /* v8 ignore next */
         if (!isSubscribed) return;
@@ -97,7 +117,7 @@ export function ReportExportModal({
     return () => {
       isSubscribed = false;
     };
-  }, [isOpen, workspaceSlug, projectKey]);
+  }, [isOpen, resolvedWorkspaceSlug, projectKey]);
 
   const activeTemplate = templates.find((t) => t.slug === selectedTemplateSlug);
 
@@ -134,7 +154,7 @@ export function ReportExportModal({
     setLoadingPreview(true);
     setError(null);
     try {
-      const res = await previewReport(workspaceSlug, {
+      const res = await previewReport(resolvedWorkspaceSlug, {
         template_ref: activeTemplate.slug,
         project_ref: projectKey,
         parameters,
@@ -162,7 +182,7 @@ export function ReportExportModal({
     setError(null);
     try {
       const { blob, filename } = await generateReport(
-        { projectRef: projectKey },
+        { projectRef: projectKey, workspaceRef: resolvedWorkspaceSlug },
         {
           template_ref: activeTemplate.slug,
           format: selectedFormat,
@@ -210,6 +230,7 @@ export function ReportExportModal({
       >
         <div
           className="reports-modal-container"
+          data-testid="report-export-modal"
           role="dialog"
           aria-modal="true"
           aria-labelledby="report-export-title"
@@ -399,10 +420,13 @@ export function ReportExportModal({
         <ReportTemplateStudioModal
           isOpen={isStudioOpen}
           onClose={() => { setIsStudioOpen(false); }}
-          workspaceSlug={workspaceSlug}
+          workspaceSlug={resolvedWorkspaceSlug}
           projectKey={projectKey}
           onTemplateSaved={(newTpl) => {
-            setTemplates((prev) => [...prev, newTpl]);
+            setTemplates((prev) => {
+              const filtered = prev.filter((t) => t.slug !== newTpl.slug);
+              return [...filtered, newTpl];
+            });
             setSelectedTemplateSlug(newTpl.slug);
           }}
         />

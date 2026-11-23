@@ -1,5 +1,7 @@
 import React, { useState, useMemo, useEffect, useCallback, type ComponentType, type JSX } from 'react';
+import { useParams } from 'react-router';
 import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
+import { useAuth } from '../auth/AuthContext';
 import { qk } from '../../api/queryKeys';
 import { BoardView, type BoardViewProps } from '../board/BoardView.tsx';
 import type { BoardIssue, BoardWorkflowState, StateGroup } from '../board/boardApi.ts';
@@ -172,6 +174,7 @@ export interface IssuesWorkspaceRouteProps {
   onOpenPeek?: ((issueKey: string) => void) | undefined;
   capabilities?: string[] | undefined;
   isProjectAdmin?: boolean | undefined;
+  workspaceSlug?: string | undefined;
 }
 
 /**
@@ -230,7 +233,22 @@ export function IssuesWorkspaceRoute({
   onOpenPeek: propOnOpenPeek,
   capabilities,
   isProjectAdmin,
+  workspaceSlug: propWorkspaceSlug,
 }: IssuesWorkspaceRouteProps): JSX.Element {
+  const routeParams = useParams<{ workspaceSlug?: string }>();
+  const auth = useAuth();
+  const cachedMe = queryClient.getQueryData<{ workspace_id?: string }>(qk.me());
+  const activeWorkspaceSlug =
+    (propWorkspaceSlug && propWorkspaceSlug !== 'default' && propWorkspaceSlug.trim().length > 0)
+      ? propWorkspaceSlug.trim()
+      : (routeParams.workspaceSlug && routeParams.workspaceSlug !== 'default' && routeParams.workspaceSlug.trim().length > 0)
+        ? routeParams.workspaceSlug.trim()
+        : (auth.session?.workspace_id && auth.session.workspace_id.trim().length > 0)
+          ? auth.session.workspace_id.trim()
+          : (cachedMe?.workspace_id && cachedMe.workspace_id.trim().length > 0)
+            ? cachedMe.workspace_id.trim()
+            : 'current';
+
   const isLiveMode = initialIssues === undefined;
 
   const [projectMetadata, setProjectMetadata] = useState<{ modules_enabled?: boolean; name?: string } | null>(() => {
@@ -1245,6 +1263,7 @@ export function IssuesWorkspaceRoute({
       {layout === 'list' ? (
         <IssueNavigatorBar
           projectKey={projectKey}
+          workspaceScope={activeWorkspaceSlug}
           issues={issues}
           projectStates={projectStates}
           modulesEnabled={modulesEnabled}
@@ -1281,6 +1300,8 @@ export function IssuesWorkspaceRoute({
         />
       ) : (
         <FilterDisplayBar
+          projectKey={projectKey}
+          workspaceScope={activeWorkspaceSlug}
           activeFilters={activeFilters}
           onFiltersChange={setActiveFilters}
           groupBy={groupBy}
@@ -1290,7 +1311,6 @@ export function IssuesWorkspaceRoute({
           modulesEnabled={modulesEnabled}
           isFilterOpen={isFilterOpen}
           onToggleFilterOpen={setIsFilterOpen}
-          projectKey={projectKey}
           issues={issues}
           onSaveView={() => { setIsSaveViewModalOpen(true); }}
           searchQuery={searchQuery}
@@ -1537,6 +1557,7 @@ export function IssuesWorkspaceRoute({
           isOpen={true}
           onClose={() => { setCsvModalTab(null); }}
           projectKey={projectKey}
+          workspaceScope={activeWorkspaceSlug}
           activeFilters={activeFilters}
           searchQuery={searchQuery}
           initialTab={csvModalTab}
@@ -1549,6 +1570,7 @@ export function IssuesWorkspaceRoute({
           isOpen={isReportsModalOpen}
           onClose={() => { setIsReportsModalOpen(false); }}
           projectKey={projectKey}
+          workspaceSlug={activeWorkspaceSlug}
         />
       )}
     </div>

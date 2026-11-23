@@ -7,6 +7,10 @@
  */
 
 import React, { useState, useRef, type JSX, type SyntheticEvent } from 'react';
+import { useParams } from 'react-router';
+import { QueryClientContext } from '@tanstack/react-query';
+import { useAuth } from '../auth/AuthContext';
+import { qk } from '../../api/queryKeys';
 import { createReportTemplate, type ReportTemplate } from './reportsApi';
 import './reports.css';
 
@@ -34,9 +38,25 @@ const TEMPLATE_SNIPPETS = [
 export function ReportTemplateStudioModal({
   isOpen,
   onClose,
-  workspaceSlug = 'default',
+  workspaceSlug,
+  projectKey,
   onTemplateSaved,
 }: ReportTemplateStudioModalProps): JSX.Element | null {
+  const routeParams = useParams<{ workspaceSlug?: string }>();
+  const auth = useAuth();
+  const queryContext = React.useContext(QueryClientContext);
+  const cachedMe = queryContext ? queryContext.getQueryData<{ workspace_id?: string }>(qk.me()) : undefined;
+
+  const resolvedWorkspaceSlug =
+    (workspaceSlug && workspaceSlug !== 'default' && workspaceSlug.trim().length > 0)
+      ? workspaceSlug.trim()
+      : (routeParams.workspaceSlug && routeParams.workspaceSlug !== 'default' && routeParams.workspaceSlug.trim().length > 0)
+        ? routeParams.workspaceSlug.trim()
+        : (auth.session?.workspace_id && auth.session.workspace_id.trim().length > 0)
+          ? auth.session.workspace_id.trim()
+          : (cachedMe?.workspace_id && cachedMe.workspace_id.trim().length > 0)
+            ? cachedMe.workspace_id.trim()
+            : (workspaceSlug ?? 'default');
   const [name, setName] = useState('');
   const [slug, setSlug] = useState('');
   const [description, setDescription] = useState('');
@@ -95,11 +115,12 @@ export function ReportTemplateStudioModal({
 
       setLoading(true);
       try {
-        const created = await createReportTemplate(workspaceSlug, {
+        const created = await createReportTemplate(resolvedWorkspaceSlug, {
           name: name.trim(),
           slug: slug.trim(),
           /* v8 ignore next */
           description: description.trim() || undefined,
+          project_id: projectKey,
           template_markdown: markdown,
           allowed_formats: ['PDF', 'XLSX', 'CSV', 'DOCX', 'ODT', 'HTML', 'MD'],
         });
