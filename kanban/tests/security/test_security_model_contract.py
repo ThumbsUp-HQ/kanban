@@ -265,7 +265,7 @@ def test_docs_and_wiki_contain_all_asset_and_entrypoint_tiers() -> None:
     wiki_candidates = [
         Path("/home/adamoutler/kanban/thumbs-up-kanban.wiki/Security-and-STRIDE-Threat-Matrix.md"),
         repo_root / "thumbs-up-kanban.wiki" / "Security-and-STRIDE-Threat-Matrix.md",
-        repo_root / "kanban" / "web" / "src" / "features" / "docs" / "wikiBundle.gen.ts",
+        repo_root / "kanban" / "web" / "src" / "features" / "docs-center" / "wikiManifest.ts",
     ]
     wiki_file = next((p for p in wiki_candidates if p.is_file()), None)
     assert wiki_file is not None, "Wiki Security-and-STRIDE-Threat-Matrix.md missing"
