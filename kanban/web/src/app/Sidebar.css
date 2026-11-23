@@ -443,3 +443,20 @@
     display: none;
   }
 }
+
+@media (max-width: 767px), (pointer: coarse) {
+  .kb-sidebar-nav-close-btn {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .kb-sidebar-nav-item {
+    min-height: 44px;
+  }
+
+  .kb-sidebar-subnav-item {
+    min-height: 44px !important;
+  }
+}

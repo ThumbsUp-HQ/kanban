@@ -812,6 +812,10 @@
    Responsive Adaptations (Mobile <= 767px)
    ========================================================================== */
 
+.swimlane-column-mobile-header {
+  display: none;
+}
+
 @media (max-width: 767px) {
   .bulk-action-bar {
     bottom: var(--space-4, 16px);
@@ -826,6 +830,14 @@
     padding: 0 var(--space-3, 12px);
   }
 
+  .filter-search-input,
+  .quick-create-input,
+  .quick-create-textarea,
+  .quick-create-select {
+    font-size: 16px;
+    min-height: 44px;
+  }
+
   .swimlane-board-grid {
     overflow-x: auto;
     width: 100%;
@@ -834,9 +846,34 @@
   }
 
   .swimlane-col-headers {
-    overflow-x: auto;
-    width: 100%;
-    max-width: 100%;
+    display: none;
+  }
+
+  .swimlane-column-mobile-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: var(--space-2, 8px) var(--space-3, 12px);
+    margin-bottom: var(--space-2, 8px);
+    background: var(--bg-surface-raised, #24272f);
+    border: 1px solid var(--border-subtle, #333842);
+    border-radius: var(--radius-sm, 4px);
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--fg-secondary, #cbd5e1);
+  }
+
+  .filter-axis-select {
+    font-size: 16px;
+    min-height: 44px;
+  }
+
+  .swimlane-column-mobile-count {
+    background: var(--bg-canvas, #1a1d23);
+    border-radius: 9999px;
+    padding: 2px 8px;
+    font-size: 11px;
+    font-weight: 700;
   }
 
   .swimlane-band {

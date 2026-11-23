@@ -622,11 +622,41 @@
   font-size: var(--text-sm, 13px);
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) {
+  textarea,
+  input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="hidden"]),
+  select {
+    font-size: 16px;
+  }
+
   .quick-props__select {
     min-height: 44px;
     height: 44px;
-    font-size: var(--text-base, 14px);
+    font-size: 16px;
+  }
+
+  .surface__description-textarea {
+    font-size: 16px;
+  }
+
+  .issue-prev-btn,
+  .issue-next-btn {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .split-toolbar-btn {
+    min-height: 44px;
+    height: 44px;
+    padding: 0 12px;
+  }
+
+  .split-state-select {
+    min-height: 44px;
+    height: 44px;
+    font-size: 16px;
   }
 }
 

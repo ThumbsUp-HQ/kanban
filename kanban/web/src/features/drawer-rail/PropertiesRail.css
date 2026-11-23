@@ -586,12 +586,25 @@
   }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) {
   .prop-row__select,
-  .prop-row__input {
+  .prop-row__input,
+  .assignees-combobox__input {
     min-height: 44px;
     height: 44px;
-    font-size: var(--text-base, 14px);
+    font-size: 16px;
+  }
+
+  .assignees-menu {
+    left: auto;
+    right: 0;
+    max-width: calc(100vw - 32px);
+  }
+
+  .labels-dropdown__menu {
+    left: auto;
+    right: 0;
+    max-width: calc(100vw - 32px);
   }
 }
 

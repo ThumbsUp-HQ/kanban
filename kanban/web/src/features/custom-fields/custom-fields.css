@@ -1573,3 +1573,12 @@ pre.custom-field-test-logs,
   border-radius: var(--radius-sm);
   margin-left: auto;
 }
+
+@media (max-width: 768px), (pointer: coarse) {
+  .custom-field-input,
+  .custom-field-select,
+  .custom-field-textarea {
+    font-size: 16px;
+    min-height: 44px;
+  }
+}

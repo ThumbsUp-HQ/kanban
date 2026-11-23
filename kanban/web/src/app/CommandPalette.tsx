@@ -686,6 +686,15 @@ export function CommandPalette({
             value={query}
             onChange={handleInputChange}
           />
+          <button
+            type="button"
+            className="kb-palette-close-btn"
+            data-testid="command-palette-close-btn"
+            aria-label="Close command palette"
+            onClick={onClose}
+          >
+            &#x2715;
+          </button>
         </div>
 
         <ul
