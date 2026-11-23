@@ -66,31 +66,50 @@
   position: relative;
   box-sizing: border-box;
   transition: box-shadow 150ms ease, transform 150ms ease;
+  color: var(--sticky-fg, var(--fg-primary));
 }
 
 .sticky-card:hover {
   box-shadow: var(--shadow-md, 0 4px 6px -1px rgba(0, 0, 0, 0.1));
 }
 
+.sticky-card:focus-visible,
+.sticky-card:focus-within {
+  outline: 2px solid var(--accent-primary, #3b82f6);
+  outline-offset: 2px;
+}
+
 /* 6-Palette Themed Surfaces referencing theme.css tokens */
-.sticky-card--amber {
+.sticky-card--amber,
+.sticky-card--yellow {
   background-color: var(--sticky-amber);
 }
 
-.sticky-card--mint {
+.sticky-card--mint,
+.sticky-card--green {
   background-color: var(--sticky-mint);
 }
 
-.sticky-card--sky {
+.sticky-card--sky,
+.sticky-card--blue {
   background-color: var(--sticky-sky);
 }
 
-.sticky-card--lavender {
+.sticky-card--lavender,
+.sticky-card--purple {
   background-color: var(--sticky-lavender);
 }
 
 .sticky-card--coral {
   background-color: var(--sticky-coral);
+}
+
+.sticky-card--orange {
+  background-color: var(--sticky-orange);
+}
+
+.sticky-card--pink {
+  background-color: var(--sticky-pink);
 }
 
 .sticky-card--slate {
@@ -109,6 +128,30 @@
   display: flex;
   align-items: center;
   gap: var(--space-1, 4px);
+}
+
+.sticky-card__color-indicator {
+  display: flex;
+  align-items: center;
+}
+
+.sticky-card__color-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: var(--text-xs, 0.75rem);
+  font-weight: 600;
+  text-transform: capitalize;
+  color: var(--sticky-fg, var(--fg-primary));
+  opacity: 0.9;
+  padding: 1px 6px;
+  border-radius: var(--radius-sm, 4px);
+  background-color: rgba(0, 0, 0, 0.06);
+  border: 1px solid rgba(0, 0, 0, 0.12);
+}
+
+[data-theme="dark"] .sticky-card__color-badge {
+  background-color: rgba(255, 255, 255, 0.12);
+  border-color: rgba(255, 255, 255, 0.18);
 }
 
 .sticky-swatch {
@@ -153,6 +196,30 @@
 
 .sticky-swatch--slate {
   background-color: var(--sticky-slate);
+}
+
+.sticky-swatch--yellow {
+  background-color: var(--sticky-yellow);
+}
+
+.sticky-swatch--green {
+  background-color: var(--sticky-green);
+}
+
+.sticky-swatch--blue {
+  background-color: var(--sticky-blue);
+}
+
+.sticky-swatch--purple {
+  background-color: var(--sticky-purple);
+}
+
+.sticky-swatch--orange {
+  background-color: var(--sticky-orange);
+}
+
+.sticky-swatch--pink {
+  background-color: var(--sticky-pink);
 }
 
 .sticky-card__actions {
@@ -243,6 +310,12 @@
   background: transparent;
   padding: 0;
   min-height: 120px;
+  color: var(--sticky-fg, var(--fg-primary));
+}
+
+.sticky-card textarea,
+.sticky-card .kb-editor-surface p {
+  color: var(--sticky-fg, var(--fg-primary));
 }
 
 /* Promotion Banner */
