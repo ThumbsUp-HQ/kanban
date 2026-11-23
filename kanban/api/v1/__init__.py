@@ -69,6 +69,7 @@ from kanban.api.v1.remote_runners import (
     router as remote_runners_router,
 )
 from kanban.api.v1.repo_bindings import router as repo_bindings_router
+from kanban.api.v1.reports import router as reports_router
 from kanban.api.v1.resolve import router as resolve_router
 from kanban.api.v1.search import router as search_router
 from kanban.api.v1.stickies import router as stickies_router
@@ -156,6 +157,7 @@ def build_v1_router() -> APIRouter:  # noqa: PLR0915
     v1.include_router(repo_bindings_router)
     v1.include_router(webhooks_scm_router)
     v1.include_router(remote_runners_router)
+    v1.include_router(reports_router)
     v1.include_router(workspaces_router)
     v1.include_router(system_router)
     v1.include_router(system_status_router)

@@ -1,0 +1,148 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan317-19cdfb46/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan317-19cdfb46
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 27 items
+
+kanban/tests/test_jinja_reports.py::test_ssti_sandbox_blocks_forbidden_attributes PASSED [  3%]
+kanban/tests/test_jinja_reports.py::test_ssti_sandbox_template_size_limit PASSED [  7%]
+kanban/tests/test_jinja_reports.py::test_ssti_sandbox_output_size_limit PASSED [ 11%]
+kanban/tests/test_jinja_reports.py::test_ssti_sandbox_timeout_limit PASSED [ 14%]
+kanban/tests/test_jinja_reports.py::test_toc_and_issues_table_generation PASSED [ 18%]
+kanban/tests/test_jinja_reports.py::test_build_report_stats PASSED       [ 22%]
+kanban/tests/test_jinja_reports.py::test_winzip_ae2_aes256_roundtrip PASSED [ 25%]
+kanban/tests/test_jinja_reports.py::test_winzip_ae2_aes256_wrong_password PASSED [ 29%]
+kanban/tests/test_jinja_reports.py::test_formula_injection_neutralization PASSED [ 33%]
+kanban/tests/test_jinja_reports.py::test_render_markdown_and_html_sanitization PASSED [ 37%]
+kanban/tests/test_jinja_reports.py::test_render_csv_and_xlsx PASSED      [ 40%]
+kanban/tests/test_jinja_reports.py::test_render_docx_and_odt PASSED      [ 44%]
+kanban/tests/test_jinja_reports.py::test_render_pdf_passes_sanitizer PASSED [ 48%]
+kanban/tests/test_jinja_reports.py::test_render_report_bundle_all_formats PASSED [ 51%]
+kanban/tests/test_jinja_reports.py::test_builtin_presets_syntax_and_rendering PASSED [ 55%]
+kanban/tests/test_jinja_reports.py::test_report_templates_crud_api PASSED [ 59%]
+kanban/tests/test_jinja_reports.py::test_preview_report_api PASSED       [ 62%]
+kanban/tests/test_jinja_reports.py::test_generate_report_workspace_and_project_api PASSED [ 66%]
+kanban/tests/test_jinja_reports.py::test_3_tier_governance_enforcement PASSED [ 70%]
+kanban/tests/test_jinja_reports.py::test_docx_and_odt_comprehensive_formatting PASSED [ 74%]
+kanban/tests/test_jinja_reports.py::test_render_csv_custom_columns PASSED [ 77%]
+kanban/tests/test_jinja_reports.py::test_winzip_ae2_single_file_and_error_branches PASSED [ 81%]
+kanban/tests/test_jinja_reports.py::test_sandbox_and_stats_edge_cases PASSED [ 85%]
+kanban/tests/test_jinja_reports.py::test_reports_api_syntax_and_not_found_branches PASSED [ 88%]
+kanban/tests/test_jinja_reports.py::test_renderers_deep_coverage PASSED  [ 92%]
+kanban/tests/test_jinja_reports.py::test_zip_packaging_tampering_and_corrupt_headers PASSED [ 96%]
+kanban/tests/test_jinja_reports.py::test_sandbox_custom_parameters_and_toc_skip PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                              Stmts   Miss Branch BrPart  Cover   Missing
+-----------------------------------------------------------------------------
+kanban/reports/__init__.py            6      0      0      0   100%
+kanban/reports/presets.py             3      0      0      0   100%
+kanban/reports/renderers.py         324      5    114      5    98%   591-593, 615, 743->745, 787->790, 791
+kanban/reports/sandbox.py           161      1     44      2    99%   154->156, 177
+kanban/reports/zip_packaging.py     125      4     32      4    95%   225, 228, 271, 282
+-----------------------------------------------------------------------------
+TOTAL                               619     10    190     11    97%
+============================= 27 passed in 16.06s ==============================
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan317-19cdfb46/kanban/web
+
+stderr | src/features/reports/__tests__/ReportExportModal.test.tsx > ReportExportModal > toggles AES-256 ZIP password protection
+An update to ReportExportModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ReportExportModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ReportExportModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/reports/__tests__/ReportExportModal.test.tsx > ReportExportModal > toggles AES-256 ZIP password protection
+An update to ReportExportModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+Not implemented: navigation to another Document
+stderr | src/features/reports/__tests__/ReportExportModal.test.tsx > ReportExportModal > opens template studio modal on studio button click
+An update to ReportExportModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ReportExportModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+An update to ReportExportModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+stderr | src/features/reports/__tests__/ReportExportModal.test.tsx > ReportExportModal > opens template studio modal on studio button click
+An update to ReportExportModal inside a test was not wrapped in act(...).
+
+When testing, code that causes React state updates should be wrapped into act(...):
+
+act(() => {
+  /* fire events that update state */
+});
+/* assert on the output */
+
+This ensures that you're testing the behavior the user would see in the browser. Learn more at https://react.dev/link/wrap-tests-with-act
+
+ ✓ src/features/reports/__tests__/ReportExportModal.test.tsx (7 tests) 162ms
+
+ Test Files  1 passed (1)
+      Tests  7 passed (7)
+   Start at  20:02:30
+   Duration  1.18s (environment 63%, tests 16%, import 12%, transform 8%, worker 1%)
+

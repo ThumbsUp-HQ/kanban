@@ -44,6 +44,8 @@ class WorkspaceSettingsResponse(BaseModel):
     mcp_key_max_ttl_days: int
     air_gap_mode: bool
     default_skip_loaded_sequence_numbers: bool = False
+    report_export_enabled: bool = True
+    report_export_allowed_roles: list[str] = Field(default_factory=lambda: ["ADMIN", "MEMBER"])
     updated_at: datetime
 
 
@@ -62,6 +64,8 @@ class WorkspaceSettingsUpdate(BaseModel):
     mcp_key_max_ttl_days: int | None = Field(default=None, ge=1, le=365)
     air_gap_mode: bool | None = None
     default_skip_loaded_sequence_numbers: bool | None = None
+    report_export_enabled: bool | None = None
+    report_export_allowed_roles: list[str] | None = None
 
 
 async def require_workspace_or_server_admin(
@@ -251,6 +255,8 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
         "mcp_key_max_ttl_days": settings.mcp_key_max_ttl_days,
         "air_gap_mode": settings.air_gap_mode,
         "default_skip_loaded_sequence_numbers": settings.default_skip_loaded_sequence_numbers,
+        "report_export_enabled": settings.report_export_enabled,
+        "report_export_allowed_roles": settings.report_export_allowed_roles,
     }
 
     diff: dict[str, Any] = {}
@@ -342,6 +348,14 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
         diff["default_skip_loaded_sequence_numbers"] = skip_seq
         settings.default_skip_loaded_sequence_numbers = skip_seq
 
+    if body.report_export_enabled is not None and body.report_export_enabled != settings.report_export_enabled:
+        diff["report_export_enabled"] = body.report_export_enabled
+        settings.report_export_enabled = body.report_export_enabled
+
+    if body.report_export_allowed_roles is not None and body.report_export_allowed_roles != settings.report_export_allowed_roles:
+        diff["report_export_allowed_roles"] = body.report_export_allowed_roles
+        settings.report_export_allowed_roles = body.report_export_allowed_roles
+
     if diff:
         await session.flush()
         await session.refresh(settings)
@@ -357,6 +371,8 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
             "mcp_key_max_ttl_days": settings.mcp_key_max_ttl_days,
             "air_gap_mode": settings.air_gap_mode,
             "default_skip_loaded_sequence_numbers": settings.default_skip_loaded_sequence_numbers,
+            "report_export_enabled": settings.report_export_enabled,
+            "report_export_allowed_roles": settings.report_export_allowed_roles,
         }
 
         await record_activity(

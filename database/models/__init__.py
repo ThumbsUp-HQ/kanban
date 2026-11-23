@@ -81,6 +81,7 @@ from database.models.projects import (
 )
 from database.models.ratelimit import RateLimitBucket
 from database.models.remote_runner import RemoteRunner, RemoteRunnerEnrollmentToken
+from database.models.report_template import ReportTemplate
 from database.models.repo_binding import ProjectRepoBinding
 from database.models.spine import (
     InvalidObjectLinkAudit,
@@ -176,6 +177,7 @@ __all__ = [
     "RecoveryCode",
     "RemoteRunner",
     "RemoteRunnerEnrollmentToken",
+    "ReportTemplate",
     "ResourceAclEntry",
     "RoleBinding",
     "ScmArtifact",

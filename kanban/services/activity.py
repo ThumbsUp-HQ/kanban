@@ -214,6 +214,10 @@ class ActivityEventType(StrEnum):
     CRYPTO_SHRED_EXECUTED = "CRYPTO_SHRED_EXECUTED"
     MCP_TAINT_BLOCKED = "MCP_TAINT_BLOCKED"
     SEQUENCE_SKIPPED = "SEQUENCE_SKIPPED"
+    REPORT_EXPORTED = "REPORT_EXPORTED"
+    REPORT_TEMPLATE_CREATED = "REPORT_TEMPLATE_CREATED"
+    REPORT_TEMPLATE_UPDATED = "REPORT_TEMPLATE_UPDATED"
+    REPORT_TEMPLATE_DELETED = "REPORT_TEMPLATE_DELETED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -371,6 +375,10 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.ACL_ENTRY_REVOKED: ActivityCategory.SYSTEM,
         ActivityEventType.MCP_TAINT_BLOCKED: ActivityCategory.SYSTEM,
         ActivityEventType.SEQUENCE_SKIPPED: ActivityCategory.SYSTEM,
+        ActivityEventType.REPORT_EXPORTED: ActivityCategory.HISTORY,
+        ActivityEventType.REPORT_TEMPLATE_CREATED: ActivityCategory.SYSTEM,
+        ActivityEventType.REPORT_TEMPLATE_UPDATED: ActivityCategory.SYSTEM,
+        ActivityEventType.REPORT_TEMPLATE_DELETED: ActivityCategory.SYSTEM,
     }
 )
 

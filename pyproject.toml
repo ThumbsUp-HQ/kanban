@@ -64,6 +64,8 @@ ignore = [
 "tests/**" = ["S101", "PLR2004", "S603", "S607", "S108", "S105"]     # assert, magic values, subprocess calls, /tmp paths, and test credentials in tests
 "**/tests/**" = ["S101", "PLR2004", "S603", "S607", "S108", "S105"]  # assert, magic values, subprocess calls, /tmp paths, and test credentials in tests
 "database/testing/**" = ["S108", "ASYNC240"]                          # test harness uses /tmp sockets and initialization file reads
+"kanban/reports/zip_packaging.py" = ["S303", "S305", "PLR2004", "TRY003", "EM101", "EM102", "B905", "D413"]  # WinZip AE-2 specification
+"kanban/reports/renderers.py" = ["PLR0912", "PLR0915", "C901", "PLR2004", "TRY003", "EM101", "EM102", "ANN401", "E501", "ERA001", "PLR0911", "TC001", "D301", "D413", "FBT001", "FBT002", "Q003"]  # Multi-format document builders (PDF, OOXML, ODF, CSV)
 
 [tool.mypy]
 python_version = "3.12"

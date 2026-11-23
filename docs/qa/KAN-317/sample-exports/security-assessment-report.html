@@ -1,0 +1,201 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Acme Enterprise Report - </title>
+  <style>
+    :root {
+      --font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      --bg-color: #ffffff;
+      --text-color: #1a202c;
+      --border-color: #e2e8f0;
+      --heading-color: #0f172a;
+      --table-stripe: #f8fafc;
+      --badge-urgent-bg: #fee2e2;
+      --badge-urgent-text: #991b1b;
+      --badge-high-bg: #ffedd5;
+      --badge-high-text: #9a3412;
+      --badge-medium-bg: #e0f2fe;
+      --badge-medium-text: #075985;
+      --badge-low-bg: #f1f5f9;
+      --badge-low-text: #475569;
+    }
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg-color: #0f172a;
+        --text-color: #f1f5f9;
+        --border-color: #334155;
+        --heading-color: #f8fafc;
+        --table-stripe: #1e293b;
+      }
+    }
+    body {
+      font-family: var(--font-family);
+      background-color: var(--bg-color);
+      color: var(--text-color);
+      line-height: 1.6;
+      margin: 0;
+      padding: 2.5rem 3rem;
+      max-width: 900px;
+      margin-left: auto;
+      margin-right: auto;
+    }
+    h1, h2, h3, h4 {
+      color: var(--heading-color);
+      font-weight: 700;
+      margin-top: 1.75rem;
+      margin-bottom: 0.75rem;
+    }
+    h1 {
+      font-size: 2rem;
+      border-bottom: 2px solid var(--border-color);
+      padding-bottom: 0.5rem;
+    }
+    h2 {
+      font-size: 1.5rem;
+      border-bottom: 1px solid var(--border-color);
+      padding-bottom: 0.35rem;
+    }
+    h3 { font-size: 1.25rem; }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin: 1.5rem 0;
+      font-size: 0.95rem;
+    }
+    th, td {
+      padding: 0.65rem 0.85rem;
+      border: 1px solid var(--border-color);
+      text-align: left;
+    }
+    th {
+      background-color: var(--table-stripe);
+      font-weight: 600;
+    }
+    tbody tr:nth-child(even) {
+      background-color: var(--table-stripe);
+    }
+    code {
+      font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+      font-size: 0.9em;
+      background-color: var(--table-stripe);
+      padding: 0.15rem 0.35rem;
+      border-radius: 4px;
+    }
+    pre code {
+      display: block;
+      padding: 1rem;
+      overflow-x: auto;
+    }
+    blockquote {
+      margin: 1.5rem 0;
+      padding: 0.5rem 1rem;
+      border-left: 4px solid var(--border-color);
+      color: #64748b;
+    }
+    .report-metadata-bar {
+      margin-bottom: 2rem;
+      padding-bottom: 1rem;
+      border-bottom: 1px solid var(--border-color);
+      font-size: 0.9rem;
+      color: #64748b;
+    }
+    @media print {
+      body {
+        padding: 0;
+        max-width: 100%;
+        color: #000;
+        background: #fff;
+      }
+      h1 {
+        page-break-before: always;
+      }
+      h1:first-of-type {
+        page-break-before: avoid;
+      }
+      table, pre, blockquote {
+        page-break-inside: avoid;
+      }
+      @page {
+        margin: 1.5cm;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="report-metadata-bar">
+    <strong>Workspace:</strong> Acme Enterprise &nbsp;|&nbsp;
+    <strong>Generated:</strong>  &nbsp;|&nbsp;
+    <strong>By:</strong> 
+  </div>
+  <p>Annual Red Team &amp; Threat Surface Audit 2026
+CONFIDENTIAL // PROPRIETARY - ACME CYBERSECURITY INC.</p>
+<h2>Table of Contents</h2>
+<ul>
+<li><a href="#executive-summary" rel="noopener noreferrer">Executive Summary</a></li>
+<li><a href="#details" rel="noopener noreferrer">Details</a>
+<ul>
+<li><a href="#issuecreated_date-----issuesummary---issuepriority--upper" rel="noopener noreferrer">{{ issue.created_date }} - {{ issue.summary }} [{{ issue.priority | upper }}]</a></li>
+</ul>
+</li>
+<li><a href="#appendix" rel="noopener noreferrer">Appendix</a></li>
+</ul>
+<h1>Executive Summary</h1>
+<p>This security assessment identified 3 critical vulnerabilities across core platform components.</p>
+<table>
+<thead>
+<tr>
+<th>Key</th>
+<th>Summary</th>
+<th>State</th>
+<th>Priority</th>
+<th>Assignees</th>
+<th>Created Date</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>SEC-101</td>
+<td>Remote Code Execution via SSTI in Custom Field Template</td>
+<td>In Progress</td>
+<td>Urgent</td>
+<td>sec-lead, app-sec</td>
+<td>2026-11-20</td>
+</tr>
+<tr>
+<td>SEC-102</td>
+<td>CWE-1236 Formula Injection in CSV Export</td>
+<td>Resolved</td>
+<td>High</td>
+<td>backend-eng</td>
+<td>2026-11-21</td>
+</tr>
+<tr>
+<td>SEC-103</td>
+<td>Missing Strict Content-Security-Policy on Report Preview</td>
+<td>Open</td>
+<td>Medium</td>
+<td>frontend-eng</td>
+<td>2026-11-22</td>
+</tr>
+</tbody>
+</table>
+<h1>Details</h1>
+<h2>2026-11-20 - Remote Code Execution via SSTI in Custom Field Template [URGENT]</h2>
+<p><strong>Key:</strong> SEC-101 | <strong>State:</strong> In Progress
+<strong>Assignees:</strong> sec-lead, app-sec</p>
+<p>Template parser evaluated unsafe Jinja2 expressions allowing sandbox escape.</p>
+<h2>2026-11-21 - CWE-1236 Formula Injection in CSV Export [HIGH]</h2>
+<p><strong>Key:</strong> SEC-102 | <strong>State:</strong> Resolved
+<strong>Assignees:</strong> backend-eng</p>
+<p>Spreadsheet formula characters (=, +, -, @) unescaped in export table cells.</p>
+<h2>2026-11-22 - Missing Strict Content-Security-Policy on Report Preview [MEDIUM]</h2>
+<p><strong>Key:</strong> SEC-103 | <strong>State:</strong> Open
+<strong>Assignees:</strong> frontend-eng</p>
+<p>Inline script evaluation permitted on unauthenticated preview iframe.</p>
+<h1>Appendix</h1>
+<p>Methodology follows OWASP ASVS 4.0.3 and NIST SP 800-115 standards.</p>
+
+</body>
+</html>

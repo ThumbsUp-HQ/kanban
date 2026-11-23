@@ -110,6 +110,22 @@ class Settings(BaseSettings):
             "disable_unlimited_mcp_keys",
         ),
     )
+    enable_report_templates: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "KB_ENABLE_REPORT_TEMPLATES",
+            "KANBAN_ENABLE_REPORT_TEMPLATES",
+            "enable_report_templates",
+        ),
+    )
+    enable_issue_export: bool = Field(
+        default=True,
+        validation_alias=AliasChoices(
+            "KB_ENABLE_ISSUE_EXPORT",
+            "KANBAN_ENABLE_ISSUE_EXPORT",
+            "enable_issue_export",
+        ),
+    )
     trusted_proxies: str = Field(
         default="",
         validation_alias=AliasChoices(

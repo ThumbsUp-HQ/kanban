@@ -483,3 +483,28 @@
   color: var(--accent-primary-fg, #ffffff);
   border-color: var(--accent-primary);
 }
+
+.navigator-reports-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  height: 28px;
+  padding: 0 10px;
+  background: var(--bg-surface, #1e2025);
+  border: 1px solid var(--border-subtle, #333842);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--fg-secondary, #cbd5e1);
+  font-family: var(--font-sans);
+  font-size: 12px;
+  font-weight: 500;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 120ms ease;
+}
+
+.navigator-reports-btn:hover {
+  background: var(--bg-hover, #2c313a);
+  color: var(--fg-primary, #f8fafc);
+  border-color: var(--accent-primary, #3b82f6);
+}
+
