@@ -216,6 +216,10 @@ class ActivityEventType(StrEnum):
     SEQUENCE_SKIPPED = "SEQUENCE_SKIPPED"
     ISSUE_BULK_EXPORTED = "ISSUE_BULK_EXPORTED"
     ISSUE_BULK_IMPORTED = "ISSUE_BULK_IMPORTED"
+    REPORT_EXPORTED = "REPORT_EXPORTED"
+    REPORT_TEMPLATE_CREATED = "REPORT_TEMPLATE_CREATED"
+    REPORT_TEMPLATE_UPDATED = "REPORT_TEMPLATE_UPDATED"
+    REPORT_TEMPLATE_DELETED = "REPORT_TEMPLATE_DELETED"
 
 
 EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingProxyType(
@@ -375,6 +379,10 @@ EVENT_CATEGORY: Final[Mapping[ActivityEventType, ActivityCategory]] = MappingPro
         ActivityEventType.SEQUENCE_SKIPPED: ActivityCategory.SYSTEM,
         ActivityEventType.ISSUE_BULK_EXPORTED: ActivityCategory.SYSTEM,
         ActivityEventType.ISSUE_BULK_IMPORTED: ActivityCategory.SYSTEM,
+        ActivityEventType.REPORT_EXPORTED: ActivityCategory.HISTORY,
+        ActivityEventType.REPORT_TEMPLATE_CREATED: ActivityCategory.SYSTEM,
+        ActivityEventType.REPORT_TEMPLATE_UPDATED: ActivityCategory.SYSTEM,
+        ActivityEventType.REPORT_TEMPLATE_DELETED: ActivityCategory.SYSTEM,
     }
 )
 

@@ -1,0 +1,100 @@
+%PDF-1.4
+%‚„œ”
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R] /Count 1 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R /Resources << /Font << /F1 5 0 R /F2 6 0 R >> >> >>
+endobj
+4 0 obj
+<< /Length 2326 >>
+stream
+BT
+/F2 18 Tf 54 738 Td
+(Acme Enterprise Report) Tj
+/F1 9 Tf 54 714 Td
+(Generated:   |  By: ) Tj
+/F1 9 Tf 54 672 Td
+(Annual Red Team & Threat Surface Audit 2026) Tj
+/F1 9 Tf 54 658 Td
+(CONFIDENTIAL // PROPRIETARY - ACME CYBERSECURITY INC.) Tj
+/F2 11 Tf 54 644 Td
+(Table of Contents) Tj
+/F1 9 Tf 54 622 Td
+(- [Executive Summary]\(#executive-summary\)) Tj
+/F1 9 Tf 54 608 Td
+(- [Details]\(#details\)) Tj
+/F1 9 Tf 54 594 Td
+(- [{{ issue.created_date }} - {{ issue.summary }} [{{ issue.priority | upper }}]]\(#issuecr) Tj
+/F1 9 Tf 54 580 Td
+(- [Appendix]\(#appendix\)) Tj
+/F2 14 Tf 54 554 Td
+(Executive Summary) Tj
+/F1 9 Tf 54 540 Td
+(This security assessment identified 3 critical vulnerabilities across core platform compon) Tj
+/F1 9 Tf 54 518 Td
+(| Key | Summary | State | Priority | Assignees | Created Date |) Tj
+/F1 9 Tf 54 504 Td
+(| :--- | :--- | :--- | :--- | :--- | :--- |) Tj
+/F1 9 Tf 54 490 Td
+(| SEC-101 | Remote Code Execution via SSTI in Custom Field Template | In Progress | Urgent) Tj
+/F1 9 Tf 54 476 Td
+(| SEC-102 | CWE-1236 Formula Injection in CSV Export | Resolved | High | backend-eng | 202) Tj
+/F1 9 Tf 54 462 Td
+(| SEC-103 | Missing Strict Content-Security-Policy on Report Preview | Open | Medium | fro) Tj
+/F2 14 Tf 54 436 Td
+(Details) Tj
+/F2 11 Tf 54 422 Td
+(2026-11-20 - Remote Code Execution via SSTI in Custom Field Template [URGENT]) Tj
+/F1 9 Tf 54 408 Td
+(**Key:** SEC-101 | **State:** In Progress) Tj
+/F1 9 Tf 54 394 Td
+(**Assignees:** sec-lead, app-sec) Tj
+/F1 9 Tf 54 372 Td
+(Template parser evaluated unsafe Jinja2 expressions allowing sandbox escape.) Tj
+/F2 11 Tf 54 358 Td
+(2026-11-21 - CWE-1236 Formula Injection in CSV Export [HIGH]) Tj
+/F1 9 Tf 54 344 Td
+(**Key:** SEC-102 | **State:** Resolved) Tj
+/F1 9 Tf 54 330 Td
+(**Assignees:** backend-eng) Tj
+/F1 9 Tf 54 308 Td
+(Spreadsheet formula characters \(=, +, -, @\) unescaped in export table cells.) Tj
+/F2 11 Tf 54 294 Td
+(2026-11-22 - Missing Strict Content-Security-Policy on Report Preview [MEDIUM]) Tj
+/F1 9 Tf 54 280 Td
+(**Key:** SEC-103 | **State:** Open) Tj
+/F1 9 Tf 54 266 Td
+(**Assignees:** frontend-eng) Tj
+/F1 9 Tf 54 244 Td
+(Inline script evaluation permitted on unauthenticated preview iframe.) Tj
+/F2 14 Tf 54 218 Td
+(Appendix) Tj
+/F1 9 Tf 54 204 Td
+(Methodology follows OWASP ASVS 4.0.3 and NIST SP 800-115 standards.) Tj
+ET
+endstream
+endobj
+5 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica /Encoding /WinAnsiEncoding >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica-Bold /Encoding /WinAnsiEncoding >>
+endobj
+xref
+0 7
+0000000000 65535 f 
+0000000015 00000 n 
+0000000064 00000 n 
+0000000121 00000 n 
+0000000257 00000 n 
+0000002635 00000 n 
+0000002732 00000 n 
+trailer
+<< /Size 7 /Root 1 0 R >>
+startxref
+2834
+%%EOF

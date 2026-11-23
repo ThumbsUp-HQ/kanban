@@ -49,6 +49,8 @@ class WorkspaceSettingsResponse(BaseModel):
     issue_export_allowed_roles: list[str] = Field(
         default_factory=lambda: ["workspace_admin", "project_admin", "member"]
     )
+    report_export_enabled: bool = True
+    report_export_allowed_roles: list[str] = Field(default_factory=lambda: ["ADMIN", "MEMBER"])
     updated_at: datetime
 
 
@@ -70,6 +72,8 @@ class WorkspaceSettingsUpdate(BaseModel):
     issue_export_enabled: bool | None = None
     issue_import_enabled: bool | None = None
     issue_export_allowed_roles: list[str] | None = None
+    report_export_enabled: bool | None = None
+    report_export_allowed_roles: list[str] | None = None
 
 
 async def require_workspace_or_server_admin(
@@ -133,6 +137,8 @@ async def _get_or_create_settings(
         issue_export_enabled=True,
         issue_import_enabled=True,
         issue_export_allowed_roles=["workspace_admin", "project_admin", "member"],
+        report_export_enabled=True,
+        report_export_allowed_roles=["ADMIN", "MEMBER"],
     )
     session.add(settings)
     await session.flush()
@@ -169,6 +175,10 @@ async def get_workspace_settings(
         issue_import_enabled=settings.issue_import_enabled,
         issue_export_allowed_roles=list(
             settings.issue_export_allowed_roles or ["workspace_admin", "project_admin", "member"]
+        ),
+        report_export_enabled=settings.report_export_enabled,
+        report_export_allowed_roles=list(
+            settings.report_export_allowed_roles or ["ADMIN", "MEMBER"]
         ),
         updated_at=settings.updated_at,
     )
@@ -272,6 +282,8 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
         "issue_export_allowed_roles": list(
             settings.issue_export_allowed_roles or ["workspace_admin", "project_admin", "member"]
         ),
+        "report_export_enabled": settings.report_export_enabled,
+        "report_export_allowed_roles": settings.report_export_allowed_roles,
     }
 
     diff: dict[str, Any] = {}
@@ -384,6 +396,20 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
         diff["issue_export_allowed_roles"] = body.issue_export_allowed_roles
         settings.issue_export_allowed_roles = body.issue_export_allowed_roles
 
+    if (
+        body.report_export_enabled is not None
+        and body.report_export_enabled != settings.report_export_enabled
+    ):
+        diff["report_export_enabled"] = body.report_export_enabled
+        settings.report_export_enabled = body.report_export_enabled
+
+    if (
+        body.report_export_allowed_roles is not None
+        and body.report_export_allowed_roles != settings.report_export_allowed_roles
+    ):
+        diff["report_export_allowed_roles"] = body.report_export_allowed_roles
+        settings.report_export_allowed_roles = body.report_export_allowed_roles
+
     if diff:
         await session.flush()
         await session.refresh(settings)
@@ -404,6 +430,8 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
             "issue_export_allowed_roles": list(
                 settings.issue_export_allowed_roles or ["workspace_admin", "project_admin", "member"]
             ),
+            "report_export_enabled": settings.report_export_enabled,
+            "report_export_allowed_roles": settings.report_export_allowed_roles,
         }
 
         await record_activity(
@@ -466,6 +494,10 @@ async def update_workspace_settings(  # noqa: C901, PLR0912, PLR0915
         issue_import_enabled=settings.issue_import_enabled,
         issue_export_allowed_roles=list(
             settings.issue_export_allowed_roles or ["workspace_admin", "project_admin", "member"]
+        ),
+        report_export_enabled=settings.report_export_enabled,
+        report_export_allowed_roles=list(
+            settings.report_export_allowed_roles or ["ADMIN", "MEMBER"]
         ),
         updated_at=settings.updated_at,
     )

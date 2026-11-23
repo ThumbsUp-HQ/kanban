@@ -9,7 +9,7 @@ from datetime import datetime  # noqa: TC003  # Runtime import required for SQLA
 from typing import TYPE_CHECKING
 
 from sqlalchemy import Boolean, CheckConstraint, DateTime, ForeignKey, Integer, Text, func, text
-from sqlalchemy.dialects.postgresql import ARRAY, UUID
+from sqlalchemy.dialects.postgresql import ARRAY, JSONB, UUID
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from database.models.base import Base
@@ -81,6 +81,16 @@ class WorkspaceSettings(Base):
         ARRAY(Text),
         nullable=False,
         server_default=text("ARRAY['workspace_admin', 'project_admin', 'member']::text[]"),
+    )
+    report_export_enabled: Mapped[bool] = mapped_column(
+        Boolean,
+        nullable=False,
+        server_default="true",
+    )
+    report_export_allowed_roles: Mapped[list[str]] = mapped_column(
+        JSONB,
+        nullable=False,
+        server_default='["ADMIN", "MEMBER"]',
     )
     updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),

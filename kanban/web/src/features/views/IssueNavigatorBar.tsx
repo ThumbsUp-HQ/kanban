@@ -26,6 +26,7 @@ import {
 import { CsvImportExportModal } from './CsvImportExportModal';
 import type { IssueItem, SavedView, StateSummary } from './viewsApi';
 import type { ActiveFilters } from './FilterDisplayBar';
+import { ReportExportModal } from '../reports/ReportExportModal';
 import './IssueNavigatorBar.css';
 
 export interface IssueNavigatorBarProps {
@@ -98,6 +99,8 @@ export function IssueNavigatorBar({
       createActionableStateFilterPreference()
     );
   });
+
+  const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
 
   const effectiveStateFilter = controlledStateFilter ?? internalStateFilter;
 
@@ -507,6 +510,17 @@ export function IssueNavigatorBar({
           >
             <span>{favoritesOnly ? '⭐ Favorites only' : '☆ Favorites only'}</span>
           </button>
+
+          {/* Reports & Export Modal Trigger */}
+          <button
+            type="button"
+            className="navigator-reports-btn"
+            data-testid="navigator-reports-export-btn"
+            onClick={() => setIsReportsModalOpen(true)}
+            title="Export reports in PDF, XLSX, CSV, DOCX, ODT, HTML, MD"
+          >
+            <span>📄 Export</span>
+          </button>
         </div>
       )}
 
@@ -572,6 +586,15 @@ export function IssueNavigatorBar({
           activeFilters={activeFilters}
           searchQuery={searchQuery}
           initialTab={csvModalTab}
+        />
+      )}
+
+      {isReportsModalOpen && (
+        <ReportExportModal
+          isOpen={isReportsModalOpen}
+          onClose={() => setIsReportsModalOpen(false)}
+          workspaceSlug={workspaceScope}
+          projectKey={projectKey}
         />
       )}
     </div>
