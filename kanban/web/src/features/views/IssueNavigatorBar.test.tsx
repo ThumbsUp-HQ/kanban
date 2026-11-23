@@ -1,13 +1,17 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import React from 'react';
-import { IssueNavigatorBar } from './IssueNavigatorBar';
+import {
+  IssueNavigatorBar,
+  NAVIGATOR_HEADER_MODE_STORAGE_KEY,
+} from './IssueNavigatorBar';
 import { ISSUE_FILTER_COOKIE_NAME } from './issueFilterCookie';
 import type { IssueItem, SavedView } from './viewsApi';
 
 describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
   beforeEach(() => {
     document.cookie = `${ISSUE_FILTER_COOKIE_NAME}=; Path=/; Max-Age=0`;
+    localStorage.clear();
   });
 
   const mockIssues: IssueItem[] = [
@@ -268,6 +272,37 @@ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
     const view2Chip = screen.getByTestId('saved-view-chip-view-2');
     fireEvent.click(view2Chip);
     expect(onSelectSavedView).toHaveBeenCalledWith('view-2');
+
+    // Select view via dropdown
+    const viewSelect = screen.getByTestId('navigator-saved-views-select');
+    fireEvent.change(viewSelect, { target: { value: 'view-2' } });
+    expect(onSelectSavedView).toHaveBeenCalledWith('view-2');
+    fireEvent.change(viewSelect, { target: { value: '' } });
+  });
+
+  it('invokes onExport, onImport, and onExportReports callbacks when provided as props', () => {
+    const onExport = vi.fn();
+    const onImport = vi.fn();
+    const onExportReports = vi.fn();
+
+    render(
+      <IssueNavigatorBar
+        projectKey="KAN"
+        issues={mockIssues}
+        onExport={onExport}
+        onImport={onImport}
+        onExportReports={onExportReports}
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('navigator-export-btn'));
+    expect(onExport).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTestId('navigator-import-btn'));
+    expect(onImport).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByTestId('navigator-reports-export-btn'));
+    expect(onExportReports).toHaveBeenCalledTimes(1);
   });
 
   it('covers defensive branches for missing assignees, display_name, cycle name, module_ids, and omitted onFiltersChange', () => {
@@ -377,5 +412,121 @@ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
     expect(screen.getByTestId('navigator-export-menu')).toBeDefined();
     fireEvent.mouseDown(document.body);
     expect(screen.queryByTestId('navigator-export-menu')).toBeNull();
+  });
+
+  describe('Space-Preserving Header Modes (KAN-377)', () => {
+    it('defaults to 1col mode, renders data-header-mode="1col", and updates on 2-Col and 1-Line button clicks', () => {
+      const onHeaderModeChange = vi.fn();
+      render(
+        <IssueNavigatorBar
+          projectKey="KAN"
+          issues={mockIssues}
+          onHeaderModeChange={onHeaderModeChange}
+        />,
+      );
+
+      const navBar = screen.getByTestId('issue-navigator-bar');
+      expect(navBar.getAttribute('data-header-mode')).toBe('1col');
+      expect(navBar.classList.contains('issue-navigator-bar--1col')).toBe(true);
+
+      const col1Btn = screen.getByTestId('header-mode-1col-btn');
+      const col2Btn = screen.getByTestId('header-mode-basic-2col-btn');
+      const line1Btn = screen.getByTestId('header-mode-advanced-1line-btn');
+
+      expect(col1Btn.getAttribute('aria-pressed')).toBe('true');
+      expect(col2Btn.getAttribute('aria-pressed')).toBe('false');
+      expect(line1Btn.getAttribute('aria-pressed')).toBe('false');
+
+      // Switch to Basic 2-Col
+      fireEvent.click(col2Btn);
+      expect(navBar.getAttribute('data-header-mode')).toBe('basic-2col');
+      expect(navBar.classList.contains('issue-navigator-bar--basic-2col')).toBe(true);
+      expect(col2Btn.getAttribute('aria-pressed')).toBe('true');
+      expect(col1Btn.getAttribute('aria-pressed')).toBe('false');
+      expect(localStorage.getItem(NAVIGATOR_HEADER_MODE_STORAGE_KEY)).toBe('basic-2col');
+      expect(onHeaderModeChange).toHaveBeenCalledWith('basic-2col');
+
+      // Switch to Advanced 1-Line
+      fireEvent.click(line1Btn);
+      expect(navBar.getAttribute('data-header-mode')).toBe('advanced-1line');
+      expect(navBar.classList.contains('issue-navigator-bar--advanced-1line')).toBe(true);
+      expect(line1Btn.getAttribute('aria-pressed')).toBe('true');
+      expect(col2Btn.getAttribute('aria-pressed')).toBe('false');
+      expect(localStorage.getItem(NAVIGATOR_HEADER_MODE_STORAGE_KEY)).toBe('advanced-1line');
+      expect(onHeaderModeChange).toHaveBeenCalledWith('advanced-1line');
+
+      // Switch back to 1-Col
+      fireEvent.click(col1Btn);
+      expect(navBar.getAttribute('data-header-mode')).toBe('1col');
+      expect(col1Btn.getAttribute('aria-pressed')).toBe('true');
+      expect(localStorage.getItem(NAVIGATOR_HEADER_MODE_STORAGE_KEY)).toBe('1col');
+      expect(onHeaderModeChange).toHaveBeenCalledWith('1col');
+    });
+
+    it('initializes from persisted localStorage mode when valid', () => {
+      localStorage.setItem(NAVIGATOR_HEADER_MODE_STORAGE_KEY, 'advanced-1line');
+
+      render(
+        <IssueNavigatorBar
+          projectKey="KAN"
+          issues={mockIssues}
+        />,
+      );
+
+      const navBar = screen.getByTestId('issue-navigator-bar');
+      expect(navBar.getAttribute('data-header-mode')).toBe('advanced-1line');
+      expect(screen.getByTestId('header-mode-advanced-1line-btn').getAttribute('aria-pressed')).toBe('true');
+    });
+
+    it('honors controlled headerMode prop and reacts to prop changes', () => {
+      const { rerender } = render(
+        <IssueNavigatorBar
+          projectKey="KAN"
+          issues={mockIssues}
+          headerMode="basic-2col"
+        />,
+      );
+
+      const navBar = screen.getByTestId('issue-navigator-bar');
+      expect(navBar.getAttribute('data-header-mode')).toBe('basic-2col');
+
+      rerender(
+        <IssueNavigatorBar
+          projectKey="KAN"
+          issues={mockIssues}
+          headerMode="advanced-1line"
+        />,
+      );
+      expect(navBar.getAttribute('data-header-mode')).toBe('advanced-1line');
+    });
+
+    it('handles localStorage errors gracefully during initialization and mode changes', () => {
+      const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+        throw new Error('Storage disabled');
+      });
+      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+        throw new Error('Quota exceeded');
+      });
+
+      const onHeaderModeChange = vi.fn();
+      render(
+        <IssueNavigatorBar
+          projectKey="KAN"
+          issues={mockIssues}
+          onHeaderModeChange={onHeaderModeChange}
+        />,
+      );
+
+      const navBar = screen.getByTestId('issue-navigator-bar');
+      expect(navBar.getAttribute('data-header-mode')).toBe('1col');
+
+      // Click to switch mode should still work internally and call callback despite setItem failure
+      fireEvent.click(screen.getByTestId('header-mode-basic-2col-btn'));
+      expect(navBar.getAttribute('data-header-mode')).toBe('basic-2col');
+      expect(onHeaderModeChange).toHaveBeenCalledWith('basic-2col');
+
+      getItemSpy.mockRestore();
+      setItemSpy.mockRestore();
+    });
   });
 });

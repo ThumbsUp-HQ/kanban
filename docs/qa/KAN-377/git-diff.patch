@@ -1,0 +1,878 @@
+diff --git a/kanban/web/src/features/views/IssueNavigatorBar.css b/kanban/web/src/features/views/IssueNavigatorBar.css
+index d5639a37..5336e6d2 100644
+--- a/kanban/web/src/features/views/IssueNavigatorBar.css
++++ b/kanban/web/src/features/views/IssueNavigatorBar.css
+@@ -106,6 +106,47 @@
+   transition: all 120ms ease;
+ }
+ 
++.navigator-header-mode-group {
++  display: inline-flex;
++  align-items: center;
++  background: var(--bg-surface, #1e2025);
++  border: 1px solid var(--border-subtle, #333842);
++  border-radius: var(--radius-sm, 4px);
++  padding: 2px;
++  gap: 2px;
++  flex-shrink: 0;
++}
++
++.navigator-header-mode-btn {
++  background: transparent;
++  color: var(--fg-muted, #94a3b8);
++  border: none;
++  border-radius: var(--radius-sm, 4px);
++  padding: 4px 8px;
++  font-family: var(--font-sans);
++  font-size: 11px;
++  font-weight: 500;
++  cursor: pointer;
++  transition: all 120ms ease;
++  white-space: nowrap;
++}
++
++.navigator-header-mode-btn:hover {
++  background: var(--bg-hover, #2c313a);
++  color: var(--fg-primary, #f8fafc);
++}
++
++.navigator-header-mode-btn--active {
++  background: var(--bg-hover, #2c313a);
++  color: var(--fg-primary, #f8fafc);
++  font-weight: 600;
++}
++
++.navigator-header-mode-btn:focus-visible {
++  outline: 2px solid var(--focus-ring, #6366f1);
++  outline-offset: 1px;
++}
++
+ .navigator-filters-toggle {
+   display: none;
+   align-items: center;
+@@ -148,6 +189,7 @@
+ 
+   .navigator-search-btn,
+   .navigator-mode-btn,
++  .navigator-header-mode-btn,
+   .navigator-fav-toggle {
+     min-height: 44px;
+     height: 44px;
+@@ -590,3 +632,162 @@
+   outline: 2px solid var(--focus-ring, #6366f1);
+   outline-offset: 1px;
+ }
++
++/* ==========================================================================
++   Space-Preserving Header Layout Modes (KAN-377)
++   Modes: 1col (Search only), basic-2col, advanced-1line
++   ========================================================================== */
++
++/* 1. Search Only (1col) Mode: Docks inside .kb-split-list-pane above <ListView /> */
++.issue-navigator-bar[data-header-mode="1col"] {
++  padding: var(--space-2, 8px);
++  margin-bottom: var(--space-2, 8px);
++  border-radius: var(--radius-sm, 4px);
++  position: sticky;
++  top: 0;
++  z-index: 10;
++  box-shadow: var(--shadow-sm);
++}
++
++.issue-navigator-bar[data-header-mode="1col"] .navigator-top-row {
++  display: flex;
++  flex-direction: column;
++  align-items: stretch;
++  gap: var(--space-2, 8px);
++}
++
++.issue-navigator-bar[data-header-mode="1col"] .navigator-search-form {
++  flex: 1 1 100%;
++  width: 100%;
++  min-width: 0;
++}
++
++.issue-navigator-bar[data-header-mode="1col"] .navigator-search-input,
++.issue-navigator-bar[data-header-mode="1col"] .navigator-query-input {
++  min-width: 0;
++  width: 100%;
++}
++
++.issue-navigator-bar[data-header-mode="1col"] .navigator-filters-row {
++  display: flex;
++  flex-wrap: wrap;
++  gap: var(--space-1, 4px);
++}
++
++.issue-navigator-bar[data-header-mode="1col"] .navigator-filter-select {
++  font-size: 11px;
++  height: 26px;
++  padding: 0 4px;
++  max-width: 100%;
++  flex: 1 1 calc(50% - 4px);
++  min-width: 80px;
++}
++
++.issue-navigator-bar[data-header-mode="1col"] .navigator-state-trigger,
++.issue-navigator-bar[data-header-mode="1col"] .navigator-fav-toggle,
++.issue-navigator-bar[data-header-mode="1col"] .navigator-reports-btn {
++  font-size: 11px;
++  height: 26px;
++  padding: 0 6px;
++  flex: 1 1 calc(50% - 4px);
++  min-width: 80px;
++}
++
++/* 2. Basic (2col) Mode: Above .kb-split-layout across 2 columns with basic search input and compact filter pills */
++.issue-navigator-bar[data-header-mode="basic-2col"] {
++  padding: var(--space-2, 8px) var(--space-4, 16px);
++  margin-bottom: var(--space-3, 12px);
++}
++
++.issue-navigator-bar[data-header-mode="basic-2col"] .navigator-filters-row {
++  gap: var(--space-2, 8px);
++}
++
++.issue-navigator-bar[data-header-mode="basic-2col"] .navigator-filter-select,
++.issue-navigator-bar[data-header-mode="basic-2col"] .navigator-state-trigger,
++.issue-navigator-bar[data-header-mode="basic-2col"] .navigator-fav-toggle,
++.issue-navigator-bar[data-header-mode="basic-2col"] .navigator-reports-btn {
++  border-radius: var(--radius-full, 9999px);
++  padding: 0 10px;
++  background: var(--bg-surface, #1e2025);
++}
++
++/* 3. Advanced (2col 1 line) Mode: Strictly single non-wrapping horizontal line across both columns */
++.issue-navigator-bar[data-header-mode="advanced-1line"] {
++  display: flex;
++  flex-direction: row;
++  align-items: center;
++  flex-wrap: nowrap;
++  gap: var(--space-2, 8px);
++  overflow-x: auto;
++  overflow-y: hidden;
++  white-space: nowrap;
++  padding: var(--space-1, 4px) var(--space-3, 12px);
++  min-height: 38px;
++  scrollbar-width: thin;
++}
++
++.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-top-row {
++  display: inline-flex;
++  flex-direction: row;
++  align-items: center;
++  flex-wrap: nowrap;
++  gap: var(--space-2, 8px);
++  flex: 0 0 auto;
++}
++
++.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-search-form {
++  flex: 0 1 200px;
++  min-width: 140px;
++}
++
++.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-search-input,
++.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-query-input {
++  height: 26px;
++  font-size: 11px;
++}
++
++.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-search-btn {
++  height: 26px;
++  padding: 0 var(--space-2, 8px);
++  font-size: 11px;
++}
++
++.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-mode-btn,
++.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-header-mode-btn,
++.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-csv-btn {
++  padding: 2px 6px;
++  font-size: 11px;
++  height: 24px;
++}
++
++.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-filters-row {
++  display: inline-flex;
++  flex-direction: row;
++  align-items: center;
++  flex-wrap: nowrap;
++  gap: var(--space-2, 8px);
++  flex: 0 0 auto;
++}
++
++.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-filter-select,
++.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-state-trigger,
++.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-fav-toggle,
++.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-reports-btn {
++  height: 26px;
++  font-size: 11px;
++  padding: 0 6px;
++  white-space: nowrap;
++  flex-shrink: 0;
++}
++
++.issue-navigator-bar[data-header-mode="advanced-1line"] .navigator-saved-views-strip {
++  display: inline-flex;
++  align-items: center;
++  flex-wrap: nowrap;
++  gap: var(--space-1, 4px);
++  margin-top: 0;
++  padding-top: 0;
++  border-top: none;
++  flex-shrink: 0;
++}
+diff --git a/kanban/web/src/features/views/IssueNavigatorBar.test.tsx b/kanban/web/src/features/views/IssueNavigatorBar.test.tsx
+index 9fab45ec..24bc5607 100644
+--- a/kanban/web/src/features/views/IssueNavigatorBar.test.tsx
++++ b/kanban/web/src/features/views/IssueNavigatorBar.test.tsx
+@@ -1,13 +1,17 @@
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+ import { render, screen, fireEvent } from '@testing-library/react';
+ import React from 'react';
+-import { IssueNavigatorBar } from './IssueNavigatorBar';
++import {
++  IssueNavigatorBar,
++  NAVIGATOR_HEADER_MODE_STORAGE_KEY,
++} from './IssueNavigatorBar';
+ import { ISSUE_FILTER_COOKIE_NAME } from './issueFilterCookie';
+ import type { IssueItem, SavedView } from './viewsApi';
+ 
+ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
+   beforeEach(() => {
+     document.cookie = `${ISSUE_FILTER_COOKIE_NAME}=; Path=/; Max-Age=0`;
++    localStorage.clear();
+   });
+ 
+   const mockIssues: IssueItem[] = [
+@@ -268,6 +272,37 @@ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
+     const view2Chip = screen.getByTestId('saved-view-chip-view-2');
+     fireEvent.click(view2Chip);
+     expect(onSelectSavedView).toHaveBeenCalledWith('view-2');
++
++    // Select view via dropdown
++    const viewSelect = screen.getByTestId('navigator-saved-views-select');
++    fireEvent.change(viewSelect, { target: { value: 'view-2' } });
++    expect(onSelectSavedView).toHaveBeenCalledWith('view-2');
++    fireEvent.change(viewSelect, { target: { value: '' } });
++  });
++
++  it('invokes onExport, onImport, and onExportReports callbacks when provided as props', () => {
++    const onExport = vi.fn();
++    const onImport = vi.fn();
++    const onExportReports = vi.fn();
++
++    render(
++      <IssueNavigatorBar
++        projectKey="KAN"
++        issues={mockIssues}
++        onExport={onExport}
++        onImport={onImport}
++        onExportReports={onExportReports}
++      />,
++    );
++
++    fireEvent.click(screen.getByTestId('navigator-export-btn'));
++    expect(onExport).toHaveBeenCalledTimes(1);
++
++    fireEvent.click(screen.getByTestId('navigator-import-btn'));
++    expect(onImport).toHaveBeenCalledTimes(1);
++
++    fireEvent.click(screen.getByTestId('navigator-reports-export-btn'));
++    expect(onExportReports).toHaveBeenCalledTimes(1);
+   });
+ 
+   it('covers defensive branches for missing assignees, display_name, cycle name, module_ids, and omitted onFiltersChange', () => {
+@@ -340,4 +375,120 @@ describe('IssueNavigatorBar (KAN-52 & KAN-308 Problems 2 & 3)', () => {
+     fireEvent.click(screen.getByTestId('report-export-close-btn'));
+     expect(screen.queryByTestId('report-export-backdrop')).toBeNull();
+   });
++
++  describe('Space-Preserving Header Modes (KAN-377)', () => {
++    it('defaults to 1col mode, renders data-header-mode="1col", and updates on 2-Col and 1-Line button clicks', () => {
++      const onHeaderModeChange = vi.fn();
++      render(
++        <IssueNavigatorBar
++          projectKey="KAN"
++          issues={mockIssues}
++          onHeaderModeChange={onHeaderModeChange}
++        />,
++      );
++
++      const navBar = screen.getByTestId('issue-navigator-bar');
++      expect(navBar.getAttribute('data-header-mode')).toBe('1col');
++      expect(navBar.classList.contains('issue-navigator-bar--1col')).toBe(true);
++
++      const col1Btn = screen.getByTestId('header-mode-1col-btn');
++      const col2Btn = screen.getByTestId('header-mode-basic-2col-btn');
++      const line1Btn = screen.getByTestId('header-mode-advanced-1line-btn');
++
++      expect(col1Btn.getAttribute('aria-pressed')).toBe('true');
++      expect(col2Btn.getAttribute('aria-pressed')).toBe('false');
++      expect(line1Btn.getAttribute('aria-pressed')).toBe('false');
++
++      // Switch to Basic 2-Col
++      fireEvent.click(col2Btn);
++      expect(navBar.getAttribute('data-header-mode')).toBe('basic-2col');
++      expect(navBar.classList.contains('issue-navigator-bar--basic-2col')).toBe(true);
++      expect(col2Btn.getAttribute('aria-pressed')).toBe('true');
++      expect(col1Btn.getAttribute('aria-pressed')).toBe('false');
++      expect(localStorage.getItem(NAVIGATOR_HEADER_MODE_STORAGE_KEY)).toBe('basic-2col');
++      expect(onHeaderModeChange).toHaveBeenCalledWith('basic-2col');
++
++      // Switch to Advanced 1-Line
++      fireEvent.click(line1Btn);
++      expect(navBar.getAttribute('data-header-mode')).toBe('advanced-1line');
++      expect(navBar.classList.contains('issue-navigator-bar--advanced-1line')).toBe(true);
++      expect(line1Btn.getAttribute('aria-pressed')).toBe('true');
++      expect(col2Btn.getAttribute('aria-pressed')).toBe('false');
++      expect(localStorage.getItem(NAVIGATOR_HEADER_MODE_STORAGE_KEY)).toBe('advanced-1line');
++      expect(onHeaderModeChange).toHaveBeenCalledWith('advanced-1line');
++
++      // Switch back to 1-Col
++      fireEvent.click(col1Btn);
++      expect(navBar.getAttribute('data-header-mode')).toBe('1col');
++      expect(col1Btn.getAttribute('aria-pressed')).toBe('true');
++      expect(localStorage.getItem(NAVIGATOR_HEADER_MODE_STORAGE_KEY)).toBe('1col');
++      expect(onHeaderModeChange).toHaveBeenCalledWith('1col');
++    });
++
++    it('initializes from persisted localStorage mode when valid', () => {
++      localStorage.setItem(NAVIGATOR_HEADER_MODE_STORAGE_KEY, 'advanced-1line');
++
++      render(
++        <IssueNavigatorBar
++          projectKey="KAN"
++          issues={mockIssues}
++        />,
++      );
++
++      const navBar = screen.getByTestId('issue-navigator-bar');
++      expect(navBar.getAttribute('data-header-mode')).toBe('advanced-1line');
++      expect(screen.getByTestId('header-mode-advanced-1line-btn').getAttribute('aria-pressed')).toBe('true');
++    });
++
++    it('honors controlled headerMode prop and reacts to prop changes', () => {
++      const { rerender } = render(
++        <IssueNavigatorBar
++          projectKey="KAN"
++          issues={mockIssues}
++          headerMode="basic-2col"
++        />,
++      );
++
++      const navBar = screen.getByTestId('issue-navigator-bar');
++      expect(navBar.getAttribute('data-header-mode')).toBe('basic-2col');
++
++      rerender(
++        <IssueNavigatorBar
++          projectKey="KAN"
++          issues={mockIssues}
++          headerMode="advanced-1line"
++        />,
++      );
++      expect(navBar.getAttribute('data-header-mode')).toBe('advanced-1line');
++    });
++
++    it('handles localStorage errors gracefully during initialization and mode changes', () => {
++      const getItemSpy = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
++        throw new Error('Storage disabled');
++      });
++      const setItemSpy = vi.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
++        throw new Error('Quota exceeded');
++      });
++
++      const onHeaderModeChange = vi.fn();
++      render(
++        <IssueNavigatorBar
++          projectKey="KAN"
++          issues={mockIssues}
++          onHeaderModeChange={onHeaderModeChange}
++        />,
++      );
++
++      const navBar = screen.getByTestId('issue-navigator-bar');
++      expect(navBar.getAttribute('data-header-mode')).toBe('1col');
++
++      // Click to switch mode should still work internally and call callback despite setItem failure
++      fireEvent.click(screen.getByTestId('header-mode-basic-2col-btn'));
++      expect(navBar.getAttribute('data-header-mode')).toBe('basic-2col');
++      expect(onHeaderModeChange).toHaveBeenCalledWith('basic-2col');
++
++      getItemSpy.mockRestore();
++      setItemSpy.mockRestore();
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/views/IssueNavigatorBar.tsx b/kanban/web/src/features/views/IssueNavigatorBar.tsx
+index b2ac2efb..dfb03375 100644
+--- a/kanban/web/src/features/views/IssueNavigatorBar.tsx
++++ b/kanban/web/src/features/views/IssueNavigatorBar.tsx
+@@ -29,6 +29,10 @@ import type { ActiveFilters } from './FilterDisplayBar';
+ import { ReportExportModal } from '../reports/ReportExportModal';
+ import './IssueNavigatorBar.css';
+ 
++export type NavigatorHeaderMode = '1col' | 'basic-2col' | 'advanced-1line';
++
++export const NAVIGATOR_HEADER_MODE_STORAGE_KEY = 'kb_navigator_header_mode';
++
+ export interface IssueNavigatorBarProps {
+   projectKey: string;
+   issues?: IssueItem[];
+@@ -57,6 +61,8 @@ export interface IssueNavigatorBarProps {
+   onImport?: () => void;
+   onExportReports?: () => void;
+   className?: string;
++  headerMode?: NavigatorHeaderMode;
++  onHeaderModeChange?: (mode: NavigatorHeaderMode) => void;
+ }
+ 
+ export function IssueNavigatorBar({
+@@ -87,7 +93,43 @@ export function IssueNavigatorBar({
+   onImport,
+   onExportReports,
+   className = '',
++  headerMode: propHeaderMode,
++  onHeaderModeChange,
+ }: IssueNavigatorBarProps): JSX.Element {
++  const [internalHeaderMode, setInternalHeaderMode] = useState<NavigatorHeaderMode>(() => {
++    if (propHeaderMode) {
++      return propHeaderMode;
++    }
++    if (typeof window !== 'undefined') {
++      try {
++        const stored = window.localStorage.getItem(NAVIGATOR_HEADER_MODE_STORAGE_KEY);
++        if (stored === '1col' || stored === 'basic-2col' || stored === 'advanced-1line') {
++          return stored;
++        }
++      } catch {
++        // ignore storage errors
++      }
++    }
++    return '1col';
++  });
++
++  const effectiveHeaderMode = propHeaderMode ?? internalHeaderMode;
++
++  const handleHeaderModeSelect = useCallback(
++    (nextMode: NavigatorHeaderMode) => {
++      setInternalHeaderMode(nextMode);
++      if (typeof window !== 'undefined') {
++        try {
++          window.localStorage.setItem(NAVIGATOR_HEADER_MODE_STORAGE_KEY, nextMode);
++        } catch {
++          // ignore storage errors
++        }
++      }
++      onHeaderModeChange?.(nextMode);
++    },
++    [onHeaderModeChange],
++  );
++
+   const effectiveStates = useMemo(
+     () => resolveEffectiveProjectStates(projectStates),
+     [projectStates],
+@@ -280,8 +322,9 @@ export function IssueNavigatorBar({
+ 
+   return (
+     <div
+-      className={`issue-navigator-bar ${className}`}
++      className={`issue-navigator-bar issue-navigator-bar--${effectiveHeaderMode} ${className}`}
+       data-testid="issue-navigator-bar"
++      data-header-mode={effectiveHeaderMode}
+     >
+       {/* Top Search & Mode Row */}
+       <div className="navigator-top-row">
+@@ -359,6 +402,54 @@ export function IssueNavigatorBar({
+           </button>
+         </div>
+ 
++        {/* Compact Search Header Mode Selector (KAN-377) */}
++        <div
++          className="navigator-header-mode-group"
++          data-testid="navigator-header-mode-selector"
++          role="group"
++          aria-label="Header layout mode"
++        >
++          <button
++            type="button"
++            className={`navigator-header-mode-btn ${effectiveHeaderMode === '1col' ? 'navigator-header-mode-btn--active' : ''}`}
++            data-testid="header-mode-1col-btn"
++            aria-pressed={effectiveHeaderMode === '1col'}
++            title="Search only (1col): Dock search inside list pane so issue detail rises to the top"
++            aria-label="Search only (1-column)"
++            onClick={() => {
++              handleHeaderModeSelect('1col');
++            }}
++          >
++            1-Col
++          </button>
++          <button
++            type="button"
++            className={`navigator-header-mode-btn ${effectiveHeaderMode === 'basic-2col' ? 'navigator-header-mode-btn--active' : ''}`}
++            data-testid="header-mode-basic-2col-btn"
++            aria-pressed={effectiveHeaderMode === 'basic-2col'}
++            title="Basic (2col): 2-column header with basic search and compact filter pills"
++            aria-label="Basic (2-column)"
++            onClick={() => {
++              handleHeaderModeSelect('basic-2col');
++            }}
++          >
++            2-Col
++          </button>
++          <button
++            type="button"
++            className={`navigator-header-mode-btn ${effectiveHeaderMode === 'advanced-1line' ? 'navigator-header-mode-btn--active' : ''}`}
++            data-testid="header-mode-advanced-1line-btn"
++            aria-pressed={effectiveHeaderMode === 'advanced-1line'}
++            title="Advanced (2col 1 line): Collapsed single non-wrapping horizontal line across both columns"
++            aria-label="Advanced (2-column 1-line)"
++            onClick={() => {
++              handleHeaderModeSelect('advanced-1line');
++            }}
++          >
++            1-Line
++          </button>
++        </div>
++
+         {/* CSV Import & Export Actions */}
+         <div className="navigator-csv-actions" role="group" aria-label="CSV actions">
+           <button
+diff --git a/kanban/web/src/features/views/viewRegistry.test.tsx b/kanban/web/src/features/views/viewRegistry.test.tsx
+index f81ebe8c..b684337f 100644
+--- a/kanban/web/src/features/views/viewRegistry.test.tsx
++++ b/kanban/web/src/features/views/viewRegistry.test.tsx
+@@ -3019,4 +3019,144 @@ describe('viewRegistry & IssuesWorkspaceRoute (KB-P3-40, S6.3, S6.4, S7.2)', ()
+       unmount();
+     });
+   });
++
++  describe('KAN-377: 3 Space-Preserving Search Header Modes', () => {
++    beforeEach(() => {
++      localStorage.clear();
++      window.history.pushState({}, '', '/projects/KAN/issues');
++    });
++
++    it('docks IssueNavigatorBar inside .kb-split-list-pane above ListView in 1col mode so split detail rises to top', () => {
++      const { unmount } = render(
++        <IssuesWorkspaceRoute
++          projectKey="KAN"
++          initialLayout="list"
++          initialIssues={FIXTURE_12_ISSUES}
++        />,
++      );
++
++      const splitLayout = screen.getByTestId('split-list-layout');
++      expect(splitLayout).toBeDefined();
++
++      const splitPane = splitLayout.querySelector('.kb-split-list-pane');
++      expect(splitPane).toBeDefined();
++
++      const navBarInsidePane = splitPane?.querySelector('[data-testid="issue-navigator-bar"]');
++      expect(navBarInsidePane).toBeDefined();
++      expect(navBarInsidePane?.getAttribute('data-header-mode')).toBe('1col');
++
++      // The top-level workspace should NOT have another IssueNavigatorBar above split-list-layout
++      const allNavBars = screen.getAllByTestId('issue-navigator-bar');
++      expect(allNavBars).toHaveLength(1);
++
++      unmount();
++    });
++
++    it('transitions between 1col, basic-2col, and advanced-1line header modes and persists to localStorage', () => {
++      const { unmount } = render(
++        <IssuesWorkspaceRoute
++          projectKey="KAN"
++          initialLayout="list"
++          initialIssues={FIXTURE_12_ISSUES}
++        />,
++      );
++
++      // 1. Initial 1col mode
++      let navBar = screen.getByTestId('issue-navigator-bar');
++      expect(navBar.getAttribute('data-header-mode')).toBe('1col');
++
++      // 2. Click 2-Col button
++      const col2Btn = screen.getByTestId('header-mode-basic-2col-btn');
++      fireEvent.click(col2Btn);
++
++      navBar = screen.getByTestId('issue-navigator-bar');
++      expect(navBar.getAttribute('data-header-mode')).toBe('basic-2col');
++      expect(localStorage.getItem('kb_navigator_header_mode')).toBe('basic-2col');
++
++      // Verify it is now above .kb-split-layout and NOT inside .kb-split-list-pane
++      const splitPane = document.querySelector('.kb-split-list-pane');
++      expect(splitPane?.querySelector('[data-testid="issue-navigator-bar"]')).toBeNull();
++
++      // 3. Click 1-Line button
++      const line1Btn = screen.getByTestId('header-mode-advanced-1line-btn');
++      fireEvent.click(line1Btn);
++
++      navBar = screen.getByTestId('issue-navigator-bar');
++      expect(navBar.getAttribute('data-header-mode')).toBe('advanced-1line');
++      expect(localStorage.getItem('kb_navigator_header_mode')).toBe('advanced-1line');
++
++      // 4. Click 1-Col button to dock back inside list pane
++      const col1Btn = screen.getByTestId('header-mode-1col-btn');
++      fireEvent.click(col1Btn);
++
++      navBar = screen.getByTestId('issue-navigator-bar');
++      expect(navBar.getAttribute('data-header-mode')).toBe('1col');
++      expect(localStorage.getItem('kb_navigator_header_mode')).toBe('1col');
++      expect(splitPane?.querySelector('[data-testid="issue-navigator-bar"]')).toBeDefined();
++
++      unmount();
++    });
++
++    it('restores headerMode from localStorage on mount and verifies split issue view rises to top', () => {
++      localStorage.setItem('kb_navigator_header_mode', 'advanced-1line');
++      window.history.pushState({}, '', '/projects/KAN/issues?peek=KAN-1');
++
++      const { unmount } = render(
++        <IssuesWorkspaceRoute
++          projectKey="KAN"
++          initialLayout="list"
++          initialIssues={FIXTURE_12_ISSUES}
++        />,
++      );
++
++      const navBar = screen.getByTestId('issue-navigator-bar');
++      expect(navBar.getAttribute('data-header-mode')).toBe('advanced-1line');
++
++      // Verify split layout has both list pane and split issue surface
++      const splitLayout = screen.getByTestId('split-list-layout');
++      expect(splitLayout.querySelector('.kb-split-list-pane')).toBeDefined();
++      expect(splitLayout.querySelector('[data-testid="issue-surface-root"]')).toBeDefined();
++
++      // Switch to 1col mode and confirm split issue rises to the top (no navigator bar above layout)
++      const col1Btn = screen.getByTestId('header-mode-1col-btn');
++      fireEvent.click(col1Btn);
++
++      const workspace = screen.getByTestId('issues-workspace');
++      // In 1col mode, split-list-layout is the first major layout child in issues-workspace
++      const directChildren = Array.from(workspace.children);
++      const splitLayoutIndex = directChildren.findIndex((el) => el.getAttribute('data-testid') === 'split-list-layout');
++      expect(splitLayoutIndex).toBe(0);
++
++      unmount();
++    });
++
++    it('opens and closes CSV and Report export modals from IssueNavigatorBar in list layout', () => {
++      const { unmount } = render(
++        <IssuesWorkspaceRoute
++          projectKey="KAN"
++          initialLayout="list"
++          initialIssues={FIXTURE_12_ISSUES}
++        />,
++      );
++
++      // Open and close CSV Export modal
++      fireEvent.click(screen.getByTestId('navigator-export-btn'));
++      expect(screen.getByTestId('csv-import-export-modal')).toBeDefined();
++      fireEvent.click(screen.getByTestId('csv-modal-close-btn'));
++      expect(screen.queryByTestId('csv-import-export-modal')).toBeNull();
++
++      // Open and close CSV Import modal
++      fireEvent.click(screen.getByTestId('navigator-import-btn'));
++      expect(screen.getByTestId('csv-import-export-modal')).toBeDefined();
++      fireEvent.click(screen.getByTestId('csv-modal-close-btn'));
++
++      // Open and close Reports modal
++      fireEvent.click(screen.getByTestId('navigator-reports-export-btn'));
++      expect(screen.getByTestId('report-export-backdrop')).toBeDefined();
++      fireEvent.click(screen.getByTestId('report-export-close-btn'));
++      expect(screen.queryByTestId('report-export-backdrop')).toBeNull();
++
++      unmount();
++    });
++  });
+ });
+diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
+index e3a0e223..cd9ff0a7 100644
+--- a/kanban/web/src/features/views/viewRegistry.tsx
++++ b/kanban/web/src/features/views/viewRegistry.tsx
+@@ -8,7 +8,11 @@ import { TableView } from '../table/TableView';
+ import { CalendarView } from '../calendar/CalendarView';
+ import { TimelineView } from '../timeline/TimelineView';
+ import { FilterDisplayBar, type ActiveFilters } from './FilterDisplayBar';
+-import { IssueNavigatorBar } from './IssueNavigatorBar';
++import {
++  IssueNavigatorBar,
++  type NavigatorHeaderMode,
++  NAVIGATOR_HEADER_MODE_STORAGE_KEY,
++} from './IssueNavigatorBar';
+ import {
+   createActionableStateFilterPreference,
+   createAllStatesFilterPreference,
+@@ -63,7 +67,10 @@ export {
+   QuickFieldPopover,
+   StateFilterPopover,
+   useIssueKeyboardMap,
++  IssueNavigatorBar,
++  NAVIGATOR_HEADER_MODE_STORAGE_KEY,
+ };
++export type { NavigatorHeaderMode };
+ 
+ export type ViewLayout = 'board' | 'list' | 'table' | 'calendar' | 'timeline' | 'grid';
+ 
+@@ -340,6 +347,31 @@ export function IssuesWorkspaceRoute({
+   );
+   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+ 
++  const [navigatorHeaderMode, setNavigatorHeaderMode] = useState<NavigatorHeaderMode>(() => {
++    if (typeof window !== 'undefined') {
++      try {
++        const stored = window.localStorage.getItem(NAVIGATOR_HEADER_MODE_STORAGE_KEY);
++        if (stored === '1col' || stored === 'basic-2col' || stored === 'advanced-1line') {
++          return stored;
++        }
++      } catch {
++        // ignore storage errors
++      }
++    }
++    return '1col';
++  });
++
++  const handleNavigatorHeaderModeChange = useCallback((mode: NavigatorHeaderMode) => {
++    setNavigatorHeaderMode(mode);
++    if (typeof window !== 'undefined') {
++      try {
++        window.localStorage.setItem(NAVIGATOR_HEADER_MODE_STORAGE_KEY, mode);
++      } catch {
++        // ignore storage errors
++      }
++    }
++  }, []);
++
+   const [peekParam, setPeekParam] = useState<string | null>(() =>
+     new URLSearchParams(window.location.search).get('peek')
+   );
+@@ -1243,42 +1275,46 @@ export function IssuesWorkspaceRoute({
+         )}
+         {/* 1. Filter and Display Bar */}
+       {layout === 'list' ? (
+-        <IssueNavigatorBar
+-          projectKey={projectKey}
+-          issues={issues}
+-          projectStates={projectStates}
+-          modulesEnabled={modulesEnabled}
+-          activeFilters={activeFilters}
+-          onFiltersChange={setActiveFilters}
+-          stateFilter={stateFilterPref}
+-          onStateFilterChange={handleUserStateFilterChange}
+-          onStatePopoverOpenChange={setIsStatePopoverOpen}
+-          hiddenCompletedCount={
+-            searchQuery.trim().length > 0 &&
+-            !(queryMode === 'query' && hasExplicitStatePredicate(searchQuery))
+-              ? hiddenByStateCount
+-              : 0
+-          }
+-          hiddenExactMatch={hiddenExactSearchMatch}
+-          onShowAllStates={handleShowAllStates}
+-          searchQuery={searchQuery}
+-          onSearchQueryChange={setSearchQuery}
+-          onSearchSubmit={() => {
+-            setActiveFilters((prev) => ({ ...prev }));
+-          }}
+-          queryMode={queryMode}
+-          onQueryModeChange={handleQueryModeChange}
+-          favoritesOnly={favoritesOnly}
+-          onToggleFavoritesOnly={() => {
+-            setFavoritesOnly((prev) => !prev);
+-          }}
+-          savedViews={savedViews}
+-          activeViewId={activeViewId}
+-          onSelectSavedView={handleSelectSavedView}
+-          onExport={() => { setCsvModalTab('export'); }}
+-          onImport={() => { setCsvModalTab('import'); }}
+-          onExportReports={() => { setIsReportsModalOpen(true); }}
+-        />
++        navigatorHeaderMode !== '1col' ? (
++          <IssueNavigatorBar
++            projectKey={projectKey}
++            issues={issues}
++            projectStates={projectStates}
++            modulesEnabled={modulesEnabled}
++            activeFilters={activeFilters}
++            onFiltersChange={setActiveFilters}
++            stateFilter={stateFilterPref}
++            onStateFilterChange={handleUserStateFilterChange}
++            onStatePopoverOpenChange={setIsStatePopoverOpen}
++            hiddenCompletedCount={
++              searchQuery.trim().length > 0 &&
++              !(queryMode === 'query' && hasExplicitStatePredicate(searchQuery))
++                ? hiddenByStateCount
++                : 0
++            }
++            hiddenExactMatch={hiddenExactSearchMatch}
++            onShowAllStates={handleShowAllStates}
++            searchQuery={searchQuery}
++            onSearchQueryChange={setSearchQuery}
++            onSearchSubmit={() => {
++              setActiveFilters((prev) => ({ ...prev }));
++            }}
++            queryMode={queryMode}
++            onQueryModeChange={handleQueryModeChange}
++            favoritesOnly={favoritesOnly}
++            onToggleFavoritesOnly={() => {
++              setFavoritesOnly((prev) => !prev);
++            }}
++            savedViews={savedViews}
++            activeViewId={activeViewId}
++            onSelectSavedView={handleSelectSavedView}
++            onExport={() => { setCsvModalTab('export'); }}
++            onImport={() => { setCsvModalTab('import'); }}
++            onExportReports={() => { setIsReportsModalOpen(true); }}
++            headerMode={navigatorHeaderMode}
++            onHeaderModeChange={handleNavigatorHeaderModeChange}
++          />
++        ) : null
+       ) : (
+         <FilterDisplayBar
+           activeFilters={activeFilters}
+@@ -1349,6 +1385,46 @@ export function IssuesWorkspaceRoute({
+       ) : layout === 'list' ? (
+         <div className="kb-split-layout" data-testid="split-list-layout">
+           <div className="kb-split-list-pane">
++            {navigatorHeaderMode === '1col' && (
++              <IssueNavigatorBar
++                projectKey={projectKey}
++                issues={issues}
++                projectStates={projectStates}
++                modulesEnabled={modulesEnabled}
++                activeFilters={activeFilters}
++                onFiltersChange={setActiveFilters}
++                stateFilter={stateFilterPref}
++                onStateFilterChange={handleUserStateFilterChange}
++                onStatePopoverOpenChange={setIsStatePopoverOpen}
++                hiddenCompletedCount={
++                  searchQuery.trim().length > 0 &&
++                  !(queryMode === 'query' && hasExplicitStatePredicate(searchQuery))
++                    ? hiddenByStateCount
++                    : 0
++                }
++                hiddenExactMatch={hiddenExactSearchMatch}
++                onShowAllStates={handleShowAllStates}
++                searchQuery={searchQuery}
++                onSearchQueryChange={setSearchQuery}
++                onSearchSubmit={() => {
++                  setActiveFilters((prev) => ({ ...prev }));
++                }}
++                queryMode={queryMode}
++                onQueryModeChange={handleQueryModeChange}
++                favoritesOnly={favoritesOnly}
++                onToggleFavoritesOnly={() => {
++                  setFavoritesOnly((prev) => !prev);
++                }}
++                savedViews={savedViews}
++                activeViewId={activeViewId}
++                onSelectSavedView={handleSelectSavedView}
++                onExport={() => { setCsvModalTab('export'); }}
++                onImport={() => { setCsvModalTab('import'); }}
++                onExportReports={() => { setIsReportsModalOpen(true); }}
++                headerMode={navigatorHeaderMode}
++                onHeaderModeChange={handleNavigatorHeaderModeChange}
++              />
++            )}
+             <ListView
+               issues={sortedRailIssues}
+               isLoading={isInitialLoading || issuesQuery.isLoading}
