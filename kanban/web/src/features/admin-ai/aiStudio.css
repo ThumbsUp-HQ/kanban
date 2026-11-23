@@ -413,7 +413,7 @@
   color: #9ca3af;
 }
 
-/* Responsive adjustments */
+/* Responsive adjustments (KAN-344) */
 @media (max-width: 768px) {
   .kb-ai-studio {
     padding: var(--space-4, 16px);
@@ -435,6 +435,53 @@
   .kb-modal-footer button {
     width: 100%;
     min-height: 44px;
+  }
+}
+
+@media (max-width: 767px) {
+  .kb-ai-studio {
+    padding: var(--space-4, 16px);
+  }
+
+  /* Responsive column stacking for provider grids (KAN-344) */
+  .kb-providers-grid {
+    grid-template-columns: 1fr;
+    gap: var(--space-3, 12px);
+    width: 100%;
+  }
+
+  .kb-provider-card {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .kb-ai-studio-header {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3, 12px);
+  }
+
+  .kb-ai-studio-header .kb-btn {
+    width: 100%;
+    min-height: var(--tap-min, 44px);
+    justify-content: center;
+  }
+
+  .kb-modal-footer,
+  .kb-ai-drawer-footer {
+    position: sticky;
+    bottom: 0;
+    background: var(--kb-color-bg-surface, #ffffff);
+    border-top: 1px solid var(--border-subtle);
+    padding: var(--space-3, 12px);
+    z-index: 5;
+    flex-direction: column-reverse;
+  }
+
+  .kb-modal-footer button,
+  .kb-ai-drawer-footer button {
+    width: 100%;
+    min-height: var(--tap-min, 44px);
   }
 }
 

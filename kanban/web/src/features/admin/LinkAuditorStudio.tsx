@@ -541,7 +541,7 @@ export function LinkAuditorStudio(): JSX.Element {
                       className={isSelected ? 'row--selected' : undefined}
                       data-testid={`audit-row-${rec.id}`}
                     >
-                      <td>
+                      <td data-label="Select">
                         <input
                           type="checkbox"
                           aria-label={`Select audit ${rec.id}`}
@@ -552,29 +552,29 @@ export function LinkAuditorStudio(): JSX.Element {
                           data-testid={`checkbox-${rec.id}`}
                         />
                       </td>
-                      <td>
+                      <td data-label="Invalidity Reason">
                         <span
                           className={`reason-badge ${reasonInfo.badgeClass}`}
                         >
                           {reasonInfo.label}
                         </span>
                       </td>
-                      <td className="entity-cell">
+                      <td className="entity-cell" data-label="Source Object">
                         <span className="entity-label" title={sourceStr}>
                           {sourceStr}
                         </span>
                       </td>
-                      <td>
+                      <td data-label="Link Type">
                         <span className="link-type-pill">
                           {rec.link_snapshot.link_type ?? 'RELATES_TO'}
                         </span>
                       </td>
-                      <td className="entity-cell">
+                      <td className="entity-cell" data-label="Target Object">
                         <span className="entity-label" title={targetStr}>
                           {targetStr}
                         </span>
                       </td>
-                      <td className="date-cell">
+                      <td className="date-cell" data-label="Detected At">
                         {new Date(rec.detected_at).toLocaleString(undefined, {
                           month: 'short',
                           day: 'numeric',
@@ -582,7 +582,7 @@ export function LinkAuditorStudio(): JSX.Element {
                           minute: '2-digit',
                         })}
                       </td>
-                      <td>
+                      <td data-label="Status">
                         {isPurged ? (
                           <span className="status-badge status-badge--purged">
                             Purged
@@ -597,7 +597,7 @@ export function LinkAuditorStudio(): JSX.Element {
                           </span>
                         )}
                       </td>
-                      <td className="actions-cell">
+                      <td className="actions-cell" data-label="Actions">
                         <button
                           type="button"
                           className="link-auditor-action-btn"

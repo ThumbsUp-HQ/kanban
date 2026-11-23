@@ -1,0 +1,1530 @@
+diff --git a/kanban/web/src/features/admin-ai/aiStudio.css b/kanban/web/src/features/admin-ai/aiStudio.css
+index 64381ae0..2c30043f 100644
+--- a/kanban/web/src/features/admin-ai/aiStudio.css
++++ b/kanban/web/src/features/admin-ai/aiStudio.css
+@@ -413,7 +413,7 @@
+   color: #9ca3af;
+ }
+ 
+-/* Responsive adjustments */
++/* Responsive adjustments (KAN-344) */
+ @media (max-width: 768px) {
+   .kb-ai-studio {
+     padding: var(--space-4, 16px);
+@@ -438,6 +438,53 @@
+   }
+ }
+ 
++@media (max-width: 767px) {
++  .kb-ai-studio {
++    padding: var(--space-4, 16px);
++  }
++
++  /* Responsive column stacking for provider grids (KAN-344) */
++  .kb-providers-grid {
++    grid-template-columns: 1fr;
++    gap: var(--space-3, 12px);
++    width: 100%;
++  }
++
++  .kb-provider-card {
++    width: 100%;
++    box-sizing: border-box;
++  }
++
++  .kb-ai-studio-header {
++    flex-direction: column;
++    align-items: stretch;
++    gap: var(--space-3, 12px);
++  }
++
++  .kb-ai-studio-header .kb-btn {
++    width: 100%;
++    min-height: var(--tap-min, 44px);
++    justify-content: center;
++  }
++
++  .kb-modal-footer,
++  .kb-ai-drawer-footer {
++    position: sticky;
++    bottom: 0;
++    background: var(--kb-color-bg-surface, #ffffff);
++    border-top: 1px solid var(--border-subtle);
++    padding: var(--space-3, 12px);
++    z-index: 5;
++    flex-direction: column-reverse;
++  }
++
++  .kb-modal-footer button,
++  .kb-ai-drawer-footer button {
++    width: 100%;
++    min-height: var(--tap-min, 44px);
++  }
++}
++
+ /* Form Helper & Strict CSP Classes */
+ .kb-form-error {
+   color: var(--text-danger, #dc2626);
+diff --git a/kanban/web/src/features/admin-auth/AuthStudioPage.tsx b/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
+index 8bbe0d70..12e1f87b 100644
+--- a/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
++++ b/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
+@@ -876,7 +876,7 @@ export function AuthStudioPage(): JSX.Element {
+                   ) : (
+                     users.map((u) => (
+                       <tr key={u.id} className="auth-users-tr" data-testid={`auth-user-row-${u.id}`}>
+-                        <td className="auth-users-td">
++                        <td className="auth-users-td" data-label="User / Handle">
+                           <div className="auth-user-name-cell">
+                             <span className="auth-user-display-name">
+                               {u.display_name || (u.handle ?? u.principal)}
+@@ -886,10 +886,10 @@ export function AuthStudioPage(): JSX.Element {
+                             </span>
+                           </div>
+                         </td>
+-                        <td className="auth-users-td">
++                        <td className="auth-users-td" data-label="Email">
+                           <span className="auth-user-email">{u.email ?? '-'}</span>
+                         </td>
+-                        <td className="auth-users-td">
++                        <td className="auth-users-td" data-label="Type">
+                           {(() => {
+                             const rawType = (u.type ?? 'USER').toUpperCase();
+                             const pillClass = rawType === 'GROUP' ? 'group' : rawType === 'AGENT' ? 'agent' : 'user';
+@@ -901,14 +901,14 @@ export function AuthStudioPage(): JSX.Element {
+                             );
+                           })()}
+                         </td>
+-                        <td className="auth-users-td">
++                        <td className="auth-users-td" data-label="Provider">
+                           <span
+                             className={`auth-badge-provider ${getProviderBadgeClass(u.provider)}`}
+                           >
+                             {u.provider ?? 'LOCAL'}
+                           </span>
+                         </td>
+-                        <td className="auth-users-td">
++                        <td className="auth-users-td" data-label="Role Grant">
+                           <select
+                             className="auth-role-select"
+                             value={u.role ?? 'WORKSPACE_MEMBER'}
+@@ -924,7 +924,7 @@ export function AuthStudioPage(): JSX.Element {
+                           </select>
+                           <RoleLabelPicker principalId={u.id} />
+                         </td>
+-                        <td className="auth-users-td">
++                        <td className="auth-users-td" data-label="Actions">
+                           {(() => {
+                             const rawType = (
+                               u.type ??
+diff --git a/kanban/web/src/features/admin-auth/adminAuth.css b/kanban/web/src/features/admin-auth/adminAuth.css
+index fbab4030..3c290fe4 100644
+--- a/kanban/web/src/features/admin-auth/adminAuth.css
++++ b/kanban/web/src/features/admin-auth/adminAuth.css
+@@ -865,6 +865,81 @@
+     min-width: var(--tap-min, 44px);
+   }
+ 
++  /* Responsive table column stacking (KAN-344) */
++  .auth-users-table-container {
++    overflow-x: visible;
++    border: none;
++    background: transparent;
++  }
++
++  .auth-users-table,
++  .auth-users-table tbody,
++  .auth-users-tr,
++  .auth-users-td {
++    display: block;
++    width: 100%;
++    box-sizing: border-box;
++  }
++
++  .auth-users-th,
++  .auth-users-table thead {
++    display: none;
++  }
++
++  .auth-users-tr {
++    margin-bottom: var(--space-3, 12px);
++    border: 1px solid var(--border-subtle);
++    border-radius: var(--radius-lg, 10px);
++    background: var(--bg-surface);
++    padding: var(--space-3, 12px);
++  }
++
++  .auth-users-td {
++    display: flex;
++    justify-content: space-between;
++    align-items: center;
++    padding: var(--space-2, 8px) 0;
++    border-bottom: 1px solid var(--border-subtle);
++    text-align: right;
++  }
++
++  .auth-users-td:last-child {
++    border-bottom: none;
++  }
++
++  .auth-users-td::before {
++    content: attr(data-label);
++    font-weight: 600;
++    color: var(--fg-muted);
++    text-align: left;
++    margin-right: var(--space-2, 8px);
++    font-size: var(--text-xs, 0.75rem);
++    text-transform: uppercase;
++    letter-spacing: 0.05em;
++    flex-shrink: 0;
++  }
++
++  .auth-users-actions-bar {
++    flex-direction: column;
++    align-items: stretch;
++    gap: var(--space-3, 12px);
++  }
++
++  .auth-users-actions-bar .auth-studio-add-btn {
++    width: 100%;
++    justify-content: center;
++  }
++
++  .auth-editor-drawer-actions,
++  .auth-card-editor-footer {
++    position: sticky;
++    bottom: 0;
++    background: var(--bg-surface);
++    border-top: 1px solid var(--border-subtle);
++    padding: var(--space-3, 12px) 0;
++    z-index: 5;
++  }
++
+   .auth-editor-drawer {
+     width: 100vw;
+     padding: var(--space-6, 24px) var(--space-5, 20px);
+diff --git a/kanban/web/src/features/admin/AdminDiagnosticsStudio.css b/kanban/web/src/features/admin/AdminDiagnosticsStudio.css
+index b21f47e8..3cf4509b 100644
+--- a/kanban/web/src/features/admin/AdminDiagnosticsStudio.css
++++ b/kanban/web/src/features/admin/AdminDiagnosticsStudio.css
+@@ -165,6 +165,8 @@
+   border-bottom: 1px solid var(--border-subtle);
+   margin-bottom: 24px;
+   overflow-x: auto;
++  -webkit-overflow-scrolling: touch;
++  overscroll-behavior-x: contain;
+   padding-bottom: 4px;
+ }
+ 
+@@ -182,6 +184,8 @@
+   align-items: center;
+   gap: 6px;
+   transition: color 0.15s ease, border-color 0.15s ease;
++  min-height: var(--tap-min, 44px);
++  flex-shrink: 0;
+ }
+ 
+ .admin-diag-tab:hover {
+@@ -335,22 +339,112 @@
+   font-size: 0.8125rem;
+ }
+ 
+-/* Responsive */
++/* Responsive (KAN-344) */
+ @media (max-width: 1024px) {
+   .admin-diag-summary-strip {
+     grid-template-columns: repeat(2, 1fr);
+   }
+ }
+ 
+-@media (max-width: 640px) {
++@media (max-width: 767px) {
+   .admin-diag-summary-strip {
+     grid-template-columns: 1fr;
++    gap: var(--space-3, 12px);
+   }
++
+   .admin-diag-subsystems-grid {
+     grid-template-columns: 1fr;
++    gap: var(--space-3, 12px);
+   }
++
+   .admin-diag-header {
+     flex-direction: column;
+     align-items: stretch;
++    gap: var(--space-3, 12px);
++  }
++
++  .admin-diag-header-actions {
++    display: flex;
++    width: 100%;
++    gap: var(--space-2, 8px);
++  }
++
++  .admin-diag-btn {
++    min-height: var(--tap-min, 44px);
++    min-width: var(--tap-min, 44px);
++    flex: 1;
++    justify-content: center;
++  }
++
++  .admin-diag-tabs {
++    overflow-x: auto;
++    -webkit-overflow-scrolling: touch;
++    flex-wrap: nowrap;
++    margin-bottom: var(--space-4, 16px);
++  }
++
++  .admin-diag-tab {
++    min-height: var(--tap-min, 44px);
++    padding: var(--space-2, 8px) var(--space-3, 12px);
++    font-size: 0.85rem;
++  }
++
++  .admin-diag-search-input {
++    min-height: var(--tap-min, 44px);
++    font-size: 16px;
++    width: 100%;
++    box-sizing: border-box;
++  }
++
++  /* Responsive column stacking for multi-column tables (KAN-344) */
++  .admin-diag-table,
++  .admin-diag-table tbody,
++  .admin-diag-table tr,
++  .admin-diag-table td {
++    display: block;
++    width: 100%;
++    box-sizing: border-box;
++  }
++
++  .admin-diag-table thead {
++    display: none;
++  }
++
++  .admin-diag-table tr {
++    margin-bottom: var(--space-3, 12px);
++    border: 1px solid var(--border-subtle);
++    border-radius: var(--radius-md, 8px);
++    background: var(--bg-surface);
++    padding: var(--space-3, 12px);
++  }
++
++  .admin-diag-table td {
++    display: flex;
++    justify-content: space-between;
++    align-items: center;
++    padding: var(--space-2, 8px) 0;
++    border-bottom: 1px solid var(--border-subtle);
++    text-align: right;
++    word-break: break-word;
++  }
++
++  .admin-diag-table td:last-child {
++    border-bottom: none;
++  }
++
++  .admin-diag-table td::before {
++    content: attr(data-label);
++    font-weight: 600;
++    color: var(--fg-secondary);
++    text-align: left;
++    margin-right: var(--space-2, 8px);
++    font-size: 0.8125rem;
++    flex-shrink: 0;
++  }
++}
++
++@media (max-width: 640px) {
++  .admin-diag-container {
++    padding: var(--space-4, 16px);
+   }
+ }
+diff --git a/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx b/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
+index 54f0dcfd..99bacfd0 100644
+--- a/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
++++ b/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
+@@ -712,13 +712,13 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
+               <tbody>
+                 {(diag?.storage.directories ?? []).map((dir) => (
+                   <tr key={dir.name}>
+-                    <td>
++                    <td data-label="Storage Volume">
+                       <strong>{dir.name}</strong>
+                     </td>
+-                    <td>
++                    <td data-label="Mount / Path">
+                       <code className="admin-diag-code">{dir.path}</code>
+                     </td>
+-                    <td>
++                    <td data-label="Status">
+                       <span
+                         className={`admin-diag-badge ${
+                           dir.exists && dir.writable
+@@ -733,8 +733,8 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
+                             : 'Missing'}
+                       </span>
+                     </td>
+-                    <td>{Math.round(dir.free_bytes / (1024 * 1024 * 1024))} GB</td>
+-                    <td>{Math.round(dir.total_bytes / (1024 * 1024 * 1024))} GB</td>
++                    <td data-label="Free Space">{Math.round(dir.free_bytes / (1024 * 1024 * 1024))} GB</td>
++                    <td data-label="Total Capacity">{Math.round(dir.total_bytes / (1024 * 1024 * 1024))} GB</td>
+                   </tr>
+                 ))}
+               </tbody>
+@@ -804,21 +804,21 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
+               <tbody>
+                 {filteredConfig.map((item) => (
+                   <tr key={item.key}>
+-                    <td>
++                    <td data-label="Setting Key">
+                       <code className="admin-diag-code">{item.key}</code>
+                     </td>
+-                    <td>{item.subsystem}</td>
+-                    <td>
++                    <td data-label="Subsystem">{item.subsystem}</td>
++                    <td data-label="Effective Value">
+                       {item.redacted ? (
+                         <span className="admin-diag-badge admin-diag-badge--warn">[REDACTED]</span>
+                       ) : (
+                         <span>{String(item.value)}</span>
+                       )}
+                     </td>
+-                    <td>
++                    <td data-label="Source">
+                       <span className="admin-diag-badge">{item.source}</span>
+                     </td>
+-                    <td>{item.notes}</td>
++                    <td data-label="Security Notes">{item.notes}</td>
+                   </tr>
+                 ))}
+               </tbody>
+diff --git a/kanban/web/src/features/admin/AdminStudioSubnav.css b/kanban/web/src/features/admin/AdminStudioSubnav.css
+index e3ab7109..12213a22 100644
+--- a/kanban/web/src/features/admin/AdminStudioSubnav.css
++++ b/kanban/web/src/features/admin/AdminStudioSubnav.css
+@@ -8,6 +8,8 @@
+   margin-bottom: 24px;
+   padding-bottom: 0;
+   overflow-x: auto;
++  -webkit-overflow-scrolling: touch;
++  overscroll-behavior-x: contain;
+   scrollbar-width: thin;
+ }
+ 
+@@ -23,7 +25,8 @@
+   align-items: center;
+   gap: 6px;
+   padding: 8px 14px;
+-  min-height: 44px;
++  min-height: var(--tap-min, 44px);
++  min-width: var(--tap-min, 44px);
+   border-radius: 6px 6px 0 0;
+   text-decoration: none;
+   font-size: 0.9rem;
+@@ -32,6 +35,7 @@
+   border-bottom: 2px solid transparent;
+   transition: all 0.15s ease-in-out;
+   white-space: nowrap;
++  flex-shrink: 0;
+ }
+ 
+ .admin-studio-subnav__item:hover {
+@@ -48,3 +52,24 @@
+ .admin-studio-subnav__icon {
+   font-size: 1rem;
+ }
++
++/* Mobile responsive swipe tabs (KAN-344) */
++@media (max-width: 767px) {
++  .admin-studio-subnav {
++    margin-bottom: var(--space-4, 16px);
++    padding-bottom: var(--space-1, 4px);
++    -webkit-overflow-scrolling: touch;
++    overflow-x: auto;
++  }
++
++  .admin-studio-subnav__scroll {
++    gap: var(--space-2, 8px);
++    padding: 0 var(--space-2, 8px) var(--space-1, 4px) var(--space-2, 8px);
++  }
++
++  .admin-studio-subnav__item {
++    padding: var(--space-2, 8px) var(--space-3, 12px);
++    font-size: 0.85rem;
++    min-height: var(--tap-min, 44px);
++  }
++}
+diff --git a/kanban/web/src/features/admin/LinkAuditorStudio.css b/kanban/web/src/features/admin/LinkAuditorStudio.css
+index 920b223a..34a7e68e 100644
+--- a/kanban/web/src/features/admin/LinkAuditorStudio.css
++++ b/kanban/web/src/features/admin/LinkAuditorStudio.css
+@@ -679,29 +679,144 @@
+   background-color: var(--bg-surface-raised, #161b22);
+ }
+ 
+-/* Mobile responsive adjustments */
+-@media (max-width: 640px) {
++/* Mobile responsive adjustments (KAN-344) */
++@media (max-width: 767px) {
+   .link-auditor-container {
+-    padding: 16px;
++    padding: var(--space-4, 16px);
+   }
+ 
+   .link-auditor-header {
+     flex-direction: column;
+     align-items: stretch;
++    gap: var(--space-3, 12px);
++  }
++
++  .link-auditor-header__actions {
++    width: 100%;
++    display: flex;
++    justify-content: stretch;
++  }
++
++  .link-auditor-header__actions .link-auditor-btn {
++    flex: 1;
++    min-height: var(--tap-min, 44px);
++    justify-content: center;
++  }
++
++  .link-auditor-metrics {
++    grid-template-columns: 1fr;
++    gap: var(--space-3, 12px);
+   }
+ 
+   .link-auditor-toolbar {
+     flex-direction: column;
+     align-items: stretch;
++    gap: var(--space-3, 12px);
++    position: sticky;
++    top: var(--topbar-h, 52px);
++    z-index: 10;
++    background: var(--bg-surface, #161b22);
++    border-bottom: 1px solid var(--border-subtle, #30363d);
++  }
++
++  .link-auditor-filters {
++    width: 100%;
++    flex-direction: column;
++    align-items: stretch;
++    gap: var(--space-2, 8px);
++  }
++
++  .filter-pill-group {
++    width: 100%;
++    overflow-x: auto;
++    -webkit-overflow-scrolling: touch;
++    flex-wrap: nowrap;
++  }
++
++  .filter-pill {
++    flex: 1;
++    min-height: var(--tap-min, 44px);
++    white-space: nowrap;
++    text-align: center;
++  }
++
++  .filter-select {
++    width: 100%;
++    min-height: var(--tap-min, 44px);
++    font-size: 16px;
++    box-sizing: border-box;
+   }
+ 
+   .link-auditor-bulk-actions {
++    width: 100%;
++    justify-content: space-between;
++  }
++
++  .link-auditor-bulk-actions .link-auditor-btn {
++    min-height: var(--tap-min, 44px);
++  }
++
++  /* Responsive card stacking for link auditor table (KAN-344) */
++  .table-wrapper {
++    overflow-x: visible;
++  }
++
++  .link-auditor-table,
++  .link-auditor-table tbody,
++  .link-auditor-table tr,
++  .link-auditor-table td {
++    display: block;
++    width: 100%;
++    box-sizing: border-box;
++  }
++
++  .link-auditor-table thead {
++    display: none;
++  }
++
++  .link-auditor-table tr {
++    margin-bottom: var(--space-3, 12px);
++    border: 1px solid var(--border-subtle, #30363d);
++    border-radius: var(--radius-md, 8px);
++    background-color: var(--bg-surface, #161b22);
++    padding: var(--space-3, 12px);
++  }
++
++  .link-auditor-table td {
++    display: flex;
++    justify-content: space-between;
++    align-items: center;
++    padding: var(--space-2, 8px) 0;
++    border-bottom: 1px solid var(--border-subtle, #21262d);
++    text-align: right;
++  }
++
++  .link-auditor-table td:last-child {
++    border-bottom: none;
++  }
++
++  .link-auditor-table td::before {
++    content: attr(data-label);
++    font-weight: 600;
++    color: var(--fg-secondary, #8b949e);
++    text-align: left;
++    margin-right: var(--space-2, 8px);
++    font-size: 0.8125rem;
++    flex-shrink: 0;
++  }
++
++  .link-auditor-table td.actions-cell {
+     justify-content: flex-end;
+   }
+ 
++  .link-auditor-action-btn {
++    min-height: var(--tap-min, 44px);
++    min-width: var(--tap-min, 44px);
++  }
++
+   .inspect-drawer {
+-    width: 100%;
+-    max-width: 100%;
++    width: 100vw;
++    max-width: 100vw;
+   }
+ 
+   .purge-modal {
+@@ -713,6 +828,6 @@
+   .filter-select,
+   .purge-textarea {
+     font-size: 16px;
+-    min-height: 44px;
++    min-height: var(--tap-min, 44px);
+   }
+ }
+diff --git a/kanban/web/src/features/admin/LinkAuditorStudio.tsx b/kanban/web/src/features/admin/LinkAuditorStudio.tsx
+index 5e870448..35d3af40 100644
+--- a/kanban/web/src/features/admin/LinkAuditorStudio.tsx
++++ b/kanban/web/src/features/admin/LinkAuditorStudio.tsx
+@@ -541,7 +541,7 @@ export function LinkAuditorStudio(): JSX.Element {
+                       className={isSelected ? 'row--selected' : undefined}
+                       data-testid={`audit-row-${rec.id}`}
+                     >
+-                      <td>
++                      <td data-label="Select">
+                         <input
+                           type="checkbox"
+                           aria-label={`Select audit ${rec.id}`}
+@@ -552,29 +552,29 @@ export function LinkAuditorStudio(): JSX.Element {
+                           data-testid={`checkbox-${rec.id}`}
+                         />
+                       </td>
+-                      <td>
++                      <td data-label="Invalidity Reason">
+                         <span
+                           className={`reason-badge ${reasonInfo.badgeClass}`}
+                         >
+                           {reasonInfo.label}
+                         </span>
+                       </td>
+-                      <td className="entity-cell">
++                      <td className="entity-cell" data-label="Source Object">
+                         <span className="entity-label" title={sourceStr}>
+                           {sourceStr}
+                         </span>
+                       </td>
+-                      <td>
++                      <td data-label="Link Type">
+                         <span className="link-type-pill">
+                           {rec.link_snapshot.link_type ?? 'RELATES_TO'}
+                         </span>
+                       </td>
+-                      <td className="entity-cell">
++                      <td className="entity-cell" data-label="Target Object">
+                         <span className="entity-label" title={targetStr}>
+                           {targetStr}
+                         </span>
+                       </td>
+-                      <td className="date-cell">
++                      <td className="date-cell" data-label="Detected At">
+                         {new Date(rec.detected_at).toLocaleString(undefined, {
+                           month: 'short',
+                           day: 'numeric',
+@@ -582,7 +582,7 @@ export function LinkAuditorStudio(): JSX.Element {
+                           minute: '2-digit',
+                         })}
+                       </td>
+-                      <td>
++                      <td data-label="Status">
+                         {isPurged ? (
+                           <span className="status-badge status-badge--purged">
+                             Purged
+@@ -597,7 +597,7 @@ export function LinkAuditorStudio(): JSX.Element {
+                           </span>
+                         )}
+                       </td>
+-                      <td className="actions-cell">
++                      <td className="actions-cell" data-label="Actions">
+                         <button
+                           type="button"
+                           className="link-auditor-action-btn"
+diff --git a/kanban/web/src/features/admin/__tests__/AdminMobileLayout.test.tsx b/kanban/web/src/features/admin/__tests__/AdminMobileLayout.test.tsx
+new file mode 100644
+index 00000000..3b96aedc
+--- /dev/null
++++ b/kanban/web/src/features/admin/__tests__/AdminMobileLayout.test.tsx
+@@ -0,0 +1,503 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React from 'react';
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { render, screen } from '@testing-library/react';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { MemoryRouter } from 'react-router';
++import fs from 'node:fs';
++import path from 'node:path';
++import { AdminStudioSubnav } from '../AdminStudioSubnav';
++import { LinkAuditorStudio } from '../LinkAuditorStudio';
++import { AdminDiagnosticsStudio } from '../AdminDiagnosticsStudio';
++
++vi.mock('../../../api/client', async () => {
++  const actual = await vi.importActual<typeof import('../../../api/client')>(
++    '../../../api/client',
++  );
++  return {
++    ...actual,
++    apiFetch: vi.fn(),
++    getCsrfToken: vi.fn(() => 'csrf-mock-token'),
++  };
++});
++
++const mockAdminUser = {
++  id: 'usr-admin-1',
++  email: 'admin@example.com',
++  is_server_admin: true,
++  is_workspace_admin: true,
++  aal_level: 2,
++  auth_aal: 'aal2',
++};
++
++const mockAuditResponse = {
++  items: [
++    {
++      id: 'aud-test-1',
++      workspace_id: 'ws-1',
++      link_id: 'lnk-1',
++      reason: 'DANGLING_TARGET',
++      detected_at: '2026-11-20T10:00:00Z',
++      purged_at: null,
++      resolved_at: null,
++      link_snapshot: {
++        id: 'lnk-1',
++        source_id: 'src-1',
++        target_id: 'tgt-1',
++        link_type: 'RELATES_TO',
++      },
++      source_snapshot: { id: 'src-1', title: 'Source Issue', canonical_key: 'KAN-1' },
++      target_snapshot: { id: 'tgt-1', title: 'Target Sticky', canonical_key: 'STK-2' },
++    },
++  ],
++  total: 1,
++  has_more: false,
++};
++
++const mockDiagResponse = {
++  status: 'healthy',
++  timestamp: '2026-11-20T10:00:00Z',
++  runtime_and_container: {
++    deployment_mode: 'production_multi_container',
++    in_container: true,
++    container_runtime: 'docker',
++    container_id_short: 'c116ba38',
++    os_platform: 'Linux-6.6.137',
++    python_version: '3.12.7',
++    process_uid: 1000,
++    process_gid: 1000,
++    is_non_root: true,
++    uptime_seconds: 3600.0,
++    cgroup_version: 'v2',
++    memory_limit_bytes: 4294967296,
++    memory_current_bytes: 524288000,
++    cpu_quota: 'max',
++    pids_limit: 4096,
++    pids_current: 42,
++  },
++  database: {
++    engine: 'postgresql',
++    pool_size: 10,
++    max_overflow: 20,
++    active_connections: 2,
++    rls_enforced: true,
++    schema_version: '20261120_120000',
++    pending_migrations_count: 0,
++    db_response_time_ms: 1.2,
++  },
++  realtime: {
++    outbox_relay_running: true,
++    outbox_pending_count: 0,
++    outbox_dead_letter_count: 0,
++    active_connections_total: 8,
++    workspace_connections: { 'ws-01': 8 },
++    ws_connections: 6,
++    sse_connections: 2,
++    heartbeat_interval_s: 25.0,
++    session_recheck_interval_s: 60.0,
++    replay_retention_minutes: 60,
++    background_tasks: {
++      listener_alive: true,
++      ping_alive: true,
++      session_check_alive: true,
++    },
++  },
++  request_proxy_check: {
++    detected_scheme: 'https',
++    is_https: true,
++    resolved_client_ip: '127.0.0.1',
++    forwarded_proto_present: true,
++    forwarded_host: 'localhost',
++    origin_header: 'https://localhost:8921',
++    origin_allowed_for_ws: true,
++    trusted_proxies_configured: false,
++    csp_connect_src_allows_wss: true,
++    warnings: [],
++  },
++  sandbox: {
++    tier_a_wasm: {
++      available: true,
++      engine: 'wasmtime',
++      max_fuel: 50000000,
++      max_memory_bytes: 33554432,
++      timeout_ms: 500,
++      cached_modules: 3,
++    },
++    tier_b_nsjail: {
++      available: false,
++      binary_exists: false,
++      binary_owned_by_root: false,
++      permissions_safe: false,
++      userns_probe_ok: false,
++      error_code: 'SANDBOX_UNAVAILABLE_IN_STANDALONE',
++      reason: 'nsjail not found',
++      seccomp_profile_present: false,
++    },
++  },
++  subsystems: {
++    database: {
++      name: 'database',
++      status: 'ok',
++      message: 'PostgreSQL connection pool healthy',
++      details: { connections: 10 },
++    },
++  },
++  storage: {
++    total_bytes: 107374182400,
++    free_bytes: 53687091200,
++    directories: [
++      {
++        name: 'uploads',
++        path: '/var/lib/kanban/uploads',
++        exists: true,
++        writable: true,
++        total_bytes: 107374182400,
++        free_bytes: 53687091200,
++      },
++    ],
++  },
++  config: [
++    {
++      key: 'AUTH_SESSION_TTL',
++      subsystem: 'auth',
++      value: '86400',
++      source: 'env',
++      redacted: false,
++      notes: 'Session lifetime in seconds',
++    },
++  ],
++};
++
++function renderWithClient(ui: React.ReactElement) {
++  const queryClient = new QueryClient({
++    defaultOptions: {
++      queries: {
++        retry: false,
++        staleTime: Infinity,
++      },
++    },
++  });
++  return render(
++    <QueryClientProvider client={queryClient}>
++      <MemoryRouter initialEntries={['/admin/diagnostics']}>{ui}</MemoryRouter>
++    </QueryClientProvider>,
++  );
++}
++
++describe('Admin & Settings Studios Mobile Layout Ergonomics (KAN-344)', () => {
++  beforeEach(async () => {
++    vi.clearAllMocks();
++    const { apiFetch } = await import('../../../api/client');
++    vi.mocked(apiFetch).mockImplementation((_method, pathStr) => {
++      if (pathStr === '/api/v1/auth/me') {
++        return Promise.resolve(mockAdminUser);
++      }
++      if (pathStr === '/api/v1/admin/object-links/audits') {
++        return Promise.resolve(mockAuditResponse);
++      }
++      if (pathStr === '/api/v1/admin/diagnostics') {
++        return Promise.resolve(mockDiagResponse);
++      }
++      return Promise.resolve([]);
++    });
++  });
++
++  // =========================================================================
++  // Test Case 1: Horizontal swipe tabs & touch scrolling navigation
++  // =========================================================================
++  describe('Case 1: Horizontal swipe tabs & touch scrolling navigation', () => {
++    it('renders AdminStudioSubnav with swipeable scroll container, aria attributes, and touch targets', () => {
++      renderWithClient(<AdminStudioSubnav activeTab="diagnostics" />);
++
++      const navElement = screen.getByRole('navigation', {
++        name: /Admin MCP and Governance Navigation/i,
++      });
++      expect(navElement).toBeTruthy();
++      expect(navElement.classList.contains('admin-studio-subnav')).toBe(true);
++
++      const scrollContainer = navElement.querySelector('.admin-studio-subnav__scroll');
++      expect(scrollContainer).toBeTruthy();
++
++      const tabs = screen.getAllByRole('link');
++      expect(tabs.length).toBeGreaterThanOrEqual(8);
++
++      const activeTab = screen.getByTestId('tab-admin-diagnostics');
++      expect(activeTab.getAttribute('aria-current')).toBe('page');
++      expect(activeTab.classList.contains('admin-studio-subnav__item--active')).toBe(true);
++    });
++
++    it('renders AdminStudioSubnav with matching currentPath and subpath in router context without explicit activeTab', () => {
++      const queryClient = new QueryClient({
++        defaultOptions: { queries: { retry: false } },
++      });
++      render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/admin/ai/new']}>
++            <AdminStudioSubnav />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      const aiTab = screen.getByTestId('tab-admin-ai');
++      expect(aiTab.getAttribute('aria-current')).toBe('page');
++    });
++
++    it('renders AdminStudioSubnav outside router context with matching activeTab or path fallback', () => {
++      const { container: c1 } = render(<AdminStudioSubnav activeTab="auth" />);
++      const links = c1.querySelectorAll('a.admin-studio-subnav__item');
++      expect(links.length).toBeGreaterThanOrEqual(8);
++
++      const authLink = c1.querySelector('[data-testid="tab-admin-auth"]');
++      expect(authLink).toBeTruthy();
++      expect(authLink?.getAttribute('aria-current')).toBe('page');
++      expect(authLink?.classList.contains('admin-studio-subnav__item--active')).toBe(true);
++
++      // Outside router with window.location fallback (exact match and prefix match)
++      const origLocation = window.location;
++      try {
++        delete (window as unknown as { location: unknown }).location;
++        (window as unknown as { location: unknown }).location = {
++          pathname: '/admin/oauth/clients',
++        };
++        const { container: c2 } = render(<AdminStudioSubnav />);
++        const oauthLink = c2.querySelector('[data-testid="tab-admin-oauth"]');
++        expect(oauthLink?.getAttribute('aria-current')).toBe('page');
++
++        (window as unknown as { location: unknown }).location = {
++          pathname: '/admin/diagnostics',
++        };
++        const { container: c3 } = render(<AdminStudioSubnav />);
++        const diagLink = c3.querySelector('[data-testid="tab-admin-diagnostics"]');
++        expect(diagLink?.getAttribute('aria-current')).toBe('page');
++
++        (window as unknown as { location: unknown }).location = {
++          pathname: '/unknown-route',
++        };
++        const { container: c4 } = render(<AdminStudioSubnav />);
++        const activeItem = c4.querySelector('.admin-studio-subnav__item--active');
++        expect(activeItem).toBeNull();
++      } finally {
++        (window as unknown as { location: unknown }).location = origLocation;
++      }
++    });
++
++    it('enforces touch scrolling rules in AdminStudioSubnav.css and AdminDiagnosticsStudio.css', () => {
++      const subnavCssPath = path.resolve(
++        import.meta.dirname,
++        '../AdminStudioSubnav.css',
++      );
++      const subnavCss = fs.readFileSync(subnavCssPath, 'utf8');
++
++      expect(subnavCss).toContain('-webkit-overflow-scrolling: touch');
++      expect(subnavCss).toContain('overflow-x: auto');
++      expect(subnavCss).toContain('overscroll-behavior-x: contain');
++      expect(subnavCss).toContain('@media (max-width: 767px)');
++      expect(subnavCss).toContain('var(--tap-min, 44px)');
++
++      const diagCssPath = path.resolve(
++        import.meta.dirname,
++        '../AdminDiagnosticsStudio.css',
++      );
++      const diagCss = fs.readFileSync(diagCssPath, 'utf8');
++
++      expect(diagCss).toContain('-webkit-overflow-scrolling: touch');
++      expect(diagCss).toContain('overscroll-behavior-x: contain');
++    });
++
++    it('enforces horizontal swipe tabs in WorkspaceSettingsPage.css and ProjectSettingsPage.css', () => {
++      const wsCssPath = path.resolve(
++        import.meta.dirname,
++        '../../settings/WorkspaceSettingsPage.css',
++      );
++      expect(fs.existsSync(wsCssPath)).toBe(true);
++      const wsCss = fs.readFileSync(wsCssPath, 'utf8');
++
++      expect(wsCss).toContain('-webkit-overflow-scrolling: touch');
++      expect(wsCss).toContain('overflow-x: auto');
++      expect(wsCss).toContain('flex-wrap: nowrap');
++
++      const projCssPath = path.resolve(
++        import.meta.dirname,
++        '../../settings/ProjectSettingsPage.css',
++      );
++      const projCss = fs.readFileSync(projCssPath, 'utf8');
++
++      expect(projCss).toContain('-webkit-overflow-scrolling: touch');
++      expect(projCss).toContain('overflow-x: auto');
++      expect(projCss).toContain('flex-wrap: nowrap');
++    });
++  });
++
++  // =========================================================================
++  // Test Case 2: Responsive column stacking for multi-column tables at <= 767px
++  // =========================================================================
++  describe('Case 2: Responsive column stacking for multi-column tables at <= 767px', () => {
++    it('verifies LinkAuditorStudio table cells expose data-label attributes for mobile card stacking', async () => {
++      renderWithClient(
++        <LinkAuditorStudio />,
++      );
++
++      const table = await screen.findByTestId('audit-links-table');
++      expect(table).toBeTruthy();
++
++      const row = await screen.findByTestId('audit-row-aud-test-1');
++      expect(row).toBeTruthy();
++
++      const cells = row.querySelectorAll('td');
++      expect(cells.length).toBe(8);
++
++      expect(cells[0]?.getAttribute('data-label')).toBe('Select');
++      expect(cells[1]?.getAttribute('data-label')).toBe('Invalidity Reason');
++      expect(cells[2]?.getAttribute('data-label')).toBe('Source Object');
++      expect(cells[3]?.getAttribute('data-label')).toBe('Link Type');
++      expect(cells[4]?.getAttribute('data-label')).toBe('Target Object');
++      expect(cells[5]?.getAttribute('data-label')).toBe('Detected At');
++      expect(cells[6]?.getAttribute('data-label')).toBe('Status');
++      expect(cells[7]?.getAttribute('data-label')).toBe('Actions');
++    });
++
++    it('verifies AdminDiagnosticsStudio storage and config tables expose data-label attributes', async () => {
++      renderWithClient(
++        <AdminDiagnosticsStudio defaultTab="runtime" />,
++      );
++
++      const storageVolumeCell = await screen.findByText('uploads');
++      const storageTd = storageVolumeCell.closest('td');
++      expect(storageTd).toBeTruthy();
++      expect(storageTd?.getAttribute('data-label')).toBe('Storage Volume');
++    });
++
++    it('enforces table display block stacking and thead suppression rules in CSS files', () => {
++      const linkAuditorCssPath = path.resolve(
++        import.meta.dirname,
++        '../LinkAuditorStudio.css',
++      );
++      const linkAuditorCss = fs.readFileSync(linkAuditorCssPath, 'utf8');
++
++      expect(linkAuditorCss).toContain('@media (max-width: 767px)');
++      expect(linkAuditorCss).toContain('.link-auditor-table thead');
++      expect(linkAuditorCss).toContain('display: none');
++      expect(linkAuditorCss).toContain('content: attr(data-label)');
++
++      const diagCssPath = path.resolve(
++        import.meta.dirname,
++        '../AdminDiagnosticsStudio.css',
++      );
++      const diagCss = fs.readFileSync(diagCssPath, 'utf8');
++
++      expect(diagCss).toContain('@media (max-width: 767px)');
++      expect(diagCss).toContain('.admin-diag-table thead');
++      expect(diagCss).toContain('display: none');
++      expect(diagCss).toContain('content: attr(data-label)');
++
++      const authCssPath = path.resolve(
++        import.meta.dirname,
++        '../../admin-auth/adminAuth.css',
++      );
++      const authCss = fs.readFileSync(authCssPath, 'utf8');
++
++      expect(authCss).toContain('@media (max-width: 767px)');
++      expect(authCss).toContain('.auth-users-th,');
++      expect(authCss).toContain('display: none');
++      expect(authCss).toContain('content: attr(data-label)');
++
++      const aiCssPath = path.resolve(
++        import.meta.dirname,
++        '../../admin-ai/aiStudio.css',
++      );
++      const aiCss = fs.readFileSync(aiCssPath, 'utf8');
++
++      expect(aiCss).toContain('@media (max-width: 767px)');
++      expect(aiCss).toContain('grid-template-columns: 1fr');
++    });
++  });
++
++  // =========================================================================
++  // Test Case 3: Sticky and visible form action buttons and mobile touch ergonomics
++  // =========================================================================
++  describe('Case 3: Sticky and visible form action buttons and mobile touch ergonomics', () => {
++    it('verifies action buttons and interactive controls across admin studios meet 44px tap target requirements', () => {
++      const subnavCssPath = path.resolve(
++        import.meta.dirname,
++        '../AdminStudioSubnav.css',
++      );
++      const subnavCss = fs.readFileSync(subnavCssPath, 'utf8');
++      expect(subnavCss).toContain('min-height: var(--tap-min, 44px)');
++
++      const linkAuditorCssPath = path.resolve(
++        import.meta.dirname,
++        '../LinkAuditorStudio.css',
++      );
++      const linkAuditorCss = fs.readFileSync(linkAuditorCssPath, 'utf8');
++      expect(linkAuditorCss).toContain('min-height: var(--tap-min, 44px)');
++      expect(linkAuditorCss).toContain('min-width: var(--tap-min, 44px)');
++
++      const diagCssPath = path.resolve(
++        import.meta.dirname,
++        '../AdminDiagnosticsStudio.css',
++      );
++      const diagCss = fs.readFileSync(diagCssPath, 'utf8');
++      expect(diagCss).toContain('min-height: var(--tap-min, 44px)');
++      expect(diagCss).toContain('min-width: var(--tap-min, 44px)');
++    });
++
++    it('verifies sticky action toolbars and drawer footers remain anchored on mobile viewports', () => {
++      const linkAuditorCssPath = path.resolve(
++        import.meta.dirname,
++        '../LinkAuditorStudio.css',
++      );
++      const linkAuditorCss = fs.readFileSync(linkAuditorCssPath, 'utf8');
++      expect(linkAuditorCss).toContain('position: sticky');
++      expect(linkAuditorCss).toContain('top: var(--topbar-h, 52px)');
++
++      const authCssPath = path.resolve(
++        import.meta.dirname,
++        '../../admin-auth/adminAuth.css',
++      );
++      const authCss = fs.readFileSync(authCssPath, 'utf8');
++      expect(authCss).toContain('position: sticky');
++      expect(authCss).toContain('bottom: 0');
++
++      const aiCssPath = path.resolve(
++        import.meta.dirname,
++        '../../admin-ai/aiStudio.css',
++      );
++      const aiCss = fs.readFileSync(aiCssPath, 'utf8');
++      expect(aiCss).toContain('position: sticky');
++      expect(aiCss).toContain('bottom: 0');
++
++      const wsCssPath = path.resolve(
++        import.meta.dirname,
++        '../../settings/WorkspaceSettingsPage.css',
++      );
++      const wsCss = fs.readFileSync(wsCssPath, 'utf8');
++      expect(wsCss).toContain('position: sticky');
++      expect(wsCss).toContain('bottom: 0');
++    });
++
++    it('verifies mobile input controls enforce font-size 16px to prevent iOS auto-zoom distortion', () => {
++      const linkAuditorCssPath = path.resolve(
++        import.meta.dirname,
++        '../LinkAuditorStudio.css',
++      );
++      const linkAuditorCss = fs.readFileSync(linkAuditorCssPath, 'utf8');
++      expect(linkAuditorCss).toContain('font-size: 16px');
++
++      const diagCssPath = path.resolve(
++        import.meta.dirname,
++        '../AdminDiagnosticsStudio.css',
++      );
++      const diagCss = fs.readFileSync(diagCssPath, 'utf8');
++      expect(diagCss).toContain('font-size: 16px');
++
++      const authCssPath = path.resolve(
++        import.meta.dirname,
++        '../../admin-auth/adminAuth.css',
++      );
++      const authCss = fs.readFileSync(authCssPath, 'utf8');
++      expect(authCss).toContain('font-size: 16px');
++    });
++  });
++});
+diff --git a/kanban/web/src/features/settings/ProjectSettingsPage.css b/kanban/web/src/features/settings/ProjectSettingsPage.css
+index fed5f4cd..6a80a8a5 100644
+--- a/kanban/web/src/features/settings/ProjectSettingsPage.css
++++ b/kanban/web/src/features/settings/ProjectSettingsPage.css
+@@ -467,6 +467,95 @@
+   }
+ }
+ 
++@media (max-width: 767px) {
++  .kb-settings-tabs {
++    flex-wrap: nowrap;
++    overflow-x: auto;
++    -webkit-overflow-scrolling: touch;
++    overscroll-behavior-x: contain;
++    scrollbar-width: thin;
++    padding-bottom: var(--space-1, 4px);
++    margin-bottom: var(--space-4, 16px);
++    gap: var(--space-2, 8px);
++  }
++
++  .kb-settings-tab {
++    flex-shrink: 0;
++    white-space: nowrap;
++    min-height: var(--tap-min, 44px);
++  }
++
++  .kb-table-scroll-container,
++  .kb-members-table-wrapper,
++  .kb-group-members-table-wrapper {
++    overflow-x: visible;
++  }
++
++  .kb-table,
++  .kb-table tbody,
++  .kb-table tr,
++  .kb-table td {
++    display: block;
++    width: 100%;
++    box-sizing: border-box;
++  }
++
++  .kb-table thead {
++    display: none;
++  }
++
++  .kb-table tr {
++    margin-bottom: var(--space-3, 12px);
++    border: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
++    border-radius: var(--radius-md, 8px);
++    background: var(--kb-color-bg-surface, var(--bg-surface, #ffffff));
++    padding: var(--space-3, 12px);
++  }
++
++  .kb-table td {
++    display: flex;
++    justify-content: space-between;
++    align-items: center;
++    padding: var(--space-2, 8px) 0;
++    border-bottom: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
++    text-align: right;
++  }
++
++  .kb-table td:last-child {
++    border-bottom: none;
++  }
++
++  .kb-table td::before {
++    content: attr(data-label);
++    font-weight: 600;
++    color: var(--kb-color-text-secondary, var(--text-secondary, #64748b));
++    text-align: left;
++    margin-right: var(--space-2, 8px);
++    font-size: 0.8125rem;
++    flex-shrink: 0;
++  }
++
++  .kb-settings-form-actions,
++  .kb-members-actions-bar {
++    position: sticky;
++    bottom: 0;
++    background: var(--kb-color-bg-surface, var(--bg-surface, #ffffff));
++    border-top: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
++    padding: var(--space-3, 12px) 0;
++    z-index: 5;
++    display: flex;
++    gap: var(--space-2, 8px);
++  }
++
++  .kb-settings-form-actions .kb-btn,
++  .kb-members-actions-bar .kb-btn {
++    min-height: var(--tap-min, 44px);
++    min-width: var(--tap-min, 44px);
++    flex: 1;
++    justify-content: center;
++  }
++}
++
+ @media (max-width: 640px) {
+   .kb-settings-container {
+     padding: 1.5rem 1rem;
+diff --git a/kanban/web/src/features/settings/WorkspaceSettingsPage.css b/kanban/web/src/features/settings/WorkspaceSettingsPage.css
+new file mode 100644
+index 00000000..e72c03cd
+--- /dev/null
++++ b/kanban/web/src/features/settings/WorkspaceSettingsPage.css
+@@ -0,0 +1,110 @@
++/* Copyright 2026 Kanban Platform Contributors */
++/* Apache-2.0 License. See LICENSE for details. */
++
++/**
++ * Workspace Settings Studio Responsive Styles (KAN-344).
++ * Enforces horizontal swipe tabs, responsive card stacking for tables,
++ * and sticky visible action buttons on mobile viewports.
++ */
++
++.kb-workspace-settings-container {
++  max-width: 960px;
++  margin: 0 auto;
++  padding: var(--space-6, 24px) var(--space-4, 16px);
++  color: var(--kb-color-text-primary, #0f172a);
++}
++
++/* Horizontal swipeable tabs for mobile viewports (KAN-344) */
++@media (max-width: 767px) {
++  .kb-settings-tabs {
++    display: flex;
++    flex-wrap: nowrap;
++    overflow-x: auto;
++    -webkit-overflow-scrolling: touch;
++    overscroll-behavior-x: contain;
++    scrollbar-width: thin;
++    padding-bottom: var(--space-1, 4px);
++    margin-bottom: var(--space-4, 16px);
++    gap: var(--space-2, 8px);
++  }
++
++  .kb-settings-tab {
++    flex-shrink: 0;
++    white-space: nowrap;
++    min-height: var(--tap-min, 44px);
++    padding: var(--space-2, 8px) var(--space-3, 12px);
++    font-size: 0.875rem;
++  }
++
++  /* Responsive column stacking for multi-column tables (KAN-344) */
++  .kb-table-scroll-container,
++  .kb-members-table-wrapper,
++  .kb-group-members-table-wrapper {
++    overflow-x: visible;
++  }
++
++  .kb-table,
++  .kb-table tbody,
++  .kb-table tr,
++  .kb-table td {
++    display: block;
++    width: 100%;
++    box-sizing: border-box;
++  }
++
++  .kb-table thead {
++    display: none;
++  }
++
++  .kb-table tr {
++    margin-bottom: var(--space-3, 12px);
++    border: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
++    border-radius: var(--radius-md, 8px);
++    background: var(--kb-color-bg-surface, var(--bg-surface, #ffffff));
++    padding: var(--space-3, 12px);
++  }
++
++  .kb-table td {
++    display: flex;
++    justify-content: space-between;
++    align-items: center;
++    padding: var(--space-2, 8px) 0;
++    border-bottom: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
++    text-align: right;
++  }
++
++  .kb-table td:last-child {
++    border-bottom: none;
++  }
++
++  .kb-table td::before {
++    content: attr(data-label);
++    font-weight: 600;
++    color: var(--kb-color-text-secondary, var(--text-secondary, #64748b));
++    text-align: left;
++    margin-right: var(--space-2, 8px);
++    font-size: 0.8125rem;
++    flex-shrink: 0;
++  }
++
++  /* Sticky / visible action buttons (KAN-344) */
++  .kb-settings-form-actions,
++  .kb-members-actions-bar {
++    position: sticky;
++    bottom: 0;
++    background: var(--kb-color-bg-surface, var(--bg-surface, #ffffff));
++    border-top: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
++    padding: var(--space-3, 12px) 0;
++    z-index: 5;
++    display: flex;
++    gap: var(--space-2, 8px);
++  }
++
++  .kb-settings-form-actions .kb-btn,
++  .kb-members-actions-bar .kb-btn {
++    min-height: var(--tap-min, 44px);
++    min-width: var(--tap-min, 44px);
++    flex: 1;
++    justify-content: center;
++  }
++}
+diff --git a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
+index e33480bb..aefa9724 100644
+--- a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
++++ b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
+@@ -23,6 +23,7 @@ import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
+ import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
+ import { AdvancedSection } from '../../ui/AdvancedSection';
+ import './ProjectSettingsPage.css';
++import './WorkspaceSettingsPage.css';
+ 
+ interface WorkspaceSettingsData {
+   workspace_id?: string;
+@@ -1300,7 +1301,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+                       const typeClass = pType.toLowerCase();
+                       return (
+                         <tr key={p.id} data-testid={`principal-row-${p.id}`}>
+-                          <td>
++                          <td data-label="User">
+                             <div className="kb-member-info">
+                               <span className="kb-member-name" data-testid={`member-name-${p.id}`}>
+                                 {p.display_name ?? ((p.handle ?? p.principal) ? formatHandle(p.handle ?? p.principal) : p.id)}
+@@ -1312,12 +1313,12 @@ export function WorkspaceSettingsPage(): JSX.Element {
+                               )}
+                             </div>
+                           </td>
+-                          <td>
++                          <td data-label="Email">
+                             <span className="kb-member-email" data-testid={`member-email-${p.id}`}>
+                               {p.email ?? '-'}
+                             </span>
+                           </td>
+-                          <td>
++                          <td data-label="Type">
+                             <span
+                               className={`kb-type-pill kb-type-pill--${typeClass}`}
+                               data-testid={`type-pill-${p.id}`}
+@@ -1325,7 +1326,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+                               {pType.charAt(0) + pType.slice(1).toLowerCase()}
+                             </span>
+                           </td>
+-                          <td>
++                          <td data-label="Role Grant">
+                             <select
+                               data-testid={`role-select-${p.id}`}
+                               aria-label={`Role for ${p.display_name ?? p.handle ?? p.principal ?? p.id}`}
+@@ -1341,7 +1342,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+                             </select>
+                             <RoleLabelPicker principalId={p.id} />
+                           </td>
+-                          <td>
++                          <td data-label="Actions">
+                             <button
+                               type="button"
+                               data-testid={`remove-member-btn-${p.id}`}
+@@ -1512,7 +1513,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+                                 const isNestedGroup = mType === 'GROUP';
+                                 return (
+                                   <tr key={m.id} data-testid={`group-member-row-${m.id}`}>
+-                                    <td>
++                                    <td data-label="Principal">
+                                       <div className="kb-member-info">
+                                         <span className="kb-member-name">
+                                           {m.display_name ?? formatHandle(m.handle ?? m.principal ?? m.id)}
+@@ -1524,7 +1525,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+                                         )}
+                                       </div>
+                                     </td>
+-                                    <td>
++                                    <td data-label="Type">
+                                       <span
+                                         className={`kb-type-pill kb-type-pill--${mType.toLowerCase()}`}
+                                         data-testid={`group-member-type-${m.id}`}
+@@ -1532,7 +1533,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+                                         {isNestedGroup ? 'Nested Group' : mType.charAt(0) + mType.slice(1).toLowerCase()}
+                                       </span>
+                                     </td>
+-                                    <td>
++                                    <td data-label="Actions">
+                                       <button
+                                         type="button"
+                                         data-testid={`remove-group-member-${m.id}`}
+@@ -1765,12 +1766,12 @@ export function WorkspaceSettingsPage(): JSX.Element {
+                   <tbody>
+                     {trashedItems.map((item) => (
+                       <tr key={item.id} data-testid={`trash-row-${item.id}`}>
+-                        <td>
++                        <td data-label="Type">
+                           <span className="kb-role-badge kb-role-member">
+                             {formatTrashKind(item.kind)}
+                           </span>
+                         </td>
+-                        <td>
++                        <td data-label="Item">
+                           <div className="kb-member-info">
+                             {item.key && (
+                               <strong className="kb-member-name" data-testid="trash-item-key">
+@@ -1782,12 +1783,12 @@ export function WorkspaceSettingsPage(): JSX.Element {
+                             </span>
+                           </div>
+                         </td>
+-                        <td>
++                        <td data-label="Deleted At">
+                           <span data-testid="trash-deleted-at">
+                             {new Date(item.deleted_at).toLocaleString()}
+                           </span>
+                         </td>
+-                        <td>
++                        <td data-label="Days Remaining">
+                           <span
+                             data-testid="trash-remaining-days"
+                             className={`kb-retention-pill ${item.remaining_days <= 3 ? 'kb-retention-pill-expired' : ''}`}
+@@ -1797,7 +1798,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
+                               : 'Expires today'}
+                           </span>
+                         </td>
+-                        <td>
++                        <td data-label="Actions">
+                           <div className="kb-edit-cell-row">
+                             <button
+                               type="button"

@@ -467,6 +467,95 @@
   }
 }
 
+@media (max-width: 767px) {
+  .kb-settings-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    overscroll-behavior-x: contain;
+    scrollbar-width: thin;
+    padding-bottom: var(--space-1, 4px);
+    margin-bottom: var(--space-4, 16px);
+    gap: var(--space-2, 8px);
+  }
+
+  .kb-settings-tab {
+    flex-shrink: 0;
+    white-space: nowrap;
+    min-height: var(--tap-min, 44px);
+  }
+
+  .kb-table-scroll-container,
+  .kb-members-table-wrapper,
+  .kb-group-members-table-wrapper {
+    overflow-x: visible;
+  }
+
+  .kb-table,
+  .kb-table tbody,
+  .kb-table tr,
+  .kb-table td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .kb-table thead {
+    display: none;
+  }
+
+  .kb-table tr {
+    margin-bottom: var(--space-3, 12px);
+    border: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
+    border-radius: var(--radius-md, 8px);
+    background: var(--kb-color-bg-surface, var(--bg-surface, #ffffff));
+    padding: var(--space-3, 12px);
+  }
+
+  .kb-table td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-2, 8px) 0;
+    border-bottom: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
+    text-align: right;
+  }
+
+  .kb-table td:last-child {
+    border-bottom: none;
+  }
+
+  .kb-table td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--kb-color-text-secondary, var(--text-secondary, #64748b));
+    text-align: left;
+    margin-right: var(--space-2, 8px);
+    font-size: 0.8125rem;
+    flex-shrink: 0;
+  }
+
+  .kb-settings-form-actions,
+  .kb-members-actions-bar {
+    position: sticky;
+    bottom: 0;
+    background: var(--kb-color-bg-surface, var(--bg-surface, #ffffff));
+    border-top: 1px solid var(--kb-color-border-subtle, var(--border-color, #e2e8f0));
+    padding: var(--space-3, 12px) 0;
+    z-index: 5;
+    display: flex;
+    gap: var(--space-2, 8px);
+  }
+
+  .kb-settings-form-actions .kb-btn,
+  .kb-members-actions-bar .kb-btn {
+    min-height: var(--tap-min, 44px);
+    min-width: var(--tap-min, 44px);
+    flex: 1;
+    justify-content: center;
+  }
+}
+
 @media (max-width: 640px) {
   .kb-settings-container {
     padding: 1.5rem 1rem;

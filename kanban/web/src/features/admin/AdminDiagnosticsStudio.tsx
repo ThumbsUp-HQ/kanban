@@ -712,13 +712,13 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
               <tbody>
                 {(diag?.storage.directories ?? []).map((dir) => (
                   <tr key={dir.name}>
-                    <td>
+                    <td data-label="Storage Volume">
                       <strong>{dir.name}</strong>
                     </td>
-                    <td>
+                    <td data-label="Mount / Path">
                       <code className="admin-diag-code">{dir.path}</code>
                     </td>
-                    <td>
+                    <td data-label="Status">
                       <span
                         className={`admin-diag-badge ${
                           dir.exists && dir.writable
@@ -733,8 +733,8 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
                             : 'Missing'}
                       </span>
                     </td>
-                    <td>{Math.round(dir.free_bytes / (1024 * 1024 * 1024))} GB</td>
-                    <td>{Math.round(dir.total_bytes / (1024 * 1024 * 1024))} GB</td>
+                    <td data-label="Free Space">{Math.round(dir.free_bytes / (1024 * 1024 * 1024))} GB</td>
+                    <td data-label="Total Capacity">{Math.round(dir.total_bytes / (1024 * 1024 * 1024))} GB</td>
                   </tr>
                 ))}
               </tbody>
@@ -804,21 +804,21 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
               <tbody>
                 {filteredConfig.map((item) => (
                   <tr key={item.key}>
-                    <td>
+                    <td data-label="Setting Key">
                       <code className="admin-diag-code">{item.key}</code>
                     </td>
-                    <td>{item.subsystem}</td>
-                    <td>
+                    <td data-label="Subsystem">{item.subsystem}</td>
+                    <td data-label="Effective Value">
                       {item.redacted ? (
                         <span className="admin-diag-badge admin-diag-badge--warn">[REDACTED]</span>
                       ) : (
                         <span>{String(item.value)}</span>
                       )}
                     </td>
-                    <td>
+                    <td data-label="Source">
                       <span className="admin-diag-badge">{item.source}</span>
                     </td>
-                    <td>{item.notes}</td>
+                    <td data-label="Security Notes">{item.notes}</td>
                   </tr>
                 ))}
               </tbody>

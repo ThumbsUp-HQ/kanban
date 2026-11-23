@@ -23,6 +23,7 @@ import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
 import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
 import { AdvancedSection } from '../../ui/AdvancedSection';
 import './ProjectSettingsPage.css';
+import './WorkspaceSettingsPage.css';
 
 interface WorkspaceSettingsData {
   workspace_id?: string;
@@ -1300,7 +1301,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                       const typeClass = pType.toLowerCase();
                       return (
                         <tr key={p.id} data-testid={`principal-row-${p.id}`}>
-                          <td>
+                          <td data-label="User">
                             <div className="kb-member-info">
                               <span className="kb-member-name" data-testid={`member-name-${p.id}`}>
                                 {p.display_name ?? ((p.handle ?? p.principal) ? formatHandle(p.handle ?? p.principal) : p.id)}
@@ -1312,12 +1313,12 @@ export function WorkspaceSettingsPage(): JSX.Element {
                               )}
                             </div>
                           </td>
-                          <td>
+                          <td data-label="Email">
                             <span className="kb-member-email" data-testid={`member-email-${p.id}`}>
                               {p.email ?? '-'}
                             </span>
                           </td>
-                          <td>
+                          <td data-label="Type">
                             <span
                               className={`kb-type-pill kb-type-pill--${typeClass}`}
                               data-testid={`type-pill-${p.id}`}
@@ -1325,7 +1326,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                               {pType.charAt(0) + pType.slice(1).toLowerCase()}
                             </span>
                           </td>
-                          <td>
+                          <td data-label="Role Grant">
                             <select
                               data-testid={`role-select-${p.id}`}
                               aria-label={`Role for ${p.display_name ?? p.handle ?? p.principal ?? p.id}`}
@@ -1341,7 +1342,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                             </select>
                             <RoleLabelPicker principalId={p.id} />
                           </td>
-                          <td>
+                          <td data-label="Actions">
                             <button
                               type="button"
                               data-testid={`remove-member-btn-${p.id}`}
@@ -1512,7 +1513,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                                 const isNestedGroup = mType === 'GROUP';
                                 return (
                                   <tr key={m.id} data-testid={`group-member-row-${m.id}`}>
-                                    <td>
+                                    <td data-label="Principal">
                                       <div className="kb-member-info">
                                         <span className="kb-member-name">
                                           {m.display_name ?? formatHandle(m.handle ?? m.principal ?? m.id)}
@@ -1524,7 +1525,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                                         )}
                                       </div>
                                     </td>
-                                    <td>
+                                    <td data-label="Type">
                                       <span
                                         className={`kb-type-pill kb-type-pill--${mType.toLowerCase()}`}
                                         data-testid={`group-member-type-${m.id}`}
@@ -1532,7 +1533,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                                         {isNestedGroup ? 'Nested Group' : mType.charAt(0) + mType.slice(1).toLowerCase()}
                                       </span>
                                     </td>
-                                    <td>
+                                    <td data-label="Actions">
                                       <button
                                         type="button"
                                         data-testid={`remove-group-member-${m.id}`}
@@ -1765,12 +1766,12 @@ export function WorkspaceSettingsPage(): JSX.Element {
                   <tbody>
                     {trashedItems.map((item) => (
                       <tr key={item.id} data-testid={`trash-row-${item.id}`}>
-                        <td>
+                        <td data-label="Type">
                           <span className="kb-role-badge kb-role-member">
                             {formatTrashKind(item.kind)}
                           </span>
                         </td>
-                        <td>
+                        <td data-label="Item">
                           <div className="kb-member-info">
                             {item.key && (
                               <strong className="kb-member-name" data-testid="trash-item-key">
@@ -1782,12 +1783,12 @@ export function WorkspaceSettingsPage(): JSX.Element {
                             </span>
                           </div>
                         </td>
-                        <td>
+                        <td data-label="Deleted At">
                           <span data-testid="trash-deleted-at">
                             {new Date(item.deleted_at).toLocaleString()}
                           </span>
                         </td>
-                        <td>
+                        <td data-label="Days Remaining">
                           <span
                             data-testid="trash-remaining-days"
                             className={`kb-retention-pill ${item.remaining_days <= 3 ? 'kb-retention-pill-expired' : ''}`}
@@ -1797,7 +1798,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                               : 'Expires today'}
                           </span>
                         </td>
-                        <td>
+                        <td data-label="Actions">
                           <div className="kb-edit-cell-row">
                             <button
                               type="button"

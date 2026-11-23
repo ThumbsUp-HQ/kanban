@@ -865,6 +865,81 @@
     min-width: var(--tap-min, 44px);
   }
 
+  /* Responsive table column stacking (KAN-344) */
+  .auth-users-table-container {
+    overflow-x: visible;
+    border: none;
+    background: transparent;
+  }
+
+  .auth-users-table,
+  .auth-users-table tbody,
+  .auth-users-tr,
+  .auth-users-td {
+    display: block;
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .auth-users-th,
+  .auth-users-table thead {
+    display: none;
+  }
+
+  .auth-users-tr {
+    margin-bottom: var(--space-3, 12px);
+    border: 1px solid var(--border-subtle);
+    border-radius: var(--radius-lg, 10px);
+    background: var(--bg-surface);
+    padding: var(--space-3, 12px);
+  }
+
+  .auth-users-td {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--space-2, 8px) 0;
+    border-bottom: 1px solid var(--border-subtle);
+    text-align: right;
+  }
+
+  .auth-users-td:last-child {
+    border-bottom: none;
+  }
+
+  .auth-users-td::before {
+    content: attr(data-label);
+    font-weight: 600;
+    color: var(--fg-muted);
+    text-align: left;
+    margin-right: var(--space-2, 8px);
+    font-size: var(--text-xs, 0.75rem);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    flex-shrink: 0;
+  }
+
+  .auth-users-actions-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3, 12px);
+  }
+
+  .auth-users-actions-bar .auth-studio-add-btn {
+    width: 100%;
+    justify-content: center;
+  }
+
+  .auth-editor-drawer-actions,
+  .auth-card-editor-footer {
+    position: sticky;
+    bottom: 0;
+    background: var(--bg-surface);
+    border-top: 1px solid var(--border-subtle);
+    padding: var(--space-3, 12px) 0;
+    z-index: 5;
+  }
+
   .auth-editor-drawer {
     width: 100vw;
     padding: var(--space-6, 24px) var(--space-5, 20px);
