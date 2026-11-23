@@ -240,14 +240,14 @@ class AIProviderConfigService:
         self._session = session
         if kek_provider is None:
             try:
-                from kanban.security.keys import load_key_material  # noqa: PLC0415
+                from kanban.security.keys import KeyMaterialError, load_key_material  # noqa: PLC0415
 
                 km = load_key_material()
                 kek_provider = StaticKekProvider(
                     {km.master_kek_kid: km.master_kek},
                     current=km.master_kek_kid,
                 )
-            except (KeyError, ValueError, RuntimeError, TypeError, OSError):
+            except (KeyMaterialError, KeyError, ValueError, RuntimeError, TypeError, OSError):
                 kek_provider = None
         self._kek = kek_provider
         self._resolver = resolver
