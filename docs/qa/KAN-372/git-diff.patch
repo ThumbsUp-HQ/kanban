@@ -1,0 +1,585 @@
+diff --git a/kanban/web/src/features/drawer/IssueSurface.css b/kanban/web/src/features/drawer/IssueSurface.css
+index 3baea9cf..5f71da02 100644
+--- a/kanban/web/src/features/drawer/IssueSurface.css
++++ b/kanban/web/src/features/drawer/IssueSurface.css
+@@ -778,6 +778,50 @@
+   border-color: var(--border-warning, #fbbf24);
+ }
+ 
++.share-export-menu-container {
++  position: relative;
++  display: inline-flex;
++}
++
++.share-export-popover-menu {
++  position: absolute;
++  top: calc(100% + 4px);
++  left: 0;
++  z-index: 100;
++  min-width: 260px;
++  background: var(--bg-surface-raised, #24272f);
++  border: 1px solid var(--border-subtle, #333842);
++  border-radius: var(--radius-md, 6px);
++  box-shadow: var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.3));
++  padding: 4px;
++  display: flex;
++  flex-direction: column;
++  gap: 2px;
++}
++
++.share-export-popover-menu__item {
++  display: flex;
++  align-items: center;
++  gap: 8px;
++  width: 100%;
++  padding: 8px 12px;
++  background: transparent;
++  border: none;
++  border-radius: var(--radius-sm, 4px);
++  color: var(--fg-secondary, #cbd5e1);
++  font-size: 13px;
++  text-align: left;
++  cursor: pointer;
++  transition: background-color 100ms ease, color 100ms ease;
++}
++
++.share-export-popover-menu__item:hover,
++.share-export-popover-menu__item:focus-visible {
++  background: var(--bg-hover, #2c313a);
++  color: var(--fg-primary, #f8fafc);
++  outline: none;
++}
++
+ .split-state-select {
+   height: 28px;
+   padding: 0 8px;
+diff --git a/kanban/web/src/features/drawer/IssueSurface.tsx b/kanban/web/src/features/drawer/IssueSurface.tsx
+index 71dd57df..6c66bd11 100644
+--- a/kanban/web/src/features/drawer/IssueSurface.tsx
++++ b/kanban/web/src/features/drawer/IssueSurface.tsx
+@@ -53,6 +53,8 @@ import { SafeMarkdownPreview } from '../activity/SafeMarkdownPreview';
+ import { PdfAttachmentCard } from '../../components/attachments/PdfAttachmentCard';
+ import { fetchComments, type CommentResponse, type CommentList } from '../activity/activityApi';
+ import { copyToClipboard } from '../../utils/clipboard';
++import { CsvImportExportModal } from '../views/CsvImportExportModal';
++import { ReportExportModal } from '../reports/ReportExportModal';
+ import './IssueSurface.css';
+ 
+ let moduleMountCounter = 0;
+@@ -226,6 +228,7 @@ export function normalizeIssueDetail(
+ 
+   return {
+     ...candidate,
++    id: candidate.id ?? candidate.object_id ?? rawId,
+     project_key: inferredProject,
+     object_id: candidate.object_id ?? rawId,
+     etag: candidate.etag ?? rawSha,
+@@ -291,6 +294,64 @@ function IssueSurfaceContent({
+   const copyShareTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+   const [copiedBranch, setCopiedBranch] = useState(false);
+   const [copiedShare, setCopiedShare] = useState(false);
++  const [isShareMenuOpen, setIsShareMenuOpen] = useState(false);
++  const [isCsvExportOpen, setIsCsvExportOpen] = useState(false);
++  const [csvExportFormat, setCsvExportFormat] = useState<'csv' | 'zip_csv'>('csv');
++  const [isReportExportOpen, setIsReportExportOpen] = useState(false);
++  const shareMenuRef = useRef<HTMLDivElement | null>(null);
++  const shareButtonRef = useRef<HTMLButtonElement | null>(null);
++
++  useEffect(() => {
++    if (!isShareMenuOpen) return;
++
++    const handleClickOutside = (event: MouseEvent | TouchEvent): void => {
++      if (
++        shareMenuRef.current &&
++        !shareMenuRef.current.contains(event.target as Node)
++      ) {
++        setIsShareMenuOpen(false);
++      }
++    };
++
++    const handleKeyDown = (event: KeyboardEvent): void => {
++      if (event.key === 'Escape') {
++        setIsShareMenuOpen(false);
++        shareButtonRef.current?.focus();
++      }
++    };
++
++    document.addEventListener('mousedown', handleClickOutside);
++    document.addEventListener('touchstart', handleClickOutside);
++    document.addEventListener('keydown', handleKeyDown);
++
++    return () => {
++      document.removeEventListener('mousedown', handleClickOutside);
++      document.removeEventListener('touchstart', handleClickOutside);
++      document.removeEventListener('keydown', handleKeyDown);
++    };
++  }, [isShareMenuOpen]);
++
++  const handleShareMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
++    const items = shareMenuRef.current?.querySelectorAll<HTMLButtonElement>(
++      'button[role="menuitem"]',
++    );
++    if (!items || items.length === 0) return;
++
++    const itemsArray = Array.from(items);
++    const currentIndex = itemsArray.indexOf(document.activeElement as HTMLButtonElement);
++
++    if (e.key === 'ArrowDown') {
++      e.preventDefault();
++      const nextIndex = currentIndex < itemsArray.length - 1 ? currentIndex + 1 : 0;
++      itemsArray[nextIndex]?.focus();
++    } else if (e.key === 'ArrowUp') {
++      e.preventDefault();
++      const prevIndex = currentIndex > 0 ? currentIndex - 1 : itemsArray.length - 1;
++      itemsArray[prevIndex]?.focus();
++    } else if (e.key === 'Tab') {
++      setIsShareMenuOpen(false);
++    }
++  };
+ 
+   useEffect(() => {
+     return () => {
+@@ -1685,17 +1746,85 @@ function IssueSurfaceContent({
+               >
+                 {isFavorite ? '★' : '☆'} Favorite
+               </button>
+-              <button
+-                type="button"
+-                className="split-toolbar-btn"
+-                data-testid="split-share-btn"
+-                aria-label="Share or export issue"
+-                onClick={() => {
+-                  void handleShareExport();
+-                }}
++              <div
++                className="share-export-menu-container"
++                ref={shareMenuRef}
++                onKeyDown={handleShareMenuKeyDown}
+               >
+-                {copiedShare ? '✓ Copied link!' : '🔗 Share / Export'}
+-              </button>
++                <button
++                  ref={shareButtonRef}
++                  type="button"
++                  className="split-toolbar-btn"
++                  data-testid="split-share-btn"
++                  aria-label="Share or export issue"
++                  aria-haspopup="menu"
++                  aria-expanded={isShareMenuOpen}
++                  onClick={() => {
++                    setIsShareMenuOpen((prev) => !prev);
++                  }}
++                >
++                  {copiedShare ? '✓ Copied link!' : '🔗 Share / Export'}
++                </button>
++                {isShareMenuOpen && (
++                  <div
++                    role="menu"
++                    aria-label="Share and export options"
++                    className="share-export-popover-menu"
++                    data-testid="share-export-menu"
++                  >
++                    <button
++                      type="button"
++                      role="menuitem"
++                      className="share-export-popover-menu__item"
++                      data-testid="share-export-copy-link"
++                      onClick={() => {
++                        void handleShareExport();
++                        setIsShareMenuOpen(false);
++                      }}
++                    >
++                      {copiedShare ? '✓ Copied link!' : 'Copy share link'}
++                    </button>
++                    <button
++                      type="button"
++                      role="menuitem"
++                      className="share-export-popover-menu__item"
++                      data-testid="share-export-csv"
++                      onClick={() => {
++                        setCsvExportFormat('csv');
++                        setIsCsvExportOpen(true);
++                        setIsShareMenuOpen(false);
++                      }}
++                    >
++                      Export CSV (.csv)
++                    </button>
++                    <button
++                      type="button"
++                      role="menuitem"
++                      className="share-export-popover-menu__item"
++                      data-testid="share-export-zip"
++                      onClick={() => {
++                        setCsvExportFormat('zip_csv');
++                        setIsCsvExportOpen(true);
++                        setIsShareMenuOpen(false);
++                      }}
++                    >
++                      Export Password-protected ZIP (AES-256)
++                    </button>
++                    <button
++                      type="button"
++                      role="menuitem"
++                      className="share-export-popover-menu__item"
++                      data-testid="share-export-report"
++                      onClick={() => {
++                        setIsReportExportOpen(true);
++                        setIsShareMenuOpen(false);
++                      }}
++                    >
++                      Export via Report Template...
++                    </button>
++                  </div>
++                )}
++              </div>
+               {SubscribeSlot && <SubscribeSlot issue={currentIssue} />}
+               {LinkSlot && <LinkSlot issue={currentIssue} />}
+               {OverflowSlot && (
+@@ -2191,6 +2320,27 @@ function IssueSurfaceContent({
+             )}
+           </div>
+         )}
++        {isCsvExportOpen && (
++          <CsvImportExportModal
++            isOpen={isCsvExportOpen}
++            onClose={() => {
++              setIsCsvExportOpen(false);
++            }}
++            projectKey={resolvedProjectForAux}
++            selectedIssueIds={[currentIssue.id ?? currentIssue.key]}
++            initialExportFormat={csvExportFormat}
++          />
++        )}
++        {isReportExportOpen && (
++          <ReportExportModal
++            isOpen={isReportExportOpen}
++            onClose={() => {
++              setIsReportExportOpen(false);
++            }}
++            projectKey={resolvedProjectForAux}
++            selectedIssueIds={[currentIssue.id ?? currentIssue.key]}
++          />
++        )}
+       </>
+     );
+   };
+diff --git a/kanban/web/src/features/drawer/IssueSurfaceSplitMasterDetail.test.tsx b/kanban/web/src/features/drawer/IssueSurfaceSplitMasterDetail.test.tsx
+index 9634a296..c099c428 100644
+--- a/kanban/web/src/features/drawer/IssueSurfaceSplitMasterDetail.test.tsx
++++ b/kanban/web/src/features/drawer/IssueSurfaceSplitMasterDetail.test.tsx
+@@ -171,13 +171,24 @@ describe('IssueSurface split mode (KAN-52 Problem 3)', () => {
+     fireEvent.click(favBtn);
+     expect(favBtn.textContent).toContain('★ Favorite');
+ 
+-    // 6. Share / Export button
++    // 6. Share / Export button and menu (KAN-372)
+     const shareBtn = screen.getByTestId('split-share-btn');
+     expect(shareBtn).toBeDefined();
++    expect(shareBtn.getAttribute('aria-haspopup')).toBe('menu');
++    expect(shareBtn.getAttribute('aria-expanded')).toBe('false');
++
+     await act(async () => {
+       fireEvent.click(shareBtn);
+       await Promise.resolve();
+     });
++    expect(shareBtn.getAttribute('aria-expanded')).toBe('true');
++    expect(screen.getByTestId('share-export-menu')).toBeDefined();
++
++    const copyLinkItem = screen.getByTestId('share-export-copy-link');
++    await act(async () => {
++      fireEvent.click(copyLinkItem);
++      await Promise.resolve();
++    });
+     expect(clipboardSpy).toHaveBeenCalled();
+   });
+ 
+@@ -321,6 +332,11 @@ describe('IssueSurface split mode (KAN-52 Problem 3)', () => {
+       fireEvent.click(shareBtn);
+       await Promise.resolve();
+     });
++    const copyLinkItem = screen.getByTestId('share-export-copy-link');
++    await act(async () => {
++      fireEvent.click(copyLinkItem);
++      await Promise.resolve();
++    });
+     expect(shareBtn.textContent).toContain('✓ Copied link!');
+   });
+ 
+@@ -356,6 +372,11 @@ describe('IssueSurface split mode (KAN-52 Problem 3)', () => {
+       fireEvent.click(shareBtn);
+       await Promise.resolve();
+     });
++    const copyLinkItem = screen.getByTestId('share-export-copy-link');
++    await act(async () => {
++      fireEvent.click(copyLinkItem);
++      await Promise.resolve();
++    });
+     expect(shareBtn.textContent).toContain('✓ Copied link!');
+     expect(gitBranchBtn.textContent).toContain('✓ Copied!');
+ 
+@@ -577,4 +598,131 @@ describe('IssueSurface split mode (KAN-52 Problem 3)', () => {
+     });
+     unmount3();
+   });
++
++  it('opens CsvImportExportModal in standard CSV or AES-256 ZIP mode when share export menu actions are clicked (KAN-372)', async () => {
++    renderSplitSurface();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('split-share-btn')).toBeDefined();
++    });
++
++    const shareBtn = screen.getByTestId('split-share-btn');
++
++    // 1. Export CSV action opens CsvImportExportModal in standard CSV mode
++    fireEvent.click(shareBtn);
++    expect(screen.getByTestId('share-export-menu')).toBeDefined();
++    const csvItem = screen.getByTestId('share-export-csv');
++    fireEvent.click(csvItem);
++
++    await waitFor(() => {
++      expect(screen.getByTestId('csv-import-export-modal')).toBeDefined();
++    });
++    const csvRadio = screen.getByTestId<HTMLInputElement>('export-format-csv');
++    expect(csvRadio.checked).toBe(true);
++
++    // Close modal
++    fireEvent.click(screen.getByTestId('csv-modal-close-btn'));
++    await waitFor(() => {
++      expect(screen.queryByTestId('csv-import-export-modal')).toBeNull();
++    });
++
++    // 2. Export Password-protected ZIP action opens CsvImportExportModal in AES-256 ZIP mode
++    fireEvent.click(shareBtn);
++    expect(screen.getByTestId('share-export-menu')).toBeDefined();
++    const zipItem = screen.getByTestId('share-export-zip');
++    fireEvent.click(zipItem);
++
++    await waitFor(() => {
++      expect(screen.getByTestId('csv-import-export-modal')).toBeDefined();
++    });
++    const zipRadio = screen.getByTestId<HTMLInputElement>('export-format-zip');
++    expect(zipRadio.checked).toBe(true);
++
++    fireEvent.click(screen.getByTestId('csv-modal-close-btn'));
++    await waitFor(() => {
++      expect(screen.queryByTestId('csv-import-export-modal')).toBeNull();
++    });
++  });
++
++  it('opens ReportExportModal when export via report template is clicked (KAN-372)', async () => {
++    renderSplitSurface();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('split-share-btn')).toBeDefined();
++    });
++
++    const shareBtn = screen.getByTestId('split-share-btn');
++    fireEvent.click(shareBtn);
++    expect(screen.getByTestId('share-export-menu')).toBeDefined();
++
++    const reportItem = screen.getByTestId('share-export-report');
++    fireEvent.click(reportItem);
++
++    await waitFor(() => {
++      expect(screen.getByTestId('report-export-backdrop')).toBeDefined();
++    });
++
++    // Close report modal
++    fireEvent.click(screen.getByTestId('report-export-close-btn'));
++    await waitFor(() => {
++      expect(screen.queryByTestId('report-export-backdrop')).toBeNull();
++    });
++  });
++
++  it('handles keyboard navigation and outside clicks on share export popover menu (KAN-372)', async () => {
++    renderSplitSurface();
++
++    await waitFor(() => {
++      expect(screen.getByTestId('split-share-btn')).toBeDefined();
++    });
++
++    const shareBtn = screen.getByTestId('split-share-btn');
++    fireEvent.click(shareBtn);
++    expect(screen.getByTestId('share-export-menu')).toBeDefined();
++
++    const menu = screen.getByTestId('share-export-menu');
++    const copyLinkItem = screen.getByTestId('share-export-copy-link');
++    const csvItem = screen.getByTestId('share-export-csv');
++    const zipItem = screen.getByTestId('share-export-zip');
++    const reportItem = screen.getByTestId('share-export-report');
++
++    // Arrow navigation
++    copyLinkItem.focus();
++    expect(document.activeElement).toBe(copyLinkItem);
++
++    fireEvent.keyDown(menu, { key: 'ArrowDown' });
++    expect(document.activeElement).toBe(csvItem);
++
++    fireEvent.keyDown(menu, { key: 'ArrowDown' });
++    expect(document.activeElement).toBe(zipItem);
++
++    fireEvent.keyDown(menu, { key: 'ArrowDown' });
++    expect(document.activeElement).toBe(reportItem);
++
++    // Wraparound ArrowDown
++    fireEvent.keyDown(menu, { key: 'ArrowDown' });
++    expect(document.activeElement).toBe(copyLinkItem);
++
++    // ArrowUp wraparound
++    fireEvent.keyDown(menu, { key: 'ArrowUp' });
++    expect(document.activeElement).toBe(reportItem);
++
++    // Tab closes menu
++    fireEvent.keyDown(menu, { key: 'Tab' });
++    expect(screen.queryByTestId('share-export-menu')).toBeNull();
++
++    // Reopen and test Escape
++    fireEvent.click(shareBtn);
++    expect(screen.getByTestId('share-export-menu')).toBeDefined();
++
++    fireEvent.keyDown(document, { key: 'Escape' });
++    expect(screen.queryByTestId('share-export-menu')).toBeNull();
++
++    // Reopen and test outside click
++    fireEvent.click(shareBtn);
++    expect(screen.getByTestId('share-export-menu')).toBeDefined();
++
++    fireEvent.mouseDown(document.body);
++    expect(screen.queryByTestId('share-export-menu')).toBeNull();
++  });
+ });
+diff --git a/kanban/web/src/features/views/CsvImportExportModal.tsx b/kanban/web/src/features/views/CsvImportExportModal.tsx
+index d1efe966..81946075 100644
+--- a/kanban/web/src/features/views/CsvImportExportModal.tsx
++++ b/kanban/web/src/features/views/CsvImportExportModal.tsx
+@@ -50,6 +50,8 @@ export interface CsvImportExportModalProps {
+   searchQuery?: string | undefined;
+   initialTab?: 'export' | 'import' | undefined;
+   onImportSuccess?: (() => void) | undefined;
++  selectedIssueIds?: string[] | undefined;
++  initialExportFormat?: 'csv' | 'zip_csv' | undefined;
+ }
+ 
+ export function CsvImportExportModal({
+@@ -61,9 +63,16 @@ export function CsvImportExportModal({
+   searchQuery,
+   initialTab = 'export',
+   onImportSuccess,
++  selectedIssueIds,
++  initialExportFormat = 'csv',
+ }: CsvImportExportModalProps): JSX.Element | null {
+   const [activeTab, setActiveTab] = useState<'export' | 'import'>(initialTab);
+-  const [exportFormat, setExportFormat] = useState<'csv' | 'zip_csv'>('csv');
++  const [exportFormat, setExportFormat] = useState<'csv' | 'zip_csv'>(initialExportFormat);
++  const [prevInitialFormat, setPrevInitialFormat] = useState(initialExportFormat);
++  if (initialExportFormat !== prevInitialFormat) {
++    setPrevInitialFormat(initialExportFormat);
++    setExportFormat(initialExportFormat);
++  }
+   const [exportPassword, setExportPassword] = useState('');
+   const [isExporting, setIsExporting] = useState(false);
+ 
+@@ -136,7 +145,7 @@ export function CsvImportExportModal({
+         ? `/api/v1/projects/${encodeURIComponent(projectKey)}/issues/export`
+         : `/api/v1/workspaces/${encodeURIComponent(workspaceScope ?? 'default')}/issues/export`;
+ 
+-      /* v8 ignore next 11 */
++      /* v8 ignore next 12 */
+       const payload = {
+         format: exportFormat,
+         zip_password: exportFormat === 'zip_csv' ? exportPassword : null,
+@@ -147,6 +156,7 @@ export function CsvImportExportModal({
+         label_ids: activeFilters.label ?? null,
+         cycle_id: activeFilters.cycle?.[0] ?? null,
+         module_id: activeFilters.module?.[0] ?? null,
++        issue_ids: selectedIssueIds ?? null,
+       };
+ 
+       const csrfToken = getCsrfToken();
+diff --git a/kanban/web/src/features/views/__tests__/CsvImportExportModal.test.tsx b/kanban/web/src/features/views/__tests__/CsvImportExportModal.test.tsx
+index 85b62b2e..73610b62 100644
+--- a/kanban/web/src/features/views/__tests__/CsvImportExportModal.test.tsx
++++ b/kanban/web/src/features/views/__tests__/CsvImportExportModal.test.tsx
+@@ -207,4 +207,81 @@ describe('CsvImportExportModal (KAN-316)', () => {
+       });
+     }
+   });
++
++  it('wires selectedIssueIds and initialExportFormat into export payload (KAN-372)', async () => {
++    vi.spyOn(clientModule, 'getCsrfToken').mockReturnValue('csrf-tok-372');
++    const fetchMock = vi.fn().mockResolvedValue({
++      ok: true,
++      blob: () => Promise.resolve(new Blob(['key,summary\n'], { type: 'text/csv' })),
++    });
++    vi.stubGlobal('fetch', fetchMock);
++
++    // 1. Mount with selectedIssueIds and initialExportFormat="csv"
++    const { rerender } = render(
++      <CsvImportExportModal
++        {...defaultProps}
++        selectedIssueIds={['ISSUE-42', 'ISSUE-43']}
++        initialExportFormat="csv"
++      />,
++    );
++
++    fireEvent.click(screen.getByTestId('export-submit-btn'));
++
++    await waitFor(() => {
++      expect(fetchMock).toHaveBeenCalledWith(
++        '/api/v1/projects/TESTPROJ/issues/export',
++        expect.objectContaining({ method: 'POST' }),
++      );
++    });
++
++    const calls = fetchMock.mock.calls as unknown as [string, { body: string }][];
++    const firstCallInit = calls[0]?.[1];
++    const rawParsed: unknown = JSON.parse(firstCallInit?.body ?? '{}');
++    const lastCallBody = rawParsed as {
++      issue_ids?: string[];
++      format?: string;
++      zip_password?: string;
++    };
++    expect(lastCallBody.issue_ids).toEqual(['ISSUE-42', 'ISSUE-43']);
++    expect(lastCallBody.format).toBe('csv');
++
++    // 2. Mount with initialExportFormat="zip_csv"
++    fetchMock.mockClear();
++    rerender(
++      <CsvImportExportModal
++        {...defaultProps}
++        selectedIssueIds={['ISSUE-99']}
++        initialExportFormat="zip_csv"
++      />,
++    );
++
++    const zipRadio = screen.getByTestId<HTMLInputElement>('export-format-zip');
++    expect(zipRadio.checked).toBe(true);
++
++    const passwordInput = screen.getByTestId('export-zip-password-input');
++    fireEvent.change(passwordInput, {
++      target: { value: 'secure-password-123' },
++    });
++
++    fireEvent.click(screen.getByTestId('export-submit-btn'));
++
++    await waitFor(() => {
++      expect(fetchMock).toHaveBeenCalledWith(
++        '/api/v1/projects/TESTPROJ/issues/export',
++        expect.objectContaining({ method: 'POST' }),
++      );
++    });
++
++    const zipCalls = fetchMock.mock.calls as unknown as [string, { body: string }][];
++    const zipCallInit = zipCalls[0]?.[1];
++    const rawZipParsed: unknown = JSON.parse(zipCallInit?.body ?? '{}');
++    const zipCallBody = rawZipParsed as {
++      issue_ids?: string[];
++      format?: string;
++      zip_password?: string;
++    };
++    expect(zipCallBody.issue_ids).toEqual(['ISSUE-99']);
++    expect(zipCallBody.format).toBe('zip_csv');
++    expect(zipCallBody.zip_password).toBe('secure-password-123');
++  });
+ });

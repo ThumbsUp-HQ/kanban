@@ -50,6 +50,8 @@ export interface CsvImportExportModalProps {
   searchQuery?: string | undefined;
   initialTab?: 'export' | 'import' | undefined;
   onImportSuccess?: (() => void) | undefined;
+  selectedIssueIds?: string[] | undefined;
+  initialExportFormat?: 'csv' | 'zip_csv' | undefined;
 }
 
 export function CsvImportExportModal({
@@ -61,9 +63,16 @@ export function CsvImportExportModal({
   searchQuery,
   initialTab = 'export',
   onImportSuccess,
+  selectedIssueIds,
+  initialExportFormat = 'csv',
 }: CsvImportExportModalProps): JSX.Element | null {
   const [activeTab, setActiveTab] = useState<'export' | 'import'>(initialTab);
-  const [exportFormat, setExportFormat] = useState<'csv' | 'zip_csv'>('csv');
+  const [exportFormat, setExportFormat] = useState<'csv' | 'zip_csv'>(initialExportFormat);
+  const [prevInitialFormat, setPrevInitialFormat] = useState(initialExportFormat);
+  if (initialExportFormat !== prevInitialFormat) {
+    setPrevInitialFormat(initialExportFormat);
+    setExportFormat(initialExportFormat);
+  }
   const [exportPassword, setExportPassword] = useState('');
   const [isExporting, setIsExporting] = useState(false);
 
@@ -136,7 +145,7 @@ export function CsvImportExportModal({
         ? `/api/v1/projects/${encodeURIComponent(projectKey)}/issues/export`
         : `/api/v1/workspaces/${encodeURIComponent(workspaceScope ?? 'default')}/issues/export`;
 
-      /* v8 ignore next 11 */
+      /* v8 ignore next 12 */
       const payload = {
         format: exportFormat,
         zip_password: exportFormat === 'zip_csv' ? exportPassword : null,
@@ -147,6 +156,7 @@ export function CsvImportExportModal({
         label_ids: activeFilters.label ?? null,
         cycle_id: activeFilters.cycle?.[0] ?? null,
         module_id: activeFilters.module?.[0] ?? null,
+        issue_ids: selectedIssueIds ?? null,
       };
 
       const csrfToken = getCsrfToken();
