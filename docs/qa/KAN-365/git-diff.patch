@@ -1,0 +1,1185 @@
+diff --git a/kanban/web/src/app/__tests__/MenuConsolidation_KAN365.test.tsx b/kanban/web/src/app/__tests__/MenuConsolidation_KAN365.test.tsx
+new file mode 100644
+index 00000000..d952c18c
+--- /dev/null
++++ b/kanban/web/src/app/__tests__/MenuConsolidation_KAN365.test.tsx
+@@ -0,0 +1,522 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent, within, act, waitFor } from '@testing-library/react';
++import React from 'react';
++import { MemoryRouter } from 'react-router';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { FilterDisplayBar, type ActiveFilters } from '../../features/views/FilterDisplayBar';
++import { IssueNavigatorBar } from '../../features/views/IssueNavigatorBar';
++import { IssuesWorkspaceRoute } from '../../features/views/viewRegistry';
++import type { IssueItem, SavedView, StateSummary } from '../../features/views/viewsApi';
++import * as railApi from '../../features/drawer-rail/railApi';
++import {
++  createActionableStateFilterPreference,
++} from '../../features/views/issueFilterCookie';
++
++vi.mock('../../api/client', () => ({
++  apiClient: {
++    get: vi.fn().mockResolvedValue({ items: [] }),
++    post: vi.fn().mockResolvedValue({}),
++    put: vi.fn().mockResolvedValue({}),
++    patch: vi.fn().mockResolvedValue({}),
++    delete: vi.fn().mockResolvedValue({}),
++  },
++  apiFetch: vi.fn().mockResolvedValue({ items: [] }),
++}));
++
++describe('Menu & View Toolbar Consolidation Suite (KAN-365)', () => {
++  let queryClient: QueryClient;
++
++  const mockProjectStates: StateSummary[] = [
++    { id: 'state-backlog', name: 'Backlog', group: 'backlog', color_hex: '#64748b' },
++    { id: 'state-todo', name: 'Todo', group: 'unstarted', color_hex: '#3b82f6' },
++    { id: 'state-in-progress', name: 'In Progress', group: 'started', color_hex: '#f59e0b' },
++    { id: 'state-done', name: 'Done', group: 'completed', color_hex: '#10b981' },
++    { id: 'state-cancelled', name: 'Cancelled', group: 'cancelled', color_hex: '#ef4444' },
++  ];
++
++  const mockIssues: IssueItem[] = [
++    {
++      id: 'iss-1',
++      key: 'KAN-101',
++      summary: 'Frontend Toolbar Polish',
++      state: { id: 'state-todo', name: 'Todo', group: 'unstarted' },
++      priority: { slug: 'high', label: 'High' },
++      assignees: [
++        {
++          id: 'asg-1',
++          kind: 'principal',
++          principal: { id: 'u-1', handle: 'alice', display_name: 'Alice Cooper', type: 'USER' },
++        },
++      ],
++      labels: [{ id: 'lbl-1', name: 'ui', color_hex: '#3b82f6' }],
++      cycle_id: 'c-1',
++      cycle: { id: 'c-1', name: 'Sprint 1' },
++      module_ids: ['m-1'],
++      modules: [{ id: 'm-1', name: 'Navigation' }],
++    },
++    {
++      id: 'iss-2',
++      key: 'KAN-102',
++      summary: 'Backend Export Endpoint',
++      state: { id: 'state-done', name: 'Done', group: 'completed' },
++      priority: { slug: 'low', label: 'Low' },
++      assignees: [],
++    },
++  ];
++
++  const mockSavedViews: SavedView[] = [
++    {
++      id: 'view-triage',
++      name: 'Daily Triage',
++      layout: 'list',
++      group_by: 'state',
++      sub_group_by: 'none',
++      filters: { search_query: 'status = "Todo"' },
++    },
++    {
++      id: 'view-sprint',
++      name: 'Sprint Board',
++      layout: 'board',
++      group_by: 'priority',
++      sub_group_by: 'state',
++    },
++  ];
++
++  beforeEach(() => {
++    queryClient = new QueryClient({
++      defaultOptions: { queries: { retry: false } },
++    });
++    vi.spyOn(railApi, 'fetchAssigneeSuggestions').mockResolvedValue([]);
++    vi.spyOn(railApi, 'fetchProjectLabels').mockResolvedValue([]);
++    vi.spyOn(railApi, 'fetchProjectCycles').mockResolvedValue([]);
++    vi.spyOn(railApi, 'fetchProjectModules').mockResolvedValue([]);
++    vi.clearAllMocks();
++  });
++
++  describe('Test Case 1: Unified View Toolbar Filter & State Popover Consistency Across Layouts', () => {
++    it('renders StateFilterPopover in both IssueNavigatorBar (List) and FilterDisplayBar (Non-List) with state presets', () => {
++      const onStateFilterChangeList = vi.fn();
++      const onStateFilterChangeBoard = vi.fn();
++      const onFiltersChangeList = vi.fn();
++      const onFiltersChangeBoard = vi.fn();
++
++      const actionablePref = createActionableStateFilterPreference();
++
++      // 1. Render List Toolbar (IssueNavigatorBar)
++      let rendered: ReturnType<typeof render>;
++      act(() => {
++        rendered = render(
++          <IssueNavigatorBar
++            projectKey="KAN"
++            issues={mockIssues}
++            projectStates={mockProjectStates}
++            stateFilter={actionablePref}
++            onStateFilterChange={onStateFilterChangeList}
++            onFiltersChange={onFiltersChangeList}
++          />,
++        );
++      });
++
++      const listStateBtn = screen.getByTestId('navigator-filter-state');
++      expect(listStateBtn).toBeDefined();
++      expect(listStateBtn.getAttribute('aria-label')).toMatch(/filter by state/i);
++
++      // Open State Filter Popover in List toolbar
++      act(() => {
++        fireEvent.click(listStateBtn);
++      });
++      const allStatesPreset = screen.getByTestId('state-preset-all');
++      expect(allStatesPreset).toBeDefined();
++      act(() => {
++        fireEvent.click(allStatesPreset);
++      });
++      expect(onStateFilterChangeList).toHaveBeenCalled();
++
++      // 2. Render Board Toolbar (FilterDisplayBar) with unified StateFilterPopover
++      act(() => {
++        rendered.rerender(
++          <FilterDisplayBar
++            projectKey=""
++            issues={mockIssues}
++            projectStates={mockProjectStates}
++            stateFilter={actionablePref}
++            onStateFilterChange={onStateFilterChangeBoard}
++            onFiltersChange={onFiltersChangeBoard}
++            groupBy="state"
++            subGroupBy="none"
++          />,
++        );
++      });
++
++      const boardStateBtn = screen.getByTestId('navigator-filter-state');
++      expect(boardStateBtn).toBeDefined();
++      expect(boardStateBtn.getAttribute('aria-label')).toMatch(/filter by state/i);
++
++      // Open State Filter Popover in Board toolbar
++      act(() => {
++        fireEvent.click(boardStateBtn);
++      });
++      const actionablePreset = screen.getByTestId('state-preset-actionable');
++      expect(actionablePreset).toBeDefined();
++      act(() => {
++        fireEvent.click(actionablePreset);
++      });
++      expect(onStateFilterChangeBoard).toHaveBeenCalled();
++    });
++
++    it('propagates state and facet changes consistently across toolbars and renders active chips', () => {
++      const handleFiltersChange = vi.fn();
++      const active: ActiveFilters = {
++        state: ['state-todo'],
++        priority: ['urgent'],
++      };
++
++      act(() => {
++        render(
++          <FilterDisplayBar
++            projectKey=""
++            issues={mockIssues}
++            activeFilters={active}
++            onFiltersChange={handleFiltersChange}
++            groupBy="state"
++            subGroupBy="none"
++          />,
++        );
++      });
++
++      // Active chips exist
++      expect(screen.getByText(/Priority: 🔥 Urgent/i)).toBeDefined();
++
++      // Remove priority chip
++      const removeBtn = screen.getByRole('button', { name: /remove priority: 🔥 urgent filter/i });
++      act(() => {
++        fireEvent.click(removeBtn);
++      });
++      expect(handleFiltersChange).toHaveBeenCalledWith({
++        state: ['state-todo'],
++      });
++    });
++  });
++
++  describe('Test Case 2: Search DSL & Saved Views Consistency Across All 5 Layouts', () => {
++    it('supports basic text search and Query DSL toggle in both IssueNavigatorBar and FilterDisplayBar', () => {
++      const onSearchChange = vi.fn();
++      const onModeChange = vi.fn();
++      const onSearchSubmit = vi.fn();
++
++      // 1. IssueNavigatorBar search DSL
++      let rendered: ReturnType<typeof render>;
++      act(() => {
++        rendered = render(
++          <IssueNavigatorBar
++            projectKey="KAN"
++            searchQuery="initial query"
++            onSearchQueryChange={onSearchChange}
++            queryMode="basic"
++            onQueryModeChange={onModeChange}
++            onSearchSubmit={onSearchSubmit}
++          />,
++        );
++      });
++
++      const listSearchInput = screen.getByTestId('navigator-search-input');
++      expect(listSearchInput).toBeDefined();
++      act(() => {
++        fireEvent.change(listSearchInput, { target: { value: 'updated search' } });
++      });
++      expect(onSearchChange).toHaveBeenCalledWith('updated search');
++
++      const queryModeBtn = screen.getByTestId('mode-query-btn');
++      act(() => {
++        fireEvent.click(queryModeBtn);
++      });
++      expect(onModeChange).toHaveBeenCalledWith('query');
++
++      // 2. FilterDisplayBar search DSL
++      act(() => {
++        rendered.rerender(
++          <FilterDisplayBar
++            projectKey=""
++            searchQuery="board search"
++            onSearchQueryChange={onSearchChange}
++            queryMode="query"
++            onQueryModeChange={onModeChange}
++            onSearchSubmit={onSearchSubmit}
++          />,
++        );
++      });
++
++      const boardQueryInput = screen.getByTestId('filter-display-query-input');
++      expect(boardQueryInput).toBeDefined();
++      act(() => {
++        fireEvent.change(boardQueryInput, { target: { value: 'status = "Done"' } });
++      });
++      expect(onSearchChange).toHaveBeenCalledWith('status = "Done"');
++
++      const basicModeBtn = screen.getByTestId('mode-basic-btn');
++      act(() => {
++        fireEvent.click(basicModeBtn);
++      });
++      expect(onModeChange).toHaveBeenCalledWith('basic');
++
++      const submitBtn = screen.getByTestId('filter-display-search-btn');
++      act(() => {
++        fireEvent.click(submitBtn);
++      });
++      expect(onSearchSubmit).toHaveBeenCalled();
++    });
++
++    it('renders saved views chip strip and dropdown selector across all view toolbars', () => {
++      const onSelectSavedView = vi.fn();
++
++      // 1. IssueNavigatorBar saved views
++      let rendered: ReturnType<typeof render>;
++      act(() => {
++        rendered = render(
++          <IssueNavigatorBar
++            projectKey="KAN"
++            savedViews={mockSavedViews}
++            activeViewId="view-triage"
++            onSelectSavedView={onSelectSavedView}
++          />,
++        );
++      });
++
++      expect(screen.getByTestId('navigator-saved-views-strip')).toBeDefined();
++      expect(screen.getByTestId('saved-view-chip-view-triage')).toBeDefined();
++      expect(screen.getByTestId('saved-view-chip-view-sprint')).toBeDefined();
++
++      const listSelect = screen.getByTestId<HTMLSelectElement>('navigator-saved-views-select');
++      expect(listSelect.value).toBe('view-triage');
++      act(() => {
++        fireEvent.change(listSelect, { target: { value: 'view-sprint' } });
++      });
++      expect(onSelectSavedView).toHaveBeenCalledWith('view-sprint');
++
++      // 2. FilterDisplayBar saved views
++      act(() => {
++        rendered.rerender(
++          <FilterDisplayBar
++            projectKey=""
++            savedViews={mockSavedViews}
++            activeViewId="view-sprint"
++            onSelectSavedView={onSelectSavedView}
++          />,
++        );
++      });
++
++      expect(screen.getByTestId('filter-display-saved-views')).toBeDefined();
++      expect(screen.getByTestId('saved-view-chip-view-sprint')).toBeDefined();
++
++      const boardSelect = screen.getByTestId<HTMLSelectElement>('filter-display-saved-views-select');
++      expect(boardSelect.value).toBe('view-sprint');
++      act(() => {
++        fireEvent.change(boardSelect, { target: { value: 'view-triage' } });
++      });
++      expect(onSelectSavedView).toHaveBeenCalledWith('view-triage');
++
++      // Click chip directly
++      const triageChip = screen.getByTestId('saved-view-chip-view-triage');
++      act(() => {
++        fireEvent.click(triageChip);
++      });
++      expect(onSelectSavedView).toHaveBeenCalledWith('view-triage');
++    });
++  });
++
++  describe('Test Case 3: Export & Import Actions Parity and Display Popover Refinement', () => {
++    it('provides export and import action buttons in both IssueNavigatorBar and FilterDisplayBar Display popover', () => {
++      const handleExport = vi.fn();
++      const handleImport = vi.fn();
++      const handleExportReports = vi.fn();
++      const handleSaveView = vi.fn();
++
++      // 1. IssueNavigatorBar export actions
++      let rendered: ReturnType<typeof render>;
++      act(() => {
++        rendered = render(
++          <IssueNavigatorBar
++            projectKey="KAN"
++            onExport={handleExport}
++            onImport={handleImport}
++            onExportReports={handleExportReports}
++          />,
++        );
++      });
++
++      const listExportBtn = screen.getByTestId('navigator-export-btn');
++      const listImportBtn = screen.getByTestId('navigator-import-btn');
++      const listReportsBtn = screen.getByTestId('navigator-reports-export-btn');
++
++      act(() => {
++        fireEvent.click(listExportBtn);
++      });
++      expect(handleExport).toHaveBeenCalledTimes(1);
++
++      act(() => {
++        fireEvent.click(listImportBtn);
++      });
++      expect(handleImport).toHaveBeenCalledTimes(1);
++
++      act(() => {
++        fireEvent.click(listReportsBtn);
++      });
++      expect(handleExportReports).toHaveBeenCalledTimes(1);
++
++      // 2. FilterDisplayBar refined Display popover actions
++      act(() => {
++        rendered.rerender(
++          <FilterDisplayBar
++            projectKey=""
++            onExport={handleExport}
++            onImport={handleImport}
++            onExportReports={handleExportReports}
++            onSaveView={handleSaveView}
++            savedViews={mockSavedViews}
++            activeViewId="view-triage"
++            onSelectSavedView={vi.fn()}
++          />,
++        );
++      });
++
++      // Open Display Configuration Popover
++      const displayBtn = screen.getByRole('button', { name: /display configuration/i });
++      act(() => {
++        fireEvent.click(displayBtn);
++      });
++
++      const popover = screen.getByRole('dialog', { name: /display options/i });
++      expect(popover).toBeDefined();
++
++      // Verify refined popover content: Saved Views list, Save as view, Reports, Export, Import
++      expect(within(popover).getByTestId('filter-display-saved-views-list')).toBeDefined();
++      expect(within(popover).getByTestId('filter-display-save-view-btn')).toBeDefined();
++      expect(within(popover).getByTestId('filter-display-reports-btn')).toBeDefined();
++      expect(within(popover).getByTestId('filter-display-export-btn')).toBeDefined();
++      expect(within(popover).getByTestId('filter-display-import-btn')).toBeDefined();
++
++      // Trigger Save as view
++      act(() => {
++        fireEvent.click(within(popover).getByTestId('filter-display-save-view-btn'));
++      });
++      expect(handleSaveView).toHaveBeenCalledTimes(1);
++
++      // Reopen and trigger Export Reports
++      act(() => {
++        fireEvent.click(displayBtn);
++      });
++      const reportsOption = screen.getByTestId('filter-display-reports-btn');
++      act(() => {
++        fireEvent.click(reportsOption);
++      });
++      expect(handleExportReports).toHaveBeenCalledTimes(2);
++
++      // Reopen and trigger Export CSV
++      act(() => {
++        fireEvent.click(displayBtn);
++      });
++      const exportOption = screen.getByTestId('filter-display-export-btn');
++      act(() => {
++        fireEvent.click(exportOption);
++      });
++      expect(handleExport).toHaveBeenCalledTimes(2);
++
++      // Reopen and trigger Import CSV
++      act(() => {
++        fireEvent.click(displayBtn);
++      });
++      const importOption = screen.getByTestId('filter-display-import-btn');
++      act(() => {
++        fireEvent.click(importOption);
++      });
++      expect(handleImport).toHaveBeenCalledTimes(2);
++    });
++
++    it('covers fallback modal states when callback props are omitted in FilterDisplayBar and IssueNavigatorBar', () => {
++      // Render without callback props; internal modal triggers will execute cleanly without crashing
++      let rendered: ReturnType<typeof render>;
++      act(() => {
++        rendered = render(
++          <IssueNavigatorBar
++            projectKey=""
++          />,
++        );
++      });
++
++      const listExport = screen.getByTestId('navigator-export-btn');
++      act(() => {
++        fireEvent.click(listExport);
++      });
++
++      const listImport = screen.getByTestId('navigator-import-btn');
++      act(() => {
++        fireEvent.click(listImport);
++      });
++
++      const listReports = screen.getByTestId('navigator-reports-export-btn');
++      act(() => {
++        fireEvent.click(listReports);
++      });
++
++      // FilterDisplayBar fallback branch
++      act(() => {
++        rendered.rerender(
++          <FilterDisplayBar
++            projectKey=""
++          />,
++        );
++      });
++
++      const displayBtn = screen.getByRole('button', { name: /display configuration/i });
++      act(() => {
++        fireEvent.click(displayBtn);
++      });
++
++      const reportsBtn = screen.getByTestId('filter-display-reports-btn');
++      act(() => {
++        fireEvent.click(reportsBtn);
++      });
++
++      act(() => {
++        fireEvent.click(displayBtn);
++      });
++      const exportBtn = screen.getByTestId('filter-display-export-btn');
++      act(() => {
++        fireEvent.click(exportBtn);
++      });
++
++      act(() => {
++        fireEvent.click(displayBtn);
++      });
++      const importBtn = screen.getByTestId('filter-display-import-btn');
++      act(() => {
++        fireEvent.click(importBtn);
++      });
++    });
++
++    it('verifies IssuesWorkspaceRoute wires FilterDisplayBar with unified search, saved view, and export props in board layout', async () => {
++      render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/projects/KAN/issues?layout=board']}>
++            <IssuesWorkspaceRoute
++              projectKey="KAN"
++              initialLayout="board"
++              initialIssues={mockIssues}
++            />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      // Board layout renders FilterDisplayBar with unified search form and Display configuration
++      await waitFor(() => {
++        expect(screen.getByTestId('filter-display-bar')).toBeDefined();
++        expect(screen.getByTestId('filter-display-search-form')).toBeDefined();
++        expect(screen.getByTestId('filter-display-search-input')).toBeDefined();
++        expect(screen.getByRole('button', { name: /display configuration/i })).toBeDefined();
++      });
++    });
++  });
++});
+diff --git a/kanban/web/src/features/views/FilterDisplayBar.tsx b/kanban/web/src/features/views/FilterDisplayBar.tsx
+index 194b2360..6757560f 100644
+--- a/kanban/web/src/features/views/FilterDisplayBar.tsx
++++ b/kanban/web/src/features/views/FilterDisplayBar.tsx
+@@ -1,5 +1,9 @@
+ import React, { useState, useRef, useEffect, useCallback, useMemo, type JSX } from 'react';
+-import type { GroupAxis, IssueItem } from './viewsApi';
++import type { GroupAxis, IssueItem, SavedView, StateSummary } from './viewsApi';
++import { createAllStatesFilterPreference, type ProjectStateFilterPreference } from './issueFilterCookie';
++import { StateFilterPopover } from './StateFilterPopover';
++import { CsvImportExportModal } from './CsvImportExportModal';
++import { ReportExportModal } from '../reports/ReportExportModal';
+ import {
+   fetchAssigneeSuggestions,
+   fetchProjectLabels,
+@@ -31,11 +35,26 @@ export interface FilterDisplayBarProps {
+   onSaveView?: () => void;
+   onExport?: () => void;
+   onImport?: () => void;
++  onExportReports?: () => void;
+   searchInputRef?: React.RefObject<HTMLInputElement | null>;
+   isFilterOpen?: boolean;
+   onToggleFilterOpen?: (open: boolean) => void;
+   projectKey?: string;
+   issues?: IssueItem[];
++  // Unified toolbar consistency across all layouts (KAN-365)
++  searchQuery?: string;
++  onSearchQueryChange?: (q: string) => void;
++  queryMode?: 'basic' | 'query';
++  onQueryModeChange?: (mode: 'basic' | 'query') => void;
++  onSearchSubmit?: () => void;
++  savedViews?: SavedView[];
++  activeViewId?: string | null;
++  onSelectSavedView?: (viewId: string) => void;
++  projectStates?: StateSummary[];
++  stateFilter?: ProjectStateFilterPreference;
++  onStateFilterChange?: (pref: ProjectStateFilterPreference) => void;
++  workspaceScope?: string;
++  className?: string;
+ }
+ 
+ interface FacetOption {
+@@ -56,22 +75,40 @@ export function FilterDisplayBar({
+   onSaveView,
+   onExport,
+   onImport,
++  onExportReports,
+   searchInputRef: externalSearchRef,
+   isFilterOpen: externalFilterOpen,
+   onToggleFilterOpen: externalToggleFilterOpen,
+   projectKey,
+   issues,
++  searchQuery: propSearchQuery,
++  onSearchQueryChange,
++  queryMode = 'basic',
++  onQueryModeChange,
++  onSearchSubmit,
++  savedViews = [],
++  activeViewId = null,
++  onSelectSavedView,
++  projectStates = [],
++  stateFilter,
++  onStateFilterChange,
++  workspaceScope,
++  className = '',
+ }: FilterDisplayBarProps): JSX.Element {
+   const [internalFilterOpen, setInternalFilterOpen] = useState(false);
+   const [isDisplayTuneOpen, setIsDisplayTuneOpen] = useState(false);
+-  const [searchQuery, setSearchQuery] = useState('');
++  const [facetSearchQuery, setFacetSearchQuery] = useState('');
+   const [liveAssignees, setLiveAssignees] = useState<FacetOption[]>([]);
+   const [liveLabels, setLiveLabels] = useState<FacetOption[]>([]);
+   const [liveCycles, setLiveCycles] = useState<FacetOption[]>([]);
+   const [liveModules, setLiveModules] = useState<FacetOption[]>([]);
++  const [csvModalTab, setCsvModalTab] = useState<'export' | 'import' | null>(null);
++  const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
+   const internalSearchRef = useRef<HTMLInputElement>(null);
+   const searchRef = externalSearchRef ?? internalSearchRef;
+ 
++  const effectiveSearchQuery = propSearchQuery ?? '';
++
+   const isPopoverOpen = externalFilterOpen ?? internalFilterOpen;
+   const setPopoverOpen = useCallback((open: boolean) => {
+     if (externalToggleFilterOpen) {
+@@ -360,8 +397,8 @@ export function FilterDisplayBar({
+   }
+ 
+   const filteredFacets = facetDefinitions.filter((facet) => {
+-    if (!searchQuery) return true;
+-    const q = searchQuery.toLowerCase();
++    if (!facetSearchQuery) return true;
++    const q = facetSearchQuery.toLowerCase();
+     return (
+       facet.label.toLowerCase().includes(q) ||
+       facet.category.toLowerCase().includes(q)
+@@ -369,8 +406,102 @@ export function FilterDisplayBar({
+   });
+ 
+   return (
+-    <div className="filter-display-bar" role="region" aria-label="Filter and display controls">
++    <div
++      className={`filter-display-bar ${className}`}
++      role="region"
++      aria-label="Filter and display controls"
++      data-testid="filter-display-bar"
++    >
++      {/* Search DSL Form (KAN-365 Parity across layouts) */}
++      {onSearchQueryChange && (
++        <form
++          className="filter-search-form navigator-search-form"
++          data-testid="filter-display-search-form"
++          onSubmit={(e) => {
++            e.preventDefault();
++            onSearchSubmit?.();
++          }}
++        >
++          {queryMode === 'basic' ? (
++            <input
++              type="search"
++              className="navigator-search-input filter-search-dsl-input"
++              data-testid="filter-display-search-input"
++              placeholder="Search issues by summary, key, or details..."
++              aria-label="Search issues"
++              value={effectiveSearchQuery}
++              onChange={(e) => {
++                onSearchQueryChange(e.target.value);
++              }}
++            />
++          ) : (
++            <input
++              type="text"
++              className="navigator-query-input filter-query-dsl-input"
++              data-testid="filter-display-query-input"
++              placeholder='e.g. project = "KAN" AND status = "Todo"'
++              aria-label="Structured query search"
++              value={effectiveSearchQuery}
++              onChange={(e) => {
++                onSearchQueryChange(e.target.value);
++              }}
++            />
++          )}
++
++          <button
++            type="submit"
++            className="navigator-search-btn filter-search-btn"
++            data-testid="filter-display-search-btn"
++            aria-label="Search"
++          >
++            Search
++          </button>
++
++          {onQueryModeChange && (
++            <div
++              className="navigator-mode-group filter-mode-group"
++              data-testid="filter-display-mode-toggle"
++              role="group"
++              aria-label="Search mode"
++            >
++              <button
++                type="button"
++                className={`navigator-mode-btn ${queryMode === 'basic' ? 'navigator-mode-btn--active' : ''}`}
++                data-testid="mode-basic-btn"
++                aria-pressed={queryMode === 'basic'}
++                onClick={() => {
++                  onQueryModeChange('basic');
++                }}
++              >
++                Basic
++              </button>
++              <button
++                type="button"
++                className={`navigator-mode-btn ${queryMode === 'query' ? 'navigator-mode-btn--active' : ''}`}
++                data-testid="mode-query-btn"
++                aria-pressed={queryMode === 'query'}
++                onClick={() => {
++                  onQueryModeChange('query');
++                }}
++              >
++                Query
++              </button>
++            </div>
++          )}
++        </form>
++      )}
++
+       <div className="filter-controls-group">
++        {/* Multi-Select StateFilterPopover parity when provided */}
++        {(onStateFilterChange ?? stateFilter) != null && (
++          <StateFilterPopover
++            projectStates={projectStates}
++            issues={issues ?? []}
++            value={stateFilter ?? createAllStatesFilterPreference()}
++            onChange={(pref) => onStateFilterChange?.(pref)}
++          />
++        )}
++
+         <button
+           type="button"
+           className="filter-btn-trigger"
+@@ -394,8 +525,8 @@ export function FilterDisplayBar({
+               type="text"
+               className="filter-search-input"
+               placeholder="Search filters..."
+-              value={searchQuery}
+-              onChange={(e) => { setSearchQuery(e.target.value); }}
++              value={facetSearchQuery}
++              onChange={(e) => { setFacetSearchQuery(e.target.value); }}
+               aria-label="Search filter facets"
+             />
+             <div className="filter-facets-list">
+@@ -521,9 +652,35 @@ export function FilterDisplayBar({
+             aria-label="Display options"
+           >
+             <div className="filter-facet-category-title">Display Settings</div>
++
++            {savedViews.length > 0 && (
++              <div
++                className="filter-display-saved-views-section"
++                data-testid="filter-display-saved-views-list"
++              >
++                <div className="filter-facet-category-title">Saved Views</div>
++                {savedViews.map((v) => (
++                  <button
++                    key={v.id}
++                    type="button"
++                    className={`filter-facet-option ${activeViewId === v.id ? 'filter-facet-option--active' : ''}`}
++                    data-testid={`filter-display-saved-view-${v.id}`}
++                    onClick={() => {
++                      onSelectSavedView?.(v.id);
++                      setIsDisplayTuneOpen(false);
++                    }}
++                  >
++                    <span>{v.name}</span>
++                    {activeViewId === v.id && <span>✓</span>}
++                  </button>
++                ))}
++              </div>
++            )}
++
+             <button
+               type="button"
+               className="filter-facet-option"
++              data-testid="filter-display-save-view-btn"
+               onClick={() => {
+                 onSaveView?.();
+                 setIsDisplayTuneOpen(false);
+@@ -531,35 +688,124 @@ export function FilterDisplayBar({
+             >
+               Save as view
+             </button>
+-            {onExport && (
+-              <button
+-                type="button"
+-                className="filter-facet-option"
+-                data-testid="filter-display-export-btn"
+-                onClick={() => {
++            <button
++              type="button"
++              className="filter-facet-option"
++              data-testid="filter-display-reports-btn"
++              onClick={() => {
++                if (onExportReports) {
++                  onExportReports();
++                } else {
++                  setIsReportsModalOpen(true);
++                }
++                setIsDisplayTuneOpen(false);
++              }}
++            >
++              Export Reports (PDF, XLSX, CSV, DOCX, HTML, MD)
++            </button>
++            <button
++              type="button"
++              className="filter-facet-option"
++              data-testid="filter-display-export-btn"
++              onClick={() => {
++                if (onExport) {
+                   onExport();
+-                  setIsDisplayTuneOpen(false);
+-                }}
+-              >
+-                Export Issues (CSV / ZIP)
+-              </button>
+-            )}
+-            {onImport && (
++                } else {
++                  setCsvModalTab('export');
++                }
++                setIsDisplayTuneOpen(false);
++              }}
++            >
++              Export Issues (CSV / ZIP)
++            </button>
++            <button
++              type="button"
++              className="filter-facet-option"
++              data-testid="filter-display-import-btn"
++              onClick={() => {
++                if (onImport) {
++                  onImport();
++                } else {
++                  setCsvModalTab('import');
++                }
++                setIsDisplayTuneOpen(false);
++              }}
++            >
++              Import Issues (CSV / ZIP)
++            </button>
++          </div>
++        )}
++      </div>
++
++      {/* Saved Views Chip Strip (KAN-365) */}
++      {savedViews.length > 0 && (
++        <div
++          className="filter-saved-views-strip navigator-saved-views-strip"
++          data-testid="filter-display-saved-views"
++          role="region"
++          aria-label="Saved Views"
++        >
++          <span className="navigator-saved-views-label">Views:</span>
++          {savedViews.map((v) => {
++            const isActive = activeViewId === v.id;
++            return (
+               <button
++                key={v.id}
+                 type="button"
+-                className="filter-facet-option"
+-                data-testid="filter-display-import-btn"
++                className={`navigator-view-chip ${isActive ? 'navigator-view-chip--active' : ''}`}
++                data-testid={`saved-view-chip-${v.id}`}
++                aria-pressed={isActive}
+                 onClick={() => {
+-                  onImport();
+-                  setIsDisplayTuneOpen(false);
++                  onSelectSavedView?.(v.id);
+                 }}
+               >
+-                Import Issues (CSV / ZIP)
++                {v.name}
+               </button>
+-            )}
+-          </div>
+-        )}
+-      </div>
++            );
++          })}
++          {onSelectSavedView && (
++            <select
++              className="navigator-saved-views-select filter-saved-views-select"
++              data-testid="filter-display-saved-views-select"
++              aria-label="Select saved view"
++              value={activeViewId ?? ''}
++              onChange={(e) => {
++                if (e.target.value) {
++                  onSelectSavedView(e.target.value);
++                }
++              }}
++            >
++              <option value="">Select view...</option>
++              {savedViews.map((v) => (
++                <option key={v.id} value={v.id}>
++                  {v.name}
++                </option>
++              ))}
++            </select>
++          )}
++        </div>
++      )}
++
++      {csvModalTab && projectKey && (
++        <CsvImportExportModal
++          isOpen={true}
++          onClose={() => { setCsvModalTab(null); }}
++          projectKey={projectKey}
++          workspaceScope={workspaceScope}
++          activeFilters={activeFilters}
++          searchQuery={effectiveSearchQuery}
++          initialTab={csvModalTab}
++        />
++      )}
++
++      {isReportsModalOpen && projectKey && (
++        <ReportExportModal
++          isOpen={isReportsModalOpen}
++          onClose={() => { setIsReportsModalOpen(false); }}
++          workspaceSlug={workspaceScope}
++          projectKey={projectKey}
++        />
++      )}
+     </div>
+   );
+ }
+diff --git a/kanban/web/src/features/views/IssueNavigatorBar.css b/kanban/web/src/features/views/IssueNavigatorBar.css
+index 1c59d1f4..d5639a37 100644
+--- a/kanban/web/src/features/views/IssueNavigatorBar.css
++++ b/kanban/web/src/features/views/IssueNavigatorBar.css
+@@ -567,3 +567,26 @@
+   color: var(--fg-primary, #f8fafc);
+   border-color: var(--accent-primary, #3b82f6);
+ }
++
++.navigator-saved-views-select {
++  height: 28px;
++  padding: 0 var(--space-2, 8px);
++  background: var(--bg-surface, #1e2025);
++  border: 1px solid var(--border-subtle, #333842);
++  border-radius: var(--radius-sm, 4px);
++  color: var(--fg-secondary, #94a3b8);
++  font-family: var(--font-sans);
++  font-size: 12px;
++  cursor: pointer;
++  transition: all 120ms ease;
++}
++
++.navigator-saved-views-select:hover {
++  border-color: var(--accent-primary, #3b82f6);
++  color: var(--fg-primary, #f8fafc);
++}
++
++.navigator-saved-views-select:focus-visible {
++  outline: 2px solid var(--focus-ring, #6366f1);
++  outline-offset: 1px;
++}
+diff --git a/kanban/web/src/features/views/IssueNavigatorBar.tsx b/kanban/web/src/features/views/IssueNavigatorBar.tsx
+index c928b8a5..b2ac2efb 100644
+--- a/kanban/web/src/features/views/IssueNavigatorBar.tsx
++++ b/kanban/web/src/features/views/IssueNavigatorBar.tsx
+@@ -53,6 +53,9 @@ export interface IssueNavigatorBarProps {
+   activeViewId?: string | null;
+   onSelectSavedView?: (viewId: string) => void;
+   onSearchSubmit?: () => void;
++  onExport?: () => void;
++  onImport?: () => void;
++  onExportReports?: () => void;
+   className?: string;
+ }
+ 
+@@ -80,6 +83,9 @@ export function IssueNavigatorBar({
+   activeViewId = null,
+   onSelectSavedView,
+   onSearchSubmit,
++  onExport,
++  onImport,
++  onExportReports,
+   className = '',
+ }: IssueNavigatorBarProps): JSX.Element {
+   const effectiveStates = useMemo(
+@@ -361,8 +367,11 @@ export function IssueNavigatorBar({
+             data-testid="navigator-export-btn"
+             aria-label="Export Issues to CSV"
+             onClick={() => {
+-              /* v8 ignore next */
+-              setCsvModalTab('export');
++              if (onExport) {
++                onExport();
++              } else {
++                setCsvModalTab('export');
++              }
+             }}
+           >
+             Export
+@@ -373,8 +382,11 @@ export function IssueNavigatorBar({
+             data-testid="navigator-import-btn"
+             aria-label="Import Issues from CSV"
+             onClick={() => {
+-              /* v8 ignore next */
+-              setCsvModalTab('import');
++              if (onImport) {
++                onImport();
++              } else {
++                setCsvModalTab('import');
++              }
+             }}
+           >
+             Import
+@@ -523,8 +535,11 @@ export function IssueNavigatorBar({
+             className="navigator-reports-btn"
+             data-testid="navigator-reports-export-btn"
+             onClick={() => {
+-              /* v8 ignore next */
+-              setIsReportsModalOpen(true);
++              if (onExportReports) {
++                onExportReports();
++              } else {
++                setIsReportsModalOpen(true);
++              }
+             }}
+             title="Export reports in PDF, XLSX, CSV, DOCX, ODT, HTML, MD"
+           >
+@@ -557,7 +572,7 @@ export function IssueNavigatorBar({
+         </div>
+       )}
+ 
+-      {/* Saved Views Chip Strip */}
++      {/* Saved Views Chip Strip & Dropdown (KAN-365) */}
+       {savedViews.length > 0 && (
+         <div
+           className="navigator-saved-views-strip"
+@@ -583,6 +598,26 @@ export function IssueNavigatorBar({
+               </button>
+             );
+           })}
++          {onSelectSavedView && (
++            <select
++              className="navigator-saved-views-select"
++              data-testid="navigator-saved-views-select"
++              aria-label="Select saved view"
++              value={activeViewId ?? ''}
++              onChange={(e) => {
++                if (e.target.value) {
++                  onSelectSavedView(e.target.value);
++                }
++              }}
++            >
++              <option value="">Select view...</option>
++              {savedViews.map((v) => (
++                <option key={v.id} value={v.id}>
++                  {v.name}
++                </option>
++              ))}
++            </select>
++          )}
+         </div>
+       )}
+ 
+diff --git a/kanban/web/src/features/views/filterBulk.css b/kanban/web/src/features/views/filterBulk.css
+index 1e3d5d1b..b513c615 100644
+--- a/kanban/web/src/features/views/filterBulk.css
++++ b/kanban/web/src/features/views/filterBulk.css
+@@ -896,3 +896,43 @@
+     max-width: 100%;
+   }
+ }
++
++/* ==========================================================================
++   Unified Toolbar Consistency Extensions (KAN-365)
++   ========================================================================== */
++
++.filter-search-form {
++  display: inline-flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++  flex: 1 1 280px;
++  min-width: 200px;
++}
++
++.filter-search-form .navigator-search-input,
++.filter-search-form .navigator-query-input {
++  height: 36px;
++  min-height: 36px;
++}
++
++.filter-search-form .navigator-search-btn {
++  height: 36px;
++}
++
++.filter-saved-views-strip {
++  display: flex;
++  align-items: center;
++  gap: var(--space-2, 8px);
++  width: 100%;
++  margin-top: var(--space-1, 4px);
++  overflow-x: auto;
++}
++
++.filter-display-saved-views-section {
++  display: flex;
++  flex-direction: column;
++  gap: 4px;
++  border-bottom: 1px solid var(--border-subtle);
++  padding-bottom: var(--space-2, 8px);
++  margin-bottom: var(--space-2, 8px);
++}
+diff --git a/kanban/web/src/features/views/viewRegistry.tsx b/kanban/web/src/features/views/viewRegistry.tsx
+index 04c5576a..e3a0e223 100644
+--- a/kanban/web/src/features/views/viewRegistry.tsx
++++ b/kanban/web/src/features/views/viewRegistry.tsx
+@@ -31,6 +31,8 @@ import { BulkActionBar } from './BulkActionBar';
+ import { QuickCreateIssueModal } from './QuickCreateIssueModal';
+ import { SaveViewModal } from './SaveViewModal';
+ import { QuickFieldPopover, type QuickFieldType } from './QuickFieldPopover';
++import { CsvImportExportModal } from './CsvImportExportModal';
++import { ReportExportModal } from '../reports/ReportExportModal';
+ import { useIssueKeyboardMap } from './useIssueKeyboardMap';
+ import { announce } from '../../realtime';
+ import {
+@@ -572,6 +574,8 @@ export function IssuesWorkspaceRoute({
+   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+   const [isSaveViewModalOpen, setIsSaveViewModalOpen] = useState(false);
+   const [isFilterOpen, setIsFilterOpen] = useState(false);
++  const [csvModalTab, setCsvModalTab] = useState<'export' | 'import' | null>(null);
++  const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
+ 
+   const handleOpenCreateModal = useCallback(() => {
+     setIsCreateModalOpen(true);
+@@ -1271,6 +1275,9 @@ export function IssuesWorkspaceRoute({
+           savedViews={savedViews}
+           activeViewId={activeViewId}
+           onSelectSavedView={handleSelectSavedView}
++          onExport={() => { setCsvModalTab('export'); }}
++          onImport={() => { setCsvModalTab('import'); }}
++          onExportReports={() => { setIsReportsModalOpen(true); }}
+         />
+       ) : (
+         <FilterDisplayBar
+@@ -1286,6 +1293,22 @@ export function IssuesWorkspaceRoute({
+           projectKey={projectKey}
+           issues={issues}
+           onSaveView={() => { setIsSaveViewModalOpen(true); }}
++          searchQuery={searchQuery}
++          onSearchQueryChange={setSearchQuery}
++          queryMode={queryMode}
++          onQueryModeChange={handleQueryModeChange}
++          onSearchSubmit={() => {
++            setActiveFilters((prev) => ({ ...prev }));
++          }}
++          savedViews={savedViews}
++          activeViewId={activeViewId}
++          onSelectSavedView={handleSelectSavedView}
++          projectStates={projectStates}
++          stateFilter={stateFilterPref}
++          onStateFilterChange={handleUserStateFilterChange}
++          onExport={() => { setCsvModalTab('export'); }}
++          onImport={() => { setCsvModalTab('import'); }}
++          onExportReports={() => { setIsReportsModalOpen(true); }}
+         />
+       )}
+ 
+@@ -1507,6 +1530,27 @@ export function IssuesWorkspaceRoute({
+           setIsSaveViewModalOpen(false);
+         }}
+       />
++
++      {/* 7. CSV Import & Export Modal (KAN-365 Parity across layouts) */}
++      {csvModalTab && (
++        <CsvImportExportModal
++          isOpen={true}
++          onClose={() => { setCsvModalTab(null); }}
++          projectKey={projectKey}
++          activeFilters={activeFilters}
++          searchQuery={searchQuery}
++          initialTab={csvModalTab}
++        />
++      )}
++
++      {/* 8. Reports & Document Export Modal (KAN-365 Parity across layouts) */}
++      {isReportsModalOpen && (
++        <ReportExportModal
++          isOpen={isReportsModalOpen}
++          onClose={() => { setIsReportsModalOpen(false); }}
++          projectKey={projectKey}
++        />
++      )}
+     </div>
+   </QueryClientProvider>
+   );

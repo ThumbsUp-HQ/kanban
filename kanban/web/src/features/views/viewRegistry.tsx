@@ -31,6 +31,8 @@ import { BulkActionBar } from './BulkActionBar';
 import { QuickCreateIssueModal } from './QuickCreateIssueModal';
 import { SaveViewModal } from './SaveViewModal';
 import { QuickFieldPopover, type QuickFieldType } from './QuickFieldPopover';
+import { CsvImportExportModal } from './CsvImportExportModal';
+import { ReportExportModal } from '../reports/ReportExportModal';
 import { useIssueKeyboardMap } from './useIssueKeyboardMap';
 import { announce } from '../../realtime';
 import {
@@ -572,6 +574,8 @@ export function IssuesWorkspaceRoute({
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const [isSaveViewModalOpen, setIsSaveViewModalOpen] = useState(false);
   const [isFilterOpen, setIsFilterOpen] = useState(false);
+  const [csvModalTab, setCsvModalTab] = useState<'export' | 'import' | null>(null);
+  const [isReportsModalOpen, setIsReportsModalOpen] = useState(false);
 
   const handleOpenCreateModal = useCallback(() => {
     setIsCreateModalOpen(true);
@@ -1271,6 +1275,9 @@ export function IssuesWorkspaceRoute({
           savedViews={savedViews}
           activeViewId={activeViewId}
           onSelectSavedView={handleSelectSavedView}
+          onExport={() => { setCsvModalTab('export'); }}
+          onImport={() => { setCsvModalTab('import'); }}
+          onExportReports={() => { setIsReportsModalOpen(true); }}
         />
       ) : (
         <FilterDisplayBar
@@ -1286,6 +1293,22 @@ export function IssuesWorkspaceRoute({
           projectKey={projectKey}
           issues={issues}
           onSaveView={() => { setIsSaveViewModalOpen(true); }}
+          searchQuery={searchQuery}
+          onSearchQueryChange={setSearchQuery}
+          queryMode={queryMode}
+          onQueryModeChange={handleQueryModeChange}
+          onSearchSubmit={() => {
+            setActiveFilters((prev) => ({ ...prev }));
+          }}
+          savedViews={savedViews}
+          activeViewId={activeViewId}
+          onSelectSavedView={handleSelectSavedView}
+          projectStates={projectStates}
+          stateFilter={stateFilterPref}
+          onStateFilterChange={handleUserStateFilterChange}
+          onExport={() => { setCsvModalTab('export'); }}
+          onImport={() => { setCsvModalTab('import'); }}
+          onExportReports={() => { setIsReportsModalOpen(true); }}
         />
       )}
 
@@ -1507,6 +1530,27 @@ export function IssuesWorkspaceRoute({
           setIsSaveViewModalOpen(false);
         }}
       />
+
+      {/* 7. CSV Import & Export Modal (KAN-365 Parity across layouts) */}
+      {csvModalTab && (
+        <CsvImportExportModal
+          isOpen={true}
+          onClose={() => { setCsvModalTab(null); }}
+          projectKey={projectKey}
+          activeFilters={activeFilters}
+          searchQuery={searchQuery}
+          initialTab={csvModalTab}
+        />
+      )}
+
+      {/* 8. Reports & Document Export Modal (KAN-365 Parity across layouts) */}
+      {isReportsModalOpen && (
+        <ReportExportModal
+          isOpen={isReportsModalOpen}
+          onClose={() => { setIsReportsModalOpen(false); }}
+          projectKey={projectKey}
+        />
+      )}
     </div>
   </QueryClientProvider>
   );

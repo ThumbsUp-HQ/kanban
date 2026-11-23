@@ -53,6 +53,9 @@ export interface IssueNavigatorBarProps {
   activeViewId?: string | null;
   onSelectSavedView?: (viewId: string) => void;
   onSearchSubmit?: () => void;
+  onExport?: () => void;
+  onImport?: () => void;
+  onExportReports?: () => void;
   className?: string;
 }
 
@@ -80,6 +83,9 @@ export function IssueNavigatorBar({
   activeViewId = null,
   onSelectSavedView,
   onSearchSubmit,
+  onExport,
+  onImport,
+  onExportReports,
   className = '',
 }: IssueNavigatorBarProps): JSX.Element {
   const effectiveStates = useMemo(
@@ -361,8 +367,11 @@ export function IssueNavigatorBar({
             data-testid="navigator-export-btn"
             aria-label="Export Issues to CSV"
             onClick={() => {
-              /* v8 ignore next */
-              setCsvModalTab('export');
+              if (onExport) {
+                onExport();
+              } else {
+                setCsvModalTab('export');
+              }
             }}
           >
             Export
@@ -373,8 +382,11 @@ export function IssueNavigatorBar({
             data-testid="navigator-import-btn"
             aria-label="Import Issues from CSV"
             onClick={() => {
-              /* v8 ignore next */
-              setCsvModalTab('import');
+              if (onImport) {
+                onImport();
+              } else {
+                setCsvModalTab('import');
+              }
             }}
           >
             Import
@@ -523,8 +535,11 @@ export function IssueNavigatorBar({
             className="navigator-reports-btn"
             data-testid="navigator-reports-export-btn"
             onClick={() => {
-              /* v8 ignore next */
-              setIsReportsModalOpen(true);
+              if (onExportReports) {
+                onExportReports();
+              } else {
+                setIsReportsModalOpen(true);
+              }
             }}
             title="Export reports in PDF, XLSX, CSV, DOCX, ODT, HTML, MD"
           >
@@ -557,7 +572,7 @@ export function IssueNavigatorBar({
         </div>
       )}
 
-      {/* Saved Views Chip Strip */}
+      {/* Saved Views Chip Strip & Dropdown (KAN-365) */}
       {savedViews.length > 0 && (
         <div
           className="navigator-saved-views-strip"
@@ -583,6 +598,26 @@ export function IssueNavigatorBar({
               </button>
             );
           })}
+          {onSelectSavedView && (
+            <select
+              className="navigator-saved-views-select"
+              data-testid="navigator-saved-views-select"
+              aria-label="Select saved view"
+              value={activeViewId ?? ''}
+              onChange={(e) => {
+                if (e.target.value) {
+                  onSelectSavedView(e.target.value);
+                }
+              }}
+            >
+              <option value="">Select view...</option>
+              {savedViews.map((v) => (
+                <option key={v.id} value={v.id}>
+                  {v.name}
+                </option>
+              ))}
+            </select>
+          )}
         </div>
       )}
 
