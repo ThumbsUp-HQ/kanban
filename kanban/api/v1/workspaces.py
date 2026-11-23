@@ -20,6 +20,11 @@ from database.models.workspace_settings import WorkspaceSettings
 from kanban.admin import principal_service
 from kanban.api.deps import PrincipalContext, get_principal, get_rls_session
 from kanban.api.problems import FieldError, ProblemException
+from kanban.api.v1.admin.workspace_settings import (
+    WorkspaceSettingsResponse,
+    WorkspaceSettingsUpdate,
+    _get_or_create_settings,
+)
 from kanban.auth.sessions.cookies import (
     FALLBACK_SESSION_COOKIE_NAME,
     SESSION_COOKIE_NAME,
@@ -561,3 +566,135 @@ async def unbind_workspace_role_endpoint(
     )
     await session.commit()
     return res
+
+
+@router.get(
+    "/{workspace_ref}/settings",
+    response_model=WorkspaceSettingsResponse,
+    summary="Get workspace settings by workspace slug or ID",
+)
+async def get_workspace_settings_by_ref(
+    workspace_ref: str,
+    _caller: Annotated[PrincipalContext, Depends(get_principal)],
+    session: Annotated[AsyncSession, Depends(get_rls_session)],
+) -> WorkspaceSettingsResponse:
+    """Retrieve workspace settings by slug or UUID."""
+    ws_res = await session.execute(
+        text("SELECT resolve_workspace_by_slug_or_id(:ident)"),
+        {"ident": workspace_ref},
+    )
+    ws_id = ws_res.scalar_one_or_none()
+    if not ws_id:
+        raise ProblemException(
+            code="WORKSPACE_NOT_FOUND",
+            status=status.HTTP_404_NOT_FOUND,
+            title="Workspace Not Found",
+            detail=f"Workspace '{workspace_ref}' not found.",
+        )
+    settings = await _get_or_create_settings(session, ws_id)
+    ws_stmt = select(Workspace).where(Workspace.id == ws_id)
+    ws = (await session.execute(ws_stmt)).scalar_one_or_none()
+    return WorkspaceSettingsResponse(
+        workspace_id=settings.workspace_id,
+        name=ws.name if ws else settings.display_name,
+        slug=ws.slug if ws else "default",
+        display_name=settings.display_name,
+        default_project_visibility=settings.default_project_visibility,  # type: ignore[arg-type]
+        session_idle_timeout_min=settings.session_idle_timeout_min,
+        session_absolute_timeout_min=settings.session_absolute_timeout_min,
+        trash_retention_days=settings.trash_retention_days,
+        mcp_key_max_ttl_days=settings.mcp_key_max_ttl_days,
+        air_gap_mode=settings.air_gap_mode,
+        default_skip_loaded_sequence_numbers=settings.default_skip_loaded_sequence_numbers,
+        issue_export_enabled=settings.issue_export_enabled,
+        issue_import_enabled=settings.issue_import_enabled,
+        issue_export_allowed_roles=list(
+            settings.issue_export_allowed_roles or ["workspace_admin", "project_admin", "member"]
+        ),
+        updated_at=settings.updated_at,
+    )
+
+
+@router.patch(
+    "/{workspace_ref}/settings",
+    response_model=WorkspaceSettingsResponse,
+    summary="Update workspace settings by workspace slug or ID",
+)
+async def update_workspace_settings_by_ref(
+    workspace_ref: str,
+    body: WorkspaceSettingsUpdate,
+    _caller: Annotated[PrincipalContext, Depends(get_principal)],
+    session: Annotated[AsyncSession, Depends(get_rls_session)],
+) -> WorkspaceSettingsResponse:
+    """Update workspace settings by slug or UUID. Requires WORKSPACE_ADMIN or SERVER_ADMIN."""
+    ws_res = await session.execute(
+        text("SELECT resolve_workspace_by_slug_or_id(:ident)"),
+        {"ident": workspace_ref},
+    )
+    ws_id = ws_res.scalar_one_or_none()
+    if not ws_id:
+        raise ProblemException(
+            code="WORKSPACE_NOT_FOUND",
+            status=status.HTTP_404_NOT_FOUND,
+            title="Workspace Not Found",
+            detail=f"Workspace '{workspace_ref}' not found.",
+        )
+
+    admin_check = await session.execute(
+        text("SELECT app_principal_has_role(NULL, ARRAY['SERVER_ADMIN', 'WORKSPACE_ADMIN'])")
+    )
+    if not bool(admin_check.scalar_one()):
+        raise ProblemException(
+            code="INSUFFICIENT_CAPABILITY",
+            status=status.HTTP_403_FORBIDDEN,
+            title="Insufficient Capability",
+            detail="Operation requires SERVER_ADMIN or WORKSPACE_ADMIN role.",
+        )
+
+    settings = await _get_or_create_settings(session, ws_id)
+    ws_stmt = select(Workspace).where(Workspace.id == ws_id)
+    ws = (await session.execute(ws_stmt)).scalar_one_or_none()
+
+    if body.issue_export_enabled is not None:
+        settings.issue_export_enabled = body.issue_export_enabled
+    if body.issue_import_enabled is not None:
+        settings.issue_import_enabled = body.issue_import_enabled
+    if body.issue_export_allowed_roles is not None:
+        settings.issue_export_allowed_roles = body.issue_export_allowed_roles
+    if body.display_name is not None:
+        settings.display_name = body.display_name
+    if body.default_project_visibility is not None:
+        settings.default_project_visibility = body.default_project_visibility
+    if body.session_idle_timeout_min is not None:
+        settings.session_idle_timeout_min = body.session_idle_timeout_min
+    if body.session_absolute_timeout_min is not None:
+        settings.session_absolute_timeout_min = body.session_absolute_timeout_min
+    if body.trash_retention_days is not None:
+        settings.trash_retention_days = body.trash_retention_days
+    if body.mcp_key_max_ttl_days is not None:
+        settings.mcp_key_max_ttl_days = body.mcp_key_max_ttl_days
+    if body.air_gap_mode is not None:
+        settings.air_gap_mode = body.air_gap_mode
+    if body.default_skip_loaded_sequence_numbers is not None:
+        settings.default_skip_loaded_sequence_numbers = body.default_skip_loaded_sequence_numbers
+
+    await session.commit()
+    return WorkspaceSettingsResponse(
+        workspace_id=settings.workspace_id,
+        name=ws.name if ws else settings.display_name,
+        slug=ws.slug if ws else "default",
+        display_name=settings.display_name,
+        default_project_visibility=settings.default_project_visibility,  # type: ignore[arg-type]
+        session_idle_timeout_min=settings.session_idle_timeout_min,
+        session_absolute_timeout_min=settings.session_absolute_timeout_min,
+        trash_retention_days=settings.trash_retention_days,
+        mcp_key_max_ttl_days=settings.mcp_key_max_ttl_days,
+        air_gap_mode=settings.air_gap_mode,
+        default_skip_loaded_sequence_numbers=settings.default_skip_loaded_sequence_numbers,
+        issue_export_enabled=settings.issue_export_enabled,
+        issue_import_enabled=settings.issue_import_enabled,
+        issue_export_allowed_roles=list(
+            settings.issue_export_allowed_roles or ["workspace_admin", "project_admin", "member"]
+        ),
+        updated_at=settings.updated_at,
+    )

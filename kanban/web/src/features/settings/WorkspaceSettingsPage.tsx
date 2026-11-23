@@ -34,6 +34,9 @@ interface WorkspaceSettingsData {
   mcp_key_max_ttl_days?: number;
   air_gap_mode?: boolean;
   default_skip_loaded_sequence_numbers?: boolean;
+  issue_export_enabled?: boolean;
+  issue_import_enabled?: boolean;
+  issue_export_allowed_roles?: string[];
   updated_at?: string;
 }
 
@@ -175,6 +178,13 @@ export function WorkspaceSettingsPage(): JSX.Element {
   const [mcpKeyMaxTtl, setMcpKeyMaxTtl] = useState<number>(90);
   const [airGapMode, setAirGapMode] = useState<boolean>(false);
   const [defaultSkipLoadedSeq, setDefaultSkipLoadedSeq] = useState<boolean>(false);
+  const [issueExportEnabled, setIssueExportEnabled] = useState<boolean>(true);
+  const [issueImportEnabled, setIssueImportEnabled] = useState<boolean>(true);
+  const [issueExportAllowedRoles, setIssueExportAllowedRoles] = useState<string[]>([
+    'workspace_admin',
+    'project_admin',
+    'member',
+  ]);
   const [isSaving, setIsSaving] = useState<boolean>(false);
 
   // Form Fields - New User
@@ -311,6 +321,11 @@ export function WorkspaceSettingsPage(): JSX.Element {
           setMcpKeyMaxTtl(settingsRes.mcp_key_max_ttl_days ?? 90);
           setAirGapMode(Boolean(settingsRes.air_gap_mode));
           setDefaultSkipLoadedSeq(Boolean(settingsRes.default_skip_loaded_sequence_numbers));
+          setIssueExportEnabled(settingsRes.issue_export_enabled !== false);
+          setIssueImportEnabled(settingsRes.issue_import_enabled !== false);
+          if (Array.isArray(settingsRes.issue_export_allowed_roles)) {
+            setIssueExportAllowedRoles(settingsRes.issue_export_allowed_roles);
+          }
         }
 
         // 2. Fetch workspace principals
@@ -548,6 +563,9 @@ export function WorkspaceSettingsPage(): JSX.Element {
           mcp_key_max_ttl_days: mcpKeyMaxTtl,
           air_gap_mode: airGapMode,
           default_skip_loaded_sequence_numbers: defaultSkipLoadedSeq,
+          issue_export_enabled: issueExportEnabled,
+          issue_import_enabled: issueImportEnabled,
+          issue_export_allowed_roles: issueExportAllowedRoles,
         };
 
         const updated = (await apiFetch('PATCH', '/api/v1/admin/workspace-settings' as never, {
@@ -1039,6 +1057,69 @@ export function WorkspaceSettingsPage(): JSX.Element {
                 </span>
               </label>
               <EmojiHint kind="agentSafeNumbering" />
+            </div>
+
+            <div className="kb-form-group kb-form-group-toggle">
+              <label htmlFor="ws-issue-export-toggle" className="kb-toggle-label">
+                <input
+                  id="ws-issue-export-toggle"
+                  type="checkbox"
+                  data-testid="workspace-setting-issue-export-toggle"
+                  className="kb-checkbox"
+                  checked={issueExportEnabled}
+                  onChange={(e) => { setIssueExportEnabled(e.target.checked); }}
+                />
+                <span className="kb-toggle-text">
+                  Enable Issue Export (Allow exporting issues to CSV / WinZip AES-256)
+                </span>
+              </label>
+            </div>
+
+            <div className="kb-form-group kb-form-group-toggle">
+              <label htmlFor="ws-issue-import-toggle" className="kb-toggle-label">
+                <input
+                  id="ws-issue-import-toggle"
+                  type="checkbox"
+                  data-testid="workspace-setting-issue-import-toggle"
+                  className="kb-checkbox"
+                  checked={issueImportEnabled}
+                  onChange={(e) => { setIssueImportEnabled(e.target.checked); }}
+                />
+                <span className="kb-toggle-text">
+                  Enable Issue Import (Allow importing issues from CSV / WinZip AES-256)
+                </span>
+              </label>
+            </div>
+
+            <div className="kb-form-group" data-testid="workspace-setting-export-roles">
+              <label className="kb-label">Allowed Issue Export Roles</label>
+              <div className="kb-roles-checklist">
+                {[
+                  { role: 'workspace_admin', label: 'Workspace Admin' },
+                  { role: 'project_admin', label: 'Project Admin' },
+                  { role: 'member', label: 'Member' },
+                  { role: 'guest', label: 'Guest' },
+                ].map(({ role, label }) => {
+                  const isChecked = issueExportAllowedRoles.includes(role);
+                  return (
+                    <label key={role} className="kb-checkbox-inline">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        value={role}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setIssueExportAllowedRoles((prev) => [...prev, role]);
+                          } else {
+                            setIssueExportAllowedRoles((prev) => prev.filter((r) => r !== role));
+                          }
+                        }}
+                      />
+                      <span>{label}</span>
+                    </label>
+                  );
+                })}
+              </div>
             </div>
 
             <button

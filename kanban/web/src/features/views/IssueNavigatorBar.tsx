@@ -23,6 +23,7 @@ import {
   StateFilterPopover,
   resolveEffectiveProjectStates,
 } from './StateFilterPopover';
+import { CsvImportExportModal } from './CsvImportExportModal';
 import type { IssueItem, SavedView, StateSummary } from './viewsApi';
 import type { ActiveFilters } from './FilterDisplayBar';
 import './IssueNavigatorBar.css';
@@ -266,6 +267,7 @@ export function IssueNavigatorBar({
   const currentCycle = activeFilters.cycle?.[0] ?? 'all';
   const currentModule = activeFilters.module?.[0] ?? 'all';
   const [filtersExpanded, setFiltersExpanded] = React.useState<boolean>(false);
+  const [csvModalTab, setCsvModalTab] = useState<'export' | 'import' | null>(null);
 
   return (
     <div
@@ -345,6 +347,28 @@ export function IssueNavigatorBar({
             }}
           >
             Query
+          </button>
+        </div>
+
+        {/* CSV Import & Export Actions */}
+        <div className="navigator-csv-actions" role="group" aria-label="CSV actions">
+          <button
+            type="button"
+            className="navigator-csv-btn"
+            data-testid="navigator-export-btn"
+            aria-label="Export Issues to CSV"
+            onClick={() => { setCsvModalTab('export'); }}
+          >
+            Export
+          </button>
+          <button
+            type="button"
+            className="navigator-csv-btn"
+            data-testid="navigator-import-btn"
+            aria-label="Import Issues from CSV"
+            onClick={() => { setCsvModalTab('import'); }}
+          >
+            Import
           </button>
         </div>
 
@@ -537,6 +561,18 @@ export function IssueNavigatorBar({
             );
           })}
         </div>
+      )}
+
+      {csvModalTab && (
+        <CsvImportExportModal
+          isOpen={csvModalTab !== null}
+          onClose={() => { setCsvModalTab(null); }}
+          projectKey={projectKey}
+          workspaceScope={workspaceScope}
+          activeFilters={activeFilters}
+          searchQuery={searchQuery}
+          initialTab={csvModalTab}
+        />
       )}
     </div>
   );
