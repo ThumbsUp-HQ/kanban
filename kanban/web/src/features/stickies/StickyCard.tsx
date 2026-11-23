@@ -24,6 +24,8 @@ import {
 } from './stickyHeuristic';
 import { StickyPromotionBanner } from './StickyPromotionBanner';
 import { StickyPromotePreviewModal } from './StickyPromotePreviewModal';
+import { useTouchDragSensor } from '../views/useTouchDragSensor';
+import { TouchReorderPopover } from '../views/TouchReorderPopover';
 import type { StickyItem } from './stickiesApi';
 
 export interface StickyCardProps {
@@ -37,6 +39,7 @@ export interface StickyCardProps {
       body_markdown?: string | undefined;
       color_token?: StickyColorToken | undefined;
       promotion_snoozed_at_length?: number | null | undefined;
+      sort_rank?: string | undefined;
     },
     etag?: string,
   ) => Promise<void> | void;
@@ -70,7 +73,13 @@ export function StickyCard({
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isPromoting, setIsPromoting] = useState(false);
   const [isPromoteModalOpen, setIsPromoteModalOpen] = useState(false);
+  const [isTouchPopoverOpen, setIsTouchPopoverOpen] = useState(false);
   const [inlineError, setInlineError] = useState<string | null>(null);
+
+  const { isTouchLifted, touchHandlers } = useTouchDragSensor({
+    delay: 200,
+    tolerance: 8,
+  });
 
   const effectiveCaps = sticky.capabilities ?? (readOnly ? ['VIEW'] : ['EDIT', 'DELETE', 'ADMIN']);
   const canEdit = !readOnly && (effectiveCaps.includes('EDIT') || effectiveCaps.includes('ADMIN'));
@@ -216,10 +225,12 @@ export function StickyCard({
 
   return (
     <article
-      className={`sticky-card sticky-card--${color}`}
+      className={`sticky-card sticky-card--${color} ${isTouchLifted ? 'sticky-card--touch-lifted' : ''}`}
       aria-label={`Sticky note in ${color}`}
       data-testid={`sticky-card-${sticky.id}`}
       data-sticky-id={sticky.id}
+      data-touch-lifted={isTouchLifted ? 'true' : undefined}
+      {...touchHandlers}
     >
       <header className="sticky-card__header">
         {/* 6-swatch palette radiogroup */}
@@ -252,6 +263,19 @@ export function StickyCard({
         )}
 
         <div className="sticky-card__actions">
+          {canEdit && (
+            <button
+              type="button"
+              className="sticky-card__touch-action-btn"
+              data-testid={`sticky-touch-action-${sticky.id}`}
+              aria-label={`Reorder sticky ${sticky.id}`}
+              title="Reorder sticky"
+              onClick={() => { setIsTouchPopoverOpen(true); }}
+            >
+              ⇅
+            </button>
+          )}
+
           {/* Access Inspector 🛡️ */}
           <span className="sticky-card__access-btn">
             <EmojiHint
@@ -361,6 +385,22 @@ export function StickyCard({
           isOpen={isPromoteModalOpen}
           onClose={() => { setIsPromoteModalOpen(false); }}
           onConfirm={handleConfirmPromote}
+        />
+      )}
+
+      {/* Mobile Touch Reorder Popover */}
+      {isTouchPopoverOpen && (
+        <TouchReorderPopover
+          isOpen={isTouchPopoverOpen}
+          itemKey={`Sticky-${sticky.id.slice(0, 6)}`}
+          itemSummary={body ? body.slice(0, 60) : 'Sticky Note'}
+          kind="sticky"
+          onClose={() => { setIsTouchPopoverOpen(false); }}
+          onReorderSticky={(pos) => {
+            const nextRank = pos === 'top' ? '0000000000000001' : '9999999999999999';
+            void onUpdate(sticky.id, { sort_rank: nextRank }, sticky.etag);
+            setIsTouchPopoverOpen(false);
+          }}
         />
       )}
     </article>
