@@ -27,18 +27,21 @@ import { DatesCycleModulesRows } from './DatesCycleModulesRows';
 import { ParentLabelsRows } from './ParentLabelsRows';
 import { CustomFieldsRailSection } from '../custom-fields/CustomFieldsRailSection';
 import { canModifyIssueField, hasIssuePermission } from '../drawer/permissions';
+import { AdvancedSection } from '../../ui/AdvancedSection';
 import './PropertiesRail.css';
 
 export interface PropertiesRailProps {
   issue: IssueDetail;
   projectMetadata?: ProjectMetadata | undefined;
   onIssueUpdate?: ((updated: IssueDetail) => void) | undefined;
+  defaultAdvancedOpen?: boolean | undefined;
 }
 
 export function PropertiesRail({
   issue: initialIssue,
   projectMetadata: initialMetadata,
   onIssueUpdate,
+  defaultAdvancedOpen,
 }: PropertiesRailProps): JSX.Element {
   const [currentIssue, setCurrentIssue] = useState<IssueDetail>(initialIssue);
   const [prevInitialIssue, setPrevInitialIssue] = useState<IssueDetail>(initialIssue);
@@ -70,6 +73,24 @@ export function PropertiesRail({
 
   const modulesEnabled =
     (metadata?.modules_enabled ?? initialMetadata?.modules_enabled) !== false;
+
+  const customFieldsObj = currentIssue.custom_fields as Record<string, unknown> | undefined;
+  const customFieldsCount = customFieldsObj
+    ? Object.keys(customFieldsObj).filter(
+        (k) =>
+          customFieldsObj[k] !== undefined &&
+          customFieldsObj[k] !== null &&
+          customFieldsObj[k] !== '',
+      ).length
+    : 0;
+  const provenanceOverrideCount = currentIssue.provenance?.overridden ? 1 : 0;
+  const rawLinks = Array.isArray(currentIssue.links) ? currentIssue.links : [];
+  const devLinksCount = rawLinks.filter((l: unknown) => {
+    if (!l || typeof l !== 'object') return false;
+    const linkType = (l as { link_type?: unknown }).link_type;
+    return linkType === 'branch' || linkType === 'pr' || linkType === 'development';
+  }).length;
+  const activeAdvancedCount = customFieldsCount + provenanceOverrideCount + devLinksCount;
 
   // Fetch project auxiliary configuration
   useEffect(() => {
@@ -271,12 +292,6 @@ export function PropertiesRail({
         fetchSuggestions={fetchAssigneeSuggestions}
       />
 
-      <CreatedByRow
-        issue={currentIssue}
-        isAdmin={isAdmin}
-        onOverrideCreator={handleOverrideCreator}
-      />
-
       <DatesCycleModulesRows
         issue={currentIssue}
         modulesEnabled={modulesEnabled}
@@ -297,14 +312,29 @@ export function PropertiesRail({
         onCreateLabel={handleCreateLabel}
       />
 
-      {/* Admin-Defined Custom Fields section (KB-P5-15) */}
-      <div data-slot="custom-fields-rail">
-        <CustomFieldsRailSection
-          projectKey={projectKey}
-          issueKey={currentIssue.key}
-          canEdit={canEditCustomFields}
+      {/* Advanced Properties: Progressive disclosure for secondary audit and custom field metadata (KB-ADVANCED-DISCLOSURE-02, KAN-368) */}
+      <AdvancedSection
+        title="Advanced Properties"
+        summary="Provenance audit and custom attributes"
+        testId="properties-rail-advanced"
+        defaultOpen={defaultAdvancedOpen ?? false}
+        activeOverridesCount={activeAdvancedCount}
+      >
+        <CreatedByRow
+          issue={currentIssue}
+          isAdmin={isAdmin}
+          onOverrideCreator={handleOverrideCreator}
         />
-      </div>
+
+        {/* Admin-Defined Custom Fields section (KB-P5-15) */}
+        <div data-slot="custom-fields-rail">
+          <CustomFieldsRailSection
+            projectKey={projectKey}
+            issueKey={currentIssue.key}
+            canEdit={canEditCustomFields}
+          />
+        </div>
+      </AdvancedSection>
     </aside>
   );
 }

@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo, type JSX } fr
 import type { IssueItem } from './viewsApi';
 import { saveDraft } from '../drafts/draftsStore';
 import { useFocusTrap } from '../drawer/useFocusTrap';
+import { AdvancedSection } from '../../ui/AdvancedSection';
 import './filterBulk.css';
 
 export interface QuickCreateIssueModalProps {
@@ -13,6 +14,9 @@ export interface QuickCreateIssueModalProps {
   defaultStateId?: string;
   defaultPrioritySlug?: string;
   defaultModuleIds?: string[];
+  defaultDueDate?: string;
+  defaultParentKey?: string;
+  defaultAdvancedOpen?: boolean;
   states?: { id: string; name: string; group?: string; color_hex?: string | null; is_default?: boolean }[];
   modules?: { id: string; name: string; emoji?: string }[];
   onOpenPeek?: (issueKey: string) => void;
@@ -34,6 +38,9 @@ export function QuickCreateIssueModal({
   defaultStateId = 'state-todo',
   defaultPrioritySlug = 'medium',
   defaultModuleIds = [],
+  defaultDueDate,
+  defaultParentKey,
+  defaultAdvancedOpen,
   states,
   modules,
   onOpenPeek,
@@ -59,10 +66,19 @@ export function QuickCreateIssueModal({
   const [selectedModuleIds, setSelectedModuleIds] = useState<string[]>(
     modulesEnabled ? defaultModuleIds : [],
   );
+  const [dueDate, setDueDate] = useState(defaultDueDate ?? '');
+  const [parentKey, setParentKey] = useState(defaultParentKey ?? '');
   const [isDraft, setIsDraft] = useState(false);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [postCreateData, setPostCreateData] = useState<PostCreateState | null>(null);
+
+  const activeAdvancedCount =
+    (selectedModuleIds.length > 0 ? 1 : 0) +
+    (dueDate ? 1 : 0) +
+    (parentKey.trim() ? 1 : 0);
+  const hasAdvancedContent =
+    activeAdvancedCount > 0 || defaultModuleIds.length > 0;
 
   const summaryInputRef = useRef<HTMLInputElement>(null);
   const modalContainerRef = useRef<HTMLDivElement>(null);
@@ -158,6 +174,8 @@ export function QuickCreateIssueModal({
   const handleDone = (): void => {
     setSummary('');
     setDescription('');
+    setDueDate('');
+    setParentKey('');
     setIsDraft(false);
     setPostCreateData(null);
     handleClose();
@@ -166,6 +184,8 @@ export function QuickCreateIssueModal({
   const handleCreateAnother = (): void => {
     setSummary('');
     setDescription('');
+    setDueDate('');
+    setParentKey('');
     setIsDraft(false);
     setPostCreateData(null);
   };
@@ -266,6 +286,12 @@ export function QuickCreateIssueModal({
     }
     if (modulesEnabled) {
       payload.module_ids = selectedModuleIds;
+    }
+    if (dueDate) {
+      payload.due_date = dueDate;
+    }
+    if (parentKey.trim()) {
+      payload.parent = { key: parentKey.trim(), summary: '' };
     }
 
     setSubmitError(null);
@@ -502,34 +528,84 @@ export function QuickCreateIssueModal({
                 <option value="none">➖ None</option>
               </select>
             </div>
-
-            {/* Modules field: conditionally mounted ONLY when modulesEnabled is true (S7.2 8f) */}
-            {modulesEnabled && (
-              <div className="quick-create-input-group quick-create-input-group--flex1">
-                <label
-                  htmlFor="quick-create-module"
-                  className="quick-create-label"
-                >
-                  Module
-                </label>
-                <select
-                  id="quick-create-module"
-                  className="quick-create-select"
-                  value={selectedModuleIds[0] ?? ''}
-                  onChange={(e) => {
-                    setSelectedModuleIds(e.target.value ? [e.target.value] : []);
-                  }}
-                >
-                  <option value="">No Module</option>
-                  {(modules ?? []).map((mod) => (
-                    <option key={mod.id} value={mod.id}>
-                      {`${mod.emoji ?? '🧩'} ${mod.name}`}
-                    </option>
-                  ))}
-                </select>
-              </div>
-            )}
           </div>
+
+          {/* Advanced Section: Progressive disclosure for secondary metadata (KB-ADVANCED-DISCLOSURE-02, KAN-368) */}
+          <AdvancedSection
+            title="Advanced Properties"
+            summary="Module, parent issue, and schedule dates"
+            testId="quick-create-advanced"
+            defaultOpen={defaultAdvancedOpen ?? hasAdvancedContent}
+            activeOverridesCount={activeAdvancedCount}
+            hasErrors={Boolean(submitError)}
+          >
+            <div className="quick-create-advanced-grid">
+              {modulesEnabled && (
+                <div className="quick-create-input-group">
+                  <label
+                    htmlFor="quick-create-module"
+                    className="quick-create-label"
+                  >
+                    Module
+                  </label>
+                  <select
+                    id="quick-create-module"
+                    className="quick-create-select"
+                    value={selectedModuleIds[0] ?? ''}
+                    onChange={(e) => {
+                      setSelectedModuleIds(e.target.value ? [e.target.value] : []);
+                    }}
+                  >
+                    <option value="">No Module</option>
+                    {(modules ?? []).map((mod) => (
+                      <option key={mod.id} value={mod.id}>
+                        {`${mod.emoji ?? '🧩'} ${mod.name}`}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              <div className="quick-create-row-fields">
+                <div className="quick-create-input-group quick-create-input-group--flex1">
+                  <label
+                    htmlFor="quick-create-due-date"
+                    className="quick-create-label"
+                  >
+                    Due Date
+                  </label>
+                  <input
+                    id="quick-create-due-date"
+                    type="date"
+                    className="quick-create-input"
+                    value={dueDate}
+                    onChange={(e) => {
+                      setDueDate(e.target.value);
+                    }}
+                  />
+                </div>
+
+                <div className="quick-create-input-group quick-create-input-group--flex1">
+                  <label
+                    htmlFor="quick-create-parent"
+                    className="quick-create-label"
+                  >
+                    Parent Issue
+                  </label>
+                  <input
+                    id="quick-create-parent"
+                    type="text"
+                    className="quick-create-input"
+                    placeholder="e.g. KAN-100"
+                    value={parentKey}
+                    onChange={(e) => {
+                      setParentKey(e.target.value);
+                    }}
+                  />
+                </div>
+              </div>
+            </div>
+          </AdvancedSection>
 
           {submitError && (
             <div

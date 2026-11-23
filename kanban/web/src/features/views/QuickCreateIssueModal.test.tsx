@@ -510,4 +510,177 @@ describe('QuickCreateIssueModal (KB-P3-40, KANBA-173)', () => {
       }),
     );
   });
+
+  describe('Progressive Disclosure with AdvancedSection (KB-ADVANCED-DISCLOSURE-02, KAN-368)', () => {
+    it('Required Test Case 1 (Positive / Progressive Disclosure): renders AdvancedSection collapsed by default and submits advanced fields when expanded', () => {
+      const handleCreate = vi.fn().mockReturnValue({ key: 'KAN-200', summary: 'Advanced Task' });
+      const handleClose = vi.fn();
+
+      render(
+        <QuickCreateIssueModal
+          isOpen={true}
+          onClose={handleClose}
+          onCreate={handleCreate}
+          projectKey="KAN"
+          modulesEnabled={true}
+          modules={[{ id: 'mod-1', name: 'Core Engine' }]}
+        />
+      );
+
+      // Verify toggle button and details state
+      const toggle = screen.getByTestId('quick-create-advanced-toggle');
+      expect(toggle.getAttribute('aria-expanded')).toBe('false');
+
+      const details = screen.getByTestId('quick-create-advanced');
+      expect(details.hasAttribute('open')).toBe(false);
+
+      // Expand advanced section via click
+      fireEvent.click(toggle);
+      expect(toggle.getAttribute('aria-expanded')).toBe('true');
+      expect(details.hasAttribute('open')).toBe(true);
+
+      // Fill primary and secondary fields
+      fireEvent.change(screen.getByLabelText(/summary/i), { target: { value: 'Advanced Task' } });
+      fireEvent.change(screen.getByLabelText(/^due date$/i), { target: { value: '2026-12-15' } });
+      fireEvent.change(screen.getByLabelText(/^parent issue$/i), { target: { value: 'KAN-50' } });
+      fireEvent.change(screen.getByLabelText(/^module$/i), { target: { value: 'mod-1' } });
+
+      fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+
+      expect(handleCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          summary: 'Advanced Task',
+          due_date: '2026-12-15',
+          parent: { key: 'KAN-50', summary: '' },
+          module_ids: ['mod-1'],
+        })
+      );
+    });
+
+    it('Required Test Case 2 (Active Overrides Badge & Auto-Expand): displays active overrides count badge and auto-expands with defaultOpen', () => {
+      render(
+        <QuickCreateIssueModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onCreate={vi.fn()}
+          projectKey="KAN"
+          modulesEnabled={true}
+          defaultModuleIds={['mod-1']}
+          defaultDueDate="2026-12-31"
+          defaultParentKey="KAN-99"
+          defaultAdvancedOpen={true}
+          modules={[{ id: 'mod-1', name: 'Core Engine' }]}
+        />
+      );
+
+      const details = screen.getByTestId('quick-create-advanced');
+      expect(details.hasAttribute('open')).toBe(true);
+
+      // Active overrides badge renders with count of 3 custom settings
+      const badge = screen.getByTestId('advanced-active-badge');
+      expect(badge.textContent).toBe('3 custom settings active');
+    });
+
+    it('Required Test Case 3 (Error Auto-Expansion & Value Preservation): auto-expands on submit error and preserves input values across toggling', async () => {
+      const handleCreate = vi.fn().mockRejectedValue(new Error('Validation constraint failed on server'));
+
+      render(
+        <QuickCreateIssueModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onCreate={handleCreate}
+          projectKey="KAN"
+          modulesEnabled={true}
+        />
+      );
+
+      const toggle = screen.getByTestId('quick-create-advanced-toggle');
+      const details = screen.getByTestId('quick-create-advanced');
+      expect(details.hasAttribute('open')).toBe(false);
+
+      // Enter summary and due date
+      fireEvent.change(screen.getByLabelText(/summary/i), { target: { value: 'Failing Task' } });
+      fireEvent.change(screen.getByLabelText(/^due date$/i), { target: { value: '2026-11-30' } });
+
+      // Collapse and expand again to verify preservation
+      fireEvent.click(toggle);
+      expect(details.hasAttribute('open')).toBe(true);
+      const dueDateInput = screen.getByLabelText<HTMLInputElement>(/^due date$/i);
+      expect(dueDateInput.value).toBe('2026-11-30');
+
+      fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+
+      // Error appears and details remains open
+      const err = await screen.findByTestId('quick-create-error');
+      expect(err.textContent).toContain('Validation constraint failed on server');
+      expect(details.hasAttribute('open')).toBe(true);
+    });
+
+    it('covers resolvedInitialStateId branches (is_default, unstarted, states[0]) and draft view link', () => {
+      // Branch with states containing is_default
+      const { rerender } = render(
+        <QuickCreateIssueModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onCreate={vi.fn()}
+          projectKey="KAN"
+          defaultStateId="state-todo"
+          states={[
+            { id: 'st-def', name: 'Default State', is_default: true },
+            { id: 'st-other', name: 'Other' },
+          ]}
+        />
+      );
+      const stateSelect = screen.getByLabelText<HTMLSelectElement>(/^state$/i);
+      expect(stateSelect.value).toBe('st-def');
+
+      // Branch with states containing group unstarted
+      rerender(
+        <QuickCreateIssueModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onCreate={vi.fn()}
+          projectKey="KAN"
+          defaultStateId="state-todo"
+          states={[
+            { id: 'st-started', name: 'In Progress', group: 'started' },
+            { id: 'st-unstarted', name: 'Ready', group: 'unstarted' },
+          ]}
+        />
+      );
+
+      // Branch with states without default or unstarted
+      rerender(
+        <QuickCreateIssueModal
+          isOpen={true}
+          onClose={vi.fn()}
+          onCreate={vi.fn()}
+          projectKey="KAN"
+          defaultStateId="state-todo"
+          states={[
+            { id: 'st-single', name: 'Single State', group: 'other' },
+          ]}
+        />
+      );
+
+      // Branch with draft saved and clicking view issue
+      const handleClose = vi.fn();
+      rerender(
+        <QuickCreateIssueModal
+          isOpen={true}
+          onClose={handleClose}
+          onCreate={vi.fn()}
+          projectKey="KAN"
+        />
+      );
+
+      fireEvent.change(screen.getByLabelText(/summary/i), { target: { value: 'Draft Item' } });
+      fireEvent.click(screen.getByTestId('quick-create-draft-checkbox'));
+      fireEvent.click(screen.getByRole('button', { name: /^save draft$/i }));
+
+      expect(screen.getByText('✍️ Draft Saved')).toBeDefined();
+      fireEvent.click(screen.getByTestId('post-create-view-btn'));
+      expect(handleClose).toHaveBeenCalled();
+    });
+  });
 });

@@ -648,3 +648,17 @@
   outline: 2px solid var(--accent-primary, #3b82f6);
   outline-offset: 1px;
 }
+
+/* Progressive Disclosure: Advanced Properties Section (KB-ADVANCED-DISCLOSURE-02, KAN-368) */
+.surface__rail .kb-advanced-section {
+  margin: var(--space-2, 8px) 0;
+  background-color: var(--bg-surface-raised, #1e293b);
+  border-color: var(--border-subtle, #334155);
+}
+
+.surface__rail .kb-advanced-content {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2, 8px);
+  padding: 8px 12px 12px;
+}
