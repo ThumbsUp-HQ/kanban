@@ -5,6 +5,7 @@
 
 import React, {
   useCallback,
+  useEffect,
   useRef,
   useState,
   type JSX,
@@ -68,6 +69,26 @@ export function LayoutSwitcher({
   const [menuOpen, setMenuOpen] = useState(false);
   const containerRef = useRef<HTMLDivElement>(null);
   const buttonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+
+  useEffect(() => {
+    if (!menuOpen) return;
+    const handleOutsideClick = (e: MouseEvent): void => {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setMenuOpen(false);
+      }
+    };
+    const handleEscape = (e: globalThis.KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        setMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('keydown', handleEscape);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleEscape);
+    };
+  }, [menuOpen]);
 
   const handleSelect = useCallback(
     (opt: LayoutOption) => {

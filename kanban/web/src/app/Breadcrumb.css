@@ -1,6 +1,7 @@
 .kb-breadcrumb {
   display: flex;
   align-items: center;
+  min-width: 0;
 }
 
 .kb-breadcrumb-desktop {
@@ -12,18 +13,22 @@
   gap: 8px;
   font-size: 14px;
   color: var(--fg-secondary, #94a3b8);
+  min-width: 0;
 }
 
 .kb-breadcrumb-mobile {
   display: none;
   align-items: center;
   gap: 8px;
+  min-width: 0;
 }
 
 .kb-breadcrumb-item {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
+  flex-shrink: 1;
 }
 
 .kb-breadcrumb-workspace {
@@ -32,12 +37,27 @@
   gap: 6px;
   font-weight: 500;
   color: var(--fg-secondary, #94a3b8);
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-breadcrumb-workspace span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .kb-breadcrumb-link {
   color: var(--fg-secondary, #94a3b8);
   text-decoration: none;
   font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .kb-breadcrumb-link:hover {
@@ -47,6 +67,7 @@
 .kb-breadcrumb-separator {
   color: var(--fg-muted, #64748b);
   user-select: none;
+  flex-shrink: 0;
 }
 
 .kb-breadcrumb-current {
@@ -55,12 +76,24 @@
   gap: 6px;
   color: var(--fg-primary, #f8fafc);
   font-weight: 600;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.kb-breadcrumb-current span {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .kb-breadcrumb-count {
   color: var(--fg-muted, #94a3b8);
   font-weight: 400;
   font-size: 13px;
+  flex-shrink: 0;
 }
 
 .kb-breadcrumb-back-btn {
