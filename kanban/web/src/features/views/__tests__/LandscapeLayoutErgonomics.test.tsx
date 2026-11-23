@@ -176,11 +176,13 @@ describe('LandscapeLayoutErgonomics (KAN-343)', () => {
     const { container: tableContainer } = render(
       <TableView issues={FIXTURE_12_ISSUES} projectKey="KAN" modulesEnabled={true} />
     );
-    const scrollWrap = tableContainer.querySelector('.table-scroll-wrap') as HTMLElement;
+    const scrollWrap = tableContainer.querySelector<HTMLElement>('.table-scroll-wrap');
     expect(scrollWrap).not.toBeNull();
     // Simulate horizontal scroll event
-    scrollWrap.scrollLeft = 120;
-    expect(scrollWrap.scrollLeft).toBe(120);
+    if (scrollWrap) {
+      scrollWrap.scrollLeft = 120;
+      expect(scrollWrap.scrollLeft).toBe(120);
+    }
 
     const { container: timelineContainer } = render(
       <TimelineView
@@ -190,10 +192,12 @@ describe('LandscapeLayoutErgonomics (KAN-343)', () => {
         initialStartDate="2026-11-01"
       />
     );
-    const canvasWrap = timelineContainer.querySelector('.timeline-right-canvas-wrapper') as HTMLElement;
+    const canvasWrap = timelineContainer.querySelector<HTMLElement>('.timeline-right-canvas-wrapper');
     expect(canvasWrap).not.toBeNull();
-    canvasWrap.scrollLeft = 240;
-    expect(canvasWrap.scrollLeft).toBe(240);
+    if (canvasWrap) {
+      canvasWrap.scrollLeft = 240;
+      expect(canvasWrap.scrollLeft).toBe(240);
+    }
   });
 
   it('Case 3 (Boundary): verifies sticky headers maintain position when scrolled to bottom of dataset', () => {
@@ -235,8 +239,8 @@ describe('LandscapeLayoutErgonomics (KAN-343)', () => {
     const { container: tableContainer } = render(
       <TableView issues={FIXTURE_12_ISSUES} projectKey="KAN" modulesEnabled={true} />
     );
-    const scrollWrap = tableContainer.querySelector('.table-scroll-wrap') as HTMLElement;
-    const thead = tableContainer.querySelector('.issues-table-head') as HTMLElement;
+    const scrollWrap = tableContainer.querySelector<HTMLElement>('.table-scroll-wrap');
+    const thead = tableContainer.querySelector<HTMLElement>('.issues-table-head');
     const stickyHeaders = tableContainer.querySelectorAll('.sticky-col');
 
     expect(scrollWrap).not.toBeNull();
@@ -244,8 +248,10 @@ describe('LandscapeLayoutErgonomics (KAN-343)', () => {
     expect(stickyHeaders.length).toBeGreaterThan(0);
 
     // Boundary scroll to bottom
-    scrollWrap.scrollTop = 1000;
-    expect(scrollWrap.scrollTop).toBe(1000);
+    if (scrollWrap) {
+      scrollWrap.scrollTop = 1000;
+      expect(scrollWrap.scrollTop).toBe(1000);
+    }
 
     // Check header row structure
     const headerRow = thead.querySelector('tr');
