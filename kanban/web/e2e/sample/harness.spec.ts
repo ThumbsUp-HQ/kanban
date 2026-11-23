@@ -14,7 +14,7 @@ test.describe('E2E Harness Smoke and Guard Proofs', () => {
     const cspHeader = response?.headers()['content-security-policy'] ?? '';
     expect(cspHeader).toBe(PRODUCTION_CSP);
 
-    await expect(page).toHaveTitle('Kanban');
+    await expect(page).toHaveTitle('kanban');
     const appRoot = page.locator('[data-testid="app-root"]');
     await expect(appRoot).toBeVisible();
 

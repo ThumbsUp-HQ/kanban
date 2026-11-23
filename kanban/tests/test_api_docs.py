@@ -103,7 +103,7 @@ async def test_api_docs_swagger_ui_and_csp(test_settings: Settings) -> None:
 
         # Content assertions
         text = resp.text
-        assert "<title>👍kanban API - Swagger UI</title>" in text
+        assert "<title>kanban API - Swagger UI</title>" in text
         assert "Swagger UI" in text
         assert '<link rel="stylesheet" href="/api/docs/docs.css"/>' in text
         assert '<link rel="manifest" href="/manifest.json"/>' in text
@@ -138,7 +138,7 @@ async def test_api_redoc_and_csp(test_settings: Settings) -> None:
 
         # Content assertions
         text = resp.text
-        assert "<title>👍kanban API - ReDoc</title>" in text
+        assert "<title>kanban API - ReDoc</title>" in text
         assert "ReDoc" in text
         assert '<link rel="stylesheet" href="/api/docs/docs.css"/>' in text
         assert '<link rel="manifest" href="/manifest.json"/>' in text

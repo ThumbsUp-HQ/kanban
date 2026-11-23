@@ -32,6 +32,11 @@ import { useSessionGuard } from '../features/auth/useSessionGuard';
 import { useQuery } from '@tanstack/react-query';
 import { qk } from '../api/queryKeys';
 import { apiFetch } from '../api/client';
+import {
+  BRAND_TITLE,
+  formatDocumentTitle,
+  useDocumentTitle,
+} from './documentTitle';
 import type { TopbarUser } from './Topbar';
 import './AppShell.css';
 
@@ -136,6 +141,16 @@ export function AppShell({
     location.pathname.startsWith('/login') ||
     location.pathname.startsWith('/setup') ||
     location.pathname.startsWith('/activate');
+
+  const shellTitle =
+    location.pathname === '/'
+      ? BRAND_TITLE
+      : formatDocumentTitle(
+          isInsideProject && projectName && projectName.toLowerCase() !== BRAND_TITLE.toLowerCase()
+            ? [computedSection, projectName]
+            : [computedSection],
+        );
+  useDocumentTitle(shellTitle);
 
   const meQuery = useQuery<TopbarUser | null>({
     queryKey: qk.me(),

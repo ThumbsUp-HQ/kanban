@@ -90,13 +90,15 @@ function AppContent(): JSX.Element {
 
   const router = createAppRouter();
   return (
-    <QueryClientProvider client={appQueryClient}>
-      <RealtimeProvider>
-        <ShellPanelsProvider>
-          <RouterProvider router={router} />
-        </ShellPanelsProvider>
-      </RealtimeProvider>
-    </QueryClientProvider>
+    <div data-testid="app-root">
+      <QueryClientProvider client={appQueryClient}>
+        <RealtimeProvider>
+          <ShellPanelsProvider>
+            <RouterProvider router={router} />
+          </ShellPanelsProvider>
+        </RealtimeProvider>
+      </QueryClientProvider>
+    </div>
   );
 }
 

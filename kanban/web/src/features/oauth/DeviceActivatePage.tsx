@@ -9,6 +9,7 @@ import {
   type DeviceCodeInfoResponse,
 } from './oauthApi';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
+import { formatDocumentTitle, useDocumentTitle } from '../../app/documentTitle';
 import './DeviceActivatePage.css';
 
 const BASE20_CHARS = 'BCDFGHJKLMNPQRSTVWXZ';
@@ -60,6 +61,7 @@ async function fetchWorkspaceProjects(): Promise<WorkspaceProject[]> {
 }
 
 export function DeviceActivatePage(): JSX.Element {
+  useDocumentTitle(formatDocumentTitle(['Device Activation']));
   const [searchParams] = useSearchParams();
   const [userCode, setUserCode] = useState<string>(() =>
     formatUserCodeInput(searchParams.get('user_code') ?? ''),
