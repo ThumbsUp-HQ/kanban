@@ -1,0 +1,947 @@
+diff --git a/kanban/web/src/app/Topbar.tsx b/kanban/web/src/app/Topbar.tsx
+index f4d51fe2..28eee527 100644
+--- a/kanban/web/src/app/Topbar.tsx
++++ b/kanban/web/src/app/Topbar.tsx
+@@ -478,7 +478,7 @@ export function Topbar({
+ 
+                 {(isWorkspaceAdmin || isServerAdmin) && (
+                   <Link
+-                    to="/admin/link-auditor"
++                    to="/admin/diagnostics"
+                     role="menuitem"
+                     data-testid="topbar-link-auditor-link"
+                     className="kb-theme-radio kb-avatar-menu-link"
+@@ -500,6 +500,7 @@ export function Topbar({
+                     <Link
+                       to="/admin/auth"
+                       role="menuitem"
++                      data-testid="topbar-admin-auth-link"
+                       className="kb-theme-radio kb-avatar-menu-link"
+                       onClick={() => {
+                         setAvatarMenuOpen(false);
+@@ -516,6 +517,7 @@ export function Topbar({
+                     <Link
+                       to="/admin/ai"
+                       role="menuitem"
++                      data-testid="topbar-admin-ai-link"
+                       className="kb-theme-radio kb-avatar-menu-link"
+                       onClick={() => {
+                         setAvatarMenuOpen(false);
+@@ -532,6 +534,7 @@ export function Topbar({
+                     <Link
+                       to="/admin/agents"
+                       role="menuitem"
++                      data-testid="topbar-admin-agents-link"
+                       className="kb-theme-radio kb-avatar-menu-link"
+                       onClick={() => {
+                         setAvatarMenuOpen(false);
+@@ -548,6 +551,7 @@ export function Topbar({
+                     <Link
+                       to="/admin/agent-runners"
+                       role="menuitem"
++                      data-testid="topbar-admin-runners-link"
+                       className="kb-theme-radio kb-avatar-menu-link"
+                       onClick={() => {
+                         setAvatarMenuOpen(false);
+@@ -561,10 +565,45 @@ export function Topbar({
+                       </span>
+                     </Link>
+ 
++                    <Link
++                      to="/admin/oauth"
++                      role="menuitem"
++                      data-testid="topbar-admin-oauth-link"
++                      className="kb-theme-radio kb-avatar-menu-link"
++                      onClick={() => {
++                        setAvatarMenuOpen(false);
++                      }}
++                    >
++                      <span>
++                        <span aria-hidden="true" className="kb-avatar-menu-icon">
++                          🌐
++                        </span>
++                        OAuth 2.1 Clients
++                      </span>
++                    </Link>
++
++                    <Link
++                      to="/admin/imports"
++                      role="menuitem"
++                      data-testid="topbar-admin-imports-link"
++                      className="kb-theme-radio kb-avatar-menu-link"
++                      onClick={() => {
++                        setAvatarMenuOpen(false);
++                      }}
++                    >
++                      <span>
++                        <span aria-hidden="true" className="kb-avatar-menu-icon">
++                          📥
++                        </span>
++                        Plane Migration Studio
++                      </span>
++                    </Link>
++
+                     {/* Preserving System Storage, Backups & Deployment from KANBA-188 */}
+                     <Link
+                       to="/admin/standalone"
+                       role="menuitem"
++                      data-testid="topbar-admin-standalone-link"
+                       className="kb-theme-radio kb-avatar-menu-link"
+                       onClick={() => {
+                         setAvatarMenuOpen(false);
+diff --git a/kanban/web/src/app/__tests__/MenuConsolidation.test.tsx b/kanban/web/src/app/__tests__/MenuConsolidation.test.tsx
+new file mode 100644
+index 00000000..5e110590
+--- /dev/null
++++ b/kanban/web/src/app/__tests__/MenuConsolidation.test.tsx
+@@ -0,0 +1,280 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import { describe, it, expect, vi, beforeEach } from 'vitest';
++import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import React from 'react';
++import { MemoryRouter, Route, Routes } from 'react-router';
++import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
++import { AdminStudioSubnav } from '../../features/admin/AdminStudioSubnav';
++import { AdminMcpRedirect } from '../routes';
++import { Topbar } from '../Topbar';
++import { ThemeProvider } from '../../theme/ThemeProvider';
++import { ShellPanelsProvider } from '../shellPanels';
++import { IssueSurfaceRoot } from '../../features/drawer/IssueSurface';
++import { IssueSurfaceSlotsContext, type IssueDetail } from '../../features/drawer/slots';
++import { LinkGraphAction } from '../../features/drawer-actions/LinkGraphAction';
++
++vi.mock('../../api/client', () => ({
++  apiClient: {
++    get: vi.fn().mockResolvedValue({
++      id: 'iss-test',
++      key: 'KAN-100',
++      summary: 'Test Issue Summary',
++      state: { id: 'state-1', name: 'Todo', group: 'unstarted' },
++      priority: { slug: 'high', label: 'High', emoji: '▲' },
++      capabilities: ['VIEW', 'EDIT', 'ADMIN'],
++    }),
++    post: vi.fn().mockResolvedValue({}),
++    put: vi.fn().mockResolvedValue({}),
++    patch: vi.fn().mockResolvedValue({}),
++    delete: vi.fn().mockResolvedValue({}),
++  },
++  apiFetch: vi.fn().mockResolvedValue({}),
++}));
++
++describe('Menu & Navigation Consolidation Suite (KAN-318)', () => {
++  let queryClient: QueryClient;
++
++  beforeEach(() => {
++    queryClient = new QueryClient({
++      defaultOptions: { queries: { retry: false } },
++    });
++    vi.restoreAllMocks();
++  });
++
++  describe('1. AdminStudioSubnav Component', () => {
++    it('renders all 8 administrative studio tabs with correct test IDs', () => {
++      render(
++        <MemoryRouter initialEntries={['/admin/mcp']}>
++          <AdminStudioSubnav activeTab="mcp" />
++        </MemoryRouter>,
++      );
++
++      expect(screen.getByTestId('tab-admin-auth')).toBeDefined();
++      expect(screen.getByTestId('tab-admin-ai')).toBeDefined();
++      expect(screen.getByTestId('tab-admin-runners')).toBeDefined();
++      expect(screen.getByTestId('tab-admin-mcp')).toBeDefined();
++      expect(screen.getByTestId('tab-admin-oauth')).toBeDefined();
++      expect(screen.getByTestId('tab-admin-imports')).toBeDefined();
++      expect(screen.getByTestId('tab-admin-standalone')).toBeDefined();
++      expect(screen.getByTestId('tab-admin-diagnostics')).toBeDefined();
++    });
++
++    it('highlights activeTab and sets aria-current=page', () => {
++      render(
++        <MemoryRouter initialEntries={['/admin/diagnostics']}>
++          <AdminStudioSubnav activeTab="diagnostics" />
++        </MemoryRouter>,
++      );
++
++      const diagTab = screen.getByTestId('tab-admin-diagnostics');
++      expect(diagTab.classList.contains('kb-mcp-admin-subnav-active')).toBe(true);
++      expect(diagTab.getAttribute('aria-current')).toBe('page');
++
++      const mcpTab = screen.getByTestId('tab-admin-mcp');
++      expect(mcpTab.classList.contains('kb-mcp-admin-subnav-active')).toBe(false);
++      expect(mcpTab.getAttribute('aria-current')).toBeNull();
++    });
++
++    it('derives active state from pathname when activeTab prop is omitted', () => {
++      render(
++        <MemoryRouter initialEntries={['/admin/oauth']}>
++          <AdminStudioSubnav />
++        </MemoryRouter>,
++      );
++
++      const oauthTab = screen.getByTestId('tab-admin-oauth');
++      expect(oauthTab.classList.contains('kb-mcp-admin-subnav-active')).toBe(true);
++      expect(oauthTab.getAttribute('aria-current')).toBe('page');
++    });
++  });
++
++  describe('2. AdminMcpRedirect Route', () => {
++    it('redirects /admin/mcp to /admin/mcp with preserved query parameters', () => {
++      render(
++        <MemoryRouter initialEntries={['/legacy-mcp?tier=global&filter=active']}>
++          <Routes>
++            <Route path="/legacy-mcp" element={<AdminMcpRedirect />} />
++            <Route
++              path="/admin/mcp"
++              element={<div data-testid="destination-admin-mcp">Admin MCP Destination</div>}
++            />
++          </Routes>
++        </MemoryRouter>,
++      );
++
++      expect(screen.getByTestId('destination-admin-mcp')).toBeDefined();
++    });
++  });
++
++  describe('3. Topbar Avatar Menu Consolidation', () => {
++    it('renders server admin studio navigation entries including OAuth, Imports, and Diagnostics', () => {
++      render(
++        <QueryClientProvider client={queryClient}>
++          <ThemeProvider>
++            <ShellPanelsProvider>
++              <MemoryRouter initialEntries={['/projects/KAN/issues']}>
++                <Topbar
++                  onOpenPalette={vi.fn()}
++                  onToggleSidebar={vi.fn()}
++                  projectKey="KAN"
++                  projectName="kanban"
++                  currentSection="Work Items"
++                  user={{
++                    id: 'u-admin',
++                    handle: 'admin',
++                    display_name: 'Admin User',
++                    is_server_admin: true,
++                    is_workspace_admin: true,
++                  }}
++                />
++              </MemoryRouter>
++            </ShellPanelsProvider>
++          </ThemeProvider>
++        </QueryClientProvider>,
++      );
++
++      // Open avatar menu
++      const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
++      fireEvent.click(avatarBtn);
++
++      // Verify all admin entries exist
++      expect(screen.getByTestId('topbar-personal-settings-link')).toBeDefined();
++      expect(screen.getByTestId('topbar-mcp-studio-link')).toBeDefined();
++      expect(screen.getByTestId('topbar-workspace-settings-link')).toBeDefined();
++      expect(screen.getByTestId('topbar-link-auditor-link')).toBeDefined();
++      expect(screen.getByTestId('topbar-admin-auth-link')).toBeDefined();
++      expect(screen.getByTestId('topbar-admin-ai-link')).toBeDefined();
++      expect(screen.getByTestId('topbar-admin-agents-link')).toBeDefined();
++      expect(screen.getByTestId('topbar-admin-runners-link')).toBeDefined();
++      expect(screen.getByTestId('topbar-admin-oauth-link')).toBeDefined();
++      expect(screen.getByTestId('topbar-admin-imports-link')).toBeDefined();
++      expect(screen.getByTestId('topbar-admin-standalone-link')).toBeDefined();
++      expect(screen.getByTestId('topbar-avatar-docs-link')).toBeDefined();
++      expect(screen.getByTestId('topbar-about-link')).toBeDefined();
++    });
++
++    it('hides privileged admin links for standard workspace members', () => {
++      render(
++        <QueryClientProvider client={queryClient}>
++          <ThemeProvider>
++            <ShellPanelsProvider>
++              <MemoryRouter initialEntries={['/projects/KAN/issues']}>
++                <Topbar
++                  onOpenPalette={vi.fn()}
++                  onToggleSidebar={vi.fn()}
++                  projectKey="KAN"
++                  projectName="kanban"
++                  currentSection="Work Items"
++                  user={{
++                    id: 'u-member',
++                    handle: 'member',
++                    display_name: 'Standard Member',
++                    is_server_admin: false,
++                    is_workspace_admin: false,
++                  }}
++                />
++              </MemoryRouter>
++            </ShellPanelsProvider>
++          </ThemeProvider>
++        </QueryClientProvider>,
++      );
++
++      // Open avatar menu
++      const avatarBtn = screen.getByRole('button', { name: 'User profile and settings' });
++      fireEvent.click(avatarBtn);
++
++      expect(screen.getByTestId('topbar-personal-settings-link')).toBeDefined();
++      expect(screen.getByTestId('topbar-mcp-studio-link')).toBeDefined();
++      expect(screen.queryByTestId('topbar-workspace-settings-link')).toBeNull();
++      expect(screen.queryByTestId('topbar-link-auditor-link')).toBeNull();
++      expect(screen.queryByTestId('topbar-admin-auth-link')).toBeNull();
++      expect(screen.queryByTestId('topbar-admin-oauth-link')).toBeNull();
++      expect(screen.queryByTestId('topbar-admin-imports-link')).toBeNull();
++    });
++  });
++
++  describe('4. IssueSurface Split-Mode Action Parity', () => {
++    it('renders Subscribe, Link Graph, and Overflow action slots in split view mode', async () => {
++      const mockSubscribeSlot = ({ issue }: { issue: IssueDetail }) => (
++        <button type="button" data-testid="custom-subscribe-slot">
++          Subscribe ({issue.key})
++        </button>
++      );
++      const mockLinkSlot = ({ issue }: { issue: IssueDetail }) => (
++        <button type="button" data-testid="custom-link-slot">
++          Links ({issue.key})
++        </button>
++      );
++      const mockOverflowSlot = ({ issue }: { issue: IssueDetail }) => (
++        <button type="button" data-testid="custom-overflow-slot">
++          Overflow ({issue.key})
++        </button>
++      );
++
++      const mockIssue: IssueDetail = {
++        id: 'iss-test',
++        key: 'KAN-100',
++        project_key: 'KAN',
++        summary: 'Split Mode Test Issue',
++        state: { id: 's-todo', name: 'Todo', group: 'unstarted' },
++        priority: { slug: 'high', label: 'High', emoji: '▲' },
++        capabilities: ['VIEW', 'EDIT', 'ADMIN'],
++      };
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter initialEntries={['/projects/KAN/issues/KAN-100']}>
++            <IssueSurfaceSlotsContext.Provider
++              value={{
++                subscribe: mockSubscribeSlot,
++                link: mockLinkSlot,
++                overflow: mockOverflowSlot,
++              }}
++            >
++              <IssueSurfaceRoot
++                issueKey="KAN-100"
++                projectKey="KAN"
++                mode="split"
++                onClose={vi.fn()}
++              />
++            </IssueSurfaceSlotsContext.Provider>
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      await waitFor(() => {
++        expect(screen.getByTestId('split-action-toolbar')).toBeDefined();
++        expect(screen.getByTestId('custom-subscribe-slot')).toBeDefined();
++        expect(screen.getByTestId('custom-link-slot')).toBeDefined();
++        expect(screen.getByTestId('custom-overflow-slot')).toBeDefined();
++      });
++    });
++  });
++
++  describe('5. LinkGraphAction Icon Disambiguation', () => {
++    it('renders distinct 🕸️ glyph to differentiate from copy link 🔗 icon', () => {
++      const mockIssue: IssueDetail = {
++        id: 'iss-1',
++        key: 'KAN-1',
++        project_key: 'KAN',
++        summary: 'Link Graph Test',
++        capabilities: ['VIEW', 'EDIT'],
++      };
++
++      render(
++        <QueryClientProvider client={queryClient}>
++          <MemoryRouter>
++            <LinkGraphAction issue={mockIssue} />
++          </MemoryRouter>
++        </QueryClientProvider>,
++      );
++
++      const trigger = screen.getByTestId('link-graph-trigger');
++      expect(trigger).toBeDefined();
++      expect(trigger.textContent).toContain('🕸️');
++      expect(trigger.getAttribute('aria-label')).toBe('Link and Object Graph');
++    });
++  });
++});
+diff --git a/kanban/web/src/app/routes.tsx b/kanban/web/src/app/routes.tsx
+index 113080c5..a676010b 100644
+--- a/kanban/web/src/app/routes.tsx
++++ b/kanban/web/src/app/routes.tsx
+@@ -2002,10 +2002,8 @@ export function WorkspaceMcpRedirect(): JSX.Element {
+ export function AdminMcpRedirect(): JSX.Element {
+   const [searchParams] = useSearchParams();
+   const nextParams = new URLSearchParams(searchParams);
+-  if (!nextParams.has('scope')) {
+-    nextParams.set('scope', 'server');
+-  }
+-  return <Navigate to={`/settings/mcp?${nextParams.toString()}`} replace />;
++  const qs = nextParams.toString();
++  return <Navigate to={`/admin/mcp${qs ? `?${qs}` : ''}`} replace />;
+ }
+ 
+ const projectRouteChildren: RouteObject[] = [
+@@ -2183,11 +2181,11 @@ export const appRoutes: RouteObject[] = [
+               },
+               {
+                 path: 'mcp',
+-                element: <AdminMcpRedirect />,
++                element: <McpAccessStudio tier="global" />,
+               },
+               {
+                 path: 'mcp-keys',
+-                element: <AdminMcpRedirect />,
++                element: <Navigate to="/admin/mcp" replace />,
+               },
+               {
+                 path: 'oauth',
+diff --git a/kanban/web/src/features/admin-ai/AiStudioPage.tsx b/kanban/web/src/features/admin-ai/AiStudioPage.tsx
+index 86c9514e..5c0ecd5c 100644
+--- a/kanban/web/src/features/admin-ai/AiStudioPage.tsx
++++ b/kanban/web/src/features/admin-ai/AiStudioPage.tsx
+@@ -16,6 +16,7 @@ import {
+ import { AiBudgetModal } from './AiBudgetModal';
+ import { AiProviderEditorDrawer } from './AiProviderEditorDrawer';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
++import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
+ import './aiStudio.css';
+ 
+ interface CardTestStatus {
+@@ -204,6 +205,7 @@ export function AiStudioPage(): JSX.Element {
+ 
+   return (
+     <section className="kb-ai-studio" data-testid="ai-studio-page">
++      <AdminStudioSubnav activeTab="ai" />
+       <div className="kb-ai-studio-header">
+         <div className="kb-ai-studio-title-group">
+           <h1>
+diff --git a/kanban/web/src/features/admin-auth/AuthStudioPage.tsx b/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
+index 50a91b00..8bbe0d70 100644
+--- a/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
++++ b/kanban/web/src/features/admin-auth/AuthStudioPage.tsx
+@@ -28,6 +28,7 @@ import {
+ import { SecondFactorStep } from '../auth/SecondFactorStep';
+ import type { MfaMethod } from '../auth/authApi';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
++import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
+ import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
+ import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
+ import './adminAuth.css';
+@@ -643,6 +644,7 @@ export function AuthStudioPage(): JSX.Element {
+ 
+   return (
+     <main className="auth-studio-page" data-testid="auth-studio-page">
++      <AdminStudioSubnav activeTab="auth" />
+       {/* Studio Header */}
+       <header className="auth-studio-header">
+         <div className="auth-studio-title-row">
+diff --git a/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx b/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
+index 3b9b797c..164a9f60 100644
+--- a/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
++++ b/kanban/web/src/features/admin-imports/PlaneImportStudio.tsx
+@@ -11,6 +11,7 @@ import {
+   type ImportSource,
+ } from './planeImportApi';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
++import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
+ import './PlaneImportStudio.css';
+ 
+ export interface EntityCounts {
+@@ -326,21 +327,7 @@ export function PlaneImportStudio(): JSX.Element {
+         </div>
+       </header>
+ 
+-      <nav className="kb-mcp-admin-subnav" aria-label="Admin MCP and Governance Navigation">
+-        <Link to="/admin/mcp" className="kb-mcp-admin-subnav-link" data-testid="tab-admin-mcp">
+-          Bot API Keys
+-        </Link>
+-        <Link to="/admin/oauth" className="kb-mcp-admin-subnav-link" data-testid="tab-admin-oauth">
+-          OAuth 2.1 Clients
+-        </Link>
+-        <Link
+-          to="/admin/imports"
+-          className="kb-mcp-admin-subnav-link kb-mcp-admin-subnav-active"
+-          data-testid="tab-admin-imports"
+-        >
+-          Migration Studio
+-        </Link>
+-      </nav>
++      <AdminStudioSubnav activeTab="imports" />
+ 
+       <div
+         className="kb-plane-mode-row"
+diff --git a/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx b/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx
+index cc28111a..27cd1e48 100644
+--- a/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx
++++ b/kanban/web/src/features/admin-runners/RunnerStudioPage.tsx
+@@ -11,6 +11,7 @@ import { MintEnrollmentTokenModal } from './MintEnrollmentTokenModal';
+ import { SecondFactorStep } from '../auth/SecondFactorStep';
+ import type { MfaMethod } from '../auth/authApi';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
++import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
+ import './runnerStudio.css';
+ 
+ export function RunnerStudioPage(): JSX.Element {
+@@ -105,6 +106,7 @@ export function RunnerStudioPage(): JSX.Element {
+ 
+   return (
+     <section className="kb-runner-studio" data-testid="runner-studio-page">
++      <AdminStudioSubnav activeTab="runners" />
+       <div className="kb-runner-studio-header">
+         <div className="kb-runner-studio-title-group">
+           <h1>
+diff --git a/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx b/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
+index 5990d8f1..8fe2a4b5 100644
+--- a/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
++++ b/kanban/web/src/features/admin/AdminDiagnosticsStudio.tsx
+@@ -7,6 +7,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
+ import { apiFetch } from '../../api/client';
+ import { NotFoundView } from '../../app/routes';
+ import { LinkAuditorStudio } from './LinkAuditorStudio';
++import { AdminStudioSubnav } from './AdminStudioSubnav';
+ import './AdminDiagnosticsStudio.css';
+ 
+ export interface SubsystemHealth {
+@@ -417,6 +418,8 @@ export function AdminDiagnosticsStudio({ defaultTab }: AdminDiagnosticsStudioPro
+         </div>
+       </header>
+ 
++      <AdminStudioSubnav activeTab="diagnostics" />
++
+       {/* Top 4-Card Summary Strip */}
+       <section className="admin-diag-summary-strip" aria-label="System Summary Strip">
+         {/* Card 1: Realtime Transport */}
+diff --git a/kanban/web/src/features/admin/AdminStudioSubnav.css b/kanban/web/src/features/admin/AdminStudioSubnav.css
+new file mode 100644
+index 00000000..e3ab7109
+--- /dev/null
++++ b/kanban/web/src/features/admin/AdminStudioSubnav.css
+@@ -0,0 +1,50 @@
++/* Copyright 2026 Kanban Platform Contributors */
++/* Apache-2.0 License. See LICENSE for details. */
++
++.admin-studio-subnav {
++  display: flex;
++  width: 100%;
++  border-bottom: 1px solid var(--kb-color-border-subtle, var(--border-subtle, #30363d));
++  margin-bottom: 24px;
++  padding-bottom: 0;
++  overflow-x: auto;
++  scrollbar-width: thin;
++}
++
++.admin-studio-subnav__scroll {
++  display: flex;
++  gap: 8px;
++  min-width: max-content;
++  padding-bottom: 4px;
++}
++
++.admin-studio-subnav__item {
++  display: inline-flex;
++  align-items: center;
++  gap: 6px;
++  padding: 8px 14px;
++  min-height: 44px;
++  border-radius: 6px 6px 0 0;
++  text-decoration: none;
++  font-size: 0.9rem;
++  font-weight: 500;
++  color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
++  border-bottom: 2px solid transparent;
++  transition: all 0.15s ease-in-out;
++  white-space: nowrap;
++}
++
++.admin-studio-subnav__item:hover {
++  color: var(--kb-color-text-primary, var(--fg-primary, #f0f6fc));
++  border-bottom-color: var(--kb-color-text-secondary, var(--fg-secondary, #8b949e));
++}
++
++.admin-studio-subnav__item--active {
++  color: var(--accent-primary, #58a6ff) !important;
++  border-bottom-color: var(--accent-primary, #58a6ff) !important;
++  font-weight: 600;
++}
++
++.admin-studio-subnav__icon {
++  font-size: 1rem;
++}
+diff --git a/kanban/web/src/features/admin/AdminStudioSubnav.tsx b/kanban/web/src/features/admin/AdminStudioSubnav.tsx
+new file mode 100644
+index 00000000..7b21d096
+--- /dev/null
++++ b/kanban/web/src/features/admin/AdminStudioSubnav.tsx
+@@ -0,0 +1,63 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import React, { type JSX } from 'react';
++import { Link, useLocation } from 'react-router';
++import './AdminStudioSubnav.css';
++
++export interface AdminStudioSubnavProps {
++  activeTab?: 'auth' | 'ai' | 'runners' | 'mcp' | 'oauth' | 'imports' | 'standalone' | 'diagnostics';
++}
++
++interface AdminTabDefinition {
++  id: 'auth' | 'ai' | 'runners' | 'mcp' | 'oauth' | 'imports' | 'standalone' | 'diagnostics';
++  testId: string;
++  label: string;
++  path: string;
++  icon: string;
++}
++
++const ADMIN_TABS: AdminTabDefinition[] = [
++  { id: 'auth', testId: 'tab-admin-auth', label: 'Auth Cards', path: '/admin/auth', icon: '🛡️' },
++  { id: 'ai', testId: 'tab-admin-ai', label: 'AI Providers', path: '/admin/ai', icon: '🧠' },
++  { id: 'runners', testId: 'tab-admin-runners', label: 'Remote Runners', path: '/admin/agent-runners', icon: '🚀' },
++  { id: 'mcp', testId: 'tab-admin-mcp', label: 'Bot API Keys', path: '/admin/mcp', icon: '🔑' },
++  { id: 'oauth', testId: 'tab-admin-oauth', label: 'OAuth 2.1 Clients', path: '/admin/oauth', icon: '🌐' },
++  { id: 'imports', testId: 'tab-admin-imports', label: 'Plane Migration', path: '/admin/imports', icon: '📥' },
++  { id: 'standalone', testId: 'tab-admin-standalone', label: 'System & Backups', path: '/admin/standalone', icon: '💾' },
++  { id: 'diagnostics', testId: 'tab-admin-diagnostics', label: 'Diagnostics', path: '/admin/diagnostics', icon: '🩺' },
++];
++
++export function AdminStudioSubnav({ activeTab }: AdminStudioSubnavProps): JSX.Element {
++  const location = useLocation();
++  const currentPath = location.pathname;
++
++  return (
++    <nav className="kb-mcp-admin-subnav admin-studio-subnav" aria-label="Admin MCP and Governance Navigation">
++      <div className="admin-studio-subnav__scroll">
++        {ADMIN_TABS.map((tab) => {
++          const isActive = activeTab
++            ? activeTab === tab.id
++            : currentPath === tab.path || currentPath.startsWith(`${tab.path}/`);
++
++          return (
++            <Link
++              key={tab.id}
++              to={tab.path}
++              className={`kb-mcp-admin-subnav-link admin-studio-subnav__item ${
++                isActive ? 'kb-mcp-admin-subnav-active admin-studio-subnav__item--active' : ''
++              }`}
++              data-testid={tab.testId}
++              aria-current={isActive ? 'page' : undefined}
++            >
++              <span className="admin-studio-subnav__icon" aria-hidden="true">
++                {tab.icon}
++              </span>
++              <span>{tab.label}</span>
++            </Link>
++          );
++        })}
++      </div>
++    </nav>
++  );
++}
+diff --git a/kanban/web/src/features/drawer-actions/LinkGraphAction.tsx b/kanban/web/src/features/drawer-actions/LinkGraphAction.tsx
+index 72965f07..631748f8 100644
+--- a/kanban/web/src/features/drawer-actions/LinkGraphAction.tsx
++++ b/kanban/web/src/features/drawer-actions/LinkGraphAction.tsx
+@@ -187,7 +187,7 @@ export function LinkGraphAction({ issue }: LinkGraphActionProps): JSX.Element {
+         onClick={() => { setPopoverOpen((prev) => !prev); }}
+         data-testid="link-graph-trigger"
+       >
+-        <span aria-hidden="true">🔗</span>
++        <span aria-hidden="true">🕸️</span>
+       </button>
+ 
+       {popoverOpen && (
+diff --git a/kanban/web/src/features/drawer/IssueSurface.tsx b/kanban/web/src/features/drawer/IssueSurface.tsx
+index 289c084f..32c530bd 100644
+--- a/kanban/web/src/features/drawer/IssueSurface.tsx
++++ b/kanban/web/src/features/drawer/IssueSurface.tsx
+@@ -597,6 +597,9 @@ function IssueSurfaceContent({
+   const RailSlot = slots.rail;
+   const ActivitySlot = slots.activity;
+   const WorkpadSlot = slots.workpad;
++  const SubscribeSlot = slots.subscribe;
++  const LinkSlot = slots.link;
++  const OverflowSlot = slots.overflow;
+ 
+   const errorStatus =
+     error instanceof ApiProblem
+@@ -1693,6 +1696,15 @@ function IssueSurfaceContent({
+               >
+                 {copiedShare ? '✓ Copied link!' : '🔗 Share / Export'}
+               </button>
++              {SubscribeSlot && <SubscribeSlot issue={currentIssue} />}
++              {LinkSlot && <LinkSlot issue={currentIssue} />}
++              {OverflowSlot && (
++                <OverflowSlot
++                  issue={currentIssue}
++                  mode="drawer"
++                  toggleFullScreen={handleToggleFullScreen}
++                />
++              )}
+             </div>
+ 
+             {/* 2-Column Collapsible Detail Layout */}
+diff --git a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
+index bf3fb81d..bf5c07ef 100644
+--- a/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
++++ b/kanban/web/src/features/oauth/OAuthClientGovernanceStudio.tsx
+@@ -14,6 +14,7 @@ import { copyToClipboard } from '../../utils/clipboard';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
++import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
+ import './OAuthClientGovernanceStudio.css';
+ 
+ export function OAuthClientGovernanceStudio(): JSX.Element {
+@@ -233,25 +234,7 @@ export function OAuthClientGovernanceStudio(): JSX.Element {
+         </div>
+       </header>
+ 
+-      <nav className="kb-mcp-admin-subnav" aria-label="Admin MCP and Governance Navigation">
+-        <Link to="/admin/mcp" className="kb-mcp-admin-subnav-link" data-testid="tab-admin-mcp">
+-          Bot API Keys
+-        </Link>
+-        <Link
+-          to="/admin/oauth"
+-          className="kb-mcp-admin-subnav-link kb-mcp-admin-subnav-active"
+-          data-testid="tab-admin-oauth"
+-        >
+-          OAuth 2.1 Clients
+-        </Link>
+-        <Link
+-          to="/admin/imports"
+-          className="kb-mcp-admin-subnav-link"
+-          data-testid="tab-admin-imports"
+-        >
+-          Plane Migration Studio
+-        </Link>
+-      </nav>
++      <AdminStudioSubnav activeTab="oauth" />
+ 
+       {error !== null && (
+         <div className="kb-oauth-gov-alert kb-oauth-gov-alert-error" role="alert" data-testid="error-alert">
+diff --git a/kanban/web/src/features/settings/McpAccessStudio.tsx b/kanban/web/src/features/settings/McpAccessStudio.tsx
+index 85d7c983..7d34e9be 100644
+--- a/kanban/web/src/features/settings/McpAccessStudio.tsx
++++ b/kanban/web/src/features/settings/McpAccessStudio.tsx
+@@ -28,6 +28,7 @@ import { useSystemStatus } from '../../app/useSystemStatus';
+ import { apiFetch } from '../../api/client';
+ import { NotFoundView } from '../../app/routes';
+ import { FieldHelpHint } from '../../components/help/FieldHelpHint';
++import { AdminStudioSubnav } from '../admin/AdminStudioSubnav';
+ import { StudioDocLink } from '../../components/help/StudioDocLink';
+ import { copyToClipboard } from '../../utils/clipboard';
+ import './McpAccessStudio.css';
+@@ -740,29 +741,7 @@ export function McpAccessStudio({
+ 
+       {/* Admin subnav for global tier */}
+       {tier === 'global' && (
+-        <nav className="kb-mcp-admin-subnav" aria-label="Admin MCP and Governance Navigation">
+-          <Link
+-            to="/admin/mcp"
+-            className="kb-mcp-admin-subnav-link kb-mcp-admin-subnav-active"
+-            data-testid="tab-admin-mcp"
+-          >
+-            Bot API Keys
+-          </Link>
+-          <Link
+-            to="/admin/oauth"
+-            className="kb-mcp-admin-subnav-link"
+-            data-testid="tab-admin-oauth"
+-          >
+-            OAuth 2.1 Clients
+-          </Link>
+-          <Link
+-            to="/admin/imports"
+-            className="kb-mcp-admin-subnav-link"
+-            data-testid="tab-admin-imports"
+-          >
+-            Plane Migration Studio
+-          </Link>
+-        </nav>
++        <AdminStudioSubnav activeTab="mcp" />
+       )}
+ 
+       {/* Admin View Switch (My Keys vs Governance) */}
+diff --git a/scripts/capture_kan318_screenshots.mjs b/scripts/capture_kan318_screenshots.mjs
+new file mode 100644
+index 00000000..56ab1502
+--- /dev/null
++++ b/scripts/capture_kan318_screenshots.mjs
+@@ -0,0 +1,167 @@
++// Copyright 2026 Kanban Platform Contributors
++// Apache-2.0 License. See LICENSE for details.
++
++import fs from 'node:fs';
++import path from 'node:path';
++import { spawn } from 'node:child_process';
++import { chromium } from '/home/adamoutler/kanban/kanban/web/node_modules/@playwright/test/index.mjs';
++
++const PORT = 18988;
++const BASE_URL = `http://127.0.0.1:${PORT}`;
++const OUT_DIR = path.resolve('docs/qa/KAN-318/screenshots');
++
++const VIEWPORTS = [
++  {
++    name: '1440x900-desktop-light',
++    width: 1440,
++    height: 900,
++    theme: 'light',
++    url: `${BASE_URL}/admin/mcp`,
++    action: async (page) => {
++      await page.waitForTimeout(1000);
++      const avatarBtn = await page.$('button[aria-label="User profile and settings"]');
++      if (avatarBtn) {
++        await avatarBtn.click();
++        await page.waitForTimeout(400);
++      }
++    },
++  },
++  {
++    name: '1440x900-desktop-dark',
++    width: 1440,
++    height: 900,
++    theme: 'dark',
++    url: `${BASE_URL}/admin/imports`,
++    action: async (page) => {
++      await page.waitForTimeout(1000);
++    },
++  },
++  {
++    name: '768x1024-tablet',
++    width: 768,
++    height: 1024,
++    theme: 'light',
++    url: `${BASE_URL}/admin/oauth`,
++    action: async (page) => {
++      await page.waitForTimeout(1000);
++    },
++  },
++  {
++    name: '390x844-mobile-portrait',
++    width: 390,
++    height: 844,
++    theme: 'light',
++    url: `${BASE_URL}/admin/diagnostics`,
++    action: async (page) => {
++      await page.waitForTimeout(1000);
++    },
++  },
++  {
++    name: '844x390-mobile-landscape',
++    width: 844,
++    height: 390,
++    theme: 'light',
++    url: `${BASE_URL}/admin/mcp`,
++    action: async (page) => {
++      await page.waitForTimeout(1000);
++    },
++  },
++];
++
++async function waitForServer(url, timeoutMs = 15000) {
++  const start = Date.now();
++  while (Date.now() - start < timeoutMs) {
++    try {
++      const res = await fetch(url);
++      if (res.ok || res.status === 404 || res.status === 200) {
++        return true;
++      }
++    } catch {
++      // wait and retry
++    }
++    await new Promise((resolve) => setTimeout(resolve, 300));
++  }
++  throw new Error(`Server failed to start at ${url} within ${timeoutMs}ms`);
++}
++
++async function main() {
++  fs.mkdirSync(OUT_DIR, { recursive: true });
++  console.log(`Starting preview server on port ${PORT}...`);
++  const previewProc = spawn(
++    'pnpm',
++    ['--dir', 'kanban/web', 'exec', 'vite', 'preview', '--port', String(PORT), '--host', '127.0.0.1'],
++    { stdio: 'inherit' }
++  );
++
++  try {
++    await waitForServer(BASE_URL);
++    console.log(`Preview server ready at ${BASE_URL}`);
++
++    const browser = await chromium.launch({
++      executablePath: '/usr/bin/google-chrome',
++      headless: true,
++      args: ['--no-sandbox', '--disable-gpu', '--disable-dev-shm-usage'],
++    });
++
++    for (const vp of VIEWPORTS) {
++      console.log(`Capturing ${vp.name}...`);
++      const context = await browser.newContext({
++        viewport: { width: vp.width, height: vp.height },
++        deviceScaleFactor: 1,
++      });
++
++      const page = await context.newPage();
++
++      // Intercept user profile & auth if needed to provide active admin state
++      await page.route('**/api/v1/user/me', (route) => {
++        route.fulfill({
++          status: 200,
++          contentType: 'application/json',
++          body: JSON.stringify({
++            id: 'u-admin',
++            handle: 'admin',
++            display_name: 'Administrator',
++            email: 'admin@kanban.local',
++            is_server_admin: true,
++            is_workspace_admin: true,
++          }),
++        });
++      });
++
++      try {
++        await page.goto(vp.url, { waitUntil: 'load', timeout: 15000 });
++      } catch (err) {
++        console.warn(`Warning navigating to ${vp.url}:`, err.message);
++      }
++
++      await page.evaluate((theme) => {
++        document.documentElement.setAttribute('data-theme', theme);
++        document.documentElement.dataset.theme = theme;
++        localStorage.setItem('theme', theme);
++      }, vp.theme);
++
++      if (vp.action) {
++        try {
++          await vp.action(page);
++        } catch (e) {
++          console.warn(`Action failed for ${vp.name}:`, e.message);
++        }
++      }
++
++      const outPath = path.join(OUT_DIR, `${vp.name}.png`);
++      await page.screenshot({ path: outPath, fullPage: false });
++      console.log(`  -> Saved ${outPath}`);
++      await context.close();
++    }
++
++    await browser.close();
++    console.log('Playwright screenshot capture completed successfully.');
++  } finally {
++    previewProc.kill('SIGTERM');
++  }
++}
++
++main().catch((err) => {
++  console.error('Fatal error during screenshot capture:', err);
++  process.exit(1);
++});

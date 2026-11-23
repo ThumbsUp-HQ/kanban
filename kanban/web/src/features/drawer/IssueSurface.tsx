@@ -597,6 +597,9 @@ function IssueSurfaceContent({
   const RailSlot = slots.rail;
   const ActivitySlot = slots.activity;
   const WorkpadSlot = slots.workpad;
+  const SubscribeSlot = slots.subscribe;
+  const LinkSlot = slots.link;
+  const OverflowSlot = slots.overflow;
 
   const errorStatus =
     error instanceof ApiProblem
@@ -1693,6 +1696,15 @@ function IssueSurfaceContent({
               >
                 {copiedShare ? '✓ Copied link!' : '🔗 Share / Export'}
               </button>
+              {SubscribeSlot && <SubscribeSlot issue={currentIssue} />}
+              {LinkSlot && <LinkSlot issue={currentIssue} />}
+              {OverflowSlot && (
+                <OverflowSlot
+                  issue={currentIssue}
+                  mode="drawer"
+                  toggleFullScreen={handleToggleFullScreen}
+                />
+              )}
             </div>
 
             {/* 2-Column Collapsible Detail Layout */}
