@@ -8,17 +8,20 @@ import json
 import os
 import re
 from pathlib import Path
+from typing import Any
 
 from scripts.sync_wiki_bundle import CHAPTER_TAXONOMY
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
-MANIFEST_PATH = REPO_ROOT / "kanban" / "web" / "src" / "features" / "docs-center" / "wikiManifest.ts"
+MANIFEST_PATH = (
+    REPO_ROOT / "kanban" / "web" / "src" / "features" / "docs-center" / "wikiManifest.ts"
+)
 WIKI_DIR = Path(os.environ.get("KANBAN_WIKI_PATH", "/home/adamoutler/kanban/thumbs-up-kanban.wiki"))
 CHAPTER_SLUG = "multi-source-migration-and-key-alias-redirects"
 MARKDOWN_FILENAME = "Multi-Source-Migration-and-Key-Alias-Redirects.md"
 
 
-def load_chapter() -> tuple[str, dict]:
+def load_chapter() -> tuple[str, dict[str, Any]]:
     """Load chapter content and manifest metadata, falling back to wikiManifest.ts in CI."""
     wiki_file = WIKI_DIR / MARKDOWN_FILENAME
     content = ""
@@ -27,7 +30,9 @@ def load_chapter() -> tuple[str, dict]:
 
     assert MANIFEST_PATH.is_file(), f"Missing manifest at {MANIFEST_PATH}"
     manifest_text = MANIFEST_PATH.read_text(encoding="utf-8")
-    m = re.search(r"export const WIKI_CHAPTERS: WikiChapter\[\] = (\[.*?\]);", manifest_text, re.DOTALL)
+    m = re.search(
+        r"export const WIKI_CHAPTERS: WikiChapter\[\] = (\[.*?\]);", manifest_text, re.DOTALL
+    )
     assert m, "Failed to find WIKI_CHAPTERS in wikiManifest.ts"
     chapters = json.loads(m.group(1))
     meta = next((c for c in chapters if c["slug"] == CHAPTER_SLUG), None)
@@ -53,8 +58,12 @@ def test_migration_guide_markdown_content() -> None:
     content, meta = load_chapter()
 
     # Title verification
-    assert content.startswith("# [Guide] End-to-End Multi-Source Migration, Key Alias Redirects, and Cross-Project Merge Guide")
-    assert meta["title"] == "[Guide] End-to-End Multi-Source Migration, Key Alias Redirects, and Cross-Project Merge Guide"
+    expected_title = (
+        "[Guide] End-to-End Multi-Source Migration, "
+        "Key Alias Redirects, and Cross-Project Merge Guide"
+    )
+    assert content.startswith(f"# {expected_title}")
+    assert meta["title"] == expected_title
     assert meta["category"] == "guide"
 
     # Multi-source importers
