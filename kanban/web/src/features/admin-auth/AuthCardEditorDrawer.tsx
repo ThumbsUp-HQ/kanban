@@ -822,6 +822,8 @@ export function AuthCardEditorDrawer({
                   id="card-display-name"
                   type="text"
                   className="auth-editor-input"
+                  aria-invalid={Boolean(fieldErrors.displayName)}
+                  aria-describedby={fieldErrors.displayName ? 'card-display-name-error' : undefined}
                   value={displayName}
                   onChange={(e) => {
                     const val = e.target.value;
@@ -842,7 +844,7 @@ export function AuthCardEditorDrawer({
                 />
               </div>
               {fieldErrors.displayName ? (
-                <div className="auth-editor-error">{fieldErrors.displayName}</div>
+                <div className="auth-editor-error" id="card-display-name-error" role="alert">{fieldErrors.displayName}</div>
               ) : null}
 
               {/* Enable Card Toggle */}
@@ -872,6 +874,8 @@ export function AuthCardEditorDrawer({
                       id="card-issuer-url"
                       type="url"
                       className="auth-editor-input"
+                      aria-invalid={Boolean(fieldErrors.issuerUrl)}
+                      aria-describedby={fieldErrors.issuerUrl ? 'card-issuer-url-error' : undefined}
                       value={issuerUrl}
                       onChange={(e) => {
                         setIssuerUrl(e.target.value);
@@ -882,7 +886,7 @@ export function AuthCardEditorDrawer({
                     />
                   </div>
                   {fieldErrors.issuerUrl ? (
-                    <div className="auth-editor-error">{fieldErrors.issuerUrl}</div>
+                    <div className="auth-editor-error" id="card-issuer-url-error" role="alert">{fieldErrors.issuerUrl}</div>
                   ) : null}
 
                   <div className="auth-editor-prop-row">
@@ -936,6 +940,8 @@ export function AuthCardEditorDrawer({
                       id="card-client-id"
                       type="text"
                       className="auth-editor-input"
+                      aria-invalid={Boolean(fieldErrors.clientId)}
+                      aria-describedby={fieldErrors.clientId ? 'card-client-id-error' : undefined}
                       value={clientId}
                       onChange={(e) => {
                         setClientId(e.target.value);
@@ -946,7 +952,7 @@ export function AuthCardEditorDrawer({
                     />
                   </div>
                   {fieldErrors.clientId ? (
-                    <div className="auth-editor-error">{fieldErrors.clientId}</div>
+                    <div className="auth-editor-error" id="card-client-id-error" role="alert">{fieldErrors.clientId}</div>
                   ) : null}
 
                   <div className="auth-editor-prop-row">
@@ -994,6 +1000,8 @@ export function AuthCardEditorDrawer({
                       id="card-server-url"
                       type="text"
                       className="auth-editor-input"
+                      aria-invalid={Boolean(fieldErrors.serverUrl)}
+                      aria-describedby={fieldErrors.serverUrl ? 'card-server-url-error' : undefined}
                       value={serverUrl}
                       onChange={(e) => {
                         handleServerUrlChange(e.target.value);
@@ -1004,7 +1012,7 @@ export function AuthCardEditorDrawer({
                     />
                   </div>
                   {fieldErrors.serverUrl ? (
-                    <div className="auth-editor-error">{fieldErrors.serverUrl}</div>
+                    <div className="auth-editor-error" id="card-server-url-error" role="alert">{fieldErrors.serverUrl}</div>
                   ) : null}
 
                   <div className="auth-editor-prop-row">
@@ -1015,6 +1023,8 @@ export function AuthCardEditorDrawer({
                       id="card-bind-dn"
                       type="text"
                       className="auth-editor-input"
+                      aria-invalid={Boolean(fieldErrors.bindDn)}
+                      aria-describedby={fieldErrors.bindDn ? 'card-bind-dn-error' : undefined}
                       value={bindDn}
                       onChange={(e) => {
                         setBindDn(e.target.value);
@@ -1025,7 +1035,7 @@ export function AuthCardEditorDrawer({
                     />
                   </div>
                   {fieldErrors.bindDn ? (
-                    <div className="auth-editor-error">{fieldErrors.bindDn}</div>
+                    <div className="auth-editor-error" id="card-bind-dn-error" role="alert">{fieldErrors.bindDn}</div>
                   ) : null}
 
                   <div className="auth-editor-prop-row">
@@ -1071,6 +1081,8 @@ export function AuthCardEditorDrawer({
                       id="card-base-dn"
                       type="text"
                       className="auth-editor-input"
+                      aria-invalid={Boolean(fieldErrors.baseDn)}
+                      aria-describedby={fieldErrors.baseDn ? 'card-base-dn-error' : undefined}
                       value={baseDn}
                       onChange={(e) => {
                         setBaseDn(e.target.value);
@@ -1081,7 +1093,7 @@ export function AuthCardEditorDrawer({
                     />
                   </div>
                   {fieldErrors.baseDn ? (
-                    <div className="auth-editor-error">{fieldErrors.baseDn}</div>
+                    <div className="auth-editor-error" id="card-base-dn-error" role="alert">{fieldErrors.baseDn}</div>
                   ) : null}
                 </div>
               ) : null}
@@ -1103,6 +1115,8 @@ export function AuthCardEditorDrawer({
                     id="card-slug"
                     type="text"
                     className="auth-editor-input"
+                    aria-invalid={Boolean(fieldErrors.slug)}
+                    aria-describedby={fieldErrors.slug ? 'card-slug-error' : undefined}
                     value={slug}
                     onChange={(e) => {
                       setSlug(e.target.value);
@@ -1114,7 +1128,7 @@ export function AuthCardEditorDrawer({
                   />
                 </div>
                 {fieldErrors.slug ? (
-                  <div className="auth-editor-error">{fieldErrors.slug}</div>
+                  <div className="auth-editor-error" id="card-slug-error" role="alert">{fieldErrors.slug}</div>
                 ) : null}
                 <div className="auth-field-helper">
                   Unique identifier slug for URLs and card references. Auto-generated if left blank.
@@ -1128,6 +1142,8 @@ export function AuthCardEditorDrawer({
                     id="card-subtext"
                     type="text"
                     className="auth-editor-input"
+                    aria-invalid={Boolean(fieldErrors.buttonSubtext)}
+                    aria-describedby={fieldErrors.buttonSubtext ? 'card-subtext-error' : undefined}
                     value={buttonSubtext}
                     onChange={(e) => {
                       setButtonSubtext(e.target.value);
@@ -1138,7 +1154,7 @@ export function AuthCardEditorDrawer({
                   />
                 </div>
                 {fieldErrors.buttonSubtext ? (
-                  <div className="auth-editor-error">{fieldErrors.buttonSubtext}</div>
+                  <div className="auth-editor-error" id="card-subtext-error" role="alert">{fieldErrors.buttonSubtext}</div>
                 ) : null}
                 <div className="auth-field-helper">
                   Subtitle displayed directly beneath the login button to guide users.
@@ -1336,7 +1352,7 @@ export function AuthCardEditorDrawer({
                       </div>
 
                       {googleJsonError && (
-                        <div className="auth-editor-error" role="alert" data-testid="google-json-error">
+                        <div className="auth-editor-error" role="alert" id="google-json-error-msg" data-testid="google-json-error">
                           {googleJsonError}
                         </div>
                       )}
@@ -1370,10 +1386,14 @@ export function AuthCardEditorDrawer({
                       >
                         <p>Drag and drop <code>client_secret_*.json</code> here, or</p>
                         <input
+                          id="card-google-json-file"
                           ref={fileInputRef}
                           type="file"
                           accept=".json,application/json"
                           className="auth-hidden-file-input"
+                          aria-label="Upload Google credentials JSON file"
+                          aria-invalid={Boolean(googleJsonError)}
+                          aria-describedby={googleJsonError ? 'google-json-error-msg' : undefined}
                           onChange={(e) => {
                             const file = e.target.files?.[0];
                             if (file) {
@@ -1411,6 +1431,8 @@ export function AuthCardEditorDrawer({
                               setGoogleJsonPasteText(e.target.value);
                             }}
                             aria-label="Paste Google Cloud Console client JSON"
+                            aria-invalid={Boolean(googleJsonError)}
+                            aria-describedby={googleJsonError ? 'google-json-error-msg' : undefined}
                           />
                           <button
                             type="button"
@@ -1609,6 +1631,8 @@ export function AuthCardEditorDrawer({
                         id="card-spki-pin"
                         type="text"
                         className="auth-editor-input"
+                        aria-invalid={Boolean(fieldErrors.spkiPin)}
+                        aria-describedby={fieldErrors.spkiPin ? 'card-spki-pin-error' : undefined}
                         value={spkiPin}
                         onChange={(e) => {
                           setSpkiPin(e.target.value);
@@ -1619,7 +1643,7 @@ export function AuthCardEditorDrawer({
                       />
                     </div>
                     {fieldErrors.spkiPin ? (
-                      <div className="auth-editor-error">{fieldErrors.spkiPin}</div>
+                      <div className="auth-editor-error" id="card-spki-pin-error" role="alert">{fieldErrors.spkiPin}</div>
                     ) : null}
 
                     <div className="auth-editor-prop-row">

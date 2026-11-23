@@ -1146,9 +1146,11 @@ export function WorkspaceSettingsPage(): JSX.Element {
                   ].map(({ role, label }) => {
                     const isChecked = issueExportAllowedRoles.includes(role);
                     return (
-                      <label key={role} className="kb-checkbox-inline">
+                      <label key={role} className="kb-checkbox-inline" htmlFor={`export-role-${role}`}>
                         <input
                           type="checkbox"
+                          id={`export-role-${role}`}
+                          aria-label={`Allowed export role ${label}`}
                           checked={isChecked}
                           value={role}
                           onChange={(e) => {
@@ -1213,8 +1215,13 @@ export function WorkspaceSettingsPage(): JSX.Element {
             <form onSubmit={handleCreateUser} className="kb-add-member-form" data-testid="create-user-form" noValidate>
               <h3>+ Add Workspace User</h3>
               <div className="kb-form-group">
+                <label htmlFor="new-user-handle" className="kb-visually-hidden">
+                  User handle
+                </label>
                 <input
                   type="text"
+                  id="new-user-handle"
+                  aria-label="User handle"
                   data-testid="new-user-handle"
                   className="kb-input"
                   placeholder="@handle"
@@ -1224,8 +1231,13 @@ export function WorkspaceSettingsPage(): JSX.Element {
                 />
               </div>
               <div className="kb-form-group">
+                <label htmlFor="new-user-name" className="kb-visually-hidden">
+                  User display name
+                </label>
                 <input
                   type="text"
+                  id="new-user-name"
+                  aria-label="User display name"
                   data-testid="new-user-name"
                   className="kb-input"
                   placeholder="Full Name / Display Name"
@@ -1235,8 +1247,13 @@ export function WorkspaceSettingsPage(): JSX.Element {
                 />
               </div>
               <div className="kb-form-group">
+                <label htmlFor="new-user-email" className="kb-visually-hidden">
+                  User email
+                </label>
                 <input
                   type="email"
+                  id="new-user-email"
+                  aria-label="User email"
                   data-testid="new-user-email"
                   className="kb-input"
                   placeholder="email@example.com"
@@ -1246,8 +1263,13 @@ export function WorkspaceSettingsPage(): JSX.Element {
                 />
               </div>
               <div className="kb-form-group">
+                <label htmlFor="new-user-password" className="kb-visually-hidden">
+                  Initial password
+                </label>
                 <input
                   type="password"
+                  id="new-user-password"
+                  aria-label="Initial password"
                   data-testid="new-user-password"
                   className="kb-input"
                   placeholder="Initial Password (optional)"
@@ -1256,7 +1278,12 @@ export function WorkspaceSettingsPage(): JSX.Element {
                 />
               </div>
               <div className="kb-form-row">
+                <label htmlFor="new-user-role-select" className="kb-visually-hidden">
+                  User role
+                </label>
                 <select
+                  id="new-user-role-select"
+                  aria-label="New user role"
                   data-testid="new-user-role-select"
                   className="kb-select"
                   value={newRole}
@@ -1378,8 +1405,13 @@ export function WorkspaceSettingsPage(): JSX.Element {
             <form onSubmit={handleCreateGroup} className="kb-add-group-form" data-testid="create-group-form">
               <h4>+ Create Group</h4>
               <div className="kb-form-row">
+                <label htmlFor="new-group-name" className="kb-visually-hidden">
+                  Group name
+                </label>
                 <input
                   type="text"
+                  id="new-group-name"
+                  aria-label="Group name"
                   data-testid="new-group-name"
                   className="kb-input"
                   placeholder="Group Name (e.g. Core Engineers)"
@@ -1387,8 +1419,13 @@ export function WorkspaceSettingsPage(): JSX.Element {
                   onChange={(e) => { setNewGroupName(e.target.value); }}
                   required
                 />
+                <label htmlFor="new-group-handle" className="kb-visually-hidden">
+                  Group handle
+                </label>
                 <input
                   type="text"
+                  id="new-group-handle"
+                  aria-label="Group handle"
                   data-testid="new-group-handle"
                   className="kb-input"
                   placeholder="@handle"
@@ -1448,7 +1485,7 @@ export function WorkspaceSettingsPage(): JSX.Element {
                     </div>
 
                     {groupActionError && (
-                      <div data-testid="group-cycle-alert" className="kb-settings-alert kb-settings-alert-error" role="alert">
+                      <div data-testid="group-cycle-alert" id="group-cycle-alert" className="kb-settings-alert kb-settings-alert-error" role="alert">
                         {groupActionError}
                       </div>
                     )}
@@ -1457,7 +1494,14 @@ export function WorkspaceSettingsPage(): JSX.Element {
                     <div className="kb-add-group-member-box">
                       <h5>Add Member or Nested Group</h5>
                       <div className="kb-form-row">
+                        <label htmlFor="add-group-member-select" className="kb-visually-hidden">
+                          Select a user, agent, or group to nest
+                        </label>
                         <select
+                          id="add-group-member-select"
+                          aria-label="Select a user, agent, or group to nest"
+                          aria-invalid={Boolean(groupActionError)}
+                          aria-describedby={groupActionError ? 'group-cycle-alert' : undefined}
                           data-testid="add-group-member-select"
                           className="kb-select"
                           value={selectedAddMemberId}
@@ -1644,8 +1688,13 @@ export function WorkspaceSettingsPage(): JSX.Element {
                 ))}
               </div>
               <div className="kb-trash-search-box">
+                <label htmlFor="trash-search-input" className="kb-visually-hidden">
+                  Search trashed items by key or title
+                </label>
                 <input
                   type="text"
+                  id="trash-search-input"
+                  aria-label="Search trashed items by key or title"
                   data-testid="trash-search-input"
                   className="kb-input"
                   placeholder="Search trashed items by key or title..."
