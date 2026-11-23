@@ -136,6 +136,96 @@ describe('IssueSurface split mode (KAN-52 Problem 3)', () => {
     expect(onNavigateIssue).toHaveBeenCalledWith('KAN-51');
   });
 
+  it('renders drawn SVG chevron icons in issue pager buttons without ASCII ^/v and disables at boundaries (KAN-378)', async () => {
+    // 1. Test boundary at index 0 (first issue: KAN-51, 1 of 3)
+    const onNavigateIssue = vi.fn();
+    const { unmount } = renderSplitSurface({
+      issueKey: 'KAN-51',
+      issuesList: mockIssuesList,
+      onNavigateIssue,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('split-pager')).toBeDefined();
+    });
+
+    const prevBtn = screen.getByTestId('issue-prev-btn');
+    const nextBtn = screen.getByTestId('issue-next-btn');
+    const pagerPos = screen.getByTestId('issue-navigator-position');
+
+    expect(pagerPos.textContent).toBe('1 of 3');
+
+    // Boundary check at index 0: prev is disabled, next is enabled
+    expect((prevBtn as HTMLButtonElement).disabled).toBe(true);
+    expect((nextBtn as HTMLButtonElement).disabled).toBe(false);
+
+    // Verify SVG vector chevron icons rendered with aria-hidden="true"
+    const prevSvg = prevBtn.querySelector('svg');
+    const nextSvg = nextBtn.querySelector('svg');
+    expect(prevSvg).not.toBeNull();
+    expect(nextSvg).not.toBeNull();
+    if (!prevSvg || !nextSvg) throw new Error('SVGs missing');
+    expect(prevSvg.getAttribute('aria-hidden')).toBe('true');
+    expect(nextSvg.getAttribute('aria-hidden')).toBe('true');
+    expect(prevSvg.getAttribute('width')).toBe('14');
+    expect(prevSvg.getAttribute('height')).toBe('14');
+    expect(nextSvg.getAttribute('width')).toBe('14');
+    expect(nextSvg.getAttribute('height')).toBe('14');
+
+    // Verify no raw ASCII caret or v character content
+    const prevText = prevBtn.textContent;
+    const nextText = nextBtn.textContent;
+    expect(prevText.trim()).not.toContain('^');
+    expect(nextText.trim()).not.toContain('v');
+    expect(prevText.trim()).toBe('');
+    expect(nextText.trim()).toBe('');
+
+    // Verify accessible labels
+    expect(prevBtn.getAttribute('aria-label')).toBe('Previous issue (k)');
+    expect(nextBtn.getAttribute('aria-label')).toBe('Next issue (j)');
+
+    // Verify CSS classes unified
+    expect(prevBtn.classList.contains('issue-pager-btn')).toBe(true);
+    expect(prevBtn.classList.contains('issue-prev-btn')).toBe(true);
+    expect(nextBtn.classList.contains('issue-pager-btn')).toBe(true);
+    expect(nextBtn.classList.contains('issue-next-btn')).toBe(true);
+
+    unmount();
+
+    // 2. Test boundary at index N - 1 (last issue: KAN-53, 3 of 3)
+    renderSplitSurface({
+      issueKey: 'KAN-53',
+      issuesList: mockIssuesList,
+      onNavigateIssue,
+    });
+
+    await waitFor(() => {
+      expect(screen.getByTestId('split-pager')).toBeDefined();
+    });
+
+    const prevBtnLast = screen.getByTestId('issue-prev-btn');
+    const nextBtnLast = screen.getByTestId('issue-next-btn');
+    const pagerPosLast = screen.getByTestId('issue-navigator-position');
+
+    expect(pagerPosLast.textContent).toBe('3 of 3');
+
+    // Boundary check at index N - 1: prev is enabled, next is disabled
+    expect((prevBtnLast as HTMLButtonElement).disabled).toBe(false);
+    expect((nextBtnLast as HTMLButtonElement).disabled).toBe(true);
+
+    const prevSvgLast = prevBtnLast.querySelector('svg');
+    const nextSvgLast = nextBtnLast.querySelector('svg');
+    expect(prevSvgLast).not.toBeNull();
+    expect(nextSvgLast).not.toBeNull();
+    if (!prevSvgLast || !nextSvgLast) throw new Error('SVGs missing');
+    expect(prevSvgLast.getAttribute('aria-hidden')).toBe('true');
+    expect(nextSvgLast.getAttribute('aria-hidden')).toBe('true');
+    const prevLastText = prevBtnLast.textContent;
+    const nextLastText = nextBtnLast.textContent;
+    expect(prevLastText.trim()).not.toContain('^');
+    expect(nextLastText.trim()).not.toContain('v');
+  });
+
   it('renders action toolbar row with edit, add comment, assign, state dropdown, favorite toggle, and share', async () => {
     const clipboardSpy = vi.fn();
     Object.assign(navigator, {

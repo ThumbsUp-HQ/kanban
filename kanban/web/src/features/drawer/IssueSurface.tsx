@@ -28,6 +28,7 @@ import { getOpenerElement, setOpenerElement } from './IssueKeyLink';
 import { useIssueSurfaceSlots, type IssueDetail } from './slots';
 import { IssueHeader } from './IssueHeader';
 import { AccessPill } from './AccessPill';
+import { ChevronUp, ChevronDown } from '../../components/icons/KanbanIcons';
 import { StateBadge } from '../../components/state/StateBadge';
 import * as railApi from '../drawer-rail/railApi';
 import { SummaryField } from './SummaryField';
@@ -1584,25 +1585,25 @@ function IssueSurfaceContent({
               </span>
               <button
                 type="button"
-                className="issue-header__btn issue-pager-btn"
+                className="issue-header__btn issue-pager-btn issue-prev-btn"
                 data-testid="issue-prev-btn"
-                aria-label="Previous issue"
+                aria-label="Previous issue (k)"
                 title="Previous issue (K / ↑)"
                 disabled={currentIndex <= 0}
                 onClick={handlePrevIssue}
               >
-                ^
+                <ChevronUp size={14} aria-hidden="true" />
               </button>
               <button
                 type="button"
-                className="issue-header__btn issue-pager-btn"
+                className="issue-header__btn issue-pager-btn issue-next-btn"
                 data-testid="issue-next-btn"
-                aria-label="Next issue"
+                aria-label="Next issue (j)"
                 title="Next issue (J / ↓)"
                 disabled={!issuesList || currentIndex < 0 || currentIndex >= issuesList.length - 1}
                 onClick={handleNextIssue}
               >
-                v
+                <ChevronDown size={14} aria-hidden="true" />
               </button>
             </div>
 
