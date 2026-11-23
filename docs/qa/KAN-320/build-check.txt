@@ -1,0 +1,57 @@
+=== MAKE CHECK ===
+uv run ruff check .
+All checks passed!
+uv run ruff format --check .
+2280 files already formatted
+uv run mypy
+Success: no issues found in 1267 source files
+uv run lint-imports
+
+╔══╗─────────▶╔╗ ╔╗      ╔╗◀───┐
+╚╣╠╝◀─────┐  ╔╝╚╗║║────▶╔╝╚╗   │
+ ║║   ╔══╦══╦╩╗╔╝║║  ╔╦═╩╗╔╝╔═╦══╗
+ ║║╔══╣╔╗║╔╗║╔╣║ ║║ ╔╬╣╔╗║║ ║│║╔═╝
+╔╣╠╣║║║╚╝║╚╝║║║╚╗║╚═╝║║║║║╚╗║═╣║
+╚══╩╩╩╣╔═╩══╩╝╚═╝╚═══╩╩╝╚╩═╩╩═╩╝
+  └──▶║║                    ▲ 
+      ╚╝────────────────────┘
+
+
+---------
+Contracts
+---------
+
+Analyzed 1113 files, 4115 dependencies.
+---------------------------------------
+
+Unidirectional module layers agent -> mcp -> kanban -> database KEPT (9 ignored imports)
+mcp forbidden from importing database KEPT (51 ignored imports)
+
+Contracts: 2 kept, 0 broken.
+uv run python -m scripts.check_no_dashes --all
+Notice: skipping /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan320-64c93bfe/docs/qa/KANBA-205/mcp-transcript.txt exceeding 5 MiB limit (6557086 bytes)
+uv run python -m database.migrations.cli check-migrations --static-only
+OK: All 71 migrations valid. Single head: p6_09_scm_webhooks_and_outbound_bus
+
+=== SYNC WIKI BUNDLE ===
+Successfully synchronized 29 wiki chapters into kanban/web/src/features/docs-center/wikiManifest.ts (468015 bytes, 71 images copied to kanban/web/public/docs-images).
+
+=== CHECK API ===
+
+> @kanban/web@0.1.0 check:api /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan320-64c93bfe/kanban/web
+> node scripts/gen-api.mjs && git diff --exit-code src/api/schema.gen.ts openapi.json
+
+✨ openapi-typescript 7.6.1
+🚀 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan320-64c93bfe/kanban/web/openapi.json → /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan320-64c93bfe/kanban/web/src/api/schema.gen.ts [725.7ms]
+
+=== WEB TYPECHECK ===
+
+> @kanban/web@0.1.0 typecheck /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan320-64c93bfe/kanban/web
+> tsc -b --noEmit
+
+
+=== WEB LINT ===
+
+> @kanban/web@0.1.0 lint /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan320-64c93bfe/kanban/web
+> eslint . --max-warnings 0
+

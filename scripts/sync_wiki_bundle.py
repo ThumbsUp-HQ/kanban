@@ -120,6 +120,12 @@ CHAPTER_TAXONOMY: dict[str, dict[str, str]] = {
         "subtrack": "Zero-Trust Architecture",
         "audience": "Security Architects & Hardening Engineers",
     },
+    "security-and-stride-threat-matrix": {
+        "category": "informational",
+        "track": "Security & Adoption Overview",
+        "subtrack": "Zero-Trust Architecture",
+        "audience": "Security Officers & Compliance Auditors",
+    },
     "feature-comparison": {
         "category": "informational",
         "track": "Security & Adoption Overview",
