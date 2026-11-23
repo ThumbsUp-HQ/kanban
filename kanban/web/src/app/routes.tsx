@@ -2006,6 +2006,13 @@ export function AdminMcpRedirect(): JSX.Element {
   return <Navigate to={`/admin/mcp${qs ? `?${qs}` : ''}`} replace />;
 }
 
+export function WorkspaceAiRedirect(): JSX.Element {
+  const [searchParams] = useSearchParams();
+  const nextParams = new URLSearchParams(searchParams);
+  const qs = nextParams.toString();
+  return <Navigate to={`/admin/ai${qs ? `?${qs}` : ''}`} replace />;
+}
+
 const projectRouteChildren: RouteObject[] = [
   {
     path: 'issues',
@@ -2165,7 +2172,7 @@ export const appRoutes: RouteObject[] = [
           },
           {
             path: 'workspaces/settings/ai',
-            element: <AiStudioPage />,
+            element: <WorkspaceAiRedirect />,
           },
           {
             path: 'admin',
