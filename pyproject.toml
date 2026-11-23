@@ -115,6 +115,8 @@ ignore_imports = [
     "kanban.app -> mcp.settings",
     "kanban.tests.mcp.** -> mcp.**",
     "kanban.tests.workflows.test_async_gate -> agent.**",
+    "kanban.tests.security.test_security_model_contract -> mcp.app",
+    "kanban.tests.security.test_security_model_contract -> agent.asgi",
 ]
 
 [[tool.importlinter.contracts]]

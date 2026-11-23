@@ -1,0 +1,28 @@
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan320-64c93bfe/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan320-64c93bfe
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 10 items
+
+kanban/tests/security/test_security_model_contract.py::test_create_app_routes_100_percent_classified PASSED [ 10%]
+kanban/tests/security/test_security_model_contract.py::test_create_internal_app_routes_100_percent_classified PASSED [ 20%]
+kanban/tests/security/test_security_model_contract.py::test_create_mcp_app_routes_100_percent_classified PASSED [ 30%]
+kanban/tests/security/test_security_model_contract.py::test_create_agent_app_routes_100_percent_classified PASSED [ 40%]
+kanban/tests/security/test_security_model_contract.py::test_all_admin_routes_enforce_require_admin_aal2 PASSED [ 50%]
+kanban/tests/security/test_security_model_contract.py::test_all_internal_routes_enforce_verify_internal_service_auth PASSED [ 60%]
+kanban/tests/security/test_security_model_contract.py::test_docs_and_wiki_contain_all_asset_and_entrypoint_tiers PASSED [ 70%]
+kanban/tests/security/test_security_model_contract.py::test_negative_unclassified_route_fails_closed PASSED [ 80%]
+kanban/tests/security/test_security_model_contract.py::test_negative_admin_route_without_aal2_fails_closed PASSED [ 90%]
+kanban/tests/security/test_security_model_contract.py::test_boundary_empty_or_mount_route_handling PASSED [100%]
+
+================================ tests coverage ================================
+_______________ coverage: platform linux, python 3.12.7-final-0 ________________
+
+Name                                                    Stmts   Miss Branch BrPart  Cover   Missing
+---------------------------------------------------------------------------------------------------
+kanban/tests/security/test_security_model_contract.py     196      2     40      5    97%   71, 238->246, 239->246, 241->239, 248
+---------------------------------------------------------------------------------------------------
+TOTAL                                                     196      2     40      5    97%
+============================== 10 passed in 5.89s ==============================
