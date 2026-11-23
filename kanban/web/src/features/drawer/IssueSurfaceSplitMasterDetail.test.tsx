@@ -261,11 +261,22 @@ describe('IssueSurface split mode (KAN-52 Problem 3)', () => {
     fireEvent.click(favBtn);
     expect(favBtn.textContent).toContain('★ Favorite');
 
-    // 6. Share / Export button
+    // 6. Share / Export button and menu (KAN-372)
     const shareBtn = screen.getByTestId('split-share-btn');
     expect(shareBtn).toBeDefined();
+    expect(shareBtn.getAttribute('aria-haspopup')).toBe('menu');
+    expect(shareBtn.getAttribute('aria-expanded')).toBe('false');
+
     await act(async () => {
       fireEvent.click(shareBtn);
+      await Promise.resolve();
+    });
+    expect(shareBtn.getAttribute('aria-expanded')).toBe('true');
+    expect(screen.getByTestId('share-export-menu')).toBeDefined();
+
+    const copyLinkItem = screen.getByTestId('share-export-copy-link');
+    await act(async () => {
+      fireEvent.click(copyLinkItem);
       await Promise.resolve();
     });
     expect(clipboardSpy).toHaveBeenCalled();
@@ -411,6 +422,11 @@ describe('IssueSurface split mode (KAN-52 Problem 3)', () => {
       fireEvent.click(shareBtn);
       await Promise.resolve();
     });
+    const copyLinkItem = screen.getByTestId('share-export-copy-link');
+    await act(async () => {
+      fireEvent.click(copyLinkItem);
+      await Promise.resolve();
+    });
     expect(shareBtn.textContent).toContain('✓ Copied link!');
   });
 
@@ -444,6 +460,11 @@ describe('IssueSurface split mode (KAN-52 Problem 3)', () => {
 
     await act(async () => {
       fireEvent.click(shareBtn);
+      await Promise.resolve();
+    });
+    const copyLinkItem = screen.getByTestId('share-export-copy-link');
+    await act(async () => {
+      fireEvent.click(copyLinkItem);
       await Promise.resolve();
     });
     expect(shareBtn.textContent).toContain('✓ Copied link!');
@@ -705,5 +726,132 @@ describe('IssueSurface split mode (KAN-52 Problem 3)', () => {
     expect(toolbar.querySelector('[data-testid="split-assign-btn"]')).not.toBeNull();
     expect(toolbar.querySelector('[data-testid="favorite-issue-toggle"]')).not.toBeNull();
     expect(toolbar.querySelector('[data-testid="split-share-btn"]')).not.toBeNull();
+  });
+
+  it('opens CsvImportExportModal in standard CSV or AES-256 ZIP mode when share export menu actions are clicked (KAN-372)', async () => {
+    renderSplitSurface();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('split-share-btn')).toBeDefined();
+    });
+
+    const shareBtn = screen.getByTestId('split-share-btn');
+
+    // 1. Export CSV action opens CsvImportExportModal in standard CSV mode
+    fireEvent.click(shareBtn);
+    expect(screen.getByTestId('share-export-menu')).toBeDefined();
+    const csvItem = screen.getByTestId('share-export-csv');
+    fireEvent.click(csvItem);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('csv-import-export-modal')).toBeDefined();
+    });
+    const csvRadio = screen.getByTestId<HTMLInputElement>('export-format-csv');
+    expect(csvRadio.checked).toBe(true);
+
+    // Close modal
+    fireEvent.click(screen.getByTestId('csv-modal-close-btn'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('csv-import-export-modal')).toBeNull();
+    });
+
+    // 2. Export Password-protected ZIP action opens CsvImportExportModal in AES-256 ZIP mode
+    fireEvent.click(shareBtn);
+    expect(screen.getByTestId('share-export-menu')).toBeDefined();
+    const zipItem = screen.getByTestId('share-export-zip');
+    fireEvent.click(zipItem);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('csv-import-export-modal')).toBeDefined();
+    });
+    const zipRadio = screen.getByTestId<HTMLInputElement>('export-format-zip');
+    expect(zipRadio.checked).toBe(true);
+
+    fireEvent.click(screen.getByTestId('csv-modal-close-btn'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('csv-import-export-modal')).toBeNull();
+    });
+  });
+
+  it('opens ReportExportModal when export via report template is clicked (KAN-372)', async () => {
+    renderSplitSurface();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('split-share-btn')).toBeDefined();
+    });
+
+    const shareBtn = screen.getByTestId('split-share-btn');
+    fireEvent.click(shareBtn);
+    expect(screen.getByTestId('share-export-menu')).toBeDefined();
+
+    const reportItem = screen.getByTestId('share-export-report');
+    fireEvent.click(reportItem);
+
+    await waitFor(() => {
+      expect(screen.getByTestId('report-export-backdrop')).toBeDefined();
+    });
+
+    // Close report modal
+    fireEvent.click(screen.getByTestId('report-export-close-btn'));
+    await waitFor(() => {
+      expect(screen.queryByTestId('report-export-backdrop')).toBeNull();
+    });
+  });
+
+  it('handles keyboard navigation and outside clicks on share export popover menu (KAN-372)', async () => {
+    renderSplitSurface();
+
+    await waitFor(() => {
+      expect(screen.getByTestId('split-share-btn')).toBeDefined();
+    });
+
+    const shareBtn = screen.getByTestId('split-share-btn');
+    fireEvent.click(shareBtn);
+    expect(screen.getByTestId('share-export-menu')).toBeDefined();
+
+    const menu = screen.getByTestId('share-export-menu');
+    const copyLinkItem = screen.getByTestId('share-export-copy-link');
+    const csvItem = screen.getByTestId('share-export-csv');
+    const zipItem = screen.getByTestId('share-export-zip');
+    const reportItem = screen.getByTestId('share-export-report');
+
+    // Arrow navigation
+    copyLinkItem.focus();
+    expect(document.activeElement).toBe(copyLinkItem);
+
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(csvItem);
+
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(zipItem);
+
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(reportItem);
+
+    // Wraparound ArrowDown
+    fireEvent.keyDown(menu, { key: 'ArrowDown' });
+    expect(document.activeElement).toBe(copyLinkItem);
+
+    // ArrowUp wraparound
+    fireEvent.keyDown(menu, { key: 'ArrowUp' });
+    expect(document.activeElement).toBe(reportItem);
+
+    // Tab closes menu
+    fireEvent.keyDown(menu, { key: 'Tab' });
+    expect(screen.queryByTestId('share-export-menu')).toBeNull();
+
+    // Reopen and test Escape
+    fireEvent.click(shareBtn);
+    expect(screen.getByTestId('share-export-menu')).toBeDefined();
+
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(screen.queryByTestId('share-export-menu')).toBeNull();
+
+    // Reopen and test outside click
+    fireEvent.click(shareBtn);
+    expect(screen.getByTestId('share-export-menu')).toBeDefined();
+
+    fireEvent.mouseDown(document.body);
+    expect(screen.queryByTestId('share-export-menu')).toBeNull();
   });
 });

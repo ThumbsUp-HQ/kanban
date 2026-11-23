@@ -54,6 +54,8 @@ import { SafeMarkdownPreview } from '../activity/SafeMarkdownPreview';
 import { PdfAttachmentCard } from '../../components/attachments/PdfAttachmentCard';
 import { fetchComments, type CommentResponse, type CommentList } from '../activity/activityApi';
 import { copyToClipboard } from '../../utils/clipboard';
+import { CsvImportExportModal } from '../views/CsvImportExportModal';
+import { ReportExportModal } from '../reports/ReportExportModal';
 import './IssueSurface.css';
 
 let moduleMountCounter = 0;
@@ -227,6 +229,7 @@ export function normalizeIssueDetail(
 
   return {
     ...candidate,
+    id: candidate.id ?? candidate.object_id ?? rawId,
     project_key: inferredProject,
     object_id: candidate.object_id ?? rawId,
     etag: candidate.etag ?? rawSha,
@@ -292,6 +295,64 @@ function IssueSurfaceContent({
   const copyShareTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [copiedBranch, setCopiedBranch] = useState(false);
   const [copiedShare, setCopiedShare] = useState(false);
+  const [isShareMenuOpen, setIsShareMenuOpen] = useState(false);
+  const [isCsvExportOpen, setIsCsvExportOpen] = useState(false);
+  const [csvExportFormat, setCsvExportFormat] = useState<'csv' | 'zip_csv'>('csv');
+  const [isReportExportOpen, setIsReportExportOpen] = useState(false);
+  const shareMenuRef = useRef<HTMLDivElement | null>(null);
+  const shareButtonRef = useRef<HTMLButtonElement | null>(null);
+
+  useEffect(() => {
+    if (!isShareMenuOpen) return;
+
+    const handleClickOutside = (event: MouseEvent | TouchEvent): void => {
+      if (
+        shareMenuRef.current &&
+        !shareMenuRef.current.contains(event.target as Node)
+      ) {
+        setIsShareMenuOpen(false);
+      }
+    };
+
+    const handleKeyDown = (event: KeyboardEvent): void => {
+      if (event.key === 'Escape') {
+        setIsShareMenuOpen(false);
+        shareButtonRef.current?.focus();
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    document.addEventListener('touchstart', handleClickOutside);
+    document.addEventListener('keydown', handleKeyDown);
+
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+      document.removeEventListener('touchstart', handleClickOutside);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isShareMenuOpen]);
+
+  const handleShareMenuKeyDown = (e: React.KeyboardEvent<HTMLDivElement>): void => {
+    const items = shareMenuRef.current?.querySelectorAll<HTMLButtonElement>(
+      'button[role="menuitem"]',
+    );
+    if (!items || items.length === 0) return;
+
+    const itemsArray = Array.from(items);
+    const currentIndex = itemsArray.indexOf(document.activeElement as HTMLButtonElement);
+
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextIndex = currentIndex < itemsArray.length - 1 ? currentIndex + 1 : 0;
+      itemsArray[nextIndex]?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const prevIndex = currentIndex > 0 ? currentIndex - 1 : itemsArray.length - 1;
+      itemsArray[prevIndex]?.focus();
+    } else if (e.key === 'Tab') {
+      setIsShareMenuOpen(false);
+    }
+  };
 
   useEffect(() => {
     return () => {
@@ -2077,17 +2138,85 @@ function IssueSurfaceContent({
                         {isFavorite ? '★' : '☆'} Favorite
                       </span>
                     </button>
-                    <button
-                      type="button"
-                      className="split-toolbar-btn"
-                      data-testid="split-share-btn"
-                      aria-label="Share or export issue"
-                      onClick={() => {
-                        void handleShareExport();
-                      }}
+                    <div
+                      className="share-export-menu-container"
+                      ref={shareMenuRef}
+                      onKeyDown={handleShareMenuKeyDown}
                     >
-                      {copiedShare ? '✓ Copied link!' : '🔗 Share / Export'}
-                    </button>
+                      <button
+                        ref={shareButtonRef}
+                        type="button"
+                        className="split-toolbar-btn"
+                        data-testid="split-share-btn"
+                        aria-label="Share or export issue"
+                        aria-haspopup="menu"
+                        aria-expanded={isShareMenuOpen}
+                        onClick={() => {
+                          setIsShareMenuOpen((prev) => !prev);
+                        }}
+                      >
+                        {copiedShare ? '✓ Copied link!' : '🔗 Share / Export'}
+                      </button>
+                      {isShareMenuOpen && (
+                        <div
+                          role="menu"
+                          aria-label="Share and export options"
+                          className="share-export-popover-menu"
+                          data-testid="share-export-menu"
+                        >
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="share-export-popover-menu__item"
+                            data-testid="share-export-copy-link"
+                            onClick={() => {
+                              void handleShareExport();
+                              setIsShareMenuOpen(false);
+                            }}
+                          >
+                            {copiedShare ? '✓ Copied link!' : 'Copy share link'}
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="share-export-popover-menu__item"
+                            data-testid="share-export-csv"
+                            onClick={() => {
+                              setCsvExportFormat('csv');
+                              setIsCsvExportOpen(true);
+                              setIsShareMenuOpen(false);
+                            }}
+                          >
+                            Export CSV (.csv)
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="share-export-popover-menu__item"
+                            data-testid="share-export-zip"
+                            onClick={() => {
+                              setCsvExportFormat('zip_csv');
+                              setIsCsvExportOpen(true);
+                              setIsShareMenuOpen(false);
+                            }}
+                          >
+                            Export Password-protected ZIP (AES-256)
+                          </button>
+                          <button
+                            type="button"
+                            role="menuitem"
+                            className="share-export-popover-menu__item"
+                            data-testid="share-export-report"
+                            onClick={() => {
+                              setIsReportExportOpen(true);
+                              setIsShareMenuOpen(false);
+                            }}
+                          >
+                            Export via Report Template...
+                          </button>
+                        </div>
+                      )}
+                    </div>
                     {SubscribeSlot && <SubscribeSlot issue={currentIssue} />}
                     {LinkSlot && <LinkSlot issue={currentIssue} />}
                     {OverflowSlot && (
@@ -2191,6 +2320,27 @@ function IssueSurfaceContent({
               <aside className="surface__rail" aria-label="Properties" />
             )}
           </div>
+        )}
+        {isCsvExportOpen && (
+          <CsvImportExportModal
+            isOpen={isCsvExportOpen}
+            onClose={() => {
+              setIsCsvExportOpen(false);
+            }}
+            projectKey={resolvedProjectForAux}
+            selectedIssueIds={[currentIssue.id ?? currentIssue.key]}
+            initialExportFormat={csvExportFormat}
+          />
+        )}
+        {isReportExportOpen && (
+          <ReportExportModal
+            isOpen={isReportExportOpen}
+            onClose={() => {
+              setIsReportExportOpen(false);
+            }}
+            projectKey={resolvedProjectForAux}
+            selectedIssueIds={[currentIssue.id ?? currentIssue.key]}
+          />
         )}
       </>
     );

@@ -51,6 +51,7 @@ export interface CsvImportExportModalProps {
   initialTab?: 'export' | 'import' | undefined;
   initialExportFormat?: 'csv' | 'zip_csv' | undefined;
   onImportSuccess?: (() => void) | undefined;
+  selectedIssueIds?: string[] | undefined;
 }
 
 export function CsvImportExportModal({
@@ -63,6 +64,7 @@ export function CsvImportExportModal({
   initialTab = 'export',
   initialExportFormat = 'csv',
   onImportSuccess,
+  selectedIssueIds,
 }: CsvImportExportModalProps): JSX.Element | null {
   const [activeTab, setActiveTab] = useState<'export' | 'import'>(initialTab);
   const [prevInitialTab, setPrevInitialTab] = useState(initialTab);
@@ -149,7 +151,7 @@ export function CsvImportExportModal({
         ? `/api/v1/projects/${encodeURIComponent(projectKey)}/issues/export`
         : `/api/v1/workspaces/${encodeURIComponent(workspaceScope ?? 'default')}/issues/export`;
 
-      /* v8 ignore next 11 */
+      /* v8 ignore next 12 */
       const payload = {
         format: exportFormat,
         zip_password: exportFormat === 'zip_csv' ? exportPassword : null,
@@ -160,6 +162,7 @@ export function CsvImportExportModal({
         label_ids: activeFilters.label ?? null,
         cycle_id: activeFilters.cycle?.[0] ?? null,
         module_id: activeFilters.module?.[0] ?? null,
+        issue_ids: selectedIssueIds ?? null,
       };
 
       const csrfToken = getCsrfToken();

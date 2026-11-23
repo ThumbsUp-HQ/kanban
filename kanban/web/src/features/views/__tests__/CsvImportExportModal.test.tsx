@@ -227,4 +227,81 @@ describe('CsvImportExportModal (KAN-316)', () => {
       });
     }
   });
+
+  it('wires selectedIssueIds and initialExportFormat into export payload (KAN-372)', async () => {
+    vi.spyOn(clientModule, 'getCsrfToken').mockReturnValue('csrf-tok-372');
+    const fetchMock = vi.fn().mockResolvedValue({
+      ok: true,
+      blob: () => Promise.resolve(new Blob(['key,summary\n'], { type: 'text/csv' })),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    // 1. Mount with selectedIssueIds and initialExportFormat="csv"
+    const { rerender } = render(
+      <CsvImportExportModal
+        {...defaultProps}
+        selectedIssueIds={['ISSUE-42', 'ISSUE-43']}
+        initialExportFormat="csv"
+      />,
+    );
+
+    fireEvent.click(screen.getByTestId('export-submit-btn'));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/v1/projects/TESTPROJ/issues/export',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    const calls = fetchMock.mock.calls as unknown as [string, { body: string }][];
+    const firstCallInit = calls[0]?.[1];
+    const rawParsed: unknown = JSON.parse(firstCallInit?.body ?? '{}');
+    const lastCallBody = rawParsed as {
+      issue_ids?: string[];
+      format?: string;
+      zip_password?: string;
+    };
+    expect(lastCallBody.issue_ids).toEqual(['ISSUE-42', 'ISSUE-43']);
+    expect(lastCallBody.format).toBe('csv');
+
+    // 2. Mount with initialExportFormat="zip_csv"
+    fetchMock.mockClear();
+    rerender(
+      <CsvImportExportModal
+        {...defaultProps}
+        selectedIssueIds={['ISSUE-99']}
+        initialExportFormat="zip_csv"
+      />,
+    );
+
+    const zipRadio = screen.getByTestId<HTMLInputElement>('export-format-zip');
+    expect(zipRadio.checked).toBe(true);
+
+    const passwordInput = screen.getByTestId('export-zip-password-input');
+    fireEvent.change(passwordInput, {
+      target: { value: 'secure-password-123' },
+    });
+
+    fireEvent.click(screen.getByTestId('export-submit-btn'));
+
+    await waitFor(() => {
+      expect(fetchMock).toHaveBeenCalledWith(
+        '/api/v1/projects/TESTPROJ/issues/export',
+        expect.objectContaining({ method: 'POST' }),
+      );
+    });
+
+    const zipCalls = fetchMock.mock.calls as unknown as [string, { body: string }][];
+    const zipCallInit = zipCalls[0]?.[1];
+    const rawZipParsed: unknown = JSON.parse(zipCallInit?.body ?? '{}');
+    const zipCallBody = rawZipParsed as {
+      issue_ids?: string[];
+      format?: string;
+      zip_password?: string;
+    };
+    expect(zipCallBody.issue_ids).toEqual(['ISSUE-99']);
+    expect(zipCallBody.format).toBe('zip_csv');
+    expect(zipCallBody.zip_password).toBe('secure-password-123');
+  });
 });
