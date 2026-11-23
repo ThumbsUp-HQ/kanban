@@ -1,0 +1,45 @@
+=== Python Unit Tests ===
+============================= test session starts ==============================
+platform linux -- Python 3.12.7, pytest-9.2.0, pluggy-1.7.0 -- /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan323-18c1e85b/.venv/bin/python
+rootdir: /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan323-18c1e85b
+configfile: pyproject.toml
+plugins: anyio-4.16.0, platformdirs-4.14.5, asyncio-1.4.1.post1, cov-7.1.0, xdist-3.8.0, socket-0.8.1
+asyncio: mode=Mode.AUTO, debug=False, asyncio_default_fixture_loop_scope=session, asyncio_default_test_loop_scope=session
+collecting ... collected 6 items
+
+kanban/tests/test_wiki_bundle_sync.py::test_wiki_and_public_images_sha256_parity PASSED [ 16%]
+kanban/tests/test_wiki_bundle_sync.py::test_zero_duplicate_numeric_prefix_collisions PASSED [ 33%]
+kanban/tests/test_wiki_bundle_sync.py::test_every_markdown_image_reference_resolves PASSED [ 50%]
+kanban/tests/test_wiki_bundle_sync.py::test_reject_external_image_links_in_wiki PASSED [ 66%]
+kanban/tests/test_wiki_bundle_sync.py::test_reject_unreferenced_orphan_images PASSED [ 83%]
+kanban/tests/test_wiki_bundle_sync.py::test_sync_wiki_bundle_execution PASSED [100%]
+
+============================== 6 passed in 0.20s ===============================
+
+=== Vitest Unit Tests ===
+
+> @kanban/web@0.1.0 test:unit /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan323-18c1e85b/kanban/web
+> vitest run src/features/docs-center
+
+
+ RUN  v5.1.0 /home/adamoutler/.gemini/antigravity-cli/worktrees/ceecd8ef-f0c3-4c2c-b75c-e6eb23e99760/swarm-b-kan323-18c1e85b/kanban/web
+
+ ✓ src/features/docs-center/__tests__/DocsCenterImages.test.tsx (9 tests) 189ms
+Not implemented: navigation to another Document
+Not implemented: navigation to another Document
+ ✓ src/features/docs-center/__tests__/DocsCenter.test.tsx (45 tests) 3296ms
+   ✓ DocsCenter & Help System (KAN-16) (45)
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (13)
+       ✓ renders the 46-feature comparison matrix, non-goal compatibility tables, and 🎯✅ targets in DocsCenterPage 775ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 357ms
+ ✓ src/features/docs-center/DocsCenter.test.tsx (45 tests) 3302ms
+   ✓ DocsCenter & Help System (KAN-16) (45)
+     ✓ Release Candidate Polish & Accessibility (KAN-16 RC1) (13)
+       ✓ renders the 46-feature comparison matrix, non-goal compatibility tables, and 🎯✅ targets in DocsCenterPage 774ms
+       ✓ renders Engineering Appendix <details> block and nested-bracket bare wiki links in DocsCenterPage 376ms
+
+ Test Files  3 passed (3)
+      Tests  99 passed (99)
+   Start at  22:53:49
+   Duration  4.50s (tests 70%, environment 23%, import 5%, transform 1%)
+
