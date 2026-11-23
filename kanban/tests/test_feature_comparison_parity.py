@@ -4,15 +4,13 @@
 
 from __future__ import annotations
 
+import importlib
 import re
 from pathlib import Path
 from typing import Final
 
 from database.models.base import Base
 from kanban.app import create_app
-from mcp.surfaces.admin import build_admin_registry
-from mcp.surfaces.agent import create_agent_registry
-from mcp.surfaces.docs import build_docs_registry
 
 ROOT_DIR: Final[Path] = Path(__file__).resolve().parents[2]
 DOCS_FC_PATH: Final[Path] = ROOT_DIR / "docs" / "FEATURE_COMPARISON.md"
@@ -98,11 +96,7 @@ def test_feature_comparison_tables_and_shipped_status() -> None:
         if line.startswith("## 6. "):
             in_section = False
             break
-        if (
-            in_section
-            and line.startswith("|")
-            and not line.startswith(("| Feature", "| ---"))
-        ):
+        if in_section and line.startswith("|") and not line.startswith(("| Feature", "| ---")):
             m = table_row_re.match(line)
             if m:
                 feat_name = m.group(1).strip()
@@ -114,9 +108,7 @@ def test_feature_comparison_tables_and_shipped_status() -> None:
     )
 
     for feat_name, status in section_feature_rows:
-        assert status == "✅", (
-            f"Feature '{feat_name}' has status '{status}', expected '✅'"
-        )
+        assert status == "✅", f"Feature '{feat_name}' has status '{status}', expected '✅'"
 
 
 def test_shipped_tickets_documented() -> None:
@@ -133,9 +125,13 @@ def test_shipped_tickets_documented() -> None:
 
 def test_mcp_tool_counts_and_architecture_delta_parity() -> None:
     """Assert exact MCP tool counts and verify ARCHITECTURE_DELTA reports live metrics."""
-    agent_reg = create_agent_registry()
-    docs_reg = build_docs_registry()
-    admin_reg = build_admin_registry()
+    agent_mod = importlib.import_module("mcp.surfaces.agent")
+    docs_mod = importlib.import_module("mcp.surfaces.docs")
+    admin_mod = importlib.import_module("mcp.surfaces.admin")
+
+    agent_reg = agent_mod.create_agent_registry()
+    docs_reg = docs_mod.build_docs_registry()
+    admin_reg = admin_mod.build_admin_registry()
 
     agent_count = len(agent_reg.list_specs())
     docs_count = len(docs_reg.list_specs())
@@ -143,7 +139,7 @@ def test_mcp_tool_counts_and_architecture_delta_parity() -> None:
     total_tools = agent_count + docs_count + admin_count
 
     assert agent_count == 10  # 9 core + update_workpad (KAN-71)
-    assert docs_count == 3    # search, create, update
+    assert docs_count == 3  # search, create, update
     assert admin_count == 12  # 12 admin governance tools
     assert total_tools == 25  # 24 standard + 1 workpad
 
@@ -163,9 +159,7 @@ def test_codebase_metrics_parity() -> None:
     # Live migrations
     sql_up_files = list((ROOT_DIR / "database" / "migrations" / "sql").glob("*.up.sql"))
     versions_dir = ROOT_DIR / "database" / "migrations" / "versions"
-    alembic_files = [
-        f for f in versions_dir.glob("*.py") if not f.name.endswith("__init__.py")
-    ]
+    alembic_files = [f for f in versions_dir.glob("*.py") if not f.name.endswith("__init__.py")]
     assert len(sql_up_files) == 76, f"Expected 76 SQL up files, got {len(sql_up_files)}"
     assert len(alembic_files) == 76, f"Expected 76 Alembic versions, got {len(alembic_files)}"
 
