@@ -1016,5 +1016,21 @@
   color: var(--fg-primary, #f8fafc);
 }
 
+@media (prefers-reduced-motion: reduce) {
+  .surface--drawer,
+  .surface--full,
+  .surface__body,
+  .surface__skeleton-line,
+  .surface__prose,
+  .surface__rail {
+    animation: none !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+
 
 

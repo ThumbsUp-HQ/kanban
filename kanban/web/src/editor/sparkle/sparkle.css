@@ -39,9 +39,21 @@
 
 @media (prefers-reduced-motion: reduce) {
   .sparkle-badge {
-    animation: none;
-    opacity: 1;
+    animation: none !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition: none !important;
+    transition-duration: 0.01ms !important;
+    opacity: 1 !important;
     box-shadow: 0 0 8px var(--focus-ring);
+  }
+
+  .sparkle-ghost {
+    animation: none !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition: none !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

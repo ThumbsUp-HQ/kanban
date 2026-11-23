@@ -529,3 +529,19 @@
 .hard-wip-form {
   display: contents;
 }
+
+@media (prefers-reduced-motion: reduce) {
+  .board-card,
+  .board-card-wrapper,
+  .board-column,
+  .board-card-state-btn,
+  .board-column-add-workflow-btn,
+  .hard-wip-btn,
+  .board-alert-toast {
+    animation: none !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition: none !important;
+    transition-duration: 0.01ms !important;
+  }
+}
