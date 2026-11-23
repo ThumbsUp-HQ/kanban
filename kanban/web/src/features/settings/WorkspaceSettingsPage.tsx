@@ -21,6 +21,7 @@ import { StudioDocLink } from '../../components/help/StudioDocLink';
 import { EmojiHint } from '../../components/emoji/EmojiHint';
 import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
 import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
+import { AdvancedSection } from '../../ui/AdvancedSection';
 import './ProjectSettingsPage.css';
 
 interface WorkspaceSettingsData {
@@ -967,181 +968,219 @@ export function WorkspaceSettingsPage(): JSX.Element {
               </select>
             </div>
 
-            <div className="kb-form-group">
-              <label htmlFor="ws-idle-timeout-input">
-                Session Idle Timeout (Minutes)
-                <FieldHelpHint
-                  title="Session Idle Timeout"
-                  summary="Minutes of user inactivity before the session is expired and re-authentication is enforced."
-                  docHref="/docs/multi-card-authentication-studio"
-                  testId="ws-idle-timeout-help"
-                />
-              </label>
-              <input
-                id="ws-idle-timeout-input"
-                type="number"
-                data-testid="workspace-idle-timeout-input"
-                className="kb-input"
-                min="5"
-                value={idleTimeout}
-                onChange={(e) => { setIdleTimeout(Number(e.target.value)); }}
-                required
-              />
-            </div>
-
-            <div className="kb-form-group">
-              <label htmlFor="ws-abs-timeout-input">Session Absolute Timeout (Minutes)</label>
-              <input
-                id="ws-abs-timeout-input"
-                type="number"
-                data-testid="workspace-abs-timeout-input"
-                className="kb-input"
-                min="60"
-                value={absTimeout}
-                onChange={(e) => { setAbsTimeout(Number(e.target.value)); }}
-                required
-              />
-            </div>
-
-            <div className="kb-form-group">
-              <label htmlFor="ws-trash-retention-input">Trash Retention Days</label>
-              <input
-                id="ws-trash-retention-input"
-                type="number"
-                data-testid="workspace-trash-retention-input"
-                className="kb-input"
-                min="7"
-                max="365"
-                value={trashRetention}
-                onChange={(e) => { setTrashRetention(Number(e.target.value)); }}
-                required
-              />
-            </div>
-
-            <div className="kb-form-group">
-              <label htmlFor="ws-mcp-key-max-ttl-input">MCP Key Max TTL (Days)</label>
-              <input
-                id="ws-mcp-key-max-ttl-input"
-                type="number"
-                data-testid="workspace-mcp-key-max-ttl-input"
-                className="kb-input"
-                min="1"
-                max="365"
-                value={mcpKeyMaxTtl}
-                onChange={(e) => { setMcpKeyMaxTtl(Number(e.target.value)); }}
-                required
-              />
-            </div>
-
-            <div className="kb-form-group kb-form-group-toggle">
-              <label htmlFor="ws-air-gap-toggle" className="kb-toggle-label">
-                <input
-                  id="ws-air-gap-toggle"
-                  type="checkbox"
-                  data-testid="workspace-air-gap-toggle"
-                  className="kb-checkbox"
-                  checked={airGapMode}
-                  onChange={(e) => { setAirGapMode(e.target.checked); }}
-                />
-                <span className="kb-toggle-text">
-                  📴 Air-Gap Mode (Strict local execution; disables external outbound telemetry)
-                </span>
-                <FieldHelpHint
-                  title="Air-Gap Mode"
-                  summary="Disables all outbound external network egress, telemetry, and external SaaS AI providers."
-                  caution="External AI integrations requiring internet access will fail while Air-Gap mode is enabled."
-                  docHref="/docs/zero-trust-security-and-access-visibility"
-                  testId="ws-air-gap-help"
-                />
-              </label>
-            </div>
-
-            <div className="kb-form-group kb-form-group-toggle">
-              <label htmlFor="ws-default-skip-loaded-seq" className="kb-toggle-label">
-                <input
-                  id="ws-default-skip-loaded-seq"
-                  type="checkbox"
-                  data-testid="workspace-default-skip-loaded-seq-checkbox"
-                  className="kb-checkbox"
-                  checked={defaultSkipLoadedSeq}
-                  onChange={(e) => { setDefaultSkipLoadedSeq(e.target.checked); }}
-                />
-                <span className="kb-toggle-text">
-                  Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)
-                </span>
-              </label>
-              <EmojiHint kind="agentSafeNumbering" />
-            </div>
-
-            <div className="kb-form-group kb-form-group-toggle">
-              <label htmlFor="ws-issue-export-toggle" className="kb-toggle-label">
-                <input
-                  id="ws-issue-export-toggle"
-                  type="checkbox"
-                  data-testid="workspace-setting-issue-export-toggle"
-                  className="kb-checkbox"
-                  checked={issueExportEnabled}
-                  onChange={(e) => {
-                    /* v8 ignore next */
-                    setIssueExportEnabled(e.target.checked);
-                  }}
-                />
-                <span className="kb-toggle-text">
-                  Enable Issue Export (Allow exporting issues to CSV / WinZip AES-256)
-                </span>
-              </label>
-            </div>
-
-            <div className="kb-form-group kb-form-group-toggle">
-              <label htmlFor="ws-issue-import-toggle" className="kb-toggle-label">
-                <input
-                  id="ws-issue-import-toggle"
-                  type="checkbox"
-                  data-testid="workspace-setting-issue-import-toggle"
-                  className="kb-checkbox"
-                  checked={issueImportEnabled}
-                  onChange={(e) => {
-                    /* v8 ignore next */
-                    setIssueImportEnabled(e.target.checked);
-                  }}
-                />
-                <span className="kb-toggle-text">
-                  Enable Issue Import (Allow importing issues from CSV / WinZip AES-256)
-                </span>
-              </label>
-            </div>
-
-            <div className="kb-form-group" data-testid="workspace-setting-export-roles">
-              <label className="kb-label">Allowed Issue Export Roles</label>
-              <div className="kb-roles-checklist">
-                {[
-                  { role: 'workspace_admin', label: 'Workspace Admin' },
-                  { role: 'project_admin', label: 'Project Admin' },
-                  { role: 'member', label: 'Member' },
-                  { role: 'guest', label: 'Guest' },
-                ].map(({ role, label }) => {
-                  const isChecked = issueExportAllowedRoles.includes(role);
-                  return (
-                    <label key={role} className="kb-checkbox-inline">
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        value={role}
-                        onChange={(e) => {
-                          /* v8 ignore next 6 */
-                          if (e.target.checked) {
-                            setIssueExportAllowedRoles((prev) => [...prev, role]);
-                          } else {
-                            setIssueExportAllowedRoles((prev) => prev.filter((r) => r !== role));
-                          }
-                        }}
-                      />
-                      <span>{label}</span>
-                    </label>
-                  );
-                })}
+            {/* Advanced Security & Governance (Progressive Disclosure - KAN-370) */}
+            <AdvancedSection
+              title="Advanced Security & Governance"
+              summary="Granular field-level overrides, session idle and absolute TTLs, key lifetimes, air-gap mode, and export/webhook restrictions"
+              testId="workspace-advanced-security-section"
+              defaultOpen={false}
+            >
+              <div className="kb-form-group" data-testid="workspace-field-level-overrides">
+                <label className="kb-label">
+                  Granular Field-Level Override Rules
+                  <FieldHelpHint
+                    title="Granular Field-Level Override Rules"
+                    summary="Configure custom permission overrides on individual issue and project attributes."
+                    docHref="/docs/role-and-permission-matrix#workspace-level-roles"
+                    testId="ws-field-override-help"
+                  />
+                </label>
+                <p className="kb-field-desc">
+                  Strict workspace inheritance enabled. Role-based field override rules apply globally across member issues.
+                </p>
               </div>
-            </div>
+
+              <div className="kb-form-group">
+                <label htmlFor="ws-idle-timeout-input">
+                  Session Idle Timeout (Minutes)
+                  <FieldHelpHint
+                    title="Session Idle Timeout"
+                    summary="Minutes of user inactivity before the session is expired and re-authentication is enforced."
+                    docHref="/docs/multi-card-authentication-studio"
+                    testId="ws-idle-timeout-help"
+                  />
+                </label>
+                <input
+                  id="ws-idle-timeout-input"
+                  type="number"
+                  data-testid="workspace-idle-timeout-input"
+                  className="kb-input"
+                  min="5"
+                  value={idleTimeout}
+                  onChange={(e) => { setIdleTimeout(Number(e.target.value)); }}
+                  required
+                />
+              </div>
+
+              <div className="kb-form-group">
+                <label htmlFor="ws-abs-timeout-input">Session Absolute Timeout (Minutes)</label>
+                <input
+                  id="ws-abs-timeout-input"
+                  type="number"
+                  data-testid="workspace-abs-timeout-input"
+                  className="kb-input"
+                  min="60"
+                  value={absTimeout}
+                  onChange={(e) => { setAbsTimeout(Number(e.target.value)); }}
+                  required
+                />
+              </div>
+
+              <div className="kb-form-group">
+                <label htmlFor="ws-trash-retention-input">Trash Retention Days</label>
+                <input
+                  id="ws-trash-retention-input"
+                  type="number"
+                  data-testid="workspace-trash-retention-input"
+                  className="kb-input"
+                  min="7"
+                  max="365"
+                  value={trashRetention}
+                  onChange={(e) => { setTrashRetention(Number(e.target.value)); }}
+                  required
+                />
+              </div>
+
+              <div className="kb-form-group">
+                <label htmlFor="ws-mcp-key-max-ttl-input">MCP Key Max TTL (Days)</label>
+                <input
+                  id="ws-mcp-key-max-ttl-input"
+                  type="number"
+                  data-testid="workspace-mcp-key-max-ttl-input"
+                  className="kb-input"
+                  min="1"
+                  max="365"
+                  value={mcpKeyMaxTtl}
+                  onChange={(e) => { setMcpKeyMaxTtl(Number(e.target.value)); }}
+                  required
+                />
+              </div>
+
+              <div className="kb-form-group kb-form-group-toggle">
+                <label htmlFor="ws-air-gap-toggle" className="kb-toggle-label">
+                  <input
+                    id="ws-air-gap-toggle"
+                    type="checkbox"
+                    data-testid="workspace-air-gap-toggle"
+                    className="kb-checkbox"
+                    checked={airGapMode}
+                    onChange={(e) => { setAirGapMode(e.target.checked); }}
+                  />
+                  <span className="kb-toggle-text">
+                    📴 Air-Gap Mode (Strict local execution; disables external outbound telemetry)
+                  </span>
+                  <FieldHelpHint
+                    title="Air-Gap Mode"
+                    summary="Disables all outbound external network egress, telemetry, and external SaaS AI providers."
+                    caution="External AI integrations requiring internet access will fail while Air-Gap mode is enabled."
+                    docHref="/docs/zero-trust-security-and-access-visibility"
+                    testId="ws-air-gap-help"
+                  />
+                </label>
+              </div>
+
+              <div className="kb-form-group kb-form-group-toggle">
+                <label htmlFor="ws-default-skip-loaded-seq" className="kb-toggle-label">
+                  <input
+                    id="ws-default-skip-loaded-seq"
+                    type="checkbox"
+                    data-testid="workspace-default-skip-loaded-seq-checkbox"
+                    className="kb-checkbox"
+                    checked={defaultSkipLoadedSeq}
+                    onChange={(e) => { setDefaultSkipLoadedSeq(e.target.checked); }}
+                  />
+                  <span className="kb-toggle-text">
+                    Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)
+                  </span>
+                </label>
+                <EmojiHint kind="agentSafeNumbering" />
+              </div>
+
+              <div className="kb-form-group kb-form-group-toggle">
+                <label htmlFor="ws-issue-export-toggle" className="kb-toggle-label">
+                  <input
+                    id="ws-issue-export-toggle"
+                    type="checkbox"
+                    data-testid="workspace-setting-issue-export-toggle"
+                    className="kb-checkbox"
+                    checked={issueExportEnabled}
+                    onChange={(e) => {
+                      /* v8 ignore next */
+                      setIssueExportEnabled(e.target.checked);
+                    }}
+                  />
+                  <span className="kb-toggle-text">
+                    Enable Issue Export (Allow exporting issues to CSV / WinZip AES-256)
+                  </span>
+                </label>
+              </div>
+
+              <div className="kb-form-group kb-form-group-toggle">
+                <label htmlFor="ws-issue-import-toggle" className="kb-toggle-label">
+                  <input
+                    id="ws-issue-import-toggle"
+                    type="checkbox"
+                    data-testid="workspace-setting-issue-import-toggle"
+                    className="kb-checkbox"
+                    checked={issueImportEnabled}
+                    onChange={(e) => {
+                      /* v8 ignore next */
+                      setIssueImportEnabled(e.target.checked);
+                    }}
+                  />
+                  <span className="kb-toggle-text">
+                    Enable Issue Import (Allow importing issues from CSV / WinZip AES-256)
+                  </span>
+                </label>
+              </div>
+
+              <div className="kb-form-group" data-testid="workspace-setting-export-roles">
+                <label className="kb-label">Allowed Issue Export Roles</label>
+                <div className="kb-roles-checklist">
+                  {[
+                    { role: 'workspace_admin', label: 'Workspace Admin' },
+                    { role: 'project_admin', label: 'Project Admin' },
+                    { role: 'member', label: 'Member' },
+                    { role: 'guest', label: 'Guest' },
+                  ].map(({ role, label }) => {
+                    const isChecked = issueExportAllowedRoles.includes(role);
+                    return (
+                      <label key={role} className="kb-checkbox-inline">
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          value={role}
+                          onChange={(e) => {
+                            /* v8 ignore next 6 */
+                            if (e.target.checked) {
+                              setIssueExportAllowedRoles((prev) => [...prev, role]);
+                            } else {
+                              setIssueExportAllowedRoles((prev) => prev.filter((r) => r !== role));
+                            }
+                          }}
+                        />
+                        <span>{label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+              </div>
+
+              <div className="kb-form-group" data-testid="workspace-webhook-restrictions">
+                <label className="kb-label">
+                  Webhook &amp; Egress Restrictions
+                  <FieldHelpHint
+                    title="Webhook Restrictions"
+                    summary="Restrict outbound webhook notifications to pinned endpoints and signed payloads."
+                    docHref="/docs/zero-trust-security-and-access-visibility"
+                    testId="ws-webhook-help"
+                  />
+                </label>
+                <p className="kb-field-desc">
+                  Outbound webhook deliveries require HMAC SHA-256 payload signing.
+                </p>
+              </div>
+            </AdvancedSection>
 
             <button
               type="submit"

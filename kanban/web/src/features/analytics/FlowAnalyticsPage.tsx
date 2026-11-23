@@ -8,6 +8,7 @@ import { CycleTimeScatterChart } from './charts/CycleTimeScatterChart';
 import { AgingWipChart } from './charts/AgingWipChart';
 import { MonteCarloForecastCard } from './charts/MonteCarloForecastCard';
 import { CycleBurndownChart } from './charts/CycleBurndownChart';
+import { AdvancedSection } from '../../ui/AdvancedSection';
 import './FlowAnalyticsPage.css';
 
 export type ProjectFlowMetricsResponse = components['schemas']['ProjectFlowMetricsResponse'];
@@ -168,30 +169,47 @@ export function FlowAnalyticsPage(): JSX.Element {
 
       {!isFlowLoading && flowData && (
         <div className="kb-flow-grid">
+          {/* Headline Flow KPIs (KAN-370) */}
+          <div className="kb-flow-headline-kpis" data-testid="flow-headline-kpis">
+            <div className="kb-flow-kpi-card" data-testid="kpi-throughput">
+              <div className="kb-flow-kpi-label">Throughput</div>
+              <div className="kb-flow-kpi-value">
+                {flowData.monte_carlo.average_daily_throughput.toFixed(1)}{' '}
+                <span className="kb-flow-kpi-unit">issues/day</span>
+              </div>
+              <div className="kb-flow-kpi-subtext">
+                {flowData.cycle_lead_time.total_completed_in_window} completed in window
+              </div>
+            </div>
+
+            <div className="kb-flow-kpi-card" data-testid="kpi-cycle-time">
+              <div className="kb-flow-kpi-label">Cycle Time (P50 / P85)</div>
+              <div className="kb-flow-kpi-value">
+                {flowData.cycle_lead_time.cycle_time_percentiles.p50}d{' '}
+                <span className="kb-flow-kpi-divider">/</span>{' '}
+                {flowData.cycle_lead_time.cycle_time_percentiles.p85}d
+              </div>
+              <div className="kb-flow-kpi-subtext">
+                Lead Time: {flowData.cycle_lead_time.lead_time_percentiles.p50}d (P50) / {flowData.cycle_lead_time.lead_time_percentiles.p85}d (P85)
+              </div>
+            </div>
+
+            <div className="kb-flow-kpi-card" data-testid="kpi-wip-count">
+              <div className="kb-flow-kpi-label">Active WIP Count</div>
+              <div className="kb-flow-kpi-value">
+                {flowData.aging_wip.total_active_wip}{' '}
+                <span className="kb-flow-kpi-unit">in progress</span>
+              </div>
+              <div className="kb-flow-kpi-subtext">
+                Across active flow columns
+              </div>
+            </div>
+          </div>
+
           {/* Cumulative Flow Diagram (CFD) */}
           <CfdAreaChart
             points={flowData.cfd.points}
             states={flowData.cfd.states}
-          />
-
-          {/* Cycle & Lead Time Scatterplot */}
-          <CycleTimeScatterChart
-            points={flowData.cycle_lead_time.points}
-            cycleTimePercentiles={flowData.cycle_lead_time.cycle_time_percentiles}
-            leadTimePercentiles={flowData.cycle_lead_time.lead_time_percentiles}
-            totalCompleted={flowData.cycle_lead_time.total_completed_in_window}
-          />
-
-          {/* Aging Work in Progress (WIP) */}
-          <AgingWipChart
-            activeIssues={flowData.aging_wip.active_issues}
-            columnThresholds={flowData.aging_wip.column_thresholds}
-            totalActiveWip={flowData.aging_wip.total_active_wip}
-          />
-
-          {/* Monte Carlo Throughput & Delivery Forecast */}
-          <MonteCarloForecastCard
-            forecast={flowData.monte_carlo}
           />
 
           {/* Cycle Burndown Section */}
@@ -235,6 +253,36 @@ export function FlowAnalyticsPage(): JSX.Element {
               />
             )}
           </div>
+
+          {/* Advanced Statistical Parameters (Progressive Disclosure - KAN-370) */}
+          <AdvancedSection
+            title="Advanced Statistical Parameters & Simulation"
+            summary="Monte Carlo trial count (10,000), percentile band tunables (P50/P85/P95), aging WIP thresholds, and raw statistical tables"
+            testId="flow-advanced-stats-section"
+            defaultOpen={false}
+          >
+            <div className="kb-flow-advanced-grid">
+              {/* Cycle & Lead Time Scatterplot */}
+              <CycleTimeScatterChart
+                points={flowData.cycle_lead_time.points}
+                cycleTimePercentiles={flowData.cycle_lead_time.cycle_time_percentiles}
+                leadTimePercentiles={flowData.cycle_lead_time.lead_time_percentiles}
+                totalCompleted={flowData.cycle_lead_time.total_completed_in_window}
+              />
+
+              {/* Aging Work in Progress (WIP) */}
+              <AgingWipChart
+                activeIssues={flowData.aging_wip.active_issues}
+                columnThresholds={flowData.aging_wip.column_thresholds}
+                totalActiveWip={flowData.aging_wip.total_active_wip}
+              />
+
+              {/* Monte Carlo Throughput & Delivery Forecast */}
+              <MonteCarloForecastCard
+                forecast={flowData.monte_carlo}
+              />
+            </div>
+          </AdvancedSection>
         </div>
       )}
     </div>

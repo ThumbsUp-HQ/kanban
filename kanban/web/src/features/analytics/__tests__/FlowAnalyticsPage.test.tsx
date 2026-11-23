@@ -620,4 +620,63 @@ describe('FlowAnalyticsPage & Flow Telemetry Studio (KAN-79)', () => {
       expect(screen.getByTestId<HTMLSelectElement>('flow-cycle-select').value).toBe('c-second');
     });
   });
+
+  it('renders headline KPIs with Monte Carlo trial count collapsed in AdvancedSection (KAN-370)', async () => {
+    renderWithProviders(<FlowAnalyticsPage />);
+
+    // Headline KPIs are visible and render expected metrics
+    await waitFor(() => {
+      expect(screen.getByTestId('flow-headline-kpis')).toBeDefined();
+    });
+
+    expect(screen.getByTestId('kpi-throughput').textContent).toContain('1.4');
+    expect(screen.getByTestId('kpi-throughput').textContent).toContain('issues/day');
+    expect(screen.getByTestId('kpi-cycle-time').textContent).toContain('2.5d');
+    expect(screen.getByTestId('kpi-cycle-time').textContent).toContain('4d');
+    expect(screen.getByTestId('kpi-wip-count').textContent).toContain('1 in progress');
+
+    // Primary CFD chart is visible outside AdvancedSection
+    expect(screen.getByTestId('cfd-area-chart-card')).toBeDefined();
+
+    // AdvancedSection is present and collapsed by default
+    const advSection = screen.getByTestId('flow-advanced-stats-section');
+    expect(advSection).toBeDefined();
+    expect(advSection.hasAttribute('open')).toBe(false);
+
+    // Monte Carlo forecast, trials count (10,000), and scatter/aging charts are inside AdvancedSection
+    const mcCard = within(advSection).getByTestId('monte-carlo-forecast-card');
+    expect(mcCard.textContent).toContain('10,000 trials');
+    expect(within(advSection).getByTestId('cycle-time-scatter-card')).toBeDefined();
+    expect(within(advSection).getByTestId('aging-wip-card')).toBeDefined();
+
+    // Toggling the AdvancedSection opens and closes it
+    const toggleBtn = screen.getByTestId('flow-advanced-stats-section-toggle');
+    fireEvent.click(toggleBtn);
+    expect(advSection.hasAttribute('open')).toBe(true);
+
+    fireEvent.click(toggleBtn);
+    expect(advSection.hasAttribute('open')).toBe(false);
+  });
+
+  it('handles missing projectKey param and empty cycles object fallback', () => {
+    vi.mocked(clientModule.apiFetch).mockImplementation((_method, path) => {
+      const p = typeof path === 'string' ? path : '';
+      if (p.includes('/cycles')) {
+        return Promise.resolve({});
+      }
+      return Promise.resolve(mockFlowData);
+    });
+
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <MemoryRouter initialEntries={['/analytics']}>
+          <Routes>
+            <Route path="/analytics" element={<FlowAnalyticsPage />} />
+          </Routes>
+        </MemoryRouter>
+      </QueryClientProvider>,
+    );
+
+    expect(screen.getByText('Flow Telemetry Studio')).toBeDefined();
+  });
 });
