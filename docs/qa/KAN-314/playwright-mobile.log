@@ -1,0 +1,23 @@
+[WebServer] [plugin builtin:vite-reporter] 
+[WebServer] (!) Some chunks are larger than 500 kB after minification. Consider:
+[WebServer] - Using dynamic import() to code-split the application
+[WebServer] - Use build.rolldownOptions.output.codeSplitting to improve chunking: https://rolldown.rs/reference/OutputOptions.codeSplitting
+[WebServer] - Adjust chunk size limit for this warning via build.chunkSizeWarningLimit.
+
+Running 13 tests using 10 workers
+
+  ✓   2 [mobile] › e2e/qa/mobile-browser-review.spec.ts:203:3 › KAN-314 Mobile & Landscape Browser Ergonomics Verification Suite › 01: mobile portrait (390x844) - Login surface font sizes and touch targets (1.5s)
+  ✓   7 [mobile] › e2e/qa/mobile-browser-review.spec.ts:369:3 › KAN-314 Mobile & Landscape Browser Ergonomics Verification Suite › 07: mobile portrait (390x844) - Personal profile and avatar cropper responsiveness (1.6s)
+  ✓   5 [mobile] › e2e/qa/mobile-browser-review.spec.ts:351:3 › KAN-314 Mobile & Landscape Browser Ergonomics Verification Suite › 06: mobile portrait (390x844) - Docs workspace drawers and coarse action visibility (1.9s)
+  ✓   6 [mobile] › e2e/qa/mobile-browser-review.spec.ts:386:3 › KAN-314 Mobile & Landscape Browser Ergonomics Verification Suite › 08: mobile landscape (844x390) - Board view containment and layout (1.8s)
+  ✓   4 [mobile] › e2e/qa/mobile-browser-review.spec.ts:431:3 › KAN-314 Mobile & Landscape Browser Ergonomics Verification Suite › 10: tablet portrait (768x1024) - Board layout verification (1.9s)
+  ✓   9 [mobile] › e2e/qa/mobile-browser-review.spec.ts:294:3 › KAN-314 Mobile & Landscape Browser Ergonomics Verification Suite › 04: mobile portrait (390x844) - Notifications tray viewport bounding and touch target (1.8s)
+  ✓   3 [mobile] › e2e/qa/mobile-browser-review.spec.ts:228:3 › KAN-314 Mobile & Landscape Browser Ergonomics Verification Suite › 02: mobile portrait (390x844) - Board layout, topbar offset, and column state headers (2.2s)
+  ✓   1 [mobile] › e2e/qa/mobile-browser-review.spec.ts:326:3 › KAN-314 Mobile & Landscape Browser Ergonomics Verification Suite › 05: mobile portrait (390x844) - Issue drawer peek and properties rail dropdown containment (2.5s)
+  ✓  10 [mobile] › e2e/qa/mobile-browser-review.spec.ts:403:3 › KAN-314 Mobile & Landscape Browser Ergonomics Verification Suite › 09: mobile landscape (844x390) - Command palette bounded in compact landscape (2.2s)
+  ✓   8 [mobile] › e2e/qa/mobile-browser-review.spec.ts:251:3 › KAN-314 Mobile & Landscape Browser Ergonomics Verification Suite › 03: mobile portrait (390x844) - Command palette touch close button and bounded height (2.4s)
+  ✓  12 [mobile] › e2e/qa/mobile-browser-review.spec.ts:459:3 › KAN-314 Mobile & Landscape Browser Ergonomics Verification Suite › 12: desktop (1440x900) - Light theme baseline board screenshot (1.3s)
+  ✓  11 [mobile] › e2e/qa/mobile-browser-review.spec.ts:445:3 › KAN-314 Mobile & Landscape Browser Ergonomics Verification Suite › 11: tablet portrait (768x1024) - Docs workspace verification (1.7s)
+  ✓  13 [mobile] › e2e/qa/mobile-browser-review.spec.ts:474:3 › KAN-314 Mobile & Landscape Browser Ergonomics Verification Suite › 13: desktop (1440x900) - Dark theme baseline board screenshot (1.9s)
+
+  13 passed (30.9s)

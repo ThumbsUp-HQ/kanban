@@ -60,7 +60,8 @@
   top: calc(100% + 8px);
   right: 0;
   width: 360px;
-  max-height: 480px;
+  max-width: calc(100vw - 24px);
+  max-height: calc(100dvh - var(--topbar-h, 52px) - 16px);
   background: var(--bg-surface, #ffffff);
   border: 1px solid var(--border-subtle, #cbd5e1);
   border-radius: var(--radius-lg, 10px);
@@ -228,6 +229,33 @@
   background: var(--accent-primary, #2563eb);
   color: #ffffff;
   border-color: var(--accent-primary, #2563eb);
+}
+
+@media (max-width: 767px) {
+  .kb-notif-tray {
+    width: min(360px, calc(100vw - 24px));
+    right: -44px;
+  }
+}
+
+@media (max-height: 540px) {
+  .kb-notif-tray {
+    max-height: calc(100dvh - var(--topbar-h, 52px) - 16px);
+  }
+
+  .kb-notif-tray-body {
+    max-height: calc(100dvh - var(--topbar-h, 52px) - 80px);
+  }
+}
+
+@media (max-width: 767px), (pointer: coarse) {
+  .kb-notif-mark-read-btn {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+    font-size: 1rem;
+  }
 }
 
 .kb-notif-item-content {

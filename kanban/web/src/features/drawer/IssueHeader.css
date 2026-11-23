@@ -121,11 +121,18 @@
   margin-left: 4px;
 }
 
-@media (max-width: 768px) {
+@media (max-width: 768px), (pointer: coarse) {
+  .issue-header__copy-btn {
+    min-width: 44px;
+    min-height: 44px;
+    padding: 8px;
+    font-size: 14px;
+  }
+
   .header-state-select {
     min-height: 44px;
     height: 44px;
-    font-size: var(--text-base, 14px);
+    font-size: 16px;
   }
 }
 

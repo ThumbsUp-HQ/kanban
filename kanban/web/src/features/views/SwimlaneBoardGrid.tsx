@@ -370,6 +370,10 @@ export function SwimlaneBoardGrid({
                       data-swimlane-id={lane.id}
                       role="cell"
                     >
+                      <div className="swimlane-column-mobile-header" aria-hidden="true">
+                        <span className="swimlane-column-mobile-title">{col.name}</span>
+                        <span className="swimlane-column-mobile-count">{cellIssues.length}</span>
+                      </div>
                       {cellIssues.map((issue) => {
                         const isSelected = selectedIds.includes(issue.key);
                         const isFocused = focusedKey === issue.key;

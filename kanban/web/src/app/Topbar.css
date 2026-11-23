@@ -200,6 +200,9 @@
   border-radius: var(--radius-md, 6px);
   box-shadow: var(--shadow-lg, 0 10px 15px -3px rgba(0, 0, 0, 0.5));
   min-width: 220px;
+  max-height: calc(100dvh - var(--topbar-h, 52px) - 16px);
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
   padding: var(--space-2, 8px);
   z-index: 150;
 }
@@ -466,5 +469,21 @@
   .kb-search-trigger-text,
   .kb-search-kbd {
     display: none;
+  }
+}
+
+@media (max-width: 767px), (pointer: coarse) {
+  .kb-topbar-docs-btn {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .kb-avatar-button {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
   }
 }

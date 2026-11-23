@@ -508,3 +508,213 @@ export async function assertDisallowedControls(
 
   return violations;
 }
+
+export interface TouchTargetViolation {
+  selector: string;
+  text: string;
+  width: number;
+  height: number;
+  minAllowed: number;
+}
+
+/**
+ * Scans page for interactive elements failing minimum touch target bounds (>=44x44px).
+ */
+export async function scanMobileTouchTargets(
+  page: Page,
+  options: {
+    minTargetSize?: number;
+    ignoreSelectors?: string[];
+    containerSelector?: string;
+  } = {}
+): Promise<TouchTargetViolation[]> {
+  const minTarget = options.minTargetSize ?? 44;
+  const ignore = options.ignoreSelectors ?? [];
+  const container = options.containerSelector ?? 'body';
+
+  return page.evaluate(
+    ({ minSize, ignoreList, containerSel }) => {
+      const violations: {
+        selector: string;
+        text: string;
+        width: number;
+        height: number;
+        minAllowed: number;
+      }[] = [];
+
+      const root = document.querySelector(containerSel) || document.body;
+      const interactiveElements = root.querySelectorAll<HTMLElement>(
+        'button, a[href], input:not([type="hidden"]), select, textarea, [role="button"], [role="menuitem"], [role="tab"]'
+      );
+
+      interactiveElements.forEach((el, idx) => {
+        const style = window.getComputedStyle(el);
+        if (
+          style.display === 'none' ||
+          style.visibility === 'hidden' ||
+          style.opacity === '0' ||
+          el.hasAttribute('hidden') ||
+          el.getAttribute('aria-hidden') === 'true'
+        ) {
+          return;
+        }
+
+        for (const ig of ignoreList) {
+          if (el.matches(ig)) return;
+        }
+
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) return;
+
+        if (el.tagName === 'A' && el.parentElement && window.getComputedStyle(el.parentElement).display === 'block') {
+          if (style.display === 'inline') return;
+        }
+
+        if (rect.width < minSize - 1 || rect.height < minSize - 1) {
+          const text = (el.textContent || el.getAttribute('aria-label') || el.tagName).trim().slice(0, 30);
+          const selector = el.id ? `#${el.id}` : `${el.tagName.toLowerCase()}:nth-of-type(${String(idx + 1)})`;
+          violations.push({
+            selector,
+            text,
+            width: Math.round(rect.width * 10) / 10,
+            height: Math.round(rect.height * 10) / 10,
+            minAllowed: minSize,
+          });
+        }
+      });
+
+      return violations;
+    },
+    { minSize: minTarget, ignoreList: ignore, containerSel: container }
+  );
+}
+
+export interface InputFontSizeViolation {
+  selector: string;
+  tagName: string;
+  fontSize: number;
+  requiredSize: number;
+}
+
+/**
+ * Scans page for text inputs/selects/textareas rendering with font-size < 16px.
+ */
+export async function scanMobileInputFontSizes(
+  page: Page,
+  options: {
+    minFontSize?: number;
+    containerSelector?: string;
+  } = {}
+): Promise<InputFontSizeViolation[]> {
+  const minFont = options.minFontSize ?? 16;
+  const container = options.containerSelector ?? 'body';
+
+  return page.evaluate(
+    ({ minSize, containerSel }) => {
+      const violations: {
+        selector: string;
+        tagName: string;
+        fontSize: number;
+        requiredSize: number;
+      }[] = [];
+
+      const root = document.querySelector(containerSel) || document.body;
+      const inputs = root.querySelectorAll<HTMLElement>(
+        'input:not([type="hidden"]):not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]), select, textarea'
+      );
+
+      inputs.forEach((el, idx) => {
+        const style = window.getComputedStyle(el);
+        if (
+          style.display === 'none' ||
+          style.visibility === 'hidden' ||
+          style.opacity === '0' ||
+          el.hasAttribute('hidden')
+        ) {
+          return;
+        }
+
+        const rect = el.getBoundingClientRect();
+        if (rect.width === 0 && rect.height === 0) return;
+
+        const size = parseFloat(style.fontSize) || 0;
+        if (size < minSize - 0.1) {
+          const selector = el.id ? `#${el.id}` : `${el.tagName.toLowerCase()}:nth-of-type(${String(idx + 1)})`;
+          violations.push({
+            selector,
+            tagName: el.tagName.toLowerCase(),
+            fontSize: Math.round(size * 10) / 10,
+            requiredSize: minSize,
+          });
+        }
+      });
+
+      return violations;
+    },
+    { minSize: minFont, containerSel: container }
+  );
+}
+
+export interface TopbarOcclusionViolation {
+  selector: string;
+  topbarBottom: number;
+  elementTop: number;
+  occludedPixels: number;
+}
+
+/**
+ * Scans for sticky or drawer containers occluded by the fixed Topbar.
+ */
+export async function scanTopbarOcclusion(
+  page: Page,
+  topbarSelector = '.kb-topbar',
+  targetSelectors: string[] = ['.docs-tree-pane', '.docs-rail-pane', '.docs-sheet-backdrop']
+): Promise<TopbarOcclusionViolation[]> {
+  return page.evaluate(
+    ({ topbarSel, targets }) => {
+      const violations: {
+        selector: string;
+        topbarBottom: number;
+        elementTop: number;
+        occludedPixels: number;
+      }[] = [];
+
+      const topbar = document.querySelector<HTMLElement>(topbarSel);
+      if (!topbar) return violations;
+
+      const topbarRect = topbar.getBoundingClientRect();
+      const topbarBottom = topbarRect.bottom;
+
+      for (const sel of targets) {
+        const el = document.querySelector<HTMLElement>(sel);
+        if (!el) continue;
+
+        const style = window.getComputedStyle(el);
+        if (
+          style.display === 'none' ||
+          style.visibility === 'hidden' ||
+          style.opacity === '0' ||
+          style.position !== 'fixed'
+        ) {
+          continue;
+        }
+
+        const rect = el.getBoundingClientRect();
+        const topbarZ = parseInt(window.getComputedStyle(topbar).zIndex, 10) || 0;
+        const elZ = parseInt(style.zIndex, 10) || 0;
+
+        if (rect.top < topbarBottom && topbarZ > elZ) {
+          violations.push({
+            selector: sel,
+            topbarBottom: Math.round(topbarBottom),
+            elementTop: Math.round(rect.top),
+            occludedPixels: Math.round(topbarBottom - rect.top),
+          });
+        }
+      }
+
+      return violations;
+    },
+    { topbarSel: topbarSelector, targets: targetSelectors }
+  );
+}

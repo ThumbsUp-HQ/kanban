@@ -135,4 +135,38 @@ describe('CSS Tokens & Contrast Audit Gate (KANBA-190)', () => {
     expect(foundTokens).toContain('--fg-default');
     expect(foundTokens).toContain('--bg-surface-elevated');
   });
+
+  it('verifies mobile media query rules (font-size: 16px, 100dvh, max-height: calc(100dvh - ...), --tap-min: 44px)', () => {
+    const baseCss = fs.readFileSync(path.join(STYLES_DIR, 'base.css'), 'utf8');
+    expect(baseCss).toContain('font-size: 16px');
+    expect(baseCss).toContain('@media (max-width: 767px), (pointer: coarse)');
+
+    const topbarCss = fs.readFileSync(path.join(SRC_DIR, 'app/Topbar.css'), 'utf8');
+    expect(topbarCss).toContain('max-height: calc(100dvh - var(--topbar-h, 52px) - 16px)');
+    expect(topbarCss).toContain('overflow-y: auto');
+    expect(topbarCss).toContain('min-width: 44px');
+    expect(topbarCss).toContain('min-height: 44px');
+
+    const notifCss = fs.readFileSync(path.join(SRC_DIR, 'features/notifications/NotificationsBell.css'), 'utf8');
+    expect(notifCss).toContain('max-height: calc(100dvh - var(--topbar-h, 52px) - 16px)');
+    expect(notifCss).toContain('width: min(360px, calc(100vw - 24px))');
+    expect(notifCss).toContain('min-width: 44px');
+    expect(notifCss).toContain('min-height: 44px');
+
+    const commandPaletteCss = fs.readFileSync(path.join(SRC_DIR, 'app/CommandPalette.css'), 'utf8');
+    expect(commandPaletteCss).toContain('min-width: 44px');
+    expect(commandPaletteCss).toContain('min-height: 44px');
+    expect(commandPaletteCss).toContain('max-height: calc(100dvh - 32px)');
+    expect(commandPaletteCss).toContain('font-size: 16px');
+  });
+
+  it('verifies DocsWorkspaceView mobile drawers do not overlap kb-topbar and expose action buttons under coarse pointer', () => {
+    const docsCss = fs.readFileSync(path.join(SRC_DIR, 'features/docs/DocsWorkspaceView.css'), 'utf8');
+    expect(docsCss).toContain('top: var(--topbar-h, 52px)');
+    expect(docsCss).toContain('height: calc(100dvh - var(--topbar-h, 52px))');
+    expect(docsCss).toContain('.docs-tree-item__action-btn');
+    expect(docsCss).toContain('min-width: 44px');
+    expect(docsCss).toContain('min-height: 44px');
+    expect(docsCss).toContain('@media (pointer: coarse)');
+  });
 });

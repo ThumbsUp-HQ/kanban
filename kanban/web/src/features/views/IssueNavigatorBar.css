@@ -123,10 +123,27 @@
 @media (max-width: 767px), (max-height: 540px) {
   .navigator-filters-toggle {
     display: inline-flex;
+    min-height: 44px;
+    height: 44px;
   }
 
   .navigator-filters-row:not(.navigator-filters-row--expanded) {
     display: none;
+  }
+
+  .navigator-search-input,
+  .navigator-query-input,
+  .navigator-filter-select {
+    font-size: 16px;
+    min-height: 44px;
+    height: 44px;
+  }
+
+  .navigator-search-btn,
+  .navigator-mode-btn,
+  .navigator-fav-toggle {
+    min-height: 44px;
+    height: 44px;
   }
 }
 

@@ -50,6 +50,25 @@ export default defineConfig({
         hasTouch: true,
       },
     },
+    {
+      name: 'mobile-landscape',
+      use: {
+        browserName: 'chromium',
+        viewport: { width: 844, height: 390 },
+        deviceScaleFactor: 3,
+        isMobile: true,
+        hasTouch: true,
+      },
+    },
+    {
+      name: 'tablet-portrait',
+      use: {
+        browserName: 'chromium',
+        viewport: { width: 768, height: 1024 },
+        deviceScaleFactor: 2,
+        hasTouch: true,
+      },
+    },
   ],
   webServer: {
     command: `pnpm build && pnpm preview --host 127.0.0.1 --port ${PORT} --strictPort`,

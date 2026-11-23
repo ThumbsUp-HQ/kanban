@@ -1,7 +1,8 @@
 // Copyright 2026 Kanban Platform Contributors
 // Apache-2.0 License. See LICENSE for details.
 
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
+import type { Page } from '@playwright/test';
 import {
   FORBIDDEN_MOCK_TOKENS,
   scanForMockTokens,
@@ -10,6 +11,9 @@ import {
   calculateContrastRatio,
   parseRgb,
   ROLE_DISALLOWED_SELECTORS,
+  scanMobileTouchTargets,
+  scanMobileInputFontSizes,
+  scanTopbarOcclusion,
 } from './gateAuditor';
 
 describe('gateAuditor Meta-Assertion Harness (KANBA-223)', () => {
@@ -135,6 +139,46 @@ describe('gateAuditor Meta-Assertion Harness (KANBA-223)', () => {
       // Member disallowed selectors include project creation
       expect(ROLE_DISALLOWED_SELECTORS.member).toContain('[data-testid="home-create-project-btn"]');
       expect(ROLE_DISALLOWED_SELECTORS.member).toContain('button:has-text("+ Workflow")');
+    });
+  });
+
+  describe('Mobile Gate Auditors (KAN-314)', () => {
+    it('scanMobileTouchTargets delegates to page.evaluate with target bounds', async () => {
+      const mockPage = {
+        evaluate: vi.fn().mockResolvedValue([
+          { selector: 'button:nth-of-type(1)', text: 'Tiny', width: 24, height: 24, minAllowed: 44 }
+        ]),
+      } as unknown as Page;
+
+      const violations = await scanMobileTouchTargets(mockPage, { minTargetSize: 44 });
+      expect(violations).toHaveLength(1);
+      expect(violations[0]?.width).toBe(24);
+      expect(violations[0]?.minAllowed).toBe(44);
+    });
+
+    it('scanMobileInputFontSizes delegates to page.evaluate with 16px requirement', async () => {
+      const mockPage = {
+        evaluate: vi.fn().mockResolvedValue([
+          { selector: 'input:nth-of-type(1)', tagName: 'input', fontSize: 13, requiredSize: 16 }
+        ]),
+      } as unknown as Page;
+
+      const violations = await scanMobileInputFontSizes(mockPage, { minFontSize: 16 });
+      expect(violations).toHaveLength(1);
+      expect(violations[0]?.fontSize).toBe(13);
+      expect(violations[0]?.requiredSize).toBe(16);
+    });
+
+    it('scanTopbarOcclusion delegates to page.evaluate detecting topbar overlay', async () => {
+      const mockPage = {
+        evaluate: vi.fn().mockResolvedValue([
+          { selector: '.docs-tree-pane', topbarBottom: 52, elementTop: 0, occludedPixels: 52 }
+        ]),
+      } as unknown as Page;
+
+      const violations = await scanTopbarOcclusion(mockPage, '.kb-topbar');
+      expect(violations).toHaveLength(1);
+      expect(violations[0]?.occludedPixels).toBe(52);
     });
   });
 });

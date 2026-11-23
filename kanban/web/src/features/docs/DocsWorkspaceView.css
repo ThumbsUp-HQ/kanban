@@ -1106,12 +1106,13 @@
 
   .docs-tree-pane {
     position: fixed;
-    top: 0;
+    top: var(--topbar-h, 52px);
     left: 0;
     bottom: 0;
+    height: calc(100dvh - var(--topbar-h, 52px));
     width: 280px;
     max-width: 80vw;
-    z-index: 100;
+    z-index: 200;
     box-shadow: 4px 0 16px rgba(0, 0, 0, 0.15);
     transform: translateX(-100%);
     transition: transform 200ms ease;
@@ -1123,12 +1124,13 @@
 
   .docs-rail-pane {
     position: fixed;
-    top: 0;
+    top: var(--topbar-h, 52px);
     right: 0;
     bottom: 0;
+    height: calc(100dvh - var(--topbar-h, 52px));
     width: 280px;
     max-width: 80vw;
-    z-index: 100;
+    z-index: 200;
     box-shadow: -4px 0 16px rgba(0, 0, 0, 0.15);
     transform: translateX(100%);
     transition: transform 200ms ease;
@@ -1141,8 +1143,75 @@
   .docs-sheet-backdrop {
     display: block;
     position: fixed;
-    inset: 0;
+    top: var(--topbar-h, 52px);
+    left: 0;
+    right: 0;
+    bottom: 0;
+    height: calc(100dvh - var(--topbar-h, 52px));
     background: rgba(0, 0, 0, 0.4);
-    z-index: 90;
+    z-index: 190;
+  }
+
+  .docs-tree-item__actions {
+    display: inline-flex;
+  }
+
+  .docs-tree-item__action-btn {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+    font-size: 14px;
+  }
+
+  .docs-tree-item__toggle {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+    font-size: 12px;
+  }
+
+  .docs-rail-toggle-btn {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+  }
+
+  .docs-modal__input,
+  .docs-modal__textarea,
+  .docs-modal__select {
+    font-size: 16px;
+    min-height: 44px;
+  }
+}
+
+@media (pointer: coarse) {
+  .docs-tree-item__actions {
+    display: inline-flex;
+  }
+
+  .docs-tree-item__action-btn {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+    font-size: 14px;
+  }
+
+  .docs-tree-item__toggle {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
+    font-size: 12px;
+  }
+
+  .docs-rail-toggle-btn {
+    min-width: 44px;
+    min-height: 44px;
+    width: 44px;
+    height: 44px;
   }
 }
