@@ -8,6 +8,8 @@ import type { EmojiKey } from '../../components/emoji/emojiRegistry.ts';
 import { GateStatusPill } from '../gates/GateStatusPill.tsx';
 import { setOpenerElement } from '../drawer/IssueKeyLink.tsx';
 import { QuickFieldPopover } from '../views/QuickFieldPopover.tsx';
+import { useTouchDragSensor } from '../views/useTouchDragSensor.ts';
+import { TouchReorderPopover } from '../views/TouchReorderPopover.tsx';
 import type { IssueItem } from '../views/viewsApi.ts';
 import type { BoardAssignee, BoardIssue, BoardPriority, BoardWorkflowState, StateGroup } from './boardApi.ts';
 
@@ -117,6 +119,11 @@ export function BoardCard({
   const isGatePending = issue.gate_status === 'pending' || Boolean(issue.pending_gate);
   const [isStatePopoverOpen, setIsStatePopoverOpen] = useState(false);
   const [popoverAnchor, setPopoverAnchor] = useState<DOMRect | null>(null);
+  const [isTouchPopoverOpen, setIsTouchPopoverOpen] = useState(false);
+  const { isTouchLifted, touchHandlers, isScrollingRef } = useTouchDragSensor({
+    delay: 200,
+    tolerance: 8,
+  });
 
   const currentAgeHours =
     typeof issue.age_in_current_state_hours === 'number'
@@ -175,7 +182,7 @@ export function BoardCard({
 
     const cleanupDraggable = draggableFactory({
       element: el,
-      canDrag: () => !isGatePending,
+      canDrag: () => !isGatePending && !isScrollingRef.current,
       getInitialData: () => getCardDragData(issue),
     });
 
@@ -188,7 +195,7 @@ export function BoardCard({
       cleanupDraggable();
       cleanupDropTarget();
     };
-  }, [issue, isGatePending, draggableFactory, dropTargetFactory]);
+  }, [issue, isGatePending, draggableFactory, dropTargetFactory, isScrollingRef]);
 
   const handleOpenPeek = (targetEl?: HTMLElement | null): void => {
     setOpenerElement(targetEl ?? cardRef.current);
@@ -250,7 +257,7 @@ export function BoardCard({
       ref={cardRef}
       role="button"
       tabIndex={0}
-      className={`board-card ${isGatePending ? 'board-card--pending-gate' : ''}`}
+      className={`board-card ${isGatePending ? 'board-card--pending-gate' : ''} ${isTouchLifted ? 'board-card--touch-lifted' : ''}`}
       data-testid={`board-card-${issue.key}`}
       data-issue-key={issue.key}
       data-gate-pending={isGatePending ? 'true' : undefined}
@@ -258,9 +265,11 @@ export function BoardCard({
       title={isGatePending ? 'Transition gate in progress' : undefined}
       data-dragging={isDragging ? 'true' : undefined}
       data-drop-target={dropEdge ?? undefined}
+      data-touch-lifted={isTouchLifted ? 'true' : undefined}
       onKeyDown={handleKeyDown}
       onClick={handleCardClick}
       aria-label={`${issue.key} ${issue.summary}`.trim()}
+      {...touchHandlers}
     >
       <div className="board-card-top">
         <a
@@ -273,17 +282,34 @@ export function BoardCard({
         </a>
         <div className="board-card-top-badges">
           {canTransition && (
-            <button
-              type="button"
-              className="board-card-state-btn"
-              data-testid={`board-card-state-btn-${issue.key}`}
-              aria-label={`Move ${issue.key} to another state`}
-              title={`Move ${issue.key}`}
-              onClick={handleStateBtnClick}
-            >
-              <span className="board-card-state-btn-glyph" aria-hidden="true">⇄</span>
-              <span>{issue.state?.name ?? 'Move'}</span>
-            </button>
+            <>
+              <button
+                type="button"
+                className="board-card-touch-action-btn board-card-touch-reorder-btn"
+                data-testid={`board-card-touch-action-${issue.key}`}
+                aria-label={`Quick move ${issue.key}`}
+                title={`Quick move ${issue.key}`}
+                onClick={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  setIsTouchPopoverOpen(true);
+                }}
+              >
+                <span className="board-card-touch-glyph" aria-hidden="true">⇅</span>
+                <span className="visually-hidden">Quick move</span>
+              </button>
+              <button
+                type="button"
+                className="board-card-state-btn"
+                data-testid={`board-card-state-btn-${issue.key}`}
+                aria-label={`Move ${issue.key} to another state`}
+                title={`Move ${issue.key}`}
+                onClick={handleStateBtnClick}
+              >
+                <span className="board-card-state-btn-glyph" aria-hidden="true">⇄</span>
+                <span>{issue.state?.name ?? 'Move'}</span>
+              </button>
+            </>
           )}
           {isGatePending && (
             <GateStatusPill
@@ -411,6 +437,34 @@ export function BoardCard({
             }
           }}
           states={projectStates}
+        />
+      )}
+      {isTouchPopoverOpen && (
+        <TouchReorderPopover
+          isOpen={isTouchPopoverOpen}
+          itemKey={issue.key}
+          itemSummary={issue.summary}
+          currentStateId={issue.state_id}
+          states={projectStates && projectStates.length > 0 ? projectStates : [
+            { id: 'state-backlog', name: 'Backlog', group: 'backlog' },
+            { id: 'state-todo', name: 'To Do', group: 'unstarted' },
+            { id: 'state-in-progress', name: 'In Progress', group: 'started' },
+            { id: 'state-in-review', name: 'In Review', group: 'started' },
+            { id: 'state-done', name: 'Done', group: 'completed' },
+          ]}
+          kind="issue"
+          onClose={() => { setIsTouchPopoverOpen(false); }}
+          onSelectState={(targetStateId) => {
+            onStateTransition?.(issue.key, targetStateId);
+            setIsTouchPopoverOpen(false);
+          }}
+          onApplyMove={(targetStateId, rank) => {
+            onStateTransition?.(issue.key, targetStateId);
+            if (rank && onKeyboardMove) {
+              onKeyboardMove(issue, rank === 'top' ? 'up' : 'down');
+            }
+            setIsTouchPopoverOpen(false);
+          }}
         />
       )}
     </div>

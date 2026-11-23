@@ -1,0 +1,298 @@
+/**
+ * Mobile Touch Action Popover and Lift Styles (KAN-342).
+ *
+ * Implements accessible bottom-sheet / popover fallback for touchscreens,
+ * tuned touch drag indicators, and visual vibration/lift styles.
+ */
+
+.board-card--touch-lifted {
+  transform: scale(1.025) translateY(-4px) !important;
+  box-shadow: 0 14px 28px -4px rgba(0, 0, 0, 0.22), 0 6px 12px -2px rgba(0, 0, 0, 0.12) !important;
+  border-color: var(--accent-primary, #3b82f6) !important;
+  z-index: 30 !important;
+  transition: transform 120ms cubic-bezier(0.2, 0, 0, 1), box-shadow 120ms ease;
+}
+
+.board-card-touch-action-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  min-width: 28px;
+  min-height: 28px;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.1));
+  background: var(--bg-surface, #ffffff);
+  color: var(--fg-secondary, #64748b);
+  cursor: pointer;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+  transition: background-color 120ms ease, color 120ms ease;
+}
+
+.board-card-touch-action-btn:hover,
+.board-card-touch-action-btn:focus-visible {
+  background: var(--bg-surface-raised, rgba(0, 0, 0, 0.05));
+  color: var(--fg-primary, #0f172a);
+}
+
+@media (max-width: 768px) {
+  .board-card-touch-action-btn {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
+  }
+}
+
+/* Touch Reorder Overlay & Backdrop */
+.touch-reorder-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-sizing: border-box;
+}
+
+.touch-reorder-backdrop {
+  position: absolute;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(2px);
+  -webkit-backdrop-filter: blur(2px);
+  cursor: pointer;
+}
+
+/* Modal / Bottom-Sheet */
+.touch-reorder-popover {
+  position: relative;
+  z-index: 1001;
+  width: 90%;
+  max-width: 440px;
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.15));
+  border-radius: var(--radius-xl, 14px);
+  box-shadow: 0 20px 40px -8px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  box-sizing: border-box;
+  animation: touchPopoverSlideUp 180ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes touchPopoverSlideUp {
+  from {
+    opacity: 0;
+    transform: translateY(16px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (max-width: 640px) {
+  .touch-reorder-overlay {
+    align-items: flex-end;
+  }
+  .touch-reorder-popover {
+    width: 100%;
+    max-width: 100%;
+    border-bottom-left-radius: 0;
+    border-bottom-right-radius: 0;
+    margin: 0;
+  }
+}
+
+.touch-reorder-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+}
+
+.touch-reorder-badge {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--accent-primary, #3b82f6);
+  margin-bottom: 2px;
+  display: block;
+}
+
+.touch-reorder-title {
+  margin: 0;
+  font-size: 1.125rem;
+  font-weight: 600;
+  color: var(--fg-primary, #0f172a);
+}
+
+.touch-reorder-summary {
+  margin: 4px 0 0;
+  font-size: 0.8125rem;
+  color: var(--fg-secondary, #64748b);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 320px;
+}
+
+.touch-reorder-close-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.125rem;
+  color: var(--fg-muted, #94a3b8);
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm, 4px);
+  line-height: 1;
+}
+
+.touch-reorder-close-btn:hover {
+  background: var(--bg-surface-raised, rgba(0, 0, 0, 0.06));
+  color: var(--fg-primary, #0f172a);
+}
+
+.touch-reorder-body {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+.touch-reorder-section-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--fg-secondary, #64748b);
+  margin-bottom: 8px;
+  display: block;
+}
+
+.touch-reorder-states-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+
+.touch-reorder-state-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.1));
+  background: var(--bg-surface-raised, rgba(0, 0, 0, 0.02));
+  color: var(--fg-primary, #0f172a);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+  transition: all 120ms ease;
+}
+
+.touch-reorder-state-option:hover {
+  border-color: var(--accent-primary, #3b82f6);
+  background: var(--bg-surface, #ffffff);
+}
+
+.touch-reorder-state-option--selected {
+  border-color: var(--accent-primary, #3b82f6);
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--accent-primary, #3b82f6);
+  font-weight: 600;
+}
+
+.touch-reorder-state-glyph {
+  font-size: 0.875rem;
+  line-height: 1;
+}
+
+.touch-reorder-current-tag {
+  font-size: 0.6875rem;
+  color: var(--fg-muted, #94a3b8);
+  margin-left: auto;
+}
+
+.touch-reorder-rank-options {
+  display: flex;
+  gap: 8px;
+}
+
+.touch-reorder-rank-btn {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  padding: 10px 12px;
+  border-radius: var(--radius-md, 8px);
+  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.1));
+  background: var(--bg-surface-raised, rgba(0, 0, 0, 0.02));
+  color: var(--fg-primary, #0f172a);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 120ms ease;
+}
+
+.touch-reorder-rank-btn:hover {
+  border-color: var(--accent-primary, #3b82f6);
+  background: var(--bg-surface, #ffffff);
+}
+
+.touch-reorder-rank-btn--active {
+  border-color: var(--accent-primary, #3b82f6);
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--accent-primary, #3b82f6);
+  font-weight: 600;
+}
+
+.touch-reorder-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 14px 20px;
+  border-top: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.08));
+  background: var(--bg-surface-raised, rgba(0, 0, 0, 0.02));
+}
+
+.touch-reorder-cancel-btn {
+  padding: 8px 16px;
+  border-radius: var(--radius-md, 6px);
+  border: 1px solid var(--border-subtle, rgba(0, 0, 0, 0.15));
+  background: var(--bg-surface, #ffffff);
+  color: var(--fg-secondary, #64748b);
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.touch-reorder-cancel-btn:hover {
+  background: var(--bg-surface-raised, rgba(0, 0, 0, 0.05));
+  color: var(--fg-primary, #0f172a);
+}
+
+.touch-reorder-apply-btn {
+  padding: 8px 18px;
+  border-radius: var(--radius-md, 6px);
+  border: 1px solid transparent;
+  background: var(--accent-primary, #3b82f6);
+  color: #ffffff;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background-color 120ms ease;
+}
+
+.touch-reorder-apply-btn:hover {
+  filter: brightness(1.08);
+}
