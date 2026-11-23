@@ -29,6 +29,11 @@
   transition: background 120ms ease, color 120ms ease;
 }
 
+.kb-layout-switcher-btn:focus-visible {
+  outline: 2px solid var(--focus-ring, #6366f1);
+  outline-offset: 2px;
+}
+
 .kb-layout-switcher-btn--selected {
   background: var(--bg-hover, #2c313a);
   color: var(--fg-primary, #f8fafc);

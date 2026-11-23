@@ -589,6 +589,15 @@ export function CommandPalette({
   const selectedIndex =
     filteredOptions.length === 0 ? 0 : Math.min(rawSelectedIndex, filteredOptions.length - 1);
 
+  useEffect(() => {
+    if (filteredOptions[selectedIndex]) {
+      const activeEl = document.getElementById(`kb-palette-opt-${filteredOptions[selectedIndex].id}`);
+      if (typeof activeEl?.scrollIntoView === 'function') {
+        activeEl.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }, [selectedIndex, filteredOptions]);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>): void => {
     const raw = e.target.value;
     const truncated = raw.length > MAX_QUERY_LENGTH ? raw.slice(0, MAX_QUERY_LENGTH) : raw;
@@ -666,6 +675,11 @@ export function CommandPalette({
             aria-expanded="true"
             aria-controls="command-palette-list"
             aria-autocomplete="list"
+            aria-activedescendant={
+              filteredOptions[selectedIndex]
+                ? `kb-palette-opt-${filteredOptions[selectedIndex].id}`
+                : undefined
+            }
             className="kb-palette-input"
             data-testid="command-palette-input"
             placeholder="Type a command or search issues..."

@@ -1075,6 +1075,12 @@
   background: var(--bg-hover, #2c313a);
 }
 
+.navigator-issue-card:focus-visible,
+.issue-list-card:focus-visible {
+  outline: 2px solid var(--focus-ring, #6366f1);
+  outline-offset: 2px;
+}
+
 .issue-list-card.list-row--active {
   background: var(--bg-hover, #2c313a);
   border-color: var(--accent-primary);

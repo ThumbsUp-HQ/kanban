@@ -360,10 +360,17 @@ export function AppShell({
           systemStatus={systemStatus}
           showLayoutSwitcher={false}
           user={currentUser}
+          hamburgerButtonRef={hamburgerButtonRef}
         />
 
         {/* Main Canvas Region */}
-        <main id="main" tabIndex={-1} className="kb-main-canvas">
+        <main
+          id="main"
+          tabIndex={-1}
+          className="kb-main-canvas"
+          inert={mobileSidebarOpen ? true : undefined}
+          aria-hidden={mobileSidebarOpen ? 'true' : undefined}
+        >
           {children ?? <Outlet />}
         </main>
 

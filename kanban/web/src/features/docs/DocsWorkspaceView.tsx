@@ -8,6 +8,7 @@ import React, {
   useEffect,
   useCallback,
   useMemo,
+  useRef,
   type JSX,
 } from 'react';
 import { useParams, useNavigate } from 'react-router';
@@ -19,6 +20,7 @@ import { PageEditorPane } from './PageEditorPane';
 import { OutlineAndVersionsRail } from './OutlineAndVersionsRail';
 import { SelectionToIssueToolbar } from './SelectionToIssueToolbar';
 import { useProjectRouteContext } from '../../app/ProjectRouteContext';
+import { useFocusTrap } from '../drawer/useFocusTrap';
 import './DocsWorkspaceView.css';
 
 export function DocsWorkspaceView(): JSX.Element {
@@ -42,6 +44,46 @@ export function DocsWorkspaceView(): JSX.Element {
   const [isMobile, setIsMobile] = useState(
     () => typeof window !== 'undefined' && window.innerWidth <= 1024
   );
+
+  const toggleTreeBtnRef = useRef<HTMLButtonElement | null>(null);
+  const toggleRailBtnRef = useRef<HTMLButtonElement | null>(null);
+  const treePaneRef = useRef<HTMLDivElement | null>(null);
+  const railPaneRef = useRef<HTMLDivElement | null>(null);
+  const wasTreeSheetOpenRef = useRef<boolean>(false);
+  const wasRailSheetOpenRef = useRef<boolean>(false);
+
+  useEffect(() => {
+    if (wasTreeSheetOpenRef.current && !isTreeSheetOpen) {
+      toggleTreeBtnRef.current?.focus();
+    }
+    wasTreeSheetOpenRef.current = isTreeSheetOpen;
+  }, [isTreeSheetOpen]);
+
+  useEffect(() => {
+    if (wasRailSheetOpenRef.current && !isRailSheetOpen) {
+      toggleRailBtnRef.current?.focus();
+    }
+    wasRailSheetOpenRef.current = isRailSheetOpen;
+  }, [isRailSheetOpen]);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent): void => {
+      if (e.key === 'Escape') {
+        if (isTreeSheetOpen) {
+          setIsTreeSheetOpen(false);
+        } else if (isRailSheetOpen) {
+          setIsRailSheetOpen(false);
+        }
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isTreeSheetOpen, isRailSheetOpen]);
+
+  useFocusTrap(isMobile && isTreeSheetOpen, treePaneRef);
+  useFocusTrap(isMobile && isRailSheetOpen, railPaneRef);
 
   useEffect(() => {
     function handleResize() {
@@ -120,6 +162,7 @@ export function DocsWorkspaceView(): JSX.Element {
       {/* Mobile Topbar */}
       <div className="docs-mobile-bar" data-testid="docs-mobile-bar">
         <button
+          ref={toggleTreeBtnRef}
           type="button"
           className="docs-mobile-btn"
           onClick={() => {
@@ -127,11 +170,13 @@ export function DocsWorkspaceView(): JSX.Element {
             setIsRailSheetOpen(false);
           }}
           aria-label="Toggle document tree"
+          aria-expanded={isTreeSheetOpen}
           data-testid="toggle-tree-sheet-btn"
         >
           📂 Pages Tree
         </button>
         <button
+          ref={toggleRailBtnRef}
           type="button"
           className="docs-mobile-btn"
           onClick={() => {
@@ -139,6 +184,7 @@ export function DocsWorkspaceView(): JSX.Element {
             setIsTreeSheetOpen(false);
           }}
           aria-label="Toggle outline and history"
+          aria-expanded={isRailSheetOpen}
           data-testid="toggle-rail-sheet-btn"
         >
           📑 Outline & History
@@ -166,6 +212,10 @@ export function DocsWorkspaceView(): JSX.Element {
 
         {/* Left Pane (Tree) */}
         <div
+          ref={treePaneRef}
+          role={isMobile && isTreeSheetOpen ? 'dialog' : undefined}
+          aria-modal={isMobile && isTreeSheetOpen ? 'true' : undefined}
+          aria-label="Document pages tree"
           className={`docs-tree-wrapper ${isTreeSheetOpen ? 'docs-tree-pane--open' : ''}`}
           data-testid="docs-tree-wrapper"
         >
@@ -213,6 +263,10 @@ export function DocsWorkspaceView(): JSX.Element {
         {/* Right Pane (Outline & History) */}
         {activePageId && (
           <div
+            ref={railPaneRef}
+            role={isMobile && isRailSheetOpen ? 'dialog' : undefined}
+            aria-modal={isMobile && isRailSheetOpen ? 'true' : undefined}
+            aria-label="Document outline and version history"
             className={`docs-rail-wrapper ${isRailSheetOpen ? 'docs-rail-pane--open' : ''}`}
             data-testid="docs-rail-wrapper"
           >

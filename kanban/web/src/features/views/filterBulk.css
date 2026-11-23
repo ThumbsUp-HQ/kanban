@@ -404,7 +404,8 @@
   border-color: var(--border-strong);
 }
 
-.swimlane-card[data-focused="true"] {
+.swimlane-card[data-focused="true"],
+.swimlane-card:focus-visible {
   outline: 2px solid var(--focus-ring);
   outline-offset: 2px;
 }

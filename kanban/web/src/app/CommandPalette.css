@@ -47,6 +47,11 @@
   font-family: inherit;
 }
 
+.kb-palette-input:focus-visible {
+  outline: 2px solid var(--focus-ring, #6366f1);
+  outline-offset: 2px;
+}
+
 .kb-palette-input::placeholder {
   color: var(--fg-muted, #64748b);
 }

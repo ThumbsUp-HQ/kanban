@@ -649,7 +649,13 @@
 
 .purge-textarea:focus {
   outline: none;
-  border-color: #58a6ff;
+  border-color: var(--focus-ring, #58a6ff);
+}
+
+.purge-textarea:focus-visible {
+  outline: 2px solid var(--focus-ring, #58a6ff);
+  outline-offset: 2px;
+  border-color: var(--focus-ring, #58a6ff);
 }
 
 .char-count {
@@ -661,7 +667,7 @@
 .validation-error {
   margin: 4px 0 0;
   font-size: 0.8125rem;
-  color: #ff7b72;
+  color: var(--danger-fg, #ff7b72);
 }
 
 .purge-modal__footer {
