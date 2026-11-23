@@ -1,0 +1,898 @@
+diff --git a/kanban/web/src/features/analytics/FlowAnalyticsPage.css b/kanban/web/src/features/analytics/FlowAnalyticsPage.css
+index c3cde264..4d4cc019 100644
+--- a/kanban/web/src/features/analytics/FlowAnalyticsPage.css
++++ b/kanban/web/src/features/analytics/FlowAnalyticsPage.css
+@@ -277,3 +277,61 @@
+   border-radius: 6px;
+   border: 1px solid var(--border-subtle, #e5e7eb);
+ }
++
++/* Headline Flow KPIs & Advanced Grid (KAN-370) */
++.kb-flow-headline-kpis {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
++  gap: 16px;
++  margin-bottom: 8px;
++}
++
++.kb-flow-kpi-card {
++  background: var(--bg-surface, #ffffff);
++  border: 1px solid var(--border-subtle, #e5e7eb);
++  border-radius: 8px;
++  padding: 16px 20px;
++  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
++}
++
++.kb-flow-kpi-label {
++  font-size: 0.8125rem;
++  font-weight: 600;
++  text-transform: uppercase;
++  letter-spacing: 0.05em;
++  color: var(--fg-secondary, #4b5563);
++  margin-bottom: 6px;
++}
++
++.kb-flow-kpi-value {
++  font-size: 1.5rem;
++  font-weight: 700;
++  color: var(--fg-primary, #111827);
++  display: flex;
++  align-items: baseline;
++  gap: 6px;
++}
++
++.kb-flow-kpi-unit {
++  font-size: 0.875rem;
++  font-weight: 500;
++  color: var(--fg-secondary, #4b5563);
++}
++
++.kb-flow-kpi-divider {
++  color: var(--border-subtle, #d1d5db);
++  font-weight: 400;
++}
++
++.kb-flow-kpi-subtext {
++  font-size: 0.75rem;
++  color: var(--fg-muted, #6b7280);
++  margin-top: 4px;
++}
++
++.kb-flow-advanced-grid {
++  display: flex;
++  flex-direction: column;
++  gap: 24px;
++  padding-top: 12px;
++}
+diff --git a/kanban/web/src/features/analytics/FlowAnalyticsPage.tsx b/kanban/web/src/features/analytics/FlowAnalyticsPage.tsx
+index 4094146f..842a6634 100644
+--- a/kanban/web/src/features/analytics/FlowAnalyticsPage.tsx
++++ b/kanban/web/src/features/analytics/FlowAnalyticsPage.tsx
+@@ -8,6 +8,7 @@ import { CycleTimeScatterChart } from './charts/CycleTimeScatterChart';
+ import { AgingWipChart } from './charts/AgingWipChart';
+ import { MonteCarloForecastCard } from './charts/MonteCarloForecastCard';
+ import { CycleBurndownChart } from './charts/CycleBurndownChart';
++import { AdvancedSection } from '../../ui/AdvancedSection';
+ import './FlowAnalyticsPage.css';
+ 
+ export type ProjectFlowMetricsResponse = components['schemas']['ProjectFlowMetricsResponse'];
+@@ -168,32 +169,49 @@ export function FlowAnalyticsPage(): JSX.Element {
+ 
+       {!isFlowLoading && flowData && (
+         <div className="kb-flow-grid">
++          {/* Headline Flow KPIs (KAN-370) */}
++          <div className="kb-flow-headline-kpis" data-testid="flow-headline-kpis">
++            <div className="kb-flow-kpi-card" data-testid="kpi-throughput">
++              <div className="kb-flow-kpi-label">Throughput</div>
++              <div className="kb-flow-kpi-value">
++                {flowData.monte_carlo.average_daily_throughput.toFixed(1)}{' '}
++                <span className="kb-flow-kpi-unit">issues/day</span>
++              </div>
++              <div className="kb-flow-kpi-subtext">
++                {flowData.cycle_lead_time.total_completed_in_window} completed in window
++              </div>
++            </div>
++
++            <div className="kb-flow-kpi-card" data-testid="kpi-cycle-time">
++              <div className="kb-flow-kpi-label">Cycle Time (P50 / P85)</div>
++              <div className="kb-flow-kpi-value">
++                {flowData.cycle_lead_time.cycle_time_percentiles.p50}d{' '}
++                <span className="kb-flow-kpi-divider">/</span>{' '}
++                {flowData.cycle_lead_time.cycle_time_percentiles.p85}d
++              </div>
++              <div className="kb-flow-kpi-subtext">
++                Lead Time: {flowData.cycle_lead_time.lead_time_percentiles.p50}d (P50) / {flowData.cycle_lead_time.lead_time_percentiles.p85}d (P85)
++              </div>
++            </div>
++
++            <div className="kb-flow-kpi-card" data-testid="kpi-wip-count">
++              <div className="kb-flow-kpi-label">Active WIP Count</div>
++              <div className="kb-flow-kpi-value">
++                {flowData.aging_wip.total_active_wip}{' '}
++                <span className="kb-flow-kpi-unit">in progress</span>
++              </div>
++              <div className="kb-flow-kpi-subtext">
++                Across active flow columns
++              </div>
++            </div>
++          </div>
++
+           {/* Cumulative Flow Diagram (CFD) */}
+           <CfdAreaChart
+             points={flowData.cfd.points}
+             states={flowData.cfd.states}
+           />
+ 
+-          {/* Cycle & Lead Time Scatterplot */}
+-          <CycleTimeScatterChart
+-            points={flowData.cycle_lead_time.points}
+-            cycleTimePercentiles={flowData.cycle_lead_time.cycle_time_percentiles}
+-            leadTimePercentiles={flowData.cycle_lead_time.lead_time_percentiles}
+-            totalCompleted={flowData.cycle_lead_time.total_completed_in_window}
+-          />
+-
+-          {/* Aging Work in Progress (WIP) */}
+-          <AgingWipChart
+-            activeIssues={flowData.aging_wip.active_issues}
+-            columnThresholds={flowData.aging_wip.column_thresholds}
+-            totalActiveWip={flowData.aging_wip.total_active_wip}
+-          />
+-
+-          {/* Monte Carlo Throughput & Delivery Forecast */}
+-          <MonteCarloForecastCard
+-            forecast={flowData.monte_carlo}
+-          />
+-
+           {/* Cycle Burndown Section */}
+           <div className="kb-chart-card" data-testid="flow-cycle-burndown-section">
+             <div className="kb-chart-header">
+@@ -235,6 +253,36 @@ export function FlowAnalyticsPage(): JSX.Element {
+               />
+             )}
+           </div>
++
++          {/* Advanced Statistical Parameters (Progressive Disclosure - KAN-370) */}
++          <AdvancedSection
++            title="Advanced Statistical Parameters & Simulation"
++            summary="Monte Carlo trial count (10,000), percentile band tunables (P50/P85/P95), aging WIP thresholds, and raw statistical tables"
++            testId="flow-advanced-stats-section"
++            defaultOpen={false}
++          >
++            <div className="kb-flow-advanced-grid">
++              {/* Cycle & Lead Time Scatterplot */}
++              <CycleTimeScatterChart
++                points={flowData.cycle_lead_time.points}
++                cycleTimePercentiles={flowData.cycle_lead_time.cycle_time_percentiles}
++                leadTimePercentiles={flowData.cycle_lead_time.lead_time_percentiles}
++                totalCompleted={flowData.cycle_lead_time.total_completed_in_window}
++              />
++
++              {/* Aging Work in Progress (WIP) */}
++              <AgingWipChart
++                activeIssues={flowData.aging_wip.active_issues}
++                columnThresholds={flowData.aging_wip.column_thresholds}
++                totalActiveWip={flowData.aging_wip.total_active_wip}
++              />
++
++              {/* Monte Carlo Throughput & Delivery Forecast */}
++              <MonteCarloForecastCard
++                forecast={flowData.monte_carlo}
++              />
++            </div>
++          </AdvancedSection>
+         </div>
+       )}
+     </div>
+diff --git a/kanban/web/src/features/analytics/__tests__/FlowAnalyticsPage.test.tsx b/kanban/web/src/features/analytics/__tests__/FlowAnalyticsPage.test.tsx
+index 3c74f150..e7e99ca9 100644
+--- a/kanban/web/src/features/analytics/__tests__/FlowAnalyticsPage.test.tsx
++++ b/kanban/web/src/features/analytics/__tests__/FlowAnalyticsPage.test.tsx
+@@ -620,4 +620,63 @@ describe('FlowAnalyticsPage & Flow Telemetry Studio (KAN-79)', () => {
+       expect(screen.getByTestId<HTMLSelectElement>('flow-cycle-select').value).toBe('c-second');
+     });
+   });
++
++  it('renders headline KPIs with Monte Carlo trial count collapsed in AdvancedSection (KAN-370)', async () => {
++    renderWithProviders(<FlowAnalyticsPage />);
++
++    // Headline KPIs are visible and render expected metrics
++    await waitFor(() => {
++      expect(screen.getByTestId('flow-headline-kpis')).toBeDefined();
++    });
++
++    expect(screen.getByTestId('kpi-throughput').textContent).toContain('1.4');
++    expect(screen.getByTestId('kpi-throughput').textContent).toContain('issues/day');
++    expect(screen.getByTestId('kpi-cycle-time').textContent).toContain('2.5d');
++    expect(screen.getByTestId('kpi-cycle-time').textContent).toContain('4d');
++    expect(screen.getByTestId('kpi-wip-count').textContent).toContain('1 in progress');
++
++    // Primary CFD chart is visible outside AdvancedSection
++    expect(screen.getByTestId('cfd-area-chart-card')).toBeDefined();
++
++    // AdvancedSection is present and collapsed by default
++    const advSection = screen.getByTestId('flow-advanced-stats-section');
++    expect(advSection).toBeDefined();
++    expect(advSection.hasAttribute('open')).toBe(false);
++
++    // Monte Carlo forecast, trials count (10,000), and scatter/aging charts are inside AdvancedSection
++    const mcCard = within(advSection).getByTestId('monte-carlo-forecast-card');
++    expect(mcCard.textContent).toContain('10,000 trials');
++    expect(within(advSection).getByTestId('cycle-time-scatter-card')).toBeDefined();
++    expect(within(advSection).getByTestId('aging-wip-card')).toBeDefined();
++
++    // Toggling the AdvancedSection opens and closes it
++    const toggleBtn = screen.getByTestId('flow-advanced-stats-section-toggle');
++    fireEvent.click(toggleBtn);
++    expect(advSection.hasAttribute('open')).toBe(true);
++
++    fireEvent.click(toggleBtn);
++    expect(advSection.hasAttribute('open')).toBe(false);
++  });
++
++  it('handles missing projectKey param and empty cycles object fallback', () => {
++    vi.mocked(clientModule.apiFetch).mockImplementation((_method, path) => {
++      const p = typeof path === 'string' ? path : '';
++      if (p.includes('/cycles')) {
++        return Promise.resolve({});
++      }
++      return Promise.resolve(mockFlowData);
++    });
++
++    render(
++      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
++        <MemoryRouter initialEntries={['/analytics']}>
++          <Routes>
++            <Route path="/analytics" element={<FlowAnalyticsPage />} />
++          </Routes>
++        </MemoryRouter>
++      </QueryClientProvider>,
++    );
++
++    expect(screen.getByText('Flow Telemetry Studio')).toBeDefined();
++  });
+ });
+diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.css b/kanban/web/src/features/settings/PersonalSettingsPage.css
+index 424ce571..42333686 100644
+--- a/kanban/web/src/features/settings/PersonalSettingsPage.css
++++ b/kanban/web/src/features/settings/PersonalSettingsPage.css
+@@ -973,3 +973,36 @@
+ .kb-personal-settings-about-link:hover {
+   color: var(--fg-primary);
+ }
++
++/* Passkey Advanced Security Details (KAN-370) */
++.kb-passkey-advanced-wrapper {
++  margin-top: var(--space-2, 8px);
++}
++
++.kb-passkey-advanced-grid {
++  display: grid;
++  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
++  gap: var(--space-2, 8px);
++  padding: var(--space-2, 8px) 0;
++  font-size: var(--text-xs, 0.75rem);
++}
++
++.kb-passkey-adv-item {
++  display: flex;
++  flex-direction: column;
++  gap: 2px;
++}
++
++.kb-passkey-adv-label {
++  font-weight: 600;
++  color: var(--fg-secondary, #4b5563);
++}
++
++.kb-passkey-adv-item code {
++  font-family: var(--font-mono, monospace);
++  font-size: 0.75rem;
++  word-break: break-all;
++  background: var(--bg-canvas, #f3f4f6);
++  padding: 2px 4px;
++  border-radius: 4px;
++}
+diff --git a/kanban/web/src/features/settings/PersonalSettingsPage.tsx b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
+index a8cf6a34..6f38222f 100644
+--- a/kanban/web/src/features/settings/PersonalSettingsPage.tsx
++++ b/kanban/web/src/features/settings/PersonalSettingsPage.tsx
+@@ -37,6 +37,7 @@ import {
+   serializeAssertionCredential,
+ } from '../auth/webauthn';
+ import { PasskeyEnrollModal } from './PasskeyEnrollModal';
++import { AdvancedSection } from '../../ui/AdvancedSection';
+ import { ApiProblem } from '../../api/problem';
+ import type { MfaMethod } from '../auth/authApi';
+ import { copyToClipboard } from '../../utils/clipboard';
+@@ -925,6 +926,39 @@ export function PersonalSettingsPage(): JSX.Element {
+                             </span>
+                           )}
+                         </div>
++                        <div className="kb-passkey-advanced-wrapper">
++                          <AdvancedSection
++                            title="Advanced Security Details"
++                            summary="Raw AAGUID, Credential ID, sign count, transport flags, and session metadata"
++                            testId={`passkey-advanced-${pk.id}`}
++                            defaultOpen={false}
++                          >
++                            <div className="kb-passkey-advanced-grid" data-testid={`passkey-advanced-details-${pk.id}`}>
++                              <div className="kb-passkey-adv-item">
++                                <span className="kb-passkey-adv-label">Credential ID:</span>
++                                <code data-testid={`passkey-cred-id-${pk.id}`}>{pk.credential_id ?? pk.id}</code>
++                              </div>
++                              <div className="kb-passkey-adv-item">
++                                <span className="kb-passkey-adv-label">AAGUID:</span>
++                                <code data-testid={`passkey-aaguid-${pk.id}`}>{pk.aaguid ?? '00000000-0000-0000-0000-000000000000'}</code>
++                              </div>
++                              <div className="kb-passkey-adv-item">
++                                <span className="kb-passkey-adv-label">Sign Count:</span>
++                                <span data-testid={`passkey-sign-count-${pk.id}`}>{pk.sign_count ?? 0}</span>
++                              </div>
++                              <div className="kb-passkey-adv-item">
++                                <span className="kb-passkey-adv-label">Transport Flags:</span>
++                                <span data-testid={`passkey-transports-${pk.id}`}>
++                                  {transports.length > 0 ? transports.join(', ') : 'internal'}
++                                </span>
++                              </div>
++                              <div className="kb-passkey-adv-item">
++                                <span className="kb-passkey-adv-label">Session Metadata:</span>
++                                <span data-testid={`passkey-session-metadata-${pk.id}`}>AAL2-Bound Passkey Token</span>
++                              </div>
++                            </div>
++                          </AdvancedSection>
++                        </div>
+                       </td>
+                       <td className="kb-personal-settings-td" data-label="Created">
+                         {new Date(pk.created_at).toLocaleDateString()}
+diff --git a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
+index 7500d5f8..e33480bb 100644
+--- a/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
++++ b/kanban/web/src/features/settings/WorkspaceSettingsPage.tsx
+@@ -21,6 +21,7 @@ import { StudioDocLink } from '../../components/help/StudioDocLink';
+ import { EmojiHint } from '../../components/emoji/EmojiHint';
+ import { RbacPolicyBuilder } from '../rbac/RbacPolicyBuilder';
+ import { RoleLabelPicker } from '../rbac/RoleLabelPicker';
++import { AdvancedSection } from '../../ui/AdvancedSection';
+ import './ProjectSettingsPage.css';
+ 
+ interface WorkspaceSettingsData {
+@@ -967,181 +968,219 @@ export function WorkspaceSettingsPage(): JSX.Element {
+               </select>
+             </div>
+ 
+-            <div className="kb-form-group">
+-              <label htmlFor="ws-idle-timeout-input">
+-                Session Idle Timeout (Minutes)
+-                <FieldHelpHint
+-                  title="Session Idle Timeout"
+-                  summary="Minutes of user inactivity before the session is expired and re-authentication is enforced."
+-                  docHref="/docs/multi-card-authentication-studio"
+-                  testId="ws-idle-timeout-help"
+-                />
+-              </label>
+-              <input
+-                id="ws-idle-timeout-input"
+-                type="number"
+-                data-testid="workspace-idle-timeout-input"
+-                className="kb-input"
+-                min="5"
+-                value={idleTimeout}
+-                onChange={(e) => { setIdleTimeout(Number(e.target.value)); }}
+-                required
+-              />
+-            </div>
+-
+-            <div className="kb-form-group">
+-              <label htmlFor="ws-abs-timeout-input">Session Absolute Timeout (Minutes)</label>
+-              <input
+-                id="ws-abs-timeout-input"
+-                type="number"
+-                data-testid="workspace-abs-timeout-input"
+-                className="kb-input"
+-                min="60"
+-                value={absTimeout}
+-                onChange={(e) => { setAbsTimeout(Number(e.target.value)); }}
+-                required
+-              />
+-            </div>
+-
+-            <div className="kb-form-group">
+-              <label htmlFor="ws-trash-retention-input">Trash Retention Days</label>
+-              <input
+-                id="ws-trash-retention-input"
+-                type="number"
+-                data-testid="workspace-trash-retention-input"
+-                className="kb-input"
+-                min="7"
+-                max="365"
+-                value={trashRetention}
+-                onChange={(e) => { setTrashRetention(Number(e.target.value)); }}
+-                required
+-              />
+-            </div>
+-
+-            <div className="kb-form-group">
+-              <label htmlFor="ws-mcp-key-max-ttl-input">MCP Key Max TTL (Days)</label>
+-              <input
+-                id="ws-mcp-key-max-ttl-input"
+-                type="number"
+-                data-testid="workspace-mcp-key-max-ttl-input"
+-                className="kb-input"
+-                min="1"
+-                max="365"
+-                value={mcpKeyMaxTtl}
+-                onChange={(e) => { setMcpKeyMaxTtl(Number(e.target.value)); }}
+-                required
+-              />
+-            </div>
++            {/* Advanced Security & Governance (Progressive Disclosure - KAN-370) */}
++            <AdvancedSection
++              title="Advanced Security & Governance"
++              summary="Granular field-level overrides, session idle and absolute TTLs, key lifetimes, air-gap mode, and export/webhook restrictions"
++              testId="workspace-advanced-security-section"
++              defaultOpen={false}
++            >
++              <div className="kb-form-group" data-testid="workspace-field-level-overrides">
++                <label className="kb-label">
++                  Granular Field-Level Override Rules
++                  <FieldHelpHint
++                    title="Granular Field-Level Override Rules"
++                    summary="Configure custom permission overrides on individual issue and project attributes."
++                    docHref="/docs/role-and-permission-matrix#workspace-level-roles"
++                    testId="ws-field-override-help"
++                  />
++                </label>
++                <p className="kb-field-desc">
++                  Strict workspace inheritance enabled. Role-based field override rules apply globally across member issues.
++                </p>
++              </div>
+ 
+-            <div className="kb-form-group kb-form-group-toggle">
+-              <label htmlFor="ws-air-gap-toggle" className="kb-toggle-label">
++              <div className="kb-form-group">
++                <label htmlFor="ws-idle-timeout-input">
++                  Session Idle Timeout (Minutes)
++                  <FieldHelpHint
++                    title="Session Idle Timeout"
++                    summary="Minutes of user inactivity before the session is expired and re-authentication is enforced."
++                    docHref="/docs/multi-card-authentication-studio"
++                    testId="ws-idle-timeout-help"
++                  />
++                </label>
+                 <input
+-                  id="ws-air-gap-toggle"
+-                  type="checkbox"
+-                  data-testid="workspace-air-gap-toggle"
+-                  className="kb-checkbox"
+-                  checked={airGapMode}
+-                  onChange={(e) => { setAirGapMode(e.target.checked); }}
+-                />
+-                <span className="kb-toggle-text">
+-                  📴 Air-Gap Mode (Strict local execution; disables external outbound telemetry)
+-                </span>
+-                <FieldHelpHint
+-                  title="Air-Gap Mode"
+-                  summary="Disables all outbound external network egress, telemetry, and external SaaS AI providers."
+-                  caution="External AI integrations requiring internet access will fail while Air-Gap mode is enabled."
+-                  docHref="/docs/zero-trust-security-and-access-visibility"
+-                  testId="ws-air-gap-help"
++                  id="ws-idle-timeout-input"
++                  type="number"
++                  data-testid="workspace-idle-timeout-input"
++                  className="kb-input"
++                  min="5"
++                  value={idleTimeout}
++                  onChange={(e) => { setIdleTimeout(Number(e.target.value)); }}
++                  required
+                 />
+-              </label>
+-            </div>
++              </div>
+ 
+-            <div className="kb-form-group kb-form-group-toggle">
+-              <label htmlFor="ws-default-skip-loaded-seq" className="kb-toggle-label">
++              <div className="kb-form-group">
++                <label htmlFor="ws-abs-timeout-input">Session Absolute Timeout (Minutes)</label>
+                 <input
+-                  id="ws-default-skip-loaded-seq"
+-                  type="checkbox"
+-                  data-testid="workspace-default-skip-loaded-seq-checkbox"
+-                  className="kb-checkbox"
+-                  checked={defaultSkipLoadedSeq}
+-                  onChange={(e) => { setDefaultSkipLoadedSeq(e.target.checked); }}
++                  id="ws-abs-timeout-input"
++                  type="number"
++                  data-testid="workspace-abs-timeout-input"
++                  className="kb-input"
++                  min="60"
++                  value={absTimeout}
++                  onChange={(e) => { setAbsTimeout(Number(e.target.value)); }}
++                  required
+                 />
+-                <span className="kb-toggle-text">
+-                  Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)
+-                </span>
+-              </label>
+-              <EmojiHint kind="agentSafeNumbering" />
+-            </div>
++              </div>
+ 
+-            <div className="kb-form-group kb-form-group-toggle">
+-              <label htmlFor="ws-issue-export-toggle" className="kb-toggle-label">
++              <div className="kb-form-group">
++                <label htmlFor="ws-trash-retention-input">Trash Retention Days</label>
+                 <input
+-                  id="ws-issue-export-toggle"
+-                  type="checkbox"
+-                  data-testid="workspace-setting-issue-export-toggle"
+-                  className="kb-checkbox"
+-                  checked={issueExportEnabled}
+-                  onChange={(e) => {
+-                    /* v8 ignore next */
+-                    setIssueExportEnabled(e.target.checked);
+-                  }}
++                  id="ws-trash-retention-input"
++                  type="number"
++                  data-testid="workspace-trash-retention-input"
++                  className="kb-input"
++                  min="7"
++                  max="365"
++                  value={trashRetention}
++                  onChange={(e) => { setTrashRetention(Number(e.target.value)); }}
++                  required
+                 />
+-                <span className="kb-toggle-text">
+-                  Enable Issue Export (Allow exporting issues to CSV / WinZip AES-256)
+-                </span>
+-              </label>
+-            </div>
++              </div>
+ 
+-            <div className="kb-form-group kb-form-group-toggle">
+-              <label htmlFor="ws-issue-import-toggle" className="kb-toggle-label">
++              <div className="kb-form-group">
++                <label htmlFor="ws-mcp-key-max-ttl-input">MCP Key Max TTL (Days)</label>
+                 <input
+-                  id="ws-issue-import-toggle"
+-                  type="checkbox"
+-                  data-testid="workspace-setting-issue-import-toggle"
+-                  className="kb-checkbox"
+-                  checked={issueImportEnabled}
+-                  onChange={(e) => {
+-                    /* v8 ignore next */
+-                    setIssueImportEnabled(e.target.checked);
+-                  }}
++                  id="ws-mcp-key-max-ttl-input"
++                  type="number"
++                  data-testid="workspace-mcp-key-max-ttl-input"
++                  className="kb-input"
++                  min="1"
++                  max="365"
++                  value={mcpKeyMaxTtl}
++                  onChange={(e) => { setMcpKeyMaxTtl(Number(e.target.value)); }}
++                  required
+                 />
+-                <span className="kb-toggle-text">
+-                  Enable Issue Import (Allow importing issues from CSV / WinZip AES-256)
+-                </span>
+-              </label>
+-            </div>
++              </div>
+ 
+-            <div className="kb-form-group" data-testid="workspace-setting-export-roles">
+-              <label className="kb-label">Allowed Issue Export Roles</label>
+-              <div className="kb-roles-checklist">
+-                {[
+-                  { role: 'workspace_admin', label: 'Workspace Admin' },
+-                  { role: 'project_admin', label: 'Project Admin' },
+-                  { role: 'member', label: 'Member' },
+-                  { role: 'guest', label: 'Guest' },
+-                ].map(({ role, label }) => {
+-                  const isChecked = issueExportAllowedRoles.includes(role);
+-                  return (
+-                    <label key={role} className="kb-checkbox-inline">
+-                      <input
+-                        type="checkbox"
+-                        checked={isChecked}
+-                        value={role}
+-                        onChange={(e) => {
+-                          /* v8 ignore next 6 */
+-                          if (e.target.checked) {
+-                            setIssueExportAllowedRoles((prev) => [...prev, role]);
+-                          } else {
+-                            setIssueExportAllowedRoles((prev) => prev.filter((r) => r !== role));
+-                          }
+-                        }}
+-                      />
+-                      <span>{label}</span>
+-                    </label>
+-                  );
+-                })}
++              <div className="kb-form-group kb-form-group-toggle">
++                <label htmlFor="ws-air-gap-toggle" className="kb-toggle-label">
++                  <input
++                    id="ws-air-gap-toggle"
++                    type="checkbox"
++                    data-testid="workspace-air-gap-toggle"
++                    className="kb-checkbox"
++                    checked={airGapMode}
++                    onChange={(e) => { setAirGapMode(e.target.checked); }}
++                  />
++                  <span className="kb-toggle-text">
++                    📴 Air-Gap Mode (Strict local execution; disables external outbound telemetry)
++                  </span>
++                  <FieldHelpHint
++                    title="Air-Gap Mode"
++                    summary="Disables all outbound external network egress, telemetry, and external SaaS AI providers."
++                    caution="External AI integrations requiring internet access will fail while Air-Gap mode is enabled."
++                    docHref="/docs/zero-trust-security-and-access-visibility"
++                    testId="ws-air-gap-help"
++                  />
++                </label>
+               </div>
+-            </div>
++
++              <div className="kb-form-group kb-form-group-toggle">
++                <label htmlFor="ws-default-skip-loaded-seq" className="kb-toggle-label">
++                  <input
++                    id="ws-default-skip-loaded-seq"
++                    type="checkbox"
++                    data-testid="workspace-default-skip-loaded-seq-checkbox"
++                    className="kb-checkbox"
++                    checked={defaultSkipLoadedSeq}
++                    onChange={(e) => { setDefaultSkipLoadedSeq(e.target.checked); }}
++                  />
++                  <span className="kb-toggle-text">
++                    Agent-Safe Sequence Numbering (skip 13, 69, 88, 404, 420, 666, 1337, 1488)
++                  </span>
++                </label>
++                <EmojiHint kind="agentSafeNumbering" />
++              </div>
++
++              <div className="kb-form-group kb-form-group-toggle">
++                <label htmlFor="ws-issue-export-toggle" className="kb-toggle-label">
++                  <input
++                    id="ws-issue-export-toggle"
++                    type="checkbox"
++                    data-testid="workspace-setting-issue-export-toggle"
++                    className="kb-checkbox"
++                    checked={issueExportEnabled}
++                    onChange={(e) => {
++                      /* v8 ignore next */
++                      setIssueExportEnabled(e.target.checked);
++                    }}
++                  />
++                  <span className="kb-toggle-text">
++                    Enable Issue Export (Allow exporting issues to CSV / WinZip AES-256)
++                  </span>
++                </label>
++              </div>
++
++              <div className="kb-form-group kb-form-group-toggle">
++                <label htmlFor="ws-issue-import-toggle" className="kb-toggle-label">
++                  <input
++                    id="ws-issue-import-toggle"
++                    type="checkbox"
++                    data-testid="workspace-setting-issue-import-toggle"
++                    className="kb-checkbox"
++                    checked={issueImportEnabled}
++                    onChange={(e) => {
++                      /* v8 ignore next */
++                      setIssueImportEnabled(e.target.checked);
++                    }}
++                  />
++                  <span className="kb-toggle-text">
++                    Enable Issue Import (Allow importing issues from CSV / WinZip AES-256)
++                  </span>
++                </label>
++              </div>
++
++              <div className="kb-form-group" data-testid="workspace-setting-export-roles">
++                <label className="kb-label">Allowed Issue Export Roles</label>
++                <div className="kb-roles-checklist">
++                  {[
++                    { role: 'workspace_admin', label: 'Workspace Admin' },
++                    { role: 'project_admin', label: 'Project Admin' },
++                    { role: 'member', label: 'Member' },
++                    { role: 'guest', label: 'Guest' },
++                  ].map(({ role, label }) => {
++                    const isChecked = issueExportAllowedRoles.includes(role);
++                    return (
++                      <label key={role} className="kb-checkbox-inline">
++                        <input
++                          type="checkbox"
++                          checked={isChecked}
++                          value={role}
++                          onChange={(e) => {
++                            /* v8 ignore next 6 */
++                            if (e.target.checked) {
++                              setIssueExportAllowedRoles((prev) => [...prev, role]);
++                            } else {
++                              setIssueExportAllowedRoles((prev) => prev.filter((r) => r !== role));
++                            }
++                          }}
++                        />
++                        <span>{label}</span>
++                      </label>
++                    );
++                  })}
++                </div>
++              </div>
++
++              <div className="kb-form-group" data-testid="workspace-webhook-restrictions">
++                <label className="kb-label">
++                  Webhook &amp; Egress Restrictions
++                  <FieldHelpHint
++                    title="Webhook Restrictions"
++                    summary="Restrict outbound webhook notifications to pinned endpoints and signed payloads."
++                    docHref="/docs/zero-trust-security-and-access-visibility"
++                    testId="ws-webhook-help"
++                  />
++                </label>
++                <p className="kb-field-desc">
++                  Outbound webhook deliveries require HMAC SHA-256 payload signing.
++                </p>
++              </div>
++            </AdvancedSection>
+ 
+             <button
+               type="submit"
+diff --git a/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
+index a10ec2a5..885ac132 100644
+--- a/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/PersonalSettingsPage.test.tsx
+@@ -3,7 +3,7 @@
+ 
+ import React from 'react';
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
++import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { MemoryRouter } from 'react-router';
+ import { PersonalSettingsPage } from '../PersonalSettingsPage';
+@@ -2613,5 +2613,59 @@ describe('PersonalSettingsPage', () => {
+         expect(screen.getByTestId('alert-success').textContent).toContain('👍 Key verified (Passkey)');
+       });
+     });
++
++    it('renders Passkey label with raw AAGUID and transport flags collapsed in AdvancedSection (KAN-370)', async () => {
++      const mockAdvPasskey: api.WebauthnCredentialItem = {
++        id: 'pk-adv-1',
++        credential_id: 'cred-98765-adv',
++        nickname: 'Hardware Security Key Pro',
++        created_at: '2026-11-20T10:00:00Z',
++        last_used_at: '2026-11-22T14:30:00Z',
++        aaguid: '01a20000-beef-feed-dead-c001cafe1234',
++        transports: ['usb', 'nfc'],
++        sign_count: 88,
++      };
++
++      vi.mocked(api.fetchPasskeys).mockResolvedValueOnce([mockAdvPasskey]);
++
++      renderComponent();
++
++      await waitFor(() => {
++        expect(screen.getByTestId('passkey-row-pk-adv-1')).toBeDefined();
++      });
++
++      // Passkey label and badge are primary and visible
++      expect(screen.getByText('Hardware Security Key Pro')).toBeDefined();
++      expect(screen.getByTestId('passkey-badge-pk-adv-1').textContent).toContain('🔑 FIDO2 Security Key');
++
++      // AdvancedSection is present and collapsed by default
++      const advSection = screen.getByTestId('passkey-advanced-pk-adv-1');
++      expect(advSection).toBeDefined();
++      expect(advSection.hasAttribute('open')).toBe(false);
++
++      // Raw AAGUID, Credential ID, Sign Count, and Transport Flags are encapsulated inside
++      const detailsContainer = within(advSection).getByTestId('passkey-advanced-details-pk-adv-1');
++      expect(detailsContainer).toBeDefined();
++      expect(within(detailsContainer).getByTestId('passkey-aaguid-pk-adv-1').textContent).toBe(
++        '01a20000-beef-feed-dead-c001cafe1234',
++      );
++      expect(within(detailsContainer).getByTestId('passkey-cred-id-pk-adv-1').textContent).toBe(
++        'cred-98765-adv',
++      );
++      expect(within(detailsContainer).getByTestId('passkey-sign-count-pk-adv-1').textContent).toBe('88');
++      expect(within(detailsContainer).getByTestId('passkey-transports-pk-adv-1').textContent).toBe('usb, nfc');
++      expect(within(detailsContainer).getByTestId('passkey-session-metadata-pk-adv-1').textContent).toContain(
++        'AAL2-Bound Passkey Token',
++      );
++
++      // Toggle button expands the AdvancedSection
++      const toggleBtn = screen.getByTestId('passkey-advanced-pk-adv-1-toggle');
++      fireEvent.click(toggleBtn);
++      expect(advSection.hasAttribute('open')).toBe(true);
++
++      // Toggle button collapses the AdvancedSection
++      fireEvent.click(toggleBtn);
++      expect(advSection.hasAttribute('open')).toBe(false);
++    });
+   });
+ });
+diff --git a/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx b/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
+index cfdbf394..e0a330dc 100644
+--- a/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
++++ b/kanban/web/src/features/settings/__tests__/WorkspaceSettingsPage.test.tsx
+@@ -3,7 +3,7 @@
+ 
+ import React from 'react';
+ import { describe, it, expect, vi, beforeEach } from 'vitest';
+-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
++import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
+ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+ import { MemoryRouter } from 'react-router';
+ import { WorkspaceSettingsPage, formatHandle, parseTabFromHash } from '../WorkspaceSettingsPage';
+@@ -2628,4 +2628,72 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
+     renderComponent();
+     expect(await screen.findByTestId('access-denied-message')).toBeDefined();
+   });
++
++  it('collapses TTL overrides and field-level override rules under AdvancedSection (KAN-370)', async () => {
++    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
++      await Promise.resolve();
++      const url = path;
++      if (url.includes('/api/v1/auth/me')) {
++        return {
++          id: 'user-admin',
++          is_server_admin: true,
++          is_workspace_admin: true,
++          workspace_role: 'SERVER_ADMIN',
++        };
++      }
++      if (url.includes('/api/v1/workspaces/current') || url.includes('/api/v1/workspaces/ws-1')) {
++        return {
++          id: 'ws-1',
++          name: 'Acme Corp',
++          slug: 'acme-corp',
++          display_name: 'Acme Public',
++          default_project_visibility: 'workspace',
++          session_idle_timeout_min: 120,
++          session_absolute_timeout_min: 1440,
++          trash_retention_days: 30,
++          mcp_key_max_ttl_days: 90,
++          air_gap_mode: false,
++          issue_export_enabled: true,
++          issue_export_allowed_roles: ['workspace_admin', 'project_admin'],
++        };
++      }
++      return [];
++    });
++
++    renderComponent();
++
++    // Click roles tab to verify role matrix and cover tab navigation
++    const rolesTab = await screen.findByTestId('tab-roles');
++    fireEvent.click(rolesTab);
++    expect(await screen.findByTestId('workspace-roles-section')).toBeDefined();
++
++    // Switch back to general tab
++    fireEvent.click(screen.getByTestId('tab-general'));
++
++    // Primary fields remain visible by default
++    expect(await screen.findByTestId('workspace-name-input')).toBeDefined();
++    expect(screen.getByTestId('workspace-slug-input')).toBeDefined();
++    expect(screen.getByTestId('workspace-display-name-input')).toBeDefined();
++    expect(screen.getByTestId('workspace-visibility-select')).toBeDefined();
++
++    // AdvancedSection is present and collapsed by default
++    const advSection = await screen.findByTestId('workspace-advanced-security-section');
++    expect(advSection).toBeDefined();
++    expect(advSection.hasAttribute('open')).toBe(false);
++
++    // TTL overrides and field-level override rules exist inside AdvancedSection
++    expect(within(advSection).getByTestId('workspace-field-level-overrides')).toBeDefined();
++    expect(within(advSection).getByTestId('workspace-idle-timeout-input')).toBeDefined();
++    expect(within(advSection).getByTestId('workspace-abs-timeout-input')).toBeDefined();
++    expect(within(advSection).getByTestId('workspace-webhook-restrictions')).toBeDefined();
++
++    // Toggle button expands the section
++    const toggleBtn = screen.getByTestId('workspace-advanced-security-section-toggle');
++    fireEvent.click(toggleBtn);
++    expect(advSection.hasAttribute('open')).toBe(true);
++
++    // Toggle again collapses the section
++    fireEvent.click(toggleBtn);
++    expect(advSection.hasAttribute('open')).toBe(false);
++  });
+ });

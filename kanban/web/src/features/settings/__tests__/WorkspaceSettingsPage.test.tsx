@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, cleanup, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { WorkspaceSettingsPage, formatHandle, parseTabFromHash } from '../WorkspaceSettingsPage';
@@ -2627,5 +2627,73 @@ describe('WorkspaceSettingsPage (KANBA-202)', () => {
 
     renderComponent();
     expect(await screen.findByTestId('access-denied-message')).toBeDefined();
+  });
+
+  it('collapses TTL overrides and field-level override rules under AdvancedSection (KAN-370)', async () => {
+    vi.spyOn(clientModule, 'apiFetch').mockImplementation(async (method, path) => {
+      await Promise.resolve();
+      const url = path;
+      if (url.includes('/api/v1/auth/me')) {
+        return {
+          id: 'user-admin',
+          is_server_admin: true,
+          is_workspace_admin: true,
+          workspace_role: 'SERVER_ADMIN',
+        };
+      }
+      if (url.includes('/api/v1/workspaces/current') || url.includes('/api/v1/workspaces/ws-1')) {
+        return {
+          id: 'ws-1',
+          name: 'Acme Corp',
+          slug: 'acme-corp',
+          display_name: 'Acme Public',
+          default_project_visibility: 'workspace',
+          session_idle_timeout_min: 120,
+          session_absolute_timeout_min: 1440,
+          trash_retention_days: 30,
+          mcp_key_max_ttl_days: 90,
+          air_gap_mode: false,
+          issue_export_enabled: true,
+          issue_export_allowed_roles: ['workspace_admin', 'project_admin'],
+        };
+      }
+      return [];
+    });
+
+    renderComponent();
+
+    // Click roles tab to verify role matrix and cover tab navigation
+    const rolesTab = await screen.findByTestId('tab-roles');
+    fireEvent.click(rolesTab);
+    expect(await screen.findByTestId('workspace-roles-section')).toBeDefined();
+
+    // Switch back to general tab
+    fireEvent.click(screen.getByTestId('tab-general'));
+
+    // Primary fields remain visible by default
+    expect(await screen.findByTestId('workspace-name-input')).toBeDefined();
+    expect(screen.getByTestId('workspace-slug-input')).toBeDefined();
+    expect(screen.getByTestId('workspace-display-name-input')).toBeDefined();
+    expect(screen.getByTestId('workspace-visibility-select')).toBeDefined();
+
+    // AdvancedSection is present and collapsed by default
+    const advSection = await screen.findByTestId('workspace-advanced-security-section');
+    expect(advSection).toBeDefined();
+    expect(advSection.hasAttribute('open')).toBe(false);
+
+    // TTL overrides and field-level override rules exist inside AdvancedSection
+    expect(within(advSection).getByTestId('workspace-field-level-overrides')).toBeDefined();
+    expect(within(advSection).getByTestId('workspace-idle-timeout-input')).toBeDefined();
+    expect(within(advSection).getByTestId('workspace-abs-timeout-input')).toBeDefined();
+    expect(within(advSection).getByTestId('workspace-webhook-restrictions')).toBeDefined();
+
+    // Toggle button expands the section
+    const toggleBtn = screen.getByTestId('workspace-advanced-security-section-toggle');
+    fireEvent.click(toggleBtn);
+    expect(advSection.hasAttribute('open')).toBe(true);
+
+    // Toggle again collapses the section
+    fireEvent.click(toggleBtn);
+    expect(advSection.hasAttribute('open')).toBe(false);
   });
 });

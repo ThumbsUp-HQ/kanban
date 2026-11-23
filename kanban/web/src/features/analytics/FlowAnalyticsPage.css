@@ -277,3 +277,61 @@
   border-radius: 6px;
   border: 1px solid var(--border-subtle, #e5e7eb);
 }
+
+/* Headline Flow KPIs & Advanced Grid (KAN-370) */
+.kb-flow-headline-kpis {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 16px;
+  margin-bottom: 8px;
+}
+
+.kb-flow-kpi-card {
+  background: var(--bg-surface, #ffffff);
+  border: 1px solid var(--border-subtle, #e5e7eb);
+  border-radius: 8px;
+  padding: 16px 20px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.kb-flow-kpi-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--fg-secondary, #4b5563);
+  margin-bottom: 6px;
+}
+
+.kb-flow-kpi-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--fg-primary, #111827);
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.kb-flow-kpi-unit {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--fg-secondary, #4b5563);
+}
+
+.kb-flow-kpi-divider {
+  color: var(--border-subtle, #d1d5db);
+  font-weight: 400;
+}
+
+.kb-flow-kpi-subtext {
+  font-size: 0.75rem;
+  color: var(--fg-muted, #6b7280);
+  margin-top: 4px;
+}
+
+.kb-flow-advanced-grid {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  padding-top: 12px;
+}

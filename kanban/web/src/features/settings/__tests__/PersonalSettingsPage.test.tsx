@@ -3,7 +3,7 @@
 
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent, waitFor } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { MemoryRouter } from 'react-router';
 import { PersonalSettingsPage } from '../PersonalSettingsPage';
@@ -2612,6 +2612,60 @@ describe('PersonalSettingsPage', () => {
       await waitFor(() => {
         expect(screen.getByTestId('alert-success').textContent).toContain('👍 Key verified (Passkey)');
       });
+    });
+
+    it('renders Passkey label with raw AAGUID and transport flags collapsed in AdvancedSection (KAN-370)', async () => {
+      const mockAdvPasskey: api.WebauthnCredentialItem = {
+        id: 'pk-adv-1',
+        credential_id: 'cred-98765-adv',
+        nickname: 'Hardware Security Key Pro',
+        created_at: '2026-11-20T10:00:00Z',
+        last_used_at: '2026-11-22T14:30:00Z',
+        aaguid: '01a20000-beef-feed-dead-c001cafe1234',
+        transports: ['usb', 'nfc'],
+        sign_count: 88,
+      };
+
+      vi.mocked(api.fetchPasskeys).mockResolvedValueOnce([mockAdvPasskey]);
+
+      renderComponent();
+
+      await waitFor(() => {
+        expect(screen.getByTestId('passkey-row-pk-adv-1')).toBeDefined();
+      });
+
+      // Passkey label and badge are primary and visible
+      expect(screen.getByText('Hardware Security Key Pro')).toBeDefined();
+      expect(screen.getByTestId('passkey-badge-pk-adv-1').textContent).toContain('🔑 FIDO2 Security Key');
+
+      // AdvancedSection is present and collapsed by default
+      const advSection = screen.getByTestId('passkey-advanced-pk-adv-1');
+      expect(advSection).toBeDefined();
+      expect(advSection.hasAttribute('open')).toBe(false);
+
+      // Raw AAGUID, Credential ID, Sign Count, and Transport Flags are encapsulated inside
+      const detailsContainer = within(advSection).getByTestId('passkey-advanced-details-pk-adv-1');
+      expect(detailsContainer).toBeDefined();
+      expect(within(detailsContainer).getByTestId('passkey-aaguid-pk-adv-1').textContent).toBe(
+        '01a20000-beef-feed-dead-c001cafe1234',
+      );
+      expect(within(detailsContainer).getByTestId('passkey-cred-id-pk-adv-1').textContent).toBe(
+        'cred-98765-adv',
+      );
+      expect(within(detailsContainer).getByTestId('passkey-sign-count-pk-adv-1').textContent).toBe('88');
+      expect(within(detailsContainer).getByTestId('passkey-transports-pk-adv-1').textContent).toBe('usb, nfc');
+      expect(within(detailsContainer).getByTestId('passkey-session-metadata-pk-adv-1').textContent).toContain(
+        'AAL2-Bound Passkey Token',
+      );
+
+      // Toggle button expands the AdvancedSection
+      const toggleBtn = screen.getByTestId('passkey-advanced-pk-adv-1-toggle');
+      fireEvent.click(toggleBtn);
+      expect(advSection.hasAttribute('open')).toBe(true);
+
+      // Toggle button collapses the AdvancedSection
+      fireEvent.click(toggleBtn);
+      expect(advSection.hasAttribute('open')).toBe(false);
     });
   });
 });

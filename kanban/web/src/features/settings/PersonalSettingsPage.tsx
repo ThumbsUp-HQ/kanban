@@ -37,6 +37,7 @@ import {
   serializeAssertionCredential,
 } from '../auth/webauthn';
 import { PasskeyEnrollModal } from './PasskeyEnrollModal';
+import { AdvancedSection } from '../../ui/AdvancedSection';
 import { ApiProblem } from '../../api/problem';
 import type { MfaMethod } from '../auth/authApi';
 import { copyToClipboard } from '../../utils/clipboard';
@@ -924,6 +925,39 @@ export function PersonalSettingsPage(): JSX.Element {
                               ⚠️ Suspected Clone
                             </span>
                           )}
+                        </div>
+                        <div className="kb-passkey-advanced-wrapper">
+                          <AdvancedSection
+                            title="Advanced Security Details"
+                            summary="Raw AAGUID, Credential ID, sign count, transport flags, and session metadata"
+                            testId={`passkey-advanced-${pk.id}`}
+                            defaultOpen={false}
+                          >
+                            <div className="kb-passkey-advanced-grid" data-testid={`passkey-advanced-details-${pk.id}`}>
+                              <div className="kb-passkey-adv-item">
+                                <span className="kb-passkey-adv-label">Credential ID:</span>
+                                <code data-testid={`passkey-cred-id-${pk.id}`}>{pk.credential_id ?? pk.id}</code>
+                              </div>
+                              <div className="kb-passkey-adv-item">
+                                <span className="kb-passkey-adv-label">AAGUID:</span>
+                                <code data-testid={`passkey-aaguid-${pk.id}`}>{pk.aaguid ?? '00000000-0000-0000-0000-000000000000'}</code>
+                              </div>
+                              <div className="kb-passkey-adv-item">
+                                <span className="kb-passkey-adv-label">Sign Count:</span>
+                                <span data-testid={`passkey-sign-count-${pk.id}`}>{pk.sign_count ?? 0}</span>
+                              </div>
+                              <div className="kb-passkey-adv-item">
+                                <span className="kb-passkey-adv-label">Transport Flags:</span>
+                                <span data-testid={`passkey-transports-${pk.id}`}>
+                                  {transports.length > 0 ? transports.join(', ') : 'internal'}
+                                </span>
+                              </div>
+                              <div className="kb-passkey-adv-item">
+                                <span className="kb-passkey-adv-label">Session Metadata:</span>
+                                <span data-testid={`passkey-session-metadata-${pk.id}`}>AAL2-Bound Passkey Token</span>
+                              </div>
+                            </div>
+                          </AdvancedSection>
                         </div>
                       </td>
                       <td className="kb-personal-settings-td" data-label="Created">
